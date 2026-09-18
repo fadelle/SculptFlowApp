@@ -1,0 +1,206 @@
+@page "/settings/integrations"
+@model PlasticSurgery.Pages.Settings.IntegrationsModel
+@using PlasticSurgery.Data.Entities
+@{
+    ViewData["Title"] = "Channels & Integrations";
+}
+
+@if (!Model.ClinicConfigured)
+{
+    <div class="alert alert-warning">No clinic configured yet — see the Main Numbers page for setup steps.</div>
+}
+else
+{
+    if (!string.IsNullOrEmpty(Model.StatusMessage))
+    {
+        <div class="alert alert-info mb-3">@Model.StatusMessage</div>
+    }
+
+    <p class="text-muted mb-3">
+        Connect the channels leads message the clinic on. These credentials let the platform
+        (via n8n / the AI agent) send and receive WhatsApp, Instagram, and Facebook messages —
+        see Project 5 in the plan.
+    </p>
+
+    <div class="integration-list">
+        @{ await RenderChannelCard(ChannelType.WhatsApp, "WA", "#25D366", "WhatsApp Business", oauth: true); }
+        @{ await RenderChannelCard(ChannelType.Instagram, "IG", "#C13584", "Instagram", oauth: false); }
+        @{ await RenderChannelCard(ChannelType.Facebook, "FB", "#1877F2", "Facebook Messenger", oauth: true); }
+    </div>
+}
+
+<script>
+    window.PS_META_CONFIG = {
+        appId: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.MetaAppId)),
+        version: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.MetaGraphApiVersion)),
+        clinicId: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.ClinicId.ToString())),
+        whatsappConfigId: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.MetaWhatsAppLoginConfigId)),
+        facebookConfigId: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.MetaFacebookLoginConfigId))
+    };
+</script>
+<script src="~/js/meta-connect.js" asp-append-version="true"></script>
+
+@functions {
+    // Renders one channel's card: an OAuth "Continue with Facebook" button (when oauth: true and
+    // a Login Configuration ID is set) plus a manual-entry fallback, or manual entry only (when
+    // oauth: false — Instagram's Login Configuration isn't set up yet, see Settings notes).
+    private async Task RenderChannelCard(string channel, string initials, string accentHex, string title, bool oauth)
+    {
+        var info = Model.Channels.TryGetValue(channel, out var c) ? c : null;
+        var connected = info?.Status == ChannelIntegrationStatus.Connected;
+        var badgeClass = info?.Status switch
+        {
+            ChannelIntegrationStatus.Connected => "badge-green",
+            ChannelIntegrationStatus.Error => "badge-red",
+            _ => "badge-gray"
+        };
+        var statusLabel = info?.Status ?? ChannelIntegrationStatus.Disconnected;
+        var configId = channel switch
+        {
+            ChannelType.WhatsApp => Model.MetaWhatsAppLoginConfigId,
+            ChannelType.Facebook => Model.MetaFacebookLoginConfigId,
+            _ => ""
+        };
+        // Only WhatsApp still uses a JS-driven button (see below for why) — Facebook Messenger's
+        // disabled-fallback button (shown only when its config ID is unset) never needs to fire.
+        var jsFunction = channel == ChannelType.WhatsApp ? "psConnectWhatsApp" : "";
+
+        <div class="card integration-card">
+            <div class="integration-card-header">
+                <div class="flex items-center gap-2">
+                    <span class="channel-mark" style="background:@accentHex">@initials</span>
+                    <div>
+                        <div class="integration-title">@title</div>
+                        @if (connected && !string.IsNullOrEmpty(info!.DisplayName))
+                        {
+                            <div class="text-subtle" style="font-size:.78rem">@info.DisplayName</div>
+                        }
+                        @if (channel == ChannelType.WhatsApp && connected && !string.IsNullOrEmpty(info!.Pin))
+                        {
+                            <div class="text-subtle" style="font-size:.78rem">2-step PIN: <code>@info.Pin</code></div>
+                        }
+                    </div>
+                </div>
+                <span class="badge @badgeClass">@statusLabel</span>
+            </div>
+
+            @if (oauth)
+            {
+                @if (channel == ChannelType.Facebook && !string.IsNullOrEmpty(configId))
+                {
+                    // Facebook Messenger uses Meta's own fb:login-button plugin (requires
+                    // FB.init({ xfbml: true }) — see meta-connect.js) instead of a JS-driven
+                    // button, matching the Quickstart flow directly.
+                    <fb:login-button config_id="@configId" onlogin="psFacebookOnLogin();"></fb:login-button>
+                }
+                else
+                {
+                    <button type="button" class="btn btn-primary btn-sm"
+                            onclick="@(string.IsNullOrEmpty(jsFunction) ? null : jsFunction + "()")"
+                            disabled="@string.IsNullOrEmpty(configId)">
+                        Continue with Facebook
+                    </button>
+                }
+                @if (string.IsNullOrEmpty(configId))
+                {
+                    <div class="text-subtle mt-1" style="font-size:.75rem">
+                        Login Configuration ID not set for @title yet — add it to appsettings.json (Meta section).
+                    </div>
+                }
+                else
+                {
+                    <div class="text-subtle mt-1" data-status-for="@channel" style="font-size:.75rem"></div>
+                }
+
+                <details class="mt-2">
+                    <summary class="text-subtle" style="font-size:.78rem;cursor:pointer">Advanced: enter credentials manually</summary>
+                    <div class="mt-2">
+                        @{ await RenderManualForm(channel, info, connected); }
+                    </div>
+                </details>
+            }
+            else
+            {
+                await RenderManualForm(channel, info, connected);
+            }
+
+            @if (connected)
+            {
+                <form method="post" asp-page-handler="Disconnect" class="mt-1"
+                      onsubmit="return confirm('Disconnect @title? Leads on this channel will stop being sent/received until reconnected.');">
+                    <input type="hidden" name="Channel" value="@channel" />
+                    <button type="submit" class="btn btn-sm">Disconnect</button>
+                </form>
+            }
+        </div>
+        await Task.CompletedTask;
+    }
+
+    private async Task RenderManualForm(string channel, PlasticSurgery.Dtos.ChannelIntegrationResponse? info, bool connected)
+    {
+        <form method="post" asp-page-handler="Save" class="integration-form">
+            <input type="hidden" name="Channel" value="@channel" />
+
+            <label class="field">
+                <span>Display name</span>
+                <input type="text" name="DisplayName" value="@(info?.DisplayName)"
+                       placeholder="e.g. Clinic front desk" class="text-input" />
+            </label>
+
+            @if (channel == ChannelType.WhatsApp)
+            {
+                <label class="field">
+                    <span>Phone number ID</span>
+                    <input type="text" name="PhoneNumberId" value="@(info?.PhoneNumberId)"
+                           placeholder="From Meta app → WhatsApp → API Setup" class="text-input" />
+                </label>
+                <label class="field">
+                    <span>WhatsApp Business Account ID</span>
+                    <input type="text" name="WhatsAppBusinessId" value="@(info?.WhatsAppBusinessId)"
+                           class="text-input" />
+                </label>
+                <label class="field">
+                    <span>Webhook verify token</span>
+                    <input type="text" name="WebhookVerifyToken"
+                           placeholder="@(info?.HasWebhookVerifyToken == true ? "•••••••• (leave blank to keep)" : "Choose a verify token for the webhook")"
+                           class="text-input" />
+                </label>
+            }
+            else if (channel == ChannelType.Instagram)
+            {
+                <label class="field">
+                    <span>Instagram Business Account ID</span>
+                    <input type="text" name="InstagramBusinessId" value="@(info?.InstagramBusinessId)"
+                           class="text-input" />
+                </label>
+                <label class="field">
+                    <span>Linked Facebook Page ID</span>
+                    <input type="text" name="PageId" value="@(info?.PageId)" class="text-input" />
+                </label>
+            }
+            else if (channel == ChannelType.Facebook)
+            {
+                <label class="field">
+                    <span>Page ID</span>
+                    <input type="text" name="PageId" value="@(info?.PageId)" class="text-input" />
+                </label>
+            }
+
+            <label class="field">
+                <span>Access token</span>
+                <input type="password" name="AccessToken"
+                       placeholder="@(info?.HasAccessToken == true ? "•••••••• (leave blank to keep)" : "Paste a permanent access token")"
+                       class="text-input" autocomplete="off" />
+            </label>
+
+            <div class="flex items-center gap-2 mt-1">
+                <button type="submit" class="btn btn-sm">@(connected ? "Save changes" : "Connect manually")</button>
+                @if (info is not null && (connected || info.HasAccessToken))
+                {
+                    <span class="text-subtle" style="font-size:.75rem">Access token on file — hidden for your security.</span>
+                }
+            </div>
+        </form>
+        await Task.CompletedTask;
+    }
+}

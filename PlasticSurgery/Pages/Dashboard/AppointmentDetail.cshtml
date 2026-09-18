@@ -1,0 +1,52 @@
+@page "/dashboard/appointments/{id:guid}"
+@using PlasticSurgery.Pages.Shared
+@model PlasticSurgery.Pages.Dashboard.AppointmentDetailModel
+@{
+    ViewData["Title"] = "Appointment";
+}
+
+@if (!Model.ClinicConfigured)
+{
+    <div class="alert alert-warning">No clinic configured yet — see the Main Numbers page for setup steps.</div>
+}
+else if (Model.Appointment is null)
+{
+    <div class="alert alert-warning">Appointment not found.</div>
+}
+else
+{
+    if (!string.IsNullOrEmpty(Model.StatusMessage))
+    {
+        <div class="alert alert-info mb-3">@Model.StatusMessage</div>
+    }
+    if (!string.IsNullOrEmpty(Model.ErrorMessage))
+    {
+        <div class="alert alert-warning mb-3">@Model.ErrorMessage</div>
+    }
+
+    <div class="card mb-3" style="padding:1rem">
+        <div style="font-size:1.1rem;font-weight:600">@(Model.Appointment.LeadFullName ?? "—")</div>
+        <div class="text-subtle" style="font-size:.85rem">
+            @(Model.Appointment.ProcedureName ?? "No procedure on file") &middot; @Model.Appointment.ScheduledStart.ToString("MMM d, yyyy HH:mm")
+        </div>
+    </div>
+
+    <div class="card" style="padding:1.25rem;max-width:480px">
+        <form method="post" class="integration-form">
+            <label class="field">
+                <span>Appointment status</span>
+                <select name="Status" class="select">
+                    @foreach (var s in Model.StatusOptions)
+                    {
+                        <option value="@s" selected="@(s == Model.Status)">@FilterLabelHelper.Label(s)</option>
+                    }
+                </select>
+            </label>
+
+            <div class="flex items-center gap-2 mt-2">
+                <button type="submit" class="btn btn-primary btn-sm">Save</button>
+                <a href="/dashboard/appointments" class="btn btn-sm">Back to list</a>
+            </div>
+        </form>
+    </div>
+}

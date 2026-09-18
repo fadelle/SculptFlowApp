@@ -1,0 +1,105 @@
+@page "/Campaigns/{id:guid}"
+@model PlasticSurgery.Pages.Campaigns.DetailsModel
+@using PlasticSurgery.Data.Entities
+@using PlasticSurgery.Pages.Shared
+@{
+    ViewData["Title"] = Model.Details?.Campaign.Name ?? "Campaign";
+}
+
+@if (!Model.ClinicConfigured)
+{
+    <div class="alert alert-warning">No clinic configured yet — see the Main Numbers page for setup steps.</div>
+}
+else if (Model.Details is not null)
+{
+    var d = Model.Details;
+
+    if (!string.IsNullOrEmpty(Model.StatusMessage))
+    {
+        <div class="alert alert-info mb-3">@Model.StatusMessage</div>
+    }
+    if (!string.IsNullOrEmpty(Model.ErrorMessage))
+    {
+        <div class="alert alert-warning mb-3">@Model.ErrorMessage</div>
+    }
+
+    <div class="flex items-center justify-between mb-3">
+        <div>
+            <h2 style="margin:0">@d.Campaign.Name</h2>
+            <div class="text-subtle">Template: @(d.Campaign.TemplateName ?? "—")</div>
+        </div>
+        <div class="flex items-center gap-2">
+            <span class="badge @StatusBadgeHelper.CssClass(d.Campaign.Status)">@d.Campaign.Status</span>
+            @if (d.Campaign.Status is CampaignStatus.Draft or CampaignStatus.Scheduled or CampaignStatus.Running)
+            {
+                <form method="post" asp-page-handler="Send">
+                    <button type="submit" class="btn btn-primary btn-sm">
+                        @(d.Campaign.Status == CampaignStatus.Running ? "Send more" : "Send now")
+                    </button>
+                </form>
+            }
+            @if (d.Campaign.Status is CampaignStatus.Draft or CampaignStatus.Scheduled or CampaignStatus.Running)
+            {
+                <form method="post" asp-page-handler="Cancel" onsubmit="return confirm('Cancel this campaign? Recipients not yet sent will be marked failed.');">
+                    <button type="submit" class="btn btn-sm">Cancel</button>
+                </form>
+            }
+        </div>
+    </div>
+
+    <div class="flex items-center gap-2 mb-4" style="flex-wrap:wrap">
+        @{ await Stat("Total", d.Stats.TotalRecipients); }
+        @{ await Stat("Pending", d.Stats.Pending); }
+        @{ await Stat("Queued", d.Stats.Queued); }
+        @{ await Stat("Sent", d.Stats.Sent); }
+        @{ await Stat("Delivered", d.Stats.Delivered); }
+        @{ await Stat("Read", d.Stats.Read); }
+        @{ await Stat("Failed", d.Stats.Failed); }
+        @{ await Stat("Replied", d.Stats.Replied); }
+    </div>
+
+    <div class="table-card table-scroll">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Lead</th>
+                    <th>Phone</th>
+                    <th>Status</th>
+                    <th>Error</th>
+                    <th>Sent</th>
+                    <th>Delivered</th>
+                    <th>Read</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var r in d.Recipients)
+                {
+                    <tr>
+                        <td>@(r.LeadFullName ?? "—")</td>
+                        <td>@r.PhoneNumber</td>
+                        <td><span class="badge @StatusBadgeHelper.CssClass(r.Status)">@r.Status</span></td>
+                        <td>@(r.SkipReason ?? r.FailureReason ?? "—")</td>
+                        <td>@(r.SentAt?.ToString("MMM d, HH:mm") ?? "—")</td>
+                        <td>@(r.DeliveredAt?.ToString("MMM d, HH:mm") ?? "—")</td>
+                        <td>@(r.ReadAt?.ToString("MMM d, HH:mm") ?? "—")</td>
+                    </tr>
+                }
+                @if (d.Recipients.Count == 0)
+                {
+                    <tr class="empty-row"><td colspan="7">No recipients.</td></tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@functions {
+    private async Task Stat(string label, int value)
+    {
+        <div class="card" style="padding:.75rem 1rem;min-width:100px">
+            <div class="text-subtle" style="font-size:.7rem;text-transform:uppercase">@label</div>
+            <div style="font-size:1.3rem;font-weight:600">@value</div>
+        </div>
+        await Task.CompletedTask;
+    }
+}

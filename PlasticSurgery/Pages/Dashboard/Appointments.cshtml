@@ -1,0 +1,71 @@
+@page "/dashboard/appointments"
+@using PlasticSurgery.Pages.Shared
+@model PlasticSurgery.Pages.Dashboard.AppointmentsModel
+@{
+    ViewData["Title"] = "Appointments";
+}
+
+@if (!Model.ClinicConfigured)
+{
+    <div class="alert alert-warning">No clinic configured yet — see the Main Numbers page for setup steps.</div>
+}
+else
+{
+    <form method="get" class="mb-3 flex items-center gap-2">
+        <input type="text" name="Search" value="@Model.Search" placeholder="Search by name or phone…" class="text-input" style="width:auto" />
+        <select name="Status" class="select" onchange="this.form.submit()">
+            <option value="">All statuses</option>
+            @foreach (var status in Model.AllStatuses)
+            {
+                <option value="@status" selected="@(status == Model.Status)">@status</option>
+            }
+        </select>
+        <button type="submit" class="btn btn-sm">Search</button>
+    </form>
+
+    <div class="table-card table-scroll">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Lead</th>
+                    <th>Phone</th>
+                    <th>Procedure</th>
+                    <th>Status</th>
+                    <th>Scheduled</th>
+                    <th>Location</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var a in Model.Appointments)
+                {
+                    <tr>
+                        <td><a href="/dashboard/appointments/@a.Id">@(a.LeadFullName ?? "—")</a></td>
+                        <td>@(a.LeadPhone ?? "—")</td>
+                        <td>@(a.ProcedureName ?? "—")</td>
+                        <td><span class="badge @StatusBadgeHelper.CssClass(a.Status)">@a.Status</span></td>
+                        <td>@a.ScheduledStart.ToString("MMM d, HH:mm")</td>
+                        <td>@(a.LocationType ?? "—")</td>
+                    </tr>
+                }
+                @if (Model.Appointments.Count == 0)
+                {
+                    <tr class="empty-row"><td colspan="6">No appointments match this filter.</td></tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    @if (Model.TotalPages > 1)
+    {
+        <ul class="pagination">
+            @for (var p = 1; p <= Model.TotalPages; p++)
+            {
+                <li class="@(p == Model.PageNumber ? "active" : "")">
+                    <a href="/dashboard/appointments?PageNumber=@p&Status=@Model.Status&Search=@Uri.EscapeDataString(Model.Search ?? "")">@p</a>
+                </li>
+            }
+        </ul>
+    }
+
+    <p class="text-subtle mt-2">@Model.TotalCount total appointment(s).</p>
+}

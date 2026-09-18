@@ -1,0 +1,71 @@
+@* Reusable "what do these statuses mean?" reference — included on the Lead edit page and the
+   Campaign creation page (the two places staff pick from these four status/source fields). Static
+   reference content, not DB-driven; update this file if a status value's meaning changes. *@
+<div id="status-help-overlay" class="status-help-overlay" hidden>
+    <div class="status-help-card card">
+        <div class="status-help-header">
+            <h3>What do these mean?</h3>
+            <button type="button" class="btn btn-sm" id="status-help-close">Close</button>
+        </div>
+
+        <section class="status-help-section">
+            <h4>Lead status</h4>
+            <p class="text-subtle">Where this person is in your funnel. Used to organize the Interested People list and to filter campaign audiences.</p>
+            <dl>
+                <dt>New</dt><dd>Just came in — no contact made yet.</dd>
+                <dt>Contacted</dt><dd>Staff or the AI has messaged them at least once.</dd>
+                <dt>Qualified</dt><dd>Assessed as a good fit for treatment.</dd>
+                <dt>Consultation booked</dt><dd>A consultation appointment has been scheduled.</dd>
+                <dt>Consultation attended</dt><dd>They showed up for their consultation.</dd>
+                <dt>No-show</dt><dd>They missed a scheduled consultation.</dd>
+                <dt>Surgery booked</dt><dd>A procedure/surgery booking has been confirmed.</dd>
+                <dt>Not interested</dt><dd>The lead declined or isn't interested.</dd>
+                <dt>Needs human review</dt><dd>The AI flagged this lead as needing a real staff member.</dd>
+                <dt>Lost</dt><dd>No longer being pursued.</dd>
+            </dl>
+        </section>
+
+        <section class="status-help-section">
+            <h4>Qualification status</h4>
+            <p class="text-subtle">How promising this lead looks — set by the AI during conversation, or by staff directly.</p>
+            <dl>
+                <dt>Unknown</dt><dd>Not yet assessed.</dd>
+                <dt>Hot</dt><dd>High intent — likely to book soon.</dd>
+                <dt>Warm</dt><dd>Interested, but not urgent.</dd>
+                <dt>Cold</dt><dd>Low intent — unlikely to convert soon.</dd>
+                <dt>Needs human review</dt><dd>The AI couldn't confidently qualify this lead — flagged for staff.</dd>
+                <dt>Medical question</dt><dd>The lead asked something clinical the AI can't answer — needs a clinician's input.</dd>
+                <dt>Spam</dt><dd>Not a genuine lead.</dd>
+            </dl>
+        </section>
+
+        <section class="status-help-section">
+            <h4>Lead source</h4>
+            <p class="text-subtle">
+                Where the lead came from. There's no fixed list — it's free text, so it grows to match
+                however your clinic actually acquires leads (e.g. <em>facebook</em>, <em>instagram</em>,
+                <em>google</em>, <em>website</em>, <em>referral</em>, <em>whatsapp</em>, or anything else
+                via "Other…"). Used to filter campaigns by acquisition channel.
+            </p>
+        </section>
+
+        <section class="status-help-section">
+            <h4>Appointment status</h4>
+            <p class="text-subtle">The state of one specific consultation booking.</p>
+            <dl>
+                <dt>Booked</dt><dd>A consultation time has been scheduled.</dd>
+                <dt>Confirmed</dt><dd>The clinic or lead has confirmed they'll attend.</dd>
+                <dt>Attended</dt><dd>The consultation took place.</dd>
+                <dt>No-show</dt><dd>They didn't show up.</dd>
+                <dt>Canceled</dt><dd>The appointment was canceled.</dd>
+                <dt>Rescheduled</dt><dd>The appointment time was moved to a new date/time.</dd>
+            </dl>
+            <p class="text-subtle">
+                <strong>Matters for "Old leads who never booked":</strong> Booked, Confirmed, Rescheduled,
+                or Attended means the lead has a real consultation on record, so they stop matching that
+                reactivation audience. Canceled and No-show don't count as a successful booking — those
+                leads stay eligible for reactivation.
+            </p>
+        </section>
+    </div>
+</div>

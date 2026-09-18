@@ -1,0 +1,46 @@
+@page "/Account/Register"
+@model PlasticSurgery.Pages.Account.RegisterModel
+@{
+    Layout = null;
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Register - PlasticSurgery</title>
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+</head>
+<body>
+    <div class="auth-shell">
+        <div class="card auth-card" style="padding:1.75rem">
+            <div class="flex items-center gap-2 mb-3">
+                <span class="mark">PS</span>
+                <h1 style="margin:0;font-size:1.1rem">PlasticSurgery</h1>
+            </div>
+
+            @if (!string.IsNullOrEmpty(Model.ErrorMessage))
+            {
+                <div class="alert alert-warning mb-3">@Model.ErrorMessage</div>
+            }
+
+            <form method="post" class="integration-form">
+                <label class="field">
+                    <span>Email</span>
+                    <input type="email" name="Email" value="@Model.Email" class="text-input" autocomplete="username" required autofocus />
+                </label>
+                <label class="field">
+                    <span>Password</span>
+                    <input type="password" name="Password" class="text-input" autocomplete="new-password" required minlength="6" />
+                </label>
+
+                <button type="submit" class="btn btn-primary btn-sm mt-1">Create account</button>
+            </form>
+
+            <p class="text-subtle mt-3" style="font-size:.82rem">
+                Already have an account? <a href="/Account/Login@(string.IsNullOrEmpty(Model.ReturnUrl) ? "" : "?ReturnUrl=" + Uri.EscapeDataString(Model.ReturnUrl))">Sign in</a>
+            </p>
+        </div>
+    </div>
+</body>
+</html>

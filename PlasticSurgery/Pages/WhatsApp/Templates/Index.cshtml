@@ -1,0 +1,138 @@
+@page "/WhatsApp/Templates"
+@model PlasticSurgery.Pages.WhatsApp.Templates.IndexModel
+@using PlasticSurgery.Pages.Shared
+@{
+    ViewData["Title"] = "WhatsApp Templates";
+}
+
+@if (!Model.ClinicConfigured)
+{
+    <div class="alert alert-warning">No clinic configured yet — see the Main Numbers page for setup steps.</div>
+}
+else
+{
+    if (!string.IsNullOrEmpty(Model.StatusMessage))
+    {
+        <div class="alert alert-info mb-3">@Model.StatusMessage</div>
+    }
+    if (!string.IsNullOrEmpty(Model.ErrorMessage))
+    {
+        <div class="alert alert-warning mb-3">@Model.ErrorMessage</div>
+    }
+
+    <p class="text-muted mb-3">
+        Templates are required by Meta for any WhatsApp message sent outside the 24-hour customer
+        service window — re-engagement, reminders, follow-ups, and Campaigns all use one of these.
+        New templates are submitted to Meta for review immediately; use <strong>Sync</strong> to
+        refresh a pending template's status once Meta finishes reviewing it.
+    </p>
+
+    <div class="table-card table-scroll mb-4">
+        <table class="data-table" id="templates-table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Category</th>
+                    <th>Language</th>
+                    <th>Status</th>
+                    <th>Quality</th>
+                    <th>Body</th>
+                    <th>Rejection reason</th>
+                    <th>Last update</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody id="templates-tbody">
+                @foreach (var t in Model.Templates)
+                {
+                    <tr data-template-id="@t.Id">
+                        <td>@t.Name</td>
+                        <td>@t.Category</td>
+                        <td>@t.Language</td>
+                        <td><span class="badge @StatusBadgeHelper.TemplateStatusCssClass(t.Status)" data-role="status">@StatusBadgeHelper.TemplateStatusLabel(t.Status)</span></td>
+                        <td data-role="quality">@(t.QualityRating ?? "—")</td>
+                        <td style="max-width:320px;white-space:normal">@t.Body</td>
+                        <td data-role="reason">@(t.RejectionReason ?? "—")</td>
+                        <td data-role="updated">@((t.LastMetaEventAt ?? t.UpdatedAt).ToString("MMM d, HH:mm"))</td>
+                        <td>
+                            @if (!string.IsNullOrEmpty(t.MetaTemplateId))
+                            {
+                                <form method="post" asp-page-handler="Sync">
+                                    <input type="hidden" name="id" value="@t.Id" />
+                                    <button type="submit" class="btn btn-sm">Sync</button>
+                                </form>
+                            }
+                        </td>
+                    </tr>
+                }
+                @if (Model.Templates.Count == 0)
+                {
+                    <tr class="empty-row"><td colspan="9">No templates yet — create one below.</td></tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    <div class="card" style="padding:1.25rem">
+        <h3 class="mb-2">New template</h3>
+        <form method="post" asp-page-handler="Create" class="integration-form">
+            <label class="field">
+                <span>Name (Meta's rules apply — lowercase, underscores, no spaces)</span>
+                <input type="text" name="Name" value="@Model.Name" placeholder="e.g. appointment_reminder" class="text-input" required />
+            </label>
+
+            <label class="field">
+                <span>Category</span>
+                <select name="Category" class="select">
+                    @foreach (var c in Model.Categories)
+                    {
+                        <option value="@c" selected="@(c == Model.Category)">@c</option>
+                    }
+                </select>
+            </label>
+
+            <label class="field">
+                <span>Language code</span>
+                <input type="text" name="Language" value="@Model.Language" placeholder="en_US" class="text-input" />
+            </label>
+
+            <label class="field">
+                <span>Header type</span>
+                <select name="HeaderType" class="select">
+                    @foreach (var h in Model.HeaderTypes)
+                    {
+                        <option value="@h" selected="@(h == Model.HeaderType)">@h</option>
+                    }
+                </select>
+            </label>
+
+            <label class="field">
+                <span>Header content (text headers only)</span>
+                <input type="text" name="HeaderContent" value="@Model.HeaderContent" class="text-input" />
+            </label>
+
+            <label class="field">
+                <span>Body — use {{1}}, {{2}}... for variables</span>
+                <textarea name="Body" rows="3" class="text-input" required>@Model.Body</textarea>
+            </label>
+
+            <label class="field">
+                <span>Footer (optional)</span>
+                <input type="text" name="Footer" value="@Model.Footer" class="text-input" />
+            </label>
+
+            <div class="flex items-center gap-2 mt-1">
+                <button type="submit" class="btn btn-primary btn-sm">Create &amp; submit to Meta</button>
+            </div>
+        </form>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@@microsoft/signalr@@8.0.0/dist/browser/signalr.min.js"></script>
+    <script>
+        window.PS_WHATSAPP_TEMPLATES_CONFIG = {
+            clinicId: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.ClinicId.ToString())),
+            hubUrl: '/hubs/inbox'
+        };
+    </script>
+    <script src="~/js/whatsapp-templates.js" asp-append-version="true"></script>
+}

@@ -1,0 +1,111 @@
+@page "/inbox"
+@model PlasticSurgery.Pages.Inbox.IndexModel
+@{
+    ViewData["Title"] = "Inbox";
+}
+
+@if (!Model.ClinicConfigured)
+{
+    <div class="alert alert-warning">No clinic configured yet — see the Main Numbers page for setup steps.</div>
+}
+else
+{
+    <div class="inbox-shell">
+        <div class="inbox-list" id="inbox-list">
+            @foreach (var c in Model.Conversations)
+            {
+                <div class="inbox-conv-item" data-conversation-id="@c.Id" data-lead-name="@(c.LeadFullName ?? "Unknown")" data-procedure-name="@(c.ProcedureName ?? "")">
+                    <div class="flex items-center justify-between">
+                        <span class="flex items-center gap-1">
+                            <span class="inbox-channel-icon" style="background:@PlasticSurgery.Pages.Shared.ChannelIconHelper.Hex(c.Channel)" title="@c.Channel">
+                                @{ var svg = PlasticSurgery.Pages.Shared.ChannelIconHelper.Svg(c.Channel); }
+                                @if (svg is not null)
+                                {
+                                    @Html.Raw(svg)
+                                }
+                                else
+                                {
+                                    @PlasticSurgery.Pages.Shared.ChannelIconHelper.Initials(c.Channel)
+                                }
+                            </span>
+                            <span class="inbox-conv-name">@(c.LeadFullName ?? "Unknown")</span>
+                        </span>
+                        <span class="badge @PlasticSurgery.Pages.Shared.StatusBadgeHelper.CssClass(c.Mode)">@c.Mode</span>
+                    </div>
+                    @if (!string.IsNullOrEmpty(c.ProcedureName))
+                    {
+                        <div class="inbox-conv-procedure">@c.ProcedureName</div>
+                    }
+                    <div class="inbox-conv-preview">@(c.LastMessagePreview ?? "No messages yet")</div>
+                    <div class="inbox-conv-time" data-timestamp="@((c.LastMessageAt ?? c.CreatedAt).ToString("O"))"></div>
+                </div>
+            }
+            @if (Model.Conversations.Count == 0)
+            {
+                <div class="text-subtle" style="padding:1.5rem 1rem">No conversations yet.</div>
+            }
+        </div>
+
+        <div class="inbox-thread" id="inbox-thread">
+            <div class="inbox-empty" id="inbox-empty">
+                <p class="text-subtle">Select a conversation to view it here.</p>
+            </div>
+
+            <div class="inbox-thread-inner" id="inbox-thread-inner" hidden>
+                <div class="inbox-thread-header">
+                    <div>
+                        <div class="inbox-thread-name" id="inbox-thread-name"></div>
+                        <div class="inbox-thread-procedure text-subtle" id="inbox-thread-procedure"></div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="badge" id="inbox-thread-mode"></span>
+                        <button type="button" class="btn btn-sm" id="inbox-btn-info" title="Customer info">ⓘ Info</button>
+                        <button type="button" class="btn btn-sm" id="inbox-btn-takeover">Take Over</button>
+                        <button type="button" class="btn btn-sm" id="inbox-btn-return-ai">Return to AI</button>
+                        <button type="button" class="btn btn-sm" id="inbox-btn-close">Close</button>
+                    </div>
+                </div>
+
+                <div class="inbox-lead-info" id="inbox-lead-info" hidden>
+                    <div class="inbox-lead-info-row"><span>Phone</span><strong id="inbox-lead-phone">—</strong></div>
+                    <div class="inbox-lead-info-row"><span>Email</span><strong id="inbox-lead-email">—</strong></div>
+                    <div class="inbox-lead-info-row"><span>Procedure</span><strong id="inbox-lead-procedure">—</strong></div>
+                    <div class="inbox-lead-info-row"><span>Source</span><strong id="inbox-lead-source">—</strong></div>
+                    <div class="inbox-lead-info-row"><span>Status</span><strong id="inbox-lead-status">—</strong></div>
+                    <div class="inbox-lead-info-row"><span>Timeline</span><strong id="inbox-lead-timeline">—</strong></div>
+                </div>
+
+                <div class="inbox-messages" id="inbox-messages"></div>
+
+                <div class="inbox-window-closed-notice" id="inbox-window-closed-notice" hidden>
+                    The 24-hour WhatsApp customer service window is closed — send an approved template to reach this lead.
+                </div>
+
+                <form class="inbox-composer" id="inbox-composer">
+                    <textarea class="inbox-composer-input" id="inbox-composer-input" placeholder="Type a reply…" rows="2"></textarea>
+                    <button type="submit" class="btn btn-primary btn-sm" id="inbox-composer-send">Send</button>
+                    <button type="button" class="btn btn-sm" id="inbox-btn-send-template">Send Template</button>
+                </form>
+
+                <form class="inbox-template-picker" id="inbox-template-picker" hidden>
+                    <select class="select" id="inbox-template-select"></select>
+                    <div id="inbox-template-variables"></div>
+                    <div id="inbox-template-preview" class="text-subtle" style="font-size:.8rem;white-space:pre-wrap"></div>
+                    <div class="flex items-center gap-2 mt-1">
+                        <button type="submit" class="btn btn-primary btn-sm" id="inbox-template-send">Send</button>
+                        <button type="button" class="btn btn-sm" id="inbox-template-cancel">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+}
+
+<script src="https://cdn.jsdelivr.net/npm/@@microsoft/signalr@@8.0.0/dist/browser/signalr.min.js"></script>
+<script>
+    window.PS_INBOX_CONFIG = {
+        clinicId: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.ClinicId.ToString())),
+        hubUrl: '/hubs/inbox'
+    };
+</script>
+<script src="~/js/inbox.js" asp-append-version="true"></script>

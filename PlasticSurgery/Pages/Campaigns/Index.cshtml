@@ -1,0 +1,56 @@
+@page "/Campaigns"
+@model PlasticSurgery.Pages.Campaigns.IndexModel
+@using PlasticSurgery.Pages.Shared
+@{
+    ViewData["Title"] = "Campaigns";
+}
+
+@if (!Model.ClinicConfigured)
+{
+    <div class="alert alert-warning">No clinic configured yet — see the Main Numbers page for setup steps.</div>
+}
+else
+{
+    <div class="flex items-center justify-between mb-3">
+        <p class="text-muted" style="margin:0">Send one approved WhatsApp template to many leads — every send still lands in that lead's normal Inbox conversation.</p>
+        <a href="/Campaigns/Create" class="btn btn-primary btn-sm">New campaign</a>
+    </div>
+
+    <div class="table-card table-scroll">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Template</th>
+                    <th>Status</th>
+                    <th>Recipients</th>
+                    <th>Sent</th>
+                    <th>Delivered</th>
+                    <th>Failed</th>
+                    <th>Scheduled</th>
+                    <th>Created</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var c in Model.Campaigns)
+                {
+                    <tr onclick="location.href='/Campaigns/@c.Id'" style="cursor:pointer">
+                        <td>@c.Name</td>
+                        <td>@(c.TemplateName ?? "—")</td>
+                        <td><span class="badge @StatusBadgeHelper.CssClass(c.Status)">@c.Status</span></td>
+                        <td>@c.TotalRecipients</td>
+                        <td>@c.Sent</td>
+                        <td>@c.Delivered</td>
+                        <td>@c.Failed</td>
+                        <td>@(c.ScheduledAt?.ToString("MMM d, HH:mm") ?? "—")</td>
+                        <td>@c.CreatedAt.ToString("MMM d, HH:mm")</td>
+                    </tr>
+                }
+                @if (Model.Campaigns.Count == 0)
+                {
+                    <tr class="empty-row"><td colspan="9">No campaigns yet.</td></tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}

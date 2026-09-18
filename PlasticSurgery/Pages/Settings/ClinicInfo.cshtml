@@ -1,0 +1,53 @@
+@page "/settings/clinic-info"
+@model PlasticSurgery.Pages.Settings.ClinicInfoModel
+@{
+    ViewData["Title"] = "Clinic Info";
+}
+
+@if (!Model.ClinicConfigured)
+{
+    <div class="alert alert-warning">No clinic configured yet — see the Main Numbers page for setup steps.</div>
+}
+else
+{
+    if (!string.IsNullOrEmpty(Model.StatusMessage))
+    {
+        <div class="alert alert-info mb-3">@Model.StatusMessage</div>
+    }
+
+    <p class="text-muted mb-3">
+        General info the AI agent reads to answer patient questions (hours, location, contact,
+        consultation rules) instead of inventing an answer — see the <code>get_clinic_info</code> tool.
+    </p>
+
+    <form method="post" class="integration-form card" style="padding:1.25rem">
+        <label class="field">
+            <span>Phone</span>
+            <input type="text" name="Phone" value="@Model.Phone" class="text-input" />
+        </label>
+        <label class="field">
+            <span>Email</span>
+            <input type="text" name="Email" value="@Model.Email" class="text-input" />
+        </label>
+        <label class="field">
+            <span>Website</span>
+            <input type="text" name="Website" value="@Model.Website" class="text-input" />
+        </label>
+        <label class="field">
+            <span>Address</span>
+            <textarea name="Address" rows="2" class="text-input">@Model.Address</textarea>
+        </label>
+        <label class="field">
+            <span>Operating hours</span>
+            <textarea name="OperatingHours" rows="3" class="text-input" placeholder="e.g. Mon-Fri 9am-6pm, Sat 10am-2pm, closed Sundays">@Model.OperatingHours</textarea>
+        </label>
+        <label class="field">
+            <span>Consultation rules / general info</span>
+            <textarea name="ConsultationInfo" rows="4" class="text-input" placeholder="e.g. Free initial consultations, $50 deposit required for surgical bookings...">@Model.ConsultationInfo</textarea>
+        </label>
+
+        <div class="flex items-center gap-2 mt-1">
+            <button type="submit" class="btn btn-primary btn-sm">Save</button>
+        </div>
+    </form>
+}

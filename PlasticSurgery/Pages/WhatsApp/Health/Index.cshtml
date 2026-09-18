@@ -1,0 +1,81 @@
+@page "/WhatsApp/Health"
+@model PlasticSurgery.Pages.WhatsApp.Health.IndexModel
+@using PlasticSurgery.Pages.Shared
+@{
+    ViewData["Title"] = "WhatsApp Health";
+}
+
+@if (!Model.ClinicConfigured)
+{
+    <div class="alert alert-warning">No clinic configured yet — see the Main Numbers page for setup steps.</div>
+}
+else if (Model.Health is null)
+{
+    <div class="alert alert-info">
+        No WhatsApp connection yet — connect one under <a href="/settings/integrations">Settings → Channels &amp; Integrations</a>.
+    </div>
+}
+else
+{
+    var h = Model.Health;
+
+    <div class="card mb-4" style="padding:1.25rem" id="whatsapp-health-card">
+        <div class="flex items-center justify-between mb-3">
+            <h2 style="margin:0">WhatsApp</h2>
+            <span class="badge @StatusBadgeHelper.CssClass(h.HealthLevel)" id="health-status-badge" style="font-size:.85rem;padding:.35rem .8rem">
+                @h.HealthLevel.Substring(0,1).ToUpper()@h.HealthLevel.Substring(1)
+            </span>
+        </div>
+
+        <div class="health-grid">
+            <div><span class="text-subtle">Phone</span><div id="health-phone">@(h.DisplayPhoneNumber ?? "—")</div></div>
+            <div><span class="text-subtle">WABA</span><div id="health-waba">@(h.WabaId is not null ? "Connected" : "Not connected")</div></div>
+            <div><span class="text-subtle">Phone Quality</span><div id="health-quality">@(h.PhoneQualityRating ?? "—")</div></div>
+            <div><span class="text-subtle">Account</span><div id="health-account">@(h.AccountStatus ?? "—")</div></div>
+            <div><span class="text-subtle">Account Review</span><div id="health-review">@(h.AccountReviewStatus ?? "—")</div></div>
+            <div><span class="text-subtle">Verified Name</span><div id="health-verified-name">@(h.VerifiedName ?? "—")</div></div>
+            <div><span class="text-subtle">Last Webhook</span><div id="health-last-webhook" data-timestamp="@(h.LastWebhookAt?.ToString("O"))">@(h.LastWebhookAt?.ToString("MMM d, HH:mm") ?? "Never")</div></div>
+            <div><span class="text-subtle">Last Problem</span><div id="health-last-problem">@(h.LastProblemMessage ?? "None")</div></div>
+        </div>
+    </div>
+
+    <h3 class="mb-2">Recent activity</h3>
+    <div class="table-card table-scroll" id="whatsapp-health-events">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Type</th>
+                    <th>Severity</th>
+                    <th>Status</th>
+                    <th>Message</th>
+                    <th>Occurred</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var e in Model.Events)
+                {
+                    <tr>
+                        <td>@e.EventType.Replace("_", " ")</td>
+                        <td><span class="badge @StatusBadgeHelper.CssClass(e.Severity)">@(e.Severity ?? "—")</span></td>
+                        <td>@(e.Status ?? "—")</td>
+                        <td>@(e.Message ?? "—")</td>
+                        <td>@e.OccurredAt.ToString("MMM d, HH:mm")</td>
+                    </tr>
+                }
+                @if (Model.Events.Count == 0)
+                {
+                    <tr class="empty-row"><td colspan="5">No health events recorded yet.</td></tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@@microsoft/signalr@@8.0.0/dist/browser/signalr.min.js"></script>
+    <script>
+        window.PS_WHATSAPP_HEALTH_CONFIG = {
+            clinicId: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.ClinicId.ToString())),
+            hubUrl: '/hubs/inbox'
+        };
+    </script>
+    <script src="~/js/whatsapp-health.js" asp-append-version="true"></script>
+}

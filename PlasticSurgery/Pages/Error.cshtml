@@ -1,0 +1,19 @@
+@page
+@model ErrorModel
+@{
+    ViewData["Title"] = "Error";
+}
+
+<div class="alert alert-warning">
+    <strong>An error occurred while processing your request.</strong>
+    @if (Model.ShowRequestId)
+    {
+        <div class="mt-1">Request ID: <code>@Model.RequestId</code></div>
+    }
+</div>
+
+<p class="text-muted mt-3">
+    Enable the <strong>Development</strong> environment (set <code>ASPNETCORE_ENVIRONMENT=Development</code>
+    and restart) for a detailed error page. Don't do this for deployed/production apps — it can leak
+    exception details to end users.
+</p>

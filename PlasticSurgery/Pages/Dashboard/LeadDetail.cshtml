@@ -1,0 +1,85 @@
+@page "/dashboard/leads/{id:guid}"
+@using PlasticSurgery.Pages.Shared
+@model PlasticSurgery.Pages.Dashboard.LeadDetailModel
+@{
+    ViewData["Title"] = "Lead";
+}
+
+@if (!Model.ClinicConfigured)
+{
+    <div class="alert alert-warning">No clinic configured yet — see the Main Numbers page for setup steps.</div>
+}
+else if (Model.Lead is null)
+{
+    <div class="alert alert-warning">Lead not found.</div>
+}
+else
+{
+    if (!string.IsNullOrEmpty(Model.StatusMessage))
+    {
+        <div class="alert alert-info mb-3">@Model.StatusMessage</div>
+    }
+    if (!string.IsNullOrEmpty(Model.ErrorMessage))
+    {
+        <div class="alert alert-warning mb-3">@Model.ErrorMessage</div>
+    }
+
+    <div class="card mb-3" style="padding:1rem">
+        <div style="font-size:1.1rem;font-weight:600">@(Model.Lead.FullName ?? "—")</div>
+        <div class="text-subtle" style="font-size:.85rem">
+            @(Model.Lead.Phone ?? "—") &middot; @(Model.Lead.ProcedureName ?? "No procedure on file")
+        </div>
+    </div>
+
+    <div class="card" style="padding:1.25rem;max-width:480px">
+        <div class="flex items-center gap-2 mb-2">
+            <span class="text-subtle" style="font-size:.78rem;text-transform:uppercase;letter-spacing:.05em">Edit lead</span>
+            <button type="button" class="status-help-trigger" data-status-help-trigger title="What do these mean?">?</button>
+        </div>
+        <form method="post" class="integration-form">
+            <label class="field">
+                <span>Lead status</span>
+                <select name="Status" class="select">
+                    @foreach (var s in Model.StatusOptions)
+                    {
+                        <option value="@s" selected="@(s == Model.Status)">@FilterLabelHelper.Label(s)</option>
+                    }
+                </select>
+            </label>
+
+            <label class="field">
+                <span>Qualification status</span>
+                <select name="QualificationStatus" class="select">
+                    @foreach (var s in Model.QualificationOptions)
+                    {
+                        <option value="@s" selected="@(s == Model.QualificationStatus)">@FilterLabelHelper.Label(s)</option>
+                    }
+                </select>
+            </label>
+
+            <label class="field">
+                <span>Lead source</span>
+                <select name="SourceChoice" id="source-choice" class="select" onchange="document.getElementById('custom-source-field').style.display = this.value === 'other' ? '' : 'none';">
+                    @foreach (var s in Model.SourceOptions)
+                    {
+                        <option value="@s" selected="@(s == Model.SourceChoice)">@s</option>
+                    }
+                    <option value="other" selected="@(Model.SourceChoice == "other")">Other…</option>
+                </select>
+            </label>
+
+            <label class="field" id="custom-source-field" style="display:@(Model.SourceChoice == "other" ? "" : "none")">
+                <span>Custom source</span>
+                <input type="text" name="CustomSource" value="@Model.CustomSource" class="text-input" placeholder="e.g. trade show" />
+            </label>
+
+            <div class="flex items-center gap-2 mt-2">
+                <button type="submit" class="btn btn-primary btn-sm">Save</button>
+                <a href="/dashboard/leads" class="btn btn-sm">Back to list</a>
+            </div>
+        </form>
+    </div>
+
+    <partial name="_StatusHelp" />
+    <script src="~/js/status-help.js" asp-append-version="true"></script>
+}

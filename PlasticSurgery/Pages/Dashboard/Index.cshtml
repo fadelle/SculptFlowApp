@@ -1,0 +1,78 @@
+@page "/dashboard"
+@model PlasticSurgery.Pages.Dashboard.IndexModel
+@{
+    ViewData["Title"] = "Main Numbers";
+}
+
+@if (!Model.ClinicConfigured)
+{
+    <div class="alert alert-warning">
+        No clinic found for slug "<code>@(HttpContext.RequestServices.GetService<IConfiguration>()?["Clinic:DefaultSlug"] ?? "demo-clinic")</code>".
+        Run <code>Database/schema.sql</code> then <code>Database/seed.sql</code> against your Postgres database,
+        or set <code>Clinic:DefaultSlug</code> in appsettings.json to an existing clinic's slug.
+    </div>
+}
+else
+{
+    var s = Model.Summary!;
+    <p class="text-muted mb-3">@Model.ClinicName</p>
+
+    var whatsAppLevel = Model.WhatsAppHealth?.HealthLevel ?? "unknown";
+    var whatsAppDotClass = whatsAppLevel switch
+    {
+        "healthy" => "badge-green",
+        "warning" => "badge-amber",
+        "problem" => "badge-red",
+        "disconnected" => "badge-gray",
+        _ => "badge-gray"
+    };
+    var whatsAppLabel = Model.WhatsAppHealth is null ? "Not connected"
+        : whatsAppLevel == "healthy" ? "Healthy" : "Attention Required";
+    <a href="/WhatsApp/Health" class="card flex items-center gap-2 mb-3" style="padding:.75rem 1rem;width:fit-content;text-decoration:none;color:inherit">
+        <span class="text-subtle" style="font-size:.78rem;text-transform:uppercase">WhatsApp</span>
+        <span id="dashboard-whatsapp-health-dot" class="health-dot @whatsAppDotClass"></span>
+        <span id="dashboard-whatsapp-health-label">@whatsAppLabel</span>
+    </a>
+
+    <div class="stat-grid">
+        <div class="stat-card">
+            <div class="label">New interested people</div>
+            <div class="value">@s.NewInterestedPeople</div>
+        </div>
+        <div class="stat-card">
+            <div class="label">Consultations booked</div>
+            <div class="value">@s.ConsultationsBooked</div>
+        </div>
+        <div class="stat-card">
+            <div class="label">Consultations attended</div>
+            <div class="value">@s.ConsultationsAttended</div>
+        </div>
+        <div class="stat-card">
+            <div class="label">Surgeries booked</div>
+            <div class="value">@s.SurgeriesBooked</div>
+        </div>
+        <div class="stat-card">
+            <div class="label">Revenue</div>
+            <div class="value">@s.Revenue.ToString("C0")</div>
+        </div>
+        <div class="stat-card">
+            <div class="label">Old leads recovered</div>
+            <div class="value">@s.OldLeadsRecovered</div>
+            <div class="hint">Wired up in Project 8</div>
+        </div>
+    </div>
+
+    <div class="mt-4 flex gap-2">
+        <a class="btn" href="/dashboard/leads">View Interested People →</a>
+        <a class="btn" href="/dashboard/appointments">View Appointments →</a>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@@microsoft/signalr@@8.0.0/dist/browser/signalr.min.js"></script>
+    <script>
+        window.PS_DASHBOARD_CONFIG = {
+            clinicId: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.ClinicId.ToString())),
+            hubUrl: '/hubs/inbox'
+        };
+    </script>
+    <script src="~/js/whatsapp-health.js" asp-append-version="true"></script>
+}
