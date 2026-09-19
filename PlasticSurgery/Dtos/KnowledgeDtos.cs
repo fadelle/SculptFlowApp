@@ -9,8 +9,17 @@ public record KnowledgeDocumentResponse(
     bool IsActive,
     int ChunkCount,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt
+    DateTimeOffset UpdatedAt,
+    /// <summary>"manual" or "upload" — see KnowledgeSourceType. Upload metadata below is null for manual entries.</summary>
+    string SourceType = "manual",
+    string? OriginalFileName = null,
+    string? MimeType = null,
+    long? FileSizeBytes = null
 );
+
+/// <summary>What the upload form supplies. The file itself is passed separately as a stream; the clinic
+/// is never part of this — it comes from CurrentClinicContext.</summary>
+public record UploadKnowledgeRequest(string? Title, string Category, bool IsActive = true);
 
 /// <summary>Body for creating/updating a Knowledge Base document from the dashboard.</summary>
 public record SaveKnowledgeRequest(string Title, string Category, string Content, bool IsActive = true);
@@ -42,3 +51,13 @@ public record UpdateKnowledgeSettingsRequest(int ChunkSizeTokens, int ChunkOverl
 public record KnowledgeSearchResult(Guid DocumentId, string Title, string Category, string Content, double Score);
 
 public record KnowledgeSearchResponse(IReadOnlyList<KnowledgeSearchResult> Results);
+
+/// <summary>multipart/form-data body for POST /api/knowledge/upload — ONE file. No clinicId: the clinic
+/// comes from the logged-in user.</summary>
+public class KnowledgeUploadForm
+{
+    public IFormFile? File { get; set; }
+    public string? Title { get; set; }
+    public string? Category { get; set; }
+    public bool IsActive { get; set; } = true;
+}

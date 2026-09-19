@@ -16,7 +16,17 @@ public class KnowledgeDocument
     /// deliberately no DB CHECK, like campaigns.campaign_type, so new categories need no migration.</summary>
     public string Category { get; set; } = KnowledgeCategory.General;
 
+    /// <summary>The text that gets chunked and embedded. For a manual entry it's what staff typed; for an
+    /// uploaded file it's the normalized text extracted from it — so re-indexing never needs the original file.</summary>
     public string Content { get; set; } = string.Empty;
+
+    /// <summary>See <see cref="KnowledgeSourceType"/>.</summary>
+    public string SourceType { get; set; } = KnowledgeSourceType.Manual;
+
+    // Upload metadata (null for manual entries). The original binary is deliberately NOT retained.
+    public string? OriginalFileName { get; set; }
+    public string? MimeType { get; set; }
+    public long? FileSizeBytes { get; set; }
 
     /// <summary>Inactive documents keep their chunks stored but are excluded from AI search.</summary>
     public bool IsActive { get; set; } = true;
@@ -26,6 +36,13 @@ public class KnowledgeDocument
 
     public Clinic? Clinic { get; set; }
     public ICollection<KnowledgeChunk> Chunks { get; set; } = new List<KnowledgeChunk>();
+}
+
+/// <summary>Allowed values for KnowledgeDocument.SourceType — must match schema.sql's CHECK constraint.</summary>
+public static class KnowledgeSourceType
+{
+    public const string Manual = "manual";
+    public const string Upload = "upload";
 }
 
 public static class KnowledgeCategory

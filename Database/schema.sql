@@ -985,3 +985,23 @@ alter table messages add constraint ck_messages_origin check (origin in (
 create unique index if not exists ux_conversations_clinic_channel_thread
   on conversations(clinic_id, channel, external_thread_id)
   where external_thread_id is not null;
+
+-- ---------------------------------------------------------------------
+-- Knowledge Base: uploaded documents (PDF / DOCX / TXT)
+--
+-- An uploaded file is turned into text server-side and stored in knowledge_documents.content — the
+-- same column manual entries use — then chunked/embedded by the SAME pipeline. So re-saving or
+-- re-indexing never needs the original file, and the binary is NOT stored (only these metadata
+-- columns). source_type = 'manual' (typed in) | 'upload' (extracted from a file).
+-- ---------------------------------------------------------------------
+alter table knowledge_documents add column if not exists source_type varchar(20) not null default 'manual';
+alter table knowledge_documents add column if not exists original_file_name varchar(255);
+alter table knowledge_documents add column if not exists mime_type varchar(100);
+alter table knowledge_documents add column if not exists file_size_bytes bigint;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'ck_knowledge_documents_source_type') then
+    alter table knowledge_documents add constraint ck_knowledge_documents_source_type
+      check (source_type in ('manual','upload'));
+  end if;
+end $$;

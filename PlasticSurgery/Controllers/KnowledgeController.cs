@@ -85,6 +85,36 @@ public class KnowledgeController : DashboardApiController
         }
     }
 
+    /// <summary>Creates a document from ONE uploaded PDF/DOCX/TXT (multipart/form-data: file, optional title,
+    /// category, isActive). The text is extracted server-side and goes through the same chunk → embed →
+    /// store pipeline as a manual entry, so it's searchable immediately. The file itself isn't kept.</summary>
+    [HttpPost("upload")]
+    public async Task<ActionResult<KnowledgeDocumentResponse>> Upload([FromForm] KnowledgeUploadForm form, CancellationToken ct)
+    {
+        var clinicId = await GetClinicIdAsync(ct);
+        if (clinicId is null) return Forbid();
+
+        if (form.File is null) return BadRequest(new { error = "Choose a file to upload." });
+
+        try
+        {
+            await using var stream = form.File.OpenReadStream();
+            var doc = await _knowledge.CreateFromUploadAsync(
+                clinicId.Value,
+                new UploadKnowledgeRequest(form.Title, string.IsNullOrWhiteSpace(form.Category) ? "general" : form.Category, form.IsActive),
+                form.File.FileName, stream, form.File.Length, ct);
+            return CreatedAtAction(nameof(GetById), new { id = doc.Id }, doc);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new { error = ex.Message });
+        }
+    }
+
     [HttpPut("{id:guid}")]
     public async Task<ActionResult<KnowledgeDocumentResponse>> Update(Guid id, [FromBody] SaveKnowledgeRequest request, CancellationToken ct)
     {

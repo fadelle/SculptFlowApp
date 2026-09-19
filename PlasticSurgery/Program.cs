@@ -85,6 +85,7 @@ builder.Services.AddScoped<IWhatsAppHealthService, WhatsAppHealthService>();
 builder.Services.AddScoped<IKnowledgeSettingsService, KnowledgeSettingsService>();
 builder.Services.AddScoped<IKnowledgeChunkingService, KnowledgeChunkingService>();
 builder.Services.AddHttpClient<IEmbeddingService, OpenAiEmbeddingService>();
+builder.Services.AddSingleton<IDocumentTextExtractor, DocumentTextExtractor>();
 builder.Services.AddScoped<IKnowledgeService, KnowledgeService>();
 builder.Services.AddScoped<IKnowledgeSearchService, KnowledgeSearchService>();
 

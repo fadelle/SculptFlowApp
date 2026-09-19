@@ -655,6 +655,10 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.Property(x => x.Title).HasColumnName("title").HasMaxLength(200).IsRequired();
             e.Property(x => x.Category).HasColumnName("category").HasMaxLength(50).IsRequired();
             e.Property(x => x.Content).HasColumnName("content").IsRequired();
+            e.Property(x => x.SourceType).HasColumnName("source_type").HasMaxLength(20).IsRequired();
+            e.Property(x => x.OriginalFileName).HasColumnName("original_file_name").HasMaxLength(255);
+            e.Property(x => x.MimeType).HasColumnName("mime_type").HasMaxLength(100);
+            e.Property(x => x.FileSizeBytes).HasColumnName("file_size_bytes");
             e.Property(x => x.IsActive).HasColumnName("is_active");
             e.Property(x => x.CreatedAt).HasColumnName("created_at");
             e.Property(x => x.UpdatedAt).HasColumnName("updated_at");

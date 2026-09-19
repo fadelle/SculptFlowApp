@@ -201,7 +201,7 @@ Consumers: `inbox.js`, `whatsapp-templates.js`, `whatsapp-health.js`.
 
 **Purpose**: each clinic keeps its own approved information; the AI searches ONLY that clinic's knowledge
 and composes the answer itself. .NET stores, chunks, embeds, searches and isolates; n8n/AI decides when to
-search and what to ask. **Manual entry only** — no document upload/PDF/crawling.
+search and what to ask. Two ways in: **manual entry** or **upload ONE PDF/DOCX/TXT** (see "Document upload" below) — no OCR, batch upload or crawling.
 
 **Tables** (`Database/schema.sql`, applied live):
 - `knowledge_documents(id, clinic_id FK cascade, title varchar(200), category varchar(50) default 'general'
@@ -278,6 +278,28 @@ re-embed; delete removes the chunks.
 Request `{ "clinicId": "...", "query": "...", "limit": 5 }` (limit optional); response
 `{ "results": [ { "documentId", "title", "category", "content", "score" } ] }`. 400 if clinicId/query
 missing; 503 if the embedding provider fails. No `conversationId`.
+
+**Document upload** (added after Telegram; uncommitted): staff pick *Manual Entry* or *Upload Document* on
+`/KnowledgeBase/Edit` (tabs; "Upload Document" button on the list opens it preselected, `?mode=upload`), or
+`POST /api/knowledge/upload` (multipart: `file`, optional `title` [defaults to file name], `category`, `isActive`).
+One file only; **PDF, DOCX, TXT**; max **5 MB** (`Knowledge:MaxUploadBytes`, clamped to ≤25 MB) and max **250,000
+extracted characters** (`Knowledge:MaxExtractedChars`, guards decompression bombs/embedding cost).
+`IKnowledgeService.CreateFromUploadAsync` → `IDocumentTextExtractor` (`Services/DocumentTextExtractor.cs`): type is
+checked by extension **and** magic bytes (`%PDF-`, `PK\x03\x04`; TXT rejects NUL bytes; UTF-8/UTF-16 BOM/Latin-1
+fallback); **PDF via PdfPig 0.1.16** (`ContentOrderTextExtractor`), **DOCX via DocumentFormat.OpenXml 3.5.1**
+(all paragraphs incl. table cells, no deleted text); `KnowledgeTextNormalizer` cleans (CRLF, control/zero-width chars,
+whitespace, ≤1 blank line). No text (scanned PDF/blank DOCX/empty TXT) → clear 400 "…does not contain readable text.
+Scanned documents are not supported yet."; nothing is saved on any failure. Then the extracted text goes through the
+SAME `CreateCoreAsync` as a manual entry: clinic's chunk settings → same embedding model/dimension → transactional
+chunk write → immediately searchable via the unchanged `search_clinic_knowledge`. Schema: `knowledge_documents` +
+`source_type` (`manual`|`upload`, CHECK), `original_file_name`, `mime_type`, `file_size_bytes`; extracted text lives in
+the existing `content` column. **The original binary is discarded** (only text + metadata kept), so re-saving never
+needs the file. Editing an uploaded document changes title/category/active only (service ignores a supplied
+`content`; the page shows the text read-only — re-upload to change it); re-saving re-chunks from stored `content`
+with the current settings; deactivate/delete behave as before. There is **still no bulk "reindex all"** action —
+re-save each document. List shows a Source column (Manual / Uploaded + file name). Not built: OCR, multi-file,
+legacy `.doc`, password-protected PDFs (reported as unreadable). Verified locally with generated PDF/DOCX/TXT plus 15
+bad-file cases and two-clinic isolation (all 404 across clinics; upload ignores a posted `clinicId`).
 
 **Dashboard**: `/KnowledgeBase` (list: title, category, Active/Inactive, last updated; Edit /
 Activate-Deactivate / Delete; "Add Knowledge" and "Settings" buttons), `/KnowledgeBase/Edit/{id?}`
@@ -491,7 +513,7 @@ shown), mapped onto the 3 backend audience types via two hidden fields (`Audienc
 - Appointments: `GET/POST /api/appointments`, `GET /api/appointments/{id}`,
   `PATCH /api/appointments/{id}/status`, `GET /api/appointments/available`
 - Procedures: `GET/POST /api/procedures`, `GET/PUT /api/procedures/{id}`, `POST /api/procedures/{id}/active`
-- Knowledge: `GET/POST /api/knowledge`, `GET/PUT/DELETE /api/knowledge/{id}`,
+- Knowledge: `POST /api/knowledge/upload` (multipart, one file), `GET/POST /api/knowledge`, `GET/PUT/DELETE /api/knowledge/{id}`,
   `POST /api/knowledge/{id}/active`, `GET/PUT /api/knowledge/settings`
 - Campaigns: `GET/POST /api/campaigns`, `GET /api/campaigns/{id}`,
   `POST …/{id}/schedule|send|process-batch|cancel`, `GET /api/campaigns/audience-preview`,
@@ -537,7 +559,8 @@ AI tools under `/api/ai/*` (§8, incl. `POST /api/ai/knowledge/search`).
 **Non-secret** (`appsettings.json`, overridable by env): `Clinic:DefaultSlug` (`demo-clinic`);
 `Meta:AppId`, `Meta:GraphApiVersion` (`v21.0`), `Meta:WhatsAppLoginConfigId`, `Meta:FacebookLoginConfigId`;
 `Embeddings:BaseUrl` (`https://api.openai.com/v1`), `Embeddings:Model` (`text-embedding-3-small`),
-`Embeddings:Dimensions` (`1536` — must equal the `vector(N)` column); `Knowledge:MinScore` (0.30),
+`Embeddings:Dimensions` (`1536` — must equal the `vector(N)` column); `Knowledge:MaxUploadBytes` (5242880),
+`Knowledge:MaxExtractedChars` (250000); `Knowledge:MinScore` (0.30),
 `Knowledge:ChunkMaxChars` (1000), `Knowledge:ChunkOverlapChars` (150), `Knowledge:ChunkMinChars` (200) —
 the first three are **defaults for a clinic's first settings row only**; `ChunkMinChars` is system-wide.
 Render sets `PORT` itself; the Dockerfile sets `ASPNETCORE_ENVIRONMENT`/`ASPNETCORE_URLS`.
@@ -566,6 +589,8 @@ Render sets `PORT` itself; the Dockerfile sets `ASPNETCORE_ENVIRONMENT`/`ASPNETC
     `webhook_registered_at`; `telegram` added to the channel CHECKs (`channel_integrations`, `conversations`) and
     `telegram_customer` to `ck_messages_origin`; partial unique `ux_channel_integrations_telegram_bot_id`
     (connected rows only) and `ux_conversations_clinic_channel_thread` — applied live, **not yet on `main`**
+12. **KB document upload**: `knowledge_documents` + `source_type` (default `manual`, CHECK `manual|upload`),
+    `original_file_name`, `mime_type`, `file_size_bytes` — applied live, **not yet on `main`**
 
 No migration was needed for Procedures, lead/appointment editing, or the audience UI.
 

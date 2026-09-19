@@ -28,6 +28,7 @@ else
         </p>
         <div class="flex items-center gap-2">
             <a href="/KnowledgeBase/Settings" class="btn btn-sm">Settings</a>
+            <a href="/KnowledgeBase/Edit?mode=upload" class="btn btn-sm">Upload Document</a>
             <a href="/KnowledgeBase/Edit" class="btn btn-primary btn-sm">Add Knowledge</a>
         </div>
     </div>
@@ -38,6 +39,7 @@ else
                 <tr>
                     <th>Title</th>
                     <th>Category</th>
+                    <th>Source</th>
                     <th>Status</th>
                     <th>Last updated</th>
                     <th></th>
@@ -49,6 +51,17 @@ else
                     <tr>
                         <td><a href="/KnowledgeBase/Edit/@d.Id">@d.Title</a></td>
                         <td>@KnowledgeCategory.Label(d.Category)</td>
+                        <td>
+                            @if (d.SourceType == KnowledgeSourceType.Upload)
+                            {
+                                <span class="badge badge-teal">Uploaded</span>
+                                <div class="text-subtle" style="font-size:.72rem">@d.OriginalFileName</div>
+                            }
+                            else
+                            {
+                                <span class="badge badge-gray">Manual</span>
+                            }
+                        </td>
                         <td><span class="badge @(d.IsActive ? "badge-green" : "badge-gray")">@(d.IsActive ? "Active" : "Inactive")</span></td>
                         <td>@d.UpdatedAt.ToString("MMM d, yyyy HH:mm")</td>
                         <td>
@@ -69,7 +82,7 @@ else
                 }
                 @if (Model.Documents.Count == 0)
                 {
-                    <tr class="empty-row"><td colspan="5">No knowledge yet — click "Add Knowledge" to add your first entry.</td></tr>
+                    <tr class="empty-row"><td colspan="6">No knowledge yet — click "Add Knowledge" to add your first entry.</td></tr>
                 }
             </tbody>
         </table>

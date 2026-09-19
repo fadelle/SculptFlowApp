@@ -2,6 +2,7 @@
 @model PlasticSurgery.Pages.KnowledgeBase.EditModel
 @{
     ViewData["Title"] = Model.IsNew ? "Add Knowledge" : "Edit Knowledge";
+    var maxMb = Model.MaxUploadBytes / 1024.0 / 1024.0;
 }
 
 @if (!Model.ClinicConfigured)
@@ -16,42 +17,127 @@ else
     }
 
     <div class="card" style="padding:1.25rem;max-width:720px">
-        <form method="post" class="integration-form">
-            <label class="field">
-                <span>Title</span>
-                <input type="text" name="Title" value="@Model.Title" class="text-input" maxlength="200" required
-                       placeholder="e.g. Rhinoplasty recovery" />
-            </label>
 
-            <label class="field">
-                <span>Category</span>
-                <select name="Category" class="select">
-                    @foreach (var (value, label) in Model.CategoryOptions)
-                    {
-                        <option value="@value" selected="@(value == Model.Category)">@label</option>
-                    }
-                </select>
-            </label>
+        @if (Model.IsNew)
+        {
+            <div class="flex items-center gap-2 mb-3" role="tablist">
+                <button type="button" class="btn btn-sm @(Model.ShowUploadTab ? "" : "btn-primary")" id="kb-tab-manual" data-kb-tab="manual">Manual Entry</button>
+                <button type="button" class="btn btn-sm @(Model.ShowUploadTab ? "btn-primary" : "")" id="kb-tab-upload" data-kb-tab="upload">Upload Document</button>
+            </div>
+        }
 
-            <label class="field">
-                <span>Content</span>
-                <textarea name="Body" rows="12" class="text-input" required
-                          placeholder="Write the approved information the AI is allowed to share.&#10;&#10;For FAQs you can write:&#10;Q: Do I stay overnight after rhinoplasty?&#10;A: No, it's a day-case procedure.">@Model.Body</textarea>
-            </label>
+        @* ---------- Manual entry / edit (unchanged behavior) ---------- *@
+        <div id="kb-panel-manual" hidden="@(Model.IsNew && Model.ShowUploadTab)">
+            <form method="post" class="integration-form">
+                <label class="field">
+                    <span>Title</span>
+                    <input type="text" name="Title" value="@Model.Title" class="text-input" maxlength="200" required
+                           placeholder="e.g. Rhinoplasty recovery" />
+                </label>
 
-            <label class="flex items-center gap-1" style="font-weight:400">
-                <input type="checkbox" name="IsActive" value="true" checked="@Model.IsActive" />
-                Active — the AI can use this entry
-            </label>
+                <label class="field">
+                    <span>Category</span>
+                    <select name="Category" class="select">
+                        @foreach (var (value, label) in Model.CategoryOptions)
+                        {
+                            <option value="@value" selected="@(value == Model.Category)">@label</option>
+                        }
+                    </select>
+                </label>
 
-            <div class="text-subtle" style="font-size:.78rem">
-                Saving splits the text into searchable pieces and prepares it for AI lookup, which can take a few seconds.
+                @if (Model.IsUpload)
+                {
+                    <div class="text-subtle" style="font-size:.85rem">
+                        Uploaded from <strong>@Model.OriginalFileName</strong>
+                        @if (Model.FileSizeBytes.HasValue) { <text>(@((Model.FileSizeBytes.Value / 1024.0).ToString("0.#")) KB)</text> }.
+                        The text below was extracted from the file and can't be edited here — upload the document again to change it.
+                    </div>
+                    <label class="field">
+                        <span>Extracted text</span>
+                        <textarea rows="12" class="text-input" readonly>@Model.Body</textarea>
+                    </label>
+                }
+                else
+                {
+                    <label class="field">
+                        <span>Content</span>
+                        <textarea name="Body" rows="12" class="text-input" required
+                                  placeholder="Write the approved information the AI is allowed to share.&#10;&#10;For FAQs you can write:&#10;Q: Do I stay overnight after rhinoplasty?&#10;A: No, it's a day-case procedure.">@Model.Body</textarea>
+                    </label>
+                }
+
+                <label class="flex items-center gap-1" style="font-weight:400">
+                    <input type="checkbox" name="IsActive" value="true" checked="@Model.IsActive" />
+                    Active — the AI can use this entry
+                </label>
+
+                <div class="text-subtle" style="font-size:.78rem">
+                    Saving splits the text into searchable pieces and prepares it for AI lookup, which can take a few seconds.
+                </div>
+
+                <div class="flex items-center gap-2 mt-2">
+                    <button type="submit" class="btn btn-primary btn-sm">Save</button>
+                    <a href="/KnowledgeBase" class="btn btn-sm">Cancel</a>
+                </div>
+            </form>
+        </div>
+
+        @* ---------- Upload Document (new entries only) ---------- *@
+        @if (Model.IsNew)
+        {
+            <div id="kb-panel-upload" hidden="@(!Model.ShowUploadTab)">
+                <form method="post" asp-page-handler="Upload" enctype="multipart/form-data" class="integration-form">
+                    <label class="field">
+                        <span>File (PDF, DOCX or TXT — one file, up to @maxMb.ToString("0.#") MB)</span>
+                        <input type="file" name="UploadFile" class="text-input" accept=".pdf,.docx,.txt" required />
+                    </label>
+
+                    <label class="field">
+                        <span>Title <small class="text-subtle">(optional — defaults to the file name)</small></span>
+                        <input type="text" name="Title" value="@Model.Title" class="text-input" maxlength="200"
+                               placeholder="e.g. Pre-operative instructions" />
+                    </label>
+
+                    <label class="field">
+                        <span>Category</span>
+                        <select name="Category" class="select">
+                            @foreach (var (value, label) in Model.CategoryOptions)
+                            {
+                                <option value="@value" selected="@(value == Model.Category)">@label</option>
+                            }
+                        </select>
+                    </label>
+
+                    <label class="flex items-center gap-1" style="font-weight:400">
+                        <input type="checkbox" name="IsActive" value="true" checked="@(Model.ErrorMessage is null || Model.IsActive)" />
+                        Active — the AI can use this document
+                    </label>
+
+                    <div class="text-subtle" style="font-size:.78rem">
+                        Text is extracted from the file and prepared for AI search, which can take a few seconds. Only text-based
+                        documents are supported — scanned pages (images) can't be read. The original file isn't stored; only its text is kept.
+                    </div>
+
+                    <div class="flex items-center gap-2 mt-2">
+                        <button type="submit" class="btn btn-primary btn-sm">Upload</button>
+                        <a href="/KnowledgeBase" class="btn btn-sm">Cancel</a>
+                    </div>
+                </form>
             </div>
 
-            <div class="flex items-center gap-2 mt-2">
-                <button type="submit" class="btn btn-primary btn-sm">Save</button>
-                <a href="/KnowledgeBase" class="btn btn-sm">Cancel</a>
-            </div>
-        </form>
+            <script>
+                (function () {
+                    var tabs = document.querySelectorAll('[data-kb-tab]');
+                    tabs.forEach(function (tab) {
+                        tab.addEventListener('click', function () {
+                            var which = tab.getAttribute('data-kb-tab');
+                            document.getElementById('kb-panel-manual').hidden = which !== 'manual';
+                            document.getElementById('kb-panel-upload').hidden = which !== 'upload';
+                            tabs.forEach(function (t) { t.classList.toggle('btn-primary', t === tab); });
+                        });
+                    });
+                })();
+            </script>
+        }
     </div>
 }

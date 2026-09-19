@@ -15,14 +15,23 @@ public class KnowledgeService : IKnowledgeService
     private readonly IKnowledgeChunkingService _chunking;
     private readonly IEmbeddingService _embeddings;
     private readonly IKnowledgeSettingsService _settings;
+    private readonly IDocumentTextExtractor _extractor;
 
-    public KnowledgeService(ApplicationDbContext db, IKnowledgeChunkingService chunking, IEmbeddingService embeddings, IKnowledgeSettingsService settings)
+    public KnowledgeService(
+        ApplicationDbContext db, IKnowledgeChunkingService chunking, IEmbeddingService embeddings,
+        IKnowledgeSettingsService settings, IDocumentTextExtractor extractor, IConfiguration configuration)
     {
         _db = db;
         _chunking = chunking;
         _embeddings = embeddings;
         _settings = settings;
+        _extractor = extractor;
+        // Hard ceiling of 25 MB even if configured higher — Kestrel's own request limit is ~30 MB, and
+        // the whole file is buffered in memory for parsing.
+        MaxUploadBytes = Math.Clamp(configuration.GetValue("Knowledge:MaxUploadBytes", 5L * 1024 * 1024), 1024, 25L * 1024 * 1024);
     }
+
+    public long MaxUploadBytes { get; }
 
     public async Task<IReadOnlyList<KnowledgeDocumentResponse>> ListAsync(Guid clinicId, CancellationToken ct = default)
     {
@@ -46,7 +55,42 @@ public class KnowledgeService : IKnowledgeService
         return doc is null ? null : await ToResponseAsync(doc, ct);
     }
 
-    public async Task<KnowledgeDocumentResponse> CreateAsync(Guid clinicId, SaveKnowledgeRequest request, CancellationToken ct = default)
+    public Task<KnowledgeDocumentResponse> CreateAsync(Guid clinicId, SaveKnowledgeRequest request, CancellationToken ct = default) =>
+        CreateCoreAsync(clinicId, request, upload: null, ct);
+
+    public async Task<KnowledgeDocumentResponse> CreateFromUploadAsync(
+        Guid clinicId, UploadKnowledgeRequest request, string fileName, Stream content, long length, CancellationToken ct = default)
+    {
+        fileName = Path.GetFileName(fileName ?? string.Empty).Trim();
+        if (fileName.Length == 0 || length <= 0)
+        {
+            throw new InvalidDocumentException(length == 0 && fileName.Length > 0 ? "The file is empty." : "Choose a file to upload.");
+        }
+        if (length > MaxUploadBytes)
+        {
+            throw new InvalidDocumentException(
+                $"This file is {length / 1024.0 / 1024.0:0.#} MB — the maximum upload size is {MaxUploadBytes / 1024.0 / 1024.0:0.#} MB.");
+        }
+
+        // Extraction validates the type (extension + contents) and throws a staff-readable message for
+        // every user-fixable problem. Nothing is written until the text has been extracted successfully.
+        var text = await _extractor.ExtractAsync(content, fileName, ct);
+
+        // Title defaults to the file name (without extension) so a quick upload doesn't need one typed.
+        var title = string.IsNullOrWhiteSpace(request.Title) ? Path.GetFileNameWithoutExtension(fileName) : request.Title;
+        if (title.Length > MaxTitleLength) title = title[..MaxTitleLength];
+
+        // From here it's exactly the manual-entry pipeline: same chunker, same settings, same embeddings,
+        // same transactional chunk write — so the document is immediately searchable.
+        return await CreateCoreAsync(
+            clinicId, new SaveKnowledgeRequest(title, request.Category, text, request.IsActive),
+            new UploadInfo(fileName.Length > 255 ? fileName[^255..] : fileName, DocumentTextExtractor.MimeTypeFor(fileName), length), ct);
+    }
+
+    private sealed record UploadInfo(string FileName, string MimeType, long SizeBytes);
+
+    private async Task<KnowledgeDocumentResponse> CreateCoreAsync(
+        Guid clinicId, SaveKnowledgeRequest request, UploadInfo? upload, CancellationToken ct)
     {
         var (title, category, content) = Validate(request);
         var (pieces, vectors) = await ChunkAndEmbedAsync(clinicId, title, content, ct);
@@ -59,6 +103,10 @@ public class KnowledgeService : IKnowledgeService
             Title = title,
             Category = category,
             Content = content,
+            SourceType = upload is null ? KnowledgeSourceType.Manual : KnowledgeSourceType.Upload,
+            OriginalFileName = upload?.FileName,
+            MimeType = upload?.MimeType,
+            FileSizeBytes = upload?.SizeBytes,
             IsActive = request.IsActive,
             CreatedAt = now,
             UpdatedAt = now
@@ -77,6 +125,11 @@ public class KnowledgeService : IKnowledgeService
     {
         var doc = await _db.KnowledgeDocuments.FirstOrDefaultAsync(d => d.ClinicId == clinicId && d.Id == id, ct);
         if (doc is null) return null;
+
+        // An uploaded document's text is what was extracted from the file — it isn't editable here
+        // (re-upload to change it), whatever the caller sent. Title/category/active stay editable, and
+        // the stored text is re-chunked below exactly like a manual entry.
+        if (doc.SourceType == KnowledgeSourceType.Upload) request = request with { Content = doc.Content };
 
         var (title, category, content) = Validate(request);
         // Saving always re-chunks and re-embeds with the clinic's CURRENT settings — that's how a
@@ -178,5 +231,6 @@ public class KnowledgeService : IKnowledgeService
         ToResponse(doc, await _db.KnowledgeChunks.CountAsync(c => c.KnowledgeDocumentId == doc.Id, ct));
 
     private static KnowledgeDocumentResponse ToResponse(KnowledgeDocument d, int chunkCount) => new(
-        d.Id, d.ClinicId, d.Title, d.Category, d.Content, d.IsActive, chunkCount, d.CreatedAt, d.UpdatedAt);
+        d.Id, d.ClinicId, d.Title, d.Category, d.Content, d.IsActive, chunkCount, d.CreatedAt, d.UpdatedAt,
+        d.SourceType, d.OriginalFileName, d.MimeType, d.FileSizeBytes);
 }

@@ -18,7 +18,19 @@ public interface IKnowledgeService
     /// <summary>Throws ArgumentException for invalid input, InvalidOperationException if embedding fails.</summary>
     Task<KnowledgeDocumentResponse> CreateAsync(Guid clinicId, SaveKnowledgeRequest request, CancellationToken ct = default);
 
-    /// <summary>Returns null if the document isn't in this clinic. Always regenerates the chunks and
+    /// <summary>Maximum accepted upload size in bytes (config Knowledge:MaxUploadBytes, default 5 MB).</summary>
+    long MaxUploadBytes { get; }
+
+    /// <summary>Creates a document from ONE uploaded PDF/DOCX/TXT: validates size/type, extracts and
+    /// normalizes the text, then runs the same chunk → embed → store pipeline as a manual entry. The
+    /// original file is not kept — only its name/type/size and the extracted text (in Content).
+    /// Throws InvalidDocumentException (an ArgumentException) for anything staff can fix, and
+    /// InvalidOperationException if embedding fails (nothing is saved in either case).</summary>
+    Task<KnowledgeDocumentResponse> CreateFromUploadAsync(
+        Guid clinicId, UploadKnowledgeRequest request, string fileName, Stream content, long length, CancellationToken ct = default);
+
+    /// <summary>Returns null if the document isn't in this clinic. For an uploaded document the text is
+    /// kept as extracted (only title/category/active change). Always regenerates the chunks and
     /// embeddings using the clinic's current Knowledge Base settings (so re-saving an entry applies
     /// changed chunk size/overlap to it).</summary>
     Task<KnowledgeDocumentResponse?> UpdateAsync(Guid clinicId, Guid id, SaveKnowledgeRequest request, CancellationToken ct = default);
