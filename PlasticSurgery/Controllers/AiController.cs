@@ -108,9 +108,13 @@ public class AiController : ControllerBase
     /// use this when an actual procedure id/record is needed.</summary>
     [HttpGet("procedures")]
     public async Task<ActionResult<IReadOnlyList<ProcedureResponse>>> GetProcedures(
-        [FromQuery] Guid clinicId, [FromQuery] bool activeOnly = true, CancellationToken ct = default)
+        [FromQuery] Guid clinicId, CancellationToken ct = default)
     {
-        var procedures = await _procedures.ListAsync(clinicId, activeOnly, ct);
+        // Always ACTIVE procedures only — the AI must never see (and so never suggest or book) an
+        // inactive one. Historical use of inactive procedures (existing leads/appointments/bookings,
+        // Campaign filtering) goes through the normal backend queries, not this tool. There is
+        // deliberately no activeOnly switch here; a stray activeOnly=false query param is ignored.
+        var procedures = await _procedures.ListAsync(clinicId, activeOnly: true, ct);
         return Ok(procedures);
     }
 
@@ -154,11 +158,18 @@ public class AiController : ControllerBase
     public async Task<ActionResult<AppointmentResponse>> BookConsultation(
         [FromQuery] Guid clinicId, [FromBody] BookConsultationRequest request, CancellationToken ct)
     {
-        var appointment = await _appointments.CreateAsync(new CreateAppointmentRequest(
-            clinicId, request.LeadId, request.ProcedureId,
-            string.IsNullOrWhiteSpace(request.AppointmentType) ? "consultation" : request.AppointmentType,
-            request.ScheduledStart, request.ScheduledEnd, request.LocationType, request.LocationName, request.Notes), ct);
-        return Ok(appointment);
+        try
+        {
+            var appointment = await _appointments.CreateAsync(new CreateAppointmentRequest(
+                clinicId, request.LeadId, request.ProcedureId,
+                string.IsNullOrWhiteSpace(request.AppointmentType) ? "consultation" : request.AppointmentType,
+                request.ScheduledStart, request.ScheduledEnd, request.LocationType, request.LocationName, request.Notes), ct);
+            return Ok(appointment);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
     }
 
     /// <summary>reschedule_consultation — patient wants to change an existing consultation's time.</summary>

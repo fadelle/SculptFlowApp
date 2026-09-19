@@ -9,15 +9,20 @@ public class ProcedureBookingService : IProcedureBookingService
 {
     private readonly ApplicationDbContext _db;
     private readonly IEventLogger _events;
+    private readonly IProcedureService _procedures;
 
-    public ProcedureBookingService(ApplicationDbContext db, IEventLogger events)
+    public ProcedureBookingService(ApplicationDbContext db, IEventLogger events, IProcedureService procedures)
     {
         _db = db;
         _events = events;
+        _procedures = procedures;
     }
 
     public async Task<ProcedureBookingResponse> CreateAsync(CreateProcedureBookingRequest request, CancellationToken ct = default)
     {
+        // A new procedure booking may only reference one of this clinic's ACTIVE procedures.
+        await _procedures.EnsureUsableAsync(request.ClinicId, request.ProcedureId, ct);
+
         var booking = new ProcedureBooking
         {
             Id = Guid.NewGuid(),

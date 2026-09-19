@@ -21,8 +21,15 @@ public class ProcedureBookingsController : DashboardApiController
         var clinicId = await GetClinicIdAsync(ct);
         if (clinicId is null) return Forbid();
 
-        var booking = await _bookings.CreateAsync(request with { ClinicId = clinicId.Value }, ct);
-        return CreatedAtAction(nameof(List), null, booking);
+        try
+        {
+            var booking = await _bookings.CreateAsync(request with { ClinicId = clinicId.Value }, ct);
+            return CreatedAtAction(nameof(List), null, booking);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
     }
 
     [HttpPatch("{id:guid}")]

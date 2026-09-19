@@ -1,0 +1,70 @@
+@page "/Procedures"
+@model PlasticSurgery.Pages.Procedures.IndexModel
+@{
+    ViewData["Title"] = "Procedures";
+}
+
+@if (!Model.ClinicConfigured)
+{
+    <div class="alert alert-warning">No clinic configured yet — see the Main Numbers page for setup steps.</div>
+}
+else
+{
+    if (!string.IsNullOrEmpty(Model.StatusMessage))
+    {
+        <div class="alert alert-info mb-3">@Model.StatusMessage</div>
+    }
+    if (!string.IsNullOrEmpty(Model.ErrorMessage))
+    {
+        <div class="alert alert-warning mb-3">@Model.ErrorMessage</div>
+    }
+
+    <div class="flex items-center gap-2 mb-3" style="justify-content:space-between">
+        <p class="text-muted" style="margin:0;max-width:640px">
+            The procedures your clinic offers. They're used for lead interest, consultation booking,
+            campaign filters and the AI assistant. Procedures can't be deleted — deactivate one to stop
+            using it for new bookings while keeping past leads and appointments intact. Put detailed
+            information (pricing, recovery, preparation) in the <a href="/KnowledgeBase">Knowledge Base</a>.
+        </p>
+        <a href="/Procedures/Edit" class="btn btn-primary btn-sm">Add Procedure</a>
+    </div>
+
+    <div class="table-card table-scroll">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Code</th>
+                    <th>Consultation</th>
+                    <th>Status</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var p in Model.Procedures)
+                {
+                    <tr>
+                        <td><a href="/Procedures/Edit/@p.Id">@p.Name</a></td>
+                        <td>@(p.Code ?? "—")</td>
+                        <td>@(p.ConsultationDuration is { } d ? $"{d} min" : "—")</td>
+                        <td><span class="badge @(p.IsActive ? "badge-green" : "badge-gray")">@(p.IsActive ? "Active" : "Inactive")</span></td>
+                        <td>
+                            <div class="flex items-center gap-2">
+                                <a href="/Procedures/Edit/@p.Id" class="btn btn-sm">Edit</a>
+                                <form method="post" asp-page-handler="Toggle">
+                                    <input type="hidden" name="id" value="@p.Id" />
+                                    <input type="hidden" name="active" value="@((!p.IsActive).ToString().ToLowerInvariant())" />
+                                    <button type="submit" class="btn btn-sm">@(p.IsActive ? "Deactivate" : "Activate")</button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                }
+                @if (Model.Procedures.Count == 0)
+                {
+                    <tr class="empty-row"><td colspan="5">No procedures yet — click "Add Procedure" to add your first one.</td></tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}

@@ -9,11 +9,13 @@ public class LeadService : ILeadService
 {
     private readonly ApplicationDbContext _db;
     private readonly IEventLogger _events;
+    private readonly IProcedureService _procedures;
 
-    public LeadService(ApplicationDbContext db, IEventLogger events)
+    public LeadService(ApplicationDbContext db, IEventLogger events, IProcedureService procedures)
     {
         _db = db;
         _events = events;
+        _procedures = procedures;
     }
 
     public async Task<(LeadResponse Lead, bool WasCreated)> CreateOrGetAsync(CreateLeadRequest request, CancellationToken ct = default)
@@ -119,6 +121,13 @@ public class LeadService : ILeadService
 
         if (lead is null) return null;
 
+        // Only a CHANGE of procedure interest is validated — resubmitting the lead's current
+        // (possibly now-inactive) procedure must keep working.
+        if (request.ProcedureId is { } newProcedureId && newProcedureId != lead.ProcedureId)
+        {
+            await _procedures.EnsureUsableAsync(clinicId, newProcedureId, ct);
+        }
+
         if (request.ProcedureId is not null) lead.ProcedureId = request.ProcedureId;
         if (request.FullName is not null) lead.FullName = request.FullName;
         if (request.FirstName is not null) lead.FirstName = request.FirstName;
@@ -206,6 +215,11 @@ public class LeadService : ILeadService
         var lead = await _db.Leads.Include(l => l.Procedure)
             .FirstOrDefaultAsync(l => l.ClinicId == clinicId && l.Id == id, ct);
         if (lead is null) return null;
+
+        if (request.ProcedureId is { } newProcedureId && newProcedureId != lead.ProcedureId)
+        {
+            await _procedures.EnsureUsableAsync(clinicId, newProcedureId, ct);
+        }
 
         if (request.ProcedureId is not null) lead.ProcedureId = request.ProcedureId;
         if (request.PreferredLanguage is not null) lead.PreferredLanguage = request.PreferredLanguage;

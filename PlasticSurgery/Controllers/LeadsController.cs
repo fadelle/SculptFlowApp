@@ -70,8 +70,15 @@ public class LeadsController : DashboardApiController
         var clinicId = await GetClinicIdAsync(ct);
         if (clinicId is null) return Forbid();
 
-        var lead = await _leads.UpdateAsync(clinicId.Value, id, request, ct);
-        return lead is null ? NotFound() : Ok(lead);
+        try
+        {
+            var lead = await _leads.UpdateAsync(clinicId.Value, id, request, ct);
+            return lead is null ? NotFound() : Ok(lead);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
     }
 
     [HttpPost("{id:guid}/status")]

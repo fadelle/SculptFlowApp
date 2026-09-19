@@ -10,11 +10,13 @@ public class AppointmentService : IAppointmentService
 {
     private readonly ApplicationDbContext _db;
     private readonly IEventLogger _events;
+    private readonly IProcedureService _procedures;
 
-    public AppointmentService(ApplicationDbContext db, IEventLogger events)
+    public AppointmentService(ApplicationDbContext db, IEventLogger events, IProcedureService procedures)
     {
         _db = db;
         _events = events;
+        _procedures = procedures;
     }
 
     public async Task<IReadOnlyList<AvailableSlotResponse>> GetAvailableSlotsAsync(Guid clinicId, int days, CancellationToken ct = default)
@@ -71,6 +73,12 @@ public class AppointmentService : IAppointmentService
 
     public async Task<AppointmentResponse> CreateAsync(CreateAppointmentRequest request, CancellationToken ct = default)
     {
+        // A new booking may only reference one of this clinic's ACTIVE procedures.
+        if (request.ProcedureId is { } procedureId)
+        {
+            await _procedures.EnsureUsableAsync(request.ClinicId, procedureId, ct);
+        }
+
         var appointment = new Appointment
         {
             Id = Guid.NewGuid(),

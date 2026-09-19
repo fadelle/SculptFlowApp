@@ -25,13 +25,59 @@ public class ProceduresController : DashboardApiController
         return Ok(items);
     }
 
+    [HttpGet("{id:guid}")]
+    public async Task<ActionResult<ProcedureResponse>> GetById(Guid id, CancellationToken ct)
+    {
+        var clinicId = await GetClinicIdAsync(ct);
+        if (clinicId is null) return Forbid();
+
+        var procedure = await _procedures.GetByIdAsync(clinicId.Value, id, ct);
+        return procedure is null ? NotFound() : Ok(procedure);
+    }
+
     [HttpPost]
     public async Task<ActionResult<ProcedureResponse>> Create([FromBody] CreateProcedureRequest request, CancellationToken ct)
     {
         var clinicId = await GetClinicIdAsync(ct);
         if (clinicId is null) return Forbid();
 
-        var procedure = await _procedures.CreateAsync(request with { ClinicId = clinicId.Value }, ct);
-        return CreatedAtAction(nameof(List), null, procedure);
+        try
+        {
+            var procedure = await _procedures.CreateAsync(request with { ClinicId = clinicId.Value }, ct);
+            return CreatedAtAction(nameof(GetById), new { id = procedure.Id }, procedure);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    [HttpPut("{id:guid}")]
+    public async Task<ActionResult<ProcedureResponse>> Update(Guid id, [FromBody] UpdateProcedureRequest request, CancellationToken ct)
+    {
+        var clinicId = await GetClinicIdAsync(ct);
+        if (clinicId is null) return Forbid();
+
+        try
+        {
+            var procedure = await _procedures.UpdateAsync(clinicId.Value, id, request, ct);
+            return procedure is null ? NotFound() : Ok(procedure);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    /// <summary>Activate/deactivate — procedures are never deleted (leads, appointments and procedure
+    /// bookings reference them).</summary>
+    [HttpPost("{id:guid}/active")]
+    public async Task<ActionResult<ProcedureResponse>> SetActive(Guid id, [FromBody] SetProcedureActiveRequest request, CancellationToken ct)
+    {
+        var clinicId = await GetClinicIdAsync(ct);
+        if (clinicId is null) return Forbid();
+
+        var procedure = await _procedures.SetActiveAsync(clinicId.Value, id, request.IsActive, ct);
+        return procedure is null ? NotFound() : Ok(procedure);
     }
 }

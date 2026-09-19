@@ -1,0 +1,51 @@
+@page "/Procedures/Edit/{id:guid?}"
+@model PlasticSurgery.Pages.Procedures.EditModel
+@{
+    ViewData["Title"] = Model.IsNew ? "Add Procedure" : "Edit Procedure";
+}
+
+@if (!Model.ClinicConfigured)
+{
+    <div class="alert alert-warning">No clinic configured yet — see the Main Numbers page for setup steps.</div>
+}
+else
+{
+    if (!string.IsNullOrEmpty(Model.ErrorMessage))
+    {
+        <div class="alert alert-warning mb-3">@Model.ErrorMessage</div>
+    }
+
+    <div class="card" style="padding:1.25rem;max-width:560px">
+        <form method="post" class="integration-form">
+            <label class="field">
+                <span>Name</span>
+                <input type="text" name="Name" value="@Model.Name" class="text-input" maxlength="200" required placeholder="e.g. Rhinoplasty" />
+            </label>
+
+            <label class="field">
+                <span>Code (optional)</span>
+                <input type="text" name="Code" value="@Model.Code" class="text-input" maxlength="100" placeholder="e.g. RHINO" />
+            </label>
+
+            <label class="field">
+                <span>Consultation duration (minutes)</span>
+                <input type="number" name="DurationMinutes" value="@Model.DurationMinutes" class="text-input" min="1" max="480" placeholder="e.g. 30" style="max-width:160px" />
+            </label>
+
+            <label class="field">
+                <span>Short description (optional)</span>
+                <textarea name="Description" rows="3" class="text-input" maxlength="500" placeholder="One or two sentences.">@Model.Description</textarea>
+            </label>
+
+            <div class="text-subtle" style="font-size:.78rem">
+                Keep this page to basic details. Pricing, preparation, recovery and other detailed information
+                belong in the <a href="/KnowledgeBase">Knowledge Base</a>.
+            </div>
+
+            <div class="flex items-center gap-2 mt-2">
+                <button type="submit" class="btn btn-primary btn-sm">Save</button>
+                <a href="/Procedures" class="btn btn-sm">Cancel</a>
+            </div>
+        </form>
+    </div>
+}

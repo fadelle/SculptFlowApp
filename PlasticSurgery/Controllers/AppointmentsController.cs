@@ -34,8 +34,15 @@ public class AppointmentsController : DashboardApiController
         var clinicId = await GetClinicIdAsync(ct);
         if (clinicId is null) return Forbid();
 
-        var appointment = await _appointments.CreateAsync(request with { ClinicId = clinicId.Value }, ct);
-        return CreatedAtAction(nameof(List), null, appointment);
+        try
+        {
+            var appointment = await _appointments.CreateAsync(request with { ClinicId = clinicId.Value }, ct);
+            return CreatedAtAction(nameof(List), null, appointment);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
     }
 
     [HttpGet("{id:guid}")]
