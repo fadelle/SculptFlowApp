@@ -14,7 +14,7 @@
 <body>
     <div class="auth-shell">
         <div class="card auth-card" style="padding:1.75rem">
-            <div class="flex items-center gap-2 mb-3">
+            <div class="auth-brand">
                 <span class="mark">SF</span>
                 <h1 style="margin:0;font-size:1.1rem">MySculptFlow</h1>
             </div>
@@ -34,10 +34,10 @@
                     <input type="password" name="Password" class="text-input" autocomplete="current-password" required />
                 </label>
 
-                <button type="submit" class="btn btn-primary btn-sm mt-1">Sign in</button>
+                <button type="submit" class="btn btn-primary auth-submit">Sign in</button>
             </form>
 
-            <p class="text-subtle mt-3" style="font-size:.82rem">
+            <p class="text-subtle auth-footer">
                 No account yet? <a href="/Account/Register@(string.IsNullOrEmpty(Model.ReturnUrl) ? "" : "?ReturnUrl=" + Uri.EscapeDataString(Model.ReturnUrl))">Register</a>
             </p>
         </div>
