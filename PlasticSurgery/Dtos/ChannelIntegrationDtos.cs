@@ -18,8 +18,21 @@ public record ChannelIntegrationResponse(
     /// <summary>WhatsApp only — the two-step-verification PIN registered with Meta for this phone
     /// number. Not a bearer credential, so unlike AccessToken it's shown directly rather than
     /// hidden — staff may need it for WhatsApp Business App coexistence login.</summary>
-    string? Pin = null
+    string? Pin = null,
+    /// <summary>Telegram only. The bot token and webhook secret are NEVER part of any response —
+    /// HasAccessToken / HasWebhookVerifyToken are the only trace of them.</summary>
+    string? TelegramBotId = null,
+    string? TelegramBotUsername = null,
+    /// <summary>One of WebhookStatus (active / pending / error / not_registered); null for channels without a self-registered webhook.</summary>
+    string? WebhookStatus = null,
+    DateTimeOffset? WebhookRegisteredAt = null,
+    /// <summary>When the last webhook delivery from the platform arrived (Telegram only today).</summary>
+    DateTimeOffset? LastWebhookAt = null
 );
+
+/// <summary>Body for POST /api/channel-integrations/telegram/connect. The token is write-only: it is
+/// validated with Telegram, stored server-side, and never returned or logged.</summary>
+public record ConnectTelegramRequest(string? BotToken);
 
 /// <summary>
 /// Save/update request for one channel's connection config. AccessToken and

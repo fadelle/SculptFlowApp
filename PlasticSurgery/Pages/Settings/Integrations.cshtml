@@ -15,17 +15,21 @@ else
     {
         <div class="alert alert-info mb-3">@Model.StatusMessage</div>
     }
+    if (!string.IsNullOrEmpty(Model.ErrorMessage))
+    {
+        <div class="alert alert-warning mb-3">@Model.ErrorMessage</div>
+    }
 
     <p class="text-muted mb-3">
         Connect the channels leads message the clinic on. These credentials let the platform
-        (via n8n / the AI agent) send and receive WhatsApp, Instagram, and Facebook messages —
-        see Project 5 in the plan.
+        (via n8n / the AI agent) send and receive WhatsApp, Instagram, Facebook and Telegram messages.
     </p>
 
     <div class="integration-list">
         @{ await RenderChannelCard(ChannelType.WhatsApp, "WA", "#25D366", "WhatsApp Business", oauth: true); }
         @{ await RenderChannelCard(ChannelType.Instagram, "IG", "#C13584", "Instagram", oauth: false); }
         @{ await RenderChannelCard(ChannelType.Facebook, "FB", "#1877F2", "Facebook Messenger", oauth: true); }
+        @{ await RenderTelegramCard(); }
     </div>
 }
 
@@ -133,6 +137,117 @@ else
                 </form>
             }
         </div>
+        await Task.CompletedTask;
+    }
+
+    // Telegram is connected differently from the Meta channels: the clinic pastes a BotFather token
+    // and SculptFlow does the rest (getMe, then setWebhook with a generated secret). The token is
+    // write-only — the form never shows a saved one, and nothing here can render it.
+    private async Task RenderTelegramCard()
+    {
+        var info = Model.Channels.TryGetValue(ChannelType.Telegram, out var c) ? c : null;
+        var connected = info?.Status == ChannelIntegrationStatus.Connected;
+        var badgeClass = info?.Status switch
+        {
+            ChannelIntegrationStatus.Connected => "badge-green",
+            ChannelIntegrationStatus.Error => "badge-red",
+            _ => "badge-gray"
+        };
+        var webhookBadge = info?.WebhookStatus switch
+        {
+            WebhookStatus.Active => "badge-green",
+            WebhookStatus.Error => "badge-red",
+            WebhookStatus.Pending => "badge-gray",
+            _ => "badge-gray"
+        };
+        var webhookLabel = info?.WebhookStatus switch
+        {
+            WebhookStatus.Active => "Webhook active",
+            WebhookStatus.Error => "Webhook problem",
+            WebhookStatus.Pending => "Webhook pending",
+            _ => "Webhook not registered"
+        };
+
+        <div class="card integration-card">
+            <div class="integration-card-header">
+                <div class="flex items-center gap-2">
+                    <span class="channel-mark" style="background:#229ED9">TG</span>
+                    <div>
+                        <div class="integration-title">Telegram</div>
+                        @if (!string.IsNullOrEmpty(info?.TelegramBotUsername))
+                        {
+                            <div class="text-subtle" style="font-size:.78rem">
+                                @(connected ? "Bot" : "Last connected bot") <strong>@("@" + info!.TelegramBotUsername)</strong>
+                                · ID <code>@info.TelegramBotId</code>
+                            </div>
+                        }
+                    </div>
+                </div>
+                <span class="badge @badgeClass">@(info?.Status ?? ChannelIntegrationStatus.Disconnected)</span>
+            </div>
+
+            @if (connected)
+            {
+                <div class="flex items-center gap-2 mb-2" style="flex-wrap:wrap">
+                    <span class="badge @webhookBadge">@webhookLabel</span>
+                    @if (info!.LastWebhookAt.HasValue)
+                    {
+                        <span class="text-subtle" style="font-size:.75rem">Last message received @info.LastWebhookAt.Value.ToString("MMM d, HH:mm") UTC</span>
+                    }
+                    else
+                    {
+                        <span class="text-subtle" style="font-size:.75rem">No messages received yet — send your bot a message from Telegram to test.</span>
+                    }
+                </div>
+            }
+            @if (!string.IsNullOrEmpty(info?.LastError))
+            {
+                <div class="alert alert-warning mb-2" style="font-size:.8rem">@info!.LastError</div>
+            }
+
+            @if (connected)
+            {
+                <div class="flex items-center gap-2 mt-1" style="flex-wrap:wrap">
+                    <form method="post" asp-page-handler="RefreshTelegram">
+                        <button type="submit" class="btn btn-sm">Check webhook</button>
+                    </form>
+                    <form method="post" asp-page-handler="Disconnect"
+                          onsubmit="return confirm('Disconnect Telegram? The webhook is removed and the bot stops receiving/sending until reconnected. Existing conversations are kept.');">
+                        <input type="hidden" name="Channel" value="@ChannelType.Telegram" />
+                        <button type="submit" class="btn btn-sm">Disconnect</button>
+                    </form>
+                </div>
+                <details class="mt-2">
+                    <summary class="text-subtle" style="font-size:.78rem;cursor:pointer">Reconnect or use a different bot</summary>
+                    <div class="mt-2">
+                        @{ await RenderTelegramConnectForm("Reconnect Telegram"); }
+                    </div>
+                </details>
+            }
+            else
+            {
+                await RenderTelegramConnectForm("Connect Telegram");
+            }
+        </div>
+        await Task.CompletedTask;
+    }
+
+    private async Task RenderTelegramConnectForm(string buttonLabel)
+    {
+        <form method="post" asp-page-handler="ConnectTelegram" class="integration-form">
+            <label class="field">
+                <span>Bot token</span>
+                <input type="password" name="BotToken" class="text-input" autocomplete="off" spellcheck="false"
+                       placeholder="123456789:AA… — from @@BotFather" required />
+            </label>
+            <div class="text-subtle" style="font-size:.75rem">
+                Create a bot with <strong>@@BotFather</strong> in Telegram and paste its token here. SculptFlow verifies it,
+                registers the webhook for you, and never shows the token again.
+            </div>
+            <div class="flex items-center gap-2 mt-1">
+                <button type="submit" class="btn btn-primary btn-sm">@buttonLabel</button>
+            </div>
+        </form>
         await Task.CompletedTask;
     }
 

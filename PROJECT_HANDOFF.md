@@ -1,400 +1,672 @@
-# SculptFlow — Project Handoff
+# SculptFlow (MySculptFlow) — Project Handoff
 
-_Last updated: 2026-09-18. Written for session continuity — read this first after any context reset._
+_Last updated: 2026-09-19 (Telegram added). Written for session continuity — read this first after any context reset.
+This is the ONE handoff/state file; update it in place, don't create another._
+
+> **No secrets live in this file.** Earlier versions of it (git commit `2aec468`, already on GitHub)
+> contained the real `Meta:WebhookVerifyToken` and `N8n:IngestApiKey` values — they were removed here
+> but remain in git history, so **rotate both** (see §22). Config key *names* are listed in §20; values
+> live in `dotnet user-secrets` locally and in Render env vars in production.
 
 ---
 
 ## 1. Product overview
 
-SculptFlow is a multi-tenant SaaS platform for plastic surgery clinics. Core loop: a lead messages
-a clinic on WhatsApp → an AI agent (orchestrated via n8n) carries the first-line conversation,
-qualifies the lead, books consultations → staff can take over any conversation at any moment from a
-dashboard Inbox → clinics can also run WhatsApp template campaigns (reactivation, reminders) to
-existing leads. Every actual message — whether from the customer, the AI, staff, or a campaign —
-lives in one unified conversation history per lead, in Postgres.
+SculptFlow (UI brand: **MySculptFlow**) is a multi-tenant SaaS platform for plastic surgery clinics. Core
+loop: a lead messages a clinic on WhatsApp → an AI agent (orchestrated via n8n) carries the first-line
+conversation, answers from the clinic's Knowledge Base, qualifies the lead, books consultations → staff
+can take over any conversation at any moment from a dashboard Inbox → clinics run WhatsApp template
+campaigns (especially **old-lead reactivation**) to existing leads. Every actual message — customer, AI,
+staff, or campaign — lives in one unified conversation history per lead, in Postgres.
 
 ## 2. Current architecture
 
-- **.NET 10**, ASP.NET Core Razor Pages (staff dashboard) + Web API controllers (REST, consumed by
-  the dashboard's own JS and by n8n/Meta).
-- **EF Core / Npgsql** against **Supabase PostgreSQL**. Schema is **hand-authored in
-  `Database/schema.sql`, not EF Core migrations** — `ApplicationDbContext.OnModelCreating` must be
-  kept in sync by hand every time the schema changes. This is a deliberate, stated project
-  convention, not an oversight.
-- **No Razor runtime compilation** — `.cshtml`/`.cs` edits require a full stop → `dotnet build` →
-  `dotnet run` cycle. `wwwroot/js|css` are served live, no restart needed.
-- **SignalR** (`Hubs/InboxHub.cs`, route `/hubs/inbox`) — PostgreSQL is the single source of truth;
-  SignalR only tells connected clients "something changed," they always re-fetch via REST.
-- **Hand-rolled CSS** (`wwwroot/css/site.css`) — no Bootstrap, no jQuery, dark sidebar admin layout.
-- **ASP.NET Core Identity** for authentication (role-free) — see §5.
-- **n8n** is the AI orchestration layer — see §8. It no longer sees raw Meta webhook payloads.
-- **Meta WhatsApp Cloud API** — direct Graph API integration, Embedded Signup for onboarding.
-- A scratchpad **`sqlrunner`** console utility (outside the repo, in the session's temp scratchpad)
-  is used to run raw SQL against Supabase directly via `PG_CONN` env var — supports plain script
-  execution, `--query <file>`, `--introspect`, `--counts`.
+- **.NET 10**, ASP.NET Core Razor Pages (staff dashboard) + Web API controllers (REST, consumed by the
+  dashboard's own JS and by n8n/Meta). Assembly/DLL name is **`PlasticSurgery`** (`PlasticSurgery.dll`);
+  only user-visible text was renamed to MySculptFlow — namespaces/project names were left alone.
+- **EF Core / Npgsql** against **Supabase PostgreSQL**. Schema is **hand-authored in `Database/schema.sql`,
+  not EF Core migrations** (no `Migrations/` folder exists) — each change is an appended idempotent SQL
+  block, applied live to Supabase, and `ApplicationDbContext.OnModelCreating` is kept in sync by hand.
+  Deliberate project convention.
+- **No Razor runtime compilation** — `.cshtml`/`.cs` edits need stop → `dotnet build` → `dotnet run`.
+  `wwwroot/js|css` are served live.
+- **SignalR** (`Hubs/InboxHub.cs`, `/hubs/inbox`) — PostgreSQL is the source of truth; SignalR only says
+  "something changed", clients re-fetch via REST.
+- **Hand-rolled CSS** (`wwwroot/css/site.css`) — no Bootstrap/jQuery, dark sidebar admin layout. Small
+  vanilla-JS files in `wwwroot/js` (no frontend framework/libs): `inbox.js`, `meta-connect.js`,
+  `whatsapp-templates.js`, `whatsapp-health.js`, `campaign-audience.js`, `multi-select.js`,
+  `status-help.js`.
+- **Razor Pages call services directly** (DI); API controllers expose the same services over HTTP for JS,
+  n8n/AI and tooling. Business logic lives in `Services/`, never in pages/controllers.
+- **ASP.NET Core Identity** (role-free) for auth — §5. **n8n** = AI orchestration — §8.
+  **Meta WhatsApp Cloud API** — direct Graph API integration, Embedded Signup.
+- **Hosting**: Docker image → **Render** (`https://sculptflowapp.onrender.com`); code on GitHub — §15.
+- **pgvector** (Postgres extension, v0.8.2 already installed on Supabase) powers the Knowledge Base — §11.
+- Scratchpad tools (NOT in the repo, in the session temp scratchpad): **`sqlrunner`** (C# console: run SQL
+  file, `--query <file>`, `--introspect`, `--counts`, reads `PG_CONN`) and **`fakeembed`** (tiny local
+  OpenAI-compatible embeddings stub used to test the Knowledge Base without a real API key).
 
 ## 3. Database tables / entities
 
-All tables are `clinic_id`-scoped except the Identity tables (scoped via `clinic_users` instead).
+All tables are `clinic_id`-scoped except Identity tables (scoped via `clinic_users`).
 
 | Table | Purpose |
 |---|---|
-| `clinics` | Tenant root. Also carries `address`, `operating_hours`, `consultation_info` (free text, read by the AI's `get_clinic_info` tool). |
-| `procedures` | Clinic's service catalog. |
-| `leads` | A person of interest. `source`, `external_lead_id` (webhook dedup), `status`, `qualification_status`. |
-| `conversations` | One per (lead, channel). `mode` (`ai`/`human`/`approval`), `last_customer_message_at`, `service_window_expires_at` (24h WhatsApp window — see §10). |
-| `messages` | Every message, any origin, one table. `direction`, `sender_type`, `origin`, `channel`, `message_type`, `content`, `external_message_id` (idempotency), `delivery_status` + per-state timestamps (`delivered_at`/`read_at`/`failed_at`/`deleted_at`), `failure_code`/`failure_reason`, `metadata_json` (media/interactive/location payloads), `whatsapp_template_id`, `campaign_id`, `campaign_recipient_id`. |
-| `appointments` | Consultations. `status`, `scheduled_start/end`. |
-| `procedure_bookings` | A lead actually booking/undergoing a procedure. |
-| `events` | Audit/analytics log. Free-text `event_type`. **Now has real FK relationships** to `leads`/`conversations`/`appointments` (fixed this session — see §17). |
-| `channel_integrations` | Per-clinic connection config for WhatsApp/Instagram/Facebook — functions as "whatsapp_connections". Health fields: `account_status`, `account_review_status`, `phone_quality_rating`, `phone_status`, `name_status`, `is_healthy`, `health_level`, `last_problem_code/message`, `last_webhook_at`, `last_health_event_at`, plus `pin` (2-step verification PIN for phone registration). |
-| `whatsapp_templates` | Message templates. `channel_integration_id`, `meta_template_id`, `status` (CHECK constraint **dropped** — tolerates new Meta statuses), `quality_rating`, `previous_category`/`current_category`, `components` (jsonb raw). |
-| `campaigns` | Bulk template send campaigns. `status` (draft/scheduled/running/completed/cancelled/failed). |
-| `campaign_recipients` | One row per lead per campaign. `status` lifecycle (pending→queued→sent→delivered/read/failed), links back to the `messages` row it produced. |
-| `whatsapp_health_events` | Append-only history behind `channel_integrations`' current health state. |
-| `clinic_users` | Links an Identity user to a clinic. `id, clinic_id, user_id (text), is_active`. |
-| `identity_users`, `identity_user_claims`, `identity_user_logins`, `identity_user_tokens` | ASP.NET Core Identity's standard tables, role-free variant, remapped to snake_case. |
+| `clinics` | Tenant root. `name` is shown in the sidebar. Also `address`, `operating_hours`, `consultation_info` (free text, read by AI `get_clinic_info`). |
+| `procedures` | Clinic service catalog: `name`, `code`, `description`, `consultation_duration` (minutes), `is_active`. Managed at `/Procedures` — §12. Never hard-deleted. |
+| `leads` | A person of interest. `source` (free text, no CHECK), `external_lead_id` (dedup), `status`, `qualification_status` (both CHECK-constrained), `procedure_id`, `last_contact_at`, `marketing_opt_in`/`opted_out_at` (the contactability flags — there is **no** `do_not_contact`/`contact_consent` column), `campaign_name` (acquisition campaign — NOT related to outbound SculptFlow campaigns). |
+| `conversations` | One per (lead, channel). `mode` (`ai`/`human`/`approval`), `last_customer_message_at`, `service_window_expires_at` (24h WhatsApp window — §10). CHECK on `channel`: `whatsapp,instagram,website,facebook,sms,email,telegram` (Telegram: `external_thread_id` = chat id). |
+| `messages` | Every message, one table: `direction`, `sender_type`, `origin`, `channel`, `message_type`, `content`, `external_message_id` (idempotency), delivery status + timestamps, `failure_code/reason`, `metadata_json`, `whatsapp_template_id`, `campaign_id`, `campaign_recipient_id`. |
+| `appointments` | Consultations. `status`: `booked, confirmed, attended, no_show, canceled, rescheduled`. |
+| `procedure_bookings` | A lead considering/booked/completing a procedure. |
+| `events` | Audit/analytics log (real FKs to leads/conversations/appointments/clinics). |
+| `channel_integrations` | Per-clinic connection config for WhatsApp/Instagram/Facebook (acts as "whatsapp_connections"). CHECK `channel in ('whatsapp','instagram','facebook','telegram')`. Fields include `access_token` (Telegram: bot token), `webhook_verify_token` (Telegram: webhook secret), `phone_number_id`, `whatsapp_business_id`, `page_id`, `pin`, health fields, and Telegram's `telegram_bot_id`, `telegram_bot_username`, `webhook_status`, `webhook_registered_at` — §23. |
+| `whatsapp_templates` | Message templates (status/category CHECKs dropped). |
+| `campaigns` | Outbound campaigns. `campaign_type` (free string), `channel` (CHECK `whatsapp,instagram,messenger`), `whatsapp_template_id` (nullable), `audience_type` (CHECK `all_eligible,reactivation_no_consultation,custom`), `audience_filters` (jsonb), `status` (`draft,scheduled,running,paused,completed,cancelled,failed`). |
+| `campaign_recipients` | Audience **snapshot**, one row per lead per campaign (`UNIQUE(campaign_id, lead_id)`). `status`: `pending,queued,sent,delivered,read,replied,booked,failed,skipped`; `skip_reason`, `failure_code`, `failure_reason`, `external_message_id`, `appointment_id`, `replied_at`, `booked_at`, plus sent/delivered/read/failed timestamps; `message_id` → the outbound `messages` row. |
+| `whatsapp_health_events` | Append-only WhatsApp health history. |
+| `knowledge_documents` | Staff-entered knowledge (title, category, content, `is_active`) — §11. |
+| `knowledge_chunks` | Embedded slices of documents; `embedding vector(1536)` — §11. |
+| `knowledge_search_settings` | One row per clinic of KB retrieval/embedding settings — §11. |
+| `clinic_users` | Links an Identity user to a clinic (`UNIQUE(clinic_id,user_id)` + `UNIQUE(user_id) WHERE is_active`). |
+| `identity_users`, `identity_user_claims`, `identity_user_logins`, `identity_user_tokens` | ASP.NET Identity tables, role-free, snake_case. |
+
+Clinic `demo-clinic` = `abb02743-4563-4c5a-91e2-80508fb25a77` ("Demo Aesthetic Clinic"). Seed data
+(`Database/seed.sql`): 5 procedures (Rhinoplasty, Breast Augmentation, Facelift, Liposuction, Tummy Tuck)
+and 5 test leads.
 
 ## 4. Multi-tenant model
 
-Two independent resolution paths that both terminate at `clinic_id`:
+Two independent resolution paths that terminate at `clinic_id`:
 
 ```
-LOGIN:    Authenticated User → clinic_users (is_active=true) → clinic_id
-WEBHOOK:  Meta phone_number_id / WABA id → channel_integrations → clinic_id
+LOGIN:    Authenticated User → clinic_users (is_active=true) → clinic_id      (dashboard, pages, dashboard APIs)
+WEBHOOK:  Meta phone_number_id / WABA id → channel_integrations → clinic_id   (WhatsApp inbound)
 ```
 
-- **Dashboard/API**: `ICurrentClinicContext` (`Services/ICurrentClinicContext.cs`) resolves clinic
-  from the logged-in user. No controller/page accepts `clinicId` from the browser anymore.
-- **Webhook**: `MetaWebhookProcessor.ResolveClinicAsync` resolves via `phone_number_id` (primary)
-  or `waba_id` (fallback) against `channel_integrations`.
-- **n8n/AI Agent** (`AiController`, and the AI branch of `ConversationsController.SendMessage`):
-  **still takes `clinicId` explicitly as a trusted parameter**, gated only by the shared-secret
-  `X-Ingest-Key` header — **not** derived server-side. This was explicitly flagged as a gap against
-  the strictest "never trust clinicId from n8n/AI Agent" rule the user later stated; not yet fixed.
-- **Enforced uniqueness** (added this session):
-  - `channel_integrations`: `UNIQUE(clinic_id, channel)` (one WhatsApp connection per clinic) +
-    `UNIQUE(phone_number_id) WHERE phone_number_id IS NOT NULL` (a number can't belong to two
-    clinics). `whatsapp_business_id` deliberately **not** unique (one WABA can have multiple
-    numbers).
-  - `clinic_users`: `UNIQUE(clinic_id, user_id)` + `UNIQUE(user_id) WHERE is_active` (one active
-    clinic membership per user).
+- `ICurrentClinicContext` resolves the clinic from the logged-in user. **No page/dashboard controller
+  accepts `clinicId` from the browser**; request bodies' `ClinicId` is overwritten server-side.
+- `AiController` and the AI branch of `ConversationsController.SendMessage` still take `clinicId` as a
+  trusted parameter gated only by the `X-Ingest-Key` shared secret (known gap, not fixed).
+- New Knowledge Base / Procedures / settings data are all clinic-scoped; verified with a second temp
+  clinic in tests (404 across clinics; search never crosses clinics).
+- Enforced uniqueness: `channel_integrations` `UNIQUE(clinic_id,channel)` + unique `phone_number_id`
+  (WABA id deliberately NOT unique); `clinic_users` as above; `campaign_recipients (campaign_id,lead_id)`;
+  `knowledge_search_settings(clinic_id)`; procedure **name unique per clinic (case-insensitive) is
+  enforced in the service**, not by a DB constraint.
 
 ## 5. Authentication / login
 
-- **ASP.NET Core Identity**, role-free (`ApplicationDbContext : IdentityUserContext<IdentityUser>`
-  — deliberately not `IdentityDbContext`, so no `AspNetRoles`/`AspNetUserRoles` tables exist at
-  all). No owner/manager/receptionist/surgeon distinction anywhere — every clinic_users row grants
-  full access to that clinic.
-- Wired up via `AddIdentityCore<IdentityUser>()` + `.AddSignInManager()` + explicit
-  `AddAuthentication(IdentityConstants.ApplicationScheme).AddCookie(...)` (not the full
-  `AddIdentity<TUser,TRole>`, which would drag in roles).
-- **Pages/Account/Login.cshtml**, **Register.cshtml**, **Logout.cshtml** — hand-rolled, styled with
-  `site.css` (no Identity UI scaffolding, no Bootstrap). `Layout = null` on these pages (no
-  sidebar). Register auto-links the new user to the single existing demo clinic via
-  `IClinicContext.GetDefaultClinicAsync()` — this MVP has no clinic-creation wizard; that's the one
-  remaining caller of the old `IClinicContext`.
-- **`DashboardApiController`** (`Controllers/DashboardApiController.cs`) — base class with
-  `[Authorize]` + a `GetClinicIdAsync()` helper, inherited by 8 controllers (Leads, Appointments,
-  Procedures, Dashboard, ProcedureBookings, ChannelIntegrations, WhatsAppTemplates, Campaigns,
-  WhatsAppHealth).
-- **`ConversationsController`** does NOT inherit that base — `SendMessage` serves two callers on
-  one route (staff via cookie, AI via `X-Ingest-Key` + `sender:"ai"` body field) so it can't be
-  blanket-`[Authorize]`d; every other action on it is individually `[Authorize]`d.
-- **`InboxHub`** is `[Authorize]`, resolves clinic via `ICurrentClinicContext` in `OnConnectedAsync`.
-- Razor Pages: `AuthorizeFolder("/")` with explicit `AllowAnonymousToPage` for
-  `/Account/Login`, `/Account/Register`, `/Error`.
-- Test account still in the DB: `testauth@example.com` / `Test12345`, linked to clinic
-  `abb02743-4563-4c5a-91e2-80508fb25a77` (slug `demo-clinic`).
+- ASP.NET Core Identity, **role-free** (`ApplicationDbContext : IdentityUserContext<IdentityUser>`); no
+  owner/manager/etc. — every `clinic_users` row has full access to its clinic. `AddIdentityCore` +
+  explicit cookie auth. Password policy: non-alphanumeric not required.
+- Pages `Account/Login|Register|Logout` are hand-rolled (`Layout = null`); restyled this session: centered
+  brand row (`.auth-brand`), full-width taller submit button (`.auth-submit`), centered footer text.
+  Register links a new user to the default clinic (`Clinic:DefaultSlug`, default `demo-clinic`) — no
+  clinic-creation wizard.
+- `DashboardApiController` = `[Authorize]` base + `GetClinicIdAsync()`; used by the dashboard API
+  controllers (Leads, Appointments, Procedures, Dashboard, ProcedureBookings, ChannelIntegrations,
+  WhatsAppTemplates, Campaigns, WhatsAppHealth, **Knowledge**). `ConversationsController` is separate
+  (dual-mode `SendMessage`). `InboxHub` is `[Authorize]`. Razor Pages: `AuthorizeFolder("/")` with
+  anonymous Login/Register/Error.
+- Accounts in the DB: `testauth@example.com` (test account) and `fadelle38@gmail.com` (the owner's
+  account, created via the Register page). Passwords are intentionally not recorded here.
+- Operational note: the owner's own PowerShell may run under a different profile and not see the
+  `dotnet user-secrets` store (it reported "No secrets configured"); Claude Code's shell can. Secrets file:
+  `%APPDATA%\Microsoft\UserSecrets\fd2e992d-9bcf-48ed-9103-5e4aaf375724\secrets.json`.
 
 ## 6. WhatsApp integration
 
-- **Embedded Signup**: full-page OAuth redirect (not the JS SDK popup — the popup's code is tied to
-  an internal `redirect_uri` we can't reproduce server-side, causes OAuth subcode 36008; full-page
-  redirect sidesteps this). `wwwroot/js/meta-connect.js` drives it.
-- **`ChannelIntegrationService.ConnectWhatsAppAsync`** — exchanges the code, auto-discovers
-  WABA/phone number via Graph API when the popup can't deliver them, **registers the phone number**
-  for Cloud API use (`POST /{phone-number-id}/register` with an auto-generated 6-digit 2-step PIN —
-  this was a missing step found and fixed this session; without it Meta won't let the number
-  send/receive at all). Saves everything to `channel_integrations`, scoped to the logged-in user's
-  clinic via `ICurrentClinicContext` (never trusts the request body's `ClinicId`).
-- **`MetaGraphClient`** (`Services/MetaGraphClient.cs`) — all raw Meta Graph API HTTP calls live
-  here: OAuth token exchange, WABA/phone discovery, template create/status, phone registration.
-- **`WhatsAppService`** — the actual message-sending client (`SendTextMessageAsync`,
-  `SendTemplateMessageAsync`), used by every send path (staff, AI, campaign) — no duplicated
-  sending logic anywhere.
-- Settings → Channels & Integrations page still has a **manual-entry fallback form** that does
-  *not* call Meta's phone registration — known gap, only Embedded Signup registers the number.
+- **Embedded Signup**: full-page OAuth redirect (not the JS SDK popup — popup's `redirect_uri` can't be
+  reproduced server-side → OAuth subcode 36008). `wwwroot/js/meta-connect.js`.
+- `ChannelIntegrationService.ConnectWhatsAppAsync` exchanges the code, discovers WABA/phone, **registers
+  the phone number** (`POST /{phone-number-id}/register` with an auto-generated 6-digit PIN), saves to
+  `channel_integrations` scoped by `ICurrentClinicContext`.
+- `MetaGraphClient` = all raw Graph API calls. `WhatsAppService` = the only thing that calls Meta's send
+  API (used by staff, AI and campaign paths via `MessageService`).
+- Settings → Integrations manual-entry fallback form does not register the phone number (known gap).
 
 ## 7. Webhook GET/POST flow
 
-Meta now posts **directly** to .NET (n8n is no longer in the inbound path):
+Meta posts **directly** to .NET (n8n is not in the inbound path):
 
 ```
-Meta ──GET/POST──> Controllers/WhatsAppWebhookController.cs
-                    Route: /api/integrations/whatsapp/webhook
-                    No auth at all (Meta can't present any of our existing auth mechanisms)
-
-GET  → reads hub.mode / hub.verify_token / hub.challenge
-        compares hub.verify_token to config Meta:WebhookVerifyToken
-        match + hub.mode=="subscribe" → returns hub.challenge as text/plain, HTTP 200
-        else → 403
-
-POST → [FromBody] JsonElement rawBody
-        → IMetaWebhookProcessor.ProcessAsync(rawBody)
-             (Integrations/WhatsApp/MetaWebhookProcessor.cs)
-          → MetaWebhookParser.Parse (raw Meta JSON → IReadOnlyList<ParsedMetaEvent>)
-               — the ONLY place that understands Meta's entry[].changes[].field/value shape
-          → for each parsed event: resolve clinic (phone_number_id → waba_id fallback)
-          → dispatch to Handlers/ (one per ParsedMetaEventKind):
-               CustomerMessageHandler, BusinessAppEchoHandler, MessageStatusHandler,
-               TemplateEventHandler, HealthEventHandler, HistoryHandler, AppStateSyncHandler,
-               UnknownEventHandler
-             — each Handler is a thin adapter that resolves/creates Lead+Conversation as needed,
-               then calls the SAME existing services (IMessageService.IngestAsync,
-               IWhatsAppTemplateService.ApplyMetaEventAsync, IWhatsAppHealthService.ApplyHealthEventAsync)
-               that the old normalized per-domain endpoints called — zero duplicated persistence/
-               SignalR logic.
-          → returns ONE flat WhatsAppWebhookResponse (Processed, EventType, ShouldRunAi, ClinicId,
-            WhatsAppConnectionId, ConversationId, LeadId, MessageId, Mode, MessageType, Content,
-            SelectedValue, Status, TemplateId, HealthLevel, ...). When a payload contains multiple
-            events, every one is persisted/broadcast, but the single response reflects the
-            AI-eligible one if any exists, else the last one processed.
-        Controller: if result.ShouldRunAi → call IAiTriggerNotifier (see §8); else nothing further.
-        Always returns HTTP 200 to Meta (fast ack, regardless of n8n reachability).
+Meta ──GET/POST──> Controllers/WhatsAppWebhookController.cs   /api/integrations/whatsapp/webhook   (no auth)
+GET  → hub.mode/hub.verify_token/hub.challenge; token == config Meta:WebhookVerifyToken → echo challenge (200) else 403
+POST → raw JSON → IMetaWebhookProcessor.ProcessAsync
+         → MetaWebhookParser (only place that knows Meta's entry[].changes[].field shapes)
+         → resolve clinic (phone_number_id → waba_id fallback)
+         → Handlers/: CustomerMessage, BusinessAppEcho, MessageStatus, TemplateEvent, HealthEvent,
+                       History, AppStateSync, Unknown  (thin adapters over existing services)
+         → ONE flat WhatsAppWebhookResponse (…, ShouldRunAi, ClinicId, ConversationId, LeadId, MessageId, …)
+       if ShouldRunAi → IAiTriggerNotifier calls n8n; always HTTP 200 to Meta.
 ```
 
-**Interactive message normalization** (button_reply/list_reply): `messageText` is always the
-user-visible title, never raw Meta JSON. `selectedValue` carries the stable Meta reply id
-separately (e.g. `messageText: "Rhinoplasty"`, `selectedValue: "rhinoplasty"`). Verified live.
-
-`Controllers/WhatsAppIntegrationEventsController.cs` no longer has a `webhook` action (removed to
-avoid a route collision with the new controller) — it still owns `POST templates/events` and
-`POST health/events`, ingest-key protected, for already-normalized/tooling callers.
-
-**Not implemented**: Meta's `X-Hub-Signature-256` HMAC body-signature verification. The GET
-handshake only covers one-time subscription setup, not per-delivery authenticity — currently any
-POST body is accepted. Flagged, not requested/built.
+Interactive replies normalize to `messageText` = visible title, `selectedValue` = stable Meta id.
+`WhatsAppIntegrationEventsController` keeps `POST templates/events` and `POST health/events`
+(ingest-key protected). **Not implemented**: Meta `X-Hub-Signature-256` body-signature verification.
 
 ## 8. n8n / AI flow
 
 ```
-Before:  Meta → n8n (classifies + forwards raw JSON) → .NET
-Now:     Meta → .NET (classifies + processes) → n8n (normalized trigger, AI-eligible only)
+Meta → .NET (classify + process) → n8n (normalized trigger, only when AI should reply) → AI Agent → AI tools → .NET
 ```
 
-**Outbound call to n8n** (`Services/IAiTriggerNotifier.cs`), POSTed to config `N8n:AiWebhookUrl`
-(**currently unset** — real n8n URL still needed), exact shape:
-```json
-{
-  "clinicId": "...", "conversationId": "...", "leadId": "...", "messageId": "...",
-  "channel": "whatsapp", "messageType": "text|interactive", "messageText": "...",
-  "selectedValue": "..."
-}
-```
-Never throws (Meta still needs its fast 200 regardless of n8n's reachability) — logs a warning and
-skips if the URL isn't configured or the call fails.
+- **Outbound trigger** (`Services/IAiTriggerNotifier.cs`) → `N8n:AiWebhookUrl` (**still unset**). Payload as
+  actually coded: `clinicId, conversationId, leadId, messageId, channel, messageType, messageText,
+  selectedValue`. (The owner has described n8n as receiving only `clinicId`; the code sends more —
+  don't change it without being asked. Note `get_lead_context` needs a `leadId` and
+  `handoff_to_human` a conversation id, so those tools depend on n8n having them.)
+- **AI reply**: `POST /api/conversations/{id}/messages/send` with `{content, sender:"ai"}` + `X-Ingest-Key`
+  + `?clinicId=`; `MessageService.SendAiReplyAsync` re-checks `conversation.mode == ai` fresh from the DB
+  → `409 conversation_in_human_mode` if a human took over; never flips mode.
+- **AI tool surface** — `Controllers/AiController.cs`, `/api/ai/*`, `[RequireIngestKey]` (`X-Ingest-Key`),
+  clinicId passed explicitly (query, or body for knowledge search):
 
-**AI reply flow** (unchanged across all this session's refactors): n8n's AI Agent finishes by
-calling `POST /api/conversations/{conversationId}/messages/send` with
-`{ "content": "...", "sender": "ai" }` + `X-Ingest-Key` header + `?clinicId=...` query param. This
-is handled by the SAME route staff use, branching internally:
-- `sender != "ai"` → staff path, requires login cookie, resolves clinic via `ICurrentClinicContext`,
-  flips conversation to human mode.
-- `sender == "ai"` → requires `X-Ingest-Key`, takes `clinicId` from query (trusted via the key, not
-  derived), calls `MessageService.SendAiReplyAsync`, which **rechecks `conversation.mode == ai`
-  fresh from the database immediately before sending** (a human may have taken over while the AI
-  was "thinking") — returns `409 { sent:false, code:"conversation_in_human_mode" }` if not, never
-  flips mode on success.
+| Tool | Endpoint | Responsibility |
+|---|---|---|
+| `search_clinic_knowledge` | `POST /api/ai/knowledge/search` | Clinic-approved **information**: hours, address, parking, policies, consultation info, pricing, payment/financing, doctors, procedure explanations, preparation, recovery, FAQs — §11 |
+| `get_clinic_info` | `GET /api/ai/clinic-info` | Hours/address/contact/consultation rules from `clinics`. **Kept**, but partly redundant with the KB; may be retired later (decision deferred). |
+| `get_procedures` | `GET /api/ai/procedures?clinicId=` | Structured procedure records (id, name, active, duration) for booking. **Always ACTIVE procedures only** — no `activeOnly` parameter (a stray `activeOnly=false` is ignored). Stays; KB explains, this is authoritative. |
+| `get_lead_context` | `GET /api/ai/leads/{leadId}` | What's known about this lead |
+| `update_lead` | `PATCH /api/ai/leads/{leadId}` | Interest, language, timeline, notes, follow-up, qualification (no identity fields). Rejects an inactive/foreign `procedureId` (400). |
+| `get_available_slots` | `GET /api/ai/appointments/available` | Live availability |
+| `book_consultation` | `POST /api/ai/appointments/book` | Real booking; inactive/foreign procedure → 400 |
+| `reschedule_consultation` / `cancel_consultation` | `POST /api/ai/appointments/{id}/reschedule|cancel` | |
+| `handoff_to_human` | `POST /api/ai/conversations/{id}/handoff` | Switch conversation to human |
 
-**AI tool surface** — `Controllers/AiController.cs`, route `/api/ai/*`, `[RequireIngestKey]`. 9 of
-10 originally planned tools implemented: `get_clinic_info`, `get_procedures`, `get_lead_context`,
-`update_lead` (identity fields like name/phone/email excluded on purpose), `get_available_slots`,
-`book_consultation`, `reschedule_consultation`, `cancel_consultation`, `handoff_to_human`.
-**Not implemented**: `get_approved_clinic_answer` (knowledge-base search) — no FAQ/knowledge table
-exists yet, explicitly deferred.
+Rule of thumb (documented in `AiController`'s class comment): **Knowledge Base = information;
+structured APIs = live data and actions.** The KB is never the source of truth for lead data,
+availability, bookings, conversation state or handoff.
 
 ## 9. SignalR
 
-Single hub: `Hubs/InboxHub.cs`, route `/hubs/inbox`, `[Authorize]`. Clients join
-`clinic:{clinicId}` groups (server-resolved via `ICurrentClinicContext`, never client-supplied) and
-optionally `conversation:{conversationId}` groups. Events (`Services/IInboxNotifier.cs`):
-
-| Event | Fired by | Consumed by |
-|---|---|---|
-| `NewMessage` | Any message send/ingest path | `inbox.js` |
-| `MessageStatusUpdated` | Delivery status webhook | `inbox.js` (ticks: ✓/✓✓/✓✓ blue/⚠) |
-| `ConversationUpdated` | Conversation closed | `inbox.js` |
-| `ConversationModeChanged` | Take over / return to AI / staff or AI send | `inbox.js` |
-| `WhatsAppTemplateUpdated` | Template status/quality change | `wwwroot/js/whatsapp-templates.js` |
-| `WhatsAppHealthUpdated` | Health event applied | `wwwroot/js/whatsapp-health.js` (Health page + dashboard indicator) |
+`Hubs/InboxHub.cs`, `/hubs/inbox`, `[Authorize]`; groups `clinic:{id}` (server-resolved) and
+`conversation:{id}`. Events (`IInboxNotifier`): `NewMessage`, `MessageStatusUpdated`,
+`ConversationUpdated`, `ConversationModeChanged`, `WhatsAppTemplateUpdated`, `WhatsAppHealthUpdated`.
+Consumers: `inbox.js`, `whatsapp-templates.js`, `whatsapp-health.js`.
 
 ## 10. Inbox / conversation modes
 
-- `Conversation.Mode`: `ai` / `human` / `approval`. Legacy `AiEnabled`/`HumanTakeover` booleans kept
-  in sync via `ConversationModeSync.Apply(conversation, mode)` — the single place that changes mode.
-- `Message.Origin`: `whatsapp_customer`, `whatsapp_business_app` (Coexistence echo),
-  `dashboard` (staff), `ai`, `system`, `campaign`. `SenderType`: `lead`/`ai`/`staff`/`system`.
-  `Direction`: `inbound`/`outbound`.
-- **24h WhatsApp service window**: `Conversation.LastCustomerMessageAt` /
-  `ServiceWindowExpiresAt`, `IsServiceWindowOpen(now)` helper. Reset **only** by a genuine
-  `whatsapp_customer` inbound message — staff/AI/campaign sends never touch it. Enforced
-  server-side (`MessageService.SendAsync` throws `ServiceWindowClosedException`), not just hidden
-  in the UI. When closed, Inbox composer disables and shows a "Send Template" panel instead
-  (`inbox.js`).
-- A manually-sent template from the Inbox is `origin=dashboard` + `message_type=template` — `origin
-  =campaign` is reserved strictly for actual Campaign-initiated sends.
+- `Conversation.Mode`: `ai`/`human`/`approval` (`ConversationModeSync.Apply` is the only place that changes it).
+- `Message.Origin`: `whatsapp_customer`, `telegram_customer`, `whatsapp_business_app`, `dashboard`, `ai`, `system`, `campaign`.
+  `SenderType`: `lead/ai/staff/system`. `Direction`: `inbound/outbound`.
+- **24h service window** (`LastCustomerMessageAt`/`ServiceWindowExpiresAt`, `IsServiceWindowOpen`) is
+  WhatsApp-specific, reset only by a genuine customer inbound, enforced server-side
+  (`ServiceWindowClosedException`). `MessageService` text sends are routed by
+  `conversation.Channel` through `IChannelSender` (WhatsApp + Telegram, §23); other channels still throw;
+  template sends are WhatsApp-only.
 
-## 11. Implemented features (chronological, this engagement)
+## 11. Knowledge Base (clinic-specific, semantic search for the AI)
 
-1. WhatsApp Templates + Campaigns + 24h service-window enforcement (backend + Razor UI)
-2. AI agent tool surface (`AiController`) + Settings → Clinic Info page
-3. WhatsApp phone number registration (2-step PIN) on Embedded Signup connect
-4. Webhook event routing for Inbox delivery states, Templates, Health (initially 3 separate
-   n8n-facing normalized endpoints)
-5. Consolidated into one raw Meta webhook endpoint + parser/processor/handler architecture
-6. Corrected business-app-echo detection to use Meta's real `smb_message_echoes` field; added
-   `history`/`smb_app_state_sync` handling
-7. ASP.NET Core Identity + `clinic_users` + `CurrentClinicContext`; migrated every controller/page
-   off browser-supplied `clinicId`
-8. DB uniqueness constraints (`phone_number_id`, one-active-clinic-per-user)
-9. Split webhook entry point so Meta calls .NET directly; n8n now gets only normalized AI triggers
-10. Interactive-message normalization (`messageText`/`selectedValue`)
+**Purpose**: each clinic keeps its own approved information; the AI searches ONLY that clinic's knowledge
+and composes the answer itself. .NET stores, chunks, embeds, searches and isolates; n8n/AI decides when to
+search and what to ask. **Manual entry only** — no document upload/PDF/crawling.
 
-## 12. Campaign / reactivation design
+**Tables** (`Database/schema.sql`, applied live):
+- `knowledge_documents(id, clinic_id FK cascade, title varchar(200), category varchar(50) default 'general'
+  [no CHECK — extensible; UI offers general, faq, policy, doctor, procedure, pricing, consultation, payment,
+  preparation, recovery], content text, is_active bool, created_at, updated_at)`; indexes on clinic_id,
+  category, is_active; `updated_at` trigger.
+- `knowledge_chunks(id, clinic_id, knowledge_document_id FK cascade, chunk_index, content, embedding
+  vector(1536) NOT NULL, created_at, updated_at)`; indexes on clinic_id and knowledge_document_id. The
+  `embedding` column is **not mapped in EF** (`KnowledgeChunk` has no Embedding property) — chunks are
+  written/searched with raw SQL (`VectorLiteral` formats `[..]` and SQL casts `::vector`), so no EF vector
+  package is used. Never insert chunks via `DbContext.Add`.
+- `knowledge_search_settings` — see below.
 
-- `CampaignService` — creates a `Campaign` + one `CampaignRecipient` per (deduped) lead, all
-  `Pending`. Never sends synchronously for the whole list.
-- **Bounded batch processing**: `ProcessBatchAsync(batchSize=20 default)` processes a small batch of
-  `Queued` recipients per call — meant to be called repeatedly (dashboard "Send more" button, or an
-  n8n schedule hitting `POST /api/campaigns/{id}/process-batch`) until `CampaignCompleted` is true.
-  `SendAsync` transitions Draft/Scheduled → Running (queues every Pending recipient) then processes
-  the first batch.
-- **Per-recipient variable mapping**: `Campaigns/Create.cshtml` lets each `{{n}}` placeholder box
-  contain literal text (same for every recipient) or a token (`{LeadFullName}`, `{LeadFirstName}`,
-  `{LeadPhone}`) resolved per-lead server-side at creation time into `VariablesByLeadId`.
-  Intentionally no per-row input grid.
-- Every actual send goes through `MessageService.SendCampaignTemplateAsync` (shares the same core
-  as the Inbox's template send, just stamps `origin=campaign` + links `CampaignId`/
-  `CampaignRecipientId`) — writes a normal `Message` row in the lead's own Conversation. **No
-  separate CampaignMessage table exists or should ever be created.**
-  `CampaignService.ProcessRecipientAsync` resolves/creates the lead's Conversation via
-  `IConversationService.GetOrCreateForLeadAsync` first.
-  `CampaignStatsResponse` (TotalRecipients/Sent/Delivered/Read/Failed/Replied) is always computed
-  live from `CampaignRecipient` rows — never cached on `Campaign`.
-- Delivery/read/failed status webhooks roll into the linked `CampaignRecipient` automatically
-  (`MessageService.HandleStatusUpdateAsync` → `ApplyDeliveryStatusToRecipient`) — still just one
-  `Message` row, no second write path.
-- A campaign reply from the customer is a completely normal inbound message in the same
-  Conversation — there is no special "campaign conversation."
+**pgvector**: `create extension if not exists vector` (v0.8.2). **Vector index type = none (exact scan)** —
+deliberate: every search is already narrowed by `clinic_id` (btree index), a clinic has hundreds of chunks,
+exact scan has perfect recall, and HNSW would apply the clinic filter after its approximate scan and can
+drop results. Add `using hnsw (embedding vector_cosine_ops)` only if one clinic reaches tens of thousands of
+chunks (and then update `vector_index_type`).
 
-## 13. Pending work
+**Embeddings** (`IEmbeddingService` → `OpenAiEmbeddingService`, any OpenAI-compatible `POST {BaseUrl}/embeddings`):
+- Actual model: **`text-embedding-3-small`**, **1536 dimensions** (`dimensions` param sent for
+  `text-embedding-3*`). Every response is length-checked against the expected dimension.
+- Key from config `Embeddings:ApiKey` (secret; **not yet set in Render**). Batches of 64. Provider failures
+  surface as `InvalidOperationException` → dashboard shows a friendly error; API returns **503**
+  (verified: nothing half-saved).
+- Per-call `model`/`dimensions` overrides: the KB passes the **clinic's persisted settings**, so a clinic's
+  vectors always use the model/dimension recorded for it.
+- The title is prepended when embedding each chunk (`"{title}\n\n{chunk}"`); stored/returned chunk text
+  stays plain.
 
-- Set the real `N8n:AiWebhookUrl` (currently unset, notifier gracefully no-ops with a warning)
-- Close the `clinicId` trust gap for `AiController`/AI-send: derive clinic from existing
-  `leadId`/`conversationId` records server-side instead of accepting it as a trusted parameter
-- Meta `X-Hub-Signature-256` webhook signature verification (real per-delivery authenticity check)
-- Knowledge-base search AI tool (`get_approved_clinic_answer`) — no schema/design started
-- Manual-entry Settings form doesn't register the phone number (only Embedded Signup does)
-- Multi-clinic signup — Register currently hardcodes new users into the single default clinic; no
-  clinic-creation wizard exists
+**Chunking** (`IKnowledgeChunkingService.Chunk(content, chunkSizeTokens, chunkOverlapTokens)`): tokens are
+approximated as **4 characters per token** (no tokenizer). Split on blank lines → long paragraphs on
+sentences → over-long sentences at word boundaries → greedily pack up to max (≥200 chars) → merge a tiny
+trailing chunk (`Knowledge:ChunkMinChars`, default 200, system-wide) into the previous → each chunk after
+the first is prefixed with a word-aligned tail of the previous (overlap). A short document is one chunk.
 
-## 14. Important constraints / decisions
+**Settings — `knowledge_search_settings`** (one row per clinic; `UNIQUE(clinic_id)` =
+`ux_knowledge_search_settings_clinic_id`; lazily created with system defaults by
+`IKnowledgeSettingsService.GetAsync`, race-safe; `updated_at` trigger):
 
-- **Reuse over new tables**: `channel_integrations` plays the role of "whatsapp_connections" —
-  deliberately not a separate table, to avoid duplicating clinic/WABA/phone_number_id/access_token
-  concerns. Same for `Message` — no `CampaignMessage` table, ever.
-- **PostgreSQL is the source of truth; SignalR only notifies.** Every client handler re-fetches from
-  REST rather than trusting the SignalR payload's content as authoritative.
-- **No role-based authorization in this MVP** — explicit user decision. Every `clinic_users` row is
-  full access, no owner/manager/receptionist/surgeon distinction, no permissions matrix.
-- **Central sending service** — `WhatsAppService` is the only thing that calls Meta's send API;
-  staff/AI/campaign paths all funnel through `MessageService`'s shared core methods, never
-  duplicate the HTTP call.
-- **Idempotency**: messages by `(clinic_id, channel, external_message_id)`; templates upsert by
-  `(clinic_id, meta_template_id)` falling back to `(clinic_id, name, language)`; health events by
+| Column | Default | Editable in UI/API? |
+|---|---|---|
+| `embedding_model` | `text-embedding-3-small` (from `Embeddings:Model`) | **Read-only** |
+| `vector_dimension` | `1536` (from `Embeddings:Dimensions`) | **Read-only** |
+| `similarity_method` | `cosine` | **Read-only** |
+| `vector_index_type` | `none` (shown as "None — exact scan") | **Read-only** |
+| `chunk_size_tokens` | `250` (= old 1000 chars) | Editable, 50–1000 |
+| `chunk_overlap_tokens` | `38` (≈ old 150 chars) | Editable, 0 … size/2 |
+| `top_k` | `5` | Editable, 1–10 |
+| `minimum_similarity` | `0.30` (from `Knowledge:MinScore`) | Editable, 0–1 |
+
+DB CHECKs enforce the ranges (`ck_knowledge_search_settings_*`; overlap < size). **No secrets are stored in
+this table.** `UpdateKnowledgeSettingsRequest` has only the 4 editable fields, so read-only ones can't be
+changed via form or API (verified by tamper tests). The `Embeddings__*`/`Knowledge__*` config keys are now
+only **defaults for a clinic's first row**; after that the persisted row is what's used. Changing the
+embedding model/dimension is unsupported from the UI (needs re-embedding everything + altering
+`vector(N)`).
+
+**Search** (`IKnowledgeSearchService`): read settings → embed query with the clinic's model/dim →
+`select … from knowledge_chunks c join knowledge_documents d … where c.clinic_id=@clinic and
+d.clinic_id=@clinic and d.is_active order by c.embedding <=> @q limit @n` → drop rows below
+`minimum_similarity` → score = `1 - cosine distance` rounded to 4 dp. Result count =
+`clamp(limit ?? top_k, 1, top_k)` — **top_k is the clinic's ceiling; the AI's `limit` can only lower it**.
+Nothing relevant → `{"results":[]}` (no fabricated answer). Inactive documents never appear.
+
+**Rebuild/re-index behavior**: creating/updating a document computes embeddings **before** opening the
+transaction, then swaps chunks transactionally (a failed embedding call leaves the old chunks intact).
+**Saving an entry always re-chunks + re-embeds with the current settings** (that's how new chunk
+size/overlap reach existing entries). Changing settings does **not** auto re-chunk existing entries —
+re-save each one; there is **no bulk "reindex all" action** (not implemented). Activate/deactivate does not
+re-embed; delete removes the chunks.
+
+**AI endpoint**: `POST /api/ai/knowledge/search` (`[RequireIngestKey]`).
+Request `{ "clinicId": "...", "query": "...", "limit": 5 }` (limit optional); response
+`{ "results": [ { "documentId", "title", "category", "content", "score" } ] }`. 400 if clinicId/query
+missing; 503 if the embedding provider fails. No `conversationId`.
+
+**Dashboard**: `/KnowledgeBase` (list: title, category, Active/Inactive, last updated; Edit /
+Activate-Deactivate / Delete; "Add Knowledge" and "Settings" buttons), `/KnowledgeBase/Edit/{id?}`
+(title, category, content, active), **`/KnowledgeBase/Settings`** (4 editable inputs; 4 clearly disabled
+read-only fields with a "Read-only" badge and explanation; help text that chunk changes apply on next
+save). Sidebar link "Knowledge Base". API (`KnowledgeController`, login required):
+`GET/POST /api/knowledge`, `GET/PUT/DELETE /api/knowledge/{id}`, `POST /api/knowledge/{id}/active`,
+`GET/PUT /api/knowledge/settings`.
+
+**Files**: entities `KnowledgeDocument`(+`KnowledgeCategory` labels)/`KnowledgeChunk`/`KnowledgeSearchSettings`;
+services `IEmbeddingService`+`OpenAiEmbeddingService`, `KnowledgeChunkingService`, `KnowledgeService`,
+`KnowledgeSearchService`, `KnowledgeSettingsService`, `VectorLiteral`; `Dtos/KnowledgeDtos.cs`;
+`Pages/KnowledgeBase/{Index,Edit,Settings}`.
+
+**Testing done** (with the local `fakeembed` stub, not a real key): chunking, ranking, top-k ceiling,
+min-similarity, inactive exclusion, empty results, edit/deactivate/reactivate/delete, cross-clinic
+isolation, unique constraint, CHECK constraints, provider-down → 503, persisted model/dim really used.
+**Not yet verified with a real OpenAI key**: real similarity scores are distributed differently than the
+stub's — if real searches come back empty, lower `minimum_similarity` (≈0.2) on the Settings page.
+
+## 12. Procedures management
+
+- **Page** `/Procedures` (list: name, code, consultation "N min", Active/Inactive, Edit,
+  Activate/Deactivate; "Add Procedure") and `/Procedures/Edit/{id?}` (name, optional code, duration in
+  minutes, short description). Sidebar link "Procedures" (under Appointments). Styling mirrors the KB pages.
+- **Rules** (`IProcedureService`/`ProcedureService`): name required ≤200 and **unique per clinic
+  (case-insensitive)**; code ≤100; description ≤500 (page tells staff detailed info belongs in the KB);
+  duration 1–480 or empty. **Never deleted** (leads/appointments/bookings reference procedures) — only
+  activated/deactivated. No new fields/migration were needed (columns already existed).
+- **Endpoints** (`ProceduresController`, login required): `GET /api/procedures?activeOnly=`,
+  `GET /api/procedures/{id}`, `POST /api/procedures`, `PUT /api/procedures/{id}`,
+  `POST /api/procedures/{id}/active`. Bad input → 400.
+- **Inactive procedure rules**: row + all history preserved. Hidden from the AI `get_procedures` (active
+  only, always), from Campaign procedure dropdowns (active only), and blocked for **new activity** via
+  `IProcedureService.EnsureUsableAsync` (throws `ArgumentException` → controllers return 400 "inactive
+  and can't be used for new activity" / "not found for this clinic"): new appointments
+  (`AppointmentService.CreateAsync`, so also AI `book_consultation`), new procedure bookings
+  (`ProcedureBookingService.CreateAsync`), and a lead's procedure being **changed**
+  (`LeadService.UpdateAsync`/`UpdateContextAsync` — resubmitting a lead's current, now-inactive
+  procedure still works). This also rejects another clinic's procedure id.
+- **Deliberately unchanged**: lead **intake** (`LeadsController.Create`/`CreateOrGetAsync`, webhook/n8n)
+  never rejects a lead for referencing an inactive procedure. Campaign audience filtering by an inactive
+  procedure still works (it filters `Lead.ProcedureId`). `GetProcedureStatsAsync` (dashboard money page)
+  still lists all procedures incl. inactive.
+
+## 13. Campaigns / reactivation
+
+**Backend model** (built earlier, extended): `Campaign` = orchestration + audience definition;
+`CampaignRecipient` = the audience **snapshot** created at creation time (never re-derived). Every send
+goes through `MessageService.SendCampaignTemplateAsync` and writes a normal `Message` in the lead's own
+Conversation — **no CampaignMessage table, ever**. Batches of 20 (`ProcessBatchAsync`); delivery/read/failed
+webhooks roll into the recipient. Templates must be approved (`WhatsAppTemplateStatus.Approved`).
+
+**Audience (single source of truth: `ICampaignAudienceService`/`CampaignAudienceService`)** — the ONLY place
+eligibility is computed (never duplicated in JS; UI counts call the API):
+- **Mandatory exclusions always**: same clinic, has a phone, `marketing_opt_in = true`, `opted_out_at is null`.
+- `all_eligible` = mandatory exclusions only.
+- `reactivation_no_consultation` ("old leads who never booked"): prior interest (has a conversation OR
+  `status != new`) AND inactive (`last_contact_at` null/older than cutoff AND no conversation
+  `last_message_at` newer than cutoff; default **60 days**, UI offers 30/60/90) AND **no appointment with
+  status booked/confirmed/rescheduled/attended** (canceled and no_show do NOT count → still eligible), plus
+  optional procedure/source filters. Derived live — **no** `is_old_lead`/`incomplete_booking` flag exists.
+- `custom` = mandatory exclusions + `CampaignAudienceFilters` (jsonb): `inactiveDays, procedureId,
+  leadStatuses, sources, qualificationStatuses, createdAfter/Before, lastContactedAfter/Before,
+  appointmentStatuses, countries, cities` (a `languages` filter was added then removed). All map to
+  existing Lead/Appointment columns.
+- `CampaignService.CreateAsync`: explicit `LeadIds` win (manual selection); otherwise the audience is
+  resolved by the audience service for any type (incl. custom). Non-contactable leads become `skipped`
+  recipients with a `skip_reason` (`no_phone`, `opted_out`, `marketing_opt_in_false`).
+- **Endpoints**: `GET /api/campaigns/audience-preview?audienceType=&filters=` → `{matchingLeads}`;
+  `GET /api/campaigns/audience-preview/leads?...&limit=` (≤50, default 10) → count + first N names/phones;
+  `GET/POST /api/campaigns`, `GET /api/campaigns/{id}`, `POST …/{id}/schedule|send|process-batch|cancel`.
+
+**Campaign creation UI** (`/Campaigns/Create`, `Create.cshtml(.cs)`, `campaign-audience.js`,
+`multi-select.js`): "Who do you want to reach?" — **four clinic-facing cards** (no internal enum names
+shown), mapped onto the 3 backend audience types via two hidden fields (`AudienceType`,
+`ManualSelection`):
+1. **Old leads who never booked** — default, "Recommended" badge, accent border. Controls: Inactive for
+   30/60/90 days, Procedure (all/specific, active only), optional Lead source. Big
+   "N leads ready for reactivation" count + **Preview leads**.
+2. **All contactable leads** — "N contactable leads" count + Preview; no filters.
+3. **Build a custom audience** — Procedure + Inactive for by default; **Advanced filters ▾** collapsed:
+   lead status, qualification status, lead source, appointment status (searchable checkbox dropdowns with
+   chips — reusable `multi-select.js`), created/last-contacted date ranges, country, city. "N matching
+   leads" + Preview.
+4. **Select leads manually** — the original search + checkbox list (`audience_type=custom` +
+   explicit `LeadIds`).
+- Counts refresh (350 ms debounce) from the preview API. Status/category values shown with friendly
+  labels via `Pages/Shared/FilterLabelHelper.cs` ("No-show", "Needs human review", …); stored values
+  unchanged. `_StatusHelp.cshtml` + `status-help.js` = a "?" modal explaining Lead status, Qualification
+  status, Lead source, Appointment status (also on the Lead edit page).
+- Limitation: body variables (`{LeadFullName}` etc.) only work with **manual selection** (they need the lead
+  list up front); audience-based campaigns with variables are rejected with a clear message.
+- Fixed along the way: an invalid **nested `<form>`** in the old page broke the submit button; **"Send
+  later"** crashed (Npgsql needs UTC `DateTimeOffset`) — now `ToUniversalTime()`.
+- **Test-data gotcha**: a real send attempt (even one Meta rejects) creates a `Conversation` for the lead,
+  which makes them count as "prior interest" — clean up test conversations. Meta's sandbox rejects
+  non-allow-listed numbers ("recipient not in allowed list").
+
+## 14. Staff-editable fields & dashboard pages
+
+- **Lead status, Qualification status, Lead source** editable at **`/dashboard/leads/{id}`**
+  (`LeadDetail`), **Appointment status** at **`/dashboard/appointments/{id}`** (`AppointmentDetail`);
+  reached by clicking a name in the Interested People / Appointments lists. Plain form posts through the
+  same services the APIs use: `POST /api/leads/{id}/status` (`UpdateLeadStatusRequest` gained optional
+  `Source`) and `PATCH /api/appointments/{id}/status`; new `IAppointmentService.GetByIdAsync` +
+  `GET /api/appointments/{id}`.
+- Lead source dropdown = distinct sources on file (`ILeadService.GetDistinctSourcesAsync`) + starter set
+  (facebook, instagram, google, website, referral, whatsapp) + "Other…" (free text); Source has no enum/CHECK.
+  (The Campaign filter lists only sources actually in use — intentional difference.)
+- `LeadService.UpdateStatusAsync` now bumps `last_contact_at` **only on a real status change**, so
+  metadata-only edits can't reset the reactivation inactivity clock.
+- Who writes these fields: lead status — creation, first staff reply (→contacted), booking, attended/no-show,
+  procedure booking, staff edit; qualification — AI `update_lead`, staff; source — set at creation
+  (n8n/intake, or `whatsapp` for auto-created leads) and staff edit; appointment status — booking (booked),
+  AI reschedule/cancel, staff edit (confirmed/attended/no_show/rescheduled…).
+- **Search by name/phone** on both list pages (`IDashboardService.GetLeadsAsync/GetAppointmentsAsync` got a
+  `search` param; also `/api/dashboard/leads|appointments?search=`).
+- **Branding/nav**: app renamed **MySculptFlow** (logo badge "SF"); sidebar shows the **logged-in clinic's
+  name** (from `clinics.name` via `ICurrentClinicContext`, fallback "Clinic Dashboard"); nav: Inbox, Main
+  Numbers, Interested People, Appointments, **Procedures**, [WhatsApp] Templates, Health, Campaigns,
+  **Knowledge Base**, API (Swagger), Settings, Clinic Info.
+
+## 15. Deployment (Docker / Render / GitHub)
+
+- **Dockerfile** (repo root): multi-stage — `mcr.microsoft.com/dotnet/sdk:10.0` restores/publishes
+  `PlasticSurgery/PlasticSurgery.csproj`; runtime `aspnet:10.0` runs `dotnet PlasticSurgery.dll`;
+  `ASPNETCORE_ENVIRONMENT=Production`; `CMD sh -c "ASPNETCORE_URLS=http://+:${PORT:-8080} exec dotnet
+  PlasticSurgery.dll"` (Render injects `PORT`, terminates TLS). `.dockerignore` excludes bin/obj/.git/etc.
+  Docker isn't installed on the dev machine, so the image build has only been exercised by Render.
+- **Render**: service live at `https://sculptflowapp.onrender.com`. Env var names in §20. After editing env
+  vars use "Save, rebuild, and deploy" (Save-only doesn't restart). Git push to `main` triggers deploy if
+  Auto-Deploy is on, else Manual Deploy → Deploy latest commit.
+- Lessons: `ConnectionStrings__Postgres` must be **key=value**, not a `postgresql://` URI (URI → Npgsql
+  "Format of the initialization string… index 0"); use the **session pooler** host, not the direct one; a
+  wrong password gives `28P01`, not the format error; "No such host is known" = DNS/host problem in the
+  string or network. Startup warnings that are known/benign for now: DataProtection keys stored in the
+  container (users get signed out on redeploy), "Failed to determine the https port for redirect".
+- **Gap**: `Program.cs` has no forwarded-headers handling (`UseForwardedHeaders`); behind Render's proxy
+  the app sees HTTP, which may affect Meta OAuth redirect URIs / cookies.
+- **GitHub**: `https://github.com/fadelle/SculptFlowApp`, branch `main`. Commits: `2aec468` initial;
+  `a0f218a` Dockerfile; `6f13697` .dockerignore; `5ff4d55` rename + sidebar clinic name; `5a0b25a`
+  login/register polish; `974f9b2` Knowledge Base; `da36238` Procedures + AI active-only.
+  **Uncommitted at time of writing**: the `knowledge_search_settings` work (entity, settings service,
+  Settings page, chunking/embedding/search changes, `schema.sql` block, `appsettings.json` `Embeddings`/
+  `Knowledge` keys, and this handoff update). The settings table is already applied to Supabase — the live
+  DB is ahead of `main` until that is pushed (Render's code still lacks the settings code).
+- Git identity is configured; LF→CRLF warnings on commit are harmless. Commit trailer used:
+  `Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>`.
+
+## 16. Implemented features (chronological, this engagement)
+
+1. WhatsApp Templates + Campaigns + 24h service-window enforcement
+2. AI tool surface + Clinic Info page
+3. WhatsApp phone registration (PIN) on Embedded Signup
+4. Webhook event routing (Inbox delivery states, Templates, Health) → consolidated raw Meta webhook +
+   parser/processor/handlers; `smb_message_echoes`, `history`, `smb_app_state_sync`
+5. Identity + `clinic_users` + `CurrentClinicContext`; all pages/controllers off browser `clinicId`
+6. DB uniqueness constraints; Meta now calls .NET directly (n8n only gets AI triggers); interactive
+   message normalization
+7. Campaign/reactivation data model (audience types, filters, recipient snapshot, attribution columns)
+8. Campaign creation UI: audience picker (4 choices), advanced filters, previews, help modal
+9. Staff editing of lead/qualification/source/appointment status + list search
+10. Docker + Render deployment; GitHub repo; rename to MySculptFlow; login polish
+11. Knowledge Base (docs, chunks, pgvector embeddings, semantic search, dashboard, AI tool) +
+    per-clinic persisted settings page
+12. Procedures management page with inactive-procedure rules; AI `get_procedures` active-only
+
+## 17. Pending work
+
+- **Set `Embeddings__ApiKey` in Render** (real OpenAI-compatible key) — KB saving/search won't work in
+  production without it; then tune `minimum_similarity` against real scores
+- Commit/push the uncommitted `knowledge_search_settings` work (§15)
+- Set the real `N8n__AiWebhookUrl` (notifier no-ops with a warning until then); wire the n8n
+  `search_clinic_knowledge` HTTP tool (clinicId from workflow context, AI supplies only `query`)
+- **Rotate leaked secrets** (§22); close the `clinicId`-trust gap for AI endpoints
+- Meta `X-Hub-Signature-256` verification; forwarded-headers in `Program.cs`; persist DataProtection keys
+- KB: optional bulk "reindex all"; possible future HNSW index; maybe merge/retire `get_clinic_info`
+- Manual-entry integrations form doesn't register the phone number
+- Multi-clinic signup (new users all go to the default clinic)
+- **Telegram is implemented (§23) but uncommitted/undeployed** — set `App__PublicBaseUrl` on Render, push, then test with the real bot
+
+## 18. Important constraints / decisions
+
+- **Reuse over new tables**: `channel_integrations` = "whatsapp_connections"; no `CampaignMessage`; the KB
+  reuses existing patterns; audience logic lives only in `CampaignAudienceService`.
+- **PostgreSQL is the source of truth; SignalR only notifies.**
+- **No role-based authorization** (explicit decision).
+- **Central sending service**: only `WhatsAppService` calls Meta's send API; all paths go through `MessageService`.
+- **Idempotency**: messages by `(clinic_id, channel, external_message_id)`; templates by
+  `(clinic_id, meta_template_id)` → `(clinic_id, name, language)`; health events by
   `(channel_integration_id, event_type, occurred_at)`.
-- **n8n holds no business state** — every decision (is this AI-eligible, what's the current mode)
-  is computed in .NET and hard-coded into the response; n8n only branches on `shouldRunAi`.
-- **Standing operational instructions** (persistent memory, apply going forward): always leave the
-  app running after any change unless explicitly told to shut down; `.cshtml`/`.cs` edits need a
-  full stop → build → run cycle, `wwwroot` JS/CSS changes are live with no restart.
-- Windows **Smart App Control** was intermittently blocking local `dotnet run` builds this session
-  (`FileLoadException`, Code Integrity policy) — the user turned it off to resolve. Worth knowing if
-  build/run issues resurface on this machine.
+- **n8n holds no business state**; .NET decides AI eligibility/mode.
+- **Schema is hand-written SQL**, appended idempotently to `schema.sql` and applied live; EF model kept in
+  sync manually; extensible strings (category, campaign_type, lead source) have no CHECK, closed sets do.
+- **Secrets never in the repo or in `knowledge_search_settings`** — user-secrets locally, Render env vars in prod.
+- **Knowledge Base ≠ structured data**: procedures/lead/booking data stay in structured APIs.
+- Standing operating instructions: leave the app running after changes unless told to shut down; run it with
+  `dotnet run --launch-profile https` (**https://localhost:7276**; the default profile is http-only :5274);
+  `.cshtml`/`.cs` changes need stop → build → run. Clean up test data after live testing (shared Supabase,
+  now also feeding Render). The Claude Code auto-mode classifier blocks printing secrets (e.g.
+  `dotnet user-secrets list` values) — don't work around it. The browser tool's screenshots are flaky in this
+  environment (use page text / `curl` with cookie jars for verification). Windows Smart App Control once
+  blocked `dotnet run` (user disabled it).
 
-## 15. Current API endpoints
+## 19. Current API endpoints
 
-**Dashboard-facing** (require login, clinic resolved server-side via `ICurrentClinicContext`):
-- `GET/PATCH /api/leads`, `GET /api/leads/{id}`, `POST /api/leads/{id}/status` (`Create` is
-  `[AllowAnonymous]` — n8n/Meta intake, not currently ingest-key protected — pre-existing gap)
-- `GET/POST /api/appointments`, `PATCH /api/appointments/{id}/status`, `GET /api/appointments/available`
-- `GET/POST /api/procedures`
-- `GET /api/dashboard/summary|leads|appointments|procedures`
-- `POST /api/procedure-bookings`, `PATCH /api/procedure-bookings/{id}`, `GET /api/procedure-bookings`
-- `GET/PUT /api/channel-integrations`, `POST /api/channel-integrations/{channel}/disconnect`,
-  `POST /api/channel-integrations/whatsapp/connect`, `POST /api/channel-integrations/facebook/connect`,
-  `POST /api/channel-integrations/whatsapp/debug-token` (debug-only)
-- `GET/POST /api/whatsapp/templates`, `GET /api/whatsapp/templates/{id}`,
-  `POST /api/whatsapp/templates/{id}/sync`
-- `GET/POST /api/campaigns`, `GET /api/campaigns/{id}`, `POST /api/campaigns/{id}/schedule|send|process-batch|cancel`
-- `GET /api/whatsapp/health`, `GET /api/whatsapp/health/events`
-- `GET/POST /api/conversations`, `GET /api/conversations/{id}`, `GET /api/conversations/{id}/messages`,
-  `POST /api/conversations/{id}/messages`, `POST /api/conversations/{id}/messages/send` (dual-mode,
-  see §8), `POST /api/conversations/{id}/messages/send-template`, `POST /api/conversations/{id}/take-over|return-to-ai|close`
+**Dashboard-facing** (login required; clinic from `ICurrentClinicContext`):
+- Leads: `GET/PATCH /api/leads`, `GET/PATCH /api/leads/{id}`, `POST /api/leads/{id}/status`
+  (`POST /api/leads` is `[AllowAnonymous]` intake — not ingest-key protected, known gap)
+- Appointments: `GET/POST /api/appointments`, `GET /api/appointments/{id}`,
+  `PATCH /api/appointments/{id}/status`, `GET /api/appointments/available`
+- Procedures: `GET/POST /api/procedures`, `GET/PUT /api/procedures/{id}`, `POST /api/procedures/{id}/active`
+- Knowledge: `GET/POST /api/knowledge`, `GET/PUT/DELETE /api/knowledge/{id}`,
+  `POST /api/knowledge/{id}/active`, `GET/PUT /api/knowledge/settings`
+- Campaigns: `GET/POST /api/campaigns`, `GET /api/campaigns/{id}`,
+  `POST …/{id}/schedule|send|process-batch|cancel`, `GET /api/campaigns/audience-preview`,
+  `GET /api/campaigns/audience-preview/leads`
+- Dashboard: `GET /api/dashboard/summary|leads|appointments|procedures` (`?search` on leads/appointments)
+- Procedure bookings: `POST/GET /api/procedure-bookings`, `PATCH /api/procedure-bookings/{id}`
+- Integrations: `GET/PUT /api/channel-integrations`, `POST …/{channel}/disconnect`,
+  `POST …/whatsapp/connect`, `POST …/facebook/connect`, `POST …/whatsapp/debug-token`
+- WhatsApp: `GET/POST /api/whatsapp/templates`, `GET …/{id}`, `POST …/{id}/sync`,
+  `GET /api/whatsapp/health`, `GET /api/whatsapp/health/events`
+- Conversations: `GET/POST /api/conversations`, `GET /api/conversations/{id}`,
+  `GET/POST /api/conversations/{id}/messages`, `POST …/messages/send` (dual-mode), `POST …/messages/send-template`,
+  `POST …/take-over|return-to-ai|close`
 
-**Trusted server-to-server** (`[RequireIngestKey]`, shared-secret header, no login):
-- `POST /api/messages/ingest` (legacy normalized message/status ingest — still valid, unused by new webhook flow)
-- `POST /api/integrations/whatsapp/templates/events`, `POST /api/integrations/whatsapp/health/events`
-  (normalized, for tooling/tests — not the primary Meta path anymore)
-- `GET/PATCH/POST /api/ai/*` — 9 AI tool endpoints (see §8)
+**Trusted server-to-server** (`[RequireIngestKey]` / `X-Ingest-Key`): `POST /api/messages/ingest`,
+`POST /api/integrations/whatsapp/templates/events`, `POST /api/integrations/whatsapp/health/events`, and the
+AI tools under `/api/ai/*` (§8, incl. `POST /api/ai/knowledge/search`).
 
-**Public, no auth at all** (Meta calls these directly):
-- `GET/POST /api/integrations/whatsapp/webhook`
+**Public** (Meta): `GET/POST /api/integrations/whatsapp/webhook`. **Public** (Telegram, secret-token protected):
+`POST /api/integrations/telegram/webhook/{connectionId}`. Dashboard adds
+`POST /api/channel-integrations/telegram/connect|refresh` (disconnect uses the existing `…/{channel}/disconnect`).
 
-**Razor Pages** (all require login except `/Account/Login`, `/Account/Register`, `/Error`):
-`/dashboard`, `/dashboard/leads`, `/dashboard/appointments`, `/inbox`, `/settings/integrations`,
-`/settings/clinic-info`, `/WhatsApp/Templates`, `/WhatsApp/Health`, `/Campaigns`,
-`/Campaigns/Create`, `/Campaigns/{id}`, `/Account/Login`, `/Account/Register`, `/Account/Logout`.
+**Razor pages** (login required except Login/Register/Error): `/dashboard`, `/dashboard/leads`,
+`/dashboard/leads/{id}`, `/dashboard/appointments`, `/dashboard/appointments/{id}`, `/inbox`,
+`/Procedures`, `/Procedures/Edit/{id?}`, `/KnowledgeBase`, `/KnowledgeBase/Edit/{id?}`,
+`/KnowledgeBase/Settings`, `/Campaigns`, `/Campaigns/Create`, `/Campaigns/{id}`,
+`/WhatsApp/Templates`, `/WhatsApp/Health`, `/settings/integrations`, `/settings/clinic-info`,
+`/Account/Login|Register|Logout`.
 
-## 16. Current configuration keys
+## 20. Current configuration keys (names only — values are secrets or defaults)
 
-Via `dotnet user-secrets` (from `PlasticSurgery/PlasticSurgery/`):
-- `ConnectionStrings:Postgres` — Supabase connection string (session pooler host, not direct — IPv6 issue)
-- `Meta:AppSecret` — Meta app secret
-- `Meta:WebhookVerifyToken` — GET handshake token (set this session: `792b52f643d517cade1eed2fdf4bba93`)
-- `N8n:IngestApiKey` — shared secret for `[RequireIngestKey]`-protected endpoints (`98e2fb3f66604768a4bd658b32e9a952`)
-- `N8n:AiWebhookUrl` — **not set** — n8n's AI-trigger webhook URL, needed for §8 to actually fire
+**Secrets** (local: `dotnet user-secrets` in `PlasticSurgery/PlasticSurgery/`; Render: env vars with `__`):
+- `ConnectionStrings:Postgres` / `ConnectionStrings__Postgres` — Supabase **session pooler**, key=value format
+- `Meta:AppSecret` / `Meta__AppSecret`
+- `Meta:WebhookVerifyToken` / `Meta__WebhookVerifyToken` — must match Meta's webhook config
+- `N8n:IngestApiKey` / `N8n__IngestApiKey` — must match the n8n `X-Ingest-Key` header
+- `N8n:AiWebhookUrl` / `N8n__AiWebhookUrl` — **unset**
+- `Embeddings:ApiKey` / `Embeddings__ApiKey` — **not set anywhere real yet** (needed for the KB)
+- Telegram needs no secret in config (the bot token is entered in the UI and stored per clinic), but needs
+  `App:PublicBaseUrl` / `App__PublicBaseUrl` — the public HTTPS origin (**required on Render**); `Telegram:ApiBaseUrl`
+  is a test-only override.
 
-Via `appsettings.json`/`appsettings.Development.json` (non-secret):
-- `Clinic:DefaultSlug` — which clinic Register.cshtml links new users to (default `"demo-clinic"`)
-- `Meta:AppId`, `Meta:GraphApiVersion`, `Meta:WhatsAppLoginConfigId`, `Meta:FacebookLoginConfigId`
+**Non-secret** (`appsettings.json`, overridable by env): `Clinic:DefaultSlug` (`demo-clinic`);
+`Meta:AppId`, `Meta:GraphApiVersion` (`v21.0`), `Meta:WhatsAppLoginConfigId`, `Meta:FacebookLoginConfigId`;
+`Embeddings:BaseUrl` (`https://api.openai.com/v1`), `Embeddings:Model` (`text-embedding-3-small`),
+`Embeddings:Dimensions` (`1536` — must equal the `vector(N)` column); `Knowledge:MinScore` (0.30),
+`Knowledge:ChunkMaxChars` (1000), `Knowledge:ChunkOverlapChars` (150), `Knowledge:ChunkMinChars` (200) —
+the first three are **defaults for a clinic's first settings row only**; `ChunkMinChars` is system-wide.
+Render sets `PORT` itself; the Dockerfile sets `ASPNETCORE_ENVIRONMENT`/`ASPNETCORE_URLS`.
 
-## 17. Recent migrations (schema.sql, all applied live to Supabase, chronological)
+## 21. Migrations (all in `Database/schema.sql`, applied live to Supabase, chronological)
 
-1. Service window columns on `conversations`; `whatsapp_templates`, `campaigns`,
-   `campaign_recipients` tables; `messages` gains `whatsapp_template_id`/`campaign_id`/
-   `campaign_recipient_id`; `origin` CHECK extended with `'campaign'`
-2. `clinics` gains `address`/`operating_hours`/`consultation_info` (AI tool surface)
-3. `channel_integrations` gains `pin` (phone registration)
-4. `messages` gains per-status timestamps/failure fields/`metadata_json`; `channel_integrations`
-   gains health fields; `whatsapp_templates` gains `channel_integration_id`/`quality_rating`/
-   `components`/etc., **status/category CHECK constraints dropped**; new `whatsapp_health_events` table
-5. `events` gains real FK constraints to `leads`/`conversations`/`appointments`/`clinics` (bug fix —
-   EF had no dependency info, could insert an `events` row before its referenced `leads` row in the
-   same `SaveChanges` batch)
-6. Identity tables (`identity_users`, `identity_user_claims`, `identity_user_logins`,
-   `identity_user_tokens`) + `clinic_users`
-7. Unique partial index on `channel_integrations.phone_number_id`; unique partial index on
-   `clinic_users.user_id WHERE is_active`
+1. Service-window columns; `whatsapp_templates`, `campaigns`, `campaign_recipients`; `messages` template/
+   campaign links; `origin` CHECK + `'campaign'`
+2. `clinics` address/operating_hours/consultation_info
+3. `channel_integrations.pin`
+4. `messages` status timestamps/failure/metadata; `channel_integrations` health fields;
+   `whatsapp_templates` extras + CHECKs dropped; `whatsapp_health_events`
+5. `events` real FKs
+6. Identity tables + `clinic_users`
+7. Unique partial indexes: `channel_integrations.phone_number_id`, `clinic_users(user_id) where is_active`
+8. **Campaigns + old-lead reactivation model**: `campaigns` + `campaign_type`, `channel` (CHECK), `audience_type`
+   (CHECK), `audience_filters jsonb`, `whatsapp_template_id` nullable, status CHECK + `paused`, index on
+   `campaign_type`; `campaign_recipients` + `external_message_id`, `appointment_id` FK, `skip_reason`,
+   `failure_code`, `replied_at`, `booked_at`, `error_message` → `failure_reason`, status CHECK + `replied,
+   booked, skipped`, partial indexes
+9. **Knowledge Base**: `create extension vector`; `knowledge_documents`; `knowledge_chunks` (`vector(1536)`,
+   no ANN index)
+10. **`knowledge_search_settings`** (unique `clinic_id`, 4 CHECKs, trigger) — applied live, **not yet on `main`**
 
-## 18. Known TODOs
+11. **Telegram**: `channel_integrations` + `telegram_bot_id`, `telegram_bot_username`, `webhook_status`,
+    `webhook_registered_at`; `telegram` added to the channel CHECKs (`channel_integrations`, `conversations`) and
+    `telegram_customer` to `ck_messages_origin`; partial unique `ux_channel_integrations_telegram_bot_id`
+    (connected rows only) and `ux_conversations_clinic_channel_thread` — applied live, **not yet on `main`**
 
-- [ ] Set real `N8n:AiWebhookUrl`
-- [ ] Derive `clinicId` server-side for `AiController`/AI-send instead of trusting the parameter
-- [ ] Implement Meta `X-Hub-Signature-256` verification on the webhook POST endpoint
-- [ ] Design + build knowledge-base search (`get_approved_clinic_answer`)
-- [ ] Wire phone registration into the Settings manual-entry connect form (currently Embedded-Signup-only)
-- [ ] Decide on real multi-clinic signup (currently every new user → the one default clinic)
-- [ ] Consider protecting `LeadsController.Create` (currently `[AllowAnonymous]`, no ingest-key —
-      pre-existing gap, not introduced this session but never closed either)
+No migration was needed for Procedures, lead/appointment editing, or the audience UI.
+
+## 22. Known TODOs
+
+- [ ] Set `Embeddings__ApiKey` in Render (real key); verify KB end-to-end with real embeddings
+- [ ] Commit + push the uncommitted settings work; update Render deploy
+- [ ] **Rotate** `Meta:WebhookVerifyToken` and `N8n:IngestApiKey` (were in git history via this file's
+      first version) and update Meta + n8n; consider resetting the Supabase DB password (it was shown in
+      chat) and updating user-secrets + Render
+- [ ] Set real `N8n__AiWebhookUrl`; build the n8n `search_clinic_knowledge` tool
+- [ ] Derive `clinicId` server-side for AI endpoints instead of trusting the parameter
+- [ ] Meta `X-Hub-Signature-256` verification; `UseForwardedHeaders`; persist DataProtection keys
+- [ ] Protect/decide `LeadsController.Create` (`[AllowAnonymous]`, no ingest key)
+- [ ] Manual integrations form should register the WhatsApp phone number
+- [ ] Multi-clinic signup / clinic-creation wizard
+- [ ] Optional: KB bulk reindex; HNSW index at scale; retire `get_clinic_info`
+- [ ] Stray `webhook_test_template` template exists in the DB from earlier testing (harmless)
+
+## 23. Telegram integration (direct Bot API) — IMPLEMENTED, not yet committed/deployed
+
+Telegram is a channel adapter alongside WhatsApp; nothing about the WhatsApp webhook/parser/sender/templates/
+health/coexistence was changed (only the shared send path was made channel-routable — see below).
+
+```
+Telegram ──POST──> TelegramWebhookController  /api/integrations/telegram/webhook/{connectionId}   (anonymous)
+   connectionId = channel_integrations.id ; row must be channel=telegram AND status=connected else 404
+   X-Telegram-Bot-Api-Secret-Token must equal the row's stored secret (constant-time) else 403
+   clinic_id comes from the STORED row, never from the payload
+   → TelegramWebhookProcessor → TelegramUpdateParser (only place that knows Telegram JSON)
+   → ILeadService.GetOrCreateByExternalIdAsync  (lead = "telegram:{chatId}", Phone stays NULL, Source="telegram", SourceDetail="@username")
+   → IConversationService.GetOrCreateForLeadAsync(…, externalThreadId = chat.id)
+   → IMessageService.IngestAsync (unchanged: persist → conversation fields → SignalR → AI eligibility)
+   → if AiEligible (text, mode=ai, not a duplicate) → IAiTriggerNotifier (same payload as WhatsApp, channel="telegram")
+Outbound: n8n/dashboard → MessageService → IChannelSender (by conversation.Channel) → WhatsAppChannelSender | TelegramChannelSender → Bot API sendMessage
+```
+
+- **Connect** (`Settings → Channels & Integrations → Telegram`, `POST /api/channel-integrations/telegram/connect {botToken}`):
+  validate token shape → `getMe` → reject if that bot is connected to another clinic → reuse/mint the clinic's
+  row id → generate secret (256 random bits, base64url) → `setWebhook(url, secret_token, allowed_updates=["message"])`
+  → only then persist (status connected, webhook_status active) → `getWebhookInfo` confirms. Failure before
+  persist leaves nothing behind. Reconnect reuses the same connectionId and rotates the secret.
+  `POST …/telegram/refresh` ("Check webhook" button) re-reads `getWebhookInfo`.
+- **Disconnect** (`POST /api/channel-integrations/telegram/disconnect` or the page button): `deleteWebhook` (best
+  effort), status → disconnected, **token + secret cleared**, webhook_status `not_registered`; bot id/username
+  kept for display; leads/conversations/messages untouched (history stays visible; sending into an old
+  Telegram conversation while disconnected → 422 "reconnect"). Inbound to a disconnected connection → 404.
+- **Storage** (reuses `channel_integrations`): `access_token` = bot token, `webhook_verify_token` = webhook
+  secret, `display_name` = "@bot". New columns: `telegram_bot_id`, `telegram_bot_username`, `webhook_status`,
+  `webhook_registered_at` (`last_webhook_at` existed). Token/secret are plain text like every other channel
+  credential in this MVP (DataProtection keys don't survive Render redeploys, so column encryption would
+  brick tokens) but are **never returned** (DTO has only `hasAccessToken`/`hasWebhookVerifyToken`), never
+  rendered, never logged (the Telegram `HttpClient` is registered `.RemoveAllLoggers()` because the token is in
+  the URL path; exceptions are rebuilt from Telegram's description, never the URL).
+- **Identity/idempotency**: lead `ExternalLeadId = "telegram:{chatId}"` (unique per clinic via the existing
+  `ux_leads_clinic_external_lead_id`; same person on two clinics = two leads). Conversation `ExternalThreadId =
+  chat.id`, new unique `ux_conversations_clinic_channel_thread`. Message `ExternalMessageId = "{chatId}:{message_id}"`
+  (Telegram ids are only unique per chat) under the existing `(clinic_id, channel, external_message_id)` unique
+  index — same key for inbound and outbound. Unique-violation races are caught (lead, conversation, message) —
+  verified with 8 parallel identical deliveries → 1 row, 1 n8n trigger.
+- **Update handling**: only `message` updates from private chats by non-bots. Text → `text`; `/cmd` → `command`
+  (saved, **never AI-eligible**, so `/start` creates the lead/conversation but the AI does not reply); photo →
+  `image`, voice/audio → `audio`, video/video_note → `video`, document, sticker, location, contact → `contacts`,
+  anything else → `unsupported` (all saved with raw JSON in `metadata_json`, never AI). Edited messages, groups,
+  channels, bot senders, non-message updates → ignored with 200.
+- **n8n payload** (unchanged record `AiTriggerPayload`): `{clinicId, conversationId, leadId, messageId,
+  channel:"telegram", messageType:"text", messageText, selectedValue:null}`. AI reply path unchanged:
+  `POST /api/conversations/{id}/messages/send?clinicId=` + `X-Ingest-Key`, `sender:"ai"` → `SendAiReplyAsync`
+  re-checks `mode == ai` (409 `conversation_in_human_mode` otherwise, nothing sent to Telegram).
+- **MessageService extension**: new `IChannelSender { Channel; SendTextAsync(conversation, text) }`
+  (`Services/IChannelSender.cs`). `WhatsAppChannelSender` = the 24h-window + phone checks moved verbatim out of
+  MessageService (same messages/order); `TelegramChannelSender` (`Integrations/Telegram`) = this clinic's connected
+  bot + chat id. `MessageService` resolves by `conversation.Channel`, stamps `Message.Channel` from the
+  conversation. `WhatsAppSendException` and `TelegramApiException` share base `ChannelSendException` (controllers
+  map it to 502). `IngestAsync`: inbound origin via `MessageOrigin.CustomerFor(channel)` (`telegram_customer`);
+  `ServiceWindowExpiresAt` only set for WhatsApp. Template sends stay WhatsApp-only. Staff send flips to human as
+  before; Take Over / Return to AI are channel-agnostic.
+- **Inbox**: Telegram badge (TG, #229ED9 + paper-plane glyph) in `ChannelIconHelper.cs` and `inbox.js`;
+  `telegram_customer` renders as "Customer"; composer never disabled for non-WhatsApp and the Send Template
+  button is hidden. Integrations card shows bot, status, webhook status, last message received, Check webhook,
+  Disconnect, "Reconnect or use a different bot".
+- **Config**: `App:PublicBaseUrl` (HTTPS origin used to build the webhook URL; on Render
+  `App__PublicBaseUrl=https://sculptflowapp.onrender.com`; locally an https tunnel) — if empty the request host is
+  used unless it's localhost. `Telegram:ApiBaseUrl` (default `https://api.telegram.org`; test-only override for a
+  fake Bot API). The bot token is entered in the UI, not config.
+- **Files**: `Integrations/Telegram/{TelegramBotClient,TelegramUpdateParser,TelegramWebhookProcessor,
+  TelegramChannelSender,TelegramIntegrationService}.cs`, `Controllers/TelegramWebhookController.cs`,
+  `Services/{IChannelSender,DbErrors}.cs`; edits in MessageService, ConversationService, LeadService,
+  ChannelIntegrationService, ChannelIntegrationsController, ConversationsController, Integrations page,
+  ChannelIconHelper, inbox.js, DTOs/entities, Program.cs.
+- **Verified** (local run against a fake Bot API + fake n8n, then all test data removed): connect (valid/malformed/
+  rejected token), inbound text → lead/conversation/message/n8n, duplicate + concurrent duplicates, commands/media/
+  groups ignored or saved without AI, human mode (saved, no n8n), AI reply, AI blocked after takeover (409, not
+  sent), staff reply → human, Take Over/Return to AI, Telegram 403 → 502 with nothing persisted,
+  disconnect/history/reconnect (secret rotated, old secret 403), two-clinic isolation (404s, separate leads, a bot
+  can't serve two clinics, cross-secret 403), no token/secret in logs or HTML. **Not yet verified against the real
+  Telegram API/real bot.**
+- **Limitations / future**: outbound is text only; inbound media is stored as a placeholder + metadata (no
+  download); no `/start` auto-greeting; >4096-char AI replies fail (502) rather than being split; Telegram leads
+  have no phone so they're excluded from (WhatsApp) campaigns automatically; one bot ↔ one clinic; no
+  `edited_message`. **Telegram Business** (`business_connection`/`business_message`/`business_connection_id`) is
+  intentionally NOT built — seam: add the update types to `allowed_updates` in `SetWebhookAsync`, add a branch in
+  `TelegramUpdateParser` mapping `business_message` onto `ParsedTelegramMessage`, and a business_connection_id →
+  channel_integration lookup in the webhook controller; Lead/Conversation/Message/Inbox/n8n/send are unaffected.

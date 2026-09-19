@@ -70,11 +70,17 @@ public static class MessageOrigin
     /// <summary>Sent by an actual Campaign (bulk template send) — a manually-sent template from the
     /// Inbox is still Origin.Dashboard with MessageType "template"; this is reserved for Campaign sends.</summary>
     public const string Campaign = "campaign";
+    /// <summary>Customer message received via the Telegram bot webhook.</summary>
+    public const string TelegramCustomer = "telegram_customer";
 
     public static readonly IReadOnlySet<string> All = new HashSet<string>
     {
-        WhatsAppCustomer, WhatsAppBusinessApp, Dashboard, Ai, System, Campaign
+        WhatsAppCustomer, WhatsAppBusinessApp, Dashboard, Ai, System, Campaign, TelegramCustomer
     };
+
+    /// <summary>The origin of a genuine inbound customer message on the given channel.</summary>
+    public static string CustomerFor(string channel) =>
+        channel == ConversationChannel.Telegram ? TelegramCustomer : WhatsAppCustomer;
 }
 
 public static class MessageDirection

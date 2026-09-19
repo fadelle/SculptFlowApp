@@ -54,6 +54,35 @@ public class ConversationService : IConversationService
         return await CreateAsync(new CreateConversationRequest(clinicId, leadId, channel, ExternalThreadId: null), ct);
     }
 
+    public async Task<ConversationResponse> GetOrCreateForLeadAsync(
+        Guid clinicId, Guid leadId, string channel, string externalThreadId, CancellationToken ct = default)
+    {
+        var existing = await _db.Conversations.FirstOrDefaultAsync(
+            c => c.ClinicId == clinicId && c.LeadId == leadId && c.Channel == channel, ct);
+        if (existing is not null)
+        {
+            if (string.IsNullOrEmpty(existing.ExternalThreadId))
+            {
+                existing.ExternalThreadId = externalThreadId;
+                existing.UpdatedAt = DateTimeOffset.UtcNow;
+                await _db.SaveChangesAsync(ct);
+            }
+            return ToResponse(existing);
+        }
+
+        try
+        {
+            return await CreateAsync(new CreateConversationRequest(clinicId, leadId, channel, externalThreadId), ct);
+        }
+        catch (DbUpdateException ex) when (DbErrors.IsUniqueViolation(ex))
+        {
+            _db.ChangeTracker.Clear();
+            var winner = await _db.Conversations.FirstAsync(
+                c => c.ClinicId == clinicId && c.Channel == channel && c.ExternalThreadId == externalThreadId, ct);
+            return ToResponse(winner);
+        }
+    }
+
     public async Task<(ConversationResponse Conversation, IReadOnlyList<MessageResponse> Messages)?> GetByIdWithMessagesAsync(
         Guid clinicId, Guid id, CancellationToken ct = default)
     {
@@ -208,6 +237,7 @@ public class ConversationService : IConversationService
         if (senderType == MessageSenderType.Ai) return MessageOrigin.Ai;
         if (senderType == MessageSenderType.Staff) return MessageOrigin.Dashboard;
         if (senderType == MessageSenderType.Lead && channel == ConversationChannel.WhatsApp) return MessageOrigin.WhatsAppCustomer;
+        if (senderType == MessageSenderType.Lead && channel == ConversationChannel.Telegram) return MessageOrigin.TelegramCustomer;
         return MessageOrigin.System;
     }
 

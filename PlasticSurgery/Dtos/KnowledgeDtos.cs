@@ -21,6 +21,24 @@ public record SetKnowledgeActiveRequest(bool IsActive);
 /// in context (the AI agent supplies only Query) — nothing else about the conversation is passed.</summary>
 public record KnowledgeSearchRequest(Guid ClinicId, string Query, int? Limit = null);
 
+/// <summary>All of a clinic's Knowledge Base retrieval/embedding settings, as persisted. The first four
+/// are read-only (see KnowledgeSearchSettings); the rest are the tunable ones.</summary>
+public record KnowledgeSettingsResponse(
+    string EmbeddingModel,
+    int VectorDimension,
+    string SimilarityMethod,
+    string VectorIndexType,
+    int ChunkSizeTokens,
+    int ChunkOverlapTokens,
+    int TopK,
+    double MinimumSimilarity,
+    DateTimeOffset UpdatedAt
+);
+
+/// <summary>The ONLY settings staff can change. Deliberately has no embedding-model / dimension /
+/// similarity / index fields — those can't be changed from the clinic UI or API.</summary>
+public record UpdateKnowledgeSettingsRequest(int ChunkSizeTokens, int ChunkOverlapTokens, int TopK, double MinimumSimilarity);
+
 public record KnowledgeSearchResult(Guid DocumentId, string Title, string Category, string Content, double Score);
 
 public record KnowledgeSearchResponse(IReadOnlyList<KnowledgeSearchResult> Results);

@@ -9,8 +9,9 @@ namespace PlasticSurgery.Services;
 public interface IKnowledgeSearchService
 {
     /// <summary>Embeds the query, then ranks only chunks with clinic_id = clinicId whose parent document
-    /// is active, by cosine similarity. limit defaults to 5 and is capped at 10. Chunks scoring below
-    /// Knowledge:MinScore (default 0.30) are dropped, so an unrelated query yields an empty list rather
-    /// than the least-bad match. Throws InvalidOperationException if the embedding call fails.</summary>
+    /// is active, by cosine similarity. Uses the clinic's persisted settings: at most Top K results (an
+    /// explicit limit can only lower that), and chunks scoring below the clinic's minimum similarity are
+    /// dropped, so an unrelated query yields an empty list rather than the least-bad match. Throws
+    /// InvalidOperationException if the embedding call fails.</summary>
     Task<KnowledgeSearchResponse> SearchAsync(Guid clinicId, string query, int? limit = null, CancellationToken ct = default);
 }

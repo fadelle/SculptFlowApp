@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using PlasticSurgery.Data;
 using PlasticSurgery.Data.Entities;
 using PlasticSurgery.Dtos;
+using PlasticSurgery.Integrations.Telegram;
 
 namespace PlasticSurgery.Services;
 
@@ -10,11 +11,13 @@ public class ChannelIntegrationService : IChannelIntegrationService
 {
     private readonly ApplicationDbContext _db;
     private readonly IMetaGraphClient _graph;
+    private readonly ITelegramIntegrationService _telegram;
 
-    public ChannelIntegrationService(ApplicationDbContext db, IMetaGraphClient graph)
+    public ChannelIntegrationService(ApplicationDbContext db, IMetaGraphClient graph, ITelegramIntegrationService telegram)
     {
         _db = db;
         _graph = graph;
+        _telegram = telegram;
     }
 
     public async Task<IReadOnlyList<ChannelIntegrationResponse>> ListAsync(Guid clinicId, CancellationToken ct = default)
@@ -39,6 +42,14 @@ public class ChannelIntegrationService : IChannelIntegrationService
         if (!ChannelType.All.Contains(request.Channel))
         {
             throw new ArgumentException($"Unknown channel '{request.Channel}'.", nameof(request));
+        }
+
+        if (request.Channel == ChannelType.Telegram)
+        {
+            // A Telegram connection isn't "save some fields": it needs getMe + setWebhook, which only
+            // ITelegramIntegrationService.ConnectAsync does. Saving raw fields would produce a
+            // "connected" row with no webhook.
+            throw new ArgumentException("Telegram is connected with a bot token (Connect Telegram), not the manual form.", nameof(request));
         }
 
         var row = await _db.ChannelIntegrations.FirstOrDefaultAsync(
@@ -93,6 +104,13 @@ public class ChannelIntegrationService : IChannelIntegrationService
 
     public async Task DisconnectAsync(Guid clinicId, string channel, CancellationToken ct = default)
     {
+        if (channel == ChannelType.Telegram)
+        {
+            // Also removes the webhook at Telegram — see TelegramIntegrationService.DisconnectAsync.
+            await _telegram.DisconnectAsync(clinicId, ct);
+            return;
+        }
+
         var row = await _db.ChannelIntegrations.FirstOrDefaultAsync(
             c => c.ClinicId == clinicId && c.Channel == channel, ct);
         if (row is null)
@@ -193,5 +211,6 @@ public class ChannelIntegrationService : IChannelIntegrationService
         c.PhoneNumberId, c.WhatsAppBusinessId, c.PageId, c.InstagramBusinessId,
         HasAccessToken: !string.IsNullOrEmpty(c.AccessToken),
         HasWebhookVerifyToken: !string.IsNullOrEmpty(c.WebhookVerifyToken),
-        c.LastVerifiedAt, c.LastError, c.UpdatedAt, c.Pin);
+        c.LastVerifiedAt, c.LastError, c.UpdatedAt, c.Pin,
+        c.TelegramBotId, c.TelegramBotUsername, c.WebhookStatus, c.WebhookRegisteredAt, c.LastWebhookAt);
 }

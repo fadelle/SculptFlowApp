@@ -82,6 +82,7 @@ builder.Services.AddScoped<IWhatsAppHealthService, WhatsAppHealthService>();
 
 // Clinic Knowledge Base — dashboard CRUD, chunking, embeddings (Embeddings:* config) and the semantic
 // search behind POST /api/ai/knowledge/search. See Services/IKnowledgeService.cs.
+builder.Services.AddScoped<IKnowledgeSettingsService, KnowledgeSettingsService>();
 builder.Services.AddScoped<IKnowledgeChunkingService, KnowledgeChunkingService>();
 builder.Services.AddHttpClient<IEmbeddingService, OpenAiEmbeddingService>();
 builder.Services.AddScoped<IKnowledgeService, KnowledgeService>();
@@ -99,6 +100,18 @@ builder.Services.AddScoped<HistoryHandler>();
 builder.Services.AddScoped<AppStateSyncHandler>();
 builder.Services.AddScoped<UnknownEventHandler>();
 builder.Services.AddScoped<IMetaWebhookProcessor, MetaWebhookProcessor>();
+
+// Telegram (direct Bot API) — a channel adapter alongside WhatsApp. Inbound: TelegramWebhookController ->
+// TelegramWebhookProcessor -> the same Lead/Conversation/Message services. Outbound: IChannelSender
+// implementations are resolved by conversation.Channel inside MessageService.
+// RemoveAllLoggers: Telegram puts the bot token in the request URL, and the default HttpClient logging
+// prints request URIs — so this client must not log at all.
+builder.Services.AddHttpClient<PlasticSurgery.Integrations.Telegram.ITelegramBotClient, PlasticSurgery.Integrations.Telegram.TelegramBotClient>()
+    .RemoveAllLoggers();
+builder.Services.AddScoped<PlasticSurgery.Integrations.Telegram.ITelegramIntegrationService, PlasticSurgery.Integrations.Telegram.TelegramIntegrationService>();
+builder.Services.AddScoped<PlasticSurgery.Integrations.Telegram.ITelegramWebhookProcessor, PlasticSurgery.Integrations.Telegram.TelegramWebhookProcessor>();
+builder.Services.AddScoped<IChannelSender, WhatsAppChannelSender>();
+builder.Services.AddScoped<IChannelSender, PlasticSurgery.Integrations.Telegram.TelegramChannelSender>();
 
 // Outbound: the one call to n8n left after Meta started posting directly to us — see
 // Controllers/WhatsAppWebhookController.cs and IAiTriggerNotifier's own doc comment.

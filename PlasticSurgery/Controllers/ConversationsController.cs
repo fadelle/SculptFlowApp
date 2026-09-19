@@ -156,7 +156,7 @@ public class ConversationsController : ControllerBase
             {
                 return UnprocessableEntity(new { error = ex.Message });
             }
-            catch (WhatsAppSendException ex)
+            catch (ChannelSendException ex)
             {
                 return StatusCode(StatusCodes.Status502BadGateway, new { error = ex.Message });
             }
@@ -189,7 +189,7 @@ public class ConversationsController : ControllerBase
         {
             return UnprocessableEntity(new { error = ex.Message });
         }
-        catch (WhatsAppSendException ex)
+        catch (ChannelSendException ex)
         {
             return StatusCode(StatusCodes.Status502BadGateway, new { error = ex.Message });
         }
@@ -217,7 +217,7 @@ public class ConversationsController : ControllerBase
         {
             return UnprocessableEntity(new { error = ex.Message });
         }
-        catch (WhatsAppSendException ex)
+        catch (ChannelSendException ex)
         {
             return StatusCode(StatusCodes.Status502BadGateway, new { error = ex.Message });
         }

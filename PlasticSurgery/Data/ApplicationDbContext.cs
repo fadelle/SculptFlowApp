@@ -39,6 +39,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
     public DbSet<WhatsAppHealthEvent> WhatsAppHealthEvents => Set<WhatsAppHealthEvent>();
     public DbSet<KnowledgeDocument> KnowledgeDocuments => Set<KnowledgeDocument>();
     public DbSet<KnowledgeChunk> KnowledgeChunks => Set<KnowledgeChunk>();
+    public DbSet<KnowledgeSearchSettings> KnowledgeSearchSettings => Set<KnowledgeSearchSettings>();
     public DbSet<ClinicUser> ClinicUsers => Set<ClinicUser>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -418,6 +419,10 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.Property(x => x.LastProblemMessage).HasColumnName("last_problem_message");
             e.Property(x => x.LastWebhookAt).HasColumnName("last_webhook_at");
             e.Property(x => x.LastHealthEventAt).HasColumnName("last_health_event_at");
+            e.Property(x => x.TelegramBotId).HasColumnName("telegram_bot_id").HasMaxLength(50);
+            e.Property(x => x.TelegramBotUsername).HasColumnName("telegram_bot_username").HasMaxLength(100);
+            e.Property(x => x.WebhookStatus).HasColumnName("webhook_status").HasMaxLength(30);
+            e.Property(x => x.WebhookRegisteredAt).HasColumnName("webhook_registered_at");
             e.Property(x => x.LastVerifiedAt).HasColumnName("last_verified_at");
             e.Property(x => x.LastError).HasColumnName("last_error");
             e.Property(x => x.CreatedAt).HasColumnName("created_at");
@@ -681,6 +686,32 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
 
             e.HasIndex(x => x.ClinicId);
             e.HasIndex(x => x.KnowledgeDocumentId);
+        });
+
+        // One settings row per clinic (unique clinic_id) — see KnowledgeSearchSettings.
+        modelBuilder.Entity<KnowledgeSearchSettings>(e =>
+        {
+            e.ToTable("knowledge_search_settings");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.ClinicId).HasColumnName("clinic_id");
+            e.Property(x => x.EmbeddingModel).HasColumnName("embedding_model").HasMaxLength(100).IsRequired();
+            e.Property(x => x.VectorDimension).HasColumnName("vector_dimension");
+            e.Property(x => x.ChunkSizeTokens).HasColumnName("chunk_size_tokens");
+            e.Property(x => x.ChunkOverlapTokens).HasColumnName("chunk_overlap_tokens");
+            e.Property(x => x.SimilarityMethod).HasColumnName("similarity_method").HasMaxLength(30).IsRequired();
+            e.Property(x => x.TopK).HasColumnName("top_k");
+            e.Property(x => x.MinimumSimilarity).HasColumnName("minimum_similarity");
+            e.Property(x => x.VectorIndexType).HasColumnName("vector_index_type").HasMaxLength(30).IsRequired();
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+            e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
+
+            e.HasOne(x => x.Clinic).WithMany()
+                .HasForeignKey(x => x.ClinicId).OnDelete(DeleteBehavior.Cascade);
+
+            e.HasIndex(x => x.ClinicId)
+                .IsUnique()
+                .HasDatabaseName("ux_knowledge_search_settings_clinic_id");
         });
     }
 }

@@ -268,6 +268,51 @@ public class LeadService : ILeadService
         return ToResponse(lead);
     }
 
+    public async Task<LeadResponse> GetOrCreateByExternalIdAsync(
+        Guid clinicId, string externalLeadId, string source, string? fullName, string? firstName, string? lastName,
+        string? sourceDetail, CancellationToken ct = default)
+    {
+        var existing = await _db.Leads.Include(l => l.Procedure)
+            .FirstOrDefaultAsync(l => l.ClinicId == clinicId && l.ExternalLeadId == externalLeadId, ct);
+        if (existing is not null) return ToResponse(existing);
+
+        var now = DateTimeOffset.UtcNow;
+        var lead = new Lead
+        {
+            Id = Guid.NewGuid(),
+            ClinicId = clinicId,
+            FullName = fullName,
+            FirstName = firstName,
+            LastName = lastName,
+            Phone = null,
+            Source = source,
+            SourceDetail = sourceDetail,
+            ExternalLeadId = externalLeadId,
+            Status = LeadStatus.New,
+            QualificationStatus = LeadQualificationStatus.Unknown,
+            MarketingOptIn = true,
+            CreatedAt = now,
+            UpdatedAt = now
+        };
+        _db.Leads.Add(lead);
+        _events.Log(clinicId, EventTypes.LeadCreated, leadId: lead.Id, source: source);
+
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex) when (DbErrors.IsUniqueViolation(ex))
+        {
+            // A concurrent delivery created the same lead first — drop our pending lead/event and use theirs.
+            _db.ChangeTracker.Clear();
+            var winner = await _db.Leads.Include(l => l.Procedure)
+                .FirstAsync(l => l.ClinicId == clinicId && l.ExternalLeadId == externalLeadId, ct);
+            return ToResponse(winner);
+        }
+
+        return ToResponse(lead);
+    }
+
     public async Task<IReadOnlyList<string>> GetDistinctSourcesAsync(Guid clinicId, CancellationToken ct = default) =>
         await _db.Leads
             .Where(l => l.ClinicId == clinicId && l.Source != null && l.Source != "")

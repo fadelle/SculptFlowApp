@@ -14,12 +14,14 @@ public class KnowledgeService : IKnowledgeService
     private readonly ApplicationDbContext _db;
     private readonly IKnowledgeChunkingService _chunking;
     private readonly IEmbeddingService _embeddings;
+    private readonly IKnowledgeSettingsService _settings;
 
-    public KnowledgeService(ApplicationDbContext db, IKnowledgeChunkingService chunking, IEmbeddingService embeddings)
+    public KnowledgeService(ApplicationDbContext db, IKnowledgeChunkingService chunking, IEmbeddingService embeddings, IKnowledgeSettingsService settings)
     {
         _db = db;
         _chunking = chunking;
         _embeddings = embeddings;
+        _settings = settings;
     }
 
     public async Task<IReadOnlyList<KnowledgeDocumentResponse>> ListAsync(Guid clinicId, CancellationToken ct = default)
@@ -47,7 +49,7 @@ public class KnowledgeService : IKnowledgeService
     public async Task<KnowledgeDocumentResponse> CreateAsync(Guid clinicId, SaveKnowledgeRequest request, CancellationToken ct = default)
     {
         var (title, category, content) = Validate(request);
-        var (pieces, vectors) = await ChunkAndEmbedAsync(title, content, ct);
+        var (pieces, vectors) = await ChunkAndEmbedAsync(clinicId, title, content, ct);
 
         var now = DateTimeOffset.UtcNow;
         var doc = new KnowledgeDocument
@@ -77,14 +79,9 @@ public class KnowledgeService : IKnowledgeService
         if (doc is null) return null;
 
         var (title, category, content) = Validate(request);
-        var textChanged = title != doc.Title || content != doc.Content;
-
-        IReadOnlyList<string> pieces = Array.Empty<string>();
-        IReadOnlyList<float[]> vectors = Array.Empty<float[]>();
-        if (textChanged)
-        {
-            (pieces, vectors) = await ChunkAndEmbedAsync(title, content, ct);
-        }
+        // Saving always re-chunks and re-embeds with the clinic's CURRENT settings — that's how a
+        // changed chunk size/overlap is applied to an existing entry (just re-save it).
+        var (pieces, vectors) = await ChunkAndEmbedAsync(clinicId, title, content, ct);
 
         await using var tx = await _db.Database.BeginTransactionAsync(ct);
         doc.Title = title;
@@ -94,11 +91,8 @@ public class KnowledgeService : IKnowledgeService
         doc.UpdatedAt = DateTimeOffset.UtcNow;
         await _db.SaveChangesAsync(ct);
 
-        if (textChanged)
-        {
-            await _db.KnowledgeChunks.Where(c => c.KnowledgeDocumentId == doc.Id).ExecuteDeleteAsync(ct);
-            await InsertChunksAsync(clinicId, doc.Id, pieces, vectors, ct);
-        }
+        await _db.KnowledgeChunks.Where(c => c.KnowledgeDocumentId == doc.Id).ExecuteDeleteAsync(ct);
+        await InsertChunksAsync(clinicId, doc.Id, pieces, vectors, ct);
         await tx.CommitAsync(ct);
 
         return await ToResponseAsync(doc, ct);
@@ -129,14 +123,18 @@ public class KnowledgeService : IKnowledgeService
     }
 
     private async Task<(IReadOnlyList<string> Pieces, IReadOnlyList<float[]> Vectors)> ChunkAndEmbedAsync(
-        string title, string content, CancellationToken ct)
+        Guid clinicId, string title, string content, CancellationToken ct)
     {
-        var pieces = _chunking.Chunk(content);
+        // Chunk sizes and the embedding model/dimension come from the clinic's persisted settings.
+        var settings = await _settings.GetAsync(clinicId, ct);
+
+        var pieces = _chunking.Chunk(content, settings.ChunkSizeTokens, settings.ChunkOverlapTokens);
         if (pieces.Count == 0) throw new ArgumentException("Content is required.");
 
         // The title is part of what gets embedded so a chunk like "Yes, you stay overnight" still
         // carries which procedure/topic it's about; the stored (and returned) chunk text stays plain.
-        var vectors = await _embeddings.EmbedBatchAsync(pieces.Select(p => $"{title}\n\n{p}").ToList(), ct);
+        var vectors = await _embeddings.EmbedBatchAsync(
+            pieces.Select(p => $"{title}\n\n{p}").ToList(), settings.EmbeddingModel, settings.VectorDimension, ct);
         return (pieces, vectors);
     }
 

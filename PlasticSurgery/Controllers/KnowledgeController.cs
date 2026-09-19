@@ -11,10 +11,12 @@ namespace PlasticSurgery.Controllers;
 public class KnowledgeController : DashboardApiController
 {
     private readonly IKnowledgeService _knowledge;
+    private readonly IKnowledgeSettingsService _settings;
 
-    public KnowledgeController(IKnowledgeService knowledge, ICurrentClinicContext clinicContext) : base(clinicContext)
+    public KnowledgeController(IKnowledgeService knowledge, IKnowledgeSettingsService settings, ICurrentClinicContext clinicContext) : base(clinicContext)
     {
         _knowledge = knowledge;
+        _settings = settings;
     }
 
     [HttpGet]
@@ -23,6 +25,34 @@ public class KnowledgeController : DashboardApiController
         var clinicId = await GetClinicIdAsync(ct);
         if (clinicId is null) return Forbid();
         return Ok(await _knowledge.ListAsync(clinicId.Value, ct));
+    }
+
+    /// <summary>All of the clinic's Knowledge Base retrieval/embedding settings (created with the system
+    /// defaults on first use).</summary>
+    [HttpGet("settings")]
+    public async Task<ActionResult<KnowledgeSettingsResponse>> GetSettings(CancellationToken ct)
+    {
+        var clinicId = await GetClinicIdAsync(ct);
+        if (clinicId is null) return Forbid();
+        return Ok(await _settings.GetAsync(clinicId.Value, ct));
+    }
+
+    /// <summary>Updates only chunk size, chunk overlap, top K and minimum similarity — the request type
+    /// has no fields for the read-only settings, so they can't be changed here.</summary>
+    [HttpPut("settings")]
+    public async Task<ActionResult<KnowledgeSettingsResponse>> UpdateSettings([FromBody] UpdateKnowledgeSettingsRequest request, CancellationToken ct)
+    {
+        var clinicId = await GetClinicIdAsync(ct);
+        if (clinicId is null) return Forbid();
+
+        try
+        {
+            return Ok(await _settings.UpdateAsync(clinicId.Value, request, ct));
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
     }
 
     [HttpGet("{id:guid}")]

@@ -7,19 +7,15 @@ namespace PlasticSurgery.Services;
 
 public class KnowledgeSearchService : IKnowledgeSearchService
 {
-    private const int DefaultLimit = 5;
-    private const int MaxLimit = 10;
-    private const double DefaultMinScore = 0.30;
-
     private readonly ApplicationDbContext _db;
     private readonly IEmbeddingService _embeddings;
-    private readonly IConfiguration _configuration;
+    private readonly IKnowledgeSettingsService _settings;
 
-    public KnowledgeSearchService(ApplicationDbContext db, IEmbeddingService embeddings, IConfiguration configuration)
+    public KnowledgeSearchService(ApplicationDbContext db, IEmbeddingService embeddings, IKnowledgeSettingsService settings)
     {
         _db = db;
         _embeddings = embeddings;
-        _configuration = configuration;
+        _settings = settings;
     }
 
     public async Task<KnowledgeSearchResponse> SearchAsync(Guid clinicId, string query, int? limit = null, CancellationToken ct = default)
@@ -29,11 +25,13 @@ public class KnowledgeSearchService : IKnowledgeSearchService
             return new KnowledgeSearchResponse(Array.Empty<KnowledgeSearchResult>());
         }
 
-        var take = Math.Clamp(limit ?? DefaultLimit, 1, MaxLimit);
-        var minScore = double.TryParse(_configuration["Knowledge:MinScore"], System.Globalization.NumberStyles.Float,
-            System.Globalization.CultureInfo.InvariantCulture, out var m) ? m : DefaultMinScore;
+        // Top K, the similarity floor and the embedding model/dimension are the clinic's persisted
+        // settings. Top K is the clinic's ceiling: the AI's optional limit can only lower it.
+        var settings = await _settings.GetAsync(clinicId, ct);
+        var take = Math.Clamp(limit ?? settings.TopK, 1, settings.TopK);
 
-        var queryVector = VectorLiteral.From(await _embeddings.EmbedAsync(query.Trim(), ct));
+        var queryVector = VectorLiteral.From(
+            await _embeddings.EmbedAsync(query.Trim(), settings.EmbeddingModel, settings.VectorDimension, ct));
 
         // Clinic isolation: the WHERE clause pins clinic_id on BOTH the chunk and its document, and
         // only active documents qualify — the similarity ranking only ever sees that slice.
@@ -51,7 +49,7 @@ public class KnowledgeSearchService : IKnowledgeSearchService
             .ToListAsync(ct);
 
         var results = rows
-            .Where(r => r.Score >= minScore)
+            .Where(r => r.Score >= settings.MinimumSimilarity)
             .Select(r => new KnowledgeSearchResult(r.DocumentId, r.Title, r.Category, r.Content, Math.Round(r.Score, 4)))
             .ToList();
 

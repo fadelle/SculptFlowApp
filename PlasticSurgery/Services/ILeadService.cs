@@ -32,6 +32,15 @@ public interface ILeadService
     /// then messaged on WhatsApp.</summary>
     Task<LeadResponse> GetOrCreateByPhoneAsync(Guid clinicId, string phone, string? fullName, CancellationToken ct = default);
 
+    /// <summary>Finds or creates the lead for a channel-native identity that has NO phone number
+    /// (Telegram today): matched strictly on (clinicId, externalLeadId), so the same person on two
+    /// clinics is two separate leads. Never invents a phone number — Lead.Phone stays null. Safe under
+    /// concurrent deliveries (the unique index on (clinic_id, external_lead_id) decides the winner and
+    /// the loser re-reads it).</summary>
+    Task<LeadResponse> GetOrCreateByExternalIdAsync(
+        Guid clinicId, string externalLeadId, string source, string? fullName, string? firstName, string? lastName,
+        string? sourceDetail, CancellationToken ct = default);
+
     /// <summary>Distinct non-empty Lead.Source values on file for this clinic, alphabetical — backs
     /// the "Lead source" filter dropdown on the Campaign creation page rather than a hardcoded list,
     /// since Source is a free string (see Lead.cs), not a fixed enum.</summary>

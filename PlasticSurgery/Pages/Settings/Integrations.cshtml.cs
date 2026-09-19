@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using PlasticSurgery.Data.Entities;
 using PlasticSurgery.Dtos;
+using PlasticSurgery.Integrations.Telegram;
 using PlasticSurgery.Services;
 
 namespace PlasticSurgery.Pages.Settings;
@@ -12,12 +13,16 @@ public class IntegrationsModel : PageModel
     private readonly ICurrentClinicContext _clinicContext;
     private readonly IChannelIntegrationService _integrations;
     private readonly IConfiguration _configuration;
+    private readonly ITelegramIntegrationService _telegram;
 
-    public IntegrationsModel(ICurrentClinicContext clinicContext, IChannelIntegrationService integrations, IConfiguration configuration)
+    public IntegrationsModel(
+        ICurrentClinicContext clinicContext, IChannelIntegrationService integrations, IConfiguration configuration,
+        ITelegramIntegrationService telegram)
     {
         _clinicContext = clinicContext;
         _integrations = integrations;
         _configuration = configuration;
+        _telegram = telegram;
     }
 
     public bool ClinicConfigured { get; private set; }
@@ -57,8 +62,16 @@ public class IntegrationsModel : PageModel
     [BindProperty]
     public string? WebhookVerifyToken { get; set; }
 
+    /// <summary>Telegram bot token from the connect form. Write-only: every POST that reads it ends in a
+    /// redirect, so it is never rendered back into a page.</summary>
+    [BindProperty]
+    public string? BotToken { get; set; }
+
     [TempData]
     public string? StatusMessage { get; set; }
+
+    [TempData]
+    public string? ErrorMessage { get; set; }
 
     public async Task<IActionResult> OnGetAsync(CancellationToken ct)
     {
@@ -74,7 +87,8 @@ public class IntegrationsModel : PageModel
             return RedirectToPage();
         }
 
-        if (!ChannelType.All.Contains(Channel))
+        // Telegram has its own Connect flow (token -> getMe -> setWebhook); it can't be "saved" as fields.
+        if (!ChannelType.All.Contains(Channel) || Channel == ChannelType.Telegram)
         {
             return BadRequest();
         }
@@ -84,6 +98,43 @@ public class IntegrationsModel : PageModel
             PageId, InstagramBusinessId, AccessToken, WebhookVerifyToken), ct);
 
         StatusMessage = $"{Label(Channel)} connection saved.";
+        return RedirectToPage();
+    }
+
+    /// <summary>Connect / reconnect Telegram: clinic comes from the logged-in user, the token from the form.</summary>
+    public async Task<IActionResult> OnPostConnectTelegramAsync(CancellationToken ct)
+    {
+        var clinic = await _clinicContext.GetClinicAsync(ct);
+        if (clinic is null)
+        {
+            return RedirectToPage();
+        }
+
+        try
+        {
+            var result = await _telegram.ConnectAsync(clinic.Id, BotToken, ct);
+            StatusMessage = $"Telegram connected — bot {result.DisplayName ?? "(unnamed)"}. The webhook was registered automatically.";
+        }
+        catch (Exception ex) when (ex is ArgumentException or TelegramApiException or InvalidOperationException)
+        {
+            ErrorMessage = "Could not connect Telegram: " + ex.Message;
+        }
+
+        return RedirectToPage();
+    }
+
+    public async Task<IActionResult> OnPostRefreshTelegramAsync(CancellationToken ct)
+    {
+        var clinic = await _clinicContext.GetClinicAsync(ct);
+        if (clinic is null)
+        {
+            return RedirectToPage();
+        }
+
+        var result = await _telegram.RefreshStatusAsync(clinic.Id, ct);
+        StatusMessage = result.WebhookStatus == WebhookStatus.Active
+            ? "Telegram webhook is active."
+            : "Telegram webhook check finished — see the status below.";
         return RedirectToPage();
     }
 
@@ -120,6 +171,7 @@ public class IntegrationsModel : PageModel
         ChannelType.WhatsApp => "WhatsApp",
         ChannelType.Instagram => "Instagram",
         ChannelType.Facebook => "Facebook",
+        ChannelType.Telegram => "Telegram",
         _ => channel
     };
 }

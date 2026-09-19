@@ -101,7 +101,7 @@ public class WhatsAppService : IWhatsAppService
     }
 }
 
-public class WhatsAppSendException : Exception
+public class WhatsAppSendException : ChannelSendException
 {
     public WhatsAppSendException(string message) : base(message) { }
 }

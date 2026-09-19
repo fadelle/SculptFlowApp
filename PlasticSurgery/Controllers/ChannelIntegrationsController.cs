@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using PlasticSurgery.Dtos;
+using PlasticSurgery.Integrations.Telegram;
 using PlasticSurgery.Services;
 
 namespace PlasticSurgery.Controllers;
@@ -15,12 +16,16 @@ public class ChannelIntegrationsController : DashboardApiController
 {
     private readonly IChannelIntegrationService _integrations;
     private readonly IMetaGraphClient _graph;
+    private readonly ITelegramIntegrationService _telegram;
 
-    public ChannelIntegrationsController(IChannelIntegrationService integrations, IMetaGraphClient graph, ICurrentClinicContext clinicContext)
+    public ChannelIntegrationsController(
+        IChannelIntegrationService integrations, IMetaGraphClient graph, ITelegramIntegrationService telegram,
+        ICurrentClinicContext clinicContext)
         : base(clinicContext)
     {
         _integrations = integrations;
         _graph = graph;
+        _telegram = telegram;
     }
 
     [HttpGet]
@@ -39,8 +44,48 @@ public class ChannelIntegrationsController : DashboardApiController
         var clinicId = await GetClinicIdAsync(ct);
         if (clinicId is null) return Forbid();
 
-        var result = await _integrations.SaveAsync(request with { ClinicId = clinicId.Value }, ct);
-        return Ok(result);
+        try
+        {
+            var result = await _integrations.SaveAsync(request with { ClinicId = clinicId.Value }, ct);
+            return Ok(result);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    /// <summary>Connects (or reconnects) the clinic's Telegram bot from a BotFather token: validates it
+    /// with getMe, registers the webhook (setWebhook + secret token) and stores the connection. The
+    /// token is write-only — never echoed back. clinicId always comes from the logged-in user.</summary>
+    [HttpPost("telegram/connect")]
+    public async Task<ActionResult<ChannelIntegrationResponse>> ConnectTelegram([FromBody] ConnectTelegramRequest request, CancellationToken ct)
+    {
+        var clinicId = await GetClinicIdAsync(ct);
+        if (clinicId is null) return Forbid();
+
+        try
+        {
+            return Ok(await _telegram.ConnectAsync(clinicId.Value, request.BotToken, ct));
+        }
+        catch (Exception ex) when (ex is ArgumentException or TelegramApiException)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(new { error = ex.Message });
+        }
+    }
+
+    /// <summary>Re-checks the webhook with Telegram (getWebhookInfo) and updates the stored status.</summary>
+    [HttpPost("telegram/refresh")]
+    public async Task<ActionResult<ChannelIntegrationResponse>> RefreshTelegram(CancellationToken ct)
+    {
+        var clinicId = await GetClinicIdAsync(ct);
+        if (clinicId is null) return Forbid();
+
+        return Ok(await _telegram.RefreshStatusAsync(clinicId.Value, ct));
     }
 
     [HttpPost("{channel}/disconnect")]

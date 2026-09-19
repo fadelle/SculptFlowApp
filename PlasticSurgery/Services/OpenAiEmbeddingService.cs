@@ -33,10 +33,10 @@ public class OpenAiEmbeddingService : IEmbeddingService
 
     public int Dimensions => int.TryParse(_configuration["Embeddings:Dimensions"], out var d) && d > 0 ? d : 1536;
 
-    public async Task<float[]> EmbedAsync(string text, CancellationToken ct = default) =>
-        (await EmbedBatchAsync(new[] { text }, ct))[0];
+    public async Task<float[]> EmbedAsync(string text, string? model = null, int? dimensions = null, CancellationToken ct = default) =>
+        (await EmbedBatchAsync(new[] { text }, model, dimensions, ct))[0];
 
-    public async Task<IReadOnlyList<float[]>> EmbedBatchAsync(IReadOnlyList<string> texts, CancellationToken ct = default)
+    public async Task<IReadOnlyList<float[]>> EmbedBatchAsync(IReadOnlyList<string> texts, string? model = null, int? dimensions = null, CancellationToken ct = default)
     {
         var apiKey = _configuration["Embeddings:ApiKey"];
         if (string.IsNullOrWhiteSpace(apiKey))
@@ -49,17 +49,17 @@ public class OpenAiEmbeddingService : IEmbeddingService
         for (var offset = 0; offset < texts.Count; offset += MaxInputsPerRequest)
         {
             var batch = texts.Skip(offset).Take(MaxInputsPerRequest).ToList();
-            results.AddRange(await EmbedOneRequestAsync(batch, apiKey, ct));
+            results.AddRange(await EmbedOneRequestAsync(batch, apiKey, model ?? Model, dimensions ?? Dimensions, ct));
         }
         return results;
     }
 
-    private async Task<IReadOnlyList<float[]>> EmbedOneRequestAsync(List<string> batch, string apiKey, CancellationToken ct)
+    private async Task<IReadOnlyList<float[]>> EmbedOneRequestAsync(List<string> batch, string apiKey, string model, int dimensions, CancellationToken ct)
     {
-        var payload = new Dictionary<string, object> { ["model"] = Model, ["input"] = batch };
-        if (Model.StartsWith("text-embedding-3", StringComparison.OrdinalIgnoreCase))
+        var payload = new Dictionary<string, object> { ["model"] = model, ["input"] = batch };
+        if (model.StartsWith("text-embedding-3", StringComparison.OrdinalIgnoreCase))
         {
-            payload["dimensions"] = Dimensions;
+            payload["dimensions"] = dimensions;
         }
 
         using var request = new HttpRequestMessage(HttpMethod.Post, $"{BaseUrl}/embeddings")
@@ -101,10 +101,10 @@ public class OpenAiEmbeddingService : IEmbeddingService
             {
                 var index = item.GetProperty("index").GetInt32();
                 var values = item.GetProperty("embedding").EnumerateArray().Select(v => v.GetSingle()).ToArray();
-                if (values.Length != Dimensions)
+                if (values.Length != dimensions)
                 {
                     throw new InvalidOperationException(
-                        $"Embedding model '{Model}' returned {values.Length} dimensions but Embeddings:Dimensions is {Dimensions} " +
+                        $"Embedding model '{model}' returned {values.Length} dimensions but the configured dimension is {dimensions} " +
                         "(the knowledge_chunks.embedding column must be vector(N) with the same N).");
                 }
                 vectors[index] = values;

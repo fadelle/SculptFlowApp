@@ -11,6 +11,12 @@ public interface IConversationService
     /// Conversation — a Campaign never creates a separate "campaign conversation".</summary>
     Task<ConversationResponse> GetOrCreateForLeadAsync(Guid clinicId, Guid leadId, string channel, CancellationToken ct = default);
 
+    /// <summary>Same as the overload above, for channels whose conversations are identified by an
+    /// external thread id (Telegram: chat.id). Finds the (clinic, lead, channel) conversation — or, for
+    /// a lead with none, creates it stamped with <paramref name="externalThreadId"/>. Race-safe via the
+    /// unique index on (clinic_id, channel, external_thread_id).</summary>
+    Task<ConversationResponse> GetOrCreateForLeadAsync(Guid clinicId, Guid leadId, string channel, string externalThreadId, CancellationToken ct = default);
+
     Task<(ConversationResponse Conversation, IReadOnlyList<MessageResponse> Messages)?> GetByIdWithMessagesAsync(
         Guid clinicId, Guid id, CancellationToken ct = default);
 

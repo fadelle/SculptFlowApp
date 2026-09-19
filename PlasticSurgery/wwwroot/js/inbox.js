@@ -72,6 +72,7 @@
   // ---------------------------------------------------------------------
   var ORIGIN_LABELS = {
     whatsapp_customer: 'Customer',
+    telegram_customer: 'Customer',
     whatsapp_business_app: 'WhatsApp Business App',
     dashboard: 'Staff',
     ai: 'AI',
@@ -83,7 +84,7 @@
   }
 
   function originBubbleClass(origin, direction) {
-    if (origin === 'whatsapp_customer') return 'inbox-msg-customer';
+    if (origin === 'whatsapp_customer' || origin === 'telegram_customer') return 'inbox-msg-customer';
     if (origin === 'ai') return 'inbox-msg-ai';
     if (origin === 'dashboard') return 'inbox-msg-staff';
     if (origin === 'whatsapp_business_app') return 'inbox-msg-staff-app';
@@ -147,6 +148,7 @@
     whatsapp: { initials: 'WA', hex: '#25D366' },
     instagram: { initials: 'IG', hex: '#C13584' },
     facebook: { initials: 'FB', hex: '#1877F2' },
+    telegram: { initials: 'TG', hex: '#229ED9' },
     website: { initials: 'WEB', hex: '#6b7280' },
     sms: { initials: 'SMS', hex: '#6b7280' },
     email: { initials: 'MAIL', hex: '#6b7280' }
@@ -157,7 +159,8 @@
 
   // Mirrors ChannelIconHelper.Svg() in C# — recognizable brand glyph instead of plain initials.
   var WHATSAPP_SVG = '<svg viewBox="0 0 24 24" fill="#fff" xmlns="http://www.w3.org/2000/svg"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413"/></svg>';
-  function channelIcon(channel) { return channel === 'whatsapp' ? WHATSAPP_SVG : null; }
+  var TELEGRAM_SVG = '<svg viewBox="0 0 24 24" fill="#fff" xmlns="http://www.w3.org/2000/svg"><path d="M9.78 18.65l.28-4.23 7.68-6.92c.34-.31-.07-.46-.52-.19L7.74 13.3 3.64 12c-.88-.25-.89-.86.2-1.3l15.97-6.16c.73-.33 1.43.18 1.15 1.3l-2.72 12.81c-.19.91-.74 1.13-1.5.71L12.6 16.3l-1.99 1.93c-.23.23-.42.42-.83.42z"/></svg>';
+  function channelIcon(channel) { return channel === 'whatsapp' ? WHATSAPP_SVG : (channel === 'telegram' ? TELEGRAM_SVG : null); }
 
   function badgeClassForMode(mode) {
     if (mode === 'ai') return 'badge-teal';
@@ -221,10 +224,14 @@
 
     // Backend is authoritative for this (see MessageService.SendAsync's ServiceWindowClosedException)
     // — this just mirrors it in the UI so staff aren't surprised by a rejected send.
-    currentWindowOpen = !!conversation.isServiceWindowOpen;
+    // The 24h customer-service window (and message templates) are WhatsApp-only — a Telegram
+    // conversation can always be replied to, so its composer is never disabled and has no template button.
+    var isWhatsApp = conversation.channel === 'whatsapp';
+    currentWindowOpen = !isWhatsApp || !!conversation.isServiceWindowOpen;
     composerInputEl.disabled = !currentWindowOpen;
     composerSendEl.disabled = !currentWindowOpen;
     windowClosedNoticeEl.hidden = currentWindowOpen;
+    btnSendTemplate.hidden = !isWhatsApp;
     hideTemplatePicker();
   }
 

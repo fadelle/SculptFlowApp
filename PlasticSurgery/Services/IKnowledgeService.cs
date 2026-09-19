@@ -18,8 +18,9 @@ public interface IKnowledgeService
     /// <summary>Throws ArgumentException for invalid input, InvalidOperationException if embedding fails.</summary>
     Task<KnowledgeDocumentResponse> CreateAsync(Guid clinicId, SaveKnowledgeRequest request, CancellationToken ct = default);
 
-    /// <summary>Returns null if the document isn't in this clinic. Only regenerates chunks/embeddings
-    /// when the title or content actually changed.</summary>
+    /// <summary>Returns null if the document isn't in this clinic. Always regenerates the chunks and
+    /// embeddings using the clinic's current Knowledge Base settings (so re-saving an entry applies
+    /// changed chunk size/overlap to it).</summary>
     Task<KnowledgeDocumentResponse?> UpdateAsync(Guid clinicId, Guid id, SaveKnowledgeRequest request, CancellationToken ct = default);
 
     /// <summary>Activate/deactivate without re-embedding — inactive documents keep their chunks but are

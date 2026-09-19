@@ -41,6 +41,15 @@ public class ChannelIntegration
     /// coexistence login.</summary>
     public string? Pin { get; set; }
 
+    // Telegram (direct Bot API). The BotFather token lives in AccessToken and the setWebhook
+    // secret_token in WebhookVerifyToken (both hidden from the UI/API responses); Id doubles as the
+    // connectionId in the webhook URL. See Integrations/Telegram and TelegramIntegrationService.
+    public string? TelegramBotId { get; set; }
+    public string? TelegramBotUsername { get; set; }
+    /// <summary>One of <see cref="WebhookStatus"/>; null for channels that don't register a webhook themselves.</summary>
+    public string? WebhookStatus { get; set; }
+    public DateTimeOffset? WebhookRegisteredAt { get; set; }
+
     public DateTimeOffset? LastVerifiedAt { get; set; }
     public string? LastError { get; set; }
 
@@ -100,8 +109,18 @@ public static class ChannelType
     public const string WhatsApp = "whatsapp";
     public const string Instagram = "instagram";
     public const string Facebook = "facebook";
+    public const string Telegram = "telegram";
 
-    public static readonly IReadOnlyList<string> All = new[] { WhatsApp, Instagram, Facebook };
+    public static readonly IReadOnlyList<string> All = new[] { WhatsApp, Instagram, Facebook, Telegram };
+}
+
+/// <summary>Values for ChannelIntegration.WebhookStatus (Telegram today).</summary>
+public static class WebhookStatus
+{
+    public const string Active = "active";
+    public const string Pending = "pending";
+    public const string Error = "error";
+    public const string NotRegistered = "not_registered";
 }
 
 /// <summary>Allowed values for ChannelIntegration.Status — must match schema.sql's CHECK constraint.</summary>

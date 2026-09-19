@@ -9,16 +9,26 @@ public class MessageService : IMessageService
 {
     private readonly ApplicationDbContext _db;
     private readonly IWhatsAppService _whatsApp;
+    private readonly IEnumerable<IChannelSender> _senders;
     private readonly IInboxNotifier _notifier;
     private readonly IEventLogger _events;
 
-    public MessageService(ApplicationDbContext db, IWhatsAppService whatsApp, IInboxNotifier notifier, IEventLogger events)
+    public MessageService(
+        ApplicationDbContext db, IWhatsAppService whatsApp, IEnumerable<IChannelSender> senders,
+        IInboxNotifier notifier, IEventLogger events)
     {
         _db = db;
-        _whatsApp = whatsApp;
+        _whatsApp = whatsApp; // still used directly for WhatsApp-only template sends
+        _senders = senders;
         _notifier = notifier;
         _events = events;
     }
+
+    /// <summary>Picks the outbound adapter for a conversation's channel (WhatsApp, Telegram, ...).</summary>
+    private IChannelSender ResolveSender(string channel) =>
+        _senders.FirstOrDefault(s => s.Channel == channel)
+        ?? throw new InvalidOperationException(
+            $"Sending is only implemented for WhatsApp and Telegram conversations right now (this one is '{channel}').");
 
     public async Task<MessageResponse?> SendAsync(Guid clinicId, Guid conversationId, SendMessageRequest request, CancellationToken ct = default)
     {
@@ -32,27 +42,11 @@ public class MessageService : IMessageService
             .FirstOrDefaultAsync(c => c.ClinicId == clinicId && c.Id == conversationId, ct);
         if (conversation is null) return null;
 
-        if (conversation.Channel != ConversationChannel.WhatsApp)
-        {
-            throw new InvalidOperationException(
-                $"Sending is only implemented for WhatsApp conversations right now (this one is '{conversation.Channel}').");
-        }
-
-        // WhatsApp only allows free-form messages within 24h of the customer's last message —
-        // enforced here server-side, not just by hiding the composer in the UI (a stale page, a
-        // direct API call, or a race with the window expiring must all be caught too).
-        if (!conversation.IsServiceWindowOpen(DateTimeOffset.UtcNow))
-        {
-            throw new ServiceWindowClosedException(
-                "The 24-hour WhatsApp customer service window is closed for this conversation — send an approved template instead.");
-        }
-
-        var toPhone = conversation.Lead?.Phone
-            ?? throw new InvalidOperationException("This lead has no phone number on file — can't send a WhatsApp message.");
-
-        // The actual WhatsApp API call happens before we touch the database — if it throws, no
-        // message row or conversation-state change is left behind for a send that never went out.
-        var externalMessageId = await _whatsApp.SendTextMessageAsync(clinicId, toPhone, request.Content, ct);
+        // Channel-specific rules (WhatsApp's 24h window + phone, Telegram's connected bot + chat id)
+        // live in the IChannelSender for this conversation's channel. The actual API call happens
+        // before we touch the database — if it throws, no message row or conversation-state change
+        // is left behind for a send that never went out.
+        var externalMessageId = await ResolveSender(conversation.Channel).SendTextAsync(conversation, request.Content, ct);
 
         var now = DateTimeOffset.UtcNow;
         var message = new Message
@@ -64,7 +58,7 @@ public class MessageService : IMessageService
             Direction = MessageDirection.Outbound,
             SenderType = MessageSenderType.Staff,
             Origin = MessageOrigin.Dashboard,
-            Channel = ConversationChannel.WhatsApp,
+            Channel = conversation.Channel,
             MessageType = string.IsNullOrWhiteSpace(request.MessageType) ? "text" : request.MessageType,
             Content = request.Content,
             ExternalMessageId = externalMessageId,
@@ -124,22 +118,7 @@ public class MessageService : IMessageService
             throw new ConversationNotInAiModeException(conversation.Mode);
         }
 
-        if (conversation.Channel != ConversationChannel.WhatsApp)
-        {
-            throw new InvalidOperationException(
-                $"Sending is only implemented for WhatsApp conversations right now (this one is '{conversation.Channel}').");
-        }
-
-        if (!conversation.IsServiceWindowOpen(DateTimeOffset.UtcNow))
-        {
-            throw new ServiceWindowClosedException(
-                "The 24-hour WhatsApp customer service window is closed for this conversation — send an approved template instead.");
-        }
-
-        var toPhone = conversation.Lead?.Phone
-            ?? throw new InvalidOperationException("This lead has no phone number on file — can't send a WhatsApp message.");
-
-        var externalMessageId = await _whatsApp.SendTextMessageAsync(clinicId, toPhone, content, ct);
+        var externalMessageId = await ResolveSender(conversation.Channel).SendTextAsync(conversation, content, ct);
 
         var now = DateTimeOffset.UtcNow;
         var message = new Message
@@ -151,7 +130,7 @@ public class MessageService : IMessageService
             Direction = MessageDirection.Outbound,
             SenderType = MessageSenderType.Ai,
             Origin = MessageOrigin.Ai,
-            Channel = ConversationChannel.WhatsApp,
+            Channel = conversation.Channel,
             MessageType = "text",
             Content = content,
             ExternalMessageId = externalMessageId,
@@ -209,10 +188,10 @@ public class MessageService : IMessageService
         if (conversation.Channel != ConversationChannel.WhatsApp)
         {
             throw new InvalidOperationException(
-                $"Sending is only implemented for WhatsApp conversations right now (this one is '{conversation.Channel}').");
+                $"Templates are WhatsApp-only — this conversation is on '{conversation.Channel}'.");
         }
 
-        var template = await _db.WhatsAppTemplates.FirstOrDefaultAsync(
+        var template =await _db.WhatsAppTemplates.FirstOrDefaultAsync(
             t => t.ClinicId == clinicId && t.Id == whatsAppTemplateId, ct);
         if (template is null)
         {
@@ -330,7 +309,7 @@ public class MessageService : IMessageService
         var (direction, senderType, origin, isAiGenerated, moveToHuman, eventType) = request.EventType switch
         {
             IngestEventType.CustomerMessage => (
-                MessageDirection.Inbound, MessageSenderType.Lead, MessageOrigin.WhatsAppCustomer,
+                MessageDirection.Inbound, MessageSenderType.Lead, MessageOrigin.CustomerFor(request.Channel),
                 false, false, EventTypes.CustomerMessageReceived),
 
             // Coexistence echo: staff replied from the WhatsApp Business phone app directly. This
@@ -379,7 +358,11 @@ public class MessageService : IMessageService
         if (request.EventType == IngestEventType.CustomerMessage)
         {
             conversation.LastCustomerMessageAt = now;
-            conversation.ServiceWindowExpiresAt = now.AddHours(24);
+            // The 24h window is a WhatsApp rule only — other channels (Telegram) have no such limit.
+            if (conversation.Channel == ConversationChannel.WhatsApp)
+            {
+                conversation.ServiceWindowExpiresAt = now.AddHours(24);
+            }
         }
 
         var modeChanged = false;
@@ -423,6 +406,8 @@ public class MessageService : IMessageService
 
     /// <summary>Customer message types the AI agent is allowed to see — see IngestMessageResult.AiEligible.</summary>
     private static readonly HashSet<string> AiEligibleMessageTypes = new(StringComparer.OrdinalIgnoreCase) { "text", "interactive" };
+    // (Telegram commands like /start arrive as message type "command" and media as "image"/"audio"/…,
+    // so they're saved to the Inbox but never reach the AI.)
 
     private async Task<IngestMessageResult> HandleStatusUpdateAsync(IngestMessageRequest request, CancellationToken ct)
     {

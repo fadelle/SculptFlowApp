@@ -901,3 +901,87 @@ drop trigger if exists trg_knowledge_chunks_updated_at on knowledge_chunks;
 create trigger trg_knowledge_chunks_updated_at
   before update on knowledge_chunks
   for each row execute function set_updated_at();
+
+
+-- =====================================================================
+-- Knowledge Base search settings — one row per clinic (unique clinic_id), created lazily by
+-- IKnowledgeSettingsService with the system defaults. Staff edit only chunk size/overlap, top_k and
+-- minimum_similarity; embedding_model, vector_dimension, similarity_method and vector_index_type are
+-- persisted for transparency but read-only in the UI (changing them means re-embedding and/or a
+-- migration of knowledge_chunks.embedding). Secrets such as the embeddings API key are NEVER stored
+-- here — they stay in configuration.
+-- =====================================================================
+create table if not exists knowledge_search_settings (
+  id                    uuid primary key default gen_random_uuid(),
+  clinic_id             uuid not null references clinics(id) on delete cascade,
+
+  -- read-only in the UI
+  embedding_model       varchar(100) not null,
+  vector_dimension      integer not null,
+  similarity_method     varchar(30) not null default 'cosine',
+  vector_index_type     varchar(30) not null default 'none',
+
+  -- editable tuning
+  chunk_size_tokens     integer not null,
+  chunk_overlap_tokens  integer not null,
+  top_k                 integer not null,
+  minimum_similarity    double precision not null,
+
+  created_at            timestamptz not null default now(),
+  updated_at            timestamptz not null default now(),
+
+  constraint ck_knowledge_search_settings_chunk_size check (chunk_size_tokens between 50 and 1000),
+  constraint ck_knowledge_search_settings_chunk_overlap check (chunk_overlap_tokens >= 0 and chunk_overlap_tokens < chunk_size_tokens),
+  constraint ck_knowledge_search_settings_top_k check (top_k between 1 and 10),
+  constraint ck_knowledge_search_settings_min_similarity check (minimum_similarity between 0 and 1)
+);
+
+create unique index if not exists ux_knowledge_search_settings_clinic_id on knowledge_search_settings(clinic_id);
+
+drop trigger if exists trg_knowledge_search_settings_updated_at on knowledge_search_settings;
+create trigger trg_knowledge_search_settings_updated_at
+  before update on knowledge_search_settings
+  for each row execute function set_updated_at();
+
+-- ---------------------------------------------------------------------
+-- Telegram (direct Bot API channel)
+--
+-- Reuses channel_integrations (one row per clinic+channel, unchanged):
+--   access_token         = the BotFather token (never returned to the browser, never logged)
+--   webhook_verify_token = the random secret_token registered with setWebhook; Telegram echoes it back
+--                          in the X-Telegram-Bot-Api-Secret-Token header on every delivery
+--   display_name         = "@bot_username" (display only)
+--   channel_integrations.id = the connectionId in /api/integrations/telegram/webhook/{connectionId}
+-- Only the identifiers Telegram itself hands back need new columns.
+-- ---------------------------------------------------------------------
+alter table channel_integrations add column if not exists telegram_bot_id varchar(50);
+alter table channel_integrations add column if not exists telegram_bot_username varchar(100);
+-- 'active' | 'pending' | 'error' | 'not_registered' — generic on purpose so other webhook-registered
+-- channels could reuse it; WhatsApp/Facebook rows leave it null.
+alter table channel_integrations add column if not exists webhook_status varchar(30);
+alter table channel_integrations add column if not exists webhook_registered_at timestamptz;
+
+alter table channel_integrations drop constraint if exists ck_channel_integrations_channel;
+alter table channel_integrations add constraint ck_channel_integrations_channel
+  check (channel in ('whatsapp','instagram','facebook','telegram'));
+
+-- One bot can have only one webhook, so one bot may be connected to only one clinic at a time
+-- (a disconnected row keeps its bot id for display but no longer blocks another clinic).
+create unique index if not exists ux_channel_integrations_telegram_bot_id
+  on channel_integrations(telegram_bot_id)
+  where telegram_bot_id is not null and status = 'connected';
+
+alter table conversations drop constraint if exists ck_conversations_channel;
+alter table conversations add constraint ck_conversations_channel
+  check (channel in ('whatsapp','instagram','website','facebook','sms','email','telegram'));
+
+alter table messages drop constraint if exists ck_messages_origin;
+alter table messages add constraint ck_messages_origin check (origin in (
+  'whatsapp_customer','whatsapp_business_app','dashboard','ai','system','campaign','telegram_customer'
+));
+
+-- A Telegram chat maps to exactly one conversation per clinic+channel (external_thread_id = chat.id).
+-- Partial: WhatsApp/other conversations leave external_thread_id null.
+create unique index if not exists ux_conversations_clinic_channel_thread
+  on conversations(clinic_id, channel, external_thread_id)
+  where external_thread_id is not null;

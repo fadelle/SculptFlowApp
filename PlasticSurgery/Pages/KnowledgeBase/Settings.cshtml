@@ -1,0 +1,89 @@
+@page "/KnowledgeBase/Settings"
+@using PlasticSurgery.Data.Entities
+@model PlasticSurgery.Pages.KnowledgeBase.SettingsModel
+@{
+    ViewData["Title"] = "Knowledge Base Settings";
+}
+
+@if (!Model.ClinicConfigured)
+{
+    <div class="alert alert-warning">No clinic configured yet — see the Main Numbers page for setup steps.</div>
+}
+else
+{
+    if (!string.IsNullOrEmpty(Model.StatusMessage))
+    {
+        <div class="alert alert-info mb-3">@Model.StatusMessage</div>
+    }
+    if (!string.IsNullOrEmpty(Model.ErrorMessage))
+    {
+        <div class="alert alert-warning mb-3">@Model.ErrorMessage</div>
+    }
+
+    <div class="mb-3"><a href="/KnowledgeBase" class="btn btn-sm">&larr; Back to Knowledge Base</a></div>
+
+    <div class="card" style="padding:1.25rem;max-width:640px">
+        <form method="post" class="integration-form">
+            <h3 style="margin:0">Search tuning</h3>
+            <div class="text-subtle" style="font-size:.78rem;margin-top:-.3rem">
+                Chunk settings apply to entries saved from now on — re-save an entry to re-chunk it with new values.
+            </div>
+
+            <label class="field">
+                <span>Chunk size (tokens)</span>
+                <input type="number" name="ChunkSizeTokens" value="@Model.ChunkSizeTokens" class="text-input" min="50" max="1000" style="max-width:180px" required />
+                <span style="font-weight:400">How much text goes into each searchable piece (about 4 characters per token). 50–1000.</span>
+            </label>
+
+            <label class="field">
+                <span>Chunk overlap (tokens)</span>
+                <input type="number" name="ChunkOverlapTokens" value="@Model.ChunkOverlapTokens" class="text-input" min="0" max="500" style="max-width:180px" required />
+                <span style="font-weight:400">Text repeated between neighbouring pieces so nothing is cut in half. Up to half the chunk size.</span>
+            </label>
+
+            <label class="field">
+                <span>Top K</span>
+                <input type="number" name="TopK" value="@Model.TopK" class="text-input" min="1" max="10" style="max-width:180px" required />
+                <span style="font-weight:400">The most results the AI gets back for one question. 1–10.</span>
+            </label>
+
+            <label class="field">
+                <span>Minimum similarity</span>
+                <input type="text" inputmode="decimal" name="MinimumSimilarity" value="@Model.MinimumSimilarity" class="text-input" style="max-width:180px" required />
+                <span style="font-weight:400">Results scoring below this are dropped, so unrelated questions return nothing. 0–1 — higher is stricter.</span>
+            </label>
+
+            <div class="flex items-center gap-2 mt-1">
+                <button type="submit" class="btn btn-primary btn-sm">Save settings</button>
+                <a href="/KnowledgeBase" class="btn btn-sm">Cancel</a>
+            </div>
+        </form>
+    </div>
+
+    <div class="card mt-3" style="padding:1.25rem;max-width:640px">
+        <h3 style="margin:0 0 .3rem">Embedding configuration <span class="badge badge-gray">Read-only</span></h3>
+        <div class="text-subtle" style="font-size:.78rem;margin-bottom:.8rem">
+            This is what your Knowledge Base was built with. It can't be changed here because changing it means
+            re-processing every entry and/or updating the database — contact support if you need a different setup.
+        </div>
+        <div class="integration-form">
+            <label class="field">
+                <span>Embedding model</span>
+                <input type="text" class="text-input" value="@Model.Current.EmbeddingModel" disabled style="max-width:320px;background:var(--bg);color:var(--text-muted);cursor:not-allowed" />
+            </label>
+            <label class="field">
+                <span>Vector dimension</span>
+                <input type="text" class="text-input" value="@Model.Current.VectorDimension" disabled style="max-width:180px;background:var(--bg);color:var(--text-muted);cursor:not-allowed" />
+            </label>
+            <label class="field">
+                <span>Similarity method</span>
+                <input type="text" class="text-input" value="@KnowledgeSimilarityMethod.Label(Model.Current.SimilarityMethod)" disabled style="max-width:240px;background:var(--bg);color:var(--text-muted);cursor:not-allowed" />
+            </label>
+            <label class="field">
+                <span>Vector index type</span>
+                <input type="text" class="text-input" value="@KnowledgeVectorIndexType.Label(Model.Current.VectorIndexType)" disabled style="max-width:320px;background:var(--bg);color:var(--text-muted);cursor:not-allowed" />
+            </label>
+        </div>
+        <div class="text-subtle" style="font-size:.75rem;margin-top:.6rem">Last updated @Model.Current.UpdatedAt.ToString("MMM d, yyyy HH:mm")</div>
+    </div>
+}

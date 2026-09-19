@@ -9,7 +9,9 @@ namespace PlasticSurgery.Services;
 /// </summary>
 public interface IKnowledgeChunkingService
 {
-    IReadOnlyList<string> Chunk(string content);
+    /// <summary>Chunk size and overlap are the clinic's persisted settings (see IKnowledgeSettingsService),
+    /// in approximate tokens.</summary>
+    IReadOnlyList<string> Chunk(string content, int chunkSizeTokens, int chunkOverlapTokens);
 }
 
 /// <summary>
@@ -18,36 +20,41 @@ public interface IKnowledgeChunkingService
 /// units back together up to the max size, so related paragraphs stay in one chunk; (4) a too-small
 /// trailing chunk is merged into the one before it; (5) every chunk after the first starts with the
 /// tail of the previous one (word-aligned overlap) so a fact straddling a boundary is still
-/// retrievable. Sizes come from Knowledge:ChunkMaxChars (1000), ChunkOverlapChars (150) and
-/// ChunkMinChars (200); a document shorter than the max is a single chunk.
+/// retrievable. Sizes are configured in tokens but measured as ~4 characters per token (no tokenizer
+/// dependency); a document shorter than the max is a single chunk. The minimum trailing-chunk size
+/// stays a system setting (Knowledge:ChunkMinChars, default 200).
 /// </summary>
 public class KnowledgeChunkingService : IKnowledgeChunkingService
 {
+    /// <summary>Characters per token used to convert the token-based settings (a common rule of thumb
+    /// for English text).</summary>
+    public const int CharsPerToken = 4;
+
     private static readonly Regex ParagraphSplit = new(@"\n\s*\n", RegexOptions.Compiled);
     private static readonly Regex SentenceSplit = new(@"(?<=[.!?])\s+", RegexOptions.Compiled);
 
-    private readonly int _max;
-    private readonly int _overlap;
-    private readonly int _min;
+    private readonly int _minChars;
 
     public KnowledgeChunkingService(IConfiguration configuration)
     {
-        _max = Math.Max(200, ReadInt(configuration, "Knowledge:ChunkMaxChars", 1000));
-        _overlap = Math.Clamp(ReadInt(configuration, "Knowledge:ChunkOverlapChars", 150), 0, _max / 2);
-        _min = Math.Clamp(ReadInt(configuration, "Knowledge:ChunkMinChars", 200), 0, _max);
+        _minChars = int.TryParse(configuration["Knowledge:ChunkMinChars"], out var v) && v > 0 ? v : 200;
     }
 
-    public IReadOnlyList<string> Chunk(string content)
+    public IReadOnlyList<string> Chunk(string content, int chunkSizeTokens, int chunkOverlapTokens)
     {
+        var max = Math.Max(200, chunkSizeTokens * CharsPerToken);
+        var overlap = Math.Clamp(chunkOverlapTokens * CharsPerToken, 0, max / 2);
+        var min = Math.Clamp(_minChars, 0, max);
+
         var text = (content ?? string.Empty).Replace("\r\n", "\n").Trim();
         if (text.Length == 0) return Array.Empty<string>();
-        if (text.Length <= _max) return new[] { text };
+        if (text.Length <= max) return new[] { text };
 
         var units = new List<string>();
         foreach (var paragraph in ParagraphSplit.Split(text).Select(p => p.Trim()).Where(p => p.Length > 0))
         {
-            if (paragraph.Length <= _max) units.Add(paragraph);
-            else units.AddRange(SplitLongParagraph(paragraph));
+            if (paragraph.Length <= max) units.Add(paragraph);
+            else units.AddRange(SplitLongParagraph(paragraph, max));
         }
 
         var chunks = new List<string>();
@@ -58,7 +65,7 @@ public class KnowledgeChunkingService : IKnowledgeChunkingService
             {
                 current.Append(unit);
             }
-            else if (current.Length + 2 + unit.Length <= _max)
+            else if (current.Length + 2 + unit.Length <= max)
             {
                 current.Append("\n\n").Append(unit);
             }
@@ -70,30 +77,30 @@ public class KnowledgeChunkingService : IKnowledgeChunkingService
         }
         if (current.Length > 0) chunks.Add(current.ToString());
 
-        if (chunks.Count > 1 && chunks[^1].Length < _min)
+        if (chunks.Count > 1 && chunks[^1].Length < min)
         {
             chunks[^2] = chunks[^2] + "\n\n" + chunks[^1];
             chunks.RemoveAt(chunks.Count - 1);
         }
 
-        if (_overlap == 0 || chunks.Count == 1) return chunks;
+        if (overlap == 0 || chunks.Count == 1) return chunks;
 
         var withOverlap = new List<string>(chunks.Count) { chunks[0] };
         for (var i = 1; i < chunks.Count; i++)
         {
-            withOverlap.Add(TailAtWordBoundary(chunks[i - 1], _overlap) + "\n" + chunks[i]);
+            withOverlap.Add(TailAtWordBoundary(chunks[i - 1], overlap) + "\n" + chunks[i]);
         }
         return withOverlap;
     }
 
-    private IEnumerable<string> SplitLongParagraph(string paragraph)
+    private static IEnumerable<string> SplitLongParagraph(string paragraph, int max)
     {
         var current = new StringBuilder();
         foreach (var sentence in SentenceSplit.Split(paragraph).Select(s => s.Trim()).Where(s => s.Length > 0))
         {
-            foreach (var piece in sentence.Length <= _max ? new[] { sentence } : HardSplit(sentence))
+            foreach (var piece in sentence.Length <= max ? new[] { sentence } : HardSplit(sentence, max))
             {
-                if (current.Length > 0 && current.Length + 1 + piece.Length > _max)
+                if (current.Length > 0 && current.Length + 1 + piece.Length > max)
                 {
                     yield return current.ToString();
                     current.Clear();
@@ -105,12 +112,12 @@ public class KnowledgeChunkingService : IKnowledgeChunkingService
         if (current.Length > 0) yield return current.ToString();
     }
 
-    private IEnumerable<string> HardSplit(string s)
+    private static IEnumerable<string> HardSplit(string s, int max)
     {
-        while (s.Length > _max)
+        while (s.Length > max)
         {
-            var cut = s.LastIndexOf(' ', _max);
-            if (cut < _max / 2) cut = _max;
+            var cut = s.LastIndexOf(' ', max);
+            if (cut < max / 2) cut = max;
             yield return s[..cut].Trim();
             s = s[cut..].TrimStart();
         }
@@ -124,7 +131,4 @@ public class KnowledgeChunkingService : IKnowledgeChunkingService
         var space = text.IndexOf(' ', start);
         return space < 0 ? text[start..] : text[(space + 1)..];
     }
-
-    private static int ReadInt(IConfiguration configuration, string key, int fallback) =>
-        int.TryParse(configuration[key], out var v) && v > 0 ? v : fallback;
 }
