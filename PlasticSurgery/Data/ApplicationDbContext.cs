@@ -37,6 +37,8 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
     public DbSet<Campaign> Campaigns => Set<Campaign>();
     public DbSet<CampaignRecipient> CampaignRecipients => Set<CampaignRecipient>();
     public DbSet<WhatsAppHealthEvent> WhatsAppHealthEvents => Set<WhatsAppHealthEvent>();
+    public DbSet<KnowledgeDocument> KnowledgeDocuments => Set<KnowledgeDocument>();
+    public DbSet<KnowledgeChunk> KnowledgeChunks => Set<KnowledgeChunk>();
     public DbSet<ClinicUser> ClinicUsers => Set<ClinicUser>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -632,6 +634,53 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
                 .IsUnique()
                 .HasFilter("is_active = true")
                 .HasDatabaseName("ux_clinic_users_user_active");
+        });
+
+        // ---------------------------------------------------------------
+        // knowledge_documents / knowledge_chunks — the clinic Knowledge Base. The chunks table also
+        // has a pgvector `embedding` column that is intentionally NOT mapped here (see
+        // KnowledgeChunk's doc comment): chunks are written/searched with raw SQL.
+        // ---------------------------------------------------------------
+        modelBuilder.Entity<KnowledgeDocument>(e =>
+        {
+            e.ToTable("knowledge_documents");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.ClinicId).HasColumnName("clinic_id");
+            e.Property(x => x.Title).HasColumnName("title").HasMaxLength(200).IsRequired();
+            e.Property(x => x.Category).HasColumnName("category").HasMaxLength(50).IsRequired();
+            e.Property(x => x.Content).HasColumnName("content").IsRequired();
+            e.Property(x => x.IsActive).HasColumnName("is_active");
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+            e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
+
+            e.HasOne(x => x.Clinic).WithMany()
+                .HasForeignKey(x => x.ClinicId).OnDelete(DeleteBehavior.Cascade);
+
+            e.HasIndex(x => x.ClinicId);
+            e.HasIndex(x => x.Category);
+            e.HasIndex(x => x.IsActive);
+        });
+
+        modelBuilder.Entity<KnowledgeChunk>(e =>
+        {
+            e.ToTable("knowledge_chunks");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.ClinicId).HasColumnName("clinic_id");
+            e.Property(x => x.KnowledgeDocumentId).HasColumnName("knowledge_document_id");
+            e.Property(x => x.ChunkIndex).HasColumnName("chunk_index");
+            e.Property(x => x.Content).HasColumnName("content").IsRequired();
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+            e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
+
+            e.HasOne<Clinic>().WithMany()
+                .HasForeignKey(x => x.ClinicId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.Document).WithMany(d => d.Chunks)
+                .HasForeignKey(x => x.KnowledgeDocumentId).OnDelete(DeleteBehavior.Cascade);
+
+            e.HasIndex(x => x.ClinicId);
+            e.HasIndex(x => x.KnowledgeDocumentId);
         });
     }
 }

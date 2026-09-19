@@ -15,8 +15,31 @@ namespace PlasticSurgery.Controllers;
 /// touch identity fields (name/phone/email), and reschedule/cancel/handoff each log a dedicated
 /// event with the AI as the source so staff can see what the AI did and why (see EventTypes).
 ///
-/// Knowledge-base search (get_approved_clinic_answer) is intentionally not implemented yet — no
-/// FAQ/knowledge table exists in the schema.
+/// Knowledge search (search_clinic_knowledge) is POST /api/ai/knowledge/search — see
+/// IKnowledgeSearchService. It returns relevant chunks of the clinic's approved Knowledge Base only;
+/// the AI agent composes the answer.
+///
+/// WHICH TOOL FOR WHAT — rule of thumb: the Knowledge Base is for INFORMATION; the structured tools
+/// are for LIVE DATA and ACTIONS. The Knowledge Base is never the source of truth for lead data,
+/// appointment availability, bookings, conversation state or handoff.
+///
+///   search_clinic_knowledge   → clinic-approved informational content: hours, address, parking,
+///                               policies, consultation info, pricing, payment/financing, doctors,
+///                               procedure explanations, preparation, recovery, FAQs.
+///                               ("Where is the clinic?", "What happens at a rhinoplasty consultation?")
+///   get_lead_context          → what is currently known about THIS lead.
+///   update_lead               → write real lead/business data (interest, language, qualification...).
+///   get_available_slots       → LIVE appointment availability.
+///   book_consultation         → perform an actual booking (also reschedule_ / cancel_consultation).
+///   handoff_to_human          → switch the conversation to human handling.
+///
+/// Overlap that is deliberate for now (nothing removed yet):
+///   get_clinic_info  — hours/address/consultation rules also belong in the Knowledge Base, so this
+///                      may become redundant. Kept working until the Knowledge Base is proven; then
+///                      decide whether it is still needed.
+///   get_procedures   — stays. The Knowledge Base EXPLAINS procedures in prose; get_procedures returns
+///                      the authoritative structured records (procedure id, name, active flag,
+///                      consultation duration) that booking and business logic depend on.
 /// </summary>
 [ApiController]
 [Route("api/ai")]
@@ -28,19 +51,47 @@ public class AiController : ControllerBase
     private readonly ILeadService _leads;
     private readonly IAppointmentService _appointments;
     private readonly IConversationService _conversations;
+    private readonly IKnowledgeSearchService _knowledgeSearch;
 
     public AiController(
         IClinicContext clinicContext, IProcedureService procedures, ILeadService leads,
-        IAppointmentService appointments, IConversationService conversations)
+        IAppointmentService appointments, IConversationService conversations,
+        IKnowledgeSearchService knowledgeSearch)
     {
         _clinicContext = clinicContext;
         _procedures = procedures;
         _leads = leads;
         _appointments = appointments;
         _conversations = conversations;
+        _knowledgeSearch = knowledgeSearch;
     }
 
-    /// <summary>get_clinic_info — hours, location, contact info, consultation rules.</summary>
+    /// <summary>search_clinic_knowledge — semantic search over the clinic's approved Knowledge Base.
+    /// For INFORMATION questions only (hours, address, policies, pricing, doctors, procedure
+    /// explanations, recovery, FAQs) — not lead data, availability, bookings or handoff. clinicId is the
+    /// one n8n already has in context; the AI supplies only the query text. Returns relevant chunks
+    /// (possibly none) — never a composed answer.</summary>
+    [HttpPost("knowledge/search")]
+    public async Task<ActionResult<KnowledgeSearchResponse>> SearchKnowledge([FromBody] KnowledgeSearchRequest request, CancellationToken ct)
+    {
+        if (request.ClinicId == Guid.Empty || string.IsNullOrWhiteSpace(request.Query))
+        {
+            return BadRequest(new { error = "clinicId and query are required." });
+        }
+
+        try
+        {
+            return Ok(await _knowledgeSearch.SearchAsync(request.ClinicId, request.Query, request.Limit, ct));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new { error = ex.Message });
+        }
+    }
+
+    /// <summary>get_clinic_info — hours, location, contact info, consultation rules. Partly overlaps the
+    /// Knowledge Base (search_clinic_knowledge), which is now the preferred place for this kind of
+    /// information; kept working for now and may be retired later.</summary>
     [HttpGet("clinic-info")]
     public async Task<ActionResult<ClinicInfoResponse>> GetClinicInfo([FromQuery] Guid clinicId, CancellationToken ct)
     {
@@ -52,7 +103,9 @@ public class AiController : ControllerBase
             clinic.Address, clinic.OperatingHours, clinic.ConsultationInfo, clinic.Timezone));
     }
 
-    /// <summary>get_procedures — what procedures the clinic offers, with their ids for booking.</summary>
+    /// <summary>get_procedures — the structured, authoritative procedure records (id, name, active flag,
+    /// consultation duration) needed for booking. Use search_clinic_knowledge to EXPLAIN a procedure;
+    /// use this when an actual procedure id/record is needed.</summary>
     [HttpGet("procedures")]
     public async Task<ActionResult<IReadOnlyList<ProcedureResponse>>> GetProcedures(
         [FromQuery] Guid clinicId, [FromQuery] bool activeOnly = true, CancellationToken ct = default)

@@ -80,6 +80,13 @@ builder.Services.AddScoped<ICampaignAudienceService, CampaignAudienceService>();
 builder.Services.AddScoped<ICampaignService, CampaignService>();
 builder.Services.AddScoped<IWhatsAppHealthService, WhatsAppHealthService>();
 
+// Clinic Knowledge Base — dashboard CRUD, chunking, embeddings (Embeddings:* config) and the semantic
+// search behind POST /api/ai/knowledge/search. See Services/IKnowledgeService.cs.
+builder.Services.AddScoped<IKnowledgeChunkingService, KnowledgeChunkingService>();
+builder.Services.AddHttpClient<IEmbeddingService, OpenAiEmbeddingService>();
+builder.Services.AddScoped<IKnowledgeService, KnowledgeService>();
+builder.Services.AddScoped<IKnowledgeSearchService, KnowledgeSearchService>();
+
 // Unified raw Meta WhatsApp webhook endpoint — see Integrations/WhatsApp/MetaWebhookProcessor.cs.
 // The Handlers are thin adapters over the services already registered above; registering them here
 // just lets MetaWebhookProcessor receive them via constructor injection like everything else.

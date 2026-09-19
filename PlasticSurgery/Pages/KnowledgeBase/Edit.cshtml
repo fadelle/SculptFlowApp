@@ -1,0 +1,57 @@
+@page "/KnowledgeBase/Edit/{id:guid?}"
+@model PlasticSurgery.Pages.KnowledgeBase.EditModel
+@{
+    ViewData["Title"] = Model.IsNew ? "Add Knowledge" : "Edit Knowledge";
+}
+
+@if (!Model.ClinicConfigured)
+{
+    <div class="alert alert-warning">No clinic configured yet — see the Main Numbers page for setup steps.</div>
+}
+else
+{
+    if (!string.IsNullOrEmpty(Model.ErrorMessage))
+    {
+        <div class="alert alert-warning mb-3">@Model.ErrorMessage</div>
+    }
+
+    <div class="card" style="padding:1.25rem;max-width:720px">
+        <form method="post" class="integration-form">
+            <label class="field">
+                <span>Title</span>
+                <input type="text" name="Title" value="@Model.Title" class="text-input" maxlength="200" required
+                       placeholder="e.g. Rhinoplasty recovery" />
+            </label>
+
+            <label class="field">
+                <span>Category</span>
+                <select name="Category" class="select">
+                    @foreach (var (value, label) in Model.CategoryOptions)
+                    {
+                        <option value="@value" selected="@(value == Model.Category)">@label</option>
+                    }
+                </select>
+            </label>
+
+            <label class="field">
+                <span>Content</span>
+                <textarea name="Body" rows="12" class="text-input" required
+                          placeholder="Write the approved information the AI is allowed to share.&#10;&#10;For FAQs you can write:&#10;Q: Do I stay overnight after rhinoplasty?&#10;A: No, it's a day-case procedure.">@Model.Body</textarea>
+            </label>
+
+            <label class="flex items-center gap-1" style="font-weight:400">
+                <input type="checkbox" name="IsActive" value="true" checked="@Model.IsActive" />
+                Active — the AI can use this entry
+            </label>
+
+            <div class="text-subtle" style="font-size:.78rem">
+                Saving splits the text into searchable pieces and prepares it for AI lookup, which can take a few seconds.
+            </div>
+
+            <div class="flex items-center gap-2 mt-2">
+                <button type="submit" class="btn btn-primary btn-sm">Save</button>
+                <a href="/KnowledgeBase" class="btn btn-sm">Cancel</a>
+            </div>
+        </form>
+    </div>
+}

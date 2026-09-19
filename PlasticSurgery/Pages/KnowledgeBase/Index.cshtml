@@ -1,0 +1,74 @@
+@page "/KnowledgeBase"
+@using PlasticSurgery.Data.Entities
+@model PlasticSurgery.Pages.KnowledgeBase.IndexModel
+@{
+    ViewData["Title"] = "Knowledge Base";
+}
+
+@if (!Model.ClinicConfigured)
+{
+    <div class="alert alert-warning">No clinic configured yet — see the Main Numbers page for setup steps.</div>
+}
+else
+{
+    if (!string.IsNullOrEmpty(Model.StatusMessage))
+    {
+        <div class="alert alert-info mb-3">@Model.StatusMessage</div>
+    }
+    if (!string.IsNullOrEmpty(Model.ErrorMessage))
+    {
+        <div class="alert alert-warning mb-3">@Model.ErrorMessage</div>
+    }
+
+    <div class="flex items-center gap-2 mb-3" style="justify-content:space-between">
+        <p class="text-muted" style="margin:0;max-width:640px">
+            Approved information your AI assistant can look up when patients ask about your clinic —
+            FAQs, policies, doctors, pricing, preparation and recovery. Only <strong>Active</strong>
+            entries are used.
+        </p>
+        <a href="/KnowledgeBase/Edit" class="btn btn-primary btn-sm">Add Knowledge</a>
+    </div>
+
+    <div class="table-card table-scroll">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Title</th>
+                    <th>Category</th>
+                    <th>Status</th>
+                    <th>Last updated</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var d in Model.Documents)
+                {
+                    <tr>
+                        <td><a href="/KnowledgeBase/Edit/@d.Id">@d.Title</a></td>
+                        <td>@KnowledgeCategory.Label(d.Category)</td>
+                        <td><span class="badge @(d.IsActive ? "badge-green" : "badge-gray")">@(d.IsActive ? "Active" : "Inactive")</span></td>
+                        <td>@d.UpdatedAt.ToString("MMM d, yyyy HH:mm")</td>
+                        <td>
+                            <div class="flex items-center gap-2">
+                                <a href="/KnowledgeBase/Edit/@d.Id" class="btn btn-sm">Edit</a>
+                                <form method="post" asp-page-handler="Toggle">
+                                    <input type="hidden" name="id" value="@d.Id" />
+                                    <input type="hidden" name="active" value="@((!d.IsActive).ToString().ToLowerInvariant())" />
+                                    <button type="submit" class="btn btn-sm">@(d.IsActive ? "Deactivate" : "Activate")</button>
+                                </form>
+                                <form method="post" asp-page-handler="Delete" onsubmit="return confirm('Delete this entry permanently?');">
+                                    <input type="hidden" name="id" value="@d.Id" />
+                                    <button type="submit" class="btn btn-sm">Delete</button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                }
+                @if (Model.Documents.Count == 0)
+                {
+                    <tr class="empty-row"><td colspan="5">No knowledge yet — click "Add Knowledge" to add your first entry.</td></tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}

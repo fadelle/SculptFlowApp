@@ -844,3 +844,60 @@ create index if not exists ix_campaign_recipients_appointment_id
 -- ux_campaign_recipients_campaign_lead (UNIQUE(campaign_id, lead_id)) already exists from the
 -- original campaign_recipients table above — no change needed for the "no duplicate lead in the
 -- same campaign" requirement.
+
+
+-- =====================================================================
+-- Clinic Knowledge Base — knowledge_documents (what staff type in) + knowledge_chunks (the
+-- embedded slices the AI agent searches semantically). Everything is scoped by clinic_id; every
+-- search filters on it. See Services/IKnowledgeService.cs and IKnowledgeSearchService.cs.
+-- =====================================================================
+create extension if not exists vector;
+
+create table if not exists knowledge_documents (
+  id          uuid primary key default gen_random_uuid(),
+  clinic_id   uuid not null references clinics(id) on delete cascade,
+  title       varchar(200) not null,
+  -- Extensible string (general, faq, policy, doctor, procedure, pricing, payment, consultation,
+  -- preparation, recovery, ...) — deliberately no CHECK, like campaigns.campaign_type.
+  category    varchar(50) not null default 'general',
+  content     text not null,
+  is_active   boolean not null default true,
+  created_at  timestamptz not null default now(),
+  updated_at  timestamptz not null default now()
+);
+
+create index if not exists ix_knowledge_documents_clinic_id on knowledge_documents(clinic_id);
+create index if not exists ix_knowledge_documents_category on knowledge_documents(category);
+create index if not exists ix_knowledge_documents_is_active on knowledge_documents(is_active);
+
+drop trigger if exists trg_knowledge_documents_updated_at on knowledge_documents;
+create trigger trg_knowledge_documents_updated_at
+  before update on knowledge_documents
+  for each row execute function set_updated_at();
+
+-- vector(1536) matches Embeddings:Dimensions (default: OpenAI text-embedding-3-small at 1536).
+-- If you switch to a model with a different dimension, this column must be changed to match.
+create table if not exists knowledge_chunks (
+  id                     uuid primary key default gen_random_uuid(),
+  clinic_id              uuid not null references clinics(id) on delete cascade,
+  knowledge_document_id  uuid not null references knowledge_documents(id) on delete cascade,
+  chunk_index            integer not null,
+  content                text not null,
+  embedding              vector(1536) not null,
+  created_at             timestamptz not null default now(),
+  updated_at             timestamptz not null default now()
+);
+
+create index if not exists ix_knowledge_chunks_clinic_id on knowledge_chunks(clinic_id);
+create index if not exists ix_knowledge_chunks_knowledge_document_id on knowledge_chunks(knowledge_document_id);
+-- Deliberately no ANN (hnsw/ivfflat) index yet: every search is already narrowed to one clinic by
+-- ix_knowledge_chunks_clinic_id first, and a clinic's Knowledge Base is hundreds of chunks, not
+-- millions — an exact scan of that slice is fast and has perfect recall (an ANN index would apply the
+-- clinic filter *after* its approximate scan and can drop results). Add
+--   create index ... using hnsw (embedding vector_cosine_ops);
+-- only if a single clinic's chunk count grows into the tens of thousands.
+
+drop trigger if exists trg_knowledge_chunks_updated_at on knowledge_chunks;
+create trigger trg_knowledge_chunks_updated_at
+  before update on knowledge_chunks
+  for each row execute function set_updated_at();
