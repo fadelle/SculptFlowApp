@@ -1,4 +1,6 @@
+@inject PlasticSurgery.Services.ICurrentClinicContext CurrentClinic
 @{
+    var clinicName = (await CurrentClinic.GetClinicAsync())?.Name;
     var path = Context.Request.Path.Value ?? "";
     bool IsActive(string prefix) => path.Equals(prefix, StringComparison.OrdinalIgnoreCase)
         || path.StartsWith(prefix + "/", StringComparison.OrdinalIgnoreCase);
@@ -8,17 +10,17 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>@ViewData["Title"] - PlasticSurgery</title>
+    <title>@ViewData["Title"] - MySculptFlow</title>
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
 </head>
 <body>
     <div class="app-shell">
         <aside class="sidebar">
             <a class="sidebar-brand" href="/dashboard">
-                <span class="mark">PS</span>
-                <span>PlasticSurgery</span>
+                <span class="mark">SF</span>
+                <span>MySculptFlow</span>
             </a>
-            <div class="sidebar-clinic">Clinic Dashboard</div>
+            <div class="sidebar-clinic">@(string.IsNullOrWhiteSpace(clinicName) ? "Clinic Dashboard" : clinicName)</div>
 
             <nav class="sidebar-nav sidebar-nav-main">
                 <a href="/inbox" class="@(IsActive("/inbox") ? "active" : "")">
@@ -77,7 +79,7 @@
                 </div>
             }
 
-            <div class="sidebar-footer">&copy; 2026 PlasticSurgery</div>
+            <div class="sidebar-footer">&copy; 2026 MySculptFlow</div>
         </aside>
 
         <div class="app-main">
