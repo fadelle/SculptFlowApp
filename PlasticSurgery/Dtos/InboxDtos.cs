@@ -13,7 +13,9 @@ public record ConversationListRow(
     string? LastMessagePreview,
     string? LastMessageDirection,
     DateTimeOffset? LastMessageAt,
-    DateTimeOffset CreatedAt
+    DateTimeOffset CreatedAt,
+    /// <summary>Inbound (customer) messages received since staff last opened the conversation.</summary>
+    int UnreadCount = 0
 );
 
 /// <summary>Body for POST /api/conversations/{id}/messages/send. Two callers share this one route:

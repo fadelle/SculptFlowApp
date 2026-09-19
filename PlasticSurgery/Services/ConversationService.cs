@@ -170,7 +170,9 @@ public class ConversationService : IConversationService
                 c.Id, c.LeadId, c.Lead!.FullName, c.Lead.Phone, c.Lead.Procedure != null ? c.Lead.Procedure.Name : null,
                 c.Channel, c.Status, c.Mode,
                 _db.Messages.Where(m => m.ConversationId == c.Id).OrderByDescending(m => m.CreatedAt).Select(m => m.Content).FirstOrDefault(),
-                c.LastMessageDirection, c.LastMessageAt, c.CreatedAt))
+                c.LastMessageDirection, c.LastMessageAt, c.CreatedAt,
+                _db.Messages.Count(m => m.ConversationId == c.Id && m.Direction == MessageDirection.Inbound
+                                        && (c.LastReadAt == null || m.CreatedAt > c.LastReadAt))))
             .ToListAsync(ct);
 
         return (items, totalCount);
@@ -187,6 +189,20 @@ public class ConversationService : IConversationService
             .ToListAsync(ct);
 
         return messages.Select(ToResponse).ToList();
+    }
+
+    public async Task<bool> MarkReadAsync(Guid clinicId, Guid conversationId, CancellationToken ct = default)
+    {
+        var now = DateTimeOffset.UtcNow;
+        // Direct update (no tracking, no updated_at bump): reading a conversation isn't a change to it.
+        var rows = await _db.Conversations
+            .Where(c => c.ClinicId == clinicId && c.Id == conversationId)
+            .ExecuteUpdateAsync(s => s.SetProperty(c => c.LastReadAt, now), ct);
+        if (rows == 0) return false;
+
+        // Other staff with the Inbox open should drop the unread marker too.
+        await _notifier.ConversationUpdatedAsync(clinicId, conversationId, ct);
+        return true;
     }
 
     public Task<ConversationResponse?> TakeOverAsync(Guid clinicId, Guid conversationId, CancellationToken ct = default) =>

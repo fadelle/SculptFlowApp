@@ -1161,3 +1161,23 @@ table.data-table {
   .content { padding: 1.1rem; }
   .topbar { padding: 0 1.1rem; }
 }
+
+/* Inbox: unread conversations — count badge next to the name, bolder name/preview */
+.inbox-unread-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  margin-left: 0.4rem;
+  border-radius: 9px;
+  background: #2563eb;
+  color: #fff;
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1;
+}
+.inbox-conv-item.unread { border-left: 3px solid #2563eb; }
+.inbox-conv-item.unread .inbox-conv-name,
+.inbox-conv-item.unread .inbox-conv-preview { font-weight: 700; color: var(--text); }

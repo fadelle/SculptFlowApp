@@ -217,6 +217,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.Property(x => x.LastMessageDirection).HasColumnName("last_message_direction").HasMaxLength(20);
             e.Property(x => x.LastCustomerMessageAt).HasColumnName("last_customer_message_at");
             e.Property(x => x.ServiceWindowExpiresAt).HasColumnName("service_window_expires_at");
+            e.Property(x => x.LastReadAt).HasColumnName("last_read_at");
             e.Property(x => x.CreatedAt).HasColumnName("created_at");
             e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
 

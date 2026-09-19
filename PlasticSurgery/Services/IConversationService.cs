@@ -28,6 +28,10 @@ public interface IConversationService
 
     Task<IReadOnlyList<MessageResponse>> GetMessagesAsync(Guid clinicId, Guid conversationId, CancellationToken ct = default);
 
+    /// <summary>Marks the conversation as read by staff now (clears its unread count). False if it
+    /// isn't in this clinic. Notifies the clinic's Inbox clients so other open Inboxes update.</summary>
+    Task<bool> MarkReadAsync(Guid clinicId, Guid conversationId, CancellationToken ct = default);
+
     /// <summary>Staff explicitly takes over — AI stops auto-replying.</summary>
     Task<ConversationResponse?> TakeOverAsync(Guid clinicId, Guid conversationId, CancellationToken ct = default);
 

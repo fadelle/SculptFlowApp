@@ -1005,3 +1005,17 @@ do $$ begin
       check (source_type in ('manual','upload'));
   end if;
 end $$;
+
+-- ---------------------------------------------------------------------
+-- Inbox: unread tracking
+--
+-- last_read_at = when staff last opened the conversation (shared across the clinic's staff). Unread =
+-- inbound messages newer than it. Existing conversations are backfilled as "read" exactly once (when
+-- the column is first added); conversations created later start NULL = everything unread.
+-- ---------------------------------------------------------------------
+do $$ begin
+  if not exists (select 1 from information_schema.columns where table_name = 'conversations' and column_name = 'last_read_at') then
+    alter table conversations add column last_read_at timestamptz;
+    update conversations set last_read_at = now();
+  end if;
+end $$;

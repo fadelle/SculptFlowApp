@@ -106,23 +106,36 @@
     });
   }
 
+  // Browser-tab title shows how many customer messages are waiting, e.g. "(3) Inbox - MySculptFlow",
+  // so staff working in another tab notice new messages too.
+  var baseTitle = document.title;
+  function updateTabTitle(totalUnread) {
+    document.title = totalUnread > 0 ? '(' + totalUnread + ') ' + baseTitle : baseTitle;
+  }
+
   function renderConversationList(items) {
     listEl.innerHTML = '';
+    var totalUnread = 0;
     if (!items || items.length === 0) {
       listEl.innerHTML = '<div class="text-subtle" style="padding:1.5rem 1rem">No conversations yet.</div>';
+      updateTabTitle(0);
       return;
     }
     items.forEach(function (c) {
       var div = document.createElement('div');
-      div.className = 'inbox-conv-item' + (c.id === currentConversationId ? ' active' : '');
+      // Unread = customer messages staff haven't opened yet. The conversation being viewed right now
+      // counts as read (it is marked read on the server as soon as it's opened / a message arrives in it).
+      var unreadCount = c.id === currentConversationId ? 0 : (c.unreadCount || 0);
+      totalUnread += unreadCount;
+      div.className = 'inbox-conv-item' + (c.id === currentConversationId ? ' active' : '') + (unreadCount > 0 ? ' unread' : '');
       div.setAttribute('data-conversation-id', c.id);
       div.setAttribute('data-lead-name', c.leadFullName || 'Unknown');
       div.setAttribute('data-procedure-name', c.procedureName || '');
 
-      // "Needs Human" means AI is paused AND nobody's replied to the customer's last message yet
+      // "Needs Human" means AI is paused, the customer spoke last, AND staff haven't opened it yet
       // — not just "mode is human". Staff sending from the dashboard also sets mode to human, but
-      // that's a conversation actively being handled, not one waiting for attention.
-      var needsHuman = (c.mode === 'human' && c.lastMessageDirection === 'inbound')
+      // that's a conversation actively being handled, and once staff open a conversation they're on it.
+      var needsHuman = (c.mode === 'human' && c.lastMessageDirection === 'inbound' && unreadCount > 0)
         ? ' <span class="badge badge-red" style="margin-left:.3rem">Needs Human</span>' : '';
 
       div.innerHTML =
@@ -130,6 +143,7 @@
           '<span class="flex items-center gap-1">' +
             '<span class="inbox-channel-icon" style="background:' + channelColor(c.channel) + '" title="' + escapeHtml(c.channel) + '">' + (channelIcon(c.channel) || channelInitials(c.channel)) + '</span>' +
             '<span class="inbox-conv-name">' + escapeHtml(c.leadFullName || 'Unknown') + '</span>' +
+            (unreadCount > 0 ? '<span class="inbox-unread-badge" title="' + unreadCount + ' unread">' + (unreadCount > 99 ? '99+' : unreadCount) + '</span>' : '') +
           '</span>' +
           '<span class="badge ' + badgeClassForMode(c.mode) + '">' + escapeHtml(c.mode) + '</span>' +
         '</div>' +
@@ -141,6 +155,13 @@
       listEl.appendChild(div);
     });
     renderTimestamps();
+    updateTabTitle(totalUnread);
+  }
+
+  // Tells the server staff have seen this conversation (clears its unread count). The server then
+  // notifies every open Inbox, which re-fetches the list — so this can't loop back into itself.
+  function markRead(id) {
+    return apiPost(withClinic('/api/conversations/' + id + '/read')).catch(function () { /* non-critical */ });
   }
 
   // Mirrors Pages/Shared/ChannelIconHelper.cs — keep both in sync if a channel is added.
@@ -251,6 +272,14 @@
     threadEl.hidden = false;
     if (switchingConversation) {
       leadInfoEl.hidden = true; // don't show the previous conversation's lead while the new one loads
+      markRead(id); // opening a conversation = reading it
+      // Drop its unread marker right away instead of waiting for the round trip.
+      var opened = document.querySelector('.inbox-conv-item[data-conversation-id="' + id + '"]');
+      if (opened) {
+        opened.classList.remove('unread');
+        var b = opened.querySelector('.inbox-unread-badge');
+        if (b) b.remove();
+      }
     }
 
     document.querySelectorAll('.inbox-conv-item').forEach(function (el) {
@@ -494,6 +523,9 @@
     });
   });
   renderTimestamps();
+  // Replace the server-rendered first paint with the client-rendered list so unread badges / the tab
+  // title are consistent from the start.
+  loadConversationList();
 
   // ---------------------------------------------------------------------
   // SignalR — real-time notifications only. Every handler re-fetches from the API rather than
@@ -506,10 +538,14 @@
       .build();
 
     connection.on('NewMessage', function (payload) {
-      loadConversationList();
-      if (payload && payload.conversationId === currentConversationId) {
+      var inOpenConversation = payload && payload.conversationId === currentConversationId;
+      if (inOpenConversation) {
         refreshCurrentConversation();
+        // A customer message arriving in the conversation staff are looking at is seen immediately.
+        if (payload.direction === 'inbound') markRead(currentConversationId);
       }
+      // Any other conversation: the refreshed list shows it as unread (badge + bold + tab title).
+      loadConversationList();
     });
 
     connection.on('MessageStatusUpdated', function (payload) {

@@ -223,6 +223,17 @@ public class ConversationsController : ControllerBase
         }
     }
 
+    /// <summary>Staff opened the conversation — clears its unread marker.</summary>
+    [Authorize]
+    [HttpPost("{id:guid}/read")]
+    public async Task<IActionResult> MarkRead(Guid id, CancellationToken ct)
+    {
+        var clinicId = await _clinicContext.GetClinicIdAsync(ct);
+        if (clinicId is null) return Forbid();
+
+        return await _conversations.MarkReadAsync(clinicId.Value, id, ct) ? NoContent() : NotFound();
+    }
+
     [Authorize]
     [HttpPost("{id:guid}/take-over")]
     public async Task<ActionResult<ConversationResponse>> TakeOver(Guid id, CancellationToken ct)

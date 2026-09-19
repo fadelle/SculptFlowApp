@@ -191,6 +191,12 @@ Consumers: `inbox.js`, `whatsapp-templates.js`, `whatsapp-health.js`.
 - `Conversation.Mode`: `ai`/`human`/`approval` (`ConversationModeSync.Apply` is the only place that changes it).
 - `Message.Origin`: `whatsapp_customer`, `telegram_customer`, `whatsapp_business_app`, `dashboard`, `ai`, `system`, `campaign`.
   `SenderType`: `lead/ai/staff/system`. `Direction`: `inbound/outbound`.
+- **Unread tracking** (uncommitted): `conversations.last_read_at` (shared by the clinic's staff; existing rows
+  backfilled as read once). `ConversationListRow.UnreadCount` = inbound messages newer than it.
+  `POST /api/conversations/{id}/read` (`IConversationService.MarkReadAsync`, clinic-scoped, notifies via
+  `ConversationUpdated`) is called when staff open a conversation or a customer message arrives in the one already
+  open. `inbox.js`: blue count badge + bold + left border on unread rows, and `(N) Inbox` in the tab title, live via
+  SignalR. **"Needs Human" badge = mode human AND customer spoke last AND unread** — it clears once staff open the conversation.
 - **24h service window** (`LastCustomerMessageAt`/`ServiceWindowExpiresAt`, `IsServiceWindowOpen`) is
   WhatsApp-specific, reset only by a genuine customer inbound, enforced server-side
   (`ServiceWindowClosedException`). `MessageService` text sends are routed by

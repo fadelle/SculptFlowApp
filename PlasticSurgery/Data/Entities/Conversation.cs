@@ -30,6 +30,10 @@ public class Conversation
     /// interval math everywhere it's checked. Recomputed alongside LastCustomerMessageAt.</summary>
     public DateTimeOffset? ServiceWindowExpiresAt { get; set; }
 
+    /// <summary>When staff last opened this conversation (shared by all the clinic's staff). Inbound
+    /// messages newer than this are "unread"; null = never opened, so every inbound message is unread.</summary>
+    public DateTimeOffset? LastReadAt { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 
