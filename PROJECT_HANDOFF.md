@@ -512,7 +512,7 @@ shown), mapped onto the 3 backend audience types via two hidden fields (`Audienc
 - **Branding/nav**: app renamed **MySculptFlow** (logo badge "SF"); sidebar shows the **logged-in clinic's
   name** (from `clinics.name` via `ICurrentClinicContext`, fallback "Clinic Dashboard"); nav: Inbox, Main
   Numbers, Interested People, Appointments, **Procedures**, [WhatsApp] Templates, Health, Campaigns,
-  **Knowledge Base**, API (Swagger), Settings, Clinic Info.
+  **Knowledge Base**, API (Swagger), **Integrations** (was "Settings"; opens `/settings/integrations`), Staff, Clinic Info.
 
 ## 15. Deployment (Docker / Render / GitHub)
 
