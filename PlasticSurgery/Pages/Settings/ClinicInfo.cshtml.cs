@@ -20,6 +20,13 @@ public class ClinicInfoModel : PageModel
 
     public bool ClinicConfigured { get; private set; }
 
+    /// <summary>The clinic's name (given at registration) — shown in the sidebar and to the AI. The URL slug is NOT
+    /// changed when the name is edited.</summary>
+    [BindProperty]
+    public string Name { get; set; } = string.Empty;
+
+    public string? ErrorMessage { get; set; }
+
     [BindProperty]
     public string? Phone { get; set; }
 
@@ -51,6 +58,7 @@ public class ClinicInfoModel : PageModel
         }
 
         ClinicConfigured = true;
+        Name = clinic.Name;
         Phone = clinic.Phone;
         Email = clinic.Email;
         Website = clinic.Website;
@@ -65,6 +73,17 @@ public class ClinicInfoModel : PageModel
         var clinic = await _clinicContext.GetClinicAsync(ct);
         if (clinic is null) return RedirectToPage();
 
+        var name = (Name ?? string.Empty).Trim();
+        if (name.Length == 0 || name.Length > 200)
+        {
+            // Redisplay the form with what was typed instead of saving.
+            ClinicConfigured = true;
+            Name = name;
+            ErrorMessage = name.Length == 0 ? "Clinic name is required." : "Clinic name must be 200 characters or fewer.";
+            return Page();
+        }
+
+        clinic.Name = name;
         clinic.Phone = Phone;
         clinic.Email = Email;
         clinic.Website = Website;

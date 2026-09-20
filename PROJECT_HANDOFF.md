@@ -108,7 +108,7 @@ WEBHOOK:  Meta phone_number_id / WABA id → channel_integrations → clinic_id 
   hyphenated, `-2`/random suffix on collision; `email` = the user's email, phone/address blank) →
   `clinic_users` membership → default `knowledge_search_settings` row; any failure rolls everything back (no
   orphan user/clinic; verified with an injected mid-transaction failure). Then it signs the user in and redirects to
-  `/dashboard`. Registration can never join an existing clinic (joining will be a separate invitation/staff flow —
+  `/dashboard`. The clinic name can be edited later on the Clinic Info page (first field; the slug never changes). Registration can never join an existing clinic (joining will be a separate invitation/staff flow —
   not built). `Clinic:DefaultSlug` and `IClinicContext.GetDefaultClinicAsync` were removed. A new clinic starts
   fully empty and isolated (verified: no demo/other-clinic leads, conversations, messages, appointments,
   procedures, KB, campaigns or channel connections; 404 on every cross-clinic id). **No email verification,
