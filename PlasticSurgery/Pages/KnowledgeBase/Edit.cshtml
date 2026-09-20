@@ -21,13 +21,14 @@ else
         @if (Model.IsNew)
         {
             <div class="flex items-center gap-2 mb-3" role="tablist">
-                <button type="button" class="btn btn-sm @(Model.ShowUploadTab ? "" : "btn-primary")" id="kb-tab-manual" data-kb-tab="manual">Manual Entry</button>
+                <button type="button" class="btn btn-sm @(Model.ShowUploadTab || Model.ShowWebsiteTab ? "" : "btn-primary")" id="kb-tab-manual" data-kb-tab="manual">Manual Entry</button>
                 <button type="button" class="btn btn-sm @(Model.ShowUploadTab ? "btn-primary" : "")" id="kb-tab-upload" data-kb-tab="upload">Upload Document</button>
+                <button type="button" class="btn btn-sm @(Model.ShowWebsiteTab ? "btn-primary" : "")" id="kb-tab-website" data-kb-tab="website">Website</button>
             </div>
         }
 
         @* ---------- Manual entry / edit (unchanged behavior) ---------- *@
-        <div id="kb-panel-manual" hidden="@(Model.IsNew && Model.ShowUploadTab)">
+        <div id="kb-panel-manual" hidden="@(Model.IsNew && (Model.ShowUploadTab || Model.ShowWebsiteTab))">
             <form method="post" class="integration-form">
                 <label class="field">
                     <span>Title</span>
@@ -45,7 +46,19 @@ else
                     </select>
                 </label>
 
-                @if (Model.IsUpload)
+                @if (Model.IsWebsite)
+                {
+                    <div class="text-subtle" style="font-size:.85rem">
+                        Imported from the website page <a href="@Model.SourceUrl" target="_blank" rel="noopener noreferrer">@Model.SourceUrl</a>.
+                        The text below is kept in sync by the website crawl and can't be edited here — re-scrape the website to refresh it.
+                        Title, category and Active can be changed (a re-scrape keeps the Active setting).
+                    </div>
+                    <label class="field">
+                        <span>Extracted text</span>
+                        <textarea rows="12" class="text-input" readonly>@Model.Body</textarea>
+                    </label>
+                }
+                else if (Model.IsUpload)
                 {
                     <div class="text-subtle" style="font-size:.85rem">
                         Uploaded from <strong>@Model.OriginalFileName</strong>
@@ -125,14 +138,59 @@ else
                 </form>
             </div>
 
+            @* ---------- Website (new entries only) ---------- *@
+            <div id="kb-panel-website" hidden="@(!Model.ShowWebsiteTab)">
+                <form method="post" asp-page-handler="Website" class="integration-form">
+                    <label class="field">
+                        <span>Website address</span>
+                        <input type="text" name="WebsiteUrl" value="@Model.WebsiteUrl" class="text-input" maxlength="2000" required
+                               placeholder="https://www.yourclinic.com" inputmode="url" autocomplete="off" />
+                    </label>
+
+                    <label class="field">
+                        <span>What to import</span>
+                        <select name="WebsiteMode" class="select">
+                            <option value="crawl_site" selected="@(Model.WebsiteMode != "single_page")">Crawl website — follow links on the same site</option>
+                            <option value="single_page" selected="@(Model.WebsiteMode == "single_page")">Single page only</option>
+                        </select>
+                    </label>
+
+                    <label class="field">
+                        <span>Category</span>
+                        <select name="Category" class="select">
+                            @foreach (var (value, label) in Model.CategoryOptions)
+                            {
+                                <option value="@value" selected="@(value == Model.Category)">@label</option>
+                            }
+                        </select>
+                    </label>
+
+                    <label class="flex items-center gap-1" style="font-weight:400">
+                        <input type="checkbox" name="IsActive" value="true" checked="@(Model.ErrorMessage is null || Model.IsActive)" />
+                        Active — the AI can use these pages
+                    </label>
+
+                    <div class="text-subtle" style="font-size:.78rem">
+                        Only the text of public pages on <strong>this website</strong> is imported — no images, videos or files, and links to other websites
+                        are not followed. The crawl respects the site's <code>robots.txt</code> and runs in the background, so you can leave this page;
+                        progress is shown on the website's page. Pages built entirely with JavaScript can't be read.
+                    </div>
+
+                    <div class="flex items-center gap-2 mt-2">
+                        <button type="submit" class="btn btn-primary btn-sm">Import website</button>
+                        <a href="/KnowledgeBase" class="btn btn-sm">Cancel</a>
+                    </div>
+                </form>
+            </div>
+
             <script>
                 (function () {
+                    var panels = { manual: 'kb-panel-manual', upload: 'kb-panel-upload', website: 'kb-panel-website' };
                     var tabs = document.querySelectorAll('[data-kb-tab]');
                     tabs.forEach(function (tab) {
                         tab.addEventListener('click', function () {
                             var which = tab.getAttribute('data-kb-tab');
-                            document.getElementById('kb-panel-manual').hidden = which !== 'manual';
-                            document.getElementById('kb-panel-upload').hidden = which !== 'upload';
+                            Object.keys(panels).forEach(function (k) { document.getElementById(panels[k]).hidden = k !== which; });
                             tabs.forEach(function (t) { t.classList.toggle('btn-primary', t === tab); });
                         });
                     });

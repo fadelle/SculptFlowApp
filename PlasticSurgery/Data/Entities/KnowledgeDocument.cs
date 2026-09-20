@@ -28,6 +28,10 @@ public class KnowledgeDocument
     public string? MimeType { get; set; }
     public long? FileSizeBytes { get; set; }
 
+    /// <summary>The page URL a website-sourced document came from (null otherwise). The document is
+    /// created/updated by the website-scraping subsystem; its text still lives in <see cref="Content"/>.</summary>
+    public string? SourceUrl { get; set; }
+
     /// <summary>Inactive documents keep their chunks stored but are excluded from AI search.</summary>
     public bool IsActive { get; set; } = true;
 
@@ -43,6 +47,8 @@ public static class KnowledgeSourceType
 {
     public const string Manual = "manual";
     public const string Upload = "upload";
+    /// <summary>A web page imported by the website-scraping subsystem.</summary>
+    public const string Website = "website";
 }
 
 public static class KnowledgeCategory

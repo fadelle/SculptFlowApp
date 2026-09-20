@@ -1019,3 +1019,135 @@ do $$ begin
     update conversations set last_read_at = now();
   end if;
 end $$;
+
+-- =====================================================================
+-- Knowledge Base: WEBSITE SCRAPING (standalone ingestion subsystem)
+--
+--   knowledge_website_sources      one website configured as a KB source (per clinic)
+--   knowledge_website_pages        every URL the crawler knows about, with its crawl state
+--   knowledge_website_scrape_runs  one row per crawl (history / progress / debugging)
+--
+-- The crawler OWNS crawling, URL identity, fetching, text extraction, page state, runs and change
+-- detection. The existing Knowledge Base owns content, chunking, embeddings and search: a successfully
+-- extracted page becomes (or updates) a knowledge_documents row (source_type = 'website') and flows through
+-- the SAME chunk -> embed -> knowledge_chunks pipeline as manual entries and uploads. NO vectors and no
+-- extracted text live in the scraping tables (the text is knowledge_documents.content).
+-- Everything is scoped by clinic_id; nothing is ever deduplicated across clinics.
+-- =====================================================================
+
+-- knowledge_documents: 'website' as a source type + the page URL it came from.
+alter table knowledge_documents add column if not exists source_url varchar(2000);
+alter table knowledge_documents drop constraint if exists ck_knowledge_documents_source_type;
+alter table knowledge_documents add constraint ck_knowledge_documents_source_type
+  check (source_type in ('manual','upload','website'));
+
+create table if not exists knowledge_website_sources (
+  id                    uuid primary key default gen_random_uuid(),
+  clinic_id             uuid not null references clinics(id) on delete cascade,
+
+  start_url             varchar(2000) not null,
+  normalized_start_url  varchar(2000) not null,
+  host                  varchar(255)  not null,
+  crawl_mode            varchar(20)   not null default 'crawl_site',
+  category              varchar(50)   not null default 'general',
+  is_active             boolean       not null default true,
+  status                varchar(30)   not null default 'pending',
+  last_scraped_at       timestamptz,
+  -- Hashes of blocks of text found repeated across the site pages (menus/footers/banners). Kept so a
+  -- partial recrawl strips the same boilerplate as the full one. Hashes only - no page text.
+  boilerplate_block_hashes jsonb,
+  created_at            timestamptz   not null default now(),
+  updated_at            timestamptz   not null default now(),
+
+  constraint ck_kws_crawl_mode check (crawl_mode in ('single_page','crawl_site')),
+  constraint ck_kws_status check (status in ('pending','crawling','completed','completed_with_errors','failed'))
+);
+-- The same website cannot be added twice for one clinic; two clinics may each add it.
+create unique index if not exists ux_kws_clinic_start_url on knowledge_website_sources(clinic_id, normalized_start_url);
+create index if not exists ix_kws_clinic_id on knowledge_website_sources(clinic_id);
+
+drop trigger if exists trg_kws_updated_at on knowledge_website_sources;
+create trigger trg_kws_updated_at before update on knowledge_website_sources
+  for each row execute function set_updated_at();
+
+create table if not exists knowledge_website_pages (
+  id                    uuid primary key default gen_random_uuid(),
+  clinic_id             uuid not null references clinics(id) on delete cascade,
+  website_source_id     uuid not null references knowledge_website_sources(id) on delete cascade,
+
+  url                   varchar(2000) not null,
+  normalized_url        varchar(2000) not null,
+  canonical_url         varchar(2000),
+  title                 varchar(500),
+
+  http_status           integer,
+  content_type          varchar(200),
+
+  -- SHA-256 of the NORMALIZED EXTRACTED TEXT (never of raw HTML).
+  content_hash          varchar(64),
+  etag                  varchar(500),
+  last_modified_header  varchar(100),
+
+  status                varchar(20)  not null default 'discovered',
+  failure_reason        text,
+  depth                 integer      not null default 0,
+
+  -- The KB document this page produced (null for skipped/duplicate/failed/removed pages).
+  knowledge_document_id uuid references knowledge_documents(id) on delete set null,
+  -- For status 'duplicate': the page whose identical content/canonical was kept instead.
+  duplicate_of_page_id  uuid references knowledge_website_pages(id) on delete set null,
+
+  -- Internal links found on the page (normalized, capped) - lets a 304 Not Modified page still be crawled through.
+  links                 jsonb,
+  -- Removal handling: consecutive full crawls in which this page was gone (404/410 or no longer linked).
+  missing_count         integer      not null default 0,
+  removed_at            timestamptz,
+
+  first_discovered_at   timestamptz  not null default now(),
+  last_seen_at          timestamptz,
+  last_scraped_at       timestamptz,
+  created_at            timestamptz  not null default now(),
+  updated_at            timestamptz  not null default now(),
+
+  constraint ck_kwp_status check (status in
+    ('discovered','processing','indexed','unchanged','skipped','duplicate','failed','removed'))
+);
+-- One row per (source, normalized URL): the same page is never stored twice for a source.
+create unique index if not exists ux_kwp_source_normalized_url on knowledge_website_pages(website_source_id, normalized_url);
+create index if not exists ix_kwp_clinic_id on knowledge_website_pages(clinic_id);
+create index if not exists ix_kwp_source_status on knowledge_website_pages(website_source_id, status);
+create index if not exists ix_kwp_document_id on knowledge_website_pages(knowledge_document_id) where knowledge_document_id is not null;
+-- Deliberately NOT unique: identical text may legitimately exist on several pages / clinics.
+create index if not exists ix_kwp_source_content_hash on knowledge_website_pages(website_source_id, content_hash) where content_hash is not null;
+
+drop trigger if exists trg_kwp_updated_at on knowledge_website_pages;
+create trigger trg_kwp_updated_at before update on knowledge_website_pages
+  for each row execute function set_updated_at();
+
+create table if not exists knowledge_website_scrape_runs (
+  id                    uuid primary key default gen_random_uuid(),
+  clinic_id             uuid not null references clinics(id) on delete cascade,
+  website_source_id     uuid not null references knowledge_website_sources(id) on delete cascade,
+
+  status                varchar(30) not null default 'pending',
+  started_at            timestamptz,
+  completed_at          timestamptz,
+
+  pages_discovered      integer not null default 0,
+  pages_processed       integer not null default 0,
+  pages_indexed         integer not null default 0,   -- new + changed
+  pages_new             integer not null default 0,
+  pages_changed         integer not null default 0,
+  pages_unchanged       integer not null default 0,
+  pages_skipped         integer not null default 0,
+  pages_duplicate       integer not null default 0,
+  pages_failed          integer not null default 0,
+  pages_removed         integer not null default 0,
+
+  error_summary         text,
+  created_at            timestamptz not null default now(),
+
+  constraint ck_kwr_status check (status in ('pending','crawling','completed','completed_with_errors','failed'))
+);
+create index if not exists ix_kwr_source_created on knowledge_website_scrape_runs(website_source_id, created_at desc);
+create index if not exists ix_kwr_clinic_id on knowledge_website_scrape_runs(clinic_id);

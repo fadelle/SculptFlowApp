@@ -1,0 +1,51 @@
+@page "/Staff"
+@model PlasticSurgery.Pages.Staff.IndexModel
+@{
+    ViewData["Title"] = "Staff";
+}
+
+@if (!Model.ClinicConfigured)
+{
+    <div class="alert alert-warning">No clinic configured yet — see the Main Numbers page for setup steps.</div>
+}
+else
+{
+    <p class="text-muted mb-3" style="max-width:640px">
+        People who can sign in to <strong>@Model.ClinicName</strong> and see its leads, conversations and settings.
+        Adding more staff to an existing clinic isn't available yet.
+    </p>
+
+    <div class="table-card table-scroll">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Status</th>
+                    <th>Joined</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var m in Model.Members)
+                {
+                    <tr>
+                        <td>
+                            @(string.IsNullOrWhiteSpace(m.FullName) ? "—" : m.FullName)
+                            @if (m.UserId == Model.CurrentUserId)
+                            {
+                                <span class="badge badge-teal" style="margin-left:.4rem">You</span>
+                            }
+                        </td>
+                        <td>@(m.Email ?? "—")</td>
+                        <td><span class="badge @(m.IsActive ? "badge-green" : "badge-gray")">@(m.IsActive ? "Active" : "Inactive")</span></td>
+                        <td>@m.JoinedAt.ToString("MMM d, yyyy")</td>
+                    </tr>
+                }
+                @if (Model.Members.Count == 0)
+                {
+                    <tr class="empty-row"><td colspan="4">No staff found.</td></tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}

@@ -1,0 +1,77 @@
+@page "/KnowledgeBase/Websites"
+@using PlasticSurgery.Data.Entities
+@model PlasticSurgery.Pages.KnowledgeBase.Websites.IndexModel
+@{
+    ViewData["Title"] = "Knowledge Base — Websites";
+    string Badge(string s) => s switch
+    {
+        WebsiteScrapeStatus.Completed => "badge-green",
+        WebsiteScrapeStatus.CompletedWithErrors => "badge-amber",
+        WebsiteScrapeStatus.Failed => "badge-red",
+        WebsiteScrapeStatus.Crawling => "badge-teal",
+        _ => "badge-gray"
+    };
+    string Label(string s) => s == WebsiteScrapeStatus.CompletedWithErrors ? "Completed with errors" : char.ToUpper(s[0]) + s[1..];
+}
+
+@if (!Model.ClinicConfigured)
+{
+    <div class="alert alert-warning">No clinic configured yet — see the Main Numbers page for setup steps.</div>
+}
+else
+{
+    if (!string.IsNullOrEmpty(Model.StatusMessage))
+    {
+        <div class="alert alert-info mb-3">@Model.StatusMessage</div>
+    }
+
+    <div class="flex items-center gap-2 mb-3" style="justify-content:space-between">
+        <p class="text-muted" style="margin:0;max-width:640px">
+            Websites your AI assistant learns from. Each page is imported as a Knowledge Base entry and kept up to date when you re-scrape.
+            Only the text of public pages is imported.
+        </p>
+        <div class="flex items-center gap-2">
+            <a href="/KnowledgeBase" class="btn btn-sm">Back to Knowledge Base</a>
+            <a href="/KnowledgeBase/Edit?mode=website" class="btn btn-primary btn-sm">Add Website</a>
+        </div>
+    </div>
+
+    <div class="table-card table-scroll">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Website</th>
+                    <th>Mode</th>
+                    <th>Status</th>
+                    <th>Pages in Knowledge Base</th>
+                    <th>Last scraped</th>
+                    <th>Active</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var s in Model.Sources)
+                {
+                    <tr>
+                        <td><a href="/KnowledgeBase/Websites/@s.Id">@s.StartUrl</a></td>
+                        <td>@(s.CrawlMode == WebsiteCrawlMode.SinglePage ? "Single page" : "Whole website")</td>
+                        <td><span class="badge @Badge(s.Status)">@Label(s.Status)</span></td>
+                        <td>@s.IndexedPages</td>
+                        <td>@(s.LastScrapedAt?.ToString("MMM d, yyyy HH:mm") ?? "—")</td>
+                        <td><span class="badge @(s.IsActive ? "badge-green" : "badge-gray")">@(s.IsActive ? "Active" : "Inactive")</span></td>
+                        <td><a href="/KnowledgeBase/Websites/@s.Id" class="btn btn-sm">Open</a></td>
+                    </tr>
+                }
+                @if (Model.Sources.Count == 0)
+                {
+                    <tr class="empty-row"><td colspan="7">No websites yet — click "Add Website" to import your clinic website.</td></tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@if (Model.Sources.Any(s => s.InProgress))
+{
+    <script>setTimeout(function () { location.reload(); }, 4000);</script>
+}

@@ -28,6 +28,7 @@ else
         </p>
         <div class="flex items-center gap-2">
             <a href="/KnowledgeBase/Settings" class="btn btn-sm">Settings</a>
+            <a href="/KnowledgeBase/Websites" class="btn btn-sm">Websites</a>
             <a href="/KnowledgeBase/Edit" class="btn btn-primary btn-sm">Add Knowledge</a>
         </div>
     </div>
@@ -55,6 +56,11 @@ else
                             {
                                 <span class="badge badge-teal">Uploaded</span>
                                 <div class="text-subtle" style="font-size:.72rem">@d.OriginalFileName</div>
+                            }
+                            else if (d.SourceType == KnowledgeSourceType.Website)
+                            {
+                                <span class="badge badge-purple">Website</span>
+                                <div class="text-subtle" style="font-size:.72rem;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="@d.SourceUrl">@d.SourceUrl</div>
                             }
                             else
                             {

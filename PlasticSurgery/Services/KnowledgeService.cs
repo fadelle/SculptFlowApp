@@ -56,7 +56,7 @@ public class KnowledgeService : IKnowledgeService
     }
 
     public Task<KnowledgeDocumentResponse> CreateAsync(Guid clinicId, SaveKnowledgeRequest request, CancellationToken ct = default) =>
-        CreateCoreAsync(clinicId, request, upload: null, ct);
+        CreateCoreAsync(clinicId, request, source: null, ct);
 
     public async Task<KnowledgeDocumentResponse> CreateFromUploadAsync(
         Guid clinicId, UploadKnowledgeRequest request, string fileName, Stream content, long length, CancellationToken ct = default)
@@ -84,13 +84,43 @@ public class KnowledgeService : IKnowledgeService
         // same transactional chunk write — so the document is immediately searchable.
         return await CreateCoreAsync(
             clinicId, new SaveKnowledgeRequest(title, request.Category, text, request.IsActive),
-            new UploadInfo(fileName.Length > 255 ? fileName[^255..] : fileName, DocumentTextExtractor.MimeTypeFor(fileName), length), ct);
+            new SourceInfo(KnowledgeSourceType.Upload, fileName.Length > 255 ? fileName[^255..] : fileName, DocumentTextExtractor.MimeTypeFor(fileName), length), ct);
     }
 
-    private sealed record UploadInfo(string FileName, string MimeType, long SizeBytes);
+    public Task<KnowledgeDocumentResponse> CreateFromSourceAsync(Guid clinicId, ExternalKnowledgeDocument document, CancellationToken ct = default) =>
+        // Exactly the manual-entry pipeline (same chunker, clinic settings, embeddings, transactional chunk write);
+        // only the provenance columns differ. The caller (an ingestion subsystem) has already produced clean text.
+        CreateCoreAsync(
+            clinicId, new SaveKnowledgeRequest(document.Title, document.Category, document.Content, document.IsActive),
+            new SourceInfo(document.SourceType, SourceUrl: document.SourceUrl), ct);
+
+    public async Task<KnowledgeDocumentResponse?> ReplaceSourceContentAsync(
+        Guid clinicId, Guid id, string title, string content, CancellationToken ct = default)
+    {
+        var doc = await _db.KnowledgeDocuments.FirstOrDefaultAsync(d => d.ClinicId == clinicId && d.Id == id, ct);
+        if (doc is null) return null;
+
+        var (cleanTitle, _, cleanContent) = Validate(new SaveKnowledgeRequest(title, doc.Category, content, doc.IsActive));
+        // Embeddings are computed BEFORE the transaction, so a provider failure leaves the old chunks intact.
+        var (pieces, vectors) = await ChunkAndEmbedAsync(clinicId, cleanTitle, cleanContent, ct);
+
+        await using var tx = await _db.Database.BeginTransactionAsync(ct);
+        doc.Title = cleanTitle;
+        doc.Content = cleanContent;
+        doc.UpdatedAt = DateTimeOffset.UtcNow;
+        await _db.SaveChangesAsync(ct);
+
+        await _db.KnowledgeChunks.Where(c => c.KnowledgeDocumentId == doc.Id).ExecuteDeleteAsync(ct);
+        await InsertChunksAsync(clinicId, doc.Id, pieces, vectors, ct);
+        await tx.CommitAsync(ct);
+
+        return ToResponse(doc, pieces.Count);
+    }
+
+    private sealed record SourceInfo(string SourceType, string? FileName = null, string? MimeType = null, long? SizeBytes = null, string? SourceUrl = null);
 
     private async Task<KnowledgeDocumentResponse> CreateCoreAsync(
-        Guid clinicId, SaveKnowledgeRequest request, UploadInfo? upload, CancellationToken ct)
+        Guid clinicId, SaveKnowledgeRequest request, SourceInfo? source, CancellationToken ct)
     {
         var (title, category, content) = Validate(request);
         var (pieces, vectors) = await ChunkAndEmbedAsync(clinicId, title, content, ct);
@@ -103,10 +133,11 @@ public class KnowledgeService : IKnowledgeService
             Title = title,
             Category = category,
             Content = content,
-            SourceType = upload is null ? KnowledgeSourceType.Manual : KnowledgeSourceType.Upload,
-            OriginalFileName = upload?.FileName,
-            MimeType = upload?.MimeType,
-            FileSizeBytes = upload?.SizeBytes,
+            SourceType = source?.SourceType ?? KnowledgeSourceType.Manual,
+            OriginalFileName = source?.FileName,
+            MimeType = source?.MimeType,
+            FileSizeBytes = source?.SizeBytes,
+            SourceUrl = source?.SourceUrl,
             IsActive = request.IsActive,
             CreatedAt = now,
             UpdatedAt = now
@@ -129,7 +160,7 @@ public class KnowledgeService : IKnowledgeService
         // An uploaded document's text is what was extracted from the file — it isn't editable here
         // (re-upload to change it), whatever the caller sent. Title/category/active stay editable, and
         // the stored text is re-chunked below exactly like a manual entry.
-        if (doc.SourceType == KnowledgeSourceType.Upload) request = request with { Content = doc.Content };
+        if (doc.SourceType != KnowledgeSourceType.Manual) request = request with { Content = doc.Content };
 
         var (title, category, content) = Validate(request);
         // Saving always re-chunks and re-embeds with the clinic's CURRENT settings — that's how a
@@ -232,5 +263,5 @@ public class KnowledgeService : IKnowledgeService
 
     private static KnowledgeDocumentResponse ToResponse(KnowledgeDocument d, int chunkCount) => new(
         d.Id, d.ClinicId, d.Title, d.Category, d.Content, d.IsActive, chunkCount, d.CreatedAt, d.UpdatedAt,
-        d.SourceType, d.OriginalFileName, d.MimeType, d.FileSizeBytes);
+        d.SourceType, d.OriginalFileName, d.MimeType, d.FileSizeBytes, d.SourceUrl);
 }

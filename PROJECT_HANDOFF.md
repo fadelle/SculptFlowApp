@@ -113,6 +113,9 @@ WEBHOOK:  Meta phone_number_id / WABA id → channel_integrations → clinic_id 
   fully empty and isolated (verified: no demo/other-clinic leads, conversations, messages, appointments,
   procedures, KB, campaigns or channel connections; 404 on every cross-clinic id). **No email verification,
   CAPTCHA or rate limiting** on signup yet — anyone who can reach the site can create a clinic.
+  **Staff page** (`/Staff`, sidebar "Staff"; uncommitted): read-only list of the current clinic's `clinic_users`
+  (name from the `full_name` claim, email, Active/Inactive, joined date, "You" badge) via `IStaffService`;
+  `GET /api/staff` (login required, clinic from `ICurrentClinicContext`). No add/remove/invite yet.
 - `DashboardApiController` = `[Authorize]` base + `GetClinicIdAsync()`; used by the dashboard API
   controllers (Leads, Appointments, Procedures, Dashboard, ProcedureBookings, ChannelIntegrations,
   WhatsAppTemplates, Campaigns, WhatsAppHealth, **Knowledge**). `ConversationsController` is separate
@@ -315,6 +318,63 @@ with the current settings; deactivate/delete behave as before. There is **still 
 re-save each document. List shows a Source column (Manual / Uploaded + file name). Not built: OCR, multi-file,
 legacy `.doc`, password-protected PDFs (reported as unreadable). Verified locally with generated PDF/DOCX/TXT plus 15
 bad-file cases and two-clinic isolation (all 404 across clinics; upload ignores a posted `clinicId`).
+
+**Website scraping** (uncommitted): a STANDALONE ingestion subsystem in `Integrations/Knowledge/WebScraping/` — a third
+way into the SAME `knowledge_documents` → `knowledge_chunks` → embeddings → `search_clinic_knowledge` pipeline (no second
+KB/vector/search). The crawler owns crawling, URL identity, fetching, extraction, page state, runs and change
+detection; the KB owns content, chunking, embeddings and search. Bridge = two small crawler-agnostic methods on
+`IKnowledgeService`: `CreateFromSourceAsync` / `ReplaceSourceContentAsync` (page text → the clinic's normal
+chunk/embed settings). UI: `/KnowledgeBase/Edit` has a 3rd tab **Website** (URL, "Crawl website" | "Single page only",
+category, active); `/KnowledgeBase/Websites` (list) and `/KnowledgeBase/Websites/{id}` (status, live counters,
+pages + failures, Re-scrape / Deactivate / Delete, run history; auto-refreshes while running). API (login,
+clinic from `ICurrentClinicContext`): `POST/GET /api/knowledge/websites`, `GET …/{id}`, `GET …/{id}/pages?status=`,
+`POST …/{id}/rescrape|active`, `DELETE …/{id}`. **Tables** (all `clinic_id`-scoped, cascade from clinic):
+`knowledge_website_sources` (unique `(clinic_id, normalized_start_url)`, crawl_mode, category, is_active, status,
+`boilerplate_block_hashes` jsonb), `knowledge_website_pages` (unique `(website_source_id, normalized_url)`,
+canonical_url, http_status, `content_hash` = SHA-256 of normalized extracted TEXT, etag, last_modified, status
+`discovered|processing|indexed|unchanged|skipped|duplicate|failed|removed`, failure_reason, `knowledge_document_id`
+→ knowledge_documents ON DELETE SET NULL, duplicate_of_page_id, `links` jsonb, missing_count, removed_at; content_hash
+index is NOT unique), `knowledge_website_scrape_runs` (status `pending|crawling|completed|completed_with_errors|failed`,
+pages_discovered/processed/indexed/new/changed/unchanged/skipped/duplicate/failed/removed, error_summary);
+`knowledge_documents` + `source_url`, `source_type` CHECK now `manual|upload|website`. **Background**: request writes a
+`pending` run and enqueues its id (`IWebsiteScrapeQueue`, an in-process Channel); `WebsiteScrapeWorker` (hosted
+service) runs one crawl at a time in its own DI scope; state is in the DB; on startup runs left `crawling` are marked
+failed ("interrupted by restart") and `pending` ones re-queued. **Engine** (`WebsiteScrapeProcessor`): 1) CRAWL breadth-
+first, level by level, limited concurrency, politeness delay, robots.txt; 2) ANALYZE (canonical/redirect aliases, site-
+wide boilerplate removal, text render + SHA-256, duplicate detection); 3) APPLY (unchanged → nothing touched and NO
+embedding call; changed → same document updated, only ITS chunks rebuilt; new → new document). **URL identity**
+(`UrlNormalizer`, the only place): http/https only, no credentials, lower-case host (IDN→punycode), default ports
+dropped, fragment removed, dot-segments/`//` collapsed, `index.html|htm|php` folded, trailing slash removed (root
+`/`), tracking params (`utm_*`, fbclid, gclid, msclkid, …) removed but other query params KEPT and sorted; www/non-www
+and http/https default ports = one site, a different explicit port = a different site. **Same-site only**; external
+links, images/CSS/JS/fonts/media/archives/XML are never fetched or stored; PDFs/Office files are recorded as
+`skipped` ("use Upload Document"). **Dedup**: canonical link (same-site only, ignored if it points at the home page
+from a deep page) and redirects make alias pages `duplicate`; identical text within one website → one owner
+(previous owner kept, else canonical/shallowest/shortest) — never across clinics. **Extraction**: AngleSharp (HTML5
+parser, no regex on markup); main/[role=main]/article/known content containers else body; drops script/style/
+noscript/hidden/aria-hidden/nav/aside/header/dialog/form controls and cookie/consent/popup/menu/breadcrumb/share
+widgets; keeps headings, paragraphs, lists ("- "), table rows ("a | b"), details/FAQ text, image alt text; footer text
+kept only for contact-looking lines; blocks repeated on ≥50% of ≥4 pages are stripped everywhere except the start page
+(its hashes persist per source for partial recrawls). **Change detection**: ETag/Last-Modified conditional requests
+(304 → unchanged, stored `links` keep the crawl going) + content hash. **Removed pages**: 410 → removed at once; 404 or
+"no longer linked" → removed after 2 consecutive complete crawls (never when a crawl was cut short by limits, or the
+start page failed); removed = row kept + document DEACTIVATED (never deleted); a returning page is re-activated, a
+hand-deactivated document is never re-activated by a crawl. **Limits** (`Knowledge:WebScraping`, clamped): MaxPages 100,
+MaxDepth 3, MaxConcurrency 3, RequestTimeoutSeconds 15, MaxResponseBytes 2 MB, MaxRedirects 5, PolitenessDelayMs 300,
+MaxRunMinutes 20, MinTextChars 80, MaxTextChars 200k, MaxQueryVariantsPerPath 5, MaxSourcesPerClinic 25; crawl-trap
+filters (calendar/filter/session params, repeated/deep paths, >4 query params, per-path variant cap). **SSRF**
+(`SsrfGuard`): http/https + ports 80/443 only; localhost/.local/.internal/single-label names blocked; DNS answers must
+ALL be public (private, loopback, link-local incl. 169.254.169.254, CGNAT, multicast, IPv6 ULA/link-local, mapped/6to4/
+Teredo/NAT64 forms); checked before every request AND again in the socket connect callback (anti-DNS-rebinding);
+redirects followed manually and re-validated, leaving the site is refused; no proxy/cookies. Only in the Development
+environment `DevAllowedHosts` (exact host:port) bypasses this, for tests. robots.txt is respected (`SculptFlowBot`
+group else `*`, longest match, `*`/`$`, Crawl-delay ≤5 s); an unreachable/5xx robots.txt stops the crawl.
+Deactivating a source hides all its documents; activating restores only pages that are in the KB; deleting removes the
+source, its rows and the documents it created (manual/upload/other sources/other clinics untouched). Not built: JS
+rendering (JS-only pages are skipped as "no readable text"), sitemap reading, OCR, authenticated sites, batch imports,
+per-source limits, concurrent crawls. Tested end-to-end against a purpose-built fake site (single page, multi-page,
+URL variants, alias/duplicate content, unchanged/changed/new/removed recrawls, external/assets, 500/404/timeout,
+robots/noindex, SSRF forms, tenant isolation, restart recovery).
 
 **Dashboard**: `/KnowledgeBase` (list: title, category, Active/Inactive, last updated; Edit /
 Activate-Deactivate / Delete; "Add Knowledge" and "Settings" buttons), `/KnowledgeBase/Edit/{id?}`
@@ -528,6 +588,7 @@ shown), mapped onto the 3 backend audience types via two hidden fields (`Audienc
 - Appointments: `GET/POST /api/appointments`, `GET /api/appointments/{id}`,
   `PATCH /api/appointments/{id}/status`, `GET /api/appointments/available`
 - Procedures: `GET/POST /api/procedures`, `GET/PUT /api/procedures/{id}`, `POST /api/procedures/{id}/active`
+- Knowledge websites: `POST/GET /api/knowledge/websites`, `GET /api/knowledge/websites/{id}` (+`/pages`), `POST …/{id}/rescrape|active`, `DELETE …/{id}`
 - Knowledge: `POST /api/knowledge/upload` (multipart, one file), `GET/POST /api/knowledge`, `GET/PUT/DELETE /api/knowledge/{id}`,
   `POST /api/knowledge/{id}/active`, `GET/PUT /api/knowledge/settings`
 - Campaigns: `GET/POST /api/campaigns`, `GET /api/campaigns/{id}`,
@@ -576,7 +637,7 @@ registration no longer uses a default clinic; a leftover env var is harmless);
 `Meta:AppId`, `Meta:GraphApiVersion` (`v21.0`), `Meta:WhatsAppLoginConfigId`, `Meta:FacebookLoginConfigId`;
 `Embeddings:BaseUrl` (`https://api.openai.com/v1`), `Embeddings:Model` (`text-embedding-3-small`),
 `Embeddings:Dimensions` (`1536` — must equal the `vector(N)` column); `Knowledge:MaxUploadBytes` (5242880),
-`Knowledge:MaxExtractedChars` (250000); `Knowledge:MinScore` (0.30),
+`Knowledge:MaxExtractedChars` (250000); `Knowledge:WebScraping:*` (crawler limits — see §11; `DevAllowedHosts` is Development-only, leave empty); `Knowledge:MinScore` (0.30),
 `Knowledge:ChunkMaxChars` (1000), `Knowledge:ChunkOverlapChars` (150), `Knowledge:ChunkMinChars` (200) —
 the first three are **defaults for a clinic's first settings row only**; `ChunkMinChars` is system-wide.
 Render sets `PORT` itself; the Dockerfile sets `ASPNETCORE_ENVIRONMENT`/`ASPNETCORE_URLS`.
@@ -607,6 +668,7 @@ Render sets `PORT` itself; the Dockerfile sets `ASPNETCORE_ENVIRONMENT`/`ASPNETC
     (connected rows only) and `ux_conversations_clinic_channel_thread` — applied live, **not yet on `main`**
 12. **KB document upload**: `knowledge_documents` + `source_type` (default `manual`, CHECK `manual|upload`),
     `original_file_name`, `mime_type`, `file_size_bytes` — applied live, **not yet on `main`**
+13. **KB website scraping**: `knowledge_website_sources`, `knowledge_website_pages`, `knowledge_website_scrape_runs` (+ indexes/CHECKs/triggers); `knowledge_documents` + `source_url`, `source_type` CHECK adds `website` — applied live, **not yet on `main`**
 
 No migration was needed for Procedures, lead/appointment editing, or the audience UI.
 

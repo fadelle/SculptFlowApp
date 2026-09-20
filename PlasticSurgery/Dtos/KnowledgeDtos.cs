@@ -14,8 +14,14 @@ public record KnowledgeDocumentResponse(
     string SourceType = "manual",
     string? OriginalFileName = null,
     string? MimeType = null,
-    long? FileSizeBytes = null
+    long? FileSizeBytes = null,
+    /// <summary>The page URL for a website-imported document (source_type "website"); null otherwise.</summary>
+    string? SourceUrl = null
 );
+
+/// <summary>A document produced by an external ingestion subsystem (the website crawler). The Knowledge Base
+/// treats it like any other: same chunking, same embeddings, same search.</summary>
+public record ExternalKnowledgeDocument(string SourceType, string Title, string Category, string Content, bool IsActive, string? SourceUrl);
 
 /// <summary>What the upload form supplies. The file itself is passed separately as a stream; the clinic
 /// is never part of this — it comes from CurrentClinicContext.</summary>

@@ -1,0 +1,196 @@
+@page "/KnowledgeBase/Websites/{id:guid}"
+@using PlasticSurgery.Data.Entities
+@model PlasticSurgery.Pages.KnowledgeBase.Websites.DetailsModel
+@{
+    ViewData["Title"] = "Website";
+    string RunBadge(string s) => s switch
+    {
+        WebsiteScrapeStatus.Completed => "badge-green",
+        WebsiteScrapeStatus.CompletedWithErrors => "badge-amber",
+        WebsiteScrapeStatus.Failed => "badge-red",
+        WebsiteScrapeStatus.Crawling => "badge-teal",
+        _ => "badge-gray"
+    };
+    string RunLabel(string s) => s == WebsiteScrapeStatus.CompletedWithErrors ? "Completed with errors" : char.ToUpper(s[0]) + s[1..];
+    string PageBadge(string s) => s switch
+    {
+        WebsitePageStatus.Indexed => "badge-green",
+        WebsitePageStatus.Unchanged => "badge-green",
+        WebsitePageStatus.Failed => "badge-red",
+        WebsitePageStatus.Removed => "badge-red",
+        WebsitePageStatus.Skipped => "badge-gray",
+        WebsitePageStatus.Duplicate => "badge-gray",
+        _ => "badge-teal"
+    };
+    var d = Model.Detail;
+}
+
+@if (!Model.ClinicConfigured || d is null)
+{
+    <div class="alert alert-warning">No clinic configured yet — see the Main Numbers page for setup steps.</div>
+}
+else
+{
+    var s = d.Source;
+    var run = s.LatestRun;
+
+    if (!string.IsNullOrEmpty(Model.StatusMessage))
+    {
+        <div class="alert alert-info mb-3">@Model.StatusMessage</div>
+    }
+    if (!string.IsNullOrEmpty(Model.ErrorMessage))
+    {
+        <div class="alert alert-warning mb-3">@Model.ErrorMessage</div>
+    }
+
+    <div class="card" style="padding:1.25rem;margin-bottom:1rem">
+        <div class="flex items-center gap-2" style="justify-content:space-between;flex-wrap:wrap">
+            <div>
+                <div style="font-weight:600;word-break:break-all">@s.StartUrl</div>
+                <div class="text-subtle" style="font-size:.8rem">
+                    @(s.CrawlMode == WebsiteCrawlMode.SinglePage ? "Single page only" : "Whole website")
+                    · category @KnowledgeCategory.Label(s.Category)
+                    · @s.IndexedPages page@(s.IndexedPages == 1 ? "" : "s") in the Knowledge Base
+                    · last scraped @(s.LastScrapedAt?.ToString("MMM d, yyyy HH:mm") ?? "never")
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <span class="badge @RunBadge(s.Status)">@RunLabel(s.Status)</span>
+                <span class="badge @(s.IsActive ? "badge-green" : "badge-gray")">@(s.IsActive ? "Active" : "Inactive")</span>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-2 mt-2" style="flex-wrap:wrap">
+            @if (s.IsActive)
+            {
+                <form method="post" asp-page-handler="Rescrape">
+                    <button type="submit" class="btn btn-primary btn-sm" disabled="@s.InProgress">Re-scrape Website</button>
+                </form>
+            }
+            <form method="post" asp-page-handler="Toggle">
+                <input type="hidden" name="active" value="@((!s.IsActive).ToString().ToLowerInvariant())" />
+                <button type="submit" class="btn btn-sm">@(s.IsActive ? "Deactivate" : "Activate")</button>
+            </form>
+            <form method="post" asp-page-handler="Delete"
+                  onsubmit="return confirm('Delete this website and ALL the Knowledge Base pages imported from it? Manual entries and uploaded documents are not affected.');">
+                <button type="submit" class="btn btn-sm" disabled="@s.InProgress">Delete</button>
+            </form>
+            <a href="/KnowledgeBase/Websites" class="btn btn-sm">All websites</a>
+        </div>
+    </div>
+
+    @if (run is not null)
+    {
+        <div class="card" style="padding:1.25rem;margin-bottom:1rem">
+            <div class="flex items-center gap-2 mb-2" style="justify-content:space-between">
+                <strong>@(s.InProgress ? "Crawl in progress" : "Latest crawl")</strong>
+                <span class="text-subtle" style="font-size:.78rem">
+                    @(run.StartedAt is null ? "Waiting to start…" : "Started " + run.StartedAt.Value.ToString("MMM d, HH:mm"))
+                    @(run.CompletedAt is { } done ? " · finished " + done.ToString("HH:mm") : "")
+                </span>
+            </div>
+            <div class="flex items-center gap-2" style="flex-wrap:wrap">
+                @foreach (var (label, value, hint) in new[]
+                {
+                    ("Discovered", run.PagesDiscovered, "URLs found on the site"),
+                    ("Processed", run.PagesProcessed, "URLs fetched and examined"),
+                    ("Indexed", run.PagesIndexed, "New + changed pages added to the Knowledge Base"),
+                    ("New", run.PagesNew, "Pages added for the first time"),
+                    ("Changed", run.PagesChanged, "Pages whose text changed and were re-indexed"),
+                    ("Unchanged", run.PagesUnchanged, "Same content as last time — left alone"),
+                    ("Skipped", run.PagesSkipped, "Not imported (robots.txt, not HTML, too little text, …)"),
+                    ("Duplicate", run.PagesDuplicate, "Same page/content as another page"),
+                    ("Failed", run.PagesFailed, "Could not be fetched or indexed"),
+                    ("Removed", run.PagesRemoved, "No longer on the website — hidden from the AI")
+                })
+                {
+                    <div title="@hint" style="min-width:92px;padding:.5rem .75rem;border:1px solid var(--border);border-radius:8px;background:var(--surface-subtle)">
+                        <div style="font-size:1.15rem;font-weight:700">@value</div>
+                        <div class="text-subtle" style="font-size:.72rem">@label</div>
+                    </div>
+                }
+            </div>
+            @if (!string.IsNullOrWhiteSpace(run.ErrorSummary))
+            {
+                <div class="alert @(run.Status == WebsiteScrapeStatus.Failed ? "alert-warning" : "alert-info") mt-2" style="font-size:.82rem;word-break:break-word">@run.ErrorSummary</div>
+            }
+        </div>
+    }
+
+    <div class="flex items-center gap-2 mb-2" style="flex-wrap:wrap">
+        <strong style="margin-right:.5rem">Pages</strong>
+        @foreach (var (value, label) in new[]
+        {
+            ("", "All"), (WebsitePageStatus.Indexed, "Indexed"), (WebsitePageStatus.Unchanged, "Unchanged"), (WebsitePageStatus.Failed, "Failed"),
+            (WebsitePageStatus.Skipped, "Skipped"), (WebsitePageStatus.Duplicate, "Duplicate"), (WebsitePageStatus.Removed, "Removed")
+        })
+        {
+            var count = value == "" ? d.PageStatusCounts.Values.Sum() : d.PageStatusCounts.GetValueOrDefault(value);
+            <a href="/KnowledgeBase/Websites/@s.Id@(value == "" ? "" : "?status=" + value)"
+               class="btn btn-sm @((Model.Status ?? "") == value ? "btn-primary" : "")">@label (@count)</a>
+        }
+    </div>
+
+    <div class="table-card table-scroll">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Page</th>
+                    <th>Status</th>
+                    <th>HTTP</th>
+                    <th>Note</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var p in Model.Pages)
+                {
+                    <tr>
+                        <td style="max-width:420px;word-break:break-all">
+                            <a href="@p.Url" target="_blank" rel="noopener noreferrer">@p.Url</a>
+                            @if (!string.IsNullOrEmpty(p.Title)) { <div class="text-subtle" style="font-size:.75rem">@p.Title</div> }
+                        </td>
+                        <td><span class="badge @PageBadge(p.Status)">@p.Status</span></td>
+                        <td>@(p.HttpStatus?.ToString() ?? "—")</td>
+                        <td style="font-size:.8rem;max-width:360px;word-break:break-word">@(p.FailureReason ?? "")</td>
+                        <td>
+                            @if (p.KnowledgeDocumentId is { } docId)
+                            {
+                                <a href="/KnowledgeBase/Edit/@docId" class="btn btn-sm">View entry</a>
+                            }
+                        </td>
+                    </tr>
+                }
+                @if (Model.Pages.Count == 0)
+                {
+                    <tr class="empty-row"><td colspan="5">@(s.InProgress ? "Crawling — pages will appear here as they are processed." : "No pages to show.")</td></tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    @if (d.RecentRuns.Count > 1)
+    {
+        <h3 style="margin:1.25rem 0 .5rem;font-size:.95rem">Crawl history</h3>
+        <div class="table-card table-scroll">
+            <table class="data-table">
+                <thead><tr><th>Started</th><th>Status</th><th>Discovered</th><th>New</th><th>Changed</th><th>Unchanged</th><th>Failed</th><th>Removed</th></tr></thead>
+                <tbody>
+                    @foreach (var r in d.RecentRuns)
+                    {
+                        <tr>
+                            <td>@(r.StartedAt?.ToString("MMM d, yyyy HH:mm") ?? r.CreatedAt.ToString("MMM d, yyyy HH:mm"))</td>
+                            <td><span class="badge @RunBadge(r.Status)">@RunLabel(r.Status)</span></td>
+                            <td>@r.PagesDiscovered</td><td>@r.PagesNew</td><td>@r.PagesChanged</td><td>@r.PagesUnchanged</td><td>@r.PagesFailed</td><td>@r.PagesRemoved</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+
+    @if (s.InProgress)
+    {
+        <script>setTimeout(function () { location.reload(); }, 3000);</script>
+    }
+}

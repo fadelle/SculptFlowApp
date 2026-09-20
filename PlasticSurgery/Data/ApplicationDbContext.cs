@@ -40,6 +40,9 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
     public DbSet<KnowledgeDocument> KnowledgeDocuments => Set<KnowledgeDocument>();
     public DbSet<KnowledgeChunk> KnowledgeChunks => Set<KnowledgeChunk>();
     public DbSet<KnowledgeSearchSettings> KnowledgeSearchSettings => Set<KnowledgeSearchSettings>();
+    public DbSet<KnowledgeWebsiteSource> KnowledgeWebsiteSources => Set<KnowledgeWebsiteSource>();
+    public DbSet<KnowledgeWebsitePage> KnowledgeWebsitePages => Set<KnowledgeWebsitePage>();
+    public DbSet<KnowledgeWebsiteScrapeRun> KnowledgeWebsiteScrapeRuns => Set<KnowledgeWebsiteScrapeRun>();
     public DbSet<ClinicUser> ClinicUsers => Set<ClinicUser>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -660,6 +663,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.Property(x => x.OriginalFileName).HasColumnName("original_file_name").HasMaxLength(255);
             e.Property(x => x.MimeType).HasColumnName("mime_type").HasMaxLength(100);
             e.Property(x => x.FileSizeBytes).HasColumnName("file_size_bytes");
+            e.Property(x => x.SourceUrl).HasColumnName("source_url").HasMaxLength(2000);
             e.Property(x => x.IsActive).HasColumnName("is_active");
             e.Property(x => x.CreatedAt).HasColumnName("created_at");
             e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
@@ -670,6 +674,94 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.HasIndex(x => x.ClinicId);
             e.HasIndex(x => x.Category);
             e.HasIndex(x => x.IsActive);
+        });
+
+        // Website scraping (see Integrations/Knowledge/WebScraping): crawl STATE only — no text, no vectors.
+        modelBuilder.Entity<KnowledgeWebsiteSource>(e =>
+        {
+            e.ToTable("knowledge_website_sources");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.ClinicId).HasColumnName("clinic_id");
+            e.Property(x => x.StartUrl).HasColumnName("start_url").HasMaxLength(2000).IsRequired();
+            e.Property(x => x.NormalizedStartUrl).HasColumnName("normalized_start_url").HasMaxLength(2000).IsRequired();
+            e.Property(x => x.Host).HasColumnName("host").HasMaxLength(255).IsRequired();
+            e.Property(x => x.CrawlMode).HasColumnName("crawl_mode").HasMaxLength(20).IsRequired();
+            e.Property(x => x.Category).HasColumnName("category").HasMaxLength(50).IsRequired();
+            e.Property(x => x.IsActive).HasColumnName("is_active");
+            e.Property(x => x.Status).HasColumnName("status").HasMaxLength(30).IsRequired();
+            e.Property(x => x.LastScrapedAt).HasColumnName("last_scraped_at");
+            e.Property(x => x.BoilerplateBlockHashes).HasColumnName("boilerplate_block_hashes").HasColumnType("jsonb");
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+            e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
+
+            e.HasOne<Clinic>().WithMany().HasForeignKey(x => x.ClinicId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(x => new { x.ClinicId, x.NormalizedStartUrl }).IsUnique().HasDatabaseName("ux_kws_clinic_start_url");
+            e.HasIndex(x => x.ClinicId).HasDatabaseName("ix_kws_clinic_id");
+        });
+
+        modelBuilder.Entity<KnowledgeWebsitePage>(e =>
+        {
+            e.ToTable("knowledge_website_pages");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.ClinicId).HasColumnName("clinic_id");
+            e.Property(x => x.WebsiteSourceId).HasColumnName("website_source_id");
+            e.Property(x => x.Url).HasColumnName("url").HasMaxLength(2000).IsRequired();
+            e.Property(x => x.NormalizedUrl).HasColumnName("normalized_url").HasMaxLength(2000).IsRequired();
+            e.Property(x => x.CanonicalUrl).HasColumnName("canonical_url").HasMaxLength(2000);
+            e.Property(x => x.Title).HasColumnName("title").HasMaxLength(500);
+            e.Property(x => x.HttpStatus).HasColumnName("http_status");
+            e.Property(x => x.ContentType).HasColumnName("content_type").HasMaxLength(200);
+            e.Property(x => x.ContentHash).HasColumnName("content_hash").HasMaxLength(64);
+            e.Property(x => x.ETag).HasColumnName("etag").HasMaxLength(500);
+            e.Property(x => x.LastModifiedHeader).HasColumnName("last_modified_header").HasMaxLength(100);
+            e.Property(x => x.Status).HasColumnName("status").HasMaxLength(20).IsRequired();
+            e.Property(x => x.FailureReason).HasColumnName("failure_reason");
+            e.Property(x => x.Depth).HasColumnName("depth");
+            e.Property(x => x.KnowledgeDocumentId).HasColumnName("knowledge_document_id");
+            e.Property(x => x.DuplicateOfPageId).HasColumnName("duplicate_of_page_id");
+            e.Property(x => x.Links).HasColumnName("links").HasColumnType("jsonb");
+            e.Property(x => x.MissingCount).HasColumnName("missing_count");
+            e.Property(x => x.RemovedAt).HasColumnName("removed_at");
+            e.Property(x => x.FirstDiscoveredAt).HasColumnName("first_discovered_at");
+            e.Property(x => x.LastSeenAt).HasColumnName("last_seen_at");
+            e.Property(x => x.LastScrapedAt).HasColumnName("last_scraped_at");
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+            e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
+
+            e.HasOne<KnowledgeWebsiteSource>().WithMany().HasForeignKey(x => x.WebsiteSourceId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<KnowledgeDocument>().WithMany().HasForeignKey(x => x.KnowledgeDocumentId).OnDelete(DeleteBehavior.SetNull);
+            e.HasIndex(x => new { x.WebsiteSourceId, x.NormalizedUrl }).IsUnique().HasDatabaseName("ux_kwp_source_normalized_url");
+            e.HasIndex(x => x.ClinicId).HasDatabaseName("ix_kwp_clinic_id");
+            e.HasIndex(x => new { x.WebsiteSourceId, x.Status }).HasDatabaseName("ix_kwp_source_status");
+        });
+
+        modelBuilder.Entity<KnowledgeWebsiteScrapeRun>(e =>
+        {
+            e.ToTable("knowledge_website_scrape_runs");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.ClinicId).HasColumnName("clinic_id");
+            e.Property(x => x.WebsiteSourceId).HasColumnName("website_source_id");
+            e.Property(x => x.Status).HasColumnName("status").HasMaxLength(30).IsRequired();
+            e.Property(x => x.StartedAt).HasColumnName("started_at");
+            e.Property(x => x.CompletedAt).HasColumnName("completed_at");
+            e.Property(x => x.PagesDiscovered).HasColumnName("pages_discovered");
+            e.Property(x => x.PagesProcessed).HasColumnName("pages_processed");
+            e.Property(x => x.PagesIndexed).HasColumnName("pages_indexed");
+            e.Property(x => x.PagesNew).HasColumnName("pages_new");
+            e.Property(x => x.PagesChanged).HasColumnName("pages_changed");
+            e.Property(x => x.PagesUnchanged).HasColumnName("pages_unchanged");
+            e.Property(x => x.PagesSkipped).HasColumnName("pages_skipped");
+            e.Property(x => x.PagesDuplicate).HasColumnName("pages_duplicate");
+            e.Property(x => x.PagesFailed).HasColumnName("pages_failed");
+            e.Property(x => x.PagesRemoved).HasColumnName("pages_removed");
+            e.Property(x => x.ErrorSummary).HasColumnName("error_summary");
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+
+            e.HasOne<KnowledgeWebsiteSource>().WithMany().HasForeignKey(x => x.WebsiteSourceId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(x => x.ClinicId).HasDatabaseName("ix_kwr_clinic_id");
         });
 
         modelBuilder.Entity<KnowledgeChunk>(e =>

@@ -58,6 +58,7 @@ builder.Services.AddScoped<IEventLogger, EventLogger>();
 builder.Services.AddScoped<IClinicContext, ClinicContext>();
 builder.Services.AddScoped<ICurrentClinicContext, CurrentClinicContext>();
 builder.Services.AddScoped<IClinicRegistrationService, ClinicRegistrationService>();
+builder.Services.AddScoped<IStaffService, StaffService>();
 builder.Services.AddScoped<ILeadService, LeadService>();
 builder.Services.AddScoped<IProcedureService, ProcedureService>();
 builder.Services.AddScoped<IAppointmentService, AppointmentService>();
@@ -89,6 +90,30 @@ builder.Services.AddHttpClient<IEmbeddingService, OpenAiEmbeddingService>();
 builder.Services.AddSingleton<IDocumentTextExtractor, DocumentTextExtractor>();
 builder.Services.AddScoped<IKnowledgeService, KnowledgeService>();
 builder.Services.AddScoped<IKnowledgeSearchService, KnowledgeSearchService>();
+
+// Knowledge Base WEBSITE SCRAPING — a standalone ingestion subsystem (Integrations/Knowledge/WebScraping). It owns
+// crawling/URL identity/fetching/extraction/page state/change detection and hands clean text to IKnowledgeService,
+// so pages flow through the SAME chunking/embedding/search as manual entries and uploads.
+builder.Services.AddSingleton(sp => PlasticSurgery.Integrations.Knowledge.WebScraping.WebsiteScrapeOptions.Resolve(sp.GetRequiredService<IConfiguration>()));
+builder.Services.AddSingleton<PlasticSurgery.Integrations.Knowledge.WebScraping.SsrfGuard>();
+builder.Services.AddSingleton<PlasticSurgery.Integrations.Knowledge.WebScraping.IHtmlContentExtractor, PlasticSurgery.Integrations.Knowledge.WebScraping.HtmlContentExtractor>();
+builder.Services.AddSingleton<PlasticSurgery.Integrations.Knowledge.WebScraping.IWebsiteScrapeQueue, PlasticSurgery.Integrations.Knowledge.WebScraping.WebsiteScrapeQueue>();
+builder.Services.AddHttpClient<PlasticSurgery.Integrations.Knowledge.WebScraping.IWebsiteFetchClient, PlasticSurgery.Integrations.Knowledge.WebScraping.WebsiteFetchClient>(client =>
+    {
+        client.Timeout = Timeout.InfiniteTimeSpan; // per-request timeouts are enforced by the fetch client
+    })
+    .ConfigurePrimaryHttpMessageHandler(sp => new SocketsHttpHandler
+    {
+        AllowAutoRedirect = false,                                   // redirects are followed manually so each hop is re-validated
+        UseCookies = false,
+        UseProxy = false,                                            // no proxy: the SSRF guard must see the real destination
+        AutomaticDecompression = System.Net.DecompressionMethods.All,
+        PooledConnectionLifetime = TimeSpan.FromMinutes(2),
+        ConnectCallback = sp.GetRequiredService<PlasticSurgery.Integrations.Knowledge.WebScraping.SsrfGuard>().ConnectAsync
+    });
+builder.Services.AddScoped<PlasticSurgery.Integrations.Knowledge.WebScraping.IWebsiteScrapeProcessor, PlasticSurgery.Integrations.Knowledge.WebScraping.WebsiteScrapeProcessor>();
+builder.Services.AddScoped<PlasticSurgery.Integrations.Knowledge.WebScraping.IWebsiteSourceService, PlasticSurgery.Integrations.Knowledge.WebScraping.WebsiteSourceService>();
+builder.Services.AddHostedService<PlasticSurgery.Integrations.Knowledge.WebScraping.WebsiteScrapeWorker>();
 
 // Unified raw Meta WhatsApp webhook endpoint — see Integrations/WhatsApp/MetaWebhookProcessor.cs.
 // The Handlers are thin adapters over the services already registered above; registering them here
