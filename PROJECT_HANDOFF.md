@@ -102,8 +102,17 @@ WEBHOOK:  Meta phone_number_id / WABA id → channel_integrations → clinic_id 
   explicit cookie auth. Password policy: non-alphanumeric not required.
 - Pages `Account/Login|Register|Logout` are hand-rolled (`Layout = null`); restyled this session: centered
   brand row (`.auth-brand`), full-width taller submit button (`.auth-submit`), centered footer text.
-  Register links a new user to the default clinic (`Clinic:DefaultSlug`, default `demo-clinic`) — no
-  clinic-creation wizard.
+  **Registration = NEW USER → NEW CLINIC** (open signup; uncommitted): fields Full name, Clinic name, Email,
+  Password, Confirm password. `ClinicRegistrationService` runs ONE transaction: Identity user → `full_name`
+  claim (identity_user_claims) → `clinics` row (slug from the name — lowercase ASCII, accents stripped,
+  hyphenated, `-2`/random suffix on collision; `email` = the user's email, phone/address blank) →
+  `clinic_users` membership → default `knowledge_search_settings` row; any failure rolls everything back (no
+  orphan user/clinic; verified with an injected mid-transaction failure). Then it signs the user in and redirects to
+  `/dashboard`. Registration can never join an existing clinic (joining will be a separate invitation/staff flow —
+  not built). `Clinic:DefaultSlug` and `IClinicContext.GetDefaultClinicAsync` were removed. A new clinic starts
+  fully empty and isolated (verified: no demo/other-clinic leads, conversations, messages, appointments,
+  procedures, KB, campaigns or channel connections; 404 on every cross-clinic id). **No email verification,
+  CAPTCHA or rate limiting** on signup yet — anyone who can reach the site can create a clinic.
 - `DashboardApiController` = `[Authorize]` base + `GetClinicIdAsync()`; used by the dashboard API
   controllers (Leads, Appointments, Procedures, Dashboard, ProcedureBookings, ChannelIntegrations,
   WhatsAppTemplates, Campaigns, WhatsAppHealth, **Knowledge**). `ConversationsController` is separate
@@ -485,7 +494,7 @@ shown), mapped onto the 3 backend audience types via two hidden fields (`Audienc
 - Meta `X-Hub-Signature-256` verification; forwarded-headers in `Program.cs`; persist DataProtection keys
 - KB: optional bulk "reindex all"; possible future HNSW index; maybe merge/retire `get_clinic_info`
 - Manual-entry integrations form doesn't register the phone number
-- Multi-clinic signup (new users all go to the default clinic)
+- Staff invitations (join an existing clinic), signup email verification/CAPTCHA/rate limiting
 - **Telegram is implemented (§23) but uncommitted/undeployed** — set `App__PublicBaseUrl` on Render, push, then test with the real bot
 
 ## 18. Important constraints / decisions
@@ -562,7 +571,8 @@ AI tools under `/api/ai/*` (§8, incl. `POST /api/ai/knowledge/search`).
   `App:PublicBaseUrl` / `App__PublicBaseUrl` — the public HTTPS origin (**required on Render**); `Telegram:ApiBaseUrl`
   is a test-only override.
 
-**Non-secret** (`appsettings.json`, overridable by env): `Clinic:DefaultSlug` (`demo-clinic`);
+**Non-secret** (`appsettings.json`, overridable by env): (`Clinic:DefaultSlug` was removed —
+registration no longer uses a default clinic; a leftover env var is harmless);
 `Meta:AppId`, `Meta:GraphApiVersion` (`v21.0`), `Meta:WhatsAppLoginConfigId`, `Meta:FacebookLoginConfigId`;
 `Embeddings:BaseUrl` (`https://api.openai.com/v1`), `Embeddings:Model` (`text-embedding-3-small`),
 `Embeddings:Dimensions` (`1536` — must equal the `vector(N)` column); `Knowledge:MaxUploadBytes` (5242880),
@@ -612,7 +622,8 @@ No migration was needed for Procedures, lead/appointment editing, or the audienc
 - [ ] Meta `X-Hub-Signature-256` verification; `UseForwardedHeaders`; persist DataProtection keys
 - [ ] Protect/decide `LeadsController.Create` (`[AllowAnonymous]`, no ingest key)
 - [ ] Manual integrations form should register the WhatsApp phone number
-- [ ] Multi-clinic signup / clinic-creation wizard
+- [ ] Staff invitations to join an existing clinic; email verification / CAPTCHA / rate limiting on signup
+- [ ] New clinics have no procedures — staff add them at `/Procedures` (no starter set is seeded)
 - [ ] Optional: KB bulk reindex; HNSW index at scale; retire `get_clinic_info`
 - [ ] Stray `webhook_test_template` template exists in the DB from earlier testing (harmless)
 

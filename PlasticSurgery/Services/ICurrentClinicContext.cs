@@ -11,11 +11,10 @@ namespace PlasticSurgery.Services;
 /// MVP assumes one active membership per user (see ClinicUser's doc comment): the first matching
 /// row wins if there's ever more than one.
 ///
-/// This is the direct replacement for the old IClinicContext.GetDefaultClinicAsync() pattern
-/// everywhere except: (1) the WhatsApp webhook path, which resolves clinic from the Meta
-/// WABA/phone_number_id instead (see Integrations/WhatsApp/MetaWebhookProcessor.cs — unaffected by
-/// this class), and (2) new-user registration, which still uses IClinicContext once to bootstrap
-/// the first clinic_users row (see Pages/Account/Register.cshtml.cs).
+/// Used everywhere except the WhatsApp/Telegram webhook paths, which resolve the clinic from the
+/// stored channel connection instead (see Integrations/WhatsApp/MetaWebhookProcessor.cs and
+/// Controllers/TelegramWebhookController.cs). New-user registration creates the clinic AND its first
+/// clinic_users row itself (see ClinicRegistrationService).
 /// </summary>
 public interface ICurrentClinicContext
 {

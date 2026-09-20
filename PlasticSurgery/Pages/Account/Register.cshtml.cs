@@ -1,41 +1,42 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
-using PlasticSurgery.Data;
-using PlasticSurgery.Data.Entities;
 using PlasticSurgery.Services;
 
 namespace PlasticSurgery.Pages.Account;
 
 /// <summary>
-/// This MVP has no clinic-creation/signup wizard, so every newly registered user is linked to the
-/// single clinic IClinicContext.GetDefaultClinicAsync() resolves (the "Clinic:DefaultSlug" config
-/// key) — the one remaining caller of that method. If this app ever needs real multi-clinic signup,
-/// this is the one place that changes; nothing downstream cares how a user got linked to a clinic,
-/// only that clinic_users has a row (see ICurrentClinicContext).
+/// Registration always creates a NEW clinic for the new user (see IClinicRegistrationService) — it can
+/// never attach an account to an existing clinic. Joining an existing clinic will be a separate
+/// invitation/staff flow. The page only collects the form and signs the user in; the clinic, membership
+/// and default settings are created atomically by the service.
 /// </summary>
 public class RegisterModel : PageModel
 {
-    private readonly UserManager<IdentityUser> _userManager;
+    private readonly IClinicRegistrationService _registration;
     private readonly SignInManager<IdentityUser> _signInManager;
-    private readonly IClinicContext _clinicContext;
-    private readonly ApplicationDbContext _db;
 
-    public RegisterModel(
-        UserManager<IdentityUser> userManager, SignInManager<IdentityUser> signInManager,
-        IClinicContext clinicContext, ApplicationDbContext db)
+    public RegisterModel(IClinicRegistrationService registration, SignInManager<IdentityUser> signInManager)
     {
-        _userManager = userManager;
+        _registration = registration;
         _signInManager = signInManager;
-        _clinicContext = clinicContext;
-        _db = db;
     }
+
+    [BindProperty]
+    public string FullName { get; set; } = string.Empty;
+
+    [BindProperty]
+    public string ClinicName { get; set; } = string.Empty;
 
     [BindProperty]
     public string Email { get; set; } = string.Empty;
 
+    // Passwords are deliberately never echoed back into the form after a failed attempt.
     [BindProperty]
     public string Password { get; set; } = string.Empty;
+
+    [BindProperty]
+    public string ConfirmPassword { get; set; } = string.Empty;
 
     [BindProperty(SupportsGet = true)]
     public string? ReturnUrl { get; set; }
@@ -48,41 +49,16 @@ public class RegisterModel : PageModel
 
     public async Task<IActionResult> OnPostAsync(CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(Email) || string.IsNullOrWhiteSpace(Password))
+        var result = await _registration.RegisterAsync(
+            new RegisterClinicRequest(FullName, ClinicName, Email, Password, ConfirmPassword), ct);
+
+        if (!result.Succeeded)
         {
-            ErrorMessage = "Email and password are required.";
+            ErrorMessage = string.Join(" ", result.Errors);
             return Page();
         }
 
-        var clinic = await _clinicContext.GetDefaultClinicAsync(ct);
-        if (clinic is null)
-        {
-            ErrorMessage = "No clinic is configured yet — run Database/schema.sql and seed.sql, " +
-                            "or set Clinic:DefaultSlug to an existing clinic's slug, before registering.";
-            return Page();
-        }
-
-        var user = new IdentityUser { UserName = Email, Email = Email };
-        var createResult = await _userManager.CreateAsync(user, Password);
-        if (!createResult.Succeeded)
-        {
-            ErrorMessage = string.Join(" ", createResult.Errors.Select(e => e.Description));
-            return Page();
-        }
-
-        var now = DateTimeOffset.UtcNow;
-        _db.ClinicUsers.Add(new ClinicUser
-        {
-            Id = Guid.NewGuid(),
-            ClinicId = clinic.Id,
-            UserId = user.Id,
-            IsActive = true,
-            CreatedAt = now,
-            UpdatedAt = now
-        });
-        await _db.SaveChangesAsync(ct);
-
-        await _signInManager.SignInAsync(user, isPersistent: true);
+        await _signInManager.SignInAsync(result.User!, isPersistent: true);
 
         return LocalRedirect(Url.IsLocalUrl(ReturnUrl) ? ReturnUrl! : "/dashboard");
     }

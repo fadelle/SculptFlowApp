@@ -26,17 +26,33 @@
 
             <form method="post" class="integration-form">
                 <label class="field">
+                    <span>Full name</span>
+                    <input type="text" name="FullName" value="@Model.FullName" class="text-input" autocomplete="name" maxlength="200" required autofocus />
+                </label>
+                <label class="field">
+                    <span>Clinic name</span>
+                    <input type="text" name="ClinicName" value="@Model.ClinicName" class="text-input" autocomplete="organization" maxlength="200" required
+                           placeholder="e.g. Glow Aesthetic Clinic" />
+                </label>
+                <label class="field">
                     <span>Email</span>
-                    <input type="email" name="Email" value="@Model.Email" class="text-input" autocomplete="username" required autofocus />
+                    <input type="email" name="Email" value="@Model.Email" class="text-input" autocomplete="username" required />
                 </label>
                 <label class="field">
                     <span>Password</span>
                     <input type="password" name="Password" class="text-input" autocomplete="new-password" required minlength="6" />
                 </label>
+                <label class="field">
+                    <span>Confirm password</span>
+                    <input type="password" name="ConfirmPassword" class="text-input" autocomplete="new-password" required minlength="6" />
+                </label>
 
                 <button type="submit" class="btn btn-primary auth-submit">Create account</button>
             </form>
 
+            <p class="text-subtle auth-footer" style="margin-bottom:.5rem">
+                Creating an account sets up your own new clinic workspace.
+            </p>
             <p class="text-subtle auth-footer">
                 Already have an account? <a href="/Account/Login@(string.IsNullOrEmpty(Model.ReturnUrl) ? "" : "?ReturnUrl=" + Uri.EscapeDataString(Model.ReturnUrl))">Sign in</a>
             </p>

@@ -7,9 +7,8 @@
 @if (!Model.ClinicConfigured)
 {
     <div class="alert alert-warning">
-        No clinic found for slug "<code>@(HttpContext.RequestServices.GetService<IConfiguration>()?["Clinic:DefaultSlug"] ?? "demo-clinic")</code>".
-        Run <code>Database/schema.sql</code> then <code>Database/seed.sql</code> against your Postgres database,
-        or set <code>Clinic:DefaultSlug</code> in appsettings.json to an existing clinic's slug.
+        Your account isn't linked to a clinic yet. New accounts get their own clinic when they register;
+        an account created before that change may need a <code>clinic_users</code> row pointing at its clinic.
     </div>
 }
 else

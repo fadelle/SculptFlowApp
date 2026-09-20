@@ -57,6 +57,7 @@ builder.Services.AddAuthorization();
 builder.Services.AddScoped<IEventLogger, EventLogger>();
 builder.Services.AddScoped<IClinicContext, ClinicContext>();
 builder.Services.AddScoped<ICurrentClinicContext, CurrentClinicContext>();
+builder.Services.AddScoped<IClinicRegistrationService, ClinicRegistrationService>();
 builder.Services.AddScoped<ILeadService, LeadService>();
 builder.Services.AddScoped<IProcedureService, ProcedureService>();
 builder.Services.AddScoped<IAppointmentService, AppointmentService>();
