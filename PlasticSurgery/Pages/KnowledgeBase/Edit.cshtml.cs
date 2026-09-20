@@ -76,6 +76,16 @@ public class EditModel : PageModel
 
     public string? ErrorMessage { get; set; }
 
+    /// <summary>Where the user came from (e.g. a website's page list opens "View entry" with this set) so Cancel and a
+    /// successful Save go back there instead of the main list. Only local Knowledge Base addresses are honored.</summary>
+    [BindProperty(SupportsGet = true)]
+    public string? ReturnUrl { get; set; }
+
+    public string BackUrl =>
+        !string.IsNullOrEmpty(ReturnUrl) && Url.IsLocalUrl(ReturnUrl) && ReturnUrl.StartsWith("/KnowledgeBase", StringComparison.OrdinalIgnoreCase)
+            ? ReturnUrl
+            : "/KnowledgeBase";
+
     /// <summary>The standard categories, plus the entry's own if it was saved with a custom one.</summary>
     public IReadOnlyList<(string Value, string Label)> CategoryOptions =>
         KnowledgeCategory.All.Any(c => c.Value == Category) || string.IsNullOrWhiteSpace(Category)
@@ -202,7 +212,7 @@ public class EditModel : PageModel
             }
 
             TempData["StatusMessage"] = "Saved.";
-            return RedirectToPage("/KnowledgeBase/Index");
+            return LocalRedirect(BackUrl); // back to where the user came from (the main list, or a website's page)
         }
         catch (ArgumentException ex)
         {
