@@ -83,7 +83,7 @@ public class DetailsModel : PageModel
         {
             if (!await _websites.DeleteAsync(clinic.Id, Id, ct)) return NotFound();
             TempData["StatusMessage"] = "Website and its imported pages deleted.";
-            return Redirect("/KnowledgeBase/Websites");
+            return Redirect("/KnowledgeBase");
         }
         catch (ArgumentException ex)
         {

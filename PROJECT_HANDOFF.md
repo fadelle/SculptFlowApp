@@ -325,7 +325,7 @@ KB/vector/search). The crawler owns crawling, URL identity, fetching, extraction
 detection; the KB owns content, chunking, embeddings and search. Bridge = two small crawler-agnostic methods on
 `IKnowledgeService`: `CreateFromSourceAsync` / `ReplaceSourceContentAsync` (page text → the clinic's normal
 chunk/embed settings). UI: `/KnowledgeBase/Edit` has a 3rd tab **Website** (URL, "Crawl website" | "Single page only",
-category, active); `/KnowledgeBase/Websites` (list) and `/KnowledgeBase/Websites/{id}` (status, live counters,
+category, active); the main `/KnowledgeBase` list shows each website as ONE record (its scraped pages are not listed there; the record has Open/Activate-Deactivate/Delete) and clicking it opens `/KnowledgeBase/Websites/{id}` (status, live counters,
 pages + failures, Re-scrape / Deactivate / Delete, run history; auto-refreshes while running). API (login,
 clinic from `ICurrentClinicContext`): `POST/GET /api/knowledge/websites`, `GET …/{id}`, `GET …/{id}/pages?status=`,
 `POST …/{id}/rescrape|active`, `DELETE …/{id}`. **Tables** (all `clinic_id`-scoped, cascade from clinic):

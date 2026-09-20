@@ -75,7 +75,7 @@ else
                   onsubmit="return confirm('Delete this website and ALL the Knowledge Base pages imported from it? Manual entries and uploaded documents are not affected.');">
                 <button type="submit" class="btn btn-sm" disabled="@s.InProgress">Delete</button>
             </form>
-            <a href="/KnowledgeBase/Websites" class="btn btn-sm">All websites</a>
+            <a href="/KnowledgeBase" class="btn btn-sm">&larr; Back to Knowledge Base</a>
         </div>
     </div>
 
@@ -146,9 +146,11 @@ else
                 @foreach (var p in Model.Pages)
                 {
                     <tr>
-                        <td style="max-width:420px;word-break:break-all">
-                            <a href="@p.Url" target="_blank" rel="noopener noreferrer">@p.Url</a>
-                            @if (!string.IsNullOrEmpty(p.Title)) { <div class="text-subtle" style="font-size:.75rem">@p.Title</div> }
+                        <td style="max-width:440px">
+                            @* Long/encoded URLs are cut with "…" (full readable address on hover; the link itself is unchanged). *@
+                            <a href="@p.Url" target="_blank" rel="noopener noreferrer" title="@PlasticSurgery.Pages.Shared.UrlDisplayHelper.Readable(p.Url)"
+                               style="display:block;max-width:440px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">@PlasticSurgery.Pages.Shared.UrlDisplayHelper.Readable(p.Url)</a>
+                            @if (!string.IsNullOrEmpty(p.Title)) { <div class="text-subtle" style="font-size:.75rem;max-width:440px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="@p.Title">@p.Title</div> }
                         </td>
                         <td><span class="badge @PageBadge(p.Status)">@p.Status</span></td>
                         <td>@(p.HttpStatus?.ToString() ?? "—")</td>

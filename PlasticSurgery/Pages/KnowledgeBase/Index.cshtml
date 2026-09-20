@@ -1,8 +1,24 @@
 @page "/KnowledgeBase"
 @using PlasticSurgery.Data.Entities
+@using PlasticSurgery.Pages.Shared
 @model PlasticSurgery.Pages.KnowledgeBase.IndexModel
 @{
     ViewData["Title"] = "Knowledge Base";
+    string CrawlBadge(string status) => status switch
+    {
+        WebsiteScrapeStatus.Failed => "badge-red",
+        WebsiteScrapeStatus.CompletedWithErrors => "badge-amber",
+        WebsiteScrapeStatus.Crawling => "badge-teal",
+        _ => "badge-gray"
+    };
+    string CrawlLabel(string status) => status switch
+    {
+        WebsiteScrapeStatus.Pending => "Waiting to crawl",
+        WebsiteScrapeStatus.Crawling => "Crawling…",
+        WebsiteScrapeStatus.CompletedWithErrors => "Completed with errors",
+        WebsiteScrapeStatus.Failed => "Crawl failed",
+        _ => status
+    };
 }
 
 @if (!Model.ClinicConfigured)
@@ -24,11 +40,10 @@ else
         <p class="text-muted" style="margin:0;max-width:640px">
             Approved information your AI assistant can look up when patients ask about your clinic —
             FAQs, policies, doctors, pricing, preparation and recovery. Only <strong>Active</strong>
-            entries are used.
+            entries are used. A website you import shows here as one record — open it to see every page that was scraped.
         </p>
         <div class="flex items-center gap-2">
             <a href="/KnowledgeBase/Settings" class="btn btn-sm">Settings</a>
-            <a href="/KnowledgeBase/Websites" class="btn btn-sm">Websites</a>
             <a href="/KnowledgeBase/Edit" class="btn btn-primary btn-sm">Add Knowledge</a>
         </div>
     </div>
@@ -46,50 +61,93 @@ else
                 </tr>
             </thead>
             <tbody>
-                @foreach (var d in Model.Documents)
+                @foreach (var row in Model.Rows)
                 {
-                    <tr>
-                        <td><a href="/KnowledgeBase/Edit/@d.Id">@d.Title</a></td>
-                        <td>@KnowledgeCategory.Label(d.Category)</td>
-                        <td>
-                            @if (d.SourceType == KnowledgeSourceType.Upload)
-                            {
-                                <span class="badge badge-teal">Uploaded</span>
-                                <div class="text-subtle" style="font-size:.72rem">@d.OriginalFileName</div>
-                            }
-                            else if (d.SourceType == KnowledgeSourceType.Website)
-                            {
-                                <span class="badge badge-purple">Website</span>
-                                <div class="text-subtle" style="font-size:.72rem;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="@d.SourceUrl">@d.SourceUrl</div>
-                            }
-                            else
-                            {
-                                <span class="badge badge-gray">Manual</span>
-                            }
-                        </td>
-                        <td><span class="badge @(d.IsActive ? "badge-green" : "badge-gray")">@(d.IsActive ? "Active" : "Inactive")</span></td>
-                        <td>@d.UpdatedAt.ToString("MMM d, yyyy HH:mm")</td>
-                        <td>
-                            <div class="flex items-center gap-2">
-                                <a href="/KnowledgeBase/Edit/@d.Id" class="btn btn-sm">Edit</a>
-                                <form method="post" asp-page-handler="Toggle">
-                                    <input type="hidden" name="id" value="@d.Id" />
-                                    <input type="hidden" name="active" value="@((!d.IsActive).ToString().ToLowerInvariant())" />
-                                    <button type="submit" class="btn btn-sm">@(d.IsActive ? "Deactivate" : "Activate")</button>
-                                </form>
-                                <form method="post" asp-page-handler="Delete" onsubmit="return confirm('Delete this entry permanently?');">
-                                    <input type="hidden" name="id" value="@d.Id" />
-                                    <button type="submit" class="btn btn-sm">Delete</button>
-                                </form>
-                            </div>
-                        </td>
-                    </tr>
+                    if (row.Website is { } w)
+                    {
+                        @* ---------- One record per website: click to see the pages that were scraped ---------- *@
+                        <tr>
+                            <td style="max-width:380px">
+                                <a href="/KnowledgeBase/Websites/@w.Id" title="@UrlDisplayHelper.Readable(w.StartUrl)"
+                                   style="display:block;max-width:380px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">@UrlDisplayHelper.Readable(w.StartUrl)</a>
+                                <div class="text-subtle" style="font-size:.72rem">
+                                    @(w.CrawlMode == WebsiteCrawlMode.SinglePage ? "Single page" : "Whole website")
+                                    · @w.IndexedPages page@(w.IndexedPages == 1 ? "" : "s") in the Knowledge Base
+                                </div>
+                            </td>
+                            <td>@KnowledgeCategory.Label(w.Category)</td>
+                            <td><span class="badge badge-purple">Website</span></td>
+                            <td>
+                                <span class="badge @(w.IsActive ? "badge-green" : "badge-gray")">@(w.IsActive ? "Active" : "Inactive")</span>
+                                @if (w.Status != WebsiteScrapeStatus.Completed)
+                                {
+                                    <span class="badge @CrawlBadge(w.Status)" style="margin-left:.25rem">@CrawlLabel(w.Status)</span>
+                                }
+                            </td>
+                            <td>@((w.LastScrapedAt ?? w.CreatedAt).ToString("MMM d, yyyy HH:mm"))</td>
+                            <td>
+                                <div class="flex items-center gap-2">
+                                    <a href="/KnowledgeBase/Websites/@w.Id" class="btn btn-sm">Open</a>
+                                    <form method="post" asp-page-handler="ToggleWebsite">
+                                        <input type="hidden" name="id" value="@w.Id" />
+                                        <input type="hidden" name="active" value="@((!w.IsActive).ToString().ToLowerInvariant())" />
+                                        <button type="submit" class="btn btn-sm">@(w.IsActive ? "Deactivate" : "Activate")</button>
+                                    </form>
+                                    <form method="post" asp-page-handler="DeleteWebsite"
+                                          onsubmit="return confirm('Delete this website and ALL the Knowledge Base pages imported from it? Manual entries and uploaded documents are not affected.');">
+                                        <input type="hidden" name="id" value="@w.Id" />
+                                        <button type="submit" class="btn btn-sm" disabled="@w.InProgress">Delete</button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                    else if (row.Document is { } d)
+                    {
+                        @* ---------- Manual entry / uploaded document: click to edit ---------- *@
+                        <tr>
+                            <td><a href="/KnowledgeBase/Edit/@d.Id">@d.Title</a></td>
+                            <td>@KnowledgeCategory.Label(d.Category)</td>
+                            <td>
+                                @if (d.SourceType == KnowledgeSourceType.Upload)
+                                {
+                                    <span class="badge badge-teal">Uploaded</span>
+                                    <div class="text-subtle" style="font-size:.72rem">@d.OriginalFileName</div>
+                                }
+                                else
+                                {
+                                    <span class="badge badge-gray">Manual</span>
+                                }
+                            </td>
+                            <td><span class="badge @(d.IsActive ? "badge-green" : "badge-gray")">@(d.IsActive ? "Active" : "Inactive")</span></td>
+                            <td>@d.UpdatedAt.ToString("MMM d, yyyy HH:mm")</td>
+                            <td>
+                                <div class="flex items-center gap-2">
+                                    <a href="/KnowledgeBase/Edit/@d.Id" class="btn btn-sm">Edit</a>
+                                    <form method="post" asp-page-handler="Toggle">
+                                        <input type="hidden" name="id" value="@d.Id" />
+                                        <input type="hidden" name="active" value="@((!d.IsActive).ToString().ToLowerInvariant())" />
+                                        <button type="submit" class="btn btn-sm">@(d.IsActive ? "Deactivate" : "Activate")</button>
+                                    </form>
+                                    <form method="post" asp-page-handler="Delete" onsubmit="return confirm('Delete this entry permanently?');">
+                                        <input type="hidden" name="id" value="@d.Id" />
+                                        <button type="submit" class="btn btn-sm">Delete</button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                    }
                 }
-                @if (Model.Documents.Count == 0)
+                @if (Model.Rows.Count == 0)
                 {
-                    <tr class="empty-row"><td colspan="6">No knowledge yet — click "Add Knowledge" to add your first entry.</td></tr>
+                    <tr class="empty-row"><td colspan="6">No knowledge yet — click "Add Knowledge" to add your first entry, upload a document, or import a website.</td></tr>
                 }
             </tbody>
         </table>
     </div>
+
+    @if (Model.AnyWebsiteInProgress)
+    {
+        <script>setTimeout(function () { location.reload(); }, 4000);</script>
+    }
 }
