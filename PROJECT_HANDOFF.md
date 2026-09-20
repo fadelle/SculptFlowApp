@@ -1,6 +1,6 @@
 # SculptFlow (MySculptFlow) — Project Handoff
 
-_Last updated: 2026-09-19 (Telegram added). Written for session continuity — read this first after any context reset.
+_Last updated: 2026-09-20 (Telegram, KB upload, website scraping, unread tracking, self-service clinic registration, Staff page). Written for session continuity — read this first after any context reset.
 This is the ONE handoff/state file; update it in place, don't create another._
 
 > **No secrets live in this file.** Earlier versions of it (git commit `2aec468`, already on GitHub)
@@ -102,7 +102,7 @@ WEBHOOK:  Meta phone_number_id / WABA id → channel_integrations → clinic_id 
   explicit cookie auth. Password policy: non-alphanumeric not required.
 - Pages `Account/Login|Register|Logout` are hand-rolled (`Layout = null`); restyled this session: centered
   brand row (`.auth-brand`), full-width taller submit button (`.auth-submit`), centered footer text.
-  **Registration = NEW USER → NEW CLINIC** (open signup; uncommitted): fields Full name, Clinic name, Email,
+  **Registration = NEW USER → NEW CLINIC** (open signup; pushed in `48b1eb3`): fields Full name, Clinic name, Email,
   Password, Confirm password. `ClinicRegistrationService` runs ONE transaction: Identity user → `full_name`
   claim (identity_user_claims) → `clinics` row (slug from the name — lowercase ASCII, accents stripped,
   hyphenated, `-2`/random suffix on collision; `email` = the user's email, phone/address blank) →
@@ -113,7 +113,7 @@ WEBHOOK:  Meta phone_number_id / WABA id → channel_integrations → clinic_id 
   fully empty and isolated (verified: no demo/other-clinic leads, conversations, messages, appointments,
   procedures, KB, campaigns or channel connections; 404 on every cross-clinic id). **No email verification,
   CAPTCHA or rate limiting** on signup yet — anyone who can reach the site can create a clinic.
-  **Staff page** (`/Staff`, sidebar "Staff"; uncommitted): read-only list of the current clinic's `clinic_users`
+  **Staff page** (`/Staff`, sidebar "Staff"; pushed in `57cd713`): read-only list of the current clinic's `clinic_users`
   (name from the `full_name` claim, email, Active/Inactive, joined date, "You" badge) via `IStaffService`;
   `GET /api/staff` (login required, clinic from `ICurrentClinicContext`). No add/remove/invite yet.
 - `DashboardApiController` = `[Authorize]` base + `GetClinicIdAsync()`; used by the dashboard API
@@ -172,6 +172,16 @@ Meta → .NET (classify + process) → n8n (normalized trigger, only when AI sho
 - **AI reply**: `POST /api/conversations/{id}/messages/send` with `{content, sender:"ai"}` + `X-Ingest-Key`
   + `?clinicId=`; `MessageService.SendAiReplyAsync` re-checks `conversation.mode == ai` fresh from the DB
   → `409 conversation_in_human_mode` if a human took over; never flips mode.
+- **n8n wiring (as set up in this engagement)**: the **Webhook trigger node must have Authentication = None** — the app
+  POSTs to `N8n__AiWebhookUrl` without any header (a Header-Auth trigger returns 403 and the AI silently never runs);
+  use the **Production** URL (`/webhook/…`, workflow active), not the Test URL. Every call n8n makes INTO the app
+  uses a Header Auth credential `X-Ingest-Key` = `N8n__IngestApiKey` (must be set on Render — empty = every AI call
+  401). Tools are HTTP Request Tool nodes: `search_clinic_knowledge` (POST body `{clinicId, query, limit}`; only `query`
+  via `$fromAI`), `handoff_to_human` (`POST /api/ai/conversations/{conversationId}/handoff?clinicId=` body
+  `{reason}`), and the reply node (`POST /api/conversations/{conversationId}/messages/send?clinicId=` body
+  `{"content": …, "sender": "ai"}`); `conversationId`/`clinicId` come from the trigger payload. Send the reply BEFORE
+  calling handoff (a reply after handoff gets 409); treat 409 `conversation_in_human_mode` as "stop quietly" (set the node to
+  continue on error). The AI can't send once mode ≠ ai — this is by design, not a bug.
 - **AI tool surface** — `Controllers/AiController.cs`, `/api/ai/*`, `[RequireIngestKey]` (`X-Ingest-Key`),
   clinicId passed explicitly (query, or body for knowledge search):
 
@@ -203,7 +213,13 @@ Consumers: `inbox.js`, `whatsapp-templates.js`, `whatsapp-health.js`.
 - `Conversation.Mode`: `ai`/`human`/`approval` (`ConversationModeSync.Apply` is the only place that changes it).
 - `Message.Origin`: `whatsapp_customer`, `telegram_customer`, `whatsapp_business_app`, `dashboard`, `ai`, `system`, `campaign`.
   `SenderType`: `lead/ai/staff/system`. `Direction`: `inbound/outbound`.
-- **Unread tracking** (uncommitted): `conversations.last_read_at` (shared by the clinic's staff; existing rows
+- **What switches a conversation to `human`** (only these): staff **Take Over**; a staff **message** or **template** sent
+  from the Inbox; a staff reply from the **WhatsApp Business phone app** (coexistence echo); the AI's
+  **`handoff_to_human`** tool; and a **campaign template send** to that lead (so a lead a reactivation campaign
+  reaches stays human until staff click Return to AI — a deliberate-looking side effect worth revisiting). NOT
+  triggers: a customer message, an AI reply, Close, or the AI marking a lead `needs_human`/`medical_question` (that
+  only labels the lead). Only **Return to AI** switches back; `approval` is never set automatically.
+- **Unread tracking** (pushed in `2eec572`): `conversations.last_read_at` (shared by the clinic's staff; existing rows
   backfilled as read once). `ConversationListRow.UnreadCount` = inbound messages newer than it.
   `POST /api/conversations/{id}/read` (`IConversationService.MarkReadAsync`, clinic-scoped, notifies via
   `ConversationUpdated`) is called when staff open a conversation or a customer message arrives in the one already
@@ -297,7 +313,7 @@ Request `{ "clinicId": "...", "query": "...", "limit": 5 }` (limit optional); re
 `{ "results": [ { "documentId", "title", "category", "content", "score" } ] }`. 400 if clinicId/query
 missing; 503 if the embedding provider fails. No `conversationId`.
 
-**Document upload** (added after Telegram; uncommitted): staff pick *Manual Entry* or *Upload Document* on
+**Document upload** (pushed in `79a88a5`): staff pick *Manual Entry* or *Upload Document* on
 `/KnowledgeBase/Edit` (tabs; "Upload Document" button on the list opens it preselected, `?mode=upload`), or
 `POST /api/knowledge/upload` (multipart: `file`, optional `title` [defaults to file name], `category`, `isActive`).
 One file only; **PDF, DOCX, TXT**; max **5 MB** (`Knowledge:MaxUploadBytes`, clamped to ≤25 MB) and max **250,000
@@ -319,7 +335,7 @@ re-save each document. List shows a Source column (Manual / Uploaded + file name
 legacy `.doc`, password-protected PDFs (reported as unreadable). Verified locally with generated PDF/DOCX/TXT plus 15
 bad-file cases and two-clinic isolation (all 404 across clinics; upload ignores a posted `clinicId`).
 
-**Website scraping** (uncommitted): a STANDALONE ingestion subsystem in `Integrations/Knowledge/WebScraping/` — a third
+**Website scraping** (pushed in `57cd713`, UI refined in `f9b306a`/`8580cd1`): a STANDALONE ingestion subsystem in `Integrations/Knowledge/WebScraping/` — a third
 way into the SAME `knowledge_documents` → `knowledge_chunks` → embeddings → `search_clinic_knowledge` pipeline (no second
 KB/vector/search). The crawler owns crawling, URL identity, fetching, extraction, page state, runs and change
 detection; the KB owns content, chunking, embeddings and search. Bridge = two small crawler-agnostic methods on
@@ -517,11 +533,12 @@ shown), mapped onto the 3 backend audience types via two hidden fields (`Audienc
   the app sees HTTP, which may affect Meta OAuth redirect URIs / cookies.
 - **GitHub**: `https://github.com/fadelle/SculptFlowApp`, branch `main`. Commits: `2aec468` initial;
   `a0f218a` Dockerfile; `6f13697` .dockerignore; `5ff4d55` rename + sidebar clinic name; `5a0b25a`
-  login/register polish; `974f9b2` Knowledge Base; `da36238` Procedures + AI active-only.
-  **Uncommitted at time of writing**: the `knowledge_search_settings` work (entity, settings service,
-  Settings page, chunking/embedding/search changes, `schema.sql` block, `appsettings.json` `Embeddings`/
-  `Knowledge` keys, and this handoff update). The settings table is already applied to Supabase — the live
-  DB is ahead of `main` until that is pushed (Render's code still lacks the settings code).
+  login/register polish; `974f9b2` Knowledge Base; `da36238` Procedures + AI active-only; `566ca90` Telegram +
+  KB settings; `79a88a5` KB document upload; `25b23ce` remove redundant Upload button; `2eec572` Inbox unread
+  tracking; `48b1eb3` registration creates a new clinic; `57cd713` KB website scraping + Staff page; `f9b306a` one
+  KB-list record per website + URL shortening; `8580cd1` website back button / View-entry return address.
+  **Nothing was uncommitted at the time of this update** (all schema changes are applied live AND on `main`).
+  Render deploys from `main`; new env vars still to set there are listed in §17.
 - Git identity is configured; LF→CRLF warnings on commit are harmless. Commit trailer used:
   `Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>`.
 
@@ -547,7 +564,6 @@ shown), mapped onto the 3 backend audience types via two hidden fields (`Audienc
 
 - **Set `Embeddings__ApiKey` in Render** (real OpenAI-compatible key) — KB saving/search won't work in
   production without it; then tune `minimum_similarity` against real scores
-- Commit/push the uncommitted `knowledge_search_settings` work (§15)
 - Set the real `N8n__AiWebhookUrl` (notifier no-ops with a warning until then); wire the n8n
   `search_clinic_knowledge` HTTP tool (clinicId from workflow context, AI supplies only `query`)
 - **Rotate leaked secrets** (§22); close the `clinicId`-trust gap for AI endpoints
@@ -555,7 +571,7 @@ shown), mapped onto the 3 backend audience types via two hidden fields (`Audienc
 - KB: optional bulk "reindex all"; possible future HNSW index; maybe merge/retire `get_clinic_info`
 - Manual-entry integrations form doesn't register the phone number
 - Staff invitations (join an existing clinic), signup email verification/CAPTCHA/rate limiting
-- **Telegram is implemented (§23) but uncommitted/undeployed** — set `App__PublicBaseUrl` on Render, push, then test with the real bot
+- **Telegram** (§23) is pushed: set `App__PublicBaseUrl` on Render and test with the real bot; set `N8n__AiWebhookUrl` (n8n Webhook trigger must have Authentication = None) and `N8n__IngestApiKey` on Render
 
 ## 18. Important constraints / decisions
 
@@ -572,6 +588,17 @@ shown), mapped onto the 3 backend audience types via two hidden fields (`Audienc
   sync manually; extensible strings (category, campaign_type, lead source) have no CHECK, closed sets do.
 - **Secrets never in the repo or in `knowledge_search_settings`** — user-secrets locally, Render env vars in prod.
 - **Knowledge Base ≠ structured data**: procedures/lead/booking data stay in structured APIs.
+- **How features were verified**: there is NO automated test project. Each feature was tested live against the shared
+  Supabase DB using throwaway scratchpad tools (NOT in the repo): a fake Telegram Bot API + fake n8n receiver, a fake
+  OpenAI embeddings server with a call counter, a fake clinic website (`fakesite`, ports 5098/5097, with traps for
+  duplicates/redirects/robots/etc.), and `sqlrunner`; test users/clinics are registered through the real Register page
+  and deleted afterwards (`@example.com` addresses; delete events → clinics → identity_users). Test-only config:
+  `Telegram:ApiBaseUrl`, `Embeddings:BaseUrl`, and `Knowledge:WebScraping:DevAllowedHosts` (honoured ONLY in
+  Development; never set it in Production). The Bash tool chokes on apostrophes inside heredocs — write files with the
+  file tool instead. Stop the running app before `dotnet build` (it locks the exe); restart it afterwards.
+- Small UX rules already applied: KB entry pages take a validated local `returnUrl` so Cancel/Save go back to the page the
+  user came from (used by the website page's "View entry"); long/percent-encoded URLs are decoded and ellipsized
+  (`UrlDisplayHelper`).
 - Standing operating instructions: leave the app running after changes unless told to shut down; run it with
   `dotnet run --launch-profile https` (**https://localhost:7276**; the default profile is http-only :5274);
   `.cshtml`/`.cs` changes need stop → build → run. Clean up test data after live testing (shared Supabase,
@@ -660,22 +687,21 @@ Render sets `PORT` itself; the Dockerfile sets `ASPNETCORE_ENVIRONMENT`/`ASPNETC
    booked, skipped`, partial indexes
 9. **Knowledge Base**: `create extension vector`; `knowledge_documents`; `knowledge_chunks` (`vector(1536)`,
    no ANN index)
-10. **`knowledge_search_settings`** (unique `clinic_id`, 4 CHECKs, trigger) — applied live, **not yet on `main`**
+10. **`knowledge_search_settings`** (unique `clinic_id`, 4 CHECKs, trigger) — applied live and on `main`
 
 11. **Telegram**: `channel_integrations` + `telegram_bot_id`, `telegram_bot_username`, `webhook_status`,
     `webhook_registered_at`; `telegram` added to the channel CHECKs (`channel_integrations`, `conversations`) and
     `telegram_customer` to `ck_messages_origin`; partial unique `ux_channel_integrations_telegram_bot_id`
-    (connected rows only) and `ux_conversations_clinic_channel_thread` — applied live, **not yet on `main`**
+    (connected rows only) and `ux_conversations_clinic_channel_thread` — applied live and on `main`
 12. **KB document upload**: `knowledge_documents` + `source_type` (default `manual`, CHECK `manual|upload`),
-    `original_file_name`, `mime_type`, `file_size_bytes` — applied live, **not yet on `main`**
-13. **KB website scraping**: `knowledge_website_sources`, `knowledge_website_pages`, `knowledge_website_scrape_runs` (+ indexes/CHECKs/triggers); `knowledge_documents` + `source_url`, `source_type` CHECK adds `website` — applied live, **not yet on `main`**
+    `original_file_name`, `mime_type`, `file_size_bytes` — applied live and on `main`
+13. **KB website scraping**: `knowledge_website_sources`, `knowledge_website_pages`, `knowledge_website_scrape_runs` (+ indexes/CHECKs/triggers); `knowledge_documents` + `source_url`, `source_type` CHECK adds `website` — applied live and on `main`
 
 No migration was needed for Procedures, lead/appointment editing, or the audience UI.
 
 ## 22. Known TODOs
 
 - [ ] Set `Embeddings__ApiKey` in Render (real key); verify KB end-to-end with real embeddings
-- [ ] Commit + push the uncommitted settings work; update Render deploy
 - [ ] **Rotate** `Meta:WebhookVerifyToken` and `N8n:IngestApiKey` (were in git history via this file's
       first version) and update Meta + n8n; consider resetting the Supabase DB password (it was shown in
       chat) and updating user-secrets + Render
@@ -689,7 +715,7 @@ No migration was needed for Procedures, lead/appointment editing, or the audienc
 - [ ] Optional: KB bulk reindex; HNSW index at scale; retire `get_clinic_info`
 - [ ] Stray `webhook_test_template` template exists in the DB from earlier testing (harmless)
 
-## 23. Telegram integration (direct Bot API) — IMPLEMENTED, not yet committed/deployed
+## 23. Telegram integration (direct Bot API) — IMPLEMENTED and pushed (`566ca90`); needs `App__PublicBaseUrl` on Render + a real-bot test
 
 Telegram is a channel adapter alongside WhatsApp; nothing about the WhatsApp webhook/parser/sender/templates/
 health/coexistence was changed (only the shared send path was made channel-routable — see below).
