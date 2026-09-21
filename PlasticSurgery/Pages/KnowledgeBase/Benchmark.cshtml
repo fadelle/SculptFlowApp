@@ -1,0 +1,179 @@
+@page "/KnowledgeBase/Benchmark"
+@model PlasticSurgery.Pages.KnowledgeBase.BenchmarkModel
+@{
+    ViewData["Title"] = "Knowledge Retrieval Benchmark";
+}
+
+@if (!Model.ClinicConfigured)
+{
+    <div class="alert alert-warning">No clinic configured yet — see the Main Numbers page for setup steps.</div>
+}
+else
+{
+    <div class="mb-3"><a href="/KnowledgeBase" class="btn btn-sm">&larr; Back to Knowledge Base</a></div>
+
+    <p class="text-muted" style="max-width:760px;margin-top:0">
+        Measures how well your Knowledge Base <strong>search</strong> finds the right piece of information. Each test case is a realistic
+        patient question tied to the one Knowledge Base chunk that answers it; the benchmark sends the question through the real search
+        (the same one your AI assistant uses) and checks where that chunk ranks. It does not test the AI's replies — only retrieval.
+    </p>
+
+    <div id="bm-message"></div>
+
+    @* ---------- Cases summary + actions ---------- *@
+    <div class="card" style="padding:1.1rem 1.25rem">
+        <div class="flex items-center gap-2" style="justify-content:space-between;flex-wrap:wrap">
+            <div id="bm-counts" class="text-muted" style="font-size:.9rem">Loading…</div>
+            <div class="flex items-center gap-2" style="flex-wrap:wrap">
+                <button type="button" class="btn btn-sm" id="bm-generate">Generate Test Cases</button>
+                <select id="bm-scope" class="select" aria-label="Which cases to run" style="width:auto">
+                    <option value="all">All cases</option>
+                    <option value="generated">Generated cases</option>
+                    <option value="reviewed">Reviewed cases</option>
+                </select>
+                <button type="button" class="btn btn-primary btn-sm" id="bm-run">Run Benchmark</button>
+            </div>
+        </div>
+        <div id="bm-generate-note" class="text-subtle" style="font-size:.78rem;margin-top:.4rem" hidden></div>
+        <div id="bm-progress" class="bm-progress" hidden>
+            <div class="bm-progress-track"><div class="bm-progress-bar" id="bm-progress-bar"></div></div>
+            <div class="text-subtle" style="font-size:.78rem" id="bm-progress-text"></div>
+        </div>
+    </div>
+
+    @* ---------- Headline metrics of the latest completed run ---------- *@
+    <div id="bm-metrics" class="mt-3"></div>
+
+    @* ---------- Cases ---------- *@
+    <div class="mt-4">
+        <div class="flex items-center gap-2 mb-1" style="justify-content:space-between;flex-wrap:wrap">
+            <h3 class="bm-section-title">Test cases</h3>
+            <div class="flex items-center gap-2">
+                <select id="bm-case-view" class="select" aria-label="Filter cases" style="width:auto">
+                    <option value="all">All cases</option>
+                    <option value="generated">Generated</option>
+                    <option value="manual">Manual</option>
+                    <option value="reviewed">Reviewed</option>
+                    <option value="unreviewed">Not reviewed</option>
+                    <option value="stale">Stale</option>
+                </select>
+                <button type="button" class="btn btn-sm" id="bm-add-toggle">Add manual case</button>
+            </div>
+        </div>
+
+        <div class="card" id="bm-add-form" style="padding:1rem 1.25rem;max-width:760px" hidden>
+            <div class="integration-form">
+                <label class="field">
+                    <span>Patient question</span>
+                    <textarea id="bm-add-question" class="text-input" rows="2" maxlength="500" placeholder="e.g. How much time should I take off work after a nose job?"></textarea>
+                </label>
+                <label class="field">
+                    <span>Document that answers it</span>
+                    <select id="bm-add-doc" class="select"><option value="">Loading…</option></select>
+                </label>
+                <label class="field">
+                    <span>Chunk that answers it</span>
+                    <select id="bm-add-chunk" class="select" disabled><option value="">Choose a document first</option></select>
+                </label>
+                <div class="text-subtle" style="font-size:.78rem">A case you add by hand is marked Reviewed automatically.</div>
+                <div class="flex items-center gap-2">
+                    <button type="button" class="btn btn-primary btn-sm" id="bm-add-save">Add case</button>
+                    <button type="button" class="btn btn-sm" id="bm-add-cancel">Cancel</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="table-card table-scroll mt-1">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Question</th>
+                        <th>Expected document / chunk</th>
+                        <th>Type</th>
+                        <th>Reviewed</th>
+                        <th>Last result</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody id="bm-cases-body"><tr class="empty-row"><td colspan="6">Loading…</td></tr></tbody>
+            </table>
+        </div>
+        <div class="flex items-center gap-2 mt-1" id="bm-cases-pager" hidden>
+            <button type="button" class="btn btn-sm" id="bm-cases-prev">&larr; Previous</button>
+            <span class="text-subtle" style="font-size:.8rem" id="bm-cases-range"></span>
+            <button type="button" class="btn btn-sm" id="bm-cases-next">Next &rarr;</button>
+        </div>
+    </div>
+
+    @* ---------- Run history ---------- *@
+    <div class="mt-4">
+        <h3 class="bm-section-title">Run history</h3>
+        <div class="text-subtle" style="font-size:.78rem;margin-bottom:.5rem">
+            Every run is kept, with the settings it used, so you can compare runs after changing chunk size, Top K or minimum similarity.
+        </div>
+        <div class="table-card table-scroll">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Started</th>
+                        <th>Cases</th>
+                        <th>Status</th>
+                        <th>Chunk Top-1</th>
+                        <th>Chunk Top-3</th>
+                        <th>Chunk Top-5</th>
+                        <th>Chunk MRR</th>
+                        <th>Doc Top-3</th>
+                        <th>Latency</th>
+                        <th>Settings used</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody id="bm-runs-body"><tr class="empty-row"><td colspan="11">Loading…</td></tr></tbody>
+            </table>
+        </div>
+    </div>
+
+    @* ---------- Results of the selected run ---------- *@
+    <div class="mt-4" id="bm-results-section" hidden>
+        <div class="flex items-center gap-2 mb-1" style="justify-content:space-between;flex-wrap:wrap">
+            <h3 class="bm-section-title" id="bm-results-title">Run results</h3>
+            <select id="bm-result-filter" class="select" aria-label="Filter results" style="width:auto">
+                <option value="">All results</option>
+                <option value="MISS">Miss</option>
+                <option value="DOCUMENT_ONLY_HIT">Document only</option>
+                <option value="EXACT_CHUNK_HIT">Exact chunk hit</option>
+                <option value="STALE_CASE">Stale</option>
+                <option value="ERROR">Error</option>
+            </select>
+        </div>
+        <div class="table-card table-scroll">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Question</th>
+                        <th>Result</th>
+                        <th>Chunk rank</th>
+                        <th>Document rank</th>
+                        <th>Expected chunk score</th>
+                        <th>Latency</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody id="bm-results-body"></tbody>
+            </table>
+        </div>
+    </div>
+
+    @* ---------- Detail overlay (a case, or a failed-case analysis) ---------- *@
+    <div class="bm-overlay" id="bm-overlay" hidden>
+        <div class="card bm-modal" role="dialog" aria-modal="true" aria-labelledby="bm-modal-title">
+            <div class="flex items-center gap-2" style="justify-content:space-between;margin-bottom:.75rem">
+                <h3 id="bm-modal-title" style="margin:0;font-size:1.05rem">Details</h3>
+                <button type="button" class="btn btn-sm" id="bm-modal-close">Close</button>
+            </div>
+            <div id="bm-modal-body"></div>
+        </div>
+    </div>
+
+    <script src="~/js/knowledge-benchmark.js" asp-append-version="true"></script>
+}

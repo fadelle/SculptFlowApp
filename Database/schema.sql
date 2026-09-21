@@ -1151,3 +1151,155 @@ create table if not exists knowledge_website_scrape_runs (
 );
 create index if not exists ix_kwr_source_created on knowledge_website_scrape_runs(website_source_id, created_at desc);
 create index if not exists ix_kwr_clinic_id on knowledge_website_scrape_runs(clinic_id);
+
+-- =====================================================================
+-- Knowledge Base: RETRIEVAL BENCHMARK (standalone diagnostic feature)
+--
+--   knowledge_retrieval_benchmark_cases    one realistic patient question + the ONE chunk that answers it
+--   knowledge_retrieval_benchmark_runs     one benchmark execution: aggregate metrics + the settings it ran with
+--   knowledge_retrieval_benchmark_results  one row per case per run: where the expected chunk/document ranked
+--
+-- Tests ONLY retrieval (question -> embedding -> pgvector -> ranked chunks). Nothing here is read by the
+-- production search path, and no benchmark state lives on knowledge_documents / knowledge_chunks.
+--
+-- expected_document_id / expected_chunk_id are deliberately NOT foreign keys to the production tables:
+-- chunks are rebuilt (new ids) whenever a document is re-saved, and a benchmark table must never block or
+-- slow production ingestion. A case whose chunk disappeared or changed is detected in code and marked stale
+-- (is_stale / stale_reason), and excluded from scoring instead of being counted as a retrieval failure.
+-- Everything is scoped by clinic_id.
+-- =====================================================================
+create table if not exists knowledge_retrieval_benchmark_cases (
+  id                    uuid primary key default gen_random_uuid(),
+  clinic_id             uuid not null references clinics(id) on delete cascade,
+
+  question              text not null,
+
+  expected_document_id  uuid not null,
+  expected_chunk_id     uuid not null,
+
+  case_type             varchar(20) not null default 'generated',
+  is_reviewed           boolean not null default false,
+  reviewed_at           timestamptz,
+
+  -- SHA-256 (hex) of the expected chunk's content when the case was created + a short readable excerpt, so a
+  -- rebuilt/changed chunk can be detected and a stale case still shows what it was about.
+  source_chunk_hash     varchar(64),
+  source_chunk_preview  varchar(400),
+  source_document_title varchar(200),
+
+  is_stale              boolean not null default false,
+  stale_reason          varchar(30),
+
+  created_at            timestamptz not null default now(),
+  updated_at            timestamptz not null default now(),
+
+  constraint ck_kbc_case_type check (case_type in ('generated','manual')),
+  constraint ck_kbc_question_length check (char_length(question) between 1 and 1000)
+);
+create index if not exists ix_kbc_clinic_id on knowledge_retrieval_benchmark_cases(clinic_id);
+create index if not exists ix_kbc_clinic_chunk on knowledge_retrieval_benchmark_cases(clinic_id, expected_chunk_id);
+-- The same question for the same chunk is never stored twice.
+create unique index if not exists ux_kbc_clinic_chunk_question
+  on knowledge_retrieval_benchmark_cases(clinic_id, expected_chunk_id, lower(question));
+
+drop trigger if exists trg_kbc_updated_at on knowledge_retrieval_benchmark_cases;
+create trigger trg_kbc_updated_at before update on knowledge_retrieval_benchmark_cases
+  for each row execute function set_updated_at();
+
+create table if not exists knowledge_retrieval_benchmark_runs (
+  id                       uuid primary key default gen_random_uuid(),
+  clinic_id                uuid not null references clinics(id) on delete cascade,
+
+  case_scope               varchar(20) not null default 'all',
+  status                   varchar(20) not null default 'pending',
+  started_at               timestamptz,
+  completed_at             timestamptz,
+
+  total_cases              integer not null default 0,   -- cases selected by the scope
+  processed_cases          integer not null default 0,   -- progress while running
+  scored_cases             integer not null default 0,   -- evaluated (excludes stale + errored) - the metrics' denominator
+  stale_cases              integer not null default 0,
+  error_cases              integer not null default 0,
+
+  -- STRICT chunk-level metrics (the exact expected chunk) and secondary document-level metrics. 0..1, null when
+  -- nothing was scored.
+  chunk_top1_accuracy      double precision,
+  chunk_top3_accuracy      double precision,
+  chunk_top5_accuracy      double precision,
+  document_top1_accuracy   double precision,
+  document_top3_accuracy   double precision,
+  document_top5_accuracy   double precision,
+  chunk_mrr                double precision,
+  document_mrr             double precision,
+  average_latency_ms       double precision,
+
+  -- Snapshot of the retrieval settings the run used (knowledge_search_settings stays the source of truth) plus
+  -- what the index actually contained, since chunk settings only apply to entries saved after a change.
+  embedding_model          varchar(100),
+  vector_dimension         integer,
+  chunk_size_tokens        integer,
+  chunk_overlap_tokens     integer,
+  similarity_method        varchar(30),
+  top_k                    integer,
+  minimum_similarity       double precision,
+  indexed_chunk_count      integer,
+  avg_chunk_chars          double precision,
+
+  error_summary            text,
+  created_at               timestamptz not null default now(),
+
+  constraint ck_kbr_case_scope check (case_scope in ('all','generated','reviewed')),
+  constraint ck_kbr_status check (status in ('pending','running','completed','failed'))
+);
+create index if not exists ix_kbr_clinic_created on knowledge_retrieval_benchmark_runs(clinic_id, created_at desc);
+
+create table if not exists knowledge_retrieval_benchmark_results (
+  id                          uuid primary key default gen_random_uuid(),
+  clinic_id                   uuid not null references clinics(id) on delete cascade,
+  benchmark_run_id            uuid not null references knowledge_retrieval_benchmark_runs(id) on delete cascade,
+  -- set null (not cascade): deleting a case keeps the run's history intact via the snapshots below.
+  benchmark_case_id           uuid references knowledge_retrieval_benchmark_cases(id) on delete set null,
+
+  question                    text not null,
+  expected_document_id        uuid not null,
+  expected_chunk_id           uuid not null,
+  expected_document_title     varchar(200),
+  expected_chunk_preview      varchar(400),
+
+  expected_chunk_rank         integer,
+  expected_document_best_rank integer,
+  expected_chunk_score        double precision,
+  -- The expected chunk was in the top-K by similarity but scored under the clinic's minimum similarity, so
+  -- production search would not have returned it (a strict miss).
+  expected_below_threshold    boolean not null default false,
+
+  chunk_top1_pass             boolean not null default false,
+  chunk_top3_pass             boolean not null default false,
+  chunk_top5_pass             boolean not null default false,
+  document_top1_pass          boolean not null default false,
+  document_top3_pass          boolean not null default false,
+  document_top5_pass          boolean not null default false,
+
+  result_classification       varchar(30) not null,
+  stale_reason                varchar(30),
+  error_message               text,
+
+  returned_count              integer not null default 0,
+  -- Ordered top-K candidates as production search saw them (rank, ids, title, score, passed-threshold, preview).
+  retrieved_json              jsonb,
+  latency_ms                  integer,
+
+  created_at                  timestamptz not null default now(),
+
+  constraint ck_kbres_classification check (result_classification in
+    ('EXACT_CHUNK_HIT','DOCUMENT_ONLY_HIT','MISS','STALE_CASE','ERROR'))
+);
+create index if not exists ix_kbres_run on knowledge_retrieval_benchmark_results(benchmark_run_id);
+create index if not exists ix_kbres_clinic_id on knowledge_retrieval_benchmark_results(clinic_id);
+create index if not exists ix_kbres_case_created on knowledge_retrieval_benchmark_results(benchmark_case_id, created_at desc);
+
+-- Retrieval Benchmark: which generation request created a generated case. The app generates a generation_id per
+-- "Generate Test Cases" request, sends it to the n8n generator, requires it echoed back, and stores it on every case
+-- that response produced (null for manual cases and for cases created before this column existed).
+alter table knowledge_retrieval_benchmark_cases add column if not exists generation_id uuid;
+create index if not exists ix_kbc_clinic_generation on knowledge_retrieval_benchmark_cases(clinic_id, generation_id) where generation_id is not null;

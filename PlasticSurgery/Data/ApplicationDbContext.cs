@@ -43,6 +43,9 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
     public DbSet<KnowledgeWebsiteSource> KnowledgeWebsiteSources => Set<KnowledgeWebsiteSource>();
     public DbSet<KnowledgeWebsitePage> KnowledgeWebsitePages => Set<KnowledgeWebsitePage>();
     public DbSet<KnowledgeWebsiteScrapeRun> KnowledgeWebsiteScrapeRuns => Set<KnowledgeWebsiteScrapeRun>();
+    public DbSet<KnowledgeRetrievalBenchmarkCase> KnowledgeBenchmarkCases => Set<KnowledgeRetrievalBenchmarkCase>();
+    public DbSet<KnowledgeRetrievalBenchmarkRun> KnowledgeBenchmarkRuns => Set<KnowledgeRetrievalBenchmarkRun>();
+    public DbSet<KnowledgeRetrievalBenchmarkResult> KnowledgeBenchmarkResults => Set<KnowledgeRetrievalBenchmarkResult>();
     public DbSet<ClinicUser> ClinicUsers => Set<ClinicUser>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -783,6 +786,113 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
 
             e.HasIndex(x => x.ClinicId);
             e.HasIndex(x => x.KnowledgeDocumentId);
+        });
+
+        // Knowledge Retrieval Benchmark (see Integrations/Knowledge/Benchmark). Standalone diagnostic tables: the
+        // expected document/chunk ids are deliberately plain columns, not foreign keys, so benchmark data can
+        // never block or slow production ingestion (stale cases are detected in code instead).
+        modelBuilder.Entity<KnowledgeRetrievalBenchmarkCase>(e =>
+        {
+            e.ToTable("knowledge_retrieval_benchmark_cases");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.ClinicId).HasColumnName("clinic_id");
+            e.Property(x => x.Question).HasColumnName("question").IsRequired();
+            e.Property(x => x.ExpectedDocumentId).HasColumnName("expected_document_id");
+            e.Property(x => x.ExpectedChunkId).HasColumnName("expected_chunk_id");
+            e.Property(x => x.CaseType).HasColumnName("case_type").HasMaxLength(20).IsRequired();
+            e.Property(x => x.IsReviewed).HasColumnName("is_reviewed");
+            e.Property(x => x.ReviewedAt).HasColumnName("reviewed_at");
+            e.Property(x => x.GenerationId).HasColumnName("generation_id");
+            e.Property(x => x.SourceChunkHash).HasColumnName("source_chunk_hash").HasMaxLength(64);
+            e.Property(x => x.SourceChunkPreview).HasColumnName("source_chunk_preview").HasMaxLength(400);
+            e.Property(x => x.SourceDocumentTitle).HasColumnName("source_document_title").HasMaxLength(200);
+            e.Property(x => x.IsStale).HasColumnName("is_stale");
+            e.Property(x => x.StaleReason).HasColumnName("stale_reason").HasMaxLength(30);
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+            e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
+
+            e.HasOne<Clinic>().WithMany().HasForeignKey(x => x.ClinicId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(x => x.ClinicId).HasDatabaseName("ix_kbc_clinic_id");
+        });
+
+        modelBuilder.Entity<KnowledgeRetrievalBenchmarkRun>(e =>
+        {
+            e.ToTable("knowledge_retrieval_benchmark_runs");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.ClinicId).HasColumnName("clinic_id");
+            e.Property(x => x.CaseScope).HasColumnName("case_scope").HasMaxLength(20).IsRequired();
+            e.Property(x => x.Status).HasColumnName("status").HasMaxLength(20).IsRequired();
+            e.Property(x => x.StartedAt).HasColumnName("started_at");
+            e.Property(x => x.CompletedAt).HasColumnName("completed_at");
+            e.Property(x => x.TotalCases).HasColumnName("total_cases");
+            e.Property(x => x.ProcessedCases).HasColumnName("processed_cases");
+            e.Property(x => x.ScoredCases).HasColumnName("scored_cases");
+            e.Property(x => x.StaleCases).HasColumnName("stale_cases");
+            e.Property(x => x.ErrorCases).HasColumnName("error_cases");
+            e.Property(x => x.ChunkTop1Accuracy).HasColumnName("chunk_top1_accuracy");
+            e.Property(x => x.ChunkTop3Accuracy).HasColumnName("chunk_top3_accuracy");
+            e.Property(x => x.ChunkTop5Accuracy).HasColumnName("chunk_top5_accuracy");
+            e.Property(x => x.DocumentTop1Accuracy).HasColumnName("document_top1_accuracy");
+            e.Property(x => x.DocumentTop3Accuracy).HasColumnName("document_top3_accuracy");
+            e.Property(x => x.DocumentTop5Accuracy).HasColumnName("document_top5_accuracy");
+            e.Property(x => x.ChunkMrr).HasColumnName("chunk_mrr");
+            e.Property(x => x.DocumentMrr).HasColumnName("document_mrr");
+            e.Property(x => x.AverageLatencyMs).HasColumnName("average_latency_ms");
+            e.Property(x => x.EmbeddingModel).HasColumnName("embedding_model").HasMaxLength(100);
+            e.Property(x => x.VectorDimension).HasColumnName("vector_dimension");
+            e.Property(x => x.ChunkSizeTokens).HasColumnName("chunk_size_tokens");
+            e.Property(x => x.ChunkOverlapTokens).HasColumnName("chunk_overlap_tokens");
+            e.Property(x => x.SimilarityMethod).HasColumnName("similarity_method").HasMaxLength(30);
+            e.Property(x => x.TopK).HasColumnName("top_k");
+            e.Property(x => x.MinimumSimilarity).HasColumnName("minimum_similarity");
+            e.Property(x => x.IndexedChunkCount).HasColumnName("indexed_chunk_count");
+            e.Property(x => x.AvgChunkChars).HasColumnName("avg_chunk_chars");
+            e.Property(x => x.ErrorSummary).HasColumnName("error_summary");
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+
+            e.HasOne<Clinic>().WithMany().HasForeignKey(x => x.ClinicId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(x => new { x.ClinicId, x.CreatedAt }).HasDatabaseName("ix_kbr_clinic_created");
+        });
+
+        modelBuilder.Entity<KnowledgeRetrievalBenchmarkResult>(e =>
+        {
+            e.ToTable("knowledge_retrieval_benchmark_results");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.ClinicId).HasColumnName("clinic_id");
+            e.Property(x => x.BenchmarkRunId).HasColumnName("benchmark_run_id");
+            e.Property(x => x.BenchmarkCaseId).HasColumnName("benchmark_case_id");
+            e.Property(x => x.Question).HasColumnName("question").IsRequired();
+            e.Property(x => x.ExpectedDocumentId).HasColumnName("expected_document_id");
+            e.Property(x => x.ExpectedChunkId).HasColumnName("expected_chunk_id");
+            e.Property(x => x.ExpectedDocumentTitle).HasColumnName("expected_document_title").HasMaxLength(200);
+            e.Property(x => x.ExpectedChunkPreview).HasColumnName("expected_chunk_preview").HasMaxLength(400);
+            e.Property(x => x.ExpectedChunkRank).HasColumnName("expected_chunk_rank");
+            e.Property(x => x.ExpectedDocumentBestRank).HasColumnName("expected_document_best_rank");
+            e.Property(x => x.ExpectedChunkScore).HasColumnName("expected_chunk_score");
+            e.Property(x => x.ExpectedBelowThreshold).HasColumnName("expected_below_threshold");
+            e.Property(x => x.ChunkTop1Pass).HasColumnName("chunk_top1_pass");
+            e.Property(x => x.ChunkTop3Pass).HasColumnName("chunk_top3_pass");
+            e.Property(x => x.ChunkTop5Pass).HasColumnName("chunk_top5_pass");
+            e.Property(x => x.DocumentTop1Pass).HasColumnName("document_top1_pass");
+            e.Property(x => x.DocumentTop3Pass).HasColumnName("document_top3_pass");
+            e.Property(x => x.DocumentTop5Pass).HasColumnName("document_top5_pass");
+            e.Property(x => x.ResultClassification).HasColumnName("result_classification").HasMaxLength(30).IsRequired();
+            e.Property(x => x.StaleReason).HasColumnName("stale_reason").HasMaxLength(30);
+            e.Property(x => x.ErrorMessage).HasColumnName("error_message");
+            e.Property(x => x.ReturnedCount).HasColumnName("returned_count");
+            e.Property(x => x.RetrievedJson).HasColumnName("retrieved_json").HasColumnType("jsonb");
+            e.Property(x => x.LatencyMs).HasColumnName("latency_ms");
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+
+            e.HasOne<Clinic>().WithMany().HasForeignKey(x => x.ClinicId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<KnowledgeRetrievalBenchmarkRun>().WithMany().HasForeignKey(x => x.BenchmarkRunId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<KnowledgeRetrievalBenchmarkCase>().WithMany().HasForeignKey(x => x.BenchmarkCaseId).OnDelete(DeleteBehavior.SetNull);
+            e.HasIndex(x => x.BenchmarkRunId).HasDatabaseName("ix_kbres_run");
+            e.HasIndex(x => x.ClinicId).HasDatabaseName("ix_kbres_clinic_id");
+            e.HasIndex(x => new { x.BenchmarkCaseId, x.CreatedAt }).HasDatabaseName("ix_kbres_case_created");
         });
 
         // One settings row per clinic (unique clinic_id) — see KnowledgeSearchSettings.

@@ -115,6 +115,20 @@ builder.Services.AddScoped<PlasticSurgery.Integrations.Knowledge.WebScraping.IWe
 builder.Services.AddScoped<PlasticSurgery.Integrations.Knowledge.WebScraping.IWebsiteSourceService, PlasticSurgery.Integrations.Knowledge.WebScraping.WebsiteSourceService>();
 builder.Services.AddHostedService<PlasticSurgery.Integrations.Knowledge.WebScraping.WebsiteScrapeWorker>();
 
+// Knowledge RETRIEVAL BENCHMARK — a standalone diagnostic module (Integrations/Knowledge/Benchmark). It is a CLIENT of
+// IKnowledgeSearchService (the production retrieval engine registered above) and of the separate n8n benchmark-question
+// workflow; nothing in production ingestion/search depends on it, so it can be removed without touching them.
+// RemoveAllLoggers: the n8n webhook URL acts as the credential for that endpoint, so request URIs must not be logged.
+builder.Services.AddSingleton<PlasticSurgery.Integrations.Knowledge.Benchmark.IKnowledgeBenchmarkScorer, PlasticSurgery.Integrations.Knowledge.Benchmark.KnowledgeBenchmarkScorer>();
+builder.Services.AddSingleton<PlasticSurgery.Integrations.Knowledge.Benchmark.IKnowledgeBenchmarkRunQueue, PlasticSurgery.Integrations.Knowledge.Benchmark.KnowledgeBenchmarkRunQueue>();
+builder.Services.AddHttpClient<PlasticSurgery.Integrations.Knowledge.Benchmark.IKnowledgeBenchmarkGeneratorClient, PlasticSurgery.Integrations.Knowledge.Benchmark.N8nKnowledgeBenchmarkGeneratorClient>(client =>
+    {
+        client.Timeout = TimeSpan.FromMinutes(3); // the workflow answers only after an LLM has written the questions
+    })
+    .RemoveAllLoggers();
+builder.Services.AddScoped<PlasticSurgery.Integrations.Knowledge.Benchmark.IKnowledgeBenchmarkService, PlasticSurgery.Integrations.Knowledge.Benchmark.KnowledgeBenchmarkService>();
+builder.Services.AddHostedService<PlasticSurgery.Integrations.Knowledge.Benchmark.KnowledgeBenchmarkRunWorker>();
+
 // Unified raw Meta WhatsApp webhook endpoint — see Integrations/WhatsApp/MetaWebhookProcessor.cs.
 // The Handlers are thin adapters over the services already registered above; registering them here
 // just lets MetaWebhookProcessor receive them via constructor injection like everything else.

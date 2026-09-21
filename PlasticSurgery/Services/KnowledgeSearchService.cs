@@ -20,9 +20,23 @@ public class KnowledgeSearchService : IKnowledgeSearchService
 
     public async Task<KnowledgeSearchResponse> SearchAsync(Guid clinicId, string query, int? limit = null, CancellationToken ct = default)
     {
+        var ranked = await SearchRankedAsync(clinicId, query, limit, ct);
+
+        // Chunks scoring below the clinic's minimum similarity are dropped, so an unrelated query yields an
+        // empty list rather than the least-bad match.
+        var results = ranked
+            .Where(r => r.MeetsMinimumSimilarity)
+            .Select(r => new KnowledgeSearchResult(r.DocumentId, r.Title, r.Category, r.Content, Math.Round(r.Score, 4)))
+            .ToList();
+
+        return new KnowledgeSearchResponse(results);
+    }
+
+    public async Task<IReadOnlyList<RankedKnowledgeChunk>> SearchRankedAsync(Guid clinicId, string query, int? limit = null, CancellationToken ct = default)
+    {
         if (clinicId == Guid.Empty || string.IsNullOrWhiteSpace(query))
         {
-            return new KnowledgeSearchResponse(Array.Empty<KnowledgeSearchResult>());
+            return Array.Empty<RankedKnowledgeChunk>();
         }
 
         // Top K, the similarity floor and the embedding model/dimension are the clinic's persisted
@@ -36,7 +50,7 @@ public class KnowledgeSearchService : IKnowledgeSearchService
         // Clinic isolation: the WHERE clause pins clinic_id on BOTH the chunk and its document, and
         // only active documents qualify — the similarity ranking only ever sees that slice.
         var rows = await _db.Database.SqlQueryRaw<SearchRow>(
-            @"select d.id as ""DocumentId"", d.title as ""Title"", d.category as ""Category"", c.content as ""Content"",
+            @"select c.id as ""ChunkId"", d.id as ""DocumentId"", d.title as ""Title"", d.category as ""Category"", c.content as ""Content"",
                      (1 - (c.embedding <=> @q::vector))::double precision as ""Score""
               from knowledge_chunks c
               join knowledge_documents d on d.id = c.knowledge_document_id
@@ -48,16 +62,15 @@ public class KnowledgeSearchService : IKnowledgeSearchService
             new NpgsqlParameter("lim", take))
             .ToListAsync(ct);
 
-        var results = rows
-            .Where(r => r.Score >= settings.MinimumSimilarity)
-            .Select(r => new KnowledgeSearchResult(r.DocumentId, r.Title, r.Category, r.Content, Math.Round(r.Score, 4)))
+        return rows
+            .Select(r => new RankedKnowledgeChunk(
+                r.ChunkId, r.DocumentId, r.Title, r.Category, r.Content, r.Score, r.Score >= settings.MinimumSimilarity))
             .ToList();
-
-        return new KnowledgeSearchResponse(results);
     }
 
     private class SearchRow
     {
+        public Guid ChunkId { get; set; }
         public Guid DocumentId { get; set; }
         public string Title { get; set; } = string.Empty;
         public string Category { get; set; } = string.Empty;

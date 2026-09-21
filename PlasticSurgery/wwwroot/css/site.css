@@ -1181,3 +1181,25 @@ table.data-table {
 .inbox-conv-item.unread { border-left: 3px solid #2563eb; }
 .inbox-conv-item.unread .inbox-conv-name,
 .inbox-conv-item.unread .inbox-conv-preview { font-weight: 700; color: var(--text); }
+
+/* Knowledge Retrieval Benchmark (Pages/KnowledgeBase/Benchmark.cshtml, wwwroot/js/knowledge-benchmark.js) */
+.bm-section-title { margin: 0; font-size: 1.05rem; }
+.bm-subtitle { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); font-weight: 600; margin: 0 0 0.5rem; }
+.bm-metric-note { font-size: 0.78rem; color: var(--text-subtle); margin-top: 0.4rem; }
+.bm-progress { margin-top: 0.8rem; }
+.bm-progress-track { height: 8px; background: var(--badge-gray-bg); border-radius: 4px; overflow: hidden; margin-bottom: 0.3rem; }
+.bm-progress-bar { height: 100%; width: 0; background: var(--accent); transition: width 0.4s ease; }
+.bm-cell-clip { display: block; max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bm-overlay { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.45); display: flex; align-items: flex-start; justify-content: center; padding: 4vh 1rem; z-index: 100; overflow-y: auto; }
+.bm-modal { max-width: 860px; width: 100%; padding: 1.5rem; max-height: 92vh; overflow-y: auto; }
+.bm-block { background: var(--surface-subtle); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0.7rem 0.9rem; font-size: 0.85rem; white-space: pre-wrap; word-break: break-word; }
+.bm-verdict { border-radius: var(--radius-sm); padding: 0.7rem 0.9rem; font-size: 0.88rem; margin-bottom: 0.9rem; }
+.bm-verdict.ok { background: var(--badge-green-bg); color: var(--badge-green-text); }
+.bm-verdict.partial { background: var(--badge-amber-bg); color: var(--badge-amber-text); }
+.bm-verdict.bad { background: var(--badge-red-bg); color: var(--badge-red-text); }
+.bm-verdict.neutral { background: var(--badge-gray-bg); color: var(--badge-gray-text); }
+.bm-retrieved td { white-space: normal; vertical-align: top; }
+.bm-retrieved tr.expected-chunk td { background: var(--badge-green-bg); }
+.bm-retrieved tr.expected-doc td { background: var(--badge-amber-bg); }
+.bm-retrieved tr.dropped td { color: var(--text-subtle); }
+.bm-clickable { cursor: pointer; }

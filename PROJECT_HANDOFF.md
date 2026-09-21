@@ -164,7 +164,9 @@ Interactive replies normalize to `messageText` = visible title, `selectedValue` 
 Meta → .NET (classify + process) → n8n (normalized trigger, only when AI should reply) → AI Agent → AI tools → .NET
 ```
 
-- **Outbound trigger** (`Services/IAiTriggerNotifier.cs`) → `N8n:AiWebhookUrl` (**still unset**). Payload as
+- **Outbound trigger** (`Services/IAiTriggerNotifier.cs`) → `N8n:AiWebhookUrl` (set on Render; the owner confirmed
+  the Render env vars — `App__PublicBaseUrl`, `N8n__AiWebhookUrl`, `N8n__IngestApiKey`, `Embeddings__ApiKey` — are all
+  populated and working). Payload as
   actually coded: `clinicId, conversationId, leadId, messageId, channel, messageType, messageText,
   selectedValue`. (The owner has described n8n as receiving only `clinicId`; the code sends more —
   don't change it without being asked. Note `get_lead_context` needs a `leadId` and
@@ -200,6 +202,9 @@ Meta → .NET (classify + process) → n8n (normalized trigger, only when AI sho
 Rule of thumb (documented in `AiController`'s class comment): **Knowledge Base = information;
 structured APIs = live data and actions.** The KB is never the source of truth for lead data,
 availability, bookings, conversation state or handoff.
+
+A **second, separate n8n workflow** exists only for the Retrieval Benchmark's question generator
+(`N8n:KnowledgeBenchmarkWebhookUrl`, §11) — it is not the patient AI workflow and shares nothing with it.
 
 ## 9. SignalR
 
@@ -408,8 +413,64 @@ services `IEmbeddingService`+`OpenAiEmbeddingService`, `KnowledgeChunkingService
 **Testing done** (with the local `fakeembed` stub, not a real key): chunking, ranking, top-k ceiling,
 min-similarity, inactive exclusion, empty results, edit/deactivate/reactivate/delete, cross-clinic
 isolation, unique constraint, CHECK constraints, provider-down → 503, persisted model/dim really used.
-**Not yet verified with a real OpenAI key**: real similarity scores are distributed differently than the
-stub's — if real searches come back empty, lower `minimum_similarity` (≈0.2) on the Settings page.
+**Real OpenAI key**: now set on Render and confirmed working by the owner. Real similarity scores are distributed
+differently than the local stub's — tune `minimum_similarity` against the Retrieval Benchmark (below) rather than by guess.
+
+### Retrieval Benchmark (Knowledge Base → **Benchmark**, `/KnowledgeBase/Benchmark`) — built, NOT yet committed/pushed
+
+Measures ONLY retrieval (question → query embedding → the existing pgvector search → ranked chunks). It does not call the
+patient AI agent, does not judge answers, and no LLM scores anything — scoring is deterministic (ids + ranks).
+The only AI involved is the separate n8n workflow that WRITES the benchmark questions.
+
+- **One retrieval implementation.** The one production change: `IKnowledgeSearchService` gained `SearchRankedAsync`
+  (returns every top-K candidate WITH its chunk id and whether it cleared `minimum_similarity`); `SearchAsync` (what
+  `search_clinic_knowledge` uses) is now that list filtered to the ones that cleared it — output unchanged (verified: identical
+  docs/order/scores). The benchmark calls this same service with the clinic's current settings; production search never
+  references the benchmark, so it can be removed/disabled without touching search.
+- **Module** `Integrations/Knowledge/Benchmark/`: `KnowledgeBenchmarkService` (orchestration: sampling, validation, cases,
+  stale detection, runs, reads), `N8nKnowledgeBenchmarkGeneratorClient` (only sends chunks / parses questions),
+  `KnowledgeBenchmarkScorer` (pure), `KnowledgeBenchmarkRunWorker` + queue (background runs, restart-recoverable like the
+  crawler). Controller `KnowledgeBenchmarkController` (`api/knowledge/benchmark`, `[Authorize]`, clinic from
+  `CurrentClinicContext`, thin). Entities `Data/Entities/KnowledgeRetrievalBenchmark.cs`; DTOs `Dtos/KnowledgeBenchmarkDtos.cs`;
+  UI `Pages/KnowledgeBase/Benchmark.cshtml` + `wwwroot/js/knowledge-benchmark.js` (all server text via `textContent`).
+- **Cases**: a realistic patient question + the ONE expected chunk (`expected_document_id`, `expected_chunk_id`, kept as plain
+  columns — deliberately NOT FKs, so production ingestion is never blocked; plus `source_chunk_hash` SHA-256 and a preview).
+  `case_type` generated|manual; `is_reviewed` (a manual case is reviewed automatically). **Generate Test Cases** samples 20
+  active chunks of the current clinic (≥80 chars, none that already have a case or whose text already has one, spread
+  across documents, random) and POSTs `{clinicId, chunks:[{documentId, chunkId, documentTitle, content}]}` to
+  `N8n:KnowledgeBenchmarkWebhookUrl` (env `N8n__KnowledgeBenchmarkWebhookUrl`; the webhook must respond AFTER generating, i.e.
+  "Respond to Webhook"; ~3 min timeout; no auth header, like the AI trigger). The payload also carries a **`generationId`**
+  (a new GUID per request, stored on every case it creates, filterable via `GET …/cases?generationId=`); n8n must **echo it
+  back**: expected reply `{generationId, questions:[{documentId, chunkId, question}]}` (also accepted: the same wrapped in a
+  one-element array). A missing or different `generationId` discards the whole reply (502) — it proves the reply belongs to
+  this request. **Every returned id is untrusted**: rejected unless it
+  was in the request, matches its document, and re-checks against the DB for THIS clinic; empty/over-500-char/duplicate
+  questions are rejected too; the response lists each rejection with its reason. No URL set → the button is disabled (503);
+  generator failure → 502 with a readable message; production search is unaffected either way.
+- **Stale cases** (chunk ids change whenever a document is re-saved): re-checked on dashboard/list/run. Stale = chunk id gone
+  (`chunk_missing`), text hash changed (`chunk_changed`) or its document inactive (`document_inactive`). If the text simply
+  moved to a new id, the case is auto-RELINKED (exactly one active chunk with the same hash) and stays live. Stale cases are
+  recorded in a run as `STALE_CASE` but excluded from every metric — never counted as failures.
+- **Runs** (`all|generated|reviewed`; "reviewed" = any reviewed case, generated or manual): `POST …/runs` returns 202, a
+  worker executes one at a time (a second start → 409). Each question goes through `SearchRankedAsync` with the clinic's CURRENT
+  settings (real Top K and minimum similarity — nothing is bypassed). **Strict chunk scoring**: rank = 1-based position of the
+  exact expected chunk (must match chunk id AND document id) among the chunks search RETURNED; Hit@1/3/5 = rank ≤ N;
+  MRR = mean(1/rank, 0 if not returned). **Document scoring** (secondary): best rank of any returned chunk from the expected
+  document; same Hit@K/MRR. Classification: `EXACT_CHUNK_HIT` / `DOCUMENT_ONLY_HIT` (right document, chunk not returned — never
+  counts as a chunk hit) / `MISS` / `STALE_CASE` / `ERROR` (retrieval call failed — not scored; 5 in a row aborts the run).
+  A chunk that made the top-K but scored under the minimum similarity is a strict MISS and is flagged
+  `expected_below_threshold` with its real score. Latency = question → ranked chunks (includes the embedding call).
+- **Each run snapshots** embedding model, dimension, chunk size/overlap, similarity method, Top K, minimum similarity, plus how many
+  active chunks were indexed and their average length (chunk settings only apply to entries saved after a change, so the
+  snapshot shows what was actually indexed). Every run + its per-case results (with the ordered retrieved list as jsonb) is
+  kept for comparison; deleting a case keeps past results (snapshots; FK set null). The failed-case view shows the verdict,
+  the settings, and the ranked chunks with the expected chunk/document highlighted and below-threshold ones marked dropped.
+- **Cost/limits**: a run makes one embedding call per non-stale case; a generation makes one n8n (LLM) call — no server-side throttling
+  beyond one active run per clinic. No roles: any clinic user can generate/run.
+- **Tests** (throwaway scratchpad harness, no test project exists): 38 pure checks (scorer incl. the spec's rank-1/rank-2/doc-only/miss
+  examples, aggregates, response parsing) + 118 live end-to-end checks against the real DB with a fake n8n and the fake embedder
+  (deterministic ranks/metrics, production-parity, 20-chunk payload, hostile n8n reply, stale/relink/deactivate/delete, scopes, 409,
+  threshold, history, edit/review/delete, cross-clinic isolation) — all pass; UI exercised in the built-in browser. Test clinics deleted.
 
 ## 12. Procedures management
 
@@ -559,19 +620,21 @@ shown), mapped onto the 3 backend audience types via two hidden fields (`Audienc
 11. Knowledge Base (docs, chunks, pgvector embeddings, semantic search, dashboard, AI tool) +
     per-clinic persisted settings page
 12. Procedures management page with inactive-procedure rules; AI `get_procedures` active-only
+13. Knowledge Retrieval Benchmark (§11): standalone diagnostic page/API/worker measuring the real retrieval (strict chunk +
+    document metrics, MRR, stale handling, run history with settings snapshots) — built and tested, awaiting commit
 
 ## 17. Pending work
 
-- **Set `Embeddings__ApiKey` in Render** (real OpenAI-compatible key) — KB saving/search won't work in
-  production without it; then tune `minimum_similarity` against real scores
-- Set the real `N8n__AiWebhookUrl` (notifier no-ops with a warning until then); wire the n8n
-  `search_clinic_knowledge` HTTP tool (clinicId from workflow context, AI supplies only `query`)
+- Render env vars `Embeddings__ApiKey`, `N8n__AiWebhookUrl`, `N8n__IngestApiKey`, `App__PublicBaseUrl` are set and working
+  (owner-confirmed). Next: **build the benchmark's n8n question-generator workflow and set
+  `N8n__KnowledgeBenchmarkWebhookUrl`** (§11), then use the Benchmark to tune `minimum_similarity`, Top K and chunk size
+  against real scores; build a small set of manually reviewed cases
 - **Rotate leaked secrets** (§22); close the `clinicId`-trust gap for AI endpoints
 - Meta `X-Hub-Signature-256` verification; forwarded-headers in `Program.cs`; persist DataProtection keys
 - KB: optional bulk "reindex all"; possible future HNSW index; maybe merge/retire `get_clinic_info`
 - Manual-entry integrations form doesn't register the phone number
 - Staff invitations (join an existing clinic), signup email verification/CAPTCHA/rate limiting
-- **Telegram** (§23) is pushed: set `App__PublicBaseUrl` on Render and test with the real bot; set `N8n__AiWebhookUrl` (n8n Webhook trigger must have Authentication = None) and `N8n__IngestApiKey` on Render
+- **Telegram** (§23) is pushed and its Render env vars are set (the n8n Webhook trigger must have Authentication = None)
 
 ## 18. Important constraints / decisions
 
@@ -618,6 +681,10 @@ shown), mapped onto the 3 backend audience types via two hidden fields (`Audienc
 - Knowledge websites: `POST/GET /api/knowledge/websites`, `GET /api/knowledge/websites/{id}` (+`/pages`), `POST …/{id}/rescrape|active`, `DELETE …/{id}`
 - Knowledge: `POST /api/knowledge/upload` (multipart, one file), `GET/POST /api/knowledge`, `GET/PUT/DELETE /api/knowledge/{id}`,
   `POST /api/knowledge/{id}/active`, `GET/PUT /api/knowledge/settings`
+- Knowledge **Retrieval Benchmark** (`KnowledgeBenchmarkController`): `GET /api/knowledge/benchmark` (dashboard),
+  `GET/POST /api/knowledge/benchmark/cases`, `GET/PUT/DELETE …/cases/{id}`, `POST …/cases/generate`, `POST …/cases/{id}/review`,
+  `GET …/source-documents` + `…/source-documents/{id}/chunks` (manual-case pickers), `POST/GET …/runs`, `GET …/runs/{id}`,
+  `GET …/runs/{id}/results`, `GET …/runs/{id}/results/{resultId}`
 - Campaigns: `GET/POST /api/campaigns`, `GET /api/campaigns/{id}`,
   `POST …/{id}/schedule|send|process-batch|cancel`, `GET /api/campaigns/audience-preview`,
   `GET /api/campaigns/audience-preview/leads`
@@ -642,7 +709,7 @@ AI tools under `/api/ai/*` (§8, incl. `POST /api/ai/knowledge/search`).
 **Razor pages** (login required except Login/Register/Error): `/dashboard`, `/dashboard/leads`,
 `/dashboard/leads/{id}`, `/dashboard/appointments`, `/dashboard/appointments/{id}`, `/inbox`,
 `/Procedures`, `/Procedures/Edit/{id?}`, `/KnowledgeBase`, `/KnowledgeBase/Edit/{id?}`,
-`/KnowledgeBase/Settings`, `/Campaigns`, `/Campaigns/Create`, `/Campaigns/{id}`,
+`/KnowledgeBase/Settings`, `/KnowledgeBase/Benchmark`, `/Campaigns`, `/Campaigns/Create`, `/Campaigns/{id}`,
 `/WhatsApp/Templates`, `/WhatsApp/Health`, `/settings/integrations`, `/settings/clinic-info`,
 `/Account/Login|Register|Logout`.
 
@@ -653,8 +720,11 @@ AI tools under `/api/ai/*` (§8, incl. `POST /api/ai/knowledge/search`).
 - `Meta:AppSecret` / `Meta__AppSecret`
 - `Meta:WebhookVerifyToken` / `Meta__WebhookVerifyToken` — must match Meta's webhook config
 - `N8n:IngestApiKey` / `N8n__IngestApiKey` — must match the n8n `X-Ingest-Key` header
-- `N8n:AiWebhookUrl` / `N8n__AiWebhookUrl` — **unset**
-- `Embeddings:ApiKey` / `Embeddings__ApiKey` — **not set anywhere real yet** (needed for the KB)
+- `N8n:AiWebhookUrl` / `N8n__AiWebhookUrl` — set on Render (the patient AI workflow's production webhook)
+- `N8n:KnowledgeBenchmarkWebhookUrl` / `N8n__KnowledgeBenchmarkWebhookUrl` — the SEPARATE benchmark question-generator
+  workflow's production webhook (a URL, treated as a credential: the HttpClient logs nothing). **Not set yet** — empty just
+  disables "Generate Test Cases" (manual cases and runs still work)
+- `Embeddings:ApiKey` / `Embeddings__ApiKey` — set on Render (real key, working)
 - Telegram needs no secret in config (the bot token is entered in the UI and stored per clinic), but needs
   `App:PublicBaseUrl` / `App__PublicBaseUrl` — the public HTTPS origin (**required on Render**); `Telegram:ApiBaseUrl`
   is a test-only override.
@@ -696,16 +766,20 @@ Render sets `PORT` itself; the Dockerfile sets `ASPNETCORE_ENVIRONMENT`/`ASPNETC
 12. **KB document upload**: `knowledge_documents` + `source_type` (default `manual`, CHECK `manual|upload`),
     `original_file_name`, `mime_type`, `file_size_bytes` — applied live and on `main`
 13. **KB website scraping**: `knowledge_website_sources`, `knowledge_website_pages`, `knowledge_website_scrape_runs` (+ indexes/CHECKs/triggers); `knowledge_documents` + `source_url`, `source_type` CHECK adds `website` — applied live and on `main`
+14. **Retrieval Benchmark**: `knowledge_retrieval_benchmark_cases` (expected doc/chunk ids as plain columns, hash/preview, stale flags,
+    unique `(clinic_id, expected_chunk_id, lower(question))`), `…_runs` (metrics + settings snapshot + progress),
+    `…_results` (per-case ranks/passes/classification, `retrieved_json`; case FK `on delete set null`) — applied live to Supabase
+    (idempotent block at the end of `schema.sql`); **the Render database is the same Supabase DB, so no separate step**; `generation_id uuid` (+ partial index) added to `…_cases` in a second small block
 
 No migration was needed for Procedures, lead/appointment editing, or the audience UI.
 
 ## 22. Known TODOs
 
-- [ ] Set `Embeddings__ApiKey` in Render (real key); verify KB end-to-end with real embeddings
+- [x] `Embeddings__ApiKey`, `N8n__AiWebhookUrl`, `N8n__IngestApiKey`, `App__PublicBaseUrl` set on Render and working (owner-confirmed)
+- [ ] Build the benchmark question-generator n8n workflow; set `N8n__KnowledgeBenchmarkWebhookUrl` (§11); then run the Benchmark against real embeddings
 - [ ] **Rotate** `Meta:WebhookVerifyToken` and `N8n:IngestApiKey` (were in git history via this file's
       first version) and update Meta + n8n; consider resetting the Supabase DB password (it was shown in
       chat) and updating user-secrets + Render
-- [ ] Set real `N8n__AiWebhookUrl`; build the n8n `search_clinic_knowledge` tool
 - [ ] Derive `clinicId` server-side for AI endpoints instead of trusting the parameter
 - [ ] Meta `X-Hub-Signature-256` verification; `UseForwardedHeaders`; persist DataProtection keys
 - [ ] Protect/decide `LeadsController.Create` (`[AllowAnonymous]`, no ingest key)
@@ -715,7 +789,7 @@ No migration was needed for Procedures, lead/appointment editing, or the audienc
 - [ ] Optional: KB bulk reindex; HNSW index at scale; retire `get_clinic_info`
 - [ ] Stray `webhook_test_template` template exists in the DB from earlier testing (harmless)
 
-## 23. Telegram integration (direct Bot API) — IMPLEMENTED and pushed (`566ca90`); needs `App__PublicBaseUrl` on Render + a real-bot test
+## 23. Telegram integration (direct Bot API) — IMPLEMENTED and pushed (`566ca90`); Render env vars set and working per the owner
 
 Telegram is a channel adapter alongside WhatsApp; nothing about the WhatsApp webhook/parser/sender/templates/
 health/coexistence was changed (only the shared send path was made channel-routable — see below).
