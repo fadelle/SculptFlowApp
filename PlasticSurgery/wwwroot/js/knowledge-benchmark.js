@@ -16,6 +16,7 @@
         wasRunning: false,
         genWasRunning: false,
         genFilter: null,        // generationId the case list is limited to
+        pendingGenId: null,     // the generation "Stop generating" cancels
         pollTimer: null
     };
 
@@ -151,10 +152,13 @@
             note.textContent = 'Generate Test Cases needs the question-generator webhook (N8n__KnowledgeBenchmarkWebhookUrl) to be configured. You can still add cases by hand.';
         } else if (generating) {
             note.hidden = false;
-            note.textContent = 'Waiting for the question generator (n8n) to send the questions… this page updates by itself, so you can leave it open or come back later.';
+            note.textContent = 'Waiting for the question generator (n8n) to send the questions… this page updates by itself, so you can leave it open or come back later. "Stop generating" stops waiting; n8n may still finish its run, but its reply will be ignored.';
         } else if (note.dataset.busy !== '1') {
             note.hidden = true;
         }
+        state.pendingGenId = d.pendingGenerationId || null;
+        $('bm-stop').hidden = !generating;
+        $('bm-stop').disabled = false;
 
         renderProgress(d);
         renderMetrics(d);
@@ -359,6 +363,22 @@
         });
     }
 
+    /** "Stop generating": cancels the pending generation so Generate is free again (n8n's late reply is ignored by the app). */
+    function stopGenerating() {
+        var id = state.pendingGenId;
+        if (!id) return;
+        if (!window.confirm('Stop waiting for the question generator?\n\nn8n may still finish writing questions, but this generation is cancelled and its reply will be ignored. You can start a new generation right away.')) return;
+        $('bm-stop').disabled = true;
+        api('POST', '/generations/' + id + '/cancel').then(function () {
+            state.genWasRunning = false;
+            showMessage('Generation ' + id + ' was stopped. You can generate again.');
+            return refreshAll();
+        }).catch(function (e) {
+            showMessage(e.message, 'error');
+            return refreshAll();   // e.g. it had just completed — show the real state
+        });
+    }
+
     /** Called once when a pending generation stops being pending: say how it ended and refresh the lists. */
     function onGenerationFinished() {
         loadGenerations().then(function (gens) {
@@ -368,6 +388,8 @@
                     ' created from ' + g.chunksSent + ' chunks' + (g.rejectedCount ? ' (' + g.rejectedCount + ' rejected — see Generations → Details)' : '') + '.');
             } else if (g && g.status === 'failed') {
                 showMessage('Generation ' + g.id + ' failed: ' + (g.errorMessage || 'unknown error'), 'error');
+            } else if (g && g.status === 'cancelled') {
+                showMessage('Generation ' + g.id + ' was stopped.');
             }
             loadCases();
             loadDashboard();
@@ -395,7 +417,7 @@
             var badge = el('span', {
                 class: 'badge ' + ({ completed: 'badge-green', pending: 'badge-teal', failed: 'badge-red' }[g.status] || 'badge-gray'),
                 title: g.errorMessage || '',
-                text: g.status === 'pending' ? 'Waiting for n8n…' : g.status.charAt(0).toUpperCase() + g.status.slice(1)
+                text: g.status === 'pending' ? 'Waiting for n8n…' : g.status === 'cancelled' ? 'Stopped' : g.status.charAt(0).toUpperCase() + g.status.slice(1)
             });
             body.appendChild(el('tr', null, [
                 el('td', null, [el('div', { text: fmtDate(g.requestedAt) }), el('div', { class: 'text-subtle', style: 'font-size:.7rem', title: g.id, text: g.id.slice(0, 8) + '…' })]),
@@ -774,6 +796,7 @@
 
     function init() {
         $('bm-generate').addEventListener('click', generate);
+        $('bm-stop').addEventListener('click', stopGenerating);
         $('bm-run').addEventListener('click', runBenchmark);
         $('bm-case-view').addEventListener('change', function (e) { state.caseView = e.target.value; state.caseSkip = 0; loadCases(); });
         $('bm-cases-prev').addEventListener('click', function () { state.caseSkip = Math.max(0, state.caseSkip - PAGE_SIZE); loadCases(); });

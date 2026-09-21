@@ -24,6 +24,18 @@ public enum GenerationReceiveStatus
     NotAccepting
 }
 
+public enum GenerationCancelStatus
+{
+    /// <summary>The pending generation was stopped.</summary>
+    Cancelled,
+    /// <summary>No such generation for this clinic.</summary>
+    NotFound,
+    /// <summary>It already finished (completed / failed / cancelled), so there is nothing to stop.</summary>
+    NotPending
+}
+
+public record GenerationCancelResult(GenerationCancelStatus Status, BenchmarkGenerationSummary? Summary);
+
 public record GenerationReceiveResult(GenerationReceiveStatus Status, BenchmarkGenerationSummary? Summary, string? Message, IReadOnlyList<RejectedGeneratedQuestion>? Rejected = null);
 
 // Async question generation (the "Generate Test Cases" flow). See the class comment on KnowledgeBenchmarkService.
@@ -115,10 +127,10 @@ public partial class KnowledgeBenchmarkService
         {
             return new GenerationReceiveResult(GenerationReceiveStatus.AlreadyProcessed, await SummaryOfAsync(generation, ct), null);
         }
-        if (generation.Status == BenchmarkGenerationStatus.Failed)
+        if (generation.Status is BenchmarkGenerationStatus.Failed or BenchmarkGenerationStatus.Cancelled)
         {
             return new GenerationReceiveResult(GenerationReceiveStatus.NotAccepting, await SummaryOfAsync(generation, ct),
-                generation.ErrorMessage ?? "This generation failed and no longer accepts questions.");
+                generation.ErrorMessage ?? "This generation was stopped or failed and no longer accepts questions.");
         }
         if (generation.CreatedAt < DateTimeOffset.UtcNow - GenerationTimeout)
         {
@@ -290,6 +302,27 @@ public partial class KnowledgeBenchmarkService
         await tx.CommitAsync(ct);
 
         return new GenerationReceiveResult(GenerationReceiveStatus.Completed, await SummaryOfAsync(generation, ct), null, rejected);
+    }
+
+    public async Task<GenerationCancelResult> CancelGenerationAsync(Guid clinicId, Guid generationId, CancellationToken ct = default)
+    {
+        var exists = await _db.KnowledgeBenchmarkGenerations.AsNoTracking().AnyAsync(g => g.ClinicId == clinicId && g.Id == generationId, ct);
+        if (!exists) return new GenerationCancelResult(GenerationCancelStatus.NotFound, null);
+
+        // Only a still-pending generation can be stopped. The status flip is a single conditional UPDATE, so it races safely with
+        // n8n's callback: whichever claims the row first wins (a callback that already completed it makes this a no-op).
+        var now = DateTimeOffset.UtcNow;
+        var message = "Stopped by staff before n8n sent the questions. Any reply n8n sends later is ignored.";
+        var stopped = await _db.KnowledgeBenchmarkGenerations
+            .Where(g => g.ClinicId == clinicId && g.Id == generationId && g.Status == BenchmarkGenerationStatus.Pending)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(g => g.Status, BenchmarkGenerationStatus.Cancelled)
+                .SetProperty(g => g.ErrorMessage, message)
+                .SetProperty(g => g.CompletedAt, now), ct);
+
+        var current = await _db.KnowledgeBenchmarkGenerations.AsNoTracking().FirstAsync(g => g.ClinicId == clinicId && g.Id == generationId, ct);
+        return new GenerationCancelResult(
+            stopped > 0 ? GenerationCancelStatus.Cancelled : GenerationCancelStatus.NotPending, await SummaryOfAsync(current, ct));
     }
 
     private async Task FailGenerationAsync(Guid generationId, string message)

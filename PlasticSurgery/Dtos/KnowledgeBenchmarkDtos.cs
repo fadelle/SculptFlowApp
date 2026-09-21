@@ -50,6 +50,8 @@ public record BenchmarkDashboardResponse(
     bool RunInProgress,
     /// <summary>A "Generate Test Cases" request is waiting for n8n's callback.</summary>
     bool GenerationInProgress,
+    /// <summary>The generation currently waiting for n8n (what "Stop generating" cancels); null when none.</summary>
+    Guid? PendingGenerationId,
     /// <summary>The clinic's CURRENT retrieval settings (what a run started now would use).</summary>
     BenchmarkSettingsSnapshot CurrentSettings,
     /// <summary>The most recent run of any status (drives the progress bar).</summary>
@@ -134,7 +136,8 @@ public record BenchmarkGenerationScores(
 
 public record BenchmarkGenerationSummary(
     Guid Id,
-    /// <summary>pending | completed | failed (a pending generation with no callback after 30 minutes becomes failed).</summary>
+    /// <summary>pending | completed | failed | cancelled (a pending generation with no callback after 30 minutes becomes failed;
+    /// cancelled = stopped by staff).</summary>
     string Status,
     DateTimeOffset RequestedAt,
     DateTimeOffset? CompletedAt,

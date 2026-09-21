@@ -134,7 +134,7 @@ public class KnowledgeRetrievalBenchmarkGeneration
     public Guid Id { get; set; }
     public Guid ClinicId { get; set; }
 
-    /// <summary>pending | completed | failed</summary>
+    /// <summary>pending | completed | failed | cancelled</summary>
     public string Status { get; set; } = BenchmarkGenerationStatus.Pending;
 
     public int ChunksSent { get; set; }
@@ -159,6 +159,8 @@ public static class BenchmarkGenerationStatus
     public const string Pending = "pending";
     public const string Completed = "completed";
     public const string Failed = "failed";
+    /// <summary>Stopped by staff while still waiting for n8n; n8n's late reply is refused.</summary>
+    public const string Cancelled = "cancelled";
 }
 
 public static class BenchmarkCaseType

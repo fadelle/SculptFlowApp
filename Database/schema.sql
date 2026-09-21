@@ -1349,3 +1349,9 @@ update knowledge_retrieval_benchmark_results r
 set generation_id = c.generation_id
 from knowledge_retrieval_benchmark_cases c
 where r.benchmark_case_id = c.id and c.generation_id is not null and r.generation_id is null;
+
+-- Retrieval Benchmark: a pending generation can be stopped by staff ("Stop generating"). Status 'cancelled' frees Generate at once
+-- and makes the app refuse n8n's late callback for that generation.
+alter table knowledge_retrieval_benchmark_generations drop constraint if exists ck_kbg_status;
+alter table knowledge_retrieval_benchmark_generations add constraint ck_kbg_status
+  check (status in ('pending','completed','failed','cancelled'));

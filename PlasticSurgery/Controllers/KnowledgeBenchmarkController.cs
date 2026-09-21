@@ -95,6 +95,23 @@ public class KnowledgeBenchmarkController : DashboardApiController
         return Ok(await _benchmark.ListGenerationsAsync(clinicId.Value, take, ct));
     }
 
+    /// <summary>"Stop generating": cancels this clinic's PENDING generation (frees Generate; n8n's late reply is refused — n8n's own
+    /// run can't be halted from here). 200 = stopped, 404 = not this clinic's, 409 = it had already finished.</summary>
+    [HttpPost("generations/{id:guid}/cancel")]
+    public async Task<ActionResult<BenchmarkGenerationSummary>> CancelGeneration(Guid id, CancellationToken ct)
+    {
+        var clinicId = await GetClinicIdAsync(ct);
+        if (clinicId is null) return Forbid();
+
+        var result = await _benchmark.CancelGenerationAsync(clinicId.Value, id, ct);
+        return result.Status switch
+        {
+            GenerationCancelStatus.NotFound => NotFound(),
+            GenerationCancelStatus.NotPending => Conflict(new { error = $"This generation already finished ({result.Summary?.Status}), so there is nothing to stop." }),
+            _ => Ok(result.Summary)
+        };
+    }
+
     /// <summary>One generation: what was sent, what came back, what was rejected (with reasons) and n8n's raw reply.</summary>
     [HttpGet("generations/{id:guid}")]
     public async Task<ActionResult<BenchmarkGenerationDetail>> GetGeneration(Guid id, CancellationToken ct)

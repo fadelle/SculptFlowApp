@@ -44,6 +44,10 @@ public interface IKnowledgeBenchmarkService
     /// them and the live Knowledge Base. Idempotent: a second delivery is reported as already processed.</summary>
     Task<GenerationReceiveResult> ReceiveGenerationResultAsync(Guid generationId, GeneratorResponse reply, string? rawBody, bool requireEcho, CancellationToken ct = default);
 
+    /// <summary>"Stop generating": marks THIS clinic's pending generation cancelled so Generate is free again and n8n's late reply is
+    /// refused. It cannot halt n8n's own run. A generation that already finished is reported as such, not changed.</summary>
+    Task<GenerationCancelResult> CancelGenerationAsync(Guid clinicId, Guid generationId, CancellationToken ct = default);
+
     Task<IReadOnlyList<BenchmarkGenerationSummary>> ListGenerationsAsync(Guid clinicId, int take, CancellationToken ct = default);
     Task<BenchmarkGenerationDetail?> GetGenerationAsync(Guid clinicId, Guid id, CancellationToken ct = default);
     /// <summary>Scores of a run split by the generation each case came from. Null when the run isn't this clinic's.</summary>
@@ -147,8 +151,10 @@ public partial class KnowledgeBenchmarkService : IKnowledgeBenchmarkService
                 .OrderByDescending(r => r.CreatedAt).FirstOrDefaultAsync(ct);
 
         await ExpireOldGenerationsAsync(clinicId, ct);
-        var generationInProgress = await _db.KnowledgeBenchmarkGenerations.AsNoTracking()
-            .AnyAsync(g => g.ClinicId == clinicId && g.Status == BenchmarkGenerationStatus.Pending, ct);
+        var pendingGenerationId = await _db.KnowledgeBenchmarkGenerations.AsNoTracking()
+            .Where(g => g.ClinicId == clinicId && g.Status == BenchmarkGenerationStatus.Pending)
+            .OrderByDescending(g => g.CreatedAt).Select(g => (Guid?)g.Id).FirstOrDefaultAsync(ct);
+        var generationInProgress = pendingGenerationId is not null;
 
         var cutoff = DateTimeOffset.UtcNow - StaleRunAge;
         var inProgress = await _db.KnowledgeBenchmarkRuns.AsNoTracking().AnyAsync(r =>
@@ -157,7 +163,7 @@ public partial class KnowledgeBenchmarkService : IKnowledgeBenchmarkService
 
         return new BenchmarkDashboardResponse(
             counts?.Total ?? 0, counts?.Generated ?? 0, counts?.Manual ?? 0, counts?.Reviewed ?? 0, counts?.Stale ?? 0,
-            _generator.IsConfigured, inProgress, generationInProgress,
+            _generator.IsConfigured, inProgress, generationInProgress, pendingGenerationId,
             await CurrentSettingsSnapshotAsync(clinicId, ct),
             latest is null ? null : ToSummary(latest),
             latestCompleted is null ? null : ToSummary(latestCompleted));

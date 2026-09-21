@@ -449,7 +449,9 @@ The only AI involved is the separate n8n workflow that WRITES the benchmark ques
   re-checks against the DB for that clinic; empty / >500-char / duplicate / >3-per-chunk questions are rejected too. The claim
   (pending→completed) + case inserts run in ONE transaction, so redelivery is idempotent (200 `alreadyProcessed`, nothing
   duplicated). Callback answers: 400 bad body / body generationId ≠ URL's, 401 no/wrong key, 404 unknown id, 409 failed/expired.
-  One pending generation per clinic (another Generate → 409); a generation with no callback for **30 minutes** is marked `failed`
+  One pending generation per clinic (another Generate → 409). **Stop generating** (`POST …/generations/{id}/cancel`; dashboard field
+  `pendingGenerationId`) marks the pending generation `cancelled`: Generate is free at once, n8n's own run can't be halted but its late
+  callback is refused (409); a finished generation → 409, another clinic's → 404. A generation with no callback for **30 minutes** is marked `failed`
   ("n8n did not send the questions…") and its late callback refused. A send failure (non-2xx/unreachable) → 502 and the row is
   marked `failed` with the error. No URL set → 503 / button disabled. **Backward compatible**: a workflow that still answers
   synchronously with `{generationId, questions}` is processed immediately (its echoed generationId is then mandatory — missing/wrong
@@ -786,8 +788,8 @@ Render sets `PORT` itself; the Dockerfile sets `ASPNETCORE_ENVIRONMENT`/`ASPNETC
 14. **Retrieval Benchmark**: `knowledge_retrieval_benchmark_cases` (expected doc/chunk ids as plain columns, hash/preview, stale flags,
     unique `(clinic_id, expected_chunk_id, lower(question))`), `…_runs` (metrics + settings snapshot + progress),
     `…_results` (per-case ranks/passes/classification, `retrieved_json`, `generation_id` snapshot; case FK `on delete set null`),
-    `…_generations` (id = generationId; status pending|completed|failed, sent chunks, counts, rejected items, raw reply, error) — applied live to Supabase
-    (idempotent block at the end of `schema.sql`); **the Render database is the same Supabase DB, so no separate step**; `generation_id uuid` (+ partial index) added to `…_cases` in a second small block
+    `…_generations` (id = generationId; status pending|completed|failed|cancelled, sent chunks, counts, rejected items, raw reply, error) — applied live to Supabase
+    (idempotent block at the end of `schema.sql`); **the Render database is the same Supabase DB, so no separate step**; `generation_id uuid` (+ partial index) added to `…_cases` in a second small block; `ck_kbg_status` widened to include `cancelled` (Stop generating) — applied live
 
 No migration was needed for Procedures, lead/appointment editing, or the audience UI.
 
