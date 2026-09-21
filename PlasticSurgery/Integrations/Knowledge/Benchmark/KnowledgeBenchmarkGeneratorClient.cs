@@ -6,11 +6,16 @@ namespace PlasticSurgery.Integrations.Knowledge.Benchmark;
 public record BenchmarkSourceChunk(Guid DocumentId, Guid ChunkId, string DocumentTitle, string Content);
 
 /// <summary>One question exactly as the generator returned it. Deliberately UNTRUSTED raw strings: the benchmark
-/// service validates every id against the current clinic before anything is stored.</summary>
+/// service validates every id against the generation's sent chunks and the current clinic before anything is stored.</summary>
 public record RawGeneratedQuestion(string? DocumentId, string? ChunkId, string? Question);
 
 /// <summary>What the generator returned: the generationId it echoed (null if it didn't) and the questions.</summary>
 public record GeneratorResponse(string? GenerationId, IReadOnlyList<RawGeneratedQuestion> Questions);
+
+/// <summary>The outcome of handing a generation request to n8n. <see cref="Immediate"/> is set ONLY when n8n answered the
+/// request itself with the questions (a workflow that responds synchronously); the normal case is null — n8n acknowledged
+/// and will call back later.</summary>
+public record GeneratorSendResult(GeneratorResponse? Immediate, string? RawBody);
 
 /// <summary>The generator webhook is missing from configuration.</summary>
 public class BenchmarkGeneratorNotConfiguredException : Exception
@@ -25,16 +30,109 @@ public class BenchmarkGenerationException : Exception
 }
 
 /// <summary>
-/// The one and only link to the benchmark question-generation n8n workflow (a separate workflow from the
-/// patient AI agent). Its sole job: send chunks out, parse questions back. It never searches, embeds or scores.
+/// The one and only link OUT to the benchmark question-generation n8n workflow (a separate workflow from the patient AI
+/// agent). Its sole job: hand the chunks to n8n. It never searches, embeds or scores, and it does not wait for questions —
+/// n8n calls back (see KnowledgeBenchmarkIngestController) when they are ready.
 /// </summary>
 public interface IKnowledgeBenchmarkGeneratorClient
 {
     bool IsConfigured { get; }
 
     /// <exception cref="BenchmarkGeneratorNotConfiguredException">N8n:KnowledgeBenchmarkWebhookUrl is empty.</exception>
-    /// <exception cref="BenchmarkGenerationException">The webhook is unreachable, non-2xx, or returned an unreadable body.</exception>
-    Task<GeneratorResponse> GenerateAsync(Guid clinicId, Guid generationId, IReadOnlyList<BenchmarkSourceChunk> chunks, CancellationToken ct = default);
+    /// <exception cref="BenchmarkGenerationException">The webhook is unreachable or returned a non-2xx status.</exception>
+    Task<GeneratorSendResult> SendAsync(Guid clinicId, Guid generationId, IReadOnlyList<BenchmarkSourceChunk> chunks, CancellationToken ct = default);
+}
+
+/// <summary>Reads the generator's questions from either an immediate reply or the callback body. Tolerant of the shapes n8n
+/// produces: <c>{ generationId, questions: [...] }</c>, the same wrapped in a one-element array (the "Respond to Webhook"
+/// habit), or a bare array of question objects (no generationId then — fine for the callback, whose URL carries the id).</summary>
+public static class GeneratorResponseParser
+{
+    /// <exception cref="BenchmarkGenerationException">Not JSON, or no questions list.</exception>
+    public static GeneratorResponse Parse(string body)
+    {
+        JsonDocument doc;
+        try
+        {
+            doc = JsonDocument.Parse(body);
+        }
+        catch (JsonException ex)
+        {
+            throw new BenchmarkGenerationException("The question generator returned something that isn't JSON.", ex);
+        }
+
+        using (doc)
+        {
+            var root = doc.RootElement;
+            JsonElement? list = null;
+            string? generationId = null;
+
+            if (root.ValueKind == JsonValueKind.Object && TryGetProperty(root, "questions", out var q) && q.ValueKind == JsonValueKind.Array)
+            {
+                list = q;
+                generationId = ReadString(root, "generationId");
+            }
+            else if (root.ValueKind == JsonValueKind.Array)
+            {
+                if (root.GetArrayLength() > 0 && root[0].ValueKind == JsonValueKind.Object
+                    && TryGetProperty(root[0], "questions", out var inner) && inner.ValueKind == JsonValueKind.Array)
+                {
+                    list = inner;
+                    generationId = ReadString(root[0], "generationId");
+                }
+                else
+                {
+                    list = root;
+                }
+            }
+
+            if (list is null)
+            {
+                throw new BenchmarkGenerationException("The question generator's response has no \"questions\" list.");
+            }
+
+            var result = new List<RawGeneratedQuestion>();
+            foreach (var item in list.Value.EnumerateArray())
+            {
+                if (item.ValueKind != JsonValueKind.Object) continue;
+                result.Add(new RawGeneratedQuestion(
+                    ReadString(item, "documentId"), ReadString(item, "chunkId"), ReadString(item, "question")));
+            }
+            return new GeneratorResponse(generationId, result);
+        }
+    }
+
+    public static bool TryParse(string? body, out GeneratorResponse response)
+    {
+        response = null!;
+        if (string.IsNullOrWhiteSpace(body)) return false;
+        try
+        {
+            response = Parse(body);
+            return true;
+        }
+        catch (BenchmarkGenerationException)
+        {
+            return false;
+        }
+    }
+
+    private static bool TryGetProperty(JsonElement obj, string name, out JsonElement value)
+    {
+        foreach (var p in obj.EnumerateObject())
+        {
+            if (string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase))
+            {
+                value = p.Value;
+                return true;
+            }
+        }
+        value = default;
+        return false;
+    }
+
+    private static string? ReadString(JsonElement obj, string name) =>
+        TryGetProperty(obj, name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
 }
 
 /// <summary>
@@ -42,13 +140,10 @@ public interface IKnowledgeBenchmarkGeneratorClient
 /// <code>
 /// { "generationId": "...", "clinicId": "...", "chunks": [ { "documentId": "...", "chunkId": "...", "documentTitle": "...", "content": "..." } ] }
 /// </code>
-/// and expects the SAME generationId back:
-/// <code>
-/// { "generationId": "...", "questions": [ { "documentId": "...", "chunkId": "...", "question": "..." } ] }
-/// </code>
-/// n8n's "Respond to Webhook" node often wraps the body in a one-element array, so <c>[ { "generationId", "questions" } ]</c>
-/// is accepted too. The service checks the echoed id equals the one it sent (see KnowledgeBenchmarkService). The workflow must
-/// respond only AFTER the questions are generated (Webhook node: "Respond → Using 'Respond to Webhook' Node") — the call waits.
+/// The n8n Webhook node should be set to "Respond → Immediately": any 2xx is an acknowledgement. When the questions are ready
+/// n8n POSTs them to <c>/api/knowledge/benchmark/generations/{generationId}/questions</c> with the X-Ingest-Key header.
+/// (A workflow that still answers synchronously with <c>{ generationId, questions }</c> keeps working: that reply is processed
+/// immediately, as if it had been a callback.)
 /// </summary>
 public class N8nKnowledgeBenchmarkGeneratorClient : IKnowledgeBenchmarkGeneratorClient
 {
@@ -69,7 +164,7 @@ public class N8nKnowledgeBenchmarkGeneratorClient : IKnowledgeBenchmarkGenerator
 
     public bool IsConfigured => !string.IsNullOrWhiteSpace(Url);
 
-    public async Task<GeneratorResponse> GenerateAsync(Guid clinicId, Guid generationId, IReadOnlyList<BenchmarkSourceChunk> chunks, CancellationToken ct = default)
+    public async Task<GeneratorSendResult> SendAsync(Guid clinicId, Guid generationId, IReadOnlyList<BenchmarkSourceChunk> chunks, CancellationToken ct = default)
     {
         var url = Url;
         if (string.IsNullOrWhiteSpace(url))
@@ -106,81 +201,7 @@ public class N8nKnowledgeBenchmarkGeneratorClient : IKnowledgeBenchmarkGenerator
             throw new BenchmarkGenerationException("The question generator couldn't be reached or timed out. Check the n8n workflow is active.", ex);
         }
 
-        return Parse(body);
+        // Normal (asynchronous) workflows answer with something like {"message":"Workflow was started"} — no questions list.
+        return new GeneratorSendResult(GeneratorResponseParser.TryParse(body, out var immediate) ? immediate : null, body);
     }
-
-    /// <summary>Tolerant parser for the response shapes described on the class: reads the echoed generationId and the questions.
-    /// Anything that isn't a JSON object per question is skipped; the service rejects items with missing/invalid ids and
-    /// checks the generationId.</summary>
-    internal static GeneratorResponse Parse(string body)
-    {
-        JsonDocument doc;
-        try
-        {
-            doc = JsonDocument.Parse(body);
-        }
-        catch (JsonException ex)
-        {
-            throw new BenchmarkGenerationException("The question generator returned something that isn't JSON.", ex);
-        }
-
-        using (doc)
-        {
-            var root = doc.RootElement;
-            JsonElement? list = null;
-            string? generationId = null;
-
-            if (root.ValueKind == JsonValueKind.Object && TryGetProperty(root, "questions", out var q) && q.ValueKind == JsonValueKind.Array)
-            {
-                list = q;
-                generationId = ReadString(root, "generationId");
-            }
-            else if (root.ValueKind == JsonValueKind.Array)
-            {
-                // [ { "generationId": "...", "questions": [...] } ]  (Respond to Webhook wrapping) — otherwise a bare array
-                // of questions, which has nowhere to carry the generationId (the service will then reject it as missing).
-                if (root.GetArrayLength() > 0 && root[0].ValueKind == JsonValueKind.Object
-                    && TryGetProperty(root[0], "questions", out var inner) && inner.ValueKind == JsonValueKind.Array)
-                {
-                    list = inner;
-                    generationId = ReadString(root[0], "generationId");
-                }
-                else
-                {
-                    list = root;
-                }
-            }
-
-            if (list is null)
-            {
-                throw new BenchmarkGenerationException("The question generator's response has no \"questions\" list.");
-            }
-
-            var result = new List<RawGeneratedQuestion>();
-            foreach (var item in list.Value.EnumerateArray())
-            {
-                if (item.ValueKind != JsonValueKind.Object) continue;
-                result.Add(new RawGeneratedQuestion(
-                    ReadString(item, "documentId"), ReadString(item, "chunkId"), ReadString(item, "question")));
-            }
-            return new GeneratorResponse(generationId, result);
-        }
-    }
-
-    private static bool TryGetProperty(JsonElement obj, string name, out JsonElement value)
-    {
-        foreach (var p in obj.EnumerateObject())
-        {
-            if (string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase))
-            {
-                value = p.Value;
-                return true;
-            }
-        }
-        value = default;
-        return false;
-    }
-
-    private static string? ReadString(JsonElement obj, string name) =>
-        TryGetProperty(obj, name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
 }

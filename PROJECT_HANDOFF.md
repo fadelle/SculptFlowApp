@@ -435,18 +435,31 @@ The only AI involved is the separate n8n workflow that WRITES the benchmark ques
   UI `Pages/KnowledgeBase/Benchmark.cshtml` + `wwwroot/js/knowledge-benchmark.js` (all server text via `textContent`).
 - **Cases**: a realistic patient question + the ONE expected chunk (`expected_document_id`, `expected_chunk_id`, kept as plain
   columns — deliberately NOT FKs, so production ingestion is never blocked; plus `source_chunk_hash` SHA-256 and a preview).
-  `case_type` generated|manual; `is_reviewed` (a manual case is reviewed automatically). **Generate Test Cases** samples 20
-  active chunks of the current clinic (≥80 chars, none that already have a case or whose text already has one, spread
-  across documents, random) and POSTs `{clinicId, chunks:[{documentId, chunkId, documentTitle, content}]}` to
-  `N8n:KnowledgeBenchmarkWebhookUrl` (env `N8n__KnowledgeBenchmarkWebhookUrl`; the webhook must respond AFTER generating, i.e.
-  "Respond to Webhook"; ~3 min timeout; no auth header, like the AI trigger). The payload also carries a **`generationId`**
-  (a new GUID per request, stored on every case it creates, filterable via `GET …/cases?generationId=`); n8n must **echo it
-  back**: expected reply `{generationId, questions:[{documentId, chunkId, question}]}` (also accepted: the same wrapped in a
-  one-element array). A missing or different `generationId` discards the whole reply (502) — it proves the reply belongs to
-  this request. **Every returned id is untrusted**: rejected unless it
-  was in the request, matches its document, and re-checks against the DB for THIS clinic; empty/over-500-char/duplicate
-  questions are rejected too; the response lists each rejection with its reason. No URL set → the button is disabled (503);
-  generator failure → 502 with a readable message; production search is unaffected either way.
+  `case_type` generated|manual; `is_reviewed` (a manual case is reviewed automatically); `generation_id` (which generation made it).
+- **Generating questions is ASYNCHRONOUS** (send / callback split; nothing waits on n8n). **Generate Test Cases** samples 20 active
+  chunks of the current clinic (≥80 chars, none that already have a case or whose text already has one, spread across documents,
+  random), inserts a `pending` row in **`knowledge_retrieval_benchmark_generations`** (its `id` IS the `generationId`; it stores
+  which chunks were sent — ids + title, no text) and only THEN POSTs `{generationId, clinicId, chunks:[{documentId, chunkId,
+  documentTitle, content}]}` to `N8n:KnowledgeBenchmarkWebhookUrl`, then returns **202** at once. The n8n Webhook node should
+  be **Respond → Immediately** (any 2xx = acknowledged); when the questions are ready n8n's final HTTP Request node calls
+  **`POST /api/knowledge/benchmark/generations/{generationId}/questions`** (`KnowledgeBenchmarkIngestController`,
+  `[RequireIngestKey]` / header `X-Ingest-Key`) with `{generationId?, questions:[{documentId, chunkId, question}]}`. The UI polls
+  and refreshes when it lands. **Trust model**: the callback carries no clinic — the clinic and the allowed chunk set come from the
+  STORED generation row; **every returned id is untrusted** and rejected unless it was in the sent set, matches its document, and
+  re-checks against the DB for that clinic; empty / >500-char / duplicate / >3-per-chunk questions are rejected too. The claim
+  (pending→completed) + case inserts run in ONE transaction, so redelivery is idempotent (200 `alreadyProcessed`, nothing
+  duplicated). Callback answers: 400 bad body / body generationId ≠ URL's, 401 no/wrong key, 404 unknown id, 409 failed/expired.
+  One pending generation per clinic (another Generate → 409); a generation with no callback for **30 minutes** is marked `failed`
+  ("n8n did not send the questions…") and its late callback refused. A send failure (non-2xx/unreachable) → 502 and the row is
+  marked `failed` with the error. No URL set → 503 / button disabled. **Backward compatible**: a workflow that still answers
+  synchronously with `{generationId, questions}` is processed immediately (its echoed generationId is then mandatory — missing/wrong
+  → failed + 502). A 2xx whose body isn't a questions reply is an acknowledgement. Production search is unaffected either way.
+- **Generations table = the audit trail**: per generation — status, chunks sent (+ the sent ids/titles), questions returned, cases
+  created, rejected count and the first 100 rejected items WITH reasons, n8n's raw reply (capped 100k chars), error, timestamps.
+  **Scores per generation**: results snapshot `generation_id`, so `GET …/generations` shows each generation's Chunk Top-1/3/5/MRR
+  from the most recent completed run that included its cases (survives deleting cases), and `GET …/runs/{id}/generations` splits
+  one run's scores by generation ("no generation" = manual). The page has a Generations section (Details overlay, "View cases"
+  filter) and a "Scores by generation" panel above run results.
 - **Stale cases** (chunk ids change whenever a document is re-saved): re-checked on dashboard/list/run. Stale = chunk id gone
   (`chunk_missing`), text hash changed (`chunk_changed`) or its document inactive (`document_inactive`). If the text simply
   moved to a new id, the case is auto-RELINKED (exactly one active chunk with the same hash) and stays live. Stale cases are
@@ -466,9 +479,11 @@ The only AI involved is the separate n8n workflow that WRITES the benchmark ques
   kept for comparison; deleting a case keeps past results (snapshots; FK set null). The failed-case view shows the verdict,
   the settings, and the ranked chunks with the expected chunk/document highlighted and below-threshold ones marked dropped.
 - **Cost/limits**: a run makes one embedding call per non-stale case; a generation makes one n8n (LLM) call — no server-side throttling
-  beyond one active run per clinic. No roles: any clinic user can generate/run.
-- **Tests** (throwaway scratchpad harness, no test project exists): 38 pure checks (scorer incl. the spec's rank-1/rank-2/doc-only/miss
-  examples, aggregates, response parsing) + 118 live end-to-end checks against the real DB with a fake n8n and the fake embedder
+  beyond one active run and one pending generation per clinic. No roles: any clinic user can generate/run.
+- **Tests** (throwaway scratchpad harness, no test project exists): 45 pure checks (scorer incl. the spec's rank-1/rank-2/doc-only/miss
+  examples, `ScoreFromRanks`, aggregates, response parsing) + 169 live end-to-end checks (incl. async send/callback, redelivery, callback auth,
+  hostile callback bodies, expiry, per-generation scores; 167 passed and the 2 others were a too-strict 100% Top-1 assertion — exact ties
+  caused by the FAKE hashed embedder's bucket collisions, 95%/85% Top-1 with 100% Top-3 — since loosened) against the real DB with a fake n8n and the fake embedder
   (deterministic ranks/metrics, production-parity, 20-chunk payload, hostile n8n reply, stale/relink/deactivate/delete, scopes, 409,
   threshold, history, edit/review/delete, cross-clinic isolation) — all pass; UI exercised in the built-in browser. Test clinics deleted.
 
@@ -626,7 +641,7 @@ shown), mapped onto the 3 backend audience types via two hidden fields (`Audienc
 ## 17. Pending work
 
 - Render env vars `Embeddings__ApiKey`, `N8n__AiWebhookUrl`, `N8n__IngestApiKey`, `App__PublicBaseUrl` are set and working
-  (owner-confirmed). Next: **build the benchmark's n8n question-generator workflow and set
+  (owner-confirmed). Next: **build the benchmark's n8n question-generator workflow (Webhook → Respond Immediately → … → HTTP Request calling back `POST /api/knowledge/benchmark/generations/{generationId}/questions` with `X-Ingest-Key`) and set
   `N8n__KnowledgeBenchmarkWebhookUrl`** (§11), then use the Benchmark to tune `minimum_similarity`, Top K and chunk size
   against real scores; build a small set of manually reviewed cases
 - **Rotate leaked secrets** (§22); close the `clinicId`-trust gap for AI endpoints
@@ -684,7 +699,9 @@ shown), mapped onto the 3 backend audience types via two hidden fields (`Audienc
 - Knowledge **Retrieval Benchmark** (`KnowledgeBenchmarkController`): `GET /api/knowledge/benchmark` (dashboard),
   `GET/POST /api/knowledge/benchmark/cases`, `GET/PUT/DELETE …/cases/{id}`, `POST …/cases/generate`, `POST …/cases/{id}/review`,
   `GET …/source-documents` + `…/source-documents/{id}/chunks` (manual-case pickers), `POST/GET …/runs`, `GET …/runs/{id}`,
-  `GET …/runs/{id}/results`, `GET …/runs/{id}/results/{resultId}`
+  `GET …/runs/{id}/results`, `GET …/runs/{id}/results/{resultId}`,
+  `GET …/generations`, `GET …/generations/{id}`, `GET …/runs/{id}/generations`; **n8n callback** (ingest key, separate
+  `KnowledgeBenchmarkIngestController`): `POST …/generations/{generationId}/questions`
 - Campaigns: `GET/POST /api/campaigns`, `GET /api/campaigns/{id}`,
   `POST …/{id}/schedule|send|process-batch|cancel`, `GET /api/campaigns/audience-preview`,
   `GET /api/campaigns/audience-preview/leads`
@@ -768,7 +785,8 @@ Render sets `PORT` itself; the Dockerfile sets `ASPNETCORE_ENVIRONMENT`/`ASPNETC
 13. **KB website scraping**: `knowledge_website_sources`, `knowledge_website_pages`, `knowledge_website_scrape_runs` (+ indexes/CHECKs/triggers); `knowledge_documents` + `source_url`, `source_type` CHECK adds `website` — applied live and on `main`
 14. **Retrieval Benchmark**: `knowledge_retrieval_benchmark_cases` (expected doc/chunk ids as plain columns, hash/preview, stale flags,
     unique `(clinic_id, expected_chunk_id, lower(question))`), `…_runs` (metrics + settings snapshot + progress),
-    `…_results` (per-case ranks/passes/classification, `retrieved_json`; case FK `on delete set null`) — applied live to Supabase
+    `…_results` (per-case ranks/passes/classification, `retrieved_json`, `generation_id` snapshot; case FK `on delete set null`),
+    `…_generations` (id = generationId; status pending|completed|failed, sent chunks, counts, rejected items, raw reply, error) — applied live to Supabase
     (idempotent block at the end of `schema.sql`); **the Render database is the same Supabase DB, so no separate step**; `generation_id uuid` (+ partial index) added to `…_cases` in a second small block
 
 No migration was needed for Procedures, lead/appointment editing, or the audience UI.

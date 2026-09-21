@@ -34,9 +34,20 @@ public interface IKnowledgeBenchmarkService
     Task<BenchmarkCaseListResponse> ListCasesAsync(Guid clinicId, BenchmarkCaseFilter filter, int skip, int take, CancellationToken ct = default);
     Task<BenchmarkCaseDetailResponse?> GetCaseAsync(Guid clinicId, Guid id, CancellationToken ct = default);
 
-    /// <summary>Samples up to 20 active chunks (not already covered by a case) from THIS clinic, sends them to the n8n
-    /// generator, validates every returned id against the clinic, and stores the valid questions as generated cases.</summary>
-    Task<GenerateBenchmarkCasesResponse> GenerateCasesAsync(Guid clinicId, CancellationToken ct = default);
+    /// <summary>Samples up to 20 active chunks (not already covered by a case) from THIS clinic, records a pending generation and
+    /// hands the chunks to the n8n generator, then returns immediately (202). n8n calls back with the questions —
+    /// see <see cref="ReceiveGenerationResultAsync"/>. A workflow that answers synchronously is processed right away.</summary>
+    Task<StartBenchmarkGenerationResponse> StartGenerationAsync(Guid clinicId, CancellationToken ct = default);
+
+    /// <summary>Applies the questions n8n sent for a generation (its callback, or a synchronous reply). The clinic and the set of
+    /// chunks that were sent come from the STORED generation — never from the caller — and every returned id is validated against
+    /// them and the live Knowledge Base. Idempotent: a second delivery is reported as already processed.</summary>
+    Task<GenerationReceiveResult> ReceiveGenerationResultAsync(Guid generationId, GeneratorResponse reply, string? rawBody, bool requireEcho, CancellationToken ct = default);
+
+    Task<IReadOnlyList<BenchmarkGenerationSummary>> ListGenerationsAsync(Guid clinicId, int take, CancellationToken ct = default);
+    Task<BenchmarkGenerationDetail?> GetGenerationAsync(Guid clinicId, Guid id, CancellationToken ct = default);
+    /// <summary>Scores of a run split by the generation each case came from. Null when the run isn't this clinic's.</summary>
+    Task<IReadOnlyList<BenchmarkRunGenerationBreakdown>?> GetRunGenerationBreakdownAsync(Guid clinicId, Guid runId, CancellationToken ct = default);
 
     Task<BenchmarkCaseResponse> CreateManualCaseAsync(Guid clinicId, CreateManualBenchmarkCaseRequest request, CancellationToken ct = default);
     Task<BenchmarkCaseResponse?> UpdateCaseQuestionAsync(Guid clinicId, Guid id, string? question, CancellationToken ct = default);
@@ -66,7 +77,7 @@ public interface IKnowledgeBenchmarkService
     Task<IReadOnlyList<Guid>> RecoverInterruptedRunsAsync(CancellationToken ct = default);
 }
 
-public class KnowledgeBenchmarkService : IKnowledgeBenchmarkService
+public partial class KnowledgeBenchmarkService : IKnowledgeBenchmarkService
 {
     public const int GenerationSampleSize = 20;
     private const int MinSourceChunkChars = 80;
@@ -135,6 +146,10 @@ public class KnowledgeBenchmarkService : IKnowledgeBenchmarkService
                 .Where(r => r.ClinicId == clinicId && r.Status == BenchmarkRunStatus.Completed)
                 .OrderByDescending(r => r.CreatedAt).FirstOrDefaultAsync(ct);
 
+        await ExpireOldGenerationsAsync(clinicId, ct);
+        var generationInProgress = await _db.KnowledgeBenchmarkGenerations.AsNoTracking()
+            .AnyAsync(g => g.ClinicId == clinicId && g.Status == BenchmarkGenerationStatus.Pending, ct);
+
         var cutoff = DateTimeOffset.UtcNow - StaleRunAge;
         var inProgress = await _db.KnowledgeBenchmarkRuns.AsNoTracking().AnyAsync(r =>
             r.ClinicId == clinicId && r.CreatedAt > cutoff
@@ -142,7 +157,7 @@ public class KnowledgeBenchmarkService : IKnowledgeBenchmarkService
 
         return new BenchmarkDashboardResponse(
             counts?.Total ?? 0, counts?.Generated ?? 0, counts?.Manual ?? 0, counts?.Reviewed ?? 0, counts?.Stale ?? 0,
-            _generator.IsConfigured, inProgress,
+            _generator.IsConfigured, inProgress, generationInProgress,
             await CurrentSettingsSnapshotAsync(clinicId, ct),
             latest is null ? null : ToSummary(latest),
             latestCompleted is null ? null : ToSummary(latestCompleted));
@@ -194,136 +209,6 @@ public class KnowledgeBenchmarkService : IKnowledgeBenchmarkService
         BenchmarkResultDetailResponse? detail = latestResult is null ? null : await BuildResultDetailAsync(clinicId, latestResult, ct);
         var last = latestResult is null ? null : ToLastResult(latestResult);
         return new BenchmarkCaseDetailResponse(ToCaseResponse(c, last), content, detail);
-    }
-
-    public async Task<GenerateBenchmarkCasesResponse> GenerateCasesAsync(Guid clinicId, CancellationToken ct = default)
-    {
-        if (!_generator.IsConfigured)
-        {
-            throw new BenchmarkGeneratorNotConfiguredException(
-                "The benchmark question generator isn't configured — set N8n:KnowledgeBenchmarkWebhookUrl (env var N8n__KnowledgeBenchmarkWebhookUrl).");
-        }
-
-        await RefreshStaleAsync(clinicId, ct);
-
-        var sample = await SampleSourceChunksAsync(clinicId, ct);
-        if (sample.Count == 0)
-        {
-            return new GenerateBenchmarkCasesResponse(null, 0, 0, 0, Array.Empty<RejectedGeneratedQuestion>(),
-                "No active chunks are available to generate from — either the Knowledge Base is empty or every chunk already has a benchmark case.");
-        }
-
-        // Only THIS clinic's chunks ever leave the app (sample is clinic-scoped by SQL), and what we sent is remembered
-        // so anything the generator returns that we did not send is rejected.
-        var sent = sample.ToDictionary(s => s.ChunkId);
-
-        // One id per generation request: sent to n8n, required back in its reply, and stored on every case it produces —
-        // so a later run/test can be traced to the exact generation, and a reply that belongs to a different request
-        // (a retried/queued/misrouted workflow execution) can never be mixed into this one.
-        var generationId = Guid.NewGuid();
-        var generated = await _generator.GenerateAsync(clinicId, generationId,
-            sample.Select(s => new BenchmarkSourceChunk(s.DocumentId, s.ChunkId, s.Title, s.Content)).ToList(), ct);
-        if (!Guid.TryParse(generated.GenerationId, out var echoedId))
-        {
-            throw new BenchmarkGenerationException(
-                "The question generator did not return the generationId it was sent. The n8n workflow must echo generationId back in its response.");
-        }
-        if (echoedId != generationId)
-        {
-            throw new BenchmarkGenerationException(
-                "The question generator returned a different generationId than the one it was sent, so its response was discarded.");
-        }
-        var raw = generated.Questions;
-
-        var rejected = new List<RejectedGeneratedQuestion>();
-        var candidates = new List<(SampledChunk Source, string Question)>();
-        var seen = new HashSet<(Guid Chunk, string Question)>();
-
-        foreach (var item in raw)
-        {
-            var question = NormalizeQuestion(item.Question);
-            if (!Guid.TryParse(item.DocumentId, out var documentId) || !Guid.TryParse(item.ChunkId, out var chunkId))
-            {
-                rejected.Add(new RejectedGeneratedQuestion(question, "documentId/chunkId missing or not valid ids"));
-                continue;
-            }
-            if (!sent.TryGetValue(chunkId, out var source))
-            {
-                rejected.Add(new RejectedGeneratedQuestion(question, "chunk was not part of this request"));
-                continue;
-            }
-            if (source.DocumentId != documentId)
-            {
-                rejected.Add(new RejectedGeneratedQuestion(question, "chunk does not belong to the returned document"));
-                continue;
-            }
-            if (string.IsNullOrEmpty(question))
-            {
-                rejected.Add(new RejectedGeneratedQuestion(null, "empty question"));
-                continue;
-            }
-            if (question.Length > MaxQuestionChars)
-            {
-                rejected.Add(new RejectedGeneratedQuestion(question[..60] + "…", $"question longer than {MaxQuestionChars} characters"));
-                continue;
-            }
-            if (!seen.Add((chunkId, question.ToLowerInvariant())))
-            {
-                rejected.Add(new RejectedGeneratedQuestion(question, "duplicate question for the same chunk"));
-                continue;
-            }
-            candidates.Add((source, question));
-        }
-
-        // Re-validate against the database (clinic-scoped) — the chunk may have been rebuilt or deleted while n8n was
-        // generating. Never trust ids from outside without checking them against the current clinic.
-        var candidateChunkIds = candidates.Select(c => c.Source.ChunkId).Distinct().ToList();
-        var live = (await _db.KnowledgeChunks.AsNoTracking()
-                .Where(k => k.ClinicId == clinicId && candidateChunkIds.Contains(k.Id) && k.Document!.ClinicId == clinicId && k.Document.IsActive)
-                .Select(k => new { k.Id, k.KnowledgeDocumentId, k.Content })
-                .ToListAsync(ct))
-            .ToDictionary(k => k.Id);
-
-        var existing = (await _db.KnowledgeBenchmarkCases.AsNoTracking()
-                .Where(c => c.ClinicId == clinicId && candidateChunkIds.Contains(c.ExpectedChunkId))
-                .Select(c => new { c.ExpectedChunkId, c.Question }).ToListAsync(ct))
-            .Select(c => (c.ExpectedChunkId, c.Question.ToLowerInvariant())).ToHashSet();
-
-        var now = DateTimeOffset.UtcNow;
-        var toAdd = new List<KnowledgeRetrievalBenchmarkCase>();
-        foreach (var (source, question) in candidates)
-        {
-            if (!live.TryGetValue(source.ChunkId, out var chunk) || chunk.KnowledgeDocumentId != source.DocumentId)
-            {
-                rejected.Add(new RejectedGeneratedQuestion(question, "chunk no longer exists for this clinic"));
-                continue;
-            }
-            if (existing.Contains((source.ChunkId, question.ToLowerInvariant())))
-            {
-                rejected.Add(new RejectedGeneratedQuestion(question, "this question already exists for the chunk"));
-                continue;
-            }
-
-            toAdd.Add(new KnowledgeRetrievalBenchmarkCase
-            {
-                Id = Guid.NewGuid(),
-                ClinicId = clinicId,
-                Question = question,
-                ExpectedDocumentId = source.DocumentId,
-                ExpectedChunkId = source.ChunkId,
-                CaseType = BenchmarkCaseType.Generated,
-                IsReviewed = false,
-                GenerationId = generationId,
-                SourceChunkHash = Sha256Hex(chunk.Content),
-                SourceChunkPreview = Preview(chunk.Content, PreviewChars),
-                SourceDocumentTitle = Truncate(source.Title, 200),
-                CreatedAt = now,
-                UpdatedAt = now
-            });
-        }
-
-        var created = await InsertCasesAsync(toAdd, rejected, ct);
-        return new GenerateBenchmarkCasesResponse(generationId, sample.Count, raw.Count, created, rejected, null);
     }
 
     public async Task<BenchmarkCaseResponse> CreateManualCaseAsync(Guid clinicId, CreateManualBenchmarkCaseRequest request, CancellationToken ct = default)
@@ -674,6 +559,7 @@ public class KnowledgeBenchmarkService : IKnowledgeBenchmarkService
         ExpectedChunkId = c.ExpectedChunkId,
         ExpectedDocumentTitle = c.SourceDocumentTitle,
         ExpectedChunkPreview = c.SourceChunkPreview,
+        GenerationId = c.GenerationId,
         ResultClassification = classification,
         CreatedAt = DateTimeOffset.UtcNow
     };
@@ -890,39 +776,6 @@ public class KnowledgeBenchmarkService : IKnowledgeBenchmarkService
             if (picked.Count == GenerationSampleSize) break;
         }
         return picked;
-    }
-
-    private async Task<int> InsertCasesAsync(List<KnowledgeRetrievalBenchmarkCase> toAdd, List<RejectedGeneratedQuestion> rejected, CancellationToken ct)
-    {
-        if (toAdd.Count == 0) return 0;
-
-        _db.KnowledgeBenchmarkCases.AddRange(toAdd);
-        try
-        {
-            await _db.SaveChangesAsync(ct);
-            return toAdd.Count;
-        }
-        catch (DbUpdateException ex) when (DbErrors.IsUniqueViolation(ex))
-        {
-            // Two generations raced (e.g. a double click). Fall back to one-by-one so the winners still land.
-            _db.ChangeTracker.Clear();
-            var created = 0;
-            foreach (var c in toAdd)
-            {
-                _db.KnowledgeBenchmarkCases.Add(c);
-                try
-                {
-                    await _db.SaveChangesAsync(ct);
-                    created++;
-                }
-                catch (DbUpdateException inner) when (DbErrors.IsUniqueViolation(inner))
-                {
-                    _db.Entry(c).State = EntityState.Detached;
-                    rejected.Add(new RejectedGeneratedQuestion(c.Question, "this question already exists for the chunk"));
-                }
-            }
-            return created;
-        }
     }
 
     private static IQueryable<KnowledgeRetrievalBenchmarkCase> ApplyScope(IQueryable<KnowledgeRetrievalBenchmarkCase> query, string scope) => scope switch

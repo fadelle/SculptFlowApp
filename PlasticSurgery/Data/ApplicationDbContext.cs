@@ -46,6 +46,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
     public DbSet<KnowledgeRetrievalBenchmarkCase> KnowledgeBenchmarkCases => Set<KnowledgeRetrievalBenchmarkCase>();
     public DbSet<KnowledgeRetrievalBenchmarkRun> KnowledgeBenchmarkRuns => Set<KnowledgeRetrievalBenchmarkRun>();
     public DbSet<KnowledgeRetrievalBenchmarkResult> KnowledgeBenchmarkResults => Set<KnowledgeRetrievalBenchmarkResult>();
+    public DbSet<KnowledgeRetrievalBenchmarkGeneration> KnowledgeBenchmarkGenerations => Set<KnowledgeRetrievalBenchmarkGeneration>();
     public DbSet<ClinicUser> ClinicUsers => Set<ClinicUser>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -816,6 +817,28 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.HasIndex(x => x.ClinicId).HasDatabaseName("ix_kbc_clinic_id");
         });
 
+        modelBuilder.Entity<KnowledgeRetrievalBenchmarkGeneration>(e =>
+        {
+            e.ToTable("knowledge_retrieval_benchmark_generations");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id").ValueGeneratedNever(); // the app supplies it (it is the generationId)
+            e.Property(x => x.ClinicId).HasColumnName("clinic_id");
+            e.Property(x => x.Status).HasColumnName("status").HasMaxLength(20).IsRequired();
+            e.Property(x => x.ChunksSent).HasColumnName("chunks_sent");
+            e.Property(x => x.SentChunksJson).HasColumnName("sent_chunks").HasColumnType("jsonb");
+            e.Property(x => x.QuestionsReturned).HasColumnName("questions_returned");
+            e.Property(x => x.CasesCreated).HasColumnName("cases_created");
+            e.Property(x => x.RejectedCount).HasColumnName("rejected_count");
+            e.Property(x => x.RejectedJson).HasColumnName("rejected_json").HasColumnType("jsonb");
+            e.Property(x => x.RawResponse).HasColumnName("raw_response");
+            e.Property(x => x.ErrorMessage).HasColumnName("error_message");
+            e.Property(x => x.CompletedAt).HasColumnName("completed_at");
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+
+            e.HasOne<Clinic>().WithMany().HasForeignKey(x => x.ClinicId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(x => new { x.ClinicId, x.CreatedAt }).HasDatabaseName("ix_kbg_clinic_created");
+        });
+
         modelBuilder.Entity<KnowledgeRetrievalBenchmarkRun>(e =>
         {
             e.ToTable("knowledge_retrieval_benchmark_runs");
@@ -869,6 +892,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.Property(x => x.ExpectedChunkId).HasColumnName("expected_chunk_id");
             e.Property(x => x.ExpectedDocumentTitle).HasColumnName("expected_document_title").HasMaxLength(200);
             e.Property(x => x.ExpectedChunkPreview).HasColumnName("expected_chunk_preview").HasMaxLength(400);
+            e.Property(x => x.GenerationId).HasColumnName("generation_id");
             e.Property(x => x.ExpectedChunkRank).HasColumnName("expected_chunk_rank");
             e.Property(x => x.ExpectedDocumentBestRank).HasColumnName("expected_document_best_rank");
             e.Property(x => x.ExpectedChunkScore).HasColumnName("expected_chunk_score");

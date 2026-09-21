@@ -41,6 +41,10 @@ public interface IKnowledgeBenchmarkScorer
     /// expected document id. Document-level: the best-ranked returned item from the expected document.</summary>
     BenchmarkScore Score(Guid expectedDocumentId, Guid expectedChunkId, IReadOnlyList<BenchmarkRetrievedItem> ranked);
 
+    /// <summary>The same scoring from ranks already known (e.g. stored on a result): null = not returned. Used to aggregate stored
+    /// results per generation with exactly the same rules as a live run.</summary>
+    BenchmarkScore ScoreFromRanks(int? chunkRank, int? documentRank);
+
     BenchmarkMetrics Summarize(IReadOnlyCollection<BenchmarkScore> scoredCases);
 }
 
@@ -67,6 +71,11 @@ public class KnowledgeBenchmarkScorer : IKnowledgeBenchmarkScorer
             }
         }
 
+        return ScoreFromRanks(chunkRank, documentRank);
+    }
+
+    public BenchmarkScore ScoreFromRanks(int? chunkRank, int? documentRank)
+    {
         // An exact chunk hit is always also a document hit (same document, so its rank can't be worse).
         var classification = chunkRank is not null ? BenchmarkClassification.ExactChunkHit
             : documentRank is not null ? BenchmarkClassification.DocumentOnlyHit

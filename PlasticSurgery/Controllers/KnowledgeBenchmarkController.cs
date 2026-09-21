@@ -54,27 +54,55 @@ public class KnowledgeBenchmarkController : DashboardApiController
         return detail is null ? NotFound() : Ok(detail);
     }
 
-    /// <summary>Samples 20 of THIS clinic's active chunks, asks the n8n benchmark generator for patient questions, validates the
-    /// returned ids against the clinic and stores the valid ones as generated cases. 503 = generator webhook not configured,
-    /// 502 = the generator failed.</summary>
+    /// <summary>Samples 20 of THIS clinic's active chunks, records a pending generation and hands the chunks to the n8n benchmark
+    /// generator — then returns at once: 202 + the generationId. n8n calls back with the questions
+    /// (KnowledgeBenchmarkIngestController); poll GET generations/{id}. 200 means nothing was sent (nothing to sample) or the
+    /// workflow answered synchronously. 503 = generator webhook not configured, 502 = the generator couldn't be reached/failed,
+    /// 409 = another generation is still waiting for its callback.</summary>
     [HttpPost("cases/generate")]
-    public async Task<ActionResult<GenerateBenchmarkCasesResponse>> GenerateCases(CancellationToken ct)
+    public async Task<ActionResult<StartBenchmarkGenerationResponse>> GenerateCases(CancellationToken ct)
     {
         var clinicId = await GetClinicIdAsync(ct);
         if (clinicId is null) return Forbid();
 
         try
         {
-            return Ok(await _benchmark.GenerateCasesAsync(clinicId.Value, ct));
+            var started = await _benchmark.StartGenerationAsync(clinicId.Value, ct);
+            return started.Status == "pending" ? Accepted(started) : Ok(started);
         }
         catch (BenchmarkGeneratorNotConfiguredException ex)
         {
             return StatusCode(StatusCodes.Status503ServiceUnavailable, new { error = ex.Message });
         }
+        catch (BenchmarkGenerationInProgressException ex)
+        {
+            return Conflict(new { error = ex.Message });
+        }
         catch (BenchmarkGenerationException ex)
         {
             return StatusCode(StatusCodes.Status502BadGateway, new { error = ex.Message });
         }
+    }
+
+    // ---------------------------- generations ----------------------------
+
+    /// <summary>Recent generations (newest first) with counts and the scores of their cases in the latest run that included them.</summary>
+    [HttpGet("generations")]
+    public async Task<ActionResult<IReadOnlyList<BenchmarkGenerationSummary>>> ListGenerations([FromQuery] int take = 20, CancellationToken ct = default)
+    {
+        var clinicId = await GetClinicIdAsync(ct);
+        if (clinicId is null) return Forbid();
+        return Ok(await _benchmark.ListGenerationsAsync(clinicId.Value, take, ct));
+    }
+
+    /// <summary>One generation: what was sent, what came back, what was rejected (with reasons) and n8n's raw reply.</summary>
+    [HttpGet("generations/{id:guid}")]
+    public async Task<ActionResult<BenchmarkGenerationDetail>> GetGeneration(Guid id, CancellationToken ct)
+    {
+        var clinicId = await GetClinicIdAsync(ct);
+        if (clinicId is null) return Forbid();
+        var detail = await _benchmark.GetGenerationAsync(clinicId.Value, id, ct);
+        return detail is null ? NotFound() : Ok(detail);
     }
 
     [HttpPost("cases")]
@@ -197,6 +225,16 @@ public class KnowledgeBenchmarkController : DashboardApiController
         if (clinicId is null) return Forbid();
         var results = await _benchmark.ListResultsAsync(clinicId.Value, id, classification, skip, take, ct);
         return results is null ? NotFound() : Ok(results);
+    }
+
+    /// <summary>The run's scores split by the generation each case came from ("no generation" = manual cases).</summary>
+    [HttpGet("runs/{id:guid}/generations")]
+    public async Task<ActionResult<IReadOnlyList<BenchmarkRunGenerationBreakdown>>> RunGenerations(Guid id, CancellationToken ct)
+    {
+        var clinicId = await GetClinicIdAsync(ct);
+        if (clinicId is null) return Forbid();
+        var breakdown = await _benchmark.GetRunGenerationBreakdownAsync(clinicId.Value, id, ct);
+        return breakdown is null ? NotFound() : Ok(breakdown);
     }
 
     /// <summary>One result with the ordered chunks retrieval returned — the failed-case analysis view.</summary>

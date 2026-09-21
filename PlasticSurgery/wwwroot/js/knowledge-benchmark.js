@@ -14,6 +14,8 @@
         runId: null,           // the run whose results are shown
         resultFilter: '',
         wasRunning: false,
+        genWasRunning: false,
+        genFilter: null,        // generationId the case list is limited to
         pollTimer: null
     };
 
@@ -140,12 +142,16 @@
         ]));
 
         var running = d.runInProgress;
+        var generating = d.generationInProgress;
         $('bm-run').disabled = running || d.totalCases - d.staleCases <= 0;
-        $('bm-generate').disabled = running || !d.generatorConfigured;
+        $('bm-generate').disabled = running || generating || !d.generatorConfigured;
         var note = $('bm-generate-note');
         if (!d.generatorConfigured) {
             note.hidden = false;
             note.textContent = 'Generate Test Cases needs the question-generator webhook (N8n__KnowledgeBenchmarkWebhookUrl) to be configured. You can still add cases by hand.';
+        } else if (generating) {
+            note.hidden = false;
+            note.textContent = 'Waiting for the question generator (n8n) to send the questions… this page updates by itself, so you can leave it open or come back later.';
         } else if (note.dataset.busy !== '1') {
             note.hidden = true;
         }
@@ -162,6 +168,14 @@
             if (d.latestRun) state.runId = d.latestRun.id;
             refreshAll();
         }
+
+        if (generating) {
+            state.genWasRunning = true;
+            schedulePoll();
+        } else if (state.genWasRunning) {
+            state.genWasRunning = false;
+            onGenerationFinished();
+        }
     }
 
     function schedulePoll() {
@@ -170,6 +184,7 @@
             state.pollTimer = null;
             loadDashboard().catch(function () { /* transient — next tick retries */ });
             loadRuns();
+            loadGenerations();
         }, 2000);
     }
 
@@ -243,7 +258,10 @@
     // ---------------------------------------------------------------- cases
 
     function loadCases() {
-        var qs = '?view=' + encodeURIComponent(state.caseView) + '&skip=' + state.caseSkip + '&take=' + PAGE_SIZE;
+        var qs = '?view=' + encodeURIComponent(state.caseView) + '&skip=' + state.caseSkip + '&take=' + PAGE_SIZE +
+            (state.genFilter ? '&generationId=' + encodeURIComponent(state.genFilter) : '');
+        $('bm-gen-filter').hidden = !state.genFilter;
+        $('bm-gen-filter-id').textContent = state.genFilter || '';
         return api('GET', '/cases' + qs).then(function (res) {
             state.caseTotal = res.totalCount;
             renderCases(res.items);
@@ -313,25 +331,136 @@
         btn.disabled = true;
         note.dataset.busy = '1';
         note.hidden = false;
-        note.textContent = 'Sampling 20 chunks and asking the question generator… this can take up to a minute.';
+        note.textContent = 'Sampling 20 chunks and handing them to the question generator…';
         showMessage('');
 
         api('POST', '/cases/generate').then(function (res) {
             note.dataset.busy = '0';
             note.hidden = true;
-            var text = res.message
-                || ('Created ' + res.casesCreated + ' test case' + (res.casesCreated === 1 ? '' : 's') + ' from ' + res.chunksSent +
-                    ' chunks (' + res.questionsReturned + ' questions returned' + (res.rejected.length ? ', ' + res.rejected.length + ' rejected' : '') + ').');
-            if (res.generationId) text += ' Generation ID: ' + res.generationId;
-            var details = res.rejected.map(function (r) { return (r.question ? '"' + r.question + '" — ' : '') + r.reason; });
-            showMessage(text, res.casesCreated > 0 || res.message ? 'info' : 'error', details);
+            if (res.status === 'pending') {
+                // Normal case: n8n acknowledged and will send the questions back on its own. The page polls until they arrive.
+                state.genWasRunning = true;
+                showMessage('Generation started — the question generator is writing questions for ' + res.chunksSent +
+                    ' chunks. This page updates by itself when they arrive. Generation ID: ' + res.generationId);
+            } else if (res.message) {
+                showMessage(res.message, 'info');
+            } else {
+                // A workflow that answered synchronously: the questions are already stored.
+                var details = (res.rejected || []).map(function (r) { return (r.question ? '"' + r.question + '" — ' : '') + r.reason; });
+                showMessage('Generation ' + res.generationId + ' completed: ' + res.casesCreated + ' test case' + (res.casesCreated === 1 ? '' : 's') +
+                    ' created from ' + res.chunksSent + ' chunks' + (details.length ? ' (' + details.length + ' rejected)' : '') + '.', 'info', details);
+            }
             return refreshAll();
         }).catch(function (e) {
             note.dataset.busy = '0';
             note.hidden = true;
             showMessage(e.message, 'error');
+            refreshAll();
+        });
+    }
+
+    /** Called once when a pending generation stops being pending: say how it ended and refresh the lists. */
+    function onGenerationFinished() {
+        loadGenerations().then(function (gens) {
+            var g = gens && gens[0];
+            if (g && g.status === 'completed') {
+                showMessage('Generation ' + g.id + ' completed: ' + g.casesCreated + ' test case' + (g.casesCreated === 1 ? '' : 's') +
+                    ' created from ' + g.chunksSent + ' chunks' + (g.rejectedCount ? ' (' + g.rejectedCount + ' rejected — see Generations → Details)' : '') + '.');
+            } else if (g && g.status === 'failed') {
+                showMessage('Generation ' + g.id + ' failed: ' + (g.errorMessage || 'unknown error'), 'error');
+            }
+            loadCases();
             loadDashboard();
         });
+    }
+
+    // ---------------------------------------------------------------- generations
+
+    function loadGenerations() {
+        return api('GET', '/generations?take=20').then(function (gens) {
+            renderGenerations(gens);
+            return gens;
+        }).catch(function (e) { showMessage(e.message, 'error'); return []; });
+    }
+
+    function renderGenerations(gens) {
+        var body = $('bm-gens-body');
+        body.textContent = '';
+        if (!gens.length) {
+            body.appendChild(el('tr', { class: 'empty-row' }, [el('td', { colspan: '12', text: 'No generations yet — click "Generate Test Cases".' })]));
+            return;
+        }
+        gens.forEach(function (g) {
+            var s = g.latestScores;
+            var badge = el('span', {
+                class: 'badge ' + ({ completed: 'badge-green', pending: 'badge-teal', failed: 'badge-red' }[g.status] || 'badge-gray'),
+                title: g.errorMessage || '',
+                text: g.status === 'pending' ? 'Waiting for n8n…' : g.status.charAt(0).toUpperCase() + g.status.slice(1)
+            });
+            body.appendChild(el('tr', null, [
+                el('td', null, [el('div', { text: fmtDate(g.requestedAt) }), el('div', { class: 'text-subtle', style: 'font-size:.7rem', title: g.id, text: g.id.slice(0, 8) + '…' })]),
+                el('td', null, [badge]),
+                el('td', { text: String(g.chunksSent) }),
+                el('td', { text: g.status === 'pending' ? '—' : String(g.questionsReturned) }),
+                el('td', { text: g.status === 'pending' ? '—' : g.casesCreated + (g.casesRemaining !== g.casesCreated ? ' (' + g.casesRemaining + ' left)' : '') }),
+                el('td', { text: g.status === 'pending' ? '—' : String(g.rejectedCount) }),
+                el('td', { text: s ? pct(s.chunkTop1) : '—' }),
+                el('td', { text: s ? pct(s.chunkTop3) : '—' }),
+                el('td', { text: s ? pct(s.chunkTop5) : '—' }),
+                el('td', { text: s ? num(s.chunkMrr) : '—' }),
+                el('td', { class: 'text-subtle', style: 'font-size:.75rem', text: s ? s.scoredCases + ' cases · ' + fmtDate(s.runAt) : 'not run yet' }),
+                el('td', null, [el('div', { class: 'flex items-center gap-2' }, [
+                    el('button', { type: 'button', class: 'btn btn-sm', text: 'Details', onclick: function () { openGeneration(g.id); } }),
+                    el('button', { type: 'button', class: 'btn btn-sm', text: 'View cases', disabled: g.casesRemaining === 0 ? true : null, onclick: function () {
+                        state.genFilter = g.id; state.caseSkip = 0; state.caseView = 'all'; $('bm-case-view').value = 'all';
+                        loadCases().then(function () { $('bm-gen-filter').scrollIntoView({ behavior: 'smooth', block: 'center' }); });
+                    } })
+                ])])
+            ]));
+        });
+    }
+
+    function openGeneration(id) {
+        api('GET', '/generations/' + id).then(function (d) {
+            var g = d.summary;
+            var wrap = el('div');
+            wrap.appendChild(el('div', { class: 'text-subtle', style: 'font-size:.78rem;margin-bottom:.6rem', text: 'Generation ID: ' + g.id }));
+            wrap.appendChild(el('div', { text: 'Requested ' + fmtDate(g.requestedAt) + (g.completedAt ? ' · finished ' + fmtDate(g.completedAt) : '') +
+                ' · ' + g.chunksSent + ' chunks sent · ' + g.questionsReturned + ' questions returned · ' + g.casesCreated + ' cases created · ' + g.rejectedCount + ' rejected' }));
+            if (g.errorMessage) wrap.appendChild(el('div', { class: 'bm-verdict bad', style: 'margin-top:.7rem', text: g.errorMessage }));
+            if (g.status === 'pending') wrap.appendChild(el('div', { class: 'bm-verdict neutral', style: 'margin-top:.7rem', text: 'Still waiting for the question generator to call back.' }));
+
+            if (g.latestScores) {
+                var s = g.latestScores;
+                wrap.appendChild(el('div', { class: 'bm-subtitle', style: 'margin-top:1rem', text: 'Scores of this generation’s cases (latest completed run, ' + s.scoredCases + ' scored)' }));
+                wrap.appendChild(el('div', { class: 'stat-grid' }, [
+                    statCard('Chunk Top-1', pct(s.chunkTop1)), statCard('Chunk Top-3', pct(s.chunkTop3)),
+                    statCard('Chunk Top-5', pct(s.chunkTop5)), statCard('Chunk MRR', num(s.chunkMrr)),
+                    statCard('Doc Top-3', pct(s.documentTop3))
+                ]));
+            }
+
+            if (d.rejected.length) {
+                wrap.appendChild(el('div', { class: 'bm-subtitle', style: 'margin-top:1rem', text: 'Rejected questions (' + g.rejectedCount + (g.rejectedCount > d.rejected.length ? ', first ' + d.rejected.length + ' shown' : '') + ')' }));
+                var tb = el('tbody');
+                d.rejected.forEach(function (r) { tb.appendChild(el('tr', null, [el('td', { style: 'white-space:normal', text: r.question || '—' }), el('td', { style: 'white-space:normal', text: r.reason })])); });
+                wrap.appendChild(el('div', { class: 'table-card table-scroll' }, [el('table', { class: 'data-table bm-retrieved' }, [
+                    el('thead', null, [el('tr', null, [el('th', { text: 'Question' }), el('th', { text: 'Reason' })])]), tb])]));
+            }
+
+            wrap.appendChild(el('div', { class: 'bm-subtitle', style: 'margin-top:1rem', text: 'Chunks sent (' + d.sentChunks.length + ')' }));
+            var list = el('ul', { style: 'margin:.2rem 0 0 1.1rem;padding:0;font-size:.82rem' });
+            d.sentChunks.forEach(function (c) { list.appendChild(el('li', null, [c.documentTitle + ' ', el('span', { class: 'text-subtle', text: '· chunk ' + c.chunkId.slice(0, 8) + '…' })])); });
+            wrap.appendChild(list);
+
+            if (d.rawResponse) {
+                wrap.appendChild(el('details', { style: 'margin-top:1rem' }, [
+                    el('summary', { text: 'What n8n sent back (raw)' }),
+                    el('pre', { class: 'bm-block', style: 'max-height:260px;overflow:auto', text: d.rawResponse })
+                ]));
+            }
+            openOverlay('Generation', wrap);
+        }).catch(function (e) { showMessage(e.message, 'error'); });
     }
 
     function runBenchmark() {
@@ -394,11 +523,31 @@
         var section = $('bm-results-section');
         if (!state.runId) { section.hidden = true; return Promise.resolve(); }
         var qs = '?skip=0&take=500' + (state.resultFilter ? '&classification=' + encodeURIComponent(state.resultFilter) : '');
+        api('GET', '/runs/' + state.runId + '/generations').then(renderRunGenerations).catch(function () { /* optional panel */ });
         return api('GET', '/runs/' + state.runId + '/results' + qs).then(function (res) {
             section.hidden = false;
             $('bm-results-title').textContent = 'Run results (' + res.totalCount + ')';
             renderResults(res.items);
         }).catch(function (e) { showMessage(e.message, 'error'); });
+    }
+
+    /** "Scores by generation" for the selected run (cases with no generation — manual ones — are grouped last). */
+    function renderRunGenerations(rows) {
+        var host = $('bm-run-gens');
+        var body = $('bm-run-gens-body');
+        body.textContent = '';
+        host.hidden = rows.length === 0;
+        rows.forEach(function (b) {
+            var s = b.scores;
+            body.appendChild(el('tr', null, [
+                el('td', null, b.generationId
+                    ? [el('div', { text: fmtDate(b.generationRequestedAt) }), el('div', { class: 'text-subtle', style: 'font-size:.7rem', title: b.generationId, text: b.generationId.slice(0, 8) + '…' })]
+                    : [el('span', { class: 'text-subtle', text: 'No generation (manual cases)' })]),
+                el('td', { text: String(s.scoredCases) }),
+                el('td', { text: pct(s.chunkTop1) }), el('td', { text: pct(s.chunkTop3) }), el('td', { text: pct(s.chunkTop5) }),
+                el('td', { text: num(s.chunkMrr) }), el('td', { text: pct(s.documentTop3) })
+            ]));
+        });
     }
 
     function renderResults(items) {
@@ -620,7 +769,7 @@
     // ---------------------------------------------------------------- wiring
 
     function refreshAll() {
-        return Promise.all([loadDashboard(), loadCases(), loadRuns(), state.runId ? loadResults() : Promise.resolve()]);
+        return Promise.all([loadDashboard(), loadCases(), loadRuns(), loadGenerations(), state.runId ? loadResults() : Promise.resolve()]);
     }
 
     function init() {
@@ -629,6 +778,7 @@
         $('bm-case-view').addEventListener('change', function (e) { state.caseView = e.target.value; state.caseSkip = 0; loadCases(); });
         $('bm-cases-prev').addEventListener('click', function () { state.caseSkip = Math.max(0, state.caseSkip - PAGE_SIZE); loadCases(); });
         $('bm-cases-next').addEventListener('click', function () { state.caseSkip += PAGE_SIZE; loadCases(); });
+        $('bm-gen-filter-clear').addEventListener('click', function () { state.genFilter = null; state.caseSkip = 0; loadCases(); });
         $('bm-result-filter').addEventListener('change', function (e) { state.resultFilter = e.target.value; loadResults(); });
         $('bm-add-toggle').addEventListener('click', function () { toggleAddForm(); });
         $('bm-add-cancel').addEventListener('click', function () { toggleAddForm(false); });
@@ -641,7 +791,7 @@
         loadDashboard().then(function (d) {
             // Show the newest completed run's results by default.
             if (d.latestCompletedRun) state.runId = d.latestCompletedRun.id;
-            return Promise.all([loadCases(), loadRuns(), state.runId ? loadResults() : null]);
+            return Promise.all([loadCases(), loadRuns(), loadGenerations(), state.runId ? loadResults() : null]);
         }).catch(function (e) { showMessage(e.message, 'error'); });
     }
 

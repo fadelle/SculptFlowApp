@@ -97,6 +97,9 @@ public class KnowledgeRetrievalBenchmarkResult
     public string? ExpectedDocumentTitle { get; set; }
     public string? ExpectedChunkPreview { get; set; }
 
+    /// <summary>The generation the case came from (snapshot, so per-generation scores survive deleting the case). Null for manual cases.</summary>
+    public Guid? GenerationId { get; set; }
+
     /// <summary>1-based rank of the exact expected chunk among the chunks production search RETURNED; null = not returned.</summary>
     public int? ExpectedChunkRank { get; set; }
     /// <summary>1-based rank of the best-ranked returned chunk belonging to the expected document; null = none returned.</summary>
@@ -121,6 +124,41 @@ public class KnowledgeRetrievalBenchmarkResult
     public int? LatencyMs { get; set; }
 
     public DateTimeOffset CreatedAt { get; set; }
+}
+
+/// <summary>One "Generate Test Cases" request. <see cref="Id"/> IS the generationId sent to the n8n generator and required on its
+/// callback. Created (pending) before anything is sent; it remembers the chunks that were sent so the reply can be validated
+/// against exactly that set, and the clinic is always taken from this row — never from the caller.</summary>
+public class KnowledgeRetrievalBenchmarkGeneration
+{
+    public Guid Id { get; set; }
+    public Guid ClinicId { get; set; }
+
+    /// <summary>pending | completed | failed</summary>
+    public string Status { get; set; } = BenchmarkGenerationStatus.Pending;
+
+    public int ChunksSent { get; set; }
+    /// <summary>JSON [{documentId, chunkId, documentTitle}] — the chunks that were sent (ids and title only, no text).</summary>
+    public string? SentChunksJson { get; set; }
+
+    public int QuestionsReturned { get; set; }
+    public int CasesCreated { get; set; }
+    public int RejectedCount { get; set; }
+    /// <summary>JSON [{question, reason}] — the first rejected items (capped); <see cref="RejectedCount"/> is the exact total.</summary>
+    public string? RejectedJson { get; set; }
+    /// <summary>The reply/callback body n8n sent (capped).</summary>
+    public string? RawResponse { get; set; }
+
+    public string? ErrorMessage { get; set; }
+    public DateTimeOffset? CompletedAt { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+}
+
+public static class BenchmarkGenerationStatus
+{
+    public const string Pending = "pending";
+    public const string Completed = "completed";
+    public const string Failed = "failed";
 }
 
 public static class BenchmarkCaseType

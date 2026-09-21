@@ -1303,3 +1303,49 @@ create index if not exists ix_kbres_case_created on knowledge_retrieval_benchmar
 -- that response produced (null for manual cases and for cases created before this column existed).
 alter table knowledge_retrieval_benchmark_cases add column if not exists generation_id uuid;
 create index if not exists ix_kbc_clinic_generation on knowledge_retrieval_benchmark_cases(clinic_id, generation_id) where generation_id is not null;
+
+-- Retrieval Benchmark: ASYNC question generation. One row per "Generate Test Cases" request. `id` IS the generationId that is
+-- sent to the n8n generator and that n8n's callback must carry (POST .../generations/{id}/questions). The row is created
+-- (pending) BEFORE anything is sent, so even an instant callback finds it, and it remembers exactly which chunks were sent so
+-- the reply can be validated against that set (and the clinic is taken from THIS row, never from the caller).
+create table if not exists knowledge_retrieval_benchmark_generations (
+  id                    uuid primary key,
+  clinic_id             uuid not null references clinics(id) on delete cascade,
+
+  status                varchar(20) not null default 'pending',   -- pending | completed | failed
+
+  chunks_sent           integer not null default 0,
+  sent_chunks           jsonb,                                     -- [{documentId, chunkId, documentTitle}] (no chunk text)
+
+  questions_returned    integer not null default 0,
+  cases_created         integer not null default 0,
+  rejected_count        integer not null default 0,
+  rejected_json         jsonb,                                     -- first rejected items with reasons (capped)
+  raw_response          text,                                      -- n8n's reply/callback body, capped
+
+  error_message         text,
+  completed_at          timestamptz,
+  created_at            timestamptz not null default now(),
+
+  constraint ck_kbg_status check (status in ('pending','completed','failed'))
+);
+create index if not exists ix_kbg_clinic_created on knowledge_retrieval_benchmark_generations(clinic_id, created_at desc);
+
+-- Results remember which generation their case came from, so scores can be reported per generation even after the case is
+-- deleted (the case FK is ON DELETE SET NULL).
+alter table knowledge_retrieval_benchmark_results add column if not exists generation_id uuid;
+create index if not exists ix_kbres_generation on knowledge_retrieval_benchmark_results(clinic_id, generation_id) where generation_id is not null;
+
+-- Backfill: generations created by the earlier synchronous version left only a tag on their cases.
+insert into knowledge_retrieval_benchmark_generations
+  (id, clinic_id, status, chunks_sent, questions_returned, cases_created, completed_at, created_at)
+select generation_id, clinic_id, 'completed', count(*), count(*), count(*), min(created_at), min(created_at)
+from knowledge_retrieval_benchmark_cases
+where generation_id is not null
+group by generation_id, clinic_id
+on conflict (id) do nothing;
+
+update knowledge_retrieval_benchmark_results r
+set generation_id = c.generation_id
+from knowledge_retrieval_benchmark_cases c
+where r.benchmark_case_id = c.id and c.generation_id is not null and r.generation_id is null;

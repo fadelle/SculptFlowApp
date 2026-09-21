@@ -48,6 +48,8 @@ public record BenchmarkDashboardResponse(
     int StaleCases,
     bool GeneratorConfigured,
     bool RunInProgress,
+    /// <summary>A "Generate Test Cases" request is waiting for n8n's callback.</summary>
+    bool GenerationInProgress,
     /// <summary>The clinic's CURRENT retrieval settings (what a run started now would use).</summary>
     BenchmarkSettingsSnapshot CurrentSettings,
     /// <summary>The most recent run of any status (drives the progress bar).</summary>
@@ -101,15 +103,68 @@ public record StartBenchmarkRunRequest(string? Scope);
 
 public record RejectedGeneratedQuestion(string? Question, string Reason);
 
-public record GenerateBenchmarkCasesResponse(
-    /// <summary>The id sent to n8n and echoed back for this generation (null when nothing was sent).</summary>
+/// <summary>The result of clicking "Generate Test Cases". Normally <see cref="Status"/> is "pending": the chunks were handed to n8n
+/// and its callback will create the cases later (poll GET generations/{id}). "completed" only when the workflow answered
+/// synchronously; "none" when there was nothing to sample (then <see cref="GenerationId"/> is null).</summary>
+public record StartBenchmarkGenerationResponse(
+    /// <summary>The id sent to n8n (and carried by its callback); null when nothing was sent.</summary>
     Guid? GenerationId,
+    string Status,
     /// <summary>How many chunks were sampled and sent to the generator.</summary>
     int ChunksSent,
+    /// <summary>Only meaningful when Status is "completed" (a synchronous reply).</summary>
     int QuestionsReturned,
     int CasesCreated,
     IReadOnlyList<RejectedGeneratedQuestion> Rejected,
     string? Message);
+
+/// <summary>Strict-chunk and document-level metrics for ONE generation's cases in ONE run (see KnowledgeBenchmarkService).</summary>
+public record BenchmarkGenerationScores(
+    Guid? RunId,
+    DateTimeOffset? RunAt,
+    int ScoredCases,
+    double? ChunkTop1,
+    double? ChunkTop3,
+    double? ChunkTop5,
+    double? ChunkMrr,
+    double? DocumentTop1,
+    double? DocumentTop3,
+    double? DocumentTop5,
+    double? DocumentMrr);
+
+public record BenchmarkGenerationSummary(
+    Guid Id,
+    /// <summary>pending | completed | failed (a pending generation with no callback after 30 minutes becomes failed).</summary>
+    string Status,
+    DateTimeOffset RequestedAt,
+    DateTimeOffset? CompletedAt,
+    int ChunksSent,
+    int QuestionsReturned,
+    int CasesCreated,
+    int RejectedCount,
+    /// <summary>How many of this generation's cases still exist (cases can be deleted).</summary>
+    int CasesRemaining,
+    string? ErrorMessage,
+    /// <summary>Scores of this generation's cases in the most recent completed run that included them; null if never run.</summary>
+    BenchmarkGenerationScores? LatestScores);
+
+public record BenchmarkGenerationChunk(Guid DocumentId, Guid ChunkId, string DocumentTitle);
+
+public record BenchmarkGenerationDetail(
+    BenchmarkGenerationSummary Summary,
+    IReadOnlyList<RejectedGeneratedQuestion> Rejected,
+    IReadOnlyList<BenchmarkGenerationChunk> SentChunks,
+    /// <summary>The reply/callback body n8n sent (capped), for debugging a workflow.</summary>
+    string? RawResponse);
+
+/// <summary>One row of "scores by generation" for a run. GenerationId null = cases with no generation (manual).</summary>
+public record BenchmarkRunGenerationBreakdown(
+    Guid? GenerationId,
+    DateTimeOffset? GenerationRequestedAt,
+    BenchmarkGenerationScores Scores);
+
+/// <summary>What the n8n callback endpoint answers.</summary>
+public record BenchmarkGenerationCallbackResponse(Guid GenerationId, string Status, int CasesCreated, int Rejected, bool AlreadyProcessed);
 
 public record BenchmarkSourceDocumentResponse(Guid Id, string Title, string Category, int ChunkCount);
 

@@ -83,6 +83,11 @@ else
             </div>
         </div>
 
+        <div class="text-subtle" id="bm-gen-filter" style="font-size:.8rem;margin:.3rem 0" hidden>
+            Showing only the cases from generation <span id="bm-gen-filter-id"></span>
+            <button type="button" class="btn btn-sm" id="bm-gen-filter-clear" style="margin-left:.4rem">Show all</button>
+        </div>
+
         <div class="table-card table-scroll mt-1">
             <table class="data-table">
                 <thead>
@@ -102,6 +107,36 @@ else
             <button type="button" class="btn btn-sm" id="bm-cases-prev">&larr; Previous</button>
             <span class="text-subtle" style="font-size:.8rem" id="bm-cases-range"></span>
             <button type="button" class="btn btn-sm" id="bm-cases-next">Next &rarr;</button>
+        </div>
+    </div>
+
+    @* ---------- Generations: every "Generate Test Cases" request, what came back, and how its cases score ---------- *@
+    <div class="mt-4">
+        <h3 class="bm-section-title">Generations</h3>
+        <div class="text-subtle" style="font-size:.78rem;margin-bottom:.5rem">
+            Each "Generate Test Cases" request is recorded with what was sent and what came back. Scores are that generation's cases
+            in the most recent completed run that included them — run again after changing settings to compare.
+        </div>
+        <div class="table-card table-scroll">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Requested</th>
+                        <th>Status</th>
+                        <th>Chunks sent</th>
+                        <th>Questions</th>
+                        <th>Cases</th>
+                        <th>Rejected</th>
+                        <th>Chunk Top-1</th>
+                        <th>Chunk Top-3</th>
+                        <th>Chunk Top-5</th>
+                        <th>Chunk MRR</th>
+                        <th>Scored in</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody id="bm-gens-body"><tr class="empty-row"><td colspan="12">Loading…</td></tr></tbody>
+            </table>
         </div>
     </div>
 
@@ -146,6 +181,26 @@ else
                 <option value="ERROR">Error</option>
             </select>
         </div>
+        <div id="bm-run-gens" class="mb-2" hidden>
+            <div class="bm-subtitle">Scores by generation (this run)</div>
+            <div class="table-card table-scroll">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Generation</th>
+                            <th>Scored</th>
+                            <th>Chunk Top-1</th>
+                            <th>Chunk Top-3</th>
+                            <th>Chunk Top-5</th>
+                            <th>Chunk MRR</th>
+                            <th>Doc Top-3</th>
+                        </tr>
+                    </thead>
+                    <tbody id="bm-run-gens-body"></tbody>
+                </table>
+            </div>
+        </div>
+
         <div class="table-card table-scroll">
             <table class="data-table">
                 <thead>
