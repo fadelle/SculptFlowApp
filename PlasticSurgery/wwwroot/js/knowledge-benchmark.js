@@ -8,14 +8,13 @@
 
     var state = {
         dashboard: null,
-        caseView: 'all',
+        caseView: 'manual',    // this page only ever shows MANUAL cases — generated cases live on their own generation's page
         caseSkip: 0,
         caseTotal: 0,
         runId: null,           // the run whose results are shown
         resultFilter: '',
         wasRunning: false,
         genWasRunning: false,
-        genFilter: null,        // generationId the case list is limited to
         pendingGenId: null,     // the generation "Stop generating" cancels
         pollTimer: null
     };
@@ -263,10 +262,7 @@
     // ---------------------------------------------------------------- cases
 
     function loadCases() {
-        var qs = '?view=' + encodeURIComponent(state.caseView) + '&skip=' + state.caseSkip + '&take=' + PAGE_SIZE +
-            (state.genFilter ? '&generationId=' + encodeURIComponent(state.genFilter) : '');
-        $('bm-gen-filter').hidden = !state.genFilter;
-        $('bm-gen-filter-id').textContent = state.genFilter || '';
+        var qs = '?view=' + encodeURIComponent(state.caseView) + '&skip=' + state.caseSkip + '&take=' + PAGE_SIZE;
         return api('GET', '/cases' + qs).then(function (res) {
             state.caseTotal = res.totalCount;
             renderCases(res.items);
@@ -277,9 +273,7 @@
         var body = $('bm-cases-body');
         body.textContent = '';
         if (!items.length) {
-            body.appendChild(el('tr', { class: 'empty-row' }, [el('td', { colspan: '6', text: state.caseView === 'all'
-                ? 'No test cases yet — click "Generate Test Cases" or "Add manual case".'
-                : 'No cases match this filter.' })]));
+            body.appendChild(el('tr', { class: 'empty-row' }, [el('td', { colspan: '5', text: 'No manual test cases yet — click "Add manual case".' })]));
         }
 
         items.forEach(function (c) {
@@ -291,7 +285,6 @@
                 el('div', { class: 'bm-cell-clip', text: c.expectedDocumentTitle || '—', style: 'font-weight:600' }),
                 el('div', { class: 'bm-cell-clip text-subtle', style: 'font-size:.75rem', title: c.expectedChunkPreview || '', text: c.expectedChunkPreview || '' })
             ]);
-            var typeCell = el('td', null, [el('span', { class: 'badge ' + (c.caseType === 'manual' ? 'badge-blue' : 'badge-gray'), text: c.caseType === 'manual' ? 'Manual' : 'Generated' })]);
             var reviewCell = el('td', null, [el('span', { class: 'badge ' + (c.isReviewed ? 'badge-green' : 'badge-gray'), text: c.isReviewed ? 'Reviewed' : 'Not reviewed' })]);
             var lastCell = el('td', null, [
                 c.isStale
@@ -303,7 +296,7 @@
                 el('button', { type: 'button', class: 'btn btn-sm', text: c.isReviewed ? 'Unreview' : 'Mark reviewed', onclick: function () { toggleReviewed(c); } }),
                 el('button', { type: 'button', class: 'btn btn-sm', text: 'Delete', onclick: function () { deleteCase(c); } })
             ])]);
-            body.appendChild(el('tr', null, [qCell, expCell, typeCell, reviewCell, lastCell, actions]));
+            body.appendChild(el('tr', null, [qCell, expCell, reviewCell, lastCell, actions]));
         });
 
         var pager = $('bm-cases-pager');
@@ -386,7 +379,7 @@
             var g = gens && gens[0];
             if (g && g.status === 'completed') {
                 showMessage('Generation ' + g.id + ' completed: ' + g.casesCreated + ' test case' + (g.casesCreated === 1 ? '' : 's') +
-                    ' created from ' + g.chunksSent + ' chunks' + (g.rejectedCount ? ' (' + g.rejectedCount + ' rejected — see Generations → Details)' : '') + '.');
+                    ' created from ' + g.chunksSent + ' chunks' + (g.rejectedCount ? ' (' + g.rejectedCount + ' rejected — open it below to see why)' : '') + '.');
             } else if (g && g.status === 'failed') {
                 showMessage('Generation ' + g.id + ' failed: ' + (g.errorMessage || 'unknown error'), 'error');
             } else if (g && g.status === 'cancelled') {
@@ -433,11 +426,7 @@
                 el('td', { text: s ? num(s.chunkMrr) : '—' }),
                 el('td', { class: 'text-subtle', style: 'font-size:.75rem', text: s ? s.scoredCases + ' cases · ' + fmtDate(s.runAt) : 'not run yet' }),
                 el('td', null, [el('div', { class: 'flex items-center gap-2' }, [
-                    el('button', { type: 'button', class: 'btn btn-sm', text: 'Details', onclick: function () { openGeneration(g.id); } }),
-                    el('button', { type: 'button', class: 'btn btn-sm', text: 'View cases', disabled: g.casesRemaining === 0 ? true : null, onclick: function () {
-                        state.genFilter = g.id; state.caseSkip = 0; state.caseView = 'all'; $('bm-case-view').value = 'all';
-                        loadCases().then(function () { $('bm-gen-filter').scrollIntoView({ behavior: 'smooth', block: 'center' }); });
-                    } }),
+                    el('a', { class: 'btn btn-sm', href: '/KnowledgeBase/Benchmark/Generations/' + g.id, text: 'Open' }),
                     el('button', {
                         type: 'button', class: 'btn btn-primary btn-sm', text: 'Run',
                         title: 'Run the benchmark for just this generation’s ' + g.casesRemaining + ' case(s)',
@@ -447,59 +436,6 @@
                 ])])
             ]));
         });
-    }
-
-    function openGeneration(id) {
-        api('GET', '/generations/' + id).then(function (d) {
-            var g = d.summary;
-            var wrap = el('div');
-            wrap.appendChild(el('div', { class: 'text-subtle', style: 'font-size:.78rem;margin-bottom:.6rem', text: 'Generation ID: ' + g.id }));
-            wrap.appendChild(el('div', { text: 'Requested ' + fmtDate(g.requestedAt) + (g.completedAt ? ' · finished ' + fmtDate(g.completedAt) : '') +
-                ' · ' + g.chunksSent + ' chunks sent · ' + g.questionsReturned + ' questions returned · ' + g.casesCreated + ' cases created · ' + g.rejectedCount + ' rejected' }));
-            if (g.errorMessage) wrap.appendChild(el('div', { class: 'bm-verdict bad', style: 'margin-top:.7rem', text: g.errorMessage }));
-            if (g.status === 'pending') wrap.appendChild(el('div', { class: 'bm-verdict neutral', style: 'margin-top:.7rem', text: 'Still waiting for the question generator to call back.' }));
-
-            if (g.casesRemaining > 0) {
-                wrap.appendChild(el('div', { class: 'mt-2' }, [
-                    el('button', {
-                        type: 'button', class: 'btn btn-primary btn-sm', text: 'Run Benchmark for this generation',
-                        disabled: $('bm-run').disabled ? true : null,
-                        onclick: function () { closeOverlay(); runGeneration(g.id); }
-                    })
-                ]));
-            }
-
-            if (g.latestScores) {
-                var s = g.latestScores;
-                wrap.appendChild(el('div', { class: 'bm-subtitle', style: 'margin-top:1rem', text: 'Scores of this generation’s cases (latest completed run, ' + s.scoredCases + ' scored)' }));
-                wrap.appendChild(el('div', { class: 'stat-grid' }, [
-                    statCard('Chunk Top-1', pct(s.chunkTop1)), statCard('Chunk Top-3', pct(s.chunkTop3)),
-                    statCard('Chunk Top-5', pct(s.chunkTop5)), statCard('Chunk MRR', num(s.chunkMrr)),
-                    statCard('Doc Top-3', pct(s.documentTop3))
-                ]));
-            }
-
-            if (d.rejected.length) {
-                wrap.appendChild(el('div', { class: 'bm-subtitle', style: 'margin-top:1rem', text: 'Rejected questions (' + g.rejectedCount + (g.rejectedCount > d.rejected.length ? ', first ' + d.rejected.length + ' shown' : '') + ')' }));
-                var tb = el('tbody');
-                d.rejected.forEach(function (r) { tb.appendChild(el('tr', null, [el('td', { style: 'white-space:normal', text: r.question || '—' }), el('td', { style: 'white-space:normal', text: r.reason })])); });
-                wrap.appendChild(el('div', { class: 'table-card table-scroll' }, [el('table', { class: 'data-table bm-retrieved' }, [
-                    el('thead', null, [el('tr', null, [el('th', { text: 'Question' }), el('th', { text: 'Reason' })])]), tb])]));
-            }
-
-            wrap.appendChild(el('div', { class: 'bm-subtitle', style: 'margin-top:1rem', text: 'Chunks sent (' + d.sentChunks.length + ')' }));
-            var list = el('ul', { style: 'margin:.2rem 0 0 1.1rem;padding:0;font-size:.82rem' });
-            d.sentChunks.forEach(function (c) { list.appendChild(el('li', null, [c.documentTitle + ' ', el('span', { class: 'text-subtle', text: '· chunk ' + c.chunkId.slice(0, 8) + '…' })])); });
-            wrap.appendChild(list);
-
-            if (d.rawResponse) {
-                wrap.appendChild(el('details', { style: 'margin-top:1rem' }, [
-                    el('summary', { text: 'What n8n sent back (raw)' }),
-                    el('pre', { class: 'bm-block', style: 'max-height:260px;overflow:auto', text: d.rawResponse })
-                ]));
-            }
-            openOverlay('Generation', wrap);
-        }).catch(function (e) { showMessage(e.message, 'error'); });
     }
 
     function runBenchmark() {
@@ -832,10 +768,8 @@
         $('bm-generate').addEventListener('click', generate);
         $('bm-stop').addEventListener('click', stopGenerating);
         $('bm-run').addEventListener('click', runBenchmark);
-        $('bm-case-view').addEventListener('change', function (e) { state.caseView = e.target.value; state.caseSkip = 0; loadCases(); });
         $('bm-cases-prev').addEventListener('click', function () { state.caseSkip = Math.max(0, state.caseSkip - PAGE_SIZE); loadCases(); });
         $('bm-cases-next').addEventListener('click', function () { state.caseSkip += PAGE_SIZE; loadCases(); });
-        $('bm-gen-filter-clear').addEventListener('click', function () { state.genFilter = null; state.caseSkip = 0; loadCases(); });
         $('bm-result-filter').addEventListener('change', function (e) { state.resultFilter = e.target.value; loadResults(); });
         $('bm-add-toggle').addEventListener('click', function () { toggleAddForm(); });
         $('bm-add-cancel').addEventListener('click', function () { toggleAddForm(false); });

@@ -452,8 +452,16 @@ The only AI involved is the separate n8n workflow that WRITES the benchmark ques
   stale detection, runs, reads), `N8nKnowledgeBenchmarkGeneratorClient` (only sends chunks / parses questions),
   `KnowledgeBenchmarkScorer` (pure), `KnowledgeBenchmarkRunWorker` + queue (background runs, restart-recoverable like the
   crawler). Controller `KnowledgeBenchmarkController` (`api/knowledge/benchmark`, `[Authorize]`, clinic from
-  `CurrentClinicContext`, thin). Entities `Data/Entities/KnowledgeRetrievalBenchmark.cs`; DTOs `Dtos/KnowledgeBenchmarkDtos.cs`;
-  UI `Pages/KnowledgeBase/Benchmark.cshtml` + `wwwroot/js/knowledge-benchmark.js` (all server text via `textContent`).
+  `CurrentClinicContext`, thin). Entities `Data/Entities/KnowledgeRetrievalBenchmark.cs`; DTOs `Dtos/KnowledgeBenchmarkDtos.cs`.
+  **Two pages, both plain shells driven entirely by the same API** (all server text via `textContent`):
+  `Pages/KnowledgeBase/Benchmark.cshtml` + `wwwroot/js/knowledge-benchmark.js` (the dashboard: Generate/Stop/Run, metrics,
+  **manual** cases only, Generations list, run history, run results), and
+  `Pages/KnowledgeBase/Benchmark/Generation.cshtml` (`/KnowledgeBase/Benchmark/Generations/{id:guid}`) +
+  `wwwroot/js/knowledge-benchmark-generation.js` (one generation's OWN page: summary, chunks sent, rejected questions, raw n8n
+  reply, Run Benchmark for just this generation, and the FULL list of its own cases — edit/review/delete, same case-detail and
+  failed-case-analysis overlay as the main page, duplicated by hand into the second script rather than shared, since each page
+  is a small self-contained file). No backend changes were needed for this split — the case list already accepted a
+  `generationId` filter and the "generation" run scope already existed; this was pure UI reorganization.
 - **Cases**: a realistic patient question + the ONE expected chunk (`expected_document_id`, `expected_chunk_id`, kept as plain
   columns — deliberately NOT FKs, so production ingestion is never blocked; plus `source_chunk_hash` SHA-256 and a preview).
   `case_type` generated|manual; `is_reviewed` (a manual case is reviewed automatically); `generation_id` (which generation made it).
@@ -481,18 +489,28 @@ The only AI involved is the separate n8n workflow that WRITES the benchmark ques
   created, rejected count and the first 100 rejected items WITH reasons, n8n's raw reply (capped 100k chars), error, timestamps.
   **Scores per generation**: results snapshot `generation_id`, so `GET …/generations` shows each generation's Chunk Top-1/3/5/MRR
   from the most recent completed run that included its cases (survives deleting cases), and `GET …/runs/{id}/generations` splits
-  one run's scores by generation ("no generation" = manual). The page has a Generations section (Details overlay, "View cases"
-  filter) and a "Scores by generation" panel above run results.
+  one run's scores by generation ("no generation" = manual). The main page's Generations table links each row's **Open**
+  (a real `<a href>`, not JS) to that generation's own page, and shows a **Run** button inline; a run's results page also shows
+  a "Scores by generation" panel above the results table.
 - **4th run scope: `generation`.** `all`/`generated`/`reviewed` pool cases across every batch ever generated — there was no way
   to score just ONE "Generate Test Cases" click. `POST …/runs {scope:"generation", generationId}` scores exactly that
   generation's cases (whatever their type/reviewed state), requires `generationId` to belong to the caller's clinic (400
   otherwise; 400 if `generationId` is given with any other scope, or omitted with this one), and the run row remembers
   `generation_id` (new nullable column, `ck_kbr_case_scope` widened) so run history and the generation's own "Scores" always show
-  which run it was. UI: a **Run** button on every Generations row and inside its Details overlay — no scope picker needed, it's
-  scoped to that row. Verified live: two separate generations of 20 cases each for one clinic; a `generation`-scoped run scored
+  which run it was. UI: a **Run** button on every Generations row, and a **Run Benchmark for this generation** button on the
+  generation's own page — no scope picker needed, it's scoped to that row/page. Verified live: two separate generations of 20
+  cases each for one clinic; a `generation`-scoped run scored
   exactly the targeted 20 (zero overlap with the other 20's case ids), its own row picked up the run's scores while the untouched
   generation stayed at "not run yet", re-running the same generation works and both runs are kept, and all 4 validation rules
   (missing generationId, generationId with the wrong scope, unknown generationId, another clinic's generationId) return 400.
+- **Generated cases moved off the main page onto each generation's own page** (§ above — `Pages/KnowledgeBase/Benchmark/Generation.cshtml`).
+  The main page's case table is now **manual cases only** (its `view` is hardcoded to `manual`, no dropdown; column `Type` dropped
+  since it's always Manual there); a generated case is only ever seen by opening its generation. No backend change: `ListCasesAsync`
+  already combined `view` + `generationId`, so the new page just always passes `generationId` with `view=all|reviewed|unreviewed|stale`.
+  The old "Details" overlay and "View cases" filter-and-scroll are gone, replaced by the one **Open** link. Verified live: the main
+  page shows only a manually-added case (generated cases from a real batch never appear there); opening a generation shows its own
+  20 cases with working edit/mark-reviewed/delete (counts update immediately) and its own Run button (scores + per-case results
+  update in place after the run completes); another clinic opening the URL gets a graceful "Not Found", no data leak, no crash.
 - **Stale cases** (chunk ids change whenever a document is re-saved): re-checked on dashboard/list/run. Stale = chunk id gone
   (`chunk_missing`), text hash changed (`chunk_changed`) or its document inactive (`document_inactive`). If the text simply
   moved to a new id, the case is auto-RELINKED (exactly one active chunk with the same hash) and stays live. Stale cases are
