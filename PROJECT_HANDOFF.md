@@ -383,7 +383,22 @@ start page failed); removed = row kept + document DEACTIVATED (never deleted); a
 hand-deactivated document is never re-activated by a crawl. **Limits** (`Knowledge:WebScraping`, clamped): MaxPages 100,
 MaxDepth 3, MaxConcurrency 3, RequestTimeoutSeconds 15, MaxResponseBytes 2 MB, MaxRedirects 5, PolitenessDelayMs 300,
 MaxRunMinutes 20, MinTextChars 80, MaxTextChars 200k, MaxQueryVariantsPerPath 5, MaxSourcesPerClinic 25; crawl-trap
-filters (calendar/filter/session params, repeated/deep paths, >4 query params, per-path variant cap). **SSRF**
+filters (calendar/filter/session params, repeated/deep paths, >4 query params, per-path variant cap).
+**Blog listing/archive pages are excluded from the Knowledge Base** (`UrlNormalizer.IsListingUrl` + a title check in
+`WebsiteScrapeProcessor.Analyze`, added after the Retrieval Benchmark showed misses caused by category/tag/author/
+pagination pages — teaser text like "482 Views 0 Comments … Read More", no real answer to anything): a page whose URL
+has a `category`/`categories`/`tag`/`tags`/`author` segment, or a `page/<digits>` segment (e.g. `/blog/page/2/`), OR
+whose `<title>` contains "Archives" (most blog themes title these pages "… Archives - Site"), is classified `skipped`
+(`WebsitePageStatus.Skipped`) — same as noindex — instead of becoming a document. **Important**: the check runs AFTER
+the page is fetched, not before, specifically so its OWN links are still discovered and followed — filtering it out
+pre-fetch would silently lose any article only ever linked from a listing page (verified live: two articles reachable
+only via `/category/…` and `/blog/page/2/` remained indexed after this change). A page that was already indexed and
+later reclassified this way (title changed, or it simply wasn't caught before) goes through the SAME `Outcome.Skipped`
+path as any other skip: its `knowledge_documents` row (and chunks) is deleted via `DropDocumentAsync` on that crawl —
+no separate cleanup step, a normal Rescrape is enough. Verified live against a fake site (category/tag/author/page-N
+URLs, a title-only case, a normal page whose title was flipped to "…Archives…" mid-test and correctly lost its
+document on the next crawl) plus 19 `UrlNormalizer.IsListingUrl` unit checks (segment-exact match, case-insensitive,
+no false positive on e.g. `/my-tag-cloud/` or `/pages/about/`). **SSRF**
 (`SsrfGuard`): http/https + ports 80/443 only; localhost/.local/.internal/single-label names blocked; DNS answers must
 ALL be public (private, loopback, link-local incl. 169.254.169.254, CGNAT, multicast, IPv6 ULA/link-local, mapped/6to4/
 Teredo/NAT64 forms); checked before every request AND again in the socket connect callback (anti-DNS-rebinding);
@@ -427,6 +442,12 @@ The only AI involved is the separate n8n workflow that WRITES the benchmark ques
   `search_clinic_knowledge` uses) is now that list filtered to the ones that cleared it — output unchanged (verified: identical
   docs/order/scores). The benchmark calls this same service with the clinic's current settings; production search never
   references the benchmark, so it can be removed/disabled without touching search.
+- **Chunk sampling skips boilerplate-looking chunks** (`SampleSourceChunksAsync`'s SQL: `content !~* '[0-9]+\s*Views\s+[0-9]+\s*Comments'`
+  and `content not ilike '%Read More%'`) — a blog post-meta teaser ("482 Views 0 Comments … Read More") makes a poor
+  benchmark question, since it's byline/navigation noise, not the article answering anything. **Sampling-only**: it never
+  touches what search indexes, only which chunks are OFFERED to the question generator. Verified live: two such chunks
+  were excluded from a 20-chunk sample while a normal chunk that plainly mentions "view" and "comments" as ordinary
+  English (no digits) was still included (no false positive).
 - **Module** `Integrations/Knowledge/Benchmark/`: `KnowledgeBenchmarkService` (orchestration: sampling, validation, cases,
   stale detection, runs, reads), `N8nKnowledgeBenchmarkGeneratorClient` (only sends chunks / parses questions),
   `KnowledgeBenchmarkScorer` (pure), `KnowledgeBenchmarkRunWorker` + queue (background runs, restart-recoverable like the
@@ -638,7 +659,11 @@ shown), mapped onto the 3 backend audience types via two hidden fields (`Audienc
     per-clinic persisted settings page
 12. Procedures management page with inactive-procedure rules; AI `get_procedures` active-only
 13. Knowledge Retrieval Benchmark (§11): standalone diagnostic page/API/worker measuring the real retrieval (strict chunk +
-    document metrics, MRR, stale handling, run history with settings snapshots) — built and tested, awaiting commit
+    document metrics, MRR, stale handling, run history with settings snapshots, async n8n generation + Stop generating) —
+    pushed (`773f562`, `0655dff`, `a98e33c`)
+14. A real Jay Clinic run (20 cases) found 13/20 misses, all content-driven (blog "Archives" listing pages and Arabic
+    pages, not a retrieval bug — see §11); fixed by excluding listing/archive pages from the crawler and boilerplate
+    chunks from benchmark sampling (below), awaiting commit
 
 ## 17. Pending work
 
@@ -646,6 +671,12 @@ shown), mapped onto the 3 backend audience types via two hidden fields (`Audienc
   (owner-confirmed). Next: **build the benchmark's n8n question-generator workflow (Webhook → Respond Immediately → … → HTTP Request calling back `POST /api/knowledge/benchmark/generations/{generationId}/questions` with `X-Ingest-Key`) and set
   `N8n__KnowledgeBenchmarkWebhookUrl`** (§11), then use the Benchmark to tune `minimum_similarity`, Top K and chunk size
   against real scores; build a small set of manually reviewed cases
+- **After the listing/archive-page fix deploys, Jay Clinic's website source(s) need a real Rescrape** (Knowledge Base →
+  the website record → Rescrape) to actually drop the 17 already-imported archive pages — the code fix alone only
+  changes what a FUTURE crawl does; nothing was recrawled against the real site by this change (no login for the real
+  account, and a real recrawl calls the real embeddings API — the owner's call). n8n's benchmark generator prompt should
+  also be told to write each question in the SAME language as the passage (fixes the Arabic-page misses — n8n side, not
+  something this codebase can do)
 - **Rotate leaked secrets** (§22); close the `clinicId`-trust gap for AI endpoints
 - Meta `X-Hub-Signature-256` verification; forwarded-headers in `Program.cs`; persist DataProtection keys
 - KB: optional bulk "reindex all"; possible future HNSW index; maybe merge/retire `get_clinic_info`

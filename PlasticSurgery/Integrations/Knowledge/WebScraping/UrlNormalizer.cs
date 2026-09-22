@@ -153,6 +153,23 @@ public static partial class UrlNormalizer
     public static bool IsAssetUrl(string normalizedUrl) => HasExtension(normalizedUrl, AssetExtensions);
     public static bool IsDocumentUrl(string normalizedUrl) => HasExtension(normalizedUrl, DocumentExtensions);
 
+    /// <summary>Blog-style listing pages (WordPress category/tag/author archives, pagination): a stream of post
+    /// teasers and links, never the article text itself, so they make poor Knowledge Base entries (and poor
+    /// Retrieval Benchmark test cases — see KnowledgeBenchmarkService's chunk sampling). Matched on whole path
+    /// segments, not a substring, so e.g. "/my-tag-cloud/" is not caught.</summary>
+    public static bool IsListingUrl(string normalizedUrl)
+    {
+        if (!Uri.TryCreate(normalizedUrl, UriKind.Absolute, out var u)) return false;
+        var segments = u.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        for (var i = 0; i < segments.Length; i++)
+        {
+            var seg = segments[i].ToLowerInvariant();
+            if (seg is "category" or "categories" or "tag" or "tags" or "author") return true;
+            if (seg == "page" && i + 1 < segments.Length && segments[i + 1].Length > 0 && segments[i + 1].All(char.IsAsciiDigit)) return true;
+        }
+        return false;
+    }
+
     private static bool HasExtension(string normalizedUrl, HashSet<string> set)
     {
         if (!Uri.TryCreate(normalizedUrl, UriKind.Absolute, out var u)) return false;

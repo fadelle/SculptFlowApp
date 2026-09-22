@@ -364,6 +364,11 @@ public sealed class WebsiteScrapeProcessor : IWebsiteScrapeProcessor
                 continue;
             }
 
+            // NOTE: listing pages (category/tag/author/pagination) are deliberately NOT filtered here. They are still
+            // fetched like any other page — only their classification in Analyze() below excludes them from the
+            // Knowledge Base — because filtering them here would mean never extracting THEIR links, silently losing
+            // any article that is only ever linked from a listing page (a common pattern on blog-heavy sites).
+
             if (LooksLikeCrawlTrap(u, pathVariants)) continue;
 
             if (page.InternalLinks.Count < _options.MaxLinksPerPage && !page.InternalLinks.Contains(norm)) page.InternalLinks.Add(norm);
@@ -373,6 +378,11 @@ public sealed class WebsiteScrapeProcessor : IWebsiteScrapeProcessor
             next.Add((norm, level + 1));
         }
     }
+
+    /// <summary>Most blog themes title a category/tag/author archive page "… Archives - Site Name". A real article
+    /// title essentially never contains this as a whole word, so a plain substring check is enough.</summary>
+    private static bool LooksLikeArchivePage(string? title) =>
+        !string.IsNullOrEmpty(title) && title.Contains("Archives", StringComparison.OrdinalIgnoreCase);
 
     private static readonly string[] TrapPathParts =
     {
@@ -449,6 +459,17 @@ public sealed class WebsiteScrapeProcessor : IWebsiteScrapeProcessor
 
             if (cp.Extracted is null) { cp.Outcome = Outcome.Failed; cp.Reason = "No content."; continue; }
             if (cp.Extracted.NoIndex) { cp.Outcome = Outcome.Skipped; cp.Reason = "The page asks not to be indexed (noindex)."; continue; }
+            // Blog category/tag/author/pagination pages: teaser links, no article text of their own — excluded from
+            // the Knowledge Base. Checked here (after fetching, not before) so its OWN links are still discovered and
+            // followed above — filtering it out earlier would silently lose any article only ever linked from it.
+            // Two independent signals: the URL shape (IsListingUrl), and — for themes/paths it doesn't cover, e.g. a
+            // blog index paginated by ?paged=2 — most blog themes put "Archives" in such a page's <title>.
+            if (UrlNormalizer.IsListingUrl(cp.NormalizedUrl) || LooksLikeArchivePage(cp.Extracted.Title))
+            {
+                cp.Outcome = Outcome.Skipped;
+                cp.Reason = "This looks like a blog listing/archive page, not an article — not imported.";
+                continue;
+            }
 
             cp.Outcome = Outcome.Content;
             cp.Canonical = ResolveCanonical(cp, origin);

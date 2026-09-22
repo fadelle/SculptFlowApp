@@ -759,6 +759,11 @@ public partial class KnowledgeBenchmarkService : IKnowledgeBenchmarkService
                   and char_length(c.content) >= @minChars
                   and not exists (select 1 from knowledge_retrieval_benchmark_cases b
                                   where b.clinic_id = @clinic and b.expected_chunk_id = c.id)
+                  -- Blog post-meta teasers ('482 Views 0 Comments', '... Read More') make poor benchmark questions:
+                  -- they are byline/navigation noise, not the article's own answer to anything. This only narrows
+                  -- which chunks are OFFERED as test-case sources — it never touches what search actually indexes.
+                  and c.content !~* '[0-9]+\s*Views\s+[0-9]+\s*Comments'
+                  and c.content not ilike '%Read More%'
               ) x
               order by x.rn, random()
               limit @pool",
