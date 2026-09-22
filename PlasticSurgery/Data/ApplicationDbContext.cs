@@ -846,6 +846,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.Property(x => x.Id).HasColumnName("id");
             e.Property(x => x.ClinicId).HasColumnName("clinic_id");
             e.Property(x => x.CaseScope).HasColumnName("case_scope").HasMaxLength(20).IsRequired();
+            e.Property(x => x.GenerationId).HasColumnName("generation_id");
             e.Property(x => x.Status).HasColumnName("status").HasMaxLength(20).IsRequired();
             e.Property(x => x.StartedAt).HasColumnName("started_at");
             e.Property(x => x.CompletedAt).HasColumnName("completed_at");

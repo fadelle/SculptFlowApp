@@ -222,7 +222,8 @@
             return;
         }
 
-        var scopeLabel = { all: 'All cases', generated: 'Generated cases', reviewed: 'Reviewed cases' }[run.caseScope] || run.caseScope;
+        var scopeLabel = { all: 'All cases', generated: 'Generated cases', reviewed: 'Reviewed cases',
+            generation: 'One generation (' + (run.generationId || '').slice(0, 8) + '…)' }[run.caseScope] || run.caseScope;
         host.appendChild(el('div', { class: 'text-subtle', style: 'font-size:.8rem;margin-bottom:.6rem' }, [
             'Latest completed run — ' + scopeLabel + ' · ' + fmtDate(run.completedAt || run.createdAt) + ' · ' +
             run.scoredCases + ' scored' + (run.staleCases ? ', ' + run.staleCases + ' stale (not scored)' : '') +
@@ -436,7 +437,13 @@
                     el('button', { type: 'button', class: 'btn btn-sm', text: 'View cases', disabled: g.casesRemaining === 0 ? true : null, onclick: function () {
                         state.genFilter = g.id; state.caseSkip = 0; state.caseView = 'all'; $('bm-case-view').value = 'all';
                         loadCases().then(function () { $('bm-gen-filter').scrollIntoView({ behavior: 'smooth', block: 'center' }); });
-                    } })
+                    } }),
+                    el('button', {
+                        type: 'button', class: 'btn btn-primary btn-sm', text: 'Run',
+                        title: 'Run the benchmark for just this generation’s ' + g.casesRemaining + ' case(s)',
+                        disabled: (g.casesRemaining === 0 || $('bm-run').disabled) ? true : null,
+                        onclick: function () { runGeneration(g.id); }
+                    })
                 ])])
             ]));
         });
@@ -451,6 +458,16 @@
                 ' · ' + g.chunksSent + ' chunks sent · ' + g.questionsReturned + ' questions returned · ' + g.casesCreated + ' cases created · ' + g.rejectedCount + ' rejected' }));
             if (g.errorMessage) wrap.appendChild(el('div', { class: 'bm-verdict bad', style: 'margin-top:.7rem', text: g.errorMessage }));
             if (g.status === 'pending') wrap.appendChild(el('div', { class: 'bm-verdict neutral', style: 'margin-top:.7rem', text: 'Still waiting for the question generator to call back.' }));
+
+            if (g.casesRemaining > 0) {
+                wrap.appendChild(el('div', { class: 'mt-2' }, [
+                    el('button', {
+                        type: 'button', class: 'btn btn-primary btn-sm', text: 'Run Benchmark for this generation',
+                        disabled: $('bm-run').disabled ? true : null,
+                        onclick: function () { closeOverlay(); runGeneration(g.id); }
+                    })
+                ]));
+            }
 
             if (g.latestScores) {
                 var s = g.latestScores;
@@ -498,6 +515,19 @@
         });
     }
 
+    /** "Run" on one Generations row: benchmarks ONLY that generation's own cases, whatever their type/reviewed state. */
+    function runGeneration(generationId) {
+        showMessage('');
+        api('POST', '/runs', { scope: 'generation', generationId: generationId }).then(function () {
+            state.wasRunning = true;
+            showMessage('Running the benchmark for generation ' + generationId + '…');
+            return loadDashboard();
+        }).catch(function (e) {
+            showMessage(e.message, 'error');
+            loadDashboard();
+        });
+    }
+
     // ---------------------------------------------------------------- runs + results
 
     function loadRuns() {
@@ -512,6 +542,10 @@
             return;
         }
         var scopeLabel = { all: 'All', generated: 'Generated', reviewed: 'Reviewed' };
+        function ScopeLabel(r) {
+            if (r.caseScope === 'generation') return 'Generation ' + (r.generationId || '').slice(0, 8) + '…';
+            return scopeLabel[r.caseScope] || r.caseScope;
+        }
         runs.forEach(function (r) {
             var statusBadge = el('span', {
                 class: 'badge ' + ({ completed: 'badge-green', running: 'badge-teal', pending: 'badge-gray', failed: 'badge-red' }[r.status] || 'badge-gray'),
@@ -520,7 +554,7 @@
             });
             var tr = el('tr', null, [
                 el('td', { text: fmtDate(r.startedAt || r.createdAt) }),
-                el('td', { text: (scopeLabel[r.caseScope] || r.caseScope) + ' · ' + r.scoredCases + ' scored' + (r.staleCases ? ' · ' + r.staleCases + ' stale' : '') }),
+                el('td', { text: ScopeLabel(r) + ' · ' + r.scoredCases + ' scored' + (r.staleCases ? ' · ' + r.staleCases + ' stale' : '') }),
                 el('td', null, [statusBadge]),
                 el('td', { text: pct(r.chunkTop1Accuracy) }),
                 el('td', { text: pct(r.chunkTop3Accuracy) }),

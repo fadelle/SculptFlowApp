@@ -483,6 +483,16 @@ The only AI involved is the separate n8n workflow that WRITES the benchmark ques
   from the most recent completed run that included its cases (survives deleting cases), and `GET …/runs/{id}/generations` splits
   one run's scores by generation ("no generation" = manual). The page has a Generations section (Details overlay, "View cases"
   filter) and a "Scores by generation" panel above run results.
+- **4th run scope: `generation`.** `all`/`generated`/`reviewed` pool cases across every batch ever generated — there was no way
+  to score just ONE "Generate Test Cases" click. `POST …/runs {scope:"generation", generationId}` scores exactly that
+  generation's cases (whatever their type/reviewed state), requires `generationId` to belong to the caller's clinic (400
+  otherwise; 400 if `generationId` is given with any other scope, or omitted with this one), and the run row remembers
+  `generation_id` (new nullable column, `ck_kbr_case_scope` widened) so run history and the generation's own "Scores" always show
+  which run it was. UI: a **Run** button on every Generations row and inside its Details overlay — no scope picker needed, it's
+  scoped to that row. Verified live: two separate generations of 20 cases each for one clinic; a `generation`-scoped run scored
+  exactly the targeted 20 (zero overlap with the other 20's case ids), its own row picked up the run's scores while the untouched
+  generation stayed at "not run yet", re-running the same generation works and both runs are kept, and all 4 validation rules
+  (missing generationId, generationId with the wrong scope, unknown generationId, another clinic's generationId) return 400.
 - **Stale cases** (chunk ids change whenever a document is re-saved): re-checked on dashboard/list/run. Stale = chunk id gone
   (`chunk_missing`), text hash changed (`chunk_changed`) or its document inactive (`document_inactive`). If the text simply
   moved to a new id, the case is auto-RELINKED (exactly one active chunk with the same hash) and stays live. Stale cases are
@@ -820,7 +830,7 @@ Render sets `PORT` itself; the Dockerfile sets `ASPNETCORE_ENVIRONMENT`/`ASPNETC
     unique `(clinic_id, expected_chunk_id, lower(question))`), `…_runs` (metrics + settings snapshot + progress),
     `…_results` (per-case ranks/passes/classification, `retrieved_json`, `generation_id` snapshot; case FK `on delete set null`),
     `…_generations` (id = generationId; status pending|completed|failed|cancelled, sent chunks, counts, rejected items, raw reply, error) — applied live to Supabase
-    (idempotent block at the end of `schema.sql`); **the Render database is the same Supabase DB, so no separate step**; `generation_id uuid` (+ partial index) added to `…_cases` in a second small block; `ck_kbg_status` widened to include `cancelled` (Stop generating) — applied live
+    (idempotent block at the end of `schema.sql`); **the Render database is the same Supabase DB, so no separate step**; `generation_id uuid` (+ partial index) added to `…_cases` in a second small block; `ck_kbg_status` widened to include `cancelled` (Stop generating); `generation_id uuid` (+ partial index) added to `…_runs` and `ck_kbr_case_scope` widened to include `generation` (run-one-generation) — all applied live
 
 No migration was needed for Procedures, lead/appointment editing, or the audience UI.
 

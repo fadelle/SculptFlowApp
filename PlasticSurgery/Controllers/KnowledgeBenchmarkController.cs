@@ -193,8 +193,9 @@ public class KnowledgeBenchmarkController : DashboardApiController
 
     // ------------------------------- runs -------------------------------
 
-    /// <summary>Queues a run (scope = all | generated | reviewed) and returns 202 immediately; the run executes in the
-    /// background — poll GET runs/{id}. 409 = a run is already in progress.</summary>
+    /// <summary>Queues a run (scope = all | generated | reviewed | generation) and returns 202 immediately; the run
+    /// executes in the background — poll GET runs/{id}. scope=generation requires generationId (one of this clinic's
+    /// generations) and scores only that batch. 409 = a run is already in progress.</summary>
     [HttpPost("runs")]
     public async Task<ActionResult<BenchmarkRunSummary>> StartRun([FromBody] StartBenchmarkRunRequest request, CancellationToken ct)
     {
@@ -203,7 +204,7 @@ public class KnowledgeBenchmarkController : DashboardApiController
 
         try
         {
-            var run = await _benchmark.StartRunAsync(clinicId.Value, request.Scope, ct);
+            var run = await _benchmark.StartRunAsync(clinicId.Value, request.Scope, request.GenerationId, ct);
             return Accepted(run);
         }
         catch (BenchmarkRunInProgressException ex)

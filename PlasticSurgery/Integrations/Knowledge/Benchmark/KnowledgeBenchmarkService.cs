@@ -62,9 +62,11 @@ public interface IKnowledgeBenchmarkService
     /// <summary>Null when the document isn't one of this clinic's.</summary>
     Task<IReadOnlyList<BenchmarkSourceChunkResponse>?> ListSourceChunksAsync(Guid clinicId, Guid documentId, CancellationToken ct = default);
 
-    /// <summary>Creates a pending run for the scope ("all" | "generated" | "reviewed") and queues it for the background
-    /// worker. Throws <see cref="BenchmarkRunInProgressException"/> if one is already active.</summary>
-    Task<BenchmarkRunSummary> StartRunAsync(Guid clinicId, string? scope, CancellationToken ct = default);
+    /// <summary>Creates a pending run for the scope ("all" | "generated" | "reviewed" | "generation") and queues it for
+    /// the background worker. "generation" requires <paramref name="generationId"/> (a generation of THIS clinic) and
+    /// scores only that batch's cases, whatever their type/reviewed state. Throws
+    /// <see cref="BenchmarkRunInProgressException"/> if one is already active.</summary>
+    Task<BenchmarkRunSummary> StartRunAsync(Guid clinicId, string? scope, Guid? generationId = null, CancellationToken ct = default);
 
     /// <summary>Executes a queued run (called by the background worker). Never throws for a benchmark failure — it
     /// records it on the run instead.</summary>
@@ -329,10 +331,22 @@ public partial class KnowledgeBenchmarkService : IKnowledgeBenchmarkService
     // Runs
     // ---------------------------------------------------------------------------------------------
 
-    public async Task<BenchmarkRunSummary> StartRunAsync(Guid clinicId, string? scope, CancellationToken ct = default)
+    public async Task<BenchmarkRunSummary> StartRunAsync(Guid clinicId, string? scope, Guid? generationId = null, CancellationToken ct = default)
     {
         var normalizedScope = string.IsNullOrWhiteSpace(scope) ? BenchmarkCaseScope.All : scope.Trim().ToLowerInvariant();
-        if (!BenchmarkCaseScope.IsValid(normalizedScope)) throw new ArgumentException("Scope must be all, generated or reviewed.");
+        if (!BenchmarkCaseScope.IsValid(normalizedScope)) throw new ArgumentException("Scope must be all, generated, reviewed or generation.");
+        if (normalizedScope == BenchmarkCaseScope.Generation && generationId is null)
+        {
+            throw new ArgumentException("generationId is required when scope is \"generation\".");
+        }
+        if (normalizedScope != BenchmarkCaseScope.Generation && generationId is not null)
+        {
+            throw new ArgumentException("generationId is only valid with scope \"generation\".");
+        }
+        if (generationId is { } gid && !await _db.KnowledgeBenchmarkGenerations.AsNoTracking().AnyAsync(g => g.ClinicId == clinicId && g.Id == gid, ct))
+        {
+            throw new ArgumentException("No such generation for this clinic.");
+        }
 
         await RefreshStaleAsync(clinicId, ct);
 
@@ -343,14 +357,17 @@ public partial class KnowledgeBenchmarkService : IKnowledgeBenchmarkService
             throw new BenchmarkRunInProgressException();
         }
 
-        var inScope = ApplyScope(_db.KnowledgeBenchmarkCases.AsNoTracking().Where(c => c.ClinicId == clinicId), normalizedScope);
+        var inScope = ApplyScope(_db.KnowledgeBenchmarkCases.AsNoTracking().Where(c => c.ClinicId == clinicId), normalizedScope, generationId);
         var total = await inScope.CountAsync(ct);
         var stale = await inScope.CountAsync(c => c.IsStale, ct);
         if (total == 0)
         {
-            throw new ArgumentException(normalizedScope == BenchmarkCaseScope.Reviewed
-                ? "There are no reviewed cases yet — mark some cases as reviewed first."
-                : "There are no benchmark cases in this scope yet — generate some first.");
+            throw new ArgumentException(normalizedScope switch
+            {
+                BenchmarkCaseScope.Reviewed => "There are no reviewed cases yet — mark some cases as reviewed first.",
+                BenchmarkCaseScope.Generation => "This generation has no cases left (they may have been deleted).",
+                _ => "There are no benchmark cases in this scope yet — generate some first."
+            });
         }
         if (total - stale == 0) throw new ArgumentException("Every case in this scope is stale (its Knowledge Base chunk changed). Generate new cases first.");
 
@@ -360,6 +377,7 @@ public partial class KnowledgeBenchmarkService : IKnowledgeBenchmarkService
             Id = Guid.NewGuid(),
             ClinicId = clinicId,
             CaseScope = normalizedScope,
+            GenerationId = generationId,
             Status = BenchmarkRunStatus.Pending,
             TotalCases = total,
             StaleCases = stale,
@@ -395,7 +413,7 @@ public partial class KnowledgeBenchmarkService : IKnowledgeBenchmarkService
 
             // Cases may have gone stale between queueing and starting.
             await RefreshStaleAsync(clinicId, ct);
-            var cases = await ApplyScope(_db.KnowledgeBenchmarkCases.AsNoTracking().Where(c => c.ClinicId == clinicId), run.CaseScope)
+            var cases = await ApplyScope(_db.KnowledgeBenchmarkCases.AsNoTracking().Where(c => c.ClinicId == clinicId), run.CaseScope, run.GenerationId)
                 .OrderBy(c => c.CreatedAt).ThenBy(c => c.Id).ToListAsync(ct);
 
             run.TotalCases = cases.Count;
@@ -789,10 +807,14 @@ public partial class KnowledgeBenchmarkService : IKnowledgeBenchmarkService
         return picked;
     }
 
-    private static IQueryable<KnowledgeRetrievalBenchmarkCase> ApplyScope(IQueryable<KnowledgeRetrievalBenchmarkCase> query, string scope) => scope switch
+    private static IQueryable<KnowledgeRetrievalBenchmarkCase> ApplyScope(
+        IQueryable<KnowledgeRetrievalBenchmarkCase> query, string scope, Guid? generationId = null) => scope switch
     {
         BenchmarkCaseScope.Generated => query.Where(c => c.CaseType == BenchmarkCaseType.Generated),
         BenchmarkCaseScope.Reviewed => query.Where(c => c.IsReviewed),
+        // Every case from ONE "Generate Test Cases" request, whatever its type/reviewed state — generationId is
+        // already validated as non-null and belonging to this clinic before this is ever called with "generation".
+        BenchmarkCaseScope.Generation => query.Where(c => c.GenerationId == generationId),
         _ => query
     };
 
@@ -866,7 +888,7 @@ public partial class KnowledgeBenchmarkService : IKnowledgeBenchmarkService
         r.ReturnedCount, r.LatencyMs, r.StaleReason, r.ErrorMessage, r.CreatedAt);
 
     private static BenchmarkRunSummary ToSummary(KnowledgeRetrievalBenchmarkRun r) => new(
-        r.Id, r.CaseScope, r.Status, r.StartedAt, r.CompletedAt, r.CreatedAt,
+        r.Id, r.CaseScope, r.GenerationId, r.Status, r.StartedAt, r.CompletedAt, r.CreatedAt,
         r.TotalCases, r.ProcessedCases, r.ScoredCases, r.StaleCases, r.ErrorCases,
         r.ChunkTop1Accuracy, r.ChunkTop3Accuracy, r.ChunkTop5Accuracy, r.ChunkMrr,
         r.DocumentTop1Accuracy, r.DocumentTop3Accuracy, r.DocumentTop5Accuracy, r.DocumentMrr,

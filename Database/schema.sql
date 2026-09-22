@@ -1355,3 +1355,11 @@ where r.benchmark_case_id = c.id and c.generation_id is not null and r.generatio
 alter table knowledge_retrieval_benchmark_generations drop constraint if exists ck_kbg_status;
 alter table knowledge_retrieval_benchmark_generations add constraint ck_kbg_status
   check (status in ('pending','completed','failed','cancelled'));
+
+-- Retrieval Benchmark: "Run Benchmark" for ONE specific generation (not just all/generated/reviewed). The run
+-- remembers which generation it was scoped to, so the run history and the generation's own row can both show it.
+alter table knowledge_retrieval_benchmark_runs add column if not exists generation_id uuid;
+alter table knowledge_retrieval_benchmark_runs drop constraint if exists ck_kbr_case_scope;
+alter table knowledge_retrieval_benchmark_runs add constraint ck_kbr_case_scope
+  check (case_scope in ('all','generated','reviewed','generation'));
+create index if not exists ix_kbr_generation on knowledge_retrieval_benchmark_runs(clinic_id, generation_id) where generation_id is not null;

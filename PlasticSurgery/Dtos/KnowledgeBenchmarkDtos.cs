@@ -19,6 +19,8 @@ public record BenchmarkSettingsSnapshot(
 public record BenchmarkRunSummary(
     Guid Id,
     string CaseScope,
+    /// <summary>Set only when CaseScope is "generation".</summary>
+    Guid? GenerationId,
     string Status,
     DateTimeOffset? StartedAt,
     DateTimeOffset? CompletedAt,
@@ -101,7 +103,9 @@ public record UpdateBenchmarkCaseRequest(string? Question);
 
 public record SetBenchmarkCaseReviewedRequest(bool Reviewed);
 
-public record StartBenchmarkRunRequest(string? Scope);
+/// <summary>GenerationId is required when Scope is "generation" (and only then) — it must be one of THIS clinic's
+/// generations. That run then scores exactly that generation's cases, whatever their type/reviewed state.</summary>
+public record StartBenchmarkRunRequest(string? Scope, Guid? GenerationId = null);
 
 public record RejectedGeneratedQuestion(string? Question, string Reason);
 

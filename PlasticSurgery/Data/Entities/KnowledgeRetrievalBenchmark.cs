@@ -48,6 +48,8 @@ public class KnowledgeRetrievalBenchmarkRun
     public Guid ClinicId { get; set; }
 
     public string CaseScope { get; set; } = BenchmarkCaseScope.All;
+    /// <summary>Set only when CaseScope is "generation" — which generation's cases this run scored.</summary>
+    public Guid? GenerationId { get; set; }
     public string Status { get; set; } = BenchmarkRunStatus.Pending;
     public DateTimeOffset? StartedAt { get; set; }
     public DateTimeOffset? CompletedAt { get; set; }
@@ -169,14 +171,16 @@ public static class BenchmarkCaseType
     public const string Manual = "manual";
 }
 
-/// <summary>Which cases a run covers. "reviewed" = every case a human has marked reviewed (generated or manual).</summary>
+/// <summary>Which cases a run covers. "reviewed" = every case a human has marked reviewed (generated or manual).
+/// "generation" = every case from ONE specific "Generate Test Cases" request — the run's GenerationId names it.</summary>
 public static class BenchmarkCaseScope
 {
     public const string All = "all";
     public const string Generated = "generated";
     public const string Reviewed = "reviewed";
+    public const string Generation = "generation";
 
-    public static bool IsValid(string? value) => value is All or Generated or Reviewed;
+    public static bool IsValid(string? value) => value is All or Generated or Reviewed or Generation;
 }
 
 public static class BenchmarkRunStatus
