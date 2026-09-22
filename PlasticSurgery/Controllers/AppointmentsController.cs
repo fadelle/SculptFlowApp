@@ -72,6 +72,23 @@ public class AppointmentsController : DashboardApiController
         }
     }
 
+    /// <summary>The Appointments page's month calendar. One call returns every appointment in the visible grid
+    /// (the requested month plus its leading/trailing days from adjacent months), grouped by local calendar day
+    /// in the clinic's own timezone — see IAppointmentService.GetCalendarMonthAsync.</summary>
+    [HttpGet("calendar")]
+    public async Task<ActionResult<CalendarMonthResponse>> GetCalendarMonth(
+        [FromQuery] int year, [FromQuery] int month, CancellationToken ct = default)
+    {
+        var clinicId = await GetClinicIdAsync(ct);
+        if (clinicId is null) return Forbid();
+
+        if (month is < 1 or > 12) return BadRequest(new { error = "month must be between 1 and 12." });
+        if (year is < 1900 or > 3000) return BadRequest(new { error = "year is out of range." });
+
+        var calendar = await _appointments.GetCalendarMonthAsync(clinicId.Value, year, month, ct);
+        return Ok(calendar);
+    }
+
     [HttpGet]
     public async Task<ActionResult<object>> List(
         [FromQuery] string? status,

@@ -19,21 +19,27 @@ public class AppointmentService : IAppointmentService
         _procedures = procedures;
     }
 
+    /// <summary>The clinic's configured timezone (Clinic.Timezone), falling back to UTC for an unrecognized
+    /// value — the one place "what timezone is this clinic in" is resolved, shared by slot generation and the
+    /// calendar's day grouping so both agree on what day/time an appointment falls on.</summary>
+    private static TimeZoneInfo ResolveTimeZone(Clinic clinic)
+    {
+        try
+        {
+            return TimeZoneInfo.FindSystemTimeZoneById(clinic.Timezone);
+        }
+        catch
+        {
+            return TimeZoneInfo.Utc;
+        }
+    }
+
     public async Task<IReadOnlyList<AvailableSlotResponse>> GetAvailableSlotsAsync(Guid clinicId, int days, CancellationToken ct = default)
     {
         var clinic = await _db.Clinics.FirstOrDefaultAsync(c => c.Id == clinicId, ct);
         if (clinic is null) return Array.Empty<AvailableSlotResponse>();
 
-        TimeZoneInfo tz;
-        try
-        {
-            tz = TimeZoneInfo.FindSystemTimeZoneById(clinic.Timezone);
-        }
-        catch
-        {
-            tz = TimeZoneInfo.Utc;
-        }
-
+        var tz = ResolveTimeZone(clinic);
         var nowLocal = TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, tz);
         var windowStartUtc = DateTimeOffset.UtcNow;
         var windowEndUtc = DateTimeOffset.UtcNow.AddDays(days);
@@ -205,6 +211,49 @@ public class AppointmentService : IAppointmentService
         var items = await query.OrderBy(a => a.ScheduledStart).Skip(skip).Take(take).ToListAsync(ct);
 
         return (items.Select(ToResponse).ToList(), totalCount);
+    }
+
+    public async Task<CalendarMonthResponse> GetCalendarMonthAsync(Guid clinicId, int year, int month, CancellationToken ct = default)
+    {
+        var clinic = await _db.Clinics.FirstOrDefaultAsync(c => c.Id == clinicId, ct);
+        var tz = clinic is null ? TimeZoneInfo.Utc : ResolveTimeZone(clinic);
+
+        var firstOfMonth = new DateOnly(year, month, 1);
+        // Sunday-start weeks (no existing calendar convention in this project to match yet). Pad the grid with
+        // whole leading/trailing weeks so every row is a complete Sun–Sat week, same as any standard month view.
+        var gridStart = firstOfMonth.AddDays(-(int)firstOfMonth.DayOfWeek);
+        var lastOfMonth = firstOfMonth.AddMonths(1).AddDays(-1);
+        var gridEnd = lastOfMonth.AddDays(6 - (int)lastOfMonth.DayOfWeek);
+
+        // The grid's local boundaries, converted to UTC — this is the ONLY date range queried, so a month never
+        // pulls in the whole appointments table (see IAppointmentService's remarks).
+        var startUtc = LocalMidnightToUtc(gridStart, tz);
+        var endUtc = LocalMidnightToUtc(gridEnd.AddDays(1), tz); // exclusive upper bound
+
+        var appointments = await _db.Appointments
+            .Include(a => a.Lead)
+            .Include(a => a.Procedure)
+            .Where(a => a.ClinicId == clinicId && a.ScheduledStart >= startUtc && a.ScheduledStart < endUtc)
+            .OrderBy(a => a.ScheduledStart)
+            .ToListAsync(ct);
+
+        var items = appointments.Select(a =>
+        {
+            var local = TimeZoneInfo.ConvertTime(a.ScheduledStart, tz);
+            return new CalendarAppointmentResponse(
+                a.Id, a.LeadId, a.Lead?.FullName, a.ProcedureId, a.Procedure?.Name, a.Status,
+                a.ScheduledStart, a.ScheduledEnd,
+                local.ToString("yyyy-MM-dd"), local.ToString("HH:mm"));
+        }).ToList();
+
+        return new CalendarMonthResponse(year, month, tz.Id, gridStart.ToString("yyyy-MM-dd"), gridEnd.ToString("yyyy-MM-dd"), items);
+    }
+
+    /// <summary>Local midnight on <paramref name="date"/>, in <paramref name="tz"/>, as UTC.</summary>
+    private static DateTimeOffset LocalMidnightToUtc(DateOnly date, TimeZoneInfo tz)
+    {
+        var local = date.ToDateTime(TimeOnly.MinValue);
+        return new DateTimeOffset(local, tz.GetUtcOffset(local)).ToUniversalTime();
     }
 
     private async Task<AppointmentResponse> ToResponseAsync(Appointment a, CancellationToken ct)

@@ -635,7 +635,28 @@ shown), mapped onto the 3 backend audience types via two hidden fields (`Audienc
   (n8n/intake, or `whatsapp` for auto-created leads) and staff edit; appointment status — booking (booked),
   AI reschedule/cancel, staff edit (confirmed/attended/no_show/rescheduled…).
 - **Search by name/phone** on both list pages (`IDashboardService.GetLeadsAsync/GetAppointmentsAsync` got a
-  `search` param; also `/api/dashboard/leads|appointments?search=`).
+  `search` param; also `/api/dashboard/leads|appointments?search=`). `GetAppointmentsAsync` itself is still used
+  by Main Numbers, but **`/dashboard/appointments` no longer renders it** — see the calendar below.
+- **Appointments month calendar** (`/dashboard/appointments`, `Pages/Dashboard/Appointments.cshtml(.cs)` +
+  `wwwroot/js/appointments-calendar.js`): replaced the old flat searchable table. Month grid (Sun-start,
+  padded to whole weeks) with `[<] Month Year [>]` / Today / **+ New Appointment**; each day shows up to 3
+  appointment chips (`time · lead · procedure`, colored by status) + "+N more"; clicking a day opens a
+  right-side drawer with the full day's appointments in chronological order; clicking an appointment opens the
+  existing **`/dashboard/appointments/{id}`** detail page (reused as-is — no new detail/edit UI). One API call
+  per visible month, **`GET /api/appointments/calendar?year=&month=`** →
+  `IAppointmentService.GetCalendarMonthAsync`, clinic-scoped via `CurrentClinicContext`, no status filter (so
+  canceled/attended appointments still render) and no new tables — same `appointments`/`leads`/`procedures`.
+  Day-grouping is computed **server-side** per appointment (`LocalDate`/`LocalTime` via
+  `TimeZoneInfo.ConvertTime(ScheduledStart, clinic's TimeZoneInfo)`, `Clinic.Timezone`, default `"UTC"`, still
+  has no settings-page UI to change it) so the browser never does timezone math for day-grouping. The "+ New
+  Appointment" form posts to the same `POST /api/appointments` staff/AI bookings already use (one source of
+  truth — test-verified: an `AiController.BookConsultation` booking and a staff-created one both show up on
+  the same calendar with no special-casing) and converts the staff-typed local wall-clock time to UTC
+  client-side via `Intl`/`toLocaleString` offset diffing (`zonedWallClockToUtcIso`), not a new library.
+  **Known CSS pitfall fixed while building this**: `.cal-grid`/`.cal-weekdays` must use
+  `grid-template-columns: repeat(7, minmax(0, 1fr))`, not plain `1fr` — a long unbreakable chip label (e.g. a
+  long procedure name, `white-space: nowrap` + `text-overflow: ellipsis`) otherwise inflates that column's
+  auto-computed minimum width and pushes the Saturday column off-screen while squeezing the rest.
 - **Branding/nav**: app renamed **MySculptFlow** (logo badge "SF"); sidebar shows the **logged-in clinic's
   name** (from `clinics.name` via `ICurrentClinicContext`, fallback "Clinic Dashboard"); nav: Inbox, Main
   Numbers, Interested People, Appointments, **Procedures**, [WhatsApp] Templates, Health, Campaigns,
@@ -692,6 +713,9 @@ shown), mapped onto the 3 backend audience types via two hidden fields (`Audienc
 14. A real Jay Clinic run (20 cases) found 13/20 misses, all content-driven (blog "Archives" listing pages and Arabic
     pages, not a retrieval bug — see §11); fixed by excluding listing/archive pages from the crawler and boilerplate
     chunks from benchmark sampling (below), awaiting commit
+15. Appointments month calendar replacing the flat `/dashboard/appointments` list (§14): day-cell summaries, "+N
+    more", a right-side day drawer, reusing the existing appointment detail page and create/booking service —
+    pushed once user confirms
 
 ## 17. Pending work
 
@@ -752,7 +776,8 @@ shown), mapped onto the 3 backend audience types via two hidden fields (`Audienc
 - Leads: `GET/PATCH /api/leads`, `GET/PATCH /api/leads/{id}`, `POST /api/leads/{id}/status`
   (`POST /api/leads` is `[AllowAnonymous]` intake — not ingest-key protected, known gap)
 - Appointments: `GET/POST /api/appointments`, `GET /api/appointments/{id}`,
-  `PATCH /api/appointments/{id}/status`, `GET /api/appointments/available`
+  `PATCH /api/appointments/{id}/status`, `GET /api/appointments/available`,
+  `GET /api/appointments/calendar?year=&month=` (month calendar grid, §14)
 - Procedures: `GET/POST /api/procedures`, `GET/PUT /api/procedures/{id}`, `POST /api/procedures/{id}/active`
 - Knowledge websites: `POST/GET /api/knowledge/websites`, `GET /api/knowledge/websites/{id}` (+`/pages`), `POST …/{id}/rescrape|active`, `DELETE …/{id}`
 - Knowledge: `POST /api/knowledge/upload` (multipart, one file), `GET/POST /api/knowledge`, `GET/PUT/DELETE /api/knowledge/{id}`,

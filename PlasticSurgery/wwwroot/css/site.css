@@ -1203,3 +1203,140 @@ table.data-table {
 .bm-retrieved tr.expected-doc td { background: var(--badge-amber-bg); }
 .bm-retrieved tr.dropped td { color: var(--text-subtle); }
 .bm-clickable { cursor: pointer; }
+
+/* ---------------------------------------------------------------------
+   Appointments — month calendar (Pages/Dashboard/Appointments.cshtml, wwwroot/js/appointments-calendar.js)
+   --------------------------------------------------------------------- */
+
+.cal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.cal-nav { display: flex; align-items: center; gap: 0.6rem; }
+.cal-nav-btn {
+  width: 2.1rem; height: 2.1rem;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--surface); cursor: pointer; font-size: 1rem; color: var(--text);
+}
+.cal-nav-btn:hover { background: var(--surface-subtle); }
+.cal-title { font-size: 1.15rem; font-weight: 700; min-width: 170px; text-align: center; }
+
+.cal-weekdays, .cal-grid {
+  display: grid;
+  /* minmax(0, 1fr), not plain 1fr: a long unbreakable chip label (nowrap + ellipsis) would otherwise
+     inflate that column's auto-computed minimum width and push the grid wider than its container. */
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+.cal-weekdays { margin-bottom: 0.4rem; }
+.cal-weekday { font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); text-align: center; padding: 0.3rem 0; }
+
+.cal-grid {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--border);
+  gap: 1px;
+}
+
+.cal-day {
+  background: var(--surface);
+  min-height: 110px;
+  min-width: 0;
+  padding: 0.4rem 0.45rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  cursor: pointer;
+  transition: background 0.1s ease;
+}
+.cal-day:hover { background: var(--surface-subtle); }
+.cal-day.other-month { background: var(--bg); }
+.cal-day.other-month .cal-day-num { color: var(--text-subtle); }
+
+.cal-day-num { font-size: 0.82rem; font-weight: 600; }
+.cal-day.today .cal-day-num {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 1.5rem; height: 1.5rem; border-radius: 50%;
+  background: var(--accent); color: #fff;
+}
+
+.cal-chip {
+  font-size: 0.71rem;
+  padding: 0.12rem 0.35rem;
+  border-radius: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border-left: 3px solid var(--badge-gray-text);
+  background: var(--badge-gray-bg);
+  color: var(--text);
+}
+.cal-chip.status-booked { border-color: var(--badge-amber-text); background: var(--badge-amber-bg); }
+.cal-chip.status-confirmed { border-color: var(--badge-blue-text); background: var(--badge-blue-bg); }
+.cal-chip.status-attended { border-color: var(--badge-green-text); background: var(--badge-green-bg); }
+.cal-chip.status-canceled { border-color: var(--badge-gray-text); background: var(--badge-gray-bg); color: var(--text-subtle); text-decoration: line-through; }
+.cal-chip.status-no_show { border-color: var(--badge-red-text); background: var(--badge-red-bg); }
+.cal-chip.status-rescheduled { border-color: var(--badge-purple-text); background: var(--badge-purple-bg); }
+
+.cal-more { font-size: 0.71rem; color: var(--text-muted); font-weight: 600; padding: 0.05rem 0.35rem; }
+.cal-day-add {
+  align-self: flex-end;
+  margin-top: auto;
+  width: 1.1rem; height: 1.1rem;
+  border-radius: 50%;
+  border: 1px dashed var(--border);
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 0.75rem; line-height: 1; color: var(--text-subtle);
+  opacity: 0;
+  transition: opacity 0.1s ease;
+}
+.cal-day:hover .cal-day-add { opacity: 1; }
+
+/* Day drawer: a right-anchored slide-in panel, same overlay idiom as .bm-overlay but docked instead of centered. */
+.cal-drawer-overlay {
+  position: fixed; inset: 0;
+  background: rgba(15, 23, 42, 0.35);
+  z-index: 100;
+}
+.cal-drawer {
+  position: fixed; top: 0; right: 0; bottom: 0;
+  width: 380px; max-width: 92vw;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  z-index: 101;
+  display: flex; flex-direction: column;
+}
+.cal-drawer-header {
+  padding: 1.1rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
+}
+.cal-drawer-title { font-size: 1.05rem; font-weight: 700; margin: 0; }
+.cal-drawer-body { flex: 1; overflow-y: auto; padding: 0.75rem; }
+
+.cal-appt-row {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.7rem 0.85rem;
+  margin-bottom: 0.6rem;
+  cursor: pointer;
+  transition: background 0.1s ease, border-color 0.1s ease;
+}
+.cal-appt-row:hover { background: var(--surface-subtle); border-color: var(--accent); }
+.cal-appt-time { font-size: 0.78rem; font-weight: 700; color: var(--text-muted); }
+.cal-appt-name { font-size: 0.92rem; font-weight: 600; margin-top: 0.15rem; }
+.cal-appt-procedure { font-size: 0.8rem; color: var(--text-muted); margin-top: 0.1rem; }
+
+.cal-modal { max-width: 480px; width: 100%; padding: 1.5rem; }
+
+@media (max-width: 860px) {
+  .cal-day { min-height: 76px; }
+  .cal-chip { font-size: 0.66rem; }
+  .cal-drawer { width: 100%; max-width: 100%; }
+}

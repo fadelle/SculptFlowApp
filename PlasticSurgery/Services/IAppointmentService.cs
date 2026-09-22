@@ -28,4 +28,10 @@ public interface IAppointmentService
 
     Task<(IReadOnlyList<AppointmentResponse> Items, int TotalCount)> ListAsync(
         Guid clinicId, string? status, DateTimeOffset? from, DateTimeOffset? to, int skip, int take, CancellationToken ct = default);
+
+    /// <summary>Every appointment in the visible month calendar grid for the Appointments page — the grid's
+    /// leading/trailing days from adjacent months included, everything grouped by LOCAL calendar day in the
+    /// clinic's own timezone (never UTC, never the browser's timezone). No status filter: booked, confirmed,
+    /// canceled and completed appointments all appear, same as the rest of the app.</summary>
+    Task<CalendarMonthResponse> GetCalendarMonthAsync(Guid clinicId, int year, int month, CancellationToken ct = default);
 }

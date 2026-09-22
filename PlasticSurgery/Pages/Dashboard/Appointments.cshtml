@@ -1,5 +1,4 @@
 @page "/dashboard/appointments"
-@using PlasticSurgery.Pages.Shared
 @model PlasticSurgery.Pages.Dashboard.AppointmentsModel
 @{
     ViewData["Title"] = "Appointments";
@@ -11,61 +10,86 @@
 }
 else
 {
-    <form method="get" class="mb-3 flex items-center gap-2">
-        <input type="text" name="Search" value="@Model.Search" placeholder="Search by name or phone…" class="text-input" style="width:auto" />
-        <select name="Status" class="select" onchange="this.form.submit()">
-            <option value="">All statuses</option>
-            @foreach (var status in Model.AllStatuses)
-            {
-                <option value="@status" selected="@(status == Model.Status)">@status</option>
-            }
-        </select>
-        <button type="submit" class="btn btn-sm">Search</button>
-    </form>
+    <div id="cal-message"></div>
 
-    <div class="table-card table-scroll">
-        <table class="data-table">
-            <thead>
-                <tr>
-                    <th>Lead</th>
-                    <th>Phone</th>
-                    <th>Procedure</th>
-                    <th>Status</th>
-                    <th>Scheduled</th>
-                    <th>Location</th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach (var a in Model.Appointments)
-                {
-                    <tr>
-                        <td><a href="/dashboard/appointments/@a.Id">@(a.LeadFullName ?? "—")</a></td>
-                        <td>@(a.LeadPhone ?? "—")</td>
-                        <td>@(a.ProcedureName ?? "—")</td>
-                        <td><span class="badge @StatusBadgeHelper.CssClass(a.Status)">@a.Status</span></td>
-                        <td>@a.ScheduledStart.ToString("MMM d, HH:mm")</td>
-                        <td>@(a.LocationType ?? "—")</td>
-                    </tr>
-                }
-                @if (Model.Appointments.Count == 0)
-                {
-                    <tr class="empty-row"><td colspan="6">No appointments match this filter.</td></tr>
-                }
-            </tbody>
-        </table>
+    <div class="cal-header">
+        <div class="cal-nav">
+            <button type="button" class="cal-nav-btn" id="cal-prev" title="Previous month" aria-label="Previous month">&larr;</button>
+            <div class="cal-title" id="cal-title">&nbsp;</div>
+            <button type="button" class="cal-nav-btn" id="cal-next" title="Next month" aria-label="Next month">&rarr;</button>
+            <button type="button" class="btn btn-sm" id="cal-today">Today</button>
+        </div>
+        <button type="button" class="btn btn-primary btn-sm" id="cal-new">+ New Appointment</button>
     </div>
 
-    @if (Model.TotalPages > 1)
-    {
-        <ul class="pagination">
-            @for (var p = 1; p <= Model.TotalPages; p++)
-            {
-                <li class="@(p == Model.PageNumber ? "active" : "")">
-                    <a href="/dashboard/appointments?PageNumber=@p&Status=@Model.Status&Search=@Uri.EscapeDataString(Model.Search ?? "")">@p</a>
-                </li>
-            }
-        </ul>
-    }
+    <div class="cal-weekdays">
+        <div class="cal-weekday">Sun</div><div class="cal-weekday">Mon</div><div class="cal-weekday">Tue</div>
+        <div class="cal-weekday">Wed</div><div class="cal-weekday">Thu</div><div class="cal-weekday">Fri</div>
+        <div class="cal-weekday">Sat</div>
+    </div>
+    <div class="cal-grid" id="cal-grid"></div>
 
-    <p class="text-subtle mt-2">@Model.TotalCount total appointment(s).</p>
+    @* ---------- Day drawer: every appointment for the clicked day ---------- *@
+    <div class="cal-drawer-overlay" id="cal-drawer-overlay" hidden></div>
+    <div class="cal-drawer" id="cal-drawer" hidden>
+        <div class="cal-drawer-header">
+            <h3 class="cal-drawer-title" id="cal-drawer-title">&nbsp;</h3>
+            <div class="flex items-center gap-2">
+                <button type="button" class="btn btn-sm" id="cal-drawer-add">+ New</button>
+                <button type="button" class="btn btn-sm" id="cal-drawer-close">Close</button>
+            </div>
+        </div>
+        <div class="cal-drawer-body" id="cal-drawer-body"></div>
+    </div>
+
+    @* ---------- New Appointment ---------- *@
+    <div class="bm-overlay" id="cal-new-overlay" hidden>
+        <div class="card cal-modal" role="dialog" aria-modal="true" aria-labelledby="cal-new-title">
+            <div class="flex items-center gap-2" style="justify-content:space-between;margin-bottom:.9rem">
+                <h3 id="cal-new-title" style="margin:0;font-size:1.05rem">New Appointment</h3>
+                <button type="button" class="btn btn-sm" id="cal-new-close">Close</button>
+            </div>
+            <div id="cal-new-error"></div>
+            <div class="integration-form">
+                <label class="field">
+                    <span>Patient (lead)</span>
+                    <input type="text" id="cal-new-lead-search" class="text-input" placeholder="Search by name or phone…" autocomplete="off" />
+                    <div id="cal-new-lead-results" class="text-subtle" style="font-size:.8rem"></div>
+                    <input type="hidden" id="cal-new-lead-id" />
+                </label>
+                <label class="field">
+                    <span>Procedure <small class="text-subtle">(optional)</small></span>
+                    <select id="cal-new-procedure" class="select"><option value="">Loading…</option></select>
+                </label>
+                <div class="flex items-center gap-2">
+                    <label class="field" style="flex:1">
+                        <span>Date</span>
+                        <input type="date" id="cal-new-date" class="text-input" required />
+                    </label>
+                    <label class="field" style="flex:1">
+                        <span>Time</span>
+                        <input type="time" id="cal-new-time" class="text-input" value="09:00" required />
+                    </label>
+                    <label class="field" style="width:120px">
+                        <span>Duration (min)</span>
+                        <input type="number" id="cal-new-duration" class="text-input" value="30" min="5" max="480" />
+                    </label>
+                </div>
+                <label class="field">
+                    <span>Location <small class="text-subtle">(optional)</small></span>
+                    <input type="text" id="cal-new-location" class="text-input" maxlength="30" placeholder="e.g. in_person, video" />
+                </label>
+                <label class="field">
+                    <span>Notes <small class="text-subtle">(optional)</small></span>
+                    <textarea id="cal-new-notes" class="text-input" rows="2"></textarea>
+                </label>
+                <div class="flex items-center gap-2 mt-1">
+                    <button type="button" class="btn btn-primary btn-sm" id="cal-new-save">Create appointment</button>
+                    <button type="button" class="btn btn-sm" id="cal-new-cancel">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="~/js/appointments-calendar.js" asp-append-version="true"></script>
 }
