@@ -213,6 +213,13 @@
   function renderMessages(messages) {
     messagesEl.innerHTML = '';
     messages.forEach(function (m) {
+      if (m.origin === 'system' && m.senderType === 'system') {
+        var marker = document.createElement('div');
+        marker.className = 'inbox-mode-marker';
+        marker.innerHTML = '<span>' + escapeHtml(m.content || '') + ' &middot; ' + formatTime(m.createdAt) + '</span>';
+        messagesEl.appendChild(marker);
+        return;
+      }
       var row = document.createElement('div');
       row.className = 'inbox-msg-row ' + (m.direction === 'outbound' ? 'outbound' : 'inbound');
 

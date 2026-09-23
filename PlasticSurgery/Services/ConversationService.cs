@@ -169,7 +169,7 @@ public class ConversationService : IConversationService
             .Select(c => new ConversationListRow(
                 c.Id, c.LeadId, c.Lead!.FullName, c.Lead.Phone, c.Lead.Procedure != null ? c.Lead.Procedure.Name : null,
                 c.Channel, c.Status, c.Mode,
-                _db.Messages.Where(m => m.ConversationId == c.Id).OrderByDescending(m => m.CreatedAt).Select(m => m.Content).FirstOrDefault(),
+                _db.Messages.Where(m => m.ConversationId == c.Id && m.Origin != MessageOrigin.System).OrderByDescending(m => m.CreatedAt).Select(m => m.Content).FirstOrDefault(),
                 c.LastMessageDirection, c.LastMessageAt, c.CreatedAt,
                 _db.Messages.Count(m => m.ConversationId == c.Id && m.Direction == MessageDirection.Inbound
                                         && (c.LastReadAt == null || m.CreatedAt > c.LastReadAt))))

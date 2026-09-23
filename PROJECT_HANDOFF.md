@@ -224,6 +224,11 @@ Consumers: `inbox.js`, `whatsapp-templates.js`, `whatsapp-health.js`.
   reaches stays human until staff click Return to AI — a deliberate-looking side effect worth revisiting). NOT
   triggers: a customer message, an AI reply, Close, or the AI marking a lead `needs_human`/`medical_question` (that
   only labels the lead). Only **Return to AI** switches back; `approval` is never set automatically.
+- **Mode-change markers**: `ConversationModeSync.Apply(conversation, mode, at)` also adds a `system`-origin/`system`-sender
+  timeline message ("Handed from AI to staff" on ai→human, "Returned to AI" on human→ai; no-op changes add nothing),
+  dated 1 ms before the triggering staff message so it sorts above it. `inbox.js` renders these as a centered divider
+  instead of a bubble; the conversation-list preview skips `origin = system`. No schema change (system is already an allowed
+  origin/sender); conversations handed over before this change have no marker.
 - **Unread tracking** (pushed in `2eec572`): `conversations.last_read_at` (shared by the clinic's staff; existing rows
   backfilled as read once). `ConversationListRow.UnreadCount` = inbound messages newer than it.
   `POST /api/conversations/{id}/read` (`IConversationService.MarkReadAsync`, clinic-scoped, notifies via

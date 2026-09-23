@@ -74,7 +74,7 @@ public class MessageService : IMessageService
 
         // Staff sending from the dashboard means a human is handling this conversation now.
         var modeChanged = conversation.Mode != ConversationMode.Human;
-        ConversationModeSync.Apply(conversation, ConversationMode.Human);
+        ConversationModeSync.Apply(conversation, ConversationMode.Human, now);
 
         if (conversation.Lead is not null)
         {
@@ -239,7 +239,7 @@ public class MessageService : IMessageService
         conversation.UpdatedAt = now;
 
         var modeChanged = conversation.Mode != ConversationMode.Human;
-        ConversationModeSync.Apply(conversation, ConversationMode.Human);
+        ConversationModeSync.Apply(conversation, ConversationMode.Human, now);
 
         if (conversation.Lead is not null)
         {
@@ -368,7 +368,7 @@ public class MessageService : IMessageService
         var modeChanged = false;
         if (moveToHuman && conversation.Mode != ConversationMode.Human)
         {
-            ConversationModeSync.Apply(conversation, ConversationMode.Human);
+            ConversationModeSync.Apply(conversation, ConversationMode.Human, now);
             modeChanged = true;
         }
 

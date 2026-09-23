@@ -1055,6 +1055,13 @@ table.data-table {
   background: var(--bg);
 }
 
+.inbox-mode-marker {
+  display: flex; align-items: center; gap: 0.6rem;
+  margin: 0.5rem 0; font-size: 0.72rem; color: var(--text-muted);
+}
+.inbox-mode-marker::before, .inbox-mode-marker::after {
+  content: ""; flex: 1; height: 1px; background: var(--border);
+}
 .inbox-msg-row { display: flex; }
 .inbox-msg-row.outbound { justify-content: flex-end; }
 .inbox-msg-row.inbound { justify-content: flex-start; }
