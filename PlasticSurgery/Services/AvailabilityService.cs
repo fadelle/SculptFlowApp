@@ -94,7 +94,9 @@ public class AvailabilityService : IAvailabilityService
                         continue;
                     }
 
-                    slots.Add(new AvailableSlotResponse(slotStart, slotEnd));
+                    slots.Add(new AvailableSlotResponse(slotStart, slotEnd,
+                        date.ToString("yyyy-MM-dd"), cursor.ToString("HH:mm"),
+                        $"{date.DayOfWeek} {cursor.ToString("h:mm tt", System.Globalization.CultureInfo.InvariantCulture)}"));
                     cursor = cursor.AddMinutes(step);
                 }
             }

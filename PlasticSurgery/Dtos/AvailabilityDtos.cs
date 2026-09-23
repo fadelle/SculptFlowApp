@@ -23,7 +23,9 @@ public record AvailabilityResponse(
     public string TomorrowDayOfWeek => DateOnly.Parse(Today).AddDays(1).DayOfWeek.ToString();
 }
 
-public record AvailableSlotResponse(DateTimeOffset Start, DateTimeOffset End);
+/// <summary>Start/End are the exact values to pass back to book_consultation. Date/Time/Label are the same moment as plain
+/// clinic-local text (Time is 24-hour "HH:mm", Label is what to say to the patient) so the AI never has to read an offset.</summary>
+public record AvailableSlotResponse(DateTimeOffset Start, DateTimeOffset End, string Date, string Time, string Label);
 
 /// <summary>Weekly window as staff edit it. DayOfWeek uses .NET numbering (0 = Sunday). Times are "HH:mm" clinic-local.</summary>
 public record DayRuleDto(int DayOfWeek, bool IsOpen, string Start, string End);
