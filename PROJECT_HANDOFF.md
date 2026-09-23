@@ -662,6 +662,8 @@ shown), mapped onto the 3 backend audience types via two hidden fields (`Audienc
   `grid-template-columns: repeat(7, minmax(0, 1fr))`, not plain `1fr` — a long unbreakable chip label (e.g. a
   long procedure name, `white-space: nowrap` + `text-overflow: ellipsis`) otherwise inflates that column's
   auto-computed minimum width and pushes the Saturday column off-screen while squeezing the rest.
+  **Needs-outcome banner**: `CalendarMonthResponse.NeedsOutcomeCount` = clinic-wide past (`ScheduledStart` < now) appointments still
+  `booked`/`confirmed`; the page shows "N past appointments need an outcome" above the grid (`#cal-outcome`). Nothing is auto-marked.
 - **Branding/nav**: app renamed **MySculptFlow** (logo badge "SF"); sidebar shows the **logged-in clinic's
   name** (from `clinics.name` via `ICurrentClinicContext`, fallback "Clinic Dashboard"); nav: Inbox, Main
   Numbers, Interested People, Appointments, **Procedures**, [WhatsApp] Templates, Health, Campaigns,

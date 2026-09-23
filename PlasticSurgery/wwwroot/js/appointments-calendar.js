@@ -64,6 +64,17 @@
         box.appendChild(el('div', { class: 'alert ' + (kind === 'error' ? 'alert-warning' : 'alert-info') + ' mb-3' }, [text]));
     }
 
+    /** Past appointments still booked/confirmed have no recorded outcome — staff open each one and set attended / no-show / canceled. */
+    function renderOutcomeNotice(count) {
+        var box = $('cal-outcome');
+        box.textContent = '';
+        if (!count) return;
+        box.appendChild(el('div', { class: 'alert alert-warning mb-3' }, [
+            count + (count === 1 ? ' past appointment needs an outcome' : ' past appointments need an outcome') +
+            ' - open it and mark attended, no-show or canceled.'
+        ]));
+    }
+
     // ---------------------------------------------------------------- month grid
 
     function loadMonth(year, month) {
@@ -71,6 +82,7 @@
         $('cal-title').textContent = MONTH_NAMES[month - 1] + ' ' + year;
         return api('GET', '/api/appointments/calendar?year=' + year + '&month=' + month).then(function (data) {
             state.monthData = data;
+            renderOutcomeNotice(data.needsOutcomeCount);
             renderGrid(data);
             // Keep the drawer's contents in sync if it's open and its date is still in the new month's data.
             if (state.drawerDate) renderDrawer(state.drawerDate);

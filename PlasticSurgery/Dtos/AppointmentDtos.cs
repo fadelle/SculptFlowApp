@@ -63,5 +63,7 @@ public record CalendarMonthResponse(
     /// <summary>The grid's first/last visible day (inclusive), "yyyy-MM-dd" — may fall in the previous/next month.</summary>
     string GridStart,
     string GridEnd,
-    IReadOnlyList<CalendarAppointmentResponse> Items
+    IReadOnlyList<CalendarAppointmentResponse> Items,
+    /// <summary>Clinic-wide count of past appointments still booked/confirmed — nobody recorded an outcome (attended / no-show / canceled).</summary>
+    int NeedsOutcomeCount
 );

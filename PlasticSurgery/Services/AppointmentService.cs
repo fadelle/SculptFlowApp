@@ -246,7 +246,10 @@ public class AppointmentService : IAppointmentService
                 local.ToString("yyyy-MM-dd"), local.ToString("HH:mm"));
         }).ToList();
 
-        return new CalendarMonthResponse(year, month, tz.Id, gridStart.ToString("yyyy-MM-dd"), gridEnd.ToString("yyyy-MM-dd"), items);
+        var needsOutcome = await _db.Appointments.CountAsync(a => a.ClinicId == clinicId && a.ScheduledStart < DateTimeOffset.UtcNow
+            && (a.Status == AppointmentStatus.Booked || a.Status == AppointmentStatus.Confirmed), ct);
+
+        return new CalendarMonthResponse(year, month, tz.Id, gridStart.ToString("yyyy-MM-dd"), gridEnd.ToString("yyyy-MM-dd"), items, needsOutcome);
     }
 
     /// <summary>Local midnight on <paramref name="date"/>, in <paramref name="tz"/>, as UTC.</summary>
