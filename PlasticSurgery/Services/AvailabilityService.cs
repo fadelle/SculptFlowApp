@@ -38,8 +38,19 @@ public class AvailabilityService : IAvailabilityService
                 "This clinic hasn't set up its appointment availability yet, so no times can be offered.");
         }
 
+        // A past date is almost always the caller working from the wrong "today". Don't silently search other dates —
+        // say so, so the AI can correct itself using Today/Tomorrow in this response.
+        if (from is { } requested && requested < today)
+        {
+            return new AvailabilityResponse(true, ctx.Tz.Id, today.ToString("yyyy-MM-dd"), duration,
+                requested.ToString("yyyy-MM-dd"), requested.ToString("yyyy-MM-dd"),
+                $"The requested date {requested:yyyy-MM-dd} is in the past. Today is {today:yyyy-MM-dd} ({today.DayOfWeek}). " +
+                "Resolve the patient's day from today's date and call again with a date that is today or later.",
+                Array.Empty<AvailableSlotResponse>());
+        }
+
         days = Math.Clamp(days, 1, MaxRangeDays);
-        var start = from is null || from.Value < today ? today : from.Value;
+        var start = from ?? today;
         var maxDate = today.AddDays(ctx.Booking.MaximumAdvanceBookingDays);
         var end = start.AddDays(days - 1);
         if (end > maxDate) end = maxDate;
