@@ -19,10 +19,10 @@ public record ClinicInfoResponse(
 /// ClinicId, which the AI controller takes from the query string like every other AI endpoint.</summary>
 public record BookConsultationRequest(
     Guid LeadId,
-    Guid? ProcedureId,
+    [property: System.Text.Json.Serialization.JsonConverter(typeof(LenientNullableGuidConverter))] Guid? ProcedureId,
     string? AppointmentType,
     DateTimeOffset ScheduledStart,
-    DateTimeOffset? ScheduledEnd,
+    [property: System.Text.Json.Serialization.JsonConverter(typeof(LenientNullableDateTimeOffsetConverter))] DateTimeOffset? ScheduledEnd,
     string? LocationType,
     string? LocationName,
     string? Notes
