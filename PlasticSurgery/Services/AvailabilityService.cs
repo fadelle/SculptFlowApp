@@ -26,7 +26,7 @@ public class AvailabilityService : IAvailabilityService
         Guid clinicId, Guid? procedureId, DateOnly? from, int days, CancellationToken ct = default)
     {
         var ctx = await LoadAsync(clinicId, ct);
-        if (ctx is null) return NotConfigured("UTC", DefaultDurationMinutes, "Clinic not found.");
+        if (ctx is null) return NotConfigured("UTC", DefaultDurationMinutes, DateOnly.FromDateTime(DateTime.UtcNow), "Clinic not found.");
 
         var duration = await ResolveDurationAsync(clinicId, procedureId, ctx.Booking.DefaultConsultationDurationMinutes, ct);
         var nowUtc = DateTimeOffset.UtcNow;
@@ -34,7 +34,7 @@ public class AvailabilityService : IAvailabilityService
 
         if (!ctx.Configured)
         {
-            return NotConfigured(ctx.Tz.Id, duration,
+            return NotConfigured(ctx.Tz.Id, duration, today,
                 "This clinic hasn't set up its appointment availability yet, so no times can be offered.");
         }
 
@@ -46,7 +46,7 @@ public class AvailabilityService : IAvailabilityService
 
         if (start > maxDate)
         {
-            return new AvailabilityResponse(true, ctx.Tz.Id, duration, start.ToString("yyyy-MM-dd"), start.ToString("yyyy-MM-dd"),
+            return new AvailabilityResponse(true, ctx.Tz.Id, today.ToString("yyyy-MM-dd"), duration, start.ToString("yyyy-MM-dd"), start.ToString("yyyy-MM-dd"),
                 $"Bookings can only be made up to {ctx.Booking.MaximumAdvanceBookingDays} days ahead.", Array.Empty<AvailableSlotResponse>());
         }
 
@@ -90,7 +90,7 @@ public class AvailabilityService : IAvailabilityService
         }
 
         var message = slots.Count == 0 ? "No available times in this date range." : null;
-        return new AvailabilityResponse(true, ctx.Tz.Id, duration, start.ToString("yyyy-MM-dd"), end.ToString("yyyy-MM-dd"), message, slots);
+        return new AvailabilityResponse(true, ctx.Tz.Id, today.ToString("yyyy-MM-dd"), duration, start.ToString("yyyy-MM-dd"), end.ToString("yyyy-MM-dd"), message, slots);
     }
 
     public async Task<SlotCheck> CheckSlotAsync(
@@ -281,8 +281,8 @@ public class AvailabilityService : IAvailabilityService
 
     private static string Fmt(TimeOnly t) => t.ToString("HH:mm");
 
-    private static AvailabilityResponse NotConfigured(string tz, int duration, string message) =>
-        new(false, tz, duration, string.Empty, string.Empty, message, Array.Empty<AvailableSlotResponse>());
+    private static AvailabilityResponse NotConfigured(string tz, int duration, DateOnly today, string message) =>
+        new(false, tz, today.ToString("yyyy-MM-dd"), duration, string.Empty, string.Empty, message, Array.Empty<AvailableSlotResponse>());
 
     /// <summary>Procedure's own consultation duration when it is active and has one; otherwise the clinic default.
     /// A procedure that is unknown for this clinic or inactive is rejected — it can't be newly booked.</summary>

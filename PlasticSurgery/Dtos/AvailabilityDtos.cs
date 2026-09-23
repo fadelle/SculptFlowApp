@@ -7,13 +7,21 @@ public record AvailabilityResponse(
     /// <summary>False until the clinic has at least one open weekday configured — then Slots is always empty and Message says why.</summary>
     bool Configured,
     string Timezone,
+    /// <summary>Today's date in the clinic's timezone ("yyyy-MM-dd") — lets the AI resolve "tomorrow", "Friday" etc. from the
+    /// tool result itself instead of guessing the current date.</summary>
+    string Today,
     int DurationMinutes,
     /// <summary>First/last local date searched ("yyyy-MM-dd"), after clamping to today and the booking horizon.</summary>
     string From,
     string To,
     string? Message,
     IReadOnlyList<AvailableSlotResponse> Slots
-);
+)
+{
+    public string TodayDayOfWeek => DateOnly.Parse(Today).DayOfWeek.ToString();
+    public string Tomorrow => DateOnly.Parse(Today).AddDays(1).ToString("yyyy-MM-dd");
+    public string TomorrowDayOfWeek => DateOnly.Parse(Today).AddDays(1).DayOfWeek.ToString();
+}
 
 public record AvailableSlotResponse(DateTimeOffset Start, DateTimeOffset End);
 
