@@ -1363,3 +1363,60 @@ alter table knowledge_retrieval_benchmark_runs drop constraint if exists ck_kbr_
 alter table knowledge_retrieval_benchmark_runs add constraint ck_kbr_case_scope
   check (case_scope in ('all','generated','reviewed','generation'));
 create index if not exists ix_kbr_generation on knowledge_retrieval_benchmark_runs(clinic_id, generation_id) where generation_id is not null;
+
+-- =====================================================================
+-- Structured clinic availability (the booking source of truth; clinics.operating_hours stays free text for the AI to quote)
+-- ---------------------------------------------------------------------
+-- Weekly schedule: one row per (clinic, weekday). day_of_week follows .NET DayOfWeek: 0 = Sunday ... 6 = Saturday.
+-- Times are the clinic's LOCAL wall-clock (clinics.timezone). To allow several windows per day later, drop
+-- ux_clinic_availability_rules_day - the slot service already iterates every rule row for a day.
+create table if not exists clinic_availability_rules (
+  id           uuid primary key default gen_random_uuid(),
+  clinic_id    uuid not null references clinics(id) on delete cascade,
+  day_of_week  smallint not null check (day_of_week between 0 and 6),
+  is_open      boolean not null default true,
+  start_time   time not null,
+  end_time     time not null,
+  created_at   timestamptz not null default now(),
+  updated_at   timestamptz not null default now(),
+  constraint ck_clinic_availability_rules_range check (end_time > start_time)
+);
+create unique index if not exists ux_clinic_availability_rules_day on clinic_availability_rules(clinic_id, day_of_week);
+drop trigger if exists trg_clinic_availability_rules_updated_at on clinic_availability_rules;
+create trigger trg_clinic_availability_rules_updated_at before update on clinic_availability_rules
+  for each row execute function set_updated_at();
+
+-- Booking rules: one row per clinic. No row yet = defaults are shown in the UI (nothing is offered until a weekly rule is open).
+create table if not exists clinic_booking_settings (
+  id                                    uuid primary key default gen_random_uuid(),
+  clinic_id                             uuid not null unique references clinics(id) on delete cascade,
+  default_consultation_duration_minutes integer not null default 30 check (default_consultation_duration_minutes > 0),
+  buffer_minutes                        integer not null default 0 check (buffer_minutes >= 0),
+  minimum_booking_notice_minutes        integer not null default 240 check (minimum_booking_notice_minutes >= 0),
+  maximum_advance_booking_days          integer not null default 60 check (maximum_advance_booking_days > 0),
+  created_at                            timestamptz not null default now(),
+  updated_at                            timestamptz not null default now()
+);
+drop trigger if exists trg_clinic_booking_settings_updated_at on clinic_booking_settings;
+create trigger trg_clinic_booking_settings_updated_at before update on clinic_booking_settings
+  for each row execute function set_updated_at();
+
+-- Date exceptions override the weekly schedule for that local date: closed all day, or a custom window (which may also
+-- open a normally-closed day).
+create table if not exists clinic_availability_exceptions (
+  id          uuid primary key default gen_random_uuid(),
+  clinic_id   uuid not null references clinics(id) on delete cascade,
+  date        date not null,
+  is_closed   boolean not null default true,
+  start_time  time,
+  end_time    time,
+  reason      varchar(200),
+  created_at  timestamptz not null default now(),
+  updated_at  timestamptz not null default now(),
+  constraint ck_clinic_availability_exceptions_window
+    check (is_closed or (start_time is not null and end_time is not null and end_time > start_time))
+);
+create unique index if not exists ux_clinic_availability_exceptions_date on clinic_availability_exceptions(clinic_id, date);
+drop trigger if exists trg_clinic_availability_exceptions_updated_at on clinic_availability_exceptions;
+create trigger trg_clinic_availability_exceptions_updated_at before update on clinic_availability_exceptions
+  for each row execute function set_updated_at();

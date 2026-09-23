@@ -4,10 +4,11 @@ namespace PlasticSurgery.Services;
 
 public interface IAppointmentService
 {
-    /// <summary>Naive fixed-hour slot generator (9am-5pm, clinic timezone) for the next `days` days,
-    /// minus slots that overlap an existing non-canceled appointment. Replace with real calendar
-    /// integration (Google Calendar/Calendly) when Project 6's future additions are built.</summary>
-    Task<IReadOnlyList<AvailableSlotResponse>> GetAvailableSlotsAsync(Guid clinicId, int days, CancellationToken ct = default);
+    /// <summary>Books through the same insert as CreateAsync, but first re-checks — under a per-clinic lock, so two
+    /// simultaneous attempts for one slot cannot both succeed — that the slot is still bookable per IAvailabilityService
+    /// (weekly schedule, exceptions, notice, horizon, existing appointments, buffer). Fills in a missing end time from the
+    /// procedure/default duration. Throws SlotUnavailableException when it is not. Used by the AI's book_consultation.</summary>
+    Task<AppointmentResponse> BookAvailableSlotAsync(CreateAppointmentRequest request, CancellationToken ct = default);
 
     Task<AppointmentResponse> CreateAsync(CreateAppointmentRequest request, CancellationToken ct = default);
 
@@ -34,4 +35,10 @@ public interface IAppointmentService
     /// clinic's own timezone (never UTC, never the browser's timezone). No status filter: booked, confirmed,
     /// canceled and completed appointments all appear, same as the rest of the app.</summary>
     Task<CalendarMonthResponse> GetCalendarMonthAsync(Guid clinicId, int year, int month, CancellationToken ct = default);
+}
+
+/// <summary>The requested slot is not (or is no longer) bookable; Message is safe to show the patient/AI.</summary>
+public class SlotUnavailableException : Exception
+{
+    public SlotUnavailableException(string message) : base(message) { }
 }

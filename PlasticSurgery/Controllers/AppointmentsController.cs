@@ -9,23 +9,30 @@ namespace PlasticSurgery.Controllers;
 public class AppointmentsController : DashboardApiController
 {
     private readonly IAppointmentService _appointments;
+    private readonly IAvailabilityService _availability;
 
-    public AppointmentsController(IAppointmentService appointments, ICurrentClinicContext clinicContext) : base(clinicContext)
+    public AppointmentsController(IAppointmentService appointments, IAvailabilityService availability, ICurrentClinicContext clinicContext) : base(clinicContext)
     {
         _appointments = appointments;
+        _availability = availability;
     }
 
-    /// <summary>Naive placeholder slot generator — see IAppointmentService.GetAvailableSlotsAsync.</summary>
+    /// <summary>Open slots from the clinic's structured availability — same calculation the AI's get_available_slots uses.</summary>
     [HttpGet("available")]
-    public async Task<ActionResult<IReadOnlyList<AvailableSlotResponse>>> GetAvailable(
-        [FromQuery] int days = 7, CancellationToken ct = default)
+    public async Task<ActionResult<AvailabilityResponse>> GetAvailable(
+        [FromQuery] Guid? procedureId, [FromQuery] DateOnly? date, [FromQuery] int? days, CancellationToken ct = default)
     {
         var clinicId = await GetClinicIdAsync(ct);
         if (clinicId is null) return Forbid();
 
-        days = Math.Clamp(days, 1, 30);
-        var slots = await _appointments.GetAvailableSlotsAsync(clinicId.Value, days, ct);
-        return Ok(slots);
+        try
+        {
+            return Ok(await _availability.GetSlotsAsync(clinicId.Value, procedureId, date, days ?? (date is null ? 7 : 1), ct));
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
     }
 
     [HttpPost]

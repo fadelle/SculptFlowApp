@@ -31,9 +31,6 @@ public record CreateAppointmentRequest(
 
 public record UpdateAppointmentStatusRequest(string Status);
 
-/// <summary>A naive fixed-slot day view for /api/appointments/available. Replace with real
-/// calendar-integration logic (Google Calendar/Calendly) in a later project.</summary>
-public record AvailableSlotResponse(DateTimeOffset Start, DateTimeOffset End);
 
 /// <summary>One appointment as shown on the month calendar — the same appointments table as everywhere else,
 /// with LocalDate/LocalTime PRE-COMPUTED server-side in the clinic's own timezone (Clinic.Timezone), so the

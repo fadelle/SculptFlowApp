@@ -194,7 +194,7 @@ Meta → .NET (classify + process) → n8n (normalized trigger, only when AI sho
 | `get_procedures` | `GET /api/ai/procedures?clinicId=` | Structured procedure records (id, name, active, duration) for booking. **Always ACTIVE procedures only** — no `activeOnly` parameter (a stray `activeOnly=false` is ignored). Stays; KB explains, this is authoritative. |
 | `get_lead_context` | `GET /api/ai/leads/{leadId}` | What's known about this lead |
 | `update_lead` | `PATCH /api/ai/leads/{leadId}` | Interest, language, timeline, notes, follow-up, qualification (no identity fields). Rejects an inactive/foreign `procedureId` (400). |
-| `get_available_slots` | `GET /api/ai/appointments/available` | Live availability |
+| `get_available_slots` | `GET /api/ai/appointments/available?clinicId=&procedureId=&date=&days=` | Live availability from the structured schedule (§24) |
 | `book_consultation` | `POST /api/ai/appointments/book` | Real booking; inactive/foreign procedure → 400 |
 | `reschedule_consultation` / `cancel_consultation` | `POST /api/ai/appointments/{id}/reschedule|cancel` | |
 | `handoff_to_human` | `POST /api/ai/conversations/{id}/handoff` | Switch conversation to human |
@@ -985,3 +985,31 @@ Outbound: n8n/dashboard → MessageService → IChannelSender (by conversation.C
   intentionally NOT built — seam: add the update types to `allowed_updates` in `SetWebhookAsync`, add a branch in
   `TelegramUpdateParser` mapping `business_message` onto `ParsedTelegramMessage`, and a business_connection_id →
   channel_integration lookup in the webhook controller; Lead/Conversation/Message/Inbox/n8n/send are unaffected.
+
+## 24. Structured appointment availability (Clinic Info → Availability) — built, not yet pushed
+
+- **Source of truth for booking** = three tables (`clinic_availability_rules`, `clinic_booking_settings`,
+  `clinic_availability_exceptions`, all `clinic_id`-scoped, cascade on clinic delete; DDL at the end of `Database/schema.sql`, applied live).
+  `clinics.operating_hours` stays free text for `get_clinic_info` and is **never parsed**. Weekly rules use .NET `DayOfWeek`
+  numbering (0 = Sunday), one row per (clinic, weekday) — drop `ux_clinic_availability_rules_day` to allow several windows per
+  day (the service already iterates every rule row). Times are clinic-local wall clock in `clinics.timezone` (now editable on the tab).
+- **`IAvailabilityService`/`AvailabilityService`**: `GetSlotsAsync` (weekly rule or date exception → windows; slot duration =
+  active procedure's `ConsultationDuration` else clinic default; **next-fit** slots advancing by duration+buffer, jumping past
+  any blocking appointment + buffer; minimum notice; booking horizon; blocking = every status except `canceled`/`rescheduled`
+  (`AppointmentStatus.BlocksTime`); an appointment with no end time occupies its procedure/default duration) and `CheckSlotAsync`
+  (the final recheck of one interval). An inactive/unknown procedure → `ArgumentException` (400). **A clinic with no open weekday
+  is `configured:false` with no slots — never 24/7. There are no defaults seeded for new clinics; existing clinics must configure
+  the tab before the AI offers any time.** Booking rules with no row use defaults (30 min, 0 buffer, 4 h notice, 60 days).
+- **AI tool**: existing `GET /api/ai/appointments/available` (X-Ingest-Key, `clinicId` query — same n8n convention) now takes
+  `procedureId?`, `date?` (local yyyy-MM-dd; default today), `days?` (1–14; 1 when a date is given, else 7) and returns
+  `{configured, timezone, durationMinutes, from, to, message, slots:[{start,end}]}` with clinic-local offsets
+  (`2026-09-24T09:00:00+03:00`). **Response shape changed from the old bare array — update the n8n tool description.** Dashboard
+  `GET /api/appointments/available` returns the same, clinic from `CurrentClinicContext`.
+- **book_consultation** (`POST /api/ai/appointments/book`) now uses `IAppointmentService.BookAvailableSlotAsync`: inside a transaction
+  holding `pg_advisory_xact_lock(hashtext(clinic_id))` it re-runs `CheckSlotAsync`, fills a missing end time, then the normal
+  `CreateAsync`. Unavailable → **409** `{error, slotUnavailable:true}` (AI should re-query slots). Staff bookings (`POST /api/appointments`)
+  and AI reschedule are NOT gated (staff may override; reschedule recheck not built). `CreateAsync`/`RescheduleAsync` now
+  normalize times to UTC (Npgsql rejects non-zero offsets — local-offset times from the tool would have 500'd before).
+- **UI**: `/settings/clinic-info` has General | Availability tabs (`?tab=availability`, handlers `SaveAvailability`, `AddException`,
+  `DeleteException` in `ClinicInfo.cshtml.cs`): timezone picker (curated IANA list), Mon–Sun open/start/end, four booking rules
+  (notice entered in hours), exceptions list + add form (same date replaces).

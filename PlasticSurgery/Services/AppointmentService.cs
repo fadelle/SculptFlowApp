@@ -12,11 +12,14 @@ public class AppointmentService : IAppointmentService
     private readonly IEventLogger _events;
     private readonly IProcedureService _procedures;
 
-    public AppointmentService(ApplicationDbContext db, IEventLogger events, IProcedureService procedures)
+    private readonly IAvailabilityService _availability;
+
+    public AppointmentService(ApplicationDbContext db, IEventLogger events, IProcedureService procedures, IAvailabilityService availability)
     {
         _db = db;
         _events = events;
         _procedures = procedures;
+        _availability = availability;
     }
 
     /// <summary>The clinic's configured timezone (Clinic.Timezone), falling back to UTC for an unrecognized
@@ -34,47 +37,20 @@ public class AppointmentService : IAppointmentService
         }
     }
 
-    public async Task<IReadOnlyList<AvailableSlotResponse>> GetAvailableSlotsAsync(Guid clinicId, int days, CancellationToken ct = default)
+    public async Task<AppointmentResponse> BookAvailableSlotAsync(CreateAppointmentRequest request, CancellationToken ct = default)
     {
-        var clinic = await _db.Clinics.FirstOrDefaultAsync(c => c.Id == clinicId, ct);
-        if (clinic is null) return Array.Empty<AvailableSlotResponse>();
+        await using var tx = await _db.Database.BeginTransactionAsync(ct);
 
-        var tz = ResolveTimeZone(clinic);
-        var nowLocal = TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, tz);
-        var windowStartUtc = DateTimeOffset.UtcNow;
-        var windowEndUtc = DateTimeOffset.UtcNow.AddDays(days);
+        // Serialize bookings per clinic until commit: the second of two concurrent attempts waits here, then its check
+        // below sees the first one's appointment and rejects it.
+        await _db.Database.ExecuteSqlInterpolatedAsync($"select pg_advisory_xact_lock(hashtext({request.ClinicId.ToString()}))", ct);
 
-        var busy = await _db.Appointments
-            .Where(a => a.ClinicId == clinicId
-                        && a.Status != AppointmentStatus.Canceled
-                        && a.ScheduledStart >= windowStartUtc
-                        && a.ScheduledStart <= windowEndUtc)
-            .Select(a => new { a.ScheduledStart, End = a.ScheduledEnd ?? a.ScheduledStart.AddMinutes(30) })
-            .ToListAsync(ct);
+        var check = await _availability.CheckSlotAsync(request.ClinicId, request.ProcedureId, request.ScheduledStart, request.ScheduledEnd, ct);
+        if (check.Error is not null) throw new SlotUnavailableException(check.Error);
 
-        var slots = new List<AvailableSlotResponse>();
-
-        for (var dayOffset = 0; dayOffset < days; dayOffset++)
-        {
-            var dayLocal = nowLocal.Date.AddDays(dayOffset);
-
-            for (var hour = 9; hour < 17; hour++)
-            {
-                var slotLocal = new DateTimeOffset(dayLocal.AddHours(hour), tz.GetUtcOffset(dayLocal.AddHours(hour)));
-                var slotStartUtc = slotLocal.ToUniversalTime();
-                var slotEndUtc = slotStartUtc.AddHours(1);
-
-                if (slotStartUtc <= DateTimeOffset.UtcNow) continue;
-
-                var overlaps = busy.Any(b => b.ScheduledStart < slotEndUtc && b.End > slotStartUtc);
-                if (!overlaps)
-                {
-                    slots.Add(new AvailableSlotResponse(slotStartUtc, slotEndUtc));
-                }
-            }
-        }
-
-        return slots;
+        var appointment = await CreateAsync(request with { ScheduledEnd = check.End }, ct);
+        await tx.CommitAsync(ct);
+        return appointment;
     }
 
     public async Task<AppointmentResponse> CreateAsync(CreateAppointmentRequest request, CancellationToken ct = default)
@@ -93,8 +69,9 @@ public class AppointmentService : IAppointmentService
             ProcedureId = request.ProcedureId,
             AppointmentType = string.IsNullOrWhiteSpace(request.AppointmentType) ? "consultation" : request.AppointmentType,
             Status = AppointmentStatus.Booked,
-            ScheduledStart = request.ScheduledStart,
-            ScheduledEnd = request.ScheduledEnd,
+            // Npgsql only stores UTC-offset values; callers (n8n) send the clinic-local offset returned by get_available_slots.
+            ScheduledStart = request.ScheduledStart.ToUniversalTime(),
+            ScheduledEnd = request.ScheduledEnd?.ToUniversalTime(),
             LocationType = request.LocationType,
             LocationName = request.LocationName,
             Notes = request.Notes,
@@ -166,8 +143,8 @@ public class AppointmentService : IAppointmentService
         var appointment = await _db.Appointments.FirstOrDefaultAsync(a => a.ClinicId == clinicId && a.Id == id, ct);
         if (appointment is null) return null;
 
-        appointment.ScheduledStart = newStart;
-        appointment.ScheduledEnd = newEnd;
+        appointment.ScheduledStart = newStart.ToUniversalTime();
+        appointment.ScheduledEnd = newEnd?.ToUniversalTime();
         // A rescheduled time isn't "confirmed" again until the clinic/staff confirms it — same
         // status a brand-new booking starts at.
         appointment.Status = AppointmentStatus.Booked;

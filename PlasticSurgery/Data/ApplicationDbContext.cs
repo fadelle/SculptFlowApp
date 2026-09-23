@@ -48,6 +48,9 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
     public DbSet<KnowledgeRetrievalBenchmarkResult> KnowledgeBenchmarkResults => Set<KnowledgeRetrievalBenchmarkResult>();
     public DbSet<KnowledgeRetrievalBenchmarkGeneration> KnowledgeBenchmarkGenerations => Set<KnowledgeRetrievalBenchmarkGeneration>();
     public DbSet<ClinicUser> ClinicUsers => Set<ClinicUser>();
+    public DbSet<ClinicAvailabilityRule> ClinicAvailabilityRules => Set<ClinicAvailabilityRule>();
+    public DbSet<ClinicBookingSettings> ClinicBookingSettings => Set<ClinicBookingSettings>();
+    public DbSet<ClinicAvailabilityException> ClinicAvailabilityExceptions => Set<ClinicAvailabilityException>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -612,6 +615,56 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.HasIndex(x => new { x.ChannelIntegrationId, x.EventType, x.OccurredAt })
                 .IsUnique()
                 .HasDatabaseName("ux_whatsapp_health_events_connection_type_occurred");
+        });
+
+        // ---------------------------------------------------------------
+        // Structured availability (clinic_availability_rules / clinic_booking_settings / clinic_availability_exceptions)
+        // — see Services/AvailabilityService.cs.
+        // ---------------------------------------------------------------
+        modelBuilder.Entity<ClinicAvailabilityRule>(e =>
+        {
+            e.ToTable("clinic_availability_rules");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.ClinicId).HasColumnName("clinic_id");
+            e.Property(x => x.DayOfWeek).HasColumnName("day_of_week");
+            e.Property(x => x.IsOpen).HasColumnName("is_open");
+            e.Property(x => x.StartTime).HasColumnName("start_time");
+            e.Property(x => x.EndTime).HasColumnName("end_time");
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+            e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
+            e.HasOne<Clinic>().WithMany().HasForeignKey(x => x.ClinicId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ClinicBookingSettings>(e =>
+        {
+            e.ToTable("clinic_booking_settings");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.ClinicId).HasColumnName("clinic_id");
+            e.Property(x => x.DefaultConsultationDurationMinutes).HasColumnName("default_consultation_duration_minutes");
+            e.Property(x => x.BufferMinutes).HasColumnName("buffer_minutes");
+            e.Property(x => x.MinimumBookingNoticeMinutes).HasColumnName("minimum_booking_notice_minutes");
+            e.Property(x => x.MaximumAdvanceBookingDays).HasColumnName("maximum_advance_booking_days");
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+            e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
+            e.HasOne<Clinic>().WithMany().HasForeignKey(x => x.ClinicId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ClinicAvailabilityException>(e =>
+        {
+            e.ToTable("clinic_availability_exceptions");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.ClinicId).HasColumnName("clinic_id");
+            e.Property(x => x.Date).HasColumnName("date");
+            e.Property(x => x.IsClosed).HasColumnName("is_closed");
+            e.Property(x => x.StartTime).HasColumnName("start_time");
+            e.Property(x => x.EndTime).HasColumnName("end_time");
+            e.Property(x => x.Reason).HasColumnName("reason").HasMaxLength(200);
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+            e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
+            e.HasOne<Clinic>().WithMany().HasForeignKey(x => x.ClinicId).OnDelete(DeleteBehavior.Cascade);
         });
 
         // ---------------------------------------------------------------

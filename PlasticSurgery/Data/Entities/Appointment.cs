@@ -39,4 +39,8 @@ public static class AppointmentStatus
     {
         Booked, Confirmed, Attended, NoShow, Canceled, Rescheduled
     };
+
+    /// <summary>Whether an appointment in this status occupies its time slot. Canceled frees it; Rescheduled means the
+    /// booking moved elsewhere. Everything else (booked, confirmed, attended, no-show) holds the time.</summary>
+    public static bool BlocksTime(string status) => status != Canceled && status != Rescheduled;
 }

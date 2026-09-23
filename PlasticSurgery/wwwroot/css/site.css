@@ -1347,3 +1347,19 @@ table.data-table {
   .cal-chip { font-size: 0.66rem; }
   .cal-drawer { width: 100%; max-width: 100%; }
 }
+
+/* Clinic Info tabs + Availability tab */
+.clinic-tabs { display: flex; gap: 0.25rem; border-bottom: 1px solid var(--border); margin-bottom: 1rem; }
+.clinic-tab {
+  padding: 0.5rem 0.9rem; font-size: 0.85rem; font-weight: 600; color: var(--text-muted);
+  border-bottom: 2px solid transparent; margin-bottom: -1px; text-decoration: none;
+}
+.clinic-tab:hover { color: var(--text); }
+.clinic-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.avail-week { display: flex; flex-direction: column; gap: 0.4rem; }
+.avail-row { display: flex; align-items: center; gap: 0.6rem; }
+.avail-day { display: flex; align-items: center; gap: 0.5rem; width: 9rem; font-size: 0.88rem; }
+.avail-time { width: 8rem; }
+.avail-rules { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: 0.75rem; }
+.avail-rules label { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.8rem; color: var(--text-muted); }
+.avail-heading { margin: 1.5rem 0 0.4rem; font-size: 1rem; }

@@ -50,18 +50,20 @@ public class AiController : ControllerBase
     private readonly IProcedureService _procedures;
     private readonly ILeadService _leads;
     private readonly IAppointmentService _appointments;
+    private readonly IAvailabilityService _availability;
     private readonly IConversationService _conversations;
     private readonly IKnowledgeSearchService _knowledgeSearch;
 
     public AiController(
         IClinicContext clinicContext, IProcedureService procedures, ILeadService leads,
-        IAppointmentService appointments, IConversationService conversations,
+        IAppointmentService appointments, IAvailabilityService availability, IConversationService conversations,
         IKnowledgeSearchService knowledgeSearch)
     {
         _clinicContext = clinicContext;
         _procedures = procedures;
         _leads = leads;
         _appointments = appointments;
+        _availability = availability;
         _conversations = conversations;
         _knowledgeSearch = knowledgeSearch;
     }
@@ -143,14 +145,24 @@ public class AiController : ControllerBase
         }
     }
 
-    /// <summary>get_available_slots — open consultation slots in the next `days` days.</summary>
+    /// <summary>get_available_slots — real open consultation slots from the clinic's structured availability (weekly schedule,
+    /// date exceptions, booking rules, procedure duration, existing appointments), in the clinic's timezone. `date` is a local
+    /// "yyyy-MM-dd" (default today); `days` (1-14, default 1 when a date is given, else 7) searches that many days from it.
+    /// Never computed by the AI. A clinic that hasn't configured availability returns configured=false and no slots.</summary>
     [HttpGet("appointments/available")]
-    public async Task<ActionResult<IReadOnlyList<AvailableSlotResponse>>> GetAvailableSlots(
-        [FromQuery] Guid clinicId, [FromQuery] int days = 7, CancellationToken ct = default)
+    public async Task<ActionResult<AvailabilityResponse>> GetAvailableSlots(
+        [FromQuery] Guid clinicId, [FromQuery] Guid? procedureId, [FromQuery] DateOnly? date,
+        [FromQuery] int? days, CancellationToken ct = default)
     {
-        days = Math.Clamp(days, 1, 30);
-        var slots = await _appointments.GetAvailableSlotsAsync(clinicId, days, ct);
-        return Ok(slots);
+        try
+        {
+            var result = await _availability.GetSlotsAsync(clinicId, procedureId, date, days ?? (date is null ? 7 : 1), ct);
+            return Ok(result);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
     }
 
     /// <summary>book_consultation — the patient picked a specific slot.</summary>
@@ -160,11 +172,16 @@ public class AiController : ControllerBase
     {
         try
         {
-            var appointment = await _appointments.CreateAsync(new CreateAppointmentRequest(
+            var appointment = await _appointments.BookAvailableSlotAsync(new CreateAppointmentRequest(
                 clinicId, request.LeadId, request.ProcedureId,
                 string.IsNullOrWhiteSpace(request.AppointmentType) ? "consultation" : request.AppointmentType,
                 request.ScheduledStart, request.ScheduledEnd, request.LocationType, request.LocationName, request.Notes), ct);
             return Ok(appointment);
+        }
+        catch (SlotUnavailableException ex)
+        {
+            // 409 so the AI knows to re-run get_available_slots and offer the patient other times.
+            return Conflict(new { error = ex.Message, slotUnavailable = true });
         }
         catch (ArgumentException ex)
         {
