@@ -178,6 +178,11 @@ public class AiController : ControllerBase
                 request.ScheduledStart, request.ScheduledEnd, request.LocationType, request.LocationName, request.Notes), ct);
             return Ok(appointment);
         }
+        catch (LeadAlreadyBookedException ex)
+        {
+            // 409 with the existing appointment so the AI can offer to reschedule/cancel it instead of booking a second one.
+            return Conflict(new { error = ex.Message, alreadyBooked = true, existingAppointment = ex.Existing });
+        }
         catch (SlotUnavailableException ex)
         {
             // 409 so the AI knows to re-run get_available_slots and offer the patient other times.
@@ -189,22 +194,51 @@ public class AiController : ControllerBase
         }
     }
 
-    /// <summary>reschedule_consultation — patient wants to change an existing consultation's time.</summary>
-    [HttpPost("appointments/{id:guid}/reschedule")]
-    public async Task<ActionResult<AppointmentResponse>> RescheduleConsultation(
-        Guid id, [FromQuery] Guid clinicId, [FromBody] RescheduleConsultationRequest request, CancellationToken ct)
+    /// <summary>get_my_appointments — this patient's upcoming booked/confirmed appointments (soonest first), in clinic-local
+    /// wording. Use it before rescheduling/cancelling (to get the appointment id) and to answer "what do I have booked?".
+    /// leadId is the current conversation's lead, supplied by the workflow — not chosen by the AI.</summary>
+    [HttpGet("appointments/upcoming")]
+    public async Task<ActionResult<UpcomingAppointmentsResponse>> GetMyAppointments(
+        [FromQuery] Guid clinicId, [FromQuery] Guid leadId, CancellationToken ct)
     {
-        var appointment = await _appointments.RescheduleAsync(clinicId, id, request.ScheduledStart, request.ScheduledEnd, request.Reason, ct);
-        return appointment is null ? NotFound() : Ok(appointment);
+        return Ok(await _appointments.GetUpcomingForLeadAsync(clinicId, leadId, ct));
     }
 
-    /// <summary>cancel_consultation — patient asks to cancel.</summary>
+    /// <summary>reschedule_consultation — patient wants to move THEIR upcoming appointment. The new time is checked exactly like a
+    /// new booking (hours, exceptions, notice, overlaps); 409 means pick another time. The appointment must belong to leadId.</summary>
+    [HttpPost("appointments/{id:guid}/reschedule")]
+    public async Task<ActionResult<AppointmentResponse>> RescheduleConsultation(
+        Guid id, [FromQuery] Guid clinicId, [FromQuery] Guid leadId, [FromBody] RescheduleConsultationRequest request, CancellationToken ct)
+    {
+        try
+        {
+            var appointment = await _appointments.RescheduleAsync(clinicId, leadId, id, request.ScheduledStart, request.ScheduledEnd, request.Reason, ct);
+            return appointment is null ? NotFound(new { error = "Appointment not found for this patient." }) : Ok(appointment);
+        }
+        catch (SlotUnavailableException ex)
+        {
+            return Conflict(new { error = ex.Message, slotUnavailable = true });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    /// <summary>cancel_consultation — patient asks to cancel THEIR upcoming appointment (must belong to leadId).</summary>
     [HttpPost("appointments/{id:guid}/cancel")]
     public async Task<ActionResult<AppointmentResponse>> CancelConsultation(
-        Guid id, [FromQuery] Guid clinicId, [FromBody] CancelConsultationRequest request, CancellationToken ct)
+        Guid id, [FromQuery] Guid clinicId, [FromQuery] Guid leadId, [FromBody] CancelConsultationRequest request, CancellationToken ct)
     {
-        var appointment = await _appointments.CancelAsync(clinicId, id, request.Reason, ct);
-        return appointment is null ? NotFound() : Ok(appointment);
+        try
+        {
+            var appointment = await _appointments.CancelAsync(clinicId, leadId, id, request.Reason, ct);
+            return appointment is null ? NotFound(new { error = "Appointment not found for this patient." }) : Ok(appointment);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
     }
 
     /// <summary>handoff_to_human — medical question, patient requests staff, AI uncertain, upset

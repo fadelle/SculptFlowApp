@@ -28,7 +28,10 @@ public record BookConsultationRequest(
     string? Notes
 );
 
-public record RescheduleConsultationRequest(DateTimeOffset ScheduledStart, DateTimeOffset? ScheduledEnd, string? Reason);
+public record RescheduleConsultationRequest(
+    DateTimeOffset ScheduledStart,
+    [property: System.Text.Json.Serialization.JsonConverter(typeof(LenientNullableDateTimeOffsetConverter))] DateTimeOffset? ScheduledEnd,
+    string? Reason);
 
 public record CancelConsultationRequest(string? Reason);
 

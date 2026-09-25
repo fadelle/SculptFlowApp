@@ -64,3 +64,19 @@ public record CalendarMonthResponse(
     /// <summary>Clinic-wide count of past appointments still booked/confirmed — nobody recorded an outcome (attended / no-show / canceled).</summary>
     int NeedsOutcomeCount
 );
+
+/// <summary>One upcoming appointment as the AI describes it to a patient — Date/Time/Label are clinic-local plain text (same
+/// convention as available slots); Start/End keep the clinic's UTC offset.</summary>
+public record UpcomingAppointmentResponse(
+    Guid Id,
+    string Status,
+    Guid? ProcedureId,
+    string? ProcedureName,
+    DateTimeOffset Start,
+    DateTimeOffset? End,
+    string Date,
+    string Time,
+    string Label
+);
+
+public record UpcomingAppointmentsResponse(string Timezone, IReadOnlyList<UpcomingAppointmentResponse> Appointments);

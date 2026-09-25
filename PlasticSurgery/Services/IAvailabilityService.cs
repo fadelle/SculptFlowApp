@@ -14,8 +14,9 @@ public interface IAvailabilityService
     Task<AvailabilityResponse> GetSlotsAsync(Guid clinicId, Guid? procedureId, DateOnly? from, int days, CancellationToken ct = default);
 
     /// <summary>The final booking check: is [start, end) still bookable right now? Error is null when yes, otherwise a
-    /// human-readable reason. Same rules as slot generation, but validates the requested interval instead of a grid.</summary>
-    Task<SlotCheck> CheckSlotAsync(Guid clinicId, Guid? procedureId, DateTimeOffset start, DateTimeOffset? end, CancellationToken ct = default);
+    /// human-readable reason. Same rules as slot generation, but validates the requested interval instead of a grid.
+    /// excludeAppointmentId ignores one appointment (the one being rescheduled) so it does not block its own new time.</summary>
+    Task<SlotCheck> CheckSlotAsync(Guid clinicId, Guid? procedureId, DateTimeOffset start, DateTimeOffset? end, Guid? excludeAppointmentId = null, CancellationToken ct = default);
 
     Task<AvailabilitySettingsDto> GetSettingsAsync(Guid clinicId, CancellationToken ct = default);
 

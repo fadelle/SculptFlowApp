@@ -107,7 +107,7 @@ public class AvailabilityService : IAvailabilityService
     }
 
     public async Task<SlotCheck> CheckSlotAsync(
-        Guid clinicId, Guid? procedureId, DateTimeOffset start, DateTimeOffset? end, CancellationToken ct = default)
+        Guid clinicId, Guid? procedureId, DateTimeOffset start, DateTimeOffset? end, Guid? excludeAppointmentId = null, CancellationToken ct = default)
     {
         var ctx = await LoadAsync(clinicId, ct);
         var fallbackEnd = end ?? start.AddMinutes(DefaultDurationMinutes);
@@ -139,7 +139,7 @@ public class AvailabilityService : IAvailabilityService
             && TimeOnly.FromDateTime(startLocal) >= w.Start && TimeOnly.FromDateTime(endLocal) <= w.End);
         if (!inWindow) return new SlotCheck("The clinic is not open for a consultation at that time.", slotEnd);
 
-        var busy = await LoadBusyAsync(clinicId, ctx, date, date, ct);
+        var busy = await LoadBusyAsync(clinicId, ctx, date, date, ct, excludeAppointmentId);
         if (IsBlocked(busy, ctx.Booking.BufferMinutes, start, slotEnd, out _))
         {
             return new SlotCheck("That time is no longer available - it overlaps another appointment.", slotEnd);
@@ -338,13 +338,13 @@ public class AvailabilityService : IAvailabilityService
     /// <summary>Blocking appointments that could touch the searched dates. An appointment with no end time occupies its
     /// procedure's consultation duration, or the clinic default.</summary>
     private async Task<List<(DateTimeOffset Start, DateTimeOffset End)>> LoadBusyAsync(
-        Guid clinicId, Ctx ctx, DateOnly from, DateOnly to, CancellationToken ct)
+        Guid clinicId, Ctx ctx, DateOnly from, DateOnly to, CancellationToken ct, Guid? excludeAppointmentId = null)
     {
         var lowUtc = new DateTimeOffset(from.AddDays(-1).ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
         var highUtc = new DateTimeOffset(to.AddDays(2).ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
 
         var rows = await _db.Appointments.AsNoTracking()
-            .Where(a => a.ClinicId == clinicId
+            .Where(a => a.ClinicId == clinicId && (excludeAppointmentId == null || a.Id != excludeAppointmentId)
                         && a.Status != AppointmentStatus.Canceled && a.Status != AppointmentStatus.Rescheduled
                         && a.ScheduledStart >= lowUtc && a.ScheduledStart < highUtc)
             .Select(a => new { a.ScheduledStart, a.ScheduledEnd, ProcedureMinutes = a.Procedure != null ? a.Procedure.ConsultationDuration : null })

@@ -1013,3 +1013,15 @@ Outbound: n8n/dashboard → MessageService → IChannelSender (by conversation.C
 - **UI**: `/settings/clinic-info` has General | Availability tabs (`?tab=availability`, handlers `SaveAvailability`, `AddException`,
   `DeleteException` in `ClinicInfo.cshtml.cs`): timezone picker (curated IANA list), Mon–Sun open/start/end, four booking rules
   (notice entered in hours), exceptions list + add form (same date replaces).
+
+### 24b. AI rescheduling / duplicate-booking guard — built, not yet pushed
+- **`book_consultation`** (`BookAvailableSlotAsync`, under the per-clinic advisory lock): the lead must belong to the clinic (else 400), and must have
+  **no other upcoming appointment** (`scheduled_start > now`, status booked/confirmed) — otherwise **409** `{alreadyBooked:true, existingAppointment:{id,label,...}}`.
+  Canceled/rescheduled/attended/no-show and past appointments never count. Staff bookings (`POST /api/appointments`) are NOT guarded.
+- **`GET /api/ai/appointments/upcoming?clinicId=&leadId=`** (tool `get_my_appointments`): the lead's upcoming appointments with id + clinic-local `date/time/label`.
+- **`POST /api/ai/appointments/{id}/reschedule?clinicId=&leadId=`**: **`leadId` is now required and ownership-checked** (appointment must belong to that
+  clinic AND lead, else 404). Same lock + `CheckSlotAsync` as booking with the appointment itself excluded from overlaps; only booked/confirmed, future
+  appointments can be moved (else 400); a deactivated procedure falls back to the default duration; status → booked; a missing end is filled in. New time
+  unavailable → 409 `{slotUnavailable:true}`. **`.../cancel?clinicId=&leadId=`** likewise requires `leadId`; already-canceled is a no-op 200; finished ones → 400.
+- Flow for the AI: `get_my_appointments` → `get_available_slots` → `reschedule_consultation` (or `cancel_consultation`). n8n tools must pass `leadId` (from the
+  workflow, not the AI). Known gap: `get_available_slots` still treats the patient's own current slot as taken when suggesting new times.

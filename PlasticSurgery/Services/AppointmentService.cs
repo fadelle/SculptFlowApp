@@ -43,9 +43,20 @@ public class AppointmentService : IAppointmentService
 
         // Serialize bookings per clinic until commit: the second of two concurrent attempts waits here, then its check
         // below sees the first one's appointment and rejects it.
-        await _db.Database.ExecuteSqlInterpolatedAsync($"select pg_advisory_xact_lock(hashtext({request.ClinicId.ToString()}))", ct);
+        await LockClinicAsync(request.ClinicId, ct);
 
-        var check = await _availability.CheckSlotAsync(request.ClinicId, request.ProcedureId, request.ScheduledStart, request.ScheduledEnd, ct);
+        // The lead must be one of THIS clinic's (a wrong or foreign id must not create an appointment).
+        if (!await _db.Leads.AnyAsync(l => l.Id == request.LeadId && l.ClinicId == request.ClinicId, ct))
+        {
+            throw new ArgumentException("Lead not found for this clinic.");
+        }
+
+        // One upcoming appointment per lead: a second booking is refused, and the reply describes the existing one so the AI can
+        // offer to move it. Under the lock, so two simultaneous bookings for the same lead can't both pass.
+        var (tz, upcoming) = await LoadUpcomingAsync(request.ClinicId, request.LeadId, ct);
+        if (upcoming.Count > 0) throw new LeadAlreadyBookedException(ToUpcoming(upcoming[0], tz));
+
+        var check = await _availability.CheckSlotAsync(request.ClinicId, request.ProcedureId, request.ScheduledStart, request.ScheduledEnd, ct: ct);
         if (check.Error is not null) throw new SlotUnavailableException(check.Error);
 
         var appointment = await CreateAsync(request with { ScheduledEnd = check.End }, ct);
@@ -138,13 +149,37 @@ public class AppointmentService : IAppointmentService
     }
 
     public async Task<AppointmentResponse?> RescheduleAsync(
-        Guid clinicId, Guid id, DateTimeOffset newStart, DateTimeOffset? newEnd, string? reason, CancellationToken ct = default)
+        Guid clinicId, Guid leadId, Guid id, DateTimeOffset newStart, DateTimeOffset? newEnd, string? reason, CancellationToken ct = default)
     {
-        var appointment = await _db.Appointments.FirstOrDefaultAsync(a => a.ClinicId == clinicId && a.Id == id, ct);
+        await using var tx = await _db.Database.BeginTransactionAsync(ct);
+        await LockClinicAsync(clinicId, ct);
+
+        // The appointment must belong to this clinic AND this lead: the AI only ever acts on the patient it is talking to.
+        var appointment = await _db.Appointments.FirstOrDefaultAsync(a => a.ClinicId == clinicId && a.LeadId == leadId && a.Id == id, ct);
         if (appointment is null) return null;
 
+        if (appointment.Status != AppointmentStatus.Booked && appointment.Status != AppointmentStatus.Confirmed)
+        {
+            throw new ArgumentException($"This appointment is {appointment.Status} and can't be rescheduled.");
+        }
+        if (appointment.ScheduledStart <= DateTimeOffset.UtcNow)
+        {
+            throw new ArgumentException("This appointment is already in the past and can't be rescheduled. Book a new one instead.");
+        }
+
+        // A procedure that was deactivated since booking can't be newly booked, but must not trap the patient in an old time:
+        // fall back to the clinic's default duration for it.
+        Guid? procedureId = appointment.ProcedureId;
+        if (procedureId is { } pid && !await _db.Procedures.AnyAsync(p => p.Id == pid && p.IsActive, ct))
+        {
+            procedureId = null;
+        }
+
+        var check = await _availability.CheckSlotAsync(clinicId, procedureId, newStart, newEnd, excludeAppointmentId: id, ct: ct);
+        if (check.Error is not null) throw new SlotUnavailableException(check.Error);
+
         appointment.ScheduledStart = newStart.ToUniversalTime();
-        appointment.ScheduledEnd = newEnd?.ToUniversalTime();
+        appointment.ScheduledEnd = check.End.ToUniversalTime();
         // A rescheduled time isn't "confirmed" again until the clinic/staff confirms it — same
         // status a brand-new booking starts at.
         appointment.Status = AppointmentStatus.Booked;
@@ -154,13 +189,22 @@ public class AppointmentService : IAppointmentService
             metadataJson: JsonSerializer.Serialize(new { reason }));
 
         await _db.SaveChangesAsync(ct);
-        return await ToResponseAsync(appointment, ct);
+        var response = await ToResponseAsync(appointment, ct);
+        await tx.CommitAsync(ct);
+        return response;
     }
 
-    public async Task<AppointmentResponse?> CancelAsync(Guid clinicId, Guid id, string? reason, CancellationToken ct = default)
+    public async Task<AppointmentResponse?> CancelAsync(Guid clinicId, Guid leadId, Guid id, string? reason, CancellationToken ct = default)
     {
-        var appointment = await _db.Appointments.FirstOrDefaultAsync(a => a.ClinicId == clinicId && a.Id == id, ct);
+        var appointment = await _db.Appointments.FirstOrDefaultAsync(a => a.ClinicId == clinicId && a.LeadId == leadId && a.Id == id, ct);
         if (appointment is null) return null;
+
+        if (appointment.Status == AppointmentStatus.Canceled) return await ToResponseAsync(appointment, ct); // already done
+
+        if (appointment.Status != AppointmentStatus.Booked && appointment.Status != AppointmentStatus.Confirmed)
+        {
+            throw new ArgumentException($"This appointment is {appointment.Status} and can't be canceled.");
+        }
 
         appointment.Status = AppointmentStatus.Canceled;
         appointment.UpdatedAt = DateTimeOffset.UtcNow;
@@ -171,6 +215,44 @@ public class AppointmentService : IAppointmentService
         await _db.SaveChangesAsync(ct);
         return await ToResponseAsync(appointment, ct);
     }
+
+    public async Task<UpcomingAppointmentsResponse> GetUpcomingForLeadAsync(Guid clinicId, Guid leadId, CancellationToken ct = default)
+    {
+        var (tz, items) = await LoadUpcomingAsync(clinicId, leadId, ct);
+        return new UpcomingAppointmentsResponse(tz.Id, items.Select(a => ToUpcoming(a, tz)).ToList());
+    }
+
+    /// <summary>The lead's future booked/confirmed appointments, soonest first (canceled, rescheduled, attended and no-show never
+    /// count as "upcoming"), plus the clinic's timezone for wording them.</summary>
+    private async Task<(TimeZoneInfo Tz, List<Appointment> Items)> LoadUpcomingAsync(Guid clinicId, Guid leadId, CancellationToken ct)
+    {
+        var clinic = await _db.Clinics.AsNoTracking().FirstOrDefaultAsync(c => c.Id == clinicId, ct);
+        var tz = clinic is null ? TimeZoneInfo.Utc : ResolveTimeZone(clinic);
+        var now = DateTimeOffset.UtcNow;
+
+        var items = await _db.Appointments.AsNoTracking()
+            .Include(a => a.Procedure)
+            .Where(a => a.ClinicId == clinicId && a.LeadId == leadId && a.ScheduledStart > now
+                        && (a.Status == AppointmentStatus.Booked || a.Status == AppointmentStatus.Confirmed))
+            .OrderBy(a => a.ScheduledStart)
+            .ToListAsync(ct);
+        return (tz, items);
+    }
+
+    private static UpcomingAppointmentResponse ToUpcoming(Appointment a, TimeZoneInfo tz)
+    {
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
+        var start = TimeZoneInfo.ConvertTime(a.ScheduledStart, tz);
+        DateTimeOffset? end = a.ScheduledEnd is null ? null : TimeZoneInfo.ConvertTime(a.ScheduledEnd.Value, tz);
+        return new UpcomingAppointmentResponse(
+            a.Id, a.Status, a.ProcedureId, a.Procedure?.Name, start, end,
+            start.ToString("yyyy-MM-dd"), start.ToString("HH:mm"),
+            $"{start.DayOfWeek}, {start.ToString("MMM d", inv)} at {start.ToString("h:mm tt", inv)}");
+    }
+
+    /// <summary>Serializes bookings per clinic until the surrounding transaction ends.</summary>
+    private Task<int> LockClinicAsync(Guid clinicId, CancellationToken ct) =>
+        _db.Database.ExecuteSqlInterpolatedAsync($"select pg_advisory_xact_lock(hashtext({clinicId.ToString()}))", ct);
 
     public async Task<(IReadOnlyList<AppointmentResponse> Items, int TotalCount)> ListAsync(
         Guid clinicId, string? status, DateTimeOffset? from, DateTimeOffset? to, int skip, int take, CancellationToken ct = default)
