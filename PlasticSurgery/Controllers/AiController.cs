@@ -167,32 +167,43 @@ public class AiController : ControllerBase
 
     /// <summary>book_consultation — the patient picked a specific slot.</summary>
     [HttpPost("appointments/book")]
-    public async Task<ActionResult<AppointmentResponse>> BookConsultation(
+    public async Task<ActionResult<BookConsultationResult>> BookConsultation(
         [FromQuery] Guid clinicId, [FromBody] BookConsultationRequest request, CancellationToken ct)
     {
+        const string NotBooked = "Nothing was booked. Do NOT tell the patient an appointment is booked or confirmed. ";
+
         try
         {
             var appointment = await _appointments.BookAvailableSlotAsync(new CreateAppointmentRequest(
                 clinicId, request.LeadId, request.ProcedureId,
                 string.IsNullOrWhiteSpace(request.AppointmentType) ? "consultation" : request.AppointmentType,
                 request.ScheduledStart, request.ScheduledEnd, request.LocationType, request.LocationName, request.Notes), ct);
-            return Ok(appointment);
+            // Report the booking in the CLINIC's local time (like get_available_slots), never the stored UTC value the AI
+            // could read out to the patient as the wrong hour.
+            var upcoming = await _appointments.GetUpcomingForLeadAsync(clinicId, request.LeadId, ct);
+            var local = upcoming.Appointments.FirstOrDefault(a => a.Id == appointment.Id);
+            return Ok(new BookConsultationResult(true, "BOOKED", "Appointment booked.", Appointment: local));
         }
         catch (LeadAlreadyBookedException ex)
         {
-            // 409 with the existing appointment so the AI can offer to reschedule/cancel it instead of booking a second one.
-            return Conflict(new { error = ex.Message, alreadyBooked = true, existingAppointment = ex.Existing });
+            return Ok(new BookConsultationResult(false, "EXISTING_UPCOMING_APPOINTMENT",
+                "Patient already has an upcoming appointment.",
+                NotBooked + $"Tell the patient they already have an appointment on {ex.Existing.Label}, and offer to reschedule or cancel it instead of booking another.",
+                ExistingAppointment: ex.Existing));
         }
         catch (SlotUnavailableException ex)
         {
-            // 409 so the AI knows to re-run get_available_slots and offer the patient other times.
-            return Conflict(new { error = ex.Message, slotUnavailable = true });
+            return Ok(new BookConsultationResult(false, "SLOT_UNAVAILABLE", ex.Message,
+                NotBooked + "Apologise briefly, call get_available_slots again, and offer the patient other times. Do not retry the same time."));
         }
         catch (ArgumentException ex)
         {
-            return BadRequest(new { error = ex.Message });
+            var leadMissing = ex.Message.StartsWith("Lead not found", StringComparison.OrdinalIgnoreCase);
+            return Ok(new BookConsultationResult(false, leadMissing ? "LEAD_NOT_FOUND" : "INVALID_REQUEST", ex.Message,
+                NotBooked + "Tell the patient you couldn't complete the booking and that a team member will confirm it shortly."));
         }
     }
+
 
     /// <summary>get_my_appointments — this patient's upcoming booked/confirmed appointments (soonest first), in clinic-local
     /// wording. Use it before rescheduling/cancelling (to get the appointment id) and to answer "what do I have booked?".

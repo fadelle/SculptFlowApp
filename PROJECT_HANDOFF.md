@@ -1025,3 +1025,12 @@ Outbound: n8n/dashboard → MessageService → IChannelSender (by conversation.C
   unavailable → 409 `{slotUnavailable:true}`. **`POST /api/ai/appointments/cancel?clinicId=&leadId=[&appointmentId=]`** likewise requires `leadId`; with an explicit appointmentId an already-canceled one is a no-op 200, without it 404 "no upcoming appointment"; finished ones → 400.
 - Flow for the AI: `get_my_appointments` → `get_available_slots` → `reschedule_consultation` (or `cancel_consultation`). n8n tools must pass `leadId` (from the
   workflow, not the AI). Known gap: `get_available_slots` still treats the patient's own current slot as taken when suggesting new times.
+
+### 24c. `book_consultation` structured result — built, not yet pushed
+`POST /api/ai/appointments/book` now returns **HTTP 200 for every business outcome** with `BookConsultationResult`
+`{success, code, message, instruction, appointment?, existingAppointment?}` (n8n passes a normal result to the AI far more reliably than an error string; the AI
+kept claiming "booked" after generic error text). Codes: `BOOKED` (appointment in `appointment`), `EXISTING_UPCOMING_APPOINTMENT` (`existingAppointment` has id/scheduledStart/label),
+`SLOT_UNAVAILABLE`, `LEAD_NOT_FOUND`, `INVALID_REQUEST`; every failure's `instruction` says nothing was booked and what to do next. Malformed bodies still 400, bad key 401.
+**Breaking for the n8n tool description**: success is `success:true` + `appointment.id`, no longer the bare appointment. Reschedule/cancel still use HTTP 409/404 (not yet converted).
+Success returns `appointment` in **clinic-local time** (`scheduledStart` like `2026-09-29T16:00:00+03:00`, plus `label`), never the stored UTC value — the AI would otherwise announce the wrong hour.
+`UpcomingAppointmentResponse` fields `Start/End` were renamed **`ScheduledStart/ScheduledEnd`** (affects `get_my_appointments` and `existingAppointment`); null fields are omitted from the book result.

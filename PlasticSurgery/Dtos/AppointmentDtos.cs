@@ -72,8 +72,8 @@ public record UpcomingAppointmentResponse(
     string Status,
     Guid? ProcedureId,
     string? ProcedureName,
-    DateTimeOffset Start,
-    DateTimeOffset? End,
+    DateTimeOffset ScheduledStart,
+    DateTimeOffset? ScheduledEnd,
     string Date,
     string Time,
     string Label
