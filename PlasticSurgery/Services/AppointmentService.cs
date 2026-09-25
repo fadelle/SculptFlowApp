@@ -149,13 +149,15 @@ public class AppointmentService : IAppointmentService
     }
 
     public async Task<AppointmentResponse?> RescheduleAsync(
-        Guid clinicId, Guid leadId, Guid id, DateTimeOffset newStart, DateTimeOffset? newEnd, string? reason, CancellationToken ct = default)
+        Guid clinicId, Guid leadId, Guid? id, DateTimeOffset newStart, DateTimeOffset? newEnd, string? reason, CancellationToken ct = default)
     {
         await using var tx = await _db.Database.BeginTransactionAsync(ct);
         await LockClinicAsync(clinicId, ct);
 
         // The appointment must belong to this clinic AND this lead: the AI only ever acts on the patient it is talking to.
-        var appointment = await _db.Appointments.FirstOrDefaultAsync(a => a.ClinicId == clinicId && a.LeadId == leadId && a.Id == id, ct);
+        var targetId = await ResolveTargetAsync(clinicId, leadId, id, ct);
+        if (targetId is null) return null;
+        var appointment = await _db.Appointments.FirstOrDefaultAsync(a => a.ClinicId == clinicId && a.LeadId == leadId && a.Id == targetId, ct);
         if (appointment is null) return null;
 
         if (appointment.Status != AppointmentStatus.Booked && appointment.Status != AppointmentStatus.Confirmed)
@@ -175,7 +177,7 @@ public class AppointmentService : IAppointmentService
             procedureId = null;
         }
 
-        var check = await _availability.CheckSlotAsync(clinicId, procedureId, newStart, newEnd, excludeAppointmentId: id, ct: ct);
+        var check = await _availability.CheckSlotAsync(clinicId, procedureId, newStart, newEnd, excludeAppointmentId: appointment.Id, ct: ct);
         if (check.Error is not null) throw new SlotUnavailableException(check.Error);
 
         appointment.ScheduledStart = newStart.ToUniversalTime();
@@ -194,9 +196,11 @@ public class AppointmentService : IAppointmentService
         return response;
     }
 
-    public async Task<AppointmentResponse?> CancelAsync(Guid clinicId, Guid leadId, Guid id, string? reason, CancellationToken ct = default)
+    public async Task<AppointmentResponse?> CancelAsync(Guid clinicId, Guid leadId, Guid? id, string? reason, CancellationToken ct = default)
     {
-        var appointment = await _db.Appointments.FirstOrDefaultAsync(a => a.ClinicId == clinicId && a.LeadId == leadId && a.Id == id, ct);
+        var targetId = await ResolveTargetAsync(clinicId, leadId, id, ct);
+        if (targetId is null) return null;
+        var appointment = await _db.Appointments.FirstOrDefaultAsync(a => a.ClinicId == clinicId && a.LeadId == leadId && a.Id == targetId, ct);
         if (appointment is null) return null;
 
         if (appointment.Status == AppointmentStatus.Canceled) return await ToResponseAsync(appointment, ct); // already done
@@ -220,6 +224,18 @@ public class AppointmentService : IAppointmentService
     {
         var (tz, items) = await LoadUpcomingAsync(clinicId, leadId, ct);
         return new UpcomingAppointmentsResponse(tz.Id, items.Select(a => ToUpcoming(a, tz)).ToList());
+    }
+
+    /// <summary>The appointment a reschedule/cancel acts on: the given id, or — when the AI sends none — the lead's single upcoming
+    /// appointment. Null when the lead has none; several upcoming ones (only staff can create them) need an explicit id.</summary>
+    private async Task<Guid?> ResolveTargetAsync(Guid clinicId, Guid leadId, Guid? id, CancellationToken ct)
+    {
+        if (id is not null) return id;
+
+        var (tz, upcoming) = await LoadUpcomingAsync(clinicId, leadId, ct);
+        if (upcoming.Count == 0) return null;
+        if (upcoming.Count > 1) throw new MultipleUpcomingAppointmentsException(upcoming.Select(a => ToUpcoming(a, tz)).ToList());
+        return upcoming[0].Id;
     }
 
     /// <summary>The lead's future booked/confirmed appointments, soonest first (canceled, rescheduled, attended and no-show never

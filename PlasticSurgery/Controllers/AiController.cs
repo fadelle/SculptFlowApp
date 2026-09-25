@@ -204,16 +204,25 @@ public class AiController : ControllerBase
         return Ok(await _appointments.GetUpcomingForLeadAsync(clinicId, leadId, ct));
     }
 
-    /// <summary>reschedule_consultation — patient wants to move THEIR upcoming appointment. The new time is checked exactly like a
-    /// new booking (hours, exceptions, notice, overlaps); 409 means pick another time. The appointment must belong to leadId.</summary>
-    [HttpPost("appointments/{id:guid}/reschedule")]
+    /// <summary>reschedule_consultation — patient wants to move THEIR upcoming appointment. No appointment id is needed: the server
+    /// uses this lead's single upcoming appointment (appointmentId is only for the rare lead with several — 409 then lists them).
+    /// The new time is checked exactly like a new booking (hours, exceptions, notice, overlaps); 409 slotUnavailable means pick
+    /// another time. Always scoped to leadId — the AI can only ever touch the patient it is talking to.</summary>
+    [HttpPost("appointments/reschedule")]
     public async Task<ActionResult<AppointmentResponse>> RescheduleConsultation(
-        Guid id, [FromQuery] Guid clinicId, [FromQuery] Guid leadId, [FromBody] RescheduleConsultationRequest request, CancellationToken ct)
+        [FromQuery] Guid clinicId, [FromQuery] Guid leadId, [FromQuery] Guid? appointmentId,
+        [FromBody] RescheduleConsultationRequest request, CancellationToken ct)
     {
         try
         {
-            var appointment = await _appointments.RescheduleAsync(clinicId, leadId, id, request.ScheduledStart, request.ScheduledEnd, request.Reason, ct);
-            return appointment is null ? NotFound(new { error = "Appointment not found for this patient." }) : Ok(appointment);
+            var appointment = await _appointments.RescheduleAsync(clinicId, leadId, appointmentId, request.ScheduledStart, request.ScheduledEnd, request.Reason, ct);
+            return appointment is null
+                ? NotFound(new { error = "This patient has no upcoming appointment to reschedule. Book a new one instead." })
+                : Ok(appointment);
+        }
+        catch (MultipleUpcomingAppointmentsException ex)
+        {
+            return Conflict(new { error = ex.Message, multipleUpcoming = true, appointments = ex.Appointments });
         }
         catch (SlotUnavailableException ex)
         {
@@ -225,15 +234,22 @@ public class AiController : ControllerBase
         }
     }
 
-    /// <summary>cancel_consultation — patient asks to cancel THEIR upcoming appointment (must belong to leadId).</summary>
-    [HttpPost("appointments/{id:guid}/cancel")]
+    /// <summary>cancel_consultation — patient asks to cancel THEIR upcoming appointment. No appointment id is needed (see reschedule).</summary>
+    [HttpPost("appointments/cancel")]
     public async Task<ActionResult<AppointmentResponse>> CancelConsultation(
-        Guid id, [FromQuery] Guid clinicId, [FromQuery] Guid leadId, [FromBody] CancelConsultationRequest request, CancellationToken ct)
+        [FromQuery] Guid clinicId, [FromQuery] Guid leadId, [FromQuery] Guid? appointmentId,
+        [FromBody] CancelConsultationRequest request, CancellationToken ct)
     {
         try
         {
-            var appointment = await _appointments.CancelAsync(clinicId, leadId, id, request.Reason, ct);
-            return appointment is null ? NotFound(new { error = "Appointment not found for this patient." }) : Ok(appointment);
+            var appointment = await _appointments.CancelAsync(clinicId, leadId, appointmentId, request.Reason, ct);
+            return appointment is null
+                ? NotFound(new { error = "This patient has no upcoming appointment to cancel (it may already be canceled)." })
+                : Ok(appointment);
+        }
+        catch (MultipleUpcomingAppointmentsException ex)
+        {
+            return Conflict(new { error = ex.Message, multipleUpcoming = true, appointments = ex.Appointments });
         }
         catch (ArgumentException ex)
         {

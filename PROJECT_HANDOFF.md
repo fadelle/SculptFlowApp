@@ -1019,9 +1019,9 @@ Outbound: n8n/dashboard → MessageService → IChannelSender (by conversation.C
   **no other upcoming appointment** (`scheduled_start > now`, status booked/confirmed) — otherwise **409** `{alreadyBooked:true, existingAppointment:{id,label,...}}`.
   Canceled/rescheduled/attended/no-show and past appointments never count. Staff bookings (`POST /api/appointments`) are NOT guarded.
 - **`GET /api/ai/appointments/upcoming?clinicId=&leadId=`** (tool `get_my_appointments`): the lead's upcoming appointments with id + clinic-local `date/time/label`.
-- **`POST /api/ai/appointments/{id}/reschedule?clinicId=&leadId=`**: **`leadId` is now required and ownership-checked** (appointment must belong to that
+- **`POST /api/ai/appointments/reschedule?clinicId=&leadId=&appointmentId=`** (NO id in the path; `appointmentId` optional — omitted = the lead's single upcoming appointment; several = 409 `{multipleUpcoming, appointments}`): **`leadId` is required and ownership-checked** (appointment must belong to that
   clinic AND lead, else 404). Same lock + `CheckSlotAsync` as booking with the appointment itself excluded from overlaps; only booked/confirmed, future
   appointments can be moved (else 400); a deactivated procedure falls back to the default duration; status → booked; a missing end is filled in. New time
-  unavailable → 409 `{slotUnavailable:true}`. **`.../cancel?clinicId=&leadId=`** likewise requires `leadId`; already-canceled is a no-op 200; finished ones → 400.
+  unavailable → 409 `{slotUnavailable:true}`. **`POST /api/ai/appointments/cancel?clinicId=&leadId=[&appointmentId=]`** likewise requires `leadId`; with an explicit appointmentId an already-canceled one is a no-op 200, without it 404 "no upcoming appointment"; finished ones → 400.
 - Flow for the AI: `get_my_appointments` → `get_available_slots` → `reschedule_consultation` (or `cancel_consultation`). n8n tools must pass `leadId` (from the
   workflow, not the AI). Known gap: `get_available_slots` still treats the patient's own current slot as taken when suggesting new times.

@@ -17,17 +17,17 @@ public interface IAppointmentService
 
     Task<AppointmentResponse?> UpdateStatusAsync(Guid clinicId, Guid id, string status, CancellationToken ct = default);
 
-    /// <summary>The AI's reschedule_consultation: moves ONE of this lead's own upcoming (booked/confirmed) appointments to a new time.
+    /// <summary>The AI's reschedule_consultation: moves ONE of this lead's own upcoming (booked/confirmed) appointments to a new time. id is optional: when omitted the lead's single upcoming appointment is used (MultipleUpcomingAppointmentsException if there are several).
     /// Same rules and per-clinic lock as booking (hours, exceptions, notice, horizon, overlaps, buffer), with the appointment
     /// itself excluded from the overlap check. Status returns to Booked. Returns null when the appointment doesn't exist for this
     /// clinic AND lead; ArgumentException when it can't be moved (past, canceled, attended...); SlotUnavailableException when the
     /// new time isn't bookable.</summary>
     Task<AppointmentResponse?> RescheduleAsync(
-        Guid clinicId, Guid leadId, Guid id, DateTimeOffset newStart, DateTimeOffset? newEnd, string? reason, CancellationToken ct = default);
+        Guid clinicId, Guid leadId, Guid? id, DateTimeOffset newStart, DateTimeOffset? newEnd, string? reason, CancellationToken ct = default);
 
     /// <summary>The AI's cancel_consultation: cancels one of this lead's own upcoming appointments and records the reason.
     /// Null when it doesn't exist for this clinic AND lead; ArgumentException when it can't be canceled (already finished etc.).</summary>
-    Task<AppointmentResponse?> CancelAsync(Guid clinicId, Guid leadId, Guid id, string? reason, CancellationToken ct = default);
+    Task<AppointmentResponse?> CancelAsync(Guid clinicId, Guid leadId, Guid? id, string? reason, CancellationToken ct = default);
 
     /// <summary>The AI's get_my_appointments: this lead's future booked/confirmed appointments, soonest first, in clinic-local wording.</summary>
     Task<UpcomingAppointmentsResponse> GetUpcomingForLeadAsync(Guid clinicId, Guid leadId, CancellationToken ct = default);
@@ -59,4 +59,17 @@ public class LeadAlreadyBookedException : Exception
     }
 
     public Dtos.UpcomingAppointmentResponse Existing { get; }
+}
+
+/// <summary>The lead has more than one upcoming appointment and no appointmentId was given, so reschedule/cancel can't tell which one to act on.
+/// Appointments lists them (with ids) so the AI can ask the patient and retry with appointmentId.</summary>
+public class MultipleUpcomingAppointmentsException : Exception
+{
+    public MultipleUpcomingAppointmentsException(IReadOnlyList<Dtos.UpcomingAppointmentResponse> appointments)
+        : base("This patient has more than one upcoming appointment. Ask which one, then repeat the request with its appointmentId.")
+    {
+        Appointments = appointments;
+    }
+
+    public IReadOnlyList<Dtos.UpcomingAppointmentResponse> Appointments { get; }
 }
