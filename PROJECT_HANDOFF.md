@@ -1034,3 +1034,33 @@ kept claiming "booked" after generic error text). Codes: `BOOKED` (appointment i
 **Breaking for the n8n tool description**: success is `success:true` + `appointment.id`, no longer the bare appointment. Reschedule/cancel still use HTTP 409/404 (not yet converted).
 Success returns `appointment` in **clinic-local time** (`scheduledStart` like `2026-09-29T16:00:00+03:00`, plus `label`), never the stored UTC value — the AI would otherwise announce the wrong hour.
 `UpcomingAppointmentResponse` fields `Start/End` were renamed **`ScheduledStart/ScheduledEnd`** (affects `get_my_appointments` and `existingAppointment`); null fields are omitted from the book result.
+
+### 24d. `get_available_slots` now carries the patient's booking context (one call instead of get_my_appointments → get_available_slots) — built, not yet pushed
+- `GET /api/ai/appointments/available?clinicId=&leadId=&date=&procedureId=&days=` (same endpoint, X-Ingest-Key). **`leadId` is optional at the API but the n8n tool
+  must always pass it** (workflow value, never AI-chosen). With `leadId` the reply ALSO contains — placed BEFORE the slots — `requestedDate` (the date asked about, never derived
+  from an appointment), `hasUpcomingAppointment`, **`canCreateNewBooking`** (backend decision), `bookingBlockReason` (`"existing_upcoming_appointment"` or absent) and
+  `existingUpcomingAppointments[]` (id, status, appointmentType, procedureId/Name, scheduledStart/End in clinic-local time, date, time, label). Slots for the requested date are
+  ALWAYS still computed, even when `canCreateNewBooking` is false (→ AI offers reschedule_consultation, not book_consultation). Without `leadId` the old shape is returned unchanged
+  (context fields omitted; the dashboard `GET /api/appointments/available` is unchanged).
+- **One definition of "upcoming"**: `AppointmentService.LoadUpcomingAsync` (future, booked/confirmed) feeds `get_my_appointments`, the `book_consultation` guard and this
+  context (`IAppointmentService.GetBookingContextAsync`). Canceled / rescheduled / attended / no-show / past never count. Several upcoming appointments (staff-created) are returned as an array.
+- **Tenant safety**: a `leadId` that is not in `clinicId` → 404 `{error:"Lead not found for this clinic."}` (no appointment data leaks either way). Endpoint is read-only.
+- `get_my_appointments` and all mutation tools are unchanged; the `book_consultation` duplicate guard is unchanged (still the backend source of truth).
+- `UpcomingAppointmentResponse` gained `appointmentType`. No automated test project exists in the solution; verified with live scenario scripts against throwaway clinics (deleted afterward).
+
+### 24e. Unified `schedule_consultation` (replaces book_consultation + reschedule_consultation for the AI) — built, not yet pushed
+- **`POST /api/ai/appointments/schedule?clinicId=&leadId=`** (X-Ingest-Key; both ids are workflow values, never AI-chosen). Body `ScheduleConsultationRequest`:
+  `scheduledStart` (exact slot `start`), optional `procedureId`, `appointmentType`, `notes`, `reason`, **`confirmReplaceExisting`** (bool, lenient: also accepts "true"/"false"), optional `appointmentId`.
+  The **backend decides** (`AppointmentService.ScheduleAsync`, state read from the DB, not from the AI): no upcoming appointment → **create** (delegates to `BookAvailableSlotAsync`);
+  upcoming + `confirmReplaceExisting=true` → **reschedule** it (delegates to `RescheduleAsync`); upcoming without consent → **nothing changes**, `CONFIRMATION_REQUIRED`
+  (asking about another date is never permission to move the current appointment). Several upcoming + consent → `MULTIPLE_UPCOMING_APPOINTMENTS` until `appointmentId` is given
+  (an id that isn't this patient's upcoming one → `INVALID_REQUEST`, nothing touched). `confirmReplaceExisting` is ignored when the patient has no upcoming appointment.
+  A read-only slot pre-check (`CheckSlotAsync` excluding the appointment being moved) runs before asking for confirmation, so the patient is never asked to confirm an impossible move.
+- **Result `ScheduleConsultationResult`, always HTTP 200**: `{success, operation: created|rescheduled|none, code, message, instruction?, appointment?, previousAppointment?, existingUpcomingAppointments?, requestedLabel?}`.
+  Codes: `BOOKED`, `RESCHEDULED`, `CONFIRMATION_REQUIRED`, `MULTIPLE_UPCOMING_APPOINTMENTS`, `SLOT_UNAVAILABLE`, `LEAD_NOT_FOUND`, `INVALID_REQUEST`. **Only `success:true` (created/rescheduled) means the
+  patient's appointment changed**; every failure carries an `instruction` saying nothing changed and what to do next. All times clinic-local.
+- **Nothing weakened**: create/move still run under the per-clinic advisory lock with the final availability recheck, the one-upcoming-per-lead guard, lead/clinic ownership and the existing status rules.
+  A booking that lands between the state read and the locked check surfaces as `CONFIRMATION_REQUIRED` (race-tested: 4 concurrent calls → 1 created).
+- **Tool set for n8n**: `get_my_appointments`, `get_available_slots` (returns `canCreateNewBooking` + existing appointments, §24d), **`schedule_consultation`**, `cancel_consultation`.
+  `book_consultation` (`/appointments/book`) and `reschedule_consultation` (`/appointments/reschedule`) endpoints still work but are **deprecated** — remove them from the n8n agent and delete the endpoints once schedule_consultation is verified live.
+  Cancellation stays separate (destructive, needs explicit confirmation).

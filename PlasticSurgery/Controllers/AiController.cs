@@ -151,13 +151,32 @@ public class AiController : ControllerBase
     /// Never computed by the AI. A clinic that hasn't configured availability returns configured=false and no slots.</summary>
     [HttpGet("appointments/available")]
     public async Task<ActionResult<AvailabilityResponse>> GetAvailableSlots(
-        [FromQuery] Guid clinicId, [FromQuery] Guid? procedureId, [FromQuery] DateOnly? date,
+        [FromQuery] Guid clinicId, [FromQuery] Guid? leadId, [FromQuery] Guid? procedureId, [FromQuery] DateOnly? date,
         [FromQuery] int? days, CancellationToken ct = default)
     {
         try
         {
+            // With leadId (always passed by the n8n workflow, never chosen by the AI) the reply also carries the patient's own
+            // upcoming appointments and the backend's canCreateNewBooking decision — kept separate from the requested date and slots.
+            // Read-only: this endpoint never books, reschedules or cancels.
+            PatientBookingContext? context = null;
+            if (leadId is { } lead)
+            {
+                context = await _appointments.GetBookingContextAsync(clinicId, lead, ct);
+                if (context is null) return NotFound(new { error = "Lead not found for this clinic." });
+            }
+
             var result = await _availability.GetSlotsAsync(clinicId, procedureId, date, days ?? (date is null ? 7 : 1), ct);
-            return Ok(result);
+            if (context is null) return Ok(result);
+
+            return Ok(result with
+            {
+                RequestedDate = date?.ToString("yyyy-MM-dd") ?? result.Today,
+                HasUpcomingAppointment = context.HasUpcomingAppointment,
+                CanCreateNewBooking = context.CanCreateNewBooking,
+                BookingBlockReason = context.BookingBlockReason,
+                ExistingUpcomingAppointments = context.ExistingUpcomingAppointments
+            });
         }
         catch (ArgumentException ex)
         {
@@ -165,7 +184,42 @@ public class AiController : ControllerBase
         }
     }
 
-    /// <summary>book_consultation — the patient picked a specific slot.</summary>
+    /// <summary>schedule_consultation — the ONE tool the AI uses to book or move a consultation. The BACKEND decides which from the real
+    /// appointment state: none upcoming → book; one upcoming AND confirmReplaceExisting=true → reschedule it; upcoming without consent →
+    /// nothing changes and CONFIRMATION_REQUIRED comes back. clinicId/leadId are workflow values, never AI-chosen. Always HTTP 200 for
+    /// business outcomes; only Success=true with Operation created/rescheduled means the patient's appointment changed.
+    /// (Replaces book_consultation + reschedule_consultation, which remain for now but are deprecated.)</summary>
+    [HttpPost("appointments/schedule")]
+    public async Task<ActionResult<ScheduleConsultationResult>> ScheduleConsultation(
+        [FromQuery] Guid clinicId, [FromQuery] Guid leadId, [FromBody] ScheduleConsultationRequest request, CancellationToken ct)
+    {
+        const string NothingChanged = "Nothing was booked or changed. Do NOT tell the patient an appointment was booked, confirmed or moved. ";
+
+        var o = await _appointments.ScheduleAsync(clinicId, leadId, request, ct);
+
+        string? instruction = o.Code switch
+        {
+            "BOOKED" or "RESCHEDULED" => null,
+            "CONFIRMATION_REQUIRED" => NothingChanged +
+                $"The patient already has an appointment on {o.Existing?.FirstOrDefault()?.Label}. Tell them so, and ask whether they want to MOVE it to {o.RequestedLabel}. " +
+                "Only if they clearly agree, call schedule_consultation again with the same scheduledStart and confirmReplaceExisting=true. " +
+                "If they don't want to move it, do not call it again.",
+            "MULTIPLE_UPCOMING_APPOINTMENTS" => NothingChanged +
+                "The patient has several upcoming appointments (see existingUpcomingAppointments). Ask which one to move, then call schedule_consultation again " +
+                "with confirmReplaceExisting=true and that appointment's id as appointmentId.",
+            "SLOT_UNAVAILABLE" => NothingChanged +
+                "Apologise briefly, call get_available_slots again, and offer the patient other times. Do not retry the same time.",
+            _ => NothingChanged + "Tell the patient you couldn't complete this and that a team member will help shortly."
+        };
+
+        return Ok(new ScheduleConsultationResult(
+            o.Code is "BOOKED" or "RESCHEDULED", o.Operation, o.Code, o.Message, instruction,
+            o.Appointment, o.PreviousAppointment,
+            o.Code is "BOOKED" or "RESCHEDULED" ? null : o.Existing,
+            o.Code is "BOOKED" or "RESCHEDULED" ? null : o.RequestedLabel));
+    }
+
+    /// <summary>book_consultation — DEPRECATED: use schedule_consultation (the backend decides book vs reschedule). Kept working for now.</summary>
     [HttpPost("appointments/book")]
     public async Task<ActionResult<BookConsultationResult>> BookConsultation(
         [FromQuery] Guid clinicId, [FromBody] BookConsultationRequest request, CancellationToken ct)
@@ -215,7 +269,7 @@ public class AiController : ControllerBase
         return Ok(await _appointments.GetUpcomingForLeadAsync(clinicId, leadId, ct));
     }
 
-    /// <summary>reschedule_consultation — patient wants to move THEIR upcoming appointment. No appointment id is needed: the server
+    /// <summary>reschedule_consultation — DEPRECATED: use schedule_consultation. Patient wants to move THEIR upcoming appointment. No appointment id is needed: the server
     /// uses this lead's single upcoming appointment (appointmentId is only for the rare lead with several — 409 then lists them).
     /// The new time is checked exactly like a new booking (hours, exceptions, notice, overlaps); 409 slotUnavailable means pick
     /// another time. Always scoped to leadId — the AI can only ever touch the patient it is talking to.</summary>

@@ -32,6 +32,18 @@ public interface IAppointmentService
     /// <summary>The AI's get_my_appointments: this lead's future booked/confirmed appointments, soonest first, in clinic-local wording.</summary>
     Task<UpcomingAppointmentsResponse> GetUpcomingForLeadAsync(Guid clinicId, Guid leadId, CancellationToken ct = default);
 
+    /// <summary>What get_available_slots reports alongside the slots: the lead's upcoming appointments and the backend's explicit
+    /// CanCreateNewBooking decision. Uses the SAME definition of "upcoming" as get_my_appointments and the book_consultation guard
+    /// (LoadUpcomingAsync). Returns null when the lead does not belong to this clinic (never leaks another clinic's data).</summary>
+    Task<PatientBookingContext?> GetBookingContextAsync(Guid clinicId, Guid leadId, CancellationToken ct = default);
+
+    /// <summary>The AI's single scheduling mutation (schedule_consultation). The BACKEND decides from the real appointment state:
+    /// no upcoming appointment → create one (BookAvailableSlotAsync); one upcoming appointment AND the patient clearly agreed
+    /// (request.ConfirmReplaceExisting) → move it (RescheduleAsync); an upcoming appointment without that consent → change nothing
+    /// and return CONFIRMATION_REQUIRED. Every path reuses the existing validations (availability recheck under the per-clinic lock,
+    /// one-upcoming-per-lead guard, lead/clinic ownership, status rules). Failures come back as outcomes, not exceptions.</summary>
+    Task<ScheduleOutcome> ScheduleAsync(Guid clinicId, Guid leadId, Dtos.ScheduleConsultationRequest request, CancellationToken ct = default);
+
     Task<(IReadOnlyList<AppointmentResponse> Items, int TotalCount)> ListAsync(
         Guid clinicId, string? status, DateTimeOffset? from, DateTimeOffset? to, int skip, int take, CancellationToken ct = default);
 
@@ -73,3 +85,14 @@ public class MultipleUpcomingAppointmentsException : Exception
 
     public IReadOnlyList<Dtos.UpcomingAppointmentResponse> Appointments { get; }
 }
+
+/// <summary>What ScheduleAsync did (or why it did nothing). Operation: created | rescheduled | none.</summary>
+public record ScheduleOutcome(
+    string Operation,
+    string Code,
+    string Message,
+    Dtos.UpcomingAppointmentResponse? Appointment = null,
+    Dtos.UpcomingAppointmentResponse? PreviousAppointment = null,
+    IReadOnlyList<Dtos.UpcomingAppointmentResponse>? Existing = null,
+    string? RequestedLabel = null
+);

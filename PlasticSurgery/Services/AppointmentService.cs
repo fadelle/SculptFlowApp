@@ -171,11 +171,7 @@ public class AppointmentService : IAppointmentService
 
         // A procedure that was deactivated since booking can't be newly booked, but must not trap the patient in an old time:
         // fall back to the clinic's default duration for it.
-        Guid? procedureId = appointment.ProcedureId;
-        if (procedureId is { } pid && !await _db.Procedures.AnyAsync(p => p.Id == pid && p.IsActive, ct))
-        {
-            procedureId = null;
-        }
+        var procedureId = await ActiveProcedureOrNullAsync(appointment.ProcedureId, ct);
 
         var check = await _availability.CheckSlotAsync(clinicId, procedureId, newStart, newEnd, excludeAppointmentId: appointment.Id, ct: ct);
         if (check.Error is not null) throw new SlotUnavailableException(check.Error);
@@ -220,6 +216,129 @@ public class AppointmentService : IAppointmentService
         return await ToResponseAsync(appointment, ct);
     }
 
+    public async Task<PatientBookingContext?> GetBookingContextAsync(Guid clinicId, Guid leadId, CancellationToken ct = default)
+    {
+        // A leadId from another clinic (or a made-up one) must look exactly like "not found" — never return its appointments.
+        if (!await _db.Leads.AnyAsync(l => l.Id == leadId && l.ClinicId == clinicId, ct)) return null;
+
+        var (tz, upcoming) = await LoadUpcomingAsync(clinicId, leadId, ct);
+        var existing = upcoming.Select(a => ToUpcoming(a, tz)).ToList();
+        var blocked = existing.Count > 0;
+        return new PatientBookingContext(blocked, !blocked, blocked ? "existing_upcoming_appointment" : null, existing);
+    }
+
+    public async Task<ScheduleOutcome> ScheduleAsync(Guid clinicId, Guid leadId, ScheduleConsultationRequest request, CancellationToken ct = default)
+    {
+        // The current state always comes from the database (never from what the AI remembers). Null = the lead isn't in this clinic.
+        var context = await GetBookingContextAsync(clinicId, leadId, ct);
+        if (context is null) return new ScheduleOutcome("none", "LEAD_NOT_FOUND", "Lead not found for this clinic.");
+
+        var tz = await GetTimeZoneAsync(clinicId, ct);
+        var requestedLabel = LabelFor(TimeZoneInfo.ConvertTime(request.ScheduledStart, tz));
+        var existing = context.ExistingUpcomingAppointments;
+
+        try
+        {
+            // 1) No upcoming appointment → create. BookAvailableSlotAsync still re-checks the slot and the duplicate guard under the lock,
+            //    so a booking that landed a moment ago surfaces as LeadAlreadyBookedException below.
+            if (!context.HasUpcomingAppointment)
+            {
+                var created = await BookAvailableSlotAsync(new CreateAppointmentRequest(
+                    clinicId, leadId, request.ProcedureId,
+                    string.IsNullOrWhiteSpace(request.AppointmentType) ? "consultation" : request.AppointmentType,
+                    request.ScheduledStart, null, null, null, request.Notes), ct);
+                return new ScheduleOutcome("created", "BOOKED", "Appointment booked.",
+                    Appointment: await ToLocalAsync(clinicId, leadId, created.Id, ct), RequestedLabel: requestedLabel);
+            }
+
+            // 2) The patient already has an upcoming appointment. Which one would be replaced?
+            UpcomingAppointmentResponse? target;
+            if (request.AppointmentId is { } wanted)
+            {
+                target = existing.FirstOrDefault(e => e.Id == wanted);
+                if (target is null)
+                {
+                    return new ScheduleOutcome("none", "INVALID_REQUEST",
+                        "That appointment is not one of this patient's upcoming appointments.", Existing: existing, RequestedLabel: requestedLabel);
+                }
+            }
+            else
+            {
+                target = existing.Count == 1 ? existing[0] : null;
+            }
+
+            // Read-only pre-check, so the patient is never asked to confirm a move to a time that cannot work.
+            var check = await _availability.CheckSlotAsync(clinicId, await ActiveProcedureOrNullAsync(target?.ProcedureId ?? request.ProcedureId, ct),
+                request.ScheduledStart, null, excludeAppointmentId: target?.Id, ct: ct);
+            if (check.Error is not null)
+            {
+                return new ScheduleOutcome("none", "SLOT_UNAVAILABLE", check.Error, Existing: existing, RequestedLabel: requestedLabel);
+            }
+
+            // 3) No explicit consent → change NOTHING. Asking about another date is not permission to move the current appointment.
+            if (!request.ConfirmReplaceExisting)
+            {
+                return new ScheduleOutcome("none", "CONFIRMATION_REQUIRED",
+                    "Patient already has an upcoming appointment; nothing was changed.", Existing: existing, RequestedLabel: requestedLabel);
+            }
+
+            // 4) Consent given. With several upcoming appointments the patient must say which one.
+            if (target is null)
+            {
+                return new ScheduleOutcome("none", "MULTIPLE_UPCOMING_APPOINTMENTS",
+                    "Patient has more than one upcoming appointment; it is unclear which to move.", Existing: existing, RequestedLabel: requestedLabel);
+            }
+
+            var moved = await RescheduleAsync(clinicId, leadId, target.Id, request.ScheduledStart, null, request.Reason, ct);
+            if (moved is null)
+            {
+                return new ScheduleOutcome("none", "INVALID_REQUEST", "The appointment could not be found for this patient.", RequestedLabel: requestedLabel);
+            }
+            return new ScheduleOutcome("rescheduled", "RESCHEDULED", "Appointment rescheduled.",
+                Appointment: await ToLocalAsync(clinicId, leadId, moved.Id, ct), PreviousAppointment: target, RequestedLabel: requestedLabel);
+        }
+        catch (LeadAlreadyBookedException ex)
+        {
+            // Another booking landed between the state read and the locked check: same answer as "already has one".
+            return new ScheduleOutcome("none", "CONFIRMATION_REQUIRED", "Patient already has an upcoming appointment; nothing was changed.",
+                Existing: new[] { ex.Existing }, RequestedLabel: requestedLabel);
+        }
+        catch (SlotUnavailableException ex)
+        {
+            return new ScheduleOutcome("none", "SLOT_UNAVAILABLE", ex.Message, Existing: existing.Count > 0 ? existing : null, RequestedLabel: requestedLabel);
+        }
+        catch (ArgumentException ex)
+        {
+            return new ScheduleOutcome("none", "INVALID_REQUEST", ex.Message, RequestedLabel: requestedLabel);
+        }
+    }
+
+    private async Task<TimeZoneInfo> GetTimeZoneAsync(Guid clinicId, CancellationToken ct)
+    {
+        var clinic = await _db.Clinics.AsNoTracking().FirstOrDefaultAsync(c => c.Id == clinicId, ct);
+        return clinic is null ? TimeZoneInfo.Utc : ResolveTimeZone(clinic);
+    }
+
+    /// <summary>A procedure id only when that procedure is still active — a deactivated one falls back to the clinic's default duration.</summary>
+    private async Task<Guid?> ActiveProcedureOrNullAsync(Guid? procedureId, CancellationToken ct)
+    {
+        if (procedureId is not { } id) return null;
+        return await _db.Procedures.AnyAsync(p => p.Id == id && p.IsActive, ct) ? id : null;
+    }
+
+    private async Task<UpcomingAppointmentResponse?> ToLocalAsync(Guid clinicId, Guid leadId, Guid appointmentId, CancellationToken ct)
+    {
+        var (tz, items) = await LoadUpcomingAsync(clinicId, leadId, ct);
+        var a = items.FirstOrDefault(x => x.Id == appointmentId);
+        return a is null ? null : ToUpcoming(a, tz);
+    }
+
+    private static string LabelFor(DateTimeOffset local)
+    {
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
+        return $"{local.DayOfWeek}, {local.ToString("MMM d", inv)} at {local.ToString("h:mm tt", inv)}";
+    }
+
     public async Task<UpcomingAppointmentsResponse> GetUpcomingForLeadAsync(Guid clinicId, Guid leadId, CancellationToken ct = default)
     {
         var (tz, items) = await LoadUpcomingAsync(clinicId, leadId, ct);
@@ -257,13 +376,12 @@ public class AppointmentService : IAppointmentService
 
     private static UpcomingAppointmentResponse ToUpcoming(Appointment a, TimeZoneInfo tz)
     {
-        var inv = System.Globalization.CultureInfo.InvariantCulture;
         var start = TimeZoneInfo.ConvertTime(a.ScheduledStart, tz);
         DateTimeOffset? end = a.ScheduledEnd is null ? null : TimeZoneInfo.ConvertTime(a.ScheduledEnd.Value, tz);
         return new UpcomingAppointmentResponse(
-            a.Id, a.Status, a.ProcedureId, a.Procedure?.Name, start, end,
+            a.Id, a.Status, a.AppointmentType, a.ProcedureId, a.Procedure?.Name, start, end,
             start.ToString("yyyy-MM-dd"), start.ToString("HH:mm"),
-            $"{start.DayOfWeek}, {start.ToString("MMM d", inv)} at {start.ToString("h:mm tt", inv)}");
+            LabelFor(start));
     }
 
     /// <summary>Serializes bookings per clinic until the surrounding transaction ends.</summary>

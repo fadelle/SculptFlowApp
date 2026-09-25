@@ -70,6 +70,7 @@ public record CalendarMonthResponse(
 public record UpcomingAppointmentResponse(
     Guid Id,
     string Status,
+    string AppointmentType,
     Guid? ProcedureId,
     string? ProcedureName,
     DateTimeOffset ScheduledStart,
@@ -80,3 +81,12 @@ public record UpcomingAppointmentResponse(
 );
 
 public record UpcomingAppointmentsResponse(string Timezone, IReadOnlyList<UpcomingAppointmentResponse> Appointments);
+
+/// <summary>What the backend knows about a patient's bookings — the single definition of "upcoming appointment" shared by
+/// get_my_appointments, the book_consultation guard and get_available_slots. CanCreateNewBooking is the explicit decision.</summary>
+public record PatientBookingContext(
+    bool HasUpcomingAppointment,
+    bool CanCreateNewBooking,
+    string? BookingBlockReason,
+    IReadOnlyList<UpcomingAppointmentResponse> ExistingUpcomingAppointments
+);
