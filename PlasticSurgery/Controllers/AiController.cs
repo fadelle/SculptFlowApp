@@ -299,27 +299,30 @@ public class AiController : ControllerBase
         }
     }
 
-    /// <summary>cancel_consultation — patient asks to cancel THEIR upcoming appointment. No appointment id is needed (see reschedule).</summary>
+    /// <summary>cancel_consultation — patient asks to cancel THEIR upcoming appointment. No appointment id is needed (see reschedule).
+    /// Always HTTP 200 for business outcomes; only Success=true means something was canceled. The AI must have the patient's explicit
+    /// confirmation before calling it.</summary>
     [HttpPost("appointments/cancel")]
-    public async Task<ActionResult<AppointmentResponse>> CancelConsultation(
+    public async Task<ActionResult<CancelConsultationResult>> CancelConsultation(
         [FromQuery] Guid clinicId, [FromQuery] Guid leadId, [FromQuery] Guid? appointmentId,
         [FromBody] CancelConsultationRequest request, CancellationToken ct)
     {
-        try
+        const string NothingCanceled = "Nothing was canceled. Do NOT tell the patient an appointment was canceled. ";
+
+        var o = await _appointments.CancelConsultationAsync(clinicId, leadId, appointmentId, request.Reason, ct);
+
+        string? instruction = o.Code switch
         {
-            var appointment = await _appointments.CancelAsync(clinicId, leadId, appointmentId, request.Reason, ct);
-            return appointment is null
-                ? NotFound(new { error = "This patient has no upcoming appointment to cancel (it may already be canceled)." })
-                : Ok(appointment);
-        }
-        catch (MultipleUpcomingAppointmentsException ex)
-        {
-            return Conflict(new { error = ex.Message, multipleUpcoming = true, appointments = ex.Appointments });
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { error = ex.Message });
-        }
+            "CANCELED" => null,
+            "NO_UPCOMING_APPOINTMENT" => NothingCanceled +
+                "Tell the patient you couldn't find an upcoming appointment to cancel (it may already be canceled). You may call get_my_appointments to check.",
+            "MULTIPLE_UPCOMING_APPOINTMENTS" => NothingCanceled +
+                "The patient has several upcoming appointments (see existingUpcomingAppointments). Ask which one to cancel, confirm it, then call cancel_consultation again with that appointment's id as appointmentId.",
+            _ => NothingCanceled + "Tell the patient you couldn't cancel it and that a team member will help shortly."
+        };
+
+        return Ok(new CancelConsultationResult(
+            o.Code == "CANCELED", o.Operation, o.Code, o.Message, instruction, o.Appointment, o.Existing));
     }
 
     /// <summary>handoff_to_human — medical question, patient requests staff, AI uncertain, upset

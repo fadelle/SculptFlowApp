@@ -44,6 +44,10 @@ public interface IAppointmentService
     /// one-upcoming-per-lead guard, lead/clinic ownership, status rules). Failures come back as outcomes, not exceptions.</summary>
     Task<ScheduleOutcome> ScheduleAsync(Guid clinicId, Guid leadId, Dtos.ScheduleConsultationRequest request, CancellationToken ct = default);
 
+    /// <summary>The AI's cancel_consultation with an unambiguous outcome: wraps CancelAsync (same ownership and status rules) and reports the
+    /// canceled appointment in clinic-local time, or why nothing was canceled. Failures come back as outcomes, not exceptions.</summary>
+    Task<CancelOutcome> CancelConsultationAsync(Guid clinicId, Guid leadId, Guid? id, string? reason, CancellationToken ct = default);
+
     Task<(IReadOnlyList<AppointmentResponse> Items, int TotalCount)> ListAsync(
         Guid clinicId, string? status, DateTimeOffset? from, DateTimeOffset? to, int skip, int take, CancellationToken ct = default);
 
@@ -95,4 +99,13 @@ public record ScheduleOutcome(
     Dtos.UpcomingAppointmentResponse? PreviousAppointment = null,
     IReadOnlyList<Dtos.UpcomingAppointmentResponse>? Existing = null,
     string? RequestedLabel = null
+);
+
+/// <summary>What CancelConsultationAsync did. Operation: canceled | none.</summary>
+public record CancelOutcome(
+    string Operation,
+    string Code,
+    string Message,
+    Dtos.UpcomingAppointmentResponse? Appointment = null,
+    IReadOnlyList<Dtos.UpcomingAppointmentResponse>? Existing = null
 );

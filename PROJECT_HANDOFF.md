@@ -1064,3 +1064,10 @@ Success returns `appointment` in **clinic-local time** (`scheduledStart` like `2
 - **Tool set for n8n**: `get_my_appointments`, `get_available_slots` (returns `canCreateNewBooking` + existing appointments, §24d), **`schedule_consultation`**, `cancel_consultation`.
   `book_consultation` (`/appointments/book`) and `reschedule_consultation` (`/appointments/reschedule`) endpoints still work but are **deprecated** — remove them from the n8n agent and delete the endpoints once schedule_consultation is verified live.
   Cancellation stays separate (destructive, needs explicit confirmation).
+
+### 24f. `cancel_consultation` structured result — built, not yet pushed
+`POST /api/ai/appointments/cancel?clinicId=&leadId=[&appointmentId=]` now returns **HTTP 200 for every business outcome** with `CancelConsultationResult`
+`{success, operation: canceled|none, code, message, instruction?, appointment?, existingUpcomingAppointments?}` (previously a raw UTC appointment on success and 404/400/409 error
+strings on failure — the AI could misreport them). Codes: `CANCELED` (`appointment` in clinic-local time), `NO_UPCOMING_APPOINTMENT`, `MULTIPLE_UPCOMING_APPOINTMENTS` (list; retry with
+`appointmentId`), `INVALID_REQUEST` (not this patient's appointment / already attended etc.). Every failure carries an `instruction` saying nothing was canceled. Implemented by
+`AppointmentService.CancelConsultationAsync` wrapping the unchanged `CancelAsync` (same ownership + status rules). Only `success:true` means it was canceled. Cancellation still needs explicit patient confirmation (tool description).

@@ -339,6 +339,33 @@ public class AppointmentService : IAppointmentService
         return $"{local.DayOfWeek}, {local.ToString("MMM d", inv)} at {local.ToString("h:mm tt", inv)}";
     }
 
+    public async Task<CancelOutcome> CancelConsultationAsync(Guid clinicId, Guid leadId, Guid? id, string? reason, CancellationToken ct = default)
+    {
+        try
+        {
+            var canceled = await CancelAsync(clinicId, leadId, id, reason, ct);
+            if (canceled is null)
+            {
+                return id is null
+                    ? new CancelOutcome("none", "NO_UPCOMING_APPOINTMENT", "This patient has no upcoming appointment to cancel (it may already be canceled).")
+                    : new CancelOutcome("none", "INVALID_REQUEST", "That appointment was not found for this patient.");
+            }
+
+            // CancelAsync returns the stored (UTC) appointment; report it the way the patient should hear it — clinic-local.
+            var tz = await GetTimeZoneAsync(clinicId, ct);
+            var entity = await _db.Appointments.AsNoTracking().Include(a => a.Procedure).FirstAsync(a => a.Id == canceled.Id, ct);
+            return new CancelOutcome("canceled", "CANCELED", "Appointment canceled.", Appointment: ToUpcoming(entity, tz));
+        }
+        catch (MultipleUpcomingAppointmentsException ex)
+        {
+            return new CancelOutcome("none", "MULTIPLE_UPCOMING_APPOINTMENTS", ex.Message, Existing: ex.Appointments);
+        }
+        catch (ArgumentException ex)
+        {
+            return new CancelOutcome("none", "INVALID_REQUEST", ex.Message);
+        }
+    }
+
     public async Task<UpcomingAppointmentsResponse> GetUpcomingForLeadAsync(Guid clinicId, Guid leadId, CancellationToken ct = default)
     {
         var (tz, items) = await LoadUpcomingAsync(clinicId, leadId, ct);
