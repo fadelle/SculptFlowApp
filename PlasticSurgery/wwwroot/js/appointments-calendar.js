@@ -294,9 +294,26 @@
 
     // ---------------------------------------------------------------- wiring
 
+    /** Live updates: the server sends "AppointmentChanged" (over the same clinic-scoped SignalR hub the Inbox uses) after an appointment is
+        created, rescheduled, canceled or has its status changed — by staff, the AI, or another tab. We just re-fetch the visible month from the
+        API (the database stays the source of truth); the open drawer and New Appointment form are left alone. */
+    function connectLive() {
+        if (!window.signalR) return;
+        var timer = null;
+        function refresh() {
+            clearTimeout(timer);
+            timer = setTimeout(function () { loadMonth(state.year, state.month); }, 300); // coalesce bursts
+        }
+        var connection = new signalR.HubConnectionBuilder().withUrl('/hubs/inbox').withAutomaticReconnect().build();
+        connection.on('AppointmentChanged', refresh);
+        connection.onreconnected(refresh); // events missed while disconnected
+        connection.start().catch(function (err) { console.error('[calendar] live updates unavailable', err); });
+    }
+
     function init() {
         var today = new Date();
         loadMonth(today.getFullYear(), today.getMonth() + 1);
+        connectLive();
 
         $('cal-prev').addEventListener('click', function () {
             var m = state.month - 1, y = state.year;

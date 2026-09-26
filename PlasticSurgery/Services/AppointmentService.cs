@@ -13,13 +13,15 @@ public class AppointmentService : IAppointmentService
     private readonly IProcedureService _procedures;
 
     private readonly IAvailabilityService _availability;
+    private readonly IInboxNotifier _notifier;
 
-    public AppointmentService(ApplicationDbContext db, IEventLogger events, IProcedureService procedures, IAvailabilityService availability)
+    public AppointmentService(ApplicationDbContext db, IEventLogger events, IProcedureService procedures, IAvailabilityService availability, IInboxNotifier notifier)
     {
         _db = db;
         _events = events;
         _procedures = procedures;
         _availability = availability;
+        _notifier = notifier;
     }
 
     /// <summary>The clinic's configured timezone (Clinic.Timezone), falling back to UTC for an unrecognized
@@ -59,12 +61,28 @@ public class AppointmentService : IAppointmentService
         var check = await _availability.CheckSlotAsync(request.ClinicId, request.ProcedureId, request.ScheduledStart, request.ScheduledEnd, ct: ct);
         if (check.Error is not null) throw new SlotUnavailableException(check.Error);
 
-        var appointment = await CreateAsync(request with { ScheduledEnd = check.End }, ct);
+        var appointment = await CreateCoreAsync(request with { ScheduledEnd = check.End }, ct);
         await tx.CommitAsync(ct);
+        await NotifyChangedAsync(request.ClinicId, appointment.Id, "created", ct); // only once the row is committed and visible
         return appointment;
     }
 
+    /// <summary>Tells the clinic's open calendars to re-fetch. Never fails the operation: the change is already saved, and a missed
+    /// event only means a calendar refreshes on its next load.</summary>
+    private async Task NotifyChangedAsync(Guid clinicId, Guid appointmentId, string change, CancellationToken ct)
+    {
+        try { await _notifier.AppointmentChangedAsync(clinicId, appointmentId, change, ct); }
+        catch { /* best effort */ }
+    }
+
     public async Task<AppointmentResponse> CreateAsync(CreateAppointmentRequest request, CancellationToken ct = default)
+    {
+        var appointment = await CreateCoreAsync(request, ct);
+        await NotifyChangedAsync(request.ClinicId, appointment.Id, "created", ct);
+        return appointment;
+    }
+
+    private async Task<AppointmentResponse> CreateCoreAsync(CreateAppointmentRequest request, CancellationToken ct)
     {
         // A new booking may only reference one of this clinic's ACTIVE procedures.
         if (request.ProcedureId is { } procedureId)
@@ -145,6 +163,7 @@ public class AppointmentService : IAppointmentService
         }
 
         await _db.SaveChangesAsync(ct);
+        await NotifyChangedAsync(clinicId, appointment.Id, status == AppointmentStatus.Canceled ? "canceled" : "status_changed", ct);
         return await ToResponseAsync(appointment, ct);
     }
 
@@ -189,6 +208,7 @@ public class AppointmentService : IAppointmentService
         await _db.SaveChangesAsync(ct);
         var response = await ToResponseAsync(appointment, ct);
         await tx.CommitAsync(ct);
+        await NotifyChangedAsync(clinicId, appointment.Id, "rescheduled", ct); // after the transaction commits
         return response;
     }
 
@@ -213,6 +233,7 @@ public class AppointmentService : IAppointmentService
             metadataJson: JsonSerializer.Serialize(new { reason }));
 
         await _db.SaveChangesAsync(ct);
+        await NotifyChangedAsync(clinicId, appointment.Id, "canceled", ct);
         return await ToResponseAsync(appointment, ct);
     }
 
@@ -252,19 +273,22 @@ public class AppointmentService : IAppointmentService
             }
 
             // 2) The patient already has an upcoming appointment. Which one would be replaced?
-            UpcomingAppointmentResponse? target;
-            if (request.AppointmentId is { } wanted)
+            // Exactly ONE upcoming appointment: the backend selects it itself and appointmentId is ignored completely (the AI's ids go
+            // stale after any booking/cancel). Two or more: an appointmentId is required and must be one of the CURRENT upcoming ones,
+            // otherwise nothing is mutated.
+            UpcomingAppointmentResponse? target = null;
+            if (existing.Count == 1)
+            {
+                target = existing[0];
+            }
+            else if (request.AppointmentId is { } wanted)
             {
                 target = existing.FirstOrDefault(e => e.Id == wanted);
                 if (target is null)
                 {
                     return new ScheduleOutcome("none", "INVALID_REQUEST",
-                        "That appointment is not one of this patient's upcoming appointments.", Existing: existing, RequestedLabel: requestedLabel);
+                        "That appointment is not one of this patient's current upcoming appointments.", Existing: existing, RequestedLabel: requestedLabel);
                 }
-            }
-            else
-            {
-                target = existing.Count == 1 ? existing[0] : null;
             }
 
             // Read-only pre-check, so the patient is never asked to confirm a move to a time that cannot work.
@@ -343,12 +367,24 @@ public class AppointmentService : IAppointmentService
     {
         try
         {
-            var canceled = await CancelAsync(clinicId, leadId, id, reason, ct);
+            // Same rule as schedule_consultation: no upcoming → nothing to cancel; exactly ONE → the backend selects it and any appointmentId
+            // is ignored (the AI's ids go stale); two or more → the id is required and must be a CURRENT upcoming appointment.
+            var context = await GetBookingContextAsync(clinicId, leadId, ct);
+            var existing = context?.ExistingUpcomingAppointments;
+            if (existing is null || existing.Count == 0)
+            {
+                return new CancelOutcome("none", "NO_UPCOMING_APPOINTMENT", "This patient has no upcoming appointment to cancel (it may already be canceled).");
+            }
+            if (existing.Count > 1 && id is { } wanted && !existing.Any(e => e.Id == wanted))
+            {
+                return new CancelOutcome("none", "INVALID_REQUEST",
+                    "That appointment is not one of this patient's current upcoming appointments.", Existing: existing);
+            }
+
+            var canceled = await CancelAsync(clinicId, leadId, existing.Count == 1 ? null : id, reason, ct);
             if (canceled is null)
             {
-                return id is null
-                    ? new CancelOutcome("none", "NO_UPCOMING_APPOINTMENT", "This patient has no upcoming appointment to cancel (it may already be canceled).")
-                    : new CancelOutcome("none", "INVALID_REQUEST", "That appointment was not found for this patient.");
+                return new CancelOutcome("none", "NO_UPCOMING_APPOINTMENT", "This patient has no upcoming appointment to cancel (it may already be canceled).");
             }
 
             // CancelAsync returns the stored (UTC) appointment; report it the way the patient should hear it — clinic-local.

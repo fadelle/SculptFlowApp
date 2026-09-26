@@ -1071,3 +1071,16 @@ Success returns `appointment` in **clinic-local time** (`scheduledStart` like `2
 strings on failure — the AI could misreport them). Codes: `CANCELED` (`appointment` in clinic-local time), `NO_UPCOMING_APPOINTMENT`, `MULTIPLE_UPCOMING_APPOINTMENTS` (list; retry with
 `appointmentId`), `INVALID_REQUEST` (not this patient's appointment / already attended etc.). Every failure carries an `instruction` saying nothing was canceled. Implemented by
 `AppointmentService.CancelConsultationAsync` wrapping the unchanged `CancelAsync` (same ownership + status rules). Only `success:true` means it was canceled. Cancellation still needs explicit patient confirmation (tool description).
+
+### 24g. `appointmentId` rules for schedule_consultation and cancel_consultation — built, not yet pushed
+The AI's appointment ids go stale (a real case: it re-sent the id of an appointment it had booked and canceled earlier, so a valid reschedule was refused). Rule, from the DB's CURRENT upcoming appointments:
+**0 upcoming** → schedule creates (any appointmentId ignored); cancel → `NO_UPCOMING_APPOINTMENT`. **exactly 1** → the backend selects it itself and **`appointmentId` is ignored completely**
+(stale/garbage ids can't matter). **2+** → `appointmentId` is required and must match one of the current upcoming appointments, otherwise `INVALID_REQUEST` and nothing is mutated (no id + consent → `MULTIPLE_UPCOMING_APPOINTMENTS`).
+Implemented in `AppointmentService.ScheduleAsync` and `CancelConsultationAsync`; the deprecated `/book` and `/reschedule` endpoints keep their old behavior.
+
+### 24h. Live calendar updates — built, not yet pushed
+The Appointments calendar refreshes by itself when an appointment changes (AI booking/reschedule/cancel, staff create, status change, another tab). `IInboxNotifier.AppointmentChangedAsync`
+sends `AppointmentChanged {appointmentId, change: created|rescheduled|canceled|status_changed}` to the clinic's SignalR group (same `/hubs/inbox` hub and clinic-scoped groups the Inbox uses — the clinic comes
+from the logged-in session, never the client). `AppointmentService` sends it **after the change is committed** (Book/Reschedule after `tx.CommitAsync`; `CreateAsync` split into a notify-free `CreateCoreAsync`);
+a notification failure never fails the operation. `wwwroot/js/appointments-calendar.js` (`connectLive`) re-fetches the visible month via `loadMonth` (debounced 300 ms; also on reconnect); the open day drawer re-renders,
+the New Appointment form is untouched. The database stays the source of truth — a missed event only means the next load is current.

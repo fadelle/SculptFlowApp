@@ -20,6 +20,10 @@ public interface IInboxNotifier
 
     Task ConversationUpdatedAsync(Guid clinicId, Guid conversationId, CancellationToken ct = default);
 
+    /// <summary>Tells the clinic's open Appointments calendars that an appointment was created, rescheduled, canceled or had its status changed, so
+    /// they re-fetch the visible month. Sent only AFTER the change is committed. change: created | rescheduled | canceled | status_changed.</summary>
+    Task AppointmentChangedAsync(Guid clinicId, Guid appointmentId, string change, CancellationToken ct = default);
+
     Task ConversationModeChangedAsync(Guid clinicId, Guid conversationId, string mode, CancellationToken ct = default);
 
     /// <summary>Notifies the Templates UI (/WhatsApp/Templates) that a template's Meta-reported
@@ -63,6 +67,9 @@ public class InboxNotifier : IInboxNotifier
 
     public Task ConversationUpdatedAsync(Guid clinicId, Guid conversationId, CancellationToken ct = default) =>
         ClinicGroup(clinicId).SendAsync("ConversationUpdated", new { conversationId }, ct);
+
+    public Task AppointmentChangedAsync(Guid clinicId, Guid appointmentId, string change, CancellationToken ct = default) =>
+        ClinicGroup(clinicId).SendAsync("AppointmentChanged", new { appointmentId, change }, ct);
 
     public Task ConversationModeChangedAsync(Guid clinicId, Guid conversationId, string mode, CancellationToken ct = default) =>
         ClinicGroup(clinicId).SendAsync("ConversationModeChanged", new { conversationId, mode }, ct);
