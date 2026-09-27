@@ -11,8 +11,8 @@
 }
 else
 {
-    <form method="get" class="mb-3 flex items-center gap-2">
-        <input type="text" name="Search" value="@Model.Search" placeholder="Search by name or phone…" class="text-input" style="width:auto" />
+    <form method="get" class="filter-bar">
+        <input type="search" name="Search" value="@Model.Search" placeholder="Search by name or phone…" class="text-input search-input" aria-label="Search leads" />
         <select name="Status" class="select" onchange="this.form.submit()">
             <option value="">All statuses</option>
             @foreach (var status in Model.AllStatuses)
@@ -42,12 +42,12 @@ else
                 @foreach (var lead in Model.Leads)
                 {
                     <tr>
-                        <td><a href="/dashboard/leads/@lead.Id">@(lead.FullName ?? "—")</a></td>
+                        <td><a class="cell-person" href="/dashboard/leads/@lead.Id"><span class="avatar-sm">@(string.IsNullOrWhiteSpace(lead.FullName) ? "?" : lead.FullName.Trim()[..1])</span>@(lead.FullName ?? "—")</a></td>
                         <td>@(lead.Phone ?? "—")</td>
                         <td>@(lead.ProcedureName ?? "—")</td>
                         <td>@(lead.Source ?? "—")</td>
-                        <td><span class="badge @StatusBadgeHelper.CssClass(lead.Status)">@lead.Status</span></td>
-                        <td><span class="badge @StatusBadgeHelper.CssClass(lead.QualificationStatus)">@lead.QualificationStatus</span></td>
+                        <td><span class="badge @StatusBadgeHelper.CssClass(lead.Status)">@FilterLabelHelper.Label(lead.Status)</span></td>
+                        <td><span class="badge @StatusBadgeHelper.CssClass(lead.QualificationStatus)">@FilterLabelHelper.Label(lead.QualificationStatus)</span></td>
                         <td>@(lead.LastContactAt?.ToString("MMM d, HH:mm") ?? "—")</td>
                         <td>@(lead.NextFollowupAt?.ToString("MMM d, HH:mm") ?? "—")</td>
                         <td>@lead.CreatedAt.ToString("MMM d, HH:mm")</td>
@@ -61,6 +61,8 @@ else
         </table>
     </div>
 
+    <div class="table-footer mt-2">
+    <span class="count">@Model.TotalCount total lead(s)</span>
     @if (Model.TotalPages > 1)
     {
         <ul class="pagination">
@@ -72,6 +74,5 @@ else
             }
         </ul>
     }
-
-    <p class="text-subtle mt-2">@Model.TotalCount total lead(s).</p>
+    </div>
 }

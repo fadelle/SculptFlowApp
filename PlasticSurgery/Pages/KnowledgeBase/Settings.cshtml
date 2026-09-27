@@ -22,9 +22,9 @@ else
 
     <div class="mb-3"><a href="/KnowledgeBase" class="btn btn-sm">&larr; Back to Knowledge Base</a></div>
 
-    <div class="card" style="padding:1.25rem;max-width:640px">
+    <div class="card p-5 mw-640">
         <form method="post" class="integration-form">
-            <h3 style="margin:0">Search tuning</h3>
+            <h3 class="m-0">Search tuning</h3>
             <div class="text-subtle" style="font-size:.78rem;margin-top:-.3rem">
                 Chunk settings apply to entries saved from now on — re-save an entry to re-chunk it with new values.
             </div>
@@ -32,25 +32,25 @@ else
             <label class="field">
                 <span>Chunk size (tokens)</span>
                 <input type="number" name="ChunkSizeTokens" value="@Model.ChunkSizeTokens" class="text-input" min="50" max="1000" style="max-width:180px" required />
-                <span style="font-weight:400">How much text goes into each searchable piece (about 4 characters per token). 50–1000.</span>
+                <span class="fw-normal">How much text goes into each searchable piece (about 4 characters per token). 50–1000.</span>
             </label>
 
             <label class="field">
                 <span>Chunk overlap (tokens)</span>
                 <input type="number" name="ChunkOverlapTokens" value="@Model.ChunkOverlapTokens" class="text-input" min="0" max="500" style="max-width:180px" required />
-                <span style="font-weight:400">Text repeated between neighbouring pieces so nothing is cut in half. Up to half the chunk size.</span>
+                <span class="fw-normal">Text repeated between neighbouring pieces so nothing is cut in half. Up to half the chunk size.</span>
             </label>
 
             <label class="field">
                 <span>Top K</span>
                 <input type="number" name="TopK" value="@Model.TopK" class="text-input" min="1" max="10" style="max-width:180px" required />
-                <span style="font-weight:400">The most results the AI gets back for one question. 1–10.</span>
+                <span class="fw-normal">The most results the AI gets back for one question. 1–10.</span>
             </label>
 
             <label class="field">
                 <span>Minimum similarity</span>
                 <input type="text" inputmode="decimal" name="MinimumSimilarity" value="@Model.MinimumSimilarity" class="text-input" style="max-width:180px" required />
-                <span style="font-weight:400">Results scoring below this are dropped, so unrelated questions return nothing. 0–1 — higher is stricter.</span>
+                <span class="fw-normal">Results scoring below this are dropped, so unrelated questions return nothing. 0–1 — higher is stricter.</span>
             </label>
 
             <div class="flex items-center gap-2 mt-1">
@@ -60,7 +60,7 @@ else
         </form>
     </div>
 
-    <div class="card mt-3" style="padding:1.25rem;max-width:640px">
+    <div class="card mt-3 p-5 mw-640">
         <h3 style="margin:0 0 .3rem">Embedding configuration <span class="badge badge-gray">Read-only</span></h3>
         <div class="text-subtle" style="font-size:.78rem;margin-bottom:.8rem">
             This is what your Knowledge Base was built with. It can't be changed here because changing it means

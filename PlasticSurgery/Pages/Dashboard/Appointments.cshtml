@@ -46,8 +46,8 @@ else
     @* ---------- New Appointment ---------- *@
     <div class="bm-overlay" id="cal-new-overlay" hidden>
         <div class="card cal-modal" role="dialog" aria-modal="true" aria-labelledby="cal-new-title">
-            <div class="flex items-center gap-2" style="justify-content:space-between;margin-bottom:.9rem">
-                <h3 id="cal-new-title" style="margin:0;font-size:1.05rem">New Appointment</h3>
+            <div class="flex items-center gap-2 justify-between mb-2">
+                <h3 id="cal-new-title" class="card-title">New Appointment</h3>
                 <button type="button" class="btn btn-sm" id="cal-new-close">Close</button>
             </div>
             <div id="cal-new-error"></div>
@@ -55,7 +55,7 @@ else
                 <label class="field">
                     <span>Patient (lead)</span>
                     <input type="text" id="cal-new-lead-search" class="text-input" placeholder="Search by name or phone…" autocomplete="off" />
-                    <div id="cal-new-lead-results" class="text-subtle" style="font-size:.8rem"></div>
+                    <div id="cal-new-lead-results" class="text-subtle text-sm"></div>
                     <input type="hidden" id="cal-new-lead-id" />
                 </label>
                 <label class="field">
@@ -63,11 +63,11 @@ else
                     <select id="cal-new-procedure" class="select"><option value="">Loading…</option></select>
                 </label>
                 <div class="flex items-center gap-2">
-                    <label class="field" style="flex:1">
+                    <label class="field flex-1">
                         <span>Date</span>
                         <input type="date" id="cal-new-date" class="text-input" required />
                     </label>
-                    <label class="field" style="flex:1">
+                    <label class="field flex-1">
                         <span>Time</span>
                         <input type="time" id="cal-new-time" class="text-input" value="09:00" required />
                     </label>

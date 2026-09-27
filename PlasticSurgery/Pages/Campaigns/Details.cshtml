@@ -25,7 +25,7 @@ else if (Model.Details is not null)
 
     <div class="flex items-center justify-between mb-3">
         <div>
-            <h2 style="margin:0">@d.Campaign.Name</h2>
+            <h2 class="m-0">@d.Campaign.Name</h2>
             <div class="text-subtle">Template: @(d.Campaign.TemplateName ?? "—")</div>
         </div>
         <div class="flex items-center gap-2">
@@ -47,7 +47,7 @@ else if (Model.Details is not null)
         </div>
     </div>
 
-    <div class="flex items-center gap-2 mb-4" style="flex-wrap:wrap">
+    <div class="flex items-center gap-2 mb-4 flex-wrap">
         @{ await Stat("Total", d.Stats.TotalRecipients); }
         @{ await Stat("Pending", d.Stats.Pending); }
         @{ await Stat("Queued", d.Stats.Queued); }
@@ -97,7 +97,7 @@ else if (Model.Details is not null)
     private async Task Stat(string label, int value)
     {
         <div class="card" style="padding:.75rem 1rem;min-width:100px">
-            <div class="text-subtle" style="font-size:.7rem;text-transform:uppercase">@label</div>
+            <div class="text-subtle eyebrow">@label</div>
             <div style="font-size:1.3rem;font-weight:600">@value</div>
         </div>
         await Task.CompletedTask;

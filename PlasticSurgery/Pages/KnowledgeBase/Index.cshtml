@@ -36,8 +36,8 @@ else
         <div class="alert alert-warning mb-3">@Model.ErrorMessage</div>
     }
 
-    <div class="flex items-center gap-2 mb-3" style="justify-content:space-between">
-        <p class="text-muted" style="margin:0;max-width:640px">
+    <div class="flex items-center gap-2 mb-3 justify-between">
+        <p class="text-muted m-0 mw-640">
             Approved information your AI assistant can look up when patients ask about your clinic —
             FAQs, policies, doctors, pricing, preparation and recovery. Only <strong>Active</strong>
             entries are used. A website you import shows here as one record — open it to see every page that was scraped.
@@ -71,7 +71,7 @@ else
                             <td style="max-width:380px">
                                 <a href="/KnowledgeBase/Websites/@w.Id" title="@UrlDisplayHelper.Readable(w.StartUrl)"
                                    style="display:block;max-width:380px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">@UrlDisplayHelper.Readable(w.StartUrl)</a>
-                                <div class="text-subtle" style="font-size:.72rem">
+                                <div class="text-subtle text-xs">
                                     @(w.CrawlMode == WebsiteCrawlMode.SinglePage ? "Single page" : "Whole website")
                                     · @w.IndexedPages page@(w.IndexedPages == 1 ? "" : "s") in the Knowledge Base
                                 </div>
@@ -113,7 +113,7 @@ else
                                 @if (d.SourceType == KnowledgeSourceType.Upload)
                                 {
                                     <span class="badge badge-teal">Uploaded</span>
-                                    <div class="text-subtle" style="font-size:.72rem">@d.OriginalFileName</div>
+                                    <div class="text-subtle text-xs">@d.OriginalFileName</div>
                                 }
                                 else
                                 {

@@ -16,7 +16,7 @@ else
         <div class="alert alert-warning mb-3">@Model.ErrorMessage</div>
     }
 
-    <div class="card" style="padding:1.25rem;max-width:720px">
+    <div class="card p-5 mw-720">
 
         @if (Model.IsNew)
         {
@@ -48,7 +48,7 @@ else
 
                 @if (Model.IsWebsite)
                 {
-                    <div class="text-subtle" style="font-size:.85rem">
+                    <div class="text-subtle text-md">
                         Imported from the website page <a href="@Model.SourceUrl" target="_blank" rel="noopener noreferrer">@Model.SourceUrl</a>.
                         The text below is kept in sync by the website crawl and can't be edited here — re-scrape the website to refresh it.
                         Title, category and Active can be changed (a re-scrape keeps the Active setting).
@@ -60,7 +60,7 @@ else
                 }
                 else if (Model.IsUpload)
                 {
-                    <div class="text-subtle" style="font-size:.85rem">
+                    <div class="text-subtle text-md">
                         Uploaded from <strong>@Model.OriginalFileName</strong>
                         @if (Model.FileSizeBytes.HasValue) { <text>(@((Model.FileSizeBytes.Value / 1024.0).ToString("0.#")) KB)</text> }.
                         The text below was extracted from the file and can't be edited here — upload the document again to change it.
@@ -79,12 +79,12 @@ else
                     </label>
                 }
 
-                <label class="flex items-center gap-1" style="font-weight:400">
+                <label class="flex items-center gap-1 fw-normal">
                     <input type="checkbox" name="IsActive" value="true" checked="@Model.IsActive" />
                     Active — the AI can use this entry
                 </label>
 
-                <div class="text-subtle" style="font-size:.78rem">
+                <div class="text-subtle text-sm">
                     Saving splits the text into searchable pieces and prepares it for AI lookup, which can take a few seconds.
                 </div>
 
@@ -121,12 +121,12 @@ else
                         </select>
                     </label>
 
-                    <label class="flex items-center gap-1" style="font-weight:400">
+                    <label class="flex items-center gap-1 fw-normal">
                         <input type="checkbox" name="IsActive" value="true" checked="@(Model.ErrorMessage is null || Model.IsActive)" />
                         Active — the AI can use this document
                     </label>
 
-                    <div class="text-subtle" style="font-size:.78rem">
+                    <div class="text-subtle text-sm">
                         Text is extracted from the file and prepared for AI search, which can take a few seconds. Only text-based
                         documents are supported — scanned pages (images) can't be read. The original file isn't stored; only its text is kept.
                     </div>
@@ -165,12 +165,12 @@ else
                         </select>
                     </label>
 
-                    <label class="flex items-center gap-1" style="font-weight:400">
+                    <label class="flex items-center gap-1 fw-normal">
                         <input type="checkbox" name="IsActive" value="true" checked="@(Model.ErrorMessage is null || Model.IsActive)" />
                         Active — the AI can use these pages
                     </label>
 
-                    <div class="text-subtle" style="font-size:.78rem">
+                    <div class="text-subtle text-sm">
                         Only the text of public pages on <strong>this website</strong> is imported — no images, videos or files, and links to other websites
                         are not followed. The crawl respects the site's <code>robots.txt</code> and runs in the background, so you can leave this page;
                         progress is shown on the website's page. Pages built entirely with JavaScript can't be read.

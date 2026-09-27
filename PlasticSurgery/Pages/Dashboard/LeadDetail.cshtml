@@ -24,16 +24,23 @@ else
         <div class="alert alert-warning mb-3">@Model.ErrorMessage</div>
     }
 
-    <div class="card mb-3" style="padding:1rem">
-        <div style="font-size:1.1rem;font-weight:600">@(Model.Lead.FullName ?? "—")</div>
-        <div class="text-subtle" style="font-size:.85rem">
-            @(Model.Lead.Phone ?? "—") &middot; @(Model.Lead.ProcedureName ?? "No procedure on file")
+    <div class="card profile-header mb-3">
+        <span class="avatar-md">@(string.IsNullOrWhiteSpace(Model.Lead.FullName) ? "?" : Model.Lead.FullName.Trim()[..1])</span>
+        <div class="profile-header-main">
+            <div class="profile-header-name">@(Model.Lead.FullName ?? "—")</div>
+            <div class="text-muted text-md">
+                @(Model.Lead.Phone ?? "—") &middot; @(Model.Lead.ProcedureName ?? "No procedure on file")
+            </div>
+        </div>
+        <div class="flex items-center gap-1 flex-wrap">
+            <span class="badge @StatusBadgeHelper.CssClass(Model.Lead.Status)">@FilterLabelHelper.Label(Model.Lead.Status)</span>
+            <span class="badge @StatusBadgeHelper.CssClass(Model.Lead.QualificationStatus)">@FilterLabelHelper.Label(Model.Lead.QualificationStatus)</span>
         </div>
     </div>
 
-    <div class="card" style="padding:1.25rem;max-width:480px">
+    <div class="card p-5 mw-480">
         <div class="flex items-center gap-2 mb-2">
-            <span class="text-subtle" style="font-size:.78rem;text-transform:uppercase;letter-spacing:.05em">Edit lead</span>
+            <span class="eyebrow">Edit lead</span>
             <button type="button" class="status-help-trigger" data-status-help-trigger title="What do these mean?">?</button>
         </div>
         <form method="post" class="integration-form">

@@ -47,11 +47,11 @@ else
 
     <div class="mb-3"><a href="/KnowledgeBase" class="btn btn-sm">&larr; Back to Knowledge Base</a></div>
 
-    <div class="card" style="padding:1.25rem;margin-bottom:1rem">
-        <div class="flex items-center gap-2" style="justify-content:space-between;flex-wrap:wrap">
+    <div class="card p-5 mb-3">
+        <div class="flex items-center gap-2 justify-between flex-wrap">
             <div>
                 <div style="font-weight:600;word-break:break-all">@s.StartUrl</div>
-                <div class="text-subtle" style="font-size:.8rem">
+                <div class="text-subtle text-sm">
                     @(s.CrawlMode == WebsiteCrawlMode.SinglePage ? "Single page only" : "Whole website")
                     · category @KnowledgeCategory.Label(s.Category)
                     · @s.IndexedPages page@(s.IndexedPages == 1 ? "" : "s") in the Knowledge Base
@@ -64,7 +64,7 @@ else
             </div>
         </div>
 
-        <div class="flex items-center gap-2 mt-2" style="flex-wrap:wrap">
+        <div class="flex items-center gap-2 mt-2 flex-wrap">
             @if (s.IsActive)
             {
                 <form method="post" asp-page-handler="Rescrape">
@@ -84,15 +84,15 @@ else
 
     @if (run is not null)
     {
-        <div class="card" style="padding:1.25rem;margin-bottom:1rem">
-            <div class="flex items-center gap-2 mb-2" style="justify-content:space-between">
+        <div class="card p-5 mb-3">
+            <div class="flex items-center gap-2 mb-2 justify-between">
                 <strong>@(s.InProgress ? "Crawl in progress" : "Latest crawl")</strong>
-                <span class="text-subtle" style="font-size:.78rem">
+                <span class="text-subtle text-sm">
                     @(run.StartedAt is null ? "Waiting to start…" : "Started " + run.StartedAt.Value.ToString("MMM d, HH:mm"))
                     @(run.CompletedAt is { } done ? " · finished " + done.ToString("HH:mm") : "")
                 </span>
             </div>
-            <div class="flex items-center gap-2" style="flex-wrap:wrap">
+            <div class="flex items-center gap-2 flex-wrap">
                 @foreach (var (label, value, hint) in new[]
                 {
                     ("Discovered", run.PagesDiscovered, "URLs found on the site"),
@@ -109,7 +109,7 @@ else
                 {
                     <div title="@hint" style="min-width:92px;padding:.5rem .75rem;border:1px solid var(--border);border-radius:8px;background:var(--surface-subtle)">
                         <div style="font-size:1.15rem;font-weight:700">@value</div>
-                        <div class="text-subtle" style="font-size:.72rem">@label</div>
+                        <div class="text-subtle text-xs">@label</div>
                     </div>
                 }
             </div>
@@ -120,7 +120,7 @@ else
         </div>
     }
 
-    <div class="flex items-center gap-2 mb-2" style="flex-wrap:wrap">
+    <div class="flex items-center gap-2 mb-2 flex-wrap">
         <strong style="margin-right:.5rem">Pages</strong>
         @foreach (var (value, label) in new[]
         {

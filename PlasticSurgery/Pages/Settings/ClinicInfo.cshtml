@@ -32,7 +32,7 @@ else
             consultation rules) instead of inventing an answer — see the <code>get_clinic_info</code> tool.
         </p>
 
-        <form method="post" class="integration-form card" style="padding:1.25rem">
+        <form method="post" class="integration-form card p-5">
             <label class="field">
                 <span>Clinic name</span>
                 <input type="text" name="Name" value="@Model.Name" class="text-input" maxlength="200" required />
@@ -80,7 +80,7 @@ else
             Existing appointments, the procedure's own consultation duration, the buffer and the rules below are all applied automatically.
         </p>
 
-        <form method="post" asp-page-handler="SaveAvailability" class="integration-form card" style="padding:1.25rem">
+        <form method="post" asp-page-handler="SaveAvailability" class="integration-form card p-5">
             <label class="field">
                 <span>Timezone</span>
                 <select name="TimezoneId" class="select">
@@ -140,14 +140,14 @@ else
         <h3 class="avail-heading">Exceptions</h3>
         <p class="text-muted mb-3">Specific dates that override the weekly schedule — a holiday, a shortened day, or an extra opening.</p>
 
-        <div class="card" style="padding:1.25rem">
+        <div class="card p-5">
             @if (av.Exceptions.Count == 0)
             {
                 <p class="text-subtle" style="margin:0 0 1rem">No upcoming exceptions.</p>
             }
             else
             {
-                <table class="data-table" style="margin-bottom:1rem">
+                <table class="data-table mb-3">
                     <thead><tr><th>Date</th><th>Hours</th><th>Reason</th><th></th></tr></thead>
                     <tbody>
                         @foreach (var ex in av.Exceptions)

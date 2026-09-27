@@ -4,6 +4,8 @@
     var path = Context.Request.Path.Value ?? "";
     bool IsActive(string prefix) => path.Equals(prefix, StringComparison.OrdinalIgnoreCase)
         || path.StartsWith(prefix + "/", StringComparison.OrdinalIgnoreCase);
+    var userName = User.Identity?.Name ?? "";
+    var userInitial = userName.Length > 0 ? userName.Substring(0, 1) : "?";
 }
 <!DOCTYPE html>
 <html lang="en">
@@ -11,96 +13,135 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>@ViewData["Title"] - MySculptFlow</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@@400;500;600;700&display=swap" />
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+    <script>try { var t = localStorage.getItem('sf-theme'); if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t); if (localStorage.getItem('sf-sidebar') === 'collapsed') document.documentElement.setAttribute('data-sidebar', 'collapsed'); } catch (e) { }</script>
 </head>
 <body>
     <div class="app-shell">
-        <aside class="sidebar">
-            <a class="sidebar-brand" href="/dashboard">
-                <span class="mark">SF</span>
-                <span>MySculptFlow</span>
-            </a>
-            <div class="sidebar-clinic">@(string.IsNullOrWhiteSpace(clinicName) ? "Clinic Dashboard" : clinicName)</div>
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-top">
+                <a class="sidebar-brand" href="/dashboard">
+                    <span class="mark">SF</span>
+                    <span>MySculptFlow</span>
+                </a>
+                <button type="button" class="sidebar-collapse" id="sidebar-collapse" title="Collapse sidebar" aria-label="Collapse sidebar">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/></svg>
+                </button>
+            </div>
+            <div class="sidebar-clinic" title="@clinicName">@(string.IsNullOrWhiteSpace(clinicName) ? "Clinic Dashboard" : clinicName)</div>
 
             <nav class="sidebar-nav sidebar-nav-main">
-                <a href="/inbox" class="@(IsActive("/inbox") ? "active" : "")">
+                <div class="sidebar-nav-label">Daily work</div>
+                <a href="/inbox" class="@(IsActive("/inbox") ? "active" : "")" title="Inbox">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
                     <span>Inbox</span>
+                    <span class="sidebar-badge" id="sidebar-inbox-badge" hidden></span>
                 </a>
-                <a href="/dashboard" class="@(IsActive("/dashboard") && !IsActive("/dashboard/leads") && !IsActive("/dashboard/appointments") ? "active" : "")">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
-                    <span>Main Numbers</span>
-                </a>
-                <a href="/dashboard/leads" class="@(IsActive("/dashboard/leads") ? "active" : "")">
+                <a href="/dashboard/leads" class="@(IsActive("/dashboard/leads") ? "active" : "")" title="Interested People">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
                     <span>Interested People</span>
                 </a>
-                <a href="/dashboard/appointments" class="@(IsActive("/dashboard/appointments") ? "active" : "")">
+                <a href="/dashboard/appointments" class="@(IsActive("/dashboard/appointments") ? "active" : "")" title="Appointments">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
                     <span>Appointments</span>
                 </a>
-                <a href="/Procedures" class="@(IsActive("/Procedures") ? "active" : "")">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
-                    <span>Procedures</span>
+                <a href="/dashboard" class="@(IsActive("/dashboard") && !IsActive("/dashboard/leads") && !IsActive("/dashboard/appointments") ? "active" : "")" title="Main Numbers">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
+                    <span>Main Numbers</span>
                 </a>
-                <div class="sidebar-nav-label">WhatsApp</div>
-                <a href="/WhatsApp/Templates" class="@(IsActive("/WhatsApp/Templates") ? "active" : "")">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 13h6M9 17h6"/></svg>
-                    <span>Templates</span>
-                </a>
-                <a href="/WhatsApp/Health" class="@(IsActive("/WhatsApp/Health") ? "active" : "")">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
-                    <span>Health</span>
-                </a>
-                <a href="/Campaigns" class="@(IsActive("/Campaigns") ? "active" : "")">
+
+                <div class="sidebar-nav-label">Marketing</div>
+                <a href="/Campaigns" class="@(IsActive("/Campaigns") ? "active" : "")" title="Campaigns">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4Z"/></svg>
                     <span>Campaigns</span>
                 </a>
-                <a href="/KnowledgeBase" class="@(IsActive("/KnowledgeBase") ? "active" : "")">
+                <a href="/WhatsApp/Templates" class="@(IsActive("/WhatsApp/Templates") ? "active" : "")" title="WhatsApp Templates">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 13h6M9 17h6"/></svg>
+                    <span>WhatsApp Templates</span>
+                </a>
+                <a href="/WhatsApp/Health" class="@(IsActive("/WhatsApp/Health") ? "active" : "")" title="WhatsApp Health">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+                    <span>WhatsApp Health</span>
+                </a>
+
+                <div class="sidebar-nav-label">Clinic setup</div>
+                <a href="/Procedures" class="@(IsActive("/Procedures") ? "active" : "")" title="Procedures">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+                    <span>Procedures</span>
+                </a>
+                <a href="/KnowledgeBase" class="@(IsActive("/KnowledgeBase") ? "active" : "")" title="Knowledge Base">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
                     <span>Knowledge Base</span>
-                </a>
-                <a href="/swagger" target="_blank" rel="noopener">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/></svg>
-                    <span>API (Swagger)</span>
                 </a>
             </nav>
 
             <nav class="sidebar-nav sidebar-nav-secondary">
-                <a href="/settings/integrations" class="@(IsActive("/settings/integrations") ? "active" : "")">
+                <div class="sidebar-nav-label">Settings</div>
+                <a href="/settings/clinic-info" class="@(IsActive("/settings/clinic-info") ? "active" : "")" title="Clinic Info">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M5 21V7l7-4 7 4v14"/><path d="M9 9h1M14 9h1M9 13h1M14 13h1"/></svg>
+                    <span>Clinic Info</span>
+                </a>
+                <a href="/Staff" class="@(IsActive("/Staff") ? "active" : "")" title="Staff">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/></svg>
+                    <span>Staff</span>
+                </a>
+                <a href="/settings/integrations" class="@(IsActive("/settings/integrations") ? "active" : "")" title="Integrations">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22v-5"/><path d="M9 8V2"/><path d="M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/></svg>
                     <span>Integrations</span>
                 </a>
-                <a href="/settings/calendar-integrations" class="@(IsActive("/settings/calendar-integrations") ? "active" : "")">
+                <a href="/settings/calendar-integrations" class="@(IsActive("/settings/calendar-integrations") ? "active" : "")" title="Calendar Integrations">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="M8 14h2M14 14h2M8 18h2"/></svg>
                     <span>Calendar Integrations</span>
-                </a>
-                <a href="/Staff" class="@(IsActive("/Staff") ? "active" : "")">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-                    <span>Staff</span>
-                </a>
-                <a href="/settings/clinic-info" class="@(IsActive("/settings/clinic-info") ? "active" : "")">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M5 21V7l7-4 7 4v14"/><path d="M9 9h1M14 9h1M9 13h1M14 13h1"/></svg>
-                    <span>Clinic Info</span>
                 </a>
             </nav>
 
             @if (User.Identity?.IsAuthenticated == true)
             {
                 <div class="sidebar-user">
-                    <div class="sidebar-user-email" title="@User.Identity!.Name">@User.Identity!.Name</div>
-                    <form method="post" asp-page="/Account/Logout">
-                        <button type="submit" class="sidebar-user-logout">Sign out</button>
-                    </form>
+                    <button type="button" class="sidebar-user-btn" id="user-menu-btn" aria-haspopup="menu" aria-expanded="false" aria-controls="user-menu" title="@userName">
+                        <span class="sidebar-user-avatar" aria-hidden="true">@userInitial</span>
+                        <span class="sidebar-user-email">@userName</span>
+                        <svg class="sidebar-user-caret" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 15 5-5 5 5"/></svg>
+                    </button>
+                    <div class="user-menu" id="user-menu" role="menu" hidden>
+                        <div class="user-menu-head">
+                            <span class="sidebar-user-avatar" aria-hidden="true">@userInitial</span>
+                            <div class="user-menu-email">@userName</div>
+                        </div>
+                        <button type="button" class="user-menu-item theme-toggle" id="theme-toggle" data-mode="light" role="menuitem">
+                            <svg class="theme-icon-light" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+                            <svg class="theme-icon-dark" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+                            <span class="theme-toggle-label">Dark mode</span>
+                        </button>
+                        <a class="user-menu-item" href="/swagger" target="_blank" rel="noopener" role="menuitem">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/></svg>
+                            <span>API docs (Swagger)</span>
+                        </a>
+                        <form method="post" asp-page="/Account/Logout">
+                            <button type="submit" class="user-menu-item user-menu-danger" role="menuitem">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/></svg>
+                                <span>Sign out</span>
+                            </button>
+                        </form>
+                    </div>
                 </div>
             }
 
-            <div class="sidebar-footer">&copy; 2026 MySculptFlow</div>
         </aside>
+        <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
 
         <div class="app-main">
             <header class="topbar">
-                <h1>@ViewData["Title"]</h1>
+                <div class="topbar-title">
+                    <button type="button" class="sidebar-toggle" id="sidebar-toggle" aria-label="Open menu" aria-controls="sidebar" aria-expanded="false">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+                    </button>
+                    <h1>@ViewData["Title"]</h1>
+                </div>
+                <div class="topbar-actions">
                 @if (User.Identity?.IsAuthenticated == true)
                 {
                     <div class="notif-bell-wrap">
@@ -122,6 +163,7 @@
                         </div>
                     </div>
                 }
+                </div>
             </header>
             <main class="content">
                 @RenderBody()
@@ -129,10 +171,43 @@
         </div>
     </div>
 
+    <script>
+        // Phone layout: the sidebar is a drawer opened from the topbar menu button.
+        (function () {
+            var toggle = document.getElementById('sidebar-toggle');
+            var backdrop = document.getElementById('sidebar-backdrop');
+            function setOpen(open) {
+                document.body.classList.toggle('sidebar-open', open);
+                toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+            }
+            toggle.addEventListener('click', function () { setOpen(!document.body.classList.contains('sidebar-open')); });
+            backdrop.addEventListener('click', function () { setOpen(false); });
+            document.addEventListener('keydown', function (e) { if (e.key === 'Escape') setOpen(false); });
+
+            // Desktop: collapse the sidebar to an icon rail; remembered per browser.
+            var collapse = document.getElementById('sidebar-collapse');
+            function syncCollapse() {
+                var collapsed = document.documentElement.getAttribute('data-sidebar') === 'collapsed';
+                collapse.title = collapsed ? 'Expand sidebar' : 'Collapse sidebar';
+                collapse.setAttribute('aria-label', collapse.title);
+                collapse.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+            }
+            collapse.addEventListener('click', function () {
+                var collapsed = document.documentElement.getAttribute('data-sidebar') !== 'collapsed';
+                if (collapsed) document.documentElement.setAttribute('data-sidebar', 'collapsed');
+                else document.documentElement.removeAttribute('data-sidebar');
+                try { localStorage.setItem('sf-sidebar', collapsed ? 'collapsed' : 'expanded'); } catch (e) { }
+                syncCollapse();
+            });
+            syncCollapse();
+        })();
+    </script>
+    <script src="~/js/theme.js" asp-append-version="true"></script>
     @if (User.Identity?.IsAuthenticated == true)
     {
         <script src="https://cdn.jsdelivr.net/npm/@@microsoft/signalr@@8.0.0/dist/browser/signalr.min.js"></script>
         <script src="~/js/notifications.js" asp-append-version="true"></script>
+        <script src="~/js/sidebar.js" asp-append-version="true"></script>
     }
     @await RenderSectionAsync("Scripts", required: false)
 </body>

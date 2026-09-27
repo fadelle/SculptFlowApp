@@ -77,11 +77,11 @@ else
                         <div class="integration-title">@title</div>
                         @if (connected && !string.IsNullOrEmpty(info!.DisplayName))
                         {
-                            <div class="text-subtle" style="font-size:.78rem">@info.DisplayName</div>
+                            <div class="text-subtle text-sm">@info.DisplayName</div>
                         }
                         @if (channel == ChannelType.WhatsApp && connected && !string.IsNullOrEmpty(info!.Pin))
                         {
-                            <div class="text-subtle" style="font-size:.78rem">2-step PIN: <code>@info.Pin</code></div>
+                            <div class="text-subtle text-sm">2-step PIN: <code>@info.Pin</code></div>
                         }
                     </div>
                 </div>
@@ -107,13 +107,13 @@ else
                 }
                 @if (string.IsNullOrEmpty(configId))
                 {
-                    <div class="text-subtle mt-1" style="font-size:.75rem">
+                    <div class="text-subtle mt-1 text-xs">
                         Login Configuration ID not set for @title yet — add it to appsettings.json (Meta section).
                     </div>
                 }
                 else
                 {
-                    <div class="text-subtle mt-1" data-status-for="@channel" style="font-size:.75rem"></div>
+                    <div class="text-subtle mt-1 text-xs" data-status-for="@channel"></div>
                 }
 
                 <details class="mt-2">
@@ -176,7 +176,7 @@ else
                         <div class="integration-title">Telegram</div>
                         @if (!string.IsNullOrEmpty(info?.TelegramBotUsername))
                         {
-                            <div class="text-subtle" style="font-size:.78rem">
+                            <div class="text-subtle text-sm">
                                 @(connected ? "Bot" : "Last connected bot") <strong>@("@" + info!.TelegramBotUsername)</strong>
                                 · ID <code>@info.TelegramBotId</code>
                             </div>
@@ -188,26 +188,26 @@ else
 
             @if (connected)
             {
-                <div class="flex items-center gap-2 mb-2" style="flex-wrap:wrap">
+                <div class="flex items-center gap-2 mb-2 flex-wrap">
                     <span class="badge @webhookBadge">@webhookLabel</span>
                     @if (info!.LastWebhookAt.HasValue)
                     {
-                        <span class="text-subtle" style="font-size:.75rem">Last message received @info.LastWebhookAt.Value.ToString("MMM d, HH:mm") UTC</span>
+                        <span class="text-subtle text-xs">Last message received @info.LastWebhookAt.Value.ToString("MMM d, HH:mm") UTC</span>
                     }
                     else
                     {
-                        <span class="text-subtle" style="font-size:.75rem">No messages received yet — send your bot a message from Telegram to test.</span>
+                        <span class="text-subtle text-xs">No messages received yet — send your bot a message from Telegram to test.</span>
                     }
                 </div>
             }
             @if (!string.IsNullOrEmpty(info?.LastError))
             {
-                <div class="alert alert-warning mb-2" style="font-size:.8rem">@info!.LastError</div>
+                <div class="alert alert-warning mb-2 text-sm">@info!.LastError</div>
             }
 
             @if (connected)
             {
-                <div class="flex items-center gap-2 mt-1" style="flex-wrap:wrap">
+                <div class="flex items-center gap-2 mt-1 flex-wrap">
                     <form method="post" asp-page-handler="RefreshTelegram">
                         <button type="submit" class="btn btn-sm">Check webhook</button>
                     </form>
@@ -240,7 +240,7 @@ else
                 <input type="password" name="BotToken" class="text-input" autocomplete="off" spellcheck="false"
                        placeholder="123456789:AA… — from @@BotFather" required />
             </label>
-            <div class="text-subtle" style="font-size:.75rem">
+            <div class="text-subtle text-xs">
                 Create a bot with <strong>@@BotFather</strong> in Telegram and paste its token here. SculptFlow verifies it,
                 registers the webhook for you, and never shows the token again.
             </div>
@@ -312,7 +312,7 @@ else
                 <button type="submit" class="btn btn-sm">@(connected ? "Save changes" : "Connect manually")</button>
                 @if (info is not null && (connected || info.HasAccessToken))
                 {
-                    <span class="text-subtle" style="font-size:.75rem">Access token on file — hidden for your security.</span>
+                    <span class="text-subtle text-xs">Access token on file — hidden for your security.</span>
                 }
             </div>
         </form>

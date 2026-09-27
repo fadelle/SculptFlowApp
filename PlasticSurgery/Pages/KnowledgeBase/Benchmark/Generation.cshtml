@@ -45,9 +45,9 @@ else
 
     @* ---------- This generation's test cases ---------- *@
     <div class="mt-4">
-        <div class="flex items-center gap-2 mb-1" style="justify-content:space-between;flex-wrap:wrap">
+        <div class="flex items-center gap-2 mb-1 justify-between flex-wrap">
             <h3 class="bm-section-title">Test cases</h3>
-            <select id="bmg-case-view" class="select" aria-label="Filter cases" style="width:auto">
+            <select id="bmg-case-view" class="select w-auto" aria-label="Filter cases">
                 <option value="all">All cases</option>
                 <option value="reviewed">Reviewed</option>
                 <option value="unreviewed">Not reviewed</option>
@@ -70,7 +70,7 @@ else
         </div>
         <div class="flex items-center gap-2 mt-1" id="bmg-cases-pager" hidden>
             <button type="button" class="btn btn-sm" id="bmg-cases-prev">&larr; Previous</button>
-            <span class="text-subtle" style="font-size:.8rem" id="bmg-cases-range"></span>
+            <span class="text-subtle text-sm" id="bmg-cases-range"></span>
             <button type="button" class="btn btn-sm" id="bmg-cases-next">Next &rarr;</button>
         </div>
     </div>
@@ -78,8 +78,8 @@ else
     @* ---------- Detail overlay (a case, or a failed-case analysis) ---------- *@
     <div class="bm-overlay" id="bmg-overlay" hidden>
         <div class="card bm-modal" role="dialog" aria-modal="true" aria-labelledby="bmg-modal-title">
-            <div class="flex items-center gap-2" style="justify-content:space-between;margin-bottom:.75rem">
-                <h3 id="bmg-modal-title" style="margin:0;font-size:1.05rem">Details</h3>
+            <div class="flex items-center gap-2 justify-between mb-2">
+                <h3 id="bmg-modal-title" class="card-title">Details</h3>
                 <button type="button" class="btn btn-sm" id="bmg-modal-close">Close</button>
             </div>
             <div id="bmg-modal-body"></div>

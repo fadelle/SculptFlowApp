@@ -19,9 +19,9 @@ else
 {
     var h = Model.Health;
 
-    <div class="card mb-4" style="padding:1.25rem" id="whatsapp-health-card">
+    <div class="card mb-4 p-5" id="whatsapp-health-card">
         <div class="flex items-center justify-between mb-3">
-            <h2 style="margin:0">WhatsApp</h2>
+            <h2 class="m-0">WhatsApp</h2>
             <span class="badge @StatusBadgeHelper.CssClass(h.HealthLevel)" id="health-status-badge" style="font-size:.85rem;padding:.35rem .8rem">
                 @h.HealthLevel.Substring(0,1).ToUpper()@h.HealthLevel.Substring(1)
             </span>

@@ -35,8 +35,8 @@ else
 
         @if (Model.SelectedTemplate is not null)
         {
-            <div class="card mb-3" style="padding:1rem">
-                <div class="text-subtle" style="font-size:.78rem;text-transform:uppercase;letter-spacing:.05em">Template preview</div>
+            <div class="card mb-3 p-4">
+                <div class="text-subtle eyebrow">Template preview</div>
                 <p style="white-space:pre-wrap;margin:.4rem 0 0">@Model.SelectedTemplate.Body</p>
             </div>
 
@@ -52,7 +52,7 @@ else
                 {
                     <div class="field">
                         <span>Body variables</span>
-                        <div class="text-subtle mb-2" style="font-size:.78rem" id="variables-hint">
+                        <div class="text-subtle mb-2 text-sm" id="variables-hint">
                             Type literal text (sent to every recipient), or one of
                             <code>{LeadFullName}</code>, <code>{LeadFirstName}</code>, <code>{LeadPhone}</code>
                             to substitute each recipient's own value. Only available when recipients are
@@ -67,10 +67,10 @@ else
 
                 <div class="field">
                     <span>Send</span>
-                    <label class="flex items-center gap-1" style="font-weight:400">
+                    <label class="flex items-center gap-1 fw-normal">
                         <input type="radio" name="SendOption" value="now" checked="@(Model.SendOption != "later")" /> Now
                     </label>
-                    <label class="flex items-center gap-1" style="font-weight:400">
+                    <label class="flex items-center gap-1 fw-normal">
                         <input type="radio" name="SendOption" value="later" checked="@(Model.SendOption == "later")" /> Later
                         <input type="datetime-local" name="ScheduledAt" class="text-input" style="display:inline-block;width:auto" />
                     </label>
@@ -124,18 +124,18 @@ else
 
                 <!-- "Old leads who never booked" -->
                 <div id="reactivation-panel" class="card mb-3" style="padding:1.25rem;display:none;border-color:var(--accent)">
-                    <div class="flex items-center gap-2 mb-2" style="flex-wrap:wrap">
-                        <label class="flex items-center gap-1" style="font-weight:400">
+                    <div class="flex items-center gap-2 mb-2 flex-wrap">
+                        <label class="flex items-center gap-1 fw-normal">
                             Inactive for
-                            <select name="InactiveDays" id="inactive-days" class="select" style="width:auto">
+                            <select name="InactiveDays" id="inactive-days" class="select w-auto">
                                 <option value="30" selected="@(Model.InactiveDays == 30)">30 days</option>
                                 <option value="60" selected="@(Model.InactiveDays == 60)">60 days</option>
                                 <option value="90" selected="@(Model.InactiveDays == 90)">90 days</option>
                             </select>
                         </label>
-                        <label class="flex items-center gap-1" style="font-weight:400">
+                        <label class="flex items-center gap-1 fw-normal">
                             Procedure
-                            <select name="ReactivationProcedureId" id="reactivation-procedure" class="select" style="width:auto">
+                            <select name="ReactivationProcedureId" id="reactivation-procedure" class="select w-auto">
                                 <option value="">All procedures</option>
                                 @foreach (var p in Model.Procedures)
                                 {
@@ -145,9 +145,9 @@ else
                         </label>
                         @if (Model.LeadSources.Count > 0)
                         {
-                            <label class="flex items-center gap-1" style="font-weight:400">
+                            <label class="flex items-center gap-1 fw-normal">
                                 Lead source
-                                <select name="ReactivationSource" id="reactivation-source" class="select" style="width:auto">
+                                <select name="ReactivationSource" id="reactivation-source" class="select w-auto">
                                     <option value="">Any source</option>
                                     @foreach (var s in Model.LeadSources)
                                     {
@@ -167,7 +167,7 @@ else
 
                 <!-- "All contactable leads" -->
                 <div id="all-eligible-panel" class="card mb-3" style="padding:1.25rem;display:none">
-                    <div class="text-subtle mb-2" style="font-size:.78rem">
+                    <div class="text-subtle mb-2 text-sm">
                         Automatically excludes anyone who can't be contacted — no phone on file, opted out,
                         or otherwise not eligible.
                     </div>
@@ -181,10 +181,10 @@ else
 
                 <!-- "Build a custom audience" -->
                 <div id="custom-panel" class="card mb-3" style="padding:1.25rem;display:none">
-                    <div class="flex items-center gap-2 mb-2" style="flex-wrap:wrap">
-                        <label class="flex items-center gap-1" style="font-weight:400">
+                    <div class="flex items-center gap-2 mb-2 flex-wrap">
+                        <label class="flex items-center gap-1 fw-normal">
                             Procedure
-                            <select name="CustomProcedureId" id="custom-procedure" class="select" style="width:auto">
+                            <select name="CustomProcedureId" id="custom-procedure" class="select w-auto">
                                 <option value="">All procedures</option>
                                 @foreach (var p in Model.Procedures)
                                 {
@@ -192,9 +192,9 @@ else
                                 }
                             </select>
                         </label>
-                        <label class="flex items-center gap-1" style="font-weight:400">
+                        <label class="flex items-center gap-1 fw-normal">
                             Inactive for
-                            <select name="CustomInactiveDays" id="custom-inactive-days" class="select" style="width:auto">
+                            <select name="CustomInactiveDays" id="custom-inactive-days" class="select w-auto">
                                 <option value="" selected="@(Model.CustomInactiveDays is null)">Any time</option>
                                 <option value="30" selected="@(Model.CustomInactiveDays == 30)">30+ days</option>
                                 <option value="60" selected="@(Model.CustomInactiveDays == 60)">60+ days</option>
@@ -206,7 +206,7 @@ else
                     <button type="button" id="advanced-filters-toggle" class="btn btn-sm mb-2">Advanced filters ▾</button>
 
                     <div id="advanced-filters" style="display:none">
-                        <div class="flex items-center gap-2 mb-2" style="flex-wrap:wrap">
+                        <div class="flex items-center gap-2 mb-2 flex-wrap">
                             @{ await RenderMultiSelect("CustomLeadStatuses", "Lead status", Model.LeadStatusOptions, Model.CustomLeadStatuses); }
                             @{ await RenderMultiSelect("CustomQualificationStatuses", "Qualification status", Model.QualificationStatusOptions, Model.CustomQualificationStatuses); }
                             @if (Model.LeadSources.Count > 0)
@@ -215,34 +215,34 @@ else
                             }
                             @{ await RenderMultiSelect("CustomAppointmentStatuses", "Appointment status", Model.AppointmentStatusOptions, Model.CustomAppointmentStatuses); }
                         </div>
-                        <div class="flex items-center gap-2 mb-2" style="flex-wrap:wrap">
-                            <label class="flex items-center gap-1" style="font-weight:400">
+                        <div class="flex items-center gap-2 mb-2 flex-wrap">
+                            <label class="flex items-center gap-1 fw-normal">
                                 Created after
-                                <input type="date" name="CustomCreatedAfter" id="custom-created-after" class="text-input" style="width:auto" value="@(Model.CustomCreatedAfter?.ToString("yyyy-MM-dd"))" />
+                                <input type="date" name="CustomCreatedAfter" id="custom-created-after" class="text-input w-auto" value="@(Model.CustomCreatedAfter?.ToString("yyyy-MM-dd"))" />
                             </label>
-                            <label class="flex items-center gap-1" style="font-weight:400">
+                            <label class="flex items-center gap-1 fw-normal">
                                 Created before
-                                <input type="date" name="CustomCreatedBefore" id="custom-created-before" class="text-input" style="width:auto" value="@(Model.CustomCreatedBefore?.ToString("yyyy-MM-dd"))" />
+                                <input type="date" name="CustomCreatedBefore" id="custom-created-before" class="text-input w-auto" value="@(Model.CustomCreatedBefore?.ToString("yyyy-MM-dd"))" />
                             </label>
                         </div>
-                        <div class="flex items-center gap-2 mb-2" style="flex-wrap:wrap">
-                            <label class="flex items-center gap-1" style="font-weight:400">
+                        <div class="flex items-center gap-2 mb-2 flex-wrap">
+                            <label class="flex items-center gap-1 fw-normal">
                                 Last contacted after
-                                <input type="date" name="CustomLastContactedAfter" id="custom-last-contacted-after" class="text-input" style="width:auto" value="@(Model.CustomLastContactedAfter?.ToString("yyyy-MM-dd"))" />
+                                <input type="date" name="CustomLastContactedAfter" id="custom-last-contacted-after" class="text-input w-auto" value="@(Model.CustomLastContactedAfter?.ToString("yyyy-MM-dd"))" />
                             </label>
-                            <label class="flex items-center gap-1" style="font-weight:400">
+                            <label class="flex items-center gap-1 fw-normal">
                                 Last contacted before
-                                <input type="date" name="CustomLastContactedBefore" id="custom-last-contacted-before" class="text-input" style="width:auto" value="@(Model.CustomLastContactedBefore?.ToString("yyyy-MM-dd"))" />
+                                <input type="date" name="CustomLastContactedBefore" id="custom-last-contacted-before" class="text-input w-auto" value="@(Model.CustomLastContactedBefore?.ToString("yyyy-MM-dd"))" />
                             </label>
                         </div>
-                        <div class="flex items-center gap-2 mb-2" style="flex-wrap:wrap">
-                            <label class="flex items-center gap-1" style="font-weight:400">
+                        <div class="flex items-center gap-2 mb-2 flex-wrap">
+                            <label class="flex items-center gap-1 fw-normal">
                                 Country
-                                <input type="text" name="CustomCountry" id="custom-country" class="text-input" style="width:auto" value="@Model.CustomCountry" placeholder="e.g. LB" />
+                                <input type="text" name="CustomCountry" id="custom-country" class="text-input w-auto" value="@Model.CustomCountry" placeholder="e.g. LB" />
                             </label>
-                            <label class="flex items-center gap-1" style="font-weight:400">
+                            <label class="flex items-center gap-1 fw-normal">
                                 City
-                                <input type="text" name="CustomCity" id="custom-city" class="text-input" style="width:auto" value="@Model.CustomCity" placeholder="e.g. Beirut" />
+                                <input type="text" name="CustomCity" id="custom-city" class="text-input w-auto" value="@Model.CustomCity" placeholder="e.g. Beirut" />
                             </label>
                         </div>
                     </div>

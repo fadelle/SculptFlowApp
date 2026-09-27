@@ -24,14 +24,18 @@ else
         <div class="alert alert-warning mb-3">@Model.ErrorMessage</div>
     }
 
-    <div class="card mb-3" style="padding:1rem">
-        <div style="font-size:1.1rem;font-weight:600">@(Model.Appointment.LeadFullName ?? "—")</div>
-        <div class="text-subtle" style="font-size:.85rem">
-            @(Model.Appointment.ProcedureName ?? "No procedure on file") &middot; @Model.Appointment.ScheduledStart.ToString("MMM d, yyyy HH:mm")
+    <div class="card profile-header mb-3">
+        <span class="avatar-md">@(string.IsNullOrWhiteSpace(Model.Appointment.LeadFullName) ? "?" : Model.Appointment.LeadFullName.Trim()[..1])</span>
+        <div class="profile-header-main">
+            <div class="profile-header-name"><a href="/dashboard/leads/@Model.Appointment.LeadId">@(Model.Appointment.LeadFullName ?? "—")</a></div>
+            <div class="text-muted text-md">
+                @(Model.Appointment.ProcedureName ?? "No procedure on file") &middot; @Model.Appointment.ScheduledStart.ToString("MMM d, yyyy HH:mm")
+            </div>
         </div>
+        <span class="badge @StatusBadgeHelper.CssClass(Model.Appointment.Status)">@FilterLabelHelper.Label(Model.Appointment.Status)</span>
     </div>
 
-    <div class="card" style="padding:1.25rem;max-width:480px">
+    <div class="card p-5 mw-480">
         <form method="post" class="integration-form">
             <label class="field">
                 <span>Appointment status</span>
