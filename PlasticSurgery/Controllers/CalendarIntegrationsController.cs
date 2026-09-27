@@ -5,7 +5,10 @@ using PlasticSurgery.Services;
 namespace PlasticSurgery.Controllers;
 
 /// <summary>Settings → Calendar Integrations' API. clinicId always from CurrentClinicContext, never the client —
-/// same rule as every other dashboard controller. See ICalendarIntegrationService for the full design.</summary>
+/// same rule as every other dashboard controller. See ICalendarIntegrationService for the full design. Connect
+/// itself is NOT here — a JSON POST can't do a full-page redirect to Google/Microsoft's consent screen, so that one
+/// lives on CalendarOAuthController as a plain GET route instead; the actual Razor Page UI doesn't call this
+/// controller at all (it uses its own OnPost* handlers), but it's kept as the API surface for the feature.</summary>
 [ApiController]
 [Route("api/calendar-integrations")]
 public class CalendarIntegrationsController : DashboardApiController
@@ -25,22 +28,13 @@ public class CalendarIntegrationsController : DashboardApiController
         return Ok(await _calendar.ListAsync(clinicId.Value, ct));
     }
 
-    [HttpPost("{provider}/connect")]
-    public async Task<ActionResult<CalendarIntegrationResponse>> Connect(string provider, CancellationToken ct)
-    {
-        var clinicId = await GetClinicIdAsync(ct);
-        if (clinicId is null) return Forbid();
-        try { return Ok(await _calendar.RequestConnectAsync(clinicId.Value, provider, ct)); }
-        catch (ArgumentException ex) { return BadRequest(new { error = ex.Message }); }
-    }
-
     [HttpPost("{provider}/refresh-calendars")]
     public async Task<ActionResult> RefreshCalendars(string provider, CancellationToken ct)
     {
         var clinicId = await GetClinicIdAsync(ct);
         if (clinicId is null) return Forbid();
         try { await _calendar.RequestRefreshCalendarsAsync(clinicId.Value, provider, ct); return NoContent(); }
-        catch (ArgumentException ex) { return BadRequest(new { error = ex.Message }); }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException) { return BadRequest(new { error = ex.Message }); }
     }
 
     [HttpPost("{provider}/select-calendar")]

@@ -1524,3 +1524,12 @@ create trigger trg_appointment_calendar_syncs_updated_at before update on appoin
 -- appointment_calendar_syncs: the sync row didn't know which operation (create/update/cancel) its last request
 -- was for, so a successful cancel callback couldn't be told apart from a successful create/update one.
 alter table appointment_calendar_syncs add column if not exists last_operation varchar(10);
+
+-- calendar_integrations: connect/list-calendars/disconnect now happen directly against Google/Outlook from
+-- SculptFlow (no longer via n8n) — the clinic's own OAuth tokens are stored here so SculptFlow can refresh them
+-- and hand a fresh access token to n8n's sync webhook for the one thing n8n still does (the actual create/update/
+-- cancel API call). MVP NOTE (same as channel_integrations.access_token): plain text — move to an encrypted
+-- column/secrets manager before this handles real patient data at scale.
+alter table calendar_integrations add column if not exists access_token text;
+alter table calendar_integrations add column if not exists refresh_token text;
+alter table calendar_integrations add column if not exists token_expires_at timestamptz;

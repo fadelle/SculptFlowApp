@@ -1164,83 +1164,125 @@ MULTIPLE_UPCOMING_APPOINTMENTS, INVALID_REQUEST. An unknown/missing `code` → 4
   OUTBOUND_MESSAGE_FAILED for a WhatsApp Business App echo is theoretically possible but never realistically fires, since Meta would
   not send a failed webhook for a message it did not relay. There is no settings UI to mute a notification type; all 8 are always on.
 
-## 26. Calendar Integrations (Google/Outlook, one-way SculptFlow -> external) — built, tested, NOT pushed (awaiting explicit "push")
+## 26. Calendar Integrations (Google/Outlook, one-way SculptFlow -> external) — v2: SculptFlow owns OAuth directly — built, tested, NOT pushed (awaiting explicit "push")
 
-- **Business shape**: staff connect the clinic's Google and/or Outlook calendar and pick which calendar (by its real name) SculptFlow
-  appointments sync to. SculptFlow is authoritative and one-way only: booking/rescheduling/cancelling here updates the external
-  calendar; nothing made directly in Google/Outlook is ever read back. New sidebar link **Calendar Integrations**
-  (`/settings/calendar-integrations`, placed next to the existing Integrations link) — a new page, not a tab bolted onto the old one.
-- **SculptFlow has zero Google/Outlook-specific code.** It never talks to either provider and never sees an OAuth token. A SEPARATE
-  n8n workflow owns the real OAuth connection and the actual Calendar API calls; SculptFlow only sends it small normalized triggers
-  and receives callbacks — the exact same send/callback shape already used for the AI trigger (`IAiTriggerNotifier`) and the
-  Knowledge Benchmark's async generation. This directly satisfies "do not hardcode Google/Outlook sync logic into the appointment flow."
-- **New tables**: `calendar_integrations` (one row per clinic+provider — `status`, the opaque `external_connection_ref` n8n gave back
-  to look its own stored credentials up by, `account_display_name`, `selected_calendar_id/name`, `sync_enabled`, and
-  `is_healthy`/`last_problem_message`/`last_synced_at` mirroring the WhatsApp health pattern); `calendar_integration_calendars`
-  (the cached list of {id, name} n8n reported, replaced wholesale on connect/refresh — this is what makes the picker show real
-  calendar names instead of asking staff to paste a technical id); `appointment_calendar_syncs` (**one row per (appointment,
-  connected calendar), unique-constrained** — reused across create → reschedule → cancel, `external_event_id` + `last_operation`
-  (create/update/cancel) + `last_request_id` — this row IS the duplicate-prevention mechanism and the callback-staleness guard).
-  All applied live; no change to any existing table.
-- **`Services/ICalendarSyncNotifier.cs`** (`CalendarSyncNotifier`, `AddHttpClient`-registered exactly like `AiTriggerNotifier`):
-  `NotifyConnectAsync` → `N8n:CalendarConnectWebhookUrl` (action: connect/refresh_calendars/disconnect) and `NotifySyncAsync` →
-  `N8n:CalendarSyncWebhookUrl` (operation: create/update/cancel, with the clinic-local `ScheduledStart/End`, the clinic's IANA
-  timezone for display only, patient name + procedure/consultation type + a link back to the SculptFlow appointment — deliberately
-  no notes/conversation history). Both config keys default empty (appsettings.json, `_comment3`) — connect attempts fail with a
-  logged "not configured" until set via user-secrets/env vars; **never throws**, so a calendar problem can never affect the caller.
-- **`Services/ICalendarIntegrationService.cs`** (`CalendarIntegrationService`) — `ListAsync` (always 2 rows, google+outlook, synthetic
-  disconnected if never connected, same convention as `IChannelIntegrationService`), `RequestConnectAsync`/`RequestRefreshCalendarsAsync`
-  (fire the n8n trigger), `SelectCalendarAsync` (validated against the cached list; local write, no n8n call),
-  `SetSyncEnabledAsync` (refuses to turn on with no calendar selected), `DisconnectAsync` (clears the row, best-effort tells n8n to
-  forget the credentials, leaves `appointment_calendar_syncs` history alone), `ApplyConnectCallbackAsync` (**cross-checks the
-  `CalendarIntegrationId` in the callback actually belongs to the `ClinicId` it claims** — a spoofed callback is silently ignored,
-  verified live), `ApplySyncCallbackAsync` (**ignores a callback whose `RequestId` doesn't match the row's `LastRequestId`** — a
-  stale/superseded reply from an appointment that was already rescheduled again is a no-op), and
-  **`TriggerAppointmentSyncAsync`** — called from `AppointmentService.NotifyChangedAsync` (§24h/25's existing hook, extended a third
-  time) right after the SignalR calendar refresh and the business notification, for EVERY connected+sync-enabled calendar. It never
-  throws (wrapped in its own try/catch) and only acts on `created`/`rescheduled`/`canceled` — `status_changed` (attended/no_show/
-  confirmed) is a safe no-op, verified live.
-- **Two controllers**: `CalendarIntegrationsController` (dashboard-facing, `DashboardApiController`, clinicId from
-  `CurrentClinicContext`) for connect/refresh/select/toggle/disconnect; `CalendarIntegrationsIngestController`
-  (`[RequireIngestKey]`, same shared secret as every other n8n endpoint) for the two callbacks.
-- **UI**: `Pages/Settings/CalendarIntegrations.cshtml(.cs)` — plain server-rendered forms (no JS file), same idiom as Clinic Info's
-  Availability tab, not the JS/fetch idiom the Appointments calendar or Inbox use. Two provider cards mirroring the existing
-  `.integration-card` styling: status badge (Connected/green, Needs attention or Connection Failed/red, Connecting…/Disconnected/
-  gray), the connected account, a calendar `<select>` of real names (auto-submits on change), Turn sync on/off (disabled until a
-  calendar is chosen), Refresh calendars, Disconnect (with a confirm prompt), and the last-synced timestamp.
-- **A bug caught by testing, fixed before finishing**: the first version of `ApplySyncCallbackAsync` had no way to tell a successful
-  *cancel* callback apart from a successful *create/update* one (the sync row didn't record which operation its pending request was
-  for), so a cancelled appointment's sync row was landing on `synced` instead of `canceled`. Fixed by adding `last_operation` to
-  `appointment_calendar_syncs` (schema + entity + both read/write sites) and re-verified live.
-- **Tenant isolation**: every dashboard call goes through `CurrentClinicContext`; both ingest callbacks re-validate the id in the
-  URL/body actually belongs to the `clinicId` claimed (see above). Verified live: Clinic B's list showed both providers disconnected
-  throughout, could not touch Clinic A's connection, and a callback that named Clinic A's integration but claimed `clinicId=B` was
-  silently ignored with Clinic A's row unchanged.
-- **Integration health**: `is_healthy`/`last_problem_message` on `calendar_integrations`, same "notify only on the transition into
-  unhealthy" rule as WhatsApp health (§24h) — reuses `NotificationType.IntegrationUnhealthy` directly (no schema change to
-  `notifications`; `Link` points at `/settings/calendar-integrations` instead of a `ChannelIntegrationId`, since calendar
-  integrations aren't rows in `channel_integrations`). Verified live: a failing sync notified once, a second failure in the same
-  unhealthy state did not re-notify, and recovering then failing again correctly notified a second time.
-- **Manual/live testing performed** (throwaway clinics, deleted+verified after): connect → simulated n8n success callback with two
-  calendars → selected one → turned sync on (and confirmed it's refused with no calendar chosen); booked an appointment and confirmed
-  exactly one `appointment_calendar_syncs` row was created (status pending, no external id yet) **before** the (unconfigured, logged
-  and swallowed) outbound call; simulated the create callback and confirmed `synced` + the external event id stored; **rescheduled
-  the same appointment and confirmed the SAME row was reused (count stayed at 1) with the old external event id preserved** for the
-  update trigger; simulated the reschedule callback; cancelled and confirmed the same row's operation was `cancel`, and after the
-  bug fix above landed on `canceled` with the event id intact; sent a callback with a wrong `RequestId` and confirmed it was ignored;
-  confirmed a booking refused by availability (`SLOT_UNAVAILABLE`) created zero sync rows, and marking an appointment `attended`
-  created zero sync rows; the health-transition/dedup/re-notify sequence above; the isolation and spoof-callback checks above;
-  disconnect clearing the row and calendars; and the actual browser UI — the new sidebar link, both provider cards in their
-  Connected/Connection Failed states with real calendar names in the dropdown, and clicking "Turn sync off" live.
-- **Limitations**: this is genuinely one-way — nothing here reads Google/Outlook back, per the task's explicit scope. No conflict
-  detection, no patient invitations, no recurring appointments, no resource/room scheduling. Connect/refresh/disconnect assume n8n
-  eventually calls back; there's no UI timeout/retry if it never does (the row just stays `pending` — a limitation to revisit if it
-  matters in practice, not something this pass tried to solve).
-- **Setup required before this is live**: a separate n8n workflow (outside this repo) that (a) performs the real Google/Microsoft
-  OAuth authorization and stores the resulting tokens keyed by an opaque reference it invents and returns as `externalConnectionRef`,
-  (b) on `action=connect`/`refresh_calendars` calls back `POST /api/calendar-integrations/connect-callback` with the account name and
-  calendar list, (c) on `action=disconnect` may revoke/forget the stored tokens, (d) on the sync webhook creates/updates/cancels the
-  external event using the stored tokens for `externalConnectionRef`, on the calendar named `externalCalendarId`, and calls back
-  `POST /api/calendar-integrations/sync-callback` with the result. Then set `N8n__CalendarConnectWebhookUrl` and
-  `N8n__CalendarSyncWebhookUrl` (env vars or user-secrets) to that workflow's two webhook URLs; the existing `N8n:IngestApiKey`
-  (`X-Ingest-Key` header) is reused for both callbacks, no new secret to manage.
+- **Business shape (unchanged from v1)**: staff connect the clinic's Google and/or Outlook calendar and pick which calendar (by its
+  real name) SculptFlow appointments sync to. SculptFlow is authoritative and one-way only: booking/rescheduling/cancelling here
+  updates the external calendar; nothing made directly in Google/Outlook is ever read back. Sidebar link **Calendar Integrations**
+  (`/settings/calendar-integrations`).
+- **Architecture change (v2, this pass)**: v1 routed connect/disconnect/list-calendars through a separate n8n workflow, with
+  SculptFlow never touching Google/Outlook directly. That was replaced: **SculptFlow now owns the entire OAuth2 relationship
+  itself** — the real authorization redirect, the callback, token storage/refresh, and calendar listing, all with zero n8n
+  involvement, so Calendar Integrations connect/disconnect/list-calendars all keep working even if n8n is completely down. n8n's
+  role is now narrowed to exactly one thing: executing the actual appointment create/update/cancel call against the provider's
+  calendar API, invoked only after a SculptFlow appointment change has already succeeded — using an access token SculptFlow
+  refreshed and hands over fresh each time. The `appointment_calendar_syncs` dedup/staleness mechanism, the health-notification
+  rule, and `AppointmentService`'s hook point are all unchanged from v1.
+- **New: `Services/ICalendarProviderClient.cs`** + **`GoogleCalendarProviderClient`** + **`OutlookCalendarProviderClient`** — real
+  OAuth2 clients (resolved by `Provider`, same multi-implementation-behind-one-interface pattern as `IChannelSender`):
+  `BuildAuthorizationUrl`, `ExchangeCodeAsync`, `RefreshAccessTokenAsync`, `GetAccountEmailAsync`, `ListCalendarsAsync`, and a
+  best-effort (never-throwing) `RevokeAsync`. Google: `accounts.google.com`/`oauth2.googleapis.com` (v2 authorization-code flow,
+  `access_type=offline&prompt=consent` so a refresh token is reissued on every reconnect, scopes
+  `calendar.readonly`+`calendar.events`), account email from `oauth2/v3/userinfo`, calendars from
+  `calendar/v3/users/me/calendarList`, revoke via `oauth2.googleapis.com/revoke`. Outlook: Microsoft identity platform v2.0
+  (`login.microsoftonline.com/{tenant}/oauth2/v2.0/*`, tenant defaults to `common` so both work/school and personal accounts can
+  connect), scopes `offline_access`+`Calendars.ReadWrite`+`User.Read` via Microsoft Graph, calendars from `me/calendars`; no
+  per-token revoke endpoint exists for this flow on Microsoft's side, so `RevokeAsync` is a documented no-op there (tokens are
+  still dropped locally, which fully stops SculptFlow from using them).
+- **New: `Controllers/CalendarOAuthController.cs`** (`[Authorize]`, extends `Controller` — not `DashboardApiController`, because
+  TempData is only wired up on the full `Controller` base) at route `calendar-oauth`, browser-redirect based (not JSON):
+  `GET {provider}/connect` marks the row Pending and redirects to the provider's consent screen; `GET {provider}/callback` is
+  where the provider sends the browser back. CSRF/state handling uses ASP.NET Core's built-in `IDataProtectionProvider` /
+  `ITimeLimitedDataProtector` (purpose `PlasticSurgery.CalendarOAuthState`, 15-minute lifetime) to protect a `{ClinicId,
+  Provider}` payload as the OAuth `state` param — no new table needed, and a tampered/expired/wrong-clinic state is rejected
+  before any token exchange is attempted (verified live — see Testing below). The redirect_uri is built via the same
+  `App:PublicBaseUrl`-first convention as `TelegramIntegrationService.ResolvePublicBaseUrl()`, since it must exactly match what's
+  registered in the Google/Azure app console. A config problem (missing ClientId/Secret, missing PublicBaseUrl) is caught and
+  shown as a friendly `ErrorMessage` on the settings page rather than a raw 500.
+- **`Services/ICalendarIntegrationService.cs` / `CalendarIntegrationService.cs`** — `RequestConnectAsync` now just marks Pending (no
+  n8n trigger); new `CompleteConnectAsync` (stores tokens, lists calendars, marks Connected) and `FailConnectAsync` (marks Error
+  with a message) replace the old n8n-callback-driven `ApplyConnectCallbackAsync`, which is removed entirely.
+  `RequestRefreshCalendarsAsync` now does the real work synchronously (refreshes the token if needed, calls the provider directly,
+  throws `ArgumentException` if not connected or `InvalidOperationException` — and marks the integration unhealthy — if the
+  provider call fails). `DisconnectAsync` now best-effort revokes via the provider client, then always clears local tokens/state
+  regardless of whether the revoke succeeded. New private `EnsureFreshAccessTokenAsync` helper (refreshes and persists a new
+  access token when the stored one is missing/within 5 minutes of expiring; marks the integration unhealthy and throws if there's
+  no refresh token or the refresh fails) is used by both `RequestRefreshCalendarsAsync` and `TriggerAppointmentSyncAsync` — the
+  latter now calls it per integration before building the sync payload, and skips (continues to the next integration) rather than
+  failing the whole loop if a token can't be refreshed. `ApplySyncCallbackAsync` and the dedup/staleness structure inside
+  `TriggerAppointmentSyncAsync` are **unchanged** from v1 apart from sending `AccessToken` instead of `ExternalConnectionRef` in the
+  trigger payload.
+- **`Services/ICalendarSyncNotifier.cs`** — `NotifyConnectAsync` removed (nothing calls it anymore); `NotifySyncAsync` →
+  `N8n:CalendarSyncWebhookUrl` is unchanged. `CalendarSyncTriggerPayload` now carries `AccessToken` (a token SculptFlow already
+  refreshed) instead of `ExternalConnectionRef`; n8n uses it as-is and must not try to refresh or store it.
+- **Removed**: `CalendarConnectTriggerPayload`, `CalendarConnectCallbackRequest`, `ApplyConnectCallbackAsync`,
+  `CalendarIntegrationsIngestController.ConnectCallback` (`/api/calendar-integrations/connect-callback`), `N8n:CalendarConnectWebhookUrl`.
+  `CalendarIntegrationsController.Connect` (the old JSON POST) is also removed — a JSON POST can't do a full-page OAuth redirect,
+  and this controller isn't even called by the actual UI (the Razor Page uses its own `OnPost*` handlers) — the rest of that JSON
+  API is kept as-is.
+- **Schema**: `calendar_integrations` gained `access_token`/`refresh_token`/`token_expires_at` (all nullable text/timestamptz).
+  Same plaintext-MVP caveat as `channel_integrations.access_token` — move to an encrypted column/secrets manager before this
+  handles real patient data at scale. Applied live; no other table changed. `external_connection_ref` still exists on the table
+  (harmless/unused now — the new flow never populates it) rather than being dropped, to keep this a minimal, additive change.
+- **New config**: `GoogleCalendar:ClientId/ClientSecret` and `MicrosoftCalendar:ClientId/ClientSecret/TenantId` (TenantId defaults
+  `common`) in appsettings.json, ClientId/TenantId checked in empty with setup comments, ClientSecret always via user-secrets /
+  `GoogleCalendar__ClientSecret` / `MicrosoftCalendar__ClientSecret` on Render — same convention as `Meta:AppSecret`.
+  `N8n:CalendarConnectWebhookUrl` removed from appsettings.json; `N8n:CalendarSyncWebhookUrl` kept.
+- **UI**: only the "Connect" control changed — it's now a plain `<a href="/calendar-oauth/{provider}/connect">` link (a form POST
+  handler can't do a full-page redirect to Google/Microsoft's consent screen), styled with the same `.btn.btn-primary.btn-sm`
+  classes so it looks identical to the old button. Refresh/Select/Sync-toggle/Disconnect are unchanged plain server-form posts.
+- **Testing performed this pass** (two throwaway clinics, real network calls against Google's actual OAuth endpoints using
+  intentionally fake/test client credentials — never real ones — cleaned up and verified after):
+  - Connect with no `GoogleCalendar:ClientId`/`ClientSecret` configured → friendly `ErrorMessage`, no 500, row not left dangling in
+    Pending for a config problem.
+  - Connect with an unknown provider name, and while logged out → handled correctly (redirect-with-error, redirect-to-login).
+  - Connect with fake-but-present credentials → correctly built a real, well-formed `accounts.google.com` authorization URL and
+    marked the row Pending.
+  - Callback: provider denies consent (`error=access_denied`) → row marked Error with the provider's message, no crash.
+  - Callback: no `code` and no `error` (malformed) → friendly "provider did not return an authorization code" message.
+  - Callback: tampered/bogus `state` → rejected as "expired or invalid," no token exchange attempted.
+  - Callback: valid state, fake code → **a real POST to `oauth2.googleapis.com/token`**, which correctly returned Google's own
+    `401 invalid_client`, which was caught, logged, and surfaced as a friendly message with the row marked Error — confirming the
+    whole code-exchange path, including real-network-failure handling, end-to-end.
+  - **Tenant isolation**: a state minted for Clinic A's session, replayed under Clinic B's session, was rejected — Clinic B's own
+    row was marked Error (its own rejected attempt), Clinic A's row was left completely untouched.
+  - Refresh-calendars on a disconnected provider → `ArgumentException` surfaced as a friendly message.
+  - Sync-enabled with no calendar selected → refused with a friendly message (unchanged validation, re-verified).
+  - Refresh-calendars on a row seeded (via direct SQL, for test purposes only) with a fake-but-current access token → **a real
+    GET to `googleapis.com/calendar/v3/users/me/calendarList`**, which correctly returned `401`, handled cleanly, row marked
+    unhealthy ("Needs attention") with the real Google error message shown, no crash.
+  - Same row seeded with an **expired** token and a fake refresh token → confirmed the code path attempted a real refresh-token
+    grant against `oauth2.googleapis.com/token` (not just reused the stale token), which failed with Google's real `invalid_client`
+    error, handled cleanly, row marked unhealthy with a "reconnect this calendar" message.
+  - Disconnect on a row with fake tokens on file → completed in under a second (including a real, best-effort revoke call to
+    Google), local status/tokens/selected-calendar/sync-enabled all verified cleared in the database afterward regardless of the
+    revoke call's own result.
+  - Full solution build: 0 errors (one pre-existing, unrelated nullable warning on a line this pass didn't touch).
+- **NOT independently re-tested live this pass** (disclosed explicitly, not glossed over): a full successful connect (real Google/
+  Microsoft consent + real tokens) and the `TriggerAppointmentSyncAsync` call site's live behavior with a genuinely healthy
+  integration — neither is possible without real Google Cloud/Azure AD app credentials, which don't exist in this environment (no
+  `GoogleCalendar`/`MicrosoftCalendar` secrets were present before or after this pass — the fake ones used for testing above were
+  set and then removed). `TriggerAppointmentSyncAsync`'s only changes were (a) filtering on `AccessToken != null` instead of
+  `ExternalConnectionRef != null`, (b) calling the now-verified `EnsureFreshAccessTokenAsync` per integration and skipping ones
+  that can't refresh, (c) sending `AccessToken` instead of `ExternalConnectionRef` in the payload — reviewed by inspection and
+  covered indirectly via the token-refresh tests above (same helper method), not via a live appointment booking in this pass.
+- **Limitations (mostly unchanged from v1)**: still genuinely one-way — nothing reads Google/Outlook back. No conflict detection, no
+  patient invitations, no recurring appointments, no resource/room scheduling. Tokens are stored in plain text (MVP caveat, see
+  Schema above). Outlook `RevokeAsync` is a no-op (Microsoft Graph has no per-app revoke endpoint for this flow that doesn't nuke
+  every session the user has everywhere) — disconnecting still fully works locally, the token is just not actively invalidated
+  provider-side.
+- **Setup required before this is live**:
+  1. **Google Cloud Console** → APIs & Services → Credentials → Create OAuth client ID, type "Web application," with an
+     Authorized redirect URI of `{App:PublicBaseUrl}/calendar-oauth/google/callback`; enable the Google Calendar API for the
+     project. Set `GoogleCalendar:ClientId` (appsettings.json is fine, not secret) and `GoogleCalendar:ClientSecret` (user-secrets
+     locally / `GoogleCalendar__ClientSecret` on Render).
+  2. **Azure Portal** → Microsoft Entra ID → App registrations → New registration, platform "Web," redirect URI
+     `{App:PublicBaseUrl}/calendar-oauth/outlook/callback`; grant delegated Microsoft Graph permissions `Calendars.ReadWrite`,
+     `User.Read`, `offline_access`; create a client secret under Certificates & secrets. Set `MicrosoftCalendar:ClientId`,
+     `MicrosoftCalendar:TenantId` (or leave `common`), and `MicrosoftCalendar:ClientSecret` (user-secrets /
+     `MicrosoftCalendar__ClientSecret`).
+  3. `App:PublicBaseUrl` must already be set to the real public HTTPS origin (it's the same setting Telegram already needs) — the
+     OAuth redirect URI is built from it and must match the console/portal registration exactly.
+  4. The n8n Calendar Sync workflow from v1 is unchanged and still needed for appointment sync itself: it now receives
+     `accessToken` directly in the trigger instead of an `externalConnectionRef` it had to look up — update that one field
+     mapping in the existing n8n workflow, nothing else about it changes. Set `N8n__CalendarSyncWebhookUrl` as before.

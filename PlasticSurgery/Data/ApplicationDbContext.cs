@@ -755,6 +755,9 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.Property(x => x.IsHealthy).HasColumnName("is_healthy");
             e.Property(x => x.LastProblemMessage).HasColumnName("last_problem_message");
             e.Property(x => x.LastSyncedAt).HasColumnName("last_synced_at");
+            e.Property(x => x.AccessToken).HasColumnName("access_token");
+            e.Property(x => x.RefreshToken).HasColumnName("refresh_token");
+            e.Property(x => x.TokenExpiresAt).HasColumnName("token_expires_at");
             e.Property(x => x.CreatedAt).HasColumnName("created_at");
             e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
 

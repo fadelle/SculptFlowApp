@@ -74,10 +74,7 @@ else
 
             @if (!connected)
             {
-                <form method="post" asp-page-handler="Connect" class="mt-2">
-                    <input type="hidden" name="provider" value="@provider" />
-                    <button type="submit" class="btn btn-primary btn-sm">Connect @title</button>
-                </form>
+                <a href="/calendar-oauth/@provider/connect" class="btn btn-primary btn-sm mt-2">Connect @title</a>
             }
             else
             {

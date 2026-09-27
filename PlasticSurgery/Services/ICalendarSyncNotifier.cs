@@ -3,16 +3,13 @@ using PlasticSurgery.Dtos;
 
 namespace PlasticSurgery.Services;
 
-/// <summary>The two outbound calls to n8n's dedicated Calendar Sync workflow — connect/refresh/disconnect on one
-/// webhook, appointment create/update/cancel on the other. SculptFlow has ZERO Google/Outlook-specific code: it never
-/// talks to either provider and never sees an OAuth token: n8n owns the provider connection entirely, and reports
-/// back to CalendarIntegrationsIngestController when it has something to say. Neither method throws — a calendar
-/// sync is always secondary to the SculptFlow operation it followed, which has already succeeded and been saved by
-/// the time either of these is called.</summary>
+/// <summary>The one remaining outbound call to n8n's dedicated Calendar Sync workflow: appointment create/update/
+/// cancel. Connect/disconnect/list-calendars are handled entirely inside SculptFlow now (see ICalendarProviderClient,
+/// CalendarOAuthController) — n8n only ever receives a fresh access token to make the one API call this trigger
+/// asks for. Never throws — a calendar sync is always secondary to the SculptFlow operation it followed, which has
+/// already succeeded and been saved by the time this is called.</summary>
 public interface ICalendarSyncNotifier
 {
-    Task NotifyConnectAsync(CalendarConnectTriggerPayload payload, CancellationToken ct = default);
-
     Task NotifySyncAsync(CalendarSyncTriggerPayload payload, CancellationToken ct = default);
 }
 
@@ -30,9 +27,6 @@ public class CalendarSyncNotifier : ICalendarSyncNotifier
         _configuration = configuration;
         _logger = logger;
     }
-
-    public Task NotifyConnectAsync(CalendarConnectTriggerPayload payload, CancellationToken ct = default) =>
-        PostAsync("N8n:CalendarConnectWebhookUrl", payload, payload.CalendarIntegrationId, ct);
 
     public Task NotifySyncAsync(CalendarSyncTriggerPayload payload, CancellationToken ct = default) =>
         PostAsync("N8n:CalendarSyncWebhookUrl", payload, payload.CalendarIntegrationId, ct);
