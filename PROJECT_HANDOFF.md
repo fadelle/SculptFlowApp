@@ -1,6 +1,6 @@
 # SculptFlow (MySculptFlow) — Project Handoff
 
-_Last updated: 2026-09-20 (Telegram, KB upload, website scraping, unread tracking, self-service clinic registration, Staff page). Written for session continuity — read this first after any context reset.
+_Last updated: 2026-09-27 (doc sync: everything through Calendar Integrations `895af7f` is committed and pushed to `main`; §11 benchmark, §14 calendar, §24 availability/AI booking, §25 notifications and §26 calendar integrations were previously marked "not pushed" and are now marked pushed). Written for session continuity — read this first after any context reset.
 This is the ONE handoff/state file; update it in place, don't create another._
 
 > **No secrets live in this file.** Earlier versions of it (git commit `2aec468`, already on GitHub)
@@ -268,7 +268,7 @@ chunks (and then update `vector_index_type`).
 **Embeddings** (`IEmbeddingService` → `OpenAiEmbeddingService`, any OpenAI-compatible `POST {BaseUrl}/embeddings`):
 - Actual model: **`text-embedding-3-small`**, **1536 dimensions** (`dimensions` param sent for
   `text-embedding-3*`). Every response is length-checked against the expected dimension.
-- Key from config `Embeddings:ApiKey` (secret; **not yet set in Render**). Batches of 64. Provider failures
+- Key from config `Embeddings:ApiKey` (secret; set on Render and working). Batches of 64. Provider failures
   surface as `InvalidOperationException` → dashboard shows a friendly error; API returns **503**
   (verified: nothing half-saved).
 - Per-call `model`/`dimensions` overrides: the KB passes the **clinic's persisted settings**, so a clinic's
@@ -436,7 +436,7 @@ isolation, unique constraint, CHECK constraints, provider-down → 503, persiste
 **Real OpenAI key**: now set on Render and confirmed working by the owner. Real similarity scores are distributed
 differently than the local stub's — tune `minimum_similarity` against the Retrieval Benchmark (below) rather than by guess.
 
-### Retrieval Benchmark (Knowledge Base → **Benchmark**, `/KnowledgeBase/Benchmark`) — built, NOT yet committed/pushed
+### Retrieval Benchmark (Knowledge Base → **Benchmark**, `/KnowledgeBase/Benchmark`) — pushed (`773f562`, `0655dff`, `a98e33c`, `b41c997`, `d717f20`)
 
 Measures ONLY retrieval (question → query embedding → the existing pgvector search → ranked chunks). It does not call the
 patient AI agent, does not judge answers, and no LLM scores anything — scoring is deterministic (ids + ranks).
@@ -667,7 +667,9 @@ shown), mapped onto the 3 backend audience types via two hidden fields (`Audienc
 - **Branding/nav**: app renamed **MySculptFlow** (logo badge "SF"); sidebar shows the **logged-in clinic's
   name** (from `clinics.name` via `ICurrentClinicContext`, fallback "Clinic Dashboard"); nav: Inbox, Main
   Numbers, Interested People, Appointments, **Procedures**, [WhatsApp] Templates, Health, Campaigns,
-  **Knowledge Base**, API (Swagger), **Integrations** (was "Settings"; opens `/settings/integrations`), Staff, Clinic Info.
+  **Knowledge Base**, API (Swagger — only served in Development), **Integrations** (was "Settings"; opens
+  `/settings/integrations`), **Calendar Integrations** (§26), Staff, Clinic Info. A notification bell sits in the topbar
+  of every page (§25).
 
 ## 15. Deployment (Docker / Render / GitHub)
 
@@ -691,8 +693,18 @@ shown), mapped onto the 3 backend audience types via two hidden fields (`Audienc
   login/register polish; `974f9b2` Knowledge Base; `da36238` Procedures + AI active-only; `566ca90` Telegram +
   KB settings; `79a88a5` KB document upload; `25b23ce` remove redundant Upload button; `2eec572` Inbox unread
   tracking; `48b1eb3` registration creates a new clinic; `57cd713` KB website scraping + Staff page; `f9b306a` one
-  KB-list record per website + URL shortening; `8580cd1` website back button / View-entry return address.
-  **Nothing was uncommitted at the time of this update** (all schema changes are applied live AND on `main`).
+  KB-list record per website + URL shortening; `8580cd1` website back button / View-entry return address;
+  `3b3e372` handoff refresh; `890187c` sidebar Settings → Integrations; `805794e` editable clinic name;
+  `773f562`/`0655dff`/`a98e33c` Retrieval Benchmark (+ async generation, Stop generating); `abb4779` crawler skips
+  listing/archive pages; `b41c997` per-generation run scope; `d717f20` generation's own page; `662daa7` appointments
+  month calendar; `e98146e` AI/staff handoff dividers in the Inbox; `1831195` needs-outcome banner; `1ef7168` structured
+  availability + checked AI booking; `84f6fd7`/`41363dc`/`d454f8f`/`c0f50b1` available-slots refinements;
+  `a6f761b`/`535f220` duplicate-booking guard, get_my_appointments, id-less reschedule/cancel; `387bcc2` structured
+  book result; `5907eb1` schedule_consultation + booking context; `3207a58` structured cancel result; `6e33a15` stale
+  appointmentId rule + live calendar updates; `f672c89` AiTestController; `66a13b4`/`dc4b967` notification bell;
+  `895af7f` Calendar Integrations.
+  **Nothing was uncommitted as of 2026-09-27** (local `main` == `origin/main` at `895af7f`; all schema changes are
+  applied live AND on `main`).
   Render deploys from `main`; new env vars still to set there are listed in §17.
 - Git identity is configured; LF→CRLF warnings on commit are harmless. Commit trailer used:
   `Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>`.
@@ -719,10 +731,15 @@ shown), mapped onto the 3 backend audience types via two hidden fields (`Audienc
     pushed (`773f562`, `0655dff`, `a98e33c`)
 14. A real Jay Clinic run (20 cases) found 13/20 misses, all content-driven (blog "Archives" listing pages and Arabic
     pages, not a retrieval bug — see §11); fixed by excluding listing/archive pages from the crawler and boilerplate
-    chunks from benchmark sampling (below), awaiting commit
+    chunks from benchmark sampling (§11) — pushed (`abb4779`)
 15. Appointments month calendar replacing the flat `/dashboard/appointments` list (§14): day-cell summaries, "+N
     more", a right-side day drawer, reusing the existing appointment detail page and create/booking service —
-    pushed once user confirms
+    pushed (`662daa7`), plus the needs-outcome banner (`1831195`)
+16. Inbox mode-change dividers ("Handed from AI to staff" / "Returned to AI", §10) — pushed (`e98146e`)
+17. Structured availability + AI booking tools: `get_available_slots` with booking context, `schedule_consultation`,
+    `cancel_consultation`, `get_my_appointments`, structured results, live calendar updates, AiTestController (§24) — pushed
+18. Staff notification bell (§25) — pushed (`66a13b4`, `dc4b967`)
+19. Calendar Integrations, one-way Google/Outlook sync via n8n (§26) — pushed (`895af7f`)
 
 ## 17. Pending work
 
@@ -730,7 +747,14 @@ shown), mapped onto the 3 backend audience types via two hidden fields (`Audienc
   (owner-confirmed). Next: **build the benchmark's n8n question-generator workflow (Webhook → Respond Immediately → … → HTTP Request calling back `POST /api/knowledge/benchmark/generations/{generationId}/questions` with `X-Ingest-Key`) and set
   `N8n__KnowledgeBenchmarkWebhookUrl`** (§11), then use the Benchmark to tune `minimum_similarity`, Top K and chunk size
   against real scores; build a small set of manually reviewed cases
-- **After the listing/archive-page fix deploys, Jay Clinic's website source(s) need a real Rescrape** (Knowledge Base →
+- **Build the Calendar Integrations n8n workflow** and set `N8n__CalendarConnectWebhookUrl` / `N8n__CalendarSyncWebhookUrl`
+  (§26 "Setup required"); until then the page is visible but connect attempts fail with "not configured"
+- **Update the patient-AI n8n workflow's tools** to the §24 surface: `get_my_appointments`, `get_available_slots` (always pass
+  `leadId`; new object response), `schedule_consultation`, `cancel_consultation`; once verified live, remove the deprecated
+  `book_consultation`/`reschedule_consultation` tools and delete `/api/ai/appointments/book|reschedule`
+- Decide whether `AiTestController` (`/api/ai/test/*`, test-only canned results) should stay reachable in Production (it is
+  currently only behind the ingest key)
+- **The listing/archive-page fix is pushed (`abb4779`), but Jay Clinic's website source(s) still need a real Rescrape** (Knowledge Base →
   the website record → Rescrape) to actually drop the 17 already-imported archive pages — the code fix alone only
   changes what a FUTURE crawl does; nothing was recrawled against the real site by this change (no login for the real
   account, and a real recrawl calls the real embeddings API — the owner's call). n8n's benchmark generator prompt should
@@ -806,11 +830,19 @@ shown), mapped onto the 3 backend audience types via two hidden fields (`Audienc
   `GET /api/whatsapp/health`, `GET /api/whatsapp/health/events`
 - Conversations: `GET/POST /api/conversations`, `GET /api/conversations/{id}`,
   `GET/POST /api/conversations/{id}/messages`, `POST …/messages/send` (dual-mode), `POST …/messages/send-template`,
-  `POST …/take-over|return-to-ai|close`
+  `POST …/take-over|return-to-ai|close`, `POST /api/conversations/{id}/read`
+- Notifications (§25): `GET /api/notifications`, `GET /api/notifications/unread-count`, `POST /api/notifications/{id}/read`,
+  `POST /api/notifications/read-all`
+- Calendar integrations (§26): `GET /api/calendar-integrations`,
+  `POST /api/calendar-integrations/{provider}/connect|refresh-calendars|select-calendar|sync-enabled|disconnect`
+- Staff: `GET /api/staff`
 
 **Trusted server-to-server** (`[RequireIngestKey]` / `X-Ingest-Key`): `POST /api/messages/ingest`,
-`POST /api/integrations/whatsapp/templates/events`, `POST /api/integrations/whatsapp/health/events`, and the
-AI tools under `/api/ai/*` (§8, incl. `POST /api/ai/knowledge/search`).
+`POST /api/integrations/whatsapp/templates/events`, `POST /api/integrations/whatsapp/health/events`, the
+calendar callbacks `POST /api/calendar-integrations/connect-callback|sync-callback` (§26), and the
+AI tools under `/api/ai/*` (§8, incl. `POST /api/ai/knowledge/search`). Current `/api/ai` appointment routes (§24):
+`GET appointments/available`, `GET appointments/upcoming`, `POST appointments/schedule`, `POST appointments/cancel`, and the
+deprecated `POST appointments/book|reschedule`; test-only `GET /api/ai/test/codes`, `POST /api/ai/test/schedule|cancel`.
 
 **Public** (Meta): `GET/POST /api/integrations/whatsapp/webhook`. **Public** (Telegram, secret-token protected):
 `POST /api/integrations/telegram/webhook/{connectionId}`. Dashboard adds
@@ -819,9 +851,10 @@ AI tools under `/api/ai/*` (§8, incl. `POST /api/ai/knowledge/search`).
 **Razor pages** (login required except Login/Register/Error): `/dashboard`, `/dashboard/leads`,
 `/dashboard/leads/{id}`, `/dashboard/appointments`, `/dashboard/appointments/{id}`, `/inbox`,
 `/Procedures`, `/Procedures/Edit/{id?}`, `/KnowledgeBase`, `/KnowledgeBase/Edit/{id?}`,
-`/KnowledgeBase/Settings`, `/KnowledgeBase/Benchmark`, `/Campaigns`, `/Campaigns/Create`, `/Campaigns/{id}`,
-`/WhatsApp/Templates`, `/WhatsApp/Health`, `/settings/integrations`, `/settings/clinic-info`,
-`/Account/Login|Register|Logout`.
+`/KnowledgeBase/Settings`, `/KnowledgeBase/Websites/{id}`, `/KnowledgeBase/Benchmark`,
+`/KnowledgeBase/Benchmark/Generations/{id}`, `/Campaigns`, `/Campaigns/Create`, `/Campaigns/{id}`,
+`/WhatsApp/Templates`, `/WhatsApp/Health`, `/settings/integrations`, `/settings/calendar-integrations`,
+`/settings/clinic-info` (General | Availability tabs), `/Staff`, `/Account/Login|Register|Logout`.
 
 ## 20. Current configuration keys (names only — values are secrets or defaults)
 
@@ -835,6 +868,9 @@ AI tools under `/api/ai/*` (§8, incl. `POST /api/ai/knowledge/search`).
   workflow's production webhook (a URL, treated as a credential: the HttpClient logs nothing). **Not set yet** — empty just
   disables "Generate Test Cases" (manual cases and runs still work)
 - `Embeddings:ApiKey` / `Embeddings__ApiKey` — set on Render (real key, working)
+- `N8n:CalendarConnectWebhookUrl` / `N8n__CalendarConnectWebhookUrl` and `N8n:CalendarSyncWebhookUrl` /
+  `N8n__CalendarSyncWebhookUrl` — the SEPARATE calendar-sync workflow's two webhooks (§26). **Not set yet** — empty leaves
+  Calendar Integrations visible but inert
 - Telegram needs no secret in config (the bot token is entered in the UI and stored per clinic), but needs
   `App:PublicBaseUrl` / `App__PublicBaseUrl` — the public HTTPS origin (**required on Render**); `Telegram:ApiBaseUrl`
   is a test-only override.
@@ -881,6 +917,11 @@ Render sets `PORT` itself; the Dockerfile sets `ASPNETCORE_ENVIRONMENT`/`ASPNETC
     `…_results` (per-case ranks/passes/classification, `retrieved_json`, `generation_id` snapshot; case FK `on delete set null`),
     `…_generations` (id = generationId; status pending|completed|failed|cancelled, sent chunks, counts, rejected items, raw reply, error) — applied live to Supabase
     (idempotent block at the end of `schema.sql`); **the Render database is the same Supabase DB, so no separate step**; `generation_id uuid` (+ partial index) added to `…_cases` in a second small block; `ck_kbg_status` widened to include `cancelled` (Stop generating); `generation_id uuid` (+ partial index) added to `…_runs` and `ck_kbr_case_scope` widened to include `generation` (run-one-generation) — all applied live
+15. **Inbox unread tracking**: `conversations.last_read_at` (existing rows backfilled as read) — applied live and on `main`
+16. **Structured availability** (§24): `clinic_availability_rules`, `clinic_booking_settings`, `clinic_availability_exceptions` — applied live and on `main`
+17. **Notifications** (§25): `notifications` (type CHECK, clinic/created_at index, partial unread index) — applied live and on `main`
+18. **Calendar Integrations** (§26): `calendar_integrations`, `calendar_integration_calendars`, `appointment_calendar_syncs`
+    (+ `last_operation` column added in a follow-up block) — applied live and on `main`
 
 No migration was needed for Procedures, lead/appointment editing, or the audience UI.
 
@@ -891,7 +932,12 @@ No migration was needed for Procedures, lead/appointment editing, or the audienc
 - [ ] **Rotate** `Meta:WebhookVerifyToken` and `N8n:IngestApiKey` (were in git history via this file's
       first version) and update Meta + n8n; consider resetting the Supabase DB password (it was shown in
       chat) and updating user-secrets + Render
-- [ ] Derive `clinicId` server-side for AI endpoints instead of trusting the parameter
+- [ ] Build the Calendar Integrations n8n workflow; set `N8n__CalendarConnectWebhookUrl` / `N8n__CalendarSyncWebhookUrl` (§26)
+- [ ] Point the patient-AI n8n tools at `schedule_consultation` / `cancel_consultation` / `get_my_appointments`, then delete the
+      deprecated `/api/ai/appointments/book|reschedule` endpoints (§24e)
+- [ ] Decide whether `AiTestController` (`/api/ai/test/*`) should be disabled outside Development
+- [ ] Derive `clinicId` server-side for AI endpoints instead of trusting the parameter; compare `X-Ingest-Key` in constant time
+      (`RequireIngestKeyAttribute` currently uses `!=`)
 - [ ] Meta `X-Hub-Signature-256` verification; `UseForwardedHeaders`; persist DataProtection keys
 - [ ] Protect/decide `LeadsController.Create` (`[AllowAnonymous]`, no ingest key)
 - [ ] Manual integrations form should register the WhatsApp phone number
@@ -986,7 +1032,7 @@ Outbound: n8n/dashboard → MessageService → IChannelSender (by conversation.C
   `TelegramUpdateParser` mapping `business_message` onto `ParsedTelegramMessage`, and a business_connection_id →
   channel_integration lookup in the webhook controller; Lead/Conversation/Message/Inbox/n8n/send are unaffected.
 
-## 24. Structured appointment availability (Clinic Info → Availability) — built, not yet pushed
+## 24. Structured appointment availability (Clinic Info → Availability) — pushed (`1ef7168` + follow-ups)
 
 - **Source of truth for booking** = three tables (`clinic_availability_rules`, `clinic_booking_settings`,
   `clinic_availability_exceptions`, all `clinic_id`-scoped, cascade on clinic delete; DDL at the end of `Database/schema.sql`, applied live).
@@ -1014,7 +1060,7 @@ Outbound: n8n/dashboard → MessageService → IChannelSender (by conversation.C
   `DeleteException` in `ClinicInfo.cshtml.cs`): timezone picker (curated IANA list), Mon–Sun open/start/end, four booking rules
   (notice entered in hours), exceptions list + add form (same date replaces).
 
-### 24b. AI rescheduling / duplicate-booking guard — built, not yet pushed
+### 24b. AI rescheduling / duplicate-booking guard — pushed (`a6f761b`, `535f220`)
 - **`book_consultation`** (`BookAvailableSlotAsync`, under the per-clinic advisory lock): the lead must belong to the clinic (else 400), and must have
   **no other upcoming appointment** (`scheduled_start > now`, status booked/confirmed) — otherwise **409** `{alreadyBooked:true, existingAppointment:{id,label,...}}`.
   Canceled/rescheduled/attended/no-show and past appointments never count. Staff bookings (`POST /api/appointments`) are NOT guarded.
@@ -1026,7 +1072,7 @@ Outbound: n8n/dashboard → MessageService → IChannelSender (by conversation.C
 - Flow for the AI: `get_my_appointments` → `get_available_slots` → `reschedule_consultation` (or `cancel_consultation`). n8n tools must pass `leadId` (from the
   workflow, not the AI). Known gap: `get_available_slots` still treats the patient's own current slot as taken when suggesting new times.
 
-### 24c. `book_consultation` structured result — built, not yet pushed
+### 24c. `book_consultation` structured result — pushed (`387bcc2`)
 `POST /api/ai/appointments/book` now returns **HTTP 200 for every business outcome** with `BookConsultationResult`
 `{success, code, message, instruction, appointment?, existingAppointment?}` (n8n passes a normal result to the AI far more reliably than an error string; the AI
 kept claiming "booked" after generic error text). Codes: `BOOKED` (appointment in `appointment`), `EXISTING_UPCOMING_APPOINTMENT` (`existingAppointment` has id/scheduledStart/label),
@@ -1035,7 +1081,7 @@ kept claiming "booked" after generic error text). Codes: `BOOKED` (appointment i
 Success returns `appointment` in **clinic-local time** (`scheduledStart` like `2026-09-29T16:00:00+03:00`, plus `label`), never the stored UTC value — the AI would otherwise announce the wrong hour.
 `UpcomingAppointmentResponse` fields `Start/End` were renamed **`ScheduledStart/ScheduledEnd`** (affects `get_my_appointments` and `existingAppointment`); null fields are omitted from the book result.
 
-### 24d. `get_available_slots` now carries the patient's booking context (one call instead of get_my_appointments → get_available_slots) — built, not yet pushed
+### 24d. `get_available_slots` now carries the patient's booking context (one call instead of get_my_appointments → get_available_slots) — pushed (`5907eb1`)
 - `GET /api/ai/appointments/available?clinicId=&leadId=&date=&procedureId=&days=` (same endpoint, X-Ingest-Key). **`leadId` is optional at the API but the n8n tool
   must always pass it** (workflow value, never AI-chosen). With `leadId` the reply ALSO contains — placed BEFORE the slots — `requestedDate` (the date asked about, never derived
   from an appointment), `hasUpcomingAppointment`, **`canCreateNewBooking`** (backend decision), `bookingBlockReason` (`"existing_upcoming_appointment"` or absent) and
@@ -1048,7 +1094,7 @@ Success returns `appointment` in **clinic-local time** (`scheduledStart` like `2
 - `get_my_appointments` and all mutation tools are unchanged; the `book_consultation` duplicate guard is unchanged (still the backend source of truth).
 - `UpcomingAppointmentResponse` gained `appointmentType`. No automated test project exists in the solution; verified with live scenario scripts against throwaway clinics (deleted afterward).
 
-### 24e. Unified `schedule_consultation` (replaces book_consultation + reschedule_consultation for the AI) — built, not yet pushed
+### 24e. Unified `schedule_consultation` (replaces book_consultation + reschedule_consultation for the AI) — pushed (`5907eb1`)
 - **`POST /api/ai/appointments/schedule?clinicId=&leadId=`** (X-Ingest-Key; both ids are workflow values, never AI-chosen). Body `ScheduleConsultationRequest`:
   `scheduledStart` (exact slot `start`), optional `procedureId`, `appointmentType`, `notes`, `reason`, **`confirmReplaceExisting`** (bool, lenient: also accepts "true"/"false"), optional `appointmentId`.
   The **backend decides** (`AppointmentService.ScheduleAsync`, state read from the DB, not from the AI): no upcoming appointment → **create** (delegates to `BookAvailableSlotAsync`);
@@ -1065,27 +1111,27 @@ Success returns `appointment` in **clinic-local time** (`scheduledStart` like `2
   `book_consultation` (`/appointments/book`) and `reschedule_consultation` (`/appointments/reschedule`) endpoints still work but are **deprecated** — remove them from the n8n agent and delete the endpoints once schedule_consultation is verified live.
   Cancellation stays separate (destructive, needs explicit confirmation).
 
-### 24f. `cancel_consultation` structured result — built, not yet pushed
+### 24f. `cancel_consultation` structured result — pushed (`3207a58`)
 `POST /api/ai/appointments/cancel?clinicId=&leadId=[&appointmentId=]` now returns **HTTP 200 for every business outcome** with `CancelConsultationResult`
 `{success, operation: canceled|none, code, message, instruction?, appointment?, existingUpcomingAppointments?}` (previously a raw UTC appointment on success and 404/400/409 error
 strings on failure — the AI could misreport them). Codes: `CANCELED` (`appointment` in clinic-local time), `NO_UPCOMING_APPOINTMENT`, `MULTIPLE_UPCOMING_APPOINTMENTS` (list; retry with
 `appointmentId`), `INVALID_REQUEST` (not this patient's appointment / already attended etc.). Every failure carries an `instruction` saying nothing was canceled. Implemented by
 `AppointmentService.CancelConsultationAsync` wrapping the unchanged `CancelAsync` (same ownership + status rules). Only `success:true` means it was canceled. Cancellation still needs explicit patient confirmation (tool description).
 
-### 24g. `appointmentId` rules for schedule_consultation and cancel_consultation — built, not yet pushed
+### 24g. `appointmentId` rules for schedule_consultation and cancel_consultation — pushed (`6e33a15`)
 The AI's appointment ids go stale (a real case: it re-sent the id of an appointment it had booked and canceled earlier, so a valid reschedule was refused). Rule, from the DB's CURRENT upcoming appointments:
 **0 upcoming** → schedule creates (any appointmentId ignored); cancel → `NO_UPCOMING_APPOINTMENT`. **exactly 1** → the backend selects it itself and **`appointmentId` is ignored completely**
 (stale/garbage ids can't matter). **2+** → `appointmentId` is required and must match one of the current upcoming appointments, otherwise `INVALID_REQUEST` and nothing is mutated (no id + consent → `MULTIPLE_UPCOMING_APPOINTMENTS`).
 Implemented in `AppointmentService.ScheduleAsync` and `CancelConsultationAsync`; the deprecated `/book` and `/reschedule` endpoints keep their old behavior.
 
-### 24h. Live calendar updates — built, not yet pushed
+### 24h. Live calendar updates — pushed (`6e33a15`)
 The Appointments calendar refreshes by itself when an appointment changes (AI booking/reschedule/cancel, staff create, status change, another tab). `IInboxNotifier.AppointmentChangedAsync`
 sends `AppointmentChanged {appointmentId, change: created|rescheduled|canceled|status_changed}` to the clinic's SignalR group (same `/hubs/inbox` hub and clinic-scoped groups the Inbox uses — the clinic comes
 from the logged-in session, never the client). `AppointmentService` sends it **after the change is committed** (Book/Reschedule after `tx.CommitAsync`; `CreateAsync` split into a notify-free `CreateCoreAsync`);
 a notification failure never fails the operation. `wwwroot/js/appointments-calendar.js` (`connectLive`) re-fetches the visible month via `loadMonth` (debounced 300 ms; also on reconnect); the open day drawer re-renders,
 the New Appointment form is untouched. The database stays the source of truth — a missed event only means the next load is current.
 
-### 24i. `AiTestController` — canned fail/success codes for n8n testing (test-only, not for production traffic) — built, not yet pushed
+### 24i. `AiTestController` — canned fail/success codes for n8n testing (test-only, not for production traffic) — pushed (`f672c89`)
 `GET /api/ai/test/codes` lists every code; `POST /api/ai/test/schedule?code=<CODE>` and `POST /api/ai/test/cancel?code=<CODE>` return the exact `ScheduleConsultationResult`/
 `CancelConsultationResult` shape (including `instruction` wording) the real tools return for that code, with **no database access at all** — `clinicId`/`leadId` aren't even parameters.
 Point an n8n tool node at these URLs instead of `/appointments/schedule` or `/appointments/cancel` to watch the AI agent's reaction to a specific outcome (e.g. `SLOT_UNAVAILABLE`,
@@ -1095,7 +1141,7 @@ extracted so the test controller can never drift out of sync with production wor
 Schedule codes: BOOKED, RESCHEDULED, CONFIRMATION_REQUIRED, MULTIPLE_UPCOMING_APPOINTMENTS, SLOT_UNAVAILABLE, LEAD_NOT_FOUND, INVALID_REQUEST. Cancel codes: CANCELED, NO_UPCOMING_APPOINTMENT,
 MULTIPLE_UPCOMING_APPOINTMENTS, INVALID_REQUEST. An unknown/missing `code` → 400 listing the valid ones.
 
-## 25. Notifications (staff notification bell) — built, tested, NOT pushed (awaiting explicit "push")
+## 25. Notifications (staff notification bell) — pushed (`66a13b4`, `dc4b967`)
 
 - New table: `notifications` (`clinic_id`, `type`, `title`, `message`, `lead_id?`, `conversation_id?`, `appointment_id?`,
   `channel_integration_id?`, `link?`, `is_read`, `read_at?`, `created_at`; `type` CHECK-constrained to the 8 values below; indexed
@@ -1164,7 +1210,7 @@ MULTIPLE_UPCOMING_APPOINTMENTS, INVALID_REQUEST. An unknown/missing `code` → 4
   OUTBOUND_MESSAGE_FAILED for a WhatsApp Business App echo is theoretically possible but never realistically fires, since Meta would
   not send a failed webhook for a message it did not relay. There is no settings UI to mute a notification type; all 8 are always on.
 
-## 26. Calendar Integrations (Google/Outlook, one-way SculptFlow -> external) — built, tested, NOT pushed (awaiting explicit "push")
+## 26. Calendar Integrations (Google/Outlook, one-way SculptFlow -> external) — pushed (`895af7f`); n8n workflow not built yet
 
 - **Business shape**: staff connect the clinic's Google and/or Outlook calendar and pick which calendar (by its real name) SculptFlow
   appointments sync to. SculptFlow is authoritative and one-way only: booking/rescheduling/cancelling here updates the external
