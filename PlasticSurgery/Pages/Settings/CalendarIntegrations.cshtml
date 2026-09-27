@@ -110,7 +110,7 @@ else
                 <div class="flex items-center gap-2 mt-2">
                     <form method="post" asp-page-handler="SetSyncEnabled">
                         <input type="hidden" name="provider" value="@provider" />
-                        <input type="hidden" name="enabled" value="@(!info.SyncEnabled)" />
+                        <input type="hidden" name="enabled" value="@(!info.SyncEnabled ? "true" : "false")" />
                         <button type="submit" class="btn btn-sm" disabled="@string.IsNullOrEmpty(info.SelectedCalendarId)">
                             @(info.SyncEnabled ? "Turn sync off" : "Turn sync on")
                         </button>
