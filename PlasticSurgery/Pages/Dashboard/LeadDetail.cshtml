@@ -7,7 +7,7 @@
 
 @if (!Model.ClinicConfigured)
 {
-    <div class="alert alert-warning">No clinic configured yet — see the Main Numbers page for setup steps.</div>
+    <div class="alert alert-warning">No clinic configured yet — see the Dashboard page for setup steps.</div>
 }
 else if (Model.Lead is null)
 {
@@ -15,6 +15,13 @@ else if (Model.Lead is null)
 }
 else
 {
+    var lead = Model.Lead;
+    var followupOverdue = lead.NextFollowupAt is not null && lead.NextFollowupAt < DateTimeOffset.UtcNow;
+    // Inbox search matches name, phone or procedure — the phone is the most specific.
+    var inboxSearch = !string.IsNullOrWhiteSpace(lead.Phone) ? lead.Phone : lead.FullName;
+
+    <a href="/dashboard/leads" class="back-link mb-2">&larr; Interested People</a>
+
     if (!string.IsNullOrEmpty(Model.StatusMessage))
     {
         <div class="alert alert-info mb-3">@Model.StatusMessage</div>
@@ -35,12 +42,36 @@ else
         <div class="flex items-center gap-1 flex-wrap">
             <span class="badge @StatusBadgeHelper.CssClass(Model.Lead.Status)">@FilterLabelHelper.Label(Model.Lead.Status)</span>
             <span class="badge @StatusBadgeHelper.CssClass(Model.Lead.QualificationStatus)">@FilterLabelHelper.Label(Model.Lead.QualificationStatus)</span>
+            @if (!string.IsNullOrWhiteSpace(inboxSearch))
+            {
+                <a class="btn btn-sm" href="/inbox?search=@Uri.EscapeDataString(inboxSearch)">Open in Inbox</a>
+            }
         </div>
     </div>
 
-    <div class="card p-5 mw-480">
+    <div class="lead-grid">
+    <div class="card p-5">
+        <div class="eyebrow mb-2">Details</div>
+        <div class="inbox-lead-info-row"><span>Phone</span><strong>@(lead.Phone ?? "—")</strong></div>
+        <div class="inbox-lead-info-row"><span>Email</span><strong>@(lead.Email ?? "—")</strong></div>
+        <div class="inbox-lead-info-row"><span>Procedure</span><strong>@(lead.ProcedureName ?? "—")</strong></div>
+        <div class="inbox-lead-info-row"><span>City</span><strong>@(lead.City ?? "—")</strong></div>
+        <div class="inbox-lead-info-row"><span>Timeline</span><strong>@(lead.DesiredTimeline ?? "—")</strong></div>
+        <div class="inbox-lead-info-row"><span>Last contact</span><strong>@(lead.LastContactAt?.ToString("MMM d, HH:mm") ?? "—")</strong></div>
+        <div class="inbox-lead-info-row"><span>Next follow-up</span><strong class="@(followupOverdue ? "overdue" : "")">@(lead.NextFollowupAt?.ToString("MMM d, HH:mm") ?? "—")@(followupOverdue ? " · overdue" : "")</strong></div>
+        <div class="inbox-lead-info-row"><span>Lead since</span><strong>@lead.CreatedAt.ToString("MMM d, yyyy")</strong></div>
+        @if (!string.IsNullOrWhiteSpace(lead.Notes))
+        {
+            <div class="lead-notes">
+                <span class="eyebrow">Notes</span>
+                <p>@lead.Notes</p>
+            </div>
+        }
+    </div>
+
+    <div class="card p-5">
         <div class="flex items-center gap-2 mb-2">
-            <span class="eyebrow">Edit lead</span>
+            <span class="eyebrow">Update lead</span>
             <button type="button" class="status-help-trigger" data-status-help-trigger title="What do these mean?">?</button>
         </div>
         <form method="post" class="integration-form">
@@ -82,9 +113,9 @@ else
 
             <div class="flex items-center gap-2 mt-2">
                 <button type="submit" class="btn btn-primary btn-sm">Save</button>
-                <a href="/dashboard/leads" class="btn btn-sm">Back to list</a>
             </div>
         </form>
+    </div>
     </div>
 
     <partial name="_StatusHelp" />

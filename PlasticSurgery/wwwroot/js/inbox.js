@@ -730,8 +730,21 @@
   // title are consistent from the start.
   loadConversationList().then(function () {
     // Deep link from a notification bell click (/inbox?conversationId=...) — open it once the list exists.
-    var wanted = new URLSearchParams(window.location.search).get('conversationId');
+    var query = new URLSearchParams(window.location.search);
+    var wanted = query.get('conversationId');
     if (wanted) selectConversation(wanted);
+    // "Open in Inbox" from a lead page (/inbox?search=<phone>): pre-fill the list search, and open
+    // the conversation straight away when exactly one matches.
+    // Dashboard 'Needs attention' link (/inbox?filter=needs): open with that tab selected.
+    var filterTab = query.get('filter') && document.querySelector('.inbox-filter[data-filter="' + query.get('filter') + '"]');
+    if (filterTab) filterTab.click();
+    var search = query.get('search');
+    if (search && searchEl) {
+      searchEl.value = search;
+      applyListFilter();
+      var matches = listEl.querySelectorAll('.inbox-conv-item:not([hidden])');
+      if (!wanted && matches.length === 1) selectConversation(matches[0].getAttribute('data-conversation-id'));
+    }
   });
 
   // ---------------------------------------------------------------------

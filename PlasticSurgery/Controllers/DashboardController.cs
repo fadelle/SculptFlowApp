@@ -16,24 +16,34 @@ public class DashboardController : DashboardApiController
     }
 
     [HttpGet("summary")]
-    public async Task<ActionResult<DashboardSummaryResponse>> Summary(CancellationToken ct)
+    public async Task<ActionResult<DashboardSummaryResponse>> Summary(
+        [FromQuery] DateTimeOffset? from, [FromQuery] DateTimeOffset? to, CancellationToken ct)
     {
         var clinicId = await GetClinicIdAsync(ct);
         if (clinicId is null) return Forbid();
 
-        var summary = await _dashboard.GetSummaryAsync(clinicId.Value, ct);
+        var summary = await _dashboard.GetSummaryAsync(clinicId.Value, from, to, ct);
         return Ok(summary);
+    }
+
+    [HttpGet("attention")]
+    public async Task<ActionResult<DashboardAttentionResponse>> Attention(CancellationToken ct)
+    {
+        var clinicId = await GetClinicIdAsync(ct);
+        if (clinicId is null) return Forbid();
+
+        return Ok(await _dashboard.GetAttentionAsync(clinicId.Value, ct));
     }
 
     [HttpGet("leads")]
     public async Task<ActionResult<object>> Leads(
-        [FromQuery] string? status, [FromQuery] string? search, [FromQuery] int skip = 0, [FromQuery] int take = 50, CancellationToken ct = default)
+        [FromQuery] string? status, [FromQuery] string? search, [FromQuery] string? source, [FromQuery] int skip = 0, [FromQuery] int take = 50, CancellationToken ct = default)
     {
         var clinicId = await GetClinicIdAsync(ct);
         if (clinicId is null) return Forbid();
 
         take = Math.Clamp(take, 1, 200);
-        var (items, totalCount) = await _dashboard.GetLeadsAsync(clinicId.Value, status, search, skip, take, ct);
+        var (items, totalCount) = await _dashboard.GetLeadsAsync(clinicId.Value, status, search, source, skip, take, ct);
         return Ok(new { items, totalCount, skip, take });
     }
 
@@ -50,12 +60,13 @@ public class DashboardController : DashboardApiController
     }
 
     [HttpGet("procedures")]
-    public async Task<ActionResult<IReadOnlyList<DashboardProcedureRow>>> Procedures(CancellationToken ct)
+    public async Task<ActionResult<IReadOnlyList<DashboardProcedureRow>>> Procedures(
+        [FromQuery] DateTimeOffset? from, [FromQuery] DateTimeOffset? to, CancellationToken ct)
     {
         var clinicId = await GetClinicIdAsync(ct);
         if (clinicId is null) return Forbid();
 
-        var stats = await _dashboard.GetProcedureStatsAsync(clinicId.Value, ct);
+        var stats = await _dashboard.GetProcedureStatsAsync(clinicId.Value, from, to, ct);
         return Ok(stats);
     }
 }

@@ -84,6 +84,8 @@
             state.monthData = data;
             renderOutcomeNotice(data.needsOutcomeCount);
             renderGrid(data);
+            renderAgenda(data);
+            renderTodayLine(data);
             // Keep the drawer's contents in sync if it's open and its date is still in the new month's data.
             if (state.drawerDate) renderDrawer(state.drawerDate);
         }).catch(function (e) { showMessage(e.message, 'error'); });
@@ -114,21 +116,24 @@
         var today = todayIso();
         var cursor = data.gridStart;
         while (true) {
-            grid.appendChild(dayCell(cursor, byDate[cursor] || [], cursor.indexOf(monthPrefix) === 0, cursor === today));
+            grid.appendChild(dayCell(cursor, byDate[cursor] || [], cursor.indexOf(monthPrefix) === 0, cursor === today, cursor < today));
             if (cursor === data.gridEnd) break;
             cursor = addDaysIso(cursor, 1);
         }
     }
 
-    function dayCell(dateIso, items, isCurrentMonth, isToday) {
+    function dayCell(dateIso, items, isCurrentMonth, isToday, isPast) {
         var dayNum = parseInt(dateIso.slice(8, 10), 10);
-        var classes = 'cal-day' + (isCurrentMonth ? '' : ' other-month') + (isToday ? ' today' : '');
+        var classes = 'cal-day' + (isCurrentMonth ? '' : ' other-month') + (isToday ? ' today' : '') + (isPast ? ' past' : '');
 
         var kids = [el('div', { class: 'cal-day-num', text: String(dayNum) })];
         var shown = items.slice(0, 3);
         shown.forEach(function (a) {
-            var label = a.localTime + ' ' + shortName(a.leadFullName) + (a.procedureName ? ' - ' + a.procedureName : '');
-            kids.push(el('div', { class: 'cal-chip status-' + a.status, title: label, text: label }));
+            // Chip shows just the time (bold) and a short name; the procedure is in the tooltip and the day drawer.
+            var title = a.localTime + ' ' + (a.leadFullName || 'Unknown') + (a.procedureName ? ' - ' + a.procedureName : '') + ' (' + statusLabel(a.status) + ')';
+            kids.push(el('div', { class: 'cal-chip status-' + a.status, title: title, onclick: function (e) { e.stopPropagation(); openAppointment(a); } }, [
+                el('b', { text: a.localTime }), ' ' + shortName(a.leadFullName)
+            ]));
         });
         if (items.length > shown.length) {
             kids.push(el('div', { class: 'cal-more', text: '+' + (items.length - shown.length) + ' more' }));
@@ -145,6 +150,71 @@
         if (!fullName) return 'Unknown';
         var parts = fullName.trim().split(/\s+/);
         return parts.length < 2 ? parts[0] : parts[0] + ' ' + parts[1][0] + '.';
+    }
+
+    /** "Today: 3 appointments · next at 11:00 with Layla H." above the calendar. Only refreshed when the loaded
+        month's data covers today (so paging to another month keeps the last known line). Canceled ones don't count. */
+    function renderTodayLine(data) {
+        var box = $('cal-today-line');
+        if (!box) return;
+        var today = todayIso();
+        if (today < data.gridStart || today > data.gridEnd) return;
+
+        var todays = data.items
+            .filter(function (a) { return a.localDate === today && a.status !== 'canceled'; })
+            .sort(function (a, b) { return a.localTime < b.localTime ? -1 : 1; });
+        var now = new Date();
+        var nowTime = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+        var next = todays.filter(function (a) { return a.localTime >= nowTime; })[0];
+
+        box.textContent = '';
+        box.appendChild(el('strong', { text: 'Today:' }));
+        box.appendChild(document.createTextNode(' ' + (todays.length === 0 ? 'no appointments'
+            : todays.length + (todays.length === 1 ? ' appointment' : ' appointments'))));
+        if (next) {
+            box.appendChild(document.createTextNode(' · next at '));
+            box.appendChild(el('strong', { text: next.localTime }));
+            box.appendChild(document.createTextNode(' with ' + shortName(next.leadFullName)));
+        } else if (todays.length) {
+            box.appendChild(document.createTextNode(' · none left for today'));
+        }
+        box.hidden = false;
+    }
+
+    /** Phone layout: the 7-column grid is too cramped, so site.css hides it and shows this day-by-day list of the
+        visible month's appointments instead (same data, same links). */
+    function renderAgenda(data) {
+        var box = $('cal-agenda');
+        if (!box) return;
+        box.textContent = '';
+        var monthPrefix = data.year + '-' + String(data.month).padStart(2, '0');
+        var today = todayIso();
+        var byDate = {};
+        data.items
+            .filter(function (a) { return a.localDate.indexOf(monthPrefix) === 0; })
+            .forEach(function (a) { (byDate[a.localDate] = byDate[a.localDate] || []).push(a); });
+        var dates = Object.keys(byDate).sort();
+        if (!dates.length) {
+            box.appendChild(el('div', { class: 'agenda-empty', text: 'No appointments this month.' }));
+            return;
+        }
+        dates.forEach(function (dateIso) {
+            var d = new Date(dateIso + 'T00:00:00');
+            var label = d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+            box.appendChild(el('div', { class: 'agenda-day' + (dateIso < today ? ' past' : ''), text: (dateIso === today ? 'Today · ' : '') + label }));
+            byDate[dateIso]
+                .sort(function (a, b) { return a.localTime < b.localTime ? -1 : 1; })
+                .forEach(function (a) {
+                    box.appendChild(el('a', { class: 'agenda-row' + (dateIso < today ? ' past' : ''), href: '/dashboard/appointments/' + a.id, onclick: function (e) { e.preventDefault(); openAppointment(a); } }, [
+                        el('span', { class: 'cal-appt-time', text: a.localTime }),
+                        el('div', { class: 'agenda-row-main' }, [
+                            el('div', { class: 'cal-appt-name', text: a.leadFullName || 'Unknown patient' }),
+                            el('div', { class: 'cal-appt-procedure', text: a.procedureName || 'No procedure on file' })
+                        ]),
+                        el('span', { class: 'badge ' + badgeClass(a.status), text: statusLabel(a.status) })
+                    ]));
+                });
+        });
     }
 
     // ---------------------------------------------------------------- day drawer
@@ -176,7 +246,7 @@
         }
 
         items.forEach(function (a) {
-            body.appendChild(el('div', { class: 'cal-appt-row', onclick: function () { window.location.href = '/dashboard/appointments/' + a.id; } }, [
+            body.appendChild(el('div', { class: 'cal-appt-row', onclick: function () { openAppointment(a); } }, [
                 el('div', { class: 'flex items-center gap-2', style: 'justify-content:space-between' }, [
                     el('span', { class: 'cal-appt-time', text: a.localTime }),
                     el('span', { class: 'badge ' + badgeClass(a.status), text: statusLabel(a.status) })
@@ -191,6 +261,76 @@
     var STATUS_LABEL = { booked: 'Booked', confirmed: 'Confirmed', attended: 'Attended', canceled: 'Canceled', no_show: 'No-show', rescheduled: 'Rescheduled' };
     function badgeClass(status) { return BADGE_CLASS[status] || 'badge-gray'; }
     function statusLabel(status) { return STATUS_LABEL[status] || status; }
+
+    // ---------------------------------------------------------------- appointment details popup
+
+    var LOCATION_LABEL = { in_person: 'In person', video: 'Video call', phone: 'Phone' };
+    function locationLabel(value) { return value ? (LOCATION_LABEL[value] || value) : '—'; }
+
+    function initialOf(name) { return (name || '?').trim().charAt(0).toUpperCase() || '?'; }
+
+    /** Opens the popup from a calendar item right away (name, time, status), then fills in location/notes from
+        GET /api/appointments/{id}, which the calendar feed doesn't carry. */
+    function openAppointment(a) {
+        state.openAppointment = a;
+        var d = new Date(a.localDate + 'T00:00:00');
+        $('cal-appt-avatar').textContent = initialOf(a.leadFullName);
+        $('cal-appt-name').textContent = a.leadFullName || 'Unknown patient';
+        $('cal-appt-when').textContent = d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }) + ' · ' + a.localTime;
+        $('cal-appt-procedure').textContent = a.procedureName || 'No procedure on file';
+        $('cal-appt-location').textContent = '…';
+        $('cal-appt-notes').textContent = '…';
+        $('cal-appt-notes-row').hidden = false;
+        $('cal-appt-status').value = a.status;
+        $('cal-appt-error').textContent = '';
+        $('cal-appt-full').href = '/dashboard/appointments/' + a.id;
+        $('cal-appt-lead').href = '/dashboard/leads/' + a.leadId;
+        $('cal-appt-overlay').hidden = false;
+
+        api('GET', '/api/appointments/' + a.id).then(function (full) {
+            if (!state.openAppointment || state.openAppointment.id !== a.id) return; // another one was opened meanwhile
+            $('cal-appt-location').textContent = locationLabel(full.locationType);
+            $('cal-appt-notes').textContent = full.notes || '—';
+            $('cal-appt-notes-row').hidden = !full.notes;
+            if (full.scheduledEnd) {
+                var mins = Math.round((new Date(full.scheduledEnd) - new Date(full.scheduledStart)) / 60000);
+                if (mins > 0) $('cal-appt-when').textContent += ' – ' + addMinutes(a.localTime, mins);
+            }
+        }).catch(function () {
+            $('cal-appt-location').textContent = '—';
+            $('cal-appt-notes-row').hidden = true;
+        });
+    }
+
+    function closeAppointment() {
+        state.openAppointment = null;
+        $('cal-appt-overlay').hidden = true;
+    }
+
+    function saveAppointmentStatus() {
+        var a = state.openAppointment;
+        if (!a) return;
+        var status = $('cal-appt-status').value;
+        if (status === a.status) { closeAppointment(); return; }
+        var btn = $('cal-appt-save');
+        btn.disabled = true;
+        api('PATCH', '/api/appointments/' + a.id + '/status', { status: status }).then(function () {
+            btn.disabled = false;
+            closeAppointment();
+            showMessage('Saved.');
+            return loadMonth(state.year, state.month);
+        }).catch(function (e) {
+            btn.disabled = false;
+            $('cal-appt-error').textContent = e.message;
+        });
+    }
+
+    /** "09:00" + 30 -> "09:30" (wall-clock arithmetic for the end-time hint; wraps past midnight). */
+    function addMinutes(hhmm, minutes) {
+        var parts = hhmm.split(':');
+        var total = (parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10) + minutes) % (24 * 60);
+        return String(Math.floor(total / 60)).padStart(2, '0') + ':' + String(total % 60).padStart(2, '0');
+    }
 
     // ---------------------------------------------------------------- new appointment
 
@@ -208,17 +348,23 @@
 
     function openNewAppointment(prefillDateIso) {
         $('cal-new-error').textContent = '';
-        $('cal-new-lead-search').value = '';
-        $('cal-new-lead-id').value = '';
-        $('cal-new-lead-results').textContent = '';
-        state.selectedLead = null;
+        clearLead();
         $('cal-new-date').value = prefillDateIso || state.drawerDate || todayIso();
         $('cal-new-time').value = '09:00';
         $('cal-new-duration').value = '30';
         $('cal-new-location').value = '';
         $('cal-new-notes').value = '';
+        updateRange();
         loadProcedures();
         $('cal-new-overlay').hidden = false;
+        $('cal-new-lead-search').focus();
+    }
+
+    /** "09:00 – 09:30" under the date/time/duration row. */
+    function updateRange() {
+        var time = $('cal-new-time').value;
+        var minutes = parseInt($('cal-new-duration').value, 10);
+        $('cal-new-range').textContent = time && minutes ? time + ' – ' + addMinutes(time, minutes) : '';
     }
 
     function closeNewAppointment() { $('cal-new-overlay').hidden = true; }
@@ -234,23 +380,49 @@
 
     function searchLeads(query) {
         var box = $('cal-new-lead-results');
-        if (!query || query.trim().length < 2) { box.textContent = ''; return; }
+        if (!query || query.trim().length < 2) { box.textContent = ''; box.hidden = true; return; }
         api('GET', '/api/leads?take=8&search=' + encodeURIComponent(query.trim())).then(function (res) {
             box.textContent = '';
+            box.hidden = false;
             var items = (res && res.items) || [];
-            if (!items.length) { box.appendChild(el('div', { text: 'No matching patients.' })); return; }
+            if (!items.length) { box.appendChild(el('div', { class: 'picker-empty', text: 'No matching patients.' })); return; }
             items.forEach(function (lead) {
-                var label = (lead.fullName || 'Unnamed') + (lead.phone ? ' · ' + lead.phone : '');
-                box.appendChild(el('div', { class: 'bm-clickable', style: 'padding:.2rem 0', onclick: function () { pickLead(lead, label); } }, [label]));
+                box.appendChild(el('button', { type: 'button', class: 'picker-option', role: 'option', onclick: function () { pickLead(lead); } }, [
+                    el('span', { class: 'avatar-sm', text: initialOf(lead.fullName) }),
+                    el('span', { class: 'picker-option-main' }, [
+                        el('span', { class: 'picker-option-name', text: lead.fullName || 'Unnamed' }),
+                        el('span', { class: 'picker-option-sub', text: [lead.phone, lead.procedureName].filter(Boolean).join(' · ') })
+                    ])
+                ]));
             });
         }).catch(function () { /* transient — staff can retype */ });
     }
 
-    function pickLead(lead, label) {
+    /** Picked patient shows as a chip (with × to change); their lead's procedure pre-fills the Procedure field. */
+    function pickLead(lead) {
+        var label = (lead.fullName || 'Unnamed') + (lead.phone ? ' · ' + lead.phone : '');
         state.selectedLead = { id: lead.id, label: label };
-        $('cal-new-lead-search').value = label;
         $('cal-new-lead-id').value = lead.id;
+        $('cal-new-lead-results').hidden = true;
+        $('cal-new-lead-search').hidden = true;
+        $('cal-new-lead-chip-avatar').textContent = initialOf(lead.fullName);
+        $('cal-new-lead-chip-label').textContent = label;
+        $('cal-new-lead-chip').hidden = false;
+        if (lead.procedureId) {
+            var sel = $('cal-new-procedure');
+            var hasOption = Array.prototype.some.call(sel.options, function (o) { return o.value === lead.procedureId; });
+            if (hasOption) sel.value = lead.procedureId;
+        }
+    }
+
+    function clearLead() {
+        state.selectedLead = null;
+        $('cal-new-lead-id').value = '';
+        $('cal-new-lead-search').value = '';
+        $('cal-new-lead-search').hidden = false;
+        $('cal-new-lead-chip').hidden = true;
         $('cal-new-lead-results').textContent = '';
+        $('cal-new-lead-results').hidden = true;
     }
 
     function saveNewAppointment() {
@@ -346,10 +518,19 @@
             var q = e.target.value;
             state.leadSearchTimer = setTimeout(function () { searchLeads(q); }, 250);
         });
+        $('cal-new-lead-clear').addEventListener('click', function () { clearLead(); $('cal-new-lead-search').focus(); });
+        $('cal-new-time').addEventListener('input', updateRange);
+        $('cal-new-duration').addEventListener('input', updateRange);
+
+        $('cal-appt-close').addEventListener('click', closeAppointment);
+        $('cal-appt-cancel').addEventListener('click', closeAppointment);
+        $('cal-appt-overlay').addEventListener('click', function (e) { if (e.target === $('cal-appt-overlay')) closeAppointment(); });
+        $('cal-appt-save').addEventListener('click', saveAppointmentStatus);
 
         document.addEventListener('keydown', function (e) {
             if (e.key !== 'Escape') return;
-            if (!$('cal-new-overlay').hidden) closeNewAppointment();
+            if (!$('cal-appt-overlay').hidden) closeAppointment();
+            else if (!$('cal-new-overlay').hidden) closeNewAppointment();
             else if (!$('cal-drawer').hidden) closeDrawer();
         });
     }

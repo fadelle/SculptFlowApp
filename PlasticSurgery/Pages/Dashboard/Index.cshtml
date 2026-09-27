@@ -1,7 +1,10 @@
 @page "/dashboard"
 @model PlasticSurgery.Pages.Dashboard.IndexModel
 @{
-    ViewData["Title"] = "Main Numbers";
+    ViewData["Title"] = "Dashboard";
+
+    // Presentation only: "36% of interested people" under a funnel card ("—" when there's nothing to compare to).
+    static string Rate(int part, int whole) => whole > 0 ? $"{Math.Round(part * 100.0 / whole)}%" : "—";
 }
 
 @if (!Model.ClinicConfigured)
@@ -14,6 +17,8 @@
 else
 {
     var s = Model.Summary!;
+    var attention = Model.Attention!;
+    var custom = Model.Period == "custom";
 
     var whatsAppLevel = Model.WhatsAppHealth?.HealthLevel ?? "unknown";
     var whatsAppDotClass = whatsAppLevel switch
@@ -29,44 +34,118 @@ else
 
     <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
         <p class="text-muted m-0">@Model.ClinicName</p>
-        <a href="/WhatsApp/Health" class="health-pill">
-            <span id="dashboard-whatsapp-health-dot" class="health-dot @whatsAppDotClass"></span>
-            <span class="text-muted">WhatsApp</span>
-            <span id="dashboard-whatsapp-health-label">@whatsAppLabel</span>
-        </a>
+        <div class="flex items-center gap-2 flex-wrap">
+            <form method="get" class="period-form" id="period-form">
+                <select name="Period" class="select" id="period-select" aria-label="Period">
+                    @foreach (var (value, label) in PlasticSurgery.Pages.Dashboard.IndexModel.Periods)
+                    {
+                        <option value="@value" selected="@(value == Model.Period)">@label</option>
+                    }
+                </select>
+                <span class="period-custom" id="period-custom" hidden="@(!custom)">
+                    <input type="date" name="From" class="text-input" value="@Model.From?.ToString("yyyy-MM-dd")" aria-label="From" />
+                    <span class="text-subtle">–</span>
+                    <input type="date" name="To" class="text-input" value="@Model.To?.ToString("yyyy-MM-dd")" aria-label="To" />
+                    <button type="submit" class="btn btn-sm">Apply</button>
+                </span>
+            </form>
+            <a href="/WhatsApp/Health" class="health-pill">
+                <span id="dashboard-whatsapp-health-dot" class="health-dot @whatsAppDotClass"></span>
+                <span class="text-muted">WhatsApp</span>
+                <span id="dashboard-whatsapp-health-label">@whatsAppLabel</span>
+            </a>
+        </div>
     </div>
 
-    <div class="section-heading mt-0"><h2>Patient funnel</h2></div>
+    <div class="section-heading mt-0"><h2>Needs attention</h2></div>
+    @if (attention.ConversationsNeedingStaff + attention.OverdueFollowups + attention.AppointmentsNeedingOutcome == 0)
+    {
+        <div class="attn-clear">All clear: nothing is waiting on you.</div>
+    }
+    else
+    {
+        <div class="attn-row">
+            @if (attention.ConversationsNeedingStaff > 0)
+            {
+                <a class="attn" href="/inbox?filter=needs">
+                    <span class="attn-num">@attention.ConversationsNeedingStaff</span>
+                    <span>@(attention.ConversationsNeedingStaff == 1 ? "conversation waiting for you" : "conversations waiting for you")</span>
+                    <span class="arrow">&rarr;</span>
+                </a>
+            }
+            @if (attention.OverdueFollowups > 0)
+            {
+                <a class="attn" href="/dashboard/leads">
+                    <span class="attn-num">@attention.OverdueFollowups</span>
+                    <span>@(attention.OverdueFollowups == 1 ? "overdue follow-up" : "overdue follow-ups")</span>
+                    <span class="arrow">&rarr;</span>
+                </a>
+            }
+            @if (attention.AppointmentsNeedingOutcome > 0)
+            {
+                <a class="attn" href="/dashboard/appointments">
+                    <span class="attn-num">@attention.AppointmentsNeedingOutcome</span>
+                    <span>@(attention.AppointmentsNeedingOutcome == 1 ? "past appointment without an outcome" : "past appointments without an outcome")</span>
+                    <span class="arrow">&rarr;</span>
+                </a>
+            }
+        </div>
+    }
+
+    <div class="section-heading"><h2>Patient funnel <span class="text-subtle text-sm fw-normal">· @Model.RangeLabel</span></h2></div>
     <div class="stat-grid">
         <div class="stat-card stat-card-accent">
-            <div class="label">New interested people</div>
+            <div class="label">Interested people</div>
             <div class="value">@s.NewInterestedPeople</div>
         </div>
         <div class="stat-card">
             <div class="label">Consultations booked</div>
             <div class="value">@s.ConsultationsBooked</div>
+            <div class="conv">@Rate(s.ConsultationsBooked, s.NewInterestedPeople) of interested people</div>
         </div>
         <div class="stat-card">
             <div class="label">Consultations attended</div>
             <div class="value">@s.ConsultationsAttended</div>
+            <div class="conv">@Rate(s.ConsultationsAttended, s.ConsultationsBooked) of booked</div>
         </div>
         <div class="stat-card">
             <div class="label">Surgeries booked</div>
             <div class="value">@s.SurgeriesBooked</div>
+            <div class="conv">@Rate(s.SurgeriesBooked, s.ConsultationsAttended) of attended</div>
         </div>
     </div>
 
     <div class="section-heading"><h2>Results</h2></div>
     <div class="stat-grid">
         <div class="stat-card">
-            <div class="label">Revenue</div>
+            <div class="label">Revenue (completed surgeries)</div>
             <div class="value">@s.Revenue.ToString("C0")</div>
         </div>
-        <div class="stat-card">
-            <div class="label">Old leads recovered</div>
-            <div class="value">@s.OldLeadsRecovered</div>
-            <div class="hint">Wired up in Project 8</div>
-        </div>
+    </div>
+
+    <div class="section-heading"><h2>By procedure</h2></div>
+    <div class="table-card table-scroll">
+        <table class="data-table">
+            <thead>
+                <tr><th>Procedure</th><th>Interested</th><th>Bookings</th><th>Completed</th><th>Revenue</th></tr>
+            </thead>
+            <tbody>
+                @foreach (var p in Model.Procedures)
+                {
+                    <tr>
+                        <td><strong>@p.ProcedureName</strong></td>
+                        <td>@p.LeadCount</td>
+                        <td>@p.BookingCount</td>
+                        <td>@p.CompletedCount</td>
+                        <td>@p.CompletedRevenue.ToString("C0")</td>
+                    </tr>
+                }
+                @if (Model.Procedures.Count == 0)
+                {
+                    <tr class="empty-row"><td colspan="5">No procedures set up yet. <a class="link" href="/Procedures">Add one</a></td></tr>
+                }
+            </tbody>
+        </table>
     </div>
 
     <div class="section-heading"><h2>Jump to</h2></div>
@@ -87,6 +166,23 @@ else
             <span class="arrow">&rarr;</span>
         </a>
     </div>
+
+    <script>
+        // Period dropdown: presets apply immediately; "Custom range…" reveals the two dates + Apply.
+        (function () {
+            var form = document.getElementById('period-form');
+            var select = document.getElementById('period-select');
+            var custom = document.getElementById('period-custom');
+            select.addEventListener('change', function () {
+                var isCustom = select.value === 'custom';
+                custom.hidden = !isCustom;
+                if (!isCustom) {
+                    custom.querySelectorAll('input').forEach(function (i) { i.disabled = true; }); // keep the URL clean
+                    form.submit();
+                }
+            });
+        })();
+    </script>
 
     <script src="https://cdn.jsdelivr.net/npm/@@microsoft/signalr@@8.0.0/dist/browser/signalr.min.js"></script>
     <script>
