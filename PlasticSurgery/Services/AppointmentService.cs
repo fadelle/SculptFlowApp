@@ -15,10 +15,11 @@ public class AppointmentService : IAppointmentService
     private readonly IAvailabilityService _availability;
     private readonly IInboxNotifier _notifier;
     private readonly INotificationService _notifications;
+    private readonly ICalendarIntegrationService _calendarSync;
 
     public AppointmentService(
         ApplicationDbContext db, IEventLogger events, IProcedureService procedures, IAvailabilityService availability,
-        IInboxNotifier notifier, INotificationService notifications)
+        IInboxNotifier notifier, INotificationService notifications, ICalendarIntegrationService calendarSync)
     {
         _db = db;
         _events = events;
@@ -26,6 +27,7 @@ public class AppointmentService : IAppointmentService
         _availability = availability;
         _notifier = notifier;
         _notifications = notifications;
+        _calendarSync = calendarSync;
     }
 
     /// <summary>The clinic's configured timezone (Clinic.Timezone), falling back to UTC for an unrecognized
@@ -78,6 +80,11 @@ public class AppointmentService : IAppointmentService
     {
         try { await _notifier.AppointmentChangedAsync(clinicId, appointment.Id, change, ct); }
         catch { /* best effort */ }
+
+        // Only AFTER the appointment change is already committed — TriggerAppointmentSyncAsync itself decides
+        // whether "change" maps to a real external-calendar operation (created/rescheduled/canceled only) and
+        // never throws, so a calendar problem can never affect the appointment operation that already succeeded.
+        await _calendarSync.TriggerAppointmentSyncAsync(clinicId, appointment, change, ct);
 
         var (type, title) = change switch
         {

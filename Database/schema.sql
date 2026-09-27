@@ -1446,3 +1446,81 @@ create table if not exists notifications (
 );
 create index if not exists ix_notifications_clinic_created on notifications(clinic_id, created_at desc);
 create index if not exists ix_notifications_clinic_unread on notifications(clinic_id) where is_read = false;
+
+-- =====================================================================
+-- Calendar Integrations — one-way (SculptFlow -> external) appointment sync via a dedicated n8n workflow.
+-- SculptFlow never talks to Google/Microsoft directly and never stores their OAuth tokens: n8n owns the
+-- actual provider connection (see Services/ICalendarSyncNotifier.cs), SculptFlow only stores the opaque
+-- reference n8n gives back plus what staff chose (which calendar, sync on/off).
+-- ---------------------------------------------------------------------
+create table if not exists calendar_integrations (
+  id                       uuid primary key default gen_random_uuid(),
+  clinic_id                uuid not null references clinics(id) on delete cascade,
+  provider                 varchar(20) not null check (provider in ('google','outlook')),
+  status                   varchar(20) not null default 'disconnected'
+    check (status in ('disconnected','pending','connected','error')),
+
+  -- Opaque handle n8n returns on a successful connect — n8n looks THIS up to find the stored OAuth
+  -- tokens for this clinic+provider. Never a raw access/refresh token; SculptFlow cannot use it itself.
+  external_connection_ref  varchar(200),
+  account_display_name     varchar(200),  -- e.g. the connected Google/Outlook account's email, for display only
+
+  selected_calendar_id     varchar(200),  -- external calendar id (opaque to SculptFlow)
+  selected_calendar_name   varchar(200),  -- human-readable, from the cached list below
+
+  sync_enabled             boolean not null default false,
+
+  -- Health, same shape/intent as channel_integrations' WhatsApp health fields — "requires attention"
+  -- when a PREVIOUSLY working connection starts failing syncs, not on every transient hiccup.
+  is_healthy               boolean not null default true,
+  last_problem_message     text,
+  last_synced_at           timestamptz,
+
+  created_at               timestamptz not null default now(),
+  updated_at               timestamptz not null default now()
+);
+create unique index if not exists ux_calendar_integrations_clinic_provider on calendar_integrations(clinic_id, provider);
+drop trigger if exists trg_calendar_integrations_updated_at on calendar_integrations;
+create trigger trg_calendar_integrations_updated_at before update on calendar_integrations
+  for each row execute function set_updated_at();
+
+-- The calendars n8n reported for a connected account — cached so the picker doesn't need a live round
+-- trip on every page load. Replaced wholesale on connect / "refresh calendars".
+create table if not exists calendar_integration_calendars (
+  id                       uuid primary key default gen_random_uuid(),
+  calendar_integration_id  uuid not null references calendar_integrations(id) on delete cascade,
+  external_calendar_id     varchar(200) not null,
+  name                     varchar(200) not null,
+  is_primary               boolean not null default false,
+  created_at               timestamptz not null default now()
+);
+create index if not exists ix_calendar_integration_calendars_integration on calendar_integration_calendars(calendar_integration_id);
+create unique index if not exists ux_calendar_integration_calendars_ext
+  on calendar_integration_calendars(calendar_integration_id, external_calendar_id);
+
+-- One row per (appointment, connected calendar) — the dedup/consistency mechanism: the SAME row is
+-- reused across create -> reschedule -> cancel, so a reschedule updates the stored external_event_id's
+-- event instead of ever creating a second one. last_request_id correlates an outstanding n8n call with
+-- its callback.
+create table if not exists appointment_calendar_syncs (
+  id                       uuid primary key default gen_random_uuid(),
+  appointment_id           uuid not null references appointments(id) on delete cascade,
+  calendar_integration_id  uuid not null references calendar_integrations(id) on delete cascade,
+  external_event_id        varchar(200),
+  status                   varchar(20) not null default 'pending'
+    check (status in ('pending','synced','failed','canceled')),
+  last_request_id          uuid,
+  last_error               text,
+  created_at               timestamptz not null default now(),
+  updated_at               timestamptz not null default now()
+);
+create unique index if not exists ux_appointment_calendar_syncs_appt_integration
+  on appointment_calendar_syncs(appointment_id, calendar_integration_id);
+create index if not exists ix_appointment_calendar_syncs_integration on appointment_calendar_syncs(calendar_integration_id);
+drop trigger if exists trg_appointment_calendar_syncs_updated_at on appointment_calendar_syncs;
+create trigger trg_appointment_calendar_syncs_updated_at before update on appointment_calendar_syncs
+  for each row execute function set_updated_at();
+
+-- appointment_calendar_syncs: the sync row didn't know which operation (create/update/cancel) its last request
+-- was for, so a successful cancel callback couldn't be told apart from a successful create/update one.
+alter table appointment_calendar_syncs add column if not exists last_operation varchar(10);

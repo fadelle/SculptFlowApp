@@ -1163,3 +1163,84 @@ MULTIPLE_UPCOMING_APPOINTMENTS, INVALID_REQUEST. An unknown/missing `code` → 4
   while on /inbox. This is acceptable for an MVP and was not unified, to avoid restructuring inbox.js's own connection handling.
   OUTBOUND_MESSAGE_FAILED for a WhatsApp Business App echo is theoretically possible but never realistically fires, since Meta would
   not send a failed webhook for a message it did not relay. There is no settings UI to mute a notification type; all 8 are always on.
+
+## 26. Calendar Integrations (Google/Outlook, one-way SculptFlow -> external) — built, tested, NOT pushed (awaiting explicit "push")
+
+- **Business shape**: staff connect the clinic's Google and/or Outlook calendar and pick which calendar (by its real name) SculptFlow
+  appointments sync to. SculptFlow is authoritative and one-way only: booking/rescheduling/cancelling here updates the external
+  calendar; nothing made directly in Google/Outlook is ever read back. New sidebar link **Calendar Integrations**
+  (`/settings/calendar-integrations`, placed next to the existing Integrations link) — a new page, not a tab bolted onto the old one.
+- **SculptFlow has zero Google/Outlook-specific code.** It never talks to either provider and never sees an OAuth token. A SEPARATE
+  n8n workflow owns the real OAuth connection and the actual Calendar API calls; SculptFlow only sends it small normalized triggers
+  and receives callbacks — the exact same send/callback shape already used for the AI trigger (`IAiTriggerNotifier`) and the
+  Knowledge Benchmark's async generation. This directly satisfies "do not hardcode Google/Outlook sync logic into the appointment flow."
+- **New tables**: `calendar_integrations` (one row per clinic+provider — `status`, the opaque `external_connection_ref` n8n gave back
+  to look its own stored credentials up by, `account_display_name`, `selected_calendar_id/name`, `sync_enabled`, and
+  `is_healthy`/`last_problem_message`/`last_synced_at` mirroring the WhatsApp health pattern); `calendar_integration_calendars`
+  (the cached list of {id, name} n8n reported, replaced wholesale on connect/refresh — this is what makes the picker show real
+  calendar names instead of asking staff to paste a technical id); `appointment_calendar_syncs` (**one row per (appointment,
+  connected calendar), unique-constrained** — reused across create → reschedule → cancel, `external_event_id` + `last_operation`
+  (create/update/cancel) + `last_request_id` — this row IS the duplicate-prevention mechanism and the callback-staleness guard).
+  All applied live; no change to any existing table.
+- **`Services/ICalendarSyncNotifier.cs`** (`CalendarSyncNotifier`, `AddHttpClient`-registered exactly like `AiTriggerNotifier`):
+  `NotifyConnectAsync` → `N8n:CalendarConnectWebhookUrl` (action: connect/refresh_calendars/disconnect) and `NotifySyncAsync` →
+  `N8n:CalendarSyncWebhookUrl` (operation: create/update/cancel, with the clinic-local `ScheduledStart/End`, the clinic's IANA
+  timezone for display only, patient name + procedure/consultation type + a link back to the SculptFlow appointment — deliberately
+  no notes/conversation history). Both config keys default empty (appsettings.json, `_comment3`) — connect attempts fail with a
+  logged "not configured" until set via user-secrets/env vars; **never throws**, so a calendar problem can never affect the caller.
+- **`Services/ICalendarIntegrationService.cs`** (`CalendarIntegrationService`) — `ListAsync` (always 2 rows, google+outlook, synthetic
+  disconnected if never connected, same convention as `IChannelIntegrationService`), `RequestConnectAsync`/`RequestRefreshCalendarsAsync`
+  (fire the n8n trigger), `SelectCalendarAsync` (validated against the cached list; local write, no n8n call),
+  `SetSyncEnabledAsync` (refuses to turn on with no calendar selected), `DisconnectAsync` (clears the row, best-effort tells n8n to
+  forget the credentials, leaves `appointment_calendar_syncs` history alone), `ApplyConnectCallbackAsync` (**cross-checks the
+  `CalendarIntegrationId` in the callback actually belongs to the `ClinicId` it claims** — a spoofed callback is silently ignored,
+  verified live), `ApplySyncCallbackAsync` (**ignores a callback whose `RequestId` doesn't match the row's `LastRequestId`** — a
+  stale/superseded reply from an appointment that was already rescheduled again is a no-op), and
+  **`TriggerAppointmentSyncAsync`** — called from `AppointmentService.NotifyChangedAsync` (§24h/25's existing hook, extended a third
+  time) right after the SignalR calendar refresh and the business notification, for EVERY connected+sync-enabled calendar. It never
+  throws (wrapped in its own try/catch) and only acts on `created`/`rescheduled`/`canceled` — `status_changed` (attended/no_show/
+  confirmed) is a safe no-op, verified live.
+- **Two controllers**: `CalendarIntegrationsController` (dashboard-facing, `DashboardApiController`, clinicId from
+  `CurrentClinicContext`) for connect/refresh/select/toggle/disconnect; `CalendarIntegrationsIngestController`
+  (`[RequireIngestKey]`, same shared secret as every other n8n endpoint) for the two callbacks.
+- **UI**: `Pages/Settings/CalendarIntegrations.cshtml(.cs)` — plain server-rendered forms (no JS file), same idiom as Clinic Info's
+  Availability tab, not the JS/fetch idiom the Appointments calendar or Inbox use. Two provider cards mirroring the existing
+  `.integration-card` styling: status badge (Connected/green, Needs attention or Connection Failed/red, Connecting…/Disconnected/
+  gray), the connected account, a calendar `<select>` of real names (auto-submits on change), Turn sync on/off (disabled until a
+  calendar is chosen), Refresh calendars, Disconnect (with a confirm prompt), and the last-synced timestamp.
+- **A bug caught by testing, fixed before finishing**: the first version of `ApplySyncCallbackAsync` had no way to tell a successful
+  *cancel* callback apart from a successful *create/update* one (the sync row didn't record which operation its pending request was
+  for), so a cancelled appointment's sync row was landing on `synced` instead of `canceled`. Fixed by adding `last_operation` to
+  `appointment_calendar_syncs` (schema + entity + both read/write sites) and re-verified live.
+- **Tenant isolation**: every dashboard call goes through `CurrentClinicContext`; both ingest callbacks re-validate the id in the
+  URL/body actually belongs to the `clinicId` claimed (see above). Verified live: Clinic B's list showed both providers disconnected
+  throughout, could not touch Clinic A's connection, and a callback that named Clinic A's integration but claimed `clinicId=B` was
+  silently ignored with Clinic A's row unchanged.
+- **Integration health**: `is_healthy`/`last_problem_message` on `calendar_integrations`, same "notify only on the transition into
+  unhealthy" rule as WhatsApp health (§24h) — reuses `NotificationType.IntegrationUnhealthy` directly (no schema change to
+  `notifications`; `Link` points at `/settings/calendar-integrations` instead of a `ChannelIntegrationId`, since calendar
+  integrations aren't rows in `channel_integrations`). Verified live: a failing sync notified once, a second failure in the same
+  unhealthy state did not re-notify, and recovering then failing again correctly notified a second time.
+- **Manual/live testing performed** (throwaway clinics, deleted+verified after): connect → simulated n8n success callback with two
+  calendars → selected one → turned sync on (and confirmed it's refused with no calendar chosen); booked an appointment and confirmed
+  exactly one `appointment_calendar_syncs` row was created (status pending, no external id yet) **before** the (unconfigured, logged
+  and swallowed) outbound call; simulated the create callback and confirmed `synced` + the external event id stored; **rescheduled
+  the same appointment and confirmed the SAME row was reused (count stayed at 1) with the old external event id preserved** for the
+  update trigger; simulated the reschedule callback; cancelled and confirmed the same row's operation was `cancel`, and after the
+  bug fix above landed on `canceled` with the event id intact; sent a callback with a wrong `RequestId` and confirmed it was ignored;
+  confirmed a booking refused by availability (`SLOT_UNAVAILABLE`) created zero sync rows, and marking an appointment `attended`
+  created zero sync rows; the health-transition/dedup/re-notify sequence above; the isolation and spoof-callback checks above;
+  disconnect clearing the row and calendars; and the actual browser UI — the new sidebar link, both provider cards in their
+  Connected/Connection Failed states with real calendar names in the dropdown, and clicking "Turn sync off" live.
+- **Limitations**: this is genuinely one-way — nothing here reads Google/Outlook back, per the task's explicit scope. No conflict
+  detection, no patient invitations, no recurring appointments, no resource/room scheduling. Connect/refresh/disconnect assume n8n
+  eventually calls back; there's no UI timeout/retry if it never does (the row just stays `pending` — a limitation to revisit if it
+  matters in practice, not something this pass tried to solve).
+- **Setup required before this is live**: a separate n8n workflow (outside this repo) that (a) performs the real Google/Microsoft
+  OAuth authorization and stores the resulting tokens keyed by an opaque reference it invents and returns as `externalConnectionRef`,
+  (b) on `action=connect`/`refresh_calendars` calls back `POST /api/calendar-integrations/connect-callback` with the account name and
+  calendar list, (c) on `action=disconnect` may revoke/forget the stored tokens, (d) on the sync webhook creates/updates/cancels the
+  external event using the stored tokens for `externalConnectionRef`, on the calendar named `externalCalendarId`, and calls back
+  `POST /api/calendar-integrations/sync-callback` with the result. Then set `N8n__CalendarConnectWebhookUrl` and
+  `N8n__CalendarSyncWebhookUrl` (env vars or user-secrets) to that workflow's two webhook URLs; the existing `N8n:IngestApiKey`
+  (`X-Ingest-Key` header) is reused for both callbacks, no new secret to manage.

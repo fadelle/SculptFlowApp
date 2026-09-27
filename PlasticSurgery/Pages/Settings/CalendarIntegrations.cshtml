@@ -1,0 +1,135 @@
+@page "/settings/calendar-integrations"
+@model PlasticSurgery.Pages.Settings.CalendarIntegrationsModel
+@using PlasticSurgery.Data.Entities
+@{
+    ViewData["Title"] = "Calendar Integrations";
+}
+
+@if (!Model.ClinicConfigured)
+{
+    <div class="alert alert-warning">No clinic configured yet — see the Main Numbers page for setup steps.</div>
+}
+else
+{
+    if (!string.IsNullOrEmpty(Model.StatusMessage))
+    {
+        <div class="alert alert-info mb-3">@Model.StatusMessage</div>
+    }
+    if (!string.IsNullOrEmpty(Model.ErrorMessage))
+    {
+        <div class="alert alert-warning mb-3">@Model.ErrorMessage</div>
+    }
+
+    <p class="text-muted mb-3">
+        Connect the clinic's Google or Outlook calendar so SculptFlow appointments show up there automatically.
+        SculptFlow stays the source of truth — this is one-way only: booking, rescheduling and cancelling in
+        SculptFlow updates the external calendar; changes made directly in Google or Outlook are not read back.
+    </p>
+
+    <div class="integration-list">
+        @{ await RenderProviderCard(CalendarProvider.Google, "G", "#4285F4", "Google Calendar"); }
+        @{ await RenderProviderCard(CalendarProvider.Outlook, "O", "#0078D4", "Outlook Calendar"); }
+    </div>
+}
+
+@functions {
+    private async Task RenderProviderCard(string provider, string initials, string accentHex, string title)
+    {
+        var info = Model.Integrations.FirstOrDefault(i => i.Provider == provider);
+        var connected = info?.Status == CalendarIntegrationStatus.Connected;
+        var badgeClass = info?.Status switch
+        {
+            CalendarIntegrationStatus.Connected => info.IsHealthy ? "badge-green" : "badge-red",
+            CalendarIntegrationStatus.Pending => "badge-gray",
+            CalendarIntegrationStatus.Error => "badge-red",
+            _ => "badge-gray"
+        };
+        var statusLabel = info?.Status switch
+        {
+            CalendarIntegrationStatus.Connected => info.IsHealthy ? "Connected" : "Needs attention",
+            CalendarIntegrationStatus.Pending => "Connecting…",
+            CalendarIntegrationStatus.Error => "Connection failed",
+            _ => "Disconnected"
+        };
+
+        <div class="card integration-card">
+            <div class="integration-card-header">
+                <div class="flex items-center gap-2">
+                    <span class="channel-mark" style="background:@accentHex">@initials</span>
+                    <div>
+                        <div class="integration-title">@title</div>
+                        @if (connected && !string.IsNullOrEmpty(info!.AccountDisplayName))
+                        {
+                            <div class="text-subtle" style="font-size:.78rem">@info.AccountDisplayName</div>
+                        }
+                    </div>
+                </div>
+                <span class="badge @badgeClass">@statusLabel</span>
+            </div>
+
+            @if (!string.IsNullOrEmpty(info?.LastProblemMessage) && (info.Status == CalendarIntegrationStatus.Error || !info.IsHealthy))
+            {
+                <div class="alert alert-warning mt-2" style="font-size:.8rem">@info.LastProblemMessage</div>
+            }
+
+            @if (!connected)
+            {
+                <form method="post" asp-page-handler="Connect" class="mt-2">
+                    <input type="hidden" name="provider" value="@provider" />
+                    <button type="submit" class="btn btn-primary btn-sm">Connect @title</button>
+                </form>
+            }
+            else
+            {
+                <div class="field mt-2">
+                    <span>Sync appointments to</span>
+                    <form method="post" asp-page-handler="SelectCalendar" class="flex items-center gap-2">
+                        <input type="hidden" name="provider" value="@provider" />
+                        <select name="externalCalendarId" class="select" onchange="this.form.requestSubmit()" style="flex:1">
+                            <option value="">Choose a calendar…</option>
+                            @foreach (var cal in info!.AvailableCalendars)
+                            {
+                                <option value="@cal.ExternalCalendarId" selected="@(cal.ExternalCalendarId == info.SelectedCalendarId)">
+                                    @cal.Name@(cal.IsPrimary ? " (primary)" : "")
+                                </option>
+                            }
+                        </select>
+                    </form>
+                </div>
+                @if (info.AvailableCalendars.Count == 0)
+                {
+                    <div class="text-subtle mt-1" style="font-size:.78rem">No calendars found yet — try refreshing.</div>
+                }
+
+                <div class="flex items-center gap-2 mt-2">
+                    <form method="post" asp-page-handler="SetSyncEnabled">
+                        <input type="hidden" name="provider" value="@provider" />
+                        <input type="hidden" name="enabled" value="@(!info.SyncEnabled)" />
+                        <button type="submit" class="btn btn-sm" disabled="@string.IsNullOrEmpty(info.SelectedCalendarId)">
+                            @(info.SyncEnabled ? "Turn sync off" : "Turn sync on")
+                        </button>
+                    </form>
+                    <form method="post" asp-page-handler="RefreshCalendars">
+                        <input type="hidden" name="provider" value="@provider" />
+                        <button type="submit" class="btn btn-sm">Refresh calendars</button>
+                    </form>
+                    <form method="post" asp-page-handler="Disconnect"
+                          onsubmit="return confirm('Disconnect @title? Appointments will stop syncing there until reconnected.');">
+                        <input type="hidden" name="provider" value="@provider" />
+                        <button type="submit" class="btn btn-sm">Disconnect</button>
+                    </form>
+                </div>
+                <div class="mt-1">
+                    <span class="badge @(info.SyncEnabled ? "badge-green" : "badge-gray")">
+                        Sync is @(info.SyncEnabled ? "on" : "off")
+                    </span>
+                    @if (info.LastSyncedAt is not null)
+                    {
+                        <span class="text-subtle" style="font-size:.76rem;margin-left:.5rem">Last synced @info.LastSyncedAt.Value.ToString("MMM d, h:mm tt")</span>
+                    }
+                </div>
+            }
+        </div>
+        await Task.CompletedTask;
+    }
+}

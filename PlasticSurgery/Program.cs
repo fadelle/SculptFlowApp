@@ -63,6 +63,7 @@ builder.Services.AddScoped<ILeadService, LeadService>();
 builder.Services.AddScoped<IProcedureService, ProcedureService>();
 builder.Services.AddScoped<IAvailabilityService, AvailabilityService>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
+builder.Services.AddScoped<ICalendarIntegrationService, CalendarIntegrationService>();
 builder.Services.AddScoped<IAppointmentService, AppointmentService>();
 builder.Services.AddScoped<IConversationService, ConversationService>();
 builder.Services.AddScoped<IProcedureBookingService, ProcedureBookingService>();
@@ -159,6 +160,7 @@ builder.Services.AddScoped<IChannelSender, PlasticSurgery.Integrations.Telegram.
 // Outbound: the one call to n8n left after Meta started posting directly to us — see
 // Controllers/WhatsAppWebhookController.cs and IAiTriggerNotifier's own doc comment.
 builder.Services.AddHttpClient<IAiTriggerNotifier, AiTriggerNotifier>();
+builder.Services.AddHttpClient<ICalendarSyncNotifier, CalendarSyncNotifier>();
 
 // ---------------------------------------------------------------------
 // Web layer

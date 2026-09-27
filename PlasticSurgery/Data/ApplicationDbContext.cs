@@ -52,6 +52,9 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
     public DbSet<ClinicBookingSettings> ClinicBookingSettings => Set<ClinicBookingSettings>();
     public DbSet<ClinicAvailabilityException> ClinicAvailabilityExceptions => Set<ClinicAvailabilityException>();
     public DbSet<Notification> Notifications => Set<Notification>();
+    public DbSet<CalendarIntegration> CalendarIntegrations => Set<CalendarIntegration>();
+    public DbSet<CalendarIntegrationCalendar> CalendarIntegrationCalendars => Set<CalendarIntegrationCalendar>();
+    public DbSet<AppointmentCalendarSync> AppointmentCalendarSyncs => Set<AppointmentCalendarSync>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -731,6 +734,71 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
 
             e.HasIndex(x => new { x.ClinicId, x.CreatedAt }).HasDatabaseName("ix_notifications_clinic_created");
             e.HasIndex(x => x.ClinicId).HasFilter("is_read = false").HasDatabaseName("ix_notifications_clinic_unread");
+        });
+
+        // ---------------------------------------------------------------
+        // Calendar Integrations — see Services/ICalendarIntegrationService.cs / ICalendarSyncNotifier.cs.
+        // ---------------------------------------------------------------
+        modelBuilder.Entity<CalendarIntegration>(e =>
+        {
+            e.ToTable("calendar_integrations");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.ClinicId).HasColumnName("clinic_id");
+            e.Property(x => x.Provider).HasColumnName("provider").HasMaxLength(20).IsRequired();
+            e.Property(x => x.Status).HasColumnName("status").HasMaxLength(20).IsRequired();
+            e.Property(x => x.ExternalConnectionRef).HasColumnName("external_connection_ref").HasMaxLength(200);
+            e.Property(x => x.AccountDisplayName).HasColumnName("account_display_name").HasMaxLength(200);
+            e.Property(x => x.SelectedCalendarId).HasColumnName("selected_calendar_id").HasMaxLength(200);
+            e.Property(x => x.SelectedCalendarName).HasColumnName("selected_calendar_name").HasMaxLength(200);
+            e.Property(x => x.SyncEnabled).HasColumnName("sync_enabled");
+            e.Property(x => x.IsHealthy).HasColumnName("is_healthy");
+            e.Property(x => x.LastProblemMessage).HasColumnName("last_problem_message");
+            e.Property(x => x.LastSyncedAt).HasColumnName("last_synced_at");
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+            e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
+
+            e.HasOne<Clinic>().WithMany().HasForeignKey(x => x.ClinicId).OnDelete(DeleteBehavior.Cascade);
+            e.HasMany(x => x.Calendars).WithOne().HasForeignKey(x => x.CalendarIntegrationId).OnDelete(DeleteBehavior.Cascade);
+
+            e.HasIndex(x => new { x.ClinicId, x.Provider }).IsUnique().HasDatabaseName("ux_calendar_integrations_clinic_provider");
+        });
+
+        modelBuilder.Entity<CalendarIntegrationCalendar>(e =>
+        {
+            e.ToTable("calendar_integration_calendars");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.CalendarIntegrationId).HasColumnName("calendar_integration_id");
+            e.Property(x => x.ExternalCalendarId).HasColumnName("external_calendar_id").HasMaxLength(200).IsRequired();
+            e.Property(x => x.Name).HasColumnName("name").HasMaxLength(200).IsRequired();
+            e.Property(x => x.IsPrimary).HasColumnName("is_primary");
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+
+            e.HasIndex(x => new { x.CalendarIntegrationId, x.ExternalCalendarId }).IsUnique()
+                .HasDatabaseName("ux_calendar_integration_calendars_ext");
+        });
+
+        modelBuilder.Entity<AppointmentCalendarSync>(e =>
+        {
+            e.ToTable("appointment_calendar_syncs");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.AppointmentId).HasColumnName("appointment_id");
+            e.Property(x => x.CalendarIntegrationId).HasColumnName("calendar_integration_id");
+            e.Property(x => x.ExternalEventId).HasColumnName("external_event_id").HasMaxLength(200);
+            e.Property(x => x.Status).HasColumnName("status").HasMaxLength(20).IsRequired();
+            e.Property(x => x.LastRequestId).HasColumnName("last_request_id");
+            e.Property(x => x.LastOperation).HasColumnName("last_operation").HasMaxLength(10);
+            e.Property(x => x.LastError).HasColumnName("last_error");
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+            e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
+
+            e.HasOne<Appointment>().WithMany().HasForeignKey(x => x.AppointmentId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<CalendarIntegration>().WithMany().HasForeignKey(x => x.CalendarIntegrationId).OnDelete(DeleteBehavior.Cascade);
+
+            e.HasIndex(x => new { x.AppointmentId, x.CalendarIntegrationId }).IsUnique()
+                .HasDatabaseName("ux_appointment_calendar_syncs_appt_integration");
         });
 
         // ---------------------------------------------------------------
