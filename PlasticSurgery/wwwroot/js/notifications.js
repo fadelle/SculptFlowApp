@@ -11,6 +11,11 @@
   var body = document.getElementById('notif-dropdown-body');
   var markAllBtn = document.getElementById('notif-mark-all');
   var open = false;
+  // Per-tab cache of the last-fetched list (not persisted — just a JS variable) so opening the bell
+  // renders instantly instead of waiting on a round trip every time. Filled on page load and refreshed
+  // in the background on every SignalR push; the pushed event itself is never trusted as the data,
+  // only as a signal to go re-fetch — same principle as inbox.js.
+  var cachedItems = null;
 
   function api(method, path) {
     return fetch(path, { method: method, headers: { 'Content-Type': 'application/json' } }).then(function (r) {
@@ -63,11 +68,20 @@
       ].filter(Boolean));
       row.appendChild(main);
       row.addEventListener('click', function () {
-        if (!n.isRead) api('POST', '/api/notifications/' + n.id + '/read').then(refreshBadge).catch(function () {});
+        if (!n.isRead) {
+          api('POST', '/api/notifications/' + n.id + '/read').then(refreshBadge).catch(function () {});
+          n.isRead = true; // update our own cache after a successful mutation — not the same as trusting a push payload
+          row.classList.remove('unread');
+        }
         if (n.link) window.location.href = n.link;
       });
       body.appendChild(row);
     });
+  }
+
+  function renderLoading() {
+    body.innerHTML = '';
+    body.appendChild(el('div', { class: 'notif-empty' }, ['Loading…']));
   }
 
   function el(tag, attrs, kids) {
@@ -77,20 +91,35 @@
     return e;
   }
 
-  function loadList() {
-    api('GET', '/api/notifications?take=20').then(function (r) {
-      render(r.items);
+  // Always fetches fresh from the server and updates the cache; re-renders too if the dropdown is
+  // currently open. Called on page load, on every SignalR push, and after our own mutations
+  // (mark all read) — never gated behind the dropdown being open, so the cache stays current even
+  // while closed and the NEXT open is instant.
+  function refreshList() {
+    return api('GET', '/api/notifications?take=20').then(function (r) {
+      cachedItems = r.items;
       setBadge(r.unreadCount);
+      if (open) render(cachedItems);
     }).catch(function () {
-      body.innerHTML = '';
-      body.appendChild(el('div', { class: 'notif-empty' }, ['Could not load notifications.']));
+      if (open && !cachedItems) {
+        body.innerHTML = '';
+        body.appendChild(el('div', { class: 'notif-empty' }, ['Could not load notifications.']));
+      }
     });
   }
 
   function toggle() {
     open = !open;
     dropdown.hidden = !open;
-    if (open) loadList();
+    if (!open) return;
+
+    if (cachedItems) {
+      render(cachedItems); // instant — no wait on a network round trip
+    } else {
+      renderLoading(); // only the very first open before the page-load fetch has landed
+    }
+    // Stale-while-revalidate: quietly confirm/update in the background even when we rendered from cache.
+    refreshList();
   }
 
   bell.addEventListener('click', function (e) { e.stopPropagation(); toggle(); });
@@ -99,18 +128,17 @@
   });
   markAllBtn.addEventListener('click', function (e) {
     e.stopPropagation();
-    api('POST', '/api/notifications/read-all').then(loadList).catch(function () {});
+    api('POST', '/api/notifications/read-all').then(refreshList).catch(function () {});
   });
 
-  refreshBadge();
+  // Populate the cache in the background as soon as the page loads — not waiting for a click — so the
+  // first time the bell is opened is already instant, not just the second time onward.
+  refreshList();
 
   if (window.signalR) {
     var connection = new signalR.HubConnectionBuilder().withUrl('/hubs/inbox').withAutomaticReconnect().build();
-    connection.on('NotificationCreated', function () {
-      refreshBadge();
-      if (open) loadList();
-    });
-    connection.onreconnected(refreshBadge);
+    connection.on('NotificationCreated', refreshList);
+    connection.onreconnected(refreshList); // events missed while disconnected — resync the cache, not just the badge
     connection.start().catch(function (err) { console.error('[notifications] live updates unavailable', err); });
   }
 })();
