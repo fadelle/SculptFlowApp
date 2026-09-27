@@ -26,6 +26,11 @@ public interface IInboxNotifier
 
     Task ConversationModeChangedAsync(Guid clinicId, Guid conversationId, string mode, CancellationToken ct = default);
 
+    /// <summary>Tells the clinic's open dashboard(s) a new Notification was created (see INotificationService) —
+    /// the bell badge/list re-fetch instead of trusting the payload as authoritative, same principle as every
+    /// other event here.</summary>
+    Task NotificationCreatedAsync(Guid clinicId, Dtos.NotificationResponse notification, CancellationToken ct = default);
+
     /// <summary>Notifies the Templates UI (/WhatsApp/Templates) that a template's Meta-reported
     /// state changed — status, rejection reason, quality, category. See WhatsAppTemplateService.</summary>
     Task WhatsAppTemplateUpdatedAsync(Guid clinicId, Guid templateId, string name, string status,
@@ -67,6 +72,9 @@ public class InboxNotifier : IInboxNotifier
 
     public Task ConversationUpdatedAsync(Guid clinicId, Guid conversationId, CancellationToken ct = default) =>
         ClinicGroup(clinicId).SendAsync("ConversationUpdated", new { conversationId }, ct);
+
+    public Task NotificationCreatedAsync(Guid clinicId, Dtos.NotificationResponse notification, CancellationToken ct = default) =>
+        ClinicGroup(clinicId).SendAsync("NotificationCreated", notification, ct);
 
     public Task AppointmentChangedAsync(Guid clinicId, Guid appointmentId, string change, CancellationToken ct = default) =>
         ClinicGroup(clinicId).SendAsync("AppointmentChanged", new { appointmentId, change }, ct);

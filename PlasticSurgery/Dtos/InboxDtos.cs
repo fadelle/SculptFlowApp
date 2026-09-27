@@ -62,7 +62,11 @@ public record IngestMessageRequest(
     string? FailureReason = null,
     /// <summary>status_update only — Meta's own event timestamp, used for the per-status *_At
     /// column instead of our own ingestion time when provided.</summary>
-    DateTimeOffset? OccurredAt = null
+    DateTimeOffset? OccurredAt = null,
+    /// <summary>customer_message only, set by CustomerMessageHandler/TelegramWebhookProcessor from
+    /// ILeadService's WasCreated — drives the NEW_LEAD notification. Always false for any other caller
+    /// (e.g. the n8n ingest endpoint, which never creates a lead itself).</summary>
+    bool LeadWasNewlyCreated = false
 );
 
 public static class IngestEventType

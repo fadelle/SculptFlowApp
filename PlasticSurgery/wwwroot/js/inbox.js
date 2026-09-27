@@ -532,7 +532,11 @@
   renderTimestamps();
   // Replace the server-rendered first paint with the client-rendered list so unread badges / the tab
   // title are consistent from the start.
-  loadConversationList();
+  loadConversationList().then(function () {
+    // Deep link from a notification bell click (/inbox?conversationId=...) — open it once the list exists.
+    var wanted = new URLSearchParams(window.location.search).get('conversationId');
+    if (wanted) selectConversation(wanted);
+  });
 
   // ---------------------------------------------------------------------
   // SignalR — real-time notifications only. Every handler re-fetches from the API rather than

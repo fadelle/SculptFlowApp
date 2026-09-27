@@ -33,7 +33,9 @@ public class BusinessAppEchoHandler
         }
 
         var phone = "+" + evt.CustomerWaId.TrimStart('+');
-        var lead = await _leads.GetOrCreateByPhoneAsync(clinic.ClinicId, phone, evt.CustomerName, ct);
+        // Not a NEW_LEAD candidate even if this creates the lead row — it's staff replying, not the
+        // lead's own first inbound message, so WasCreated is deliberately not passed through.
+        var (lead, _) = await _leads.GetOrCreateByPhoneAsync(clinic.ClinicId, phone, evt.CustomerName, ct);
         var conversation = await _conversations.GetOrCreateForLeadAsync(clinic.ClinicId, lead.Id, ConversationChannel.WhatsApp, ct);
 
         var result = await _messages.IngestAsync(new IngestMessageRequest(

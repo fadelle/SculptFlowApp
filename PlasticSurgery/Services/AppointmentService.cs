@@ -14,14 +14,18 @@ public class AppointmentService : IAppointmentService
 
     private readonly IAvailabilityService _availability;
     private readonly IInboxNotifier _notifier;
+    private readonly INotificationService _notifications;
 
-    public AppointmentService(ApplicationDbContext db, IEventLogger events, IProcedureService procedures, IAvailabilityService availability, IInboxNotifier notifier)
+    public AppointmentService(
+        ApplicationDbContext db, IEventLogger events, IProcedureService procedures, IAvailabilityService availability,
+        IInboxNotifier notifier, INotificationService notifications)
     {
         _db = db;
         _events = events;
         _procedures = procedures;
         _availability = availability;
         _notifier = notifier;
+        _notifications = notifications;
     }
 
     /// <summary>The clinic's configured timezone (Clinic.Timezone), falling back to UTC for an unrecognized
@@ -63,22 +67,43 @@ public class AppointmentService : IAppointmentService
 
         var appointment = await CreateCoreAsync(request with { ScheduledEnd = check.End }, ct);
         await tx.CommitAsync(ct);
-        await NotifyChangedAsync(request.ClinicId, appointment.Id, "created", ct); // only once the row is committed and visible
+        await NotifyChangedAsync(request.ClinicId, appointment, "created", ct); // only once the row is committed and visible
         return appointment;
     }
 
-    /// <summary>Tells the clinic's open calendars to re-fetch. Never fails the operation: the change is already saved, and a missed
-    /// event only means a calendar refreshes on its next load.</summary>
-    private async Task NotifyChangedAsync(Guid clinicId, Guid appointmentId, string change, CancellationToken ct)
+    /// <summary>Tells the clinic's open calendars to re-fetch (best-effort SignalR) AND — for created/rescheduled/canceled — creates
+    /// the matching APPOINTMENT_* notification (see INotificationService; "status_changed" covers attended/no_show/confirmed, which
+    /// aren't in the notification list). Called only once the appointment row is actually committed — never on a mere request.</summary>
+    private async Task NotifyChangedAsync(Guid clinicId, AppointmentResponse appointment, string change, CancellationToken ct)
     {
-        try { await _notifier.AppointmentChangedAsync(clinicId, appointmentId, change, ct); }
+        try { await _notifier.AppointmentChangedAsync(clinicId, appointment.Id, change, ct); }
         catch { /* best effort */ }
+
+        var (type, title) = change switch
+        {
+            "created" => (NotificationType.AppointmentBooked, "Appointment booked"),
+            "rescheduled" => (NotificationType.AppointmentRescheduled, "Appointment rescheduled"),
+            "canceled" => (NotificationType.AppointmentCancelled, "Appointment canceled"),
+            _ => (null, null)
+        };
+        if (type is null) return;
+
+        var tz = await GetTimeZoneAsync(clinicId, ct);
+        var whenLabel = LabelFor(TimeZoneInfo.ConvertTime(appointment.ScheduledStart, tz));
+        var who = string.IsNullOrWhiteSpace(appointment.LeadFullName) ? "A patient" : appointment.LeadFullName!;
+        var what = string.IsNullOrWhiteSpace(appointment.ProcedureName) ? "a consultation" : appointment.ProcedureName!;
+        var verb = change switch { "created" => "booked", "rescheduled" => "moved to", _ => "canceled for" };
+
+        await _notifications.CreateAsync(clinicId, type, title!,
+            $"{who} — {what} {verb} {whenLabel}.",
+            leadId: appointment.LeadId, appointmentId: appointment.Id,
+            link: $"/dashboard/appointments/{appointment.Id}", ct: ct);
     }
 
     public async Task<AppointmentResponse> CreateAsync(CreateAppointmentRequest request, CancellationToken ct = default)
     {
         var appointment = await CreateCoreAsync(request, ct);
-        await NotifyChangedAsync(request.ClinicId, appointment.Id, "created", ct);
+        await NotifyChangedAsync(request.ClinicId, appointment, "created", ct);
         return appointment;
     }
 
@@ -163,8 +188,9 @@ public class AppointmentService : IAppointmentService
         }
 
         await _db.SaveChangesAsync(ct);
-        await NotifyChangedAsync(clinicId, appointment.Id, status == AppointmentStatus.Canceled ? "canceled" : "status_changed", ct);
-        return await ToResponseAsync(appointment, ct);
+        var updateResponse = await ToResponseAsync(appointment, ct);
+        await NotifyChangedAsync(clinicId, updateResponse, status == AppointmentStatus.Canceled ? "canceled" : "status_changed", ct);
+        return updateResponse;
     }
 
     public async Task<AppointmentResponse?> RescheduleAsync(
@@ -208,7 +234,7 @@ public class AppointmentService : IAppointmentService
         await _db.SaveChangesAsync(ct);
         var response = await ToResponseAsync(appointment, ct);
         await tx.CommitAsync(ct);
-        await NotifyChangedAsync(clinicId, appointment.Id, "rescheduled", ct); // after the transaction commits
+        await NotifyChangedAsync(clinicId, response, "rescheduled", ct); // after the transaction commits
         return response;
     }
 
@@ -233,8 +259,9 @@ public class AppointmentService : IAppointmentService
             metadataJson: JsonSerializer.Serialize(new { reason }));
 
         await _db.SaveChangesAsync(ct);
-        await NotifyChangedAsync(clinicId, appointment.Id, "canceled", ct);
-        return await ToResponseAsync(appointment, ct);
+        var cancelResponse = await ToResponseAsync(appointment, ct);
+        await NotifyChangedAsync(clinicId, cancelResponse, "canceled", ct);
+        return cancelResponse;
     }
 
     public async Task<PatientBookingContext?> GetBookingContextAsync(Guid clinicId, Guid leadId, CancellationToken ct = default)

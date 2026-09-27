@@ -1420,3 +1420,29 @@ create unique index if not exists ux_clinic_availability_exceptions_date on clin
 drop trigger if exists trg_clinic_availability_exceptions_updated_at on clinic_availability_exceptions;
 create trigger trg_clinic_availability_exceptions_updated_at before update on clinic_availability_exceptions
   for each row execute function set_updated_at();
+
+-- =====================================================================
+-- Notifications — a simple per-clinic notification center for staff (bell/list). Created ONLY from confirmed
+-- backend events (a message actually sent, an appointment actually booked...), never from an AI intention alone.
+-- ---------------------------------------------------------------------
+create table if not exists notifications (
+  id                      uuid primary key default gen_random_uuid(),
+  clinic_id               uuid not null references clinics(id) on delete cascade,
+  type                    varchar(40) not null
+    check (type in ('NEW_LEAD','HANDOFF','APPOINTMENT_BOOKED','APPOINTMENT_RESCHEDULED','APPOINTMENT_CANCELLED',
+                     'CAMPAIGN_REPLY','OUTBOUND_MESSAGE_FAILED','INTEGRATION_UNHEALTHY')),
+  title                   varchar(200) not null,
+  message                 text,
+  lead_id                 uuid references leads(id) on delete set null,
+  conversation_id         uuid references conversations(id) on delete set null,
+  appointment_id          uuid references appointments(id) on delete set null,
+  channel_integration_id  uuid references channel_integrations(id) on delete set null,
+  -- Precomputed relative URL (e.g. "/inbox?conversationId=..." or "/dashboard/appointments/{id}") so the
+  -- bell UI never has to know which entity type maps to which page.
+  link                    varchar(300),
+  is_read                 boolean not null default false,
+  read_at                 timestamptz,
+  created_at              timestamptz not null default now()
+);
+create index if not exists ix_notifications_clinic_created on notifications(clinic_id, created_at desc);
+create index if not exists ix_notifications_clinic_unread on notifications(clinic_id) where is_read = false;

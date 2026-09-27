@@ -10,12 +10,14 @@ public class ConversationService : IConversationService
     private readonly ApplicationDbContext _db;
     private readonly IInboxNotifier _notifier;
     private readonly IEventLogger _events;
+    private readonly INotificationService _notifications;
 
-    public ConversationService(ApplicationDbContext db, IInboxNotifier notifier, IEventLogger events)
+    public ConversationService(ApplicationDbContext db, IInboxNotifier notifier, IEventLogger events, INotificationService notifications)
     {
         _db = db;
         _notifier = notifier;
         _events = events;
+        _notifications = notifications;
     }
 
     public async Task<ConversationResponse> CreateAsync(CreateConversationRequest request, CancellationToken ct = default)
@@ -211,9 +213,31 @@ public class ConversationService : IConversationService
     public Task<ConversationResponse?> ReturnToAiAsync(Guid clinicId, Guid conversationId, CancellationToken ct = default) =>
         SetModeAsync(clinicId, conversationId, ConversationMode.Ai, EventTypes.ReturnedToAi, "dashboard", "{}", ct);
 
-    public Task<ConversationResponse?> HandoffToHumanAsync(Guid clinicId, Guid conversationId, string? reason, CancellationToken ct = default) =>
-        SetModeAsync(clinicId, conversationId, ConversationMode.Human, EventTypes.HumanHandoff,
+    public async Task<ConversationResponse?> HandoffToHumanAsync(Guid clinicId, Guid conversationId, string? reason, CancellationToken ct = default)
+    {
+        // Read the mode BEFORE the change so a HANDOFF notification only fires on a REAL ai->human transition —
+        // the AI calling this tool twice in a row (or on an already-human conversation) must not double-notify.
+        var wasAlreadyHuman = await _db.Conversations
+            .Where(c => c.ClinicId == clinicId && c.Id == conversationId)
+            .Select(c => c.Mode == ConversationMode.Human)
+            .FirstOrDefaultAsync(ct);
+
+        var result = await SetModeAsync(clinicId, conversationId, ConversationMode.Human, EventTypes.HumanHandoff,
             MessageOrigin.Ai, System.Text.Json.JsonSerializer.Serialize(new { reason }), ct);
+
+        if (result is not null && !wasAlreadyHuman)
+        {
+            var leadName = await _db.Leads.Where(l => l.Id == result.LeadId).Select(l => l.FullName).FirstOrDefaultAsync(ct);
+            await _notifications.CreateAsync(clinicId, NotificationType.Handoff,
+                "AI handed off to staff",
+                (string.IsNullOrWhiteSpace(leadName) ? "A conversation" : leadName) +
+                (string.IsNullOrWhiteSpace(reason) ? " needs staff attention." : $" needs staff attention: {reason}"),
+                leadId: result.LeadId, conversationId: conversationId,
+                link: $"/inbox?conversationId={conversationId}", ct: ct);
+        }
+
+        return result;
+    }
 
     public async Task<ConversationResponse?> CloseAsync(Guid clinicId, Guid conversationId, CancellationToken ct = default)
     {

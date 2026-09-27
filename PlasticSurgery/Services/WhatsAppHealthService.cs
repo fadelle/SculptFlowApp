@@ -11,13 +11,19 @@ public class WhatsAppHealthService : IWhatsAppHealthService
     private readonly ApplicationDbContext _db;
     private readonly IInboxNotifier _notifier;
     private readonly IEventLogger _events;
+    private readonly INotificationService _notifications;
 
-    public WhatsAppHealthService(ApplicationDbContext db, IInboxNotifier notifier, IEventLogger events)
+    public WhatsAppHealthService(ApplicationDbContext db, IInboxNotifier notifier, IEventLogger events, INotificationService notifications)
     {
         _db = db;
         _notifier = notifier;
         _events = events;
+        _notifications = notifications;
     }
+
+    /// <summary>The "requires attention" health levels — INTEGRATION_UNHEALTHY fires only on the transition INTO
+    /// one of these, never while it stays here (see ApplyHealthEventAsync).</summary>
+    private static bool IsUnhealthy(string level) => level is WhatsAppHealthLevel.Problem or WhatsAppHealthLevel.Disconnected;
 
     public async Task<WhatsAppHealthResponse?> GetHealthAsync(Guid clinicId, CancellationToken ct = default)
     {
@@ -100,6 +106,7 @@ public class WhatsAppHealthService : IWhatsAppHealthService
                 break;
         }
 
+        var previousLevel = integration.HealthLevel ?? WhatsAppHealthLevel.Unknown;
         var (isHealthy, healthLevel, problemCode, problemMessage) = RecomputeHealth(integration);
         integration.IsHealthy = isHealthy;
         integration.HealthLevel = healthLevel;
@@ -141,6 +148,16 @@ public class WhatsAppHealthService : IWhatsAppHealthService
             request.ClinicId, integration.Id, healthLevel, integration.AccountStatus, integration.AccountReviewStatus,
             integration.PhoneQualityRating, integration.PhoneStatus, integration.LastProblemMessage,
             integration.UpdatedAt, ct);
+
+        // Only on the transition INTO an unhealthy state — staying unhealthy across repeated webhooks must not
+        // re-notify every time (see IsUnhealthy's doc comment).
+        if (IsUnhealthy(healthLevel) && !IsUnhealthy(previousLevel))
+        {
+            await _notifications.CreateAsync(request.ClinicId, NotificationType.IntegrationUnhealthy,
+                "WhatsApp connection needs attention",
+                integration.LastProblemMessage ?? "The clinic's WhatsApp connection is no longer working normally.",
+                channelIntegrationId: integration.Id, link: "/WhatsApp/Health", ct: ct);
+        }
 
         return ToHealthResponse(integration);
     }

@@ -35,13 +35,13 @@ public class CustomerMessageHandler
         // Meta's wa_id is digits only (no leading "+") — normalize to this app's E.164-ish
         // convention ("+<digits>") used elsewhere in Lead.Phone.
         var phone = "+" + evt.CustomerWaId.TrimStart('+');
-        var lead = await _leads.GetOrCreateByPhoneAsync(clinic.ClinicId, phone, evt.CustomerName, ct);
+        var (lead, leadWasCreated) = await _leads.GetOrCreateByPhoneAsync(clinic.ClinicId, phone, evt.CustomerName, ct);
         var conversation = await _conversations.GetOrCreateForLeadAsync(clinic.ClinicId, lead.Id, ConversationChannel.WhatsApp, ct);
 
         var result = await _messages.IngestAsync(new IngestMessageRequest(
             clinic.ClinicId, conversation.Id, lead.Id, IngestEventType.CustomerMessage, ConversationChannel.WhatsApp,
             evt.Content, evt.ExternalMessageId, DeliveryStatus: null, SentAt: null, ReceivedAt: evt.Timestamp,
-            MessageType: evt.MessageType, MetadataJson: evt.MetadataJson), ct);
+            MessageType: evt.MessageType, MetadataJson: evt.MetadataJson, LeadWasNewlyCreated: leadWasCreated), ct);
 
         return new WhatsAppWebhookResponse(
             Processed: true, EventType: "customer_message", ShouldRunAi: result.AiEligible,

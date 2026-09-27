@@ -12,16 +12,18 @@ public class MessageService : IMessageService
     private readonly IEnumerable<IChannelSender> _senders;
     private readonly IInboxNotifier _notifier;
     private readonly IEventLogger _events;
+    private readonly INotificationService _notifications;
 
     public MessageService(
         ApplicationDbContext db, IWhatsAppService whatsApp, IEnumerable<IChannelSender> senders,
-        IInboxNotifier notifier, IEventLogger events)
+        IInboxNotifier notifier, IEventLogger events, INotificationService notifications)
     {
         _db = db;
         _whatsApp = whatsApp; // still used directly for WhatsApp-only template sends
         _senders = senders;
         _notifier = notifier;
         _events = events;
+        _notifications = notifications;
     }
 
     /// <summary>Picks the outbound adapter for a conversation's channel (WhatsApp, Telegram, ...).</summary>
@@ -46,7 +48,16 @@ public class MessageService : IMessageService
         // live in the IChannelSender for this conversation's channel. The actual API call happens
         // before we touch the database — if it throws, no message row or conversation-state change
         // is left behind for a send that never went out.
-        var externalMessageId = await ResolveSender(conversation.Channel).SendTextAsync(conversation, request.Content, ct);
+        string externalMessageId;
+        try
+        {
+            externalMessageId = await ResolveSender(conversation.Channel).SendTextAsync(conversation, request.Content, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            await NotifyOutboundFailureAsync(clinicId, conversation, ct);
+            throw;
+        }
 
         var now = DateTimeOffset.UtcNow;
         var message = new Message
@@ -206,8 +217,17 @@ public class MessageService : IMessageService
         var toPhone = conversation.Lead?.Phone
             ?? throw new InvalidOperationException("This lead has no phone number on file — can't send a WhatsApp message.");
 
-        var externalMessageId = await _whatsApp.SendTemplateMessageAsync(
-            clinicId, toPhone, template.Name, template.Language, bodyParameters, ct);
+        string externalMessageId;
+        try
+        {
+            externalMessageId = await _whatsApp.SendTemplateMessageAsync(
+                clinicId, toPhone, template.Name, template.Language, bodyParameters, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            await NotifyOutboundFailureAsync(clinicId, conversation, ct);
+            throw;
+        }
 
         var now = DateTimeOffset.UtcNow;
         var message = new Message
@@ -379,6 +399,25 @@ public class MessageService : IMessageService
             lead.UpdatedAt = now;
         }
 
+        // CAMPAIGN_REPLY: a genuine customer reply, attributed to whichever campaign send is the most recent
+        // one still awaiting a reply (RepliedAt null) for this lead. Persisting RepliedAt here (once) is what
+        // makes this fire only on the FIRST reply after that send — CampaignService's own read-time stat
+        // computation is unaffected, this just also writes the column its doc comment already anticipated.
+        CampaignRecipient? repliedCampaignRecipient = null;
+        if (request.EventType == IngestEventType.CustomerMessage)
+        {
+            repliedCampaignRecipient = await _db.CampaignRecipients
+                .Where(r => r.ClinicId == request.ClinicId && r.LeadId == request.LeadId && r.SentAt != null && r.RepliedAt == null)
+                .OrderByDescending(r => r.SentAt)
+                .Include(r => r.Campaign)
+                .FirstOrDefaultAsync(ct);
+            if (repliedCampaignRecipient is not null)
+            {
+                repliedCampaignRecipient.RepliedAt = now;
+                repliedCampaignRecipient.UpdatedAt = now;
+            }
+        }
+
         _events.Log(request.ClinicId, eventType,
             leadId: request.LeadId, conversationId: request.ConversationId, source: origin);
 
@@ -389,6 +428,26 @@ public class MessageService : IMessageService
         if (modeChanged)
         {
             await _notifier.ConversationModeChangedAsync(request.ClinicId, request.ConversationId, ConversationMode.Human, ct);
+        }
+
+        if (request.LeadWasNewlyCreated)
+        {
+            await _notifications.CreateAsync(request.ClinicId, NotificationType.NewLead,
+                "New lead",
+                (string.IsNullOrWhiteSpace(lead?.FullName) ? "A new patient" : lead!.FullName) + " sent their first message.",
+                leadId: request.LeadId, conversationId: request.ConversationId,
+                link: $"/inbox?conversationId={request.ConversationId}", ct: ct);
+        }
+
+        if (repliedCampaignRecipient is not null)
+        {
+            var campaignName = repliedCampaignRecipient.Campaign?.Name;
+            await _notifications.CreateAsync(request.ClinicId, NotificationType.CampaignReply,
+                "Campaign reply",
+                (string.IsNullOrWhiteSpace(lead?.FullName) ? "A patient" : lead!.FullName) +
+                " replied" + (string.IsNullOrWhiteSpace(campaignName) ? "." : $" to \"{campaignName}\"."),
+                leadId: request.LeadId, conversationId: request.ConversationId,
+                link: $"/inbox?conversationId={request.ConversationId}", ct: ct);
         }
 
         // The strict AI-trigger rule (see IngestMessageResult's doc comment): only a genuine
@@ -425,6 +484,10 @@ public class MessageService : IMessageService
 
         // Not a new message — just update delivery status and tell the Inbox. Never touches AI/mode.
         var occurredAt = request.OccurredAt ?? DateTimeOffset.UtcNow;
+        // Captured before the switch so OUTBOUND_MESSAGE_FAILED only fires on the FIRST time this message is
+        // reported failed — a retried/duplicate "failed" webhook for the same message must not re-notify.
+        var justFailed = message.Direction == MessageDirection.Outbound && message.FailedAt is null
+                          && string.Equals(request.DeliveryStatus, "failed", StringComparison.OrdinalIgnoreCase);
         message.DeliveryStatus = request.DeliveryStatus;
         switch (request.DeliveryStatus?.ToLowerInvariant())
         {
@@ -464,6 +527,16 @@ public class MessageService : IMessageService
         await _notifier.MessageStatusUpdatedAsync(
             request.ClinicId, message.ConversationId, message.Id, request.DeliveryStatus ?? "unknown", occurredAt, ct);
 
+        if (justFailed)
+        {
+            var leadName = await _db.Leads.Where(l => l.Id == message.LeadId).Select(l => l.FullName).FirstOrDefaultAsync(ct);
+            await _notifications.CreateAsync(request.ClinicId, NotificationType.OutboundMessageFailed,
+                "Message failed to send",
+                string.IsNullOrWhiteSpace(leadName) ? "A message failed to send to a patient." : $"Message failed to send to {leadName}.",
+                leadId: message.LeadId, conversationId: message.ConversationId,
+                link: $"/inbox?conversationId={message.ConversationId}", ct: ct);
+        }
+
         // Status updates are explicitly excluded from the AI trigger — never eligible.
         return new IngestMessageResult(Found: true, Deduplicated: false, ConversationService.ToResponse(message), AiEligible: false);
     }
@@ -492,5 +565,18 @@ public class MessageService : IMessageService
                 break;
         }
         recipient.UpdatedAt = now;
+    }
+
+    /// <summary>OUTBOUND_MESSAGE_FAILED for a send that failed synchronously (IChannelSender/IWhatsAppService threw
+    /// before any Message row existed). The exception's own message is never surfaced here — staff see an
+    /// operational sentence, not a raw technical error (Application logs still have the real exception).</summary>
+    private Task NotifyOutboundFailureAsync(Guid clinicId, Conversation conversation, CancellationToken ct)
+    {
+        var who = conversation.Lead?.FullName;
+        return _notifications.CreateAsync(clinicId, NotificationType.OutboundMessageFailed,
+            "Message failed to send",
+            string.IsNullOrWhiteSpace(who) ? "A message failed to send to a patient." : $"Message failed to send to {who}.",
+            leadId: conversation.LeadId, conversationId: conversation.Id,
+            link: $"/inbox?conversationId={conversation.Id}", ct: ct);
     }
 }

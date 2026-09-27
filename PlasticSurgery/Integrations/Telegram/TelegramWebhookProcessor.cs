@@ -79,7 +79,7 @@ public class TelegramWebhookProcessor : ITelegramWebhookProcessor
 
         // Telegram has no phone number for us: the person is identified by their Telegram chat id,
         // scoped to this clinic (the unique index is (clinic_id, external_lead_id)).
-        var lead = await _leads.GetOrCreateByExternalIdAsync(
+        var (lead, leadWasCreated) = await _leads.GetOrCreateByExternalIdAsync(
             clinicId,
             externalLeadId: $"telegram:{msg.ChatId}",
             source: ConversationChannel.Telegram,
@@ -102,7 +102,7 @@ public class TelegramWebhookProcessor : ITelegramWebhookProcessor
                 // (clinic_id, channel, external_message_id) is the DB-level idempotency guarantee.
                 ExternalMessageId: ExternalMessageId(msg.ChatId.ToString(), msg.MessageId),
                 DeliveryStatus: null, SentAt: null, ReceivedAt: msg.Timestamp,
-                MessageType: msg.MessageType, MetadataJson: msg.MetadataJson), ct);
+                MessageType: msg.MessageType, MetadataJson: msg.MetadataJson, LeadWasNewlyCreated: leadWasCreated), ct);
         }
         catch (DbUpdateException ex) when (DbErrors.IsUniqueViolation(ex))
         {

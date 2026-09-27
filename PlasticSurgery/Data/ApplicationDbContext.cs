@@ -51,6 +51,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
     public DbSet<ClinicAvailabilityRule> ClinicAvailabilityRules => Set<ClinicAvailabilityRule>();
     public DbSet<ClinicBookingSettings> ClinicBookingSettings => Set<ClinicBookingSettings>();
     public DbSet<ClinicAvailabilityException> ClinicAvailabilityExceptions => Set<ClinicAvailabilityException>();
+    public DbSet<Notification> Notifications => Set<Notification>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -700,6 +701,36 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
                 .IsUnique()
                 .HasFilter("is_active = true")
                 .HasDatabaseName("ux_clinic_users_user_active");
+        });
+
+        // ---------------------------------------------------------------
+        // notifications — the clinic's notification bell. See Services/INotificationService.cs.
+        // ---------------------------------------------------------------
+        modelBuilder.Entity<Notification>(e =>
+        {
+            e.ToTable("notifications");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.ClinicId).HasColumnName("clinic_id");
+            e.Property(x => x.Type).HasColumnName("type").HasMaxLength(40).IsRequired();
+            e.Property(x => x.Title).HasColumnName("title").HasMaxLength(200).IsRequired();
+            e.Property(x => x.Message).HasColumnName("message");
+            e.Property(x => x.LeadId).HasColumnName("lead_id");
+            e.Property(x => x.ConversationId).HasColumnName("conversation_id");
+            e.Property(x => x.AppointmentId).HasColumnName("appointment_id");
+            e.Property(x => x.ChannelIntegrationId).HasColumnName("channel_integration_id");
+            e.Property(x => x.Link).HasColumnName("link").HasMaxLength(300);
+            e.Property(x => x.IsRead).HasColumnName("is_read");
+            e.Property(x => x.ReadAt).HasColumnName("read_at");
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+
+            e.HasOne<Clinic>().WithMany().HasForeignKey(x => x.ClinicId).OnDelete(DeleteBehavior.Cascade);
+            // Lead/Conversation/Appointment/ChannelIntegration are all "set null" on delete in the DB — no CLR
+            // navigation to any of them (matches Lead.AssignedStaffId's scalar-FK-only pattern); a notification
+            // outliving the row it points at just shows a dead link, never blocks the delete.
+
+            e.HasIndex(x => new { x.ClinicId, x.CreatedAt }).HasDatabaseName("ix_notifications_clinic_created");
+            e.HasIndex(x => x.ClinicId).HasFilter("is_read = false").HasDatabaseName("ix_notifications_clinic_unread");
         });
 
         // ---------------------------------------------------------------

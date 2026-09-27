@@ -240,11 +240,11 @@ public class LeadService : ILeadService
         return ToResponse(lead);
     }
 
-    public async Task<LeadResponse> GetOrCreateByPhoneAsync(Guid clinicId, string phone, string? fullName, CancellationToken ct = default)
+    public async Task<(LeadResponse Lead, bool WasCreated)> GetOrCreateByPhoneAsync(Guid clinicId, string phone, string? fullName, CancellationToken ct = default)
     {
         var existing = await _db.Leads.Include(l => l.Procedure)
             .FirstOrDefaultAsync(l => l.ClinicId == clinicId && l.Phone == phone, ct);
-        if (existing is not null) return ToResponse(existing);
+        if (existing is not null) return (ToResponse(existing), false);
 
         var now = DateTimeOffset.UtcNow;
         var lead = new Lead
@@ -265,16 +265,16 @@ public class LeadService : ILeadService
         _events.Log(clinicId, EventTypes.LeadCreated, leadId: lead.Id, source: "whatsapp");
         await _db.SaveChangesAsync(ct);
 
-        return ToResponse(lead);
+        return (ToResponse(lead), true);
     }
 
-    public async Task<LeadResponse> GetOrCreateByExternalIdAsync(
+    public async Task<(LeadResponse Lead, bool WasCreated)> GetOrCreateByExternalIdAsync(
         Guid clinicId, string externalLeadId, string source, string? fullName, string? firstName, string? lastName,
         string? sourceDetail, CancellationToken ct = default)
     {
         var existing = await _db.Leads.Include(l => l.Procedure)
             .FirstOrDefaultAsync(l => l.ClinicId == clinicId && l.ExternalLeadId == externalLeadId, ct);
-        if (existing is not null) return ToResponse(existing);
+        if (existing is not null) return (ToResponse(existing), false);
 
         var now = DateTimeOffset.UtcNow;
         var lead = new Lead
@@ -307,10 +307,10 @@ public class LeadService : ILeadService
             _db.ChangeTracker.Clear();
             var winner = await _db.Leads.Include(l => l.Procedure)
                 .FirstAsync(l => l.ClinicId == clinicId && l.ExternalLeadId == externalLeadId, ct);
-            return ToResponse(winner);
+            return (ToResponse(winner), false); // a concurrent delivery created it first — not "our" new lead
         }
 
-        return ToResponse(lead);
+        return (ToResponse(lead), true);
     }
 
     public async Task<IReadOnlyList<string>> GetDistinctSourcesAsync(Guid clinicId, CancellationToken ct = default) =>

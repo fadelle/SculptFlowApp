@@ -1363,3 +1363,39 @@ table.data-table {
 .avail-rules { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: 0.75rem; }
 .avail-rules label { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.8rem; color: var(--text-muted); }
 .avail-heading { margin: 1.5rem 0 0.4rem; font-size: 1rem; }
+
+/* Notification bell (topbar, all authenticated pages) */
+.notif-bell-wrap { position: relative; }
+.notif-bell {
+  position: relative; background: none; border: none; cursor: pointer;
+  width: 36px; height: 36px; border-radius: 8px; display: flex; align-items: center; justify-content: center;
+  color: var(--text-muted);
+}
+.notif-bell:hover { background: var(--surface-subtle); color: var(--text); }
+.notif-bell-badge {
+  position: absolute; top: 2px; right: 2px; min-width: 16px; height: 16px; padding: 0 3px;
+  border-radius: 8px; background: var(--badge-red-text); color: #fff;
+  font-size: 0.62rem; font-weight: 700; line-height: 16px; text-align: center;
+}
+.notif-dropdown {
+  position: absolute; top: calc(100% + 8px); right: 0; width: 360px; max-width: calc(100vw - 2rem);
+  max-height: 420px; overflow-y: auto; background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: var(--shadow); z-index: 50;
+}
+.notif-dropdown-header {
+  display: flex; align-items: center; justify-content: space-between; padding: 0.7rem 0.9rem;
+  border-bottom: 1px solid var(--border); font-size: 0.85rem; font-weight: 600; position: sticky; top: 0; background: var(--surface);
+}
+.notif-mark-all { background: none; border: none; color: var(--accent); font-size: 0.76rem; cursor: pointer; font-weight: 500; }
+.notif-mark-all:hover { text-decoration: underline; }
+.notif-empty { padding: 1.5rem 0.9rem; text-align: center; color: var(--text-subtle); font-size: 0.82rem; }
+.notif-row { display: flex; gap: 0.6rem; padding: 0.65rem 0.9rem; cursor: pointer; border-bottom: 1px solid var(--border); }
+.notif-row:last-child { border-bottom: none; }
+.notif-row:hover { background: var(--surface-subtle); }
+.notif-row.unread { background: var(--badge-blue-bg); }
+.notif-row.unread:hover { background: var(--badge-blue-bg); filter: brightness(0.97); }
+.notif-row-icon { font-size: 1rem; flex-shrink: 0; line-height: 1.4; }
+.notif-row-main { min-width: 0; }
+.notif-row-title { font-size: 0.82rem; font-weight: 600; color: var(--text); }
+.notif-row-message { font-size: 0.78rem; color: var(--text-muted); margin-top: 0.1rem; overflow-wrap: break-word; }
+.notif-row-time { font-size: 0.7rem; color: var(--text-subtle); margin-top: 0.25rem; }

@@ -30,14 +30,17 @@ public interface ILeadService
     /// Phone first rather than only an ExternalLeadId convention — a customer who already exists
     /// as a lead from a different source must not get a second, duplicate record just because they
     /// then messaged on WhatsApp.</summary>
-    Task<LeadResponse> GetOrCreateByPhoneAsync(Guid clinicId, string phone, string? fullName, CancellationToken ct = default);
+    /// <summary>WasCreated tells the caller this is a genuinely new lead's very first inbound message — used for
+    /// the NEW_LEAD notification (see INotificationService). False for every later message from the same lead.</summary>
+    Task<(LeadResponse Lead, bool WasCreated)> GetOrCreateByPhoneAsync(Guid clinicId, string phone, string? fullName, CancellationToken ct = default);
 
     /// <summary>Finds or creates the lead for a channel-native identity that has NO phone number
     /// (Telegram today): matched strictly on (clinicId, externalLeadId), so the same person on two
     /// clinics is two separate leads. Never invents a phone number — Lead.Phone stays null. Safe under
     /// concurrent deliveries (the unique index on (clinic_id, external_lead_id) decides the winner and
     /// the loser re-reads it).</summary>
-    Task<LeadResponse> GetOrCreateByExternalIdAsync(
+    /// <summary>WasCreated — see GetOrCreateByPhoneAsync's doc comment.</summary>
+    Task<(LeadResponse Lead, bool WasCreated)> GetOrCreateByExternalIdAsync(
         Guid clinicId, string externalLeadId, string source, string? fullName, string? firstName, string? lastName,
         string? sourceDetail, CancellationToken ct = default);
 
