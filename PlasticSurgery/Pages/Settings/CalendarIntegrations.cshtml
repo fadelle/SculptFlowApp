@@ -74,7 +74,16 @@ else
 
             @if (!connected)
             {
-                <a href="/calendar-oauth/@provider/connect" class="btn btn-primary btn-sm mt-2">Connect @title</a>
+                <div class="flex items-center gap-2 mt-2">
+                    <a href="/calendar-oauth/@provider/connect" class="btn btn-primary btn-sm">Connect @title</a>
+                    @if (info is not null && info.Status != CalendarIntegrationStatus.Disconnected)
+                    {
+                        <form method="post" asp-page-handler="Disconnect">
+                            <input type="hidden" name="provider" value="@provider" />
+                            <button type="submit" class="btn btn-sm">Cancel / reset</button>
+                        </form>
+                    }
+                </div>
             }
             else
             {
