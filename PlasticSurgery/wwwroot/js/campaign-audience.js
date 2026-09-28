@@ -95,7 +95,7 @@
   function updateVisibility() {
     var choice = selectedChoice();
     Object.keys(panels).forEach(function (key) {
-      if (panels[key]) panels[key].style.display = key === choice ? (key === 'manual' ? '' : 'block') : 'none';
+      if (panels[key]) panels[key].hidden = key !== choice;
     });
   }
 
@@ -123,7 +123,10 @@
 
     fetch(url)
       .then(function (res) { return res.ok ? res.json() : null; })
-      .then(function (data) { setText(countElId, data ? String(data.matchingLeads) : '—'); })
+      .then(function (data) {
+        setText(countElId, data ? String(data.matchingLeads) : '—');
+        document.dispatchEvent(new CustomEvent('campaign:count', { detail: { count: data ? data.matchingLeads : null } }));
+      })
       .catch(function () { setText(countElId, '—'); });
   }
 
@@ -131,6 +134,7 @@
     syncHiddenFields();
     updateVisibility();
     refreshCount();
+    document.dispatchEvent(new CustomEvent('campaign:audience-changed', { detail: { choice: selectedChoice() } }));
   }
 
   function onFilterChanged() {

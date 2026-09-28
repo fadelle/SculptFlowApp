@@ -21,28 +21,48 @@
     return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
   }
 
-  function applyToFullPage(payload) {
-    var badge = document.getElementById('health-status-badge');
-    if (badge) {
-      badge.textContent = capitalize(payload.healthLevel);
-      badge.className = 'badge ' + badgeClass(payload.healthLevel);
-    }
-    var setText = function (id, value) {
-      var el = document.getElementById(id);
-      if (el) el.textContent = value || '—';
-    };
-    setText('health-quality', payload.phoneQualityRating);
-    setText('health-account', payload.accountStatus);
-    setText('health-review', payload.accountReviewStatus);
-    setText('health-last-problem', payload.problemMessage || 'None');
+  // Full Health page: the banner, cards and activity are worded server-side, so on a change we note WHAT
+  // changed ("quality changed from High to Medium"), reload to get the fresh page, and show the note there.
+  var NOTE_KEY = 'sf-health-note';
+  var QUALITY = { GREEN: 'High', YELLOW: 'Medium', RED: 'Low', HIGH: 'High', MEDIUM: 'Medium', LOW: 'Low' };
+  var LEVEL = { healthy: 'All good', warning: 'Needs attention', problem: 'Sending may be limited', disconnected: 'Not connected' };
+  function q(v) { return v ? (QUALITY[String(v).toUpperCase()] || v) : 'none'; }
 
-    var row = document.getElementById('whatsapp-health-card');
-    if (row) {
-      row.style.transition = 'background-color 0.2s';
-      row.style.backgroundColor = 'var(--surface-subtle)';
-      setTimeout(function () { row.style.backgroundColor = ''; }, 1200);
+  function describeChange(card, payload) {
+    var changes = [];
+    if ((card.dataset.quality || '').toUpperCase() !== (payload.phoneQualityRating || '').toUpperCase()) {
+      changes.push('quality changed from ' + q(card.dataset.quality) + ' to ' + q(payload.phoneQualityRating));
     }
+    if ((card.dataset.account || '').toLowerCase() !== (payload.accountStatus || '').toLowerCase()) {
+      changes.push('account is now ' + (payload.accountStatus || 'unknown').toLowerCase());
+    }
+    if ((card.dataset.review || '').toLowerCase() !== (payload.accountReviewStatus || '').toLowerCase()) {
+      changes.push('Meta review is now ' + (payload.accountReviewStatus || 'unknown').toLowerCase());
+    }
+    if (!changes.length && card.dataset.level !== payload.healthLevel) {
+      changes.push('status is now "' + (LEVEL[payload.healthLevel] || capitalize(payload.healthLevel)) + '"');
+    }
+    if (!changes.length && payload.problemMessage) changes.push(payload.problemMessage);
+    return changes.length ? changes.join('; ') : 'new information from Meta';
   }
+
+  function applyToFullPage(payload) {
+    var card = document.getElementById('whatsapp-health-card');
+    if (!card) return;
+    try { sessionStorage.setItem(NOTE_KEY, describeChange(card, payload)); } catch (e) { /* private mode: no note */ }
+    window.location.reload();
+  }
+
+  (function showNoteAfterReload() {
+    var box = document.getElementById('health-live-note');
+    if (!box) return;
+    var note = null;
+    try { note = sessionStorage.getItem(NOTE_KEY); sessionStorage.removeItem(NOTE_KEY); } catch (e) { /* ignore */ }
+    if (!note) return;
+    box.innerHTML = '<strong>Updated just now:</strong> ';
+    box.appendChild(document.createTextNode(note.charAt(0).toUpperCase() + note.slice(1) + '.'));
+    box.hidden = false;
+  })();
 
   function applyToIndicator(payload) {
     var dot = document.getElementById('dashboard-whatsapp-health-dot');

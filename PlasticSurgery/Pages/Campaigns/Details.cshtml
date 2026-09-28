@@ -4,6 +4,17 @@
 @using PlasticSurgery.Pages.Shared
 @{
     ViewData["Title"] = Model.Details?.Campaign.Name ?? "Campaign";
+
+    static string Pct(int part, int whole) => whole > 0 ? $"{Math.Round(part * 100.0 / whole)}% of previous" : "";
+    static string Width(int part, int whole) => whole > 0 ? (part * 100.0 / whole).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture) : "0";
+    // Which recipient tab a row belongs to (client-side filter below).
+    static string Group(string status) => status switch
+    {
+        CampaignRecipientStatus.Read or CampaignRecipientStatus.Replied or CampaignRecipientStatus.Booked => "read",
+        CampaignRecipientStatus.Failed or CampaignRecipientStatus.Skipped => "problem",
+        CampaignRecipientStatus.Pending or CampaignRecipientStatus.Queued => "waiting",
+        _ => "sent"
+    };
 }
 
 @if (!Model.ClinicConfigured)
@@ -13,93 +24,176 @@
 else if (Model.Details is not null)
 {
     var d = Model.Details;
+    var c = d.Campaign;
+    var st = d.Stats;
+    var isManual = c.AudienceType == CampaignAudienceType.Custom && string.IsNullOrWhiteSpace(c.AudienceFilters);
+    var audience = isManual ? "Picked manually" : c.AudienceType switch
+    {
+        CampaignAudienceType.ReactivationNoConsultation => "Old leads who never booked",
+        CampaignAudienceType.AllEligible => "All contactable leads",
+        _ => "Custom audience"
+    };
+    var when = c.Status == CampaignStatus.Scheduled && c.ScheduledAt is not null ? "Scheduled for " + c.ScheduledAt.Value.ToString("MMM d, HH:mm")
+        : c.CompletedAt is not null ? "Finished " + c.CompletedAt.Value.ToString("MMM d, HH:mm")
+        : c.StartedAt is not null ? "Started " + c.StartedAt.Value.ToString("MMM d, HH:mm")
+        : "Created " + c.CreatedAt.ToString("MMM d, HH:mm");
+    var canSend = c.Status is CampaignStatus.Draft or CampaignStatus.Scheduled or CampaignStatus.Running;
+    var sendLabel = c.Status == CampaignStatus.Running ? "Send to the rest" : $"Send now to {st.TotalRecipients - st.Skipped} {(st.TotalRecipients - st.Skipped == 1 ? "lead" : "leads")}";
+    var groups = d.Recipients.GroupBy(r => Group(r.Status)).ToDictionary(g => g.Key, g => g.Count());
+
+    <a href="/Campaigns" class="back-link">&larr; Campaigns</a>
 
     if (!string.IsNullOrEmpty(Model.StatusMessage))
     {
-        <div class="alert alert-info mb-3">@Model.StatusMessage</div>
+        <div class="alert alert-info mt-2">@Model.StatusMessage</div>
     }
     if (!string.IsNullOrEmpty(Model.ErrorMessage))
     {
-        <div class="alert alert-warning mb-3">@Model.ErrorMessage</div>
+        <div class="alert alert-warning mt-2">@Model.ErrorMessage</div>
     }
 
-    <div class="flex items-center justify-between mb-3">
-        <div>
-            <h2 class="m-0">@d.Campaign.Name</h2>
-            <div class="text-subtle">Template: @(d.Campaign.TemplateName ?? "—")</div>
+    <div class="card camp-head mt-2">
+        <div class="flex-1">
+            <div class="flex items-center gap-2 flex-wrap">
+                <h2 class="m-0">@c.Name</h2>
+                <span class="badge @StatusBadgeHelper.CssClass(c.Status)">@FilterLabelHelper.Label(c.Status)</span>
+            </div>
+            <div class="text-muted text-md mt-1">Template <strong>@(c.TemplateName ?? "—")</strong> · @audience · @when</div>
         </div>
-        <div class="flex items-center gap-2">
-            <span class="badge @StatusBadgeHelper.CssClass(d.Campaign.Status)">@d.Campaign.Status</span>
-            @if (d.Campaign.Status is CampaignStatus.Draft or CampaignStatus.Scheduled or CampaignStatus.Running)
+        <div class="flex items-center gap-2 flex-wrap">
+            @if (canSend)
             {
                 <form method="post" asp-page-handler="Send">
-                    <button type="submit" class="btn btn-primary btn-sm">
-                        @(d.Campaign.Status == CampaignStatus.Running ? "Send more" : "Send now")
-                    </button>
+                    <button type="submit" class="btn btn-primary btn-sm">@sendLabel</button>
                 </form>
             }
-            @if (d.Campaign.Status is CampaignStatus.Draft or CampaignStatus.Scheduled or CampaignStatus.Running)
+            @if (canSend)
             {
-                <form method="post" asp-page-handler="Cancel" onsubmit="return confirm('Cancel this campaign? Recipients not yet sent will be marked failed.');">
-                    <button type="submit" class="btn btn-sm">Cancel</button>
+                <form method="post" asp-page-handler="Cancel" onsubmit="return confirm('Cancel this campaign? People not messaged yet won\'t be.');">
+                    <button type="submit" class="btn btn-sm btn-danger">Cancel campaign</button>
                 </form>
             }
         </div>
     </div>
 
-    <div class="flex items-center gap-2 mb-4 flex-wrap">
-        @{ await Stat("Total", d.Stats.TotalRecipients); }
-        @{ await Stat("Pending", d.Stats.Pending); }
-        @{ await Stat("Queued", d.Stats.Queued); }
-        @{ await Stat("Sent", d.Stats.Sent); }
-        @{ await Stat("Delivered", d.Stats.Delivered); }
-        @{ await Stat("Read", d.Stats.Read); }
-        @{ await Stat("Failed", d.Stats.Failed); }
-        @{ await Stat("Replied", d.Stats.Replied); }
+    @if (st.TotalRecipients > 0)
+    {
+        <div class="prog prog-lg mt-3" title="@($"{st.TotalRecipients} recipients · {st.Sent} sent · {st.Delivered} delivered · {st.Read} read · {st.Failed} failed")">
+            <div class="prog-bar">
+                <i class="p-read" style="width:@Width(st.Read, st.TotalRecipients)%"></i><i class="p-deliv" style="width:@Width(Math.Max(st.Delivered - st.Read, 0), st.TotalRecipients)%"></i><i class="p-sent" style="width:@Width(Math.Max(st.Sent - st.Delivered, 0), st.TotalRecipients)%"></i><i class="p-fail" style="width:@Width(st.Failed, st.TotalRecipients)%"></i>
+            </div>
+        </div>
+    }
+
+    <div class="funnel">
+        @{
+            var steps = new (string Label, int Value, string Hint)[]
+            {
+                ("Recipients", st.TotalRecipients, ""),
+                ("Sent", st.Sent, Pct(st.Sent, st.TotalRecipients)),
+                ("Delivered", st.Delivered, Pct(st.Delivered, st.Sent)),
+                ("Read", st.Read, Pct(st.Read, st.Delivered)),
+                ("Replied", st.Replied, Pct(st.Replied, st.Delivered)),
+                ("Booked", st.Booked, Pct(st.Booked, st.Replied)),
+            };
+        }
+        @for (var i = 0; i < steps.Length; i++)
+        {
+            <div class="funnel-step">
+                @if (i > 0) { <span class="funnel-arrow" aria-hidden="true">&rsaquo;</span> }
+                <div class="eyebrow">@steps[i].Label</div>
+                <div class="funnel-num">@steps[i].Value</div>
+                <div class="cell-sub">@(string.IsNullOrEmpty(steps[i].Hint) ? " " : steps[i].Hint)</div>
+            </div>
+        }
+    </div>
+    <div class="side-stats">
+        Also:
+        <span class="badge badge-gray">@st.Pending pending</span>
+        <span class="badge badge-amber">@st.Queued queued</span>
+        <span class="badge badge-red">@st.Failed failed</span>
+        <span class="badge badge-gray" title="In the audience but not messaged, e.g. opted out or no phone">@st.Skipped skipped</span>
     </div>
 
-    <div class="table-card table-scroll">
+    @if (!string.IsNullOrWhiteSpace(d.TemplateBody))
+    {
+        <details class="card tpl-card mt-3">
+            <summary>Message sent</summary>
+            <div class="wa-preview"><div class="wa-bubble">@d.TemplateBody<span class="wa-time">&nbsp;</span></div></div>
+            <div class="text-subtle text-xs mt-1">Blanks like {{1}} were filled in for each person.</div>
+        </details>
+    }
+
+    @if (d.Recipients.Count > 0)
+    {
+        <div class="inbox-filters mt-3 mb-2" id="recipient-tabs">
+            <button type="button" class="inbox-filter active" data-tab="all">All <span class="inbox-filter-count">@d.Recipients.Count</span></button>
+            <button type="button" class="inbox-filter" data-tab="read">Read <span class="inbox-filter-count">@(groups.GetValueOrDefault("read"))</span></button>
+            <button type="button" class="inbox-filter" data-tab="problem">Not delivered <span class="inbox-filter-count">@(groups.GetValueOrDefault("problem"))</span></button>
+            <button type="button" class="inbox-filter" data-tab="waiting">Waiting <span class="inbox-filter-count">@(groups.GetValueOrDefault("waiting"))</span></button>
+        </div>
+    }
+
+    <div class="table-card table-scroll @(d.Recipients.Count == 0 ? "mt-3" : "")">
         <table class="data-table">
             <thead>
-                <tr>
-                    <th>Lead</th>
-                    <th>Phone</th>
-                    <th>Status</th>
-                    <th>Error</th>
-                    <th>Sent</th>
-                    <th>Delivered</th>
-                    <th>Read</th>
-                </tr>
+                <tr><th>Lead</th><th>Phone</th><th>Status</th><th>Last update</th></tr>
             </thead>
             <tbody>
                 @foreach (var r in d.Recipients)
                 {
-                    <tr>
-                        <td>@(r.LeadFullName ?? "—")</td>
+                    var last = r.ReadAt is not null ? "Read " + r.ReadAt.Value.ToString("MMM d, HH:mm")
+                        : r.DeliveredAt is not null ? "Delivered " + r.DeliveredAt.Value.ToString("MMM d, HH:mm")
+                        : r.SentAt is not null ? "Sent " + r.SentAt.Value.ToString("MMM d, HH:mm")
+                        : r.FailedAt is not null ? "Failed " + r.FailedAt.Value.ToString("MMM d, HH:mm")
+                        : r.QueuedAt is not null ? "Queued " + r.QueuedAt.Value.ToString("MMM d, HH:mm")
+                        : "—";
+                    var problem = r.SkipReason ?? r.FailureReason;
+                    <tr class="row-link" data-href="/dashboard/leads/@r.LeadId" data-group="@Group(r.Status)">
+                        <td><a class="cell-person" href="/dashboard/leads/@r.LeadId"><span class="avatar-sm">@(string.IsNullOrWhiteSpace(r.LeadFullName) ? "?" : r.LeadFullName.Trim()[..1])</span>@(r.LeadFullName ?? "—")</a></td>
                         <td>@r.PhoneNumber</td>
-                        <td><span class="badge @StatusBadgeHelper.CssClass(r.Status)">@r.Status</span></td>
-                        <td>@(r.SkipReason ?? r.FailureReason ?? "—")</td>
-                        <td>@(r.SentAt?.ToString("MMM d, HH:mm") ?? "—")</td>
-                        <td>@(r.DeliveredAt?.ToString("MMM d, HH:mm") ?? "—")</td>
-                        <td>@(r.ReadAt?.ToString("MMM d, HH:mm") ?? "—")</td>
+                        <td>
+                            <span class="badge @StatusBadgeHelper.CssClass(r.Status)">@FilterLabelHelper.Label(r.Status)</span>
+                            @if (!string.IsNullOrWhiteSpace(problem))
+                            {
+                                <div class="cell-err">@problem</div>
+                            }
+                        </td>
+                        <td class="cell-sub">@last</td>
                     </tr>
                 }
                 @if (d.Recipients.Count == 0)
                 {
-                    <tr class="empty-row"><td colspan="7">No recipients.</td></tr>
+                    <tr class="empty-row"><td colspan="4">Nobody was added to this campaign — the audience matched 0 leads when it was created.</td></tr>
                 }
+                <tr class="empty-row" id="recipient-tab-empty" hidden><td colspan="4">No one in this tab.</td></tr>
             </tbody>
         </table>
     </div>
-}
 
-@functions {
-    private async Task Stat(string label, int value)
-    {
-        <div class="card" style="padding:.75rem 1rem;min-width:100px">
-            <div class="text-subtle eyebrow">@label</div>
-            <div style="font-size:1.3rem;font-weight:600">@value</div>
-        </div>
-        await Task.CompletedTask;
-    }
+    <script>
+        (function () {
+            var tabs = document.querySelectorAll('#recipient-tabs [data-tab]');
+            var rows = document.querySelectorAll('tr[data-group]');
+            tabs.forEach(function (tab) {
+                tab.addEventListener('click', function () {
+                    var group = tab.getAttribute('data-tab');
+                    var shown = 0;
+                    tabs.forEach(function (t) { t.classList.toggle('active', t === tab); });
+                    rows.forEach(function (r) {
+                        var show = group === 'all' || r.getAttribute('data-group') === group;
+                        r.hidden = !show;
+                        if (show) shown++;
+                    });
+                    document.getElementById('recipient-tab-empty').hidden = shown > 0;
+                });
+            });
+            rows.forEach(function (r) {
+                r.addEventListener('click', function (e) {
+                    if (e.target.closest('a, button')) return;
+                    window.location.href = r.getAttribute('data-href');
+                });
+            });
+        })();
+    </script>
 }
