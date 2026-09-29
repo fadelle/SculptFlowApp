@@ -102,9 +102,9 @@ else
         // Only WhatsApp uses a JS-driven button; Facebook Messenger uses Meta's fb:login-button plugin.
         var jsFunction = channel == ChannelType.WhatsApp ? "psConnectWhatsApp" : "";
 
-        <div class="card int-card @(isError ? "int-card-error" : "")">
+        <div class="card int-card int-framed @(isError ? "int-card-error" : "")" style="--ch:@accentHex">
             <div class="int-head">
-                <span class="channel-mark" style="background:@accentHex">@initials</span>
+                <span class="channel-mark int-notch ch-@channel" title="@title">@Html.Raw(PlasticSurgery.Pages.Shared.ChannelIconHelper.BrandSvg(channel) ?? initials)</span>
                 <div class="flex-1 min-w-0">
                     <div class="integration-title">@title</div>
                     <div class="cell-sub">@((connected || isError) && !string.IsNullOrEmpty(info!.DisplayName) ? info.DisplayName : purpose)</div>
@@ -194,9 +194,9 @@ else
         var connected = info?.Status == ChannelIntegrationStatus.Connected;
         var problem = info is not null && NeedsAttention(info);
 
-        <div class="card int-card @(problem ? "int-card-error" : "")">
+        <div class="card int-card int-framed @(problem ? "int-card-error" : "")" style="--ch:#229ED9">
             <div class="int-head">
-                <span class="channel-mark" style="background:#229ED9">TG</span>
+                <span class="channel-mark int-notch ch-telegram" title="Telegram">@Html.Raw(PlasticSurgery.Pages.Shared.ChannelIconHelper.BrandSvg(ChannelType.Telegram))</span>
                 <div class="flex-1 min-w-0">
                     <div class="integration-title">Telegram</div>
                     <div class="cell-sub">

@@ -2633,3 +2633,11 @@ td .cell-sub { white-space: nowrap; }
 .set-row > div { min-width: 0; flex: 1; }
 .set-row .set-input, .set-row .unit-input { flex-shrink: 0; }
 .set-input.text-input { width: 90px; }
+
+/* ---- Integrations: channel-coloured frame with the logo set into the top border ---- */
+.int-grid:has(.int-framed) { row-gap: 1.6rem; margin-top: 1.4rem; }
+.int-card.int-framed { position: relative; border: 1.5px solid var(--ch); padding-top: 1.7rem; }
+.int-card.int-framed.int-card-error { border-color: var(--ch); }
+.int-framed .int-notch { position: absolute; top: -19px; left: 18px; background: var(--ch); box-shadow: 0 0 0 5px var(--bg); }
+.int-notch svg { width: 20px; height: 20px; }
+.int-notch.ch-instagram { background: radial-gradient(circle at 30% 107%, #fdf497 0%, #fd5949 45%, #d6249f 60%, #285AEB 90%); }
