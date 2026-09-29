@@ -20,37 +20,49 @@ else
         <div class="alert alert-warning mb-3">@Model.ErrorMessage</div>
     }
 
-    <div class="mb-3"><a href="/KnowledgeBase" class="btn btn-sm">&larr; Back to Knowledge Base</a></div>
+    <a href="/KnowledgeBase" class="back-link">← Knowledge Base</a>
 
-    <div class="card p-5 mw-640">
+    <div class="card p-5 mw-640 mt-2">
         <form method="post" class="integration-form">
-            <h3 class="m-0">Search tuning</h3>
-            <div class="text-subtle" style="font-size:.78rem;margin-top:-.3rem">
-                Chunk settings apply to entries saved from now on — re-save an entry to re-chunk it with new values.
+            <div>
+                <h3 class="m-0">Search tuning</h3>
+                <div class="cell-sub">Changes apply to entries saved from now on. Re-save an entry to use the new values.</div>
             </div>
 
-            <label class="field">
-                <span>Chunk size (tokens)</span>
-                <input type="number" name="ChunkSizeTokens" value="@Model.ChunkSizeTokens" class="text-input" min="50" max="1000" style="max-width:180px" required />
-                <span class="fw-normal">How much text goes into each searchable piece (about 4 characters per token). 50–1000.</span>
+            <label class="set-row">
+                <div>
+                    <strong>How much text per piece</strong>
+                    <div class="cell-sub">Chunk size · tokens, 50–1000</div>
+                    <div class="cell-sub">About 4 characters per token.</div>
+                </div>
+                <input type="number" name="ChunkSizeTokens" value="@Model.ChunkSizeTokens" class="text-input set-input" min="50" max="1000" required />
             </label>
 
-            <label class="field">
-                <span>Chunk overlap (tokens)</span>
-                <input type="number" name="ChunkOverlapTokens" value="@Model.ChunkOverlapTokens" class="text-input" min="0" max="500" style="max-width:180px" required />
-                <span class="fw-normal">Text repeated between neighbouring pieces so nothing is cut in half. Up to half the chunk size.</span>
+            <label class="set-row">
+                <div>
+                    <strong>Overlap between pieces</strong>
+                    <div class="cell-sub">Chunk overlap · tokens</div>
+                    <div class="cell-sub">So nothing is cut in half. Up to half the piece size.</div>
+                </div>
+                <input type="number" name="ChunkOverlapTokens" value="@Model.ChunkOverlapTokens" class="text-input set-input" min="0" max="500" required />
             </label>
 
-            <label class="field">
-                <span>Top K</span>
-                <input type="number" name="TopK" value="@Model.TopK" class="text-input" min="1" max="10" style="max-width:180px" required />
-                <span class="fw-normal">The most results the AI gets back for one question. 1–10.</span>
+            <label class="set-row">
+                <div>
+                    <strong>Results per question</strong>
+                    <div class="cell-sub">Top K · 1–10</div>
+                    <div class="cell-sub">The most pieces the AI gets back for one question.</div>
+                </div>
+                <input type="number" name="TopK" value="@Model.TopK" class="text-input set-input" min="1" max="10" required />
             </label>
 
-            <label class="field">
-                <span>Minimum similarity</span>
-                <input type="text" inputmode="decimal" name="MinimumSimilarity" value="@Model.MinimumSimilarity" class="text-input" style="max-width:180px" required />
-                <span class="fw-normal">Results scoring below this are dropped, so unrelated questions return nothing. 0–1 — higher is stricter.</span>
+            <label class="set-row">
+                <div>
+                    <strong>Minimum match</strong>
+                    <div class="cell-sub">Minimum similarity · 0–1</div>
+                    <div class="cell-sub">Higher is stricter. Unrelated questions return nothing.</div>
+                </div>
+                <input type="text" inputmode="decimal" name="MinimumSimilarity" value="@Model.MinimumSimilarity" class="text-input set-input" required />
             </label>
 
             <div class="flex items-center gap-2 mt-1">
@@ -60,30 +72,15 @@ else
         </form>
     </div>
 
-    <div class="card mt-3 p-5 mw-640">
-        <h3 style="margin:0 0 .3rem">Embedding configuration <span class="badge badge-gray">Read-only</span></h3>
-        <div class="text-subtle" style="font-size:.78rem;margin-bottom:.8rem">
-            This is what your Knowledge Base was built with. It can't be changed here because changing it means
-            re-processing every entry and/or updating the database — contact support if you need a different setup.
+    <details class="card tech mw-640 mt-3">
+        <summary>Technical setup (read-only)</summary>
+        <div class="inbox-lead-info-row"><span>Embedding model</span><strong>@Model.Current.EmbeddingModel</strong></div>
+        <div class="inbox-lead-info-row"><span>Vector dimension</span><strong>@Model.Current.VectorDimension</strong></div>
+        <div class="inbox-lead-info-row"><span>Similarity method</span><strong>@KnowledgeSimilarityMethod.Label(Model.Current.SimilarityMethod)</strong></div>
+        <div class="inbox-lead-info-row"><span>Vector index type</span><strong>@KnowledgeVectorIndexType.Label(Model.Current.VectorIndexType)</strong></div>
+        <div class="cell-sub mt-1">
+            Changing this means re-processing every entry. Contact support if you need a different setup.
+            Last updated @Model.Current.UpdatedAt.ToString("MMM d, yyyy HH:mm").
         </div>
-        <div class="integration-form">
-            <label class="field">
-                <span>Embedding model</span>
-                <input type="text" class="text-input" value="@Model.Current.EmbeddingModel" disabled style="max-width:320px;background:var(--bg);color:var(--text-muted);cursor:not-allowed" />
-            </label>
-            <label class="field">
-                <span>Vector dimension</span>
-                <input type="text" class="text-input" value="@Model.Current.VectorDimension" disabled style="max-width:180px;background:var(--bg);color:var(--text-muted);cursor:not-allowed" />
-            </label>
-            <label class="field">
-                <span>Similarity method</span>
-                <input type="text" class="text-input" value="@KnowledgeSimilarityMethod.Label(Model.Current.SimilarityMethod)" disabled style="max-width:240px;background:var(--bg);color:var(--text-muted);cursor:not-allowed" />
-            </label>
-            <label class="field">
-                <span>Vector index type</span>
-                <input type="text" class="text-input" value="@KnowledgeVectorIndexType.Label(Model.Current.VectorIndexType)" disabled style="max-width:320px;background:var(--bg);color:var(--text-muted);cursor:not-allowed" />
-            </label>
-        </div>
-        <div class="text-subtle" style="font-size:.75rem;margin-top:.6rem">Last updated @Model.Current.UpdatedAt.ToString("MMM d, yyyy HH:mm")</div>
-    </div>
+    </details>
 }

@@ -44,7 +44,11 @@ public class DetailsModel : PageModel
 
         Detail = await _websites.GetAsync(clinic.Id, Id, ct);
         if (Detail is null) return NotFound();
-        Pages = await _websites.ListPagesAsync(clinic.Id, Id, Status, 0, 300, ct);
+        // "In Knowledge Base" = indexed + unchanged pages (both are what the AI can use).
+        Pages = Status == "in_kb"
+            ? (await _websites.ListPagesAsync(clinic.Id, Id, PlasticSurgery.Data.Entities.WebsitePageStatus.Indexed, 0, 300, ct))
+                .Concat(await _websites.ListPagesAsync(clinic.Id, Id, PlasticSurgery.Data.Entities.WebsitePageStatus.Unchanged, 0, 300, ct)).ToList()
+            : await _websites.ListPagesAsync(clinic.Id, Id, Status, 0, 300, ct);
         return Page();
     }
 

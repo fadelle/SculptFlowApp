@@ -168,7 +168,7 @@ public class ClinicInfoModel : PageModel
         clinic.UpdatedAt = DateTimeOffset.UtcNow;
         await _db.SaveChangesAsync(ct);
 
-        StatusMessage = "Clinic info saved.";
+        StatusMessage = "Clinic details saved.";
         return RedirectToPage();
     }
 
@@ -196,7 +196,7 @@ public class ClinicInfoModel : PageModel
             return Page();
         }
 
-        StatusMessage = "Availability saved.";
+        StatusMessage = "Opening hours saved.";
         return RedirectToPage(new { tab = "availability" });
     }
 
@@ -207,7 +207,7 @@ public class ClinicInfoModel : PageModel
 
         try
         {
-            if (!DateOnly.TryParse(ExceptionDate, out var date)) throw new ArgumentException("Pick a date for the exception.");
+            if (!DateOnly.TryParse(ExceptionDate, out var date)) throw new ArgumentException("Pick a date.");
             await _availability.SaveExceptionAsync(clinic.Id, date, ExceptionClosed, ExceptionStart, ExceptionEnd, ExceptionReason, ct);
         }
         catch (ArgumentException ex)
@@ -220,7 +220,7 @@ public class ClinicInfoModel : PageModel
             return Page();
         }
 
-        StatusMessage = "Exception saved.";
+        StatusMessage = "Special date saved.";
         return RedirectToPage(new { tab = "availability" });
     }
 
@@ -230,7 +230,7 @@ public class ClinicInfoModel : PageModel
         if (clinic is null) return RedirectToPage();
 
         await _availability.DeleteExceptionAsync(clinic.Id, id, ct);
-        StatusMessage = "Exception removed.";
+        StatusMessage = "Special date removed.";
         return RedirectToPage(new { tab = "availability" });
     }
 

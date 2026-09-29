@@ -3,6 +3,25 @@
 @{
     ViewData["Title"] = Model.IsNew ? "Add Knowledge" : "Edit Knowledge";
     var maxMb = Model.MaxUploadBytes / 1024.0 / 1024.0;
+    var backLabel = Model.BackUrl.StartsWith("/KnowledgeBase/Websites", StringComparison.OrdinalIgnoreCase) ? "Website" : "Knowledge Base";
+    var activeMode = Model.ShowUploadTab ? "upload" : Model.ShowWebsiteTab ? "website" : "manual";
+}
+
+@functions {
+    // Active on/off switch: a real checkbox (name=IsActive, value=true) styled as a switch.
+    private Microsoft.AspNetCore.Html.IHtmlContent ActiveSwitch(bool isChecked, string what) => new Microsoft.AspNetCore.Html.HtmlString(
+        $"<label class=\"switch-row\"><input type=\"checkbox\" name=\"IsActive\" value=\"true\" class=\"switch-input\"{(isChecked ? " checked" : "")} /><span class=\"switch\" aria-hidden=\"true\"></span> Active <span class=\"text-subtle\">— the AI can use {what}</span></label>");
+
+    private Microsoft.AspNetCore.Html.IHtmlContent CategorySelect(string selected)
+    {
+        var sb = new System.Text.StringBuilder("<select name=\"Category\" class=\"select\">");
+        foreach (var (value, label) in Model.CategoryOptions)
+        {
+            sb.Append("<option value=\"").Append(System.Net.WebUtility.HtmlEncode(value)).Append('"')
+              .Append(value == selected ? " selected" : "").Append('>').Append(System.Net.WebUtility.HtmlEncode(label)).Append("</option>");
+        }
+        return new Microsoft.AspNetCore.Html.HtmlString(sb.Append("</select>").ToString());
+    }
 }
 
 @if (!Model.ClinicConfigured)
@@ -11,86 +30,81 @@
 }
 else
 {
+    <a href="@Model.BackUrl" class="back-link">← @backLabel</a>
+
     if (!string.IsNullOrEmpty(Model.ErrorMessage))
     {
-        <div class="alert alert-warning mb-3">@Model.ErrorMessage</div>
+        <div class="alert alert-warning mb-3 mt-2">@Model.ErrorMessage</div>
     }
 
-    <div class="card p-5 mw-720">
+    <div class="card p-5 mw-720 mt-2">
 
         @if (Model.IsNew)
         {
-            <div class="flex items-center gap-2 mb-3" role="tablist">
-                <button type="button" class="btn btn-sm @(Model.ShowUploadTab || Model.ShowWebsiteTab ? "" : "btn-primary")" id="kb-tab-manual" data-kb-tab="manual">Manual Entry</button>
-                <button type="button" class="btn btn-sm @(Model.ShowUploadTab ? "btn-primary" : "")" id="kb-tab-upload" data-kb-tab="upload">Upload Document</button>
-                <button type="button" class="btn btn-sm @(Model.ShowWebsiteTab ? "btn-primary" : "")" id="kb-tab-website" data-kb-tab="website">Website</button>
+            <div class="kb-choices" role="tablist">
+                <label class="kb-choice @(activeMode == "manual" ? "on" : "")"><input type="radio" name="kb-mode" value="manual" data-kb-tab="manual" checked="@(activeMode == "manual")" /><span class="kb-choice-icon">✎</span><strong>Write it</strong><small>Type FAQs, policies or any text.</small></label>
+                <label class="kb-choice @(activeMode == "upload" ? "on" : "")"><input type="radio" name="kb-mode" value="upload" data-kb-tab="upload" checked="@(activeMode == "upload")" /><span class="kb-choice-icon">📄</span><strong>Upload a document</strong><small>PDF, Word or text file.</small></label>
+                <label class="kb-choice @(activeMode == "website" ? "on" : "")"><input type="radio" name="kb-mode" value="website" data-kb-tab="website" checked="@(activeMode == "website")" /><span class="kb-choice-icon">🌐</span><strong>Import a website</strong><small>Read pages from your site.</small></label>
             </div>
         }
 
-        @* ---------- Manual entry / edit (unchanged behavior) ---------- *@
-        <div id="kb-panel-manual" hidden="@(Model.IsNew && (Model.ShowUploadTab || Model.ShowWebsiteTab))">
+        @* ---------- Manual entry / edit ---------- *@
+        <div id="kb-panel-manual" hidden="@(Model.IsNew && activeMode != "manual")">
             <form method="post" class="integration-form">
-                <label class="field">
-                    <span>Title</span>
-                    <input type="text" name="Title" value="@Model.Title" class="text-input" maxlength="200" required
-                           placeholder="e.g. Rhinoplasty recovery" />
-                </label>
-
-                <label class="field">
-                    <span>Category</span>
-                    <select name="Category" class="select">
-                        @foreach (var (value, label) in Model.CategoryOptions)
-                        {
-                            <option value="@value" selected="@(value == Model.Category)">@label</option>
-                        }
-                    </select>
-                </label>
-
-                @if (Model.IsWebsite)
+                @if (Model.IsWebsite || Model.IsUpload)
                 {
-                    <div class="text-subtle text-md">
-                        Imported from the website page <a href="@Model.SourceUrl" target="_blank" rel="noopener noreferrer">@Model.SourceUrl</a>.
-                        The text below is kept in sync by the website crawl and can't be edited here — re-scrape the website to refresh it.
-                        Title, category and Active can be changed (a re-scrape keeps the Active setting).
+                    <div class="src-banner">
+                        <span class="src-icon @(Model.IsWebsite ? "src-web" : "src-up")">@(Model.IsWebsite ? "🌐" : "📄")</span>
+                        <div class="flex-1 min-w-0">
+                            @if (Model.IsWebsite)
+                            {
+                                <text>From the page </text><a href="@Model.SourceUrl" target="_blank" rel="noopener noreferrer" class="break-all">@PlasticSurgery.Pages.Shared.UrlDisplayHelper.Readable(Model.SourceUrl ?? "")</a>
+                                <div class="cell-sub">The text updates when the website is imported again. Title, category and Active can be changed here.</div>
+                            }
+                            else
+                            {
+                                <text>From </text><strong>@Model.OriginalFileName</strong>
+                                @if (Model.FileSizeBytes.HasValue) { <text> (@((Model.FileSizeBytes.Value / 1024.0).ToString("0")) KB)</text> }
+                                <div class="cell-sub">To change the text, upload the document again.</div>
+                            }
+                        </div>
                     </div>
-                    <label class="field">
-                        <span>Extracted text</span>
-                        <textarea rows="12" class="text-input" readonly>@Model.Body</textarea>
-                    </label>
                 }
-                else if (Model.IsUpload)
-                {
-                    <div class="text-subtle text-md">
-                        Uploaded from <strong>@Model.OriginalFileName</strong>
-                        @if (Model.FileSizeBytes.HasValue) { <text>(@((Model.FileSizeBytes.Value / 1024.0).ToString("0.#")) KB)</text> }.
-                        The text below was extracted from the file and can't be edited here — upload the document again to change it.
-                    </div>
+
+                <div class="form-row-2">
                     <label class="field">
-                        <span>Extracted text</span>
-                        <textarea rows="12" class="text-input" readonly>@Model.Body</textarea>
+                        <span>Title</span>
+                        <input type="text" name="Title" value="@Model.Title" class="text-input" maxlength="200" required placeholder="e.g. Rhinoplasty recovery" />
                     </label>
+                    <label class="field">
+                        <span>Category</span>
+                        @CategorySelect(Model.Category)
+                    </label>
+                </div>
+
+                @if (Model.IsWebsite || Model.IsUpload)
+                {
+                    <div class="field">
+                        <span>Text the AI reads</span>
+                        <div class="readonly-text" dir="auto">@Model.Body</div>
+                    </div>
                 }
                 else
                 {
                     <label class="field">
-                        <span>Content</span>
-                        <textarea name="Body" rows="12" class="text-input" required
+                        <span class="flex items-center justify-between">Content <button type="button" class="btn btn-ghost btn-sm" id="kb-add-qa">+ Add Q&amp;A</button></span>
+                        <textarea name="Body" id="kb-body" rows="12" class="text-input" required dir="auto"
                                   placeholder="Write the approved information the AI is allowed to share.&#10;&#10;For FAQs you can write:&#10;Q: Do I stay overnight after rhinoplasty?&#10;A: No, it's a day-case procedure.">@Model.Body</textarea>
+                        <small class="text-subtle counter" id="kb-body-count"></small>
                     </label>
                 }
 
-                <label class="flex items-center gap-1 fw-normal">
-                    <input type="checkbox" name="IsActive" value="true" checked="@Model.IsActive" />
-                    Active — the AI can use this entry
-                </label>
+                @ActiveSwitch(Model.IsActive, "this entry")
 
-                <div class="text-subtle text-sm">
-                    Saving splits the text into searchable pieces and prepares it for AI lookup, which can take a few seconds.
-                </div>
-
-                <div class="flex items-center gap-2 mt-2">
-                    <button type="submit" class="btn btn-primary btn-sm">Save</button>
+                <div class="flex items-center gap-2 mt-2 flex-wrap">
+                    <button type="submit" class="btn btn-primary btn-sm">@(Model.IsNew ? "Add to Knowledge Base" : "Save changes")</button>
                     <a href="@Model.BackUrl" class="btn btn-sm">Cancel</a>
+                    <span class="text-subtle text-sm">Takes a few seconds to prepare for AI search.</span>
                 </div>
             </form>
         </div>
@@ -98,48 +112,40 @@ else
         @* ---------- Upload Document (new entries only) ---------- *@
         @if (Model.IsNew)
         {
-            <div id="kb-panel-upload" hidden="@(!Model.ShowUploadTab)">
+            <div id="kb-panel-upload" hidden="@(activeMode != "upload")">
                 <form method="post" asp-page-handler="Upload" enctype="multipart/form-data" class="integration-form">
-                    <label class="field">
-                        <span>File (PDF, DOCX or TXT — one file, up to @maxMb.ToString("0.#") MB)</span>
-                        <input type="file" name="UploadFile" class="text-input" accept=".pdf,.docx,.txt" required />
+                    <label class="dropzone" id="kb-dropzone" data-max-bytes="@Model.MaxUploadBytes">
+                        <input type="file" name="UploadFile" id="kb-file" accept=".pdf,.docx,.txt" required class="dropzone-input" />
+                        <span class="kb-choice-icon" id="kb-drop-icon">⇪</span>
+                        <div class="flex-1 min-w-0">
+                            <strong id="kb-drop-title">Drop a file here or click to choose</strong>
+                            <div class="cell-sub" id="kb-drop-sub">PDF, DOCX or TXT, up to @maxMb.ToString("0.#") MB. Scanned images can't be read.</div>
+                        </div>
                     </label>
 
-                    <label class="field">
-                        <span>Title <small class="text-subtle">(optional — defaults to the file name)</small></span>
-                        <input type="text" name="Title" value="@Model.Title" class="text-input" maxlength="200"
-                               placeholder="e.g. Pre-operative instructions" />
-                    </label>
-
-                    <label class="field">
-                        <span>Category</span>
-                        <select name="Category" class="select">
-                            @foreach (var (value, label) in Model.CategoryOptions)
-                            {
-                                <option value="@value" selected="@(value == Model.Category)">@label</option>
-                            }
-                        </select>
-                    </label>
-
-                    <label class="flex items-center gap-1 fw-normal">
-                        <input type="checkbox" name="IsActive" value="true" checked="@(Model.ErrorMessage is null || Model.IsActive)" />
-                        Active — the AI can use this document
-                    </label>
-
-                    <div class="text-subtle text-sm">
-                        Text is extracted from the file and prepared for AI search, which can take a few seconds. Only text-based
-                        documents are supported — scanned pages (images) can't be read. The original file isn't stored; only its text is kept.
+                    <div class="form-row-2">
+                        <label class="field">
+                            <span>Title <em class="opt">optional</em></span>
+                            <input type="text" name="Title" id="kb-upload-title" value="@Model.Title" class="text-input" maxlength="200" placeholder="Uses the file name" />
+                        </label>
+                        <label class="field">
+                            <span>Category</span>
+                            @CategorySelect(Model.Category)
+                        </label>
                     </div>
 
-                    <div class="flex items-center gap-2 mt-2">
+                    @ActiveSwitch(Model.ErrorMessage is null || Model.IsActive, "this document")
+
+                    <div class="flex items-center gap-2 mt-2 flex-wrap">
                         <button type="submit" class="btn btn-primary btn-sm">Upload</button>
                         <a href="@Model.BackUrl" class="btn btn-sm">Cancel</a>
+                        <span class="text-subtle text-sm">Only the text is kept, not the file.</span>
                     </div>
                 </form>
             </div>
 
             @* ---------- Website (new entries only) ---------- *@
-            <div id="kb-panel-website" hidden="@(!Model.ShowWebsiteTab)">
+            <div id="kb-panel-website" hidden="@(activeMode != "website")">
                 <form method="post" asp-page-handler="Website" class="integration-form">
                     <label class="field">
                         <span>Website address</span>
@@ -147,34 +153,35 @@ else
                                placeholder="https://www.yourclinic.com" inputmode="url" autocomplete="off" />
                     </label>
 
-                    <label class="field">
+                    <div class="field">
                         <span>What to import</span>
-                        <select name="WebsiteMode" class="select">
-                            <option value="crawl_site" selected="@(Model.WebsiteMode != "single_page")">Crawl website — follow links on the same site</option>
-                            <option value="single_page" selected="@(Model.WebsiteMode == "single_page")">Single page only</option>
-                        </select>
-                    </label>
+                        <div class="seg-cards">
+                            <label class="cat-card @(Model.WebsiteMode != "single_page" ? "on" : "")">
+                                <input type="radio" name="WebsiteMode" value="crawl_site" checked="@(Model.WebsiteMode != "single_page")" />
+                                <strong>Whole website</strong><small>Follows links on the same site.</small>
+                            </label>
+                            <label class="cat-card @(Model.WebsiteMode == "single_page" ? "on" : "")">
+                                <input type="radio" name="WebsiteMode" value="single_page" checked="@(Model.WebsiteMode == "single_page")" />
+                                <strong>Just this page</strong><small>Only the address above.</small>
+                            </label>
+                        </div>
+                    </div>
 
                     <label class="field">
                         <span>Category</span>
-                        <select name="Category" class="select">
-                            @foreach (var (value, label) in Model.CategoryOptions)
-                            {
-                                <option value="@value" selected="@(value == Model.Category)">@label</option>
-                            }
-                        </select>
+                        @CategorySelect(Model.Category)
                     </label>
 
-                    <label class="flex items-center gap-1 fw-normal">
-                        <input type="checkbox" name="IsActive" value="true" checked="@(Model.ErrorMessage is null || Model.IsActive)" />
-                        Active — the AI can use these pages
-                    </label>
+                    @ActiveSwitch(Model.ErrorMessage is null || Model.IsActive, "these pages")
 
-                    <div class="text-subtle text-sm">
-                        Only the text of public pages on <strong>this website</strong> is imported — no images, videos or files, and links to other websites
-                        are not followed. The crawl respects the site's <code>robots.txt</code> and runs in the background, so you can leave this page;
-                        progress is shown on the website's page. Pages built entirely with JavaScript can't be read.
-                    </div>
+                    <details class="kb-more">
+                        <summary>What gets imported?</summary>
+                        <p class="text-subtle text-sm">
+                            Only the text of public pages on this website. No images, videos or files, and links to other websites
+                            aren't followed. The site's <code>robots.txt</code> is respected, and pages built entirely with JavaScript can't be read.
+                            It runs in the background, so you can leave this page; progress shows on the website's page.
+                        </p>
+                    </details>
 
                     <div class="flex items-center gap-2 mt-2">
                         <button type="submit" class="btn btn-primary btn-sm">Import website</button>
@@ -182,20 +189,8 @@ else
                     </div>
                 </form>
             </div>
-
-            <script>
-                (function () {
-                    var panels = { manual: 'kb-panel-manual', upload: 'kb-panel-upload', website: 'kb-panel-website' };
-                    var tabs = document.querySelectorAll('[data-kb-tab]');
-                    tabs.forEach(function (tab) {
-                        tab.addEventListener('click', function () {
-                            var which = tab.getAttribute('data-kb-tab');
-                            Object.keys(panels).forEach(function (k) { document.getElementById(panels[k]).hidden = k !== which; });
-                            tabs.forEach(function (t) { t.classList.toggle('btn-primary', t === tab); });
-                        });
-                    });
-                })();
-            </script>
         }
     </div>
+
+    <script src="~/js/knowledge-page.js" asp-append-version="true"></script>
 }

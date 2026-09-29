@@ -2,6 +2,15 @@
 @model PlasticSurgery.Pages.Staff.IndexModel
 @{
     ViewData["Title"] = "Staff";
+    string DisplayName(PlasticSurgery.Dtos.StaffMemberResponse m) =>
+        !string.IsNullOrWhiteSpace(m.FullName) ? m.FullName! : !string.IsNullOrWhiteSpace(m.Email) ? m.Email!.Split('@')[0] : "—";
+    string Initials(string name) =>
+        string.Concat(name.Split(new[] { ' ', '.', '_', '-' }, StringSplitOptions.RemoveEmptyEntries).Take(2).Select(w => char.ToUpperInvariant(w[0])));
+    var members = Model.Members
+        .OrderByDescending(m => m.UserId == Model.CurrentUserId)
+        .ThenByDescending(m => m.IsActive)
+        .ThenBy(m => DisplayName(m))
+        .ToList();
 }
 
 @if (!Model.ClinicConfigured)
@@ -10,42 +19,57 @@
 }
 else
 {
-    <p class="text-muted mb-3 mw-640">
-        People who can sign in to <strong>@Model.ClinicName</strong> and see its leads, conversations and settings.
-        Adding more staff to an existing clinic isn't available yet.
-    </p>
-
-    <div class="table-card table-scroll">
-        <table class="data-table">
-            <thead>
-                <tr>
-                    <th>Name</th>
-                    <th>Email</th>
-                    <th>Status</th>
-                    <th>Joined</th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach (var m in Model.Members)
-                {
-                    <tr>
-                        <td>
-                            @(string.IsNullOrWhiteSpace(m.FullName) ? "—" : m.FullName)
-                            @if (m.UserId == Model.CurrentUserId)
-                            {
-                                <span class="badge badge-teal" style="margin-left:.4rem">You</span>
-                            }
-                        </td>
-                        <td>@(m.Email ?? "—")</td>
-                        <td><span class="badge @(m.IsActive ? "badge-green" : "badge-gray")">@(m.IsActive ? "Active" : "Inactive")</span></td>
-                        <td>@m.JoinedAt.ToString("MMM d, yyyy")</td>
-                    </tr>
-                }
-                @if (Model.Members.Count == 0)
-                {
-                    <tr class="empty-row"><td colspan="4">No staff found.</td></tr>
-                }
-            </tbody>
-        </table>
+    <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
+        <p class="text-muted m-0 mw-640">Everyone who can sign in to <strong>@Model.ClinicName</strong> and see its leads, conversations and settings.</p>
+        <span title="Coming soon"><button type="button" class="btn btn-sm" disabled>+ Invite staff</button></span>
     </div>
+
+    if (members.Count == 0)
+    {
+        <div class="card empty-card">
+            <h3>No staff yet</h3>
+            <p class="text-muted">People you add will be able to sign in and work on this clinic.</p>
+        </div>
+    }
+    else
+    {
+        <div class="section-heading">
+            <h2>@members.Count @(members.Count == 1 ? "person" : "people")</h2>
+            <span class="cell-sub">@members.Count(m => m.IsActive) active</span>
+        </div>
+        <div class="table-card table-scroll">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Email</th>
+                        <th>Status</th>
+                        <th>Joined</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var m in members)
+                    {
+                        var name = DisplayName(m);
+                        <tr class="@(m.IsActive ? "" : "row-dim")">
+                            <td>
+                                <div class="kb-title">
+                                    <span class="avatar @(m.IsActive ? "" : "avatar-off")">@Initials(name)</span>
+                                    <span class="row-title">@name</span>
+                                    @if (m.UserId == Model.CurrentUserId)
+                                    {
+                                        <span class="badge badge-teal">You</span>
+                                    }
+                                </div>
+                            </td>
+                            <td>@(m.Email ?? "—")</td>
+                            <td><span class="badge @(m.IsActive ? "badge-green" : "badge-gray")">@(m.IsActive ? "Active" : "Can't sign in")</span></td>
+                            <td class="cell-sub" title="@m.JoinedAt.ToString("MMM d, yyyy")">Joined @m.JoinedAt.ToString("MMMM yyyy")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <p class="text-subtle text-sm mt-2">Inviting new staff isn't available yet. For now, contact support to add someone.</p>
+    }
 }

@@ -3,6 +3,10 @@
 @{
     ViewData["Title"] = "Clinic Info";
     var dayNames = new[] { "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday" };
+    static (string Month, string Day, string Long) DateParts(string value) =>
+        DateOnly.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, out var d)
+            ? (d.ToString("MMM"), d.Day.ToString(), d.ToString("ddd, MMM d, yyyy"))
+            : ("", "", value);
 }
 
 @if (!Model.ClinicConfigured)
@@ -21,49 +25,79 @@ else
     }
 
     <div class="clinic-tabs">
-        <a asp-page="/Settings/ClinicInfo" class="clinic-tab @(Model.ActiveTab == "general" ? "active" : "")">General</a>
-        <a asp-page="/Settings/ClinicInfo" asp-route-tab="availability" class="clinic-tab @(Model.ActiveTab == "availability" ? "active" : "")">Availability</a>
+        <a asp-page="/Settings/ClinicInfo" class="clinic-tab @(Model.ActiveTab == "general" ? "active" : "")">Clinic details</a>
+        <a asp-page="/Settings/ClinicInfo" asp-route-tab="availability" class="clinic-tab @(Model.ActiveTab == "availability" ? "active" : "")">Opening hours &amp; booking</a>
     </div>
 
     if (Model.ActiveTab == "general")
     {
-        <p class="text-muted mb-3">
-            General info the AI agent reads to answer patient questions (hours, location, contact,
-            consultation rules) instead of inventing an answer — see the <code>get_clinic_info</code> tool.
-        </p>
+        <p class="text-muted mb-3">Your AI assistant uses these details to answer patients' questions, so it never has to guess.</p>
 
-        <form method="post" class="integration-form card p-5">
-            <label class="field">
-                <span>Clinic name</span>
-                <input type="text" name="Name" value="@Model.Name" class="text-input" maxlength="200" required />
-            </label>
-            <label class="field">
-                <span>Phone</span>
-                <input type="text" name="Phone" value="@Model.Phone" class="text-input" />
-            </label>
-            <label class="field">
-                <span>Email</span>
-                <input type="text" name="Email" value="@Model.Email" class="text-input" />
-            </label>
-            <label class="field">
-                <span>Website</span>
-                <input type="text" name="Website" value="@Model.Website" class="text-input" />
-            </label>
-            <label class="field">
-                <span>Address</span>
-                <textarea name="Address" rows="2" class="text-input">@Model.Address</textarea>
-            </label>
-            <label class="field">
-                <span>Operating hours <small class="text-subtle">(descriptive only — appointment times come from the Availability tab)</small></span>
-                <textarea name="OperatingHours" rows="3" class="text-input" placeholder="e.g. Mon-Fri 9am-6pm, Sat 10am-2pm, closed Sundays">@Model.OperatingHours</textarea>
-            </label>
-            <label class="field">
-                <span>Consultation rules / general info</span>
-                <textarea name="ConsultationInfo" rows="4" class="text-input" placeholder="e.g. Free initial consultations, $50 deposit required for surgical bookings...">@Model.ConsultationInfo</textarea>
-            </label>
+        <form method="post" class="card integration-form clinic-form" id="clinic-form" data-dirty-form>
+            <div class="set-section">
+                <div class="set-section-head"><strong>Clinic</strong><div class="cell-sub">The name patients see.</div></div>
+                <div class="set-section-body">
+                    <label class="field">
+                        <span>Clinic name</span>
+                        <input type="text" name="Name" value="@Model.Name" class="text-input" maxlength="200" required />
+                    </label>
+                </div>
+            </div>
 
-            <div class="flex items-center gap-2 mt-1">
-                <button type="submit" class="btn btn-primary btn-sm">Save</button>
+            <div class="set-section">
+                <div class="set-section-head"><strong>Contact</strong><div class="cell-sub">How patients reach you.</div></div>
+                <div class="set-section-body">
+                    <div class="form-row-contact">
+                        <label class="field">
+                            <span>Phone</span>
+                            <input type="tel" name="Phone" value="@Model.Phone" class="text-input" placeholder="+961 1 555 123" autocomplete="off" />
+                        </label>
+                        <label class="field">
+                            <span>Email</span>
+                            <input type="text" inputmode="email" name="Email" value="@Model.Email" class="text-input" placeholder="hello@yourclinic.com" autocomplete="off" />
+                        </label>
+                        <label class="field">
+                            <span>Website</span>
+                            <span class="input-with-link">
+                                <input type="text" inputmode="url" name="Website" id="clinic-website" value="@Model.Website" class="text-input" placeholder="https://yourclinic.com" autocomplete="off" />
+                                <a href="@Model.Website" id="clinic-website-open" class="btn btn-ghost btn-sm" target="_blank" rel="noopener noreferrer" title="Open website" hidden="@string.IsNullOrWhiteSpace(Model.Website)">↗</a>
+                            </span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="set-section">
+                <div class="set-section-head"><strong>Location</strong><div class="cell-sub">Where patients come for appointments.</div></div>
+                <div class="set-section-body">
+                    <label class="field">
+                        <span>Address</span>
+                        <textarea name="Address" rows="2" class="text-input" placeholder="Street, building, floor, city" dir="auto">@Model.Address</textarea>
+                    </label>
+                </div>
+            </div>
+
+            <div class="set-section">
+                <div class="set-section-head"><strong>For patients</strong><div class="cell-sub">Written the way you would say it to a patient.</div></div>
+                <div class="set-section-body">
+                    <label class="field">
+                        <span>Opening hours, in words</span>
+                        <textarea name="OperatingHours" rows="2" class="text-input" placeholder="e.g. Mon–Fri 9am–6pm, Sat 10am–2pm, closed Sundays" dir="auto">@Model.OperatingHours</textarea>
+                        <small class="text-subtle">Only for answering questions. The times patients can actually book come from <a asp-page="/Settings/ClinicInfo" asp-route-tab="availability">Opening hours &amp; booking</a>.</small>
+                    </label>
+                    <label class="field">
+                        <span>Consultation rules and other info</span>
+                        <textarea name="ConsultationInfo" rows="3" class="text-input" placeholder="e.g. Free first consultation. $50 deposit to book surgery." dir="auto">@Model.ConsultationInfo</textarea>
+                    </label>
+                </div>
+            </div>
+
+            <div class="save-bar is-idle" data-save-bar>
+                <span class="text-subtle text-sm" data-save-text>All changes saved</span>
+                <div class="flex gap-2">
+                    <button type="reset" class="btn btn-sm" data-discard hidden>Discard</button>
+                    <button type="submit" class="btn btn-primary btn-sm">Save</button>
+                </div>
             </div>
         </form>
     }
@@ -72,127 +106,158 @@ else
         if (!av.Configured)
         {
             <div class="alert alert-warning mb-3">
-                Availability isn't set up yet. Until at least one day is open below, the AI agent will not offer any appointment times.
+                <strong>Patients can't book yet.</strong> Turn on at least one day below and save, so the AI assistant can offer appointment times.
             </div>
         }
         <p class="text-muted mb-3">
-            The structured schedule the AI agent and booking use to offer real appointment times. Times are in the clinic's timezone.
-            Existing appointments, the procedure's own consultation duration, the buffer and the rules below are all applied automatically.
+            When patients can book. The AI assistant only offers times that fit these hours, your existing appointments and the rules below.
         </p>
 
-        <form method="post" asp-page-handler="SaveAvailability" class="integration-form card p-5">
-            <label class="field">
-                <span>Timezone</span>
-                <select name="TimezoneId" class="select">
-                    @foreach (var tz in Model.TimezoneOptions(av.Timezone))
-                    {
-                        <option value="@tz" selected="@(tz == av.Timezone)">@tz</option>
-                    }
-                </select>
-            </label>
-
-            <div class="field">
-                <span>Weekly schedule</span>
-                <div class="avail-week">
-                    @{ var i = 0; }
-                    @foreach (var d in Model.OrderedDays())
-                    {
-                        <div class="avail-row">
-                            <input type="hidden" name="Days[@i].DayOfWeek" value="@d.DayOfWeek" />
-                            <label class="avail-day">
-                                <input type="checkbox" name="Days[@i].IsOpen" value="true" checked="@d.IsOpen" />
-                                <span>@dayNames[d.DayOfWeek]</span>
-                            </label>
-                            <input type="time" name="Days[@i].Start" value="@d.Start" class="text-input avail-time" />
-                            <span class="text-subtle">to</span>
-                            <input type="time" name="Days[@i].End" value="@d.End" class="text-input avail-time" />
-                        </div>
-                        i++;
-                    }
+        <form method="post" asp-page-handler="SaveAvailability" class="card integration-form clinic-form" id="avail-form">
+            <div class="set-section">
+                <div class="set-section-head"><strong>Timezone</strong><div class="cell-sub">All times on this page.</div></div>
+                <div class="set-section-body">
+                    <div class="flex items-center gap-3 flex-wrap">
+                        <select name="TimezoneId" id="avail-tz" class="select w-auto">
+                            @foreach (var tz in Model.TimezoneOptions(av.Timezone))
+                            {
+                                <option value="@tz" selected="@(tz == av.Timezone)">@tz</option>
+                            }
+                        </select>
+                        <span class="cell-sub" id="avail-tz-now"></span>
+                    </div>
                 </div>
-                <small class="text-subtle">Tick a day to open it. Unticked days are closed.</small>
             </div>
 
-            <div class="field">
-                <span>Booking rules</span>
-                <div class="avail-rules">
-                    <label>Default consultation duration (min)
-                        <input type="number" name="DefaultDurationMinutes" value="@av.Booking.DefaultDurationMinutes" min="5" max="480" class="text-input" />
-                    </label>
-                    <label>Buffer between appointments (min)
-                        <input type="number" name="BufferMinutes" value="@av.Booking.BufferMinutes" min="0" max="240" class="text-input" />
-                    </label>
-                    <label>Minimum notice (hours)
-                        <input type="number" name="NoticeHours" value="@(av.Booking.MinimumNoticeMinutes / 60)" min="0" max="720" class="text-input" />
-                    </label>
-                    <label>Book up to (days ahead)
-                        <input type="number" name="MaxAdvanceDays" value="@av.Booking.MaxAdvanceDays" min="1" max="365" class="text-input" />
-                    </label>
+            <div class="set-section">
+                <div class="set-section-head"><strong>Weekly hours</strong><div class="cell-sub" id="avail-open-count"></div></div>
+                <div class="set-section-body">
+                    <div class="week" id="avail-week">
+                        @{ var i = 0; }
+                        @foreach (var d in Model.OrderedDays())
+                        {
+                            <div class="week-row @(d.IsOpen ? "" : "is-closed")" data-day="@dayNames[d.DayOfWeek]">
+                                <input type="hidden" name="Days[@i].DayOfWeek" value="@d.DayOfWeek" />
+                                <label class="switch-row">
+                                    <input type="checkbox" name="Days[@i].IsOpen" value="true" class="switch-input" data-day-open checked="@d.IsOpen" />
+                                    <span class="switch" aria-hidden="true"></span>
+                                    <span class="week-day">@dayNames[d.DayOfWeek]</span>
+                                </label>
+                                <span class="week-times">
+                                    <input type="time" name="Days[@i].Start" value="@d.Start" class="text-input avail-time" data-day-start aria-label="@dayNames[d.DayOfWeek] opens" />
+                                    <span class="text-subtle">to</span>
+                                    <input type="time" name="Days[@i].End" value="@d.End" class="text-input avail-time" data-day-end aria-label="@dayNames[d.DayOfWeek] closes" />
+                                    <span class="field-err" data-day-err hidden>Must end after it starts</span>
+                                </span>
+                                <span class="text-subtle week-closed">Closed</span>
+                            </div>
+                            i++;
+                        }
+                        <div><button type="button" class="btn btn-ghost btn-sm mt-1" id="avail-copy">Copy Monday's hours to all open days</button></div>
+                    </div>
                 </div>
-                <small class="text-subtle">A procedure's own consultation duration (Procedures page) overrides the default duration.</small>
             </div>
 
-            <div class="flex items-center gap-2 mt-1">
-                <button type="submit" class="btn btn-primary btn-sm">Save availability</button>
+            <div class="set-section">
+                <div class="set-section-head"><strong>Booking rules</strong><div class="cell-sub">Applied to every appointment the AI offers.</div></div>
+                <div class="set-section-body">
+                    <div class="rules">
+                        <label class="set-row">
+                            <div><strong>Consultation length</strong><div class="cell-sub">Unless the procedure sets its own.</div></div>
+                            <span class="unit-input"><input type="number" name="DefaultDurationMinutes" value="@av.Booking.DefaultDurationMinutes" min="5" max="480" class="text-input set-input" data-rule="duration" /><span>min</span></span>
+                        </label>
+                        <label class="set-row">
+                            <div><strong>Gap between appointments</strong></div>
+                            <span class="unit-input"><input type="number" name="BufferMinutes" value="@av.Booking.BufferMinutes" min="0" max="240" class="text-input set-input" data-rule="buffer" /><span>min</span></span>
+                        </label>
+                        <label class="set-row">
+                            <div><strong>Book at least</strong></div>
+                            <span class="unit-input"><input type="number" name="NoticeHours" value="@(av.Booking.MinimumNoticeMinutes / 60)" min="0" max="720" class="text-input set-input" data-rule="notice" /><span>hours ahead</span></span>
+                        </label>
+                        <label class="set-row">
+                            <div><strong>Book up to</strong></div>
+                            <span class="unit-input"><input type="number" name="MaxAdvanceDays" value="@av.Booking.MaxAdvanceDays" min="1" max="365" class="text-input set-input" data-rule="advance" /><span>days ahead</span></span>
+                        </label>
+                    </div>
+                    <div class="kb-hint" id="avail-summary"></div>
+                </div>
+            </div>
+
+            <div class="save-row">
+                <button type="submit" class="btn btn-primary btn-sm">Save opening hours</button>
             </div>
         </form>
 
-        <h3 class="avail-heading">Exceptions</h3>
-        <p class="text-muted mb-3">Specific dates that override the weekly schedule — a holiday, a shortened day, or an extra opening.</p>
+        <div class="section-heading mt-4"><h2>Special dates</h2></div>
+        <p class="text-muted mb-2">Holidays, shorter days or extra openings. These replace the weekly hours on that date.</p>
 
-        <div class="card p-5">
+        <div class="card">
             @if (av.Exceptions.Count == 0)
             {
-                <p class="text-subtle" style="margin:0 0 1rem">No upcoming exceptions.</p>
+                <div class="empty-card small">
+                    <h3>No special dates</h3>
+                    <p class="text-muted">Add one for a holiday or a day with different hours.</p>
+                </div>
             }
             else
             {
-                <table class="data-table mb-3">
-                    <thead><tr><th>Date</th><th>Hours</th><th>Reason</th><th></th></tr></thead>
-                    <tbody>
-                        @foreach (var ex in av.Exceptions)
-                        {
-                            <tr>
-                                <td>@ex.Date</td>
-                                <td>@(ex.IsClosed ? "Closed" : $"{ex.Start} - {ex.End}")</td>
-                                <td>@ex.Reason</td>
-                                <td>
-                                    <form method="post" asp-page-handler="DeleteException" asp-route-id="@ex.Id">
-                                        <button type="submit" class="btn btn-sm">Remove</button>
-                                    </form>
-                                </td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
+                <div class="timeline">
+                    @foreach (var ex in av.Exceptions)
+                    {
+                        var parts = DateParts(ex.Date);
+                        <div class="tl-row">
+                            <div class="date-chip"><span>@parts.Month</span><strong>@parts.Day</strong></div>
+                            <div class="flex-1 min-w-0">
+                                <div class="tl-title">@parts.Long</div>
+                                <div class="cell-sub">@(string.IsNullOrWhiteSpace(ex.Reason) ? "No reason given" : ex.Reason)</div>
+                            </div>
+                            @if (ex.IsClosed)
+                            {
+                                <span class="badge badge-gray">Closed</span>
+                            }
+                            else
+                            {
+                                <span class="badge badge-blue">@ex.Start–@ex.End</span>
+                            }
+                            <form method="post" asp-page-handler="DeleteException" asp-route-id="@ex.Id" class="inline-form">
+                                <button type="submit" class="btn btn-ghost btn-sm btn-danger-text">Remove</button>
+                            </form>
+                        </div>
+                    }
+                </div>
             }
 
-            <form method="post" asp-page-handler="AddException" class="integration-form">
-                <div class="avail-rules">
-                    <label>Date
+            <form method="post" asp-page-handler="AddException" class="integration-form add-date" id="exc-form">
+                <input type="hidden" name="ExceptionClosed" id="exc-closed" value="true" />
+                <div class="add-date-row">
+                    <label class="field">
+                        <span>Date</span>
                         <input type="date" name="ExceptionDate" class="text-input" required />
                     </label>
-                    <label>Closed all day
-                        <select name="ExceptionClosed" class="select">
-                            <option value="true">Closed</option>
-                            <option value="false">Open custom hours</option>
-                        </select>
+                    <div class="field">
+                        <span>That day</span>
+                        <div class="seg" id="exc-mode">
+                            <button type="button" class="on" data-closed="true">Closed</button>
+                            <button type="button" data-closed="false">Different hours</button>
+                        </div>
+                    </div>
+                    <label class="field" data-exc-time hidden>
+                        <span>From</span>
+                        <input type="time" name="ExceptionStart" id="exc-start" class="text-input" />
                     </label>
-                    <label>From
-                        <input type="time" name="ExceptionStart" class="text-input" />
-                    </label>
-                    <label>To
-                        <input type="time" name="ExceptionEnd" class="text-input" />
+                    <label class="field" data-exc-time hidden>
+                        <span>To</span>
+                        <input type="time" name="ExceptionEnd" id="exc-end" class="text-input" />
                     </label>
                 </div>
                 <label class="field">
-                    <span>Reason <small class="text-subtle">(optional, for staff)</small></span>
-                    <input type="text" name="ExceptionReason" class="text-input" maxlength="200" placeholder="e.g. Holiday, Doctor unavailable" />
+                    <span>Reason <em class="opt">optional, only staff see it</em></span>
+                    <input type="text" name="ExceptionReason" class="text-input" maxlength="200" placeholder="e.g. Holiday, doctor away" />
                 </label>
-                <div class="flex items-center gap-2 mt-1">
-                    <button type="submit" class="btn btn-primary btn-sm">+ Add exception</button>
-                </div>
+                <div><button type="submit" class="btn btn-primary btn-sm">+ Add date</button></div>
             </form>
         </div>
     }
+
+    <script src="~/js/clinic-info.js" asp-append-version="true"></script>
 }
