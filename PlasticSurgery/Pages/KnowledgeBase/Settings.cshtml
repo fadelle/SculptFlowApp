@@ -80,7 +80,7 @@ else
         <div class="inbox-lead-info-row"><span>Vector index type</span><strong>@KnowledgeVectorIndexType.Label(Model.Current.VectorIndexType)</strong></div>
         <div class="cell-sub mt-1">
             Changing this means re-processing every entry. Contact support if you need a different setup.
-            Last updated @Model.Current.UpdatedAt.ToString("MMM d, yyyy HH:mm").
+            Last updated @LocalTimeHelper.Time(Model.Current.UpdatedAt, "datetime-year").
         </div>
     </details>
 }

@@ -115,11 +115,11 @@ else
                             <td>
                                 @if (c.ScheduledAt is not null && c.Status == CampaignStatus.Scheduled)
                                 {
-                                    <span class="text-md">Scheduled</span><div class="cell-sub">@c.ScheduledAt.Value.ToString("MMM d, HH:mm")</div>
+                                    <span class="text-md">Scheduled</span><div class="cell-sub">@LocalTimeHelper.Time(c.ScheduledAt)</div>
                                 }
                                 else
                                 {
-                                    <span class="text-md">Created</span><div class="cell-sub">@c.CreatedAt.ToString("MMM d, HH:mm")</div>
+                                    <span class="text-md">Created</span><div class="cell-sub">@LocalTimeHelper.Time(c.CreatedAt)</div>
                                 }
                             </td>
                         </tr>

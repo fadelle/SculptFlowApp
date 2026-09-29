@@ -37,14 +37,14 @@
         WebsitePageStatus.Duplicate => "Duplicate",
         _ => "Checking…"
     };
-    static string Ago(DateTimeOffset when)
+    static Microsoft.AspNetCore.Html.IHtmlContent Ago(DateTimeOffset when)
     {
         var span = DateTimeOffset.UtcNow - when;
-        if (span.TotalMinutes < 1) return "just now";
-        if (span.TotalMinutes < 60) return $"{(int)span.TotalMinutes} min ago";
-        if (span.TotalHours < 24) return $"{(int)span.TotalHours} {((int)span.TotalHours == 1 ? "hour" : "hours")} ago";
-        if (span.TotalDays < 2) return "yesterday";
-        return when.ToString("MMM d, yyyy");
+        if (span.TotalMinutes < 1) return new Microsoft.AspNetCore.Html.HtmlString("just now");
+        if (span.TotalMinutes < 60) return new Microsoft.AspNetCore.Html.HtmlString($"{(int)span.TotalMinutes} min ago");
+        if (span.TotalHours < 24) return new Microsoft.AspNetCore.Html.HtmlString($"{(int)span.TotalHours} {((int)span.TotalHours == 1 ? "hour" : "hours")} ago");
+        if (span.TotalDays < 2) return new Microsoft.AspNetCore.Html.HtmlString("yesterday");
+        return LocalTimeHelper.Time(when, "date");
     }
     var d = Model.Detail;
     // "View text" remembers this exact page (including the filter) so Cancel/Save on the entry return here.
@@ -82,7 +82,7 @@ else
                     <div class="cell-sub">
                         @(s.CrawlMode == WebsiteCrawlMode.SinglePage ? "Single page" : "Whole website")
                         · @KnowledgeCategory.Label(s.Category)
-                        · @(s.LastScrapedAt is { } last ? "imported " + Ago(last) : "not imported yet")
+                        · @if (s.LastScrapedAt is { } last) { <text>imported @Ago(last)</text> } else { <text>not imported yet</text> }
                     </div>
                 </div>
             </div>
@@ -163,7 +163,18 @@ else
                 }
             </div>
             <div class="cell-sub mt-1">
-                @(run.StartedAt is null ? "Waiting to start" : "Started " + run.StartedAt.Value.ToString("MMM d, HH:mm"))@(run.CompletedAt is { } done ? " · finished " + done.ToString("HH:mm") : "")
+                @if (run.StartedAt is null)
+                {
+                    <text>Waiting to start</text>
+                }
+                else
+                {
+                    <text>Started @LocalTimeHelper.Time(run.StartedAt)</text>
+                }
+                @if (run.CompletedAt is not null)
+                {
+                    <text>· finished @LocalTimeHelper.Time(run.CompletedAt, "time")</text>
+                }
             </div>
         </details>
     }
@@ -247,7 +258,7 @@ else
                     <div class="tl-row">
                         <span class="badge @RunBadge(r.Status)">@RunLabel(r)</span>
                         <div class="flex-1 cell-sub">
-                            @((r.StartedAt ?? r.CreatedAt).ToString("MMM d, yyyy HH:mm"))
+                            @LocalTimeHelper.Time(r.StartedAt ?? r.CreatedAt, "datetime-year")
                             · @r.PagesDiscovered found · @r.PagesNew new · @r.PagesChanged changed · @r.PagesUnchanged unchanged
                             @if (r.PagesFailed > 0) { <text>· @r.PagesFailed failed</text> }
                             @if (r.PagesRemoved > 0) { <text>· @r.PagesRemoved removed</text> }

@@ -28,6 +28,16 @@
     manual: document.getElementById('manual-recipients')
   };
   var advancedToggle = document.getElementById('advanced-filters-toggle');
+  var clinicTimeZone = (document.querySelector('[data-clinic-timezone]') || { dataset: {} }).dataset.clinicTimezone || 'UTC';
+
+  function clinicMidnightUtc(dateStr, addDays) {
+    if (addDays) {
+      var d = new Date(dateStr + 'T00:00:00Z');
+      d.setUTCDate(d.getUTCDate() + addDays);
+      dateStr = d.toISOString().slice(0, 10);
+    }
+    return window.SculptTime ? window.SculptTime.zonedToUtcIso(dateStr, '00:00', clinicTimeZone) : dateStr + 'T00:00:00Z';
+  }
   var advancedFilters = document.getElementById('advanced-filters');
   if (!radios.length || !audienceTypeField || !manualSelectionField) return;
 
@@ -70,10 +80,12 @@
     var appointmentStatuses = checkedValues('CustomAppointmentStatuses');
     if (appointmentStatuses.length) filters.appointmentStatuses = appointmentStatuses;
 
-    if (val('custom-created-after')) filters.createdAfter = val('custom-created-after');
-    if (val('custom-created-before')) filters.createdBefore = val('custom-created-before');
-    if (val('custom-last-contacted-after')) filters.lastContactedAfter = val('custom-last-contacted-after');
-    if (val('custom-last-contacted-before')) filters.lastContactedBefore = val('custom-last-contacted-before');
+    // Date filters are whole days in the clinic's timezone; send that midnight as UTC (same as the form post).
+    // The "to" date is inclusive, so it becomes midnight at the start of the next day.
+    if (val('custom-created-after')) filters.createdAfter = clinicMidnightUtc(val('custom-created-after'));
+    if (val('custom-created-before')) filters.createdBefore = clinicMidnightUtc(val('custom-created-before'), 1);
+    if (val('custom-last-contacted-after')) filters.lastContactedAfter = clinicMidnightUtc(val('custom-last-contacted-after'));
+    if (val('custom-last-contacted-before')) filters.lastContactedBefore = clinicMidnightUtc(val('custom-last-contacted-before'), 1);
 
     if (val('custom-country')) filters.countries = [val('custom-country')];
     if (val('custom-city')) filters.cities = [val('custom-city')];

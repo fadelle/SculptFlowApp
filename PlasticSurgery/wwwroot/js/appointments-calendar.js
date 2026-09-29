@@ -91,12 +91,23 @@
         }).catch(function (e) { showMessage(e.message, 'error'); });
     }
 
-    /** "yyyy-MM-dd" for today, in the BROWSER's own local date — used only to highlight "today" on the grid and
-        to pick which month opens first; all appointment grouping/display uses the server-computed clinic-local
-        LocalDate/LocalTime instead, so which day an appointment falls on is never affected by this. */
+    /** The grid is in the CLINIC's timezone (server-computed LocalDate/LocalTime), so "today" and "now" must be
+        the clinic's too, not the viewer's. Falls back to the browser's clock until the first month has loaded. */
+    function clinicTimeZone() {
+        return (state.monthData && state.monthData.timezone) || null;
+    }
+
+    /** "yyyy-MM-dd" for today in the clinic's timezone. */
     function todayIso() {
+        var tz = clinicTimeZone();
+        if (tz) return SculptTime.todayIn(tz);
         var d = new Date();
         return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    }
+
+    /** "HH:mm" for right now in the clinic's timezone. */
+    function nowTimeInClinic() {
+        return new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: clinicTimeZone() || undefined });
     }
 
     function addDaysIso(iso, days) {
@@ -163,8 +174,7 @@
         var todays = data.items
             .filter(function (a) { return a.localDate === today && a.status !== 'canceled'; })
             .sort(function (a, b) { return a.localTime < b.localTime ? -1 : 1; });
-        var now = new Date();
-        var nowTime = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+        var nowTime = nowTimeInClinic();
         var next = todays.filter(function (a) { return a.localTime >= nowTime; })[0];
 
         box.textContent = '';
@@ -334,18 +344,6 @@
 
     // ---------------------------------------------------------------- new appointment
 
-    /** Converts a wall-clock date+time typed by staff into the correct UTC instant for the CLINIC's own timezone
-        (not the browser's) — the same "what day/time is this really" question the server already answers when
-        reading the calendar, just worked in reverse. Vanilla JS, no library: for the given calendar date, asks
-        Intl how far `timeZone` sits from UTC (this naturally accounts for DST) and applies that offset. */
-    function zonedWallClockToUtcIso(dateStr, timeStr, timeZone) {
-        var naiveUtc = new Date(dateStr + 'T' + timeStr + ':00Z');
-        var asZoned = new Date(naiveUtc.toLocaleString('en-US', { timeZone: timeZone }));
-        var asUtc = new Date(naiveUtc.toLocaleString('en-US', { timeZone: 'UTC' }));
-        var offsetMs = asZoned.getTime() - asUtc.getTime();
-        return new Date(naiveUtc.getTime() - offsetMs).toISOString();
-    }
-
     function openNewAppointment(prefillDateIso) {
         $('cal-new-error').textContent = '';
         clearLead();
@@ -435,7 +433,7 @@
         if (!date || !time) { err.textContent = 'Enter a date and time.'; return; }
 
         var timeZone = (state.monthData && state.monthData.timezone) || 'UTC';
-        var startIso = zonedWallClockToUtcIso(date, time, timeZone);
+        var startIso = SculptTime.zonedToUtcIso(date, time, timeZone);
         var durationMin = parseInt($('cal-new-duration').value, 10);
         var endIso = durationMin > 0 ? new Date(new Date(startIso).getTime() + durationMin * 60000).toISOString() : null;
 
@@ -498,8 +496,8 @@
             loadMonth(y, m);
         });
         $('cal-today').addEventListener('click', function () {
-            var t = new Date();
-            loadMonth(t.getFullYear(), t.getMonth() + 1);
+            var t = todayIso().split('-');
+            loadMonth(parseInt(t[0], 10), parseInt(t[1], 10));
         });
 
         $('cal-drawer-close').addEventListener('click', closeDrawer);

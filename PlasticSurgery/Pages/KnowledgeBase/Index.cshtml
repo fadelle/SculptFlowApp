@@ -4,15 +4,15 @@
 @model PlasticSurgery.Pages.KnowledgeBase.IndexModel
 @{
     ViewData["Title"] = "Knowledge Base";
-    static string Ago(DateTimeOffset when)
+    static Microsoft.AspNetCore.Html.IHtmlContent Ago(DateTimeOffset when)
     {
         var span = DateTimeOffset.UtcNow - when;
-        if (span.TotalMinutes < 1) return "just now";
-        if (span.TotalMinutes < 60) return $"{(int)span.TotalMinutes} min ago";
-        if (span.TotalHours < 24) return $"{(int)span.TotalHours} {((int)span.TotalHours == 1 ? "hour" : "hours")} ago";
-        if (span.TotalDays < 2) return "yesterday";
-        if (span.TotalDays < 30) return $"{(int)span.TotalDays} days ago";
-        return when.ToString(when.Year == DateTimeOffset.UtcNow.Year ? "MMM d" : "MMM d, yyyy");
+        if (span.TotalMinutes < 1) return new Microsoft.AspNetCore.Html.HtmlString("just now");
+        if (span.TotalMinutes < 60) return new Microsoft.AspNetCore.Html.HtmlString($"{(int)span.TotalMinutes} min ago");
+        if (span.TotalHours < 24) return new Microsoft.AspNetCore.Html.HtmlString($"{(int)span.TotalHours} {((int)span.TotalHours == 1 ? "hour" : "hours")} ago");
+        if (span.TotalDays < 2) return new Microsoft.AspNetCore.Html.HtmlString("yesterday");
+        if (span.TotalDays < 30) return new Microsoft.AspNetCore.Html.HtmlString($"{(int)span.TotalDays} days ago");
+        return LocalTimeHelper.Time(when, when.Year == DateTimeOffset.UtcNow.Year ? "month-day" : "date");
     }
 }
 
@@ -123,7 +123,7 @@ else
                                         <div class="cell-sub text-warn-soft">Imported with problems</div>
                                     }
                                 </td>
-                                <td class="cell-sub" title="@when.ToString("MMM d, yyyy HH:mm")">@Ago(when)</td>
+                                <td class="cell-sub" @LocalTimeHelper.Title(when)>@Ago(when)</td>
                                 <td class="row-actions">
                                     <a href="/KnowledgeBase/Websites/@w.Id" class="btn btn-sm">Open</a>
                                     <form method="post" asp-page-handler="ToggleWebsite" class="inline-form">
@@ -162,7 +162,7 @@ else
                                 </td>
                                 <td><span class="cat-tag">@KnowledgeCategory.Label(d.Category)</span></td>
                                 <td><span class="badge @(d.IsActive ? "badge-green" : "badge-gray")">@(d.IsActive ? "Active" : "Inactive")</span></td>
-                                <td class="cell-sub" title="@d.UpdatedAt.ToString("MMM d, yyyy HH:mm")">@Ago(d.UpdatedAt)</td>
+                                <td class="cell-sub" @LocalTimeHelper.Title(d.UpdatedAt)>@Ago(d.UpdatedAt)</td>
                                 <td class="row-actions">
                                     <a href="/KnowledgeBase/Edit/@d.Id" class="btn btn-sm">Edit</a>
                                     <form method="post" asp-page-handler="Toggle" class="inline-form">

@@ -223,7 +223,7 @@ public class CreateModel : PageModel
                 ? CampaignType.Reactivation
                 : (string?)null;
 
-            string? audienceFilters = isManualSelection ? null : BuildAudienceFiltersJson();
+            string? audienceFilters = isManualSelection ? null : BuildAudienceFiltersJson(ResolveTimeZone(clinic.Timezone));
 
             // The schedule is typed as a wall-clock date + time in the clinic's own timezone; convert to UTC
             // (Npgsql timestamptz columns only accept offset 0).
@@ -290,7 +290,7 @@ public class CreateModel : PageModel
     /// builder's common + advanced fields. Shares one CampaignAudienceFilters shape for both (see
     /// its remarks) since CampaignAudienceService already only reads the subset relevant to each
     /// audience type.</summary>
-    private string? BuildAudienceFiltersJson()
+    private string? BuildAudienceFiltersJson(TimeZoneInfo clinicTz)
     {
         CampaignAudienceFilters filters;
         if (AudienceType == CampaignAudienceType.ReactivationNoConsultation)
@@ -308,10 +308,10 @@ public class CreateModel : PageModel
                 LeadStatuses: CustomLeadStatuses.Count > 0 ? CustomLeadStatuses : null,
                 Sources: CustomSources.Count > 0 ? CustomSources : null,
                 QualificationStatuses: CustomQualificationStatuses.Count > 0 ? CustomQualificationStatuses : null,
-                CreatedAfter: ToUtcOffset(CustomCreatedAfter),
-                CreatedBefore: ToUtcOffset(CustomCreatedBefore),
-                LastContactedAfter: ToUtcOffset(CustomLastContactedAfter),
-                LastContactedBefore: ToUtcOffset(CustomLastContactedBefore),
+                CreatedAfter: ClinicMidnightUtc(CustomCreatedAfter, clinicTz),
+                CreatedBefore: ClinicMidnightUtc(CustomCreatedBefore?.AddDays(1), clinicTz),
+                LastContactedAfter: ClinicMidnightUtc(CustomLastContactedAfter, clinicTz),
+                LastContactedBefore: ClinicMidnightUtc(CustomLastContactedBefore?.AddDays(1), clinicTz),
                 AppointmentStatuses: CustomAppointmentStatuses.Count > 0 ? CustomAppointmentStatuses : null,
                 Countries: string.IsNullOrWhiteSpace(CustomCountry) ? null : new[] { CustomCountry },
                 Cities: string.IsNullOrWhiteSpace(CustomCity) ? null : new[] { CustomCity });
@@ -324,8 +324,14 @@ public class CreateModel : PageModel
         return JsonSerializer.Serialize(filters, AudienceFiltersJsonOptions);
     }
 
-    private static DateTimeOffset? ToUtcOffset(DateTime? value) =>
-        value.HasValue ? new DateTimeOffset(DateTime.SpecifyKind(value.Value, DateTimeKind.Utc)) : null;
+    /// <summary>The date filters are whole days in the clinic's timezone: midnight there, as UTC. The "to" date is
+    /// inclusive, so callers pass the day after it.</summary>
+    private static DateTimeOffset? ClinicMidnightUtc(DateTime? date, TimeZoneInfo tz)
+    {
+        if (date is null) return null;
+        var local = DateTime.SpecifyKind(date.Value.Date, DateTimeKind.Unspecified);
+        return new DateTimeOffset(local, tz.GetUtcOffset(local)).ToUniversalTime();
+    }
 
     private async Task LoadAsync(CancellationToken ct)
     {

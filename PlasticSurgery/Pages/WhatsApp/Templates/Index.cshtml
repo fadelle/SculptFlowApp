@@ -124,7 +124,7 @@ else
                                     }
                                 </td>
                                 <td><div class="body-clip" dir="auto">@t.Body</div></td>
-                                <td class="cell-sub" data-role="updated">@((t.LastMetaEventAt ?? t.UpdatedAt).ToString("MMM d, HH:mm"))</td>
+                                <td class="cell-sub" data-role="updated">@LocalTimeHelper.Time(t.LastMetaEventAt ?? t.UpdatedAt)</td>
                                 <td class="row-actions">
                                     @if (t.Status == WhatsAppTemplateStatus.Approved)
                                     {

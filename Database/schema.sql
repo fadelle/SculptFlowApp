@@ -1533,3 +1533,19 @@ alter table appointment_calendar_syncs add column if not exists last_operation v
 alter table calendar_integrations add column if not exists access_token text;
 alter table calendar_integrations add column if not exists refresh_token text;
 alter table calendar_integrations add column if not exists token_expires_at timestamptz;
+
+-- UTC guard: every moment in time is stored as timestamptz (UTC); only the clinic-local availability columns
+-- (clinic_availability_rules/exceptions start_time/end_time/date, read together with clinics.timezone) are
+-- zone-less on purpose. If any other column ever drifts to `timestamp without time zone`, convert it here,
+-- reading its existing values as UTC (what the app always wrote). Checked 2026-09-29: none exist, so this is a no-op.
+do $$
+declare col record;
+begin
+  for col in
+    select table_name, column_name from information_schema.columns
+    where table_schema = 'public' and data_type = 'timestamp without time zone'
+  loop
+    execute format('alter table public.%I alter column %I type timestamptz using %I at time zone ''UTC''',
+                   col.table_name, col.column_name, col.column_name);
+  end loop;
+end $$;

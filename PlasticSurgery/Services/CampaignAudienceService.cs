@@ -109,21 +109,26 @@ public class CampaignAudienceService : ICampaignAudienceService
         {
             query = query.Where(l => filters.QualificationStatuses.Contains(l.QualificationStatus));
         }
-        if (filters.CreatedAfter.HasValue)
+        // Npgsql only accepts UTC offsets for timestamptz; filters may arrive with any offset.
+        var createdAfter = filters.CreatedAfter?.ToUniversalTime();
+        var createdBefore = filters.CreatedBefore?.ToUniversalTime();
+        var lastContactedAfter = filters.LastContactedAfter?.ToUniversalTime();
+        var lastContactedBefore = filters.LastContactedBefore?.ToUniversalTime();
+        if (createdAfter.HasValue)
         {
-            query = query.Where(l => l.CreatedAt >= filters.CreatedAfter.Value);
+            query = query.Where(l => l.CreatedAt >= createdAfter.Value);
         }
-        if (filters.CreatedBefore.HasValue)
+        if (createdBefore.HasValue)
         {
-            query = query.Where(l => l.CreatedAt <= filters.CreatedBefore.Value);
+            query = query.Where(l => l.CreatedAt < createdBefore.Value);
         }
-        if (filters.LastContactedAfter.HasValue)
+        if (lastContactedAfter.HasValue)
         {
-            query = query.Where(l => l.LastContactAt != null && l.LastContactAt >= filters.LastContactedAfter.Value);
+            query = query.Where(l => l.LastContactAt != null && l.LastContactAt >= lastContactedAfter.Value);
         }
-        if (filters.LastContactedBefore.HasValue)
+        if (lastContactedBefore.HasValue)
         {
-            query = query.Where(l => l.LastContactAt != null && l.LastContactAt <= filters.LastContactedBefore.Value);
+            query = query.Where(l => l.LastContactAt != null && l.LastContactAt < lastContactedBefore.Value);
         }
         if (filters.AppointmentStatuses is { Count: > 0 })
         {

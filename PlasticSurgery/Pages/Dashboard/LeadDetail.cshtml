@@ -57,9 +57,9 @@ else
         <div class="inbox-lead-info-row"><span>Procedure</span><strong>@(lead.ProcedureName ?? "—")</strong></div>
         <div class="inbox-lead-info-row"><span>City</span><strong>@(lead.City ?? "—")</strong></div>
         <div class="inbox-lead-info-row"><span>Timeline</span><strong>@(lead.DesiredTimeline ?? "—")</strong></div>
-        <div class="inbox-lead-info-row"><span>Last contact</span><strong>@(lead.LastContactAt?.ToString("MMM d, HH:mm") ?? "—")</strong></div>
-        <div class="inbox-lead-info-row"><span>Next follow-up</span><strong class="@(followupOverdue ? "overdue" : "")">@(lead.NextFollowupAt?.ToString("MMM d, HH:mm") ?? "—")@(followupOverdue ? " · overdue" : "")</strong></div>
-        <div class="inbox-lead-info-row"><span>Lead since</span><strong>@lead.CreatedAt.ToString("MMM d, yyyy")</strong></div>
+        <div class="inbox-lead-info-row"><span>Last contact</span><strong>@LocalTimeHelper.Time(lead.LastContactAt)</strong></div>
+        <div class="inbox-lead-info-row"><span>Next follow-up</span><strong class="@(followupOverdue ? "overdue" : "")">@LocalTimeHelper.Time(lead.NextFollowupAt)@(followupOverdue ? " · overdue" : "")</strong></div>
+        <div class="inbox-lead-info-row"><span>Lead since</span><strong>@LocalTimeHelper.Time(lead.CreatedAt, "date")</strong></div>
         @if (!string.IsNullOrWhiteSpace(lead.Notes))
         {
             <div class="lead-notes">

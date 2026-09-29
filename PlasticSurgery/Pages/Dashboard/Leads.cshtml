@@ -88,15 +88,15 @@ else
                             </td>
                             <td><span class="badge @StatusBadgeHelper.CssClass(lead.Status)">@FilterLabelHelper.Label(lead.Status)</span></td>
                             <td><span class="badge @StatusBadgeHelper.CssClass(lead.QualificationStatus)">@FilterLabelHelper.Label(lead.QualificationStatus)</span></td>
-                            <td>@(lead.LastContactAt?.ToString("MMM d, HH:mm") ?? "—")</td>
+                            <td>@LocalTimeHelper.Time(lead.LastContactAt)</td>
                             <td>
                                 @if (overdue)
                                 {
-                                    <span class="overdue" title="This follow-up date has passed">@lead.NextFollowupAt!.Value.ToString("MMM d, HH:mm") · overdue</span>
+                                    <span class="overdue" title="This follow-up date has passed">@LocalTimeHelper.Time(lead.NextFollowupAt) · overdue</span>
                                 }
                                 else
                                 {
-                                    @(lead.NextFollowupAt?.ToString("MMM d, HH:mm") ?? "—")
+                                    @LocalTimeHelper.Time(lead.NextFollowupAt)
                                 }
                             </td>
                         </tr>

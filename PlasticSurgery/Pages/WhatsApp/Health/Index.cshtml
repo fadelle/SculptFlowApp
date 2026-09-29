@@ -137,7 +137,7 @@ else
                 <div class="eyebrow">Last heard from Meta</div>
                 <div class="fact-main" id="health-last-webhook" data-timestamp="@(h.LastWebhookAt?.ToString("O"))">@(h.LastWebhookAt is null ? "Never" : Ago(h.LastWebhookAt.Value))</div>
                 <div class="cell-sub">
-                    @(h.LastWebhookAt?.ToString("MMM d, HH:mm"))
+                    @LocalTimeHelper.Time(h.LastWebhookAt, empty: "")
                     @if (lastHeardLong)
                     {
                         <span class="text-warn">· longer than usual</span>
@@ -178,7 +178,7 @@ else
                         <div class="tl-title">@(e.Message ?? kind.Label + " update")</div>
                         <div class="cell-sub">@kind.Label@(e.Status is null ? "" : " · " + Nice(e.Status).ToLowerInvariant())</div>
                     </div>
-                    <div class="cell-sub" title="@e.OccurredAt.ToString("MMM d, yyyy HH:mm")">@e.OccurredAt.ToString("MMM d, HH:mm")</div>
+                    <div class="cell-sub" @LocalTimeHelper.Title(e.OccurredAt)>@LocalTimeHelper.Time(e.OccurredAt)</div>
                 </div>
             }
             <div class="tl-row tl-empty" id="health-tab-empty" hidden><span class="text-subtle">No problems reported.</span></div>

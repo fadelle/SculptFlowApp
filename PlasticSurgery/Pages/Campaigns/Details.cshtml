@@ -33,10 +33,10 @@ else if (Model.Details is not null)
         CampaignAudienceType.AllEligible => "All contactable leads",
         _ => "Custom audience"
     };
-    var when = c.Status == CampaignStatus.Scheduled && c.ScheduledAt is not null ? "Scheduled for " + c.ScheduledAt.Value.ToString("MMM d, HH:mm")
-        : c.CompletedAt is not null ? "Finished " + c.CompletedAt.Value.ToString("MMM d, HH:mm")
-        : c.StartedAt is not null ? "Started " + c.StartedAt.Value.ToString("MMM d, HH:mm")
-        : "Created " + c.CreatedAt.ToString("MMM d, HH:mm");
+    var (whenLabel, whenAt) = c.Status == CampaignStatus.Scheduled && c.ScheduledAt is not null ? ("Scheduled for", c.ScheduledAt)
+        : c.CompletedAt is not null ? ("Finished", c.CompletedAt)
+        : c.StartedAt is not null ? ("Started", c.StartedAt)
+        : ("Created", (DateTimeOffset?)c.CreatedAt);
     var canSend = c.Status is CampaignStatus.Draft or CampaignStatus.Scheduled or CampaignStatus.Running;
     var sendLabel = c.Status == CampaignStatus.Running ? "Send to the rest" : $"Send now to {st.TotalRecipients - st.Skipped} {(st.TotalRecipients - st.Skipped == 1 ? "lead" : "leads")}";
     var groups = d.Recipients.GroupBy(r => Group(r.Status)).ToDictionary(g => g.Key, g => g.Count());
@@ -58,7 +58,7 @@ else if (Model.Details is not null)
                 <h2 class="m-0">@c.Name</h2>
                 <span class="badge @StatusBadgeHelper.CssClass(c.Status)">@FilterLabelHelper.Label(c.Status)</span>
             </div>
-            <div class="text-muted text-md mt-1">Template <strong>@(c.TemplateName ?? "—")</strong> · @audience · @when</div>
+            <div class="text-muted text-md mt-1">Template <strong>@(c.TemplateName ?? "—")</strong> · @audience · @whenLabel @LocalTimeHelper.Time(whenAt)</div>
         </div>
         <div class="flex items-center gap-2 flex-wrap">
             @if (canSend)
@@ -142,12 +142,12 @@ else if (Model.Details is not null)
             <tbody>
                 @foreach (var r in d.Recipients)
                 {
-                    var last = r.ReadAt is not null ? "Read " + r.ReadAt.Value.ToString("MMM d, HH:mm")
-                        : r.DeliveredAt is not null ? "Delivered " + r.DeliveredAt.Value.ToString("MMM d, HH:mm")
-                        : r.SentAt is not null ? "Sent " + r.SentAt.Value.ToString("MMM d, HH:mm")
-                        : r.FailedAt is not null ? "Failed " + r.FailedAt.Value.ToString("MMM d, HH:mm")
-                        : r.QueuedAt is not null ? "Queued " + r.QueuedAt.Value.ToString("MMM d, HH:mm")
-                        : "—";
+                    var (lastLabel, lastAt) = r.ReadAt is not null ? ("Read", r.ReadAt)
+                        : r.DeliveredAt is not null ? ("Delivered", r.DeliveredAt)
+                        : r.SentAt is not null ? ("Sent", r.SentAt)
+                        : r.FailedAt is not null ? ("Failed", r.FailedAt)
+                        : r.QueuedAt is not null ? ("Queued", r.QueuedAt)
+                        : ("", (DateTimeOffset?)null);
                     var problem = r.SkipReason ?? r.FailureReason;
                     <tr class="row-link" data-href="/dashboard/leads/@r.LeadId" data-group="@Group(r.Status)">
                         <td><a class="cell-person" href="/dashboard/leads/@r.LeadId"><span class="avatar-sm">@(string.IsNullOrWhiteSpace(r.LeadFullName) ? "?" : r.LeadFullName.Trim()[..1])</span>@(r.LeadFullName ?? "—")</a></td>
@@ -159,7 +159,7 @@ else if (Model.Details is not null)
                                 <div class="cell-err">@problem</div>
                             }
                         </td>
-                        <td class="cell-sub">@last</td>
+                        <td class="cell-sub">@lastLabel @LocalTimeHelper.Time(lastAt)</td>
                     </tr>
                 }
                 @if (d.Recipients.Count == 0)

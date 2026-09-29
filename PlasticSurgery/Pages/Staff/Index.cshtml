@@ -64,7 +64,7 @@ else
                             </td>
                             <td>@(m.Email ?? "—")</td>
                             <td><span class="badge @(m.IsActive ? "badge-green" : "badge-gray")">@(m.IsActive ? "Active" : "Can't sign in")</span></td>
-                            <td class="cell-sub" title="@m.JoinedAt.ToString("MMM d, yyyy")">Joined @m.JoinedAt.ToString("MMMM yyyy")</td>
+                            <td class="cell-sub" @LocalTimeHelper.Title(m.JoinedAt, "date")>Joined @LocalTimeHelper.Time(m.JoinedAt, "month-year")</td>
                         </tr>
                     }
                 </tbody>
