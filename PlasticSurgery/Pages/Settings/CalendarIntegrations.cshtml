@@ -54,9 +54,9 @@ else
         var hasCalendar = connected && !string.IsNullOrEmpty(info!.SelectedCalendarId);
         var syncing = hasCalendar && info!.SyncEnabled && !unhealthy;
 
-        <div class="card int-card @(unhealthy || failed ? "int-card-error" : "")">
+        <div class="card int-card int-framed @(unhealthy || failed ? "int-card-error" : "")" style="--ch:@accentHex">
             <div class="int-head">
-                <span class="channel-mark" style="background:@accentHex">@initials</span>
+                <span class="channel-mark int-notch ch-@provider" title="@title">@Html.Raw(PlasticSurgery.Pages.Shared.ChannelIconHelper.BrandSvg(provider) ?? initials)</span>
                 <div class="flex-1 min-w-0">
                     <div class="integration-title">@title</div>
                     <div class="cell-sub">@(connected && !string.IsNullOrEmpty(info!.AccountDisplayName) ? info.AccountDisplayName : $"Show your SculptFlow appointments in {shortName}.")</div>

@@ -2641,3 +2641,4 @@ td .cell-sub { white-space: nowrap; }
 .int-framed .int-notch { position: absolute; top: -19px; left: 18px; background: var(--ch); box-shadow: 0 0 0 5px var(--bg); }
 .int-notch svg { width: 20px; height: 20px; }
 .int-notch.ch-instagram { background: radial-gradient(circle at 30% 107%, #fdf497 0%, #fd5949 45%, #d6249f 60%, #285AEB 90%); }
+.int-notch.ch-google { background: #fff; box-shadow: 0 0 0 5px var(--bg), inset 0 0 0 1px var(--border); }

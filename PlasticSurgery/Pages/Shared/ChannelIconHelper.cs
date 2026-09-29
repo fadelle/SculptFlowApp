@@ -41,8 +41,16 @@ public static class ChannelIconHelper
     {
         "instagram" => InstagramSvg,
         "facebook" => MessengerSvg,
+        "google" => GoogleCalendarSvg,
+        "outlook" => OutlookSvg,
         _ => Svg(channel)
     };
+
+    private const string GoogleCalendarSvg =
+        """<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="3" width="18" height="18" rx="3" fill="#fff"/><path d="M6 3h12a3 3 0 0 1 3 3v2.5H3V6a3 3 0 0 1 3-3z" fill="#4285F4"/><path d="M3 17.5h4.5V21H6a3 3 0 0 1-3-3z" fill="#34A853"/><path d="M16.5 17.5H21V18a3 3 0 0 1-3 3h-1.5z" fill="#FBBC04"/><rect x="3" y="3" width="18" height="18" rx="3" fill="none" stroke="#4285F4" stroke-width="1.2"/><text x="12" y="16.6" text-anchor="middle" font-family="Arial, sans-serif" font-size="7.5" font-weight="700" fill="#4285F4">31</text></svg>""";
+
+    private const string OutlookSvg =
+        """<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="9" y="6" width="12.5" height="12" rx="1.5" stroke="#fff" stroke-width="1.6"/><path d="M9.5 7.5 15.25 12 21 7.5" stroke="#fff" stroke-width="1.6"/><rect x="2.5" y="4" width="10" height="16" rx="1.8" fill="#fff"/><ellipse cx="7.5" cy="12" rx="2.4" ry="3.1" stroke="#0078D4" stroke-width="1.8"/></svg>""";
 
     private const string InstagramSvg =
         """<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4.2"/><circle cx="17.4" cy="6.6" r="1.1" fill="#fff" stroke="none"/></svg>""";
