@@ -32,10 +32,10 @@ else
         }
     </div>
 
-    <div class="int-grid">
-        @{ await RenderChannelCard(ChannelType.WhatsApp, "WA", "#25D366", "WhatsApp Business", "Chat with patients, send reminders and campaigns.", oauth: true); }
-        @{ await RenderChannelCard(ChannelType.Instagram, "IG", "#C13584", "Instagram", "Answer Instagram direct messages.", oauth: false); }
-        @{ await RenderChannelCard(ChannelType.Facebook, "FB", "#1877F2", "Facebook Messenger", "Answer messages sent to your Facebook page.", oauth: true); }
+    <div class="int-grid int-grid-even">
+        @{ await RenderChannelCard(ChannelType.WhatsApp, "WA", "#25D366", "WhatsApp Business", "Chat with patients, send reminders and campaigns.", "Chat with patients on WhatsApp, and send reminders and campaigns.", oauth: true); }
+        @{ await RenderChannelCard(ChannelType.Instagram, "IG", "#C13584", "Instagram", "Answer Instagram direct messages.", "Patients' Instagram DMs arrive in your Inbox, and the AI assistant can answer them.", oauth: false); }
+        @{ await RenderChannelCard(ChannelType.Facebook, "FB", "#1877F2", "Facebook Messenger", "Answer messages sent to your Facebook page.", "Messages to your Facebook page arrive in your Inbox, and the AI assistant can answer them.", oauth: true); }
         @{ await RenderTelegramCard(); }
     </div>
 }
@@ -59,6 +59,25 @@ else
             pin.textContent = shown ? '••••••' : pin.getAttribute('data-pin');
             btn.textContent = shown ? 'Show' : 'Hide';
         });
+    });
+
+    // Card popups: open from [data-open], close with ×/Cancel, a click outside, or Esc.
+    document.querySelectorAll('[data-open]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var m = document.getElementById(btn.getAttribute('data-open'));
+            m.hidden = false;
+            var first = m.querySelector('input:not([type=hidden]), select, textarea');
+            if (first) first.focus();
+        });
+    });
+    document.querySelectorAll('.int-modal').forEach(function (card) {
+        var overlay = card.parentElement;
+        overlay.addEventListener('click', function (e) {
+            if (e.target === overlay || e.target.closest('[data-close]')) overlay.hidden = true;
+        });
+    });
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') document.querySelectorAll('.int-modal').forEach(function (c) { c.parentElement.hidden = true; });
     });
 </script>
 
@@ -86,9 +105,34 @@ else
         await Task.CompletedTask;
     }
 
+    // Popup that holds a card's form (manual setup, account details, a different bot) so the cards never grow.
+    private async Task RenderModalStart(string id, string channel, string accentHex, string title, string subtitle)
+    {
+        @:<div class="bm-overlay" id="@id" hidden>
+        @:<div class="card cal-modal int-modal" role="dialog" aria-modal="true" aria-labelledby="@(id)-title">
+            <div class="modal-head">
+                <div class="flex items-center gap-2 min-w-0">
+                    <span class="channel-mark ch-@channel" style="background:@accentHex">@Html.Raw(PlasticSurgery.Pages.Shared.ChannelIconHelper.BrandSvg(channel) ?? "")</span>
+                    <div class="min-w-0">
+                        <h3 class="card-title m-0" id="@(id)-title">@title</h3>
+                        <div class="cell-sub">@subtitle</div>
+                    </div>
+                </div>
+                <button type="button" class="modal-x" data-close aria-label="Close">×</button>
+            </div>
+        await Task.CompletedTask;
+    }
+
+    private async Task RenderModalEnd()
+    {
+        @:</div>
+        @:</div>
+        await Task.CompletedTask;
+    }
+
     // One Meta channel's card. Connecting uses the OAuth button (when oauth: true and a Login Configuration ID
-    // is set) or the manual form; Instagram is manual only (its Login Configuration isn't set up yet).
-    private async Task RenderChannelCard(string channel, string initials, string accentHex, string title, string purpose, bool oauth)
+    // is set) or the manual form in a popup; Instagram is manual only (its Login Configuration isn't set up yet).
+    private async Task RenderChannelCard(string channel, string initials, string accentHex, string title, string purpose, string whenConnected, bool oauth)
     {
         var info = Model.Channels.TryGetValue(channel, out var c) ? c : null;
         var connected = info?.Status == ChannelIntegrationStatus.Connected;
@@ -101,6 +145,7 @@ else
         };
         // Only WhatsApp uses a JS-driven button; Facebook Messenger uses Meta's fb:login-button plugin.
         var jsFunction = channel == ChannelType.WhatsApp ? "psConnectWhatsApp" : "";
+        var modalId = "int-m-" + channel;
 
         <div class="card int-card int-framed @(isError ? "int-card-error" : "")" style="--ch:@accentHex">
             <div class="int-head">
@@ -112,38 +157,75 @@ else
                 @{ await RenderStatusPill(info); }
             </div>
 
+            @* Middle strip: same place on every card. *@
             @if (isError)
             {
-                <div class="int-problem">
-                    <strong>Problem:</strong> @title stopped working. Reconnect to keep sending and receiving messages.
-                    @if (!string.IsNullOrEmpty(info!.LastError))
-                    {
-                        <details class="mt-1"><summary class="cell-sub">Technical details</summary><div class="cell-sub break-word">@info.LastError</div></details>
-                    }
+                <div class="int-strip int-strip-problem">
+                    <div>
+                        <span class="cell-sub">Problem</span>
+                        <span class="int-val">@title stopped working. Reconnect to keep sending and receiving messages.</span>
+                        @if (!string.IsNullOrEmpty(info!.LastError))
+                        {
+                            <details class="mt-1"><summary class="cell-sub">Technical details</summary><div class="cell-sub break-word">@info.LastError</div></details>
+                        }
+                    </div>
                 </div>
             }
-
-            @if (connected && channel == ChannelType.WhatsApp)
+            else if (connected && channel == ChannelType.WhatsApp)
             {
-                <div class="int-facts">
+                <div class="int-strip">
                     @if (!string.IsNullOrEmpty(info!.Pin))
                     {
                         <div>
                             <span class="cell-sub">Two-step PIN</span>
-                            <strong><code data-pin="@info.Pin">••••••</code> <button type="button" class="link-btn" data-pin-toggle>Show</button></strong>
+                            <span class="int-val"><code data-pin="@info.Pin">••••••</code> <button type="button" class="link-btn" data-pin-toggle>Show</button></span>
                         </div>
                     }
                     <div>
                         <span class="cell-sub">Health</span>
-                        <strong><a href="/WhatsApp/Health">View WhatsApp Health →</a></strong>
+                        <span class="int-val"><a href="/WhatsApp/Health">View WhatsApp Health →</a></span>
+                    </div>
+                </div>
+            }
+            else if (connected)
+            {
+                <div class="int-strip">
+                    <div>
+                        <span class="cell-sub">@(channel == ChannelType.Instagram ? "Instagram account" : "Facebook page")</span>
+                        <span class="int-val">@(string.IsNullOrEmpty(info!.DisplayName) ? (channel == ChannelType.Instagram ? info.InstagramBusinessId : info.PageId) ?? "—" : info.DisplayName)</span>
+                    </div>
+                    <div>
+                        <span class="cell-sub">Messages</span>
+                        <span class="int-val">Arrive in your Inbox</span>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="int-strip int-strip-note">
+                    <div>
+                        <span class="cell-sub">When connected</span>
+                        <span class="int-val">@whenConnected</span>
                     </div>
                 </div>
             }
 
             @if (!connected && oauth)
             {
-                @* Connect (or reconnect) with Facebook sign-in. *@
-                <div class="int-actions">
+                @if (string.IsNullOrEmpty(configId))
+                {
+                    <div class="cell-sub" title="Meta Login Configuration ID missing in appsettings.json (Meta section)">Facebook sign-in isn't set up for this app yet, so use manual setup for now.</div>
+                }
+                else
+                {
+                    <div class="text-subtle text-xs" data-status-for="@channel"></div>
+                }
+            }
+
+            <div class="int-foot">
+                @if (!connected && oauth)
+                {
+                    @* Connect (or reconnect) with Facebook sign-in. *@
                     @if (channel == ChannelType.Facebook && !string.IsNullOrEmpty(configId))
                     {
                         <fb:login-button config_id="@configId" onlogin="psFacebookOnLogin();"></fb:login-button>
@@ -156,34 +238,27 @@ else
                             @(isError ? "Reconnect with Facebook" : "Continue with Facebook")
                         </button>
                     }
-                </div>
-                @if (string.IsNullOrEmpty(configId))
-                {
-                    <div class="cell-sub" title="Meta Login Configuration ID missing in appsettings.json (Meta section)">Facebook sign-in isn't set up for this app yet, so use manual setup for now.</div>
                 }
-                else
+                <button type="button" class="btn btn-sm @(connected || isError || oauth ? "btn-ghost" : "btn-primary")" data-open="@modalId">
+                    @(connected || isError ? "Account details" : oauth ? "Set up manually" : "Set up")
+                </button>
+                @if (connected || isError)
                 {
-                    <div class="text-subtle text-xs" data-status-for="@channel"></div>
+                    <form method="post" asp-page-handler="Disconnect" class="inline-form int-foot-end"
+                          onsubmit="return confirm('Disconnect @title? Leads on this channel will stop being sent/received until reconnected.');">
+                        <input type="hidden" name="Channel" value="@channel" />
+                        <button type="submit" class="btn btn-ghost btn-sm btn-danger-text">Disconnect</button>
+                    </form>
                 }
-            }
-
-            <details class="int-more">
-                <summary class="btn btn-ghost btn-sm">@(connected || isError ? "Account details" : oauth ? "Set up manually" : "Set up")</summary>
-                <div class="mt-2">
-                    @{ await RenderManualForm(channel, info, connected); }
-                </div>
-            </details>
-
-            @if (connected || isError)
-            {
-                <form method="post" asp-page-handler="Disconnect" class="inline-form"
-                      onsubmit="return confirm('Disconnect @title? Leads on this channel will stop being sent/received until reconnected.');">
-                    <input type="hidden" name="Channel" value="@channel" />
-                    <button type="submit" class="btn btn-ghost btn-sm btn-danger-text">Disconnect</button>
-                </form>
-            }
+            </div>
         </div>
-        await Task.CompletedTask;
+
+        await RenderModalStart(modalId, channel, accentHex,
+            connected || isError ? $"{title} account details" : oauth ? $"Set up {title} manually" : $"Set up {title}",
+            connected || isError ? (info?.DisplayName ?? "Change the IDs or the access token.")
+                : oauth ? "Only if signing in with Facebook doesn't work for you." : "With the IDs and a token from your Meta app.");
+        await RenderManualForm(channel, info, connected);
+        await RenderModalEnd();
     }
 
     // Telegram: the clinic pastes a BotFather token and SculptFlow does the rest (getMe, then setWebhook with a
@@ -193,6 +268,7 @@ else
         var info = Model.Channels.TryGetValue(ChannelType.Telegram, out var c) ? c : null;
         var connected = info?.Status == ChannelIntegrationStatus.Connected;
         var problem = info is not null && NeedsAttention(info);
+        const string modalId = "int-m-telegram";
 
         <div class="card int-card int-framed @(problem ? "int-card-error" : "")" style="--ch:#229ED9">
             <div class="int-head">
@@ -215,49 +291,62 @@ else
 
             @if (!string.IsNullOrEmpty(info?.LastError))
             {
-                <div class="int-problem">
-                    <strong>Problem:</strong> Telegram can't deliver messages to us right now. Try "Check connection", or reconnect the bot.
-                    <details class="mt-1"><summary class="cell-sub">Technical details</summary><div class="cell-sub break-word">@info!.LastError</div></details>
+                <div class="int-strip int-strip-problem">
+                    <div>
+                        <span class="cell-sub">Problem</span>
+                        <span class="int-val">Telegram can't deliver messages to us right now. Try "Check connection", or use a different bot.</span>
+                        <details class="mt-1"><summary class="cell-sub">Technical details</summary><div class="cell-sub break-word">@info!.LastError</div></details>
+                    </div>
                 </div>
             }
-
-            @if (connected)
+            else if (connected)
             {
-                <div class="int-facts">
+                <div class="int-strip">
                     <div>
                         <span class="cell-sub">Receiving messages</span>
-                        <strong>@(info!.WebhookStatus switch { WebhookStatus.Active => "Yes", WebhookStatus.Pending => "Setting up…", _ => "No" })</strong>
+                        <span class="int-val">@(info!.WebhookStatus switch { WebhookStatus.Active => "Yes", WebhookStatus.Pending => "Setting up…", _ => "No" })</span>
                     </div>
                     <div>
                         <span class="cell-sub">Last message</span>
-                        <strong title="@(info.LastWebhookAt?.ToString("MMM d, HH:mm") + " UTC")">@(info.LastWebhookAt is { } last ? Ago(last) : "None yet")</strong>
+                        <span class="int-val" title="@(info.LastWebhookAt?.ToString("MMM d, HH:mm") + " UTC")">@(info.LastWebhookAt is { } last ? Ago(last) : "None yet · send your bot a message to test")</span>
                     </div>
                 </div>
-                @if (!info.LastWebhookAt.HasValue)
+            }
+            else
+            {
+                <div class="int-strip int-strip-note">
+                    <div>
+                        <span class="cell-sub">When connected</span>
+                        <span class="int-val">Messages to your Telegram bot arrive in your Inbox, and the AI assistant can answer them.</span>
+                    </div>
+                </div>
+            }
+
+            <div class="int-foot">
+                @if (connected)
                 {
-                    <div class="cell-sub">Send your bot a message from Telegram to test it.</div>
-                }
-                <div class="int-actions">
                     <form method="post" asp-page-handler="RefreshTelegram" class="inline-form">
                         <button type="submit" class="btn btn-sm">Check connection</button>
                     </form>
-                    <form method="post" asp-page-handler="Disconnect" class="inline-form"
+                    <button type="button" class="btn btn-ghost btn-sm" data-open="@modalId">Use a different bot</button>
+                    <form method="post" asp-page-handler="Disconnect" class="inline-form int-foot-end"
                           onsubmit="return confirm('Disconnect Telegram? The bot stops receiving and sending messages until reconnected. Existing conversations are kept.');">
                         <input type="hidden" name="Channel" value="@ChannelType.Telegram" />
                         <button type="submit" class="btn btn-ghost btn-sm btn-danger-text">Disconnect</button>
                     </form>
-                </div>
-                <details class="int-more">
-                    <summary class="btn btn-ghost btn-sm">Use a different bot</summary>
-                    <div class="mt-2">@{ await RenderTelegramConnectForm("Reconnect"); }</div>
-                </details>
-            }
-            else
-            {
-                await RenderTelegramConnectForm("Connect");
-            }
+                }
+                else
+                {
+                    <button type="button" class="btn btn-primary btn-sm" data-open="@modalId">Connect</button>
+                }
+            </div>
         </div>
-        await Task.CompletedTask;
+
+        await RenderModalStart(modalId, ChannelType.Telegram, "#229ED9",
+            connected ? "Use a different bot" : "Connect Telegram",
+            connected && !string.IsNullOrEmpty(info?.TelegramBotUsername) ? "Replaces @" + info!.TelegramBotUsername + "." : "Create a bot in Telegram, then paste its token.");
+        await RenderTelegramConnectForm(connected ? "Reconnect" : "Connect");
+        await RenderModalEnd();
     }
 
     private async Task RenderTelegramConnectForm(string buttonLabel)
@@ -268,12 +357,16 @@ else
                 <li>Send <code>/newbot</code> and follow the steps.</li>
                 <li>Paste the token it gives you:</li>
             </ol>
-            <div class="flex gap-2">
-                <input type="password" name="BotToken" class="text-input flex-1" autocomplete="off" spellcheck="false"
-                       placeholder="123456789:AA…" required aria-label="Bot token" />
+            <label class="field">
+                <span>Bot token</span>
+                <input type="password" name="BotToken" class="text-input" autocomplete="off" spellcheck="false"
+                       placeholder="123456789:AA…" required />
+                <small class="text-subtle">We check the token and set everything up. It's never shown again.</small>
+            </label>
+            <div class="flex items-center gap-2">
                 <button type="submit" class="btn btn-primary btn-sm">@buttonLabel</button>
+                <button type="button" class="btn btn-sm" data-close>Cancel</button>
             </div>
-            <div class="cell-sub">We check the token and set everything up. It's never shown again.</div>
         </form>
         await Task.CompletedTask;
     }
@@ -342,7 +435,8 @@ else
             </label>
 
             <div class="flex items-center gap-2">
-                <button type="submit" class="btn btn-sm @(connected ? "" : "btn-primary")">@(connected ? "Save changes" : "Connect")</button>
+                <button type="submit" class="btn btn-sm btn-primary">@(connected ? "Save changes" : "Connect")</button>
+                <button type="button" class="btn btn-sm" data-close>Cancel</button>
             </div>
         </form>
         await Task.CompletedTask;

@@ -2642,3 +2642,22 @@ td .cell-sub { white-space: nowrap; }
 .int-notch svg { width: 20px; height: 20px; }
 .int-notch.ch-instagram { background: radial-gradient(circle at 30% 107%, #fdf497 0%, #fd5949 45%, #d6249f 60%, #285AEB 90%); }
 .int-notch.ch-google { background: #fff; box-shadow: 0 0 0 5px var(--bg), inset 0 0 0 1px var(--border); }
+
+/* ---- Integrations: equal cards ---- */
+.int-grid-even, .cal-grid-even { align-items: stretch; max-width: 1200px; }
+.int-card.int-framed { padding-bottom: 0; }
+.int-strip { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; padding: .65rem .8rem; background: var(--bg); border-radius: var(--radius); flex: 1; align-content: start; }
+.int-strip > div { display: flex; flex-direction: column; gap: .15rem; min-width: 0; }
+.int-strip-note, .int-strip-problem { grid-template-columns: 1fr; }
+.int-strip-problem { background: var(--badge-red-bg); }
+.int-strip-problem summary { cursor: pointer; }
+.int-val { font-size: .88rem; font-weight: 600; overflow-wrap: anywhere; }
+.int-strip-note .int-val, .int-strip-problem .int-val { font-weight: 400; color: var(--text); }
+.int-foot { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; padding: .75rem 0; margin-top: auto; border-top: 1px solid var(--border); }
+.int-foot-end { margin-left: auto; }
+.int-modal { max-width: 560px; }
+.int-modal .channel-mark { flex-shrink: 0; }
+.int-modal .channel-mark svg { width: 20px; height: 20px; }
+.int-modal .channel-mark.ch-instagram { background: radial-gradient(circle at 30% 107%, #fdf497 0%, #fd5949 45%, #d6249f 60%, #285AEB 90%) !important; }
+.int-modal .channel-mark.ch-google { background: #fff !important; box-shadow: inset 0 0 0 1px var(--border); }
+.bm-overlay[hidden] { display: none; }
