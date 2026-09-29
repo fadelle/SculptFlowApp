@@ -1386,7 +1386,8 @@ table.data-table {
    Campaigns (Pages/Campaigns/*, wwwroot/js/campaign-create.js)
    --------------------------------------------------------------------- */
 
-.cell-sub { font-size: 0.76rem; color: var(--text-muted); font-weight: 400; white-space: nowrap; }
+.cell-sub { font-size: 0.76rem; color: var(--text-muted); font-weight: 400; }
+td .cell-sub { white-space: nowrap; }
 .cell-err { font-size: 0.74rem; color: var(--badge-red-text); margin-top: 0.2rem; white-space: normal; max-width: 320px; }
 
 /* Friendly empty states (no campaigns / no approved templates) */
@@ -2594,3 +2595,41 @@ table.data-table {
 .cal-steps li.done .step-dot { background: var(--badge-green-text); border-color: var(--badge-green-text); color: #fff; }
 .cal-steps li.current .step-dot { border-color: var(--selected); color: var(--selected); }
 .switch-input:disabled + .switch { opacity: .45; cursor: not-allowed; }
+
+/* ---- Sign in / Register ---- */
+.auth-body { margin: 0; background: var(--bg); }
+.auth-split { display: grid; grid-template-columns: minmax(300px, 42%) 1fr; min-height: 100vh; }
+.auth-side { background: var(--sidebar-bg); color: var(--sidebar-text); padding: 2.5rem; display: flex; flex-direction: column; justify-content: space-between; gap: 2rem; }
+.auth-logo { display: flex; align-items: center; gap: .6rem; color: var(--sidebar-text-strong); font-weight: 700; }
+.auth-logo .mark { width: 32px; height: 32px; border-radius: 9px; background: var(--accent); color: #fff; display: inline-flex; align-items: center; justify-content: center; font-size: .8rem; font-weight: 800; }
+.auth-side h2 { color: var(--sidebar-text-strong); font-size: 1.6rem; line-height: 1.3; margin: 0 0 1.4rem; max-width: 420px; }
+.auth-points { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 1rem; font-size: .92rem; max-width: 420px; }
+.auth-points li { display: flex; gap: .75rem; align-items: flex-start; }
+.auth-points li span { width: 30px; height: 30px; border-radius: 8px; background: rgba(255, 255, 255, .08); display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; color: var(--accent); }
+.auth-side-foot { font-size: .75rem; color: var(--sidebar-muted); }
+.auth-main { display: flex; align-items: center; justify-content: center; padding: 2.5rem 16px; }
+.auth-form { width: 100%; max-width: 420px; }
+.auth-h { font-size: 1.5rem; margin: 0 0 .3rem; }
+.auth-form .auth-submit { width: 100%; margin-top: .4rem; justify-content: center; }
+.auth-footer-left { margin-top: 1.25rem; font-size: .88rem; }
+.auth-error { display: flex; gap: .6rem; align-items: flex-start; background: var(--badge-red-bg); color: var(--text); border: 1px solid color-mix(in srgb, var(--badge-red-text) 30%, transparent); padding: .65rem .8rem; border-radius: var(--radius); font-size: .88rem; margin-bottom: 1rem; }
+.auth-error > span { width: 20px; height: 20px; border-radius: 50%; background: var(--badge-red-text); color: #fff; font-weight: 800; font-size: .75rem; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.pw-wrap { position: relative; display: block; }
+.pw-wrap .text-input { width: 100%; padding-right: 2.6rem; }
+.pw-eye { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); border: none; background: none; cursor: pointer; font-size: .95rem; opacity: .7; padding: .2rem; }
+.pw-eye:hover { opacity: 1; }
+.caps-warn { font-size: .8rem; color: var(--badge-amber-text); font-weight: 600; }
+.auth-group { display: flex; flex-direction: column; gap: .7rem; }
+.auth-group-label { font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--text-subtle); }
+.field-ok { color: var(--badge-green-text); font-size: .8rem; }
+.spin-light { border-color: rgba(255, 255, 255, .45); border-top-color: #fff; }
+@media (max-width: 800px) {
+  .auth-split { grid-template-columns: 1fr; min-height: 0; }
+  .auth-side { padding: .9rem 16px; }
+  .auth-side-body, .auth-side-foot { display: none; }
+  .auth-main { padding: 1.75rem 16px 2.5rem; align-items: flex-start; }
+  .auth-form .form-row-even { grid-template-columns: 1fr; }
+}
+.set-row > div { min-width: 0; flex: 1; }
+.set-row .set-input, .set-row .unit-input { flex-shrink: 0; }
+.set-input.text-input { width: 90px; }

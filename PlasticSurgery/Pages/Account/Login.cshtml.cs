@@ -32,7 +32,7 @@ public class LoginModel : PageModel
     {
         if (string.IsNullOrWhiteSpace(Email) || string.IsNullOrWhiteSpace(Password))
         {
-            ErrorMessage = "Email and password are required.";
+            ErrorMessage = "Enter your email and password.";
             return Page();
         }
 
@@ -40,8 +40,8 @@ public class LoginModel : PageModel
         if (!result.Succeeded)
         {
             ErrorMessage = result.IsLockedOut
-                ? "Too many failed attempts — try again in a few minutes."
-                : "Invalid email or password.";
+                ? "Too many attempts. For your security, wait a few minutes and try again."
+                : "That email and password don't match. Check them and try again.";
             return Page();
         }
 

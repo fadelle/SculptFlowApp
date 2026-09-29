@@ -100,6 +100,11 @@ else
                                     <input type="hidden" name="provider" value="@provider" />
                                     <select name="externalCalendarId" class="select cal-select" onchange="this.form.requestSubmit()" aria-label="Calendar">
                                         <option value="">Choose a calendar…</option>
+                                        @if (hasCalendar && !info.AvailableCalendars.Any(c => c.ExternalCalendarId == info.SelectedCalendarId))
+                                        {
+                                            @* The chosen calendar isn't in the (possibly not yet loaded) list: still show it as chosen. *@
+                                            <option value="@info.SelectedCalendarId" selected>@(info.SelectedCalendarName ?? "Chosen calendar")</option>
+                                        }
                                         @foreach (var cal in info.AvailableCalendars)
                                         {
                                             <option value="@cal.ExternalCalendarId" selected="@(cal.ExternalCalendarId == info.SelectedCalendarId)">@cal.Name@(cal.IsPrimary ? " (primary)" : "")</option>

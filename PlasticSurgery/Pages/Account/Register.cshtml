@@ -2,6 +2,9 @@
 @model PlasticSurgery.Pages.Account.RegisterModel
 @{
     Layout = null;
+    var loginUrl = "/Account/Login" + (string.IsNullOrEmpty(Model.ReturnUrl) ? "" : "?ReturnUrl=" + Uri.EscapeDataString(Model.ReturnUrl));
+    // Identity reports a used email as "... is already taken." — offer to sign in instead.
+    var emailTaken = Model.ErrorMessage?.Contains("already taken", StringComparison.OrdinalIgnoreCase) == true;
 }
 <!DOCTYPE html>
 <html lang="en">
@@ -15,53 +18,83 @@
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
     <script>try { var t = localStorage.getItem('sf-theme'); if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t); } catch (e) { }</script>
 </head>
-<body>
-    <div class="auth-shell">
-        <div class="card auth-card">
-            <div class="auth-brand">
-                <span class="mark">SF</span>
-                <h1>MySculptFlow</h1>
+<body class="auth-body">
+    <div class="auth-split">
+        <partial name="_AuthSide" />
+        <main class="auth-main">
+            <div class="auth-form">
+                <h1 class="auth-h">Create your clinic account</h1>
+                <p class="text-muted mb-3">Takes a minute. You'll set up your own clinic workspace.</p>
+
+                @if (!string.IsNullOrEmpty(Model.ErrorMessage))
+                {
+                    <div class="auth-error" role="alert">
+                        <span aria-hidden="true">!</span>
+                        <div>
+                            @if (emailTaken)
+                            {
+                                <text>An account with this email already exists. <a href="@loginUrl">Sign in instead</a>?</text>
+                            }
+                            else
+                            {
+                                @Model.ErrorMessage
+                            }
+                        </div>
+                    </div>
+                }
+
+                <form method="post" class="integration-form" data-auth-form>
+                    <div class="auth-group">
+                        <div class="auth-group-label">You</div>
+                        <div class="form-row-even">
+                            <label class="field">
+                                <span>Full name</span>
+                                <input type="text" name="FullName" value="@Model.FullName" class="text-input" autocomplete="name" maxlength="200" required autofocus placeholder="Rana Khoury" />
+                            </label>
+                            <label class="field">
+                                <span>Email</span>
+                                <input type="email" name="Email" value="@Model.Email" class="text-input" autocomplete="username" required placeholder="you@yourclinic.com" />
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="auth-group">
+                        <div class="auth-group-label">Your clinic</div>
+                        <label class="field">
+                            <span>Clinic name</span>
+                            <input type="text" name="ClinicName" value="@Model.ClinicName" class="text-input" autocomplete="organization" maxlength="200" required
+                                   placeholder="e.g. Glow Aesthetic Clinic" />
+                        </label>
+                    </div>
+
+                    <div class="auth-group">
+                        <div class="auth-group-label">Password</div>
+                        <label class="field">
+                            <span>Password</span>
+                            <span class="pw-wrap">
+                                <input type="password" name="Password" class="text-input" autocomplete="new-password" required minlength="6" data-pw data-pw-new />
+                                <button type="button" class="pw-eye" data-pw-toggle aria-label="Show password" title="Show password">👁</button>
+                            </span>
+                            <small class="text-subtle" data-pw-rule>At least 6 characters</small>
+                        </label>
+                        <label class="field">
+                            <span>Confirm password</span>
+                            <span class="pw-wrap">
+                                <input type="password" name="ConfirmPassword" class="text-input" autocomplete="new-password" required minlength="6" data-pw data-pw-confirm />
+                                <button type="button" class="pw-eye" data-pw-toggle aria-label="Show password" title="Show password">👁</button>
+                            </span>
+                            <small data-pw-match hidden></small>
+                        </label>
+                        <div class="caps-warn" data-caps hidden>⇪ Caps Lock is on</div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary auth-submit" data-busy-label="Creating your account…">Create account</button>
+                </form>
+
+                <p class="text-subtle auth-footer-left">Already have an account? <a href="@loginUrl">Sign in</a></p>
             </div>
-            <p class="auth-tagline">Create your clinic account</p>
-
-            @if (!string.IsNullOrEmpty(Model.ErrorMessage))
-            {
-                <div class="alert alert-warning mb-3">@Model.ErrorMessage</div>
-            }
-
-            <form method="post" class="integration-form">
-                <label class="field">
-                    <span>Full name</span>
-                    <input type="text" name="FullName" value="@Model.FullName" class="text-input" autocomplete="name" maxlength="200" required autofocus />
-                </label>
-                <label class="field">
-                    <span>Clinic name</span>
-                    <input type="text" name="ClinicName" value="@Model.ClinicName" class="text-input" autocomplete="organization" maxlength="200" required
-                           placeholder="e.g. Glow Aesthetic Clinic" />
-                </label>
-                <label class="field">
-                    <span>Email</span>
-                    <input type="email" name="Email" value="@Model.Email" class="text-input" autocomplete="username" required />
-                </label>
-                <label class="field">
-                    <span>Password</span>
-                    <input type="password" name="Password" class="text-input" autocomplete="new-password" required minlength="6" />
-                </label>
-                <label class="field">
-                    <span>Confirm password</span>
-                    <input type="password" name="ConfirmPassword" class="text-input" autocomplete="new-password" required minlength="6" />
-                </label>
-
-                <button type="submit" class="btn btn-primary auth-submit">Create account</button>
-            </form>
-
-            <p class="text-subtle auth-footer mb-1">
-                Creating an account sets up your own new clinic workspace.
-            </p>
-            <p class="text-subtle auth-footer">
-                Already have an account? <a href="/Account/Login@(string.IsNullOrEmpty(Model.ReturnUrl) ? "" : "?ReturnUrl=" + Uri.EscapeDataString(Model.ReturnUrl))">Sign in</a>
-            </p>
-        </div>
+        </main>
     </div>
+    <script src="~/js/auth.js" asp-append-version="true"></script>
 </body>
 </html>
