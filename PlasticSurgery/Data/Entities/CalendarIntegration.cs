@@ -1,8 +1,10 @@
 namespace PlasticSurgery.Data.Entities;
 
-/// <summary>One clinic's connection to an external calendar provider (Google or Outlook). SculptFlow never talks to the
-/// provider directly and never stores its OAuth tokens — n8n owns that (see Services/ICalendarSyncNotifier.cs);
-/// ExternalConnectionRef is the opaque handle n8n gave back to look its own stored credentials up by.</summary>
+/// <summary>One clinic's connection to an external calendar provider (Google or Outlook). SculptFlow owns the OAuth
+/// relationship directly (connect/disconnect/list-calendars) and stores the resulting tokens here; n8n is only handed
+/// a fresh AccessToken (via ICalendarSyncNotifier.NotifySyncAsync) to execute the actual appointment sync call.
+/// MVP NOTE: tokens are stored in plain text, same caveat as ChannelIntegration.AccessToken — move to an encrypted
+/// column/secrets manager before this handles real patient data at scale.</summary>
 public class CalendarIntegration
 {
     public Guid Id { get; set; }
@@ -22,6 +24,10 @@ public class CalendarIntegration
     public string? LastProblemMessage { get; set; }
     public DateTimeOffset? LastSyncedAt { get; set; }
 
+    public string? AccessToken { get; set; }
+    public string? RefreshToken { get; set; }
+    public DateTimeOffset? TokenExpiresAt { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 
@@ -38,7 +44,7 @@ public static class CalendarProvider
 public static class CalendarIntegrationStatus
 {
     public const string Disconnected = "disconnected";
-    /// <summary>Waiting on n8n's connect callback.</summary>
+    /// <summary>Redirected to the provider's consent screen; waiting for the OAuth callback.</summary>
     public const string Pending = "pending";
     public const string Connected = "connected";
     public const string Error = "error";

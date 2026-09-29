@@ -25,45 +25,26 @@ public record SelectCalendarRequest(string ExternalCalendarId);
 public record SetCalendarSyncEnabledRequest(bool Enabled);
 
 // ---------------------------------------------------------------------------------------------
-// n8n contract — Services/ICalendarSyncNotifier.cs sends these; CalendarIntegrationsIngestController
-// receives the matching callbacks. Field names/casing match what n8n expects (System.Text.Json Web
-// defaults: camelCase), same convention as AiTriggerPayload.
+// n8n contract — Services/ICalendarSyncNotifier.cs sends this; CalendarIntegrationsIngestController receives the
+// matching callback. Field names/casing match what n8n expects (System.Text.Json Web defaults: camelCase), same
+// convention as AiTriggerPayload. Connect/disconnect/list-calendars no longer go through n8n at all — SculptFlow
+// owns that OAuth relationship directly (see ICalendarProviderClient, CalendarOAuthController). n8n's only remaining
+// job is executing the actual create/update/cancel call against the provider's calendar API, using a SculptFlow-
+// issued access token that is already fresh by the time this is sent.
 // ---------------------------------------------------------------------------------------------
-
-/// <summary>POSTed to N8n:CalendarConnectWebhookUrl. Action: "connect" (n8n must run the OAuth flow, then list
-/// calendars), "refresh_calendars" (n8n already has stored credentials for ExternalConnectionRef, just re-lists),
-/// or "disconnect" (best-effort — tells n8n it may revoke/forget the stored credentials).</summary>
-public record CalendarConnectTriggerPayload(
-    Guid ClinicId,
-    Guid CalendarIntegrationId,
-    string Provider,
-    string Action,
-    /// <summary>Set for refresh_calendars/disconnect — the handle from a previous successful connect.</summary>
-    string? ExternalConnectionRef
-);
-
-/// <summary>Body n8n POSTs to /api/calendar-integrations/connect-callback. Success=false + ErrorMessage covers a
-/// failed connect attempt or a refresh that discovers the connection no longer works.</summary>
-public record CalendarConnectCallbackRequest(
-    Guid ClinicId,
-    Guid CalendarIntegrationId,
-    bool Success,
-    string? ExternalConnectionRef,
-    string? AccountDisplayName,
-    IReadOnlyList<CalendarCalendarOption>? Calendars,
-    string? ErrorMessage
-);
 
 /// <summary>POSTed to N8n:CalendarSyncWebhookUrl once a SculptFlow appointment change has already succeeded and
 /// saved. ExternalEventId is set (from the stored AppointmentCalendarSync row) for update/cancel so n8n acts on the
-/// SAME external event instead of creating a new one; null for create. All patient-facing text here is exactly what
-/// should appear on the external event — n8n must not add anything else from elsewhere.</summary>
+/// SAME external event instead of creating a new one; null for create. AccessToken is a short-lived OAuth token
+/// SculptFlow refreshed just before sending this — n8n uses it as-is and must not try to refresh or store it. All
+/// patient-facing text here is exactly what should appear on the external event — n8n must not add anything else
+/// from elsewhere.</summary>
 public record CalendarSyncTriggerPayload(
     Guid ClinicId,
     Guid AppointmentId,
     Guid CalendarIntegrationId,
     string Provider,
-    string ExternalConnectionRef,
+    string AccessToken,
     string ExternalCalendarId,
     /// <summary>create | update | cancel</summary>
     string Operation,

@@ -7,7 +7,10 @@ using PlasticSurgery.Services;
 namespace PlasticSurgery.Pages.Settings;
 
 /// <summary>Settings → Calendar Integrations: connect Google/Outlook calendars for one-way SculptFlow → external
-/// appointment sync via n8n. Plain server-rendered forms, no JS — same idiom as Clinic Info's Availability tab.</summary>
+/// appointment sync. Plain server-rendered forms, no JS — same idiom as Clinic Info's Availability tab — except
+/// "Connect", which is a plain link to CalendarOAuthController (a full-page redirect to the provider's own consent
+/// screen can't happen from a form POST handler). That controller sets StatusMessage/ErrorMessage TempData directly
+/// before redirecting back here, the same TempData keys OnPost* below use.</summary>
 public class CalendarIntegrationsModel : PageModel
 {
     private readonly ICurrentClinicContext _clinicContext;
@@ -37,20 +40,6 @@ public class CalendarIntegrationsModel : PageModel
         Integrations = await _calendar.ListAsync(clinic.Id, ct);
     }
 
-    public async Task<IActionResult> OnPostConnectAsync(string provider, CancellationToken ct)
-    {
-        var clinic = await _clinicContext.GetClinicAsync(ct);
-        if (clinic is null) return RedirectToPage();
-
-        try
-        {
-            await _calendar.RequestConnectAsync(clinic.Id, provider, ct);
-            StatusMessage = $"Connecting {ProviderLabel(provider)}… this can take a moment.";
-        }
-        catch (ArgumentException ex) { ErrorMessage = ex.Message; }
-        return RedirectToPage();
-    }
-
     public async Task<IActionResult> OnPostRefreshCalendarsAsync(string provider, CancellationToken ct)
     {
         var clinic = await _clinicContext.GetClinicAsync(ct);
@@ -59,9 +48,9 @@ public class CalendarIntegrationsModel : PageModel
         try
         {
             await _calendar.RequestRefreshCalendarsAsync(clinic.Id, provider, ct);
-            StatusMessage = "Refreshing the calendar list…";
+            StatusMessage = "Calendar list refreshed.";
         }
-        catch (ArgumentException ex) { ErrorMessage = ex.Message; }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException) { ErrorMessage = ex.Message; }
         return RedirectToPage();
     }
 

@@ -71,6 +71,15 @@ builder.Services.AddScoped<IDashboardService, DashboardService>();
 builder.Services.AddScoped<IChannelIntegrationService, ChannelIntegrationService>();
 builder.Services.AddHttpClient<IMetaGraphClient, MetaGraphClient>();
 
+// Calendar Integrations OAuth — SculptFlow's own direct Google/Outlook OAuth2 clients (see
+// ICalendarProviderClient's doc comment). Registered as their own concrete types so each keeps its own configured
+// HttpClient, then forwarded into the ICalendarProviderClient collection that CalendarIntegrationService and
+// CalendarOAuthController resolve by Provider — same multi-implementation pattern as IChannelSender.
+builder.Services.AddHttpClient<GoogleCalendarProviderClient>();
+builder.Services.AddHttpClient<OutlookCalendarProviderClient>();
+builder.Services.AddScoped<ICalendarProviderClient>(sp => sp.GetRequiredService<GoogleCalendarProviderClient>());
+builder.Services.AddScoped<ICalendarProviderClient>(sp => sp.GetRequiredService<OutlookCalendarProviderClient>());
+
 // Inbox — see Hubs/InboxHub.cs and the Services/I*.cs doc comments for the overall architecture
 // (Case A/B/C flows, PostgreSQL-authoritative + SignalR-notifies-only).
 builder.Services.AddScoped<IInboxNotifier, InboxNotifier>();

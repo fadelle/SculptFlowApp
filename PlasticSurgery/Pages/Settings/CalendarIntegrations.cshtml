@@ -71,18 +71,27 @@ else
 
             @if (pending)
             {
-                <div class="cell-sub"><span class="spin"></span>Finishing the connection with @shortName. This can take a moment; refresh the page to check.</div>
-                <form method="post" asp-page-handler="Connect" class="int-actions">
-                    <input type="hidden" name="provider" value="@provider" />
-                    <button type="submit" class="btn btn-ghost btn-sm">Start again</button>
-                </form>
+                <div class="cell-sub">The sign-in to @shortName wasn't finished. Start again, or reset it.</div>
+                <div class="int-actions">
+                    <a href="/calendar-oauth/@provider/connect" class="btn btn-primary btn-sm">Start again</a>
+                    <form method="post" asp-page-handler="Disconnect" class="inline-form">
+                        <input type="hidden" name="provider" value="@provider" />
+                        <button type="submit" class="btn btn-ghost btn-sm">Cancel / reset</button>
+                    </form>
+                </div>
             }
             else if (!connected)
             {
-                <form method="post" asp-page-handler="Connect" class="int-actions">
-                    <input type="hidden" name="provider" value="@provider" />
-                    <button type="submit" class="btn btn-primary btn-sm">@(failed ? "Try again" : "Connect")</button>
-                </form>
+                <div class="int-actions">
+                    <a href="/calendar-oauth/@provider/connect" class="btn btn-primary btn-sm">@(failed ? "Try again" : "Connect")</a>
+                    @if (failed)
+                    {
+                        <form method="post" asp-page-handler="Disconnect" class="inline-form">
+                            <input type="hidden" name="provider" value="@provider" />
+                            <button type="submit" class="btn btn-ghost btn-sm">Cancel / reset</button>
+                        </form>
+                    }
+                </div>
             }
             else
             {
@@ -155,10 +164,7 @@ else
                 <div class="int-actions">
                     @if (unhealthy)
                     {
-                        <form method="post" asp-page-handler="Connect" class="inline-form">
-                            <input type="hidden" name="provider" value="@provider" />
-                            <button type="submit" class="btn btn-primary btn-sm">Reconnect</button>
-                        </form>
+                        <a href="/calendar-oauth/@provider/connect" class="btn btn-primary btn-sm">Reconnect</a>
                     }
                     <form method="post" asp-page-handler="Disconnect" class="inline-form"
                           onsubmit="return confirm('Disconnect @title? Appointments will stop syncing there until reconnected.');">
