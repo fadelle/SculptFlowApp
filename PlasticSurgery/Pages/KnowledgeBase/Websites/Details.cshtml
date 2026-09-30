@@ -37,15 +37,8 @@
         WebsitePageStatus.Duplicate => "Duplicate",
         _ => "Checking…"
     };
-    static Microsoft.AspNetCore.Html.IHtmlContent Ago(DateTimeOffset when)
-    {
-        var span = DateTimeOffset.UtcNow - when;
-        if (span.TotalMinutes < 1) return new Microsoft.AspNetCore.Html.HtmlString("just now");
-        if (span.TotalMinutes < 60) return new Microsoft.AspNetCore.Html.HtmlString($"{(int)span.TotalMinutes} min ago");
-        if (span.TotalHours < 24) return new Microsoft.AspNetCore.Html.HtmlString($"{(int)span.TotalHours} {((int)span.TotalHours == 1 ? "hour" : "hours")} ago");
-        if (span.TotalDays < 2) return new Microsoft.AspNetCore.Html.HtmlString("yesterday");
-        return LocalTimeHelper.Time(when, "date");
-    }
+    static Microsoft.AspNetCore.Html.IHtmlContent Ago(DateTimeOffset when) =>
+        LocalTimeHelper.Ago(when, dayCutoff: 2, fallbackFormat: "date");
     var d = Model.Detail;
     // "View text" remembers this exact page (including the filter) so Cancel/Save on the entry return here.
     var backToThisPage = "/KnowledgeBase/Websites/" + Model.Id + (string.IsNullOrEmpty(Model.Status) ? "" : "?status=" + Uri.EscapeDataString(Model.Status));

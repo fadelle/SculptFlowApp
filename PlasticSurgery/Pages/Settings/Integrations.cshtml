@@ -87,15 +87,6 @@ else
         i.Status == ChannelIntegrationStatus.Error
         || (i.Channel == ChannelType.Telegram && i.Status == ChannelIntegrationStatus.Connected && i.WebhookStatus == WebhookStatus.Error);
 
-    private static string Ago(DateTimeOffset when)
-    {
-        var span = DateTimeOffset.UtcNow - when;
-        if (span.TotalMinutes < 1) return "just now";
-        if (span.TotalMinutes < 60) return $"{(int)span.TotalMinutes} min ago";
-        if (span.TotalHours < 24) return $"{(int)span.TotalHours} {((int)span.TotalHours == 1 ? "hour" : "hours")} ago";
-        return $"{(int)span.TotalDays} {((int)span.TotalDays == 1 ? "day" : "days")} ago";
-    }
-
     private async Task RenderStatusPill(PlasticSurgery.Dtos.ChannelIntegrationResponse? info)
     {
         var (label, dot) = info is not null && NeedsAttention(info) ? ("Needs attention", "dot-red")
@@ -308,7 +299,9 @@ else
                     </div>
                     <div>
                         <span class="cell-sub">Last message</span>
-                        <span class="int-val" title="@(info.LastWebhookAt?.ToString("MMM d, HH:mm") + " UTC")">@(info.LastWebhookAt is { } last ? Ago(last) : "None yet · send your bot a message to test")</span>
+                        <span class="int-val" title="@(info.LastWebhookAt?.ToString("MMM d, HH:mm") + " UTC")">
+                            @if (info.LastWebhookAt is { } last) { @LocalTimeHelper.Ago(last) } else { <text>None yet · send your bot a message to test</text> }
+                        </span>
                     </div>
                 </div>
             }

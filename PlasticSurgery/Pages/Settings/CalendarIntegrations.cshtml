@@ -46,16 +46,6 @@ else
 </script>
 
 @functions {
-    private static Microsoft.AspNetCore.Html.IHtmlContent Ago(DateTimeOffset when)
-    {
-        var span = DateTimeOffset.UtcNow - when;
-        if (span.TotalMinutes < 1) return new Microsoft.AspNetCore.Html.HtmlString("just now");
-        if (span.TotalMinutes < 60) return new Microsoft.AspNetCore.Html.HtmlString($"{(int)span.TotalMinutes} min ago");
-        if (span.TotalHours < 24) return new Microsoft.AspNetCore.Html.HtmlString($"{(int)span.TotalHours} {((int)span.TotalHours == 1 ? "hour" : "hours")} ago");
-        if (span.TotalDays < 7) return new Microsoft.AspNetCore.Html.HtmlString($"{(int)span.TotalDays} {((int)span.TotalDays == 1 ? "day" : "days")} ago");
-        return LocalTimeHelper.Time(when, "month-day");
-    }
-
     private async Task RenderProviderCard(string provider, string initials, string accentHex, string title, string shortName)
     {
         var info = Model.Integrations.FirstOrDefault(i => i.Provider == provider);
@@ -115,7 +105,7 @@ else
                                 @(info.SyncEnabled ? " On" : " Off")
                                 @if (info.LastSyncedAt is { } s)
                                 {
-                                    <span class="cell-sub"> · @Ago(s)</span>
+                                    <span class="cell-sub"> · @LocalTimeHelper.Ago(s)</span>
                                 }
                             }
                         </span>

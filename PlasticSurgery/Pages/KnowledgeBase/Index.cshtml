@@ -4,16 +4,8 @@
 @model PlasticSurgery.Pages.KnowledgeBase.IndexModel
 @{
     ViewData["Title"] = "Knowledge Base";
-    static Microsoft.AspNetCore.Html.IHtmlContent Ago(DateTimeOffset when)
-    {
-        var span = DateTimeOffset.UtcNow - when;
-        if (span.TotalMinutes < 1) return new Microsoft.AspNetCore.Html.HtmlString("just now");
-        if (span.TotalMinutes < 60) return new Microsoft.AspNetCore.Html.HtmlString($"{(int)span.TotalMinutes} min ago");
-        if (span.TotalHours < 24) return new Microsoft.AspNetCore.Html.HtmlString($"{(int)span.TotalHours} {((int)span.TotalHours == 1 ? "hour" : "hours")} ago");
-        if (span.TotalDays < 2) return new Microsoft.AspNetCore.Html.HtmlString("yesterday");
-        if (span.TotalDays < 30) return new Microsoft.AspNetCore.Html.HtmlString($"{(int)span.TotalDays} days ago");
-        return LocalTimeHelper.Time(when, when.Year == DateTimeOffset.UtcNow.Year ? "month-day" : "date");
-    }
+    static Microsoft.AspNetCore.Html.IHtmlContent Ago(DateTimeOffset when) =>
+        LocalTimeHelper.Ago(when, dayCutoff: 30, fallbackFormat: when.Year == DateTimeOffset.UtcNow.Year ? "month-day" : "date");
 }
 
 @if (!Model.ClinicConfigured)

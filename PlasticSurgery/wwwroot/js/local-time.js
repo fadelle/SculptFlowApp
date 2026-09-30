@@ -71,12 +71,20 @@
     return Math.round((zoned - utc) / 60000);
   }
 
-  /* True when the viewer's clock and the clinic's differ now or in half a year (daylight saving). */
+  /* True when the viewer's clock and the clinic's differ at any point across a full year. Samples every ~30
+     days (not just "now" and "+182 days") so two zones whose DST transition dates don't line up — different
+     hemispheres, or a zone with unusual transition rules — can't slip through by having equal offsets at only
+     two sampled instants while actually differing for weeks in between. */
   function zonesDiffer(clinicTz) {
     if (!viewerTimeZone || !clinicTz || viewerTimeZone === clinicTz) return false;
-    var now = new Date(), later = new Date(now.getTime() + 182 * 86400000);
-    try { return offsetAt(viewerTimeZone, now) !== offsetAt(clinicTz, now) || offsetAt(viewerTimeZone, later) !== offsetAt(clinicTz, later); }
-    catch (e) { return false; }
+    try {
+      var now = Date.now();
+      for (var i = 0; i <= 12; i++) {
+        var sample = new Date(now + i * 30 * 86400000);
+        if (offsetAt(viewerTimeZone, sample) !== offsetAt(clinicTz, sample)) return true;
+      }
+      return false;
+    } catch (e) { return false; }
   }
 
   /* 'mine' only when the zones differ and the viewer picked "My time"; otherwise 'clinic'. */

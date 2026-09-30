@@ -14,14 +14,6 @@
         _ => null
     };
     static string Nice(string? value) => string.IsNullOrWhiteSpace(value) ? "—" : FilterLabelHelper.Label(value.ToLowerInvariant());
-    static string Ago(DateTimeOffset when)
-    {
-        var span = DateTimeOffset.UtcNow - when;
-        if (span.TotalMinutes < 1) return "just now";
-        if (span.TotalMinutes < 60) return $"{(int)span.TotalMinutes} min ago";
-        if (span.TotalHours < 24) return $"{(int)span.TotalHours} {((int)span.TotalHours == 1 ? "hour" : "hours")} ago";
-        return $"{(int)span.TotalDays} {((int)span.TotalDays == 1 ? "day" : "days")} ago";
-    }
     static (string Icon, string Label) EventKind(string type) => type switch
     {
         WhatsAppHealthEventType.PhoneNumberQualityUpdate => ("★", "Quality"),
@@ -135,7 +127,9 @@ else
             </div>
             <div class="fact card">
                 <div class="eyebrow">Last heard from Meta</div>
-                <div class="fact-main" id="health-last-webhook" data-timestamp="@(h.LastWebhookAt?.ToString("O"))">@(h.LastWebhookAt is null ? "Never" : Ago(h.LastWebhookAt.Value))</div>
+                <div class="fact-main" id="health-last-webhook" data-timestamp="@(h.LastWebhookAt?.ToString("O"))">
+                    @if (h.LastWebhookAt is { } lastWebhook) { @LocalTimeHelper.Ago(lastWebhook) } else { <text>Never</text> }
+                </div>
                 <div class="cell-sub">
                     @LocalTimeHelper.Time(h.LastWebhookAt, empty: "")
                     @if (lastHeardLong)

@@ -40,6 +40,23 @@ public static class LocalTimeHelper
         return new HtmlString($"title=\"{System.Net.WebUtility.HtmlEncode(Fallback(utc, format))}\" data-local-title=\"{Iso(utc)}|{format}\"");
     }
 
+    /// <summary>"N min/hours ago", "yesterday", or "N days ago" for a recent moment, falling back to an
+    /// absolute date (via <see cref="Time"/>, so it's still rewritten into viewer-local time) once it passes
+    /// <paramref name="dayCutoff"/> days old — so nothing shows an ever-growing "N days ago" forever. The
+    /// relative text itself needs no timezone rewriting (it's a plain duration, not a wall-clock time).
+    /// <paramref name="dayCutoff"/> and <paramref name="fallbackFormat"/> are tunable per page; the tiers
+    /// below them are shared so the wording itself stays consistent everywhere.</summary>
+    public static IHtmlContent Ago(DateTimeOffset when, int dayCutoff = 7, string fallbackFormat = "month-day")
+    {
+        var span = DateTimeOffset.UtcNow - when;
+        if (span.TotalMinutes < 1) return new HtmlString("just now");
+        if (span.TotalMinutes < 60) return new HtmlString($"{(int)span.TotalMinutes} min ago");
+        if (span.TotalHours < 24) return new HtmlString($"{(int)span.TotalHours} {((int)span.TotalHours == 1 ? "hour" : "hours")} ago");
+        if (span.TotalDays < 2) return new HtmlString("yesterday");
+        if (span.TotalDays < dayCutoff) return new HtmlString($"{(int)span.TotalDays} days ago");
+        return Time(when, fallbackFormat);
+    }
+
     public static string Iso(DateTimeOffset value) =>
         value.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture);
 

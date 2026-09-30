@@ -33,20 +33,21 @@ else
 {
     <form method="get" class="filter-bar" id="leads-filters">
         <input type="search" name="Search" value="@Model.Search" placeholder="Search by name or phone…" class="text-input search-input" aria-label="Search leads" autocomplete="off" />
-        <select name="Status" class="select" aria-label="Status">
+        <select name="Status" class="select" aria-label="Status" onchange="this.form.requestSubmit()">
             <option value="">All statuses</option>
             @foreach (var status in Model.AllStatuses)
             {
                 <option value="@status" selected="@(status == Model.Status)">@FilterLabelHelper.Label(status)</option>
             }
         </select>
-        <select name="Source" class="select" aria-label="Source">
+        <select name="Source" class="select" aria-label="Source" onchange="this.form.requestSubmit()">
             <option value="">All sources</option>
             @foreach (var source in Model.AllSources)
             {
                 <option value="@source" selected="@(string.Equals(source, Model.Source, StringComparison.OrdinalIgnoreCase))">@FilterLabelHelper.Label(source)</option>
             }
         </select>
+        <button type="submit" class="btn btn-sm">Search</button>
     </form>
 
     <div id="leads-results">

@@ -28,13 +28,21 @@ public class CampaignService : ICampaignService
             .Where(c => c.ClinicId == clinicId)
             .OrderByDescending(c => c.CreatedAt)
             .ToListAsync(ct);
+        if (campaigns.Count == 0) return Array.Empty<CampaignListRow>();
+
+        // Batched across every campaign (one CampaignRecipients query, one inbound-reply lookup) instead
+        // of once per campaign, so this page's cost doesn't grow linearly with how many campaigns exist.
+        var campaignIds = campaigns.Select(c => c.Id).ToList();
+        var allRecipients = await _db.CampaignRecipients.Where(r => campaignIds.Contains(r.CampaignId)).ToListAsync(ct);
+        var recipientsByCampaign = allRecipients.GroupBy(r => r.CampaignId).ToDictionary(g => g.Key, g => g.ToList());
+        var inboundByConversation = await FetchInboundReplyLookupAsync(clinicId, allRecipients, ct);
 
         var rows = new List<CampaignListRow>(campaigns.Count);
         foreach (var c in campaigns)
         {
-            var recipients = await _db.CampaignRecipients.Where(r => r.CampaignId == c.Id).ToListAsync(ct);
+            var recipients = recipientsByCampaign.TryGetValue(c.Id, out var list) ? list : new List<CampaignRecipient>();
             // Same numbers as the details page (including the best-effort "replied" signal).
-            var stats = await ComputeStats(clinicId, recipients, ct);
+            var stats = ComputeStatsCore(recipients, inboundByConversation);
             rows.Add(new CampaignListRow(
                 c.Id, c.Name, c.WhatsAppTemplate?.Name, c.Status,
                 stats.TotalRecipients, stats.Sent, stats.Delivered, stats.Failed,
@@ -329,6 +337,33 @@ public class CampaignService : ICampaignService
 
     private async Task<CampaignStatsResponse> ComputeStats(Guid clinicId, List<CampaignRecipient> recipients, CancellationToken ct)
     {
+        var inboundByConversation = await FetchInboundReplyLookupAsync(clinicId, recipients, ct);
+        return ComputeStatsCore(recipients, inboundByConversation);
+    }
+
+    /// <summary>Every inbound WhatsApp-customer message's timestamp, grouped by conversation, for every
+    /// conversation any of these recipients belong to — one query regardless of how many recipients/campaigns
+    /// are passed in. Raw timestamps (not aggregated to a single "earliest") because each recipient's own
+    /// SentAt is the threshold a reply has to beat, and different recipients in the same batch (e.g. the same
+    /// lead contacted by two different campaigns) can have different SentAt values for the same conversation.</summary>
+    private async Task<Dictionary<Guid, List<DateTimeOffset>>> FetchInboundReplyLookupAsync(
+        Guid clinicId, List<CampaignRecipient> recipients, CancellationToken ct)
+    {
+        var conversationIds = recipients.Where(r => r.ConversationId.HasValue && r.SentAt.HasValue)
+            .Select(r => r.ConversationId!.Value).Distinct().ToList();
+        if (conversationIds.Count == 0) return new Dictionary<Guid, List<DateTimeOffset>>();
+
+        var inboundMessages = await _db.Messages
+            .Where(m => m.ClinicId == clinicId && conversationIds.Contains(m.ConversationId)
+                && m.Direction == MessageDirection.Inbound && m.Origin == MessageOrigin.WhatsAppCustomer)
+            .Select(m => new { m.ConversationId, m.CreatedAt })
+            .ToListAsync(ct);
+
+        return inboundMessages.GroupBy(m => m.ConversationId).ToDictionary(g => g.Key, g => g.Select(x => x.CreatedAt).ToList());
+    }
+
+    private static CampaignStatsResponse ComputeStatsCore(List<CampaignRecipient> recipients, IReadOnlyDictionary<Guid, List<DateTimeOffset>> inboundByConversation)
+    {
         var total = recipients.Count;
         var pending = recipients.Count(r => r.Status == CampaignRecipientStatus.Pending);
         var queued = recipients.Count(r => r.Status == CampaignRecipientStatus.Queued);
@@ -339,27 +374,17 @@ public class CampaignService : ICampaignService
         var skipped = recipients.Count(r => r.Status == CampaignRecipientStatus.Skipped);
         var booked = recipients.Count(r => r.Status == CampaignRecipientStatus.Booked || r.BookedAt.HasValue);
 
-        // Best-effort "replied" signal: a customer inbound message landed in the recipient's
-        // conversation any time after this campaign message was sent.
+        // Best-effort "replied" signal: a customer inbound message landed in the recipient's conversation
+        // any time after THIS recipient's own campaign message was sent — not just the conversation's
+        // earliest-ever inbound message, which could predate this campaign entirely (a lead who'd messaged
+        // the clinic before would otherwise never count as "replied" to a later campaign).
         var replied = 0;
-        var sentRecipients = recipients.Where(r => r.ConversationId.HasValue && r.SentAt.HasValue).ToList();
-        if (sentRecipients.Count > 0)
+        foreach (var r in recipients.Where(r => r.ConversationId.HasValue && r.SentAt.HasValue))
         {
-            var conversationIds = sentRecipients.Select(r => r.ConversationId!.Value).Distinct().ToList();
-            var inboundByConversation = await _db.Messages
-                .Where(m => m.ClinicId == clinicId && conversationIds.Contains(m.ConversationId)
-                    && m.Direction == MessageDirection.Inbound && m.Origin == MessageOrigin.WhatsAppCustomer)
-                .GroupBy(m => m.ConversationId)
-                .Select(g => new { ConversationId = g.Key, EarliestInboundAt = g.Min(m => m.CreatedAt) })
-                .ToListAsync(ct);
-
-            var earliestByConversation = inboundByConversation.ToDictionary(x => x.ConversationId, x => x.EarliestInboundAt);
-            foreach (var r in sentRecipients)
+            if (inboundByConversation.TryGetValue(r.ConversationId!.Value, out var inboundTimes)
+                && inboundTimes.Any(t => t > r.SentAt!.Value))
             {
-                if (earliestByConversation.TryGetValue(r.ConversationId!.Value, out var earliestInboundAt) && earliestInboundAt > r.SentAt!.Value)
-                {
-                    replied++;
-                }
+                replied++;
             }
         }
 
