@@ -18,6 +18,13 @@
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@@400;500;600;700&display=swap" />
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
     <script>try { var t = localStorage.getItem('sf-theme'); if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t); if (localStorage.getItem('sf-sidebar') === 'collapsed') document.documentElement.setAttribute('data-sidebar', 'collapsed'); } catch (e) { }</script>
+    @* Loaded here (not with the other shared scripts near the end of <body>) because every page's own inline
+       <script src="..."> tags — e.g. appointments-calendar.js — sit inside @RenderBody(), which renders BEFORE
+       those trailing scripts; several of them call window.SculptTime at load time, so local-time.js has to
+       execute before any page body script does. Safe to run this early: it defers all DOM work to
+       DOMContentLoaded (see its own readyState check at the bottom), unlike theme.js just below, which looks
+       up the sidebar's #theme-toggle button immediately and so must stay after the sidebar markup renders. *@
+    <script src="~/js/local-time.js" asp-append-version="true"></script>
 </head>
 <body>
     <div class="app-shell">
@@ -203,7 +210,6 @@
         })();
     </script>
     <script src="~/js/theme.js" asp-append-version="true"></script>
-    <script src="~/js/local-time.js" asp-append-version="true"></script>
     @if (User.Identity?.IsAuthenticated == true)
     {
         <script src="https://cdn.jsdelivr.net/npm/@@microsoft/signalr@@8.0.0/dist/browser/signalr.min.js"></script>
