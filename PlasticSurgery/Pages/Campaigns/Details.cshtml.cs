@@ -50,7 +50,7 @@ public class DetailsModel : PageModel
             StatusMessage = result is null
                 ? null
                 : $"Processed {result.Processed} ({result.Succeeded} sent, {result.Failed} failed). " +
-                  (result.CampaignCompleted ? "Campaign completed." : $"{result.RemainingQueued} still queued — click Send more to continue.");
+                  (result.CampaignCompleted ? "Campaign completed." : $"{result.RemainingQueued} still waiting — click \"Send to the rest\" to continue.");
         }
         catch (InvalidOperationException ex)
         {

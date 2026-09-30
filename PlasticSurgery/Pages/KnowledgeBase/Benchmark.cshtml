@@ -6,11 +6,11 @@
 
 @if (!Model.ClinicConfigured)
 {
-    <div class="alert alert-warning">No clinic configured yet — see the Main Numbers page for setup steps.</div>
+    <div class="alert alert-warning">No clinic configured yet — see the Dashboard page for setup steps.</div>
 }
 else
 {
-    <div class="mb-3"><a href="/KnowledgeBase" class="btn btn-sm">&larr; Back to Knowledge Base</a></div>
+    <a href="/KnowledgeBase" class="back-link mb-3">← Knowledge Base</a>
 
     <p class="text-muted" style="max-width:760px;margin-top:0">
         Measures how well your Knowledge Base <strong>search</strong> finds the right piece of information. Each test case is a realistic
@@ -22,12 +22,12 @@ else
 
     @* ---------- Cases summary + actions ---------- *@
     <div class="card" style="padding:1.1rem 1.25rem">
-        <div class="flex items-center gap-2" style="justify-content:space-between;flex-wrap:wrap">
+        <div class="flex items-center gap-2 justify-between flex-wrap">
             <div id="bm-counts" class="text-muted" style="font-size:.9rem">Loading…</div>
-            <div class="flex items-center gap-2" style="flex-wrap:wrap">
+            <div class="flex items-center gap-2 flex-wrap">
                 <button type="button" class="btn btn-sm" id="bm-generate">Generate Test Cases</button>
                 <button type="button" class="btn btn-sm" id="bm-stop" hidden title="Stop waiting for the question generator">Stop generating</button>
-                <select id="bm-scope" class="select" aria-label="Which cases to run" style="width:auto">
+                <select id="bm-scope" class="select w-auto" aria-label="Which cases to run">
                     <option value="all">All cases</option>
                     <option value="generated">Generated cases</option>
                     <option value="reviewed">Reviewed cases</option>
@@ -38,7 +38,7 @@ else
         <div id="bm-generate-note" class="text-subtle" style="font-size:.78rem;margin-top:.4rem" hidden></div>
         <div id="bm-progress" class="bm-progress" hidden>
             <div class="bm-progress-track"><div class="bm-progress-bar" id="bm-progress-bar"></div></div>
-            <div class="text-subtle" style="font-size:.78rem" id="bm-progress-text"></div>
+            <div class="text-subtle text-sm" id="bm-progress-text"></div>
         </div>
     </div>
 
@@ -47,11 +47,11 @@ else
 
     @* ---------- Manual test cases (generated cases live inside their own Generation page — see Generations below) ---------- *@
     <div class="mt-4">
-        <div class="flex items-center gap-2 mb-1" style="justify-content:space-between;flex-wrap:wrap">
+        <div class="flex items-center gap-2 mb-1 justify-between flex-wrap">
             <h3 class="bm-section-title">Manual test cases</h3>
             <button type="button" class="btn btn-sm" id="bm-add-toggle">Add manual case</button>
         </div>
-        <div class="text-subtle" style="font-size:.78rem;margin-bottom:.5rem">
+        <div class="text-subtle text-sm mb-1">
             Cases you write by hand — a small, trusted set. Cases written by the question generator live on their own
             generation's page (open it from Generations below).
         </div>
@@ -70,7 +70,7 @@ else
                     <span>Chunk that answers it</span>
                     <select id="bm-add-chunk" class="select" disabled><option value="">Choose a document first</option></select>
                 </label>
-                <div class="text-subtle" style="font-size:.78rem">A case you add by hand is marked Reviewed automatically.</div>
+                <div class="text-subtle text-sm">A case you add by hand is marked Reviewed automatically.</div>
                 <div class="flex items-center gap-2">
                     <button type="button" class="btn btn-primary btn-sm" id="bm-add-save">Add case</button>
                     <button type="button" class="btn btn-sm" id="bm-add-cancel">Cancel</button>
@@ -94,7 +94,7 @@ else
         </div>
         <div class="flex items-center gap-2 mt-1" id="bm-cases-pager" hidden>
             <button type="button" class="btn btn-sm" id="bm-cases-prev">&larr; Previous</button>
-            <span class="text-subtle" style="font-size:.8rem" id="bm-cases-range"></span>
+            <span class="text-subtle text-sm" id="bm-cases-range"></span>
             <button type="button" class="btn btn-sm" id="bm-cases-next">Next &rarr;</button>
         </div>
     </div>
@@ -102,7 +102,7 @@ else
     @* ---------- Generations: every "Generate Test Cases" request, what came back, and how its cases score ---------- *@
     <div class="mt-4">
         <h3 class="bm-section-title">Generations</h3>
-        <div class="text-subtle" style="font-size:.78rem;margin-bottom:.5rem">
+        <div class="text-subtle text-sm mb-1">
             Each "Generate Test Cases" request is recorded with what was sent and what came back. Scores are that generation's cases
             in the most recent completed run that included them — run again after changing settings to compare.
         </div>
@@ -132,7 +132,7 @@ else
     @* ---------- Run history ---------- *@
     <div class="mt-4">
         <h3 class="bm-section-title">Run history</h3>
-        <div class="text-subtle" style="font-size:.78rem;margin-bottom:.5rem">
+        <div class="text-subtle text-sm mb-1">
             Every run is kept, with the settings it used, so you can compare runs after changing chunk size, Top K or minimum similarity.
         </div>
         <div class="table-card table-scroll">
@@ -159,9 +159,9 @@ else
 
     @* ---------- Results of the selected run ---------- *@
     <div class="mt-4" id="bm-results-section" hidden>
-        <div class="flex items-center gap-2 mb-1" style="justify-content:space-between;flex-wrap:wrap">
+        <div class="flex items-center gap-2 mb-1 justify-between flex-wrap">
             <h3 class="bm-section-title" id="bm-results-title">Run results</h3>
-            <select id="bm-result-filter" class="select" aria-label="Filter results" style="width:auto">
+            <select id="bm-result-filter" class="select w-auto" aria-label="Filter results">
                 <option value="">All results</option>
                 <option value="MISS">Miss</option>
                 <option value="DOCUMENT_ONLY_HIT">Document only</option>
@@ -211,8 +211,8 @@ else
     @* ---------- Detail overlay (a case, or a failed-case analysis) ---------- *@
     <div class="bm-overlay" id="bm-overlay" hidden>
         <div class="card bm-modal" role="dialog" aria-modal="true" aria-labelledby="bm-modal-title">
-            <div class="flex items-center gap-2" style="justify-content:space-between;margin-bottom:.75rem">
-                <h3 id="bm-modal-title" style="margin:0;font-size:1.05rem">Details</h3>
+            <div class="flex items-center gap-2 justify-between mb-2">
+                <h3 id="bm-modal-title" class="card-title">Details</h3>
                 <button type="button" class="btn btn-sm" id="bm-modal-close">Close</button>
             </div>
             <div id="bm-modal-body"></div>

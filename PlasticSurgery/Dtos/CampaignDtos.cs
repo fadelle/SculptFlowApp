@@ -29,7 +29,10 @@ public record CampaignStatsResponse(
 public record CampaignListRow(
     Guid Id, string Name, string? TemplateName, string Status,
     int TotalRecipients, int Sent, int Delivered, int Failed,
-    DateTimeOffset? ScheduledAt, DateTimeOffset CreatedAt
+    DateTimeOffset? ScheduledAt, DateTimeOffset CreatedAt,
+    int Read = 0, int Replied = 0,
+    /// <summary>all_eligible | reactivation_no_consultation | custom — with AudienceFilters null for a hand-picked list.</summary>
+    string? AudienceType = null, bool ManuallySelected = false
 );
 
 public record CampaignRecipientRow(
@@ -39,7 +42,8 @@ public record CampaignRecipientRow(
     DateTimeOffset? RepliedAt, DateTimeOffset? BookedAt, DateTimeOffset? FailedAt
 );
 
-public record CampaignDetailsResponse(CampaignResponse Campaign, CampaignStatsResponse Stats, IReadOnlyList<CampaignRecipientRow> Recipients);
+/// <summary>TemplateBody is the approved template text (with its {{n}} blanks) — shown on the details page as "Message sent".</summary>
+public record CampaignDetailsResponse(CampaignResponse Campaign, CampaignStatsResponse Stats, IReadOnlyList<CampaignRecipientRow> Recipients, string? TemplateBody = null);
 
 /// <summary>
 /// Creates a Campaign + one CampaignRecipient per lead (draft state — nothing is sent yet).

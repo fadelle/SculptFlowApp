@@ -3,11 +3,14 @@
 @using PlasticSurgery.Data.Entities
 @{
     ViewData["Title"] = "Channels & Integrations";
+    var allChannels = new[] { ChannelType.WhatsApp, ChannelType.Instagram, ChannelType.Facebook, ChannelType.Telegram };
+    var connectedCount = allChannels.Count(ch => Model.Channels.TryGetValue(ch, out var i) && i.Status == ChannelIntegrationStatus.Connected && !NeedsAttention(i));
+    var attentionCount = allChannels.Count(ch => Model.Channels.TryGetValue(ch, out var i) && NeedsAttention(i));
 }
 
 @if (!Model.ClinicConfigured)
 {
-    <div class="alert alert-warning">No clinic configured yet — see the Main Numbers page for setup steps.</div>
+    <div class="alert alert-warning">No clinic configured yet — see the Dashboard page for setup steps.</div>
 }
 else
 {
@@ -20,15 +23,19 @@ else
         <div class="alert alert-warning mb-3">@Model.ErrorMessage</div>
     }
 
-    <p class="text-muted mb-3">
-        Connect the channels leads message the clinic on. These credentials let the platform
-        (via n8n / the AI agent) send and receive WhatsApp, Instagram, Facebook and Telegram messages.
-    </p>
+    <p class="text-muted mb-2">Connect the apps patients message you on. Messages from all of them arrive in your Inbox.</p>
+    <div class="int-summary">
+        <strong>@connectedCount of @allChannels.Length channels connected</strong>
+        @if (attentionCount > 0)
+        {
+            <span class="text-danger-soft"> · @attentionCount need@(attentionCount == 1 ? "s" : "") attention</span>
+        }
+    </div>
 
-    <div class="integration-list">
-        @{ await RenderChannelCard(ChannelType.WhatsApp, "WA", "#25D366", "WhatsApp Business", oauth: true); }
-        @{ await RenderChannelCard(ChannelType.Instagram, "IG", "#C13584", "Instagram", oauth: false); }
-        @{ await RenderChannelCard(ChannelType.Facebook, "FB", "#1877F2", "Facebook Messenger", oauth: true); }
+    <div class="int-grid int-grid-even">
+        @{ await RenderChannelCard(ChannelType.WhatsApp, "WA", "#25D366", "WhatsApp Business", "Chat with patients, send reminders and campaigns.", "Chat with patients on WhatsApp, and send reminders and campaigns.", oauth: true); }
+        @{ await RenderChannelCard(ChannelType.Instagram, "IG", "#C13584", "Instagram", "Answer Instagram direct messages.", "Patients' Instagram DMs arrive in your Inbox, and the AI assistant can answer them.", oauth: false); }
+        @{ await RenderChannelCard(ChannelType.Facebook, "FB", "#1877F2", "Facebook Messenger", "Answer messages sent to your Facebook page.", "Messages to your Facebook page arrive in your Inbox, and the AI assistant can answer them.", oauth: true); }
         @{ await RenderTelegramCard(); }
     </div>
 }
@@ -43,209 +50,322 @@ else
     };
 </script>
 <script src="~/js/meta-connect.js" asp-append-version="true"></script>
+<script>
+    // Two-step PIN: hidden until "Show" is pressed.
+    document.querySelectorAll('[data-pin-toggle]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var pin = btn.parentElement.querySelector('[data-pin]');
+            var shown = pin.textContent !== '••••••';
+            pin.textContent = shown ? '••••••' : pin.getAttribute('data-pin');
+            btn.textContent = shown ? 'Show' : 'Hide';
+        });
+    });
+
+    // Card popups: open from [data-open], close with ×/Cancel, a click outside, or Esc.
+    document.querySelectorAll('[data-open]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var m = document.getElementById(btn.getAttribute('data-open'));
+            m.hidden = false;
+            var first = m.querySelector('input:not([type=hidden]), select, textarea');
+            if (first) first.focus();
+        });
+    });
+    document.querySelectorAll('.int-modal').forEach(function (card) {
+        var overlay = card.parentElement;
+        overlay.addEventListener('click', function (e) {
+            if (e.target === overlay || e.target.closest('[data-close]')) overlay.hidden = true;
+        });
+    });
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') document.querySelectorAll('.int-modal').forEach(function (c) { c.parentElement.hidden = true; });
+    });
+</script>
 
 @functions {
-    // Renders one channel's card: an OAuth "Continue with Facebook" button (when oauth: true and
-    // a Login Configuration ID is set) plus a manual-entry fallback, or manual entry only (when
-    // oauth: false — Instagram's Login Configuration isn't set up yet, see Settings notes).
-    private async Task RenderChannelCard(string channel, string initials, string accentHex, string title, bool oauth)
+    // A channel needs attention when it's in error, or (Telegram) its webhook reports a problem.
+    private static bool NeedsAttention(PlasticSurgery.Dtos.ChannelIntegrationResponse i) =>
+        i.Status == ChannelIntegrationStatus.Error
+        || (i.Channel == ChannelType.Telegram && i.Status == ChannelIntegrationStatus.Connected && i.WebhookStatus == WebhookStatus.Error);
+
+    private static string Ago(DateTimeOffset when)
+    {
+        var span = DateTimeOffset.UtcNow - when;
+        if (span.TotalMinutes < 1) return "just now";
+        if (span.TotalMinutes < 60) return $"{(int)span.TotalMinutes} min ago";
+        if (span.TotalHours < 24) return $"{(int)span.TotalHours} {((int)span.TotalHours == 1 ? "hour" : "hours")} ago";
+        return $"{(int)span.TotalDays} {((int)span.TotalDays == 1 ? "day" : "days")} ago";
+    }
+
+    private async Task RenderStatusPill(PlasticSurgery.Dtos.ChannelIntegrationResponse? info)
+    {
+        var (label, dot) = info is not null && NeedsAttention(info) ? ("Needs attention", "dot-red")
+            : info?.Status == ChannelIntegrationStatus.Connected ? ("Connected", "dot-green")
+            : ("Not connected", "dot-gray");
+        <span class="status-pill"><span class="dot @dot"></span>@label</span>
+        await Task.CompletedTask;
+    }
+
+    // Popup that holds a card's form (manual setup, account details, a different bot) so the cards never grow.
+    private async Task RenderModalStart(string id, string channel, string accentHex, string title, string subtitle)
+    {
+        @:<div class="bm-overlay" id="@id" hidden>
+        @:<div class="card cal-modal int-modal" role="dialog" aria-modal="true" aria-labelledby="@(id)-title">
+            <div class="modal-head">
+                <div class="flex items-center gap-2 min-w-0">
+                    <span class="channel-mark ch-@channel" style="background:@accentHex">@Html.Raw(PlasticSurgery.Pages.Shared.ChannelIconHelper.BrandSvg(channel) ?? "")</span>
+                    <div class="min-w-0">
+                        <h3 class="card-title m-0" id="@(id)-title">@title</h3>
+                        <div class="cell-sub">@subtitle</div>
+                    </div>
+                </div>
+                <button type="button" class="modal-x" data-close aria-label="Close">×</button>
+            </div>
+        await Task.CompletedTask;
+    }
+
+    private async Task RenderModalEnd()
+    {
+        @:</div>
+        @:</div>
+        await Task.CompletedTask;
+    }
+
+    // One Meta channel's card. Connecting uses the OAuth button (when oauth: true and a Login Configuration ID
+    // is set) or the manual form in a popup; Instagram is manual only (its Login Configuration isn't set up yet).
+    private async Task RenderChannelCard(string channel, string initials, string accentHex, string title, string purpose, string whenConnected, bool oauth)
     {
         var info = Model.Channels.TryGetValue(channel, out var c) ? c : null;
         var connected = info?.Status == ChannelIntegrationStatus.Connected;
-        var badgeClass = info?.Status switch
-        {
-            ChannelIntegrationStatus.Connected => "badge-green",
-            ChannelIntegrationStatus.Error => "badge-red",
-            _ => "badge-gray"
-        };
-        var statusLabel = info?.Status ?? ChannelIntegrationStatus.Disconnected;
+        var isError = info?.Status == ChannelIntegrationStatus.Error;
         var configId = channel switch
         {
             ChannelType.WhatsApp => Model.MetaWhatsAppLoginConfigId,
             ChannelType.Facebook => Model.MetaFacebookLoginConfigId,
             _ => ""
         };
-        // Only WhatsApp still uses a JS-driven button (see below for why) — Facebook Messenger's
-        // disabled-fallback button (shown only when its config ID is unset) never needs to fire.
+        // Only WhatsApp uses a JS-driven button; Facebook Messenger uses Meta's fb:login-button plugin.
         var jsFunction = channel == ChannelType.WhatsApp ? "psConnectWhatsApp" : "";
+        var modalId = "int-m-" + channel;
 
-        <div class="card integration-card">
-            <div class="integration-card-header">
-                <div class="flex items-center gap-2">
-                    <span class="channel-mark" style="background:@accentHex">@initials</span>
+        <div class="card int-card int-framed @(isError ? "int-card-error" : "")" style="--ch:@accentHex">
+            <div class="int-head">
+                <span class="channel-mark int-notch ch-@channel" title="@title">@Html.Raw(PlasticSurgery.Pages.Shared.ChannelIconHelper.BrandSvg(channel) ?? initials)</span>
+                <div class="flex-1 min-w-0">
+                    <div class="integration-title">@title</div>
+                    <div class="cell-sub">@((connected || isError) && !string.IsNullOrEmpty(info!.DisplayName) ? info.DisplayName : purpose)</div>
+                </div>
+                @{ await RenderStatusPill(info); }
+            </div>
+
+            @* Middle strip: same place on every card. *@
+            @if (isError)
+            {
+                <div class="int-strip int-strip-problem">
                     <div>
-                        <div class="integration-title">@title</div>
-                        @if (connected && !string.IsNullOrEmpty(info!.DisplayName))
+                        <span class="cell-sub">Problem</span>
+                        <span class="int-val">@title stopped working. Reconnect to keep sending and receiving messages.</span>
+                        @if (!string.IsNullOrEmpty(info!.LastError))
                         {
-                            <div class="text-subtle" style="font-size:.78rem">@info.DisplayName</div>
-                        }
-                        @if (channel == ChannelType.WhatsApp && connected && !string.IsNullOrEmpty(info!.Pin))
-                        {
-                            <div class="text-subtle" style="font-size:.78rem">2-step PIN: <code>@info.Pin</code></div>
+                            <details class="mt-1"><summary class="cell-sub">Technical details</summary><div class="cell-sub break-word">@info.LastError</div></details>
                         }
                     </div>
                 </div>
-                <span class="badge @badgeClass">@statusLabel</span>
-            </div>
-
-            @if (oauth)
+            }
+            else if (connected && channel == ChannelType.WhatsApp)
             {
-                @if (channel == ChannelType.Facebook && !string.IsNullOrEmpty(configId))
-                {
-                    // Facebook Messenger uses Meta's own fb:login-button plugin (requires
-                    // FB.init({ xfbml: true }) — see meta-connect.js) instead of a JS-driven
-                    // button, matching the Quickstart flow directly.
-                    <fb:login-button config_id="@configId" onlogin="psFacebookOnLogin();"></fb:login-button>
-                }
-                else
-                {
-                    <button type="button" class="btn btn-primary btn-sm"
-                            onclick="@(string.IsNullOrEmpty(jsFunction) ? null : jsFunction + "()")"
-                            disabled="@string.IsNullOrEmpty(configId)">
-                        Continue with Facebook
-                    </button>
-                }
-                @if (string.IsNullOrEmpty(configId))
-                {
-                    <div class="text-subtle mt-1" style="font-size:.75rem">
-                        Login Configuration ID not set for @title yet — add it to appsettings.json (Meta section).
+                <div class="int-strip">
+                    @if (!string.IsNullOrEmpty(info!.Pin))
+                    {
+                        <div>
+                            <span class="cell-sub">Two-step PIN</span>
+                            <span class="int-val"><code data-pin="@info.Pin">••••••</code> <button type="button" class="link-btn" data-pin-toggle>Show</button></span>
+                        </div>
+                    }
+                    <div>
+                        <span class="cell-sub">Health</span>
+                        <span class="int-val"><a href="/WhatsApp/Health">View WhatsApp Health →</a></span>
                     </div>
-                }
-                else
-                {
-                    <div class="text-subtle mt-1" data-status-for="@channel" style="font-size:.75rem"></div>
-                }
-
-                <details class="mt-2">
-                    <summary class="text-subtle" style="font-size:.78rem;cursor:pointer">Advanced: enter credentials manually</summary>
-                    <div class="mt-2">
-                        @{ await RenderManualForm(channel, info, connected); }
+                </div>
+            }
+            else if (connected)
+            {
+                <div class="int-strip">
+                    <div>
+                        <span class="cell-sub">@(channel == ChannelType.Instagram ? "Instagram account" : "Facebook page")</span>
+                        <span class="int-val">@(string.IsNullOrEmpty(info!.DisplayName) ? (channel == ChannelType.Instagram ? info.InstagramBusinessId : info.PageId) ?? "—" : info.DisplayName)</span>
                     </div>
-                </details>
+                    <div>
+                        <span class="cell-sub">Messages</span>
+                        <span class="int-val">Arrive in your Inbox</span>
+                    </div>
+                </div>
             }
             else
             {
-                await RenderManualForm(channel, info, connected);
+                <div class="int-strip int-strip-note">
+                    <div>
+                        <span class="cell-sub">When connected</span>
+                        <span class="int-val">@whenConnected</span>
+                    </div>
+                </div>
             }
 
-            @if (connected)
+            @if (!connected && oauth)
             {
-                <form method="post" asp-page-handler="Disconnect" class="mt-1"
-                      onsubmit="return confirm('Disconnect @title? Leads on this channel will stop being sent/received until reconnected.');">
-                    <input type="hidden" name="Channel" value="@channel" />
-                    <button type="submit" class="btn btn-sm">Disconnect</button>
-                </form>
+                @if (string.IsNullOrEmpty(configId))
+                {
+                    <div class="cell-sub" title="Meta Login Configuration ID missing in appsettings.json (Meta section)">Facebook sign-in isn't set up for this app yet, so use manual setup for now.</div>
+                }
+                else
+                {
+                    <div class="text-subtle text-xs" data-status-for="@channel"></div>
+                }
             }
+
+            <div class="int-foot">
+                @if (!connected && oauth)
+                {
+                    @* Connect (or reconnect) with Facebook sign-in. *@
+                    @if (channel == ChannelType.Facebook && !string.IsNullOrEmpty(configId))
+                    {
+                        <fb:login-button config_id="@configId" onlogin="psFacebookOnLogin();"></fb:login-button>
+                    }
+                    else
+                    {
+                        <button type="button" class="btn btn-primary btn-sm"
+                                onclick="@(string.IsNullOrEmpty(jsFunction) ? null : jsFunction + "()")"
+                                disabled="@string.IsNullOrEmpty(configId)">
+                            @(isError ? "Reconnect with Facebook" : "Continue with Facebook")
+                        </button>
+                    }
+                }
+                <button type="button" class="btn btn-sm @(connected || isError || oauth ? "btn-ghost" : "btn-primary")" data-open="@modalId">
+                    @(connected || isError ? "Account details" : oauth ? "Set up manually" : "Set up")
+                </button>
+                @if (connected || isError)
+                {
+                    <form method="post" asp-page-handler="Disconnect" class="inline-form int-foot-end"
+                          onsubmit="return confirm('Disconnect @title? Leads on this channel will stop being sent/received until reconnected.');">
+                        <input type="hidden" name="Channel" value="@channel" />
+                        <button type="submit" class="btn btn-ghost btn-sm btn-danger-text">Disconnect</button>
+                    </form>
+                }
+            </div>
         </div>
-        await Task.CompletedTask;
+
+        await RenderModalStart(modalId, channel, accentHex,
+            connected || isError ? $"{title} account details" : oauth ? $"Set up {title} manually" : $"Set up {title}",
+            connected || isError ? (info?.DisplayName ?? "Change the IDs or the access token.")
+                : oauth ? "Only if signing in with Facebook doesn't work for you." : "With the IDs and a token from your Meta app.");
+        await RenderManualForm(channel, info, connected);
+        await RenderModalEnd();
     }
 
-    // Telegram is connected differently from the Meta channels: the clinic pastes a BotFather token
-    // and SculptFlow does the rest (getMe, then setWebhook with a generated secret). The token is
-    // write-only — the form never shows a saved one, and nothing here can render it.
+    // Telegram: the clinic pastes a BotFather token and SculptFlow does the rest (getMe, then setWebhook with a
+    // generated secret). The token is write-only — nothing here can render a saved one.
     private async Task RenderTelegramCard()
     {
         var info = Model.Channels.TryGetValue(ChannelType.Telegram, out var c) ? c : null;
         var connected = info?.Status == ChannelIntegrationStatus.Connected;
-        var badgeClass = info?.Status switch
-        {
-            ChannelIntegrationStatus.Connected => "badge-green",
-            ChannelIntegrationStatus.Error => "badge-red",
-            _ => "badge-gray"
-        };
-        var webhookBadge = info?.WebhookStatus switch
-        {
-            WebhookStatus.Active => "badge-green",
-            WebhookStatus.Error => "badge-red",
-            WebhookStatus.Pending => "badge-gray",
-            _ => "badge-gray"
-        };
-        var webhookLabel = info?.WebhookStatus switch
-        {
-            WebhookStatus.Active => "Webhook active",
-            WebhookStatus.Error => "Webhook problem",
-            WebhookStatus.Pending => "Webhook pending",
-            _ => "Webhook not registered"
-        };
+        var problem = info is not null && NeedsAttention(info);
+        const string modalId = "int-m-telegram";
 
-        <div class="card integration-card">
-            <div class="integration-card-header">
-                <div class="flex items-center gap-2">
-                    <span class="channel-mark" style="background:#229ED9">TG</span>
-                    <div>
-                        <div class="integration-title">Telegram</div>
+        <div class="card int-card int-framed @(problem ? "int-card-error" : "")" style="--ch:#229ED9">
+            <div class="int-head">
+                <span class="channel-mark int-notch ch-telegram" title="Telegram">@Html.Raw(PlasticSurgery.Pages.Shared.ChannelIconHelper.BrandSvg(ChannelType.Telegram))</span>
+                <div class="flex-1 min-w-0">
+                    <div class="integration-title">Telegram</div>
+                    <div class="cell-sub">
                         @if (!string.IsNullOrEmpty(info?.TelegramBotUsername))
                         {
-                            <div class="text-subtle" style="font-size:.78rem">
-                                @(connected ? "Bot" : "Last connected bot") <strong>@("@" + info!.TelegramBotUsername)</strong>
-                                · ID <code>@info.TelegramBotId</code>
-                            </div>
+                            <text>@(connected ? "" : "Last bot ")@("@" + info!.TelegramBotUsername)</text>
+                        }
+                        else
+                        {
+                            <text>Answer messages sent to your Telegram bot.</text>
                         }
                     </div>
                 </div>
-                <span class="badge @badgeClass">@(info?.Status ?? ChannelIntegrationStatus.Disconnected)</span>
+                @{ await RenderStatusPill(info); }
             </div>
 
-            @if (connected)
-            {
-                <div class="flex items-center gap-2 mb-2" style="flex-wrap:wrap">
-                    <span class="badge @webhookBadge">@webhookLabel</span>
-                    @if (info!.LastWebhookAt.HasValue)
-                    {
-                        <span class="text-subtle" style="font-size:.75rem">Last message received @info.LastWebhookAt.Value.ToString("MMM d, HH:mm") UTC</span>
-                    }
-                    else
-                    {
-                        <span class="text-subtle" style="font-size:.75rem">No messages received yet — send your bot a message from Telegram to test.</span>
-                    }
-                </div>
-            }
             @if (!string.IsNullOrEmpty(info?.LastError))
             {
-                <div class="alert alert-warning mb-2" style="font-size:.8rem">@info!.LastError</div>
-            }
-
-            @if (connected)
-            {
-                <div class="flex items-center gap-2 mt-1" style="flex-wrap:wrap">
-                    <form method="post" asp-page-handler="RefreshTelegram">
-                        <button type="submit" class="btn btn-sm">Check webhook</button>
-                    </form>
-                    <form method="post" asp-page-handler="Disconnect"
-                          onsubmit="return confirm('Disconnect Telegram? The webhook is removed and the bot stops receiving/sending until reconnected. Existing conversations are kept.');">
-                        <input type="hidden" name="Channel" value="@ChannelType.Telegram" />
-                        <button type="submit" class="btn btn-sm">Disconnect</button>
-                    </form>
-                </div>
-                <details class="mt-2">
-                    <summary class="text-subtle" style="font-size:.78rem;cursor:pointer">Reconnect or use a different bot</summary>
-                    <div class="mt-2">
-                        @{ await RenderTelegramConnectForm("Reconnect Telegram"); }
+                <div class="int-strip int-strip-problem">
+                    <div>
+                        <span class="cell-sub">Problem</span>
+                        <span class="int-val">Telegram can't deliver messages to us right now. Try "Check connection", or use a different bot.</span>
+                        <details class="mt-1"><summary class="cell-sub">Technical details</summary><div class="cell-sub break-word">@info!.LastError</div></details>
                     </div>
-                </details>
+                </div>
+            }
+            else if (connected)
+            {
+                <div class="int-strip">
+                    <div>
+                        <span class="cell-sub">Receiving messages</span>
+                        <span class="int-val">@(info!.WebhookStatus switch { WebhookStatus.Active => "Yes", WebhookStatus.Pending => "Setting up…", _ => "No" })</span>
+                    </div>
+                    <div>
+                        <span class="cell-sub">Last message</span>
+                        <span class="int-val" title="@(info.LastWebhookAt?.ToString("MMM d, HH:mm") + " UTC")">@(info.LastWebhookAt is { } last ? Ago(last) : "None yet · send your bot a message to test")</span>
+                    </div>
+                </div>
             }
             else
             {
-                await RenderTelegramConnectForm("Connect Telegram");
+                <div class="int-strip int-strip-note">
+                    <div>
+                        <span class="cell-sub">When connected</span>
+                        <span class="int-val">Messages to your Telegram bot arrive in your Inbox, and the AI assistant can answer them.</span>
+                    </div>
+                </div>
             }
+
+            <div class="int-foot">
+                @if (connected)
+                {
+                    <form method="post" asp-page-handler="RefreshTelegram" class="inline-form">
+                        <button type="submit" class="btn btn-sm">Check connection</button>
+                    </form>
+                    <button type="button" class="btn btn-ghost btn-sm" data-open="@modalId">Use a different bot</button>
+                    <form method="post" asp-page-handler="Disconnect" class="inline-form int-foot-end"
+                          onsubmit="return confirm('Disconnect Telegram? The bot stops receiving and sending messages until reconnected. Existing conversations are kept.');">
+                        <input type="hidden" name="Channel" value="@ChannelType.Telegram" />
+                        <button type="submit" class="btn btn-ghost btn-sm btn-danger-text">Disconnect</button>
+                    </form>
+                }
+                else
+                {
+                    <button type="button" class="btn btn-primary btn-sm" data-open="@modalId">Connect</button>
+                }
+            </div>
         </div>
-        await Task.CompletedTask;
+
+        await RenderModalStart(modalId, ChannelType.Telegram, "#229ED9",
+            connected ? "Use a different bot" : "Connect Telegram",
+            connected && !string.IsNullOrEmpty(info?.TelegramBotUsername) ? "Replaces @" + info!.TelegramBotUsername + "." : "Create a bot in Telegram, then paste its token.");
+        await RenderTelegramConnectForm(connected ? "Reconnect" : "Connect");
+        await RenderModalEnd();
     }
 
     private async Task RenderTelegramConnectForm(string buttonLabel)
     {
         <form method="post" asp-page-handler="ConnectTelegram" class="integration-form">
+            <ol class="steps">
+                <li>Open <strong>@@BotFather</strong> in Telegram.</li>
+                <li>Send <code>/newbot</code> and follow the steps.</li>
+                <li>Paste the token it gives you:</li>
+            </ol>
             <label class="field">
                 <span>Bot token</span>
                 <input type="password" name="BotToken" class="text-input" autocomplete="off" spellcheck="false"
-                       placeholder="123456789:AA… — from @@BotFather" required />
+                       placeholder="123456789:AA…" required />
+                <small class="text-subtle">We check the token and set everything up. It's never shown again.</small>
             </label>
-            <div class="text-subtle" style="font-size:.75rem">
-                Create a bot with <strong>@@BotFather</strong> in Telegram and paste its token here. SculptFlow verifies it,
-                registers the webhook for you, and never shows the token again.
-            </div>
-            <div class="flex items-center gap-2 mt-1">
+            <div class="flex items-center gap-2">
                 <button type="submit" class="btn btn-primary btn-sm">@buttonLabel</button>
+                <button type="button" class="btn btn-sm" data-close>Cancel</button>
             </div>
         </form>
         await Task.CompletedTask;
@@ -253,67 +373,70 @@ else
 
     private async Task RenderManualForm(string channel, PlasticSurgery.Dtos.ChannelIntegrationResponse? info, bool connected)
     {
+        var tokenOnFile = info is not null && info.HasAccessToken;
         <form method="post" asp-page-handler="Save" class="integration-form">
             <input type="hidden" name="Channel" value="@channel" />
 
-            <label class="field">
-                <span>Display name</span>
-                <input type="text" name="DisplayName" value="@(info?.DisplayName)"
-                       placeholder="e.g. Clinic front desk" class="text-input" />
-            </label>
+            <div class="form-row-even">
+                <label class="field">
+                    <span>Display name</span>
+                    <input type="text" name="DisplayName" value="@(info?.DisplayName)" placeholder="e.g. Clinic front desk" class="text-input" />
+                </label>
 
-            @if (channel == ChannelType.WhatsApp)
-            {
-                <label class="field">
-                    <span>Phone number ID</span>
-                    <input type="text" name="PhoneNumberId" value="@(info?.PhoneNumberId)"
-                           placeholder="From Meta app → WhatsApp → API Setup" class="text-input" />
-                </label>
-                <label class="field">
-                    <span>WhatsApp Business Account ID</span>
-                    <input type="text" name="WhatsAppBusinessId" value="@(info?.WhatsAppBusinessId)"
-                           class="text-input" />
-                </label>
-                <label class="field">
-                    <span>Webhook verify token</span>
-                    <input type="text" name="WebhookVerifyToken"
-                           placeholder="@(info?.HasWebhookVerifyToken == true ? "•••••••• (leave blank to keep)" : "Choose a verify token for the webhook")"
-                           class="text-input" />
-                </label>
-            }
-            else if (channel == ChannelType.Instagram)
-            {
-                <label class="field">
-                    <span>Instagram Business Account ID</span>
-                    <input type="text" name="InstagramBusinessId" value="@(info?.InstagramBusinessId)"
-                           class="text-input" />
-                </label>
-                <label class="field">
-                    <span>Linked Facebook Page ID</span>
-                    <input type="text" name="PageId" value="@(info?.PageId)" class="text-input" />
-                </label>
-            }
-            else if (channel == ChannelType.Facebook)
-            {
-                <label class="field">
-                    <span>Page ID</span>
-                    <input type="text" name="PageId" value="@(info?.PageId)" class="text-input" />
-                </label>
-            }
+                @if (channel == ChannelType.WhatsApp)
+                {
+                    <label class="field">
+                        <span>Phone number ID</span>
+                        <input type="text" name="PhoneNumberId" value="@(info?.PhoneNumberId)" class="text-input" />
+                        <small class="text-subtle">Meta app → WhatsApp → API Setup</small>
+                    </label>
+                    <label class="field">
+                        <span>WhatsApp Business Account ID</span>
+                        <input type="text" name="WhatsAppBusinessId" value="@(info?.WhatsAppBusinessId)" class="text-input" />
+                        <small class="text-subtle">Same page, under the phone number</small>
+                    </label>
+                    <label class="field">
+                        <span>Webhook verify token</span>
+                        <input type="text" name="WebhookVerifyToken"
+                               placeholder="@(info?.HasWebhookVerifyToken == true ? "•••••••• (leave blank to keep)" : "Any word you choose")"
+                               class="text-input" />
+                        <small class="text-subtle">Type the same word in Meta's webhook settings</small>
+                    </label>
+                }
+                else if (channel == ChannelType.Instagram)
+                {
+                    <label class="field">
+                        <span>Instagram Business Account ID</span>
+                        <input type="text" name="InstagramBusinessId" value="@(info?.InstagramBusinessId)" class="text-input" />
+                        <small class="text-subtle">Meta Business Suite → Settings → Instagram accounts</small>
+                    </label>
+                    <label class="field">
+                        <span>Linked Facebook Page ID</span>
+                        <input type="text" name="PageId" value="@(info?.PageId)" class="text-input" />
+                        <small class="text-subtle">Your Facebook page → About → Page transparency</small>
+                    </label>
+                }
+                else if (channel == ChannelType.Facebook)
+                {
+                    <label class="field">
+                        <span>Page ID</span>
+                        <input type="text" name="PageId" value="@(info?.PageId)" class="text-input" />
+                        <small class="text-subtle">Your Facebook page → About → Page transparency</small>
+                    </label>
+                }
+            </div>
 
             <label class="field">
                 <span>Access token</span>
                 <input type="password" name="AccessToken"
-                       placeholder="@(info?.HasAccessToken == true ? "•••••••• (leave blank to keep)" : "Paste a permanent access token")"
+                       placeholder="@(tokenOnFile ? "•••••••• (leave blank to keep)" : "Paste a permanent access token")"
                        class="text-input" autocomplete="off" />
+                <small class="text-subtle">@(tokenOnFile ? "A token is saved. It's hidden for your security." : "Stored safely and never shown again.")</small>
             </label>
 
-            <div class="flex items-center gap-2 mt-1">
-                <button type="submit" class="btn btn-sm">@(connected ? "Save changes" : "Connect manually")</button>
-                @if (info is not null && (connected || info.HasAccessToken))
-                {
-                    <span class="text-subtle" style="font-size:.75rem">Access token on file — hidden for your security.</span>
-                }
+            <div class="flex items-center gap-2">
+                <button type="submit" class="btn btn-sm btn-primary">@(connected ? "Save changes" : "Connect")</button>
+                <button type="button" class="btn btn-sm" data-close>Cancel</button>
             </div>
         </form>
         await Task.CompletedTask;

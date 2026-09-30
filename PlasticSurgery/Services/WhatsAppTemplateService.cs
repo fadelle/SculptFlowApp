@@ -68,16 +68,40 @@ public class WhatsAppTemplateService : IWhatsAppTemplateService
         _db.WhatsAppTemplates.Add(template);
         await _db.SaveChangesAsync(ct);
 
+        // No connected WhatsApp number yet: it stays a local draft, and "Retry submit" sends it later.
+        await SubmitToMetaAsync(template, ct);
+        return ToResponse(template);
+    }
+
+    public async Task<WhatsAppTemplateResponse?> RetrySubmitAsync(Guid clinicId, Guid id, CancellationToken ct = default)
+    {
+        var template = await _db.WhatsAppTemplates.FirstOrDefaultAsync(t => t.ClinicId == clinicId && t.Id == id, ct);
+        if (template is null) return null;
+        if (!string.IsNullOrEmpty(template.MetaTemplateId))
+        {
+            throw new InvalidOperationException("This template already reached Meta. Use Sync to refresh its status, or create a new template to change it.");
+        }
+
+        var submitted = await SubmitToMetaAsync(template, ct);
+        if (!submitted)
+        {
+            throw new InvalidOperationException("Connect your WhatsApp number (Settings → Integrations) before sending templates to Meta.");
+        }
+        return ToResponse(template);
+    }
+
+    /// <summary>Sends a template that has no MetaTemplateId yet to Meta for review. Returns false (and leaves it a
+    /// draft) when the clinic has no connected WhatsApp number. A Meta error is kept on the row as Rejected +
+    /// RejectionReason so the user doesn't lose their work and can retry.</summary>
+    private async Task<bool> SubmitToMetaAsync(WhatsAppTemplate template, CancellationToken ct)
+    {
         var integration = await _db.ChannelIntegrations.FirstOrDefaultAsync(
-            c => c.ClinicId == request.ClinicId && c.Channel == ChannelType.WhatsApp, ct);
+            c => c.ClinicId == template.ClinicId && c.Channel == ChannelType.WhatsApp, ct);
 
         if (integration is null || integration.Status != ChannelIntegrationStatus.Connected
             || string.IsNullOrEmpty(integration.WhatsAppBusinessId) || string.IsNullOrEmpty(integration.AccessToken))
         {
-            // Saved as a local draft — fine to submit later (re-run CreateAsync's Meta call via a
-            // retry action, not yet wired up) once the clinic finishes connecting WhatsApp under
-            // Settings → Channels & Integrations.
-            return ToResponse(template);
+            return false;
         }
 
         try
@@ -89,19 +113,18 @@ public class WhatsAppTemplateService : IWhatsAppTemplateService
 
             template.MetaTemplateId = result.Id;
             template.Status = MapMetaStatus(result.Status);
+            template.RejectionReason = null;
             template.UpdatedAt = DateTimeOffset.UtcNow;
             await _db.SaveChangesAsync(ct);
         }
         catch (MetaGraphApiException ex)
         {
-            // Keep the draft row (so the user doesn't lose their work) but surface Meta's rejection.
             template.Status = WhatsAppTemplateStatus.Rejected;
             template.RejectionReason = ex.Message;
             template.UpdatedAt = DateTimeOffset.UtcNow;
             await _db.SaveChangesAsync(ct);
         }
-
-        return ToResponse(template);
+        return true;
     }
 
     public async Task<WhatsAppTemplateResponse?> SyncStatusAsync(Guid clinicId, Guid id, CancellationToken ct = default)

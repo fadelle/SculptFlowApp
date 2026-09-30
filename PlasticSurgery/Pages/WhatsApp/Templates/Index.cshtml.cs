@@ -108,6 +108,30 @@ public class IndexModel : PageModel
         return RedirectToPage();
     }
 
+    public async Task<IActionResult> OnPostRetryAsync(Guid id, CancellationToken ct)
+    {
+        var clinic = await _clinicContext.GetClinicAsync(ct);
+        if (clinic is null) return RedirectToPage();
+
+        try
+        {
+            var template = await _templates.RetrySubmitAsync(clinic.Id, id, ct);
+            if (template is not null)
+            {
+                if (template.Status == WhatsAppTemplateStatus.Rejected)
+                    ErrorMessage = $"Meta still didn't accept '{template.Name}': {template.RejectionReason}";
+                else
+                    StatusMessage = $"'{template.Name}' was sent to Meta for review. It will update here by itself.";
+            }
+        }
+        catch (InvalidOperationException ex)
+        {
+            ErrorMessage = ex.Message;
+        }
+
+        return RedirectToPage();
+    }
+
     private async Task LoadAsync(CancellationToken ct)
     {
         var clinic = await _clinicContext.GetClinicAsync(ct);

@@ -11,11 +11,13 @@ public class LeadsModel : PageModel
 {
     private readonly ICurrentClinicContext _clinicContext;
     private readonly IDashboardService _dashboard;
+    private readonly ILeadService _leads;
 
-    public LeadsModel(ICurrentClinicContext clinicContext, IDashboardService dashboard)
+    public LeadsModel(ICurrentClinicContext clinicContext, IDashboardService dashboard, ILeadService leads)
     {
         _clinicContext = clinicContext;
         _dashboard = dashboard;
+        _leads = leads;
     }
 
     [BindProperty(SupportsGet = true)]
@@ -23,6 +25,9 @@ public class LeadsModel : PageModel
 
     [BindProperty(SupportsGet = true)]
     public string? Search { get; set; }
+
+    [BindProperty(SupportsGet = true)]
+    public string? Source { get; set; }
 
     // Named PageNumber, not Page — PageModel already declares a Page() method, and a same-named
     // property would just hide it (harmless but a compiler warning worth avoiding).
@@ -35,6 +40,8 @@ public class LeadsModel : PageModel
     public IReadOnlyList<DashboardLeadRow> Leads { get; private set; } = Array.Empty<DashboardLeadRow>();
     public int TotalCount { get; private set; }
     public IReadOnlyList<string> AllStatuses { get; } = LeadStatus.All.OrderBy(s => s).ToList();
+    /// <summary>Every source value this clinic's leads actually have, for the source filter.</summary>
+    public IReadOnlyList<string> AllSources { get; private set; } = Array.Empty<string>();
 
     public async Task OnGetAsync(CancellationToken ct)
     {
@@ -49,9 +56,10 @@ public class LeadsModel : PageModel
         PageNumber = Math.Max(PageNumber, 1);
         var skip = (PageNumber - 1) * PageSize;
 
-        var (items, totalCount) = await _dashboard.GetLeadsAsync(clinic.Id, Status, Search, skip, PageSize, ct);
+        var (items, totalCount) = await _dashboard.GetLeadsAsync(clinic.Id, Status, Search, Source, skip, PageSize, ct);
         Leads = items;
         TotalCount = totalCount;
+        AllSources = await _leads.GetDistinctSourcesAsync(clinic.Id, ct);
     }
 
     public int TotalPages => (int)Math.Ceiling(TotalCount / (double)PageSize);

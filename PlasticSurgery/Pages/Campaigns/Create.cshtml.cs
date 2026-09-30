@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using PlasticSurgery.Data.Entities;
 using PlasticSurgery.Dtos;
+using PlasticSurgery.Pages.Shared;
 using PlasticSurgery.Services;
 
 namespace PlasticSurgery.Pages.Campaigns;
@@ -62,7 +63,8 @@ public class CreateModel : PageModel
     public IReadOnlyList<string> QualificationStatusOptions { get; } = LeadQualificationStatus.All.OrderBy(s => s).ToList();
     public IReadOnlyList<string> AppointmentStatusOptions { get; } = AppointmentStatus.All.OrderBy(s => s).ToList();
 
-    [BindProperty]
+    // SupportsGet so the typed name survives picking a template (which reloads the page with ?WhatsAppTemplateId=).
+    [BindProperty(SupportsGet = true)]
     public string Name { get; set; } = string.Empty;
 
     [BindProperty(SupportsGet = true)]
@@ -140,8 +142,15 @@ public class CreateModel : PageModel
     [BindProperty]
     public string SendOption { get; set; } = "now";
 
+    /// <summary>"Schedule" date + time, entered in the VIEWER's own timezone (ViewerTimeZone) and converted to UTC on submit.</summary>
     [BindProperty]
-    public DateTimeOffset? ScheduledAt { get; set; }
+    public DateOnly? ScheduleDate { get; set; }
+
+    [BindProperty]
+    public TimeOnly? ScheduleTime { get; set; }
+
+    /// <summary>The viewer's timezone id, shown next to the schedule fields (local-time.js corrects it on first visit).</summary>
+    public string ViewerTimezone { get; private set; } = "UTC";
 
     [TempData]
     public string? ErrorMessage { get; set; }
@@ -164,13 +173,13 @@ public class CreateModel : PageModel
 
         if (WhatsAppTemplateId is null || string.IsNullOrWhiteSpace(Name))
         {
-            ErrorMessage = "Name and a template are required.";
+            ErrorMessage = "Give the campaign a name and choose a template.";
             await LoadAsync(ct);
             return Page();
         }
         if (isManualSelection && LeadIds.Count == 0)
         {
-            ErrorMessage = "Pick at least one recipient, or switch back to an audience filter.";
+            ErrorMessage = "Tick at least one person in the list, or choose one of the other audiences.";
             await LoadAsync(ct);
             return Page();
         }
@@ -179,7 +188,7 @@ public class CreateModel : PageModel
             // {LeadFullName}/{LeadFirstName}/{LeadPhone} tokens need the lead list up front to
             // resolve per-recipient — for a filter-resolved audience there's no lead list here yet
             // (it's only resolved inside CampaignService.CreateAsync).
-            ErrorMessage = "Body variables aren't supported yet for audience-based campaigns — pick leads yourself to use them, or pick a template with no variables.";
+            ErrorMessage = "This template has blanks to fill, which only works when you pick people manually. Choose \"Pick people manually\", or a template without blanks.";
             await LoadAsync(ct);
             return Page();
         }
@@ -215,12 +224,27 @@ public class CreateModel : PageModel
                 ? CampaignType.Reactivation
                 : (string?)null;
 
-            string? audienceFilters = isManualSelection ? null : BuildAudienceFiltersJson();
+            string? audienceFilters = isManualSelection ? null : BuildAudienceFiltersJson(ViewerTimeZone.Resolve(Request, clinic.Timezone));
 
-            // datetime-local has no offset, so model binding attaches the server's local offset —
-            // Npgsql's timestamptz columns only accept UTC (offset 0), so normalize here. Pre-existing
-            // gap (not introduced by the audience picker), found while testing "Send later" above.
-            var scheduledAt = SendOption == "later" && ScheduledAt.HasValue ? ScheduledAt.Value.ToUniversalTime() : (DateTimeOffset?)null;
+            // The schedule is typed as a wall-clock date + time in the viewer's own timezone; convert to UTC
+            // (Npgsql timestamptz columns only accept offset 0).
+            DateTimeOffset? scheduledAt = null;
+            if (SendOption == "later")
+            {
+                if (ScheduleDate is null || ScheduleTime is null)
+                {
+                    ErrorMessage = "Pick the date and time to send, or choose \"Send now\".";
+                    await LoadAsync(ct);
+                    return Page();
+                }
+                scheduledAt = ViewerTimeZone.ToUtc(ScheduleDate.Value.ToDateTime(ScheduleTime.Value), ViewerTimeZone.Resolve(Request, clinic.Timezone));
+                if (scheduledAt <= DateTimeOffset.UtcNow)
+                {
+                    ErrorMessage = "That date and time has already passed. Pick a time in the future, or choose \"Send now\".";
+                    await LoadAsync(ct);
+                    return Page();
+                }
+            }
 
             var campaign = await _campaigns.CreateAsync(new CreateCampaignRequest(
                 clinic.Id, Name, WhatsAppTemplateId.Value, leadIdsForRequest, variablesByLeadId, scheduledAt,
@@ -258,7 +282,7 @@ public class CreateModel : PageModel
     /// builder's common + advanced fields. Shares one CampaignAudienceFilters shape for both (see
     /// its remarks) since CampaignAudienceService already only reads the subset relevant to each
     /// audience type.</summary>
-    private string? BuildAudienceFiltersJson()
+    private string? BuildAudienceFiltersJson(TimeZoneInfo viewerTz)
     {
         CampaignAudienceFilters filters;
         if (AudienceType == CampaignAudienceType.ReactivationNoConsultation)
@@ -276,10 +300,10 @@ public class CreateModel : PageModel
                 LeadStatuses: CustomLeadStatuses.Count > 0 ? CustomLeadStatuses : null,
                 Sources: CustomSources.Count > 0 ? CustomSources : null,
                 QualificationStatuses: CustomQualificationStatuses.Count > 0 ? CustomQualificationStatuses : null,
-                CreatedAfter: ToUtcOffset(CustomCreatedAfter),
-                CreatedBefore: ToUtcOffset(CustomCreatedBefore),
-                LastContactedAfter: ToUtcOffset(CustomLastContactedAfter),
-                LastContactedBefore: ToUtcOffset(CustomLastContactedBefore),
+                CreatedAfter: LocalMidnightUtc(CustomCreatedAfter, viewerTz),
+                CreatedBefore: LocalMidnightUtc(CustomCreatedBefore?.AddDays(1), viewerTz),
+                LastContactedAfter: LocalMidnightUtc(CustomLastContactedAfter, viewerTz),
+                LastContactedBefore: LocalMidnightUtc(CustomLastContactedBefore?.AddDays(1), viewerTz),
                 AppointmentStatuses: CustomAppointmentStatuses.Count > 0 ? CustomAppointmentStatuses : null,
                 Countries: string.IsNullOrWhiteSpace(CustomCountry) ? null : new[] { CustomCountry },
                 Cities: string.IsNullOrWhiteSpace(CustomCity) ? null : new[] { CustomCity });
@@ -292,8 +316,10 @@ public class CreateModel : PageModel
         return JsonSerializer.Serialize(filters, AudienceFiltersJsonOptions);
     }
 
-    private static DateTimeOffset? ToUtcOffset(DateTime? value) =>
-        value.HasValue ? new DateTimeOffset(DateTime.SpecifyKind(value.Value, DateTimeKind.Utc)) : null;
+    /// <summary>The date filters are whole days in the viewer's timezone: midnight there, as UTC. The "to" date is
+    /// inclusive, so callers pass the day after it.</summary>
+    private static DateTimeOffset? LocalMidnightUtc(DateTime? date, TimeZoneInfo tz) =>
+        date is null ? null : ViewerTimeZone.ToUtc(date.Value.Date, tz);
 
     private async Task LoadAsync(CancellationToken ct)
     {
@@ -305,6 +331,7 @@ public class CreateModel : PageModel
         }
 
         ClinicConfigured = true;
+        ViewerTimezone = ViewerTimeZone.Resolve(Request, clinic.Timezone).Id;
 
         var allTemplates = await _templates.ListAsync(clinic.Id, ct);
         ApprovedTemplates = allTemplates.Where(t => t.Status == WhatsAppTemplateStatus.Approved).ToList();

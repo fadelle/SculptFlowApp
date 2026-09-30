@@ -33,13 +33,14 @@ public class CampaignService : ICampaignService
         foreach (var c in campaigns)
         {
             var recipients = await _db.CampaignRecipients.Where(r => r.CampaignId == c.Id).ToListAsync(ct);
+            // Same numbers as the details page (including the best-effort "replied" signal).
+            var stats = await ComputeStats(clinicId, recipients, ct);
             rows.Add(new CampaignListRow(
                 c.Id, c.Name, c.WhatsAppTemplate?.Name, c.Status,
-                recipients.Count,
-                recipients.Count(r => r.Status == CampaignRecipientStatus.Sent || r.Status == CampaignRecipientStatus.Delivered || r.Status == CampaignRecipientStatus.Read),
-                recipients.Count(r => r.Status == CampaignRecipientStatus.Delivered || r.Status == CampaignRecipientStatus.Read),
-                recipients.Count(r => r.Status == CampaignRecipientStatus.Failed),
-                c.ScheduledAt, c.CreatedAt));
+                stats.TotalRecipients, stats.Sent, stats.Delivered, stats.Failed,
+                c.ScheduledAt, c.CreatedAt,
+                stats.Read, stats.Replied,
+                c.AudienceType, IsManualSelection(c)));
         }
         return rows;
     }
@@ -63,7 +64,7 @@ public class CampaignService : ICampaignService
             r.SkipReason, r.FailureCode, r.FailureReason,
             r.QueuedAt, r.SentAt, r.DeliveredAt, r.ReadAt, r.RepliedAt, r.BookedAt, r.FailedAt)).ToList();
 
-        return new CampaignDetailsResponse(ToResponse(campaign), stats, recipientRows);
+        return new CampaignDetailsResponse(ToResponse(campaign), stats, recipientRows, campaign.WhatsAppTemplate?.Body);
     }
 
     public async Task<CampaignResponse> CreateAsync(CreateCampaignRequest request, CancellationToken ct = default)
@@ -321,6 +322,10 @@ public class CampaignService : ICampaignService
 
         return ToResponse(campaign);
     }
+
+    /// <summary>A hand-picked lead list is stored as audience_type = custom with no filters (see Pages/Campaigns/Create).</summary>
+    private static bool IsManualSelection(Campaign c) =>
+        c.AudienceType == CampaignAudienceType.Custom && string.IsNullOrWhiteSpace(c.AudienceFilters);
 
     private async Task<CampaignStatsResponse> ComputeStats(Guid clinicId, List<CampaignRecipient> recipients, CancellationToken ct)
     {

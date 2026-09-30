@@ -35,6 +35,29 @@ public static class ChannelIconHelper
         _ => null
     };
 
+    /// <summary>Brand glyph for every connectable channel (Settings → Channels &amp; Integrations cards).
+    /// Kept separate from <see cref="Svg"/> so the Inbox/Leads badges don't change.</summary>
+    public static string? BrandSvg(string? channel) => channel?.ToLowerInvariant() switch
+    {
+        "instagram" => InstagramSvg,
+        "facebook" => MessengerSvg,
+        "google" => GoogleCalendarSvg,
+        "outlook" => OutlookSvg,
+        _ => Svg(channel)
+    };
+
+    private const string GoogleCalendarSvg =
+        """<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="3" width="18" height="18" rx="3" fill="#fff"/><path d="M6 3h12a3 3 0 0 1 3 3v2.5H3V6a3 3 0 0 1 3-3z" fill="#4285F4"/><path d="M3 17.5h4.5V21H6a3 3 0 0 1-3-3z" fill="#34A853"/><path d="M16.5 17.5H21V18a3 3 0 0 1-3 3h-1.5z" fill="#FBBC04"/><rect x="3" y="3" width="18" height="18" rx="3" fill="none" stroke="#4285F4" stroke-width="1.2"/><text x="12" y="16.6" text-anchor="middle" font-family="Arial, sans-serif" font-size="7.5" font-weight="700" fill="#4285F4">31</text></svg>""";
+
+    private const string OutlookSvg =
+        """<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="9" y="6" width="12.5" height="12" rx="1.5" stroke="#fff" stroke-width="1.6"/><path d="M9.5 7.5 15.25 12 21 7.5" stroke="#fff" stroke-width="1.6"/><rect x="2.5" y="4" width="10" height="16" rx="1.8" fill="#fff"/><ellipse cx="7.5" cy="12" rx="2.4" ry="3.1" stroke="#0078D4" stroke-width="1.8"/></svg>""";
+
+    private const string InstagramSvg =
+        """<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4.2"/><circle cx="17.4" cy="6.6" r="1.1" fill="#fff" stroke="none"/></svg>""";
+
+    private const string MessengerSvg =
+        """<svg viewBox="0 0 24 24" fill="#fff" xmlns="http://www.w3.org/2000/svg"><path d="M12 2C6.36 2 2 6.13 2 11.7c0 2.91 1.19 5.44 3.14 7.17.16.14.26.35.27.57l.05 1.78a.8.8 0 0 0 1.12.71l1.98-.87c.17-.08.36-.09.53-.04.91.25 1.87.38 2.91.38 5.64 0 10-4.13 10-9.7S17.64 2 12 2zm6 7.46-2.94 4.66a1.5 1.5 0 0 1-2.17.4l-2.34-1.75a.6.6 0 0 0-.72 0l-3.16 2.4c-.42.32-.97-.18-.69-.63l2.94-4.66a1.5 1.5 0 0 1 2.17-.4l2.34 1.75a.6.6 0 0 0 .72 0l3.16-2.4c.42-.32.97.18.69.63z"/></svg>""";
+
     private const string TelegramSvg =
         """<svg viewBox="0 0 24 24" fill="#fff" xmlns="http://www.w3.org/2000/svg"><path d="M9.78 18.65l.28-4.23 7.68-6.92c.34-.31-.07-.46-.52-.19L7.74 13.3 3.64 12c-.88-.25-.89-.86.2-1.3l15.97-6.16c.73-.33 1.43.18 1.15 1.3l-2.72 12.81c-.19.91-.74 1.13-1.5.71L12.6 16.3l-1.99 1.93c-.23.23-.42.42-.83.42z"/></svg>""";
 

@@ -38,7 +38,7 @@
       chipsEl.appendChild(chip);
     });
 
-    triggerText.textContent = checked.length > 0 ? label + ' (' + checked.length + ')' : label;
+    triggerText.textContent = checked.length > 0 ? checked.length + ' selected' : label;
     container.classList.toggle('ms-has-selection', checked.length > 0);
   }
 

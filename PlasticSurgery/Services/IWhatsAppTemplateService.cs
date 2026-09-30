@@ -23,6 +23,11 @@ public interface IWhatsAppTemplateService
     /// <summary>Refreshes Status/RejectionReason from Meta for a template that's already been submitted.</summary>
     Task<WhatsAppTemplateResponse?> SyncStatusAsync(Guid clinicId, Guid id, CancellationToken ct = default);
 
+    /// <summary>Re-sends a template that never reached Meta (no MetaTemplateId: saved while WhatsApp wasn't
+    /// connected, or Meta refused the submission). Throws InvalidOperationException if it already reached Meta
+    /// or the clinic has no connected WhatsApp number. Returns null if it doesn't exist for this clinic.</summary>
+    Task<WhatsAppTemplateResponse?> RetrySubmitAsync(Guid clinicId, Guid id, CancellationToken ct = default);
+
     /// <summary>Applies a normalized template webhook event n8n forwarded (status change, category
     /// change, quality update) — upserts by (ClinicId, MetaTemplateId), falling back to
     /// (ClinicId, Name, Language) for events that don't carry Meta's id yet. Idempotent by

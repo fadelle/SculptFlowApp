@@ -25,6 +25,8 @@
   var btnTakeover = document.getElementById('inbox-btn-takeover');
   var btnReturnAi = document.getElementById('inbox-btn-return-ai');
   var btnClose = document.getElementById('inbox-btn-close');
+  var btnMore = document.getElementById('inbox-btn-more');
+  var moreMenuEl = document.getElementById('inbox-more-menu');
   var btnInfo = document.getElementById('inbox-btn-info');
   var leadInfoEl = document.getElementById('inbox-lead-info');
   var windowClosedNoticeEl = document.getElementById('inbox-window-closed-notice');
@@ -34,6 +36,12 @@
   var templateVariablesEl = document.getElementById('inbox-template-variables');
   var templatePreviewEl = document.getElementById('inbox-template-preview');
   var btnTemplateCancel = document.getElementById('inbox-template-cancel');
+  var shellEl = document.getElementById('inbox-shell');
+  var threadAvatarEl = document.getElementById('inbox-thread-avatar');
+  var searchEl = document.getElementById('inbox-search');
+  var btnBack = document.getElementById('inbox-btn-back');
+  var btnLeadClose = document.getElementById('inbox-lead-close');
+  var listFilter = 'all'; // all | needs | ai | closed — purely client-side, over the list already loaded
 
   // ---------------------------------------------------------------------
   // API helpers
@@ -100,24 +108,108 @@
     }
   }
 
+  // Short relative time for the conversation list: "now", "5m", "3h", "Yesterday", "Sep 21".
+  function formatListTime(iso) {
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    var mins = Math.floor((Date.now() - d.getTime()) / 60000);
+    if (mins < 1) return 'now';
+    if (mins < 60) return mins + 'm';
+    if (mins < 60 * 24 && d.getDate() === new Date().getDate()) return Math.floor(mins / 60) + 'h';
+    var yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
+    if (d.toDateString() === yesterday.toDateString()) return 'Yesterday';
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  }
+
+  function formatDate(iso) {
+    if (!iso) return '—';
+    var d = new Date(iso);
+    return isNaN(d.getTime()) ? '—' : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+
   function renderTimestamps() {
     document.querySelectorAll('.inbox-conv-time[data-timestamp]').forEach(function (el) {
-      el.textContent = formatTime(el.getAttribute('data-timestamp'));
+      el.textContent = formatListTime(el.getAttribute('data-timestamp'));
+      el.title = formatTime(el.getAttribute('data-timestamp'));
     });
   }
+
+  // "Layla Haddad" -> "LH". Mirrors Initials() in Pages/Inbox/Index.cshtml.
+  function initials(name) {
+    var parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+    if (parts.length === 0) return '?';
+    return (parts[0].charAt(0) + (parts.length > 1 ? parts[parts.length - 1].charAt(0) : '')).toUpperCase();
+  }
+
+  function modeLabel(mode) {
+    return { ai: 'AI', human: 'Staff', approval: 'Approval' }[mode] || mode;
+  }
+
+  // ---------------------------------------------------------------------
+  // List search + filter tabs (client-side only; the API call is unchanged)
+  // ---------------------------------------------------------------------
+  function matchesFilter(el, filter) {
+    var closed = el.getAttribute('data-closed') === 'true';
+    if (filter === 'closed') return closed;
+    if (filter === 'needs') return !closed && el.getAttribute('data-needs') === 'true';
+    if (filter === 'ai') return !closed && el.getAttribute('data-mode') === 'ai';
+    return true;
+  }
+
+  function applyListFilter() {
+    var q = (searchEl && searchEl.value || '').trim().toLowerCase();
+    var items = listEl.querySelectorAll('.inbox-conv-item');
+    var counts = { all: 0, needs: 0, ai: 0, closed: 0 };
+    var visible = 0;
+    items.forEach(function (el) {
+      var matchesSearch = !q || (el.getAttribute('data-search') || '').indexOf(q) !== -1;
+      Object.keys(counts).forEach(function (f) { if (matchesSearch && matchesFilter(el, f)) counts[f]++; });
+      var show = matchesSearch && matchesFilter(el, listFilter);
+      el.hidden = !show;
+      if (show) visible++;
+    });
+    document.querySelectorAll('[data-count]').forEach(function (el) {
+      var n = counts[el.getAttribute('data-count')];
+      el.textContent = n > 0 ? n : '';
+    });
+    var noMatch = listEl.querySelector('.inbox-list-nomatch');
+    if (items.length > 0 && visible === 0) {
+      if (!noMatch) {
+        noMatch = document.createElement('div');
+        noMatch.className = 'inbox-list-message inbox-list-nomatch';
+        noMatch.textContent = 'No conversations match.';
+        listEl.appendChild(noMatch);
+      }
+    } else if (noMatch) {
+      noMatch.remove();
+    }
+  }
+
+  if (searchEl) searchEl.addEventListener('input', applyListFilter);
+  document.querySelectorAll('.inbox-filter').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      listFilter = btn.getAttribute('data-filter');
+      document.querySelectorAll('.inbox-filter').forEach(function (b) { b.classList.toggle('active', b === btn); });
+      applyListFilter();
+    });
+  });
 
   // Browser-tab title shows how many customer messages are waiting, e.g. "(3) Inbox - MySculptFlow",
   // so staff working in another tab notice new messages too.
   var baseTitle = document.title;
   function updateTabTitle(totalUnread) {
     document.title = totalUnread > 0 ? '(' + totalUnread + ') ' + baseTitle : baseTitle;
+    // Sidebar badge (sidebar.js). Also stored, in case sidebar.js hasn't loaded yet — it picks this up.
+    window.SF_inboxUnread = totalUnread;
+    if (window.SF_setInboxUnread) window.SF_setInboxUnread(totalUnread);
   }
 
   function renderConversationList(items) {
     listEl.innerHTML = '';
     var totalUnread = 0;
     if (!items || items.length === 0) {
-      listEl.innerHTML = '<div class="text-subtle" style="padding:1.5rem 1rem">No conversations yet.</div>';
+      listEl.innerHTML = '<div class="inbox-list-message">No conversations yet.</div>';
+      applyListFilter();
       updateTabTitle(0);
       return;
     }
@@ -127,34 +219,51 @@
       // counts as read (it is marked read on the server as soon as it's opened / a message arrives in it).
       var unreadCount = c.id === currentConversationId ? 0 : (c.unreadCount || 0);
       totalUnread += unreadCount;
-      div.className = 'inbox-conv-item' + (c.id === currentConversationId ? ' active' : '') + (unreadCount > 0 ? ' unread' : '');
+      var closed = c.status === 'closed' || c.status === 'archived';
+      div.className = 'inbox-conv-item' + (c.id === currentConversationId ? ' active' : '') + (unreadCount > 0 ? ' unread' : '') + (closed ? ' closed' : '');
       div.setAttribute('data-conversation-id', c.id);
       div.setAttribute('data-lead-name', c.leadFullName || 'Unknown');
       div.setAttribute('data-procedure-name', c.procedureName || '');
+      div.setAttribute('data-channel', c.channel || '');
+      div.setAttribute('data-mode', c.mode || '');
+      div.setAttribute('data-closed', closed ? 'true' : 'false');
+      div.setAttribute('data-search', ((c.leadFullName || '') + ' ' + (c.leadPhone || '') + ' ' + (c.procedureName || '')).toLowerCase());
 
       // "Needs Human" means AI is paused, the customer spoke last, AND staff haven't opened it yet
       // — not just "mode is human". Staff sending from the dashboard also sets mode to human, but
       // that's a conversation actively being handled, and once staff open a conversation they're on it.
-      var needsHuman = (c.mode === 'human' && c.lastMessageDirection === 'inbound' && unreadCount > 0)
-        ? ' <span class="badge badge-red" style="margin-left:.3rem">Needs Human</span>' : '';
+      var needsHuman = c.mode === 'human' && c.lastMessageDirection === 'inbound' && unreadCount > 0;
+      // The "Needs you" tab is broader: anything AI isn't handling on its own (staff mode or awaiting approval).
+      div.setAttribute('data-needs', (c.mode === 'human' || c.mode === 'approval') ? 'true' : 'false');
+
+      var modePill = closed
+        ? '<span class="inbox-mode inbox-mode-closed">Closed</span>'
+        : needsHuman
+          ? '<span class="inbox-mode inbox-mode-needs">Needs you</span>'
+          : '<span class="inbox-mode inbox-mode-' + escapeHtml(c.mode) + '">' + escapeHtml(modeLabel(c.mode)) + '</span>';
 
       div.innerHTML =
-        '<div class="flex items-center justify-between">' +
-          '<span class="flex items-center gap-1">' +
-            '<span class="inbox-channel-icon" style="background:' + channelColor(c.channel) + '" title="' + escapeHtml(c.channel) + '">' + (channelIcon(c.channel) || channelInitials(c.channel)) + '</span>' +
+        '<span class="inbox-avatar">' + escapeHtml(initials(c.leadFullName)) +
+          '<span class="inbox-channel-icon" style="background:' + channelColor(c.channel) + '" title="' + escapeHtml(c.channel) + '">' + (channelIcon(c.channel) || channelInitials(c.channel)) + '</span>' +
+        '</span>' +
+        '<div class="inbox-conv-main">' +
+          '<div class="inbox-conv-top">' +
             '<span class="inbox-conv-name">' + escapeHtml(c.leadFullName || 'Unknown') + '</span>' +
             (unreadCount > 0 ? '<span class="inbox-unread-badge" title="' + unreadCount + ' unread">' + (unreadCount > 99 ? '99+' : unreadCount) + '</span>' : '') +
-          '</span>' +
-          '<span class="badge ' + badgeClassForMode(c.mode) + '">' + escapeHtml(c.mode) + '</span>' +
-        '</div>' +
-        (c.procedureName ? '<div class="inbox-conv-procedure">' + escapeHtml(c.procedureName) + '</div>' : '') +
-        '<div class="inbox-conv-preview">' + escapeHtml(c.lastMessagePreview || 'No messages yet') + needsHuman + '</div>' +
-        '<div class="inbox-conv-time" data-timestamp="' + (c.lastMessageAt || c.createdAt) + '"></div>';
+            '<span class="inbox-conv-time" data-timestamp="' + (c.lastMessageAt || c.createdAt) + '"></span>' +
+          '</div>' +
+          (c.procedureName ? '<div class="inbox-conv-procedure">' + escapeHtml(c.procedureName) + '</div>' : '') +
+          '<div class="inbox-conv-bottom">' +
+            '<span class="inbox-conv-preview">' + escapeHtml(c.lastMessagePreview || 'No messages yet') + '</span>' +
+            modePill +
+          '</div>' +
+        '</div>';
 
       div.addEventListener('click', function () { selectConversation(c.id); });
       listEl.appendChild(div);
     });
     renderTimestamps();
+    applyListFilter();
     updateTabTitle(totalUnread);
   }
 
@@ -176,6 +285,9 @@
   };
 
   function channelInitials(channel) { return (CHANNEL_ICONS[channel] || {}).initials || '?'; }
+  function channelLabel(channel) {
+    return { whatsapp: 'WhatsApp', instagram: 'Instagram', facebook: 'Facebook', telegram: 'Telegram', website: 'Website', sms: 'SMS', email: 'Email' }[channel] || channel || '';
+  }
   function channelColor(channel) { return (CHANNEL_ICONS[channel] || {}).hex || '#9ca3af'; }
 
   // Mirrors ChannelIconHelper.Svg() in C# — recognizable brand glyph instead of plain initials.
@@ -183,12 +295,17 @@
   var TELEGRAM_SVG = '<svg viewBox="0 0 24 24" fill="#fff" xmlns="http://www.w3.org/2000/svg"><path d="M9.78 18.65l.28-4.23 7.68-6.92c.34-.31-.07-.46-.52-.19L7.74 13.3 3.64 12c-.88-.25-.89-.86.2-1.3l15.97-6.16c.73-.33 1.43.18 1.15 1.3l-2.72 12.81c-.19.91-.74 1.13-1.5.71L12.6 16.3l-1.99 1.93c-.23.23-.42.42-.83.42z"/></svg>';
   function channelIcon(channel) { return channel === 'whatsapp' ? WHATSAPP_SVG : (channel === 'telegram' ? TELEGRAM_SVG : null); }
 
-  function badgeClassForMode(mode) {
-    if (mode === 'ai') return 'badge-teal';
-    if (mode === 'human') return 'badge-red';
-    if (mode === 'approval') return 'badge-purple';
-    return 'badge-gray';
-  }
+  // Lead status badge colours — mirrors the lead-status entries in Pages/Shared/StatusBadgeHelper.cs.
+  var LEAD_STATUS_BADGES = {
+    new: 'badge-blue', contacted: 'badge-amber', qualified: 'badge-purple',
+    consultation_booked: 'badge-amber', consultation_attended: 'badge-green', no_show: 'badge-red',
+    surgery_booked: 'badge-teal', not_interested: 'badge-gray', needs_human: 'badge-red', lost: 'badge-gray'
+  };
+
+  // How far along new -> qualified -> consultation -> surgery a lead status is (0 = off that path).
+  var JOURNEY_STEP = {
+    new: 1, contacted: 1, qualified: 2, consultation_booked: 3, consultation_attended: 3, surgery_booked: 4
+  };
 
   function escapeHtml(s) {
     var div = document.createElement('div');
@@ -210,13 +327,46 @@
     }
   }
 
+  // "09:40" — the day is shown once by the day divider above, not on every bubble.
+  function formatClock(iso) {
+    var d = new Date(iso);
+    return isNaN(d.getTime()) ? '' : d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  }
+
+  // Day divider text: "Today", "Yesterday", or e.g. "Mon, Sep 22".
+  function formatDay(iso) {
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    var today = new Date();
+    var yesterday = new Date(); yesterday.setDate(today.getDate() - 1);
+    if (d.toDateString() === today.toDateString()) return 'Today';
+    if (d.toDateString() === yesterday.toDateString()) return 'Yesterday';
+    return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+  }
+
+  // Only senders that aren't obvious from the bubble's side and colour get a label: the customer
+  // (left) and staff replies from the dashboard (right, accent) go unlabelled.
+  function bubbleLabel(origin) {
+    if (origin === 'whatsapp_customer' || origin === 'telegram_customer' || origin === 'dashboard') return '';
+    return '<div class="inbox-msg-source">' + escapeHtml(originLabel(origin)) + '</div>';
+  }
+
   function renderMessages(messages) {
     messagesEl.innerHTML = '';
+    var lastDay = null;
     messages.forEach(function (m) {
+      var day = new Date(m.createdAt).toDateString();
+      if (day !== lastDay) {
+        lastDay = day;
+        var divider = document.createElement('div');
+        divider.className = 'inbox-day-divider';
+        divider.innerHTML = '<span>' + escapeHtml(formatDay(m.createdAt)) + '</span>';
+        messagesEl.appendChild(divider);
+      }
       if (m.origin === 'system' && m.senderType === 'system') {
         var marker = document.createElement('div');
         marker.className = 'inbox-mode-marker';
-        marker.innerHTML = '<span>' + escapeHtml(m.content || '') + ' &middot; ' + formatTime(m.createdAt) + '</span>';
+        marker.innerHTML = '<span>' + escapeHtml(m.content || '') + ' &middot; ' + formatClock(m.createdAt) + '</span>';
         messagesEl.appendChild(marker);
         return;
       }
@@ -229,10 +379,10 @@
       var failureNote = m.deliveryStatus === 'failed' && m.failureReason
         ? '<div class="inbox-msg-failure">' + escapeHtml(m.failureReason) + '</div>' : '';
       bubble.innerHTML =
-        '<div class="inbox-msg-source">' + escapeHtml(originLabel(m.origin)) + '</div>' +
+        bubbleLabel(m.origin) +
         '<div class="inbox-msg-content">' + escapeHtml(m.content || '') + '</div>' +
         failureNote +
-        '<div class="inbox-msg-time">' + formatTime(m.createdAt) + ' ' + tick + '</div>';
+        '<div class="inbox-msg-time" title="' + escapeHtml(formatTime(m.createdAt)) + '">' + formatClock(m.createdAt) + ' ' + tick + '</div>';
 
       row.appendChild(bubble);
       messagesEl.appendChild(row);
@@ -245,10 +395,19 @@
   // data attributes, so read it from there instead of adding it to the conversation DTO.
   function renderConversationHeader(conversation) {
     var listItem = document.querySelector('.inbox-conv-item[data-conversation-id="' + conversation.id + '"]');
-    nameEl.textContent = (listItem && listItem.getAttribute('data-lead-name')) || 'Unknown';
-    procedureEl.textContent = (listItem && listItem.getAttribute('data-procedure-name')) || '';
-    modeEl.textContent = conversation.mode === 'ai' ? 'AI Active' : (conversation.mode === 'human' ? 'AI Paused (human)' : 'Awaiting approval');
-    modeEl.className = 'badge ' + badgeClassForMode(conversation.mode);
+    var leadName = (listItem && listItem.getAttribute('data-lead-name')) || 'Unknown';
+    nameEl.textContent = leadName;
+    threadAvatarEl.textContent = initials(leadName);
+    var procedure = (listItem && listItem.getAttribute('data-procedure-name')) || '';
+    procedureEl.textContent = [procedure, channelLabel(conversation.channel)].filter(Boolean).join(' · ');
+    modeEl.textContent = conversation.mode === 'ai' ? 'AI is replying' : (conversation.mode === 'human' ? 'Staff is replying' : 'Awaiting approval');
+    modeEl.className = 'inbox-mode inbox-mode-' + conversation.mode;
+    // Only offer the switch that makes sense for the current mode.
+    btnTakeover.hidden = conversation.mode === 'human';
+    btnReturnAi.hidden = conversation.mode === 'ai';
+    var closed = conversation.status === 'closed' || conversation.status === 'archived';
+    btnMore.hidden = closed; // "⋯" only holds Close conversation for now
+    setMoreMenu(false);
 
     // Backend is authoritative for this (see MessageService.SendAsync's ServiceWindowClosedException)
     // — this just mirrors it in the UI so staff aren't surprised by a rejected send.
@@ -277,6 +436,7 @@
     currentConversationId = id;
     emptyEl.hidden = true;
     threadEl.hidden = false;
+    shellEl.classList.add('has-thread'); // phones show one pane at a time
     if (switchingConversation) {
       leadInfoEl.hidden = true; // don't show the previous conversation's lead while the new one loads
       markRead(id); // opening a conversation = reading it
@@ -309,12 +469,24 @@
   function loadLeadInfo(leadId) {
     var cached = leadInfoCache[leadId];
     var render = function (lead) {
+      var name = lead.fullName || nameEl.textContent || 'Unknown';
+      document.getElementById('inbox-lead-name').textContent = name;
+      document.getElementById('inbox-lead-avatar').textContent = initials(name);
+      var statusEl = document.getElementById('inbox-lead-status');
+      statusEl.textContent = (lead.status || '—').replace(/_/g, ' ');
+      statusEl.className = 'badge ' + (LEAD_STATUS_BADGES[lead.status] || 'badge-gray');
       document.getElementById('inbox-lead-phone').textContent = lead.phone || '—';
       document.getElementById('inbox-lead-email').textContent = lead.email || '—';
       document.getElementById('inbox-lead-procedure').textContent = lead.procedureName || '—';
       document.getElementById('inbox-lead-source').textContent = lead.source || '—';
-      document.getElementById('inbox-lead-status').textContent = lead.status || '—';
       document.getElementById('inbox-lead-timeline').textContent = lead.desiredTimeline || '—';
+      document.getElementById('inbox-lead-followup').textContent = formatDate(lead.nextFollowupAt);
+      document.getElementById('inbox-lead-created').textContent = formatDate(lead.createdAt);
+      document.getElementById('inbox-lead-profile').href = '/dashboard/leads/' + lead.id;
+
+      var step = JOURNEY_STEP[lead.status] || 0;
+      document.getElementById('inbox-lead-journey-wrap').hidden = step === 0; // off-path statuses (lost, no-show…) show just the badge
+      document.querySelectorAll('#inbox-lead-journey i').forEach(function (el, i) { el.classList.toggle('on', i < step); });
     };
 
     if (cached) {
@@ -332,6 +504,14 @@
     var willShow = leadInfoEl.hidden;
     leadInfoEl.hidden = !willShow;
     if (willShow) loadLeadInfo(currentLeadId);
+  });
+
+  btnLeadClose.addEventListener('click', function () { leadInfoEl.hidden = true; });
+
+  // Phones: back from the thread to the list.
+  btnBack.addEventListener('click', function () {
+    shellEl.classList.remove('has-thread');
+    leadInfoEl.hidden = true;
   });
 
   function refreshCurrentConversation() {
@@ -368,7 +548,6 @@
     var bubble = document.createElement('div');
     bubble.className = 'inbox-msg-bubble inbox-msg-staff';
     bubble.innerHTML =
-      '<div class="inbox-msg-source">Staff</div>' +
       '<div class="inbox-msg-content">' + escapeHtml(content) + '</div>' +
       '<div class="inbox-msg-time">Sending…</div>';
     row.appendChild(bubble);
@@ -516,7 +695,24 @@
       .then(function () { return Promise.all([refreshCurrentConversation(), loadConversationList()]); });
   });
 
+  // "⋯" menu in the thread header.
+  function setMoreMenu(open) {
+    moreMenuEl.hidden = !open;
+    btnMore.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+  btnMore.addEventListener('click', function (e) {
+    e.stopPropagation();
+    setMoreMenu(moreMenuEl.hidden);
+  });
+  document.addEventListener('click', function (e) {
+    if (!moreMenuEl.hidden && !moreMenuEl.contains(e.target)) setMoreMenu(false);
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && !moreMenuEl.hidden) setMoreMenu(false);
+  });
+
   btnClose.addEventListener('click', function () {
+    setMoreMenu(false);
     if (!currentConversationId) return;
     if (!confirm('Close this conversation?')) return;
     apiPost(withClinic('/api/conversations/' + currentConversationId + '/close'))
@@ -534,8 +730,21 @@
   // title are consistent from the start.
   loadConversationList().then(function () {
     // Deep link from a notification bell click (/inbox?conversationId=...) — open it once the list exists.
-    var wanted = new URLSearchParams(window.location.search).get('conversationId');
+    var query = new URLSearchParams(window.location.search);
+    var wanted = query.get('conversationId');
     if (wanted) selectConversation(wanted);
+    // "Open in Inbox" from a lead page (/inbox?search=<phone>): pre-fill the list search, and open
+    // the conversation straight away when exactly one matches.
+    // Dashboard 'Needs attention' link (/inbox?filter=needs): open with that tab selected.
+    var filterTab = query.get('filter') && document.querySelector('.inbox-filter[data-filter="' + query.get('filter') + '"]');
+    if (filterTab) filterTab.click();
+    var search = query.get('search');
+    if (search && searchEl) {
+      searchEl.value = search;
+      applyListFilter();
+      var matches = listEl.querySelectorAll('.inbox-conv-item:not([hidden])');
+      if (!wanted && matches.length === 1) selectConversation(matches[0].getAttribute('data-conversation-id'));
+    }
   });
 
   // ---------------------------------------------------------------------

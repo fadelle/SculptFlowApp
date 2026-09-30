@@ -31,6 +31,15 @@
   var advancedFilters = document.getElementById('advanced-filters');
   if (!radios.length || !audienceTypeField || !manualSelectionField) return;
 
+  function localMidnightUtc(dateStr, addDays) {
+    if (addDays) {
+      var d = new Date(dateStr + 'T00:00:00Z');
+      d.setUTCDate(d.getUTCDate() + addDays);
+      dateStr = d.toISOString().slice(0, 10);
+    }
+    return new Date(dateStr + 'T00:00:00').toISOString(); // the browser reads this as its own local midnight
+  }
+
   var debounceTimer = null;
 
   function selectedChoice() {
@@ -70,10 +79,12 @@
     var appointmentStatuses = checkedValues('CustomAppointmentStatuses');
     if (appointmentStatuses.length) filters.appointmentStatuses = appointmentStatuses;
 
-    if (val('custom-created-after')) filters.createdAfter = val('custom-created-after');
-    if (val('custom-created-before')) filters.createdBefore = val('custom-created-before');
-    if (val('custom-last-contacted-after')) filters.lastContactedAfter = val('custom-last-contacted-after');
-    if (val('custom-last-contacted-before')) filters.lastContactedBefore = val('custom-last-contacted-before');
+    // Date filters are whole days in the viewer's own timezone; send that midnight as UTC (same as the form post).
+    // The "to" date is inclusive, so it becomes midnight at the start of the next day.
+    if (val('custom-created-after')) filters.createdAfter = localMidnightUtc(val('custom-created-after'));
+    if (val('custom-created-before')) filters.createdBefore = localMidnightUtc(val('custom-created-before'), 1);
+    if (val('custom-last-contacted-after')) filters.lastContactedAfter = localMidnightUtc(val('custom-last-contacted-after'));
+    if (val('custom-last-contacted-before')) filters.lastContactedBefore = localMidnightUtc(val('custom-last-contacted-before'), 1);
 
     if (val('custom-country')) filters.countries = [val('custom-country')];
     if (val('custom-city')) filters.cities = [val('custom-city')];
@@ -95,7 +106,7 @@
   function updateVisibility() {
     var choice = selectedChoice();
     Object.keys(panels).forEach(function (key) {
-      if (panels[key]) panels[key].style.display = key === choice ? (key === 'manual' ? '' : 'block') : 'none';
+      if (panels[key]) panels[key].hidden = key !== choice;
     });
   }
 
@@ -123,7 +134,10 @@
 
     fetch(url)
       .then(function (res) { return res.ok ? res.json() : null; })
-      .then(function (data) { setText(countElId, data ? String(data.matchingLeads) : '—'); })
+      .then(function (data) {
+        setText(countElId, data ? String(data.matchingLeads) : '—');
+        document.dispatchEvent(new CustomEvent('campaign:count', { detail: { count: data ? data.matchingLeads : null } }));
+      })
       .catch(function () { setText(countElId, '—'); });
   }
 
@@ -131,6 +145,7 @@
     syncHiddenFields();
     updateVisibility();
     refreshCount();
+    document.dispatchEvent(new CustomEvent('campaign:audience-changed', { detail: { choice: selectedChoice() } }));
   }
 
   function onFilterChanged() {

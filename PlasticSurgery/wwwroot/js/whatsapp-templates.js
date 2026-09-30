@@ -27,6 +27,13 @@
     }
   }
 
+  // Same wording as the page: a coloured dot + High / Medium / Low.
+  function qualityHtml(rating) {
+    var r = (rating || '').toUpperCase();
+    var q = r === 'GREEN' || r === 'HIGH' ? ['High', 'q-green'] : r === 'YELLOW' || r === 'MEDIUM' ? ['Medium', 'q-yellow'] : r === 'RED' || r === 'LOW' ? ['Low', 'q-red'] : null;
+    return q ? '<span class="q-dot ' + q[1] + '"></span>' + q[0] : '<span class="text-subtle">—</span>';
+  }
+
   function formatTime(iso) {
     try {
       return new Date(iso).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -50,7 +57,11 @@
       statusEl.className = 'badge ' + statusBadgeClass(payload.status);
     }
     var reasonEl = row.querySelector('[data-role="reason"]');
-    if (reasonEl) reasonEl.textContent = payload.rejectionReason || '—';
+    if (reasonEl) {
+      reasonEl.textContent = payload.rejectionReason || '';
+      reasonEl.hidden = !payload.rejectionReason;
+    }
+    row.setAttribute('data-group', payload.status === 'approved' ? 'approved' : payload.status === 'pending' ? 'review' : 'attention');
     var updatedEl = row.querySelector('[data-role="updated"]');
     if (updatedEl) updatedEl.textContent = formatTime(payload.updatedAt);
 
@@ -61,7 +72,7 @@
       .then(function (t) {
         if (!t) return;
         var qualityEl = row.querySelector('[data-role="quality"]');
-        if (qualityEl) qualityEl.textContent = t.qualityRating || '—';
+        if (qualityEl) qualityEl.innerHTML = qualityHtml(t.qualityRating);
       });
 
     // Flash the row so staff notice the change even without watching closely.

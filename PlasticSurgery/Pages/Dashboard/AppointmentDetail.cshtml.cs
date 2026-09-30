@@ -30,6 +30,9 @@ public class AppointmentDetailModel : PageModel
 
     public bool ClinicConfigured { get; private set; }
     public AppointmentResponse? Appointment { get; private set; }
+
+    /// <summary>For the "Clinic time | My time" switch (_TimeViewSwitch); the header time defaults to clinic time.</summary>
+    public string ClinicTimezone { get; private set; } = "UTC";
     public IReadOnlyList<string> StatusOptions { get; } = AppointmentStatus.All.OrderBy(s => s).ToList();
 
     [BindProperty]
@@ -80,6 +83,7 @@ public class AppointmentDetailModel : PageModel
         }
 
         ClinicConfigured = true;
+        if (!string.IsNullOrWhiteSpace(clinic.Timezone)) ClinicTimezone = clinic.Timezone;
         Appointment = await _appointments.GetByIdAsync(clinic.Id, Id, ct);
     }
 }

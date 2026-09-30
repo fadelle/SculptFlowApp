@@ -6,12 +6,13 @@
 
 @if (!Model.ClinicConfigured)
 {
-    <div class="alert alert-warning">No clinic configured yet — see the Main Numbers page for setup steps.</div>
+    <div class="alert alert-warning">No clinic configured yet — see the Dashboard page for setup steps.</div>
 }
 else
 {
     <div id="cal-message"></div>
     <div id="cal-outcome"></div>
+    <div class="today-line" id="cal-today-line" hidden></div>
 
     <div class="cal-header">
         <div class="cal-nav">
@@ -20,7 +21,10 @@ else
             <button type="button" class="cal-nav-btn" id="cal-next" title="Next month" aria-label="Next month">&rarr;</button>
             <button type="button" class="btn btn-sm" id="cal-today">Today</button>
         </div>
-        <button type="button" class="btn btn-primary btn-sm" id="cal-new">+ New Appointment</button>
+        <div class="flex items-center gap-2">
+            <partial name="_TimeViewSwitch" model="Model.ClinicTimezone" />
+            <button type="button" class="btn btn-primary btn-sm" id="cal-new">+ New Appointment</button>
+        </div>
     </div>
 
     <div class="cal-weekdays">
@@ -29,6 +33,16 @@ else
         <div class="cal-weekday">Sat</div>
     </div>
     <div class="cal-grid" id="cal-grid"></div>
+    <div class="cal-agenda" id="cal-agenda"></div>
+
+    <div class="cal-legend" aria-label="Status colours">
+        <span class="legend-item"><i class="legend-swatch status-booked"></i>Booked</span>
+        <span class="legend-item"><i class="legend-swatch status-confirmed"></i>Confirmed</span>
+        <span class="legend-item"><i class="legend-swatch status-attended"></i>Attended</span>
+        <span class="legend-item"><i class="legend-swatch status-no_show"></i>No-show</span>
+        <span class="legend-item"><i class="legend-swatch status-canceled"></i>Canceled</span>
+        <span class="legend-item"><i class="legend-swatch status-rescheduled"></i>Rescheduled</span>
+    </div>
 
     @* ---------- Day drawer: every appointment for the clicked day ---------- *@
     <div class="cal-drawer-overlay" id="cal-drawer-overlay" hidden></div>
@@ -46,39 +60,57 @@ else
     @* ---------- New Appointment ---------- *@
     <div class="bm-overlay" id="cal-new-overlay" hidden>
         <div class="card cal-modal" role="dialog" aria-modal="true" aria-labelledby="cal-new-title">
-            <div class="flex items-center gap-2" style="justify-content:space-between;margin-bottom:.9rem">
-                <h3 id="cal-new-title" style="margin:0;font-size:1.05rem">New Appointment</h3>
-                <button type="button" class="btn btn-sm" id="cal-new-close">Close</button>
+            <div class="modal-head">
+                <h3 id="cal-new-title" class="card-title">New Appointment</h3>
+                <button type="button" class="modal-x" id="cal-new-close" aria-label="Close">&times;</button>
             </div>
-            <div id="cal-new-error"></div>
+            <div id="cal-new-error" class="connect-error text-sm"></div>
             <div class="integration-form">
-                <label class="field">
+                <div class="field">
                     <span>Patient (lead)</span>
-                    <input type="text" id="cal-new-lead-search" class="text-input" placeholder="Search by name or phone…" autocomplete="off" />
-                    <div id="cal-new-lead-results" class="text-subtle" style="font-size:.8rem"></div>
+                    <div class="picker" id="cal-new-lead-picker">
+                        <input type="text" id="cal-new-lead-search" class="text-input search-input" placeholder="Search by name or phone…" autocomplete="off" aria-label="Search patients" />
+                        <div class="picker-chip" id="cal-new-lead-chip" hidden>
+                            <span class="avatar-sm" id="cal-new-lead-chip-avatar"></span>
+                            <span class="picker-chip-label" id="cal-new-lead-chip-label"></span>
+                            <button type="button" class="picker-chip-x" id="cal-new-lead-clear" aria-label="Change patient">&times;</button>
+                        </div>
+                        <div class="picker-results" id="cal-new-lead-results" role="listbox" hidden></div>
+                    </div>
                     <input type="hidden" id="cal-new-lead-id" />
-                </label>
+                </div>
                 <label class="field">
                     <span>Procedure <small class="text-subtle">(optional)</small></span>
                     <select id="cal-new-procedure" class="select"><option value="">Loading…</option></select>
                 </label>
-                <div class="flex items-center gap-2">
-                    <label class="field" style="flex:1">
+                <div class="form-row">
+                    <label class="field flex-1">
                         <span>Date</span>
                         <input type="date" id="cal-new-date" class="text-input" required />
                     </label>
-                    <label class="field" style="flex:1">
+                    <label class="field flex-1">
                         <span>Time</span>
                         <input type="time" id="cal-new-time" class="text-input" value="09:00" required />
+                        <span class="text-subtle text-sm" id="cal-new-tz-hint"></span>
                     </label>
-                    <label class="field" style="width:120px">
+                    <label class="field flex-1">
                         <span>Duration (min)</span>
-                        <input type="number" id="cal-new-duration" class="text-input" value="30" min="5" max="480" />
+                        <input type="number" id="cal-new-duration" class="text-input" value="30" min="5" max="1440" step="5" list="cal-duration-options" />
+                        <datalist id="cal-duration-options">
+                            <option value="15"></option><option value="30"></option><option value="45"></option><option value="60"></option>
+                            <option value="90"></option><option value="120"></option><option value="180"></option><option value="240"></option>
+                        </datalist>
                     </label>
                 </div>
+                <div class="text-subtle text-sm" id="cal-new-range"></div>
                 <label class="field">
                     <span>Location <small class="text-subtle">(optional)</small></span>
-                    <input type="text" id="cal-new-location" class="text-input" maxlength="30" placeholder="e.g. in_person, video" />
+                    <select id="cal-new-location" class="select">
+                        <option value="">Not set</option>
+                        <option value="in_person">In person</option>
+                        <option value="video">Video call</option>
+                        <option value="phone">Phone</option>
+                    </select>
                 </label>
                 <label class="field">
                     <span>Notes <small class="text-subtle">(optional)</small></span>
@@ -88,6 +120,45 @@ else
                     <button type="button" class="btn btn-primary btn-sm" id="cal-new-save">Create appointment</button>
                     <button type="button" class="btn btn-sm" id="cal-new-cancel">Cancel</button>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    @* ---------- Appointment details (opens from a calendar chip or a day-panel row) ---------- *@
+    <div class="bm-overlay" id="cal-appt-overlay" hidden>
+        <div class="card cal-modal" role="dialog" aria-modal="true" aria-labelledby="cal-appt-name">
+            <div class="modal-head">
+                <div class="flex items-center gap-2">
+                    <span class="avatar-md" id="cal-appt-avatar"></span>
+                    <div>
+                        <h3 id="cal-appt-name" class="card-title"></h3>
+                        <div class="text-muted text-sm" id="cal-appt-when"></div>
+                    </div>
+                </div>
+                <button type="button" class="modal-x" id="cal-appt-close" aria-label="Close">&times;</button>
+            </div>
+            <div id="cal-appt-error" class="connect-error text-sm"></div>
+            <div class="mb-2">
+                <div class="inbox-lead-info-row"><span>Procedure</span><strong id="cal-appt-procedure">—</strong></div>
+                <div class="inbox-lead-info-row"><span>Location</span><strong id="cal-appt-location">—</strong></div>
+                <div class="inbox-lead-info-row" id="cal-appt-notes-row"><span>Notes</span><strong id="cal-appt-notes">—</strong></div>
+            </div>
+            <label class="field mb-2">
+                <span>Status</span>
+                <select id="cal-appt-status" class="select">
+                    <option value="booked">Booked</option>
+                    <option value="confirmed">Confirmed</option>
+                    <option value="attended">Attended</option>
+                    <option value="no_show">No-show</option>
+                    <option value="canceled">Canceled</option>
+                    <option value="rescheduled">Rescheduled</option>
+                </select>
+            </label>
+            <div class="flex items-center gap-2 flex-wrap">
+                <button type="button" class="btn btn-primary btn-sm" id="cal-appt-save">Save</button>
+                <button type="button" class="btn btn-sm" id="cal-appt-cancel">Cancel</button>
+                <a class="link text-sm" id="cal-appt-lead" href="#" style="margin-left:auto">Open patient</a>
+                <a class="link text-sm" id="cal-appt-full" href="#">Open full page</a>
             </div>
         </div>
     </div>
