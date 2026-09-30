@@ -14,21 +14,24 @@ public class IntegrationsModel : PageModel
     private readonly IChannelIntegrationService _integrations;
     private readonly IConfiguration _configuration;
     private readonly ITelegramIntegrationService _telegram;
+    private readonly ITikTokIntegrationService _tiktok;
 
     public IntegrationsModel(
         ICurrentClinicContext clinicContext, IChannelIntegrationService integrations, IConfiguration configuration,
-        ITelegramIntegrationService telegram)
+        ITelegramIntegrationService telegram, ITikTokIntegrationService tiktok)
     {
         _clinicContext = clinicContext;
         _integrations = integrations;
         _configuration = configuration;
         _telegram = telegram;
+        _tiktok = tiktok;
     }
 
     public bool ClinicConfigured { get; private set; }
     public Guid ClinicId { get; private set; }
     public IReadOnlyDictionary<string, ChannelIntegrationResponse> Channels { get; private set; } =
         new Dictionary<string, ChannelIntegrationResponse>();
+    public TikTokIntegrationResponse? TikTok { get; private set; }
 
     // Meta app config the browser needs to run FB.login() — App ID and Login Configuration IDs
     // are not secret (they're designed to ship in client-side JS); the App Secret never leaves
@@ -151,6 +154,19 @@ public class IntegrationsModel : PageModel
         return RedirectToPage();
     }
 
+    public async Task<IActionResult> OnPostDisconnectTikTokAsync(CancellationToken ct)
+    {
+        var clinic = await _clinicContext.GetClinicAsync(ct);
+        if (clinic is null)
+        {
+            return RedirectToPage();
+        }
+
+        await _tiktok.DisconnectAsync(clinic.Id, ct);
+        StatusMessage = "TikTok disconnected.";
+        return RedirectToPage();
+    }
+
     private async Task LoadAsync(CancellationToken ct)
     {
         var clinic = await _clinicContext.GetClinicAsync(ct);
@@ -164,6 +180,7 @@ public class IntegrationsModel : PageModel
         ClinicId = clinic.Id;
         var items = await _integrations.ListAsync(clinic.Id, ct);
         Channels = items.ToDictionary(i => i.Channel);
+        TikTok = await _tiktok.GetAsync(clinic.Id, ct);
     }
 
     private static string Label(string channel) => channel switch

@@ -55,6 +55,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
     public DbSet<CalendarIntegration> CalendarIntegrations => Set<CalendarIntegration>();
     public DbSet<CalendarIntegrationCalendar> CalendarIntegrationCalendars => Set<CalendarIntegrationCalendar>();
     public DbSet<AppointmentCalendarSync> AppointmentCalendarSyncs => Set<AppointmentCalendarSync>();
+    public DbSet<TikTokIntegration> TikTokIntegrations => Set<TikTokIntegration>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -802,6 +803,33 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
 
             e.HasIndex(x => new { x.AppointmentId, x.CalendarIntegrationId }).IsUnique()
                 .HasDatabaseName("ux_appointment_calendar_syncs_appt_integration");
+        });
+
+        // ---------------------------------------------------------------
+        // TikTok Login Kit — see Services/ITikTokIntegrationService.cs / ITikTokProviderClient.cs.
+        // ---------------------------------------------------------------
+        modelBuilder.Entity<TikTokIntegration>(e =>
+        {
+            e.ToTable("tiktok_integrations");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.ClinicId).HasColumnName("clinic_id");
+            e.Property(x => x.Status).HasColumnName("status").HasMaxLength(20).IsRequired();
+            e.Property(x => x.OpenId).HasColumnName("open_id").HasMaxLength(200);
+            e.Property(x => x.UnionId).HasColumnName("union_id").HasMaxLength(200);
+            e.Property(x => x.DisplayName).HasColumnName("display_name").HasMaxLength(200);
+            e.Property(x => x.AvatarUrl).HasColumnName("avatar_url").HasMaxLength(500);
+            e.Property(x => x.AccessToken).HasColumnName("access_token");
+            e.Property(x => x.RefreshToken).HasColumnName("refresh_token");
+            e.Property(x => x.TokenExpiresAt).HasColumnName("token_expires_at");
+            e.Property(x => x.RefreshTokenExpiresAt).HasColumnName("refresh_token_expires_at");
+            e.Property(x => x.IsHealthy).HasColumnName("is_healthy");
+            e.Property(x => x.LastProblemMessage).HasColumnName("last_problem_message");
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+            e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
+
+            e.HasOne<Clinic>().WithMany().HasForeignKey(x => x.ClinicId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(x => x.ClinicId).IsUnique().HasDatabaseName("ux_tiktok_integrations_clinic");
         });
 
         // ---------------------------------------------------------------

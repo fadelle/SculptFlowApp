@@ -80,6 +80,12 @@ builder.Services.AddHttpClient<OutlookCalendarProviderClient>();
 builder.Services.AddScoped<ICalendarProviderClient>(sp => sp.GetRequiredService<GoogleCalendarProviderClient>());
 builder.Services.AddScoped<ICalendarProviderClient>(sp => sp.GetRequiredService<OutlookCalendarProviderClient>());
 
+// TikTok Login Kit — account connection only, not a messaging channel (see ITikTokIntegrationService's doc
+// comment). Same SculptFlow-owns-OAuth-directly shape as Calendar Integrations, no n8n involvement.
+builder.Services.AddHttpClient<TikTokProviderClient>();
+builder.Services.AddScoped<ITikTokProviderClient>(sp => sp.GetRequiredService<TikTokProviderClient>());
+builder.Services.AddScoped<ITikTokIntegrationService, TikTokIntegrationService>();
+
 // Inbox — see Hubs/InboxHub.cs and the Services/I*.cs doc comments for the overall architecture
 // (Case A/B/C flows, PostgreSQL-authoritative + SignalR-notifies-only).
 builder.Services.AddScoped<IInboxNotifier, InboxNotifier>();

@@ -1332,3 +1332,181 @@ MULTIPLE_UPCOMING_APPOINTMENTS, INVALID_REQUEST. An unknown/missing `code` → 4
   4. The n8n Calendar Sync workflow from v1 is unchanged and still needed for appointment sync itself: it now receives
      `accessToken` directly in the trigger instead of an `externalConnectionRef` it had to look up — update that one field
      mapping in the existing n8n workflow, nothing else about it changes. Set `N8n__CalendarSyncWebhookUrl` as before.
+
+## 27. TikTok Login Kit (account connection only — not a messaging channel yet) — built, tested, NOT pushed (awaiting explicit "push")
+
+- **Business shape**: staff can connect their clinic's TikTok account under Settings → Channels & Integrations, alongside
+  WhatsApp/Instagram/Facebook/Telegram. This phase is **account authorization only** via TikTok Login Kit — see
+  "What this does NOT enable yet" below for the explicit boundary.
+- **Why a new, separate table instead of `channel_integrations`**: `ChannelIntegration`/`ChannelType` is deeply wired into
+  the Inbox/conversation pipeline (`IChannelSender` resolution, `MessageService.ResolveSender`, per-channel message
+  routing) — every existing row there is a real messaging channel. TikTok Login Kit grants none of that yet, so adding
+  `"tiktok"` to `ChannelType.All` would have been actively misleading (implying inbox/messaging support that doesn't
+  exist) and risked unrelated code that enumerates `ChannelType.All` assuming "these are all messaging channels."
+  Instead, TikTok got its own table/entity/service/OAuth controller — the exact same reasoning, and the exact same
+  precedent, as Calendar Integrations getting its own tables instead of being shoehorned into `channel_integrations`.
+  **Zero existing `channel_integrations` code was touched.**
+- **Architecture — SculptFlow owns the OAuth2 relationship directly**, no n8n involvement anywhere, mirroring Calendar
+  Integrations' v2 design exactly: real authorization redirect, real callback, token storage/refresh, disconnect, all in
+  SculptFlow. n8n is explicitly out of scope for this phase per the task's own instruction ("Do not route TikTok Login
+  Kit registration/authentication through n8n") — nothing here calls out to n8n, and nothing needs to.
+- **New table `tiktok_integrations`**: one row per clinic (unique on `clinic_id` — TikTok is a single provider, unlike
+  `calendar_integrations`' one-row-per-clinic-per-provider), with `status` (disconnected/pending/connected/error),
+  `open_id`/`union_id` (TikTok's account identifiers), `display_name`/`avatar_url` (for the "recognizable account
+  identity" requirement), `access_token`/`refresh_token`/`token_expires_at`/`refresh_token_expires_at`, and
+  `is_healthy`/`last_problem_message` (same health shape as `calendar_integrations`/`channel_integrations`). Applied
+  live; no other table changed.
+- **New: `Services/ITikTokProviderClient.cs` / `TikTokProviderClient.cs`** — the real OAuth2 client against TikTok's v2
+  API: `BuildAuthorizationUrl` (`https://www.tiktok.com/v2/auth/authorize/`, scope `user.info.basic` — the only scope
+  this phase needs), `ExchangeCodeAsync`/`RefreshAccessTokenAsync` (`https://open.tiktokapis.com/v2/oauth/token/`),
+  `GetAccountInfoAsync` (`https://open.tiktokapis.com/v2/user/info/` — open_id/union_id/display_name/avatar_url), and a
+  best-effort (never-throwing) `RevokeAsync` (`https://open.tiktokapis.com/v2/oauth/revoke/`). TikTok's own terms
+  ("Client Key"/"Client Secret") are kept as-is in config rather than renamed to match Google's "Client ID" convention.
+  Registered the same way as the Calendar provider clients — its own `AddHttpClient<TikTokProviderClient>()` then
+  forwarded into `ITikTokProviderClient`.
+- **New: `Services/ITikTokIntegrationService.cs` / `TikTokIntegrationService.cs`** — `GetAsync` (returns the clinic's
+  row, or a synthetic disconnected one; **opportunistically refreshes the access token first if connected and within 5
+  minutes of expiring**, so a revoked/expired connection is discovered and surfaced as unhealthy on the next Settings
+  page load rather than staying silently stale — there's no other ongoing TikTok API usage in this phase that would
+  otherwise catch it), `RequestConnectAsync`/`CompleteConnectAsync`/`FailConnectAsync` (connect lifecycle, called by the
+  OAuth controller), `DisconnectAsync` (best-effort revoke, then always clears local tokens/state regardless of whether
+  the revoke succeeded). Health failures reuse `NotificationType.IntegrationUnhealthy` with the same transition-only
+  rule as Calendar/WhatsApp health (notifies once on the transition into unhealthy, not on every repeat check) —
+  verified live (see Testing below).
+- **New: `Controllers/TikTokOAuthController.cs`** (`[Authorize]`, extends `Controller` for TempData, at route
+  `tiktok-oauth`) — `GET connect` marks the row Pending and redirects to TikTok's consent screen; `GET callback` is
+  where TikTok sends the browser back. Same CSRF/state handling as `CalendarOAuthController`: ASP.NET Core's built-in
+  `ITimeLimitedDataProtector` protects a `{ClinicId}` payload as the OAuth `state` param (purpose
+  `PlasticSurgery.TikTokOAuthState`, 15-minute lifetime) — no new table, and a tampered/expired/wrong-clinic state is
+  rejected before any token exchange. Redirect URI built via the same `App:PublicBaseUrl`-first convention as
+  `CalendarOAuthController`/`TelegramIntegrationService`. A config problem (missing ClientKey/Secret, missing
+  PublicBaseUrl) is caught and shown as a friendly settings-page error, never a raw 500.
+- **UI**: `Pages/Settings/Integrations.cshtml(.cs)` — a new TikTok card on the **same** Channels & Integrations page as
+  WhatsApp/Instagram/Facebook/Telegram (not a separate page, per the task's explicit UX spec), using the page's existing
+  `.int-card`/`.int-strip`/`.int-foot` styling. Connect/Reconnect is a plain link to `/tiktok-oauth/connect` (a form
+  POST handler can't do a full-page OAuth redirect) — same pattern as Calendar Integrations' cards. States: Disconnected
+  (Connect button), Pending ("Connecting…", "Start again" + "Cancel / reset"), Error/unhealthy ("Needs attention",
+  "Reconnect" + "Disconnect", with the raw error in a collapsed "Technical details"), Connected (green "Connected",
+  the account's `display_name` shown as the recognizable identity, "Disconnect"). New `IntegrationsModel.TikTok`
+  property and `OnPostDisconnectTikTokAsync` handler added alongside the existing ones; `LoadAsync` now also calls
+  `_tiktok.GetAsync`. **No existing `IntegrationsModel`/`Integrations.cshtml` code for WhatsApp/Instagram/Facebook/
+  Telegram was changed** — only additions. Added a TikTok brand glyph + `("TT", "#000000")` fallback to
+  `Pages/Shared/ChannelIconHelper.cs` (additive; every other channel's icon/color is untouched).
+- **Config**: new `TikTok:ClientKey`/`ClientSecret` section in `appsettings.json` (ClientKey checked in with a setup
+  comment, ClientSecret always empty — set via user-secrets / `TikTok__ClientSecret` on Render), same convention as
+  `GoogleCalendar:*`/`MicrosoftCalendar:*`.
+- **Tenant isolation**: every read/write goes through `ICurrentClinicContext` on the dashboard side and the OAuth
+  state's embedded `ClinicId` at the callback (never a clinicId the browser could otherwise supply). Verified live: a
+  `state` minted for Clinic A's connect attempt, replayed under Clinic B's session, was rejected — Clinic B's own row
+  was marked Error (its own rejected attempt), Clinic A's row was left completely untouched; the `ux_tiktok_integrations_clinic`
+  unique index also makes a second row per clinic structurally impossible.
+- **Testing performed** (two throwaway clinics, real network calls against TikTok's actual OAuth endpoints using
+  intentionally fake/test Client Key+Secret — never real ones — cleaned up and verified after):
+  - TikTok card renders correctly on a fresh clinic (Disconnected, Connect button) alongside the other channels.
+  - Connect with no `TikTok:ClientKey`/`ClientSecret`/`App:PublicBaseUrl` configured → friendly error, no 500, row not
+    left dangling in Pending for a config problem; connect while logged out → redirected to login.
+  - Connect with fake-but-present credentials → correctly built a real, well-formed `www.tiktok.com` authorization URL
+    and marked the row Pending.
+  - Callback: TikTok denies consent (`error=access_denied`) → row marked Error with the message, no crash.
+  - Callback: no `code` and no `error` (malformed) → friendly "TikTok did not return an authorization code" message.
+  - Callback: tampered/bogus `state` → rejected as "expired or invalid," no token exchange attempted.
+  - Callback: valid state, fake code → **a real POST to `open.tiktokapis.com/v2/oauth/token/`**, which correctly
+    returned TikTok's own `invalid_grant` ("Authorization code is expired") error, caught and surfaced as a friendly
+    message with the row marked Error — confirming the whole code-exchange path against TikTok's real API.
+  - **Tenant isolation** (see above) — confirmed live.
+  - Cancel/reset on a stuck Pending row → cleared back to Disconnected.
+  - Simulated a Connected row (via direct SQL, test purposes only) with a fake-but-current access token and account
+    name → settings page correctly showed "Connected" with the account identity and only a Disconnect button.
+  - Same row with an **expired** access token and a fake refresh token, reloading the settings page → confirmed
+    `GetAsync` proactively attempted a real refresh-token grant against `open.tiktokapis.com` (not just reused the
+    stale token), which failed with TikTok's real `invalid_client` error, row marked unhealthy ("Needs attention")
+    with the real TikTok error message shown, and exactly one `INTEGRATION_UNHEALTHY` notification row created —
+    reloading the page again while still unhealthy did **not** create a second notification (transition-only rule
+    confirmed).
+  - Disconnect on a row with a fake access token on file → completed in ~1 second (including a real revoke call to
+    TikTok), local status/tokens/account identity all verified cleared in the database afterward regardless of the
+    revoke call's own result.
+  - Existing functionality re-verified unaffected after these changes: Settings → Integrations still shows WhatsApp/
+    Instagram/Facebook/Telegram cards correctly; Calendar Integrations, Dashboard → Leads, Inbox, WhatsApp Templates
+    and WhatsApp Health all load with no errors.
+  - Full solution build: 0 errors, 0 warnings.
+- **NOT independently re-tested live** (disclosed explicitly): a full successful connect (real TikTok consent + real
+  tokens) — not possible without a real TikTok Sandbox Client Key/Secret, which don't exist in this environment (the
+  fake ones used for testing above were set and then removed; nothing was left configured).
+
+==================================================
+WHAT TIKTOK LOGIN KIT ENABLES IN SCULPTFLOW RIGHT NOW
+==================================================
+- A clinic can connect their TikTok account (real OAuth2 consent screen, real tokens).
+- SculptFlow knows and displays which TikTok account is connected (open_id, display name, avatar if granted).
+- The connection is stored safely, tenant-scoped, one per clinic.
+- Health is tracked: a revoked/expired connection is discovered on the next Settings page load and shown as "Needs
+  attention," with a one-time notification, exactly like the other integrations' health patterns.
+- Disconnect and reconnect both work cleanly.
+
+==================================================
+WHAT IT DOES NOT ENABLE YET
+==================================================
+- **No TikTok messaging of any kind.** No TikTok inbox, no sending/receiving TikTok DMs, no TikTok leads flowing into
+  SculptFlow's Inbox/Lead pipeline. Login Kit's `user.info.basic` scope grants account identity only — nothing about
+  messaging. Per the task's explicit instruction, none of this was faked or simulated.
+- No posting videos, no comments, no campaign functionality involving TikTok.
+- No reading TikTok content/analytics — this is authorization only.
+
+==================================================
+TENANT ISOLATION
+==================================================
+`tiktok_integrations` has a unique index on `clinic_id` (one row per clinic, structurally enforced) and every read/
+write resolves the clinic from `ICurrentClinicContext` (dashboard) or the OAuth `state`'s embedded `ClinicId` (callback,
+protected by `IDataProtector` so it can't be forged or replayed under a different clinic's session) — never a clinicId
+supplied directly by the browser. Verified live with a cross-tenant replay attempt (see Testing above).
+
+==================================================
+INTEGRATION HEALTH
+==================================================
+Reuses `NotificationType.IntegrationUnhealthy` directly (no schema change to `notifications`; `Link` points at
+`/settings/integrations`). Same "notify only on the transition into unhealthy" rule as WhatsApp/Calendar health — a
+connection that's already flagged, or one that only ever succeeds, never gets a repeat notification. Discovery happens
+opportunistically: every time `GetAsync` runs (i.e. every Settings page load) on a Connected row, it checks the token's
+expiry and refreshes proactively; if the refresh token is missing, expired, or TikTok rejects the refresh, the row
+flips to unhealthy right there. There's no background job — discovery is tied to someone viewing the page, which is
+consistent with this being a low-traffic, staff-facing settings screen rather than something else depends on
+continuously.
+
+==================================================
+TIKTOK SANDBOX CONFIGURATION NEEDED FROM THE OWNER
+==================================================
+1. In the TikTok Developer Portal, your app's Login Kit **Client Key** and **Client Secret**.
+2. The exact **redirect URI** to register for this app: `{App:PublicBaseUrl}/tiktok-oauth/callback` (e.g.
+   `https://sculptflowapp.onrender.com/tiktok-oauth/callback` if that's the domain `App:PublicBaseUrl` is set to —
+   same consideration as the Google/Microsoft Calendar redirect URIs already documented in section 26).
+3. Confirm the Sandbox app has `user.info.basic` scope available/approved (it's the standard minimal Login Kit scope,
+   should already be on by default for a Sandbox app).
+4. Set `TikTok:ClientKey` (appsettings.json is fine, not secret) and `TikTok:ClientSecret` (user-secrets locally /
+   `TikTok__ClientSecret` on Render) — same pattern already used for `GoogleCalendar`/`MicrosoftCalendar`.
+
+==================================================
+MOVING TO PRODUCTION LATER
+==================================================
+- The TikTok app itself needs to go through TikTok's app review/approval for Production (Sandbox apps are restricted
+  to a small set of test TikTok accounts the developer explicitly adds — a real clinic's TikTok account almost
+  certainly cannot authorize against a Sandbox app).
+- Once approved, swap in the Production app's Client Key/Secret (same two config keys — nothing about the code
+  changes) and re-register the exact same redirect URI pattern for the Production app.
+- No code changes anticipated for this move — the whole point of keeping Sandbox-specific values only in config
+  (never hardcoded) was to make this swap config-only, per the task's explicit instruction.
+
+==================================================
+WHAT WOULD BE NEEDED FOR TIKTOK DIRECT MESSAGES IN THE UNIFIED INBOX LATER
+==================================================
+- TikTok's messaging capability for businesses is a **separate, additionally-gated product** (commonly referred to as
+  TikTok Business Messaging / a Direct Messages API) — it is not part of Login Kit and is not something `user.info.basic`
+  scope grants access to, regardless of anything built here.
+- That product requires its own TikTok Business/Developer approval, its own scope(s) added to the app, and (per
+  TikTok's own docs, which change over time) is generally gated to approved TikTok Business/Ads partners rather than
+  being self-serve like Login Kit.
+- Architecturally, this phase was deliberately built so that step is additive, not a rewrite: `TikTokIntegration`
+  already stores the access/refresh token needed to call any further-scoped TikTok API; the natural extension point
+  would be a new `ITikTokMessagingClient` (mirroring `IChannelSender`) resolved into the same Inbox pipeline
+  WhatsApp/Telegram already use — at that point `"tiktok"` would make sense as a real `ChannelType`, which it
+  deliberately is **not** yet, precisely so that this phase doesn't imply capability the account doesn't have.

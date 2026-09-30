@@ -37,6 +37,7 @@ else
         @{ await RenderChannelCard(ChannelType.Instagram, "IG", "#C13584", "Instagram", "Answer Instagram direct messages.", "Patients' Instagram DMs arrive in your Inbox, and the AI assistant can answer them.", oauth: false); }
         @{ await RenderChannelCard(ChannelType.Facebook, "FB", "#1877F2", "Facebook Messenger", "Answer messages sent to your Facebook page.", "Messages to your Facebook page arrive in your Inbox, and the AI assistant can answer them.", oauth: true); }
         @{ await RenderTelegramCard(); }
+        @{ await RenderTikTokCard(); }
     </div>
 }
 
@@ -361,6 +362,94 @@ else
                 <button type="button" class="btn btn-sm" data-close>Cancel</button>
             </div>
         </form>
+        await Task.CompletedTask;
+    }
+
+    // TikTok Login Kit: account connection only (not a messaging channel yet — see
+    // Services/ITikTokIntegrationService.cs), so Connect/Reconnect is a plain link to TikTokOAuthController
+    // (a real browser redirect to TikTok's consent screen), same pattern as Calendar Integrations' cards.
+    private async Task RenderTikTokCard()
+    {
+        var info = Model.TikTok;
+        var connected = info?.Status == TikTokIntegrationStatus.Connected;
+        var pending = info?.Status == TikTokIntegrationStatus.Pending;
+        var failed = info?.Status == TikTokIntegrationStatus.Error;
+        var unhealthy = connected && info is not null && !info.IsHealthy;
+        var (label, dot) = failed || unhealthy ? ("Needs attention", "dot-red")
+            : connected ? ("Connected", "dot-green")
+            : pending ? ("Connecting…", "dot-gray")
+            : ("Not connected", "dot-gray");
+
+        <div class="card int-card int-framed @(failed || unhealthy ? "int-card-error" : "")" style="--ch:#000000">
+            <div class="int-head">
+                <span class="channel-mark int-notch ch-tiktok" title="TikTok">@Html.Raw(PlasticSurgery.Pages.Shared.ChannelIconHelper.BrandSvg("tiktok"))</span>
+                <div class="flex-1 min-w-0">
+                    <div class="integration-title">TikTok</div>
+                    <div class="cell-sub">@(connected && !string.IsNullOrEmpty(info!.DisplayName) ? info.DisplayName : "Connect your clinic's TikTok account.")</div>
+                </div>
+                <span class="status-pill"><span class="dot @dot"></span>@label</span>
+            </div>
+
+            @if (failed || unhealthy)
+            {
+                <div class="int-strip int-strip-problem">
+                    <div>
+                        <span class="cell-sub">Problem</span>
+                        <span class="int-val">TikTok stopped working. Reconnect to keep the connection active.</span>
+                        @if (!string.IsNullOrEmpty(info?.LastProblemMessage))
+                        {
+                            <details class="mt-1"><summary class="cell-sub">Technical details</summary><div class="cell-sub break-word">@info.LastProblemMessage</div></details>
+                        }
+                    </div>
+                </div>
+            }
+            else if (connected)
+            {
+                <div class="int-strip">
+                    <div>
+                        <span class="cell-sub">TikTok account</span>
+                        <span class="int-val">@(info!.DisplayName ?? "Connected")</span>
+                    </div>
+                </div>
+            }
+            else if (pending)
+            {
+                <div class="int-strip int-strip-note">
+                    <div><span class="cell-sub">Not finished</span><span class="int-val">The sign-in to TikTok wasn't finished. Start again, or reset it.</span></div>
+                </div>
+            }
+            else
+            {
+                <div class="int-strip int-strip-note">
+                    <div><span class="cell-sub">When connected</span><span class="int-val">See which TikTok account is linked to your clinic.</span></div>
+                </div>
+            }
+
+            <div class="int-foot">
+                @if (pending || failed)
+                {
+                    <a href="/tiktok-oauth/connect" class="btn btn-primary btn-sm">@(pending ? "Start again" : "Try again")</a>
+                    <form method="post" asp-page-handler="DisconnectTikTok" class="inline-form">
+                        <button type="submit" class="btn btn-ghost btn-sm">Cancel / reset</button>
+                    </form>
+                }
+                else if (!connected)
+                {
+                    <a href="/tiktok-oauth/connect" class="btn btn-primary btn-sm">Connect</a>
+                }
+                else
+                {
+                    @if (unhealthy)
+                    {
+                        <a href="/tiktok-oauth/connect" class="btn btn-primary btn-sm">Reconnect</a>
+                    }
+                    <form method="post" asp-page-handler="DisconnectTikTok" class="inline-form int-foot-end"
+                          onsubmit="return confirm('Disconnect TikTok? This clinic will no longer show a connected TikTok account until reconnected.');">
+                        <button type="submit" class="btn btn-ghost btn-sm btn-danger-text">Disconnect</button>
+                    </form>
+                }
+            </div>
+        </div>
         await Task.CompletedTask;
     }
 

@@ -1534,6 +1534,40 @@ alter table calendar_integrations add column if not exists access_token text;
 alter table calendar_integrations add column if not exists refresh_token text;
 alter table calendar_integrations add column if not exists token_expires_at timestamptz;
 
+-- =====================================================================
+-- TikTok Login Kit — account connection only (NOT a messaging channel in this phase, so it's its own table
+-- rather than a row in channel_integrations — see Data/Entities/TikTokIntegration.cs). SculptFlow owns the
+-- whole OAuth2 relationship directly: connect, callback, token refresh, disconnect — no n8n involvement.
+-- ---------------------------------------------------------------------
+create table if not exists tiktok_integrations (
+  id                        uuid primary key default gen_random_uuid(),
+  clinic_id                 uuid not null references clinics(id) on delete cascade,
+  status                    varchar(20) not null default 'disconnected'
+    check (status in ('disconnected','pending','connected','error')),
+
+  open_id                   varchar(200),  -- TikTok's stable per-app user id
+  union_id                  varchar(200),  -- only present if this app is part of a token "union" group
+  display_name              varchar(200),
+  avatar_url                 varchar(500),
+
+  access_token               text,
+  refresh_token              text,
+  token_expires_at           timestamptz,
+  refresh_token_expires_at   timestamptz,  -- TikTok refresh tokens themselves expire (~1 year)
+
+  -- Health, same shape/intent as calendar_integrations/channel_integrations — "requires attention" when a
+  -- PREVIOUSLY working connection starts failing, not on every transient hiccup.
+  is_healthy                 boolean not null default true,
+  last_problem_message       text,
+
+  created_at                  timestamptz not null default now(),
+  updated_at                   timestamptz not null default now()
+);
+create unique index if not exists ux_tiktok_integrations_clinic on tiktok_integrations(clinic_id);
+drop trigger if exists trg_tiktok_integrations_updated_at on tiktok_integrations;
+create trigger trg_tiktok_integrations_updated_at before update on tiktok_integrations
+  for each row execute function set_updated_at();
+
 -- UTC guard: every moment in time is stored as timestamptz (UTC); only the clinic-local availability columns
 -- (clinic_availability_rules/exceptions start_time/end_time/date, read together with clinics.timezone) are
 -- zone-less on purpose. If any other column ever drifts to `timestamp without time zone`, convert it here,

@@ -15,6 +15,7 @@ public static class ChannelIconHelper
         ["instagram"] = ("IG", "#C13584"),
         ["facebook"] = ("FB", "#1877F2"),
         ["telegram"] = ("TG", "#229ED9"),
+        ["tiktok"] = ("TT", "#000000"),
         ["website"] = ("WEB", "#6b7280"),
         ["sms"] = ("SMS", "#6b7280"),
         ["email"] = ("MAIL", "#6b7280"),
@@ -43,8 +44,12 @@ public static class ChannelIconHelper
         "facebook" => MessengerSvg,
         "google" => GoogleCalendarSvg,
         "outlook" => OutlookSvg,
+        "tiktok" => TikTokSvg,
         _ => Svg(channel)
     };
+
+    private const string TikTokSvg =
+        """<svg viewBox="0 0 24 24" fill="#fff" xmlns="http://www.w3.org/2000/svg"><path d="M16.6 5.82c-.86-.78-1.39-1.87-1.39-3.07h-3.3v13.5c0 1.5-1.22 2.72-2.72 2.72s-2.72-1.22-2.72-2.72 1.22-2.72 2.72-2.72c.28 0 .55.04.8.12v-3.35a6.1 6.1 0 0 0-.8-.05c-3.34 0-6.05 2.71-6.05 6.05S6.15 22.3 9.49 22.3s6.05-2.71 6.05-6.05V9.01a7.3 7.3 0 0 0 4.26 1.37V7.08a4.4 4.4 0 0 1-3.2-1.26z"/></svg>""";
 
     private const string GoogleCalendarSvg =
         """<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="3" width="18" height="18" rx="3" fill="#fff"/><path d="M6 3h12a3 3 0 0 1 3 3v2.5H3V6a3 3 0 0 1 3-3z" fill="#4285F4"/><path d="M3 17.5h4.5V21H6a3 3 0 0 1-3-3z" fill="#34A853"/><path d="M16.5 17.5H21V18a3 3 0 0 1-3 3h-1.5z" fill="#FBBC04"/><rect x="3" y="3" width="18" height="18" rx="3" fill="none" stroke="#4285F4" stroke-width="1.2"/><text x="12" y="16.6" text-anchor="middle" font-family="Arial, sans-serif" font-size="7.5" font-weight="700" fill="#4285F4">31</text></svg>""";
