@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using PlasticSurgery.Data.Entities;
 using PlasticSurgery.Dtos;
+using PlasticSurgery.Pages.Shared;
 using PlasticSurgery.Services;
 
 namespace PlasticSurgery.Pages.Campaigns;
@@ -141,15 +142,15 @@ public class CreateModel : PageModel
     [BindProperty]
     public string SendOption { get; set; } = "now";
 
-    /// <summary>"Schedule" date + time, entered in the CLINIC's timezone (Clinic.Timezone) and converted to UTC on submit.</summary>
+    /// <summary>"Schedule" date + time, entered in the VIEWER's own timezone (ViewerTimeZone) and converted to UTC on submit.</summary>
     [BindProperty]
     public DateOnly? ScheduleDate { get; set; }
 
     [BindProperty]
     public TimeOnly? ScheduleTime { get; set; }
 
-    /// <summary>Clinic timezone id, shown next to the schedule fields.</summary>
-    public string ClinicTimezone { get; private set; } = "UTC";
+    /// <summary>The viewer's timezone id, shown next to the schedule fields (local-time.js corrects it on first visit).</summary>
+    public string ViewerTimezone { get; private set; } = "UTC";
 
     [TempData]
     public string? ErrorMessage { get; set; }
@@ -223,9 +224,9 @@ public class CreateModel : PageModel
                 ? CampaignType.Reactivation
                 : (string?)null;
 
-            string? audienceFilters = isManualSelection ? null : BuildAudienceFiltersJson(ResolveTimeZone(clinic.Timezone));
+            string? audienceFilters = isManualSelection ? null : BuildAudienceFiltersJson(ViewerTimeZone.Resolve(Request, clinic.Timezone));
 
-            // The schedule is typed as a wall-clock date + time in the clinic's own timezone; convert to UTC
+            // The schedule is typed as a wall-clock date + time in the viewer's own timezone; convert to UTC
             // (Npgsql timestamptz columns only accept offset 0).
             DateTimeOffset? scheduledAt = null;
             if (SendOption == "later")
@@ -236,9 +237,7 @@ public class CreateModel : PageModel
                     await LoadAsync(ct);
                     return Page();
                 }
-                var tz = ResolveTimeZone(clinic.Timezone);
-                var local = ScheduleDate.Value.ToDateTime(ScheduleTime.Value);
-                scheduledAt = new DateTimeOffset(local, tz.GetUtcOffset(local)).ToUniversalTime();
+                scheduledAt = ViewerTimeZone.ToUtc(ScheduleDate.Value.ToDateTime(ScheduleTime.Value), ViewerTimeZone.Resolve(Request, clinic.Timezone));
                 if (scheduledAt <= DateTimeOffset.UtcNow)
                 {
                     ErrorMessage = "That date and time has already passed. Pick a time in the future, or choose \"Send now\".";
@@ -270,13 +269,6 @@ public class CreateModel : PageModel
         }
     }
 
-    private static TimeZoneInfo ResolveTimeZone(string? id)
-    {
-        try { return string.IsNullOrWhiteSpace(id) ? TimeZoneInfo.Utc : TimeZoneInfo.FindSystemTimeZoneById(id); }
-        catch (TimeZoneNotFoundException) { return TimeZoneInfo.Utc; }
-        catch (InvalidTimeZoneException) { return TimeZoneInfo.Utc; }
-    }
-
     private static string ResolveVariable(string? raw, LeadResponse lead) => raw switch
     {
         "{LeadFullName}" => lead.FullName ?? "",
@@ -290,7 +282,7 @@ public class CreateModel : PageModel
     /// builder's common + advanced fields. Shares one CampaignAudienceFilters shape for both (see
     /// its remarks) since CampaignAudienceService already only reads the subset relevant to each
     /// audience type.</summary>
-    private string? BuildAudienceFiltersJson(TimeZoneInfo clinicTz)
+    private string? BuildAudienceFiltersJson(TimeZoneInfo viewerTz)
     {
         CampaignAudienceFilters filters;
         if (AudienceType == CampaignAudienceType.ReactivationNoConsultation)
@@ -308,10 +300,10 @@ public class CreateModel : PageModel
                 LeadStatuses: CustomLeadStatuses.Count > 0 ? CustomLeadStatuses : null,
                 Sources: CustomSources.Count > 0 ? CustomSources : null,
                 QualificationStatuses: CustomQualificationStatuses.Count > 0 ? CustomQualificationStatuses : null,
-                CreatedAfter: ClinicMidnightUtc(CustomCreatedAfter, clinicTz),
-                CreatedBefore: ClinicMidnightUtc(CustomCreatedBefore?.AddDays(1), clinicTz),
-                LastContactedAfter: ClinicMidnightUtc(CustomLastContactedAfter, clinicTz),
-                LastContactedBefore: ClinicMidnightUtc(CustomLastContactedBefore?.AddDays(1), clinicTz),
+                CreatedAfter: LocalMidnightUtc(CustomCreatedAfter, viewerTz),
+                CreatedBefore: LocalMidnightUtc(CustomCreatedBefore?.AddDays(1), viewerTz),
+                LastContactedAfter: LocalMidnightUtc(CustomLastContactedAfter, viewerTz),
+                LastContactedBefore: LocalMidnightUtc(CustomLastContactedBefore?.AddDays(1), viewerTz),
                 AppointmentStatuses: CustomAppointmentStatuses.Count > 0 ? CustomAppointmentStatuses : null,
                 Countries: string.IsNullOrWhiteSpace(CustomCountry) ? null : new[] { CustomCountry },
                 Cities: string.IsNullOrWhiteSpace(CustomCity) ? null : new[] { CustomCity });
@@ -324,14 +316,10 @@ public class CreateModel : PageModel
         return JsonSerializer.Serialize(filters, AudienceFiltersJsonOptions);
     }
 
-    /// <summary>The date filters are whole days in the clinic's timezone: midnight there, as UTC. The "to" date is
+    /// <summary>The date filters are whole days in the viewer's timezone: midnight there, as UTC. The "to" date is
     /// inclusive, so callers pass the day after it.</summary>
-    private static DateTimeOffset? ClinicMidnightUtc(DateTime? date, TimeZoneInfo tz)
-    {
-        if (date is null) return null;
-        var local = DateTime.SpecifyKind(date.Value.Date, DateTimeKind.Unspecified);
-        return new DateTimeOffset(local, tz.GetUtcOffset(local)).ToUniversalTime();
-    }
+    private static DateTimeOffset? LocalMidnightUtc(DateTime? date, TimeZoneInfo tz) =>
+        date is null ? null : ViewerTimeZone.ToUtc(date.Value.Date, tz);
 
     private async Task LoadAsync(CancellationToken ct)
     {
@@ -343,7 +331,7 @@ public class CreateModel : PageModel
         }
 
         ClinicConfigured = true;
-        ClinicTimezone = string.IsNullOrWhiteSpace(clinic.Timezone) ? "UTC" : clinic.Timezone;
+        ViewerTimezone = ViewerTimeZone.Resolve(Request, clinic.Timezone).Id;
 
         var allTemplates = await _templates.ListAsync(clinic.Id, ct);
         ApprovedTemplates = allTemplates.Where(t => t.Status == WhatsAppTemplateStatus.Approved).ToList();

@@ -20,13 +20,16 @@ public static class LocalTimeHelper
         ["time"] = "HH:mm",
     };
 
-    /// <summary><c>&lt;time&gt;</c> element showing <paramref name="value"/> in viewer-local time; <paramref name="empty"/> when null.</summary>
-    public static IHtmlContent Time(DateTimeOffset? value, string format = "datetime", string empty = "—")
+    /// <summary><c>&lt;time&gt;</c> element showing <paramref name="value"/> in viewer-local time; <paramref name="empty"/> when null.
+    /// With <paramref name="clinicTimeZone"/> (appointment pages) it shows clinic time instead, unless the viewer picked
+    /// "My time" on the page's _TimeViewSwitch.</summary>
+    public static IHtmlContent Time(DateTimeOffset? value, string format = "datetime", string empty = "—", string? clinicTimeZone = null)
     {
         if (value is null) return new HtmlString(System.Net.WebUtility.HtmlEncode(empty));
         var utc = value.Value.ToUniversalTime();
         var fallback = Fallback(utc, format);
-        return new HtmlString($"<time datetime=\"{Iso(utc)}\" data-local=\"{format}\">{System.Net.WebUtility.HtmlEncode(fallback)}</time>");
+        var zone = clinicTimeZone is null ? "" : $" data-clinic-tz=\"{System.Net.WebUtility.HtmlEncode(clinicTimeZone)}\"";
+        return new HtmlString($"<time datetime=\"{Iso(utc)}\" data-local=\"{format}\"{zone}>{System.Net.WebUtility.HtmlEncode(fallback)}</time>");
     }
 
     /// <summary><c>title="…" data-local-title="…"</c> attributes for a tooltip showing <paramref name="value"/> in viewer-local time.</summary>

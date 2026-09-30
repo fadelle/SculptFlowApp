@@ -29,8 +29,9 @@ else
         <div class="profile-header-main">
             <div class="profile-header-name"><a href="/dashboard/leads/@Model.Appointment.LeadId">@(Model.Appointment.LeadFullName ?? "—")</a></div>
             <div class="text-muted text-md">
-                @(Model.Appointment.ProcedureName ?? "No procedure on file") &middot; @LocalTimeHelper.Time(Model.Appointment.ScheduledStart, "datetime-year")
+                @(Model.Appointment.ProcedureName ?? "No procedure on file") &middot; @LocalTimeHelper.Time(Model.Appointment.ScheduledStart, "datetime-year", clinicTimeZone: Model.ClinicTimezone)
             </div>
+            <div class="mt-2"><partial name="_TimeViewSwitch" model="Model.ClinicTimezone" /></div>
         </div>
         <span class="badge @StatusBadgeHelper.CssClass(Model.Appointment.Status)">@FilterLabelHelper.Label(Model.Appointment.Status)</span>
     </div>

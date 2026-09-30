@@ -19,8 +19,13 @@ public class AppointmentsModel : PageModel
 
     public bool ClinicConfigured { get; private set; }
 
+    /// <summary>For the "Clinic time | My time" switch (_TimeViewSwitch).</summary>
+    public string ClinicTimezone { get; private set; } = "UTC";
+
     public async Task OnGetAsync(CancellationToken ct)
     {
-        ClinicConfigured = await _clinicContext.GetClinicAsync(ct) is not null;
+        var clinic = await _clinicContext.GetClinicAsync(ct);
+        ClinicConfigured = clinic is not null;
+        if (clinic is not null && !string.IsNullOrWhiteSpace(clinic.Timezone)) ClinicTimezone = clinic.Timezone;
     }
 }

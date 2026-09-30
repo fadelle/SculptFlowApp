@@ -21,7 +21,10 @@ else
             <button type="button" class="cal-nav-btn" id="cal-next" title="Next month" aria-label="Next month">&rarr;</button>
             <button type="button" class="btn btn-sm" id="cal-today">Today</button>
         </div>
-        <button type="button" class="btn btn-primary btn-sm" id="cal-new">+ New Appointment</button>
+        <div class="flex items-center gap-2">
+            <partial name="_TimeViewSwitch" model="Model.ClinicTimezone" />
+            <button type="button" class="btn btn-primary btn-sm" id="cal-new">+ New Appointment</button>
+        </div>
     </div>
 
     <div class="cal-weekdays">
@@ -88,6 +91,7 @@ else
                     <label class="field flex-1">
                         <span>Time</span>
                         <input type="time" id="cal-new-time" class="text-input" value="09:00" required />
+                        <span class="text-subtle text-sm" id="cal-new-tz-hint"></span>
                     </label>
                     <label class="field flex-1">
                         <span>Duration (min)</span>

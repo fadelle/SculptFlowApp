@@ -80,7 +80,7 @@
     function loadMonth(year, month) {
         state.year = year; state.month = month;
         $('cal-title').textContent = MONTH_NAMES[month - 1] + ' ' + year;
-        return api('GET', '/api/appointments/calendar?year=' + year + '&month=' + month).then(function (data) {
+        return api('GET', '/api/appointments/calendar?year=' + year + '&month=' + month + '&view=' + currentView()).then(function (data) {
             state.monthData = data;
             renderOutcomeNotice(data.needsOutcomeCount);
             renderGrid(data);
@@ -91,23 +91,30 @@
         }).catch(function (e) { showMessage(e.message, 'error'); });
     }
 
-    /** The grid is in the CLINIC's timezone (server-computed LocalDate/LocalTime), so "today" and "now" must be
-        the clinic's too, not the viewer's. Falls back to the browser's clock until the first month has loaded. */
-    function clinicTimeZone() {
+    /** 'clinic' (default) or 'mine' — the page's "Clinic time | My time" switch (_TimeViewSwitch, local-time.js). */
+    function currentView() {
+        var sw = document.querySelector('.time-view-switch');
+        return SculptTime.timeView(sw ? sw.getAttribute('data-clinic-tz') : null);
+    }
+
+    /** The timezone the server grouped the grid in (LocalDate/LocalTime) — the clinic's, or the viewer's on "My time".
+        "Today", "now" and typed new-appointment times use the same zone. Falls back to the browser's clock until the
+        first month has loaded. */
+    function gridTimeZone() {
         return (state.monthData && state.monthData.timezone) || null;
     }
 
-    /** "yyyy-MM-dd" for today in the clinic's timezone. */
+    /** "yyyy-MM-dd" for today in the grid's timezone. */
     function todayIso() {
-        var tz = clinicTimeZone();
+        var tz = gridTimeZone();
         if (tz) return SculptTime.todayIn(tz);
         var d = new Date();
         return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
     }
 
-    /** "HH:mm" for right now in the clinic's timezone. */
-    function nowTimeInClinic() {
-        return new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: clinicTimeZone() || undefined });
+    /** "HH:mm" for right now in the grid's timezone. */
+    function nowTimeInGrid() {
+        return new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: gridTimeZone() || undefined });
     }
 
     function addDaysIso(iso, days) {
@@ -174,7 +181,7 @@
         var todays = data.items
             .filter(function (a) { return a.localDate === today && a.status !== 'canceled'; })
             .sort(function (a, b) { return a.localTime < b.localTime ? -1 : 1; });
-        var nowTime = nowTimeInClinic();
+        var nowTime = nowTimeInGrid();
         var next = todays.filter(function (a) { return a.localTime >= nowTime; })[0];
 
         box.textContent = '';
@@ -349,6 +356,8 @@
         clearLead();
         $('cal-new-date').value = prefillDateIso || state.drawerDate || todayIso();
         $('cal-new-time').value = '09:00';
+        var tz = gridTimeZone();
+        $('cal-new-tz-hint').textContent = tz ? (currentView() === 'mine' ? 'your time' : 'clinic time') + ' (' + tz + ')' : '';
         $('cal-new-duration').value = '30';
         $('cal-new-location').value = '';
         $('cal-new-notes').value = '';
@@ -432,7 +441,7 @@
         if (!leadId) { err.textContent = 'Search for the patient and pick one from the list.'; return; }
         if (!date || !time) { err.textContent = 'Enter a date and time.'; return; }
 
-        var timeZone = (state.monthData && state.monthData.timezone) || 'UTC';
+        var timeZone = gridTimeZone() || SculptTime.viewerTimeZone || 'UTC';
         var startIso = SculptTime.zonedToUtcIso(date, time, timeZone);
         var durationMin = parseInt($('cal-new-duration').value, 10);
         var endIso = durationMin > 0 ? new Date(new Date(startIso).getTime() + durationMin * 60000).toISOString() : null;
@@ -484,6 +493,7 @@
         var today = new Date();
         loadMonth(today.getFullYear(), today.getMonth() + 1);
         connectLive();
+        window.addEventListener('sf-time-view', function () { loadMonth(state.year, state.month); });
 
         $('cal-prev').addEventListener('click', function () {
             var m = state.month - 1, y = state.year;

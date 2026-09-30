@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using PlasticSurgery.Dtos;
+using PlasticSurgery.Pages.Shared;
 using PlasticSurgery.Services;
 
 namespace PlasticSurgery.Pages.Dashboard;
@@ -39,7 +40,7 @@ public class IndexModel : PageModel
     [BindProperty(SupportsGet = true)]
     public string Period { get; set; } = "this_month";
 
-    /// <summary>Custom range, inclusive, as clinic-local dates.</summary>
+    /// <summary>Custom range, inclusive, as viewer-local dates.</summary>
     [BindProperty(SupportsGet = true)]
     public DateOnly? From { get; set; }
 
@@ -71,7 +72,7 @@ public class IndexModel : PageModel
         ClinicId = clinic.Id;
         ClinicName = clinic.Name;
 
-        var tz = ResolveTimeZone(clinic.Timezone);
+        var tz = ViewerTimeZone.Resolve(Request, clinic.Timezone);
         var (fromDate, toDate) = ResolveRange(TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, tz).Date);
         RangeLabel = fromDate is null || toDate is null
             ? "All time"
@@ -79,7 +80,7 @@ public class IndexModel : PageModel
                 ? fromDate.Value.ToString("MMM d, yyyy")
                 : $"{fromDate.Value:MMM d} – {toDate.Value:MMM d, yyyy}";
 
-        // Clinic-local midnights -> UTC instants; the upper bound is exclusive (midnight after the last day).
+        // Viewer-local midnights -> UTC instants; the upper bound is exclusive (midnight after the last day).
         DateTimeOffset? from = fromDate is null ? null : LocalMidnightUtc(fromDate.Value, tz);
         DateTimeOffset? to = toDate is null ? null : LocalMidnightUtc(toDate.Value.AddDays(1), tz);
 
@@ -89,7 +90,7 @@ public class IndexModel : PageModel
         WhatsAppHealth = await _whatsAppHealth.GetHealthAsync(clinic.Id, ct);
     }
 
-    /// <summary>Inclusive clinic-local start/end dates for the selected period (nulls = all time). Weeks start on Monday.</summary>
+    /// <summary>Inclusive viewer-local start/end dates for the selected period (nulls = all time). Weeks start on Monday.</summary>
     private (DateOnly? From, DateOnly? To) ResolveRange(DateTime todayLocal)
     {
         var today = DateOnly.FromDateTime(todayLocal);
@@ -121,12 +122,5 @@ public class IndexModel : PageModel
     {
         var local = date.ToDateTime(TimeOnly.MinValue);
         return new DateTimeOffset(local, tz.GetUtcOffset(local)).ToUniversalTime();
-    }
-
-    private static TimeZoneInfo ResolveTimeZone(string? id)
-    {
-        try { return string.IsNullOrWhiteSpace(id) ? TimeZoneInfo.Utc : TimeZoneInfo.FindSystemTimeZoneById(id); }
-        catch (TimeZoneNotFoundException) { return TimeZoneInfo.Utc; }
-        catch (InvalidTimeZoneException) { return TimeZoneInfo.Utc; }
     }
 }

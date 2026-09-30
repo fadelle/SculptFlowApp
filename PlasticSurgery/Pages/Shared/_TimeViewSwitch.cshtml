@@ -1,0 +1,7 @@
+@model string
+@* "Clinic time | My time" for appointment pages. Model = the clinic's IANA timezone. local-time.js shows it only when
+   the viewer's timezone differs from the clinic's, and remembers the choice per browser (default: clinic time). *@
+<div class="seg time-view-switch" role="radiogroup" aria-label="Show times in" data-clinic-tz="@Model" hidden>
+    <label class="seg-opt"><input type="radio" name="time-view" value="clinic" /><span>Clinic time</span></label>
+    <label class="seg-opt"><input type="radio" name="time-view" value="mine" /><span>My time</span></label>
+</div>

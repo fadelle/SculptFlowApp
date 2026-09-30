@@ -63,7 +63,7 @@
       row.appendChild(el('span', { class: 'notif-row-icon' }, [ICONS[n.type] || '🔔']));
       var main = el('div', { class: 'notif-row-main' }, [
         el('div', { class: 'notif-row-title' }, [n.title]),
-        n.message ? el('div', { class: 'notif-row-message' }, [n.message]) : null,
+        n.message ? el('div', { class: 'notif-row-message' }, [window.SculptTime ? SculptTime.expand(n.message) : n.message]) : null,
         el('div', { class: 'notif-row-time' }, [timeAgo(n.createdAt)])
       ].filter(Boolean));
       row.appendChild(main);

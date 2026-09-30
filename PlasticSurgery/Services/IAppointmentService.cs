@@ -52,10 +52,10 @@ public interface IAppointmentService
         Guid clinicId, string? status, DateTimeOffset? from, DateTimeOffset? to, int skip, int take, CancellationToken ct = default);
 
     /// <summary>Every appointment in the visible month calendar grid for the Appointments page — the grid's
-    /// leading/trailing days from adjacent months included, everything grouped by LOCAL calendar day in the
-    /// clinic's own timezone (never UTC, never the browser's timezone). No status filter: booked, confirmed,
-    /// canceled and completed appointments all appear, same as the rest of the app.</summary>
-    Task<CalendarMonthResponse> GetCalendarMonthAsync(Guid clinicId, int year, int month, CancellationToken ct = default);
+    /// leading/trailing days from adjacent months included, everything grouped by LOCAL calendar day in
+    /// <paramref name="displayTimeZone"/> — the viewer's, when they switched to "My time" — else the clinic's own. No
+    /// status filter: booked, confirmed, canceled and completed appointments all appear, same as the rest of the app.</summary>
+    Task<CalendarMonthResponse> GetCalendarMonthAsync(Guid clinicId, int year, int month, TimeZoneInfo? displayTimeZone = null, CancellationToken ct = default);
 }
 
 /// <summary>The requested slot is not (or is no longer) bookable; Message is safe to show the patient/AI.</summary>

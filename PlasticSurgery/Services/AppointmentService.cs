@@ -95,8 +95,8 @@ public class AppointmentService : IAppointmentService
         };
         if (type is null) return;
 
-        var tz = await GetTimeZoneAsync(clinicId, ct);
-        var whenLabel = LabelFor(TimeZoneInfo.ConvertTime(appointment.ScheduledStart, tz));
+        // A [[time:…]] marker, not text: notifications.js shows it in each viewer's own timezone (SculptTime.expand).
+        var whenLabel = $"[[time:{appointment.ScheduledStart.ToUniversalTime():yyyy-MM-dd'T'HH:mm:ss'Z'}]]";
         var who = string.IsNullOrWhiteSpace(appointment.LeadFullName) ? "A patient" : appointment.LeadFullName!;
         var what = string.IsNullOrWhiteSpace(appointment.ProcedureName) ? "a consultation" : appointment.ProcedureName!;
         var verb = change switch { "created" => "booked", "rescheduled" => "moved to", _ => "canceled for" };
@@ -503,10 +503,11 @@ public class AppointmentService : IAppointmentService
         return (items.Select(ToResponse).ToList(), totalCount);
     }
 
-    public async Task<CalendarMonthResponse> GetCalendarMonthAsync(Guid clinicId, int year, int month, CancellationToken ct = default)
+    public async Task<CalendarMonthResponse> GetCalendarMonthAsync(Guid clinicId, int year, int month, TimeZoneInfo? displayTimeZone = null, CancellationToken ct = default)
     {
         var clinic = await _db.Clinics.FirstOrDefaultAsync(c => c.Id == clinicId, ct);
-        var tz = clinic is null ? TimeZoneInfo.Utc : ResolveTimeZone(clinic);
+        var clinicTz = clinic is null ? TimeZoneInfo.Utc : ResolveTimeZone(clinic);
+        var tz = displayTimeZone ?? clinicTz;
 
         var firstOfMonth = new DateOnly(year, month, 1);
         // Sunday-start weeks (no existing calendar convention in this project to match yet). Pad the grid with
@@ -539,7 +540,7 @@ public class AppointmentService : IAppointmentService
         var needsOutcome = await _db.Appointments.CountAsync(a => a.ClinicId == clinicId && a.ScheduledStart < DateTimeOffset.UtcNow
             && (a.Status == AppointmentStatus.Booked || a.Status == AppointmentStatus.Confirmed), ct);
 
-        return new CalendarMonthResponse(year, month, tz.Id, gridStart.ToString("yyyy-MM-dd"), gridEnd.ToString("yyyy-MM-dd"), items, needsOutcome);
+        return new CalendarMonthResponse(year, month, tz.Id, clinicTz.Id, gridStart.ToString("yyyy-MM-dd"), gridEnd.ToString("yyyy-MM-dd"), items, needsOutcome);
     }
 
     /// <summary>Local midnight on <paramref name="date"/>, in <paramref name="tz"/>, as UTC.</summary>

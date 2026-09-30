@@ -190,7 +190,7 @@ else
                     </div>
 
                     @* Custom audience — every filter in one grid *@
-                    <div id="custom-panel" class="aud-panel" data-clinic-timezone="@Model.ClinicTimezone" hidden>
+                    <div id="custom-panel" class="aud-panel" hidden>
                         <div class="filter-grid" id="advanced-filters">
                             <label class="field">
                                 <span>Procedure</span>
@@ -289,7 +289,7 @@ else
                     <div class="flex items-center gap-2 mt-2 flex-wrap" id="schedule-fields" hidden>
                         <input type="date" name="ScheduleDate" class="text-input w-auto" value="@Model.ScheduleDate?.ToString("yyyy-MM-dd")" aria-label="Date" />
                         <input type="time" name="ScheduleTime" class="text-input w-auto" value="@(Model.ScheduleTime?.ToString("HH:mm") ?? "09:00")" aria-label="Time" />
-                        <span class="text-subtle text-sm">clinic time (@Model.ClinicTimezone)</span>
+                        <span class="text-subtle text-sm">your time (<span data-viewer-tz>@Model.ViewerTimezone</span>)</span>
                     </div>
                 </section>
 
