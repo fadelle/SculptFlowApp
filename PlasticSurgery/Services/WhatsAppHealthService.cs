@@ -52,7 +52,7 @@ public class WhatsAppHealthService : IWhatsAppHealthService
         if (integration is null)
         {
             throw new InvalidOperationException(
-                $"Clinic {request.ClinicId} has no WhatsApp connection on file — connect one under Settings → Channels & Integrations first.");
+                $"Clinic {request.ClinicId} has no WhatsApp connection on file — connect one under Settings → Messaging Integrations first.");
         }
 
         // Don't trust ClinicId blindly — cross-check whichever identifier the event carries

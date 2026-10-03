@@ -72,7 +72,7 @@ public class WhatsAppService : IWhatsAppService
             || string.IsNullOrEmpty(integration.PhoneNumberId) || string.IsNullOrEmpty(integration.AccessToken))
         {
             throw new WhatsAppSendException(
-                "This clinic doesn't have a connected WhatsApp number yet — see Settings → Channels & Integrations.");
+                "This clinic doesn't have a connected WhatsApp number yet — see Settings → Messaging Integrations.");
         }
 
         var url = $"https://graph.facebook.com/{Version}/{integration.PhoneNumberId}/messages";

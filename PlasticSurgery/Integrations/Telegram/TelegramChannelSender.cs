@@ -42,7 +42,7 @@ public class TelegramChannelSender : IChannelSender
         if (integration is null || integration.Status != ChannelIntegrationStatus.Connected || string.IsNullOrEmpty(integration.AccessToken))
         {
             throw new InvalidOperationException(
-                "This clinic doesn't have a connected Telegram bot — reconnect it in Settings → Channels & Integrations.");
+                "This clinic doesn't have a connected Telegram bot — reconnect it in Settings → Messaging Integrations.");
         }
 
         var messageId = await _client.SendMessageAsync(integration.AccessToken, conversation.ExternalThreadId, text, ct);

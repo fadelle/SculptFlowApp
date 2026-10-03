@@ -62,7 +62,7 @@ else
                 : reviewRejected ? "Meta rejected your business account review, so sending may be blocked."
                 : "Meta lowered your number's quality to Low and may limit how much you can send.",
             "Open WhatsApp Manager to see Meta's reason, and pause campaigns until it's fixed."),
-        WhatsAppHealthLevel.Disconnected => ("off", "⏻", "Not connected", "WhatsApp is disconnected, so no messages can be sent or received.", "Reconnect your number under Settings → Integrations."),
+        WhatsAppHealthLevel.Disconnected => ("off", "⏻", "Not connected", "WhatsApp is disconnected, so no messages can be sent or received.", "Reconnect your number under Settings → Messaging Integrations."),
         _ => ("off", "?", "Status unknown", "We haven't heard from Meta about this number yet.", (string?)null)
     };
     var lastHeardLong = h.LastWebhookAt is null || DateTimeOffset.UtcNow - h.LastWebhookAt.Value > TimeSpan.FromHours(24);

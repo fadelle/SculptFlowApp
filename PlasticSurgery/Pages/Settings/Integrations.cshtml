@@ -2,7 +2,7 @@
 @model PlasticSurgery.Pages.Settings.IntegrationsModel
 @using PlasticSurgery.Data.Entities
 @{
-    ViewData["Title"] = "Channels & Integrations";
+    ViewData["Title"] = "Messaging Integrations";
     var allChannels = new[] { ChannelType.WhatsApp, ChannelType.Instagram, ChannelType.Facebook, ChannelType.Telegram };
     var connectedCount = allChannels.Count(ch => Model.Channels.TryGetValue(ch, out var i) && i.Status == ChannelIntegrationStatus.Connected && !NeedsAttention(i));
     var attentionCount = allChannels.Count(ch => Model.Channels.TryGetValue(ch, out var i) && NeedsAttention(i));
