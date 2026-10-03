@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="MySculptFlow">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2dd4bf"/>
+      <stop offset="1" stop-color="#0f766e"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="16" fill="url(#bg)"/>
+  <!-- Signature-style S: one continuous flowing stroke, with a trailing flourish -->
+  <path d="M43 19.5C40.5 15.2 33.2 13.6 28.2 16.4C23 19.3 23.6 25.4 29.4 28.4C35.6 31.6 41.4 33.4 40.6 40C39.8 46.4 31.4 49.4 25.2 46C22 44.2 20.4 41.2 20.2 38.4"
+        fill="none" stroke="#fff" stroke-width="4.6" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M19.5 50.5C28 53.5 41 53.6 49.5 49.4" fill="none" stroke="#fff" stroke-opacity=".75" stroke-width="2.6" stroke-linecap="round"/>
+</svg>

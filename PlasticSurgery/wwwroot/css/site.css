@@ -294,6 +294,9 @@ h1, h2, h3 { margin: 0; letter-spacing: -0.01em; }
   flex-shrink: 0;
 }
 
+.brand-logo { width: 30px; height: 30px; border-radius: 9px; flex-shrink: 0; display: block; }
+.auth-logo .brand-logo { width: 32px; height: 32px; }
+
 .sidebar-collapse {
   width: 30px;
   height: 30px;
