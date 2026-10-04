@@ -437,6 +437,8 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.Property(x => x.LastHealthEventAt).HasColumnName("last_health_event_at");
             e.Property(x => x.TelegramBotId).HasColumnName("telegram_bot_id").HasMaxLength(50);
             e.Property(x => x.TelegramBotUsername).HasColumnName("telegram_bot_username").HasMaxLength(100);
+            e.Property(x => x.Provider).HasColumnName("provider").HasMaxLength(30);
+            e.Property(x => x.ProviderSenderId).HasColumnName("provider_sender_id").HasMaxLength(100);
             e.Property(x => x.WebhookStatus).HasColumnName("webhook_status").HasMaxLength(30);
             e.Property(x => x.WebhookRegisteredAt).HasColumnName("webhook_registered_at");
             e.Property(x => x.LastVerifiedAt).HasColumnName("last_verified_at");
@@ -491,6 +493,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.Property(x => x.CurrentCategory).HasColumnName("current_category").HasMaxLength(30);
             e.Property(x => x.ComponentsJson).HasColumnName("components").HasColumnType("jsonb");
             e.Property(x => x.LastMetaEventAt).HasColumnName("last_meta_event_at");
+            e.Property(x => x.Provider).HasColumnName("provider").HasMaxLength(30);
             e.Property(x => x.CreatedAt).HasColumnName("created_at");
             e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
 

@@ -127,7 +127,22 @@ builder.Services.AddScoped<ITikTokIntegrationService, TikTokIntegrationService>(
 // (Case A/B/C flows, PostgreSQL-authoritative + SignalR-notifies-only).
 builder.Services.AddScoped<IInboxNotifier, InboxNotifier>();
 builder.Services.AddScoped<IMessageService, MessageService>();
-builder.Services.AddHttpClient<IWhatsAppService, WhatsAppService>();
+builder.Services.AddScoped<IWhatsAppService, WhatsAppService>();
+
+// WhatsApp providers (BSPs) behind IWhatsAppService — the global WhatsApp:Provider setting picks one
+// (see Services/IWhatsAppProvider.cs). Same concrete-type-then-forward pattern as ICalendarProviderClient.
+builder.Services.AddHttpClient<PlasticSurgery.Integrations.WhatsApp.MetaWhatsAppProvider>();
+builder.Services.AddScoped<IWhatsAppProvider>(sp => sp.GetRequiredService<PlasticSurgery.Integrations.WhatsApp.MetaWhatsAppProvider>());
+// Infobip: SculptFlow's own account (Infobip:BaseUrl / Infobip:ApiKey env vars). The key travels only in the
+// Authorization header, which HttpClient logging never prints; the client itself logs no bodies or numbers.
+builder.Services.AddHttpClient<PlasticSurgery.Integrations.Infobip.IInfobipClient, PlasticSurgery.Integrations.Infobip.InfobipClient>(client =>
+    client.Timeout = TimeSpan.FromSeconds(Math.Clamp(builder.Configuration.GetValue("Infobip:TimeoutSeconds", 20), 5, 120)));
+builder.Services.AddScoped<IWhatsAppProvider, PlasticSurgery.Integrations.Infobip.InfobipWhatsAppProvider>();
+// Template review for the same providers, picked by the same WhatsApp:Provider switch (see IWhatsAppTemplateProvider).
+builder.Services.AddScoped<IWhatsAppTemplateProvider, PlasticSurgery.Integrations.WhatsApp.MetaWhatsAppTemplateProvider>();
+builder.Services.AddScoped<IWhatsAppTemplateProvider, PlasticSurgery.Integrations.Infobip.InfobipWhatsAppTemplateProvider>();
+builder.Services.AddScoped<PlasticSurgery.Integrations.Infobip.IInfobipWhatsAppIntegrationService, PlasticSurgery.Integrations.Infobip.InfobipWhatsAppIntegrationService>();
+builder.Services.AddScoped<PlasticSurgery.Integrations.Infobip.IInfobipWhatsAppWebhookProcessor, PlasticSurgery.Integrations.Infobip.InfobipWhatsAppWebhookProcessor>();
 builder.Services.AddSignalR();
 
 // WhatsApp Templates & Campaigns — see Services/IWhatsAppTemplateService.cs and ICampaignService.cs

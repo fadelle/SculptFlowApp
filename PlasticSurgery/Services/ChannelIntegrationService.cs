@@ -68,6 +68,14 @@ public class ChannelIntegrationService : IChannelIntegrationService
             _db.ChannelIntegrations.Add(row);
         }
 
+        if (request.Channel == ChannelType.WhatsApp)
+        {
+            // This form and Embedded Signup (ConnectWhatsAppAsync) are both Meta Cloud API connections.
+            // Infobip connections go through InfobipWhatsAppIntegrationService instead.
+            row.Provider = ChannelProvider.Meta;
+            row.ProviderSenderId = null;
+        }
+
         row.DisplayName = request.DisplayName;
         row.PhoneNumberId = request.PhoneNumberId;
         row.WhatsAppBusinessId = request.WhatsAppBusinessId;
@@ -206,11 +214,12 @@ public class ChannelIntegrationService : IChannelIntegrationService
             WebhookVerifyToken: null), ct);
     }
 
-    private static ChannelIntegrationResponse ToResponse(ChannelIntegration c) => new(
+    internal static ChannelIntegrationResponse ToResponse(ChannelIntegration c) => new(
         c.Id, c.ClinicId, c.Channel, c.Status, c.DisplayName,
         c.PhoneNumberId, c.WhatsAppBusinessId, c.PageId, c.InstagramBusinessId,
         HasAccessToken: !string.IsNullOrEmpty(c.AccessToken),
         HasWebhookVerifyToken: !string.IsNullOrEmpty(c.WebhookVerifyToken),
         c.LastVerifiedAt, c.LastError, c.UpdatedAt, c.Pin,
-        c.TelegramBotId, c.TelegramBotUsername, c.WebhookStatus, c.WebhookRegisteredAt, c.LastWebhookAt);
+        c.TelegramBotId, c.TelegramBotUsername, c.WebhookStatus, c.WebhookRegisteredAt, c.LastWebhookAt,
+        c.Channel == ChannelType.WhatsApp ? ChannelProvider.Of(c) : null, c.ProviderSenderId);
 }

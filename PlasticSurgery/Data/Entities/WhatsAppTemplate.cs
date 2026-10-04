@@ -49,6 +49,12 @@ public class WhatsAppTemplate
 
     public DateTimeOffset? LastMetaEventAt { get; set; }
 
+    /// <summary>Which WhatsApp provider the template was submitted through (ChannelProvider); null = Meta, as for
+    /// every template from before Infobip. An approval only holds on the account it was reviewed on, so a template
+    /// can be sent/synced only while its provider is the active one (WhatsApp:Provider). MetaTemplateId holds the
+    /// provider's template id either way.</summary>
+    public string? Provider { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 

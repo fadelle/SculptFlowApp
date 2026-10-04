@@ -13,11 +13,13 @@ public class MessageService : IMessageService
     private readonly IInboxNotifier _notifier;
     private readonly IEventLogger _events;
     private readonly INotificationService _notifications;
+    private readonly IConfiguration _configuration;
 
     public MessageService(
         ApplicationDbContext db, IWhatsAppService whatsApp, IEnumerable<IChannelSender> senders,
-        IInboxNotifier notifier, IEventLogger events, INotificationService notifications)
+        IInboxNotifier notifier, IEventLogger events, INotificationService notifications, IConfiguration configuration)
     {
+        _configuration = configuration;
         _db = db;
         _whatsApp = whatsApp; // still used directly for WhatsApp-only template sends
         _senders = senders;
@@ -212,6 +214,12 @@ public class MessageService : IMessageService
         {
             throw new InvalidOperationException(
                 $"Template '{template.Name}' isn't approved yet (status: {template.Status}) — Meta only allows sending approved templates.");
+        }
+        // An approval only holds on the WhatsApp account it was reviewed on (see WhatsAppTemplate.Provider).
+        if (WhatsAppTemplateService.TemplateProviderOf(template) != WhatsAppService.ActiveProviderName(_configuration))
+        {
+            throw new InvalidOperationException(
+                $"Template '{template.Name}' was approved for your previous WhatsApp setup and can't be sent now. Create it again to send it for review.");
         }
 
         var toPhone = conversation.Lead?.Phone
@@ -482,23 +490,36 @@ public class MessageService : IMessageService
             return new IngestMessageResult(Found: false, Deduplicated: false, null);
         }
 
+        // Providers retry callbacks and don't guarantee order (Infobip can report "seen" before "delivered").
+        // A repeat of the status the message already has is a no-op, and an older step arriving late
+        // (delivered after read) only fills its own timestamp — it never moves the status backwards.
+        var incoming = request.DeliveryStatus?.ToLowerInvariant();
+        if (incoming is not null && string.Equals(message.DeliveryStatus, incoming, StringComparison.OrdinalIgnoreCase))
+        {
+            return new IngestMessageResult(Found: true, Deduplicated: true, ConversationService.ToResponse(message), AiEligible: false);
+        }
+        var isLateStep = ProgressRank(incoming) > 0 && ProgressRank(incoming) < ProgressRank(message.DeliveryStatus);
+
         // Not a new message — just update delivery status and tell the Inbox. Never touches AI/mode.
         var occurredAt = request.OccurredAt ?? DateTimeOffset.UtcNow;
         // Captured before the switch so OUTBOUND_MESSAGE_FAILED only fires on the FIRST time this message is
         // reported failed — a retried/duplicate "failed" webhook for the same message must not re-notify.
         var justFailed = message.Direction == MessageDirection.Outbound && message.FailedAt is null
                           && string.Equals(request.DeliveryStatus, "failed", StringComparison.OrdinalIgnoreCase);
-        message.DeliveryStatus = request.DeliveryStatus;
-        switch (request.DeliveryStatus?.ToLowerInvariant())
+        if (!isLateStep)
+        {
+            message.DeliveryStatus = request.DeliveryStatus;
+        }
+        switch (incoming)
         {
             case "sent":
                 message.SentAt ??= occurredAt;
                 break;
             case "delivered":
-                message.DeliveredAt = occurredAt;
+                message.DeliveredAt ??= occurredAt;
                 break;
             case "read":
-                message.ReadAt = occurredAt;
+                message.ReadAt ??= occurredAt;
                 break;
             case "failed":
                 message.FailedAt = occurredAt;
@@ -513,7 +534,7 @@ public class MessageService : IMessageService
         // If this message belongs to a Campaign, roll the same status into its CampaignRecipient
         // so campaign stats (CampaignStatsResponse) stay in sync — still just one Message row, no
         // second write path.
-        if (message.CampaignRecipientId.HasValue)
+        if (message.CampaignRecipientId.HasValue && !isLateStep)
         {
             var recipient = await _db.CampaignRecipients.FirstOrDefaultAsync(r => r.Id == message.CampaignRecipientId.Value, ct);
             if (recipient is not null)
@@ -524,8 +545,11 @@ public class MessageService : IMessageService
 
         await _db.SaveChangesAsync(ct);
 
-        await _notifier.MessageStatusUpdatedAsync(
-            request.ClinicId, message.ConversationId, message.Id, request.DeliveryStatus ?? "unknown", occurredAt, ct);
+        if (!isLateStep)
+        {
+            await _notifier.MessageStatusUpdatedAsync(
+                request.ClinicId, message.ConversationId, message.Id, request.DeliveryStatus ?? "unknown", occurredAt, ct);
+        }
 
         if (justFailed)
         {
@@ -540,6 +564,16 @@ public class MessageService : IMessageService
         // Status updates are explicitly excluded from the AI trigger — never eligible.
         return new IngestMessageResult(Found: true, Deduplicated: false, ConversationService.ToResponse(message), AiEligible: false);
     }
+
+    /// <summary>Order of the normal delivery progression; 0 for anything outside it (failed, deleted, unknown),
+    /// which is never treated as "late".</summary>
+    private static int ProgressRank(string? status) => status?.ToLowerInvariant() switch
+    {
+        "sent" => 1,
+        "delivered" => 2,
+        "read" => 3,
+        _ => 0
+    };
 
     private static void ApplyDeliveryStatusToRecipient(CampaignRecipient recipient, string? deliveryStatus, string? failureCode, string? failureReason)
     {

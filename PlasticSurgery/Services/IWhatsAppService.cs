@@ -1,9 +1,9 @@
 namespace PlasticSurgery.Services;
 
 /// <summary>
-/// Sends outbound WhatsApp messages via the Meta Graph API, using whichever WhatsApp
-/// ChannelIntegration the clinic has connected (Settings → Channels &amp; Integrations). This is the
-/// one place that ever calls WhatsApp's send endpoint — MessageService is the only caller, so the
+/// Sends outbound WhatsApp messages through the active provider (WhatsApp:Provider — Meta Cloud API or
+/// Infobip, see IWhatsAppProvider), using whichever WhatsApp ChannelIntegration the clinic has connected
+/// (Settings → Messaging Integrations). This is the one place that ever sends WhatsApp — MessageService is the only caller, so the
 /// dashboard, template sends, campaigns, and (eventually) n8n all go through the same sending
 /// logic instead of each reimplementing it.
 /// </summary>

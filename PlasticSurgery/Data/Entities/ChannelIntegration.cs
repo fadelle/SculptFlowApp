@@ -50,6 +50,16 @@ public class ChannelIntegration
     public string? WebhookStatus { get; set; }
     public DateTimeOffset? WebhookRegisteredAt { get; set; }
 
+    // WhatsApp provider (BSP). Null = Meta Cloud API directly (every row created before Infobip existed).
+    // Infobip rows keep only the sender number here: the API key and base URL are SculptFlow-wide config
+    // (Infobip:ApiKey / Infobip:BaseUrl), and WebhookVerifyToken holds the per-connection webhook secret.
+    // See Services/IWhatsAppProvider.cs and Integrations/Infobip.
+    /// <summary>One of <see cref="ChannelProvider"/>; null means <see cref="ChannelProvider.Meta"/>.</summary>
+    public string? Provider { get; set; }
+    /// <summary>The provider's sender identifier — for Infobip WhatsApp, the business number in
+    /// international format, digits only (e.g. "447860099299").</summary>
+    public string? ProviderSenderId { get; set; }
+
     public DateTimeOffset? LastVerifiedAt { get; set; }
     public string? LastError { get; set; }
 
@@ -112,6 +122,19 @@ public static class ChannelType
     public const string Telegram = "telegram";
 
     public static readonly IReadOnlyList<string> All = new[] { WhatsApp, Instagram, Facebook, Telegram };
+}
+
+/// <summary>Values for ChannelIntegration.Provider — who actually carries a channel's traffic. Which one
+/// WhatsApp uses is a global switch (WhatsApp:Provider config); a row only works while its own provider is
+/// the active one.</summary>
+public static class ChannelProvider
+{
+    public const string Meta = "meta";
+    public const string Infobip = "infobip";
+
+    /// <summary>The row's provider, treating the legacy null as Meta.</summary>
+    public static string Of(ChannelIntegration integration) =>
+        string.IsNullOrWhiteSpace(integration.Provider) ? Meta : integration.Provider;
 }
 
 /// <summary>Values for ChannelIntegration.WebhookStatus (Telegram today).</summary>

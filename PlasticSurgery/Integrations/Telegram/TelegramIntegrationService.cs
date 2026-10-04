@@ -249,13 +249,8 @@ public class TelegramIntegrationService : ITelegramIntegrationService
     }
 
     /// <summary>Never includes the token, webhook secret or any other credential.</summary>
-    internal static ChannelIntegrationResponse ToResponse(ChannelIntegration c) => new(
-        c.Id, c.ClinicId, c.Channel, c.Status, c.DisplayName,
-        c.PhoneNumberId, c.WhatsAppBusinessId, c.PageId, c.InstagramBusinessId,
-        HasAccessToken: !string.IsNullOrEmpty(c.AccessToken),
-        HasWebhookVerifyToken: !string.IsNullOrEmpty(c.WebhookVerifyToken),
-        c.LastVerifiedAt, c.LastError, c.UpdatedAt, c.Pin,
-        c.TelegramBotId, c.TelegramBotUsername, c.WebhookStatus, c.WebhookRegisteredAt, c.LastWebhookAt);
+    internal static ChannelIntegrationResponse ToResponse(ChannelIntegration c) =>
+        PlasticSurgery.Services.ChannelIntegrationService.ToResponse(c);
 }
 
 /// <summary>The setWebhook secret_token: generated here, stored in channel_integrations.webhook_verify_token,

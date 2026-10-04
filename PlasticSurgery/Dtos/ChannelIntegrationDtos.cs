@@ -26,8 +26,14 @@ public record ChannelIntegrationResponse(
     /// <summary>One of WebhookStatus (active / pending / error / not_registered); null for channels without a self-registered webhook.</summary>
     string? WebhookStatus = null,
     DateTimeOffset? WebhookRegisteredAt = null,
-    /// <summary>When the last webhook delivery from the platform arrived (Telegram only today).</summary>
-    DateTimeOffset? LastWebhookAt = null
+    /// <summary>When the last webhook delivery from the platform arrived (Telegram and Infobip WhatsApp).</summary>
+    DateTimeOffset? LastWebhookAt = null,
+    /// <summary>WhatsApp only — which provider this connection goes through (ChannelProvider: meta / infobip).
+    /// Server-side only (Razor pages): never serialized, so the browser can't see which provider we use.</summary>
+    [property: System.Text.Json.Serialization.JsonIgnore] string? Provider = null,
+    /// <summary>Infobip only — the business sender number, digits only. Server-side only, like Provider. The
+    /// webhook secret is never part of this record at all.</summary>
+    [property: System.Text.Json.Serialization.JsonIgnore] string? ProviderSenderId = null
 );
 
 /// <summary>Body for POST /api/channel-integrations/telegram/connect. The token is write-only: it is

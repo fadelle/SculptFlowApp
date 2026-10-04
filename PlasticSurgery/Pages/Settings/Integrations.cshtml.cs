@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using PlasticSurgery.Data.Entities;
 using PlasticSurgery.Dtos;
+using PlasticSurgery.Integrations.Infobip;
 using PlasticSurgery.Integrations.Telegram;
 using PlasticSurgery.Services;
 
@@ -15,17 +16,29 @@ public class IntegrationsModel : PageModel
     private readonly IConfiguration _configuration;
     private readonly ITelegramIntegrationService _telegram;
     private readonly ITikTokIntegrationService _tiktok;
+    private readonly IInfobipWhatsAppIntegrationService _infobip;
 
     public IntegrationsModel(
         ICurrentClinicContext clinicContext, IChannelIntegrationService integrations, IConfiguration configuration,
-        ITelegramIntegrationService telegram, ITikTokIntegrationService tiktok)
+        ITelegramIntegrationService telegram, ITikTokIntegrationService tiktok, IInfobipWhatsAppIntegrationService infobip)
     {
         _clinicContext = clinicContext;
         _integrations = integrations;
         _configuration = configuration;
         _telegram = telegram;
         _tiktok = tiktok;
+        _infobip = infobip;
     }
+
+    /// <summary>WhatsApp:Provider = infobip: the WhatsApp card links a sender number instead of Facebook sign-in.</summary>
+    public bool UsesInfobipWhatsApp => WhatsAppService.ActiveProviderName(_configuration) == ChannelProvider.Infobip;
+
+    /// <summary>The connected Infobip sender's webhook URL (with its secret) — shown only in that card's details popup.</summary>
+    public string? InfobipWebhookUrl { get; private set; }
+
+    /// <summary>WhatsApp number typed into the Infobip connect form.</summary>
+    [BindProperty]
+    public string? WhatsAppSenderNumber { get; set; }
 
     public bool ClinicConfigured { get; private set; }
     public Guid ClinicId { get; private set; }
@@ -126,6 +139,28 @@ public class IntegrationsModel : PageModel
         return RedirectToPage();
     }
 
+    /// <summary>Connect / change the clinic's WhatsApp number on SculptFlow's Infobip account.</summary>
+    public async Task<IActionResult> OnPostConnectWhatsAppNumberAsync(CancellationToken ct)
+    {
+        var clinic = await _clinicContext.GetClinicAsync(ct);
+        if (clinic is null)
+        {
+            return RedirectToPage();
+        }
+
+        try
+        {
+            var result = await _infobip.ConnectAsync(clinic.Id, WhatsAppSenderNumber, ct);
+            StatusMessage = $"WhatsApp connected — {result.DisplayName}.";
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            ErrorMessage = "Could not connect WhatsApp: " + ex.Message;
+        }
+
+        return RedirectToPage();
+    }
+
     public async Task<IActionResult> OnPostRefreshTelegramAsync(CancellationToken ct)
     {
         var clinic = await _clinicContext.GetClinicAsync(ct);
@@ -181,6 +216,10 @@ public class IntegrationsModel : PageModel
         var items = await _integrations.ListAsync(clinic.Id, ct);
         Channels = items.ToDictionary(i => i.Channel);
         TikTok = await _tiktok.GetAsync(clinic.Id, ct);
+        if (UsesInfobipWhatsApp)
+        {
+            InfobipWebhookUrl = await _infobip.GetWebhookUrlAsync(clinic.Id, ct);
+        }
     }
 
     private static string Label(string channel) => channel switch

@@ -8,6 +8,11 @@ This is the ONE handoff/state file; update it in place, don't create another._
 > but remain in git history, so **rotate both** (see §22). Config key *names* are listed in §20; values
 > live in `dotnet user-secrets` locally and in Render env vars in production.
 
+> **System design:** [`docs/system-design.html`](docs/system-design.html) is the code-verified high-level and low-level
+> design (frontend, backend, integrations, n8n contracts, database). **Any change that adds or alters a feature must
+> update it in the same change** (standing rule in [`CLAUDE.md`](CLAUDE.md); its §12 says which sections to touch).
+> Where this handoff and that document disagree, the design doc was checked against the code more recently.
+
 ---
 
 ## 1. Product overview
@@ -1556,3 +1561,23 @@ WHAT WOULD BE NEEDED FOR TIKTOK DIRECT MESSAGES IN THE UNIFIED INBOX LATER
   behaviour of the forwarded-headers change — after deploy, sign in with Google once and check the redirect works.
 - **Known limits**: no email verification or password reset exists for password accounts (no email service). A Google user has no
   password, so losing that Google account means losing access. No account-linking UI inside Settings.
+
+## 29. WhatsApp through Infobip (MVP provider) — built, tested locally, pushed on branch `feature/infobip-whatsapp-provider` (not merged to main)
+
+**Why:** SculptFlow can't yet become a Meta Tech Provider, so the first client's WhatsApp runs through SculptFlow's own single Infobip account. Later SculptFlow switches back to Meta direct (the existing Embedded Signup path), which is why the provider is a seam and not a rewrite. Owner decisions (2026-10-04): one Infobip account for all clinics, one sender number per clinic, global switch (not per clinic), credentials in env vars, media later for the whole system, OK to lose Meta-only features (health push, coexistence, in-app signup) on Infobip.
+
+**Shape:**
+- `Services/IWhatsAppProvider.cs` — the seam. `WhatsAppService` picks the provider named by `WhatsApp:Provider` (`meta` default | `infobip`) and refuses a row connected through the other provider. `MetaWhatsAppProvider` = the old Graph send code, moved unchanged. Nothing above `IWhatsAppService` changed.
+- `Integrations/Infobip/` — `InfobipClient` (App-key auth, 20s timeout, retries only 429/503/no-connection, never logs key/body/numbers), `InfobipWhatsAppProvider` (our GUID as Infobip `messageId` → stored as `messages.external_message_id`; `notifyUrl` = the clinic's webhook), `InfobipWhatsAppWebhookParser` + `Processor` (Infobip JSON → `ParsedMetaEvent` → the existing `CustomerMessageHandler` / `MessageStatusHandler` / `UnknownEventHandler`), `InfobipWhatsAppIntegrationService` (connect a sender).
+- `Controllers/InfobipWhatsAppWebhookController.cs` — `POST /api/integrations/whatsapp/connections/{connectionId}/events?token=…`, one URL per sender for inbound + delivery + seen.
+- `MessageService.HandleStatusUpdateAsync` — repeated status = no-op; a late earlier step never moves status backwards (both providers).
+- Settings → Messaging Integrations: with `WhatsApp:Provider=infobip` the WhatsApp card asks for the number (checked against Infobip business-info) and shows the webhook URL in Account details.
+- Schema: `channel_integrations.provider`, `.provider_sender_id`, unique connected `(channel, provider, provider_sender_id)`.
+
+**To go live:** run the new `schema.sql` block on Supabase; Render env `WhatsApp__Provider=infobip`, `Infobip__BaseUrl`, `Infobip__ApiKey`, and `App__PublicBaseUrl` (needed for `notifyUrl`); register the clinic's number as a WhatsApp sender in the Infobip portal; connect it in Settings; paste the card's webhook URL as the sender's inbound forwarding URL in Infobip.
+
+**TODOs:** media download/upload; health via Infobip's `GET /whatsapp/1/senders/quality`; HMAC webhook signing instead of the URL token; leads keyed by BSUID when Infobip sends no phone number (today logged as `inbound_without_phone`); TikTok messaging via Infobip (`POST /tiktok/1/messages`) behind a similar seam.
+
+**White-label rule (owner, 2026-10-05):** clinics must never learn that WhatsApp runs through Infobip. Nothing a clinic can see may name Infobip: staff-facing errors, campaign/delivery failure reasons, the settings page (HTML, form and handler names), API JSON (`Provider`/`ProviderSenderId` are `[JsonIgnore]`), message metadata (media URL replaced by `mediaId`) and the webhook URL (`/api/integrations/whatsapp/connections/{id}/events`). Infobip details belong only in server logs, config and code. Keep it that way in any follow-up (templates, media, TikTok).
+
+**Templates through Infobip (2026-10-05, same branch):** `Services/IWhatsAppTemplateProvider.cs` is the template-review seam, picked by the same `WhatsApp:Provider` switch. `MetaWhatsAppTemplateProvider` holds the old Graph code unchanged; `InfobipWhatsAppTemplateProvider` submits to `/whatsapp/2/senders/{sender}/templates` (adds body examples from `VariablesJson` or "Sample n", maps buttons) and syncs with GET. Status updates arrive on `POST /api/integrations/whatsapp/account/events?token={Infobip__WebhookToken}` (Infobip sends template events per account, not per sender), matched to the clinic by template id. New column `whatsapp_templates.provider` (null = meta): an approval only holds on the account it was reviewed on, so sending, Sync and the campaign template list only use templates of the active provider, and an old one gets "create it again". **Switching back to Meta:** set `WhatsApp__Provider=meta`; Meta templates (provider null) work exactly as before, clinics reconnect with Facebook sign-in (an Infobip row shows as not connected on the Meta card), and templates approved through Infobip must be recreated. Infobip portal: subscribe the template-update event to the account URL.

@@ -1,0 +1,931 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>SculptFlow System Design</title>
+<meta name="description" content="High-level and low-level design of SculptFlow: frontend, backend, integrations, n8n and database. Kept in sync with the code." />
+<style>
+  /* ------------------------------------------------------------------
+     Living design document. Plain HTML + CSS, no build step, no JS framework.
+     Edit it by hand. See section 12 ("Keeping this document current").
+     ------------------------------------------------------------------ */
+  :root {
+    --bg: #f7f7f5;
+    --surface: #ffffff;
+    --surface-2: #f0efeb;
+    --text: #1d1d1b;
+    --muted: #5f5e59;
+    --border: #dddcd6;
+    --accent: #2f5fd0;
+    --accent-soft: #e5ecfb;
+    --ok: #1f7a4d;
+    --ok-soft: #e1f2e9;
+    --warn: #9a5b00;
+    --warn-soft: #fbf0dc;
+    --bad: #b3261e;
+    --bad-soft: #fbe5e3;
+    --code-bg: #f0efeb;
+    --z-browser: #e5ecfb;
+    --z-app: #e1f2e9;
+    --z-ext: #fbf0dc;
+    --z-data: #efe6f7;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --sans: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #161615; --surface: #1f1f1d; --surface-2: #2a2a27; --text: #ecebe6; --muted: #a8a69e;
+      --border: #3a3935; --accent: #8fb0ff; --accent-soft: #23304d; --ok: #7fd1a5; --ok-soft: #1d3328;
+      --warn: #f0c070; --warn-soft: #3a2e17; --bad: #f2a29b; --bad-soft: #3d1f1c; --code-bg: #2a2a27;
+      --z-browser: #23304d; --z-app: #1d3328; --z-ext: #3a2e17; --z-data: #33284a;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #161615; --surface: #1f1f1d; --surface-2: #2a2a27; --text: #ecebe6; --muted: #a8a69e;
+    --border: #3a3935; --accent: #8fb0ff; --accent-soft: #23304d; --ok: #7fd1a5; --ok-soft: #1d3328;
+    --warn: #f0c070; --warn-soft: #3a2e17; --bad: #f2a29b; --bad-soft: #3d1f1c; --code-bg: #2a2a27;
+    --z-browser: #23304d; --z-app: #1d3328; --z-ext: #3a2e17; --z-data: #33284a;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.6 var(--sans); }
+  .layout { display: grid; grid-template-columns: 260px minmax(0, 1fr); max-width: 1320px; margin: 0 auto; }
+  nav.toc { position: sticky; top: 0; height: 100vh; overflow-y: auto; padding: 24px 16px; border-right: 1px solid var(--border); font-size: 13.5px; }
+  nav.toc .brand { font-weight: 700; font-size: 15px; margin-bottom: 12px; }
+  nav.toc ol { list-style: none; margin: 0; padding: 0; }
+  nav.toc li { margin: 2px 0; }
+  nav.toc li li { padding-left: 12px; }
+  nav.toc a { color: var(--muted); text-decoration: none; display: block; padding: 2px 6px; border-radius: 4px; }
+  nav.toc a:hover { color: var(--text); background: var(--surface-2); }
+  main { padding: 32px 40px 80px; min-width: 0; }
+  h1 { font-size: 30px; line-height: 1.2; margin: 0 0 6px; }
+  h2 { font-size: 22px; margin: 48px 0 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+  h3 { font-size: 17px; margin: 28px 0 8px; }
+  h4 { font-size: 15px; margin: 20px 0 6px; }
+  p, ul, ol { margin: 8px 0; }
+  a { color: var(--accent); }
+  code { font-family: var(--mono); font-size: 0.88em; background: var(--code-bg); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+  pre { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 12px 14px; border-radius: 8px; overflow-x: auto; line-height: 1.5; }
+  pre code { background: none; padding: 0; }
+  .lede { color: var(--muted); font-size: 16px; max-width: 820px; }
+  .meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0 6px; }
+  .pill { font-size: 12px; padding: 2px 10px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--border); color: var(--muted); }
+  .callout { border: 1px solid var(--border); border-left: 4px solid var(--accent); background: var(--surface); padding: 10px 14px; border-radius: 6px; margin: 14px 0; }
+  .callout.warn { border-left-color: var(--warn); background: var(--warn-soft); }
+  .callout.bad { border-left-color: var(--bad); background: var(--bad-soft); }
+  .callout.ok { border-left-color: var(--ok); background: var(--ok-soft); }
+  .callout > :first-child { margin-top: 0; }
+  .callout > :last-child { margin-bottom: 0; }
+  .table-wrap { overflow-x: auto; margin: 10px 0 16px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+  th, td { text-align: left; vertical-align: top; padding: 7px 10px; border-bottom: 1px solid var(--border); }
+  th { background: var(--surface-2); font-weight: 600; white-space: nowrap; }
+  tr:last-child td { border-bottom: none; }
+  td code { white-space: nowrap; }
+  td.wrap code { white-space: normal; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; margin: 12px 0; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; }
+  .card h4 { margin-top: 0; }
+  .card p { font-size: 13.5px; color: var(--muted); }
+  .tag { display: inline-block; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 4px; margin-right: 4px; }
+  .t-session { background: var(--accent-soft); color: var(--accent); }
+  .t-ingest { background: var(--warn-soft); color: var(--warn); }
+  .t-open { background: var(--bad-soft); color: var(--bad); }
+  .t-cookie { background: var(--ok-soft); color: var(--ok); }
+  ol.flow { counter-reset: step; list-style: none; padding: 0; margin: 10px 0 16px; }
+  ol.flow > li { counter-increment: step; position: relative; padding: 6px 0 6px 40px; border-left: 2px solid var(--border); margin-left: 13px; }
+  ol.flow > li::before { content: counter(step); position: absolute; left: -14px; top: 6px; width: 26px; height: 26px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font-weight: 700; font-size: 12px; display: flex; align-items: center; justify-content: center; border: 2px solid var(--bg); }
+  ol.flow > li:last-child { border-left-color: transparent; }
+  .actor { font-weight: 600; }
+  figure { margin: 16px 0; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px; overflow-x: auto; }
+  figcaption { font-size: 12.5px; color: var(--muted); margin-top: 6px; }
+  svg { display: block; max-width: 100%; height: auto; font-family: var(--sans); }
+  svg .box { fill: var(--surface); stroke: var(--border); stroke-width: 1.2; }
+  svg .zb { fill: var(--z-browser); stroke: none; }
+  svg .za { fill: var(--z-app); stroke: none; }
+  svg .ze { fill: var(--z-ext); stroke: none; }
+  svg .zd { fill: var(--z-data); stroke: none; }
+  svg .lbl { fill: var(--text); font-size: 12px; }
+  svg .lbl-b { fill: var(--text); font-size: 12.5px; font-weight: 600; }
+  svg .lbl-m { fill: var(--muted); font-size: 11px; }
+  svg .zone { fill: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+  svg .ln { stroke: var(--muted); stroke-width: 1.3; fill: none; }
+  svg .ln-a { stroke: var(--accent); stroke-width: 1.5; fill: none; }
+  svg .ah { fill: var(--muted); }
+  svg .ah-a { fill: var(--accent); }
+  .changelog td:first-child { white-space: nowrap; }
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: 1fr; }
+    nav.toc { position: static; height: auto; border-right: none; border-bottom: 1px solid var(--border); padding: 16px; }
+    main { padding: 20px 16px 60px; }
+    h1 { font-size: 24px; }
+  }
+</style>
+</head>
+<body>
+<div class="layout">
+<nav class="toc" aria-label="Contents">
+  <div class="brand">SculptFlow design</div>
+  <ol>
+    <li><a href="#overview">1. Overview</a></li>
+    <li><a href="#hld">2. High-level design</a>
+      <ol>
+        <li><a href="#context">System context</a></li>
+        <li><a href="#tenancy">Multi-tenancy</a></li>
+        <li><a href="#trust">Trust zones &amp; auth</a></li>
+        <li><a href="#deploy">Deployment</a></li>
+        <li><a href="#principles">Design principles</a></li>
+      </ol>
+    </li>
+    <li><a href="#frontend">3. Frontend</a>
+      <ol>
+        <li><a href="#fe-pages">Page map</a></li>
+        <li><a href="#fe-js">JavaScript modules</a></li>
+        <li><a href="#fe-css">CSS, theming, time</a></li>
+      </ol>
+    </li>
+    <li><a href="#backend">4. Backend</a>
+      <ol>
+        <li><a href="#be-layers">Layers</a></li>
+        <li><a href="#be-services">Service catalog</a></li>
+        <li><a href="#be-api">API surface</a></li>
+        <li><a href="#be-signalr">SignalR</a></li>
+        <li><a href="#be-workers">Background workers</a></li>
+        <li><a href="#be-cross">Cross-cutting</a></li>
+      </ol>
+    </li>
+    <li><a href="#flows">5. Key flows</a></li>
+    <li><a href="#integrations">6. Integrations</a></li>
+    <li><a href="#n8n">7. n8n</a></li>
+    <li><a href="#db">8. Database</a>
+      <ol>
+        <li><a href="#db-conv">Conventions</a></li>
+        <li><a href="#db-er">Core relations</a></li>
+        <li><a href="#db-tables">Table catalog</a></li>
+        <li><a href="#db-vocab">Status vocabularies</a></li>
+      </ol>
+    </li>
+    <li><a href="#config">9. Configuration</a></li>
+    <li><a href="#gaps">10. Known gaps &amp; risks</a></li>
+    <li><a href="#drift">11. Doc drift notes</a></li>
+    <li><a href="#maintain">12. Keeping this current</a></li>
+  </ol>
+</nav>
+
+<main>
+<header>
+  <h1>SculptFlow system design</h1>
+  <p class="lede">How SculptFlow (repo name MySculptFlow, assembly <code>PlasticSurgery</code>) is built today: the
+  Razor Pages dashboard, the .NET API and its workers, the WhatsApp/Telegram/calendar/knowledge integrations, the n8n
+  workflows as seen from the app, and the PostgreSQL schema. Written from the code, not from older docs.</p>
+  <div class="meta">
+    <span class="pill">Last verified against code: 2026-10-04</span>
+    <span class="pill">Code baseline: <code>febef3c</code> (main)</span>
+    <span class="pill">.NET 10 · EF Core / Npgsql · PostgreSQL + pgvector · SignalR</span>
+  </div>
+  <div class="callout">
+    <p><strong>This is a living document.</strong> Any change that adds or alters a feature, endpoint, table, integration,
+    background job, config key or n8n contract must update the matching section here in the same change, and add a line to the
+    <a href="#maintain">change log</a>. The rule is also in <code>CLAUDE.md</code> at the repo root.</p>
+  </div>
+</header>
+
+<!-- =============================================================== -->
+<section id="overview">
+<h2>1. Overview</h2>
+<p>SculptFlow is a multi-tenant SaaS for plastic surgery clinics. A prospective patient (a <em>lead</em>) messages a clinic on
+WhatsApp or Telegram. An AI agent, orchestrated in n8n, answers from the clinic's Knowledge Base, qualifies the lead and books,
+moves or cancels consultations through SculptFlow's own tool endpoints. Staff watch every conversation live in the Inbox and can
+take over at any moment. Clinics also run WhatsApp template campaigns, mainly to reactivate old leads.</p>
+<div class="grid">
+  <div class="card"><h4>Conversations</h4><p>Unified Inbox for WhatsApp and Telegram, AI / human modes, take over and return to AI, unread tracking, WhatsApp 24-hour service window, template sends.</p></div>
+  <div class="card"><h4>Leads &amp; booking</h4><p>Leads ("Interested People"), procedures catalog, structured availability, month calendar, AI booking tools with a per-clinic lock, procedure bookings.</p></div>
+  <div class="card"><h4>WhatsApp business</h4><p>Embedded Signup, message templates with Meta review status, account and phone health, campaigns with audience picker and reply/booking attribution.</p></div>
+  <div class="card"><h4>Knowledge Base</h4><p>Manual entries, PDF/DOCX/TXT upload, website crawling, chunking + embeddings, pgvector semantic search for the AI, retrieval benchmark.</p></div>
+  <div class="card"><h4>Clinic admin</h4><p>Self-service registration (one new clinic per signup), Google sign-in, clinic info and opening hours, staff list, notification bell, calendar and TikTok connections.</p></div>
+</div>
+</section>
+
+<!-- =============================================================== -->
+<section id="hld">
+<h2>2. High-level design</h2>
+
+<h3 id="context">2.1 System context</h3>
+<p>One ASP.NET Core process serves the dashboard (server-rendered Razor Pages plus small vanilla JS files), a JSON API, a
+SignalR hub and two in-process background workers. PostgreSQL (Supabase) is the single source of truth. n8n holds no business
+state: it runs the AI agent and two helper workflows, and talks to the app only over HTTP.</p>
+
+<figure>
+<svg viewBox="0 0 1000 560" role="img" aria-labelledby="ctx-title">
+  <title id="ctx-title">System context: browsers, the SculptFlow app, external providers, n8n and PostgreSQL</title>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ah"/></marker>
+    <marker id="arr-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ah-a"/></marker>
+  </defs>
+  <!-- zones -->
+  <rect class="zb" x="10" y="10" width="220" height="540" rx="10"/>
+  <text class="zone" x="24" y="32">Browser</text>
+  <rect class="za" x="250" y="10" width="440" height="540" rx="10"/>
+  <text class="zone" x="264" y="32">SculptFlow app (Render, Docker)</text>
+  <rect class="ze" x="710" y="10" width="280" height="400" rx="10"/>
+  <text class="zone" x="724" y="32">External</text>
+  <rect class="zd" x="710" y="425" width="280" height="125" rx="10"/>
+  <text class="zone" x="724" y="447">Data</text>
+
+  <!-- browser -->
+  <rect class="box" x="30" y="60" width="180" height="110" rx="8"/>
+  <text class="lbl-b" x="44" y="84">Staff dashboard</text>
+  <text class="lbl-m" x="44" y="104">Razor Pages HTML</text>
+  <text class="lbl-m" x="44" y="120">wwwroot/js/*.js (vanilla)</text>
+  <text class="lbl-m" x="44" y="136">site.css, Inter font</text>
+  <text class="lbl-m" x="44" y="152">SignalR JS client (CDN)</text>
+  <rect class="box" x="30" y="200" width="180" height="70" rx="8"/>
+  <text class="lbl-b" x="44" y="224">Meta JS SDK</text>
+  <text class="lbl-m" x="44" y="244">Embedded Signup popup</text>
+  <text class="lbl-m" x="44" y="258">(meta-connect.js)</text>
+  <rect class="box" x="30" y="300" width="180" height="70" rx="8"/>
+  <text class="lbl-b" x="44" y="324">OAuth redirects</text>
+  <text class="lbl-m" x="44" y="344">Google login, calendars,</text>
+  <text class="lbl-m" x="44" y="358">TikTok consent screens</text>
+
+  <!-- app -->
+  <rect class="box" x="270" y="50" width="190" height="80" rx="8"/>
+  <text class="lbl-b" x="284" y="74">Razor Pages</text>
+  <text class="lbl-m" x="284" y="94">Pages/** (cookie auth)</text>
+  <text class="lbl-m" x="284" y="110">server-side PageModels</text>
+  <rect class="box" x="480" y="50" width="190" height="80" rx="8"/>
+  <text class="lbl-b" x="494" y="74">API controllers</text>
+  <text class="lbl-m" x="494" y="94">/api/** , OAuth, webhooks</text>
+  <text class="lbl-m" x="494" y="110">4 trust models (§2.3)</text>
+  <rect class="box" x="270" y="150" width="190" height="60" rx="8"/>
+  <text class="lbl-b" x="284" y="174">InboxHub</text>
+  <text class="lbl-m" x="284" y="192">/hubs/inbox (SignalR)</text>
+  <rect class="box" x="480" y="150" width="190" height="60" rx="8"/>
+  <text class="lbl-b" x="494" y="174">Webhook processors</text>
+  <text class="lbl-m" x="494" y="192">Meta, Telegram</text>
+  <rect class="box" x="270" y="230" width="400" height="150" rx="8"/>
+  <text class="lbl-b" x="284" y="254">Services (business logic, clinic-scoped)</text>
+  <text class="lbl-m" x="284" y="276">Lead · Conversation · Message · Appointment · Availability · ProcedureBooking</text>
+  <text class="lbl-m" x="284" y="294">Campaign · Audience · WhatsAppTemplate · WhatsAppHealth · Channels</text>
+  <text class="lbl-m" x="284" y="312">Knowledge · Search · Embedding · Notification · Calendar</text>
+  <text class="lbl-m" x="284" y="330">TikTokIntegration · ClinicRegistration · Staff · Dashboard · EventLogger</text>
+  <text class="lbl-m" x="284" y="352">IChannelSender → WhatsApp | Telegram senders</text>
+  <text class="lbl-m" x="284" y="368">n8n out: AiTrigger · CalendarSync · BenchmarkGenerator</text>
+  <rect class="box" x="270" y="400" width="190" height="70" rx="8"/>
+  <text class="lbl-b" x="284" y="424">WebsiteScrapeWorker</text>
+  <text class="lbl-m" x="284" y="442">in-memory queue, 1 crawl</text>
+  <text class="lbl-m" x="284" y="456">at a time</text>
+  <rect class="box" x="480" y="400" width="190" height="70" rx="8"/>
+  <text class="lbl-b" x="494" y="424">BenchmarkRunWorker</text>
+  <text class="lbl-m" x="494" y="442">in-memory queue, 1 run</text>
+  <text class="lbl-m" x="494" y="456">at a time</text>
+  <rect class="box" x="270" y="490" width="400" height="44" rx="8"/>
+  <text class="lbl-b" x="284" y="517">ApplicationDbContext (EF Core, mapped to Database/schema.sql)</text>
+
+  <!-- external -->
+  <rect class="box" x="730" y="50" width="240" height="60" rx="8"/>
+  <text class="lbl-b" x="744" y="74">Meta (WhatsApp Cloud, Graph)</text>
+  <text class="lbl-m" x="744" y="92">webhooks in, sends + templates out</text>
+  <rect class="box" x="730" y="120" width="240" height="44" rx="8"/>
+  <text class="lbl-b" x="744" y="147">Telegram Bot API</text>
+  <rect class="box" x="730" y="174" width="240" height="60" rx="8"/>
+  <text class="lbl-b" x="744" y="198">n8n (3 workflows)</text>
+  <text class="lbl-m" x="744" y="216">patient AI · KB benchmark · calendar sync</text>
+  <rect class="box" x="730" y="244" width="240" height="44" rx="8"/>
+  <text class="lbl-b" x="744" y="271">OpenAI-compatible embeddings</text>
+  <rect class="box" x="730" y="298" width="240" height="44" rx="8"/>
+  <text class="lbl-b" x="744" y="325">Google / Microsoft / TikTok OAuth</text>
+  <rect class="box" x="730" y="352" width="240" height="44" rx="8"/>
+  <text class="lbl-b" x="744" y="379">Clinic websites (crawler)</text>
+  <!-- data -->
+  <rect class="box" x="730" y="460" width="240" height="74" rx="8"/>
+  <text class="lbl-b" x="744" y="484">PostgreSQL (Supabase)</text>
+  <text class="lbl-m" x="744" y="502">36 tables · pgvector</text>
+  <text class="lbl-m" x="744" y="518">schema.sql is the source of truth</text>
+
+  <!-- arrows -->
+  <path class="ln" d="M210,100 L270,90" marker-end="url(#arr)"/>
+  <path class="ln" d="M210,130 C240,130 240,180 270,180" marker-end="url(#arr)"/>
+  <path class="ln" d="M210,150 C350,150 380,135 480,110" marker-end="url(#arr)"/>
+  <path class="ln" d="M730,80 L670,80" marker-end="url(#arr)"/>
+  <path class="ln" d="M730,142 C700,142 700,180 670,180" marker-end="url(#arr)"/>
+  <path class="ln-a" d="M670,250 L730,205" marker-end="url(#arr-a)"/>
+  <path class="ln-a" d="M730,220 C700,250 690,300 670,300" marker-end="url(#arr-a)"/>
+  <path class="ln" d="M670,330 L730,266" marker-end="url(#arr)"/>
+  <path class="ln" d="M670,360 L730,320" marker-end="url(#arr)"/>
+  <path class="ln" d="M460,435 C600,480 640,400 730,374" marker-end="url(#arr)"/>
+  <path class="ln" d="M670,512 L730,497" marker-end="url(#arr)"/>
+</svg>
+<figcaption>Blue arrows are the n8n round trip: the app triggers a workflow, the workflow calls back into <code>/api/**</code> with <code>X-Ingest-Key</code>.</figcaption>
+</figure>
+
+<h3 id="tenancy">2.2 Multi-tenancy</h3>
+<ul>
+  <li><strong>Tenant = clinic.</strong> Every business table carries <code>clinic_id</code> (FK to <code>clinics</code>, <code>on delete cascade</code>), and every service method takes a <code>clinicId</code> and filters on it.</li>
+  <li><strong>Dashboard requests</strong> never trust a clinic id from the browser. <code>ICurrentClinicContext</code> resolves it from the signed-in Identity user through <code>clinic_users</code> (one active membership per user, enforced by the partial unique index <code>ux_clinic_users_user_active</code>).</li>
+  <li><strong>Webhooks</strong> resolve the clinic from the stored connection: Meta events by <code>phone_number_id</code> then WABA id on <code>channel_integrations</code>; Telegram by the <code>connectionId</code> in the URL plus its secret token.</li>
+  <li><strong>n8n tool calls</strong> pass <code>clinicId</code> explicitly (query or body) and are trusted because of the shared <code>X-Ingest-Key</code>. This is the weakest link; see <a href="#gaps">§10</a>.</li>
+  <li><strong>Registration</strong> always creates a brand-new, empty clinic plus its first <code>clinic_users</code> row in one transaction (<code>ClinicRegistrationService</code>). There is no invite or join flow yet, and no roles: every member of a clinic has full access.</li>
+  <li>SignalR groups are <code>clinic:{id}</code> (joined on connect from the server-resolved clinic) and <code>conversation:{id}</code> (joined only after an ownership check).</li>
+</ul>
+
+<h3 id="trust">2.3 Trust zones and authentication</h3>
+<div class="table-wrap"><table>
+<tr><th>Model</th><th>Who</th><th>How it is checked</th><th>Where</th></tr>
+<tr><td><span class="tag t-session">session</span></td><td>Staff in the browser</td><td>ASP.NET Core Identity cookie (<code>AddIdentityCore</code>, role-free). Razor Pages: <code>AuthorizeFolder("/")</code> with Login, Register, CompleteGoogleSignup and Error opened up. API: <code>DashboardApiController</code> base class is <code>[Authorize]</code> and exposes the resolved clinic id.</td><td>Pages/**, most <code>/api/**</code>, <code>/hubs/inbox</code>, <code>/calendar-oauth/*</code>, <code>/tiktok-oauth/*</code></td></tr>
+<tr><td><span class="tag t-ingest">ingest key</span></td><td>n8n (server to server)</td><td><code>[RequireIngestKey]</code> action filter compares header <code>X-Ingest-Key</code> to <code>N8n:IngestApiKey</code>; 500 if the key is not configured, 401 if it does not match.</td><td><code>/api/ai/**</code>, <code>/api/ai/test/**</code>, <code>/api/messages/ingest</code>, <code>/api/integrations/whatsapp/{templates,health}/events</code>, <code>/api/calendar-integrations/sync-callback</code>, <code>/api/knowledge/benchmark/generations/{id}/questions</code>, and the AI branch of <code>POST /api/conversations/{id}/messages/send</code> (checked inline)</td></tr>
+<tr><td><span class="tag t-open">provider</span></td><td>Meta, Telegram, TikTok</td><td>Meta: GET handshake against <code>Meta:WebhookVerifyToken</code>; POST deliveries are <em>not</em> signature-checked yet. Telegram: <code>connectionId</code> must be a connected telegram row and <code>X-Telegram-Bot-Api-Secret-Token</code> must match (constant time). TikTok: placeholder, logs only. Infobip: <code>connectionId</code> must be a connected whatsapp row with <code>provider=infobip</code> and <code>?token=</code> must match its <code>webhook_verify_token</code> (constant time).</td><td><code>/api/integrations/whatsapp/webhook</code>, <code>/api/integrations/telegram/webhook/{connectionId}</code>, <code>/api/integrations/whatsapp/connections/{connectionId}/events</code>, <code>/api/integrations/tiktok/webhook</code></td></tr>
+<tr><td><span class="tag t-cookie">external cookie</span></td><td>Google sign-in in progress</td><td>Short-lived (10 min) <code>IdentityConstants.ExternalScheme</code> cookie holding the Google identity; only a verified email is trusted. Registered only when <code>GoogleLogin:ClientId</code> and <code>ClientSecret</code> are both set.</td><td><code>/auth/google/start</code>, <code>/auth/google/callback</code>, <code>/signin-google</code>, <code>/Account/CompleteGoogleSignup</code></td></tr>
+</table></div>
+<p>OAuth <code>state</code> for calendar and TikTok connects is protected with ASP.NET Core DataProtection. <code>POST /api/leads</code> is still <code>[AllowAnonymous]</code> with a body-supplied clinic id (legacy intake).</p>
+
+<h3 id="deploy">2.4 Deployment and runtime</h3>
+<ul>
+  <li>Multi-stage <code>Dockerfile</code> (SDK 10.0 build, aspnet 10.0 runtime). Listens on plain HTTP <code>${PORT:-8080}</code>; Render terminates TLS. Deployed from <code>main</code> to <code>https://sculptflowapp.onrender.com</code>. No CI workflow files are in the repo.</li>
+  <li><code>UseForwardedHeaders</code> trusts <code>X-Forwarded-Proto</code> so redirect URIs and secure cookies see https.</li>
+  <li>Swagger UI at <code>/swagger</code> in Development only. HSTS and <code>/Error</code> handler outside Development.</li>
+  <li>Schema is applied by hand: <code>psql -f Database/schema.sql</code> (idempotent, append-only blocks), optional <code>Database/seed.sql</code>. EF Core migrations are not used.</li>
+  <li>Secrets: <code>dotnet user-secrets</code> locally, Render env vars (<code>Section__Key</code>) in production. <code>Properties/launchSettings.json</code> on dev machines holds real keys and must never be committed.</li>
+  <li>Single instance assumed: the scrape and benchmark queues are in-memory <code>Channel&lt;Guid&gt;</code>s, recovered from DB state on startup. SignalR has no backplane.</li>
+</ul>
+
+<h3 id="principles">2.5 Design principles visible in the code</h3>
+<ol>
+  <li><strong>PostgreSQL is authoritative; SignalR only says "something changed".</strong> Every client handler re-fetches over REST.</li>
+  <li><strong>Business logic lives in <code>Services/</code></strong>, shared by Razor PageModels and API controllers. Controllers are thin.</li>
+  <li><strong>The backend decides; the AI asks.</strong> Mode checks, slot validity, duplicate-booking guard and AI eligibility are decided in .NET, not in n8n.</li>
+  <li><strong>Idempotency at the database.</strong> Partial unique indexes on external ids (messages, leads, Telegram threads, health events) make webhook retries safe.</li>
+  <li><strong>Side effects after commit, never throwing.</strong> Notifications, calendar sync and AI triggers run after the main write succeeds and swallow their own failures.</li>
+  <li><strong>Time:</strong> every instant is <code>timestamptz</code> (UTC). Activity shows in the viewer's timezone; appointments default to clinic time with a Clinic/My time switch; availability is entered and stored clinic-local.</li>
+  <li><strong>Tolerate provider vocabularies.</strong> Meta template and health statuses are free text (CHECK constraints dropped) so unknown values never fail a webhook.</li>
+</ol>
+</section>
+
+<!-- =============================================================== -->
+<section id="frontend">
+<h2>3. Frontend</h2>
+<p>Server-rendered ASP.NET Core Razor Pages with one shared layout (<code>Pages/Shared/_Layout.cshtml</code>), hand-written CSS
+and one small vanilla JS file per interactive page. There is no bundler, no npm and no frontend framework. Razor runtime
+compilation is off, so <code>.cshtml</code> changes need a rebuild.</p>
+
+<h3 id="fe-pages">3.1 Page map</h3>
+<p>Two data patterns coexist: <strong>server-rendered</strong> pages whose PageModel calls services directly (forms post back with <code>OnPost*</code> handlers),
+and <strong>JS-driven</strong> pages that render a shell and then call <code>/api/**</code> with the session cookie.</p>
+<div class="table-wrap"><table>
+<tr><th>Route</th><th>Sidebar label</th><th>Pattern</th><th>JS</th><th>Main backend</th></tr>
+<tr><td><code>/Account/Login</code>, <code>/Account/Register</code>, <code>/Account/CompleteGoogleSignup</code>, <code>/Account/Logout</code></td><td>(anonymous)</td><td>server</td><td><code>auth.js</code></td><td>SignInManager, ClinicRegistrationService, GoogleAuthController</td></tr>
+<tr><td><code>/dashboard</code></td><td>Dashboard</td><td>server</td><td><code>whatsapp-health.js</code></td><td>DashboardService, WhatsAppHealthService</td></tr>
+<tr><td><code>/inbox</code></td><td>Inbox</td><td>JS</td><td><code>inbox.js</code></td><td><code>/api/conversations/**</code>, <code>/api/whatsapp/templates</code>, hub</td></tr>
+<tr><td><code>/dashboard/leads</code>, <code>/dashboard/leads/{id}</code></td><td>Interested People</td><td>server (+ partial refresh)</td><td><code>leads.js</code></td><td>DashboardService, LeadService</td></tr>
+<tr><td><code>/dashboard/appointments</code>, <code>/dashboard/appointments/{id}</code></td><td>Appointments</td><td>JS calendar / server detail</td><td><code>appointments-calendar.js</code></td><td><code>/api/appointments/**</code>, AppointmentService, hub <code>AppointmentChanged</code></td></tr>
+<tr><td><code>/Campaigns</code>, <code>/Campaigns/Create</code>, <code>/Campaigns/{id}</code></td><td>Campaigns</td><td>server</td><td><code>campaign-create.js</code>, <code>campaign-audience.js</code>, <code>multi-select.js</code></td><td>CampaignService, CampaignAudienceService, <code>/api/campaigns/audience-preview*</code></td></tr>
+<tr><td><code>/WhatsApp/Templates</code></td><td>WhatsApp Templates</td><td>server</td><td><code>templates-page.js</code>, <code>whatsapp-templates.js</code></td><td>WhatsAppTemplateService, hub <code>WhatsAppTemplateUpdated</code></td></tr>
+<tr><td><code>/WhatsApp/Health</code></td><td>WhatsApp Health</td><td>server + live</td><td><code>whatsapp-health.js</code></td><td>WhatsAppHealthService, hub <code>WhatsAppHealthUpdated</code></td></tr>
+<tr><td><code>/Procedures</code>, <code>/Procedures/Edit/{id?}</code></td><td>Procedures</td><td>server</td><td><code>procedures-page.js</code></td><td>ProcedureService</td></tr>
+<tr><td><code>/KnowledgeBase</code>, <code>/KnowledgeBase/Edit/{id?}</code>, <code>/KnowledgeBase/Settings</code>, <code>/KnowledgeBase/Websites/{id}</code></td><td>Knowledge Base</td><td>server</td><td><code>knowledge-page.js</code></td><td>KnowledgeService, KnowledgeSettingsService, WebsiteSourceService</td></tr>
+<tr><td><code>/KnowledgeBase/Benchmark</code>, <code>/KnowledgeBase/Benchmark/Generations/{id}</code></td><td>(inside KB)</td><td>JS</td><td><code>knowledge-benchmark.js</code>, <code>knowledge-benchmark-generation.js</code></td><td><code>/api/knowledge/benchmark/**</code></td></tr>
+<tr><td><code>/settings/clinic-info</code></td><td>Clinic Info</td><td>server</td><td><code>clinic-info.js</code></td><td>Clinic fields, AvailabilityService (weekly rules, exceptions, booking rules)</td></tr>
+<tr><td><code>/Staff</code></td><td>Staff</td><td>server</td><td>none</td><td>StaffService</td></tr>
+<tr><td><code>/settings/integrations</code></td><td>Messaging Integrations</td><td>server + JS</td><td><code>meta-connect.js</code></td><td><code>/api/channel-integrations/**</code>, TikTokIntegrationService</td></tr>
+<tr><td><code>/settings/calendar-integrations</code></td><td>Calendar Integrations</td><td>server + JS</td><td>inline</td><td><code>/calendar-oauth/*</code>, <code>/api/calendar-integrations/**</code></td></tr>
+</table></div>
+<p>Shared partials: <code>_AuthSide</code>, <code>_GoogleButton</code>, <code>_StatusHelp</code> (status glossary overlay), <code>_TimeViewSwitch</code> (Clinic time / My time).
+C# view helpers in <code>Pages/Shared</code>: <code>ChannelIconHelper</code>, <code>FilterLabelHelper</code>, <code>LocalTimeHelper</code>, <code>StatusBadgeHelper</code>, <code>UrlDisplayHelper</code>, <code>ViewerTimeZone</code>.</p>
+
+<h3 id="fe-js">3.2 JavaScript modules</h3>
+<p>Every file is an IIFE-style script loaded by its page; none depends on another except through globals noted below.
+Loaded on every authenticated page by the layout: <code>local-time.js</code> (head), <code>theme.js</code>, SignalR client
+(<code>@microsoft/signalr@8.0.0</code> from jsDelivr), <code>notifications.js</code>, <code>sidebar.js</code>.</p>
+<div class="table-wrap"><table>
+<tr><th>File</th><th>Responsibility</th><th>SignalR events</th></tr>
+<tr><td><code>inbox.js</code> (~800 lines)</td><td>Conversation list, thread, composer, Take Over / Return to AI / Close, template send when the 24h window is closed, unread badges, tab title count, mode-change dividers.</td><td><code>NewMessage</code>, <code>MessageStatusUpdated</code>, <code>ConversationUpdated</code>, <code>ConversationModeChanged</code>; joins <code>conversation:{id}</code></td></tr>
+<tr><td><code>appointments-calendar.js</code></td><td>Month grid, create appointment dialog, status changes, Clinic/My time reload.</td><td><code>AppointmentChanged</code></td></tr>
+<tr><td><code>notifications.js</code></td><td>Bell badge and dropdown over <code>/api/notifications</code>.</td><td><code>NotificationCreated</code></td></tr>
+<tr><td><code>sidebar.js</code></td><td>User menu (theme, API docs, sign out) and Inbox unread count (sums <code>unreadCount</code> from <code>GET /api/conversations</code>).</td><td><code>NewMessage</code>, <code>ConversationUpdated</code></td></tr>
+<tr><td><code>whatsapp-templates.js</code> / <code>templates-page.js</code></td><td>Live template status list / presentation, preview bubble, new-template popup.</td><td><code>WhatsAppTemplateUpdated</code></td></tr>
+<tr><td><code>whatsapp-health.js</code></td><td>Live health fields on <code>/WhatsApp/Health</code> and the dashboard indicator.</td><td><code>WhatsAppHealthUpdated</code></td></tr>
+<tr><td><code>knowledge-benchmark.js</code>, <code>knowledge-benchmark-generation.js</code></td><td>Benchmark dashboard, cases, runs, results, generation pages; polls run and generation progress.</td><td>none (polling)</td></tr>
+<tr><td><code>campaign-create.js</code>, <code>campaign-audience.js</code>, <code>multi-select.js</code></td><td>Template variables ("fill in the blanks"), live preview, audience picker mapped onto <code>AudienceType</code> + <code>ManualSelection</code>, matching-count preview, chip multiselect.</td><td>none</td></tr>
+<tr><td><code>meta-connect.js</code></td><td>Facebook JS SDK login for WhatsApp Embedded Signup and Facebook Page connect. Reads <code>window.PS_META_CONFIG</code>.</td><td>none</td></tr>
+<tr><td><code>local-time.js</code></td><td>Renders UTC instants in the viewer's zone, writes the <code>sf-tz</code> cookie used by server day math, handles <code>data-clinic-tz</code> and the <code>sf-time-view</code> event.</td><td>none</td></tr>
+<tr><td><code>clinic-info.js</code>, <code>knowledge-page.js</code>, <code>procedures-page.js</code>, <code>leads.js</code>, <code>auth.js</code>, <code>status-help.js</code>, <code>theme.js</code></td><td>Form niceties, search/filter, unsaved-changes bar, password checks, theme toggle.</td><td>none</td></tr>
+</table></div>
+
+<h3 id="fe-css">3.3 CSS, theming and time display</h3>
+<ul>
+  <li>One stylesheet, <code>wwwroot/css/site.css</code> (~2,700 lines), with CSS variables for light and dark. Theme follows the OS until the user picks one; the choice is stored in <code>localStorage['sf-theme']</code> and applied as <code>&lt;html data-theme&gt;</code> by an inline head script to avoid a flash. Sidebar collapse uses <code>localStorage['sf-sidebar']</code>.</li>
+  <li>Brand: <code>wwwroot/logo.svg</code> (also the favicon). User-visible name is MySculptFlow.</li>
+  <li>Time rule: UTC in the DB; activity in viewer time; appointments in clinic time with a switch; availability clinic-local. Server-side day boundaries use the <code>sf-tz</code> cookie via <code>ViewerTimeZone</code>.</li>
+</ul>
+</section>
+
+<!-- =============================================================== -->
+<section id="backend">
+<h2>4. Backend</h2>
+
+<h3 id="be-layers">4.1 Layers and folders</h3>
+<div class="table-wrap"><table>
+<tr><th>Folder</th><th>Contents</th></tr>
+<tr><td><code>Program.cs</code></td><td>All DI registration and the middleware pipeline (forwarded headers → exception/HSTS → https redirect → routing → authn → authz → static assets → pages, controllers, hub). <code>/</code> redirects to <code>/dashboard</code>.</td></tr>
+<tr><td><code>Controllers/</code></td><td>27 API/OAuth/webhook controllers; <code>DashboardApiController</code> base; <code>RequireIngestKeyAttribute</code>.</td></tr>
+<tr><td><code>Pages/</code></td><td>Razor Pages and their PageModels (see §3.1).</td></tr>
+<tr><td><code>Services/</code></td><td>Interfaces (<code>I*.cs</code>, with the design notes in doc comments) and implementations. Also provider clients (Meta Graph, Google/Outlook calendar, TikTok, OpenAI embeddings) and n8n notifiers.</td></tr>
+<tr><td><code>Integrations/WhatsApp</code></td><td><code>MetaWebhookParser</code> → <code>MetaWebhookProcessor</code> → 8 handlers (CustomerMessage, BusinessAppEcho, MessageStatus, TemplateEvent, HealthEvent, History, AppStateSync, Unknown). <code>MetaWhatsAppProvider</code> (Graph send).</td></tr>
+<tr><td><code>Integrations/Infobip</code></td><td><code>InfobipClient</code> (REST, retries, timeouts), <code>InfobipWhatsAppProvider</code> (send), <code>InfobipWhatsAppWebhookParser</code> → <code>InfobipWhatsAppWebhookProcessor</code> → the same CustomerMessage / MessageStatus / Unknown handlers, <code>InfobipWhatsAppIntegrationService</code> (connect a sender).</td></tr>
+<tr><td><code>Integrations/Telegram</code></td><td>Bot API client, update parser, webhook processor, integration service (connect/refresh/disconnect), channel sender.</td></tr>
+<tr><td><code>Integrations/Knowledge/WebScraping</code></td><td>Crawler: options, SSRF guard, robots.txt, URL normalizer, fetch client, HTML extractor (AngleSharp), processor, worker, source service.</td></tr>
+<tr><td><code>Integrations/Knowledge/Benchmark</code></td><td>Retrieval benchmark: service (+ generation partial), scorer, run worker, n8n generator client.</td></tr>
+<tr><td><code>Hubs/</code></td><td><code>InboxHub</code>.</td></tr>
+<tr><td><code>Data/</code></td><td><code>ApplicationDbContext</code> (Fluent API mapping to snake_case tables, Identity tables renamed) and <code>Entities/</code> (status/channel constant classes live next to entities).</td></tr>
+<tr><td><code>Dtos/</code></td><td>Request/response records per feature; <code>LenientJsonConverters</code> for tolerant n8n input.</td></tr>
+</table></div>
+
+<h3 id="be-services">4.2 Service catalog</h3>
+<p>All scoped per request unless noted. Each interface file carries the authoritative behavioral notes.</p>
+<div class="table-wrap"><table>
+<tr><th>Service</th><th>Owns</th><th>Notable rules</th></tr>
+<tr><td><code>CurrentClinicContext</code> / <code>ClinicContext</code></td><td>Clinic resolution</td><td>Session → <code>clinic_users</code>; or lookup by explicit id for trusted callers.</td></tr>
+<tr><td><code>ClinicRegistrationService</code></td><td>Sign-up</td><td>New user + new clinic + membership in one transaction; external (Google) variant links the login.</td></tr>
+<tr><td><code>LeadService</code></td><td>Leads</td><td>Dedup by <code>(clinic, external_lead_id)</code>; <code>GetOrCreateByPhoneAsync</code> for WhatsApp; <code>GetOrCreateByExternalIdAsync</code> for Telegram (no phone); AI-only <code>UpdateContextAsync</code> cannot touch identity fields.</td></tr>
+<tr><td><code>ConversationService</code></td><td>Conversations</td><td>One conversation per lead per channel; take over, handoff (AI), return to AI, close, mark read. Mode changes go through <code>ConversationModeSync.Apply</code> which keeps <code>ai_enabled</code>/<code>human_takeover</code> in sync and inserts a system divider message.</td></tr>
+<tr><td><code>MessageService</code></td><td>All writes to <code>messages</code></td><td><code>SendAsync</code> (staff, flips to human), <code>SendAiReplyAsync</code> (re-checks mode, never flips), <code>SendTemplateAsync</code>, <code>SendCampaignTemplateAsync</code>, <code>IngestAsync</code> (customer/echo/status; updates 24h window only on genuine customer inbound; campaign reply attribution; NEW_LEAD and CAMPAIGN_REPLY notifications). Text sends routed to <code>IChannelSender</code> by <code>conversation.Channel</code>.</td></tr>
+<tr><td><code>WhatsAppService</code> / <code>WhatsAppChannelSender</code></td><td>WhatsApp send, provider-independent</td><td>Only caller of WhatsApp send; free text only inside the 24h window; templates any time. Picks the <code>IWhatsAppProvider</code> named by <code>WhatsApp:Provider</code> (<code>meta</code> | <code>infobip</code>) and refuses a clinic row connected through the other provider.</td></tr>
+<tr><td><code>IWhatsAppProvider</code>: <code>MetaWhatsAppProvider</code>, <code>InfobipWhatsAppProvider</code></td><td>One BSP's REST API</td><td>SendText / SendTemplate, return the provider message id. Infobip sends our own GUID as <code>messageId</code> and sets <code>notifyUrl</code> to the clinic's webhook so delivery/seen reports come back to it.</td></tr>
+<tr><td><code>InfobipWhatsAppIntegrationService</code></td><td>Infobip sender connect</td><td>Checks the number is a sender on SculptFlow's Infobip account (business-info), one clinic per sender, stores <code>provider=infobip</code> + <code>provider_sender_id</code> + a webhook secret, clears Meta fields.</td></tr>
+<tr><td><code>AppointmentService</code></td><td>Appointments</td><td>Booking/reschedule/cancel under <code>pg_advisory_xact_lock(hashtext(clinicId))</code>; one upcoming appointment per lead; <code>ScheduleAsync</code> decides create vs move vs CONFIRMATION_REQUIRED; month calendar grouped by display zone; fires calendar sync, notifications and <code>AppointmentChanged</code> after commit.</td></tr>
+<tr><td><code>AvailabilityService</code></td><td>Slots</td><td>Weekly rules + date exceptions + duration + buffer + minimum notice + horizon + existing appointments, in the clinic's timezone. No open weekday means no slots (never 24/7).</td></tr>
+<tr><td><code>ProcedureService</code>, <code>ProcedureBookingService</code></td><td>Catalog, procedure deals</td><td>AI only sees active procedures.</td></tr>
+<tr><td><code>CampaignService</code>, <code>CampaignAudienceService</code></td><td>Campaigns</td><td>Audience snapshot at creation; contactability exclusions (opt-out, missing phone); sends in batches of 20 via <code>SendAsync</code>/<code>ProcessBatchAsync</code>.</td></tr>
+<tr><td><code>WhatsAppTemplateService</code></td><td>Template lifecycle</td><td>Create → submit for review through the active <code>IWhatsAppTemplateProvider</code> (<code>MetaWhatsAppTemplateProvider</code> | <code>InfobipWhatsAppTemplateProvider</code>); sync status; retry submit; apply provider events by template id then name+language. <code>whatsapp_templates.provider</code> records where a template was approved; sending, syncing and the campaign template list only use templates of the active provider.</td></tr>
+<tr><td><code>WhatsAppHealthService</code></td><td>Account/phone health</td><td>Maps Meta vocab to a health level, appends history, INTEGRATION_UNHEALTHY on transition into a problem state.</td></tr>
+<tr><td><code>ChannelIntegrationService</code></td><td>WhatsApp/Facebook connections</td><td>Embedded Signup code exchange, WABA and phone lookup, phone registration with generated PIN; Facebook Page connect.</td></tr>
+<tr><td><code>TelegramIntegrationService</code></td><td>Telegram bot connection</td><td><code>getMe</code>, <code>setWebhook</code> with a random secret, refresh, disconnect.</td></tr>
+<tr><td><code>KnowledgeService</code>, <code>KnowledgeChunkingService</code>, <code>KnowledgeSettingsService</code>, <code>DocumentTextExtractor</code> (singleton)</td><td>KB content</td><td>Embeddings computed before the transaction, chunk swap is transactional; uploads extracted with PdfPig / OpenXml, file not stored.</td></tr>
+<tr><td><code>KnowledgeSearchService</code>, <code>OpenAiEmbeddingService</code></td><td>Retrieval</td><td>Exact cosine scan (<code>1 - (embedding &lt;=&gt; q)</code>) over the clinic's active chunks, top-K then minimum similarity.</td></tr>
+<tr><td><code>WebsiteSourceService</code>, <code>WebsiteScrapeProcessor</code></td><td>Website sources</td><td>See §5.8.</td></tr>
+<tr><td><code>KnowledgeBenchmarkService</code></td><td>Retrieval benchmark</td><td>Cases, async generations via n8n, runs, scoring (Top-1/3/5, MRR), stale detection.</td></tr>
+<tr><td><code>NotificationService</code></td><td>Bell</td><td>Created only after a confirmed event; never throws.</td></tr>
+<tr><td><code>CalendarIntegrationService</code></td><td>Google/Outlook connection + sync</td><td>Owns OAuth tokens and refresh; n8n only executes the event API call.</td></tr>
+<tr><td><code>TikTokIntegrationService</code></td><td>TikTok Login Kit</td><td>Account connection only; refreshes on page load.</td></tr>
+<tr><td><code>DashboardService</code>, <code>StaffService</code></td><td>Read models</td><td>Funnel summary, attention list, lead/appointment tables, procedure stats; staff list.</td></tr>
+<tr><td><code>EventLogger</code></td><td><code>events</code> table</td><td>Adds rows to the caller's unit of work; saved together with the business change.</td></tr>
+</table></div>
+
+<h3 id="be-api">4.3 API surface</h3>
+<p>Tags: <span class="tag t-session">session</span> logged-in staff, <span class="tag t-ingest">ingest</span> <code>X-Ingest-Key</code>, <span class="tag t-open">open</span> provider-authenticated or anonymous.</p>
+
+<h4>Dashboard APIs (session)</h4>
+<div class="table-wrap"><table>
+<tr><th>Base</th><th>Endpoints</th></tr>
+<tr><td><code>/api/conversations</code></td><td class="wrap"><code>GET</code> list · <code>POST</code> create · <code>GET {id}</code> · <code>GET {id}/messages</code> · <code>POST {id}/messages</code> · <code>POST {id}/messages/send</code> (staff branch) · <code>POST {id}/messages/send-template</code> · <code>POST {id}/read</code> · <code>POST {id}/take-over</code> · <code>POST {id}/return-to-ai</code> · <code>POST {id}/close</code></td></tr>
+<tr><td><code>/api/leads</code></td><td class="wrap"><code>GET</code> · <code>GET {id}</code> · <code>PATCH {id}</code> · <code>POST {id}/status</code> · <code>POST</code> create is <span class="tag t-open">anonymous</span></td></tr>
+<tr><td><code>/api/appointments</code></td><td class="wrap"><code>GET</code> · <code>POST</code> · <code>GET {id}</code> · <code>PATCH {id}/status</code> · <code>GET available</code> · <code>GET calendar</code></td></tr>
+<tr><td><code>/api/procedures</code></td><td class="wrap"><code>GET</code> · <code>GET {id}</code> · <code>POST</code> · <code>PUT {id}</code> · <code>POST {id}/active</code></td></tr>
+<tr><td><code>/api/procedure-bookings</code></td><td class="wrap"><code>GET</code> · <code>POST</code> · <code>PATCH {id}</code></td></tr>
+<tr><td><code>/api/campaigns</code></td><td class="wrap"><code>GET</code> · <code>GET {id}</code> · <code>POST</code> · <code>GET audience-preview</code> · <code>GET audience-preview/leads</code> · <code>POST {id}/schedule</code> · <code>POST {id}/send</code> · <code>POST {id}/process-batch</code> · <code>POST {id}/cancel</code></td></tr>
+<tr><td><code>/api/whatsapp/templates</code></td><td class="wrap"><code>GET</code> · <code>GET {id}</code> · <code>POST</code> · <code>POST {id}/sync</code></td></tr>
+<tr><td><code>/api/whatsapp/health</code></td><td class="wrap"><code>GET</code> · <code>GET events</code></td></tr>
+<tr><td><code>/api/channel-integrations</code></td><td class="wrap"><code>GET</code> · <code>PUT</code> · <code>POST whatsapp/connect</code> · <code>POST whatsapp/debug-token</code> · <code>POST facebook/connect</code> · <code>POST telegram/connect</code> · <code>POST telegram/refresh</code> · <code>POST {channel}/disconnect</code></td></tr>
+<tr><td><code>/api/calendar-integrations</code></td><td class="wrap"><code>GET</code> · <code>POST {provider}/refresh-calendars</code> · <code>POST {provider}/select-calendar</code> · <code>POST {provider}/sync-enabled</code> · <code>POST {provider}/disconnect</code></td></tr>
+<tr><td><code>/api/knowledge</code></td><td class="wrap"><code>GET</code> · <code>GET {id}</code> · <code>POST</code> · <code>POST upload</code> (multipart) · <code>PUT {id}</code> · <code>POST {id}/active</code> · <code>DELETE {id}</code> · <code>GET/PUT settings</code></td></tr>
+<tr><td><code>/api/knowledge/websites</code></td><td class="wrap"><code>GET</code> · <code>POST</code> · <code>GET {id}</code> · <code>GET {id}/pages</code> · <code>POST {id}/rescrape</code> · <code>POST {id}/active</code> · <code>DELETE {id}</code></td></tr>
+<tr><td><code>/api/knowledge/benchmark</code></td><td class="wrap"><code>GET</code> dashboard · cases (<code>GET</code>, <code>GET {id}</code>, <code>POST</code>, <code>PUT {id}</code>, <code>POST {id}/review</code>, <code>DELETE {id}</code>, <code>POST cases/generate</code>) · generations (<code>GET</code>, <code>GET {id}</code>, <code>POST {id}/cancel</code>) · <code>GET source-documents</code>, <code>GET source-documents/{id}/chunks</code> · runs (<code>POST</code>, <code>GET</code>, <code>GET {id}</code>, <code>GET {id}/results</code>, <code>GET {id}/results/{resultId}</code>, <code>GET {id}/generations</code>)</td></tr>
+<tr><td><code>/api/notifications</code></td><td class="wrap"><code>GET</code> · <code>GET unread-count</code> · <code>POST {id}/read</code> · <code>POST read-all</code></td></tr>
+<tr><td><code>/api/dashboard</code></td><td class="wrap"><code>GET summary</code> · <code>GET attention</code> · <code>GET leads</code> · <code>GET appointments</code> · <code>GET procedures</code></td></tr>
+<tr><td><code>/api/staff</code></td><td class="wrap"><code>GET</code></td></tr>
+</table></div>
+
+<h4>AI tool surface for n8n (ingest)</h4>
+<div class="table-wrap"><table>
+<tr><th>AI tool</th><th>Endpoint</th><th>Notes</th></tr>
+<tr><td><code>search_clinic_knowledge</code></td><td><code>POST /api/ai/knowledge/search</code></td><td>Body <code>{clinicId, query, limit}</code>. Returns chunks, never an answer. Information only.</td></tr>
+<tr><td><code>get_clinic_info</code></td><td><code>GET /api/ai/clinic-info?clinicId=</code></td><td>Free-text clinic fields. Partly redundant with the KB, kept for now.</td></tr>
+<tr><td><code>get_procedures</code></td><td><code>GET /api/ai/procedures?clinicId=</code></td><td>Active procedures only.</td></tr>
+<tr><td><code>get_lead_context</code> / <code>update_lead</code></td><td><code>GET</code> / <code>PATCH /api/ai/leads/{leadId}?clinicId=</code></td><td>Update cannot change name/phone/email.</td></tr>
+<tr><td><code>get_available_slots</code></td><td><code>GET /api/ai/appointments/available</code></td><td>Slots plus the lead's booking context (<code>CanCreateNewBooking</code>, upcoming appointments).</td></tr>
+<tr><td><code>schedule_consultation</code></td><td><code>POST /api/ai/appointments/schedule</code></td><td>Single scheduling mutation; backend chooses create / move / CONFIRMATION_REQUIRED. Structured outcome codes with AI instructions (<code>AiResultInstructions</code>).</td></tr>
+<tr><td><code>cancel_consultation</code></td><td><code>POST /api/ai/appointments/cancel</code></td><td>Structured outcome.</td></tr>
+<tr><td><code>get_my_appointments</code></td><td><code>GET /api/ai/appointments/upcoming</code></td><td>Lead's upcoming booked/confirmed, clinic-local wording.</td></tr>
+<tr><td>(legacy) <code>book_consultation</code>, <code>reschedule_consultation</code></td><td><code>POST /api/ai/appointments/book</code>, <code>/reschedule</code></td><td>Superseded by <code>schedule</code>; still live.</td></tr>
+<tr><td><code>handoff_to_human</code></td><td><code>POST /api/ai/conversations/{id}/handoff?clinicId=</code></td><td>Body <code>{reason}</code>. HANDOFF notification.</td></tr>
+<tr><td>AI reply</td><td><code>POST /api/conversations/{id}/messages/send?clinicId=</code></td><td>Body <code>{content, sender:"ai"}</code>. 409 <code>conversation_in_human_mode</code> if a human took over.</td></tr>
+<tr><td>test only</td><td><code>GET /api/ai/test/codes</code>, <code>POST /api/ai/test/schedule</code>, <code>POST /api/ai/test/cancel</code></td><td>Canned outcomes, no DB access.</td></tr>
+</table></div>
+
+<h4>Other server-to-server and provider endpoints</h4>
+<div class="table-wrap"><table>
+<tr><th>Endpoint</th><th>Auth</th><th>Purpose</th></tr>
+<tr><td><code>GET/POST /api/integrations/whatsapp/webhook</code></td><td><span class="tag t-open">open</span></td><td>Meta handshake and every Meta delivery (§5.1).</td></tr>
+<tr><td><code>POST /api/integrations/telegram/webhook/{connectionId}</code></td><td><span class="tag t-open">secret header</span></td><td>Telegram updates (§5.4).</td></tr>
+<tr><td><code>POST /api/integrations/whatsapp/account/events?token=…</code></td><td><span class="tag t-open">secret in URL</span></td><td>Infobip account-level template updates (status, category, quality), token = <code>Infobip:WebhookToken</code>; 404 until it is set. Matched to a clinic by template id.</td></tr>
+<tr><td><code>POST /api/integrations/whatsapp/connections/{connectionId}/events?token=…</code></td><td><span class="tag t-open">secret in URL</span></td><td>Infobip inbound messages, delivery reports and seen reports for one clinic's sender (§5.4b).</td></tr>
+<tr><td><code>GET/POST /api/integrations/tiktok/webhook</code></td><td><span class="tag t-open">open</span></td><td>Placeholder: reachability + log only.</td></tr>
+<tr><td><code>POST /api/messages/ingest</code></td><td><span class="tag t-ingest">ingest</span></td><td>Legacy normalized ingest from the n8n-relay era (customer, echo, AI-sent, status). Same <code>MessageService.IngestAsync</code>.</td></tr>
+<tr><td><code>POST /api/integrations/whatsapp/templates/events</code>, <code>/health/events</code></td><td><span class="tag t-ingest">ingest</span></td><td>Pre-normalized template/health events (tooling, tests). Same services as the webhook handlers.</td></tr>
+<tr><td><code>POST /api/calendar-integrations/sync-callback</code></td><td><span class="tag t-ingest">ingest</span></td><td>n8n calendar sync result (§5.7).</td></tr>
+<tr><td><code>POST /api/knowledge/benchmark/generations/{id}/questions</code></td><td><span class="tag t-ingest">ingest</span></td><td>n8n benchmark question callback (§5.9).</td></tr>
+<tr><td><code>GET /calendar-oauth/{provider}/connect</code>, <code>/callback</code></td><td><span class="tag t-session">session</span></td><td>Google/Outlook OAuth.</td></tr>
+<tr><td><code>GET /tiktok-oauth/connect</code>, <code>/callback</code></td><td><span class="tag t-session">session</span></td><td>TikTok Login Kit OAuth.</td></tr>
+<tr><td><code>POST /auth/google/start</code>, <code>GET /auth/google/callback</code></td><td><span class="tag t-cookie">anonymous</span></td><td>Continue with Google (sign in or sign up).</td></tr>
+</table></div>
+
+<h3 id="be-signalr">4.4 SignalR</h3>
+<p>One hub, <code>InboxHub</code> at <code>/hubs/inbox</code>, <code>[Authorize]</code>. Server-to-client only, all sent to <code>clinic:{id}</code> through <code>IInboxNotifier</code>.
+Client methods: <code>JoinConversation(id)</code> (ownership checked), <code>LeaveConversation(id)</code>.</p>
+<div class="table-wrap"><table>
+<tr><th>Event</th><th>Payload</th><th>Sent when</th></tr>
+<tr><td><code>NewMessage</code></td><td>conversationId, messageId, leadId, direction, senderType, origin, createdAt</td><td>Any message persisted</td></tr>
+<tr><td><code>MessageStatusUpdated</code></td><td>conversationId, messageId, deliveryStatus, updatedAt</td><td>Meta status webhook</td></tr>
+<tr><td><code>ConversationUpdated</code></td><td>conversationId</td><td>Read state or conversation fields change</td></tr>
+<tr><td><code>ConversationModeChanged</code></td><td>conversationId, mode</td><td>ai ↔ human</td></tr>
+<tr><td><code>AppointmentChanged</code></td><td>appointmentId, change (created | rescheduled | canceled | status_changed)</td><td>After commit</td></tr>
+<tr><td><code>NotificationCreated</code></td><td>NotificationResponse</td><td>New bell item</td></tr>
+<tr><td><code>WhatsAppTemplateUpdated</code></td><td>templateId, name, status, rejectionReason, updatedAt</td><td>Template event or sync</td></tr>
+<tr><td><code>WhatsAppHealthUpdated</code></td><td>connectionId, healthLevel, account/review/quality/phone status, problemMessage, updatedAt</td><td>Health event</td></tr>
+</table></div>
+
+<h3 id="be-workers">4.5 Background workers</h3>
+<div class="table-wrap"><table>
+<tr><th>Hosted service</th><th>Queue</th><th>Unit of work</th><th>Recovery on startup</th></tr>
+<tr><td><code>WebsiteScrapeWorker</code></td><td><code>WebsiteScrapeQueue</code> (unbounded <code>Channel&lt;Guid&gt;</code>, singleton)</td><td>One <code>knowledge_website_scrape_runs</code> row, one at a time, own DI scope</td><td><code>crawling</code> runs → failed ("interrupted"); <code>pending</code> runs re-queued</td></tr>
+<tr><td><code>KnowledgeBenchmarkRunWorker</code></td><td><code>KnowledgeBenchmarkRunQueue</code></td><td>One <code>knowledge_retrieval_benchmark_runs</code> row</td><td><code>running</code> → failed; <code>pending</code> re-queued</td></tr>
+</table></div>
+<p>There is no scheduler. Scheduled campaigns store <code>scheduled_at</code>, but nothing in-process sends them; something (the dashboard or an external n8n schedule) must call <code>POST /api/campaigns/{id}/send</code> / <code>process-batch</code>.</p>
+
+<h3 id="be-cross">4.6 Cross-cutting concerns</h3>
+<ul>
+  <li><strong>Audit/analytics:</strong> <code>events</code> rows via <code>IEventLogger</code>, typed by <code>EventTypes</code> constants (lead_created, consultation_booked, human_handoff, ai_message_sent, whatsapp_* …).</li>
+  <li><strong>Notifications:</strong> types NEW_LEAD, HANDOFF, APPOINTMENT_BOOKED / RESCHEDULED / CANCELLED, CAMPAIGN_REPLY, OUTBOUND_MESSAGE_FAILED, INTEGRATION_UNHEALTHY; each row precomputes a <code>link</code>.</li>
+  <li><strong>Errors:</strong> controllers map <code>ArgumentException</code> → 400, <code>ServiceWindowClosedException</code> / mode conflicts → 409, <code>InvalidOperationException</code> → 422, <code>ChannelSendException</code> → 502. <code>DbErrors</code> helps detect unique violations.</li>
+  <li><strong>HTTP clients:</strong> typed clients via <code>AddHttpClient</code>. Telegram and the benchmark generator use <code>RemoveAllLoggers()</code> because their URLs carry secrets. The crawler client disables redirects, cookies and proxy, and routes every connect through <code>SsrfGuard.ConnectAsync</code>.</li>
+  <li><strong>Testing:</strong> no automated test project. <code>AiTestController</code> gives n8n canned outcomes.</li>
+</ul>
+</section>
+
+<!-- =============================================================== -->
+<section id="flows">
+<h2>5. Key flows (low-level)</h2>
+
+<h3>5.1 Inbound WhatsApp message to AI reply</h3>
+<ol class="flow">
+  <li><span class="actor">Meta</span> posts raw JSON to <code>POST /api/integrations/whatsapp/webhook</code>.</li>
+  <li><span class="actor">MetaWebhookParser</span> splits it into <code>ParsedMetaEvent</code>s (customer message, business-app echo, status, template, health, history, app-state, unknown). Interactive/button replies become clean text plus <code>SelectedValue</code>.</li>
+  <li><span class="actor">MetaWebhookProcessor</span> resolves the clinic per event from <code>channel_integrations</code> (<code>phone_number_id</code>, else WABA id) and dispatches to the handler.</li>
+  <li><span class="actor">CustomerMessageHandler</span> → <code>LeadService.GetOrCreateByPhoneAsync</code> → conversation get-or-create → <code>MessageService.IngestAsync</code>: idempotent on <code>(clinic, channel, external_message_id)</code>, stores the message, opens the 24h window, unread, campaign reply attribution, events, notifications, <code>NewMessage</code>.</li>
+  <li>If the event is AI-eligible (customer message, conversation mode <code>ai</code>, not a duplicate) the controller calls <code>AiTriggerNotifier</code> → <code>N8n:AiWebhookUrl</code> with <code>{clinicId, conversationId, leadId, messageId, channel, messageType, messageText, selectedValue}</code>. Never throws.</li>
+  <li>Meta always gets HTTP 200.</li>
+  <li><span class="actor">n8n AI agent</span> calls <code>/api/ai/*</code> tools, then <code>POST /api/conversations/{id}/messages/send?clinicId=</code> with <code>sender:"ai"</code>.</li>
+  <li><span class="actor">MessageService.SendAiReplyAsync</span> re-reads the mode; if a human took over it returns 409 and nothing is sent. Otherwise <code>WhatsAppChannelSender</code> sends through the Graph API and the message is stored with <code>origin=ai</code>.</li>
+</ol>
+
+<h3>5.2 Staff reply, echo and status</h3>
+<ul>
+  <li><strong>Staff reply from the Inbox:</strong> <code>POST …/messages/send</code> (session) → <code>MessageService.SendAsync</code> → channel sender (throws before persisting if it cannot send; WhatsApp requires an open 24h window) → store <code>origin=dashboard</code> → mode flips to <code>human</code>.</li>
+  <li><strong>Closed window:</strong> 409; the Inbox offers <code>send-template</code> with an approved template.</li>
+  <li><strong>Coexistence echo:</strong> a reply typed in the WhatsApp Business phone app arrives as a <code>BusinessAppEcho</code>, is stored with <code>origin=whatsapp_business_app</code>, flips the conversation to human, and never triggers AI.</li>
+  <li><strong>Delivery status:</strong> <code>MessageStatusHandler</code> updates <code>delivery_status</code> and the matching <code>delivered_at</code>/<code>read_at</code>/<code>failed_at</code>, mirrors campaign recipient status, raises OUTBOUND_MESSAGE_FAILED on failure, broadcasts <code>MessageStatusUpdated</code>.</li>
+</ul>
+
+<h3>5.3 Conversation modes</h3>
+<p><code>mode</code> ∈ {<code>ai</code>, <code>human</code>, <code>approval</code>}. Switches to human: staff Take Over, a staff message or template, a business-app echo, the AI's <code>handoff_to_human</code>, a campaign template send. Only Return to AI switches back. <code>approval</code> exists in the schema but is never set automatically.</p>
+
+<h3>5.4 Telegram</h3>
+<ol class="flow">
+  <li>Staff paste a BotFather token on Messaging Integrations → <code>POST /api/channel-integrations/telegram/connect</code> → <code>getMe</code>, then <code>setWebhook</code> to <code>{App:PublicBaseUrl}/api/integrations/telegram/webhook/{channel_integrations.id}</code> with a random <code>secret_token</code>.</li>
+  <li>Telegram posts an update; the controller checks the row is <code>telegram</code> + <code>connected</code> (else 404) and the secret header (else 403).</li>
+  <li><code>TelegramWebhookProcessor</code> → lead by <code>external_lead_id</code> (no phone) → conversation keyed by <code>external_thread_id = chat.id</code> → <code>IngestAsync</code> with external id <code>chatId:messageId</code>, <code>origin=telegram_customer</code>.</li>
+  <li>Same AI trigger as WhatsApp with <code>channel:"telegram"</code>. Outbound goes through <code>TelegramChannelSender</code> → <code>sendMessage</code>. No 24h window; templates are WhatsApp-only.</li>
+</ol>
+
+<h3>5.4b WhatsApp through Infobip (MVP provider)</h3>
+<ol class="flow">
+  <li><code>WhatsApp:Provider=infobip</code> makes the Messaging Integrations WhatsApp card ask for a number instead of Facebook sign-in. SculptFlow first registers the number as a sender on its single Infobip account (portal); the clinic then enters it → <code>InfobipWhatsAppIntegrationService.ConnectAsync</code> → Infobip <code>GET /whatsapp/1/senders/{sender}/business-info</code> → row with <code>provider=infobip</code>, <code>provider_sender_id</code>, random <code>webhook_verify_token</code>.</li>
+  <li>The card's details show <code>{App:PublicBaseUrl}/api/integrations/whatsapp/connections/{channel_integrations.id}/events?token=…</code>; SculptFlow sets it as the sender's inbound forwarding URL in Infobip.</li>
+  <li>Infobip posts <code>{results:[…]}</code>; the controller checks the row (else 404) and the token (else 403). <code>InfobipWhatsAppWebhookParser</code> classifies each result (has <code>message</code> = inbound, <code>seenAt</code> = read, <code>status</code> = delivery report) into <code>ParsedMetaEvent</code>, and the processor reuses <code>CustomerMessageHandler</code> / <code>MessageStatusHandler</code>, so leads, conversations, the 24h window, campaign attribution, SignalR and notifications are exactly the Meta path. An inbound result addressed to a different sender number is logged as unknown, not filed.</li>
+  <li>Same normalized AI trigger to n8n, once per conversation per delivery. The AI reply goes back through <code>WhatsAppService</code> → <code>InfobipWhatsAppProvider</code> → <code>POST /whatsapp/1/message/text</code> with our GUID as <code>messageId</code> and <code>notifyUrl</code> = the clinic's webhook URL.</li>
+  <li>Status mapping: <code>PENDING</code>/<code>ACCEPTED</code> → sent, <code>DELIVERED</code> → delivered, seen report → read, <code>UNDELIVERABLE</code>/<code>EXPIRED</code>/<code>REJECTED</code> → failed (error name/description as failure code/reason).</li>
+  <li><strong>White-label rule:</strong> clinics must never see that WhatsApp runs through Infobip. Errors shown to staff (send failures, connect errors, campaign failure reasons, delivery failure reasons) are provider-neutral, the webhook path is neutral, <code>ChannelIntegrationResponse.Provider/ProviderSenderId</code> are <code>[JsonIgnore]</code>, inbound media metadata stores only a <code>mediaId</code> (not Infobip's media URL), and the page's form/handler names are neutral. Details go to the server log only.</li>
+  <li>Idempotency: inbound dedup on <code>(clinic, channel, external_message_id)</code>; a repeated status is a no-op and a late earlier step (delivered after read) only fills its timestamp (<code>MessageService.HandleStatusUpdateAsync</code>, applies to Meta too). Errors after auth return 500 so Infobip retries.</li>
+</ol>
+
+<h3>5.5 Booking (AI and dashboard)</h3>
+<ol class="flow">
+  <li><code>get_available_slots</code> → <code>AvailabilityService.GetSlotsAsync</code> builds slots in the clinic's timezone and returns the lead's booking context.</li>
+  <li><code>schedule_consultation</code> → <code>AppointmentService.ScheduleAsync</code>: no upcoming appointment → book; one upcoming and <code>ConfirmReplaceExisting</code> → reschedule; otherwise CONFIRMATION_REQUIRED.</li>
+  <li>Every mutation takes <code>pg_advisory_xact_lock(hashtext(clinicId))</code>, re-runs <code>CheckSlotAsync</code> (excluding the appointment being moved) and the one-upcoming-per-lead guard.</li>
+  <li>After commit: event row, APPOINTMENT_* notification, <code>AppointmentChanged</code>, and <code>CalendarIntegrationService.TriggerAppointmentSyncAsync</code>.</li>
+</ol>
+
+<h3>5.6 Campaigns</h3>
+<ol class="flow">
+  <li>Create (<code>/Campaigns/Create</code>): pick an approved template, fill variables, choose audience <code>all_eligible</code> | <code>reactivation_no_consultation</code> | <code>custom</code> (filters JSON or manual selection). Recipients are snapshotted; non-contactable leads are skipped with a reason.</li>
+  <li>Send: <code>POST /api/campaigns/{id}/send</code> moves to <code>running</code>, queues pending recipients and processes the first batch (20). <code>process-batch</code> continues until complete.</li>
+  <li>Each recipient: conversation get-or-create → <code>MessageService.SendCampaignTemplateAsync</code> (<code>origin=campaign</code>, links campaign ids) → mode flips to human.</li>
+  <li>Attribution: status webhooks move recipients through sent → delivered → read; the first inbound reply after <code>sent_at</code> sets <code>replied_at</code> and CAMPAIGN_REPLY; bookings set <code>booked_at</code>/<code>appointment_id</code>.</li>
+</ol>
+
+<h3>5.7 Calendar sync (one way, SculptFlow → Google/Outlook)</h3>
+<ol class="flow">
+  <li>Connect: <code>/calendar-oauth/{provider}/connect</code> marks the row pending and redirects to consent; <code>/callback</code> exchanges the code, stores access/refresh tokens on <code>calendar_integrations</code>, lists calendars into <code>calendar_integration_calendars</code>.</li>
+  <li>Staff select a calendar and enable sync.</li>
+  <li>On every committed appointment change, the service refreshes the token if needed, upserts <code>appointment_calendar_syncs</code> (one row per appointment × integration, new <code>last_request_id</code>, <code>last_operation</code>) and posts <code>CalendarSyncTriggerPayload</code> to <code>N8n:CalendarSyncWebhookUrl</code> (access token, calendar id, operation create/update/cancel, request id, external event id, start/end with offset, clinic timezone).</li>
+  <li>n8n makes the provider call and posts <code>{clinicId, appointmentId, calendarIntegrationId, requestId, success, externalEventId, errorMessage}</code> to <code>/api/calendar-integrations/sync-callback</code>. A stale <code>requestId</code> is ignored. Failures mark the integration unhealthy.</li>
+</ol>
+
+<h3>5.8 Knowledge Base ingestion and search</h3>
+<ul>
+  <li><strong>Manual / upload:</strong> text (or extracted text, max 5 MB file, 250k chars) → chunk by the clinic's settings (tokens ≈ chars ÷ 4) → embed all chunks first → transaction replaces <code>knowledge_chunks</code> for that document.</li>
+  <li><strong>Website:</strong> create source → <code>pending</code> run enqueued → worker crawls breadth-first (robots.txt, SSRF-checked fetch, same-site links, max pages/depth/concurrency from <code>Knowledge:WebScraping</code>) → analyze (canonicals, boilerplate stripping by block hash, SHA-256 of normalized text, duplicates) → apply (unchanged pages skip embedding, changed pages rebuild only their chunks, new pages create <code>source_type='website'</code> documents, missing pages deactivate after confirmed absence).</li>
+  <li><strong>Search:</strong> embed the query with the clinic's model, exact cosine scan over the clinic's active documents' chunks, take top-K, drop anything under <code>minimum_similarity</code>. No ANN index on purpose.</li>
+</ul>
+
+<h3>5.9 Retrieval benchmark</h3>
+<ol class="flow">
+  <li>Generate: the app creates a <code>pending</code> generation row, samples 20 active chunks and posts them with the <code>generationId</code> to <code>N8n:KnowledgeBenchmarkWebhookUrl</code>; returns 202.</li>
+  <li>n8n's LLM writes one question per chunk and calls back <code>POST /api/knowledge/benchmark/generations/{id}/questions</code>. Every id is validated against the chunks that generation sent; the clinic comes from the generation row. Cancelled generations refuse late callbacks.</li>
+  <li>Run: a <code>pending</code> run is queued; the worker searches each non-stale case via <code>SearchRankedAsync</code> and records chunk/document ranks, Top-1/3/5, MRR, latency and a settings snapshot.</li>
+</ol>
+
+<h3>5.10 Sign up and sign in</h3>
+<ul>
+  <li><strong>Register:</strong> full name, clinic name, email, password → new clinic (unique slug) + user + membership in one transaction → signed in → <code>/dashboard</code>.</li>
+  <li><strong>Google:</strong> <code>/auth/google/start</code> → Google → <code>/auth/google/callback</code>: existing linked login or verified matching email signs in; a new email goes to <code>/Account/CompleteGoogleSignup</code> to collect the clinic name. Errors return to Login with <code>externalError=cancelled|failed</code>.</li>
+</ul>
+</section>
+
+<!-- =============================================================== -->
+<section id="integrations">
+<h2>6. Integrations</h2>
+<div class="table-wrap"><table>
+<tr><th>Integration</th><th>Direction</th><th>Code</th><th>Stored in</th><th>Status</th></tr>
+<tr><td>WhatsApp Cloud API (Meta)</td><td>in: webhook · out: Graph send, templates, signup</td><td><code>Integrations/WhatsApp/*</code>, <code>WhatsAppService</code>, <code>MetaGraphClient</code>, <code>ChannelIntegrationService</code>, <code>meta-connect.js</code></td><td><code>channel_integrations</code> (channel=whatsapp), <code>whatsapp_templates</code>, <code>whatsapp_health_events</code></td><td>Live. Graph <code>v21.0</code>. Embedded Signup registers the number with a generated PIN.</td></tr>
+<tr><td>WhatsApp via Infobip</td><td>in: per-sender webhook · out: <code>/whatsapp/1/message/text</code>, <code>/template</code>, business-info</td><td><code>Integrations/Infobip/*</code>, <code>InfobipWhatsAppWebhookController</code></td><td><code>channel_integrations</code> (channel=whatsapp, provider=infobip, provider_sender_id); key/base URL are env vars</td><td>MVP provider while there is no Meta Tech Provider status; switch back with <code>WhatsApp:Provider=meta</code>. Text in/out, statuses and template review; no health or media yet.</td></tr>
+<tr><td>Facebook Page</td><td>out: Login + long-lived page token</td><td><code>ChannelIntegrationService.ConnectFacebookAsync</code></td><td><code>channel_integrations</code> (channel=facebook)</td><td>Connect only; no Messenger messaging yet.</td></tr>
+<tr><td>Telegram Bot API</td><td>in: webhook · out: sendMessage</td><td><code>Integrations/Telegram/*</code></td><td><code>channel_integrations</code> (channel=telegram, bot id/username, webhook status)</td><td>Live.</td></tr>
+<tr><td>Google Calendar / Outlook (Graph)</td><td>out: OAuth, list calendars · via n8n: events</td><td><code>GoogleCalendarProviderClient</code>, <code>OutlookCalendarProviderClient</code>, <code>CalendarOAuthController</code>, <code>CalendarIntegrationService</code></td><td><code>calendar_integrations</code>, <code>calendar_integration_calendars</code>, <code>appointment_calendar_syncs</code></td><td>Connect works; event sync depends on the n8n workflow and <code>N8n:CalendarSyncWebhookUrl</code>.</td></tr>
+<tr><td>TikTok Login Kit</td><td>out: OAuth, profile, refresh, revoke</td><td><code>TikTokProviderClient</code>, <code>TikTokOAuthController</code>, <code>TikTokController</code> (webhook placeholder)</td><td><code>tiktok_integrations</code></td><td>Account connection only.</td></tr>
+<tr><td>Google sign-in</td><td>OIDC (openid, email, profile)</td><td><code>Program.cs</code>, <code>GoogleAuthController</code>, <code>CompleteGoogleSignup</code></td><td><code>identity_user_logins</code></td><td>Live when configured.</td></tr>
+<tr><td>Embeddings</td><td>out: <code>/embeddings</code></td><td><code>OpenAiEmbeddingService</code></td><td><code>knowledge_chunks.embedding vector(1536)</code></td><td>OpenAI <code>text-embedding-3-small</code>, 1536 dims.</td></tr>
+<tr><td>Website crawling</td><td>out: HTTP GET</td><td><code>Integrations/Knowledge/WebScraping/*</code></td><td><code>knowledge_website_*</code> + <code>knowledge_documents</code></td><td>Live; SSRF guard, robots.txt, per-clinic source cap.</td></tr>
+<tr><td>n8n</td><td>both</td><td>see §7</td><td>none (no state in n8n)</td><td>AI workflow live; others per §7.</td></tr>
+</table></div>
+</section>
+
+<!-- =============================================================== -->
+<section id="n8n">
+<h2>7. n8n (from the app's side)</h2>
+<div class="callout warn"><p>The workflows themselves are not in this repo. This section documents only the contracts the app sends and accepts. If a workflow changes its expectations, update the payload records in code and this section together.</p></div>
+<div class="table-wrap"><table>
+<tr><th>Workflow</th><th>Trigger (app → n8n)</th><th>Calls back (n8n → app, <code>X-Ingest-Key</code>)</th><th>Config</th></tr>
+<tr><td><strong>Patient AI agent</strong></td><td><code>AiTriggerNotifier</code> POSTs <code>AiTriggerPayload</code> on every AI-eligible WhatsApp/Telegram customer message. No auth header is sent, so the n8n Webhook node must use Authentication = None and the production URL.</td><td><code>/api/ai/*</code> tools and the AI reply send (§4.3). Send the reply before calling handoff; treat 409 <code>conversation_in_human_mode</code> as stop quietly.</td><td><code>N8n:AiWebhookUrl</code>, <code>N8n:IngestApiKey</code></td></tr>
+<tr><td><strong>KB benchmark question generator</strong></td><td><code>N8nKnowledgeBenchmarkGeneratorClient</code> POSTs <code>{generationId, clinicId, chunks:[{documentId, chunkId, documentTitle, content}]}</code>. Webhook should respond immediately (any 2xx). 3-minute client timeout.</td><td><code>POST /api/knowledge/benchmark/generations/{generationId}/questions</code> with <code>{generationId, questions:[{documentId, chunkId, question}]}</code> (also accepts a wrapped or bare array).</td><td><code>N8n:KnowledgeBenchmarkWebhookUrl</code></td></tr>
+<tr><td><strong>Calendar sync</strong></td><td><code>CalendarSyncNotifier</code> POSTs <code>CalendarSyncTriggerPayload</code> after a committed appointment change.</td><td><code>POST /api/calendar-integrations/sync-callback</code> with <code>CalendarSyncCallbackRequest</code>.</td><td><code>N8n:CalendarSyncWebhookUrl</code></td></tr>
+</table></div>
+<p>Every outbound n8n call is best effort: a missing URL logs a warning and returns, a failure logs and is swallowed. The originating operation (webhook ack, appointment change) is never failed by n8n.</p>
+<p><strong>AiTriggerPayload</strong> (camelCase JSON):</p>
+<pre><code>{ "clinicId": "uuid", "conversationId": "uuid", "leadId": "uuid|null", "messageId": "uuid|null",
+  "channel": "whatsapp|telegram", "messageType": "text|interactive|button|…", "messageText": "clean visible text",
+  "selectedValue": "stable reply id or null" }</code></pre>
+<p><strong>CalendarSyncTriggerPayload</strong>: <code>clinicId, appointmentId, calendarIntegrationId, provider, accessToken, externalCalendarId, operation (create|update|cancel), requestId, externalEventId, scheduledStart, scheduledEnd, timezone, eventTitle, eventDescription, sculptFlowAppointmentLink</code>. n8n must not reinterpret times; offsets are already correct.</p>
+</section>
+
+<!-- =============================================================== -->
+<section id="db">
+<h2>8. Database</h2>
+
+<h3 id="db-conv">8.1 Conventions</h3>
+<ul>
+  <li><code>Database/schema.sql</code> is the source of truth: idempotent, append-only blocks (<code>create … if not exists</code>, <code>add column if not exists</code>, guarded <code>do $$</code> constraint blocks). New changes are appended at the end, never edited in place. <code>ApplicationDbContext</code> is updated by hand to match.</li>
+  <li>Keys: <code>uuid</code> with <code>gen_random_uuid()</code>, except Identity (text ids) and <code>knowledge_retrieval_benchmark_generations.id</code> (app-assigned).</li>
+  <li><code>created_at</code>/<code>updated_at</code> on most tables; <code>set_updated_at()</code> trigger maintains <code>updated_at</code>.</li>
+  <li>All instants are <code>timestamptz</code>; a guard block at the end converts any stray <code>timestamp</code> column. Only availability <code>time</code>/<code>date</code> columns are zone-less (clinic-local).</li>
+  <li>Status columns are <code>varchar</code> with CHECK constraints, except deliberately free-text provider vocabularies (template status/category, health fields, <code>campaign_type</code>, <code>leads.source</code>, <code>knowledge_documents.category</code>).</li>
+  <li>Tenant FK <code>clinic_id … on delete cascade</code> everywhere. Tokens (<code>access_token</code>, <code>refresh_token</code>) are plain text today.</li>
+</ul>
+
+<h3 id="db-er">8.2 Core relations</h3>
+<figure>
+<svg viewBox="0 0 1000 470" role="img" aria-labelledby="er-title">
+  <title id="er-title">Core entity relationships around clinics, leads, conversations, messages, appointments and campaigns</title>
+  <defs>
+    <marker id="er-arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="ah"/></marker>
+  </defs>
+  <rect class="box" x="420" y="20" width="160" height="44" rx="6"/><text class="lbl-b" x="476" y="47">clinics</text>
+  <rect class="box" x="30" y="110" width="170" height="44" rx="6"/><text class="lbl-b" x="70" y="137">clinic_users</text>
+  <rect class="box" x="30" y="200" width="170" height="44" rx="6"/><text class="lbl-b" x="64" y="227">identity_users</text>
+  <rect class="box" x="230" y="110" width="160" height="44" rx="6"/><text class="lbl-b" x="276" y="137">procedures</text>
+  <rect class="box" x="420" y="110" width="160" height="44" rx="6"/><text class="lbl-b" x="482" y="137">leads</text>
+  <rect class="box" x="610" y="110" width="180" height="44" rx="6"/><text class="lbl-b" x="626" y="137">channel_integrations</text>
+  <rect class="box" x="820" y="110" width="160" height="44" rx="6"/><text class="lbl-b" x="830" y="137">whatsapp_templates</text>
+  <rect class="box" x="420" y="210" width="160" height="44" rx="6"/><text class="lbl-b" x="460" y="237">conversations</text>
+  <rect class="box" x="230" y="210" width="160" height="44" rx="6"/><text class="lbl-b" x="267" y="237">appointments</text>
+  <rect class="box" x="230" y="310" width="160" height="44" rx="6"/><text class="lbl-b" x="240" y="337">procedure_bookings</text>
+  <rect class="box" x="420" y="310" width="160" height="44" rx="6"/><text class="lbl-b" x="472" y="337">messages</text>
+  <rect class="box" x="820" y="210" width="160" height="44" rx="6"/><text class="lbl-b" x="866" y="237">campaigns</text>
+  <rect class="box" x="610" y="310" width="180" height="44" rx="6"/><text class="lbl-b" x="626" y="337">campaign_recipients</text>
+  <rect class="box" x="610" y="210" width="180" height="44" rx="6"/><text class="lbl-b" x="618" y="237">whatsapp_health_events</text>
+  <rect class="box" x="30" y="310" width="170" height="44" rx="6"/><text class="lbl-b" x="38" y="337" style="font-size:11.5px">appointment_calendar_syncs</text>
+  <rect class="box" x="30" y="400" width="170" height="44" rx="6"/><text class="lbl-b" x="40" y="427">calendar_integrations</text>
+  <rect class="box" x="420" y="400" width="160" height="44" rx="6"/><text class="lbl-b" x="472" y="427">events</text>
+  <rect class="box" x="610" y="400" width="180" height="44" rx="6"/><text class="lbl-b" x="650" y="427">notifications</text>
+
+  <!-- arrows point child -> parent -->
+  <path class="ln" d="M115,110 C115,60 300,42 420,42" marker-end="url(#er-arr)"/>
+  <path class="ln" d="M115,200 L115,154" marker-end="url(#er-arr)"/>
+  <path class="ln" d="M310,110 C310,80 420,60 450,64" marker-end="url(#er-arr)"/>
+  <path class="ln" d="M500,110 L500,64" marker-end="url(#er-arr)"/>
+  <path class="ln" d="M700,110 C700,80 600,60 560,64" marker-end="url(#er-arr)"/>
+  <path class="ln" d="M900,110 C900,60 650,42 580,42" marker-end="url(#er-arr)"/>
+  <path class="ln" d="M820,132 L790,132" marker-end="url(#er-arr)"/>
+  <path class="ln" d="M420,132 L390,132" marker-end="url(#er-arr)"/>
+  <path class="ln" d="M500,210 L500,154" marker-end="url(#er-arr)"/>
+  <path class="ln" d="M500,310 L500,254" marker-end="url(#er-arr)"/>
+  <path class="ln" d="M390,232 C410,232 410,150 420,145" marker-end="url(#er-arr)"/>
+  <path class="ln" d="M310,210 L310,154" marker-end="url(#er-arr)"/>
+  <path class="ln" d="M310,310 L310,254" marker-end="url(#er-arr)"/>
+  <path class="ln" d="M900,210 L900,154" marker-end="url(#er-arr)"/>
+  <path class="ln" d="M700,310 C700,280 860,280 880,254" marker-end="url(#er-arr)"/>
+  <path class="ln" d="M610,332 L580,332" marker-end="url(#er-arr)"/>
+  <path class="ln" d="M700,210 L700,154" marker-end="url(#er-arr)"/>
+  <path class="ln" d="M200,332 C220,332 220,250 230,240" marker-end="url(#er-arr)"/>
+  <path class="ln" d="M115,354 L115,400" marker-end="url(#er-arr)"/>
+  <text class="lbl-m" x="608" y="290">→ leads, conversations,</text>
+  <text class="lbl-m" x="608" y="303">messages, appointments</text>
+  <text class="lbl-m" x="430" y="390">events / notifications reference clinic,</text>
+  <text class="lbl-m" x="430" y="462">lead, conversation, appointment (set null)</text>
+</svg>
+<figcaption>Arrows point from child to parent (FK direction). Every table also has <code>clinic_id → clinics</code>; only the most telling edges are drawn. Knowledge Base, availability and TikTok tables hang off <code>clinics</code> and are listed below.</figcaption>
+</figure>
+
+<h3 id="db-tables">8.3 Table catalog (36 tables)</h3>
+
+<h4>Tenancy and identity</h4>
+<div class="table-wrap"><table>
+<tr><th>Table</th><th>Key columns</th><th>Constraints / indexes</th></tr>
+<tr><td><code>clinics</code></td><td>name, slug, phone, email, website, country_code, timezone (IANA, default UTC), address, operating_hours, consultation_info, is_active</td><td><code>slug</code> unique</td></tr>
+<tr><td><code>identity_users</code>, <code>identity_user_claims</code>, <code>identity_user_logins</code>, <code>identity_user_tokens</code></td><td>Role-free ASP.NET Identity, snake_case</td><td>text ids; no role tables</td></tr>
+<tr><td><code>clinic_users</code></td><td>clinic_id, user_id (text), is_active</td><td>unique (clinic, user); unique active row per user</td></tr>
+</table></div>
+
+<h4>CRM and scheduling</h4>
+<div class="table-wrap"><table>
+<tr><th>Table</th><th>Key columns</th><th>Constraints / indexes</th></tr>
+<tr><td><code>procedures</code></td><td>name, code, description, consultation_duration (min), is_active</td><td></td></tr>
+<tr><td><code>leads</code></td><td>procedure_id, names, phone (E.164), email, source, source_detail, campaign_name, external_lead_id, status, qualification_status, preferred_language, timeline, notes, marketing_opt_in, opted_out_at, last_contact_at, next_followup_at</td><td>unique (clinic, external_lead_id) partial; indexes on phone, email, status</td></tr>
+<tr><td><code>appointments</code></td><td>lead_id, procedure_id, appointment_type, status, scheduled_start/end, location, external_calendar_id, external_event_id, notes</td><td>index on scheduled_start, status</td></tr>
+<tr><td><code>procedure_bookings</code></td><td>lead_id, procedure_id (restrict), appointment_id, status, quoted/deposit/final amount, currency, procedure_date</td><td></td></tr>
+<tr><td><code>clinic_availability_rules</code></td><td>day_of_week (0 = Sunday), is_open, start_time, end_time (clinic-local)</td><td>unique (clinic, day)</td></tr>
+<tr><td><code>clinic_availability_exceptions</code></td><td>date, is_closed, start_time, end_time, reason</td><td>unique (clinic, date)</td></tr>
+<tr><td><code>clinic_booking_settings</code></td><td>default duration (30), buffer (0), minimum notice (240 min), max advance days (60)</td><td>one per clinic</td></tr>
+</table></div>
+
+<h4>Messaging</h4>
+<div class="table-wrap"><table>
+<tr><th>Table</th><th>Key columns</th><th>Constraints / indexes</th></tr>
+<tr><td><code>conversations</code></td><td>lead_id, channel, external_thread_id, status, mode, ai_enabled + human_takeover (legacy mirrors), last_message_at/direction, last_customer_message_at, service_window_expires_at, last_read_at</td><td>unique (clinic, channel, external_thread_id) partial</td></tr>
+<tr><td><code>messages</code></td><td>conversation_id, lead_id, direction, sender_type, origin, channel, message_type, content, external_message_id, delivery_status, delivered/read/failed/deleted_at, failure_code/reason, metadata_json, is_ai_generated, whatsapp_template_id, campaign_id, campaign_recipient_id</td><td>unique (clinic, channel, external_message_id) partial</td></tr>
+<tr><td><code>channel_integrations</code></td><td>channel, status, display_name, phone_number_id, whatsapp_business_id, page_id, instagram_business_id, access_token, webhook_verify_token, pin, health fields (account_status, phone_quality_rating, is_healthy, health_level, last_problem_*), telegram_bot_id/username, webhook_status, provider (null = meta), provider_sender_id</td><td>unique (clinic, channel); unique phone_number_id; unique connected telegram_bot_id; unique connected (channel, provider, provider_sender_id)</td></tr>
+<tr><td><code>whatsapp_templates</code></td><td>channel_integration_id, meta_template_id (the provider's template id), provider (null = meta), name, category, language, status, header/body/footer, buttons_json, variables_json, components, quality_rating, rejection_reason</td><td>unique (clinic, name, language)</td></tr>
+<tr><td><code>whatsapp_health_events</code></td><td>channel_integration_id, event_type, severity, status, code, message, raw_metadata, occurred_at</td><td>unique (connection, event_type, occurred_at)</td></tr>
+<tr><td><code>campaigns</code></td><td>name, whatsapp_template_id, campaign_type, channel, audience_type, audience_filters, status, scheduled/started/completed_at, created_by_user_id</td><td></td></tr>
+<tr><td><code>campaign_recipients</code></td><td>campaign_id, lead_id, conversation_id, message_id, appointment_id, phone_number, variables_json, status, skip_reason, failure_code/reason, queued/sent/delivered/read/failed/replied/booked_at, external_message_id</td><td>unique (campaign, lead)</td></tr>
+<tr><td><code>notifications</code></td><td>type, title, message, lead/conversation/appointment/channel_integration ids, link, is_read, read_at</td><td>index (clinic, created_at desc); partial unread</td></tr>
+<tr><td><code>events</code></td><td>event_type, source, metadata jsonb, lead/conversation/appointment ids</td><td>append-only log</td></tr>
+</table></div>
+
+<h4>Knowledge Base</h4>
+<div class="table-wrap"><table>
+<tr><th>Table</th><th>Key columns</th><th>Constraints / indexes</th></tr>
+<tr><td><code>knowledge_documents</code></td><td>title, category, content, is_active, source_type (manual | upload | website), original_file_name, mime_type, file_size_bytes, source_url</td><td></td></tr>
+<tr><td><code>knowledge_chunks</code></td><td>knowledge_document_id, chunk_index, content, embedding vector(1536)</td><td>no ANN index (exact scan per clinic)</td></tr>
+<tr><td><code>knowledge_search_settings</code></td><td>embedding_model, vector_dimension, similarity_method, chunk_size_tokens (50–1000), chunk_overlap_tokens, top_k (1–10), minimum_similarity (0–1)</td><td>one per clinic, created lazily</td></tr>
+<tr><td><code>knowledge_website_sources</code></td><td>start_url, normalized_start_url, host, crawl_mode, category, status, boilerplate_block_hashes</td><td>unique (clinic, normalized_start_url)</td></tr>
+<tr><td><code>knowledge_website_pages</code></td><td>url, normalized/canonical url, title, http_status, content_hash, etag, status, depth, knowledge_document_id, duplicate_of_page_id, links, missing_count, removed_at</td><td>unique (source, normalized_url)</td></tr>
+<tr><td><code>knowledge_website_scrape_runs</code></td><td>status, started/completed_at, page counters, error_summary</td><td></td></tr>
+<tr><td><code>knowledge_retrieval_benchmark_cases</code></td><td>question, expected_document_id, expected_chunk_id (no FK), case_type, is_reviewed, source_chunk_hash/preview, is_stale, generation_id</td><td>unique (clinic, chunk, lower(question))</td></tr>
+<tr><td><code>knowledge_retrieval_benchmark_generations</code></td><td>status (pending | completed | failed | cancelled), sent_chunks, counts, rejected_json, raw_response</td><td>id = generationId sent to n8n</td></tr>
+<tr><td><code>knowledge_retrieval_benchmark_runs</code></td><td>case_scope, generation_id, status, counters, chunk/document Top-1/3/5, MRR, latency, settings snapshot</td><td></td></tr>
+<tr><td><code>knowledge_retrieval_benchmark_results</code></td><td>run, case (set null), ranks, scores, pass flags, classification, retrieved_json</td><td></td></tr>
+</table></div>
+
+<h4>External accounts</h4>
+<div class="table-wrap"><table>
+<tr><th>Table</th><th>Key columns</th><th>Constraints / indexes</th></tr>
+<tr><td><code>calendar_integrations</code></td><td>provider (google | outlook), status, account_display_name, selected_calendar_id/name, sync_enabled, access/refresh token, token_expires_at, health fields. (<code>external_connection_ref</code> is from the earlier n8n-owned design.)</td><td>unique (clinic, provider)</td></tr>
+<tr><td><code>calendar_integration_calendars</code></td><td>external_calendar_id, name, is_primary</td><td>unique per integration</td></tr>
+<tr><td><code>appointment_calendar_syncs</code></td><td>appointment_id, calendar_integration_id, external_event_id, status, last_request_id, last_operation, last_error</td><td>unique (appointment, integration)</td></tr>
+<tr><td><code>tiktok_integrations</code></td><td>status, open_id, union_id, display_name, avatar_url, tokens and expiries, health</td><td>one per clinic</td></tr>
+</table></div>
+
+<h3 id="db-vocab">8.4 Status vocabularies (CHECK-enforced)</h3>
+<div class="table-wrap"><table>
+<tr><th>Column</th><th>Values</th></tr>
+<tr><td><code>leads.status</code></td><td class="wrap">new, contacted, qualified, consultation_booked, consultation_attended, no_show, surgery_booked, not_interested, needs_human, lost</td></tr>
+<tr><td><code>leads.qualification_status</code></td><td class="wrap">unknown, hot, warm, cold, needs_human, medical_question, spam</td></tr>
+<tr><td><code>conversations.channel</code> / <code>.status</code> / <code>.mode</code></td><td class="wrap">whatsapp, instagram, website, facebook, sms, email, telegram / active, closed, archived / ai, human, approval</td></tr>
+<tr><td><code>messages.direction</code> / <code>.sender_type</code> / <code>.origin</code></td><td class="wrap">inbound, outbound / lead, ai, staff, system / whatsapp_customer, telegram_customer, whatsapp_business_app, dashboard, ai, system, campaign</td></tr>
+<tr><td><code>appointments.status</code></td><td class="wrap">booked, confirmed, attended, no_show, canceled, rescheduled</td></tr>
+<tr><td><code>procedure_bookings.status</code></td><td class="wrap">considering, quoted, deposit_paid, booked, completed, canceled, lost</td></tr>
+<tr><td><code>campaigns.status</code> / <code>.audience_type</code> / <code>.channel</code></td><td class="wrap">draft, scheduled, running, paused, completed, cancelled, failed / all_eligible, reactivation_no_consultation, custom / whatsapp, instagram, messenger</td></tr>
+<tr><td><code>campaign_recipients.status</code></td><td class="wrap">pending, queued, sent, delivered, read, replied, booked, failed, skipped</td></tr>
+<tr><td><code>channel_integrations.channel</code> / <code>.status</code></td><td class="wrap">whatsapp, instagram, facebook, telegram / disconnected, connected, error</td></tr>
+<tr><td><code>notifications.type</code></td><td class="wrap">NEW_LEAD, HANDOFF, APPOINTMENT_BOOKED, APPOINTMENT_RESCHEDULED, APPOINTMENT_CANCELLED, CAMPAIGN_REPLY, OUTBOUND_MESSAGE_FAILED, INTEGRATION_UNHEALTHY</td></tr>
+<tr><td>Knowledge</td><td class="wrap">source_type manual/upload/website · website source status pending/crawling/completed/completed_with_errors/failed · page status discovered/processing/indexed/unchanged/skipped/duplicate/failed/removed · benchmark classification EXACT_CHUNK_HIT/DOCUMENT_ONLY_HIT/MISS/STALE_CASE/ERROR</td></tr>
+</table></div>
+</section>
+
+<!-- =============================================================== -->
+<section id="config">
+<h2>9. Configuration</h2>
+<p>Names only. Non-secret defaults live in <code>appsettings.json</code>; secrets via user-secrets or Render env vars (<code>__</code> for <code>:</code>).</p>
+<div class="table-wrap"><table>
+<tr><th>Key</th><th>Secret</th><th>Used by</th></tr>
+<tr><td><code>ConnectionStrings:Postgres</code></td><td>yes</td><td>EF Core (key=value format, Supabase session pooler)</td></tr>
+<tr><td><code>App:PublicBaseUrl</code></td><td>no</td><td>Telegram webhook URL, OAuth redirect URIs, Infobip <code>notifyUrl</code> (without it, Infobip sends omit <code>notifyUrl</code>)</td></tr>
+<tr><td><code>WhatsApp:Provider</code></td><td>no</td><td>Global WhatsApp provider switch: <code>meta</code> (default) or <code>infobip</code></td></tr>
+<tr><td><code>Infobip:BaseUrl</code>, <code>Infobip:ApiKey</code></td><td>yes</td><td>SculptFlow's Infobip account (env vars <code>Infobip__BaseUrl</code>, <code>Infobip__ApiKey</code>)</td></tr>
+<tr><td><code>Infobip:WebhookToken</code></td><td>yes</td><td>Account-level webhook (template updates); empty = endpoint off</td></tr>
+<tr><td><code>Infobip:TimeoutSeconds</code>, <code>Infobip:MaxSendAttempts</code></td><td>no</td><td>Per-call timeout (20s), total tries for a send Infobip clearly refused (429/503/no connection; 3)</td></tr>
+<tr><td><code>Meta:AppId</code>, <code>GraphApiVersion</code>, <code>FacebookLoginConfigId</code>, <code>WhatsAppLoginConfigId</code></td><td>no</td><td>Graph client, Embedded Signup</td></tr>
+<tr><td><code>Meta:AppSecret</code>, <code>Meta:WebhookVerifyToken</code></td><td>yes</td><td>Token exchange; webhook handshake</td></tr>
+<tr><td><code>N8n:IngestApiKey</code></td><td>yes</td><td>All ingest-key endpoints</td></tr>
+<tr><td><code>N8n:AiWebhookUrl</code>, <code>N8n:KnowledgeBenchmarkWebhookUrl</code>, <code>N8n:CalendarSyncWebhookUrl</code></td><td>treat as secret</td><td>Outbound n8n triggers (empty = feature inert, logged)</td></tr>
+<tr><td><code>Embeddings:BaseUrl</code>, <code>Model</code>, <code>Dimensions</code> / <code>Embeddings:ApiKey</code></td><td>key only</td><td>Embedding service</td></tr>
+<tr><td><code>Knowledge:*</code>, <code>Knowledge:WebScraping:*</code></td><td>no</td><td>Defaults for new clinic settings, upload limits, crawler limits (<code>DevAllowedHosts</code> only in Development)</td></tr>
+<tr><td><code>GoogleCalendar:ClientId/ClientSecret</code>, <code>MicrosoftCalendar:ClientId/ClientSecret/TenantId</code></td><td>secrets</td><td>Calendar OAuth</td></tr>
+<tr><td><code>GoogleLogin:ClientId/ClientSecret</code></td><td>secret</td><td>Continue with Google (button hidden if either is empty)</td></tr>
+<tr><td><code>TikTok:ClientKey/ClientSecret</code></td><td>secret</td><td>TikTok Login Kit</td></tr>
+<tr><td><code>Telegram:ApiBaseUrl</code></td><td>no</td><td>Optional override (default <code>https://api.telegram.org</code>), used for fakes in testing</td></tr>
+</table></div>
+</section>
+
+<!-- =============================================================== -->
+<section id="gaps">
+<h2>10. Known gaps and risks (from the code)</h2>
+<div class="table-wrap"><table>
+<tr><th>Area</th><th>Gap</th><th>Impact</th></tr>
+<tr><td>Meta webhook</td><td>No <code>X-Hub-Signature-256</code> verification on POST.</td><td>Anyone who knows the URL can forge inbound events.</td></tr>
+<tr><td>Infobip webhook</td><td>Authenticated by a per-connection secret in the URL, not Infobip's HMAC signing.</td><td>The URL is a credential; anyone holding it can post events for that one clinic. Move to HMAC once its header format is confirmed.</td></tr>
+<tr><td>Infobip coverage</td><td>No health events or media download through Infobip; leads need a phone number (BSUID-only senders are logged, not stored).</td><td>Templates approved through Infobip must be created again after switching back to Meta (different WhatsApp account).</td></tr>
+<tr><td>n8n trust</td><td>AI endpoints trust a caller-supplied <code>clinicId</code> behind one shared key.</td><td>A leaked key reaches every clinic. Derive clinic from the conversation server-side.</td></tr>
+<tr><td>Lead intake</td><td><code>POST /api/leads</code> is anonymous with body clinic id.</td><td>Spam or cross-tenant writes.</td></tr>
+<tr><td>Secrets at rest</td><td>Channel, calendar and TikTok tokens are plain text.</td><td>DB leak exposes provider access.</td></tr>
+<tr><td>DataProtection</td><td>No persistent key ring configured.</td><td>Restarts invalidate auth cookies and in-flight OAuth state.</td></tr>
+<tr><td>Single instance</td><td>In-memory queues, no SignalR backplane, advisory locks only per DB.</td><td>Scaling out needs a durable queue and a backplane.</td></tr>
+<tr><td>Scheduled campaigns</td><td><code>scheduled_at</code> stored but nothing fires it.</td><td>Scheduled campaigns need a manual or external trigger.</td></tr>
+<tr><td>Roles</td><td>No roles or invites; one clinic per user.</td><td>Every member has full access; staff can't join an existing clinic.</td></tr>
+<tr><td>Tests</td><td>No automated test project.</td><td>Regressions are caught manually.</td></tr>
+<tr><td>Rotation</td><td><code>Meta:WebhookVerifyToken</code> and <code>N8n:IngestApiKey</code> once appeared in git history.</td><td>Rotate if not yet done.</td></tr>
+</table></div>
+</section>
+
+<!-- =============================================================== -->
+<section id="drift">
+<h2>11. Doc drift notes</h2>
+<p>Places where older documentation disagrees with the code as of the baseline above. Trust the code.</p>
+<ul>
+  <li><code>PROJECT_HANDOFF.md</code> §9 lists six SignalR events; the code also sends <code>AppointmentChanged</code> and <code>NotificationCreated</code>.</li>
+  <li><code>PROJECT_HANDOFF.md</code> §8 tool table shows <code>/api/ai/appointments/{id}/reschedule|cancel</code>; the real routes are <code>/api/ai/appointments/reschedule</code> and <code>/cancel</code>, and the preferred tools are <code>schedule</code>, <code>cancel</code>, <code>upcoming</code>.</li>
+  <li><code>PROJECT_HANDOFF.md</code> §28 says Google sign-in is not pushed; it is on <code>main</code> (<code>9cd4091</code>, <code>febef3c</code>).</li>
+  <li><code>PROJECT_HANDOFF.md</code> and §20 mention <code>N8n:CalendarConnectWebhookUrl</code>; the code no longer reads it (SculptFlow owns calendar OAuth directly).</li>
+  <li>The <code>calendar_integrations</code> comment in <code>schema.sql</code> still says n8n owns the OAuth tokens; a later block in the same file moved tokens into SculptFlow.</li>
+  <li>The comment on <code>channel_integrations</code> says Settings → "Channels &amp; Integrations"; the sidebar now says "Messaging Integrations".</li>
+  <li><code>schema.sql</code> is described as safe to re-run, but a second run stops at <code>alter table campaign_recipients rename column error_message to failure_reason</code> (the column no longer exists). Found while testing the Infobip change on a scratch database; not fixed here.</li>
+</ul>
+</section>
+
+<!-- =============================================================== -->
+<section id="maintain">
+<h2>12. Keeping this document current</h2>
+<div class="callout ok">
+<p><strong>Rule:</strong> whenever a change adds, removes or alters a feature, update this file in the same change. Bump "Last verified against code" and add a change-log row.</p>
+</div>
+<div class="table-wrap"><table>
+<tr><th>If you changed…</th><th>Update</th></tr>
+<tr><td>A Razor Page, sidebar entry or JS file</td><td>§3.1 page map, §3.2 JS modules</td></tr>
+<tr><td>A controller route or its auth</td><td>§2.3 trust zones, §4.3 API surface</td></tr>
+<tr><td>A service's responsibility or a business rule</td><td>§4.2 catalog and the relevant §5 flow</td></tr>
+<tr><td>A SignalR event</td><td>§4.4 and the JS consumers in §3.2</td></tr>
+<tr><td>A hosted service, queue or scheduled job</td><td>§4.5</td></tr>
+<tr><td>An external provider or OAuth flow</td><td>§6 integrations, §9 config</td></tr>
+<tr><td>Anything n8n sends or receives</td><td>§7 contracts</td></tr>
+<tr><td><code>Database/schema.sql</code></td><td>§8 catalog, vocabularies, ER figure if a core relation changed</td></tr>
+<tr><td>A config key</td><td>§9</td></tr>
+<tr><td>Closed or found a gap</td><td>§10, §11</td></tr>
+</table></div>
+
+<h3>Change log</h3>
+<div class="table-wrap"><table class="changelog">
+<tr><th>Date</th><th>Change</th></tr>
+<tr><td>2026-10-04</td><td>First version, written from the code at <code>febef3c</code>.</td></tr>
+<tr><td>2026-10-04</td><td>WhatsApp provider seam (<code>IWhatsAppProvider</code>, <code>WhatsApp:Provider</code>) and Infobip as the MVP provider: §2.3, §4.1, §4.2, §4.3, §5.4b, §6, §8, §9, §10. Status callbacks are now idempotent and never move backwards (both providers).</td></tr>
+<tr><td>2026-10-05</td><td>Infobip made invisible to clinics: neutral webhook route <code>/api/integrations/whatsapp/connections/{id}/events</code>, neutral errors and failure reasons, provider fields hidden from the API, media URL replaced by <code>mediaId</code>: §2.3, §4.3, §5.4b.</td></tr>
+<tr><td>2026-10-05</td><td>Template provider seam (<code>IWhatsAppTemplateProvider</code>): the Templates page works through Infobip too; <code>whatsapp_templates.provider</code>; account-level webhook <code>/api/integrations/whatsapp/account/events</code>; <code>Infobip:WebhookToken</code>: §4.2, §4.3, §6, §8, §9, §10.</td></tr>
+</table></div>
+</section>
+
+</main>
+</div>
+</body>
+</html>

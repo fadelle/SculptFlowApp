@@ -4,7 +4,10 @@
 @{
     ViewData["Title"] = "Messaging Integrations";
     var allChannels = new[] { ChannelType.WhatsApp, ChannelType.Instagram, ChannelType.Facebook, ChannelType.Telegram };
-    var connectedCount = allChannels.Count(ch => Model.Channels.TryGetValue(ch, out var i) && i.Status == ChannelIntegrationStatus.Connected && !NeedsAttention(i));
+    // A WhatsApp row connected through the provider not in use now doesn't count (see the two WhatsApp cards).
+    var activeWhatsAppProvider = Model.UsesInfobipWhatsApp ? ChannelProvider.Infobip : ChannelProvider.Meta;
+    var connectedCount = allChannels.Count(ch => Model.Channels.TryGetValue(ch, out var i) && i.Status == ChannelIntegrationStatus.Connected && !NeedsAttention(i)
+        && (ch != ChannelType.WhatsApp || i.Provider == activeWhatsAppProvider));
     var attentionCount = allChannels.Count(ch => Model.Channels.TryGetValue(ch, out var i) && NeedsAttention(i));
 }
 
@@ -33,7 +36,14 @@ else
     </div>
 
     <div class="int-grid int-grid-even">
-        @{ await RenderChannelCard(ChannelType.WhatsApp, "WA", "#25D366", "WhatsApp Business", "Chat with patients, send reminders and campaigns.", "Chat with patients on WhatsApp, and send reminders and campaigns.", oauth: true); }
+        @if (Model.UsesInfobipWhatsApp)
+        {
+            await RenderInfobipWhatsAppCard();
+        }
+        else
+        {
+            await RenderChannelCard(ChannelType.WhatsApp, "WA", "#25D366", "WhatsApp Business", "Chat with patients, send reminders and campaigns.", "Chat with patients on WhatsApp, and send reminders and campaigns.", oauth: true);
+        }
         @{ await RenderChannelCard(ChannelType.Instagram, "IG", "#C13584", "Instagram", "Answer Instagram direct messages.", "Patients' Instagram DMs arrive in your Inbox, and the AI assistant can answer them.", oauth: false); }
         @{ await RenderChannelCard(ChannelType.Facebook, "FB", "#1877F2", "Facebook Messenger", "Answer messages sent to your Facebook page.", "Messages to your Facebook page arrive in your Inbox, and the AI assistant can answer them.", oauth: true); }
         @{ await RenderTelegramCard(); }
@@ -127,6 +137,12 @@ else
     private async Task RenderChannelCard(string channel, string initials, string accentHex, string title, string purpose, string whenConnected, bool oauth)
     {
         var info = Model.Channels.TryGetValue(channel, out var c) ? c : null;
+        // Back on Meta after the Infobip period: that number has to be connected again with Facebook sign-in,
+        // so an Infobip-connected row shows as not connected here (mirror of RenderInfobipWhatsAppCard).
+        if (channel == ChannelType.WhatsApp && info?.Provider == ChannelProvider.Infobip)
+        {
+            info = null;
+        }
         var connected = info?.Status == ChannelIntegrationStatus.Connected;
         var isError = info?.Status == ChannelIntegrationStatus.Error;
         var configId = channel switch
@@ -250,6 +266,93 @@ else
             connected || isError ? (info?.DisplayName ?? "Change the IDs or the access token.")
                 : oauth ? "Only if signing in with Facebook doesn't work for you." : "With the IDs and a token from your Meta app.");
         await RenderManualForm(channel, info, connected);
+        await RenderModalEnd();
+    }
+
+    // WhatsApp while WhatsApp:Provider = infobip: no Facebook sign-in. The number is registered as a sender on
+    // SculptFlow's Infobip account first; here it's only linked to this clinic (InfobipWhatsAppIntegrationService).
+    // A Meta-connected row counts as not connected on this card, since it can't send while Infobip is active.
+    private async Task RenderInfobipWhatsAppCard()
+    {
+        var row = Model.Channels.TryGetValue(ChannelType.WhatsApp, out var c) ? c : null;
+        var info = row?.Provider == ChannelProvider.Infobip ? row : null;
+        var connected = info?.Status == ChannelIntegrationStatus.Connected;
+        var isError = info?.Status == ChannelIntegrationStatus.Error;
+        const string modalId = "int-m-whatsapp-number";
+
+        <div class="card int-card int-framed @(isError ? "int-card-error" : "")" style="--ch:#25D366">
+            <div class="int-head">
+                <span class="channel-mark int-notch ch-whatsapp" title="WhatsApp Business">@Html.Raw(PlasticSurgery.Pages.Shared.ChannelIconHelper.BrandSvg(ChannelType.WhatsApp) ?? "WA")</span>
+                <div class="flex-1 min-w-0">
+                    <div class="integration-title">WhatsApp Business</div>
+                    <div class="cell-sub">@(connected && !string.IsNullOrEmpty(info!.DisplayName) ? info.DisplayName : "Chat with patients, send reminders and campaigns.")</div>
+                </div>
+                @{ await RenderStatusPill(info); }
+            </div>
+
+            @if (connected)
+            {
+                <div class="int-strip">
+                    <div>
+                        <span class="cell-sub">Number</span>
+                        <span class="int-val">@info!.DisplayName</span>
+                    </div>
+                    <div>
+                        <span class="cell-sub">Last message</span>
+                        <span class="int-val" title="@(info.LastWebhookAt?.ToString("MMM d, HH:mm") + " UTC")">
+                            @if (info.LastWebhookAt is { } last) { @LocalTimeHelper.Ago(last) } else { <text>None yet · send the number a WhatsApp message to test</text> }
+                        </span>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="int-strip int-strip-note">
+                    <div>
+                        <span class="cell-sub">When connected</span>
+                        <span class="int-val">Chat with patients on WhatsApp, and send reminders and campaigns.</span>
+                    </div>
+                </div>
+            }
+
+            <div class="int-foot">
+                <button type="button" class="btn btn-sm @(connected ? "btn-ghost" : "btn-primary")" data-open="@modalId">
+                    @(connected ? "Account details" : "Connect")
+                </button>
+                @if (connected || isError)
+                {
+                    <form method="post" asp-page-handler="Disconnect" class="inline-form int-foot-end"
+                          onsubmit="return confirm('Disconnect WhatsApp? Patients on this number will stop being sent/received until reconnected.');">
+                        <input type="hidden" name="Channel" value="@ChannelType.WhatsApp" />
+                        <button type="submit" class="btn btn-ghost btn-sm btn-danger-text">Disconnect</button>
+                    </form>
+                }
+            </div>
+        </div>
+
+        await RenderModalStart(modalId, ChannelType.WhatsApp, "#25D366",
+            connected ? "WhatsApp account details" : "Connect WhatsApp",
+            connected ? (info!.DisplayName ?? "") : "Enter the WhatsApp number SculptFlow set up for your clinic.");
+        <form method="post" asp-page-handler="ConnectWhatsAppNumber" class="integration-form">
+            <label class="field">
+                <span>WhatsApp number</span>
+                <input type="tel" name="WhatsAppSenderNumber" class="text-input" autocomplete="off"
+                       value="@(info?.ProviderSenderId is { } s ? "+" + s : "")" placeholder="+44 7860 099299" required />
+                <small class="text-subtle">International format. We check it's ready for WhatsApp before connecting.</small>
+            </label>
+            @if (connected && !string.IsNullOrEmpty(Model.InfobipWebhookUrl))
+            {
+                <label class="field">
+                    <span>Webhook URL</span>
+                    <input type="text" class="text-input" readonly value="@Model.InfobipWebhookUrl" onclick="this.select()" />
+                    <small class="text-subtle">For SculptFlow support: the number's inbound messages and delivery reports go here. Keep it private.</small>
+                </label>
+            }
+            <div class="flex items-center gap-2">
+                <button type="submit" class="btn btn-primary btn-sm">@(connected ? "Save" : "Connect")</button>
+                <button type="button" class="btn btn-sm" data-close>Cancel</button>
+            </div>
+        </form>
         await RenderModalEnd();
     }
 

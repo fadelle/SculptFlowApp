@@ -1568,6 +1568,29 @@ drop trigger if exists trg_tiktok_integrations_updated_at on tiktok_integrations
 create trigger trg_tiktok_integrations_updated_at before update on tiktok_integrations
   for each row execute function set_updated_at();
 
+-- ---------------------------------------------------------------
+-- WhatsApp provider (BSP) per connection — Infobip for the MVP, Meta Cloud API directly later.
+-- Which provider WhatsApp uses is a global switch (WhatsApp:Provider config), not a column; these say
+-- which provider a row was connected through. provider null = 'meta' (every row from before this).
+-- Infobip rows: provider_sender_id = the business WhatsApp number (digits only), webhook_verify_token =
+-- the per-connection webhook secret; the Infobip API key/base URL are SculptFlow-wide env vars, never here.
+-- Infobip webhook URL: /api/integrations/whatsapp/connections/{channel_integrations.id}/events?token={webhook_verify_token} (provider-neutral on purpose)
+-- Free text (no CHECK): new BSPs shouldn't need a schema change.
+-- ---------------------------------------------------------------
+alter table channel_integrations add column if not exists provider varchar(30);
+alter table channel_integrations add column if not exists provider_sender_id varchar(100);
+
+-- One Infobip sender can serve only one clinic at a time (SculptFlow's single Infobip account holds every
+-- clinic's number). Partial on connected so a disconnected clinic doesn't block reassigning the number.
+create unique index if not exists ux_channel_integrations_provider_sender
+  on channel_integrations(channel, provider, provider_sender_id)
+  where provider_sender_id is not null and status = 'connected';
+
+-- Which WhatsApp provider a template was submitted through (null = 'meta', every template from before this).
+-- A WhatsApp approval only holds on the account it was reviewed on, so the app sends/syncs a template only while
+-- its provider is the active one (WhatsApp:Provider). meta_template_id holds that provider's template id.
+alter table whatsapp_templates add column if not exists provider varchar(30);
+
 -- UTC guard: every moment in time is stored as timestamptz (UTC); only the clinic-local availability columns
 -- (clinic_availability_rules/exceptions start_time/end_time/date, read together with clinics.timezone) are
 -- zone-less on purpose. If any other column ever drifts to `timestamp without time zone`, convert it here,
