@@ -12,6 +12,11 @@ namespace PlasticSurgery.Services;
 
 public record RegisterClinicRequest(string? FullName, string? ClinicName, string? Email, string? Password, string? ConfirmPassword);
 
+/// <summary>Sign-up through an external identity provider (Google): no password, the provider has already
+/// verified the email, and the provider login is linked to the new user in the same transaction.</summary>
+public record RegisterExternalClinicRequest(
+    string? FullName, string? ClinicName, string? Email, string LoginProvider, string ProviderKey, string? ProviderDisplayName);
+
 /// <summary>Success carries the new user + clinic (so the caller can sign the user in); failure carries
 /// messages that are safe to show on the Register page.</summary>
 public record ClinicRegistrationResult(bool Succeeded, IdentityUser? User, Clinic? Clinic, IReadOnlyList<string> Errors)
@@ -35,6 +40,10 @@ public record ClinicRegistrationResult(bool Succeeded, IdentityUser? User, Clini
 public interface IClinicRegistrationService
 {
     Task<ClinicRegistrationResult> RegisterAsync(RegisterClinicRequest request, CancellationToken ct = default);
+
+    /// <summary>Same NEW USER -> NEW CLINIC rule and the same single transaction as <see cref="RegisterAsync"/>,
+    /// but the user has no password and is created with a provider-verified email.</summary>
+    Task<ClinicRegistrationResult> RegisterExternalAsync(RegisterExternalClinicRequest request, CancellationToken ct = default);
 }
 
 public partial class ClinicRegistrationService : IClinicRegistrationService
@@ -79,6 +88,33 @@ public partial class ClinicRegistrationService : IClinicRegistrationService
             return ClinicRegistrationResult.Fail("The passwords don't match.");
         }
 
+        return await CreateAccountAsync(fullName, clinicName, email, user => _users.CreateAsync(user, password), ct);
+    }
+
+    public async Task<ClinicRegistrationResult> RegisterExternalAsync(RegisterExternalClinicRequest request, CancellationToken ct = default)
+    {
+        var fullName = (request.FullName ?? string.Empty).Trim();
+        var clinicName = (request.ClinicName ?? string.Empty).Trim();
+        var email = (request.Email ?? string.Empty).Trim();
+
+        if (fullName.Length == 0) fullName = email; // a provider that sends no name: fall back to the email
+        if (clinicName.Length == 0) return ClinicRegistrationResult.Fail("Clinic name is required.");
+        if (fullName.Length > MaxNameLength) fullName = fullName[..MaxNameLength];
+        if (clinicName.Length > MaxNameLength) return ClinicRegistrationResult.Fail($"Clinic name must be {MaxNameLength} characters or fewer.");
+        if (!IsValidEmail(email)) return ClinicRegistrationResult.Fail("Enter a valid email address.");
+
+        return await CreateAccountAsync(fullName, clinicName, email, async user =>
+        {
+            user.EmailConfirmed = true; // the provider verified it; the caller refuses unverified emails
+            var created = await _users.CreateAsync(user);
+            if (!created.Succeeded) return created;
+            return await _users.AddLoginAsync(user, new UserLoginInfo(request.LoginProvider, request.ProviderKey, request.ProviderDisplayName));
+        }, ct);
+    }
+
+    private async Task<ClinicRegistrationResult> CreateAccountAsync(
+        string fullName, string clinicName, string email, Func<IdentityUser, Task<IdentityResult>> createUser, CancellationToken ct)
+    {
         for (var attempt = 0; attempt < MaxSlugAttempts; attempt++)
         {
             var slug = await UniqueSlugAsync(clinicName, attempt, ct);
@@ -87,7 +123,7 @@ public partial class ClinicRegistrationService : IClinicRegistrationService
             try
             {
                 var user = new IdentityUser { UserName = email, Email = email };
-                var created = await _users.CreateAsync(user, password);
+                var created = await createUser(user);
                 if (!created.Succeeded)
                 {
                     await RollbackAsync(tx, ct);

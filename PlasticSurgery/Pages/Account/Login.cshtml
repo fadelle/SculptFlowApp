@@ -30,6 +30,8 @@
                     <div class="auth-error" role="alert"><span aria-hidden="true">!</span><div>@Model.ErrorMessage</div></div>
                 }
 
+                <partial name="_GoogleButton" model="Model.ReturnUrl" />
+
                 <form method="post" class="integration-form" data-auth-form>
                     <label class="field">
                         <span>Email</span>

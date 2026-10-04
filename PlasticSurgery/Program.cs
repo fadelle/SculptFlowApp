@@ -1,3 +1,5 @@
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using PlasticSurgery.Data;
@@ -40,12 +42,47 @@ builder.Services.AddIdentityCore<IdentityUser>(options =>
     .AddSignInManager()
     .AddDefaultTokenProviders();
 
-builder.Services.AddAuthentication(IdentityConstants.ApplicationScheme)
+var authentication = builder.Services.AddAuthentication(IdentityConstants.ApplicationScheme)
     .AddCookie(IdentityConstants.ApplicationScheme, options =>
     {
         options.LoginPath = "/Account/Login";
         options.AccessDeniedPath = "/Account/Login";
+    })
+    // Holds the Google identity for the few minutes between "Google said who this is" and "we signed them in
+    // (or collected their clinic name first)" — AddIdentityCore doesn't register this scheme itself.
+    .AddCookie(IdentityConstants.ExternalScheme, options => options.ExpireTimeSpan = TimeSpan.FromMinutes(10));
+
+// "Continue with Google" (sign in / sign up) — only registered when both values are configured, so a server
+// without them simply doesn't offer the button. Login only: it asks for openid/email/profile, never Calendar.
+if (GoogleLoginSettings.IsEnabled(builder.Configuration))
+{
+    authentication.AddGoogle(options =>
+    {
+        options.ClientId = builder.Configuration["GoogleLogin:ClientId"]!;
+        options.ClientSecret = builder.Configuration["GoogleLogin:ClientSecret"]!;
+        options.SignInScheme = IdentityConstants.ExternalScheme;
+        // Google's userinfo says whether it has verified the email; only a verified one is ever trusted.
+        options.ClaimActions.MapJsonKey(GoogleLoginSettings.EmailVerifiedClaim, "email_verified");
+        // Denied consent / a failed handshake lands back on the sign-in page with a fixed code, never a stack trace.
+        options.Events.OnRemoteFailure = ctx =>
+        {
+            // The handler words a refusal as "Access was denied by the resource owner or by the remote server."
+            var denied = ctx.Failure?.Message?.Contains("denied", StringComparison.OrdinalIgnoreCase) == true;
+            ctx.Response.Redirect($"/Account/Login?externalError={(denied ? "cancelled" : "failed")}");
+            ctx.HandleResponse();
+            return Task.CompletedTask;
+        };
     });
+}
+
+// Behind Render's proxy the app only ever sees plain HTTP; trusting X-Forwarded-Proto makes Request.Scheme
+// https again, which Google's redirect_uri (built from the request) and Secure cookies both depend on.
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedProto;
+    options.KnownIPNetworks.Clear();
+    options.KnownProxies.Clear();
+});
 
 builder.Services.AddAuthorization();
 
@@ -188,6 +225,8 @@ builder.Services.AddRazorPages(options =>
     options.Conventions.AuthorizeFolder("/");
     options.Conventions.AllowAnonymousToPage("/Account/Login");
     options.Conventions.AllowAnonymousToPage("/Account/Register");
+    // Authenticated by the short-lived Google external cookie, not yet by an app session (see GoogleAuthController).
+    options.Conventions.AllowAnonymousToPage("/Account/CompleteGoogleSignup");
     options.Conventions.AllowAnonymousToPage("/Error");
 });
 builder.Services.AddControllers();
@@ -206,6 +245,8 @@ builder.Services.AddSwaggerGen(options =>
 });
 
 var app = builder.Build();
+
+app.UseForwardedHeaders();
 
 // ---------------------------------------------------------------------
 // Middleware pipeline

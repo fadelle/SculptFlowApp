@@ -1333,7 +1333,7 @@ MULTIPLE_UPCOMING_APPOINTMENTS, INVALID_REQUEST. An unknown/missing `code` → 4
      `accessToken` directly in the trigger instead of an `externalConnectionRef` it had to look up — update that one field
      mapping in the existing n8n workflow, nothing else about it changes. Set `N8n__CalendarSyncWebhookUrl` as before.
 
-## 27. TikTok Login Kit (account connection only — not a messaging channel yet) — built, tested, NOT pushed (awaiting explicit "push")
+## 27. TikTok Login Kit (account connection only — not a messaging channel yet) — pushed (`81a6b29`)
 
 - **Business shape**: staff can connect their clinic's TikTok account under Settings → Channels & Integrations, alongside
   WhatsApp/Instagram/Facebook/Telegram. This phase is **account authorization only** via TikTok Login Kit — see
@@ -1510,3 +1510,49 @@ WHAT WOULD BE NEEDED FOR TIKTOK DIRECT MESSAGES IN THE UNIFIED INBOX LATER
   would be a new `ITikTokMessagingClient` (mirroring `IChannelSender`) resolved into the same Inbox pipeline
   WhatsApp/Telegram already use — at that point `"tiktok"` would make sense as a real `ChannelType`, which it
   deliberately is **not** yet, precisely so that this phase doesn't imply capability the account doesn't have.
+
+## 28. "Continue with Google" sign-in / sign-up (SculptFlow's own login) — built, tested, NOT pushed (awaiting explicit "push")
+
+- **What it is**: a "Continue with Google" button on Sign in and Register. Email-and-password stays exactly as it was. Not to be confused
+  with Calendar Integrations (§26) — that connects a clinic's *calendar* with its own OAuth client (`GoogleCalendar:*`, calendar scopes);
+  this is how a *person* signs in, with its own client (`GoogleLogin:*`) that only asks for `openid email profile` (non-sensitive, so no
+  Google verification is needed and users see no "unverified app" warning). If either `GoogleLogin` value is empty the button is simply
+  not rendered and the Google handler isn't registered.
+- **Flow** (`Controllers/GoogleAuthController.cs`, route `auth/google`): `POST start` (antiforgery-protected, like Identity's own external
+  login) -> Google (the built-in handler owns `/signin-google`) -> `GET callback` with Google's identity in a short-lived
+  (10 min) external cookie. Then:
+  1. **Already linked** (this Google account signed in before) -> signed in.
+  2. **Unverified or missing email** -> refused (`externalError=unverified`). Only an email Google itself reports verified
+     (`email_verified`, mapped to claim `urn:google:email_verified`) is ever trusted.
+  3. **An account with that email exists** -> the Google login is linked to it and the user is signed in. **Because registration has
+     never verified emails** (no email service yet), whoever registered that address by password may not own it; Google just proved the
+     real owner. So when the existing account's email was unconfirmed, linking marks it confirmed **and removes its password**
+     (and rotates the security stamp) — otherwise the original registrant could still sign in. Consequence: such a user signs in with
+     Google from then on. Existing browser sessions are not revoked (no security-stamp validator is configured).
+  4. **Nobody yet** -> `Pages/Account/CompleteGoogleSignup` asks only for the clinic name, then
+     `IClinicRegistrationService.RegisterExternalAsync` creates user + clinic + membership + defaults in the **same transaction** as a
+     password signup (refactored: `RegisterAsync`/`RegisterExternalAsync` now share `CreateAccountAsync`). The new user has no password,
+     `EmailConfirmed = true`, and the Google link is stored in `identity_user_logins` (table already existed — no schema change).
+- **Locked-out users** can't get in via Google either. Denied consent or any handshake failure returns to Sign in with a fixed code
+  (`externalError=cancelled|failed|unverified|locked`); the page maps codes to fixed text and never echoes query-string text.
+- **Behind-the-proxy fix (affects the whole app)**: on Render the app saw every request as plain HTTP (production cookies had no
+  `Secure` flag), which would have made Google's `redirect_uri` `http://…` and mismatched. Added `UseForwardedHeaders`
+  (`XForwardedProto` only, known proxies/networks cleared as is standard on PaaS) as the first middleware. Side effect, intended:
+  `Request.Scheme` is https in production and auth/antiforgery cookies now carry `Secure`.
+- **Config**: `GoogleLogin:ClientId` in `appsettings.json` (public), `GoogleLogin:ClientSecret` via user-secrets locally and
+  `GoogleLogin__ClientSecret` on Render. Google Cloud client "SculptFlow Login" (Web application) with redirect URIs
+  `https://sculptflowapp.onrender.com/signin-google` and `https://localhost:7276/signin-google`. Consent screen must be "In
+  production"/External; the unused sensitive scopes (BigQuery, Cloud Platform, Storage) should stay removed from Data Access.
+  New package: `Microsoft.AspNetCore.Authentication.Google` 10.0.12.
+- **Testing**: real client ID against Google's actual authorize endpoint (accepted: sign-in page returned, `redirect_uri` registered, only
+  `openid profile email` + PKCE requested; POST without antiforgery token -> 400). The post-Google logic was exercised with a temporary
+  local-only simulator that planted a fake Google identity in the external cookie (deleted, never committed): new user -> clinic step ->
+  signed in with a working session; returning user (fresh browser) straight in; existing password account linked into its **existing**
+  clinic with its old password rejected afterwards; unverified email refused with no account created; clinic-name page unreachable
+  without a Google identity; locked-out user refused; denied consent -> "cancelled" message; non-local `returnUrl` ignored.
+  DB checked: Google-created users have `email_confirmed = true`, no password hash, one Google login row. Password signup and
+  login re-tested after the registration refactor (works; wrong password rejected). All test users/clinics deleted.
+- **Not tested here**: the real Google consent click-through (needs a human with a Google account) and Render's production
+  behaviour of the forwarded-headers change — after deploy, sign in with Google once and check the redirect works.
+- **Known limits**: no email verification or password reset exists for password accounts (no email service). A Google user has no
+  password, so losing that Google account means losing access. No account-linking UI inside Settings.
