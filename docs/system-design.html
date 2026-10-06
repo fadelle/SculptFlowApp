@@ -136,6 +136,7 @@
         <li><a href="#trust">Trust zones &amp; auth</a></li>
         <li><a href="#deploy">Deployment</a></li>
         <li><a href="#principles">Design principles</a></li>
+        <li><a href="#billing">Subscriptions &amp; billing</a></li>
       </ol>
     </li>
     <li><a href="#frontend">3. Frontend</a>
@@ -180,8 +181,8 @@
   Razor Pages dashboard, the .NET API and its workers, the WhatsApp/Telegram/calendar/knowledge integrations, the n8n
   workflows as seen from the app, and the PostgreSQL schema. Written from the code, not from older docs.</p>
   <div class="meta">
-    <span class="pill">Last verified against code: 2026-10-04</span>
-    <span class="pill">Code baseline: <code>febef3c</code> (main)</span>
+    <span class="pill">Last verified against code: 2026-10-06</span>
+    <span class="pill">Code baseline: <code>12fad04</code> (main) + branch <code>feature/subscription-billing</code></span>
     <span class="pill">.NET 10 · EF Core / Npgsql · PostgreSQL + pgvector · SignalR</span>
   </div>
   <div class="callout">
@@ -204,6 +205,7 @@ take over at any moment. Clinics also run WhatsApp template campaigns, mainly to
   <div class="card"><h4>WhatsApp business</h4><p>Embedded Signup, message templates with Meta review status, account and phone health, campaigns with audience picker and reply/booking attribution.</p></div>
   <div class="card"><h4>Knowledge Base</h4><p>Manual entries, PDF/DOCX/TXT upload, website crawling, chunking + embeddings, pgvector semantic search for the AI, retrieval benchmark.</p></div>
   <div class="card"><h4>Clinic admin</h4><p>Self-service registration (one new clinic per signup), Google sign-in, clinic info and opening hours, staff list, notification bell, calendar and TikTok connections.</p></div>
+  <div class="card"><h4>Billing</h4><p>Subscription plans with entitlements and included credit; prepaid wallet; usage billed per billable event from versioned rate cards (reserve, settle, release); append-only financial ledger. Off until <code>Billing:Enabled</code>.</p></div>
 </div>
 </section>
 
@@ -269,7 +271,7 @@ state: it runs the AI agent and two helper workflows, and talks to the app only 
   <text class="lbl-m" x="284" y="276">Lead · Conversation · Message · Appointment · Availability · ProcedureBooking</text>
   <text class="lbl-m" x="284" y="294">Campaign · Audience · WhatsAppTemplate · WhatsAppHealth · Channels</text>
   <text class="lbl-m" x="284" y="312">Knowledge · Search · Embedding · Notification · Calendar</text>
-  <text class="lbl-m" x="284" y="330">TikTokIntegration · ClinicRegistration · Staff · Dashboard · EventLogger</text>
+  <text class="lbl-m" x="284" y="330">TikTok · ClinicRegistration · Staff · Dashboard · EventLogger · Billing (§2.6)</text>
   <text class="lbl-m" x="284" y="352">IChannelSender → WhatsApp | Telegram senders</text>
   <text class="lbl-m" x="284" y="368">n8n out: AiTrigger · CalendarSync · BenchmarkGenerator</text>
   <rect class="box" x="270" y="400" width="190" height="70" rx="8"/>
@@ -301,7 +303,7 @@ state: it runs the AI agent and two helper workflows, and talks to the app only 
   <!-- data -->
   <rect class="box" x="730" y="460" width="240" height="74" rx="8"/>
   <text class="lbl-b" x="744" y="484">PostgreSQL (Supabase)</text>
-  <text class="lbl-m" x="744" y="502">36 tables · pgvector</text>
+  <text class="lbl-m" x="744" y="502">45 tables · pgvector</text>
   <text class="lbl-m" x="744" y="518">schema.sql is the source of truth</text>
 
   <!-- arrows -->
@@ -317,7 +319,7 @@ state: it runs the AI agent and two helper workflows, and talks to the app only 
   <path class="ln" d="M460,435 C600,480 640,400 730,374" marker-end="url(#arr)"/>
   <path class="ln" d="M670,512 L730,497" marker-end="url(#arr)"/>
 </svg>
-<figcaption>Blue arrows are the n8n round trip: the app triggers a workflow, the workflow calls back into <code>/api/**</code> with <code>X-Ingest-Key</code>.</figcaption>
+<figcaption>Blue arrows are the n8n round trip: the app triggers a workflow, the workflow calls back into <code>/api/**</code> with <code>X-Ingest-Key</code>. Not drawn: the billing maintenance worker (§4.5) and the platform-admin API the admin portal calls (§2.3).</figcaption>
 </figure>
 
 <h3 id="tenancy">2.2 Multi-tenancy</h3>
@@ -336,6 +338,7 @@ state: it runs the AI agent and two helper workflows, and talks to the app only 
 <tr><td><span class="tag t-session">session</span></td><td>Staff in the browser</td><td>ASP.NET Core Identity cookie (<code>AddIdentityCore</code>, role-free). Razor Pages: <code>AuthorizeFolder("/")</code> with Login, Register, CompleteGoogleSignup and Error opened up. API: <code>DashboardApiController</code> base class is <code>[Authorize]</code> and exposes the resolved clinic id.</td><td>Pages/**, most <code>/api/**</code>, <code>/hubs/inbox</code>, <code>/calendar-oauth/*</code>, <code>/tiktok-oauth/*</code></td></tr>
 <tr><td><span class="tag t-ingest">ingest key</span></td><td>n8n (server to server)</td><td><code>[RequireIngestKey]</code> action filter compares header <code>X-Ingest-Key</code> to <code>N8n:IngestApiKey</code>; 500 if the key is not configured, 401 if it does not match.</td><td><code>/api/ai/**</code>, <code>/api/ai/test/**</code>, <code>/api/messages/ingest</code>, <code>/api/integrations/whatsapp/{templates,health}/events</code>, <code>/api/calendar-integrations/sync-callback</code>, <code>/api/knowledge/benchmark/generations/{id}/questions</code>, and the AI branch of <code>POST /api/conversations/{id}/messages/send</code> (checked inline)</td></tr>
 <tr><td><span class="tag t-open">provider</span></td><td>Meta, Telegram, TikTok</td><td>Meta: GET handshake against <code>Meta:WebhookVerifyToken</code>; POST deliveries are <em>not</em> signature-checked yet. Telegram: <code>connectionId</code> must be a connected telegram row and <code>X-Telegram-Bot-Api-Secret-Token</code> must match (constant time). TikTok: placeholder, logs only. Infobip: <code>connectionId</code> must be a connected whatsapp row with <code>provider=infobip</code> and <code>?token=</code> must match its <code>webhook_verify_token</code> (constant time).</td><td><code>/api/integrations/whatsapp/webhook</code>, <code>/api/integrations/telegram/webhook/{connectionId}</code>, <code>/api/integrations/whatsapp/connections/{connectionId}/events</code>, <code>/api/integrations/tiktok/webhook</code></td></tr>
+<tr><td><span class="tag t-ingest">platform admin key</span></td><td>SculptFlow platform admins through the SculptFlowAdmin portal (server to server), or curl</td><td><code>[RequirePlatformAdminKey]</code> compares header <code>X-Platform-Admin-Key</code> to <code>PlatformAdmin:ApiKey</code> in constant time; 404 when the key is not configured, 401 if it does not match. <code>X-Admin-Actor</code> names the admin in the ledger. Clinic staff accounts can never reach it (no roles exist). Convention for every admin domain: the main app owns the rules and writes under <code>/api/platform-admin/{domain}</code>; the portal is the control panel and never writes those tables itself.</td><td><code>/api/platform-admin/**</code></td></tr>
 <tr><td><span class="tag t-cookie">external cookie</span></td><td>Google sign-in in progress</td><td>Short-lived (10 min) <code>IdentityConstants.ExternalScheme</code> cookie holding the Google identity; only a verified email is trusted. Registered only when <code>GoogleLogin:ClientId</code> and <code>ClientSecret</code> are both set.</td><td><code>/auth/google/start</code>, <code>/auth/google/callback</code>, <code>/signin-google</code>, <code>/Account/CompleteGoogleSignup</code></td></tr>
 </table></div>
 <p>OAuth <code>state</code> for calendar and TikTok connects is protected with ASP.NET Core DataProtection. <code>POST /api/leads</code> is still <code>[AllowAnonymous]</code> with a body-supplied clinic id (legacy intake).</p>
@@ -347,7 +350,7 @@ state: it runs the AI agent and two helper workflows, and talks to the app only 
   <li>Swagger UI at <code>/swagger</code> in Development only. HSTS and <code>/Error</code> handler outside Development.</li>
   <li>Schema is applied by hand: <code>psql -f Database/schema.sql</code> (idempotent, append-only blocks), optional <code>Database/seed.sql</code>. EF Core migrations are not used.</li>
   <li>Secrets: <code>dotnet user-secrets</code> locally, Render env vars (<code>Section__Key</code>) in production. <code>Properties/launchSettings.json</code> on dev machines holds real keys and must never be committed.</li>
-  <li>Single instance assumed: the scrape and benchmark queues are in-memory <code>Channel&lt;Guid&gt;</code>s, recovered from DB state on startup. SignalR has no backplane.</li>
+  <li>Single instance assumed: the scrape and benchmark queues are in-memory <code>Channel&lt;Guid&gt;</code>s, recovered from DB state on startup. SignalR has no backplane. (Billing is the exception: its correctness rests on database row locks and unique keys, so two instances running the billing worker can't double-charge.)</li>
 </ul>
 
 <h3 id="principles">2.5 Design principles visible in the code</h3>
@@ -359,7 +362,127 @@ state: it runs the AI agent and two helper workflows, and talks to the app only 
   <li><strong>Side effects after commit, never throwing.</strong> Notifications, calendar sync and AI triggers run after the main write succeeds and swallow their own failures.</li>
   <li><strong>Time:</strong> every instant is <code>timestamptz</code> (UTC). Activity shows in the viewer's timezone; appointments default to clinic time with a Clinic/My time switch; availability is entered and stored clinic-local.</li>
   <li><strong>Tolerate provider vocabularies.</strong> Meta template and health statuses are free text (CHECK constraints dropped) so unknown values never fail a webhook.</li>
+  <li><strong>Money moves only through the ledger.</strong> Every balance change is an append-only ledger row written in the same transaction, under the clinic's billing-account row lock, with an idempotency key (§2.6).</li>
 </ol>
+
+<h3 id="billing">2.6 Subscriptions and usage billing</h3>
+<p>An internal module (<code>Billing/</code>, tables in the Postgres schema <code>billing.*</code>, guide in <code>docs/billing.md</code>)
+built around <strong>three separate questions</strong> that are never collapsed into one:</p>
+<ol>
+  <li><strong>Platform subscription</strong>: what the clinic pays SculptFlow for access. The plan decides features and limits
+  (entitlements) and may grant a monetary <strong>included credit</strong> each period.</li>
+  <li><strong>Provider billing responsibility</strong>: who pays the upstream provider (Meta, an SMS operator…), set per
+  <strong>connected channel account</strong>: customer pays directly, SculptFlow pays, customer pays an external provider, or no
+  provider usage fee. Two WhatsApp accounts can differ.</li>
+  <li><strong>SculptFlow usage billing</strong>: whether SculptFlow charges the clinic for the usage. By default only when
+  SculptFlow pays the provider; an account can also carry a SculptFlow usage fee, or SculptFlow can absorb the cost.</li>
+</ol>
+<p>Every usage is a <strong>billable event</strong> and is recorded (volumes, provider cost where known). Only what SculptFlow
+charges is rated, reserved, settled and paid, included credit first and then the prepaid <strong>wallet</strong>, through the
+ledger. There are no per-channel quotas. Everything is off until <code>Billing:Enabled</code> is true.</p>
+
+<figure>
+<svg viewBox="0 0 1000 450" role="img" aria-labelledby="bill-title">
+  <title id="bill-title">Subscription to entitlements; channel account to provider billing responsibility; usage to billable event, which branches by who pays the provider</title>
+  <defs>
+    <marker id="bl-arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ah"/></marker>
+    <marker id="bl-arr-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ah-a"/></marker>
+  </defs>
+  <!-- zones -->
+  <rect class="zb" x="10" y="10" width="980" height="118" rx="10"/>
+  <text class="zone" x="24" y="30">1 · Subscription · pays for access</text>
+  <rect class="za" x="10" y="140" width="980" height="300" rx="10"/>
+  <text class="zone" x="24" y="160">2 + 3 · Usage · who pays the provider, and does SculptFlow charge</text>
+
+  <!-- subscription row -->
+  <rect class="box" x="30" y="48" width="130" height="62" rx="8"/>
+  <text class="lbl-b" x="44" y="73">Clinic</text>
+  <text class="lbl-m" x="44" y="92">the tenant</text>
+  <rect class="box" x="200" y="48" width="150" height="62" rx="8"/>
+  <text class="lbl-b" x="214" y="73">Subscription</text>
+  <text class="lbl-m" x="214" y="92">active · past due · expired</text>
+  <rect class="box" x="390" y="48" width="150" height="62" rx="8"/>
+  <text class="lbl-b" x="404" y="73">Plan</text>
+  <text class="lbl-m" x="404" y="92">price · period · credit</text>
+  <rect class="box" x="580" y="48" width="170" height="62" rx="8"/>
+  <text class="lbl-b" x="594" y="73">Entitlements</text>
+  <text class="lbl-m" x="594" y="92">features + limits</text>
+  <rect class="box" x="790" y="48" width="180" height="62" rx="8"/>
+  <text class="lbl-b" x="804" y="73">Feature checks</text>
+  <text class="lbl-m" x="804" y="92">send · campaigns · AI · channels</text>
+  <path class="ln" d="M160,79 L200,79" marker-end="url(#bl-arr)"/>
+  <path class="ln" d="M350,79 L390,79" marker-end="url(#bl-arr)"/>
+  <path class="ln" d="M540,79 L580,79" marker-end="url(#bl-arr)"/>
+  <path class="ln" d="M750,79 L790,79" marker-end="url(#bl-arr)"/>
+
+  <!-- left: account -> responsibility, usage -> billable event -->
+  <rect class="box" x="30" y="180" width="160" height="56" rx="8"/>
+  <text class="lbl-b" x="44" y="203">Channel account</text>
+  <text class="lbl-m" x="44" y="221">e.g. one WhatsApp WABA</text>
+  <rect class="box" x="220" y="180" width="230" height="56" rx="8"/>
+  <text class="lbl-b" x="234" y="203">Provider billing responsibility</text>
+  <text class="lbl-m" x="234" y="221">who pays the provider · per account</text>
+  <rect class="box" x="30" y="290" width="160" height="56" rx="8"/>
+  <text class="lbl-b" x="44" y="313">Usage</text>
+  <text class="lbl-m" x="44" y="331">a message is sent</text>
+  <rect class="box" x="220" y="290" width="230" height="56" rx="8"/>
+  <text class="lbl-b" x="234" y="313">Billable event</text>
+  <text class="lbl-m" x="234" y="331">what · how many · who pays · charged?</text>
+  <path class="ln" d="M190,208 L220,208" marker-end="url(#bl-arr)"/>
+  <path class="ln" d="M190,318 L220,318" marker-end="url(#bl-arr)"/>
+  <path class="ln" d="M335,236 L335,290" marker-end="url(#bl-arr)"/>
+
+  <!-- lane 1: SculptFlow pays the provider -->
+  <text class="lbl-m" x="500" y="176">SculptFlow pays provider (platform_funded): charged</text>
+  <rect class="box" x="500" y="184" width="105" height="48" rx="8"/>
+  <text class="lbl-b" x="512" y="204">Rating</text>
+  <text class="lbl-m" x="512" y="221">rate cards</text>
+  <rect class="box" x="625" y="184" width="105" height="48" rx="8"/>
+  <text class="lbl-b" x="637" y="204">Reservation</text>
+  <text class="lbl-m" x="637" y="221">hold funds</text>
+  <rect class="box" x="750" y="184" width="105" height="48" rx="8"/>
+  <text class="lbl-b" x="762" y="204">Settle / release</text>
+  <text class="lbl-m" x="762" y="221">on outcome</text>
+  <rect class="box" x="875" y="184" width="100" height="48" rx="8"/>
+  <text class="lbl-b" x="885" y="204">Credit → wallet</text>
+  <text class="lbl-m" x="885" y="221">+ ledger</text>
+  <path class="ln" d="M605,208 L625,208" marker-end="url(#bl-arr)"/>
+  <path class="ln" d="M730,208 L750,208" marker-end="url(#bl-arr)"/>
+  <path class="ln" d="M855,208 L875,208" marker-end="url(#bl-arr)"/>
+
+  <!-- lanes 2-4: not charged -->
+  <text class="lbl-m" x="500" y="262">Customer pays provider directly (customer_direct)</text>
+  <rect class="box" x="500" y="268" width="475" height="36" rx="8"/>
+  <text class="lbl" x="512" y="291">Usage record · provider cost where known · no SculptFlow money</text>
+  <text class="lbl-m" x="500" y="324">Customer pays external provider (external_provider_direct)</text>
+  <rect class="box" x="500" y="330" width="475" height="36" rx="8"/>
+  <text class="lbl" x="512" y="353">Usage record · no SculptFlow funding</text>
+  <text class="lbl-m" x="500" y="386">No provider usage fee (no_provider_usage_fee)</text>
+  <rect class="box" x="500" y="392" width="475" height="36" rx="8"/>
+  <text class="lbl" x="512" y="415">Usage record · monetized through the subscription only</text>
+
+  <!-- branches from the billable event -->
+  <path class="ln-a" d="M450,312 C480,312 470,208 500,208" marker-end="url(#bl-arr-a)"/>
+  <path class="ln" d="M450,318 C475,318 475,286 500,286" marker-end="url(#bl-arr)"/>
+  <path class="ln" d="M450,324 C475,324 475,348 500,348" marker-end="url(#bl-arr)"/>
+  <path class="ln" d="M450,330 C470,330 470,410 500,410" marker-end="url(#bl-arr)"/>
+</svg>
+<figcaption>Top: what a clinic may do comes only from its subscription's plan; the plan's price is charged from the wallet and its
+included credit granted each period, through the ledger. Bottom: the channel says what the usage is, the connected account says who
+pays the provider. Only the blue branch moves SculptFlow money. The grey branches record usage without a reservation, wallet,
+included credit or ledger row; an admin can still turn on a SculptFlow usage fee for such an account, which then follows the blue
+branch with a fee rate.</figcaption>
+</figure>
+
+<ul>
+  <li><strong>Billable event, not message.</strong> A typed event (<code>whatsapp_marketing_message</code>, <code>telegram_message</code>, later <code>sms_segment</code>, <code>voice_minute</code>, <code>ai_token</code>…) with a quantity, plus who pays the provider and whether SculptFlow charges. New types need only rates, and only where SculptFlow charges.</li>
+  <li><strong>Channel policies own channel rules</strong> (<code>IChannelBillingPolicy</code>: which event, how many units, when it counts); <strong>accounts own commercial arrangements</strong> (<code>ProviderBillingService</code>: account override → configured default per channel/provider → built-in default).</li>
+  <li><strong>Usage records keep money and provider apart</strong>: <code>charge_status</code> (reserved, settled, released, failed, not_charged) is SculptFlow's money; <code>provider_outcome</code> (pending, billable, not_billable) is what happened at the provider.</li>
+  <li><strong>Rates</strong> hold provider cost and client rate as independent numbers, optionally narrowed by country, operator, provider and responsibility, versioned by effective period; never edited, never backdated, so history is never re-priced. A customer-paid account is only ever charged a rate set for its own responsibility (a usage fee), never the platform rate by fallback.</li>
+  <li><strong>Prepaid.</strong> Spendable = wallet + included credit − reserved. The wallet and credit only finance what the clinic owes SculptFlow. Only a settlement that costs more than its estimate can take the wallet below zero.</li>
+  <li><strong>Correctness.</strong> Every money operation runs in one transaction holding the clinic's <code>billing.accounts</code> row lock, checks idempotency after taking the lock, and writes the ledger; unique keys, CHECKs, an exclusion constraint on rate versions and triggers that block ledger/rate/final-usage edits back it up. Cached balances must equal the ledger sums (reconciliation endpoint).</li>
+  <li><strong>Postpaid later</strong> fits as a credit limit on the billing account (added to the spendable formula) plus invoices built from the ledger; nothing else has to change.</li>
+</ul>
 </section>
 
 <!-- =============================================================== -->
@@ -389,6 +512,7 @@ and <strong>JS-driven</strong> pages that render a shell and then call <code>/ap
 <tr><td><code>/Staff</code></td><td>Staff</td><td>server</td><td>none</td><td>StaffService</td></tr>
 <tr><td><code>/settings/integrations</code></td><td>Messaging Integrations</td><td>server + JS</td><td><code>meta-connect.js</code></td><td><code>/api/channel-integrations/**</code>, TikTokIntegrationService</td></tr>
 <tr><td><code>/settings/calendar-integrations</code></td><td>Calendar Integrations</td><td>server + JS</td><td>inline</td><td><code>/calendar-oauth/*</code>, <code>/api/calendar-integrations/**</code></td></tr>
+<tr><td><code>/settings/billing</code></td><td>Billing (only while <code>Billing:Enabled</code>)</td><td>server, read-only</td><td>none</td><td>BillingQueryService: plan, renewal date, included credit, wallet, reserved, entitlements, this period's usage, recent transactions</td></tr>
 </table></div>
 <p>Shared partials: <code>_AuthSide</code>, <code>_GoogleButton</code>, <code>_StatusHelp</code> (status glossary overlay), <code>_TimeViewSwitch</code> (Clinic time / My time).
 C# view helpers in <code>Pages/Shared</code>: <code>ChannelIconHelper</code>, <code>FilterLabelHelper</code>, <code>LocalTimeHelper</code>, <code>StatusBadgeHelper</code>, <code>UrlDisplayHelper</code>, <code>ViewerTimeZone</code>.</p>
@@ -428,7 +552,8 @@ Loaded on every authenticated page by the layout: <code>local-time.js</code> (he
 <div class="table-wrap"><table>
 <tr><th>Folder</th><th>Contents</th></tr>
 <tr><td><code>Program.cs</code></td><td>All DI registration and the middleware pipeline (forwarded headers → exception/HSTS → https redirect → routing → authn → authz → static assets → pages, controllers, hub). <code>/</code> redirects to <code>/dashboard</code>.</td></tr>
-<tr><td><code>Controllers/</code></td><td>27 API/OAuth/webhook controllers; <code>DashboardApiController</code> base; <code>RequireIngestKeyAttribute</code>.</td></tr>
+<tr><td><code>Controllers/</code></td><td>29 API/OAuth/webhook controllers; <code>DashboardApiController</code> base; <code>RequireIngestKeyAttribute</code>, <code>RequirePlatformAdminKeyAttribute</code>.</td></tr>
+<tr><td><code>Billing/</code></td><td>Subscriptions &amp; usage billing module (§2.6): <code>BillingService</code> (reserve/settle/release/charge/refund/top-up/adjust), <code>SubscriptionService</code>, <code>EntitlementService</code>, <code>MessageBillingService</code> + <code>IChannelBillingPolicy</code>, rating (<code>RateResolver</code>/<code>RateSelector</code>), <code>PlanService</code>, <code>RateCardService</code>, <code>BillingQueryService</code>, <code>ProviderBillingService</code> (who pays the provider, per connected account), <code>BillingStore</code> (transaction + lock + ledger helpers), <code>BillingMaintenanceWorker</code>, <code>PhoneCountry</code>, <code>BillingModule.AddBilling</code>. Channel policies live with their channel: <code>Integrations/WhatsApp/WhatsAppBillingPolicy</code>, <code>Integrations/Telegram/TelegramBillingPolicy</code>.</td></tr>
 <tr><td><code>Pages/</code></td><td>Razor Pages and their PageModels (see §3.1).</td></tr>
 <tr><td><code>Services/</code></td><td>Interfaces (<code>I*.cs</code>, with the design notes in doc comments) and implementations. Also provider clients (Meta Graph, Google/Outlook calendar, TikTok, OpenAI embeddings) and n8n notifiers.</td></tr>
 <tr><td><code>Integrations/WhatsApp</code></td><td><code>MetaWebhookParser</code> → <code>MetaWebhookProcessor</code> → 8 handlers (CustomerMessage, BusinessAppEcho, MessageStatus, TemplateEvent, HealthEvent, History, AppStateSync, Unknown). <code>MetaWhatsAppProvider</code> (Graph send).</td></tr>
@@ -446,20 +571,20 @@ Loaded on every authenticated page by the layout: <code>local-time.js</code> (he
 <div class="table-wrap"><table>
 <tr><th>Service</th><th>Owns</th><th>Notable rules</th></tr>
 <tr><td><code>CurrentClinicContext</code> / <code>ClinicContext</code></td><td>Clinic resolution</td><td>Session → <code>clinic_users</code>; or lookup by explicit id for trusted callers.</td></tr>
-<tr><td><code>ClinicRegistrationService</code></td><td>Sign-up</td><td>New user + new clinic + membership in one transaction; external (Google) variant links the login.</td></tr>
+<tr><td><code>ClinicRegistrationService</code></td><td>Sign-up</td><td>New user + new clinic + membership + empty billing account in one transaction; external (Google) variant links the login. With billing on and <code>Billing:SignupPlanCode</code> set, the clinic then starts on that plan with its first period free.</td></tr>
 <tr><td><code>LeadService</code></td><td>Leads</td><td>Dedup by <code>(clinic, external_lead_id)</code>; <code>GetOrCreateByPhoneAsync</code> for WhatsApp; <code>GetOrCreateByExternalIdAsync</code> for Telegram (no phone); AI-only <code>UpdateContextAsync</code> cannot touch identity fields.</td></tr>
 <tr><td><code>ConversationService</code></td><td>Conversations</td><td>One conversation per lead per channel; take over, handoff (AI), return to AI, close, mark read. Mode changes go through <code>ConversationModeSync.Apply</code> which keeps <code>ai_enabled</code>/<code>human_takeover</code> in sync and inserts a system divider message.</td></tr>
-<tr><td><code>MessageService</code></td><td>All writes to <code>messages</code></td><td><code>SendAsync</code> (staff, flips to human), <code>SendAiReplyAsync</code> (re-checks mode, never flips), <code>SendTemplateAsync</code>, <code>SendCampaignTemplateAsync</code>, <code>IngestAsync</code> (customer/echo/status; updates 24h window only on genuine customer inbound; campaign reply attribution; NEW_LEAD and CAMPAIGN_REPLY notifications). Text sends routed to <code>IChannelSender</code> by <code>conversation.Channel</code>.</td></tr>
+<tr><td><code>MessageService</code></td><td>All writes to <code>messages</code></td><td><code>SendAsync</code> (staff, flips to human), <code>SendAiReplyAsync</code> (re-checks mode, never flips), <code>SendTemplateAsync</code>, <code>SendCampaignTemplateAsync</code>, <code>IngestAsync</code> (customer/echo/status; updates 24h window only on genuine customer inbound; campaign reply attribution; NEW_LEAD and CAMPAIGN_REPLY notifications). Text sends routed to <code>IChannelSender</code> by <code>conversation.Channel</code>. Every send first checks the subscription (<code>IEntitlementService</code>) and reserves usage (<code>IMessageBillingService</code>) under the message id it is about to create; a provider failure releases it; status updates are passed to billing to settle or release.</td></tr>
 <tr><td><code>WhatsAppService</code> / <code>WhatsAppChannelSender</code></td><td>WhatsApp send, provider-independent</td><td>Only caller of WhatsApp send; free text only inside the 24h window; templates any time. Picks the <code>IWhatsAppProvider</code> named by <code>WhatsApp:Provider</code> (<code>meta</code> | <code>infobip</code>) and refuses a clinic row connected through the other provider.</td></tr>
 <tr><td><code>IWhatsAppProvider</code>: <code>MetaWhatsAppProvider</code>, <code>InfobipWhatsAppProvider</code></td><td>One BSP's REST API</td><td>SendText / SendTemplate, return the provider message id. Infobip sends our own GUID as <code>messageId</code> and sets <code>notifyUrl</code> to the clinic's webhook so delivery/seen reports come back to it.</td></tr>
 <tr><td><code>InfobipWhatsAppIntegrationService</code></td><td>Infobip sender connect</td><td>Checks the number is a sender on SculptFlow's Infobip account (business-info), one clinic per sender, stores <code>provider=infobip</code> + <code>provider_sender_id</code> + a webhook secret, clears Meta fields.</td></tr>
 <tr><td><code>AppointmentService</code></td><td>Appointments</td><td>Booking/reschedule/cancel under <code>pg_advisory_xact_lock(hashtext(clinicId))</code>; one upcoming appointment per lead; <code>ScheduleAsync</code> decides create vs move vs CONFIRMATION_REQUIRED; month calendar grouped by display zone; fires calendar sync, notifications and <code>AppointmentChanged</code> after commit.</td></tr>
 <tr><td><code>AvailabilityService</code></td><td>Slots</td><td>Weekly rules + date exceptions + duration + buffer + minimum notice + horizon + existing appointments, in the clinic's timezone. No open weekday means no slots (never 24/7).</td></tr>
 <tr><td><code>ProcedureService</code>, <code>ProcedureBookingService</code></td><td>Catalog, procedure deals</td><td>AI only sees active procedures.</td></tr>
-<tr><td><code>CampaignService</code>, <code>CampaignAudienceService</code></td><td>Campaigns</td><td>Audience snapshot at creation; contactability exclusions (opt-out, missing phone); sends in batches of 20 via <code>SendAsync</code>/<code>ProcessBatchAsync</code>.</td></tr>
+<tr><td><code>CampaignService</code>, <code>CampaignAudienceService</code></td><td>Campaigns</td><td>Audience snapshot at creation; contactability exclusions (opt-out, missing phone); sends in batches of 20 via <code>SendAsync</code>/<code>ProcessBatchAsync</code>. Needs the <code>campaigns</code> entitlement. Running out of prepaid balance (or losing the plan) stops the batch and leaves the rest queued, so the campaign resumes after a top-up instead of failing every recipient.</td></tr>
 <tr><td><code>WhatsAppTemplateService</code></td><td>Template lifecycle</td><td>Create → submit for review through the active <code>IWhatsAppTemplateProvider</code> (<code>MetaWhatsAppTemplateProvider</code> | <code>InfobipWhatsAppTemplateProvider</code>); sync status; retry submit; apply provider events by template id then name+language. <code>whatsapp_templates.provider</code> records where a template was approved; sending, syncing and the campaign template list only use templates of the active provider.</td></tr>
 <tr><td><code>WhatsAppHealthService</code></td><td>Account/phone health</td><td>Maps Meta vocab to a health level, appends history, INTEGRATION_UNHEALTHY on transition into a problem state.</td></tr>
-<tr><td><code>ChannelIntegrationService</code></td><td>WhatsApp/Facebook connections</td><td>Embedded Signup code exchange, WABA and phone lookup, phone registration with generated PIN; Facebook Page connect.</td></tr>
+<tr><td><code>ChannelIntegrationService</code></td><td>WhatsApp/Facebook connections</td><td>Embedded Signup code exchange, WABA and phone lookup, phone registration with generated PIN; Facebook Page connect. Every connect path (also Infobip and Telegram) first checks the plan's <code>max_channel_connections</code> / <code>max_whatsapp_numbers</code>.</td></tr>
 <tr><td><code>TelegramIntegrationService</code></td><td>Telegram bot connection</td><td><code>getMe</code>, <code>setWebhook</code> with a random secret, refresh, disconnect.</td></tr>
 <tr><td><code>KnowledgeService</code>, <code>KnowledgeChunkingService</code>, <code>KnowledgeSettingsService</code>, <code>DocumentTextExtractor</code> (singleton)</td><td>KB content</td><td>Embeddings computed before the transaction, chunk swap is transactional; uploads extracted with PdfPig / OpenXml, file not stored.</td></tr>
 <tr><td><code>KnowledgeSearchService</code>, <code>OpenAiEmbeddingService</code></td><td>Retrieval</td><td>Exact cosine scan (<code>1 - (embedding &lt;=&gt; q)</code>) over the clinic's active chunks, top-K then minimum similarity.</td></tr>
@@ -470,6 +595,12 @@ Loaded on every authenticated page by the layout: <code>local-time.js</code> (he
 <tr><td><code>TikTokIntegrationService</code></td><td>TikTok Login Kit</td><td>Account connection only; refreshes on page load.</td></tr>
 <tr><td><code>DashboardService</code>, <code>StaffService</code></td><td>Read models</td><td>Funnel summary, attention list, lead/appointment tables, procedure stats; staff list.</td></tr>
 <tr><td><code>EventLogger</code></td><td><code>events</code> table</td><td>Adds rows to the caller's unit of work; saved together with the business change.</td></tr>
+<tr><td><code>BillingService</code></td><td>Usage records + SculptFlow money</td><td>Reserve: charged usage is rated, checked against spendable and held; uncharged usage (the event says SculptFlow doesn't charge it) is just recorded as <code>not_charged</code> with the provider cost where a rate knows it — no rate required, no hold. Settle / Release: charged usage is charged (credit then wallet, ledger) or its hold returned; uncharged usage only gets its provider outcome. Charge (record+settle), Refund (once, back to source), TopUp, Adjust (reason required). Own DbContext per operation; READ COMMITTED transaction holding the clinic's <code>billing.accounts</code> row lock; idempotent by key; refused attempts are kept as <code>failed</code> usage rows under a suffixed key.</td></tr>
+<tr><td><code>ProviderBillingService</code></td><td>Who pays the provider</td><td>Resolves a connected channel account's arrangement: its override (<code>billing.channel_account_settings</code>, only while on the same provider) → <code>Billing:ProviderBilling:Defaults</code> → built-in per-channel defaults; SculptFlow usage billing defaults to on only for <code>platform_funded</code>. Lists accounts, sets/resets overrides (reason required, audited as <code>provider_billing_changed</code>).</td></tr>
+<tr><td><code>SubscriptionService</code></td><td>Plan lifecycle</td><td>Start/change plan (charge from wallet unless waived, credit expired + granted), renew when due, past due → expired after grace, cancel now or at period end, resume. Ledger keys derived from the period, so a repeated run is a no-op. Audit rows in <code>events</code> (<code>subscription_*</code>).</td></tr>
+<tr><td><code>EntitlementService</code></td><td>"May this clinic do X?"</td><td>Per-request cache of the clinic's subscription + plan entitlements; <code>EnsureCanSendMessages</code>, <code>EnsureFeature</code>, <code>EnsureWithinLimit</code>, <code>EnsureCanConnectChannel</code>. Billing off = unrestricted.</td></tr>
+<tr><td><code>MessageBillingService</code> + <code>IChannelBillingPolicy</code></td><td>Messaging ↔ billing bridge</td><td>Asks the channel's policy what an outbound message is, asks <code>ProviderBillingService</code> who pays and whether SculptFlow charges for the clinic's account, then reserves (charged) or records (uncharged) under <code>{channel}:message:{messageId}</code>; releases on send failure, settles/releases on status callbacks, and resolves records older than <code>Billing:ReservationTimeoutHours</code> from the message row. A failure to record uncharged usage never blocks the message; it never throws after the send (the worker recovers).</td></tr>
+<tr><td><code>PlanService</code>, <code>RateCardService</code>, <code>BillingQueryService</code></td><td>Billing admin + reads</td><td>Plan catalog and entitlement sets; rate cards and rate versions (close + add, never edit, never backdate); clinic summary, usage, ledger, reconciliation, quotes, revenue/cost/margin report.</td></tr>
 </table></div>
 
 <h3 id="be-api">4.3 API surface</h3>
@@ -494,7 +625,19 @@ Loaded on every authenticated page by the layout: <code>local-time.js</code> (he
 <tr><td><code>/api/notifications</code></td><td class="wrap"><code>GET</code> · <code>GET unread-count</code> · <code>POST {id}/read</code> · <code>POST read-all</code></td></tr>
 <tr><td><code>/api/dashboard</code></td><td class="wrap"><code>GET summary</code> · <code>GET attention</code> · <code>GET leads</code> · <code>GET appointments</code> · <code>GET procedures</code></td></tr>
 <tr><td><code>/api/staff</code></td><td class="wrap"><code>GET</code></td></tr>
+<tr><td><code>/api/billing</code></td><td class="wrap"><code>GET summary</code> · <code>GET usage</code> · <code>GET transactions</code> (read-only, clinic-safe: no providers, costs or margins)</td></tr>
 </table></div>
+
+<h4>Billing admin API (platform admin key; used by the SculptFlowAdmin portal's Billing pages)</h4>
+<div class="table-wrap"><table>
+<tr><th>Base <code>/api/platform-admin/billing</code></th><th>Endpoints</th></tr>
+<tr><td>Plans</td><td class="wrap"><code>GET plans</code> · <code>GET plans/{code}</code> · <code>POST plans</code> · <code>PUT plans/{code}</code> · <code>PUT plans/{code}/entitlements</code> · <code>GET entitlements</code> (catalog)</td></tr>
+<tr><td>Rate cards</td><td class="wrap"><code>GET rate-cards</code> · <code>POST rate-cards</code> (<code>clinicId</code> = custom pricing) · <code>PUT rate-cards/{code}</code> · <code>GET rate-cards/{code}/rates?history=</code> · <code>POST rate-cards/{code}/rates</code> (new version) · <code>POST rates/{id}/close</code></td></tr>
+<tr><td>Clinics</td><td class="wrap"><code>GET accounts</code> · <code>GET clinics/{id}</code> (overview with costs + reconciliation) · <code>POST clinics/{id}/subscription</code>* · <code>…/subscription/cancel</code> · <code>…/subscription/resume</code> · <code>…/subscription/renew</code> · <code>POST clinics/{id}/wallet/top-ups</code>* · <code>…/wallet/adjustments</code>* · <code>GET clinics/{id}/usage</code> · <code>POST clinics/{id}/usage/{usageId}/refund</code> · <code>GET clinics/{id}/ledger</code> · <code>GET clinics/{id}/reconciliation</code> · <code>GET clinics/{id}/quote</code></td></tr>
+<tr><td>Provider billing</td><td class="wrap"><code>GET provider-billing</code> (modes + defaults) · <code>GET clinics/{id}/channel-accounts</code> · <code>PUT channel-accounts/{id}/provider-billing</code> (<code>providerBilling</code>, <code>omniUsageBilling</code>, <code>reason</code>) · <code>POST channel-accounts/{id}/provider-billing/reset</code></td></tr>
+<tr><td>Reporting</td><td class="wrap"><code>GET report?from=&amp;to=</code>: usage by clinic/channel/event type/who pays; SculptFlow usage revenue, provider cost paid by SculptFlow vs paid externally, margin, subscription revenue, top-ups</td></tr>
+</table></div>
+<p>* requires an <code>Idempotency-Key</code> header; repeating a request with the same key returns the first result.</p>
 
 <h4>AI tool surface for n8n (ingest)</h4>
 <div class="table-wrap"><table>
@@ -550,16 +693,18 @@ Client methods: <code>JoinConversation(id)</code> (ownership checked), <code>Lea
 <tr><th>Hosted service</th><th>Queue</th><th>Unit of work</th><th>Recovery on startup</th></tr>
 <tr><td><code>WebsiteScrapeWorker</code></td><td><code>WebsiteScrapeQueue</code> (unbounded <code>Channel&lt;Guid&gt;</code>, singleton)</td><td>One <code>knowledge_website_scrape_runs</code> row, one at a time, own DI scope</td><td><code>crawling</code> runs → failed ("interrupted"); <code>pending</code> runs re-queued</td></tr>
 <tr><td><code>KnowledgeBenchmarkRunWorker</code></td><td><code>KnowledgeBenchmarkRunQueue</code></td><td>One <code>knowledge_retrieval_benchmark_runs</code> row</td><td><code>running</code> → failed; <code>pending</code> re-queued</td></tr>
+<tr><td><code>BillingMaintenanceWorker</code></td><td>timer, every <code>Billing:MaintenanceIntervalMinutes</code> (5); idle while billing is off</td><td>Renew / past due / expire / end-cancelled subscriptions whose period ended; resolve reservations older than <code>Billing:ReservationTimeoutHours</code> (settle if the message was delivered, else release). One transaction per clinic.</td><td>Nothing to recover: state is in the DB and every step is idempotent</td></tr>
 </table></div>
-<p>There is no scheduler. Scheduled campaigns store <code>scheduled_at</code>, but nothing in-process sends them; something (the dashboard or an external n8n schedule) must call <code>POST /api/campaigns/{id}/send</code> / <code>process-batch</code>.</p>
+<p>The billing worker is the only scheduled job. Scheduled campaigns store <code>scheduled_at</code>, but nothing in-process sends them; something (the dashboard or an external n8n schedule) must call <code>POST /api/campaigns/{id}/send</code> / <code>process-batch</code>.</p>
 
 <h3 id="be-cross">4.6 Cross-cutting concerns</h3>
 <ul>
   <li><strong>Audit/analytics:</strong> <code>events</code> rows via <code>IEventLogger</code>, typed by <code>EventTypes</code> constants (lead_created, consultation_booked, human_handoff, ai_message_sent, whatsapp_* …).</li>
   <li><strong>Notifications:</strong> types NEW_LEAD, HANDOFF, APPOINTMENT_BOOKED / RESCHEDULED / CANCELLED, CAMPAIGN_REPLY, OUTBOUND_MESSAGE_FAILED, INTEGRATION_UNHEALTHY; each row precomputes a <code>link</code>.</li>
-  <li><strong>Errors:</strong> controllers map <code>ArgumentException</code> → 400, <code>ServiceWindowClosedException</code> / mode conflicts → 409, <code>InvalidOperationException</code> → 422, <code>ChannelSendException</code> → 502. <code>DbErrors</code> helps detect unique violations.</li>
+  <li><strong>Errors:</strong> controllers map <code>ArgumentException</code> → 400, <code>ServiceWindowClosedException</code> / mode conflicts → 409, <code>InvalidOperationException</code> → 422, <code>ChannelSendException</code> → 502. <code>DbErrors</code> helps detect unique violations. <code>BillingDeniedException</code> (no rate, not enough balance) and <code>EntitlementDeniedException</code> (no active plan, feature not in plan, limit) are <code>InvalidOperationException</code>s, so they surface as 422 with a clinic-facing, provider-neutral message.</li>
+  <li><strong>Billing logs:</strong> structured <code>Billing:</code> log lines for reservations, settlements, releases, missing rates, insufficient balance, duplicates, renewals and wallet adjustments; no phone numbers or message bodies.</li>
   <li><strong>HTTP clients:</strong> typed clients via <code>AddHttpClient</code>. Telegram and the benchmark generator use <code>RemoveAllLoggers()</code> because their URLs carry secrets. The crawler client disables redirects, cookies and proxy, and routes every connect through <code>SsrfGuard.ConnectAsync</code>.</li>
-  <li><strong>Testing:</strong> no automated test project. <code>AiTestController</code> gives n8n canned outcomes.</li>
+  <li><strong>Testing:</strong> <code>PlasticSurgery.Tests</code> (xUnit) covers billing: pure rules (rating, phone country, WhatsApp policy, entitlements) and database tests that need <code>SCULPTFLOW_TEST_DB</code> pointing at a throwaway local PostgreSQL (each run creates and drops its own database from <code>schema.sql</code>; without it those tests are skipped; remote hosts are refused). Nothing else is covered by automated tests yet. <code>AiTestController</code> gives n8n canned outcomes.</li>
 </ul>
 </section>
 
@@ -652,6 +797,25 @@ Client methods: <code>JoinConversation(id)</code> (ownership checked), <code>Lea
   <li><strong>Register:</strong> full name, clinic name, email, password → new clinic (unique slug) + user + membership in one transaction → signed in → <code>/dashboard</code>.</li>
   <li><strong>Google:</strong> <code>/auth/google/start</code> → Google → <code>/auth/google/callback</code>: existing linked login or verified matching email signs in; a new email goes to <code>/Account/CompleteGoogleSignup</code> to collect the clinic name. Errors return to Login with <code>externalError=cancelled|failed</code>.</li>
 </ul>
+
+<h3>5.11 Billing an outbound WhatsApp template (usage)</h3>
+<ol class="flow">
+  <li><span class="actor">MessageService</span> (Inbox template, campaign recipient, or a billed free-form message) checks the subscription (<code>EnsureCanSendMessages</code>; expired/cancelled/no plan → 422) and generates the message id it will save.</li>
+  <li><span class="actor">WhatsAppBillingPolicy</span> describes the message: template category → <code>whatsapp_{category}_message</code> (utility inside an open 24h window and free-form replies are free by default), quantity 1, destination country from the lead's number, provider = the active <code>WhatsApp:Provider</code>, settle on delivery.</li>
+  <li><span class="actor">ProviderBillingService</span> resolves the clinic's WhatsApp account: who pays the provider (account override, else the default — <code>platform_funded</code> for WhatsApp) and whether SculptFlow charges usage.</li>
+  <li><strong>SculptFlow doesn't charge</strong> (customer pays Meta directly, external provider, no fee): <span class="actor">BillingService.Reserve</span> only records the usage as <code>not_charged</code>, with Meta's cost if a rate knows it. No rate is required, nothing is held, the send goes ahead even with an empty wallet, and the outcome steps below only update <code>provider_outcome</code>.</li>
+  <li><strong>SculptFlow charges</strong>: <span class="actor">BillingService.Reserve</span> (own transaction, clinic account locked) rates it (clinic card → plan card → default, rate effective now, most specific country/operator/provider/arrangement; a customer-paid account only matches a fee rate for its own arrangement), refuses if no rate or spendable &lt; price (recorded as a <code>failed</code> usage row; the send is refused with 422 before the provider is called), else holds it and inserts the usage record keyed <code>whatsapp:message:{messageId}</code>.</li>
+  <li>The provider call runs. If it throws, the hold is released (<code>send_failed</code>) and the error goes back as before.</li>
+  <li>The message row is saved with the same id. Later, the provider's status callback reaches <code>MessageService.HandleStatusUpdateAsync</code> (Meta or Infobip, same path) → <code>MessageBillingService</code>: <code>delivered</code>/<code>read</code> → settle (release the hold, charge included credit first, then wallet, one ledger row per balance), <code>failed</code> → release. Repeated or out-of-order callbacks are no-ops; settle-after-release is refused and logged.</li>
+  <li>If no outcome arrives within <code>Billing:ReservationTimeoutHours</code>, the maintenance worker settles it when the message row shows it was delivered (callback processed but billing failed) and releases it otherwise.</li>
+</ol>
+
+<h3>5.12 Subscription start, renewal and expiry</h3>
+<ol class="flow">
+  <li><strong>Start / change plan</strong> (admin API, or the signup plan): wallet must cover the price while keeping existing holds covered (unless the first period is waived); old included credit expires, the plan's credit is granted, the price is charged (a 0 charge row for free/trial periods), the period runs from now. Same idempotency key → no second charge.</li>
+  <li><strong>Renewal</strong> (worker, when <code>current_period_end</code> has passed): same steps for the next contiguous period. If the wallet can't pay: <code>past_due</code>, the ended period's credit expires, the plan keeps working for <code>Billing:GracePeriodDays</code>; every worker run retries, so a top-up renews it (from the old period end).</li>
+  <li><strong>Expiry</strong>: grace over without payment → <code>expired</code>. <strong>Cancel</strong>: now, or at period end instead of renewing → <code>cancelled</code>. Expired/cancelled clinics can sign in and see everything, but can't send, run campaigns, use the AI or connect channels until a plan is started again.</li>
+</ol>
 </section>
 
 <!-- =============================================================== -->
@@ -758,7 +922,7 @@ Client methods: <code>JoinConversation(id)</code> (ownership checked), <code>Lea
 <figcaption>Arrows point from child to parent (FK direction). Every table also has <code>clinic_id → clinics</code>; only the most telling edges are drawn. Knowledge Base, availability and TikTok tables hang off <code>clinics</code> and are listed below.</figcaption>
 </figure>
 
-<h3 id="db-tables">8.3 Table catalog (36 tables)</h3>
+<h3 id="db-tables">8.3 Table catalog (45 tables)</h3>
 
 <h4>Tenancy and identity</h4>
 <div class="table-wrap"><table>
@@ -818,6 +982,19 @@ Client methods: <code>JoinConversation(id)</code> (ownership checked), <code>Lea
 <tr><td><code>tiktok_integrations</code></td><td>status, open_id, union_id, display_name, avatar_url, tokens and expiries, health</td><td>one per clinic</td></tr>
 </table></div>
 
+<h4>Subscriptions and billing — Postgres schema <code>billing</code> (§2.6)</h4>
+<div class="table-wrap"><table>
+<tr><th>Table</th><th>Key columns</th><th>Constraints / indexes</th></tr>
+<tr><td><code>billing.plans</code></td><td>code, name, price numeric(18,2), currency, billing_period (month | year), included_usage_credit, rate_card_id, is_active, sort_order</td><td>code unique (lowercase); not clinic-scoped</td></tr>
+<tr><td><code>billing.plan_entitlements</code></td><td>plan_id, entitlement_key, value (true | false | number | unlimited)</td><td>unique (plan, key); value CHECK</td></tr>
+<tr><td><code>billing.subscriptions</code></td><td>plan_id (restrict), status, current_period_start/end, cancel_at_period_end, past_due_since, ended_at</td><td>one per clinic; due index on period end</td></tr>
+<tr><td><code>billing.accounts</code></td><td>currency, wallet_balance, included_credit_balance (≥ 0), reserved_amount (≥ 0) — numeric(18,6)</td><td>one per clinic; backfilled for existing clinics</td></tr>
+<tr><td><code>billing.rate_cards</code></td><td>code, name, clinic_id (custom card), is_default, is_active</td><td>one default card; one card per clinic</td></tr>
+<tr><td><code>billing.rates</code></td><td>rate_card_id, event_type, country_code, operator, provider, provider_billing (null = any; set = a SculptFlow fee for that arrangement), unit, provider_cost, client_rate, currency, effective_from/to, created_by</td><td>exclusion constraint: versions of one rate never overlap (btree_gist); trigger blocks edits except closing</td></tr>
+<tr><td><code>billing.usage_records</code></td><td>idempotency_key, event_type, channel, channel_integration_id, provider_billing, quantity, unit, country/operator/provider, rate_id, rate_card_id, rate_source, unit price/cost snapshots, amount, provider_cost, reserved/credit/wallet/refunded amounts, charge_status, provider_outcome, failure/release reason, message/conversation/campaign ids (no FK), source, actor, occurred/reserved/settled/released/refunded_at</td><td>unique (clinic, idempotency_key); settled ⇒ credit + wallet = amount; trigger freezes final rows except refund columns</td></tr>
+<tr><td><code>billing.channel_account_settings</code></td><td>channel_integration_id (PK, FK to the connected account), provider_billing, omni_usage_billing, applies_to_provider, reason, updated_by</td><td>one per account; null values = defaults</td></tr><td>seq (posting order), entry_type, balance_type (wallet | included_credit), signed amount, balance_after, currency, idempotency_key, usage_record_id, subscription_id, plan_id, source, actor, reason, reference, correlation_id</td><td>unique (clinic, idempotency_key); sign and balance-type CHECKs; update-blocking trigger (append-only)</td></tr>
+</table></div>
+
 <h3 id="db-vocab">8.4 Status vocabularies (CHECK-enforced)</h3>
 <div class="table-wrap"><table>
 <tr><th>Column</th><th>Values</th></tr>
@@ -831,6 +1008,7 @@ Client methods: <code>JoinConversation(id)</code> (ownership checked), <code>Lea
 <tr><td><code>campaign_recipients.status</code></td><td class="wrap">pending, queued, sent, delivered, read, replied, booked, failed, skipped</td></tr>
 <tr><td><code>channel_integrations.channel</code> / <code>.status</code></td><td class="wrap">whatsapp, instagram, facebook, telegram / disconnected, connected, error</td></tr>
 <tr><td><code>notifications.type</code></td><td class="wrap">NEW_LEAD, HANDOFF, APPOINTMENT_BOOKED, APPOINTMENT_RESCHEDULED, APPOINTMENT_CANCELLED, CAMPAIGN_REPLY, OUTBOUND_MESSAGE_FAILED, INTEGRATION_UNHEALTHY</td></tr>
+<tr><td>Billing</td><td class="wrap"><code>billing.subscriptions.status</code> active, past_due, expired, cancelled · <code>billing.usage_records.charge_status</code> reserved, settled, released, failed, not_charged · <code>.provider_outcome</code> pending, billable, not_billable · <code>provider_billing</code> customer_direct, platform_funded, external_provider_direct, no_provider_usage_fee · <code>billing.ledger_entries.entry_type</code> wallet_top_up, usage_debit, included_credit_consumption, usage_refund, subscription_charge, included_credit_grant, included_credit_expiry, manual_adjustment · event types are free text (any priced <code>[a-z0-9_]+</code>)</td></tr>
 <tr><td>Knowledge</td><td class="wrap">source_type manual/upload/website · website source status pending/crawling/completed/completed_with_errors/failed · page status discovered/processing/indexed/unchanged/skipped/duplicate/failed/removed · benchmark classification EXACT_CHUNK_HIT/DOCUMENT_ONLY_HIT/MISS/STALE_CASE/ERROR</td></tr>
 </table></div>
 </section>
@@ -857,6 +1035,10 @@ Client methods: <code>JoinConversation(id)</code> (ownership checked), <code>Lea
 <tr><td><code>GoogleLogin:ClientId/ClientSecret</code></td><td>secret</td><td>Continue with Google (button hidden if either is empty)</td></tr>
 <tr><td><code>TikTok:ClientKey/ClientSecret</code></td><td>secret</td><td>TikTok Login Kit</td></tr>
 <tr><td><code>Telegram:ApiBaseUrl</code></td><td>no</td><td>Optional override (default <code>https://api.telegram.org</code>), used for fakes in testing</td></tr>
+<tr><td><code>Billing:Enabled</code></td><td>no</td><td>Master switch for usage billing + entitlements (default false = everything allowed, nothing rated)</td></tr>
+<tr><td><code>Billing:Currency</code>, <code>GracePeriodDays</code>, <code>ReservationTimeoutHours</code>, <code>MaintenanceIntervalMinutes</code>, <code>SignupPlanCode</code></td><td>no</td><td>USD; 7 days; 72 h; 5 min; plan new clinics start on (first period free, empty = none)</td></tr>
+<tr><td><code>PlatformAdmin:ApiKey</code></td><td>yes</td><td>Platform-admin API key (<code>X-Platform-Admin-Key</code>), shared with the SculptFlowAdmin portal (<code>MainApp:PlatformAdminApiKey</code> there); empty = every <code>/api/platform-admin</code> endpoint off (404)</td></tr>
+<tr><td><code>Billing:ProviderBilling:Defaults:*</code></td><td>no</td><td>Default provider billing per <code>{channel}</code> or <code>{channel}_{provider}</code> (e.g. <code>whatsapp_meta = customer_direct</code>); built-ins in <code>ProviderBillingService</code></td></tr><td>no</td><td>Optional WhatsApp pricing rules: <code>TemplateCategoryEvents</code>, <code>ServiceMessageEvent</code>, <code>FreeInsideServiceWindow</code>, <code>BillableStatuses</code>, <code>NonBillableStatuses</code> (defaults in <code>WhatsAppBillingPolicy</code>)</td></tr>
 </table></div>
 </section>
 
@@ -875,7 +1057,15 @@ Client methods: <code>JoinConversation(id)</code> (ownership checked), <code>Lea
 <tr><td>Single instance</td><td>In-memory queues, no SignalR backplane, advisory locks only per DB.</td><td>Scaling out needs a durable queue and a backplane.</td></tr>
 <tr><td>Scheduled campaigns</td><td><code>scheduled_at</code> stored but nothing fires it.</td><td>Scheduled campaigns need a manual or external trigger.</td></tr>
 <tr><td>Roles</td><td>No roles or invites; one clinic per user.</td><td>Every member has full access; staff can't join an existing clinic.</td></tr>
-<tr><td>Tests</td><td>No automated test project.</td><td>Regressions are caught manually.</td></tr>
+<tr><td>Tests</td><td>Only billing has automated tests (<code>PlasticSurgery.Tests</code>).</td><td>Other regressions are caught manually.</td></tr>
+<tr><td>Billing: payments</td><td>No payment gateway, invoices, tax or multi-currency; top-ups are admin actions; postpaid not built.</td><td>Money comes in outside the app and is recorded by an admin. Postpaid would add a credit limit to the spendable formula.</td></tr>
+<tr><td>Billing: callback timing</td><td>A delivery that arrives after its reservation timed out (and was released) is not charged; the "delivered" callback is logged as settle-after-release.</td><td>Small under-charge, never an over-charge. Tune <code>Billing:ReservationTimeoutHours</code>.</td></tr>
+<tr><td>Billing: plan changes</td><td>Changing plan starts a new period now with no proration; reservations open across a credit reset may push the wallet slightly negative.</td><td>Acceptable for now; visible in the ledger.</td></tr>
+<tr><td>Billing: tenant delete</td><td>Billing rows cascade with <code>clinics</code> like everything else.</td><td>No clinic-delete feature exists; archive the ledger before building one.</td></tr>
+<tr><td>Billing: provider responsibility defaults</td><td>Every WhatsApp account defaults to <code>platform_funded</code> (today's behaviour). A clinic that connected its own WABA with its own Meta payment method has to be switched to <code>customer_direct</code> by an admin; nothing detects it.</td><td>Until switched, such a clinic would be charged SculptFlow's WhatsApp rate. Set the override when onboarding, or configure <code>Billing:ProviderBilling:Defaults</code>.</td></tr>
+<tr><td>Billing: admin screens</td><td>The SculptFlowAdmin portal's Billing pages cover plans, rate cards and rates, wallets, subscriptions, provider billing per account, usage, ledger and the report. Usage refunds and the price check are there too; nothing in this app exposes billing admin to clinic staff.</td><td>The portal needs <code>MainApp:PlatformAdminApiKey</code> = this app's <code>PlatformAdmin:ApiKey</code>.</td></tr>
+<tr><td>Billing: provider cost for uncharged usage</td><td>For accounts SculptFlow does not pay for, provider cost is filled from a matching rate when one exists; otherwise it stays empty. Real provider invoices are not imported.</td><td>Analytics show cost paid externally as an estimate only.</td></tr>
+<tr><td>Campaign double send</td><td>A campaign batch that crashes after the provider accepted a send but before the recipient is marked sent can send that recipient again on retry (pre-existing).</td><td>Billed per real message (two sends = two charges). Fix in the campaign flow if it matters.</td></tr>
 <tr><td>Rotation</td><td><code>Meta:WebhookVerifyToken</code> and <code>N8n:IngestApiKey</code> once appeared in git history.</td><td>Rotate if not yet done.</td></tr>
 </table></div>
 </section>
@@ -913,6 +1103,7 @@ Client methods: <code>JoinConversation(id)</code> (ownership checked), <code>Lea
 <tr><td><code>Database/schema.sql</code></td><td>§8 catalog, vocabularies, ER figure if a core relation changed</td></tr>
 <tr><td>A config key</td><td>§9</td></tr>
 <tr><td>Closed or found a gap</td><td>§10, §11</td></tr>
+<tr><td>Billing: a plan rule, entitlement key, billable channel or ledger entry type</td><td>§2.6, §4.2, §5.11/5.12, §8.3/8.4, and <code>docs/billing.md</code></td></tr>
 </table></div>
 
 <h3>Change log</h3>
@@ -922,6 +1113,9 @@ Client methods: <code>JoinConversation(id)</code> (ownership checked), <code>Lea
 <tr><td>2026-10-04</td><td>WhatsApp provider seam (<code>IWhatsAppProvider</code>, <code>WhatsApp:Provider</code>) and Infobip as the MVP provider: §2.3, §4.1, §4.2, §4.3, §5.4b, §6, §8, §9, §10. Status callbacks are now idempotent and never move backwards (both providers).</td></tr>
 <tr><td>2026-10-05</td><td>Infobip made invisible to clinics: neutral webhook route <code>/api/integrations/whatsapp/connections/{id}/events</code>, neutral errors and failure reasons, provider fields hidden from the API, media URL replaced by <code>mediaId</code>: §2.3, §4.3, §5.4b.</td></tr>
 <tr><td>2026-10-05</td><td>Template provider seam (<code>IWhatsAppTemplateProvider</code>): the Templates page works through Infobip too; <code>whatsapp_templates.provider</code>; account-level webhook <code>/api/integrations/whatsapp/account/events</code>; <code>Infobip:WebhookToken</code>: §4.2, §4.3, §6, §8, §9, §10.</td></tr>
+<tr><td>2026-10-05</td><td>Subscriptions &amp; usage billing module (<code>Billing/</code>, branch <code>feature/subscription-billing</code>): plans + entitlements, clinic subscriptions with renewal/past due/expiry, prepaid wallet + included credit, rate cards with versioned rates, billable events with reserve/settle/release, append-only ledger, WhatsApp/Telegram billing policies, entitlement checks on sending, campaigns, the AI trigger and channel connects, Settings → Billing page, <code>/api/billing</code> and the key-protected <code>/api/billing/admin</code>, <code>BillingMaintenanceWorker</code>, 8 new tables, <code>Billing:*</code> config, the first test project: §1, §2.3, §2.4, §2.5, §2.6 (new, with diagram), §3.1, §4.1–§4.6, §5.11–§5.12, §8.3, §8.4, §9, §10, §12.</td></tr>
+<tr><td>2026-10-06</td><td>Billing tables moved into the Postgres schema <code>billing</code> (<code>billing.plans</code>, <code>billing.accounts</code>, …). Provider billing responsibility per connected channel account (<code>customer_direct</code>, <code>platform_funded</code>, <code>external_provider_direct</code>, <code>no_provider_usage_fee</code>) with configured defaults and admin overrides (<code>billing.channel_account_settings</code>, <code>ProviderBillingService</code>); usage is always recorded but only charged when SculptFlow charges for it (<code>charge_status</code> vs <code>provider_outcome</code>, <code>not_charged</code>); rates can target one responsibility; reports split provider cost paid by SculptFlow vs paid externally; Settings → Billing shows who pays per account: §2.6 (text + diagram), §4.1, §4.2, §4.3, §5.11, §8.3, §8.4, §9, §10.</td></tr>
+<tr><td>2026-10-06</td><td>Platform-admin convention: the billing admin API moved to <code>/api/platform-admin/billing</code> behind <code>[RequirePlatformAdminKey]</code> (<code>PlatformAdmin:ApiKey</code>, <code>X-Platform-Admin-Key</code>, actor in <code>X-Admin-Actor</code>), replacing <code>Billing:AdminApiKey</code>. The SculptFlowAdmin portal now has Billing pages that call it; the main app keeps owning the rules and writes: §2.3, §4.1, §4.3, §9, §10.</td></tr>
 </table></div>
 </section>
 

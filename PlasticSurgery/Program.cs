@@ -224,6 +224,11 @@ builder.Services.AddScoped<PlasticSurgery.Integrations.Telegram.ITelegramWebhook
 builder.Services.AddScoped<IChannelSender, WhatsAppChannelSender>();
 builder.Services.AddScoped<IChannelSender, PlasticSurgery.Integrations.Telegram.TelegramChannelSender>();
 
+// Subscriptions & usage billing — an internal module (Billing/, docs/billing.md): plans + entitlements, prepaid
+// wallet + included credit, rate cards, usage records, the ledger, and one maintenance worker. Off until
+// Billing:Enabled = true.
+PlasticSurgery.Billing.BillingModule.AddBilling(builder.Services, builder.Configuration);
+
 // Outbound: the one call to n8n left after Meta started posting directly to us — see
 // Controllers/WhatsAppWebhookController.cs and IAiTriggerNotifier's own doc comment.
 builder.Services.AddHttpClient<IAiTriggerNotifier, AiTriggerNotifier>();

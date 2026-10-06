@@ -1,6 +1,6 @@
 # SculptFlow (MySculptFlow) — Project Handoff
 
-_Last updated: 2026-09-27 (doc sync: everything through Calendar Integrations `895af7f` is committed and pushed to `main`; §11 benchmark, §14 calendar, §24 availability/AI booking, §25 notifications and §26 calendar integrations were previously marked "not pushed" and are now marked pushed). Written for session continuity — read this first after any context reset.
+_Last updated: 2026-10-05 (§30 Subscriptions & usage billing added — built and tested on branch `feature/subscription-billing`, NOT committed yet; main is at `12fad04` with Google sign-in and Infobip merged, so §28/§29's "not pushed / not merged" headings are stale). Earlier: 2026-09-27 doc sync through Calendar Integrations `895af7f`. Written for session continuity — read this first after any context reset.
 This is the ONE handoff/state file; update it in place, don't create another._
 
 > **No secrets live in this file.** Earlier versions of it (git commit `2aec468`, already on GitHub)
@@ -75,6 +75,7 @@ All tables are `clinic_id`-scoped except Identity tables (scoped via `clinic_use
 | `knowledge_search_settings` | One row per clinic of KB retrieval/embedding settings — §11. |
 | `clinic_users` | Links an Identity user to a clinic (`UNIQUE(clinic_id,user_id)` + `UNIQUE(user_id) WHERE is_active`). |
 | `identity_users`, `identity_user_claims`, `identity_user_logins`, `identity_user_tokens` | ASP.NET Identity tables, role-free, snake_case. |
+| `billing.plans`, `billing.plan_entitlements`, `billing.subscriptions`, `billing.accounts`, `billing.rate_cards`, `billing.rates`, `billing.usage_records`, `billing.ledger_entries`, `billing.channel_account_settings` | Subscriptions & usage billing — §30, in their own Postgres schema `billing`. Plans/rate cards are global (not clinic-scoped); the rest is per clinic. |
 
 Clinic `demo-clinic` = `abb02743-4563-4c5a-91e2-80508fb25a77` ("Demo Aesthetic Clinic"). Seed data
 (`Database/seed.sql`): 5 procedures (Rhinoplasty, Breast Augmentation, Facelift, Liposuction, Tummy Tuck)
@@ -745,6 +746,7 @@ shown), mapped onto the 3 backend audience types via two hidden fields (`Audienc
     `cancel_consultation`, `get_my_appointments`, structured results, live calendar updates, AiTestController (§24) — pushed
 18. Staff notification bell (§25) — pushed (`66a13b4`, `dc4b967`)
 19. Calendar Integrations, one-way Google/Outlook sync via n8n (§26) — pushed (`895af7f`)
+20. Subscriptions & usage billing + the first automated test project (§30) — branch `feature/subscription-billing`, not committed
 
 ## 17. Pending work
 
@@ -771,6 +773,8 @@ shown), mapped onto the 3 backend audience types via two hidden fields (`Audienc
 - Manual-entry integrations form doesn't register the phone number
 - Staff invitations (join an existing clinic), signup email verification/CAPTCHA/rate limiting
 - **Telegram** (§23) is pushed and its Render env vars are set (the n8n Webhook trigger must have Authentication = None)
+- **Billing (§30)**: commit/merge when Mohammad says so; then the go-live steps in §30. Admin-portal Billing pages are built in SculptFlowAdmin
+  (not committed) on top of the `/api/platform-admin/billing` API
 
 ## 18. Important constraints / decisions
 
@@ -787,7 +791,7 @@ shown), mapped onto the 3 backend audience types via two hidden fields (`Audienc
   sync manually; extensible strings (category, campaign_type, lead source) have no CHECK, closed sets do.
 - **Secrets never in the repo or in `knowledge_search_settings`** — user-secrets locally, Render env vars in prod.
 - **Knowledge Base ≠ structured data**: procedures/lead/booking data stay in structured APIs.
-- **How features were verified**: there is NO automated test project. Each feature was tested live against the shared
+- **How features were verified**: the only automated tests are billing's (`PlasticSurgery.Tests`, §30). Each other feature was tested live against the shared
   Supabase DB using throwaway scratchpad tools (NOT in the repo): a fake Telegram Bot API + fake n8n receiver, a fake
   OpenAI embeddings server with a call counter, a fake clinic website (`fakesite`, ports 5098/5097, with traps for
   duplicates/redirects/robots/etc.), and `sqlrunner`; test users/clinics are registered through the real Register page
@@ -841,6 +845,13 @@ shown), mapped onto the 3 backend audience types via two hidden fields (`Audienc
 - Calendar integrations (§26): `GET /api/calendar-integrations`,
   `POST /api/calendar-integrations/{provider}/connect|refresh-calendars|select-calendar|sync-enabled|disconnect`
 - Staff: `GET /api/staff`
+- Billing (§30, read-only): `GET /api/billing/summary|usage|transactions`
+
+**Platform admin** (`X-Platform-Admin-Key` = `PlatformAdmin:ApiKey`, actor `X-Admin-Actor`; called by the SculptFlowAdmin portal; §30): billing is everything under `/api/platform-admin/billing/*` — plans,
+entitlements, rate cards + rate versions, clinic subscription start/cancel/resume/renew, wallet top-ups/adjustments,
+usage, refunds, ledger, reconciliation, quote, report, provider billing per connected channel account
+(`GET provider-billing`, `GET clinics/{id}/channel-accounts`, `PUT channel-accounts/{id}/provider-billing`,
+`POST channel-accounts/{id}/provider-billing/reset`).
 
 **Trusted server-to-server** (`[RequireIngestKey]` / `X-Ingest-Key`): `POST /api/messages/ingest`,
 `POST /api/integrations/whatsapp/templates/events`, `POST /api/integrations/whatsapp/health/events`, the
@@ -859,7 +870,8 @@ deprecated `POST appointments/book|reschedule`; test-only `GET /api/ai/test/code
 `/KnowledgeBase/Settings`, `/KnowledgeBase/Websites/{id}`, `/KnowledgeBase/Benchmark`,
 `/KnowledgeBase/Benchmark/Generations/{id}`, `/Campaigns`, `/Campaigns/Create`, `/Campaigns/{id}`,
 `/WhatsApp/Templates`, `/WhatsApp/Health`, `/settings/integrations`, `/settings/calendar-integrations`,
-`/settings/clinic-info` (General | Availability tabs), `/Staff`, `/Account/Login|Register|Logout`.
+`/settings/clinic-info` (General | Availability tabs), `/Staff`, `/settings/billing` (only shown while billing is on),
+`/Account/Login|Register|Logout`.
 
 ## 20. Current configuration keys (names only — values are secrets or defaults)
 
@@ -876,6 +888,7 @@ deprecated `POST appointments/book|reschedule`; test-only `GET /api/ai/test/code
 - `N8n:CalendarConnectWebhookUrl` / `N8n__CalendarConnectWebhookUrl` and `N8n:CalendarSyncWebhookUrl` /
   `N8n__CalendarSyncWebhookUrl` — the SEPARATE calendar-sync workflow's two webhooks (§26). **Not set yet** — empty leaves
   Calendar Integrations visible but inert
+- `PlatformAdmin:ApiKey` / `PlatformAdmin__ApiKey` — platform-admin API key shared with the admin portal (§30); empty = that API is off
 - Telegram needs no secret in config (the bot token is entered in the UI and stored per clinic), but needs
   `App:PublicBaseUrl` / `App__PublicBaseUrl` — the public HTTPS origin (**required on Render**); `Telegram:ApiBaseUrl`
   is a test-only override.
@@ -888,6 +901,9 @@ registration no longer uses a default clinic; a leftover env var is harmless);
 `Knowledge:MaxExtractedChars` (250000); `Knowledge:WebScraping:*` (crawler limits — see §11; `DevAllowedHosts` is Development-only, leave empty); `Knowledge:MinScore` (0.30),
 `Knowledge:ChunkMaxChars` (1000), `Knowledge:ChunkOverlapChars` (150), `Knowledge:ChunkMinChars` (200) —
 the first three are **defaults for a clinic's first settings row only**; `ChunkMinChars` is system-wide.
+`Billing:Enabled` (false), `Billing:Currency` (USD), `Billing:GracePeriodDays` (7), `Billing:ReservationTimeoutHours` (72),
+`Billing:MaintenanceIntervalMinutes` (5), `Billing:SignupPlanCode` (empty), optional `Billing:WhatsApp:*` pricing rules,
+optional `Billing:ProviderBilling:Defaults` (`{channel}_{provider}` or `{channel}` → provider billing responsibility) (§30).
 Render sets `PORT` itself; the Dockerfile sets `ASPNETCORE_ENVIRONMENT`/`ASPNETCORE_URLS`.
 
 ## 21. Migrations (all in `Database/schema.sql`, applied live to Supabase, chronological)
@@ -927,6 +943,13 @@ Render sets `PORT` itself; the Dockerfile sets `ASPNETCORE_ENVIRONMENT`/`ASPNETC
 17. **Notifications** (§25): `notifications` (type CHECK, clinic/created_at index, partial unread index) — applied live and on `main`
 18. **Calendar Integrations** (§26): `calendar_integrations`, `calendar_integration_calendars`, `appointment_calendar_syncs`
     (+ `last_operation` column added in a follow-up block) — applied live and on `main`
+
+19. **Subscriptions & usage billing** (§30): `btree_gist` extension; schema `billing` with `billing.plans`,
+    `billing.plan_entitlements`, `billing.subscriptions`, `billing.accounts` (backfilled for every clinic),
+    `billing.rate_cards`, `billing.rates` (exclusion constraint incl. `provider_billing` + immutability trigger),
+    `billing.usage_records` (`charge_status` + `provider_outcome`, final-row guard trigger), `billing.ledger_entries`
+    (append-only trigger, `seq` identity), `billing.channel_account_settings` (provider billing override per connected channel
+    account) — **NOT applied to Supabase yet**; tested on local throwaway databases only
 
 No migration was needed for Procedures, lead/appointment editing, or the audience UI.
 
@@ -1581,3 +1604,80 @@ WHAT WOULD BE NEEDED FOR TIKTOK DIRECT MESSAGES IN THE UNIFIED INBOX LATER
 **White-label rule (owner, 2026-10-05):** clinics must never learn that WhatsApp runs through Infobip. Nothing a clinic can see may name Infobip: staff-facing errors, campaign/delivery failure reasons, the settings page (HTML, form and handler names), API JSON (`Provider`/`ProviderSenderId` are `[JsonIgnore]`), message metadata (media URL replaced by `mediaId`) and the webhook URL (`/api/integrations/whatsapp/connections/{id}/events`). Infobip details belong only in server logs, config and code. Keep it that way in any follow-up (templates, media, TikTok).
 
 **Templates through Infobip (2026-10-05, same branch):** `Services/IWhatsAppTemplateProvider.cs` is the template-review seam, picked by the same `WhatsApp:Provider` switch. `MetaWhatsAppTemplateProvider` holds the old Graph code unchanged; `InfobipWhatsAppTemplateProvider` submits to `/whatsapp/2/senders/{sender}/templates` (adds body examples from `VariablesJson` or "Sample n", maps buttons) and syncs with GET. Status updates arrive on `POST /api/integrations/whatsapp/account/events?token={Infobip__WebhookToken}` (Infobip sends template events per account, not per sender), matched to the clinic by template id. New column `whatsapp_templates.provider` (null = meta): an approval only holds on the account it was reviewed on, so sending, Sync and the campaign template list only use templates of the active provider, and an old one gets "create it again". **Switching back to Meta:** set `WhatsApp__Provider=meta`; Meta templates (provider null) work exactly as before, clinics reconnect with Facebook sign-in (an Infobip row shows as not connected on the Meta card), and templates approved through Infobip must be recreated. Infobip portal: subscribe the template-update event to the account URL.
+
+## 30. Subscriptions & usage billing — built and tested on branch `feature/subscription-billing` (2026-10-05, provider billing responsibility 2026-10-06), NOT committed
+
+**What it is:** an internal module (`PlasticSurgery/Billing/`, guide `docs/billing.md`, HLD `docs/system-design.html` §2.6) that
+separates the **subscription** (plan: price, period, entitlements, monetary included credit) from **usage** (communication
+charged per **billable event**, priced from versioned **rate cards**, paid from included credit first and then a prepaid
+**wallet**). Mohammad's brief called the product "the new Omni"; the design deliberately avoids the enterprise Omni's bundle /
+service / feature subscription hierarchy, per-channel quotas, stored procedures and billing microservices.
+
+**Off by default:** `Billing:Enabled=false` → nothing is rated or charged, every clinic is entitled to everything, the worker
+idles, the Billing sidebar link is hidden. Production behaviour is unchanged until it is switched on.
+
+**Shape:**
+- Tables (§21 #19), all in the Postgres schema `billing` (2026-10-06, Mohammad's ask): plans + entitlement rows, one
+  `billing.subscriptions` row per clinic, one `billing.accounts` row per clinic (wallet, included credit, reserved; a cache of
+  the ledger), rate cards (default / plan / one per clinic) with immutable, non-overlapping rate versions (provider cost +
+  client rate, optional country/operator/provider/provider billing), usage records (CDRs with snapshotted prices;
+  `charge_status` = SculptFlow money `reserved → settled | released`, `failed` = refused, `not_charged`; `provider_outcome` =
+  `pending → billable | not_billable`), append-only ledger (`seq` posting order), `billing.channel_account_settings`.
+- **Three separate questions (2026-10-06 follow-up):** (1) the subscription pays for access; (2) **provider billing
+  responsibility** says who pays the upstream provider, per connected channel account: `customer_direct` (own WABA + own Meta
+  payment method), `platform_funded` (SculptFlow pays, e.g. Infobip), `external_provider_direct`, `no_provider_usage_fee`;
+  (3) SculptFlow usage billing says whether SculptFlow charges for the usage (default: only when `platform_funded`; an admin
+  can turn on a usage fee for a customer-paid account, priced only by a rate set for that responsibility, or turn charging off
+  to absorb the cost). `ProviderBillingService` resolves: account override (only while the account still uses the provider
+  it was set for) → `Billing:ProviderBilling:Defaults` (`{channel}_{provider}` then `{channel}`) → built-in (WhatsApp/SMS/
+  Viber/RCS/email/voice `platform_funded`; Telegram/Facebook/Instagram/TikTok/website `no_provider_usage_fee`). Usage is always
+  recorded; uncharged usage gets no rate requirement, reservation, wallet/credit use or ledger row, and a failure to record it
+  never blocks a send. Changing an arrangement never alters past usage (each record snapshots it).
+- `BillingService`: reserve / settle / release / charge / refund / top-up / adjust. Every operation: own DbContext, READ
+  COMMITTED transaction, `select … for update` on the clinic's `billing.accounts` row, idempotency check after the lock, ledger
+  row per balance change, one commit. Keys unique per clinic on usage + ledger.
+- `SubscriptionService`: start/change plan (wallet pays unless waived; old credit expires, plan credit granted; no proration),
+  renewal, `past_due` (grace `Billing:GracePeriodDays`) → `expired`, cancel now / at period end, resume.
+- `EntitlementService`: `CanSendMessages`, `CanUseCampaigns`, `CanUseAiAgent`, `MaximumAgents`, … + `Ensure*`. Wired into:
+  every send in `MessageService`, `CampaignService` (create/schedule/send/batch), `AiTriggerNotifier` (no AI trigger without
+  `ai_agent`), every channel connect path (`max_channel_connections`, `max_whatsapp_numbers`). `max_agents`, `api_access`,
+  `advanced_reporting` are defined but not checked anywhere yet.
+- Channel seam `IChannelBillingPolicy`: `WhatsAppBillingPolicy` (template category → `whatsapp_{category}_message`, country
+  from the lead's phone via `PhoneCountry`, provider = `WhatsApp:Provider`, settle on delivered/read, release on failed; free
+  replies inside the 24h window and utility inside the window are free; all overridable under `Billing:WhatsApp`) and
+  `TelegramBillingPolicy` (`telegram_message`, recorded, not charged by default). `MessageBillingService` is the bridge `MessageService` calls: reserve before the provider
+  call (key `{channel}:message:{messageId}`, the same id the Message row gets), release on send failure, settle/release on
+  status callbacks (both providers go through `HandleStatusUpdateAsync`). `BillingMaintenanceWorker` renews subscriptions and
+  resolves reservations older than `Billing:ReservationTimeoutHours` from the message row.
+- Campaigns: running out of balance (or losing the plan) stops the batch with the recipient still queued, so a campaign resumes
+  after a top-up instead of failing its whole audience.
+- Registration creates the clinic's billing account in its transaction; with billing on and `Billing:SignupPlanCode` set, the
+  clinic then starts on that plan with a free first period.
+- APIs: clinic `GET /api/billing/summary|usage|transactions` (clinic-safe), page `/settings/billing` (shows who pays per
+  messaging account, what SculptFlow charged, and usage it did not charge); platform admin `/api/platform-admin/billing/*` behind
+  `X-Platform-Admin-Key` (`PlatformAdmin:ApiKey`, constant-time, empty = 404), money-moving POSTs need `Idempotency-Key`,
+  `X-Admin-Actor` is written to the ledger / audit log. Provider billing per account: `PUT/POST
+  channel-accounts/{id}/provider-billing[/reset]` (reason required); report splits provider cost paid by SculptFlow vs paid
+  externally. No admin UI in this app (it has no roles): the
+  SculptFlowAdmin portal's Billing pages call this API and never write `billing.*` themselves (2026-10-06 decision: the main
+  app owns each domain's rules and writes under `/api/platform-admin/{domain}`; the portal is the control panel).
+- White-label: clinic-facing messages, page and API never name a provider; provider/cost/margin appear only in the admin API.
+
+**Tests:** new `PlasticSurgery.Tests` (xUnit, in the solution). 86 tests: pure rules + database tests (wallet, concurrency,
+idempotency, crash-before-commit, rating hierarchy/specificity/versioning, subscriptions/renewal/grace/expiry, entitlements,
+WhatsApp end to end through the real `MessageService` with a fake provider, stale reservations, append-only ledger, every
+provider billing mode, two WhatsApp accounts with different arrangements, usage fee on a customer-paid account, absorbed
+cost, arrangement changes not re-pricing history, report split). DB tests
+need `SCULPTFLOW_TEST_DB` = a throwaway local PostgreSQL (remote hosts refused); without it they're skipped. Run on this machine
+against a local PG 18 cluster (initdb in the session scratchpad, port 55433, trust auth): all pass, repeatedly. Every money test
+ends by checking the ledger chain and reconciliation. Also exercised end to end by running the app on a scratch DB
+(Staging env, no secrets): admin API (cards, rates, plans, top-ups, plan change, quotes, report), signup plan, Billing page.
+
+**Go-live (owner's call):** apply the §21 #19 block to Supabase → set `PlatformAdmin__ApiKey` (+ the same as `MainApp__PlatformAdminApiKey` on the admin portal) → create default rate card + rates
+and plans → set `customer_direct` on every WhatsApp account whose clinic pays Meta itself (all WhatsApp accounts default to
+`platform_funded`) → give every clinic a plan (+ top-ups) → optionally `Billing__SignupPlanCode` → `Billing__Enabled=true`.
+
+**Known gaps / postponed:** no payment gateway (top-ups are admin actions), invoices, tax, postpaid (extension point = a credit
+limit in the spendable formula), multi-currency, reseller billing, proration, partial refunds, recurring number/seat fees;
+a delivery reported after its reservation timed out is not charged (logged); +1 numbers all resolve to US for pricing;
+pre-existing campaign double-send-on-crash gap is billed per real send.

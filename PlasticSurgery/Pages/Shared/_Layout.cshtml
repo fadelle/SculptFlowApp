@@ -1,4 +1,5 @@
 @inject PlasticSurgery.Services.ICurrentClinicContext CurrentClinic
+@inject Microsoft.Extensions.Options.IOptions<PlasticSurgery.Billing.BillingOptions> BillingSettings
 @{
     var clinicName = (await CurrentClinic.GetClinicAsync())?.Name;
     var path = Context.Request.Path.Value ?? "";
@@ -105,6 +106,13 @@
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="M8 14h2M14 14h2M8 18h2"/></svg>
                     <span>Calendar Integrations</span>
                 </a>
+                @if (BillingSettings.Value.Enabled)
+                {
+                    <a href="/settings/billing" class="@(IsActive("/settings/billing") ? "active" : "")" title="Billing">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/><path d="M6 15h4"/></svg>
+                        <span>Billing</span>
+                    </a>
+                }
             </nav>
 
             @if (User.Identity?.IsAuthenticated == true)

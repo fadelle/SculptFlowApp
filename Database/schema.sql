@@ -1591,6 +1591,360 @@ create unique index if not exists ux_channel_integrations_provider_sender
 -- its provider is the active one (WhatsApp:Provider). meta_template_id holds that provider's template id.
 alter table whatsapp_templates add column if not exists provider varchar(30);
 
+-- =====================================================================
+-- SUBSCRIPTIONS & USAGE BILLING — schema "billing"  (module: PlasticSurgery/Billing, guide: docs/billing.md)
+-- ---------------------------------------------------------------------
+-- Every billing table lives in its own Postgres schema, billing.*, apart from the product tables in public.
+-- Three separate questions, never collapsed into one:
+--   1. Subscription: what the clinic pays SculptFlow for access (a plan: price, period, entitlements, and an
+--      optional monetary included credit per period).
+--   2. Provider billing responsibility: who pays the upstream provider (Meta, an SMS operator...) for a connected
+--      channel account: customer_direct | platform_funded | external_provider_direct | no_provider_usage_fee.
+--   3. SculptFlow usage billing: whether SculptFlow itself charges the clinic for that usage (by default only when
+--      SculptFlow pays the provider).
+-- Usage is a BILLABLE EVENT. Every event can be recorded (usage analytics, provider cost where known), but only
+-- events SculptFlow charges are rated, reserved, settled and paid (included credit first, then the prepaid wallet).
+-- Money is numeric(18,6) in the account currency (one currency for now: Billing:Currency, default USD).
+-- Every balance change is one append-only row in billing.ledger_entries; billing.accounts caches the balances
+-- and must always equal the ledger sums (BillingQueryService.ReconcileAsync checks it).
+-- Concurrency: every money operation locks the clinic's billing.accounts row (select ... for update) inside one
+-- transaction. Idempotency: usage records and ledger entries carry an idempotency key unique per clinic.
+-- Nothing here is enforced until Billing:Enabled = true.
+-- =====================================================================
+create schema if not exists billing;
+create extension if not exists btree_gist;   -- for the "no overlapping rate versions" exclusion constraint
+
+-- Plans: what a clinic subscribes to. Price changes apply from the next renewal (history is in the ledger).
+create table if not exists billing.plans (
+  id                     uuid primary key default gen_random_uuid(),
+  code                   varchar(50) not null unique check (code ~ '^[a-z0-9_-]+$'),
+  name                   varchar(100) not null,
+  description            text,
+  price                  numeric(18,2) not null default 0 check (price >= 0),
+  currency               char(3) not null default 'USD' check (currency ~ '^[A-Z]{3}$'),
+  billing_period         varchar(10) not null default 'month' check (billing_period in ('month','year')),
+  -- Monetary credit granted each period, usable for any usage SculptFlow charges. Unused credit expires at renewal.
+  included_usage_credit  numeric(18,2) not null default 0 check (included_usage_credit >= 0),
+  rate_card_id           uuid,          -- optional plan rate card; FK added after billing.rate_cards exists
+  is_active              boolean not null default true,
+  sort_order             integer not null default 0,
+  created_at             timestamptz not null default now(),
+  updated_at             timestamptz not null default now()
+);
+drop trigger if exists trg_plans_updated_at on billing.plans;
+create trigger trg_plans_updated_at before update on billing.plans
+  for each row execute function public.set_updated_at();
+
+-- Entitlements: one row per (plan, key). Keys are defined in code (Billing/Entitlements.cs): features hold
+-- true/false, limits hold a number or 'unlimited'. A key missing from a plan means "off" / 0.
+create table if not exists billing.plan_entitlements (
+  id               uuid primary key default gen_random_uuid(),
+  plan_id          uuid not null references billing.plans(id) on delete cascade,
+  entitlement_key  varchar(60) not null check (entitlement_key ~ '^[a-z0-9_]+$'),
+  value            varchar(20) not null check (value ~ '^(true|false|unlimited|[0-9]{1,9})$'),
+  created_at       timestamptz not null default now(),
+  updated_at       timestamptz not null default now()
+);
+create unique index if not exists ux_plan_entitlements_key on billing.plan_entitlements(plan_id, entitlement_key);
+drop trigger if exists trg_plan_entitlements_updated_at on billing.plan_entitlements;
+create trigger trg_plan_entitlements_updated_at before update on billing.plan_entitlements
+  for each row execute function public.set_updated_at();
+
+-- Rate cards: named price lists. Lookup order for a billable event: the clinic's own card (clinic_id set,
+-- custom pricing) -> the plan's card -> the default card. The first card with a matching rate wins.
+create table if not exists billing.rate_cards (
+  id           uuid primary key default gen_random_uuid(),
+  code         varchar(50) not null unique check (code ~ '^[a-z0-9_-]+$'),
+  name         varchar(100) not null,
+  description  text,
+  clinic_id    uuid references public.clinics(id) on delete cascade,   -- set = this clinic's custom-pricing card
+  is_default   boolean not null default false,
+  is_active    boolean not null default true,
+  created_at   timestamptz not null default now(),
+  updated_at   timestamptz not null default now(),
+  constraint ck_rate_cards_default_not_client check (not (is_default and clinic_id is not null))
+);
+create unique index if not exists ux_rate_cards_default on billing.rate_cards(is_default) where is_default;
+create unique index if not exists ux_rate_cards_clinic on billing.rate_cards(clinic_id) where clinic_id is not null;
+drop trigger if exists trg_rate_cards_updated_at on billing.rate_cards;
+create trigger trg_rate_cards_updated_at before update on billing.rate_cards
+  for each row execute function public.set_updated_at();
+
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'fk_plans_rate_card') then
+    alter table billing.plans add constraint fk_plans_rate_card
+      foreign key (rate_card_id) references billing.rate_cards(id) on delete set null;
+  end if;
+end $$;
+
+-- Rates: one price version for one billable event type, optionally narrowed by destination country, operator,
+-- provider and provider billing responsibility (null = any). The most specific match wins inside a card.
+-- provider_cost = what the upstream provider charges per unit (paid by whoever the usage's responsibility says);
+-- client_rate = what SculptFlow charges the clinic per unit. They're independent: a customer-direct "service fee"
+-- rate can have client_rate 0.01 and the provider cost only for reporting. Rates with provider_billing = null apply
+-- only to platform_funded charging (and to cost reporting for any usage): SculptFlow never charges a customer-paid
+-- account a platform rate by fallback.
+-- A version is never edited: a price change closes the current row (effective_to) and adds a new one.
+create table if not exists billing.rates (
+  id                uuid primary key default gen_random_uuid(),
+  rate_card_id      uuid not null references billing.rate_cards(id) on delete cascade,
+  event_type        varchar(60) not null check (event_type ~ '^[a-z0-9_]+$'),
+  country_code      char(2) check (country_code ~ '^[A-Z]{2}$'),
+  operator          varchar(60),
+  provider          varchar(30),
+  provider_billing  varchar(30) check (provider_billing in
+                      ('customer_direct','platform_funded','external_provider_direct','no_provider_usage_fee')),
+  unit              varchar(20) not null default 'unit',
+  provider_cost     numeric(18,6) not null default 0 check (provider_cost >= 0),
+  client_rate       numeric(18,6) not null check (client_rate >= 0),
+  currency          char(3) not null check (currency ~ '^[A-Z]{3}$'),
+  effective_from    timestamptz not null,
+  effective_to      timestamptz,
+  notes             text,
+  created_by        varchar(200),
+  created_at        timestamptz not null default now(),
+  constraint ck_rates_period check (effective_to is null or effective_to > effective_from)
+);
+create index if not exists ix_rates_lookup on billing.rates(event_type, rate_card_id);
+-- Two versions of the same rate (same card, event, country, operator, provider, responsibility) may never overlap.
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'ex_rates_no_overlap') then
+    alter table billing.rates add constraint ex_rates_no_overlap exclude using gist (
+      rate_card_id with =,
+      event_type with =,
+      (coalesce(country_code, '')) with =,
+      (coalesce(operator, '')) with =,
+      (coalesce(provider, '')) with =,
+      (coalesce(provider_billing, '')) with =,
+      tstzrange(effective_from, effective_to, '[)') with &&);
+  end if;
+end $$;
+-- Price and scope are immutable; only effective_to (closing a version) and notes may change.
+create or replace function billing.rates_guard() returns trigger as $$
+begin
+  if new.rate_card_id <> old.rate_card_id or new.event_type <> old.event_type
+     or new.country_code is distinct from old.country_code or new.operator is distinct from old.operator
+     or new.provider is distinct from old.provider or new.provider_billing is distinct from old.provider_billing
+     or new.unit <> old.unit or new.provider_cost <> old.provider_cost or new.client_rate <> old.client_rate
+     or new.currency <> old.currency or new.effective_from <> old.effective_from then
+    raise exception 'billing.rates: a rate version can''t be edited; close it and add a new version (rate %)', old.id;
+  end if;
+  return new;
+end;
+$$ language plpgsql;
+drop trigger if exists trg_rates_guard on billing.rates;
+create trigger trg_rates_guard before update on billing.rates
+  for each row execute function billing.rates_guard();
+
+-- One billing account (wallet) per clinic. spendable = wallet_balance + included_credit_balance - reserved_amount.
+-- The wallet only finances what the clinic owes SculptFlow. wallet_balance can only go below zero when a settlement
+-- costs more than was reserved (usage that already happened); reservations, subscription charges and manual
+-- debits never take it below zero.
+create table if not exists billing.accounts (
+  id                       uuid primary key default gen_random_uuid(),
+  clinic_id                uuid not null unique references public.clinics(id) on delete cascade,
+  currency                 char(3) not null default 'USD' check (currency ~ '^[A-Z]{3}$'),
+  wallet_balance           numeric(18,6) not null default 0,
+  included_credit_balance  numeric(18,6) not null default 0 check (included_credit_balance >= 0),
+  reserved_amount          numeric(18,6) not null default 0 check (reserved_amount >= 0),
+  created_at               timestamptz not null default now(),
+  updated_at               timestamptz not null default now()
+);
+drop trigger if exists trg_accounts_updated_at on billing.accounts;
+create trigger trg_accounts_updated_at before update on billing.accounts
+  for each row execute function public.set_updated_at();
+
+-- One subscription per clinic (changing plan updates this row; history is in events + the ledger).
+-- active: normal. past_due: renewal couldn't be paid, still usable during the grace period (Billing:GracePeriodDays).
+-- expired: grace ran out. cancelled: ended on request. Expired/cancelled clinics can still sign in and see their
+-- data, but can't send messages, run campaigns or use the AI until a plan is started again.
+create table if not exists billing.subscriptions (
+  id                    uuid primary key default gen_random_uuid(),
+  clinic_id             uuid not null unique references public.clinics(id) on delete cascade,
+  plan_id               uuid not null references billing.plans(id),
+  status                varchar(20) not null check (status in ('active','past_due','expired','cancelled')),
+  current_period_start  timestamptz not null,
+  current_period_end    timestamptz not null,
+  cancel_at_period_end  boolean not null default false,
+  past_due_since        timestamptz,
+  ended_at              timestamptz,
+  created_at            timestamptz not null default now(),
+  updated_at            timestamptz not null default now(),
+  constraint ck_subscriptions_period check (current_period_end > current_period_start)
+);
+create index if not exists ix_subscriptions_due on billing.subscriptions(current_period_end)
+  where status in ('active','past_due');
+drop trigger if exists trg_subscriptions_updated_at on billing.subscriptions;
+create trigger trg_subscriptions_updated_at before update on billing.subscriptions
+  for each row execute function public.set_updated_at();
+
+-- Provider billing settings of one connected channel account (public.channel_integrations row): who pays the upstream
+-- provider, and whether SculptFlow charges usage on it. No row (or null values) = the defaults (channel/provider
+-- defaults in code + Billing:ProviderBilling:Defaults). applies_to_provider: the override only holds while the
+-- account is connected through that provider (a reconnect through another provider falls back to the defaults).
+create table if not exists billing.channel_account_settings (
+  channel_integration_id  uuid primary key references public.channel_integrations(id) on delete cascade,
+  clinic_id               uuid not null references public.clinics(id) on delete cascade,
+  provider_billing        varchar(30) check (provider_billing in
+                            ('customer_direct','platform_funded','external_provider_direct','no_provider_usage_fee')),
+  omni_usage_billing      boolean,
+  applies_to_provider     varchar(30),
+  reason                  text,
+  updated_by              varchar(200),
+  created_at              timestamptz not null default now(),
+  updated_at              timestamptz not null default now()
+);
+create index if not exists ix_channel_account_settings_clinic on billing.channel_account_settings(clinic_id);
+drop trigger if exists trg_channel_account_settings_updated_at on billing.channel_account_settings;
+create trigger trg_channel_account_settings_updated_at before update on billing.channel_account_settings
+  for each row execute function public.set_updated_at();
+
+-- Usage records (CDRs): one row per billable event, whether or not SculptFlow charges it.
+--   charge_status    = SculptFlow's money: reserved -> settled | released; failed = refused (no rate / not enough
+--                      balance, nothing charged); not_charged = SculptFlow doesn't bill this usage (customer-paid
+--                      provider, no provider fee...) — never touches the wallet, included credit or ledger.
+--   provider_outcome = what happened at the provider: pending -> billable (e.g. delivered) | not_billable (failed).
+--   provider_billing = who paid the provider for it (snapshot of the account's responsibility at the time).
+-- Prices are snapshotted at rating time, so later rate or setting changes never alter history.
+-- message/conversation/campaign/channel_integration ids are plain columns (no FK) on purpose: financial history
+-- must outlive deleted rows.
+create table if not exists billing.usage_records (
+  id                      uuid primary key default gen_random_uuid(),
+  clinic_id               uuid not null references public.clinics(id) on delete cascade,
+  billing_account_id      uuid not null references billing.accounts(id) on delete cascade,
+  idempotency_key         varchar(200) not null,
+  event_type              varchar(60) not null,
+  channel                 varchar(30) not null,
+  channel_integration_id  uuid,
+  quantity                numeric(18,6) not null check (quantity >= 0),
+  unit                    varchar(20),
+  country_code            char(2),
+  operator                varchar(60),
+  provider                varchar(30),
+  provider_billing        varchar(30) not null default 'platform_funded' check (provider_billing in
+                            ('customer_direct','platform_funded','external_provider_direct','no_provider_usage_fee')),
+  rate_id                 uuid references billing.rates(id),
+  rate_card_id            uuid references billing.rate_cards(id),
+  rate_source             varchar(20),
+  unit_provider_cost      numeric(18,6),
+  unit_price              numeric(18,6),
+  provider_cost           numeric(18,6),
+  amount                  numeric(18,6),
+  reserved_amount         numeric(18,6) not null default 0 check (reserved_amount >= 0),
+  credit_amount           numeric(18,6) not null default 0 check (credit_amount >= 0),
+  wallet_amount           numeric(18,6) not null default 0 check (wallet_amount >= 0),
+  refunded_amount         numeric(18,6) not null default 0 check (refunded_amount >= 0),
+  currency                char(3) not null,
+  charge_status           varchar(20) not null check (charge_status in ('reserved','settled','released','failed','not_charged')),
+  provider_outcome        varchar(20) not null default 'pending' check (provider_outcome in ('pending','billable','not_billable')),
+  failure_reason          varchar(60),
+  release_reason          varchar(100),
+  message_id              uuid,
+  conversation_id         uuid,
+  campaign_id             uuid,
+  source                  varchar(30) not null default 'channel',
+  actor                   varchar(200),
+  occurred_at             timestamptz not null,
+  reserved_at             timestamptz,
+  settled_at              timestamptz,
+  released_at             timestamptz,
+  refunded_at             timestamptz,
+  created_at              timestamptz not null default now(),
+  updated_at              timestamptz not null default now(),
+  constraint ck_usage_records_settled
+    check (charge_status <> 'settled' or (amount is not null and credit_amount + wallet_amount = amount)),
+  constraint ck_usage_records_not_charged
+    check (charge_status <> 'not_charged' or (reserved_amount = 0 and credit_amount = 0 and wallet_amount = 0)),
+  constraint ck_usage_records_refund check (refunded_amount <= coalesce(amount, 0))
+);
+create unique index if not exists ux_usage_records_key on billing.usage_records(clinic_id, idempotency_key);
+create index if not exists ix_usage_records_clinic_occurred on billing.usage_records(clinic_id, occurred_at desc);
+create index if not exists ix_usage_records_open on billing.usage_records(created_at)
+  where charge_status = 'reserved' or (charge_status = 'not_charged' and provider_outcome = 'pending');
+create index if not exists ix_usage_records_message on billing.usage_records(message_id) where message_id is not null;
+-- Once the money side is final (settled/released/failed/not_charged) only the refund columns and the provider
+-- outcome may change. (An uncharged record still waiting for its provider outcome may get its final quantity and
+-- provider cost once, when that outcome arrives — no money is involved.)
+create or replace function billing.usage_records_guard() returns trigger as $$
+begin
+  if old.charge_status <> 'reserved'
+     and not (old.charge_status = 'not_charged' and old.provider_outcome = 'pending'
+              and new.charge_status = 'not_charged' and new.amount is not distinct from old.amount
+              and new.credit_amount = 0 and new.wallet_amount = 0 and new.reserved_amount = 0)
+     and (
+       new.charge_status is distinct from old.charge_status or new.amount is distinct from old.amount
+       or new.quantity is distinct from old.quantity or new.credit_amount is distinct from old.credit_amount
+       or new.wallet_amount is distinct from old.wallet_amount or new.reserved_amount is distinct from old.reserved_amount
+       or new.unit_price is distinct from old.unit_price or new.provider_cost is distinct from old.provider_cost
+       or new.rate_id is distinct from old.rate_id or new.idempotency_key is distinct from old.idempotency_key
+       or new.provider_billing is distinct from old.provider_billing) then
+    raise exception 'billing.usage_records: record % is final (%) and can no longer change', old.id, old.charge_status;
+  end if;
+  new.updated_at = now();
+  return new;
+end;
+$$ language plpgsql;
+drop trigger if exists trg_usage_records_guard on billing.usage_records;
+create trigger trg_usage_records_guard before update on billing.usage_records
+  for each row execute function billing.usage_records_guard();
+
+-- Financial ledger: only real SculptFlow money movements (never uncharged usage). Append-only (updates are rejected
+-- by a trigger). balance_after = that balance right after this entry. Signs: credits to a balance are positive,
+-- debits negative. A subscription_charge of 0 is allowed so every started period (trial, free plan) has exactly one
+-- charge row.
+create table if not exists billing.ledger_entries (
+  id                  uuid primary key default gen_random_uuid(),
+  seq                 bigint generated by default as identity,   -- posting order (one operation's rows share created_at)
+  clinic_id           uuid not null references public.clinics(id) on delete cascade,
+  billing_account_id  uuid not null references billing.accounts(id) on delete cascade,
+  entry_type          varchar(40) not null check (entry_type in ('wallet_top_up','usage_debit',
+                        'included_credit_consumption','usage_refund','subscription_charge','included_credit_grant',
+                        'included_credit_expiry','manual_adjustment')),
+  balance_type        varchar(20) not null check (balance_type in ('wallet','included_credit')),
+  amount              numeric(18,6) not null,
+  balance_after       numeric(18,6) not null,
+  currency            char(3) not null,
+  idempotency_key     varchar(200) not null,
+  usage_record_id     uuid references billing.usage_records(id),
+  subscription_id     uuid references billing.subscriptions(id),
+  plan_id             uuid,
+  source              varchar(30) not null,
+  actor               varchar(200),
+  reason              text,
+  reference           varchar(200),
+  correlation_id      varchar(200),
+  created_at          timestamptz not null default now(),
+  constraint ck_ledger_entries_sign check (
+       (entry_type in ('wallet_top_up','usage_refund','included_credit_grant') and amount > 0)
+    or (entry_type in ('usage_debit','included_credit_consumption','included_credit_expiry') and amount < 0)
+    or (entry_type = 'subscription_charge' and amount <= 0)
+    or (entry_type = 'manual_adjustment' and amount <> 0)),
+  constraint ck_ledger_entries_balance_type check (
+       (entry_type in ('wallet_top_up','usage_debit','subscription_charge') and balance_type = 'wallet')
+    or (entry_type in ('included_credit_consumption','included_credit_grant','included_credit_expiry')
+        and balance_type = 'included_credit')
+    or entry_type in ('usage_refund','manual_adjustment'))
+);
+create unique index if not exists ux_ledger_entries_key on billing.ledger_entries(clinic_id, idempotency_key);
+create index if not exists ix_ledger_entries_clinic_seq on billing.ledger_entries(clinic_id, seq desc);
+create index if not exists ix_ledger_entries_usage on billing.ledger_entries(usage_record_id)
+  where usage_record_id is not null;
+create or replace function billing.ledger_entries_immutable() returns trigger as $$
+begin
+  raise exception 'billing.ledger_entries is append-only: post a correcting entry instead of editing %', old.id;
+end;
+$$ language plpgsql;
+drop trigger if exists trg_ledger_entries_immutable on billing.ledger_entries;
+create trigger trg_ledger_entries_immutable before update on billing.ledger_entries
+  for each row execute function billing.ledger_entries_immutable();
+
+-- Every existing clinic gets an (empty) billing account; new clinics get one at registration (and lazily anyway).
+insert into billing.accounts (clinic_id, currency)
+select id, 'USD' from public.clinics
+on conflict (clinic_id) do nothing;
+
 -- UTC guard: every moment in time is stored as timestamptz (UTC); only the clinic-local availability columns
 -- (clinic_availability_rules/exceptions start_time/end_time/date, read together with clinics.timezone) are
 -- zone-less on purpose. If any other column ever drifts to `timestamp without time zone`, convert it here,

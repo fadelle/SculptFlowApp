@@ -109,11 +109,17 @@ public class IntegrationsModel : PageModel
             return BadRequest();
         }
 
-        await _integrations.SaveAsync(new SaveChannelIntegrationRequest(
-            clinic.Id, Channel, DisplayName, PhoneNumberId, WhatsAppBusinessId,
-            PageId, InstagramBusinessId, AccessToken, WebhookVerifyToken), ct);
-
-        StatusMessage = $"{Label(Channel)} connection saved.";
+        try
+        {
+            await _integrations.SaveAsync(new SaveChannelIntegrationRequest(
+                clinic.Id, Channel, DisplayName, PhoneNumberId, WhatsAppBusinessId,
+                PageId, InstagramBusinessId, AccessToken, WebhookVerifyToken), ct);
+            StatusMessage = $"{Label(Channel)} connection saved.";
+        }
+        catch (InvalidOperationException ex) // e.g. the plan's channel limit
+        {
+            ErrorMessage = ex.Message;
+        }
         return RedirectToPage();
     }
 

@@ -1,0 +1,180 @@
+@page "/settings/billing"
+@model PlasticSurgery.Pages.Settings.BillingModel
+@{
+    ViewData["Title"] = "Billing";
+    var s = Model.Summary;
+    string Money(decimal value) => (s?.Currency == "USD" ? "$" : "") + value.ToString("#,0.00") + (s?.Currency == "USD" ? "" : " " + s?.Currency);
+    string UnitMoney(decimal value) => value.ToString("#,0.00##");
+    (string Css, string Text) StatusBadge(string? status) => status switch
+    {
+        "active" => ("badge-green", "Active"),
+        "past_due" => ("badge-amber", "Payment due"),
+        "expired" => ("badge-red", "Expired"),
+        "cancelled" => ("badge-gray", "Cancelled"),
+        _ => ("badge-gray", "No plan")
+    };
+    string EntitlementValue(PlasticSurgery.Dtos.BillingEntitlementRow e) => e.Kind == "feature"
+        ? (e.Value == "true" ? "Included" : "Not included")
+        : e.Value == "unlimited" ? "Unlimited" : e.Value;
+}
+
+@if (!Model.ClinicConfigured || s is null)
+{
+    <div class="alert alert-warning">No clinic configured yet — see the Dashboard page for setup steps.</div>
+}
+else
+{
+    var badge = StatusBadge(s.SubscriptionStatus);
+    <p class="text-muted mw-640">Your plan gives you access to MySculptFlow's features. Messages SculptFlow bills you for (such as
+        WhatsApp templates sent through SculptFlow's account) are paid from your plan's included credit first, then from your prepaid
+        balance. Messages on an account you pay the provider for yourself never touch your balance. To add funds or change your plan,
+        contact SculptFlow support.</p>
+
+    @if (!s.BillingEnabled)
+    {
+        <div class="alert alert-info mt-2">Billing isn't switched on for your account yet, so nothing is charged and every feature is available.</div>
+    }
+    else if (s.SubscriptionStatus == "past_due")
+    {
+        <div class="alert alert-warning mt-2">Your plan's renewal couldn't be paid.
+            @if (s.GraceEndsAt is not null)
+            {
+                <text>Everything keeps working until @LocalTimeHelper.Time(s.GraceEndsAt.Value, "date"); add funds before then to keep sending messages.</text>
+            }
+        </div>
+    }
+    else if (!s.HasAccess)
+    {
+        <div class="alert alert-warning mt-2">You don't have an active plan, so messages, campaigns and the AI agent are paused. Your data is still here.
+            Contact SculptFlow support to start a plan.</div>
+    }
+
+    <div class="section-heading"><h2>Plan</h2></div>
+    <div class="stat-grid">
+        <div class="stat-card stat-card-accent">
+            <div class="label">Current plan</div>
+            <div class="value">@(s.PlanName ?? "None")</div>
+            <div class="hint"><span class="badge @badge.Css">@badge.Text</span>
+                @if (s.PlanPrice is not null) { <text>· @Money(s.PlanPrice.Value) / @s.BillingPeriod</text> }</div>
+        </div>
+        <div class="stat-card">
+            <div class="label">@(s.CancelAtPeriodEnd ? "Ends on" : "Renews on")</div>
+            <div class="value">@LocalTimeHelper.Time(s.CurrentPeriodEnd, "date")</div>
+            @if (s.CurrentPeriodStart is not null)
+            {
+                <div class="hint">Period started @LocalTimeHelper.Time(s.CurrentPeriodStart.Value, "date")</div>
+            }
+        </div>
+        <div class="stat-card">
+            <div class="label">Included credit left</div>
+            <div class="value">@Money(s.IncludedCreditRemaining)</div>
+            <div class="hint">of @Money(s.PlanIncludedCredit) this period</div>
+        </div>
+        <div class="stat-card">
+            <div class="label">Prepaid balance</div>
+            <div class="value">@Money(s.WalletBalance)</div>
+            <div class="hint">@Money(s.ReservedAmount) held for messages in progress · @Money(s.Spendable) available</div>
+        </div>
+    </div>
+
+    <div class="section-heading"><h2>What your plan includes</h2></div>
+    <div class="table-card table-scroll">
+        <table class="data-table">
+            <tbody>
+                @foreach (var e in s.Entitlements)
+                {
+                    <tr>
+                        <td>@e.Label</td>
+                        <td>@EntitlementValue(e)</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    @if (s.ChannelAccounts.Count > 0)
+    {
+        <div class="section-heading"><h2>Your messaging accounts</h2></div>
+        <div class="table-card table-scroll">
+            <table class="data-table">
+                <thead><tr><th>Channel</th><th>Account</th><th>Message costs</th></tr></thead>
+                <tbody>
+                    @foreach (var a in s.ChannelAccounts)
+                    {
+                        <tr><td>@a.ChannelLabel</td><td>@(a.DisplayName ?? "—")</td><td>@a.PaidBy</td></tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+
+    <div class="section-heading">
+        <h2>Charged by SculptFlow this period</h2>
+        <span class="cell-sub">since @LocalTimeHelper.Time(s.UsageSince, "date")</span>
+    </div>
+    @if (s.Usage.Count == 0)
+    {
+        <div class="card empty-card"><p class="text-muted m-0">Nothing charged yet this period.</p></div>
+    }
+    else
+    {
+        <div class="table-card table-scroll">
+            <table class="data-table">
+                <thead><tr><th>Type</th><th>Count</th><th>Charged</th></tr></thead>
+                <tbody>
+                    @foreach (var u in s.Usage)
+                    {
+                        <tr><td>@u.Label</td><td>@u.Count</td><td>@Money(u.Amount)</td></tr>
+                    }
+                    <tr><td><strong>Total</strong></td><td></td><td><strong>@Money(s.UsageTotal)</strong></td></tr>
+                </tbody>
+            </table>
+        </div>
+    }
+
+    @if (s.ProviderDirectUsage.Count > 0)
+    {
+        <div class="section-heading">
+            <h2>Not charged by SculptFlow</h2>
+            <span class="cell-sub">paid directly to the provider, or free — never taken from your balance</span>
+        </div>
+        <div class="table-card table-scroll">
+            <table class="data-table">
+                <thead><tr><th>Type</th><th>Count</th><th>Who pays</th></tr></thead>
+                <tbody>
+                    @foreach (var u in s.ProviderDirectUsage)
+                    {
+                        <tr><td>@u.Label</td><td>@u.Count</td><td>@u.PaidBy</td></tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+
+    <div class="section-heading"><h2>Recent transactions</h2></div>
+    @if (s.RecentTransactions.Count == 0)
+    {
+        <div class="card empty-card"><p class="text-muted m-0">No transactions yet.</p></div>
+    }
+    else
+    {
+        <div class="table-card table-scroll">
+            <table class="data-table">
+                <thead><tr><th>Date</th><th>Description</th><th>From</th><th>Amount</th><th>Balance after</th></tr></thead>
+                <tbody>
+                    @foreach (var t in s.RecentTransactions)
+                    {
+                        <tr>
+                            <td class="cell-sub" @LocalTimeHelper.Title(t.CreatedAt)>@LocalTimeHelper.Time(t.CreatedAt, "datetime-year")</td>
+                            <td>@t.Label@(string.IsNullOrWhiteSpace(t.Reason) ? "" : " — " + t.Reason)</td>
+                            <td>@(t.BalanceType == "wallet" ? "Prepaid balance" : "Included credit")</td>
+                            <td>@(t.Amount > 0 ? "+" : t.Amount < 0 ? "−" : "")@UnitMoney(Math.Abs(t.Amount))</td>
+                            <td>@UnitMoney(t.BalanceAfter)</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <p class="text-subtle text-sm mt-2">Full history: <code>GET /api/billing/transactions</code> and <code>/api/billing/usage</code>.</p>
+    }
+}

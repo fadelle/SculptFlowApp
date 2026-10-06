@@ -53,6 +53,10 @@ public class ChannelIntegrationsController : DashboardApiController
         {
             return BadRequest(new { error = ex.Message });
         }
+        catch (InvalidOperationException ex) // e.g. the plan's channel limit
+        {
+            return UnprocessableEntity(new { error = ex.Message });
+        }
     }
 
     /// <summary>Connects (or reconnects) the clinic's Telegram bot from a BotFather token: validates it

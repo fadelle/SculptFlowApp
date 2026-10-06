@@ -38,12 +38,15 @@ public class AiTriggerNotifier : IAiTriggerNotifier
     private readonly HttpClient _http;
     private readonly IConfiguration _configuration;
     private readonly ILogger<AiTriggerNotifier> _logger;
+    private readonly Billing.IEntitlementService _entitlements;
 
-    public AiTriggerNotifier(HttpClient http, IConfiguration configuration, ILogger<AiTriggerNotifier> logger)
+    public AiTriggerNotifier(HttpClient http, IConfiguration configuration, ILogger<AiTriggerNotifier> logger,
+        Billing.IEntitlementService entitlements)
     {
         _http = http;
         _configuration = configuration;
         _logger = logger;
+        _entitlements = entitlements;
     }
 
     /// <summary>Never throws — a webhook POST from Meta must still get its fast HTTP 200 even if
@@ -62,6 +65,15 @@ public class AiTriggerNotifier : IAiTriggerNotifier
 
         try
         {
+            // The AI agent is a plan feature (automation). Without it the message just waits in the Inbox for staff.
+            var entitlements = await _entitlements.GetAsync(payload.ClinicId, ct);
+            if (!entitlements.CanUseAiAgent)
+            {
+                _logger.LogInformation("AI trigger skipped for conversation {ConversationId}: the clinic's plan doesn't include the AI agent (status {Status}).",
+                    payload.ConversationId, entitlements.SubscriptionStatus ?? "none");
+                return;
+            }
+
             using var response = await _http.PostAsJsonAsync(url, payload, JsonOptions, ct);
             if (!response.IsSuccessStatusCode)
             {

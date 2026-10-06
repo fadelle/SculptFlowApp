@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using PlasticSurgery.Billing;
 using PlasticSurgery.Data;
 using PlasticSurgery.Data.Entities;
 using PlasticSurgery.Dtos;
@@ -12,13 +13,16 @@ public class CampaignService : ICampaignService
     private readonly IConversationService _conversations;
     private readonly IMessageService _messages;
     private readonly ICampaignAudienceService _audience;
+    private readonly IEntitlementService _entitlements;
 
-    public CampaignService(ApplicationDbContext db, IConversationService conversations, IMessageService messages, ICampaignAudienceService audience)
+    public CampaignService(ApplicationDbContext db, IConversationService conversations, IMessageService messages, ICampaignAudienceService audience,
+        IEntitlementService entitlements)
     {
         _db = db;
         _conversations = conversations;
         _messages = messages;
         _audience = audience;
+        _entitlements = entitlements;
     }
 
     public async Task<IReadOnlyList<CampaignListRow>> ListAsync(Guid clinicId, CancellationToken ct = default)
@@ -81,6 +85,7 @@ public class CampaignService : ICampaignService
         {
             throw new ArgumentException("Name is required.", nameof(request));
         }
+        await _entitlements.EnsureFeatureAsync(request.ClinicId, EntitlementKeys.Campaigns, ct);
 
         var template = await _db.WhatsAppTemplates.FirstOrDefaultAsync(
             t => t.ClinicId == request.ClinicId && t.Id == request.WhatsAppTemplateId, ct);
@@ -177,6 +182,7 @@ public class CampaignService : ICampaignService
         {
             throw new InvalidOperationException($"Only a draft campaign can be scheduled (this one is '{campaign.Status}').");
         }
+        await _entitlements.EnsureFeatureAsync(clinicId, EntitlementKeys.Campaigns, ct);
 
         campaign.Status = CampaignStatus.Scheduled;
         campaign.ScheduledAt = scheduledAt;
@@ -190,6 +196,7 @@ public class CampaignService : ICampaignService
     {
         var campaign = await _db.Campaigns.FirstOrDefaultAsync(c => c.ClinicId == clinicId && c.Id == id, ct);
         if (campaign is null) return null;
+        await _entitlements.EnsureFeatureAsync(clinicId, EntitlementKeys.Campaigns, ct);
 
         if (campaign.Status is CampaignStatus.Draft or CampaignStatus.Scheduled)
         {
@@ -229,6 +236,7 @@ public class CampaignService : ICampaignService
                 r => r.CampaignId == id && r.Status == CampaignRecipientStatus.Queued, ct);
             return new ProcessCampaignBatchResult(0, 0, 0, remaining, campaign.Status == CampaignStatus.Completed);
         }
+        await _entitlements.EnsureFeatureAsync(clinicId, EntitlementKeys.Campaigns, ct);
 
         var batch = await _db.CampaignRecipients
             .Where(r => r.CampaignId == id && r.Status == CampaignRecipientStatus.Queued)
@@ -259,8 +267,10 @@ public class CampaignService : ICampaignService
         return new ProcessCampaignBatchResult(batch.Count, succeeded, failed, remainingQueued, completed);
     }
 
-    /// <summary>Sends one recipient's template and records the outcome. Never throws — a single
-    /// recipient's failure (bad phone number, WhatsApp API error, etc.) must not abort the batch.</summary>
+    /// <summary>Sends one recipient's template and records the outcome. A single recipient's failure (bad phone
+    /// number, WhatsApp API error, etc.) must not abort the batch — EXCEPT running out of prepaid balance or losing
+    /// the subscription: then the recipient stays queued and the exception stops the batch, so the campaign
+    /// continues where it left off after a top-up instead of burning the rest of the audience as failed.</summary>
     private async Task<bool> ProcessRecipientAsync(Guid clinicId, CampaignRecipient recipient, CancellationToken ct)
     {
         try
@@ -290,6 +300,10 @@ public class CampaignService : ICampaignService
             recipient.UpdatedAt = now;
             await _db.SaveChangesAsync(ct);
             return true;
+        }
+        catch (Exception ex) when (ex is BillingDeniedException { Reason: UsageFailureReason.InsufficientFunds } or EntitlementDeniedException)
+        {
+            throw;
         }
         catch (Exception ex)
         {

@@ -59,15 +59,20 @@ public partial class ClinicRegistrationService : IClinicRegistrationService
     private readonly UserManager<IdentityUser> _users;
     private readonly IKnowledgeSettingsService _knowledgeSettings;
     private readonly ILogger<ClinicRegistrationService> _logger;
+    private readonly Billing.ISubscriptionService _subscriptions;
+    private readonly Billing.BillingOptions _billing;
 
     public ClinicRegistrationService(
         ApplicationDbContext db, UserManager<IdentityUser> users, IKnowledgeSettingsService knowledgeSettings,
-        ILogger<ClinicRegistrationService> logger)
+        ILogger<ClinicRegistrationService> logger, Billing.ISubscriptionService subscriptions,
+        Microsoft.Extensions.Options.IOptions<Billing.BillingOptions> billing)
     {
         _db = db;
         _users = users;
         _knowledgeSettings = knowledgeSettings;
         _logger = logger;
+        _subscriptions = subscriptions;
+        _billing = billing.Value;
     }
 
     public async Task<ClinicRegistrationResult> RegisterAsync(RegisterClinicRequest request, CancellationToken ct = default)
@@ -159,6 +164,15 @@ public partial class ClinicRegistrationService : IClinicRegistrationService
                     CreatedAt = now,
                     UpdatedAt = now
                 });
+                // Its (empty) prepaid billing account — see Billing/. Balances only ever change through the ledger.
+                _db.BillingAccounts.Add(new BillingAccount
+                {
+                    Id = Guid.NewGuid(),
+                    ClinicId = clinic.Id,
+                    Currency = _billing.NormalizedCurrency,
+                    CreatedAt = now,
+                    UpdatedAt = now
+                });
                 await _db.SaveChangesAsync(ct);
 
                 // The one per-clinic row the app otherwise creates lazily: Knowledge Base retrieval
@@ -167,6 +181,7 @@ public partial class ClinicRegistrationService : IClinicRegistrationService
 
                 await tx.CommitAsync(ct);
                 _logger.LogInformation("Registered new clinic {ClinicId} ({Slug}) with its first user.", clinic.Id, clinic.Slug);
+                await StartSignupPlanAsync(clinic.Id, ct);
                 return new ClinicRegistrationResult(true, user, clinic, Array.Empty<string>());
             }
             catch (DbUpdateException ex) when (DbErrors.IsUniqueViolation(ex))
@@ -187,6 +202,25 @@ public partial class ClinicRegistrationService : IClinicRegistrationService
         }
 
         return ClinicRegistrationResult.Fail("We couldn't finish creating your account. Please try again.");
+    }
+
+    /// <summary>With billing on and Billing:SignupPlanCode set, a new clinic starts on that plan with its first period
+    /// free (a trial). Runs after the registration commit (billing uses its own transaction); if it fails the
+    /// account still exists and an admin can assign a plan, so this only logs.</summary>
+    private async Task StartSignupPlanAsync(Guid clinicId, CancellationToken ct)
+    {
+        if (!_billing.Enabled || string.IsNullOrWhiteSpace(_billing.SignupPlanCode)) return;
+        try
+        {
+            await _subscriptions.StartAsync(new Billing.StartSubscriptionRequest(
+                clinicId, _billing.SignupPlanCode, $"signup:{clinicId}", ChargeFirstPeriod: false,
+                Source: BillingSource.System, Reason: "Plan at signup"), ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogError(ex, "Billing: couldn't start the signup plan {Plan} for new clinic {ClinicId}; assign one from the admin API.",
+                _billing.SignupPlanCode, clinicId);
+        }
     }
 
     private async Task RollbackAsync(Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction tx, CancellationToken ct)

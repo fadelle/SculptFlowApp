@@ -12,12 +12,15 @@ public class ChannelIntegrationService : IChannelIntegrationService
     private readonly ApplicationDbContext _db;
     private readonly IMetaGraphClient _graph;
     private readonly ITelegramIntegrationService _telegram;
+    private readonly Billing.IEntitlementService _entitlements;
 
-    public ChannelIntegrationService(ApplicationDbContext db, IMetaGraphClient graph, ITelegramIntegrationService telegram)
+    public ChannelIntegrationService(ApplicationDbContext db, IMetaGraphClient graph, ITelegramIntegrationService telegram,
+        Billing.IEntitlementService entitlements)
     {
         _db = db;
         _graph = graph;
         _telegram = telegram;
+        _entitlements = entitlements;
     }
 
     public async Task<IReadOnlyList<ChannelIntegrationResponse>> ListAsync(Guid clinicId, CancellationToken ct = default)
@@ -54,6 +57,12 @@ public class ChannelIntegrationService : IChannelIntegrationService
 
         var row = await _db.ChannelIntegrations.FirstOrDefaultAsync(
             c => c.ClinicId == request.ClinicId && c.Channel == request.Channel, ct);
+
+        // Saving with a token makes the channel connected — the plan's channel limits apply.
+        if (!string.IsNullOrWhiteSpace(request.AccessToken) || !string.IsNullOrWhiteSpace(row?.AccessToken))
+        {
+            await _entitlements.EnsureCanConnectChannelAsync(request.ClinicId, request.Channel, ct);
+        }
 
         var now = DateTimeOffset.UtcNow;
         if (row is null)
@@ -139,6 +148,7 @@ public class ChannelIntegrationService : IChannelIntegrationService
 
     public async Task<ChannelIntegrationResponse> ConnectWhatsAppAsync(ConnectWhatsAppRequest request, CancellationToken ct = default)
     {
+        await _entitlements.EnsureCanConnectChannelAsync(request.ClinicId, ChannelType.WhatsApp, ct);
         var token = !string.IsNullOrWhiteSpace(request.AccessToken)
             ? request.AccessToken
             : !string.IsNullOrWhiteSpace(request.Code)
@@ -190,6 +200,7 @@ public class ChannelIntegrationService : IChannelIntegrationService
 
     public async Task<ChannelIntegrationResponse> ConnectFacebookAsync(ConnectFacebookRequest request, CancellationToken ct = default)
     {
+        await _entitlements.EnsureCanConnectChannelAsync(request.ClinicId, ChannelType.Facebook, ct);
         var shortLivedToken = !string.IsNullOrWhiteSpace(request.Code)
             ? await _graph.ExchangeCodeForTokenAsync(request.Code, ct: ct)
             : !string.IsNullOrWhiteSpace(request.AccessToken)

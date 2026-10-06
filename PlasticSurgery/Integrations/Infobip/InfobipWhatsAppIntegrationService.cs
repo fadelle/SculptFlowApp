@@ -40,16 +40,18 @@ public class InfobipWhatsAppIntegrationService : IInfobipWhatsAppIntegrationServ
     private readonly IConfiguration _configuration;
     private readonly IHttpContextAccessor _http;
     private readonly ILogger<InfobipWhatsAppIntegrationService> _logger;
+    private readonly Billing.IEntitlementService _entitlements;
 
     public InfobipWhatsAppIntegrationService(
         ApplicationDbContext db, IInfobipClient client, IConfiguration configuration,
-        IHttpContextAccessor http, ILogger<InfobipWhatsAppIntegrationService> logger)
+        IHttpContextAccessor http, ILogger<InfobipWhatsAppIntegrationService> logger, Billing.IEntitlementService entitlements)
     {
         _db = db;
         _client = client;
         _configuration = configuration;
         _http = http;
         _logger = logger;
+        _entitlements = entitlements;
     }
 
     public async Task<ChannelIntegrationResponse> ConnectAsync(Guid clinicId, string? senderNumber, CancellationToken ct = default)
@@ -59,6 +61,7 @@ public class InfobipWhatsAppIntegrationService : IInfobipWhatsAppIntegrationServ
         {
             throw new ArgumentException("Enter the WhatsApp number in international format, e.g. +44 7860 099299.");
         }
+        await _entitlements.EnsureCanConnectChannelAsync(clinicId, ChannelType.WhatsApp, ct);
 
         if (WhatsAppService.ActiveProviderName(_configuration) != ChannelProvider.Infobip)
         {

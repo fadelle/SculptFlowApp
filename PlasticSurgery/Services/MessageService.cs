@@ -1,10 +1,15 @@
 using Microsoft.EntityFrameworkCore;
+using PlasticSurgery.Billing;
 using PlasticSurgery.Data;
 using PlasticSurgery.Data.Entities;
 using PlasticSurgery.Dtos;
 
 namespace PlasticSurgery.Services;
 
+/// <summary>Every outbound send (staff text, AI reply, template, campaign template) follows the same billing steps:
+/// subscription check -> reserve (the channel's billing policy decides whether/what is billable) -> provider call
+/// (release on failure) -> Message row saved with the id the reservation was keyed on. Delivery callbacks then
+/// settle or release it (HandleStatusUpdateAsync). See Billing/MessageBilling.cs.</summary>
 public class MessageService : IMessageService
 {
     private readonly ApplicationDbContext _db;
@@ -14,10 +19,13 @@ public class MessageService : IMessageService
     private readonly IEventLogger _events;
     private readonly INotificationService _notifications;
     private readonly IConfiguration _configuration;
+    private readonly IMessageBillingService _billing;
+    private readonly IEntitlementService _entitlements;
 
     public MessageService(
         ApplicationDbContext db, IWhatsAppService whatsApp, IEnumerable<IChannelSender> senders,
-        IInboxNotifier notifier, IEventLogger events, INotificationService notifications, IConfiguration configuration)
+        IInboxNotifier notifier, IEventLogger events, INotificationService notifications, IConfiguration configuration,
+        IMessageBillingService billing, IEntitlementService entitlements)
     {
         _configuration = configuration;
         _db = db;
@@ -26,6 +34,19 @@ public class MessageService : IMessageService
         _notifier = notifier;
         _events = events;
         _notifications = notifications;
+        _billing = billing;
+        _entitlements = entitlements;
+    }
+
+    /// <summary>Subscription gate + reservation for one outbound message. Throws EntitlementDeniedException /
+    /// BillingDeniedException (both 422) before anything is sent.</summary>
+    private async Task<MessageBillingHold?> PrepareBillingAsync(Conversation conversation, Guid messageId, OutboundMessageKind kind,
+        string? templateCategory, Guid? campaignId, CancellationToken ct)
+    {
+        await _entitlements.EnsureCanSendMessagesAsync(conversation.ClinicId, ct);
+        return await _billing.ReserveOutboundAsync(new OutboundMessageBillingContext(
+            conversation.ClinicId, conversation.Channel, messageId, conversation.Id, campaignId, kind, templateCategory,
+            conversation.IsServiceWindowOpen(DateTimeOffset.UtcNow), conversation.Lead?.Phone), ct);
     }
 
     /// <summary>Picks the outbound adapter for a conversation's channel (WhatsApp, Telegram, ...).</summary>
@@ -46,10 +67,13 @@ public class MessageService : IMessageService
             .FirstOrDefaultAsync(c => c.ClinicId == clinicId && c.Id == conversationId, ct);
         if (conversation is null) return null;
 
+        var messageId = Guid.NewGuid();
+        var billingHold = await PrepareBillingAsync(conversation, messageId, OutboundMessageKind.Text, null, null, ct);
+
         // Channel-specific rules (WhatsApp's 24h window + phone, Telegram's connected bot + chat id)
         // live in the IChannelSender for this conversation's channel. The actual API call happens
         // before we touch the database — if it throws, no message row or conversation-state change
-        // is left behind for a send that never went out.
+        // is left behind for a send that never went out (and the billing hold is returned).
         string externalMessageId;
         try
         {
@@ -57,6 +81,7 @@ public class MessageService : IMessageService
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
+            await _billing.SendFailedAsync(billingHold, ct);
             await NotifyOutboundFailureAsync(clinicId, conversation, ct);
             throw;
         }
@@ -64,7 +89,7 @@ public class MessageService : IMessageService
         var now = DateTimeOffset.UtcNow;
         var message = new Message
         {
-            Id = Guid.NewGuid(),
+            Id = messageId,
             ClinicId = clinicId,
             ConversationId = conversationId,
             LeadId = conversation.LeadId,
@@ -100,6 +125,7 @@ public class MessageService : IMessageService
             leadId: conversation.LeadId, conversationId: conversationId, source: MessageOrigin.Dashboard);
 
         await _db.SaveChangesAsync(ct);
+        await _billing.SentAsync(billingHold, ct);
 
         await _notifier.NewMessageAsync(clinicId, conversationId, message.Id, conversation.LeadId,
             MessageDirection.Outbound, MessageSenderType.Staff, MessageOrigin.Dashboard, now, ct);
@@ -131,12 +157,24 @@ public class MessageService : IMessageService
             throw new ConversationNotInAiModeException(conversation.Mode);
         }
 
-        var externalMessageId = await ResolveSender(conversation.Channel).SendTextAsync(conversation, content, ct);
+        var messageId = Guid.NewGuid();
+        var billingHold = await PrepareBillingAsync(conversation, messageId, OutboundMessageKind.Text, null, null, ct);
+
+        string externalMessageId;
+        try
+        {
+            externalMessageId = await ResolveSender(conversation.Channel).SendTextAsync(conversation, content, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            await _billing.SendFailedAsync(billingHold, ct);
+            throw;
+        }
 
         var now = DateTimeOffset.UtcNow;
         var message = new Message
         {
-            Id = Guid.NewGuid(),
+            Id = messageId,
             ClinicId = clinicId,
             ConversationId = conversationId,
             LeadId = conversation.LeadId,
@@ -169,6 +207,7 @@ public class MessageService : IMessageService
             leadId: conversation.LeadId, conversationId: conversationId, source: MessageOrigin.Ai);
 
         await _db.SaveChangesAsync(ct);
+        await _billing.SentAsync(billingHold, ct);
 
         await _notifier.NewMessageAsync(clinicId, conversationId, message.Id, conversation.LeadId,
             MessageDirection.Outbound, MessageSenderType.Ai, MessageOrigin.Ai, now, ct);
@@ -225,6 +264,11 @@ public class MessageService : IMessageService
         var toPhone = conversation.Lead?.Phone
             ?? throw new InvalidOperationException("This lead has no phone number on file — can't send a WhatsApp message.");
 
+        // Meta may re-categorize an approved template (CurrentCategory, from its webhook); it's billed as what it is now.
+        var messageId = Guid.NewGuid();
+        var billingHold = await PrepareBillingAsync(conversation, messageId, OutboundMessageKind.Template,
+            string.IsNullOrWhiteSpace(template.CurrentCategory) ? template.Category : template.CurrentCategory, campaignId, ct);
+
         string externalMessageId;
         try
         {
@@ -233,6 +277,7 @@ public class MessageService : IMessageService
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
+            await _billing.SendFailedAsync(billingHold, ct);
             await NotifyOutboundFailureAsync(clinicId, conversation, ct);
             throw;
         }
@@ -240,7 +285,7 @@ public class MessageService : IMessageService
         var now = DateTimeOffset.UtcNow;
         var message = new Message
         {
-            Id = Guid.NewGuid(),
+            Id = messageId,
             ClinicId = clinicId,
             ConversationId = conversationId,
             LeadId = conversation.LeadId,
@@ -279,6 +324,7 @@ public class MessageService : IMessageService
         _events.Log(clinicId, eventType, leadId: conversation.LeadId, conversationId: conversationId, source: origin);
 
         await _db.SaveChangesAsync(ct);
+        await _billing.SentAsync(billingHold, ct);
 
         await _notifier.NewMessageAsync(clinicId, conversationId, message.Id, conversation.LeadId,
             MessageDirection.Outbound, MessageSenderType.Staff, origin, now, ct);
@@ -496,6 +542,9 @@ public class MessageService : IMessageService
         var incoming = request.DeliveryStatus?.ToLowerInvariant();
         if (incoming is not null && string.Equals(message.DeliveryStatus, incoming, StringComparison.OrdinalIgnoreCase))
         {
+            // Still offered to billing: settling/releasing is idempotent, and this lets a retried callback finish a
+            // settlement that failed the first time.
+            await _billing.DeliveryStatusChangedAsync(message, incoming, ct);
             return new IngestMessageResult(Found: true, Deduplicated: true, ConversationService.ToResponse(message), AiEligible: false);
         }
         var isLateStep = ProgressRank(incoming) > 0 && ProgressRank(incoming) < ProgressRank(message.DeliveryStatus);
@@ -544,6 +593,9 @@ public class MessageService : IMessageService
         }
 
         await _db.SaveChangesAsync(ct);
+
+        // Usage billing: the channel's policy turns the status into settle / release / nothing (never throws).
+        await _billing.DeliveryStatusChangedAsync(message, incoming, ct);
 
         if (!isLateStep)
         {

@@ -48,16 +48,18 @@ public class TelegramIntegrationService : ITelegramIntegrationService
     private readonly IConfiguration _configuration;
     private readonly IHttpContextAccessor _http;
     private readonly ILogger<TelegramIntegrationService> _logger;
+    private readonly Billing.IEntitlementService _entitlements;
 
     public TelegramIntegrationService(
         ApplicationDbContext db, ITelegramBotClient client, IConfiguration configuration,
-        IHttpContextAccessor http, ILogger<TelegramIntegrationService> logger)
+        IHttpContextAccessor http, ILogger<TelegramIntegrationService> logger, Billing.IEntitlementService entitlements)
     {
         _db = db;
         _client = client;
         _configuration = configuration;
         _http = http;
         _logger = logger;
+        _entitlements = entitlements;
     }
 
     public async Task<ChannelIntegrationResponse> ConnectAsync(Guid clinicId, string? botToken, CancellationToken ct = default)
@@ -67,6 +69,7 @@ public class TelegramIntegrationService : ITelegramIntegrationService
         {
             throw new ArgumentException("That doesn't look like a Telegram bot token. Copy it exactly from @BotFather — it looks like 123456789:AA… (no spaces or quotes).");
         }
+        await _entitlements.EnsureCanConnectChannelAsync(clinicId, ChannelType.Telegram, ct);
 
         var publicBaseUrl = ResolvePublicBaseUrl();
 

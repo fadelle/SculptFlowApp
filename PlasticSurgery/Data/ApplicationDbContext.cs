@@ -56,6 +56,15 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
     public DbSet<CalendarIntegrationCalendar> CalendarIntegrationCalendars => Set<CalendarIntegrationCalendar>();
     public DbSet<AppointmentCalendarSync> AppointmentCalendarSyncs => Set<AppointmentCalendarSync>();
     public DbSet<TikTokIntegration> TikTokIntegrations => Set<TikTokIntegration>();
+    public DbSet<SubscriptionPlan> SubscriptionPlans => Set<SubscriptionPlan>();
+    public DbSet<SubscriptionPlanEntitlement> SubscriptionPlanEntitlements => Set<SubscriptionPlanEntitlement>();
+    public DbSet<ClinicSubscription> ClinicSubscriptions => Set<ClinicSubscription>();
+    public DbSet<BillingAccount> BillingAccounts => Set<BillingAccount>();
+    public DbSet<BillingRateCard> BillingRateCards => Set<BillingRateCard>();
+    public DbSet<BillingRate> BillingRates => Set<BillingRate>();
+    public DbSet<BillingUsageRecord> BillingUsageRecords => Set<BillingUsageRecord>();
+    public DbSet<BillingLedgerEntry> BillingLedgerEntries => Set<BillingLedgerEntry>();
+    public DbSet<ChannelAccountBillingSettings> ChannelAccountBillingSettings => Set<ChannelAccountBillingSettings>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -1130,6 +1139,238 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.HasIndex(x => x.ClinicId)
                 .IsUnique()
                 .HasDatabaseName("ux_knowledge_search_settings_clinic_id");
+        });
+
+        // ---------------------------------------------------------------
+        // Subscriptions & usage billing — all in the Postgres schema "billing" (billing.*). See Billing/ (module) and
+        // docs/billing.md. Money columns are numeric(18,6) (plan price/credit numeric(18,2)); the CHECKs, the
+        // rate-overlap exclusion constraint and the immutability triggers live in schema.sql only.
+        // ---------------------------------------------------------------
+        modelBuilder.Entity<ChannelAccountBillingSettings>(e =>
+        {
+            e.ToTable("channel_account_settings", "billing");
+            e.HasKey(x => x.ChannelIntegrationId);
+            e.Property(x => x.ChannelIntegrationId).HasColumnName("channel_integration_id").ValueGeneratedNever();
+            e.Property(x => x.ClinicId).HasColumnName("clinic_id");
+            e.Property(x => x.ProviderBilling).HasColumnName("provider_billing").HasMaxLength(30);
+            e.Property(x => x.OmniUsageBilling).HasColumnName("omni_usage_billing");
+            e.Property(x => x.AppliesToProvider).HasColumnName("applies_to_provider").HasMaxLength(30);
+            e.Property(x => x.Reason).HasColumnName("reason");
+            e.Property(x => x.UpdatedBy).HasColumnName("updated_by").HasMaxLength(200);
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+            e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
+
+            e.HasOne<ChannelIntegration>().WithOne().HasForeignKey<ChannelAccountBillingSettings>(x => x.ChannelIntegrationId)
+                .OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<Clinic>().WithMany().HasForeignKey(x => x.ClinicId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<SubscriptionPlan>(e =>
+        {
+            e.ToTable("plans", "billing");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.Code).HasColumnName("code").HasMaxLength(50).IsRequired();
+            e.Property(x => x.Name).HasColumnName("name").HasMaxLength(100).IsRequired();
+            e.Property(x => x.Description).HasColumnName("description");
+            e.Property(x => x.Price).HasColumnName("price").HasPrecision(18, 2);
+            e.Property(x => x.Currency).HasColumnName("currency").HasMaxLength(3).IsFixedLength().IsRequired();
+            e.Property(x => x.BillingPeriod).HasColumnName("billing_period").HasMaxLength(10).IsRequired();
+            e.Property(x => x.IncludedUsageCredit).HasColumnName("included_usage_credit").HasPrecision(18, 2);
+            e.Property(x => x.RateCardId).HasColumnName("rate_card_id");
+            e.Property(x => x.IsActive).HasColumnName("is_active");
+            e.Property(x => x.SortOrder).HasColumnName("sort_order");
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+            e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
+
+            e.HasMany(x => x.Entitlements).WithOne().HasForeignKey(x => x.PlanId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<BillingRateCard>().WithMany().HasForeignKey(x => x.RateCardId).OnDelete(DeleteBehavior.SetNull);
+            e.HasIndex(x => x.Code).IsUnique();
+        });
+
+        modelBuilder.Entity<SubscriptionPlanEntitlement>(e =>
+        {
+            e.ToTable("plan_entitlements", "billing");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.PlanId).HasColumnName("plan_id");
+            e.Property(x => x.EntitlementKey).HasColumnName("entitlement_key").HasMaxLength(60).IsRequired();
+            e.Property(x => x.Value).HasColumnName("value").HasMaxLength(20).IsRequired();
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+            e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
+
+            e.HasIndex(x => new { x.PlanId, x.EntitlementKey }).IsUnique()
+                .HasDatabaseName("ux_plan_entitlements_key");
+        });
+
+        modelBuilder.Entity<ClinicSubscription>(e =>
+        {
+            e.ToTable("subscriptions", "billing");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.ClinicId).HasColumnName("clinic_id");
+            e.Property(x => x.PlanId).HasColumnName("plan_id");
+            e.Property(x => x.Status).HasColumnName("status").HasMaxLength(20).IsRequired();
+            e.Property(x => x.CurrentPeriodStart).HasColumnName("current_period_start");
+            e.Property(x => x.CurrentPeriodEnd).HasColumnName("current_period_end");
+            e.Property(x => x.CancelAtPeriodEnd).HasColumnName("cancel_at_period_end");
+            e.Property(x => x.PastDueSince).HasColumnName("past_due_since");
+            e.Property(x => x.EndedAt).HasColumnName("ended_at");
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+            e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
+
+            e.HasOne<Clinic>().WithMany().HasForeignKey(x => x.ClinicId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.Plan).WithMany().HasForeignKey(x => x.PlanId).OnDelete(DeleteBehavior.Restrict);
+            e.HasIndex(x => x.ClinicId).IsUnique();
+        });
+
+        modelBuilder.Entity<BillingAccount>(e =>
+        {
+            e.ToTable("accounts", "billing");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.ClinicId).HasColumnName("clinic_id");
+            e.Property(x => x.Currency).HasColumnName("currency").HasMaxLength(3).IsFixedLength().IsRequired();
+            e.Property(x => x.WalletBalance).HasColumnName("wallet_balance").HasPrecision(18, 6);
+            e.Property(x => x.IncludedCreditBalance).HasColumnName("included_credit_balance").HasPrecision(18, 6);
+            e.Property(x => x.ReservedAmount).HasColumnName("reserved_amount").HasPrecision(18, 6);
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+            e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
+            e.Ignore(x => x.Spendable);
+
+            e.HasOne<Clinic>().WithMany().HasForeignKey(x => x.ClinicId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(x => x.ClinicId).IsUnique();
+        });
+
+        modelBuilder.Entity<BillingRateCard>(e =>
+        {
+            e.ToTable("rate_cards", "billing");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.Code).HasColumnName("code").HasMaxLength(50).IsRequired();
+            e.Property(x => x.Name).HasColumnName("name").HasMaxLength(100).IsRequired();
+            e.Property(x => x.Description).HasColumnName("description");
+            e.Property(x => x.ClinicId).HasColumnName("clinic_id");
+            e.Property(x => x.IsDefault).HasColumnName("is_default");
+            e.Property(x => x.IsActive).HasColumnName("is_active");
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+            e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
+
+            e.HasOne<Clinic>().WithMany().HasForeignKey(x => x.ClinicId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(x => x.Code).IsUnique();
+        });
+
+        modelBuilder.Entity<BillingRate>(e =>
+        {
+            e.ToTable("rates", "billing");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.RateCardId).HasColumnName("rate_card_id");
+            e.Property(x => x.EventType).HasColumnName("event_type").HasMaxLength(60).IsRequired();
+            e.Property(x => x.CountryCode).HasColumnName("country_code").HasMaxLength(2).IsFixedLength();
+            e.Property(x => x.Operator).HasColumnName("operator").HasMaxLength(60);
+            e.Property(x => x.Provider).HasColumnName("provider").HasMaxLength(30);
+            e.Property(x => x.ProviderBilling).HasColumnName("provider_billing").HasMaxLength(30);
+            e.Property(x => x.Unit).HasColumnName("unit").HasMaxLength(20).IsRequired();
+            e.Property(x => x.ProviderCost).HasColumnName("provider_cost").HasPrecision(18, 6);
+            e.Property(x => x.ClientRate).HasColumnName("client_rate").HasPrecision(18, 6);
+            e.Property(x => x.Currency).HasColumnName("currency").HasMaxLength(3).IsFixedLength().IsRequired();
+            e.Property(x => x.EffectiveFrom).HasColumnName("effective_from");
+            e.Property(x => x.EffectiveTo).HasColumnName("effective_to");
+            e.Property(x => x.Notes).HasColumnName("notes");
+            e.Property(x => x.CreatedBy).HasColumnName("created_by").HasMaxLength(200);
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+
+            e.HasOne<BillingRateCard>().WithMany().HasForeignKey(x => x.RateCardId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(x => new { x.EventType, x.RateCardId }).HasDatabaseName("ix_rates_lookup");
+        });
+
+        modelBuilder.Entity<BillingUsageRecord>(e =>
+        {
+            e.ToTable("usage_records", "billing");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.ClinicId).HasColumnName("clinic_id");
+            e.Property(x => x.BillingAccountId).HasColumnName("billing_account_id");
+            e.Property(x => x.IdempotencyKey).HasColumnName("idempotency_key").HasMaxLength(200).IsRequired();
+            e.Property(x => x.EventType).HasColumnName("event_type").HasMaxLength(60).IsRequired();
+            e.Property(x => x.Channel).HasColumnName("channel").HasMaxLength(30).IsRequired();
+            e.Property(x => x.ChannelIntegrationId).HasColumnName("channel_integration_id");
+            e.Property(x => x.Quantity).HasColumnName("quantity").HasPrecision(18, 6);
+            e.Property(x => x.Unit).HasColumnName("unit").HasMaxLength(20);
+            e.Property(x => x.CountryCode).HasColumnName("country_code").HasMaxLength(2).IsFixedLength();
+            e.Property(x => x.Operator).HasColumnName("operator").HasMaxLength(60);
+            e.Property(x => x.Provider).HasColumnName("provider").HasMaxLength(30);
+            e.Property(x => x.ProviderBilling).HasColumnName("provider_billing").HasMaxLength(30).IsRequired();
+            e.Property(x => x.RateId).HasColumnName("rate_id");
+            e.Property(x => x.RateCardId).HasColumnName("rate_card_id");
+            e.Property(x => x.RateSource).HasColumnName("rate_source").HasMaxLength(20);
+            e.Property(x => x.UnitProviderCost).HasColumnName("unit_provider_cost").HasPrecision(18, 6);
+            e.Property(x => x.UnitPrice).HasColumnName("unit_price").HasPrecision(18, 6);
+            e.Property(x => x.ProviderCost).HasColumnName("provider_cost").HasPrecision(18, 6);
+            e.Property(x => x.Amount).HasColumnName("amount").HasPrecision(18, 6);
+            e.Property(x => x.ReservedAmount).HasColumnName("reserved_amount").HasPrecision(18, 6);
+            e.Property(x => x.CreditAmount).HasColumnName("credit_amount").HasPrecision(18, 6);
+            e.Property(x => x.WalletAmount).HasColumnName("wallet_amount").HasPrecision(18, 6);
+            e.Property(x => x.RefundedAmount).HasColumnName("refunded_amount").HasPrecision(18, 6);
+            e.Property(x => x.Currency).HasColumnName("currency").HasMaxLength(3).IsFixedLength().IsRequired();
+            e.Property(x => x.ChargeStatus).HasColumnName("charge_status").HasMaxLength(20).IsRequired();
+            e.Property(x => x.ProviderOutcome).HasColumnName("provider_outcome").HasMaxLength(20).IsRequired();
+            e.Property(x => x.FailureReason).HasColumnName("failure_reason").HasMaxLength(60);
+            e.Property(x => x.ReleaseReason).HasColumnName("release_reason").HasMaxLength(100);
+            e.Property(x => x.MessageId).HasColumnName("message_id");
+            e.Property(x => x.ConversationId).HasColumnName("conversation_id");
+            e.Property(x => x.CampaignId).HasColumnName("campaign_id");
+            e.Property(x => x.Source).HasColumnName("source").HasMaxLength(30).IsRequired();
+            e.Property(x => x.Actor).HasColumnName("actor").HasMaxLength(200);
+            e.Property(x => x.OccurredAt).HasColumnName("occurred_at");
+            e.Property(x => x.ReservedAt).HasColumnName("reserved_at");
+            e.Property(x => x.SettledAt).HasColumnName("settled_at");
+            e.Property(x => x.ReleasedAt).HasColumnName("released_at");
+            e.Property(x => x.RefundedAt).HasColumnName("refunded_at");
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+            e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
+
+            e.HasOne<Clinic>().WithMany().HasForeignKey(x => x.ClinicId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<BillingAccount>().WithMany().HasForeignKey(x => x.BillingAccountId).OnDelete(DeleteBehavior.Cascade);
+            // A used rate can't be deleted (no action in the DB).
+            e.HasOne<BillingRate>().WithMany().HasForeignKey(x => x.RateId).OnDelete(DeleteBehavior.NoAction);
+            e.HasOne<BillingRateCard>().WithMany().HasForeignKey(x => x.RateCardId).OnDelete(DeleteBehavior.NoAction);
+            e.HasIndex(x => new { x.ClinicId, x.IdempotencyKey }).IsUnique().HasDatabaseName("ux_usage_records_key");
+            e.HasIndex(x => new { x.ClinicId, x.OccurredAt }).HasDatabaseName("ix_usage_records_clinic_occurred");
+        });
+
+        modelBuilder.Entity<BillingLedgerEntry>(e =>
+        {
+            e.ToTable("ledger_entries", "billing");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.Seq).HasColumnName("seq").ValueGeneratedOnAdd();
+            e.Property(x => x.ClinicId).HasColumnName("clinic_id");
+            e.Property(x => x.BillingAccountId).HasColumnName("billing_account_id");
+            e.Property(x => x.EntryType).HasColumnName("entry_type").HasMaxLength(40).IsRequired();
+            e.Property(x => x.BalanceType).HasColumnName("balance_type").HasMaxLength(20).IsRequired();
+            e.Property(x => x.Amount).HasColumnName("amount").HasPrecision(18, 6);
+            e.Property(x => x.BalanceAfter).HasColumnName("balance_after").HasPrecision(18, 6);
+            e.Property(x => x.Currency).HasColumnName("currency").HasMaxLength(3).IsFixedLength().IsRequired();
+            e.Property(x => x.IdempotencyKey).HasColumnName("idempotency_key").HasMaxLength(200).IsRequired();
+            e.Property(x => x.UsageRecordId).HasColumnName("usage_record_id");
+            e.Property(x => x.SubscriptionId).HasColumnName("subscription_id");
+            e.Property(x => x.PlanId).HasColumnName("plan_id");
+            e.Property(x => x.Source).HasColumnName("source").HasMaxLength(30).IsRequired();
+            e.Property(x => x.Actor).HasColumnName("actor").HasMaxLength(200);
+            e.Property(x => x.Reason).HasColumnName("reason");
+            e.Property(x => x.Reference).HasColumnName("reference").HasMaxLength(200);
+            e.Property(x => x.CorrelationId).HasColumnName("correlation_id").HasMaxLength(200);
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+
+            e.HasOne<Clinic>().WithMany().HasForeignKey(x => x.ClinicId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<BillingAccount>().WithMany().HasForeignKey(x => x.BillingAccountId).OnDelete(DeleteBehavior.Cascade);
+            // Declared so EF inserts a new usage record / subscription before the ledger rows that point at it.
+            e.HasOne<BillingUsageRecord>().WithMany().HasForeignKey(x => x.UsageRecordId).OnDelete(DeleteBehavior.NoAction);
+            e.HasOne<ClinicSubscription>().WithMany().HasForeignKey(x => x.SubscriptionId).OnDelete(DeleteBehavior.NoAction);
+            e.HasIndex(x => new { x.ClinicId, x.IdempotencyKey }).IsUnique().HasDatabaseName("ux_ledger_entries_key");
+            e.HasIndex(x => new { x.ClinicId, x.Seq }).HasDatabaseName("ix_ledger_entries_clinic_seq");
         });
     }
 }

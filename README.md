@@ -30,6 +30,8 @@ This README is only a short orientation.
 - Knowledge Base: manual entries, PDF/DOCX/TXT upload, website crawling, semantic search, retrieval benchmark
 - Staff notification bell; Calendar Integrations (one-way Google/Outlook sync through a separate n8n workflow)
 - Self-service registration (new user → new isolated clinic), Staff list, Clinic Info settings
+- Subscriptions & prepaid usage billing (plans + entitlements, wallet, rate cards, billable events, ledger) — off until
+  `Billing:Enabled`; see [`docs/billing.md`](docs/billing.md)
 
 ## Local setup
 
@@ -56,9 +58,13 @@ This README is only a short orientation.
    Swagger is at `/swagger` in Development only. There is no Razor runtime compilation, so `.cshtml`/`.cs` changes
    need a stop, build and run.
 
+4. **Tests.** `dotnet test PlasticSurgery.Tests`. The billing database tests need `SCULPTFLOW_TEST_DB` set to a
+   throwaway local PostgreSQL server (e.g. `Host=localhost;Port=5432;Username=postgres;Password=...`); each run creates
+   and drops its own database. Without it those tests are skipped. Never point it at Supabase.
+
 ## Known gaps
 
 See `PROJECT_HANDOFF.md` §17 (pending work) and §22 (TODOs). The most important: rotate the secrets that were
 once in git history, derive `clinicId` server-side for the AI endpoints, verify Meta webhook signatures, add
 forwarded-headers handling and persistent DataProtection keys, and protect the anonymous `POST /api/leads`.
-There is no automated test project.
+Only the billing module has automated tests so far.

@@ -91,6 +91,10 @@ public class CampaignsController : DashboardApiController
         {
             return BadRequest(new { error = ex.Message });
         }
+        catch (InvalidOperationException ex) // e.g. campaigns not in the clinic's plan
+        {
+            return UnprocessableEntity(new { error = ex.Message });
+        }
     }
 
     public record ScheduleCampaignRequest(DateTimeOffset ScheduledAt);
@@ -140,8 +144,15 @@ public class CampaignsController : DashboardApiController
         var clinicId = await GetClinicIdAsync(ct);
         if (clinicId is null) return Forbid();
 
-        var result = await _campaigns.ProcessBatchAsync(clinicId.Value, id, batchSize, ct);
-        return result is null ? NotFound() : Ok(result);
+        try
+        {
+            var result = await _campaigns.ProcessBatchAsync(clinicId.Value, id, batchSize, ct);
+            return result is null ? NotFound() : Ok(result);
+        }
+        catch (InvalidOperationException ex) // out of prepaid balance / plan doesn't allow it: the batch stopped, nothing lost
+        {
+            return UnprocessableEntity(new { error = ex.Message });
+        }
     }
 
     [HttpPost("{id:guid}/cancel")]
