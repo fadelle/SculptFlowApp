@@ -1,6 +1,5 @@
 @page "/settings/integrations"
 @model PlasticSurgery.Pages.Settings.IntegrationsModel
-@using PlasticSurgery.Data.Entities
 @{
     ViewData["Title"] = "Messaging Integrations";
     var allChannels = new[] { ChannelType.WhatsApp, ChannelType.Instagram, ChannelType.Facebook, ChannelType.Telegram };
@@ -94,11 +93,11 @@ else
 
 @functions {
     // A channel needs attention when it's in error, or (Telegram) its webhook reports a problem.
-    private static bool NeedsAttention(PlasticSurgery.Dtos.ChannelIntegrationResponse i) =>
+    private static bool NeedsAttention(ChannelIntegrationResponse i) =>
         i.Status == ChannelIntegrationStatus.Error
         || (i.Channel == ChannelType.Telegram && i.Status == ChannelIntegrationStatus.Connected && i.WebhookStatus == WebhookStatus.Error);
 
-    private async Task RenderStatusPill(PlasticSurgery.Dtos.ChannelIntegrationResponse? info)
+    private async Task RenderStatusPill(ChannelIntegrationResponse? info)
     {
         var (label, dot) = info is not null && NeedsAttention(info) ? ("Needs attention", "dot-red")
             : info?.Status == ChannelIntegrationStatus.Connected ? ("Connected", "dot-green")
@@ -114,7 +113,7 @@ else
         @:<div class="card cal-modal int-modal" role="dialog" aria-modal="true" aria-labelledby="@(id)-title">
             <div class="modal-head">
                 <div class="flex items-center gap-2 min-w-0">
-                    <span class="channel-mark ch-@channel" style="background:@accentHex">@Html.Raw(PlasticSurgery.Pages.Shared.ChannelIconHelper.BrandSvg(channel) ?? "")</span>
+                    <span class="channel-mark ch-@channel" style="background:@accentHex">@Html.Raw(PlasticSurgery.Common.Helpers.ChannelIconHelper.BrandSvg(channel) ?? "")</span>
                     <div class="min-w-0">
                         <h3 class="card-title m-0" id="@(id)-title">@title</h3>
                         <div class="cell-sub">@subtitle</div>
@@ -157,7 +156,7 @@ else
 
         <div class="card int-card int-framed @(isError ? "int-card-error" : "")" style="--ch:@accentHex">
             <div class="int-head">
-                <span class="channel-mark int-notch ch-@channel" title="@title">@Html.Raw(PlasticSurgery.Pages.Shared.ChannelIconHelper.BrandSvg(channel) ?? initials)</span>
+                <span class="channel-mark int-notch ch-@channel" title="@title">@Html.Raw(PlasticSurgery.Common.Helpers.ChannelIconHelper.BrandSvg(channel) ?? initials)</span>
                 <div class="flex-1 min-w-0">
                     <div class="integration-title">@title</div>
                     <div class="cell-sub">@((connected || isError) && !string.IsNullOrEmpty(info!.DisplayName) ? info.DisplayName : purpose)</div>
@@ -282,7 +281,7 @@ else
 
         <div class="card int-card int-framed @(isError ? "int-card-error" : "")" style="--ch:#25D366">
             <div class="int-head">
-                <span class="channel-mark int-notch ch-whatsapp" title="WhatsApp Business">@Html.Raw(PlasticSurgery.Pages.Shared.ChannelIconHelper.BrandSvg(ChannelType.WhatsApp) ?? "WA")</span>
+                <span class="channel-mark int-notch ch-whatsapp" title="WhatsApp Business">@Html.Raw(PlasticSurgery.Common.Helpers.ChannelIconHelper.BrandSvg(ChannelType.WhatsApp) ?? "WA")</span>
                 <div class="flex-1 min-w-0">
                     <div class="integration-title">WhatsApp Business</div>
                     <div class="cell-sub">@(connected && !string.IsNullOrEmpty(info!.DisplayName) ? info.DisplayName : "Chat with patients, send reminders and campaigns.")</div>
@@ -367,7 +366,7 @@ else
 
         <div class="card int-card int-framed @(problem ? "int-card-error" : "")" style="--ch:#229ED9">
             <div class="int-head">
-                <span class="channel-mark int-notch ch-telegram" title="Telegram">@Html.Raw(PlasticSurgery.Pages.Shared.ChannelIconHelper.BrandSvg(ChannelType.Telegram))</span>
+                <span class="channel-mark int-notch ch-telegram" title="Telegram">@Html.Raw(PlasticSurgery.Common.Helpers.ChannelIconHelper.BrandSvg(ChannelType.Telegram))</span>
                 <div class="flex-1 min-w-0">
                     <div class="integration-title">Telegram</div>
                     <div class="cell-sub">
@@ -469,7 +468,7 @@ else
     }
 
     // TikTok Login Kit: account connection only (not a messaging channel yet — see
-    // Services/ITikTokIntegrationService.cs), so Connect/Reconnect is a plain link to TikTokOAuthController
+    // Business/Contracts/Services/TikTok/ITikTokIntegrationService.cs), so Connect/Reconnect is a plain link to TikTokOAuthController
     // (a real browser redirect to TikTok's consent screen), same pattern as Calendar Integrations' cards.
     private async Task RenderTikTokCard()
     {
@@ -485,7 +484,7 @@ else
 
         <div class="card int-card int-framed @(failed || unhealthy ? "int-card-error" : "")" style="--ch:#000000">
             <div class="int-head">
-                <span class="channel-mark int-notch ch-tiktok" title="TikTok">@Html.Raw(PlasticSurgery.Pages.Shared.ChannelIconHelper.BrandSvg("tiktok"))</span>
+                <span class="channel-mark int-notch ch-tiktok" title="TikTok">@Html.Raw(PlasticSurgery.Common.Helpers.ChannelIconHelper.BrandSvg("tiktok"))</span>
                 <div class="flex-1 min-w-0">
                     <div class="integration-title">TikTok</div>
                     <div class="cell-sub">@(connected && !string.IsNullOrEmpty(info!.DisplayName) ? info.DisplayName : "Connect your clinic's TikTok account.")</div>
@@ -556,7 +555,7 @@ else
         await Task.CompletedTask;
     }
 
-    private async Task RenderManualForm(string channel, PlasticSurgery.Dtos.ChannelIntegrationResponse? info, bool connected)
+    private async Task RenderManualForm(string channel, ChannelIntegrationResponse? info, bool connected)
     {
         var tokenOnFile = info is not null && info.HasAccessToken;
         <form method="post" asp-page-handler="Save" class="integration-form">

@@ -273,7 +273,7 @@
     return apiPost(withClinic('/api/conversations/' + id + '/read')).catch(function () { /* non-critical */ });
   }
 
-  // Mirrors Pages/Shared/ChannelIconHelper.cs — keep both in sync if a channel is added.
+  // Mirrors Common/Helpers/ChannelIconHelper.cs — keep both in sync if a channel is added.
   var CHANNEL_ICONS = {
     whatsapp: { initials: 'WA', hex: '#25D366' },
     instagram: { initials: 'IG', hex: '#C13584' },
@@ -295,7 +295,7 @@
   var TELEGRAM_SVG = '<svg viewBox="0 0 24 24" fill="#fff" xmlns="http://www.w3.org/2000/svg"><path d="M9.78 18.65l.28-4.23 7.68-6.92c.34-.31-.07-.46-.52-.19L7.74 13.3 3.64 12c-.88-.25-.89-.86.2-1.3l15.97-6.16c.73-.33 1.43.18 1.15 1.3l-2.72 12.81c-.19.91-.74 1.13-1.5.71L12.6 16.3l-1.99 1.93c-.23.23-.42.42-.83.42z"/></svg>';
   function channelIcon(channel) { return channel === 'whatsapp' ? WHATSAPP_SVG : (channel === 'telegram' ? TELEGRAM_SVG : null); }
 
-  // Lead status badge colours — mirrors the lead-status entries in Pages/Shared/StatusBadgeHelper.cs.
+  // Lead status badge colours — mirrors the lead-status entries in Common/Helpers/StatusBadgeHelper.cs.
   var LEAD_STATUS_BADGES = {
     new: 'badge-blue', contacted: 'badge-amber', qualified: 'badge-purple',
     consultation_booked: 'badge-amber', consultation_attended: 'badge-green', no_show: 'badge-red',

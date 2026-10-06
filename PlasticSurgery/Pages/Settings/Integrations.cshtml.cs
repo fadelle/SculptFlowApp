@@ -1,10 +1,14 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
-using PlasticSurgery.Data.Entities;
-using PlasticSurgery.Dtos;
-using PlasticSurgery.Integrations.Infobip;
-using PlasticSurgery.Integrations.Telegram;
-using PlasticSurgery.Services;
+using PlasticSurgery.Business.Contracts.Managers;
+using PlasticSurgery.Business.Contracts.Services.Channels;
+using PlasticSurgery.Business.Contracts.Services.TikTok;
+using PlasticSurgery.Business.Services.Inbox;
+using PlasticSurgery.Common.Enums;
+using PlasticSurgery.Common.Exceptions;
+using PlasticSurgery.Entities.Requests.Channels;
+using PlasticSurgery.Entities.Responses.Channels;
+using PlasticSurgery.Entities.Responses.TikTok;
 
 namespace PlasticSurgery.Pages.Settings;
 
@@ -48,7 +52,7 @@ public class IntegrationsModel : PageModel
 
     // Meta app config the browser needs to run FB.login() — App ID and Login Configuration IDs
     // are not secret (they're designed to ship in client-side JS); the App Secret never leaves
-    // the server (see Services/MetaGraphClient.cs).
+    // the server (see Business/HttpClients/Meta/MetaGraphClient.cs).
     public string MetaAppId => _configuration["Meta:AppId"] ?? "";
     public string MetaGraphApiVersion => _configuration["Meta:GraphApiVersion"] ?? "v21.0";
     public string MetaWhatsAppLoginConfigId => _configuration["Meta:WhatsAppLoginConfigId"] ?? "";

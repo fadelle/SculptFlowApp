@@ -1,8 +1,9 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
-using PlasticSurgery.Data.Entities;
-using PlasticSurgery.Dtos;
-using PlasticSurgery.Services;
+using PlasticSurgery.Business.Contracts.Managers;
+using PlasticSurgery.Business.Contracts.Services.Calendars;
+using PlasticSurgery.Common.Enums;
+using PlasticSurgery.Entities.Responses.Calendars;
 
 namespace PlasticSurgery.Pages.Settings;
 

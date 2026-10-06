@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc.RazorPages;
-using PlasticSurgery.Dtos;
-using PlasticSurgery.Services;
+using PlasticSurgery.Business.Contracts.Managers;
+using PlasticSurgery.Business.Contracts.Services.WhatsApp;
+using PlasticSurgery.Entities.Responses.WhatsApp;
 
 namespace PlasticSurgery.Pages.WhatsApp.Health;
 

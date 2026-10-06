@@ -13,7 +13,7 @@
         "cancelled" => ("badge-gray", "Cancelled"),
         _ => ("badge-gray", "No plan")
     };
-    string EntitlementValue(PlasticSurgery.Dtos.BillingEntitlementRow e) => e.Kind == "feature"
+    string EntitlementValue(BillingEntitlementRow e) => e.Kind == "feature"
         ? (e.Value == "true" ? "Included" : "Not included")
         : e.Value == "unlimited" ? "Unlimited" : e.Value;
 }

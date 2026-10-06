@@ -1,5 +1,5 @@
-@inject PlasticSurgery.Services.ICurrentClinicContext CurrentClinic
-@inject Microsoft.Extensions.Options.IOptions<PlasticSurgery.Billing.BillingOptions> BillingSettings
+@inject ICurrentClinicContext CurrentClinic
+@inject Microsoft.Extensions.Options.IOptions<BillingOptions> BillingSettings
 @{
     var clinicName = (await CurrentClinic.GetClinicAsync())?.Name;
     var path = Context.Request.Path.Value ?? "";

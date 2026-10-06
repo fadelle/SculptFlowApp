@@ -1,7 +1,9 @@
 using Microsoft.EntityFrameworkCore;
-using PlasticSurgery.Billing;
-using PlasticSurgery.Data.Entities;
-using PlasticSurgery.Dtos;
+using PlasticSurgery.Common.Enums;
+using PlasticSurgery.Common.Exceptions;
+using PlasticSurgery.Common.Statics;
+using PlasticSurgery.Entities.Models;
+using PlasticSurgery.Entities.Requests.Billing;
 
 namespace PlasticSurgery.Tests;
 

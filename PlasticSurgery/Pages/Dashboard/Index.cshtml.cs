@@ -1,8 +1,12 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
-using PlasticSurgery.Dtos;
-using PlasticSurgery.Pages.Shared;
-using PlasticSurgery.Services;
+using PlasticSurgery.Business.Contracts.Managers;
+using PlasticSurgery.Business.Contracts.Services.Dashboard;
+using PlasticSurgery.Business.Contracts.Services.WhatsApp;
+using PlasticSurgery.Common.Helpers;
+using PlasticSurgery.Entities.Dtos.Dashboard;
+using PlasticSurgery.Entities.Responses.Dashboard;
+using PlasticSurgery.Entities.Responses.WhatsApp;
 
 namespace PlasticSurgery.Pages.Dashboard;
 

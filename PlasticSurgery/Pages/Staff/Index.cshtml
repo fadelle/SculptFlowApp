@@ -2,7 +2,7 @@
 @model PlasticSurgery.Pages.Staff.IndexModel
 @{
     ViewData["Title"] = "Staff";
-    string DisplayName(PlasticSurgery.Dtos.StaffMemberResponse m) =>
+    string DisplayName(StaffMemberResponse m) =>
         !string.IsNullOrWhiteSpace(m.FullName) ? m.FullName! : !string.IsNullOrWhiteSpace(m.Email) ? m.Email!.Split('@')[0] : "—";
     string Initials(string name) =>
         string.Concat(name.Split(new[] { ' ', '.', '_', '-' }, StringSplitOptions.RemoveEmptyEntries).Take(2).Select(w => char.ToUpperInvariant(w[0])));

@@ -1,7 +1,7 @@
 @* "Continue with Google" for Sign in and Register. Renders nothing at all when Google login isn't configured. *@
 @inject IConfiguration Configuration
 @model string?
-@if (PlasticSurgery.Services.GoogleLoginSettings.IsEnabled(Configuration))
+@if (PlasticSurgery.Common.Configs.GoogleLoginSettings.IsEnabled(Configuration))
 {
     <form method="post" action="/auth/google/start" class="auth-google-form">
         @* Explicit: Razor only auto-adds the antiforgery token to forms with asp-* attributes or no action. *@

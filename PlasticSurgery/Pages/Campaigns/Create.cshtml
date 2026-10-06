@@ -166,7 +166,7 @@ else
                                         <option value="">Any source</option>
                                         @foreach (var s in Model.LeadSources)
                                         {
-                                            <option value="@s" selected="@(s == Model.ReactivationSource)">@PlasticSurgery.Pages.Shared.FilterLabelHelper.Label(s)</option>
+                                            <option value="@s" selected="@(s == Model.ReactivationSource)">@PlasticSurgery.Common.Helpers.FilterLabelHelper.Label(s)</option>
                                         }
                                     </select>
                                 </label>
@@ -268,7 +268,7 @@ else
                                             <td><input type="checkbox" name="LeadIds" value="@lead.Id" checked="@Model.LeadIds.Contains(lead.Id)" /></td>
                                             <td><div class="cell-person"><span class="avatar-sm">@(string.IsNullOrWhiteSpace(lead.FullName) ? "?" : lead.FullName.Trim()[..1])</span>@(lead.FullName ?? "—")</div></td>
                                             <td>@(lead.Phone ?? "—")</td>
-                                            <td><span class="badge @PlasticSurgery.Pages.Shared.StatusBadgeHelper.CssClass(lead.Status)">@PlasticSurgery.Pages.Shared.FilterLabelHelper.Label(lead.Status)</span></td>
+                                            <td><span class="badge @PlasticSurgery.Common.Helpers.StatusBadgeHelper.CssClass(lead.Status)">@PlasticSurgery.Common.Helpers.FilterLabelHelper.Label(lead.Status)</span></td>
                                         </tr>
                                     }
                                     <tr class="empty-row" id="manual-empty" hidden="@(Model.Leads.Count > 0)"><td colspan="4">No leads match this search.</td></tr>
@@ -331,7 +331,7 @@ else
                     {
                         <label class="ms-option">
                             <input type="checkbox" name="@name" value="@value" checked="@selected.Contains(value)" />
-                            <span>@PlasticSurgery.Pages.Shared.FilterLabelHelper.Label(value)</span>
+                            <span>@PlasticSurgery.Common.Helpers.FilterLabelHelper.Label(value)</span>
                         </label>
                     }
                 </div>

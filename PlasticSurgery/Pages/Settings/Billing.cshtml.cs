@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Mvc.RazorPages;
-using PlasticSurgery.Billing;
-using PlasticSurgery.Dtos;
-using PlasticSurgery.Services;
+using PlasticSurgery.Business.Contracts.Managers;
+using PlasticSurgery.Business.Contracts.Services.Billing;
+using PlasticSurgery.Entities.Responses.Billing;
 
 namespace PlasticSurgery.Pages.Settings;
 

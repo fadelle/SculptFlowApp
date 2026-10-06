@@ -2,10 +2,19 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
-using PlasticSurgery.Data.Entities;
-using PlasticSurgery.Dtos;
-using PlasticSurgery.Pages.Shared;
-using PlasticSurgery.Services;
+using PlasticSurgery.Business.Contracts.Managers;
+using PlasticSurgery.Business.Contracts.Services.Campaigns;
+using PlasticSurgery.Business.Contracts.Services.Leads;
+using PlasticSurgery.Business.Contracts.Services.Procedures;
+using PlasticSurgery.Business.Contracts.Services.WhatsApp;
+using PlasticSurgery.Business.Services.Inbox;
+using PlasticSurgery.Common.Enums;
+using PlasticSurgery.Common.Helpers;
+using PlasticSurgery.Entities.Dtos.Campaigns;
+using PlasticSurgery.Entities.Requests.Campaigns;
+using PlasticSurgery.Entities.Responses.Leads;
+using PlasticSurgery.Entities.Responses.Procedures;
+using PlasticSurgery.Entities.Responses.WhatsApp;
 
 namespace PlasticSurgery.Pages.Campaigns;
 

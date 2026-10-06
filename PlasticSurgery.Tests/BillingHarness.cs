@@ -3,10 +3,16 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
-using PlasticSurgery.Billing;
-using PlasticSurgery.Data;
-using PlasticSurgery.Data.Entities;
-using PlasticSurgery.Dtos;
+using PlasticSurgery.Business.Services.Billing;
+using PlasticSurgery.Common.Configs;
+using PlasticSurgery.Common.Enums;
+using PlasticSurgery.Entities.Dtos.Billing;
+using PlasticSurgery.Entities.Models;
+using PlasticSurgery.Entities.Requests.Billing;
+using PlasticSurgery.Entities.Responses.Billing;
+using PlasticSurgery.Persistence.Contexts;
+using PlasticSurgery.Persistence.Repositories.Billing;
+using PlasticSurgery.Persistence.Repositories.Channels;
 
 namespace PlasticSurgery.Tests;
 
@@ -29,7 +35,7 @@ public sealed class BillingHarness
         DbOptions = builder.Options;
         Time = new ManualTimeProvider(new DateTimeOffset(DateTimeOffset.UtcNow.UtcDateTime.Date.AddHours(12), TimeSpan.Zero));
         Options = new BillingOptions { Enabled = enabled, Currency = "USD", GracePeriodDays = graceDays, ReservationTimeoutHours = 72 };
-        Factory = new BillingDbFactory(DbOptions);
+        Factory = new BillingUnitOfWorkFactory(DbOptions);
         var options = Microsoft.Extensions.Options.Options.Create(Options);
         Billing = new BillingService(Factory, options, Time, NullLogger<BillingService>.Instance);
         Subscriptions = new SubscriptionService(Factory, options, Time, NullLogger<SubscriptionService>.Instance);
@@ -59,7 +65,7 @@ public sealed class BillingHarness
     public DbContextOptions<ApplicationDbContext> DbOptions { get; }
     public ManualTimeProvider Time { get; }
     public BillingOptions Options { get; }
-    public BillingDbFactory Factory { get; }
+    public BillingUnitOfWorkFactory Factory { get; }
     public BillingService Billing { get; }
     public SubscriptionService Subscriptions { get; }
     public PlanService Plans { get; }
@@ -69,7 +75,11 @@ public sealed class BillingHarness
     public ApplicationDbContext Db() => new(DbOptions);
 
     public EntitlementService Entitlements() =>
-        new(Db(), Microsoft.Extensions.Options.Options.Create(Options), Time, NullLogger<EntitlementService>.Instance);
+        Entitlements(Db());
+
+    public EntitlementService Entitlements(ApplicationDbContext db) =>
+        new(new ClinicSubscriptionRepository(db), new ChannelIntegrationRepository(db), Microsoft.Extensions.Options.Options.Create(Options),
+            Time, NullLogger<EntitlementService>.Instance);
 
     public static string Unique(string prefix) => $"{prefix}_{Guid.NewGuid():N}"[..Math.Min(prefix.Length + 13, 50)];
 

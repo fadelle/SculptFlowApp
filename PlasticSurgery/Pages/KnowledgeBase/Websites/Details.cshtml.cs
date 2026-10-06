@@ -1,8 +1,8 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
-using PlasticSurgery.Dtos;
-using PlasticSurgery.Integrations.Knowledge.WebScraping;
-using PlasticSurgery.Services;
+using PlasticSurgery.Business.Contracts.Managers;
+using PlasticSurgery.Business.Contracts.Services.Knowledge;
+using PlasticSurgery.Entities.Responses.Knowledge;
 
 namespace PlasticSurgery.Pages.KnowledgeBase.Websites;
 
@@ -46,8 +46,8 @@ public class DetailsModel : PageModel
         if (Detail is null) return NotFound();
         // "In Knowledge Base" = indexed + unchanged pages (both are what the AI can use).
         Pages = Status == "in_kb"
-            ? (await _websites.ListPagesAsync(clinic.Id, Id, PlasticSurgery.Data.Entities.WebsitePageStatus.Indexed, 0, 300, ct))
-                .Concat(await _websites.ListPagesAsync(clinic.Id, Id, PlasticSurgery.Data.Entities.WebsitePageStatus.Unchanged, 0, 300, ct)).ToList()
+            ? (await _websites.ListPagesAsync(clinic.Id, Id, PlasticSurgery.Common.Enums.WebsitePageStatus.Indexed, 0, 300, ct))
+                .Concat(await _websites.ListPagesAsync(clinic.Id, Id, PlasticSurgery.Common.Enums.WebsitePageStatus.Unchanged, 0, 300, ct)).ToList()
             : await _websites.ListPagesAsync(clinic.Id, Id, Status, 0, 300, ct);
         return Page();
     }
