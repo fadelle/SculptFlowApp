@@ -2,11 +2,79 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
-using PlasticSurgery.Data;
+using PlasticSurgery.Business.Contracts.Engines.Infobip;
+using PlasticSurgery.Business.Contracts.Engines.Knowledge;
+using PlasticSurgery.Business.Contracts.Engines.KnowledgeBenchmark;
+using PlasticSurgery.Business.Contracts.Engines.Telegram;
+using PlasticSurgery.Business.Contracts.Engines.WebScraping;
+using PlasticSurgery.Business.Contracts.Engines.WhatsApp;
+using PlasticSurgery.Business.Contracts.HttpClients.Calendars;
+using PlasticSurgery.Business.Contracts.HttpClients.Infobip;
+using PlasticSurgery.Business.Contracts.HttpClients.Meta;
+using PlasticSurgery.Business.Contracts.HttpClients.N8n;
+using PlasticSurgery.Business.Contracts.HttpClients.OpenAi;
+using PlasticSurgery.Business.Contracts.HttpClients.Telegram;
+using PlasticSurgery.Business.Contracts.HttpClients.TikTok;
+using PlasticSurgery.Business.Contracts.HttpClients.WebScraping;
+using PlasticSurgery.Business.Contracts.Jobs;
+using PlasticSurgery.Business.Contracts.Managers;
+using PlasticSurgery.Business.Contracts.Providers.Channels;
+using PlasticSurgery.Business.Contracts.Providers.WhatsApp;
+using PlasticSurgery.Business.Contracts.Services.Appointments;
+using PlasticSurgery.Business.Contracts.Services.Automation;
+using PlasticSurgery.Business.Contracts.Services.Calendars;
+using PlasticSurgery.Business.Contracts.Services.Campaigns;
+using PlasticSurgery.Business.Contracts.Services.Channels;
+using PlasticSurgery.Business.Contracts.Services.Clinics;
+using PlasticSurgery.Business.Contracts.Services.Configuration;
+using PlasticSurgery.Business.Contracts.Services.Dashboard;
+using PlasticSurgery.Business.Contracts.Services.Inbox;
+using PlasticSurgery.Business.Contracts.Services.Knowledge;
+using PlasticSurgery.Business.Contracts.Services.Leads;
+using PlasticSurgery.Business.Contracts.Services.Notifications;
+using PlasticSurgery.Business.Contracts.Services.Procedures;
+using PlasticSurgery.Business.Contracts.Services.Staff;
+using PlasticSurgery.Business.Contracts.Services.TikTok;
+using PlasticSurgery.Business.Contracts.Services.WhatsApp;
+using PlasticSurgery.Business.Engines.Infobip;
+using PlasticSurgery.Business.Engines.Knowledge;
+using PlasticSurgery.Business.Engines.KnowledgeBenchmark;
+using PlasticSurgery.Business.Engines.Telegram;
+using PlasticSurgery.Business.Engines.WebScraping;
+using PlasticSurgery.Business.Engines.WhatsApp;
+using PlasticSurgery.Business.Engines.WhatsApp.Handlers;
+using PlasticSurgery.Business.HttpClients.Calendars;
+using PlasticSurgery.Business.HttpClients.Infobip;
+using PlasticSurgery.Business.HttpClients.Meta;
+using PlasticSurgery.Business.HttpClients.N8n;
+using PlasticSurgery.Business.HttpClients.OpenAi;
+using PlasticSurgery.Business.HttpClients.Telegram;
+using PlasticSurgery.Business.HttpClients.TikTok;
+using PlasticSurgery.Business.HttpClients.WebScraping;
+using PlasticSurgery.Business.Jobs;
+using PlasticSurgery.Business.Managers;
+using PlasticSurgery.Business.Providers.Channels;
+using PlasticSurgery.Business.Providers.WhatsApp;
+using PlasticSurgery.Business.Services.Appointments;
+using PlasticSurgery.Business.Services.Automation;
+using PlasticSurgery.Business.Services.Calendars;
+using PlasticSurgery.Business.Services.Campaigns;
+using PlasticSurgery.Business.Services.Channels;
+using PlasticSurgery.Business.Services.Clinics;
+using PlasticSurgery.Business.Services.Configuration;
+using PlasticSurgery.Business.Services.Dashboard;
+using PlasticSurgery.Business.Services.Inbox;
+using PlasticSurgery.Business.Services.Knowledge;
+using PlasticSurgery.Business.Services.Leads;
+using PlasticSurgery.Business.Services.Notifications;
+using PlasticSurgery.Business.Services.Procedures;
+using PlasticSurgery.Business.Services.Staff;
+using PlasticSurgery.Business.Services.TikTok;
+using PlasticSurgery.Business.Services.WhatsApp;
+using PlasticSurgery.Common.Configs;
+using PlasticSurgery.Common.Extensions;
 using PlasticSurgery.Hubs;
-using PlasticSurgery.Integrations.WhatsApp;
-using PlasticSurgery.Integrations.WhatsApp.Handlers;
-using PlasticSurgery.Services;
+using PlasticSurgery.Persistence.Contexts;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -22,6 +90,8 @@ var connectionString = builder.Configuration.GetConnectionString("Postgres")
         "(local dev) or via user-secrets / environment variables (production, e.g. Supabase).");
 
 builder.Services.AddDbContext<ApplicationDbContext>(options => options.UseNpgsql(connectionString));
+// Repositories + unit of work (Persistence/), all sharing the request's DbContext.
+builder.Services.AddPersistence();
 
 // ---------------------------------------------------------------------
 // Authentication — ASP.NET Core Identity, authentication only. No roles, no permissions matrix:
@@ -29,7 +99,7 @@ builder.Services.AddDbContext<ApplicationDbContext>(options => options.UseNpgsql
 // doc comment) — every logged-in user linked to a clinic has full access to that clinic's data.
 // AddIdentityCore (not the full AddIdentity<TUser,TRole>) keeps roles out entirely; cookie auth is
 // wired up explicitly below rather than via AddIdentity's built-in scheme registration, for the
-// same reason. See Services/ICurrentClinicContext.cs for how a logged-in user resolves to a clinic.
+// same reason. See Business/Contracts/Managers/ICurrentClinicContext.cs for how a logged-in user resolves to a clinic.
 // ---------------------------------------------------------------------
 builder.Services.AddHttpContextAccessor();
 
@@ -95,7 +165,13 @@ builder.Services.AddScoped<IEventLogger, EventLogger>();
 builder.Services.AddScoped<IClinicContext, ClinicContext>();
 builder.Services.AddScoped<ICurrentClinicContext, CurrentClinicContext>();
 builder.Services.AddScoped<IClinicRegistrationService, ClinicRegistrationService>();
+builder.Services.AddScoped<IClinicProfileService, ClinicProfileService>();
 builder.Services.AddScoped<IStaffService, StaffService>();
+builder.Services.AddScoped<IAutomationCleanupService, AutomationCleanupService>();
+builder.Services.AddScoped<ISettingsService, SettingsService>();
+// Settings by section + key: config.settings, else the constant default in Common/Statics/ConfigDefaults.
+builder.Services.AddSingleton<IConfigManager, ConfigManager>();
+builder.Services.AddHostedService<ConfigRefreshJob>();
 builder.Services.AddScoped<ILeadService, LeadService>();
 builder.Services.AddScoped<IProcedureService, ProcedureService>();
 builder.Services.AddScoped<IAvailabilityService, AvailabilityService>();
@@ -130,22 +206,23 @@ builder.Services.AddScoped<IMessageService, MessageService>();
 builder.Services.AddScoped<IWhatsAppService, WhatsAppService>();
 
 // WhatsApp providers (BSPs) behind IWhatsAppService — the global WhatsApp:Provider setting picks one
-// (see Services/IWhatsAppProvider.cs). Same concrete-type-then-forward pattern as ICalendarProviderClient.
-builder.Services.AddHttpClient<PlasticSurgery.Integrations.WhatsApp.MetaWhatsAppProvider>();
-builder.Services.AddScoped<IWhatsAppProvider>(sp => sp.GetRequiredService<PlasticSurgery.Integrations.WhatsApp.MetaWhatsAppProvider>());
+// (see Business/Contracts/Providers/WhatsApp/IWhatsAppProvider.cs). Same concrete-type-then-forward pattern as ICalendarProviderClient.
+builder.Services.AddHttpClient<MetaWhatsAppProvider>();
+builder.Services.AddScoped<IWhatsAppProvider>(sp => sp.GetRequiredService<MetaWhatsAppProvider>());
 // Infobip: SculptFlow's own account (Infobip:BaseUrl / Infobip:ApiKey env vars). The key travels only in the
 // Authorization header, which HttpClient logging never prints; the client itself logs no bodies or numbers.
-builder.Services.AddHttpClient<PlasticSurgery.Integrations.Infobip.IInfobipClient, PlasticSurgery.Integrations.Infobip.InfobipClient>(client =>
-    client.Timeout = TimeSpan.FromSeconds(Math.Clamp(builder.Configuration.GetValue("Infobip:TimeoutSeconds", 20), 5, 120)));
-builder.Services.AddScoped<IWhatsAppProvider, PlasticSurgery.Integrations.Infobip.InfobipWhatsAppProvider>();
+// The timeout is a setting (Infobip:TimeoutSeconds in ConfigDefaults); it's read whenever a client is created.
+builder.Services.AddHttpClient<IInfobipClient, InfobipClient>((sp, client) =>
+    client.Timeout = TimeSpan.FromSeconds(sp.GetRequiredService<IConfigManager>().InfobipTimeoutSeconds));
+builder.Services.AddScoped<IWhatsAppProvider, InfobipWhatsAppProvider>();
 // Template review for the same providers, picked by the same WhatsApp:Provider switch (see IWhatsAppTemplateProvider).
-builder.Services.AddScoped<IWhatsAppTemplateProvider, PlasticSurgery.Integrations.WhatsApp.MetaWhatsAppTemplateProvider>();
-builder.Services.AddScoped<IWhatsAppTemplateProvider, PlasticSurgery.Integrations.Infobip.InfobipWhatsAppTemplateProvider>();
-builder.Services.AddScoped<PlasticSurgery.Integrations.Infobip.IInfobipWhatsAppIntegrationService, PlasticSurgery.Integrations.Infobip.InfobipWhatsAppIntegrationService>();
-builder.Services.AddScoped<PlasticSurgery.Integrations.Infobip.IInfobipWhatsAppWebhookProcessor, PlasticSurgery.Integrations.Infobip.InfobipWhatsAppWebhookProcessor>();
+builder.Services.AddScoped<IWhatsAppTemplateProvider, MetaWhatsAppTemplateProvider>();
+builder.Services.AddScoped<IWhatsAppTemplateProvider, InfobipWhatsAppTemplateProvider>();
+builder.Services.AddScoped<IInfobipWhatsAppIntegrationService, InfobipWhatsAppIntegrationService>();
+builder.Services.AddScoped<IInfobipWhatsAppWebhookProcessor, InfobipWhatsAppWebhookProcessor>();
 builder.Services.AddSignalR();
 
-// WhatsApp Templates & Campaigns — see Services/IWhatsAppTemplateService.cs and ICampaignService.cs
+// WhatsApp Templates & Campaigns — see Business/Contracts/Services/WhatsApp/IWhatsAppTemplateService.cs and ICampaignService.cs
 // for how these build on the Inbox's central MessageService instead of duplicating send logic.
 builder.Services.AddScoped<IWhatsAppTemplateService, WhatsAppTemplateService>();
 builder.Services.AddScoped<ICampaignAudienceService, CampaignAudienceService>();
@@ -153,7 +230,7 @@ builder.Services.AddScoped<ICampaignService, CampaignService>();
 builder.Services.AddScoped<IWhatsAppHealthService, WhatsAppHealthService>();
 
 // Clinic Knowledge Base — dashboard CRUD, chunking, embeddings (Embeddings:* config) and the semantic
-// search behind POST /api/ai/knowledge/search. See Services/IKnowledgeService.cs.
+// search behind POST /api/ai/knowledge/search. See Business/Contracts/Services/Knowledge/IKnowledgeService.cs.
 builder.Services.AddScoped<IKnowledgeSettingsService, KnowledgeSettingsService>();
 builder.Services.AddScoped<IKnowledgeChunkingService, KnowledgeChunkingService>();
 builder.Services.AddHttpClient<IEmbeddingService, OpenAiEmbeddingService>();
@@ -164,11 +241,10 @@ builder.Services.AddScoped<IKnowledgeSearchService, KnowledgeSearchService>();
 // Knowledge Base WEBSITE SCRAPING — a standalone ingestion subsystem (Integrations/Knowledge/WebScraping). It owns
 // crawling/URL identity/fetching/extraction/page state/change detection and hands clean text to IKnowledgeService,
 // so pages flow through the SAME chunking/embedding/search as manual entries and uploads.
-builder.Services.AddSingleton(sp => PlasticSurgery.Integrations.Knowledge.WebScraping.WebsiteScrapeOptions.Resolve(sp.GetRequiredService<IConfiguration>()));
-builder.Services.AddSingleton<PlasticSurgery.Integrations.Knowledge.WebScraping.SsrfGuard>();
-builder.Services.AddSingleton<PlasticSurgery.Integrations.Knowledge.WebScraping.IHtmlContentExtractor, PlasticSurgery.Integrations.Knowledge.WebScraping.HtmlContentExtractor>();
-builder.Services.AddSingleton<PlasticSurgery.Integrations.Knowledge.WebScraping.IWebsiteScrapeQueue, PlasticSurgery.Integrations.Knowledge.WebScraping.WebsiteScrapeQueue>();
-builder.Services.AddHttpClient<PlasticSurgery.Integrations.Knowledge.WebScraping.IWebsiteFetchClient, PlasticSurgery.Integrations.Knowledge.WebScraping.WebsiteFetchClient>(client =>
+builder.Services.AddSingleton<SsrfGuard>();
+builder.Services.AddSingleton<IHtmlContentExtractor, HtmlContentExtractor>();
+builder.Services.AddSingleton<IWebsiteScrapeQueue, WebsiteScrapeQueue>();
+builder.Services.AddHttpClient<IWebsiteFetchClient, WebsiteFetchClient>(client =>
     {
         client.Timeout = Timeout.InfiniteTimeSpan; // per-request timeouts are enforced by the fetch client
     })
@@ -179,27 +255,27 @@ builder.Services.AddHttpClient<PlasticSurgery.Integrations.Knowledge.WebScraping
         UseProxy = false,                                            // no proxy: the SSRF guard must see the real destination
         AutomaticDecompression = System.Net.DecompressionMethods.All,
         PooledConnectionLifetime = TimeSpan.FromMinutes(2),
-        ConnectCallback = sp.GetRequiredService<PlasticSurgery.Integrations.Knowledge.WebScraping.SsrfGuard>().ConnectAsync
+        ConnectCallback = sp.GetRequiredService<SsrfGuard>().ConnectAsync
     });
-builder.Services.AddScoped<PlasticSurgery.Integrations.Knowledge.WebScraping.IWebsiteScrapeProcessor, PlasticSurgery.Integrations.Knowledge.WebScraping.WebsiteScrapeProcessor>();
-builder.Services.AddScoped<PlasticSurgery.Integrations.Knowledge.WebScraping.IWebsiteSourceService, PlasticSurgery.Integrations.Knowledge.WebScraping.WebsiteSourceService>();
-builder.Services.AddHostedService<PlasticSurgery.Integrations.Knowledge.WebScraping.WebsiteScrapeWorker>();
+builder.Services.AddScoped<IWebsiteScrapeProcessor, WebsiteScrapeProcessor>();
+builder.Services.AddScoped<IWebsiteSourceService, WebsiteSourceService>();
+builder.Services.AddHostedService<WebsiteScrapeWorker>();
 
 // Knowledge RETRIEVAL BENCHMARK — a standalone diagnostic module (Integrations/Knowledge/Benchmark). It is a CLIENT of
 // IKnowledgeSearchService (the production retrieval engine registered above) and of the separate n8n benchmark-question
 // workflow; nothing in production ingestion/search depends on it, so it can be removed without touching them.
 // RemoveAllLoggers: the n8n webhook URL acts as the credential for that endpoint, so request URIs must not be logged.
-builder.Services.AddSingleton<PlasticSurgery.Integrations.Knowledge.Benchmark.IKnowledgeBenchmarkScorer, PlasticSurgery.Integrations.Knowledge.Benchmark.KnowledgeBenchmarkScorer>();
-builder.Services.AddSingleton<PlasticSurgery.Integrations.Knowledge.Benchmark.IKnowledgeBenchmarkRunQueue, PlasticSurgery.Integrations.Knowledge.Benchmark.KnowledgeBenchmarkRunQueue>();
-builder.Services.AddHttpClient<PlasticSurgery.Integrations.Knowledge.Benchmark.IKnowledgeBenchmarkGeneratorClient, PlasticSurgery.Integrations.Knowledge.Benchmark.N8nKnowledgeBenchmarkGeneratorClient>(client =>
+builder.Services.AddSingleton<IKnowledgeBenchmarkScorer, KnowledgeBenchmarkScorer>();
+builder.Services.AddSingleton<IKnowledgeBenchmarkRunQueue, KnowledgeBenchmarkRunQueue>();
+builder.Services.AddHttpClient<IKnowledgeBenchmarkGeneratorClient, N8nKnowledgeBenchmarkGeneratorClient>(client =>
     {
         client.Timeout = TimeSpan.FromMinutes(3); // the workflow answers only after an LLM has written the questions
     })
     .RemoveAllLoggers();
-builder.Services.AddScoped<PlasticSurgery.Integrations.Knowledge.Benchmark.IKnowledgeBenchmarkService, PlasticSurgery.Integrations.Knowledge.Benchmark.KnowledgeBenchmarkService>();
-builder.Services.AddHostedService<PlasticSurgery.Integrations.Knowledge.Benchmark.KnowledgeBenchmarkRunWorker>();
+builder.Services.AddScoped<IKnowledgeBenchmarkService, KnowledgeBenchmarkService>();
+builder.Services.AddHostedService<KnowledgeBenchmarkRunWorker>();
 
-// Unified raw Meta WhatsApp webhook endpoint — see Integrations/WhatsApp/MetaWebhookProcessor.cs.
+// Unified raw Meta WhatsApp webhook endpoint — see Business/Engines/WhatsApp/MetaWebhookProcessor.cs.
 // The Handlers are thin adapters over the services already registered above; registering them here
 // just lets MetaWebhookProcessor receive them via constructor injection like everything else.
 builder.Services.AddScoped<CustomerMessageHandler>();
@@ -217,20 +293,20 @@ builder.Services.AddScoped<IMetaWebhookProcessor, MetaWebhookProcessor>();
 // implementations are resolved by conversation.Channel inside MessageService.
 // RemoveAllLoggers: Telegram puts the bot token in the request URL, and the default HttpClient logging
 // prints request URIs — so this client must not log at all.
-builder.Services.AddHttpClient<PlasticSurgery.Integrations.Telegram.ITelegramBotClient, PlasticSurgery.Integrations.Telegram.TelegramBotClient>()
+builder.Services.AddHttpClient<ITelegramBotClient, TelegramBotClient>()
     .RemoveAllLoggers();
-builder.Services.AddScoped<PlasticSurgery.Integrations.Telegram.ITelegramIntegrationService, PlasticSurgery.Integrations.Telegram.TelegramIntegrationService>();
-builder.Services.AddScoped<PlasticSurgery.Integrations.Telegram.ITelegramWebhookProcessor, PlasticSurgery.Integrations.Telegram.TelegramWebhookProcessor>();
+builder.Services.AddScoped<ITelegramIntegrationService, TelegramIntegrationService>();
+builder.Services.AddScoped<ITelegramWebhookProcessor, TelegramWebhookProcessor>();
 builder.Services.AddScoped<IChannelSender, WhatsAppChannelSender>();
-builder.Services.AddScoped<IChannelSender, PlasticSurgery.Integrations.Telegram.TelegramChannelSender>();
+builder.Services.AddScoped<IChannelSender, TelegramChannelSender>();
 
 // Subscriptions & usage billing — an internal module (Billing/, docs/billing.md): plans + entitlements, prepaid
 // wallet + included credit, rate cards, usage records, the ledger, and one maintenance worker. Off until
 // Billing:Enabled = true.
-PlasticSurgery.Billing.BillingModule.AddBilling(builder.Services, builder.Configuration);
+PlasticSurgery.Common.Extensions.BillingModule.AddBilling(builder.Services, builder.Configuration);
 
 // Outbound: the one call to n8n left after Meta started posting directly to us — see
-// Controllers/WhatsAppWebhookController.cs and IAiTriggerNotifier's own doc comment.
+// Controllers/Integrations/WhatsAppWebhookController.cs and IAiTriggerNotifier's own doc comment.
 builder.Services.AddHttpClient<IAiTriggerNotifier, AiTriggerNotifier>();
 builder.Services.AddHttpClient<ICalendarSyncNotifier, CalendarSyncNotifier>();
 

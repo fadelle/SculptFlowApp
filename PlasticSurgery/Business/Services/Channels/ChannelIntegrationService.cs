@@ -1,0 +1,238 @@
+using System.Security.Cryptography;
+using PlasticSurgery.Business.Contracts.HttpClients.Meta;
+using PlasticSurgery.Business.Contracts.Services.Billing;
+using PlasticSurgery.Business.Contracts.Services.Channels;
+using PlasticSurgery.Common.Enums;
+using PlasticSurgery.Entities.Models;
+using PlasticSurgery.Entities.Requests.Channels;
+using PlasticSurgery.Entities.Responses.Channels;
+using PlasticSurgery.Persistence.Contracts;
+using PlasticSurgery.Persistence.Contracts.Channels;
+
+namespace PlasticSurgery.Business.Services.Channels;
+
+public class ChannelIntegrationService : IChannelIntegrationService
+{
+    private readonly IChannelIntegrationRepository _integrations;
+    private readonly IUnitOfWork _unitOfWork;
+    private readonly IMetaGraphClient _graph;
+    private readonly ITelegramIntegrationService _telegram;
+    private readonly IEntitlementService _entitlements;
+
+    public ChannelIntegrationService(IChannelIntegrationRepository integrations, IUnitOfWork unitOfWork, IMetaGraphClient graph, ITelegramIntegrationService telegram,
+        IEntitlementService entitlements)
+    {
+        _integrations = integrations;
+        _unitOfWork = unitOfWork;
+        _graph = graph;
+        _telegram = telegram;
+        _entitlements = entitlements;
+    }
+
+    public async Task<IReadOnlyList<ChannelIntegrationResponse>> ListAsync(Guid clinicId, CancellationToken ct = default)
+    {
+        var existing = (await _integrations.ListForClinicAsync(clinicId, ct)).ToDictionary(c => c.Channel);
+
+        // Always return one card per known channel, even if it's never been saved — the Settings
+        // page shouldn't have to special-case "no row yet" vs. "disconnected".
+        return ChannelType.All
+            .Select(channel => existing.TryGetValue(channel, out var row)
+                ? ToResponse(row)
+                : new ChannelIntegrationResponse(
+                    Guid.Empty, clinicId, channel, ChannelIntegrationStatus.Disconnected,
+                    null, null, null, null, null, false, false, null, null, DateTimeOffset.MinValue))
+            .ToList();
+    }
+
+    public async Task<ChannelIntegrationResponse> SaveAsync(SaveChannelIntegrationRequest request, CancellationToken ct = default)
+    {
+        if (!ChannelType.All.Contains(request.Channel))
+        {
+            throw new ArgumentException($"Unknown channel '{request.Channel}'.", nameof(request));
+        }
+
+        if (request.Channel == ChannelType.Telegram)
+        {
+            // A Telegram connection isn't "save some fields": it needs getMe + setWebhook, which only
+            // ITelegramIntegrationService.ConnectAsync does. Saving raw fields would produce a
+            // "connected" row with no webhook.
+            throw new ArgumentException("Telegram is connected with a bot token (Connect Telegram), not the manual form.", nameof(request));
+        }
+
+        var row = await _integrations.GetAsync(request.ClinicId, request.Channel, ct);
+
+        // Saving with a token makes the channel connected — the plan's channel limits apply.
+        if (!string.IsNullOrWhiteSpace(request.AccessToken) || !string.IsNullOrWhiteSpace(row?.AccessToken))
+        {
+            await _entitlements.EnsureCanConnectChannelAsync(request.ClinicId, request.Channel, ct);
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        if (row is null)
+        {
+            row = new ChannelIntegration
+            {
+                Id = Guid.NewGuid(),
+                ClinicId = request.ClinicId,
+                Channel = request.Channel,
+                CreatedAt = now,
+            };
+            _integrations.Add(row);
+        }
+
+        if (request.Channel == ChannelType.WhatsApp)
+        {
+            // This form and Embedded Signup (ConnectWhatsAppAsync) are both Meta Cloud API connections.
+            // Infobip connections go through InfobipWhatsAppIntegrationService instead.
+            row.Provider = ChannelProvider.Meta;
+            row.ProviderSenderId = null;
+        }
+
+        row.DisplayName = request.DisplayName;
+        row.PhoneNumberId = request.PhoneNumberId;
+        row.WhatsAppBusinessId = request.WhatsAppBusinessId;
+        row.PageId = request.PageId;
+        row.InstagramBusinessId = request.InstagramBusinessId;
+
+        // Only overwrite a secret if a new value was actually typed in — the form never
+        // round-trips a saved token back out, so an empty submission means "leave it as-is".
+        if (!string.IsNullOrWhiteSpace(request.AccessToken))
+        {
+            row.AccessToken = request.AccessToken;
+        }
+        if (!string.IsNullOrWhiteSpace(request.WebhookVerifyToken))
+        {
+            row.WebhookVerifyToken = request.WebhookVerifyToken;
+        }
+        if (!string.IsNullOrWhiteSpace(request.Pin))
+        {
+            row.Pin = request.Pin;
+        }
+
+        // NOTE: this MVP doesn't call out to the WhatsApp/Meta Graph API to actually verify the
+        // credentials (Project 5) — "connected" here just means "an access token is on file".
+        // Wire real verification in here (and set LastVerifiedAt/LastError from the result) once
+        // that integration exists.
+        row.Status = string.IsNullOrWhiteSpace(row.AccessToken)
+            ? ChannelIntegrationStatus.Disconnected
+            : ChannelIntegrationStatus.Connected;
+        row.UpdatedAt = now;
+
+        await _unitOfWork.SaveChangesAsync(ct);
+        return ToResponse(row);
+    }
+
+    public async Task DisconnectAsync(Guid clinicId, string channel, CancellationToken ct = default)
+    {
+        if (channel == ChannelType.Telegram)
+        {
+            // Also removes the webhook at Telegram — see TelegramIntegrationService.DisconnectAsync.
+            await _telegram.DisconnectAsync(clinicId, ct);
+            return;
+        }
+
+        var row = await _integrations.GetAsync(clinicId, channel, ct);
+        if (row is null)
+        {
+            return;
+        }
+
+        row.Status = ChannelIntegrationStatus.Disconnected;
+        row.AccessToken = null;
+        row.WebhookVerifyToken = null;
+        row.Pin = null;
+        row.LastVerifiedAt = null;
+        row.LastError = null;
+        row.UpdatedAt = DateTimeOffset.UtcNow;
+
+        await _unitOfWork.SaveChangesAsync(ct);
+    }
+
+    public async Task<ChannelIntegrationResponse> ConnectWhatsAppAsync(ConnectWhatsAppRequest request, CancellationToken ct = default)
+    {
+        await _entitlements.EnsureCanConnectChannelAsync(request.ClinicId, ChannelType.WhatsApp, ct);
+        var token = !string.IsNullOrWhiteSpace(request.AccessToken)
+            ? request.AccessToken
+            : !string.IsNullOrWhiteSpace(request.Code)
+                ? await _graph.ExchangeCodeForTokenAsync(request.Code, request.RedirectUri, ct)
+                : throw new InvalidOperationException("Either AccessToken or Code must be provided.");
+
+        var wabaId = request.WabaId;
+        var phoneNumberId = request.PhoneNumberId;
+
+        if (string.IsNullOrWhiteSpace(wabaId) || string.IsNullOrWhiteSpace(phoneNumberId))
+        {
+            // No popup postMessage to read these from (full-page redirect flow) — discover them
+            // via the Graph API instead: which WABA did this login just grant access to, and
+            // which phone number is registered under it.
+            var wabas = await _graph.GetClientWhatsAppBusinessAccountsAsync(token, ct);
+            var waba = wabas.FirstOrDefault()
+                ?? throw new InvalidOperationException(
+                    "No WhatsApp Business Account was found for this login — make sure a WABA was selected during signup.");
+            wabaId = waba.WabaId;
+
+            var phones = await _graph.GetPhoneNumbersForWabaAsync(wabaId, token, ct);
+            var phone = phones.FirstOrDefault()
+                ?? throw new InvalidOperationException(
+                    $"No phone number was found under WhatsApp Business Account '{waba.WabaName}' ({wabaId}).");
+            phoneNumberId = phone.PhoneNumberId;
+        }
+
+        var phoneInfo = await _graph.GetWhatsAppPhoneNumberAsync(phoneNumberId, token, ct);
+
+        // Embedded Signup grants us access to the number, but Meta won't let it send/receive via
+        // the Cloud API until it's registered with a two-step-verification PIN — a step the flow
+        // otherwise silently skips. Generate one and register on every connect (safe to repeat —
+        // Meta treats it as (re)confirming the PIN, not an error).
+        var pin = RandomNumberGenerator.GetInt32(0, 1_000_000).ToString("D6");
+        await _graph.RegisterPhoneNumberAsync(phoneNumberId, token, pin, ct);
+
+        return await SaveAsync(new SaveChannelIntegrationRequest(
+            request.ClinicId,
+            ChannelType.WhatsApp,
+            DisplayName: phoneInfo?.DisplayPhoneNumber ?? phoneInfo?.VerifiedName,
+            PhoneNumberId: phoneNumberId,
+            WhatsAppBusinessId: wabaId,
+            PageId: null,
+            InstagramBusinessId: null,
+            AccessToken: token,
+            WebhookVerifyToken: null,
+            Pin: pin), ct);
+    }
+
+    public async Task<ChannelIntegrationResponse> ConnectFacebookAsync(ConnectFacebookRequest request, CancellationToken ct = default)
+    {
+        await _entitlements.EnsureCanConnectChannelAsync(request.ClinicId, ChannelType.Facebook, ct);
+        var shortLivedToken = !string.IsNullOrWhiteSpace(request.Code)
+            ? await _graph.ExchangeCodeForTokenAsync(request.Code, ct: ct)
+            : !string.IsNullOrWhiteSpace(request.AccessToken)
+                ? request.AccessToken
+                : throw new InvalidOperationException("Either Code or AccessToken must be provided.");
+
+        var longLivedToken = await _graph.GetLongLivedTokenAsync(shortLivedToken, ct);
+
+        var page = await _graph.GetFirstManagedPageAsync(longLivedToken, ct)
+            ?? throw new InvalidOperationException(
+                "No Facebook Page found for this account — the logged-in user must be an admin on at least one Page.");
+
+        return await SaveAsync(new SaveChannelIntegrationRequest(
+            request.ClinicId,
+            ChannelType.Facebook,
+            DisplayName: page.PageName,
+            PhoneNumberId: null,
+            WhatsAppBusinessId: null,
+            PageId: page.PageId,
+            InstagramBusinessId: null,
+            AccessToken: page.PageAccessToken,
+            WebhookVerifyToken: null), ct);
+    }
+
+    internal static ChannelIntegrationResponse ToResponse(ChannelIntegration c) => new(
+        c.Id, c.ClinicId, c.Channel, c.Status, c.DisplayName,
+        c.PhoneNumberId, c.WhatsAppBusinessId, c.PageId, c.InstagramBusinessId,
+        HasAccessToken: !string.IsNullOrEmpty(c.AccessToken),
+        HasWebhookVerifyToken: !string.IsNullOrEmpty(c.WebhookVerifyToken),
+        c.LastVerifiedAt, c.LastError, c.UpdatedAt, c.Pin,
+        c.TelegramBotId, c.TelegramBotUsername, c.WebhookStatus, c.WebhookRegisteredAt, c.LastWebhookAt,
+        c.Channel == ChannelType.WhatsApp ? ChannelProvider.Of(c) : null, c.ProviderSenderId);
+}

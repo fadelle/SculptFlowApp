@@ -44,7 +44,7 @@ await _entitlements.EnsureFeatureAsync(clinicId, EntitlementKeys.Campaigns, ct);
 await _entitlements.EnsureWithinLimitAsync(clinicId, EntitlementKeys.MaxAgents, newCount, ct);
 ```
 
-Keys live in `Billing/Entitlements.cs`: features take `true`/`false`, limits a number or `unlimited`. A key a plan doesn't
+Keys live in `Common/Statics/EntitlementKeys.cs`: features take `true`/`false`, limits a number or `unlimited`. A key a plan doesn't
 list is off / 0. Wired today: sending (subscription active), campaigns, AI trigger (`ai_agent`), channel connects
 (`max_channel_connections`, `max_whatsapp_numbers`). `max_agents`, `api_access` and `advanced_reporting` are defined but
 nothing checks them yet.
@@ -132,8 +132,9 @@ SculptFlow. Every change is a `billing.ledger_entries` row in the same transacti
 (or release after settle) → `Conflict`, nothing changes. Admin top-ups, adjustments and plan starts take an
 `Idempotency-Key` header; renewals derive their keys from the period.
 
-**Concurrency / transactions.** Each operation uses its own `DbContext` (`BillingDbFactory`), locks the clinic's
-`billing.accounts` row (`select … for update`), checks idempotency after the lock, writes, commits once.
+**Concurrency / transactions.** Each operation uses its own unit of work (`IBillingUnitOfWorkFactory.Create()`, its own
+`DbContext`), locks the clinic's `billing.accounts` row (`unit.Accounts.LockAsync`, `select … for update`), checks
+idempotency after the lock, changes balances only through `BillingLedger.PostAsync`, writes, commits once.
 
 ## Channel integration
 
@@ -142,7 +143,7 @@ charges. `MessageBillingService` joins them for every outbound message: subscrip
 arrangement → record or reserve (key `{channel}:message:{messageId}`) → provider call (release on failure) → status callbacks
 settle or release. A failure to record *uncharged* usage is logged and never blocks the message.
 
-- **WhatsApp** (`Integrations/WhatsApp/WhatsAppBillingPolicy.cs`): template category → `whatsapp_{category}_message`,
+- **WhatsApp** (`Business/Engines/Billing/WhatsAppBillingPolicy.cs`): template category → `whatsapp_{category}_message`,
   country from the lead's number, provider = `WhatsApp:Provider`, outcome on delivered/read/failed. Free-form replies and
   utility templates inside the 24h window are not recorded (configurable under `Billing:WhatsApp`).
 - **Telegram**: `telegram_message` per outbound message; default `no_provider_usage_fee` → recorded, never charged.

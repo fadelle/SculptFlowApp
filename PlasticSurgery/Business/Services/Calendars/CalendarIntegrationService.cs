@@ -1,0 +1,431 @@
+using PlasticSurgery.Business.Contracts.HttpClients.Calendars;
+using PlasticSurgery.Business.Contracts.HttpClients.N8n;
+using PlasticSurgery.Business.Contracts.Managers;
+using PlasticSurgery.Business.Contracts.Services.Calendars;
+using PlasticSurgery.Business.Contracts.Services.Notifications;
+using PlasticSurgery.Common.Enums;
+using PlasticSurgery.Entities.Dtos.Calendars;
+using PlasticSurgery.Entities.Models;
+using PlasticSurgery.Entities.Requests.Calendars;
+using PlasticSurgery.Entities.Responses.Appointments;
+using PlasticSurgery.Entities.Responses.Calendars;
+using PlasticSurgery.Persistence.Contracts;
+using PlasticSurgery.Persistence.Contracts.Calendars;
+using PlasticSurgery.Persistence.Contracts.Clinics;
+
+namespace PlasticSurgery.Business.Services.Calendars;
+
+public class CalendarIntegrationService : ICalendarIntegrationService
+{
+    // A token this close to expiring is refreshed proactively rather than handed to n8n or used for a calendar
+    // listing call that might fail mid-flight.
+    private TimeSpan TokenRefreshMargin => TimeSpan.FromMinutes(_config.IntegrationsTokenRefreshMarginMinutes);
+
+    private readonly ICalendarIntegrationRepository _calendars;
+    private readonly IClinicRepository _clinics;
+    private readonly IUnitOfWork _unitOfWork;
+    private readonly ICalendarSyncNotifier _notifier;
+    private readonly INotificationService _notifications;
+    private readonly IEnumerable<ICalendarProviderClient> _providerClients;
+    private readonly IConfigManager _config;
+
+    public CalendarIntegrationService(
+        ICalendarIntegrationRepository calendars, IClinicRepository clinics, IUnitOfWork unitOfWork, ICalendarSyncNotifier notifier, INotificationService notifications,
+        IEnumerable<ICalendarProviderClient> providerClients, IConfigManager config)
+    {
+        _config = config;
+        _calendars = calendars;
+        _clinics = clinics;
+        _unitOfWork = unitOfWork;
+        _notifier = notifier;
+        _notifications = notifications;
+        _providerClients = providerClients;
+    }
+
+    public async Task<IReadOnlyList<CalendarIntegrationResponse>> ListAsync(Guid clinicId, CancellationToken ct = default)
+    {
+        var existing = (await _calendars.ListWithCalendarsAsync(clinicId, ct)).ToDictionary(c => c.Provider);
+
+        return CalendarProvider.All
+            .Select(provider => existing.TryGetValue(provider, out var row)
+                ? ToResponse(row)
+                : new CalendarIntegrationResponse(
+                    Guid.Empty, clinicId, provider, CalendarIntegrationStatus.Disconnected,
+                    null, null, null, false, true, null, null, Array.Empty<CalendarCalendarOption>()))
+            .ToList();
+    }
+
+    public async Task<CalendarIntegrationResponse> RequestConnectAsync(Guid clinicId, string provider, CancellationToken ct = default)
+    {
+        EnsureKnownProvider(provider);
+        var row = await GetOrCreateAsync(clinicId, provider, ct);
+
+        row.Status = CalendarIntegrationStatus.Pending;
+        row.LastProblemMessage = null;
+        row.UpdatedAt = DateTimeOffset.UtcNow;
+        await _unitOfWork.SaveChangesAsync(ct);
+
+        return ToResponse(row);
+    }
+
+    public async Task<CalendarIntegrationResponse> CompleteConnectAsync(
+        Guid clinicId, string provider, CalendarOAuthTokenResult tokens, string? accountEmail, CancellationToken ct = default)
+    {
+        EnsureKnownProvider(provider);
+        var row = await GetOrCreateAsync(clinicId, provider, ct);
+        var client = ResolveProviderClient(provider);
+
+        var calendars = await client.ListCalendarsAsync(tokens.AccessToken, ct);
+
+        row.AccessToken = tokens.AccessToken;
+        row.RefreshToken = tokens.RefreshToken ?? row.RefreshToken;
+        row.TokenExpiresAt = tokens.ExpiresAt;
+        row.AccountDisplayName = accountEmail ?? row.AccountDisplayName;
+        row.Status = CalendarIntegrationStatus.Connected;
+        row.IsHealthy = true;
+        row.LastProblemMessage = null;
+        row.UpdatedAt = DateTimeOffset.UtcNow;
+
+        _calendars.ReplaceCalendars(row, calendars.Select(c => new CalendarIntegrationCalendar
+        {
+            Id = Guid.NewGuid(), CalendarIntegrationId = row.Id,
+            ExternalCalendarId = c.ExternalCalendarId, Name = c.Name, IsPrimary = c.IsPrimary,
+            CreatedAt = DateTimeOffset.UtcNow
+        }).ToList());
+        // A previously selected calendar may no longer be in the refreshed list (reconnecting a different
+        // account entirely, say) — clear it rather than silently keep pointing at a calendar staff can't see anymore.
+        if (row.SelectedCalendarId is not null && calendars.All(c => c.ExternalCalendarId != row.SelectedCalendarId))
+        {
+            row.SelectedCalendarId = null;
+            row.SelectedCalendarName = null;
+            row.SyncEnabled = false;
+        }
+
+        await _unitOfWork.SaveChangesAsync(ct);
+        return ToResponse(row);
+    }
+
+    public async Task<CalendarIntegrationResponse> FailConnectAsync(Guid clinicId, string provider, string errorMessage, CancellationToken ct = default)
+    {
+        EnsureKnownProvider(provider);
+        var row = await GetOrCreateAsync(clinicId, provider, ct);
+        row.Status = CalendarIntegrationStatus.Error;
+        row.LastProblemMessage = errorMessage;
+        row.UpdatedAt = DateTimeOffset.UtcNow;
+        await _unitOfWork.SaveChangesAsync(ct);
+        return ToResponse(row);
+    }
+
+    public async Task RequestRefreshCalendarsAsync(Guid clinicId, string provider, CancellationToken ct = default)
+    {
+        EnsureKnownProvider(provider);
+        var row = await _calendars.GetWithCalendarsAsync(clinicId, provider, ct);
+        if (row is null || row.Status != CalendarIntegrationStatus.Connected)
+        {
+            throw new ArgumentException($"{provider} is not connected for this clinic yet.");
+        }
+
+        var client = ResolveProviderClient(provider);
+        try
+        {
+            var accessToken = await EnsureFreshAccessTokenAsync(row, client, ct);
+            var calendars = await client.ListCalendarsAsync(accessToken, ct);
+
+            _calendars.ReplaceCalendars(row, calendars.Select(c => new CalendarIntegrationCalendar
+            {
+                Id = Guid.NewGuid(), CalendarIntegrationId = row.Id,
+                ExternalCalendarId = c.ExternalCalendarId, Name = c.Name, IsPrimary = c.IsPrimary,
+                CreatedAt = DateTimeOffset.UtcNow
+            }).ToList());
+            if (row.SelectedCalendarId is not null && calendars.All(c => c.ExternalCalendarId != row.SelectedCalendarId))
+            {
+                row.SelectedCalendarId = null;
+                row.SelectedCalendarName = null;
+                row.SyncEnabled = false;
+            }
+            row.IsHealthy = true;
+            row.LastProblemMessage = null;
+            row.UpdatedAt = DateTimeOffset.UtcNow;
+            await _unitOfWork.SaveChangesAsync(ct);
+        }
+        catch (Exception ex) when (ex is not ArgumentException)
+        {
+            row.IsHealthy = false;
+            row.LastProblemMessage = ex.Message;
+            row.UpdatedAt = DateTimeOffset.UtcNow;
+            await _unitOfWork.SaveChangesAsync(ct);
+            throw new InvalidOperationException($"Couldn't refresh {provider} calendars: {ex.Message}", ex);
+        }
+    }
+
+    public async Task<CalendarIntegrationResponse> SelectCalendarAsync(
+        Guid clinicId, string provider, string externalCalendarId, CancellationToken ct = default)
+    {
+        EnsureKnownProvider(provider);
+        var row = await _calendars.GetWithCalendarsAsync(clinicId, provider, ct);
+        if (row is null) throw new ArgumentException($"{provider} is not connected for this clinic.");
+
+        var calendar = row.Calendars.FirstOrDefault(c => c.ExternalCalendarId == externalCalendarId);
+        if (calendar is null)
+        {
+            throw new ArgumentException("That calendar is not in this account's list — refresh calendars and try again.");
+        }
+
+        row.SelectedCalendarId = calendar.ExternalCalendarId;
+        row.SelectedCalendarName = calendar.Name;
+        row.UpdatedAt = DateTimeOffset.UtcNow;
+        await _unitOfWork.SaveChangesAsync(ct);
+
+        return ToResponse(row);
+    }
+
+    public async Task<CalendarIntegrationResponse> SetSyncEnabledAsync(Guid clinicId, string provider, bool enabled, CancellationToken ct = default)
+    {
+        EnsureKnownProvider(provider);
+        var row = await _calendars.GetWithCalendarsAsync(clinicId, provider, ct);
+        if (row is null) throw new ArgumentException($"{provider} is not connected for this clinic.");
+        if (enabled && string.IsNullOrWhiteSpace(row.SelectedCalendarId))
+        {
+            throw new ArgumentException("Choose a calendar before turning sync on.");
+        }
+
+        row.SyncEnabled = enabled;
+        row.UpdatedAt = DateTimeOffset.UtcNow;
+        await _unitOfWork.SaveChangesAsync(ct);
+
+        return ToResponse(row);
+    }
+
+    public async Task DisconnectAsync(Guid clinicId, string provider, CancellationToken ct = default)
+    {
+        EnsureKnownProvider(provider);
+        var row = await _calendars.GetWithCalendarsAsync(clinicId, provider, ct);
+        if (row is null) return; // already disconnected — nothing to do
+
+        if (!string.IsNullOrWhiteSpace(row.AccessToken) || !string.IsNullOrWhiteSpace(row.RefreshToken))
+        {
+            await ResolveProviderClient(provider).RevokeAsync(row.AccessToken, row.RefreshToken, ct);
+        }
+
+        row.Status = CalendarIntegrationStatus.Disconnected;
+        row.ExternalConnectionRef = null;
+        row.AccountDisplayName = null;
+        row.SelectedCalendarId = null;
+        row.SelectedCalendarName = null;
+        row.SyncEnabled = false;
+        row.IsHealthy = true;
+        row.LastProblemMessage = null;
+        row.AccessToken = null;
+        row.RefreshToken = null;
+        row.TokenExpiresAt = null;
+        _calendars.RemoveCalendars(row);
+        row.UpdatedAt = DateTimeOffset.UtcNow;
+        await _unitOfWork.SaveChangesAsync(ct);
+    }
+
+    public async Task ApplySyncCallbackAsync(CalendarSyncCallbackRequest request, CancellationToken ct = default)
+    {
+        var sync = await _calendars.GetSyncAsync(request.AppointmentId, request.CalendarIntegrationId, ct);
+        if (sync is null || sync.LastRequestId != request.RequestId) return; // unknown or superseded by a later request
+
+        var integration = await _calendars.GetByIdAsync(request.ClinicId, request.CalendarIntegrationId, ct);
+        if (integration is null) return;
+
+        var wasHealthy = integration.IsHealthy;
+        var now = DateTimeOffset.UtcNow;
+
+        if (request.Success)
+        {
+            sync.Status = sync.LastOperation == "cancel" ? AppointmentCalendarSyncStatus.Canceled : AppointmentCalendarSyncStatus.Synced;
+            if (!string.IsNullOrWhiteSpace(request.ExternalEventId)) sync.ExternalEventId = request.ExternalEventId;
+            sync.LastError = null;
+            integration.IsHealthy = true;
+            integration.LastProblemMessage = null;
+            integration.LastSyncedAt = now;
+        }
+        else
+        {
+            sync.Status = AppointmentCalendarSyncStatus.Failed;
+            sync.LastError = request.ErrorMessage;
+            integration.IsHealthy = false;
+            integration.LastProblemMessage = request.ErrorMessage ?? "A calendar sync failed.";
+        }
+        sync.UpdatedAt = now;
+        integration.UpdatedAt = now;
+        await _unitOfWork.SaveChangesAsync(ct);
+
+        // Only on the transition into unhealthy — a connection that is already flagged, or one that only ever
+        // succeeds, must not spam a notification on every appointment change.
+        if (!request.Success && wasHealthy)
+        {
+            await _notifications.CreateAsync(integration.ClinicId, NotificationType.IntegrationUnhealthy,
+                $"{ProviderLabel(integration.Provider)} calendar sync needs attention",
+                integration.LastProblemMessage ?? "A calendar sync failed.",
+                link: "/settings/calendar-integrations", ct: ct);
+        }
+    }
+
+    public async Task TriggerAppointmentSyncAsync(Guid clinicId, AppointmentResponse appointment, string operation, CancellationToken ct = default)
+    {
+        try
+        {
+            var syncOp = operation switch
+            {
+                "created" => "create",
+                "rescheduled" => "update",
+                "canceled" => "cancel",
+                _ => null // status_changed (attended/no_show/confirmed) — not synced
+            };
+            if (syncOp is null) return;
+
+            var integrations = await _calendars.ListSyncTargetsAsync(clinicId, ct);
+            if (integrations.Count == 0) return;
+
+            var clinic = await _clinics.GetReadOnlyAsync(clinicId, ct);
+            var timezone = clinic?.Timezone ?? "UTC";
+            var title = $"{appointment.LeadFullName ?? "Patient"} — {appointment.ProcedureName ?? appointment.AppointmentType}";
+            var description = BuildDescription(appointment);
+            var link = $"/dashboard/appointments/{appointment.Id}";
+
+            foreach (var integration in integrations)
+            {
+                string accessToken;
+                try
+                {
+                    accessToken = await EnsureFreshAccessTokenAsync(integration, ResolveProviderClient(integration.Provider), ct);
+                }
+                catch
+                {
+                    // A token that can't be refreshed is a health problem for THIS integration only — skip it and
+                    // let the others (if any) still sync; EnsureFreshAccessTokenAsync already marked it unhealthy.
+                    continue;
+                }
+
+                var sync = await _calendars.GetSyncAsync(appointment.Id, integration.Id, ct);
+
+                // A cancelled sync row (its external event was already removed) stays cancelled forever — an
+                // appointment that reaches this point again would be a fresh booking, which BookAvailableSlotAsync's
+                // own one-upcoming-per-lead guard already prevents from reusing the same appointment row.
+                if (sync is not null && sync.Status == AppointmentCalendarSyncStatus.Canceled && syncOp != "create") continue;
+
+                string effectiveOp = syncOp;
+                if (sync is null)
+                {
+                    sync = new AppointmentCalendarSync
+                    {
+                        Id = Guid.NewGuid(), AppointmentId = appointment.Id, CalendarIntegrationId = integration.Id,
+                        Status = AppointmentCalendarSyncStatus.Pending, CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow
+                    };
+                    _calendars.AddSync(sync);
+                }
+                else if (effectiveOp == "create")
+                {
+                    // A sync row already exists for this appointment+calendar (a retried "created" notification,
+                    // never expected in normal operation) — send it as an update instead of risking a duplicate.
+                    effectiveOp = "update";
+                }
+
+                var requestId = Guid.NewGuid();
+                sync.LastRequestId = requestId;
+                sync.LastOperation = effectiveOp;
+                sync.Status = AppointmentCalendarSyncStatus.Pending;
+                sync.UpdatedAt = DateTimeOffset.UtcNow;
+                await _unitOfWork.SaveChangesAsync(ct);
+
+                await _notifier.NotifySyncAsync(new CalendarSyncTriggerPayload(
+                    clinicId, appointment.Id, integration.Id, integration.Provider, accessToken,
+                    integration.SelectedCalendarId!, effectiveOp, requestId,
+                    effectiveOp == "create" ? null : sync.ExternalEventId,
+                    appointment.ScheduledStart, appointment.ScheduledEnd, timezone,
+                    title, description, link), ct);
+            }
+        }
+        catch
+        {
+            // Calendar sync is always secondary to the appointment operation that already succeeded — never
+            // let a problem here surface to the caller (AppointmentService).
+        }
+    }
+
+    // ------------------------------------------------------------------ helpers
+
+    private static void EnsureKnownProvider(string provider)
+    {
+        if (!CalendarProvider.All.Contains(provider)) throw new ArgumentException($"Unknown calendar provider '{provider}'.");
+    }
+
+    private ICalendarProviderClient ResolveProviderClient(string provider) =>
+        _providerClients.FirstOrDefault(c => c.Provider == provider)
+        ?? throw new InvalidOperationException($"No calendar provider client registered for '{provider}'.");
+
+    /// <summary>Refreshes and persists a new access token when the stored one is missing/near expiry, using the
+    /// stored refresh token. Marks the integration unhealthy and rethrows if there is no refresh token to use or the
+    /// provider rejects the refresh — callers must treat that as "this integration cannot sync right now".</summary>
+    private async Task<string> EnsureFreshAccessTokenAsync(CalendarIntegration row, ICalendarProviderClient client, CancellationToken ct)
+    {
+        if (!string.IsNullOrWhiteSpace(row.AccessToken) && row.TokenExpiresAt is { } expires
+            && expires - DateTimeOffset.UtcNow > TokenRefreshMargin)
+        {
+            return row.AccessToken;
+        }
+
+        if (string.IsNullOrWhiteSpace(row.RefreshToken))
+        {
+            row.IsHealthy = false;
+            row.LastProblemMessage = "This connection has no refresh token on file — reconnect it from Calendar Integrations.";
+            row.UpdatedAt = DateTimeOffset.UtcNow;
+            await _unitOfWork.SaveChangesAsync(ct);
+            throw new InvalidOperationException(row.LastProblemMessage);
+        }
+
+        try
+        {
+            var refreshed = await client.RefreshAccessTokenAsync(row.RefreshToken, ct);
+            row.AccessToken = refreshed.AccessToken;
+            row.RefreshToken = refreshed.RefreshToken ?? row.RefreshToken;
+            row.TokenExpiresAt = refreshed.ExpiresAt;
+            row.UpdatedAt = DateTimeOffset.UtcNow;
+            await _unitOfWork.SaveChangesAsync(ct);
+            return refreshed.AccessToken;
+        }
+        catch (Exception ex)
+        {
+            row.IsHealthy = false;
+            row.LastProblemMessage = $"Token refresh failed — reconnect this calendar. ({ex.Message})";
+            row.UpdatedAt = DateTimeOffset.UtcNow;
+            await _unitOfWork.SaveChangesAsync(ct);
+            throw;
+        }
+    }
+
+    private async Task<CalendarIntegration> GetOrCreateAsync(Guid clinicId, string provider, CancellationToken ct)
+    {
+        var row = await _calendars.GetWithCalendarsAsync(clinicId, provider, ct);
+        if (row is not null) return row;
+
+        var now = DateTimeOffset.UtcNow;
+        row = new CalendarIntegration
+        {
+            Id = Guid.NewGuid(), ClinicId = clinicId, Provider = provider,
+            Status = CalendarIntegrationStatus.Disconnected, CreatedAt = now, UpdatedAt = now
+        };
+        _calendars.Add(row);
+        return row;
+    }
+
+    private static string BuildDescription(AppointmentResponse a)
+    {
+        // Deliberately conservative: no notes, no conversation history, no clinical detail — only what's already
+        // shown on the SculptFlow calendar day-cell/drawer (see appointments-calendar.js).
+        var parts = new List<string> { $"Status: {a.Status}" };
+        if (!string.IsNullOrWhiteSpace(a.LocationName)) parts.Add($"Location: {a.LocationName}");
+        return string.Join("\n", parts);
+    }
+
+    private static string ProviderLabel(string provider) => provider == CalendarProvider.Google ? "Google Calendar" : "Outlook Calendar";
+
+    private static CalendarIntegrationResponse ToResponse(CalendarIntegration c) => new(
+        c.Id, c.ClinicId, c.Provider, c.Status, c.AccountDisplayName, c.SelectedCalendarId, c.SelectedCalendarName,
+        c.SyncEnabled, c.IsHealthy, c.LastProblemMessage, c.LastSyncedAt,
+        c.Calendars.Select(x => new CalendarCalendarOption(x.ExternalCalendarId, x.Name, x.IsPrimary)).ToList());
+}

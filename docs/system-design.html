@@ -181,7 +181,7 @@
   Razor Pages dashboard, the .NET API and its workers, the WhatsApp/Telegram/calendar/knowledge integrations, the n8n
   workflows as seen from the app, and the PostgreSQL schema. Written from the code, not from older docs.</p>
   <div class="meta">
-    <span class="pill">Last verified against code: 2026-10-06</span>
+    <span class="pill">Last verified against code: 2026-10-07</span>
     <span class="pill">Code baseline: <code>12fad04</code> (main) + branch <code>feature/subscription-billing</code></span>
     <span class="pill">.NET 10 · EF Core / Npgsql · PostgreSQL + pgvector · SignalR</span>
   </div>
@@ -356,7 +356,7 @@ state: it runs the AI agent and two helper workflows, and talks to the app only 
 <h3 id="principles">2.5 Design principles visible in the code</h3>
 <ol>
   <li><strong>PostgreSQL is authoritative; SignalR only says "something changed".</strong> Every client handler re-fetches over REST.</li>
-  <li><strong>Business logic lives in <code>Services/</code></strong>, shared by Razor PageModels and API controllers. Controllers are thin.</li>
+  <li><strong>Business logic lives in <code>Business/</code></strong>, shared by Razor PageModels and API controllers. Controllers and PageModels hold no logic; database access belongs in <code>Persistence/</code> repositories (§4.1).</li>
   <li><strong>The backend decides; the AI asks.</strong> Mode checks, slot validity, duplicate-booking guard and AI eligibility are decided in .NET, not in n8n.</li>
   <li><strong>Idempotency at the database.</strong> Partial unique indexes on external ids (messages, leads, Telegram threads, health events) make webhook retries safe.</li>
   <li><strong>Side effects after commit, never throwing.</strong> Notifications, calendar sync and AI triggers run after the main write succeeds and swallow their own failures.</li>
@@ -366,7 +366,7 @@ state: it runs the AI agent and two helper workflows, and talks to the app only 
 </ol>
 
 <h3 id="billing">2.6 Subscriptions and usage billing</h3>
-<p>An internal module (<code>Billing/</code>, tables in the Postgres schema <code>billing.*</code>, guide in <code>docs/billing.md</code>)
+<p>An internal module (the <code>Billing</code> feature folders under <code>Business/</code>, <code>Entities/</code> and <code>Persistence/</code>, tables in the Postgres schema <code>billing.*</code>, guide in <code>docs/billing.md</code>)
 built around <strong>three separate questions</strong> that are never collapsed into one:</p>
 <ol>
   <li><strong>Platform subscription</strong>: what the clinic pays SculptFlow for access. The plan decides features and limits
@@ -379,7 +379,7 @@ built around <strong>three separate questions</strong> that are never collapsed 
 </ol>
 <p>Every usage is a <strong>billable event</strong> and is recorded (volumes, provider cost where known). Only what SculptFlow
 charges is rated, reserved, settled and paid, included credit first and then the prepaid <strong>wallet</strong>, through the
-ledger. There are no per-channel quotas. Everything is off until <code>Billing:Enabled</code> is true.</p>
+ledger. There are no per-channel quotas. Everything is off while the <code>Billing</code> / <code>Enabled</code> setting is false (on by default; switch it on the admin portal's Configuration page).</p>
 
 <figure>
 <svg viewBox="0 0 1000 450" role="img" aria-labelledby="bill-title">
@@ -549,21 +549,31 @@ Loaded on every authenticated page by the layout: <code>local-time.js</code> (he
 <h2>4. Backend</h2>
 
 <h3 id="be-layers">4.1 Layers and folders</h3>
+<p>Agreed code layout (standing rule in <code>CLAUDE.md</code>; the admin portal uses the same one). One top-level type per
+file, namespace = folder path. A request flows <strong>Controller or PageModel → Service → Repository</strong>; controllers
+and PageModels hold no logic and never touch the DbContext, and only repositories query the database. Services decide
+when to save through <code>IUnitOfWork</code>; billing money operations use <code>IBillingUnitOfWork</code> (their own context).</p>
 <div class="table-wrap"><table>
 <tr><th>Folder</th><th>Contents</th></tr>
 <tr><td><code>Program.cs</code></td><td>All DI registration and the middleware pipeline (forwarded headers → exception/HSTS → https redirect → routing → authn → authz → static assets → pages, controllers, hub). <code>/</code> redirects to <code>/dashboard</code>.</td></tr>
-<tr><td><code>Controllers/</code></td><td>29 API/OAuth/webhook controllers; <code>DashboardApiController</code> base; <code>RequireIngestKeyAttribute</code>, <code>RequirePlatformAdminKeyAttribute</code>.</td></tr>
-<tr><td><code>Billing/</code></td><td>Subscriptions &amp; usage billing module (§2.6): <code>BillingService</code> (reserve/settle/release/charge/refund/top-up/adjust), <code>SubscriptionService</code>, <code>EntitlementService</code>, <code>MessageBillingService</code> + <code>IChannelBillingPolicy</code>, rating (<code>RateResolver</code>/<code>RateSelector</code>), <code>PlanService</code>, <code>RateCardService</code>, <code>BillingQueryService</code>, <code>ProviderBillingService</code> (who pays the provider, per connected account), <code>BillingStore</code> (transaction + lock + ledger helpers), <code>BillingMaintenanceWorker</code>, <code>PhoneCountry</code>, <code>BillingModule.AddBilling</code>. Channel policies live with their channel: <code>Integrations/WhatsApp/WhatsAppBillingPolicy</code>, <code>Integrations/Telegram/TelegramBillingPolicy</code>.</td></tr>
+<tr><td><code>Controllers/Client</code></td><td>Clinic dashboard APIs for signed-in staff; <code>DashboardApiController</code> base resolves the clinic.</td></tr>
+<tr><td><code>Controllers/Admin</code></td><td>Platform-admin APIs under <code>/api/platform-admin/{domain}</code> (<code>BillingAdminController</code>, <code>AutomationAdminController</code>, <code>SettingsAdminController</code>).</td></tr>
+<tr><td><code>Controllers/Integrations</code></td><td>Meta/Infobip/Telegram/TikTok webhooks, n8n ingest and AI tool endpoints (<code>AiController</code>, <code>MessagesController</code>, <code>*IngestController</code>), calendar and TikTok OAuth callbacks.</td></tr>
+<tr><td><code>Controllers/Filters</code></td><td><code>RequireIngestKeyAttribute</code>, <code>RequirePlatformAdminKeyAttribute</code>.</td></tr>
 <tr><td><code>Pages/</code></td><td>Razor Pages and their PageModels (see §3.1).</td></tr>
-<tr><td><code>Services/</code></td><td>Interfaces (<code>I*.cs</code>, with the design notes in doc comments) and implementations. Also provider clients (Meta Graph, Google/Outlook calendar, TikTok, OpenAI embeddings) and n8n notifiers.</td></tr>
-<tr><td><code>Integrations/WhatsApp</code></td><td><code>MetaWebhookParser</code> → <code>MetaWebhookProcessor</code> → 8 handlers (CustomerMessage, BusinessAppEcho, MessageStatus, TemplateEvent, HealthEvent, History, AppStateSync, Unknown). <code>MetaWhatsAppProvider</code> (Graph send).</td></tr>
-<tr><td><code>Integrations/Infobip</code></td><td><code>InfobipClient</code> (REST, retries, timeouts), <code>InfobipWhatsAppProvider</code> (send), <code>InfobipWhatsAppWebhookParser</code> → <code>InfobipWhatsAppWebhookProcessor</code> → the same CustomerMessage / MessageStatus / Unknown handlers, <code>InfobipWhatsAppIntegrationService</code> (connect a sender).</td></tr>
-<tr><td><code>Integrations/Telegram</code></td><td>Bot API client, update parser, webhook processor, integration service (connect/refresh/disconnect), channel sender.</td></tr>
-<tr><td><code>Integrations/Knowledge/WebScraping</code></td><td>Crawler: options, SSRF guard, robots.txt, URL normalizer, fetch client, HTML extractor (AngleSharp), processor, worker, source service.</td></tr>
-<tr><td><code>Integrations/Knowledge/Benchmark</code></td><td>Retrieval benchmark: service (+ generation partial), scorer, run worker, n8n generator client.</td></tr>
 <tr><td><code>Hubs/</code></td><td><code>InboxHub</code>.</td></tr>
-<tr><td><code>Data/</code></td><td><code>ApplicationDbContext</code> (Fluent API mapping to snake_case tables, Identity tables renamed) and <code>Entities/</code> (status/channel constant classes live next to entities).</td></tr>
-<tr><td><code>Dtos/</code></td><td>Request/response records per feature; <code>LenientJsonConverters</code> for tolerant n8n input.</td></tr>
+<tr><td><code>Business/Services/&lt;Feature&gt;</code></td><td>What controllers and pages call: Leads, Appointments (+ availability), Calendars, Campaigns, Channels (channel connect incl. Telegram/Infobip), Clinics, Staff, Inbox (conversations, messages, WhatsApp send), Dashboard, Knowledge (documents, search, settings, website sources, benchmark), Notifications, Procedures, WhatsApp (templates, health), TikTok, Billing (plans, rate cards, subscriptions, queries, provider billing, ledger service, entitlements).</td></tr>
+<tr><td><code>Business/Engines/&lt;Feature&gt;</code></td><td>Backend logic: <code>MetaWebhookParser</code> → <code>MetaWebhookProcessor</code> → 8 handlers (<code>Engines/WhatsApp/Handlers</code>); Infobip and Telegram webhook parsers/processors; billing (<code>MessageBillingService</code>, channel billing policies, <code>RateResolver</code>/<code>RateSelector</code>); knowledge chunking and document text extraction; benchmark scorer; website scraping (processor, HTML extractor, robots.txt, SSRF guard).</td></tr>
+<tr><td><code>Business/Managers</code></td><td><code>CurrentClinicContext</code>, <code>ClinicContext</code>, <code>EventLogger</code>, <code>InboxNotifier</code> (SignalR).</td></tr>
+<tr><td><code>Business/Providers</code></td><td><code>WhatsApp/</code>: Meta and Infobip send and template providers behind <code>IWhatsAppProvider</code>/<code>IWhatsAppTemplateProvider</code>. <code>Channels/</code>: <code>IChannelSender</code> per channel.</td></tr>
+<tr><td><code>Business/HttpClients/&lt;Provider&gt;</code></td><td>Meta Graph, Infobip (REST, retries, timeouts), Telegram Bot API, Google/Outlook calendar, TikTok, OpenAI embeddings, n8n (AI trigger, calendar sync, benchmark generator), website fetch client.</td></tr>
+<tr><td><code>Business/Jobs</code></td><td><code>BillingMaintenanceWorker</code>, <code>WebsiteScrapeWorker</code> + queue, <code>KnowledgeBenchmarkRunWorker</code> + queue.</td></tr>
+<tr><td><code>Business/Contracts</code></td><td>Interfaces of all of the above in the mirrored path (design notes live in their doc comments).</td></tr>
+<tr><td><code>Entities/Models</code></td><td>EF table classes.</td></tr>
+<tr><td><code>Entities/Requests</code>, <code>Responses</code>, <code>Dtos</code></td><td>Per-feature input, output and internal shapes (provider payloads, list rows, results).</td></tr>
+<tr><td><code>Common/</code></td><td><code>Enums</code> (enums and string vocabularies such as <code>LeadStatus</code>), <code>Statics</code> (<code>EventTypes</code>, billing event/entitlement keys, AI result instructions), <code>Configs</code> (options), <code>Helpers</code> (static: phone/URL/vector/time helpers, page display helpers, <code>ConversationModeSync</code>), <code>Exceptions</code>, <code>Converters</code> (lenient JSON for n8n), <code>Extensions</code> (<code>BillingModule.AddBilling</code>).</td></tr>
+<tr><td><code>Persistence/</code></td><td><code>Contexts/ApplicationDbContext</code> (Fluent API mapping to snake_case tables, Identity tables renamed). <code>Repositories/&lt;Feature&gt;</code> + <code>Contracts/&lt;Feature&gt;</code>: one repository per area (Clinics, Users, Events, Leads, Procedures, Notifications, Dashboard, Inbox, Channels, WhatsApp, TikTok, Campaigns, Appointments, Calendars, Knowledge, Billing), registered in <code>Common/Extensions/PersistenceModule</code>. <code>UnitOfWork</code>: the request's save / transaction / "lost an insert race" boundary; unique and exclusion violations surface as <code>DuplicateRecordException</code> / <code>OverlappingRecordException</code>. <code>Repositories/Billing</code>: <code>BillingUnitOfWorkFactory</code> → <code>BillingUnitOfWork</code>, each money operation on its own context with the billing repositories (account lock, usage, ledger, plans, rate cards, subscriptions, channel-account settings). <code>Helpers/DbErrors</code>. Nothing outside <code>Persistence/</code> references EF Core or Npgsql.</td></tr>
+<tr><td><code>Business/Mappers</code></td><td>Static entity → response mapping (<code>LeadMapper</code>, <code>InboxMapper</code>, <code>AppointmentMapper</code>, <code>ProcedureMapper</code>, <code>NotificationMapper</code>).</td></tr>
 </table></div>
 
 <h3 id="be-services">4.2 Service catalog</h3>
@@ -639,6 +649,24 @@ Loaded on every authenticated page by the layout: <code>local-time.js</code> (he
 </table></div>
 <p>* requires an <code>Idempotency-Key</code> header; repeating a request with the same key returns the first result.</p>
 
+<h4>Automation cleanup API (platform admin key; used by the SculptFlowAutomation tester)</h4>
+<p>The separate <code>SculptFlowAutomation</code> app (own folder and repo next to this one) tests the system end to end: each run
+registers a throwaway clinic through <code>/Account/Register</code>, exercises the APIs and pages as that clinic, then deletes it here.
+<code>AutomationAdminController</code> only acts on an <em>automation clinic</em>: name starts with <code>[Automation]</code> AND every
+user's email ends with <code>@sculptflow-automation.test</code>; anything else gets 409 and nothing changes.</p>
+<div class="table-wrap"><table>
+<tr><th>Base <code>/api/platform-admin/automation</code></th><th>Endpoints</th></tr>
+<tr><td>Clinics</td><td class="wrap"><code>GET clinics</code> (leftover automation clinics, oldest first) · <code>DELETE clinics/{id}</code> (204; deletes the clinic row, so all its data goes through the schema's <code>ON DELETE CASCADE</code> keys, plus its identity users, in one transaction)</td></tr>
+</table></div>
+
+<h4>Configuration API (platform admin key; used by the SculptFlowAdmin portal's Configuration page)</h4>
+<p><code>SettingsAdminController</code> → <code>SettingsService</code>. Only settings declared in <code>ConfigDefaults</code>, only
+values that fit their type and range (400); <code>X-Admin-Actor</code> is stored as <code>updated_by</code>.</p>
+<div class="table-wrap"><table>
+<tr><th>Base <code>/api/platform-admin/settings</code></th><th>Endpoints</th></tr>
+<tr><td>Settings</td><td class="wrap"><code>GET</code> (every declared setting: type, range, default, stored value, value in use) · <code>PUT {section}/{key}</code> <code>{value, note}</code> (store a value; the app uses it at once) · <code>DELETE {section}/{key}</code> (204; back to the default; 404 when nothing was stored)</td></tr>
+</table></div>
+
 <h4>AI tool surface for n8n (ingest)</h4>
 <div class="table-wrap"><table>
 <tr><th>AI tool</th><th>Endpoint</th><th>Notes</th></tr>
@@ -694,14 +722,15 @@ Client methods: <code>JoinConversation(id)</code> (ownership checked), <code>Lea
 <tr><td><code>WebsiteScrapeWorker</code></td><td><code>WebsiteScrapeQueue</code> (unbounded <code>Channel&lt;Guid&gt;</code>, singleton)</td><td>One <code>knowledge_website_scrape_runs</code> row, one at a time, own DI scope</td><td><code>crawling</code> runs → failed ("interrupted"); <code>pending</code> runs re-queued</td></tr>
 <tr><td><code>KnowledgeBenchmarkRunWorker</code></td><td><code>KnowledgeBenchmarkRunQueue</code></td><td>One <code>knowledge_retrieval_benchmark_runs</code> row</td><td><code>running</code> → failed; <code>pending</code> re-queued</td></tr>
 <tr><td><code>BillingMaintenanceWorker</code></td><td>timer, every <code>Billing:MaintenanceIntervalMinutes</code> (5); idle while billing is off</td><td>Renew / past due / expire / end-cancelled subscriptions whose period ended; resolve reservations older than <code>Billing:ReservationTimeoutHours</code> (settle if the message was delivered, else release). One transaction per clinic.</td><td>Nothing to recover: state is in the DB and every step is idempotent</td></tr>
+<tr><td><code>ConfigRefreshJob</code></td><td>timer, every 60 s</td><td>Re-reads <code>config.settings</code> into <code>IConfigManager</code> (§9)</td><td>Loads it at startup; defaults until then</td></tr>
 </table></div>
-<p>The billing worker is the only scheduled job. Scheduled campaigns store <code>scheduled_at</code>, but nothing in-process sends them; something (the dashboard or an external n8n schedule) must call <code>POST /api/campaigns/{id}/send</code> / <code>process-batch</code>.</p>
+<p>The billing worker is the only scheduled business job (the config refresh only reloads settings). Scheduled campaigns store <code>scheduled_at</code>, but nothing in-process sends them; something (the dashboard or an external n8n schedule) must call <code>POST /api/campaigns/{id}/send</code> / <code>process-batch</code>.</p>
 
 <h3 id="be-cross">4.6 Cross-cutting concerns</h3>
 <ul>
   <li><strong>Audit/analytics:</strong> <code>events</code> rows via <code>IEventLogger</code>, typed by <code>EventTypes</code> constants (lead_created, consultation_booked, human_handoff, ai_message_sent, whatsapp_* …).</li>
   <li><strong>Notifications:</strong> types NEW_LEAD, HANDOFF, APPOINTMENT_BOOKED / RESCHEDULED / CANCELLED, CAMPAIGN_REPLY, OUTBOUND_MESSAGE_FAILED, INTEGRATION_UNHEALTHY; each row precomputes a <code>link</code>.</li>
-  <li><strong>Errors:</strong> controllers map <code>ArgumentException</code> → 400, <code>ServiceWindowClosedException</code> / mode conflicts → 409, <code>InvalidOperationException</code> → 422, <code>ChannelSendException</code> → 502. <code>DbErrors</code> helps detect unique violations. <code>BillingDeniedException</code> (no rate, not enough balance) and <code>EntitlementDeniedException</code> (no active plan, feature not in plan, limit) are <code>InvalidOperationException</code>s, so they surface as 422 with a clinic-facing, provider-neutral message.</li>
+  <li><strong>Errors:</strong> one exception filter, <code>Controllers/Filters/ApiErrorsAttribute</code> (<code>[ApiErrors]</code> on <code>DashboardApiController</code>, <code>ConversationsController</code>, the platform-admin controllers and the n8n/AI controllers), turns service exceptions into <code>{ "error": message }</code>: <code>ArgumentException</code> → 400, <code>KeyNotFoundException</code> → 404, duplicate/overlapping record, closed WhatsApp window, benchmark already running → 409, <code>InvalidOperationException</code> → 422, channel send / Meta Graph / benchmark generator failure → 502, generator not configured → 503; anything else stays 500. Controllers catch only where a response must differ (AI tool results for n8n, the human-mode conflict body, OAuth redirects, the knowledge "embeddings not configured" 503). Provider webhooks don't use it, so they keep answering 500 and the provider retries.</li>
   <li><strong>Billing logs:</strong> structured <code>Billing:</code> log lines for reservations, settlements, releases, missing rates, insufficient balance, duplicates, renewals and wallet adjustments; no phone numbers or message bodies.</li>
   <li><strong>HTTP clients:</strong> typed clients via <code>AddHttpClient</code>. Telegram and the benchmark generator use <code>RemoveAllLoggers()</code> because their URLs carry secrets. The crawler client disables redirects, cookies and proxy, and routes every connect through <code>SsrfGuard.ConnectAsync</code>.</li>
   <li><strong>Testing:</strong> <code>PlasticSurgery.Tests</code> (xUnit) covers billing: pure rules (rating, phone country, WhatsApp policy, entitlements) and database tests that need <code>SCULPTFLOW_TEST_DB</code> pointing at a throwaway local PostgreSQL (each run creates and drops its own database from <code>schema.sql</code>; without it those tests are skipped; remote hosts are refused). Nothing else is covered by automated tests yet. <code>AiTestController</code> gives n8n canned outcomes.</li>
@@ -823,15 +852,15 @@ Client methods: <code>JoinConversation(id)</code> (ownership checked), <code>Lea
 <h2>6. Integrations</h2>
 <div class="table-wrap"><table>
 <tr><th>Integration</th><th>Direction</th><th>Code</th><th>Stored in</th><th>Status</th></tr>
-<tr><td>WhatsApp Cloud API (Meta)</td><td>in: webhook · out: Graph send, templates, signup</td><td><code>Integrations/WhatsApp/*</code>, <code>WhatsAppService</code>, <code>MetaGraphClient</code>, <code>ChannelIntegrationService</code>, <code>meta-connect.js</code></td><td><code>channel_integrations</code> (channel=whatsapp), <code>whatsapp_templates</code>, <code>whatsapp_health_events</code></td><td>Live. Graph <code>v21.0</code>. Embedded Signup registers the number with a generated PIN.</td></tr>
-<tr><td>WhatsApp via Infobip</td><td>in: per-sender webhook · out: <code>/whatsapp/1/message/text</code>, <code>/template</code>, business-info</td><td><code>Integrations/Infobip/*</code>, <code>InfobipWhatsAppWebhookController</code></td><td><code>channel_integrations</code> (channel=whatsapp, provider=infobip, provider_sender_id); key/base URL are env vars</td><td>MVP provider while there is no Meta Tech Provider status; switch back with <code>WhatsApp:Provider=meta</code>. Text in/out, statuses and template review; no health or media yet.</td></tr>
+<tr><td>WhatsApp Cloud API (Meta)</td><td>in: webhook · out: Graph send, templates, signup</td><td><code>Engines/WhatsApp/*</code>, <code>Providers/WhatsApp/MetaWhatsApp*</code>, <code>WhatsAppService</code>, <code>MetaGraphClient</code>, <code>ChannelIntegrationService</code>, <code>meta-connect.js</code></td><td><code>channel_integrations</code> (channel=whatsapp), <code>whatsapp_templates</code>, <code>whatsapp_health_events</code></td><td>Live. Graph <code>v21.0</code>. Embedded Signup registers the number with a generated PIN.</td></tr>
+<tr><td>WhatsApp via Infobip</td><td>in: per-sender webhook · out: <code>/whatsapp/1/message/text</code>, <code>/template</code>, business-info</td><td><code>HttpClients/Infobip</code>, <code>Engines/Infobip</code>, <code>Providers/WhatsApp/Infobip*</code>, <code>InfobipWhatsAppWebhookController</code></td><td><code>channel_integrations</code> (channel=whatsapp, provider=infobip, provider_sender_id); key/base URL are env vars</td><td>MVP provider while there is no Meta Tech Provider status; switch back with <code>WhatsApp:Provider=meta</code>. Text in/out, statuses and template review; no health or media yet.</td></tr>
 <tr><td>Facebook Page</td><td>out: Login + long-lived page token</td><td><code>ChannelIntegrationService.ConnectFacebookAsync</code></td><td><code>channel_integrations</code> (channel=facebook)</td><td>Connect only; no Messenger messaging yet.</td></tr>
-<tr><td>Telegram Bot API</td><td>in: webhook · out: sendMessage</td><td><code>Integrations/Telegram/*</code></td><td><code>channel_integrations</code> (channel=telegram, bot id/username, webhook status)</td><td>Live.</td></tr>
+<tr><td>Telegram Bot API</td><td>in: webhook · out: sendMessage</td><td><code>HttpClients/Telegram</code>, <code>Engines/Telegram</code>, <code>TelegramIntegrationService</code>, <code>TelegramChannelSender</code></td><td><code>channel_integrations</code> (channel=telegram, bot id/username, webhook status)</td><td>Live.</td></tr>
 <tr><td>Google Calendar / Outlook (Graph)</td><td>out: OAuth, list calendars · via n8n: events</td><td><code>GoogleCalendarProviderClient</code>, <code>OutlookCalendarProviderClient</code>, <code>CalendarOAuthController</code>, <code>CalendarIntegrationService</code></td><td><code>calendar_integrations</code>, <code>calendar_integration_calendars</code>, <code>appointment_calendar_syncs</code></td><td>Connect works; event sync depends on the n8n workflow and <code>N8n:CalendarSyncWebhookUrl</code>.</td></tr>
 <tr><td>TikTok Login Kit</td><td>out: OAuth, profile, refresh, revoke</td><td><code>TikTokProviderClient</code>, <code>TikTokOAuthController</code>, <code>TikTokController</code> (webhook placeholder)</td><td><code>tiktok_integrations</code></td><td>Account connection only.</td></tr>
 <tr><td>Google sign-in</td><td>OIDC (openid, email, profile)</td><td><code>Program.cs</code>, <code>GoogleAuthController</code>, <code>CompleteGoogleSignup</code></td><td><code>identity_user_logins</code></td><td>Live when configured.</td></tr>
 <tr><td>Embeddings</td><td>out: <code>/embeddings</code></td><td><code>OpenAiEmbeddingService</code></td><td><code>knowledge_chunks.embedding vector(1536)</code></td><td>OpenAI <code>text-embedding-3-small</code>, 1536 dims.</td></tr>
-<tr><td>Website crawling</td><td>out: HTTP GET</td><td><code>Integrations/Knowledge/WebScraping/*</code></td><td><code>knowledge_website_*</code> + <code>knowledge_documents</code></td><td>Live; SSRF guard, robots.txt, per-clinic source cap.</td></tr>
+<tr><td>Website crawling</td><td>out: HTTP GET</td><td><code>Engines/WebScraping</code>, <code>HttpClients/WebScraping</code>, <code>WebsiteScrapeWorker</code>, <code>WebsiteSourceService</code></td><td><code>knowledge_website_*</code> + <code>knowledge_documents</code></td><td>Live; SSRF guard, robots.txt, per-clinic source cap.</td></tr>
 <tr><td>n8n</td><td>both</td><td>see §7</td><td>none (no state in n8n)</td><td>AI workflow live; others per §7.</td></tr>
 </table></div>
 </section>
@@ -860,6 +889,16 @@ Client methods: <code>JoinConversation(id)</code> (ownership checked), <code>Lea
 
 <h3 id="db-conv">8.1 Conventions</h3>
 <ul>
+  <li><strong>One Postgres schema per area</strong> (since 2026-10-07): <code>core</code> (clinics, procedures), <code>identity</code>
+  (ASP.NET Identity, clinic_users), <code>crm</code> (leads, conversations, messages), <code>scheduling</code> (appointments,
+  procedure bookings, availability, calendar sync), <code>channels</code> (channel integrations, WhatsApp templates and health,
+  TikTok), <code>marketing</code> (campaigns), <code>knowledge</code> (knowledge base, scraping, benchmarks), <code>activity</code>
+  (events, notifications), <code>billing</code>, <code>config</code>; the admin portal's own tables are in <code>admin</code>.
+  <code>public</code> keeps only <code>set_updated_at()</code> and extensions. SQL always schema-qualifies table names and every
+  <code>ToTable</code> names its schema. The top of <code>schema.sql</code> creates the schemas and moves any table still in
+  <code>public</code> (databases created before the split) with <code>alter table … set schema</code>, which keeps data, indexes,
+  constraints, triggers and foreign keys; on a current database it does nothing. Supabase's Data API only exposes
+  <code>public</code>, so no app table is reachable through it.</li>
   <li><code>Database/schema.sql</code> is the source of truth: idempotent, append-only blocks (<code>create … if not exists</code>, <code>add column if not exists</code>, guarded <code>do $$</code> constraint blocks). New changes are appended at the end, never edited in place. <code>ApplicationDbContext</code> is updated by hand to match.</li>
   <li>Keys: <code>uuid</code> with <code>gen_random_uuid()</code>, except Identity (text ids) and <code>knowledge_retrieval_benchmark_generations.id</code> (app-assigned).</li>
   <li><code>created_at</code>/<code>updated_at</code> on most tables; <code>set_updated_at()</code> trigger maintains <code>updated_at</code>.</li>
@@ -922,64 +961,70 @@ Client methods: <code>JoinConversation(id)</code> (ownership checked), <code>Lea
 <figcaption>Arrows point from child to parent (FK direction). Every table also has <code>clinic_id → clinics</code>; only the most telling edges are drawn. Knowledge Base, availability and TikTok tables hang off <code>clinics</code> and are listed below.</figcaption>
 </figure>
 
-<h3 id="db-tables">8.3 Table catalog (45 tables)</h3>
+<h3 id="db-tables">8.3 Table catalog (46 tables)</h3>
 
 <h4>Tenancy and identity</h4>
 <div class="table-wrap"><table>
 <tr><th>Table</th><th>Key columns</th><th>Constraints / indexes</th></tr>
-<tr><td><code>clinics</code></td><td>name, slug, phone, email, website, country_code, timezone (IANA, default UTC), address, operating_hours, consultation_info, is_active</td><td><code>slug</code> unique</td></tr>
-<tr><td><code>identity_users</code>, <code>identity_user_claims</code>, <code>identity_user_logins</code>, <code>identity_user_tokens</code></td><td>Role-free ASP.NET Identity, snake_case</td><td>text ids; no role tables</td></tr>
-<tr><td><code>clinic_users</code></td><td>clinic_id, user_id (text), is_active</td><td>unique (clinic, user); unique active row per user</td></tr>
+<tr><td><code>core.clinics</code></td><td>name, slug, phone, email, website, country_code, timezone (IANA, default UTC), address, operating_hours, consultation_info, is_active</td><td><code>slug</code> unique</td></tr>
+<tr><td><code>identity.identity_users</code>, <code>identity.identity_user_claims</code>, <code>identity.identity_user_logins</code>, <code>identity.identity_user_tokens</code></td><td>Role-free ASP.NET Identity, snake_case</td><td>text ids; no role tables</td></tr>
+<tr><td><code>identity.clinic_users</code></td><td>clinic_id, user_id (text), is_active</td><td>unique (clinic, user); unique active row per user</td></tr>
 </table></div>
 
 <h4>CRM and scheduling</h4>
 <div class="table-wrap"><table>
 <tr><th>Table</th><th>Key columns</th><th>Constraints / indexes</th></tr>
-<tr><td><code>procedures</code></td><td>name, code, description, consultation_duration (min), is_active</td><td></td></tr>
-<tr><td><code>leads</code></td><td>procedure_id, names, phone (E.164), email, source, source_detail, campaign_name, external_lead_id, status, qualification_status, preferred_language, timeline, notes, marketing_opt_in, opted_out_at, last_contact_at, next_followup_at</td><td>unique (clinic, external_lead_id) partial; indexes on phone, email, status</td></tr>
-<tr><td><code>appointments</code></td><td>lead_id, procedure_id, appointment_type, status, scheduled_start/end, location, external_calendar_id, external_event_id, notes</td><td>index on scheduled_start, status</td></tr>
-<tr><td><code>procedure_bookings</code></td><td>lead_id, procedure_id (restrict), appointment_id, status, quoted/deposit/final amount, currency, procedure_date</td><td></td></tr>
-<tr><td><code>clinic_availability_rules</code></td><td>day_of_week (0 = Sunday), is_open, start_time, end_time (clinic-local)</td><td>unique (clinic, day)</td></tr>
-<tr><td><code>clinic_availability_exceptions</code></td><td>date, is_closed, start_time, end_time, reason</td><td>unique (clinic, date)</td></tr>
-<tr><td><code>clinic_booking_settings</code></td><td>default duration (30), buffer (0), minimum notice (240 min), max advance days (60)</td><td>one per clinic</td></tr>
+<tr><td><code>core.procedures</code></td><td>name, code, description, consultation_duration (min), is_active</td><td></td></tr>
+<tr><td><code>crm.leads</code></td><td>procedure_id, names, phone (E.164), email, source, source_detail, campaign_name, external_lead_id, status, qualification_status, preferred_language, timeline, notes, marketing_opt_in, opted_out_at, last_contact_at, next_followup_at</td><td>unique (clinic, external_lead_id) partial; indexes on phone, email, status</td></tr>
+<tr><td><code>scheduling.appointments</code></td><td>lead_id, procedure_id, appointment_type, status, scheduled_start/end, location, external_calendar_id, external_event_id, notes</td><td>index on scheduled_start, status</td></tr>
+<tr><td><code>scheduling.procedure_bookings</code></td><td>lead_id, procedure_id (restrict), appointment_id, status, quoted/deposit/final amount, currency, procedure_date</td><td></td></tr>
+<tr><td><code>scheduling.clinic_availability_rules</code></td><td>day_of_week (0 = Sunday), is_open, start_time, end_time (clinic-local)</td><td>unique (clinic, day)</td></tr>
+<tr><td><code>scheduling.clinic_availability_exceptions</code></td><td>date, is_closed, start_time, end_time, reason</td><td>unique (clinic, date)</td></tr>
+<tr><td><code>scheduling.clinic_booking_settings</code></td><td>default duration (30), buffer (0), minimum notice (240 min), max advance days (60)</td><td>one per clinic</td></tr>
 </table></div>
 
 <h4>Messaging</h4>
 <div class="table-wrap"><table>
 <tr><th>Table</th><th>Key columns</th><th>Constraints / indexes</th></tr>
-<tr><td><code>conversations</code></td><td>lead_id, channel, external_thread_id, status, mode, ai_enabled + human_takeover (legacy mirrors), last_message_at/direction, last_customer_message_at, service_window_expires_at, last_read_at</td><td>unique (clinic, channel, external_thread_id) partial</td></tr>
-<tr><td><code>messages</code></td><td>conversation_id, lead_id, direction, sender_type, origin, channel, message_type, content, external_message_id, delivery_status, delivered/read/failed/deleted_at, failure_code/reason, metadata_json, is_ai_generated, whatsapp_template_id, campaign_id, campaign_recipient_id</td><td>unique (clinic, channel, external_message_id) partial</td></tr>
-<tr><td><code>channel_integrations</code></td><td>channel, status, display_name, phone_number_id, whatsapp_business_id, page_id, instagram_business_id, access_token, webhook_verify_token, pin, health fields (account_status, phone_quality_rating, is_healthy, health_level, last_problem_*), telegram_bot_id/username, webhook_status, provider (null = meta), provider_sender_id</td><td>unique (clinic, channel); unique phone_number_id; unique connected telegram_bot_id; unique connected (channel, provider, provider_sender_id)</td></tr>
-<tr><td><code>whatsapp_templates</code></td><td>channel_integration_id, meta_template_id (the provider's template id), provider (null = meta), name, category, language, status, header/body/footer, buttons_json, variables_json, components, quality_rating, rejection_reason</td><td>unique (clinic, name, language)</td></tr>
-<tr><td><code>whatsapp_health_events</code></td><td>channel_integration_id, event_type, severity, status, code, message, raw_metadata, occurred_at</td><td>unique (connection, event_type, occurred_at)</td></tr>
-<tr><td><code>campaigns</code></td><td>name, whatsapp_template_id, campaign_type, channel, audience_type, audience_filters, status, scheduled/started/completed_at, created_by_user_id</td><td></td></tr>
-<tr><td><code>campaign_recipients</code></td><td>campaign_id, lead_id, conversation_id, message_id, appointment_id, phone_number, variables_json, status, skip_reason, failure_code/reason, queued/sent/delivered/read/failed/replied/booked_at, external_message_id</td><td>unique (campaign, lead)</td></tr>
-<tr><td><code>notifications</code></td><td>type, title, message, lead/conversation/appointment/channel_integration ids, link, is_read, read_at</td><td>index (clinic, created_at desc); partial unread</td></tr>
-<tr><td><code>events</code></td><td>event_type, source, metadata jsonb, lead/conversation/appointment ids</td><td>append-only log</td></tr>
+<tr><td><code>crm.conversations</code></td><td>lead_id, channel, external_thread_id, status, mode, ai_enabled + human_takeover (legacy mirrors), last_message_at/direction, last_customer_message_at, service_window_expires_at, last_read_at</td><td>unique (clinic, channel, external_thread_id) partial</td></tr>
+<tr><td><code>crm.messages</code></td><td>conversation_id, lead_id, direction, sender_type, origin, channel, message_type, content, external_message_id, delivery_status, delivered/read/failed/deleted_at, failure_code/reason, metadata_json, is_ai_generated, whatsapp_template_id, campaign_id, campaign_recipient_id</td><td>unique (clinic, channel, external_message_id) partial</td></tr>
+<tr><td><code>channels.channel_integrations</code></td><td>channel, status, display_name, phone_number_id, whatsapp_business_id, page_id, instagram_business_id, access_token, webhook_verify_token, pin, health fields (account_status, phone_quality_rating, is_healthy, health_level, last_problem_*), telegram_bot_id/username, webhook_status, provider (null = meta), provider_sender_id</td><td>unique (clinic, channel); unique phone_number_id; unique connected telegram_bot_id; unique connected (channel, provider, provider_sender_id)</td></tr>
+<tr><td><code>channels.whatsapp_templates</code></td><td>channel_integration_id, meta_template_id (the provider's template id), provider (null = meta), name, category, language, status, header/body/footer, buttons_json, variables_json, components, quality_rating, rejection_reason</td><td>unique (clinic, name, language)</td></tr>
+<tr><td><code>channels.whatsapp_health_events</code></td><td>channel_integration_id, event_type, severity, status, code, message, raw_metadata, occurred_at</td><td>unique (connection, event_type, occurred_at)</td></tr>
+<tr><td><code>marketing.campaigns</code></td><td>name, whatsapp_template_id, campaign_type, channel, audience_type, audience_filters, status, scheduled/started/completed_at, created_by_user_id</td><td></td></tr>
+<tr><td><code>marketing.campaign_recipients</code></td><td>campaign_id, lead_id, conversation_id, message_id, appointment_id, phone_number, variables_json, status, skip_reason, failure_code/reason, queued/sent/delivered/read/failed/replied/booked_at, external_message_id</td><td>unique (campaign, lead)</td></tr>
+<tr><td><code>activity.notifications</code></td><td>type, title, message, lead/conversation/appointment/channel_integration ids, link, is_read, read_at</td><td>index (clinic, created_at desc); partial unread</td></tr>
+<tr><td><code>activity.events</code></td><td>event_type, source, metadata jsonb, lead/conversation/appointment ids</td><td>append-only log</td></tr>
 </table></div>
 
 <h4>Knowledge Base</h4>
 <div class="table-wrap"><table>
 <tr><th>Table</th><th>Key columns</th><th>Constraints / indexes</th></tr>
-<tr><td><code>knowledge_documents</code></td><td>title, category, content, is_active, source_type (manual | upload | website), original_file_name, mime_type, file_size_bytes, source_url</td><td></td></tr>
-<tr><td><code>knowledge_chunks</code></td><td>knowledge_document_id, chunk_index, content, embedding vector(1536)</td><td>no ANN index (exact scan per clinic)</td></tr>
-<tr><td><code>knowledge_search_settings</code></td><td>embedding_model, vector_dimension, similarity_method, chunk_size_tokens (50–1000), chunk_overlap_tokens, top_k (1–10), minimum_similarity (0–1)</td><td>one per clinic, created lazily</td></tr>
-<tr><td><code>knowledge_website_sources</code></td><td>start_url, normalized_start_url, host, crawl_mode, category, status, boilerplate_block_hashes</td><td>unique (clinic, normalized_start_url)</td></tr>
-<tr><td><code>knowledge_website_pages</code></td><td>url, normalized/canonical url, title, http_status, content_hash, etag, status, depth, knowledge_document_id, duplicate_of_page_id, links, missing_count, removed_at</td><td>unique (source, normalized_url)</td></tr>
-<tr><td><code>knowledge_website_scrape_runs</code></td><td>status, started/completed_at, page counters, error_summary</td><td></td></tr>
-<tr><td><code>knowledge_retrieval_benchmark_cases</code></td><td>question, expected_document_id, expected_chunk_id (no FK), case_type, is_reviewed, source_chunk_hash/preview, is_stale, generation_id</td><td>unique (clinic, chunk, lower(question))</td></tr>
-<tr><td><code>knowledge_retrieval_benchmark_generations</code></td><td>status (pending | completed | failed | cancelled), sent_chunks, counts, rejected_json, raw_response</td><td>id = generationId sent to n8n</td></tr>
-<tr><td><code>knowledge_retrieval_benchmark_runs</code></td><td>case_scope, generation_id, status, counters, chunk/document Top-1/3/5, MRR, latency, settings snapshot</td><td></td></tr>
-<tr><td><code>knowledge_retrieval_benchmark_results</code></td><td>run, case (set null), ranks, scores, pass flags, classification, retrieved_json</td><td></td></tr>
+<tr><td><code>knowledge.knowledge_documents</code></td><td>title, category, content, is_active, source_type (manual | upload | website), original_file_name, mime_type, file_size_bytes, source_url</td><td></td></tr>
+<tr><td><code>knowledge.knowledge_chunks</code></td><td>knowledge_document_id, chunk_index, content, embedding vector(1536)</td><td>no ANN index (exact scan per clinic)</td></tr>
+<tr><td><code>knowledge.knowledge_search_settings</code></td><td>embedding_model, vector_dimension, similarity_method, chunk_size_tokens (50–1000), chunk_overlap_tokens, top_k (1–10), minimum_similarity (0–1)</td><td>one per clinic, created lazily</td></tr>
+<tr><td><code>knowledge.knowledge_website_sources</code></td><td>start_url, normalized_start_url, host, crawl_mode, category, status, boilerplate_block_hashes</td><td>unique (clinic, normalized_start_url)</td></tr>
+<tr><td><code>knowledge.knowledge_website_pages</code></td><td>url, normalized/canonical url, title, http_status, content_hash, etag, status, depth, knowledge_document_id, duplicate_of_page_id, links, missing_count, removed_at</td><td>unique (source, normalized_url)</td></tr>
+<tr><td><code>knowledge.knowledge_website_scrape_runs</code></td><td>status, started/completed_at, page counters, error_summary</td><td></td></tr>
+<tr><td><code>knowledge.knowledge_retrieval_benchmark_cases</code></td><td>question, expected_document_id, expected_chunk_id (no FK), case_type, is_reviewed, source_chunk_hash/preview, is_stale, generation_id</td><td>unique (clinic, chunk, lower(question))</td></tr>
+<tr><td><code>knowledge.knowledge_retrieval_benchmark_generations</code></td><td>status (pending | completed | failed | cancelled), sent_chunks, counts, rejected_json, raw_response</td><td>id = generationId sent to n8n</td></tr>
+<tr><td><code>knowledge.knowledge_retrieval_benchmark_runs</code></td><td>case_scope, generation_id, status, counters, chunk/document Top-1/3/5, MRR, latency, settings snapshot</td><td></td></tr>
+<tr><td><code>knowledge.knowledge_retrieval_benchmark_results</code></td><td>run, case (set null), ranks, scores, pass flags, classification, retrieved_json</td><td></td></tr>
 </table></div>
 
 <h4>External accounts</h4>
 <div class="table-wrap"><table>
 <tr><th>Table</th><th>Key columns</th><th>Constraints / indexes</th></tr>
-<tr><td><code>calendar_integrations</code></td><td>provider (google | outlook), status, account_display_name, selected_calendar_id/name, sync_enabled, access/refresh token, token_expires_at, health fields. (<code>external_connection_ref</code> is from the earlier n8n-owned design.)</td><td>unique (clinic, provider)</td></tr>
-<tr><td><code>calendar_integration_calendars</code></td><td>external_calendar_id, name, is_primary</td><td>unique per integration</td></tr>
-<tr><td><code>appointment_calendar_syncs</code></td><td>appointment_id, calendar_integration_id, external_event_id, status, last_request_id, last_operation, last_error</td><td>unique (appointment, integration)</td></tr>
-<tr><td><code>tiktok_integrations</code></td><td>status, open_id, union_id, display_name, avatar_url, tokens and expiries, health</td><td>one per clinic</td></tr>
+<tr><td><code>scheduling.calendar_integrations</code></td><td>provider (google | outlook), status, account_display_name, selected_calendar_id/name, sync_enabled, access/refresh token, token_expires_at, health fields. (<code>external_connection_ref</code> is from the earlier n8n-owned design.)</td><td>unique (clinic, provider)</td></tr>
+<tr><td><code>scheduling.calendar_integration_calendars</code></td><td>external_calendar_id, name, is_primary</td><td>unique per integration</td></tr>
+<tr><td><code>scheduling.appointment_calendar_syncs</code></td><td>appointment_id, calendar_integration_id, external_event_id, status, last_request_id, last_operation, last_error</td><td>unique (appointment, integration)</td></tr>
+<tr><td><code>channels.tiktok_integrations</code></td><td>status, open_id, union_id, display_name, avatar_url, tokens and expiries, health</td><td>one per clinic</td></tr>
+</table></div>
+
+<h4>Settings — Postgres schema <code>config</code> (§9)</h4>
+<div class="table-wrap"><table>
+<tr><th>Table</th><th>Key columns</th><th>Constraints / indexes</th></tr>
+<tr><td><code>config.settings</code></td><td>section, key (e.g. <code>Availability</code> / <code>DefaultDurationMinutes</code>), value, description (the admin's note), updated_by</td><td>primary key (section, key); only settings declared in <code>ConfigDefaults</code>; never secrets</td></tr>
 </table></div>
 
 <h4>Subscriptions and billing — Postgres schema <code>billing</code> (§2.6)</h4>
@@ -1017,6 +1062,19 @@ Client methods: <code>JoinConversation(id)</code> (ownership checked), <code>Lea
 <section id="config">
 <h2>9. Configuration</h2>
 <p>Names only. Non-secret defaults live in <code>appsettings.json</code>; secrets via user-secrets or Render env vars (<code>__</code> for <code>:</code>).</p>
+<p><strong>Settings in the database (<code>config.settings</code>, read through <code>IConfigManager</code>).</strong> Tunable
+values (limits, defaults, thresholds) are read with <code>IConfigManager.GetInt/GetDecimal/GetBool/GetString(section, key)</code>
+(<code>Business/Managers/ConfigManager</code>, singleton): the value stored in <code>config.settings</code> for that section and key
+when there is one, otherwise the constant default declared in <code>Common/Statics/ConfigDefaults</code>. <code>ConfigDefaults</code>
+is also the list of settings that exist (type, range, description); only those can be stored, and only values that fit. The
+manager answers from an in-memory copy of the table, loaded by <code>ConfigRefreshJob</code> at startup and every 60 seconds and
+refreshed right after a change, so a change applies at once without a restart. A stored value that doesn't parse is ignored
+(default used, warning logged). If the database is unreachable the defaults apply. 56 settings are declared, in sections <code>Availability</code>, <code>Billing</code> (incl. <code>Enabled</code>, <code>Currency</code>,
+grace period, reservation timeout, maintenance interval, signup plan), <code>Knowledge</code>, <code>WebScraping</code>,
+<code>Benchmark</code>, <code>Campaigns</code>, <code>Embeddings</code> (base URL, model, dimensions, batch size, and the API key as a secret setting: stored, but the API and the Configuration page only show whether it is set, and it never reaches logs or the audit log), <code>Integrations</code>, <code>Infobip</code> and
+<code>Dashboard</code>; each has a typed property on <code>IConfigManager</code> (full list in <code>docs/configuration.md</code>). <code>Database/seed-config.sql</code> stores every default (never overwriting a stored value).
+Those keys are no longer read from appsettings or environment variables; the table below lists what stays there. Managed from the admin portal's Configuration page through <code>/api/platform-admin/settings</code>
+(§4.3). Secrets and environment values (below) stay in appsettings / user-secrets / environment variables.</p>
 <div class="table-wrap"><table>
 <tr><th>Key</th><th>Secret</th><th>Used by</th></tr>
 <tr><td><code>ConnectionStrings:Postgres</code></td><td>yes</td><td>EF Core (key=value format, Supabase session pooler)</td></tr>
@@ -1024,19 +1082,15 @@ Client methods: <code>JoinConversation(id)</code> (ownership checked), <code>Lea
 <tr><td><code>WhatsApp:Provider</code></td><td>no</td><td>Global WhatsApp provider switch: <code>meta</code> (default) or <code>infobip</code></td></tr>
 <tr><td><code>Infobip:BaseUrl</code>, <code>Infobip:ApiKey</code></td><td>yes</td><td>SculptFlow's Infobip account (env vars <code>Infobip__BaseUrl</code>, <code>Infobip__ApiKey</code>)</td></tr>
 <tr><td><code>Infobip:WebhookToken</code></td><td>yes</td><td>Account-level webhook (template updates); empty = endpoint off</td></tr>
-<tr><td><code>Infobip:TimeoutSeconds</code>, <code>Infobip:MaxSendAttempts</code></td><td>no</td><td>Per-call timeout (20s), total tries for a send Infobip clearly refused (429/503/no connection; 3)</td></tr>
 <tr><td><code>Meta:AppId</code>, <code>GraphApiVersion</code>, <code>FacebookLoginConfigId</code>, <code>WhatsAppLoginConfigId</code></td><td>no</td><td>Graph client, Embedded Signup</td></tr>
 <tr><td><code>Meta:AppSecret</code>, <code>Meta:WebhookVerifyToken</code></td><td>yes</td><td>Token exchange; webhook handshake</td></tr>
 <tr><td><code>N8n:IngestApiKey</code></td><td>yes</td><td>All ingest-key endpoints</td></tr>
 <tr><td><code>N8n:AiWebhookUrl</code>, <code>N8n:KnowledgeBenchmarkWebhookUrl</code>, <code>N8n:CalendarSyncWebhookUrl</code></td><td>treat as secret</td><td>Outbound n8n triggers (empty = feature inert, logged)</td></tr>
-<tr><td><code>Embeddings:BaseUrl</code>, <code>Model</code>, <code>Dimensions</code> / <code>Embeddings:ApiKey</code></td><td>key only</td><td>Embedding service</td></tr>
-<tr><td><code>Knowledge:*</code>, <code>Knowledge:WebScraping:*</code></td><td>no</td><td>Defaults for new clinic settings, upload limits, crawler limits (<code>DevAllowedHosts</code> only in Development)</td></tr>
 <tr><td><code>GoogleCalendar:ClientId/ClientSecret</code>, <code>MicrosoftCalendar:ClientId/ClientSecret/TenantId</code></td><td>secrets</td><td>Calendar OAuth</td></tr>
 <tr><td><code>GoogleLogin:ClientId/ClientSecret</code></td><td>secret</td><td>Continue with Google (button hidden if either is empty)</td></tr>
 <tr><td><code>TikTok:ClientKey/ClientSecret</code></td><td>secret</td><td>TikTok Login Kit</td></tr>
 <tr><td><code>Telegram:ApiBaseUrl</code></td><td>no</td><td>Optional override (default <code>https://api.telegram.org</code>), used for fakes in testing</td></tr>
-<tr><td><code>Billing:Enabled</code></td><td>no</td><td>Master switch for usage billing + entitlements (default false = everything allowed, nothing rated)</td></tr>
-<tr><td><code>Billing:Currency</code>, <code>GracePeriodDays</code>, <code>ReservationTimeoutHours</code>, <code>MaintenanceIntervalMinutes</code>, <code>SignupPlanCode</code></td><td>no</td><td>USD; 7 days; 72 h; 5 min; plan new clinics start on (first period free, empty = none)</td></tr>
+<tr><td><code>Billing:WhatsApp:*</code>, <code>Billing:ProviderBilling:Defaults:*</code></td><td>no</td><td>Structured billing rules (lists and maps). Billing:Enabled, Currency and the other billing values are settings (§9 above); the switch defaults to on</td></tr>
 <tr><td><code>PlatformAdmin:ApiKey</code></td><td>yes</td><td>Platform-admin API key (<code>X-Platform-Admin-Key</code>), shared with the SculptFlowAdmin portal (<code>MainApp:PlatformAdminApiKey</code> there); empty = every <code>/api/platform-admin</code> endpoint off (404)</td></tr>
 <tr><td><code>Billing:ProviderBilling:Defaults:*</code></td><td>no</td><td>Default provider billing per <code>{channel}</code> or <code>{channel}_{provider}</code> (e.g. <code>whatsapp_meta = customer_direct</code>); built-ins in <code>ProviderBillingService</code></td></tr><td>no</td><td>Optional WhatsApp pricing rules: <code>TemplateCategoryEvents</code>, <code>ServiceMessageEvent</code>, <code>FreeInsideServiceWindow</code>, <code>BillableStatuses</code>, <code>NonBillableStatuses</code> (defaults in <code>WhatsAppBillingPolicy</code>)</td></tr>
 </table></div>
@@ -1115,7 +1169,12 @@ Client methods: <code>JoinConversation(id)</code> (ownership checked), <code>Lea
 <tr><td>2026-10-05</td><td>Template provider seam (<code>IWhatsAppTemplateProvider</code>): the Templates page works through Infobip too; <code>whatsapp_templates.provider</code>; account-level webhook <code>/api/integrations/whatsapp/account/events</code>; <code>Infobip:WebhookToken</code>: §4.2, §4.3, §6, §8, §9, §10.</td></tr>
 <tr><td>2026-10-05</td><td>Subscriptions &amp; usage billing module (<code>Billing/</code>, branch <code>feature/subscription-billing</code>): plans + entitlements, clinic subscriptions with renewal/past due/expiry, prepaid wallet + included credit, rate cards with versioned rates, billable events with reserve/settle/release, append-only ledger, WhatsApp/Telegram billing policies, entitlement checks on sending, campaigns, the AI trigger and channel connects, Settings → Billing page, <code>/api/billing</code> and the key-protected <code>/api/billing/admin</code>, <code>BillingMaintenanceWorker</code>, 8 new tables, <code>Billing:*</code> config, the first test project: §1, §2.3, §2.4, §2.5, §2.6 (new, with diagram), §3.1, §4.1–§4.6, §5.11–§5.12, §8.3, §8.4, §9, §10, §12.</td></tr>
 <tr><td>2026-10-06</td><td>Billing tables moved into the Postgres schema <code>billing</code> (<code>billing.plans</code>, <code>billing.accounts</code>, …). Provider billing responsibility per connected channel account (<code>customer_direct</code>, <code>platform_funded</code>, <code>external_provider_direct</code>, <code>no_provider_usage_fee</code>) with configured defaults and admin overrides (<code>billing.channel_account_settings</code>, <code>ProviderBillingService</code>); usage is always recorded but only charged when SculptFlow charges for it (<code>charge_status</code> vs <code>provider_outcome</code>, <code>not_charged</code>); rates can target one responsibility; reports split provider cost paid by SculptFlow vs paid externally; Settings → Billing shows who pays per account: §2.6 (text + diagram), §4.1, §4.2, §4.3, §5.11, §8.3, §8.4, §9, §10.</td></tr>
+<tr><td>2026-10-06</td><td>Automation cleanup API <code>/api/platform-admin/automation</code> (<code>AutomationAdminController</code>): lists and deletes <code>[Automation]</code> test clinics created by the new SculptFlowAutomation tester app, guarded by name prefix + <code>.test</code> email domain: §4.</td></tr>
 <tr><td>2026-10-06</td><td>Platform-admin convention: the billing admin API moved to <code>/api/platform-admin/billing</code> behind <code>[RequirePlatformAdminKey]</code> (<code>PlatformAdmin:ApiKey</code>, <code>X-Platform-Admin-Key</code>, actor in <code>X-Admin-Actor</code>), replacing <code>Billing:AdminApiKey</code>. The SculptFlowAdmin portal now has Billing pages that call it; the main app keeps owning the rules and writes: §2.3, §4.1, §4.3, §9, §10.</td></tr>
+<tr><td>2026-10-06</td><td>Code layout refactor (branch <code>refactor/architecture</code>): folders by layer (<code>Controllers/{Client,Admin,Integrations,Filters}</code>, <code>Business/{Services,Engines,Managers,Providers,HttpClients,Jobs,Contracts}</code>, <code>Entities/{Models,Requests,Responses,Dtos}</code>, <code>Common/{Enums,Statics,Configs,Helpers,Exceptions,Converters,Extensions}</code>, <code>Persistence/{Contexts,Repositories}</code>), one type per file, namespace = folder. No behaviour change. §2.5, §2.6, §4.1, §6.</td></tr>
+<tr><td>2026-10-07</td><td>Repositories and unit of work (branch <code>refactor/architecture</code>): every service, engine, job, hub, controller and page now reaches the database only through <code>Persistence/</code> repositories; <code>IUnitOfWork</code> owns saves/transactions; billing moved from <code>BillingDbFactory</code>/<code>BillingStore</code> to <code>IBillingUnitOfWorkFactory</code> + <code>BillingLedger</code>; webhook auth/AI-trigger logic moved from the Telegram/Infobip webhook controllers into their processors (<code>ReceiveAsync</code>); automation cleanup moved into <code>AutomationCleanupService</code>; Clinic Info details save moved into <code>ClinicProfileService</code>; the Inbox hub checks conversation ownership through <code>IConversationService</code>; entity → response mapping in <code>Business/Mappers</code>. No behaviour change. §4.1.</td></tr>
+<tr><td>2026-10-07</td><td>Database split into one Postgres schema per area (<code>core</code>, <code>identity</code>, <code>crm</code>, <code>scheduling</code>, <code>channels</code>, <code>marketing</code>, <code>knowledge</code>, <code>activity</code>, plus the existing <code>billing</code>); <code>schema.sql</code> creates them and moves existing tables out of <code>public</code>, every statement is schema-qualified, every <code>ToTable</code> names its schema, the knowledge raw SQL is qualified. The campaign-recipient column rename is now guarded so <code>schema.sql</code> re-runs cleanly. Settings: new <code>config.settings</code> table keyed by (section, key), read through <code>IConfigManager</code> (one typed property per setting) with constant defaults in <code>Common/Statics/ConfigDefaults</code>; 56 settings moved there from appsettings (incl. the embeddings API key, as a masked secret setting) (billing switch, currency and tunables, knowledge, crawler (incl. the Development SSRF allow-list), embedding base URL/model/dimensions and Infobip limits) and from constants (availability defaults, benchmark, campaigns, embeddings batch, OAuth/token timings, leads page size); their appsettings keys and environment variables no longer apply, refreshed by <code>ConfigRefreshJob</code>; <code>/api/platform-admin/settings</code> (<code>SettingsAdminController</code>, <code>SettingsService</code>), managed from the admin portal's new Configuration page. §4.3, §4.5, §8.1, §8.3, §9.</td></tr>
+<tr><td>2026-10-07</td><td>Errors: one <code>[ApiErrors]</code> exception filter replaces the per-action try/catch in the JSON API controllers (same statuses and <code>{ error }</code> bodies; unhandled duplicate/overlap/not-found now 409/404 instead of 500). Knowledge chunks are inserted 200 per statement (<code>unnest</code> of arrays) instead of one statement per chunk. §4.6.</td></tr>
 </table></div>
 </section>
 

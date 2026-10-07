@@ -1,6 +1,4 @@
 @page "/KnowledgeBase/Websites/{id:guid}"
-@using PlasticSurgery.Data.Entities
-@using PlasticSurgery.Pages.Shared
 @model PlasticSurgery.Pages.KnowledgeBase.Websites.DetailsModel
 @{
     ViewData["Title"] = "Website";
@@ -12,7 +10,7 @@
         WebsiteScrapeStatus.Crawling => "badge-teal",
         _ => "badge-gray"
     };
-    string RunLabel(PlasticSurgery.Dtos.WebsiteRunResponse r) => r.Status switch
+    string RunLabel(WebsiteRunResponse r) => r.Status switch
     {
         WebsiteScrapeStatus.Completed => "Completed",
         WebsiteScrapeStatus.CompletedWithErrors => $"{r.PagesFailed} problem{(r.PagesFailed == 1 ? "" : "s")}",

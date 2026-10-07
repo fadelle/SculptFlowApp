@@ -1,8 +1,10 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
-using PlasticSurgery.Data.Entities;
-using PlasticSurgery.Dtos;
-using PlasticSurgery.Services;
+using PlasticSurgery.Business.Contracts.Managers;
+using PlasticSurgery.Business.Contracts.Services.Dashboard;
+using PlasticSurgery.Business.Contracts.Services.Leads;
+using PlasticSurgery.Common.Enums;
+using PlasticSurgery.Entities.Dtos.Dashboard;
 
 namespace PlasticSurgery.Pages.Dashboard;
 
@@ -12,9 +14,11 @@ public class LeadsModel : PageModel
     private readonly ICurrentClinicContext _clinicContext;
     private readonly IDashboardService _dashboard;
     private readonly ILeadService _leads;
+    private readonly IConfigManager _config;
 
-    public LeadsModel(ICurrentClinicContext clinicContext, IDashboardService dashboard, ILeadService leads)
+    public LeadsModel(ICurrentClinicContext clinicContext, IDashboardService dashboard, ILeadService leads, IConfigManager config)
     {
+        _config = config;
         _clinicContext = clinicContext;
         _dashboard = dashboard;
         _leads = leads;
@@ -34,7 +38,7 @@ public class LeadsModel : PageModel
     [BindProperty(SupportsGet = true)]
     public int PageNumber { get; set; } = 1;
 
-    public const int PageSize = 25;
+    public int PageSize => _config.DashboardLeadsPageSize;
 
     public bool ClinicConfigured { get; private set; }
     public IReadOnlyList<DashboardLeadRow> Leads { get; private set; } = Array.Empty<DashboardLeadRow>();

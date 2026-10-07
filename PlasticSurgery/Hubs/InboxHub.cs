@@ -1,8 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
-using Microsoft.EntityFrameworkCore;
-using PlasticSurgery.Data;
-using PlasticSurgery.Services;
+using PlasticSurgery.Business.Contracts.Managers;
+using PlasticSurgery.Business.Contracts.Services.Inbox;
 
 namespace PlasticSurgery.Hubs;
 
@@ -19,12 +18,12 @@ namespace PlasticSurgery.Hubs;
 public class InboxHub : Hub
 {
     private readonly ICurrentClinicContext _clinicContext;
-    private readonly ApplicationDbContext _db;
+    private readonly IConversationService _conversations;
 
-    public InboxHub(ICurrentClinicContext clinicContext, ApplicationDbContext db)
+    public InboxHub(ICurrentClinicContext clinicContext, IConversationService conversations)
     {
         _clinicContext = clinicContext;
-        _db = db;
+        _conversations = conversations;
     }
 
     public override async Task OnConnectedAsync()
@@ -45,8 +44,7 @@ public class InboxHub : Hub
         var clinicId = await _clinicContext.GetClinicIdAsync(Context.ConnectionAborted);
         if (clinicId is null) return;
 
-        var belongsToClinic = await _db.Conversations
-            .AnyAsync(c => c.Id == conversationId && c.ClinicId == clinicId.Value, Context.ConnectionAborted);
+        var belongsToClinic = await _conversations.BelongsToClinicAsync(clinicId.Value, conversationId, Context.ConnectionAborted);
         if (!belongsToClinic) return;
 
         await Groups.AddToGroupAsync(Context.ConnectionId, ConversationGroup(conversationId));

@@ -1,8 +1,12 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
-using PlasticSurgery.Billing;
-using PlasticSurgery.Data.Entities;
-using PlasticSurgery.Integrations.WhatsApp;
+using PlasticSurgery.Business.Engines.Billing;
+using PlasticSurgery.Common.Configs;
+using PlasticSurgery.Common.Enums;
+using PlasticSurgery.Common.Helpers;
+using PlasticSurgery.Common.Statics;
+using PlasticSurgery.Entities.Dtos.Billing;
+using PlasticSurgery.Entities.Models;
 
 namespace PlasticSurgery.Tests;
 

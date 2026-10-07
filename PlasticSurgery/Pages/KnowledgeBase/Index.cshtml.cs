@@ -1,9 +1,9 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
-using PlasticSurgery.Data.Entities;
-using PlasticSurgery.Dtos;
-using PlasticSurgery.Integrations.Knowledge.WebScraping;
-using PlasticSurgery.Services;
+using PlasticSurgery.Business.Contracts.Managers;
+using PlasticSurgery.Business.Contracts.Services.Knowledge;
+using PlasticSurgery.Common.Enums;
+using PlasticSurgery.Entities.Dtos.Knowledge;
 
 namespace PlasticSurgery.Pages.KnowledgeBase;
 
@@ -26,11 +26,8 @@ public class IndexModel : PageModel
         _websites = websites;
     }
 
-    /// <summary>One line of the list: either a document (manual/upload) or a website source.</summary>
-    public sealed record Row(DateTimeOffset SortDate, KnowledgeDocumentResponse? Document, WebsiteSourceResponse? Website);
-
     public bool ClinicConfigured { get; private set; }
-    public IReadOnlyList<Row> Rows { get; private set; } = Array.Empty<Row>();
+    public IReadOnlyList<KnowledgeListRow> Rows { get; private set; } = Array.Empty<KnowledgeListRow>();
     public bool AnyWebsiteInProgress => Rows.Any(r => r.Website is { InProgress: true });
 
     [TempData]
@@ -50,8 +47,8 @@ public class IndexModel : PageModel
         var documents = (await _knowledge.ListAsync(clinic.Id, ct)).Where(d => d.SourceType != KnowledgeSourceType.Website);
         var websites = await _websites.ListAsync(clinic.Id, ct);
 
-        Rows = documents.Select(d => new Row(d.UpdatedAt, d, null))
-            .Concat(websites.Select(w => new Row(w.LastScrapedAt ?? w.CreatedAt, null, w)))
+        Rows = documents.Select(d => new KnowledgeListRow(d.UpdatedAt, d, null))
+            .Concat(websites.Select(w => new KnowledgeListRow(w.LastScrapedAt ?? w.CreatedAt, null, w)))
             .OrderByDescending(r => r.SortDate)
             .ToList();
     }

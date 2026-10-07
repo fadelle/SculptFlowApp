@@ -2,13 +2,31 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
-using PlasticSurgery.Billing;
-using PlasticSurgery.Data;
-using PlasticSurgery.Data.Entities;
-using PlasticSurgery.Dtos;
-using PlasticSurgery.Integrations.Telegram;
-using PlasticSurgery.Integrations.WhatsApp;
-using PlasticSurgery.Services;
+using PlasticSurgery.Business.Contracts.Engines.Billing;
+using PlasticSurgery.Business.Contracts.Managers;
+using PlasticSurgery.Business.Contracts.Providers.Channels;
+using PlasticSurgery.Business.Contracts.Services.Inbox;
+using PlasticSurgery.Business.Contracts.Services.Notifications;
+using PlasticSurgery.Business.Engines.Billing;
+using PlasticSurgery.Business.Managers;
+using PlasticSurgery.Business.Providers.Channels;
+using PlasticSurgery.Business.Services.Inbox;
+using PlasticSurgery.Common.Configs;
+using PlasticSurgery.Common.Enums;
+using PlasticSurgery.Common.Exceptions;
+using PlasticSurgery.Common.Statics;
+using PlasticSurgery.Entities.Dtos.Billing;
+using PlasticSurgery.Entities.Models;
+using PlasticSurgery.Entities.Requests.Billing;
+using PlasticSurgery.Entities.Requests.Inbox;
+using PlasticSurgery.Entities.Responses.Inbox;
+using PlasticSurgery.Persistence.Contexts;
+using PlasticSurgery.Persistence.Repositories;
+using PlasticSurgery.Persistence.Repositories.Campaigns;
+using PlasticSurgery.Persistence.Repositories.Events;
+using PlasticSurgery.Persistence.Repositories.Inbox;
+using PlasticSurgery.Persistence.Repositories.Leads;
+using PlasticSurgery.Persistence.Repositories.WhatsApp;
 
 namespace PlasticSurgery.Tests;
 
@@ -54,9 +72,10 @@ public class MessageBillingTests
         public MessageService NewMessageService(ApplicationDbContext db)
         {
             var config = Config();
-            return new MessageService(db, WhatsApp, new IChannelSender[] { new WhatsAppChannelSender(WhatsApp) },
-                NullProxy<IInboxNotifier>.Create(), new EventLogger(db), NullProxy<INotificationService>.Create(), config,
-                MessageBilling, new EntitlementService(db, Options.Create(H.Options), H.Time, NullLogger<EntitlementService>.Instance));
+            return new MessageService(new ConversationRepository(db), new MessageRepository(db), new LeadRepository(db),
+                new WhatsAppTemplateRepository(db), new CampaignRepository(db), new UnitOfWork(db), WhatsApp, new IChannelSender[] { new WhatsAppChannelSender(WhatsApp) },
+                NullProxy<IInboxNotifier>.Create(), new EventLogger(new EventLogRepository(db)), NullProxy<INotificationService>.Create(), config,
+                MessageBilling, H.Entitlements(db));
         }
 
         public async Task<MessageResponse> SendTemplateAsync(Guid templateId)
@@ -122,7 +141,6 @@ public class MessageBillingTests
             await db.SaveChangesAsync();
         }
 
-        var options = Options.Create(h.Options);
         // The clinic's WhatsApp account (SculptFlow's Infobip sender), optionally with an admin override of who pays.
         var accountId = await h.ConnectChannelAsync(clinic, ChannelType.WhatsApp, ChannelProvider.Infobip);
         if (providerBilling is not null || omniUsageBilling is not null)
@@ -132,7 +150,7 @@ public class MessageBillingTests
 
         var messageBilling = new MessageBillingService(h.Billing,
             new IChannelBillingPolicy[] { new WhatsAppBillingPolicy(Config(), Options.Create(new WhatsAppBillingOptions())), new TelegramBillingPolicy() },
-            h.ProviderBilling, h.Factory, options, h.Time, NullLogger<MessageBillingService>.Instance);
+            h.ProviderBilling, h.Factory, h.Time, NullLogger<MessageBillingService>.Instance, h.Config);
 
         return new Setup
         {
@@ -279,7 +297,7 @@ public class MessageBillingTests
     public async Task WithBillingOff_SendsWorkExactlyAsBefore()
     {
         var s = await SetupAsync(wallet: 0m, subscribe: false);
-        s.H.Options.Enabled = false;
+        s.H.SetSetting("Billing", "Enabled", "false");
 
         var message = await s.SendTemplateAsync(s.MarketingTemplate);
         await s.StatusAsync(message.Id, "delivered");

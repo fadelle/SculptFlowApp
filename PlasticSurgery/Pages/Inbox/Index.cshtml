@@ -36,15 +36,15 @@ else
                     <div class="inbox-conv-item" data-conversation-id="@c.Id" data-lead-name="@(c.LeadFullName ?? "Unknown")" data-procedure-name="@(c.ProcedureName ?? "")" data-channel="@c.Channel">
                         <span class="inbox-avatar">
                             @Initials(c.LeadFullName)
-                            <span class="inbox-channel-icon" style="background:@PlasticSurgery.Pages.Shared.ChannelIconHelper.Hex(c.Channel)" title="@c.Channel">
-                                @{ var svg = PlasticSurgery.Pages.Shared.ChannelIconHelper.Svg(c.Channel); }
+                            <span class="inbox-channel-icon" style="background:@PlasticSurgery.Common.Helpers.ChannelIconHelper.Hex(c.Channel)" title="@c.Channel">
+                                @{ var svg = PlasticSurgery.Common.Helpers.ChannelIconHelper.Svg(c.Channel); }
                                 @if (svg is not null)
                                 {
                                     @Html.Raw(svg)
                                 }
                                 else
                                 {
-                                    @PlasticSurgery.Pages.Shared.ChannelIconHelper.Initials(c.Channel)
+                                    @PlasticSurgery.Common.Helpers.ChannelIconHelper.Initials(c.Channel)
                                 }
                             </span>
                         </span>

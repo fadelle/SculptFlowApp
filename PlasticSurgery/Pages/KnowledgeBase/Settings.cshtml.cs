@@ -1,8 +1,10 @@
 using System.Globalization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
-using PlasticSurgery.Dtos;
-using PlasticSurgery.Services;
+using PlasticSurgery.Business.Contracts.Managers;
+using PlasticSurgery.Business.Contracts.Services.Knowledge;
+using PlasticSurgery.Entities.Requests.Knowledge;
+using PlasticSurgery.Entities.Responses.Knowledge;
 
 namespace PlasticSurgery.Pages.KnowledgeBase;
 

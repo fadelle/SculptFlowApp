@@ -1,0 +1,27 @@
+namespace PlasticSurgery.Entities.Responses.KnowledgeBenchmark;
+
+public record BenchmarkResultResponse(
+    Guid Id,
+    Guid RunId,
+    Guid? CaseId,
+    string Question,
+    string Classification,
+    Guid ExpectedDocumentId,
+    Guid ExpectedChunkId,
+    string? ExpectedDocumentTitle,
+    string? ExpectedChunkPreview,
+    int? ExpectedChunkRank,
+    int? ExpectedDocumentBestRank,
+    double? ExpectedChunkScore,
+    bool ExpectedBelowThreshold,
+    bool ChunkTop1Pass,
+    bool ChunkTop3Pass,
+    bool ChunkTop5Pass,
+    bool DocumentTop1Pass,
+    bool DocumentTop3Pass,
+    bool DocumentTop5Pass,
+    int ReturnedCount,
+    int? LatencyMs,
+    string? StaleReason,
+    string? ErrorMessage,
+    DateTimeOffset CreatedAt);

@@ -1,6 +1,5 @@
 @page "/settings/calendar-integrations"
 @model PlasticSurgery.Pages.Settings.CalendarIntegrationsModel
-@using PlasticSurgery.Data.Entities
 @{
     ViewData["Title"] = "Calendar Integrations";
 }
@@ -64,7 +63,7 @@ else
 
         <div class="card int-card int-framed @(unhealthy || failed ? "int-card-error" : "")" style="--ch:@accentHex">
             <div class="int-head">
-                <span class="channel-mark int-notch ch-@provider" title="@title">@Html.Raw(PlasticSurgery.Pages.Shared.ChannelIconHelper.BrandSvg(provider) ?? initials)</span>
+                <span class="channel-mark int-notch ch-@provider" title="@title">@Html.Raw(PlasticSurgery.Common.Helpers.ChannelIconHelper.BrandSvg(provider) ?? initials)</span>
                 <div class="flex-1 min-w-0">
                     <div class="integration-title">@title</div>
                     <div class="cell-sub">@(connected && !string.IsNullOrEmpty(info!.AccountDisplayName) ? info.AccountDisplayName : $"Show your SculptFlow appointments in {shortName}.")</div>
@@ -163,7 +162,7 @@ else
                 <div class="card cal-modal int-modal" role="dialog" aria-modal="true" aria-labelledby="@(modalId)-title">
                     <div class="modal-head">
                         <div class="flex items-center gap-2 min-w-0">
-                            <span class="channel-mark ch-@provider" style="background:@accentHex">@Html.Raw(PlasticSurgery.Pages.Shared.ChannelIconHelper.BrandSvg(provider) ?? initials)</span>
+                            <span class="channel-mark ch-@provider" style="background:@accentHex">@Html.Raw(PlasticSurgery.Common.Helpers.ChannelIconHelper.BrandSvg(provider) ?? initials)</span>
                             <div class="min-w-0">
                                 <h3 class="card-title m-0" id="@(modalId)-title">@(hasCalendar ? "Change calendar" : "Choose a calendar")</h3>
                                 <div class="cell-sub">Where new @shortName appointments are added.</div>

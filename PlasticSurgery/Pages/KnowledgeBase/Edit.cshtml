@@ -58,7 +58,7 @@ else
                         <div class="flex-1 min-w-0">
                             @if (Model.IsWebsite)
                             {
-                                <text>From the page </text><a href="@Model.SourceUrl" target="_blank" rel="noopener noreferrer" class="break-all">@PlasticSurgery.Pages.Shared.UrlDisplayHelper.Readable(Model.SourceUrl ?? "")</a>
+                                <text>From the page </text><a href="@Model.SourceUrl" target="_blank" rel="noopener noreferrer" class="break-all">@PlasticSurgery.Common.Helpers.UrlDisplayHelper.Readable(Model.SourceUrl ?? "")</a>
                                 <div class="cell-sub">The text updates when the website is imported again. Title, category and Active can be changed here.</div>
                             }
                             else

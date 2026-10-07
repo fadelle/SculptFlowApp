@@ -53,7 +53,9 @@ staff, or campaign — lives in one unified conversation history per lead, in Po
 
 ## 3. Database tables / entities
 
-All tables are `clinic_id`-scoped except Identity tables (scoped via `clinic_users`).
+All tables are `clinic_id`-scoped except Identity tables (scoped via `clinic_users`). Since 2026-10-07 each table lives in
+the Postgres schema of its area (`core.clinics`, `crm.leads`, ...; table in `CLAUDE.md` → "Database schemas"); the names
+below are unqualified.
 
 | Table | Purpose |
 |---|---|
@@ -149,7 +151,7 @@ WEBHOOK:  Meta phone_number_id / WABA id → channel_integrations → clinic_id 
 Meta posts **directly** to .NET (n8n is not in the inbound path):
 
 ```
-Meta ──GET/POST──> Controllers/WhatsAppWebhookController.cs   /api/integrations/whatsapp/webhook   (no auth)
+Meta ──GET/POST──> Controllers/Integrations/WhatsAppWebhookController.cs   /api/integrations/whatsapp/webhook   (no auth)
 GET  → hub.mode/hub.verify_token/hub.challenge; token == config Meta:WebhookVerifyToken → echo challenge (200) else 403
 POST → raw JSON → IMetaWebhookProcessor.ProcessAsync
          → MetaWebhookParser (only place that knows Meta's entry[].changes[].field shapes)
@@ -170,7 +172,7 @@ Interactive replies normalize to `messageText` = visible title, `selectedValue` 
 Meta → .NET (classify + process) → n8n (normalized trigger, only when AI should reply) → AI Agent → AI tools → .NET
 ```
 
-- **Outbound trigger** (`Services/IAiTriggerNotifier.cs`) → `N8n:AiWebhookUrl` (set on Render; the owner confirmed
+- **Outbound trigger** (`Business/Contracts/HttpClients/N8n/IAiTriggerNotifier.cs`) → `N8n:AiWebhookUrl` (set on Render; the owner confirmed
   the Render env vars — `App__PublicBaseUrl`, `N8n__AiWebhookUrl`, `N8n__IngestApiKey`, `Embeddings__ApiKey` — are all
   populated and working). Payload as
   actually coded: `clinicId, conversationId, leadId, messageId, channel, messageType, messageText,
@@ -190,7 +192,7 @@ Meta → .NET (classify + process) → n8n (normalized trigger, only when AI sho
   `{"content": …, "sender": "ai"}`); `conversationId`/`clinicId` come from the trigger payload. Send the reply BEFORE
   calling handoff (a reply after handoff gets 409); treat 409 `conversation_in_human_mode` as "stop quietly" (set the node to
   continue on error). The AI can't send once mode ≠ ai — this is by design, not a bug.
-- **AI tool surface** — `Controllers/AiController.cs`, `/api/ai/*`, `[RequireIngestKey]` (`X-Ingest-Key`),
+- **AI tool surface** — `Controllers/Integrations/AiController.cs`, `/api/ai/*`, `[RequireIngestKey]` (`X-Ingest-Key`),
   clinicId passed explicitly (query, or body for knowledge search):
 
 | Tool | Endpoint | Responsibility |
@@ -334,7 +336,7 @@ missing; 503 if the embedding provider fails. No `conversationId`.
 `POST /api/knowledge/upload` (multipart: `file`, optional `title` [defaults to file name], `category`, `isActive`).
 One file only; **PDF, DOCX, TXT**; max **5 MB** (`Knowledge:MaxUploadBytes`, clamped to ≤25 MB) and max **250,000
 extracted characters** (`Knowledge:MaxExtractedChars`, guards decompression bombs/embedding cost).
-`IKnowledgeService.CreateFromUploadAsync` → `IDocumentTextExtractor` (`Services/DocumentTextExtractor.cs`): type is
+`IKnowledgeService.CreateFromUploadAsync` → `IDocumentTextExtractor` (`Business/Engines/Knowledge/DocumentTextExtractor.cs`): type is
 checked by extension **and** magic bytes (`%PDF-`, `PK\x03\x04`; TXT rejects NUL bytes; UTF-8/UTF-16 BOM/Latin-1
 fallback); **PDF via PdfPig 0.1.16** (`ContentOrderTextExtractor`), **DOCX via DocumentFormat.OpenXml 3.5.1**
 (all paragraphs incl. table cells, no deleted text); `KnowledgeTextNormalizer` cleans (CRLF, control/zero-width chars,
@@ -433,7 +435,7 @@ save). Sidebar link "Knowledge Base". API (`KnowledgeController`, login required
 
 **Files**: entities `KnowledgeDocument`(+`KnowledgeCategory` labels)/`KnowledgeChunk`/`KnowledgeSearchSettings`;
 services `IEmbeddingService`+`OpenAiEmbeddingService`, `KnowledgeChunkingService`, `KnowledgeService`,
-`KnowledgeSearchService`, `KnowledgeSettingsService`, `VectorLiteral`; `Dtos/KnowledgeDtos.cs`;
+`KnowledgeSearchService`, `KnowledgeSettingsService`, `VectorLiteral`; `Entities/Responses/Knowledge/KnowledgeDocumentResponse.cs`;
 `Pages/KnowledgeBase/{Index,Edit,Settings}`.
 
 **Testing done** (with the local `fakeembed` stub, not a real key): chunking, ranking, top-k ceiling,
@@ -463,7 +465,7 @@ The only AI involved is the separate n8n workflow that WRITES the benchmark ques
   stale detection, runs, reads), `N8nKnowledgeBenchmarkGeneratorClient` (only sends chunks / parses questions),
   `KnowledgeBenchmarkScorer` (pure), `KnowledgeBenchmarkRunWorker` + queue (background runs, restart-recoverable like the
   crawler). Controller `KnowledgeBenchmarkController` (`api/knowledge/benchmark`, `[Authorize]`, clinic from
-  `CurrentClinicContext`, thin). Entities `Data/Entities/KnowledgeRetrievalBenchmark.cs`; DTOs `Dtos/KnowledgeBenchmarkDtos.cs`.
+  `CurrentClinicContext`, thin). Entities `Entities/Models/KnowledgeRetrievalBenchmarkCase.cs`; DTOs `Entities/Dtos/KnowledgeBenchmark/BenchmarkSettingsSnapshot.cs`.
   **Two pages, both plain shells driven entirely by the same API** (all server text via `textContent`):
   `Pages/KnowledgeBase/Benchmark.cshtml` + `wwwroot/js/knowledge-benchmark.js` (the dashboard: Generate/Stop/Run, metrics,
   **manual** cases only, Generations list, run history, run results), and
@@ -617,7 +619,7 @@ shown), mapped onto the 3 backend audience types via two hidden fields (`Audienc
 4. **Select leads manually** — the original search + checkbox list (`audience_type=custom` +
    explicit `LeadIds`).
 - Counts refresh (350 ms debounce) from the preview API. Status/category values shown with friendly
-  labels via `Pages/Shared/FilterLabelHelper.cs` ("No-show", "Needs human review", …); stored values
+  labels via `Common/Helpers/FilterLabelHelper.cs` ("No-show", "Needs human review", …); stored values
   unchanged. `_StatusHelp.cshtml` + `status-help.js` = a "?" modal explaining Lead status, Qualification
   status, Lead source, Appointment status (also on the Lead edit page).
 - Limitation: body variables (`{LeadFullName}` etc.) only work with **manual selection** (they need the lead
@@ -949,7 +951,15 @@ Render sets `PORT` itself; the Dockerfile sets `ASPNETCORE_ENVIRONMENT`/`ASPNETC
     `billing.rate_cards`, `billing.rates` (exclusion constraint incl. `provider_billing` + immutability trigger),
     `billing.usage_records` (`charge_status` + `provider_outcome`, final-row guard trigger), `billing.ledger_entries`
     (append-only trigger, `seq` identity), `billing.channel_account_settings` (provider billing override per connected channel
-    account) — **NOT applied to Supabase yet**; tested on local throwaway databases only
+    account) — applied to Supabase by Mohammad on 2026-10-06 (after billing merged to main as `4f67100`)
+20. **Schema split + configuration overrides** (2026-10-07, branch `refactor/architecture`): every table moved out of
+    `public` into `core`, `identity`, `crm`, `scheduling`, `channels`, `marketing`, `knowledge`, `activity` (the top of
+    `schema.sql` creates the schemas and moves tables still in `public` with `alter table … set schema`; data, indexes, FKs
+    and triggers move with them); `config.settings` (settings by section + key, read through `IConfigManager`, one typed property per setting, with constant defaults in `ConfigDefaults`; 56 settings moved there from appsettings and constants (incl. `Billing:Currency` and `Embeddings:BaseUrl/Model/Dimensions/ApiKey`; the API key is a masked secret setting and must be entered on the Configuration page, the `Embeddings__ApiKey` env var no longer applies), seeded by `Database/seed-config.sql`, so env vars such as `Billing__Enabled` no longer apply: set them on the admin portal's Configuration page; see `docs/configuration.md`); the
+    `campaign_recipients` column rename is now guarded so the file re-runs cleanly. **NOT applied to Supabase yet.**
+    To apply: back up, run `schema.sql`, and deploy the main app and the admin portal together (both map the new schemas;
+    an old build of either breaks the moment the tables move). Tested: old database + seed → new `schema.sql` twice gives
+    the same structure as a fresh database (`pg_dump -s` identical).
 
 No migration was needed for Procedures, lead/appointment editing, or the audience UI.
 
@@ -1025,7 +1035,7 @@ Outbound: n8n/dashboard → MessageService → IChannelSender (by conversation.C
   `POST /api/conversations/{id}/messages/send?clinicId=` + `X-Ingest-Key`, `sender:"ai"` → `SendAiReplyAsync`
   re-checks `mode == ai` (409 `conversation_in_human_mode` otherwise, nothing sent to Telegram).
 - **MessageService extension**: new `IChannelSender { Channel; SendTextAsync(conversation, text) }`
-  (`Services/IChannelSender.cs`). `WhatsAppChannelSender` = the 24h-window + phone checks moved verbatim out of
+  (`Business/Contracts/Providers/Channels/IChannelSender.cs`). `WhatsAppChannelSender` = the 24h-window + phone checks moved verbatim out of
   MessageService (same messages/order); `TelegramChannelSender` (`Integrations/Telegram`) = this clinic's connected
   bot + chat id. `MessageService` resolves by `conversation.Channel`, stamps `Message.Channel` from the
   conversation. `WhatsAppSendException` and `TelegramApiException` share base `ChannelSendException` (controllers
@@ -1041,7 +1051,7 @@ Outbound: n8n/dashboard → MessageService → IChannelSender (by conversation.C
   used unless it's localhost. `Telegram:ApiBaseUrl` (default `https://api.telegram.org`; test-only override for a
   fake Bot API). The bot token is entered in the UI, not config.
 - **Files**: `Integrations/Telegram/{TelegramBotClient,TelegramUpdateParser,TelegramWebhookProcessor,
-  TelegramChannelSender,TelegramIntegrationService}.cs`, `Controllers/TelegramWebhookController.cs`,
+  TelegramChannelSender,TelegramIntegrationService}.cs`, `Controllers/Integrations/TelegramWebhookController.cs`,
   `Services/{IChannelSender,DbErrors}.cs`; edits in MessageService, ConversationService, LeadService,
   ChannelIntegrationService, ChannelIntegrationsController, ConversationsController, Integrations page,
   ChannelIconHelper, inbox.js, DTOs/entities, Program.cs.
@@ -1164,7 +1174,7 @@ the New Appointment form is untouched. The database stays the source of truth �
 `CancelConsultationResult` shape (including `instruction` wording) the real tools return for that code, with **no database access at all** — `clinicId`/`leadId` aren't even parameters.
 Point an n8n tool node at these URLs instead of `/appointments/schedule` or `/appointments/cancel` to watch the AI agent's reaction to a specific outcome (e.g. `SLOT_UNAVAILABLE`,
 `CONFIRMATION_REQUIRED`) without having to set up the real appointment state that would otherwise trigger it — then point it back at the real endpoint. Same `[RequireIngestKey]` auth as the rest of the AI surface.
-Instruction wording is generated by the new shared `Services/AiResultInstructions.cs` (`ForSchedule`/`ForCancel`), which `AiController`'s real `schedule`/`cancel` endpoints now also call —
+Instruction wording is generated by the new shared `Common/Statics/AiResultInstructions.cs` (`ForSchedule`/`ForCancel`), which `AiController`'s real `schedule`/`cancel` endpoints now also call —
 extracted so the test controller can never drift out of sync with production wording; verified the real endpoints still behave identically after the refactor.
 Schedule codes: BOOKED, RESCHEDULED, CONFIRMATION_REQUIRED, MULTIPLE_UPCOMING_APPOINTMENTS, SLOT_UNAVAILABLE, LEAD_NOT_FOUND, INVALID_REQUEST. Cancel codes: CANCELED, NO_UPCOMING_APPOINTMENT,
 MULTIPLE_UPCOMING_APPOINTMENTS, INVALID_REQUEST. An unknown/missing `code` → 400 listing the valid ones.
@@ -1175,10 +1185,10 @@ MULTIPLE_UPCOMING_APPOINTMENTS, INVALID_REQUEST. An unknown/missing `code` → 4
   `channel_integration_id?`, `link?`, `is_read`, `read_at?`, `created_at`; `type` CHECK-constrained to the 8 values below; indexed
   on `(clinic_id, created_at desc)` and a partial index on unread) — applied live. No other schema change; `campaign_recipients.replied_at`
   already existed (added earlier for read-time stats, see the CampaignRecipient entity comment) and is now actually written for the first time.
-- `Data/Entities/Notification.cs` (+ `NotificationType` constants), `Dtos/NotificationDtos.cs`, `Services/INotificationService.cs` +
+- `Entities/Models/Notification.cs` (+ `NotificationType` constants), `Entities/Responses/Notifications/NotificationResponse.cs`, `Business/Contracts/Services/Notifications/INotificationService.cs` +
   `NotificationService.cs` (`CreateAsync` never throws to the caller — wrapped in a try/catch, so a notification failure cannot fail or
   roll back the real operation it is attached to; `ListAsync` / `GetUnreadCountAsync` / `MarkReadAsync` / `MarkAllReadAsync`, all clinic-scoped).
-  `Controllers/NotificationsController.cs` (`GET /api/notifications`, `GET /api/notifications/unread-count`,
+  `Controllers/Client/NotificationsController.cs` (`GET /api/notifications`, `GET /api/notifications/unread-count`,
   `POST /api/notifications/{id}/read`, `POST /api/notifications/read-all`) — a normal `DashboardApiController`, clinic resolved from
   `CurrentClinicContext` like every other dashboard endpoint, never from the client.
 - Realtime: reuses the existing Inbox SignalR hub (`/hubs/inbox`, clinic-scoped groups) — `IInboxNotifier` gained
@@ -1252,7 +1262,7 @@ MULTIPLE_UPCOMING_APPOINTMENTS, INVALID_REQUEST. An unknown/missing `code` → 4
   calendar API, invoked only after a SculptFlow appointment change has already succeeded — using an access token SculptFlow
   refreshed and hands over fresh each time. The `appointment_calendar_syncs` dedup/staleness mechanism, the health-notification
   rule, and `AppointmentService`'s hook point are all unchanged from v1.
-- **New: `Services/ICalendarProviderClient.cs`** + **`GoogleCalendarProviderClient`** + **`OutlookCalendarProviderClient`** — real
+- **New: `Business/Contracts/HttpClients/Calendars/ICalendarProviderClient.cs`** + **`GoogleCalendarProviderClient`** + **`OutlookCalendarProviderClient`** — real
   OAuth2 clients (resolved by `Provider`, same multi-implementation-behind-one-interface pattern as `IChannelSender`):
   `BuildAuthorizationUrl`, `ExchangeCodeAsync`, `RefreshAccessTokenAsync`, `GetAccountEmailAsync`, `ListCalendarsAsync`, and a
   best-effort (never-throwing) `RevokeAsync`. Google: `accounts.google.com`/`oauth2.googleapis.com` (v2 authorization-code flow,
@@ -1263,7 +1273,7 @@ MULTIPLE_UPCOMING_APPOINTMENTS, INVALID_REQUEST. An unknown/missing `code` → 4
   connect), scopes `offline_access`+`Calendars.ReadWrite`+`User.Read` via Microsoft Graph, calendars from `me/calendars`; no
   per-token revoke endpoint exists for this flow on Microsoft's side, so `RevokeAsync` is a documented no-op there (tokens are
   still dropped locally, which fully stops SculptFlow from using them).
-- **New: `Controllers/CalendarOAuthController.cs`** (`[Authorize]`, extends `Controller` — not `DashboardApiController`, because
+- **New: `Controllers/Integrations/CalendarOAuthController.cs`** (`[Authorize]`, extends `Controller` — not `DashboardApiController`, because
   TempData is only wired up on the full `Controller` base) at route `calendar-oauth`, browser-redirect based (not JSON):
   `GET {provider}/connect` marks the row Pending and redirects to the provider's consent screen; `GET {provider}/callback` is
   where the provider sends the browser back. CSRF/state handling uses ASP.NET Core's built-in `IDataProtectionProvider` /
@@ -1273,7 +1283,7 @@ MULTIPLE_UPCOMING_APPOINTMENTS, INVALID_REQUEST. An unknown/missing `code` → 4
   `App:PublicBaseUrl`-first convention as `TelegramIntegrationService.ResolvePublicBaseUrl()`, since it must exactly match what's
   registered in the Google/Azure app console. A config problem (missing ClientId/Secret, missing PublicBaseUrl) is caught and
   shown as a friendly `ErrorMessage` on the settings page rather than a raw 500.
-- **`Services/ICalendarIntegrationService.cs` / `CalendarIntegrationService.cs`** — `RequestConnectAsync` now just marks Pending (no
+- **`Business/Contracts/Services/Calendars/ICalendarIntegrationService.cs` / `CalendarIntegrationService.cs`** — `RequestConnectAsync` now just marks Pending (no
   n8n trigger); new `CompleteConnectAsync` (stores tokens, lists calendars, marks Connected) and `FailConnectAsync` (marks Error
   with a message) replace the old n8n-callback-driven `ApplyConnectCallbackAsync`, which is removed entirely.
   `RequestRefreshCalendarsAsync` now does the real work synchronously (refreshes the token if needed, calls the provider directly,
@@ -1286,7 +1296,7 @@ MULTIPLE_UPCOMING_APPOINTMENTS, INVALID_REQUEST. An unknown/missing `code` → 4
   failing the whole loop if a token can't be refreshed. `ApplySyncCallbackAsync` and the dedup/staleness structure inside
   `TriggerAppointmentSyncAsync` are **unchanged** from v1 apart from sending `AccessToken` instead of `ExternalConnectionRef` in the
   trigger payload.
-- **`Services/ICalendarSyncNotifier.cs`** — `NotifyConnectAsync` removed (nothing calls it anymore); `NotifySyncAsync` →
+- **`Business/Contracts/HttpClients/N8n/ICalendarSyncNotifier.cs`** — `NotifyConnectAsync` removed (nothing calls it anymore); `NotifySyncAsync` →
   `N8n:CalendarSyncWebhookUrl` is unchanged. `CalendarSyncTriggerPayload` now carries `AccessToken` (a token SculptFlow already
   refreshed) instead of `ExternalConnectionRef`; n8n uses it as-is and must not try to refresh or store it.
 - **Removed**: `CalendarConnectTriggerPayload`, `CalendarConnectCallbackRequest`, `ApplyConnectCallbackAsync`,
@@ -1384,7 +1394,7 @@ MULTIPLE_UPCOMING_APPOINTMENTS, INVALID_REQUEST. An unknown/missing `code` → 4
   identity" requirement), `access_token`/`refresh_token`/`token_expires_at`/`refresh_token_expires_at`, and
   `is_healthy`/`last_problem_message` (same health shape as `calendar_integrations`/`channel_integrations`). Applied
   live; no other table changed.
-- **New: `Services/ITikTokProviderClient.cs` / `TikTokProviderClient.cs`** — the real OAuth2 client against TikTok's v2
+- **New: `Business/Contracts/HttpClients/TikTok/ITikTokProviderClient.cs` / `TikTokProviderClient.cs`** — the real OAuth2 client against TikTok's v2
   API: `BuildAuthorizationUrl` (`https://www.tiktok.com/v2/auth/authorize/`, scope `user.info.basic` — the only scope
   this phase needs), `ExchangeCodeAsync`/`RefreshAccessTokenAsync` (`https://open.tiktokapis.com/v2/oauth/token/`),
   `GetAccountInfoAsync` (`https://open.tiktokapis.com/v2/user/info/` — open_id/union_id/display_name/avatar_url), and a
@@ -1392,7 +1402,7 @@ MULTIPLE_UPCOMING_APPOINTMENTS, INVALID_REQUEST. An unknown/missing `code` → 4
   ("Client Key"/"Client Secret") are kept as-is in config rather than renamed to match Google's "Client ID" convention.
   Registered the same way as the Calendar provider clients — its own `AddHttpClient<TikTokProviderClient>()` then
   forwarded into `ITikTokProviderClient`.
-- **New: `Services/ITikTokIntegrationService.cs` / `TikTokIntegrationService.cs`** — `GetAsync` (returns the clinic's
+- **New: `Business/Contracts/Services/TikTok/ITikTokIntegrationService.cs` / `TikTokIntegrationService.cs`** — `GetAsync` (returns the clinic's
   row, or a synthetic disconnected one; **opportunistically refreshes the access token first if connected and within 5
   minutes of expiring**, so a revoked/expired connection is discovered and surfaced as unhealthy on the next Settings
   page load rather than staying silently stale — there's no other ongoing TikTok API usage in this phase that would
@@ -1401,7 +1411,7 @@ MULTIPLE_UPCOMING_APPOINTMENTS, INVALID_REQUEST. An unknown/missing `code` → 4
   the revoke succeeded). Health failures reuse `NotificationType.IntegrationUnhealthy` with the same transition-only
   rule as Calendar/WhatsApp health (notifies once on the transition into unhealthy, not on every repeat check) —
   verified live (see Testing below).
-- **New: `Controllers/TikTokOAuthController.cs`** (`[Authorize]`, extends `Controller` for TempData, at route
+- **New: `Controllers/Integrations/TikTokOAuthController.cs`** (`[Authorize]`, extends `Controller` for TempData, at route
   `tiktok-oauth`) — `GET connect` marks the row Pending and redirects to TikTok's consent screen; `GET callback` is
   where TikTok sends the browser back. Same CSRF/state handling as `CalendarOAuthController`: ASP.NET Core's built-in
   `ITimeLimitedDataProtector` protects a `{ClinicId}` payload as the OAuth `state` param (purpose
@@ -1419,7 +1429,7 @@ MULTIPLE_UPCOMING_APPOINTMENTS, INVALID_REQUEST. An unknown/missing `code` → 4
   property and `OnPostDisconnectTikTokAsync` handler added alongside the existing ones; `LoadAsync` now also calls
   `_tiktok.GetAsync`. **No existing `IntegrationsModel`/`Integrations.cshtml` code for WhatsApp/Instagram/Facebook/
   Telegram was changed** — only additions. Added a TikTok brand glyph + `("TT", "#000000")` fallback to
-  `Pages/Shared/ChannelIconHelper.cs` (additive; every other channel's icon/color is untouched).
+  `Common/Helpers/ChannelIconHelper.cs` (additive; every other channel's icon/color is untouched).
 - **Config**: new `TikTok:ClientKey`/`ClientSecret` section in `appsettings.json` (ClientKey checked in with a setup
   comment, ClientSecret always empty — set via user-secrets / `TikTok__ClientSecret` on Render), same convention as
   `GoogleCalendar:*`/`MicrosoftCalendar:*`.
@@ -1546,7 +1556,7 @@ WHAT WOULD BE NEEDED FOR TIKTOK DIRECT MESSAGES IN THE UNIFIED INBOX LATER
   this is how a *person* signs in, with its own client (`GoogleLogin:*`) that only asks for `openid email profile` (non-sensitive, so no
   Google verification is needed and users see no "unverified app" warning). If either `GoogleLogin` value is empty the button is simply
   not rendered and the Google handler isn't registered.
-- **Flow** (`Controllers/GoogleAuthController.cs`, route `auth/google`): `POST start` (antiforgery-protected, like Identity's own external
+- **Flow** (`Controllers/Client/GoogleAuthController.cs`, route `auth/google`): `POST start` (antiforgery-protected, like Identity's own external
   login) -> Google (the built-in handler owns `/signin-google`) -> `GET callback` with Google's identity in a short-lived
   (10 min) external cookie. Then:
   1. **Already linked** (this Google account signed in before) -> signed in.
@@ -1590,9 +1600,9 @@ WHAT WOULD BE NEEDED FOR TIKTOK DIRECT MESSAGES IN THE UNIFIED INBOX LATER
 **Why:** SculptFlow can't yet become a Meta Tech Provider, so the first client's WhatsApp runs through SculptFlow's own single Infobip account. Later SculptFlow switches back to Meta direct (the existing Embedded Signup path), which is why the provider is a seam and not a rewrite. Owner decisions (2026-10-04): one Infobip account for all clinics, one sender number per clinic, global switch (not per clinic), credentials in env vars, media later for the whole system, OK to lose Meta-only features (health push, coexistence, in-app signup) on Infobip.
 
 **Shape:**
-- `Services/IWhatsAppProvider.cs` — the seam. `WhatsAppService` picks the provider named by `WhatsApp:Provider` (`meta` default | `infobip`) and refuses a row connected through the other provider. `MetaWhatsAppProvider` = the old Graph send code, moved unchanged. Nothing above `IWhatsAppService` changed.
+- `Business/Contracts/Providers/WhatsApp/IWhatsAppProvider.cs` — the seam. `WhatsAppService` picks the provider named by `WhatsApp:Provider` (`meta` default | `infobip`) and refuses a row connected through the other provider. `MetaWhatsAppProvider` = the old Graph send code, moved unchanged. Nothing above `IWhatsAppService` changed.
 - `Integrations/Infobip/` — `InfobipClient` (App-key auth, 20s timeout, retries only 429/503/no-connection, never logs key/body/numbers), `InfobipWhatsAppProvider` (our GUID as Infobip `messageId` → stored as `messages.external_message_id`; `notifyUrl` = the clinic's webhook), `InfobipWhatsAppWebhookParser` + `Processor` (Infobip JSON → `ParsedMetaEvent` → the existing `CustomerMessageHandler` / `MessageStatusHandler` / `UnknownEventHandler`), `InfobipWhatsAppIntegrationService` (connect a sender).
-- `Controllers/InfobipWhatsAppWebhookController.cs` — `POST /api/integrations/whatsapp/connections/{connectionId}/events?token=…`, one URL per sender for inbound + delivery + seen.
+- `Controllers/Integrations/InfobipWhatsAppWebhookController.cs` — `POST /api/integrations/whatsapp/connections/{connectionId}/events?token=…`, one URL per sender for inbound + delivery + seen.
 - `MessageService.HandleStatusUpdateAsync` — repeated status = no-op; a late earlier step never moves status backwards (both providers).
 - Settings → Messaging Integrations: with `WhatsApp:Provider=infobip` the WhatsApp card asks for the number (checked against Infobip business-info) and shows the webhook URL in Account details.
 - Schema: `channel_integrations.provider`, `.provider_sender_id`, unique connected `(channel, provider, provider_sender_id)`.
@@ -1603,7 +1613,7 @@ WHAT WOULD BE NEEDED FOR TIKTOK DIRECT MESSAGES IN THE UNIFIED INBOX LATER
 
 **White-label rule (owner, 2026-10-05):** clinics must never learn that WhatsApp runs through Infobip. Nothing a clinic can see may name Infobip: staff-facing errors, campaign/delivery failure reasons, the settings page (HTML, form and handler names), API JSON (`Provider`/`ProviderSenderId` are `[JsonIgnore]`), message metadata (media URL replaced by `mediaId`) and the webhook URL (`/api/integrations/whatsapp/connections/{id}/events`). Infobip details belong only in server logs, config and code. Keep it that way in any follow-up (templates, media, TikTok).
 
-**Templates through Infobip (2026-10-05, same branch):** `Services/IWhatsAppTemplateProvider.cs` is the template-review seam, picked by the same `WhatsApp:Provider` switch. `MetaWhatsAppTemplateProvider` holds the old Graph code unchanged; `InfobipWhatsAppTemplateProvider` submits to `/whatsapp/2/senders/{sender}/templates` (adds body examples from `VariablesJson` or "Sample n", maps buttons) and syncs with GET. Status updates arrive on `POST /api/integrations/whatsapp/account/events?token={Infobip__WebhookToken}` (Infobip sends template events per account, not per sender), matched to the clinic by template id. New column `whatsapp_templates.provider` (null = meta): an approval only holds on the account it was reviewed on, so sending, Sync and the campaign template list only use templates of the active provider, and an old one gets "create it again". **Switching back to Meta:** set `WhatsApp__Provider=meta`; Meta templates (provider null) work exactly as before, clinics reconnect with Facebook sign-in (an Infobip row shows as not connected on the Meta card), and templates approved through Infobip must be recreated. Infobip portal: subscribe the template-update event to the account URL.
+**Templates through Infobip (2026-10-05, same branch):** `Business/Contracts/Providers/WhatsApp/IWhatsAppTemplateProvider.cs` is the template-review seam, picked by the same `WhatsApp:Provider` switch. `MetaWhatsAppTemplateProvider` holds the old Graph code unchanged; `InfobipWhatsAppTemplateProvider` submits to `/whatsapp/2/senders/{sender}/templates` (adds body examples from `VariablesJson` or "Sample n", maps buttons) and syncs with GET. Status updates arrive on `POST /api/integrations/whatsapp/account/events?token={Infobip__WebhookToken}` (Infobip sends template events per account, not per sender), matched to the clinic by template id. New column `whatsapp_templates.provider` (null = meta): an approval only holds on the account it was reviewed on, so sending, Sync and the campaign template list only use templates of the active provider, and an old one gets "create it again". **Switching back to Meta:** set `WhatsApp__Provider=meta`; Meta templates (provider null) work exactly as before, clinics reconnect with Facebook sign-in (an Infobip row shows as not connected on the Meta card), and templates approved through Infobip must be recreated. Infobip portal: subscribe the template-update event to the account URL.
 
 ## 30. Subscriptions & usage billing — built and tested on branch `feature/subscription-billing` (2026-10-05, provider billing responsibility 2026-10-06), NOT committed
 

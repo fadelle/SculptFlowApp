@@ -1,7 +1,8 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
-using PlasticSurgery.Dtos;
-using PlasticSurgery.Services;
+using PlasticSurgery.Business.Contracts.Managers;
+using PlasticSurgery.Business.Contracts.Services.Procedures;
+using PlasticSurgery.Entities.Requests.Procedures;
 
 namespace PlasticSurgery.Pages.Procedures;
 

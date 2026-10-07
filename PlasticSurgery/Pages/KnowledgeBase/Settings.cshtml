@@ -1,6 +1,6 @@
 @page "/KnowledgeBase/Settings"
-@using PlasticSurgery.Data.Entities
 @model PlasticSurgery.Pages.KnowledgeBase.SettingsModel
+@inject PlasticSurgery.Business.Contracts.Managers.IConfigManager Settings
 @{
     ViewData["Title"] = "Knowledge Base Settings";
 }
@@ -32,10 +32,10 @@ else
             <label class="set-row">
                 <div>
                     <strong>How much text per piece</strong>
-                    <div class="cell-sub">Chunk size · tokens, 50–1000</div>
+                    <div class="cell-sub">Chunk size · tokens, @Settings.KnowledgeMinChunkSizeTokens–@Settings.KnowledgeMaxChunkSizeTokens</div>
                     <div class="cell-sub">About 4 characters per token.</div>
                 </div>
-                <input type="number" name="ChunkSizeTokens" value="@Model.ChunkSizeTokens" class="text-input set-input" min="50" max="1000" required />
+                <input type="number" name="ChunkSizeTokens" value="@Model.ChunkSizeTokens" class="text-input set-input" min="@Settings.KnowledgeMinChunkSizeTokens" max="@Settings.KnowledgeMaxChunkSizeTokens" required />
             </label>
 
             <label class="set-row">
@@ -50,10 +50,10 @@ else
             <label class="set-row">
                 <div>
                     <strong>Results per question</strong>
-                    <div class="cell-sub">Top K · 1–10</div>
+                    <div class="cell-sub">Top K · @Settings.KnowledgeMinTopK–@Settings.KnowledgeMaxTopK</div>
                     <div class="cell-sub">The most pieces the AI gets back for one question.</div>
                 </div>
-                <input type="number" name="TopK" value="@Model.TopK" class="text-input set-input" min="1" max="10" required />
+                <input type="number" name="TopK" value="@Model.TopK" class="text-input set-input" min="@Settings.KnowledgeMinTopK" max="@Settings.KnowledgeMaxTopK" required />
             </label>
 
             <label class="set-row">

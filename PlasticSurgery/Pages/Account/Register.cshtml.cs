@@ -1,7 +1,8 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
-using PlasticSurgery.Services;
+using PlasticSurgery.Business.Contracts.Services.Clinics;
+using PlasticSurgery.Entities.Requests.Clinics;
 
 namespace PlasticSurgery.Pages.Account;
 

@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
-using PlasticSurgery.Services;
+using PlasticSurgery.Business.Contracts.Managers;
 
 namespace PlasticSurgery.Pages.KnowledgeBase.Benchmark;
 

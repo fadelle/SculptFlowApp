@@ -1,14 +1,17 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
-using PlasticSurgery.Data;
-using PlasticSurgery.Dtos;
-using PlasticSurgery.Services;
+using PlasticSurgery.Business.Contracts.Managers;
+using PlasticSurgery.Business.Contracts.Services.Appointments;
+using PlasticSurgery.Business.Contracts.Services.Clinics;
+using PlasticSurgery.Entities.Dtos.Appointments;
+using PlasticSurgery.Entities.Models;
+using PlasticSurgery.Entities.Requests.Clinics;
 
 namespace PlasticSurgery.Pages.Settings;
 
 /// <summary>Settings → Clinic Info. Two tabs: General (the free-text info the AI's get_clinic_info tool quotes) and
 /// Availability (the structured weekly schedule, booking rules and date exceptions that drive real appointment slots —
-/// see Services/AvailabilityService.cs). The free-text Operating hours are never parsed for booking.</summary>
+/// see Business/Services/Appointments/AvailabilityService.cs). The free-text Operating hours are never parsed for booking.</summary>
 public class ClinicInfoModel : PageModel
 {
     /// <summary>Common IANA timezones for the picker; the clinic's current value is always added if missing.</summary>
@@ -29,13 +32,13 @@ public class ClinicInfoModel : PageModel
     private static readonly int[] DayOrder = { 1, 2, 3, 4, 5, 6, 0 };
 
     private readonly ICurrentClinicContext _clinicContext;
-    private readonly ApplicationDbContext _db;
+    private readonly IClinicProfileService _profile;
     private readonly IAvailabilityService _availability;
 
-    public ClinicInfoModel(ICurrentClinicContext clinicContext, ApplicationDbContext db, IAvailabilityService availability)
+    public ClinicInfoModel(ICurrentClinicContext clinicContext, IClinicProfileService profile, IAvailabilityService availability)
     {
         _clinicContext = clinicContext;
-        _db = db;
+        _profile = profile;
         _availability = availability;
     }
 
@@ -76,16 +79,8 @@ public class ClinicInfoModel : PageModel
     public string? StatusMessage { get; set; }
 
     // ---- Availability tab inputs (only posted by its own forms)
-    public class DayInput
-    {
-        public int DayOfWeek { get; set; }
-        public bool IsOpen { get; set; }
-        public string? Start { get; set; }
-        public string? End { get; set; }
-    }
-
     [BindProperty]
-    public List<DayInput> Days { get; set; } = new();
+    public List<AvailabilityDayInput> Days { get; set; } = new();
 
     [BindProperty]
     public string? TimezoneId { get; set; }
@@ -148,25 +143,19 @@ public class ClinicInfoModel : PageModel
         var clinic = await _clinicContext.GetClinicAsync(ct);
         if (clinic is null) return RedirectToPage();
 
-        var name = (Name ?? string.Empty).Trim();
-        if (name.Length == 0 || name.Length > 200)
+        try
+        {
+            await _profile.UpdateDetailsAsync(clinic.Id,
+                new UpdateClinicDetailsRequest(Name, Phone, Email, Website, Address, OperatingHours, ConsultationInfo), ct);
+        }
+        catch (ArgumentException ex)
         {
             // Redisplay the form with what was typed instead of saving.
             ClinicConfigured = true;
-            Name = name;
-            ErrorMessage = name.Length == 0 ? "Clinic name is required." : "Clinic name must be 200 characters or fewer.";
+            Name = (Name ?? string.Empty).Trim();
+            ErrorMessage = ex.Message;
             return Page();
         }
-
-        clinic.Name = name;
-        clinic.Phone = Phone;
-        clinic.Email = Email;
-        clinic.Website = Website;
-        clinic.Address = Address;
-        clinic.OperatingHours = OperatingHours;
-        clinic.ConsultationInfo = ConsultationInfo;
-        clinic.UpdatedAt = DateTimeOffset.UtcNow;
-        await _db.SaveChangesAsync(ct);
 
         StatusMessage = "Clinic details saved.";
         return RedirectToPage();
@@ -241,7 +230,7 @@ public class ClinicInfoModel : PageModel
     public IEnumerable<string> TimezoneOptions(string current) =>
         Timezones.Contains(current) ? Timezones : Timezones.Prepend(current);
 
-    private Task FillGeneralAsync(Data.Entities.Clinic clinic)
+    private Task FillGeneralAsync(Clinic clinic)
     {
         Name = clinic.Name;
         Phone = clinic.Phone;

@@ -27,7 +27,7 @@ public class LoginModel : PageModel
     public void OnGet(string? externalError)
     {
         // Set by GoogleAuthController / the Google handler as a fixed code; only known codes become text.
-        ErrorMessage = PlasticSurgery.Services.GoogleLoginSettings.ErrorMessage(externalError);
+        ErrorMessage = PlasticSurgery.Common.Configs.GoogleLoginSettings.ErrorMessage(externalError);
     }
 
     public async Task<IActionResult> OnPostAsync()
