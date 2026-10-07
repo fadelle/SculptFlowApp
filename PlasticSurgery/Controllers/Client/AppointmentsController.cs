@@ -28,14 +28,7 @@ public class AppointmentsController : DashboardApiController
         var clinicId = await GetClinicIdAsync(ct);
         if (clinicId is null) return Forbid();
 
-        try
-        {
-            return Ok(await _availability.GetSlotsAsync(clinicId.Value, procedureId, date, days ?? (date is null ? 7 : 1), ct));
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { error = ex.Message });
-        }
+        return Ok(await _availability.GetSlotsAsync(clinicId.Value, procedureId, date, days ?? (date is null ? 7 : 1), ct));
     }
 
     [HttpPost]
@@ -44,15 +37,8 @@ public class AppointmentsController : DashboardApiController
         var clinicId = await GetClinicIdAsync(ct);
         if (clinicId is null) return Forbid();
 
-        try
-        {
-            var appointment = await _appointments.CreateAsync(request with { ClinicId = clinicId.Value }, ct);
-            return CreatedAtAction(nameof(List), null, appointment);
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { error = ex.Message });
-        }
+        var appointment = await _appointments.CreateAsync(request with { ClinicId = clinicId.Value }, ct);
+        return CreatedAtAction(nameof(List), null, appointment);
     }
 
     [HttpGet("{id:guid}")]
@@ -71,15 +57,8 @@ public class AppointmentsController : DashboardApiController
         var clinicId = await GetClinicIdAsync(ct);
         if (clinicId is null) return Forbid();
 
-        try
-        {
-            var appointment = await _appointments.UpdateStatusAsync(clinicId.Value, id, request.Status, ct);
-            return appointment is null ? NotFound() : Ok(appointment);
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { error = ex.Message });
-        }
+        var appointment = await _appointments.UpdateStatusAsync(clinicId.Value, id, request.Status, ct);
+        return appointment is null ? NotFound() : Ok(appointment);
     }
 
     /// <summary>The Appointments page's month calendar. One call returns every appointment in the visible grid

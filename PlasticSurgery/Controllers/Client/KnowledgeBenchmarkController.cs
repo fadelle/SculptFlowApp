@@ -69,23 +69,8 @@ public class KnowledgeBenchmarkController : DashboardApiController
         var clinicId = await GetClinicIdAsync(ct);
         if (clinicId is null) return Forbid();
 
-        try
-        {
-            var started = await _benchmark.StartGenerationAsync(clinicId.Value, ct);
-            return started.Status == "pending" ? Accepted(started) : Ok(started);
-        }
-        catch (BenchmarkGeneratorNotConfiguredException ex)
-        {
-            return StatusCode(StatusCodes.Status503ServiceUnavailable, new { error = ex.Message });
-        }
-        catch (BenchmarkGenerationInProgressException ex)
-        {
-            return Conflict(new { error = ex.Message });
-        }
-        catch (BenchmarkGenerationException ex)
-        {
-            return StatusCode(StatusCodes.Status502BadGateway, new { error = ex.Message });
-        }
+        var started = await _benchmark.StartGenerationAsync(clinicId.Value, ct);
+        return started.Status == "pending" ? Accepted(started) : Ok(started);
     }
 
     // ---------------------------- generations ----------------------------
@@ -132,14 +117,7 @@ public class KnowledgeBenchmarkController : DashboardApiController
         var clinicId = await GetClinicIdAsync(ct);
         if (clinicId is null) return Forbid();
 
-        try
-        {
-            return Ok(await _benchmark.CreateManualCaseAsync(clinicId.Value, request, ct));
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { error = ex.Message });
-        }
+        return Ok(await _benchmark.CreateManualCaseAsync(clinicId.Value, request, ct));
     }
 
     [HttpPut("cases/{id:guid}")]
@@ -148,15 +126,8 @@ public class KnowledgeBenchmarkController : DashboardApiController
         var clinicId = await GetClinicIdAsync(ct);
         if (clinicId is null) return Forbid();
 
-        try
-        {
-            var updated = await _benchmark.UpdateCaseQuestionAsync(clinicId.Value, id, request.Question, ct);
-            return updated is null ? NotFound() : Ok(updated);
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { error = ex.Message });
-        }
+        var updated = await _benchmark.UpdateCaseQuestionAsync(clinicId.Value, id, request.Question, ct);
+        return updated is null ? NotFound() : Ok(updated);
     }
 
     [HttpPost("cases/{id:guid}/review")]
@@ -206,19 +177,8 @@ public class KnowledgeBenchmarkController : DashboardApiController
         var clinicId = await GetClinicIdAsync(ct);
         if (clinicId is null) return Forbid();
 
-        try
-        {
-            var run = await _benchmark.StartRunAsync(clinicId.Value, request.Scope, request.GenerationId, ct);
-            return Accepted(run);
-        }
-        catch (BenchmarkRunInProgressException ex)
-        {
-            return Conflict(new { error = ex.Message });
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { error = ex.Message });
-        }
+        var run = await _benchmark.StartRunAsync(clinicId.Value, request.Scope, request.GenerationId, ct);
+        return Accepted(run);
     }
 
     [HttpGet("runs")]

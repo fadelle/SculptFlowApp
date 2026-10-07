@@ -25,6 +25,7 @@ namespace PlasticSurgery.Controllers.Integrations;
 [ApiController]
 [Route("api/knowledge/benchmark/generations")]
 [RequireIngestKey]
+[ApiErrors]
 public class KnowledgeBenchmarkIngestController : ControllerBase
 {
     private readonly IKnowledgeBenchmarkService _benchmark;
@@ -55,14 +56,8 @@ public class KnowledgeBenchmarkIngestController : ControllerBase
         }
 
         GenerationReceiveResult result;
-        try
-        {
-            result = await _benchmark.ReceiveGenerationResultAsync(generationId, reply, rawBody, requireEcho: false, ct);
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { error = ex.Message });
-        }
+        result = await _benchmark.ReceiveGenerationResultAsync(generationId, reply, rawBody, requireEcho: false, ct);
+        
 
         return result.Status switch
         {

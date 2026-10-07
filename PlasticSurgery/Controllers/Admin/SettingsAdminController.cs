@@ -16,6 +16,7 @@ namespace PlasticSurgery.Controllers.Admin;
 [AllowAnonymous]
 [RequirePlatformAdminKey]
 [Route("api/platform-admin/settings")]
+[ApiErrors]
 public class SettingsAdminController : ControllerBase
 {
     private readonly ISettingsService _settings;
@@ -29,22 +30,10 @@ public class SettingsAdminController : ControllerBase
     public async Task<IActionResult> List(CancellationToken ct) => Ok(await _settings.ListAsync(ct));
 
     [HttpPut("{section}/{key}")]
-    public Task<IActionResult> Set(string section, string key, [FromBody] SetSettingRequest request, CancellationToken ct) =>
-        Run(async () => Ok(await _settings.SetAsync(section, key, request.Value, request.Note, RequirePlatformAdminKeyAttribute.Actor(Request), ct)));
+    public async Task<IActionResult> Set(string section, string key, [FromBody] SetSettingRequest request, CancellationToken ct) =>
+        Ok(await _settings.SetAsync(section, key, request.Value, request.Note, RequirePlatformAdminKeyAttribute.Actor(Request), ct));
 
     [HttpDelete("{section}/{key}")]
-    public Task<IActionResult> Reset(string section, string key, CancellationToken ct) =>
-        Run(async () => await _settings.ResetAsync(section, key, ct) ? NoContent() : NotFound());
-
-    private async Task<IActionResult> Run(Func<Task<IActionResult>> action)
-    {
-        try
-        {
-            return await action();
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { error = ex.Message });
-        }
-    }
+    public async Task<IActionResult> Reset(string section, string key, CancellationToken ct) =>
+        await _settings.ResetAsync(section, key, ct) ? NoContent() : NotFound();
 }

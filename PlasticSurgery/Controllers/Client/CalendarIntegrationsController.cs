@@ -36,6 +36,7 @@ public class CalendarIntegrationsController : DashboardApiController
         var clinicId = await GetClinicIdAsync(ct);
         if (clinicId is null) return Forbid();
         try { await _calendar.RequestRefreshCalendarsAsync(clinicId.Value, provider, ct); return NoContent(); }
+        // 400 for both here (not the usual 422): a refresh the provider can't do yet is the caller's to fix.
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException) { return BadRequest(new { error = ex.Message }); }
     }
 
@@ -45,8 +46,7 @@ public class CalendarIntegrationsController : DashboardApiController
     {
         var clinicId = await GetClinicIdAsync(ct);
         if (clinicId is null) return Forbid();
-        try { return Ok(await _calendar.SelectCalendarAsync(clinicId.Value, provider, request.ExternalCalendarId, ct)); }
-        catch (ArgumentException ex) { return BadRequest(new { error = ex.Message }); }
+        return Ok(await _calendar.SelectCalendarAsync(clinicId.Value, provider, request.ExternalCalendarId, ct));
     }
 
     [HttpPost("{provider}/sync-enabled")]
@@ -55,8 +55,7 @@ public class CalendarIntegrationsController : DashboardApiController
     {
         var clinicId = await GetClinicIdAsync(ct);
         if (clinicId is null) return Forbid();
-        try { return Ok(await _calendar.SetSyncEnabledAsync(clinicId.Value, provider, request.Enabled, ct)); }
-        catch (ArgumentException ex) { return BadRequest(new { error = ex.Message }); }
+        return Ok(await _calendar.SetSyncEnabledAsync(clinicId.Value, provider, request.Enabled, ct));
     }
 
     [HttpPost("{provider}/disconnect")]

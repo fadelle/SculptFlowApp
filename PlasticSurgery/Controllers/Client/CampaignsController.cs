@@ -86,19 +86,8 @@ public class CampaignsController : DashboardApiController
         var clinicId = await GetClinicIdAsync(ct);
         if (clinicId is null) return Forbid();
 
-        try
-        {
-            var campaign = await _campaigns.CreateAsync(request with { ClinicId = clinicId.Value }, ct);
-            return CreatedAtAction(nameof(GetById), new { id = campaign.Id }, campaign);
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { error = ex.Message });
-        }
-        catch (InvalidOperationException ex) // e.g. campaigns not in the clinic's plan
-        {
-            return UnprocessableEntity(new { error = ex.Message });
-        }
+        var campaign = await _campaigns.CreateAsync(request with { ClinicId = clinicId.Value }, ct);
+        return CreatedAtAction(nameof(GetById), new { id = campaign.Id }, campaign);
     }
 
     [HttpPost("{id:guid}/schedule")]
@@ -107,15 +96,8 @@ public class CampaignsController : DashboardApiController
         var clinicId = await GetClinicIdAsync(ct);
         if (clinicId is null) return Forbid();
 
-        try
-        {
-            var campaign = await _campaigns.ScheduleAsync(clinicId.Value, id, request.ScheduledAt, ct);
-            return campaign is null ? NotFound() : Ok(campaign);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return UnprocessableEntity(new { error = ex.Message });
-        }
+        var campaign = await _campaigns.ScheduleAsync(clinicId.Value, id, request.ScheduledAt, ct);
+        return campaign is null ? NotFound() : Ok(campaign);
     }
 
     /// <summary>Starts (or, if already Running, continues) sending — queues every Pending recipient
@@ -127,15 +109,8 @@ public class CampaignsController : DashboardApiController
         var clinicId = await GetClinicIdAsync(ct);
         if (clinicId is null) return Forbid();
 
-        try
-        {
-            var result = await _campaigns.SendAsync(clinicId.Value, id, batchSize, ct);
-            return result is null ? NotFound() : Ok(result);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return UnprocessableEntity(new { error = ex.Message });
-        }
+        var result = await _campaigns.SendAsync(clinicId.Value, id, batchSize, ct);
+        return result is null ? NotFound() : Ok(result);
     }
 
     /// <summary>Processes another bounded batch of an already-Running campaign — the endpoint an n8n
@@ -146,15 +121,8 @@ public class CampaignsController : DashboardApiController
         var clinicId = await GetClinicIdAsync(ct);
         if (clinicId is null) return Forbid();
 
-        try
-        {
-            var result = await _campaigns.ProcessBatchAsync(clinicId.Value, id, batchSize, ct);
-            return result is null ? NotFound() : Ok(result);
-        }
-        catch (InvalidOperationException ex) // out of prepaid balance / plan doesn't allow it: the batch stopped, nothing lost
-        {
-            return UnprocessableEntity(new { error = ex.Message });
-        }
+        var result = await _campaigns.ProcessBatchAsync(clinicId.Value, id, batchSize, ct);
+        return result is null ? NotFound() : Ok(result);
     }
 
     [HttpPost("{id:guid}/cancel")]
@@ -163,14 +131,7 @@ public class CampaignsController : DashboardApiController
         var clinicId = await GetClinicIdAsync(ct);
         if (clinicId is null) return Forbid();
 
-        try
-        {
-            var campaign = await _campaigns.CancelAsync(clinicId.Value, id, ct);
-            return campaign is null ? NotFound() : Ok(campaign);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return UnprocessableEntity(new { error = ex.Message });
-        }
+        var campaign = await _campaigns.CancelAsync(clinicId.Value, id, ct);
+        return campaign is null ? NotFound() : Ok(campaign);
     }
 }

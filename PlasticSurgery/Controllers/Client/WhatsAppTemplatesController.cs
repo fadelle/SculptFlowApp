@@ -44,15 +44,8 @@ public class WhatsAppTemplatesController : DashboardApiController
         var clinicId = await GetClinicIdAsync(ct);
         if (clinicId is null) return Forbid();
 
-        try
-        {
-            var template = await _templates.CreateAsync(request with { ClinicId = clinicId.Value }, ct);
-            return CreatedAtAction(nameof(GetById), new { id = template.Id }, template);
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { error = ex.Message });
-        }
+        var template = await _templates.CreateAsync(request with { ClinicId = clinicId.Value }, ct);
+        return CreatedAtAction(nameof(GetById), new { id = template.Id }, template);
     }
 
     /// <summary>Refreshes Status/RejectionReason from Meta for a template that's already been submitted.</summary>
@@ -62,18 +55,7 @@ public class WhatsAppTemplatesController : DashboardApiController
         var clinicId = await GetClinicIdAsync(ct);
         if (clinicId is null) return Forbid();
 
-        try
-        {
-            var template = await _templates.SyncStatusAsync(clinicId.Value, id, ct);
-            return template is null ? NotFound() : Ok(template);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return UnprocessableEntity(new { error = ex.Message });
-        }
-        catch (MetaGraphApiException ex)
-        {
-            return StatusCode(StatusCodes.Status502BadGateway, new { error = ex.Message });
-        }
+        var template = await _templates.SyncStatusAsync(clinicId.Value, id, ct);
+        return template is null ? NotFound() : Ok(template);
     }
 }

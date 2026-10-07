@@ -18,6 +18,7 @@ namespace PlasticSurgery.Controllers.Client;
 /// </summary>
 [ApiController]
 [Route("api/conversations")]
+[ApiErrors]
 public class ConversationsController : ControllerBase
 {
     private readonly IConversationService _conversations;
@@ -41,15 +42,8 @@ public class ConversationsController : ControllerBase
         var clinicId = await _clinicContext.GetClinicIdAsync(ct);
         if (clinicId is null) return Forbid();
 
-        try
-        {
-            var conversation = await _conversations.CreateAsync(request with { ClinicId = clinicId.Value }, ct);
-            return CreatedAtAction(nameof(GetById), new { id = conversation.Id }, conversation);
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { error = ex.Message });
-        }
+        var conversation = await _conversations.CreateAsync(request with { ClinicId = clinicId.Value }, ct);
+        return CreatedAtAction(nameof(GetById), new { id = conversation.Id }, conversation);
     }
 
     /// <summary>Inbox conversation list (left pane) — newest activity first.</summary>
@@ -96,15 +90,8 @@ public class ConversationsController : ControllerBase
         var clinicId = await _clinicContext.GetClinicIdAsync(ct);
         if (clinicId is null) return Forbid();
 
-        try
-        {
-            var message = await _conversations.AddMessageAsync(clinicId.Value, id, request, ct);
-            return message is null ? NotFound() : Ok(message);
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { error = ex.Message });
-        }
+        var message = await _conversations.AddMessageAsync(clinicId.Value, id, request, ct);
+        return message is null ? NotFound() : Ok(message);
     }
 
     /// <summary>Two callers share this one route (see SendMessageRequest's doc comment) — deliberately
@@ -144,25 +131,9 @@ public class ConversationsController : ControllerBase
                 var aiMessage = await _messages.SendAiReplyAsync(clinicId.Value, id, request.Content, ct);
                 return aiMessage is null ? NotFound() : Ok(aiMessage);
             }
-            catch (ArgumentException ex)
-            {
-                return BadRequest(new { error = ex.Message });
-            }
             catch (ConversationNotInAiModeException ex)
             {
                 return Conflict(new { sent = false, code = "conversation_in_human_mode", conversationId = id, mode = ex.CurrentMode });
-            }
-            catch (ServiceWindowClosedException ex)
-            {
-                return Conflict(new { error = ex.Message });
-            }
-            catch (InvalidOperationException ex)
-            {
-                return UnprocessableEntity(new { error = ex.Message });
-            }
-            catch (ChannelSendException ex)
-            {
-                return StatusCode(StatusCodes.Status502BadGateway, new { error = ex.Message });
             }
         }
 
@@ -176,27 +147,8 @@ public class ConversationsController : ControllerBase
         var resolvedClinicId = await _clinicContext.GetClinicIdAsync(ct);
         if (resolvedClinicId is null) return Forbid();
 
-        try
-        {
-            var message = await _messages.SendAsync(resolvedClinicId.Value, id, request, ct);
-            return message is null ? NotFound() : Ok(message);
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { error = ex.Message });
-        }
-        catch (ServiceWindowClosedException ex)
-        {
-            return Conflict(new { error = ex.Message });
-        }
-        catch (InvalidOperationException ex)
-        {
-            return UnprocessableEntity(new { error = ex.Message });
-        }
-        catch (ChannelSendException ex)
-        {
-            return StatusCode(StatusCodes.Status502BadGateway, new { error = ex.Message });
-        }
+        var message = await _messages.SendAsync(resolvedClinicId.Value, id, request, ct);
+        return message is null ? NotFound() : Ok(message);
     }
 
     /// <summary>Staff sends an approved WhatsApp template — usable any time, and the only option
@@ -208,23 +160,8 @@ public class ConversationsController : ControllerBase
         var clinicId = await _clinicContext.GetClinicIdAsync(ct);
         if (clinicId is null) return Forbid();
 
-        try
-        {
-            var message = await _messages.SendTemplateAsync(clinicId.Value, id, request, ct);
-            return message is null ? NotFound() : Ok(message);
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { error = ex.Message });
-        }
-        catch (InvalidOperationException ex)
-        {
-            return UnprocessableEntity(new { error = ex.Message });
-        }
-        catch (ChannelSendException ex)
-        {
-            return StatusCode(StatusCodes.Status502BadGateway, new { error = ex.Message });
-        }
+        var message = await _messages.SendTemplateAsync(clinicId.Value, id, request, ct);
+        return message is null ? NotFound() : Ok(message);
     }
 
     /// <summary>Staff opened the conversation — clears its unread marker.</summary>

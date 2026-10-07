@@ -43,15 +43,8 @@ public class ProceduresController : DashboardApiController
         var clinicId = await GetClinicIdAsync(ct);
         if (clinicId is null) return Forbid();
 
-        try
-        {
-            var procedure = await _procedures.CreateAsync(request with { ClinicId = clinicId.Value }, ct);
-            return CreatedAtAction(nameof(GetById), new { id = procedure.Id }, procedure);
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { error = ex.Message });
-        }
+        var procedure = await _procedures.CreateAsync(request with { ClinicId = clinicId.Value }, ct);
+        return CreatedAtAction(nameof(GetById), new { id = procedure.Id }, procedure);
     }
 
     [HttpPut("{id:guid}")]
@@ -60,15 +53,8 @@ public class ProceduresController : DashboardApiController
         var clinicId = await GetClinicIdAsync(ct);
         if (clinicId is null) return Forbid();
 
-        try
-        {
-            var procedure = await _procedures.UpdateAsync(clinicId.Value, id, request, ct);
-            return procedure is null ? NotFound() : Ok(procedure);
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { error = ex.Message });
-        }
+        var procedure = await _procedures.UpdateAsync(clinicId.Value, id, request, ct);
+        return procedure is null ? NotFound() : Ok(procedure);
     }
 
     /// <summary>Activate/deactivate — procedures are never deleted (leads, appointments and procedure

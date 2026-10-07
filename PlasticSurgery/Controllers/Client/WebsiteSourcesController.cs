@@ -37,15 +37,8 @@ public class WebsiteSourcesController : DashboardApiController
         var clinicId = await GetClinicIdAsync(ct);
         if (clinicId is null) return Forbid();
 
-        try
-        {
-            var source = await _websites.CreateAsync(clinicId.Value, request, ct);
-            return AcceptedAtAction(nameof(GetById), new { id = source.Id }, source);
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { error = ex.Message });
-        }
+        var source = await _websites.CreateAsync(clinicId.Value, request, ct);
+        return AcceptedAtAction(nameof(GetById), new { id = source.Id }, source);
     }
 
     [HttpGet("{id:guid}")]

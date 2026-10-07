@@ -17,6 +17,7 @@ namespace PlasticSurgery.Controllers.Admin;
 [AllowAnonymous]
 [RequirePlatformAdminKey]
 [Route("api/platform-admin/automation")]
+[ApiErrors]
 public class AutomationAdminController : ControllerBase
 {
     private readonly IAutomationCleanupService _cleanup;

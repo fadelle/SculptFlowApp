@@ -47,14 +47,7 @@ public class KnowledgeController : DashboardApiController
         var clinicId = await GetClinicIdAsync(ct);
         if (clinicId is null) return Forbid();
 
-        try
-        {
-            return Ok(await _settings.UpdateAsync(clinicId.Value, request, ct));
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { error = ex.Message });
-        }
+        return Ok(await _settings.UpdateAsync(clinicId.Value, request, ct));
     }
 
     [HttpGet("{id:guid}")]
@@ -76,10 +69,6 @@ public class KnowledgeController : DashboardApiController
         {
             var doc = await _knowledge.CreateAsync(clinicId.Value, request, ct);
             return CreatedAtAction(nameof(GetById), new { id = doc.Id }, doc);
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { error = ex.Message });
         }
         catch (InvalidOperationException ex)
         {
@@ -107,10 +96,6 @@ public class KnowledgeController : DashboardApiController
                 form.File.FileName, stream, form.File.Length, ct);
             return CreatedAtAction(nameof(GetById), new { id = doc.Id }, doc);
         }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { error = ex.Message });
-        }
         catch (InvalidOperationException ex)
         {
             return StatusCode(StatusCodes.Status503ServiceUnavailable, new { error = ex.Message });
@@ -127,10 +112,6 @@ public class KnowledgeController : DashboardApiController
         {
             var doc = await _knowledge.UpdateAsync(clinicId.Value, id, request, ct);
             return doc is null ? NotFound() : Ok(doc);
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { error = ex.Message });
         }
         catch (InvalidOperationException ex)
         {

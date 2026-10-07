@@ -46,22 +46,43 @@ public class KnowledgeDocumentRepository : IKnowledgeDocumentRepository
     public Task DeleteChunksAsync(Guid documentId, CancellationToken ct = default) =>
         _db.KnowledgeChunks.Where(c => c.KnowledgeDocumentId == documentId).ExecuteDeleteAsync(ct);
 
+    /// <summary>Rows per insert statement: one round trip per batch instead of one per chunk, while keeping each
+    /// statement's parameters (about 15 KB of vector text per chunk) to a few MB.</summary>
+    private const int ChunkInsertBatchSize = 200;
+
     public async Task InsertChunksAsync(Guid clinicId, Guid documentId, IReadOnlyList<string> pieces, IReadOnlyList<float[]> vectors,
         DateTimeOffset now, CancellationToken ct = default)
     {
-        for (var i = 0; i < pieces.Count; i++)
+        if (pieces.Count != vectors.Count) throw new ArgumentException("Every chunk needs exactly one embedding.");
+
+        for (var start = 0; start < pieces.Count; start += ChunkInsertBatchSize)
         {
+            var count = Math.Min(ChunkInsertBatchSize, pieces.Count - start);
+            var ids = new Guid[count];
+            var indexes = new int[count];
+            var contents = new string[count];
+            var embeddings = new string[count];
+            for (var i = 0; i < count; i++)
+            {
+                ids[i] = Guid.NewGuid();
+                indexes[i] = start + i;
+                contents[i] = pieces[start + i];
+                embeddings[i] = VectorLiteral.From(vectors[start + i]);
+            }
+
+            // One statement per batch: the arrays are unnested into rows (same order, same values as one insert per chunk).
             await _db.Database.ExecuteSqlRawAsync(
                 @"insert into knowledge.knowledge_chunks (id, clinic_id, knowledge_document_id, chunk_index, content, embedding, created_at, updated_at)
-                  values (@id, @clinic, @doc, @idx, @content, @embedding::vector, @now, @now)",
+                  select t.id, @clinic, @doc, t.idx, t.content, t.embedding::vector, @now, @now
+                  from unnest(@ids, @idxs, @contents, @embeddings) as t(id, idx, content, embedding)",
                 new object[]
                 {
-                    new NpgsqlParameter("id", Guid.NewGuid()),
+                    new NpgsqlParameter("ids", ids),
+                    new NpgsqlParameter("idxs", indexes),
+                    new NpgsqlParameter("contents", contents),
+                    new NpgsqlParameter("embeddings", embeddings),
                     new NpgsqlParameter("clinic", clinicId),
                     new NpgsqlParameter("doc", documentId),
-                    new NpgsqlParameter("idx", i),
-                    new NpgsqlParameter("content", pieces[i]),
-                    new NpgsqlParameter("embedding", VectorLiteral.From(vectors[i])),
                     new NpgsqlParameter("now", now)
                 },
                 ct);

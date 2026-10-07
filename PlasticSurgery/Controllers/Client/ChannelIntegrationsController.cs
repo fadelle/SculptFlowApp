@@ -47,19 +47,8 @@ public class ChannelIntegrationsController : DashboardApiController
         var clinicId = await GetClinicIdAsync(ct);
         if (clinicId is null) return Forbid();
 
-        try
-        {
-            var result = await _integrations.SaveAsync(request with { ClinicId = clinicId.Value }, ct);
-            return Ok(result);
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { error = ex.Message });
-        }
-        catch (InvalidOperationException ex) // e.g. the plan's channel limit
-        {
-            return UnprocessableEntity(new { error = ex.Message });
-        }
+        var result = await _integrations.SaveAsync(request with { ClinicId = clinicId.Value }, ct);
+        return Ok(result);
     }
 
     /// <summary>Connects (or reconnects) the clinic's Telegram bot from a BotFather token: validates it

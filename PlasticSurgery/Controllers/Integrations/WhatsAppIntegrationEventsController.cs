@@ -22,6 +22,7 @@ namespace PlasticSurgery.Controllers.Integrations;
 [ApiController]
 [Route("api/integrations/whatsapp")]
 [RequireIngestKey]
+[ApiErrors]
 public class WhatsAppIntegrationEventsController : ControllerBase
 {
     private readonly IWhatsAppTemplateService _templates;
@@ -36,36 +37,14 @@ public class WhatsAppIntegrationEventsController : ControllerBase
     [HttpPost("templates/events")]
     public async Task<ActionResult<WhatsAppTemplateResponse>> TemplateEvent([FromBody] WhatsAppTemplateEventRequest request, CancellationToken ct)
     {
-        try
-        {
-            var template = await _templates.ApplyMetaEventAsync(request, ct);
-            return Ok(template);
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { error = ex.Message });
-        }
-        catch (InvalidOperationException ex)
-        {
-            return UnprocessableEntity(new { error = ex.Message });
-        }
+        var template = await _templates.ApplyMetaEventAsync(request, ct);
+        return Ok(template);
     }
 
     [HttpPost("health/events")]
     public async Task<ActionResult<WhatsAppHealthResponse>> HealthEvent([FromBody] WhatsAppHealthEventRequest request, CancellationToken ct)
     {
-        try
-        {
-            var health = await _health.ApplyHealthEventAsync(request, ct);
-            return Ok(health);
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { error = ex.Message });
-        }
-        catch (InvalidOperationException ex)
-        {
-            return UnprocessableEntity(new { error = ex.Message });
-        }
+        var health = await _health.ApplyHealthEventAsync(request, ct);
+        return Ok(health);
     }
 }

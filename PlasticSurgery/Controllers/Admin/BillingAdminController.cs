@@ -22,6 +22,7 @@ namespace PlasticSurgery.Controllers.Admin;
 [AllowAnonymous]
 [RequirePlatformAdminKey]
 [Route("api/platform-admin/billing")]
+[ApiErrors]
 public class BillingAdminController : ControllerBase
 {
     public const string IdempotencyHeader = "Idempotency-Key";
@@ -59,16 +60,16 @@ public class BillingAdminController : ControllerBase
         await _plans.GetAsync(code, ct) is { } plan ? Ok(plan) : NotFound();
 
     [HttpPost("plans")]
-    public Task<IActionResult> CreatePlan([FromBody] PlanRequest request, CancellationToken ct) =>
-        Run(async () => (IActionResult)Ok(await _plans.CreateAsync(request, ct)));
+    public async Task<IActionResult> CreatePlan([FromBody] PlanRequest request, CancellationToken ct) =>
+        Ok(await _plans.CreateAsync(request, ct));
 
     [HttpPut("plans/{code}")]
-    public Task<IActionResult> UpdatePlan(string code, [FromBody] PlanRequest request, CancellationToken ct) =>
-        Run(async () => await _plans.UpdateAsync(code, request, ct) is { } plan ? Ok(plan) : NotFound());
+    public async Task<IActionResult> UpdatePlan(string code, [FromBody] PlanRequest request, CancellationToken ct) =>
+        await _plans.UpdateAsync(code, request, ct) is { } plan ? Ok(plan) : NotFound();
 
     [HttpPut("plans/{code}/entitlements")]
-    public Task<IActionResult> SetEntitlements(string code, [FromBody] Dictionary<string, string> entitlements, CancellationToken ct) =>
-        Run(async () => await _plans.SetEntitlementsAsync(code, entitlements, ct) is { } plan ? Ok(plan) : NotFound());
+    public async Task<IActionResult> SetEntitlements(string code, [FromBody] Dictionary<string, string> entitlements, CancellationToken ct) =>
+        await _plans.SetEntitlementsAsync(code, entitlements, ct) is { } plan ? Ok(plan) : NotFound();
 
     /// <summary>The entitlement keys plans can set, with their kind (feature: true/false, limit: number/unlimited).</summary>
     [HttpGet("entitlements")]
@@ -82,12 +83,12 @@ public class BillingAdminController : ControllerBase
 
     /// <summary>ClinicId set = that clinic's custom-pricing card (checked before its plan's card and the default).</summary>
     [HttpPost("rate-cards")]
-    public Task<IActionResult> CreateRateCard([FromBody] RateCardRequest request, CancellationToken ct) =>
-        Run(async () => (IActionResult)Ok(await _rateCards.CreateAsync(request, ct)));
+    public async Task<IActionResult> CreateRateCard([FromBody] RateCardRequest request, CancellationToken ct) =>
+        Ok(await _rateCards.CreateAsync(request, ct));
 
     [HttpPut("rate-cards/{code}")]
-    public Task<IActionResult> UpdateRateCard(string code, [FromBody] RateCardUpdateRequest request, CancellationToken ct) =>
-        Run(async () => await _rateCards.UpdateAsync(code, request, ct) is { } card ? Ok(card) : NotFound());
+    public async Task<IActionResult> UpdateRateCard(string code, [FromBody] RateCardUpdateRequest request, CancellationToken ct) =>
+        await _rateCards.UpdateAsync(code, request, ct) is { } card ? Ok(card) : NotFound();
 
     [HttpGet("rate-cards/{code}/rates")]
     public async Task<IActionResult> ListRates(string code, [FromQuery] bool history = false, CancellationToken ct = default) =>
@@ -95,12 +96,12 @@ public class BillingAdminController : ControllerBase
 
     /// <summary>Adds a rate version (closes the current version of the same rate at its start).</summary>
     [HttpPost("rate-cards/{code}/rates")]
-    public Task<IActionResult> AddRate(string code, [FromBody] AddRateRequest request, CancellationToken ct) =>
-        Run(async () => await _rateCards.AddRateAsync(code, request, Actor, ct) is { } rate ? Ok(rate) : NotFound());
+    public async Task<IActionResult> AddRate(string code, [FromBody] AddRateRequest request, CancellationToken ct) =>
+        await _rateCards.AddRateAsync(code, request, Actor, ct) is { } rate ? Ok(rate) : NotFound();
 
     [HttpPost("rates/{id:guid}/close")]
-    public Task<IActionResult> CloseRate(Guid id, [FromBody] CloseRateRequest? request, CancellationToken ct) =>
-        Run(async () => await _rateCards.CloseRateAsync(id, request?.EffectiveTo, ct) is { } rate ? Ok(rate) : NotFound());
+    public async Task<IActionResult> CloseRate(Guid id, [FromBody] CloseRateRequest? request, CancellationToken ct) =>
+        await _rateCards.CloseRateAsync(id, request?.EffectiveTo, ct) is { } rate ? Ok(rate) : NotFound();
 
     // ---- clinics: subscription, wallet, history ---------------------------------------------------------------
 
@@ -113,49 +114,46 @@ public class BillingAdminController : ControllerBase
 
     /// <summary>Starts a plan or switches to another one (new period from now). Requires Idempotency-Key.</summary>
     [HttpPost("clinics/{clinicId:guid}/subscription")]
-    public Task<IActionResult> StartSubscription(Guid clinicId, [FromBody] StartSubscriptionApiRequest request, CancellationToken ct) =>
-        Run(async () =>
-        {
-            if (IdempotencyKey is not { } key) return MissingIdempotencyKey();
-            var subscription = await _subscriptions.StartAsync(new StartSubscriptionRequest(
-                clinicId, request.PlanCode, key, request.ChargeFirstPeriod, BillingSource.Admin, Actor, request.Reason), ct);
-            return Ok(BillingQueryService.ToSubscription(subscription));
-        });
+    public async Task<IActionResult> StartSubscription(Guid clinicId, [FromBody] StartSubscriptionApiRequest request, CancellationToken ct)
+    {
+        if (IdempotencyKey is not { } key) return MissingIdempotencyKey();
+        var subscription = await _subscriptions.StartAsync(new StartSubscriptionRequest(
+            clinicId, request.PlanCode, key, request.ChargeFirstPeriod, BillingSource.Admin, Actor, request.Reason), ct);
+        return Ok(BillingQueryService.ToSubscription(subscription));
+    }
 
     [HttpPost("clinics/{clinicId:guid}/subscription/cancel")]
-    public Task<IActionResult> CancelSubscription(Guid clinicId, [FromBody] CancelSubscriptionRequest request, CancellationToken ct) =>
-        Run(async () => await _subscriptions.CancelAsync(clinicId, request.Immediately, BillingSource.Admin, Actor, request.Reason, ct) is { } s
-            ? Ok(BillingQueryService.ToSubscription(s)) : NotFound());
+    public async Task<IActionResult> CancelSubscription(Guid clinicId, [FromBody] CancelSubscriptionRequest request, CancellationToken ct) =>
+        await _subscriptions.CancelAsync(clinicId, request.Immediately, BillingSource.Admin, Actor, request.Reason, ct) is { } s
+            ? Ok(BillingQueryService.ToSubscription(s)) : NotFound();
 
     [HttpPost("clinics/{clinicId:guid}/subscription/resume")]
-    public Task<IActionResult> ResumeSubscription(Guid clinicId, CancellationToken ct) =>
-        Run(async () => await _subscriptions.ResumeAsync(clinicId, BillingSource.Admin, Actor, ct) is { } s
-            ? Ok(BillingQueryService.ToSubscription(s)) : NotFound());
+    public async Task<IActionResult> ResumeSubscription(Guid clinicId, CancellationToken ct) =>
+        await _subscriptions.ResumeAsync(clinicId, BillingSource.Admin, Actor, ct) is { } s
+            ? Ok(BillingQueryService.ToSubscription(s)) : NotFound();
 
     /// <summary>Runs the renewal check now (e.g. right after a top-up for a past-due clinic) instead of waiting for the worker.</summary>
     [HttpPost("clinics/{clinicId:guid}/subscription/renew")]
-    public Task<IActionResult> Renew(Guid clinicId, CancellationToken ct) =>
-        Run(async () => (IActionResult)Ok(new { outcome = (await _subscriptions.RenewIfDueAsync(clinicId, ct)).ToString() }));
+    public async Task<IActionResult> Renew(Guid clinicId, CancellationToken ct) =>
+        Ok(new { outcome = (await _subscriptions.RenewIfDueAsync(clinicId, ct)).ToString() });
 
     /// <summary>Adds money to the wallet (a payment received outside the app). Requires Idempotency-Key.</summary>
     [HttpPost("clinics/{clinicId:guid}/wallet/top-ups")]
-    public Task<IActionResult> TopUp(Guid clinicId, [FromBody] TopUpRequest request, CancellationToken ct) =>
-        Run(async () =>
-        {
-            if (IdempotencyKey is not { } key) return MissingIdempotencyKey();
-            return Ok(await _billing.TopUpAsync(new WalletTopUp(clinicId, request.Amount, key, request.Reference, request.Reason,
-                BillingSource.Admin, Actor), ct));
-        });
+    public async Task<IActionResult> TopUp(Guid clinicId, [FromBody] TopUpRequest request, CancellationToken ct)
+    {
+        if (IdempotencyKey is not { } key) return MissingIdempotencyKey();
+        return Ok(await _billing.TopUpAsync(new WalletTopUp(clinicId, request.Amount, key, request.Reference, request.Reason,
+            BillingSource.Admin, Actor), ct));
+    }
 
     /// <summary>Manual correction of the wallet or included credit (signed amount, reason required). Requires Idempotency-Key.</summary>
     [HttpPost("clinics/{clinicId:guid}/wallet/adjustments")]
-    public Task<IActionResult> Adjust(Guid clinicId, [FromBody] AdjustmentRequest request, CancellationToken ct) =>
-        Run(async () =>
-        {
-            if (IdempotencyKey is not { } key) return MissingIdempotencyKey();
-            return Ok(await _billing.AdjustAsync(new WalletAdjustment(clinicId, request.Amount, (request.BalanceType ?? string.Empty).Trim().ToLowerInvariant(),
-                request.Reason, key, BillingSource.Admin, Actor), ct));
-        });
+    public async Task<IActionResult> Adjust(Guid clinicId, [FromBody] AdjustmentRequest request, CancellationToken ct)
+    {
+        if (IdempotencyKey is not { } key) return MissingIdempotencyKey();
+        return Ok(await _billing.AdjustAsync(new WalletAdjustment(clinicId, request.Amount, (request.BalanceType ?? string.Empty).Trim().ToLowerInvariant(),
+            request.Reason, key, BillingSource.Admin, Actor), ct));
+    }
 
     [HttpGet("clinics/{clinicId:guid}/usage")]
     public async Task<IActionResult> Usage(Guid clinicId, [FromQuery] string? status, [FromQuery] string? eventType,
@@ -165,17 +163,16 @@ public class BillingAdminController : ControllerBase
 
     /// <summary>Refunds one settled usage in full, back to where it was paid from. Once only; reason required.</summary>
     [HttpPost("clinics/{clinicId:guid}/usage/{usageId:guid}/refund")]
-    public Task<IActionResult> Refund(Guid clinicId, Guid usageId, [FromBody] RefundRequest request, CancellationToken ct) =>
-        Run(async () =>
+    public async Task<IActionResult> Refund(Guid clinicId, Guid usageId, [FromBody] RefundRequest request, CancellationToken ct)
+    {
+        var result = await _billing.RefundAsync(clinicId, usageId, request.Reason, BillingSource.Admin, Actor, ct);
+        return result.Outcome switch
         {
-            var result = await _billing.RefundAsync(clinicId, usageId, request.Reason, BillingSource.Admin, Actor, ct);
-            return result.Outcome switch
-            {
-                UsageOutcome.NotFound => NotFound(),
-                UsageOutcome.Conflict => UnprocessableEntity(new { error = "Only a settled usage can be refunded." }),
-                _ => Ok(result)
-            };
-        });
+            UsageOutcome.NotFound => NotFound(),
+            UsageOutcome.Conflict => UnprocessableEntity(new { error = "Only a settled usage can be refunded." }),
+            _ => Ok(result)
+        };
+    }
 
     [HttpGet("clinics/{clinicId:guid}/ledger")]
     public async Task<IActionResult> Ledger(Guid clinicId, [FromQuery] int page = 1, [FromQuery] int pageSize = 50, CancellationToken ct = default) =>
@@ -220,16 +217,16 @@ public class BillingAdminController : ControllerBase
     /// platform_funded | external_provider_direct | no_provider_usage_fee, or null = default), omniUsageBilling
     /// (true/false, or null = default: on only when SculptFlow pays the provider), reason (required).</summary>
     [HttpPut("channel-accounts/{channelIntegrationId:guid}/provider-billing")]
-    public Task<IActionResult> SetProviderBilling(Guid channelIntegrationId, [FromBody] ProviderBillingRequest request, CancellationToken ct) =>
-        Run(async () => await _providerBilling.SetAsync(channelIntegrationId,
+    public async Task<IActionResult> SetProviderBilling(Guid channelIntegrationId, [FromBody] ProviderBillingRequest request, CancellationToken ct) =>
+        await _providerBilling.SetAsync(channelIntegrationId,
             new ChannelAccountBillingChange(request.ProviderBilling, request.OmniUsageBilling, request.Reason, Actor), ct) is { } account
-            ? Ok(account) : NotFound());
+            ? Ok(account) : NotFound();
 
     /// <summary>Removes one account's override: back to the channel/provider defaults.</summary>
     [HttpPost("channel-accounts/{channelIntegrationId:guid}/provider-billing/reset")]
-    public Task<IActionResult> ResetProviderBilling(Guid channelIntegrationId, [FromBody] ResetProviderBillingRequest request, CancellationToken ct) =>
-        Run(async () => await _providerBilling.ResetAsync(channelIntegrationId, request.Reason, Actor, ct) is { } account
-            ? Ok(account) : NotFound());
+    public async Task<IActionResult> ResetProviderBilling(Guid channelIntegrationId, [FromBody] ResetProviderBillingRequest request, CancellationToken ct) =>
+        await _providerBilling.ResetAsync(channelIntegrationId, request.Reason, Actor, ct) is { } account
+            ? Ok(account) : NotFound();
 
     /// <summary>Usage revenue, provider cost and margin by clinic/channel/event type, plus subscription revenue and
     /// top-ups, for [from, to). Defaults to the current calendar month (UTC).</summary>
@@ -245,20 +242,4 @@ public class BillingAdminController : ControllerBase
 
     private IActionResult MissingIdempotencyKey() =>
         BadRequest(new { error = $"An {IdempotencyHeader} header is required (any unique string per intended operation, max {BillingService.MaxKeyLength} chars)." });
-
-    private async Task<IActionResult> Run(Func<Task<IActionResult>> action)
-    {
-        try
-        {
-            return await action();
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { error = ex.Message });
-        }
-        catch (InvalidOperationException ex)
-        {
-            return UnprocessableEntity(new { error = ex.Message });
-        }
-    }
 }

@@ -64,6 +64,7 @@ namespace PlasticSurgery.Controllers.Integrations;
 [ApiController]
 [Route("api/ai")]
 [RequireIngestKey]
+[ApiErrors]
 public class AiController : ControllerBase
 {
     private readonly IClinicContext _clinicContext;
@@ -154,15 +155,8 @@ public class AiController : ControllerBase
     public async Task<ActionResult<LeadResponse>> UpdateLead(
         Guid leadId, [FromQuery] Guid clinicId, [FromBody] UpdateLeadContextRequest request, CancellationToken ct)
     {
-        try
-        {
-            var lead = await _leads.UpdateContextAsync(clinicId, leadId, request, ct);
-            return lead is null ? NotFound() : Ok(lead);
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { error = ex.Message });
-        }
+        var lead = await _leads.UpdateContextAsync(clinicId, leadId, request, ct);
+        return lead is null ? NotFound() : Ok(lead);
     }
 
     /// <summary>get_available_slots — real open consultation slots from the clinic's structured availability (weekly schedule,
@@ -174,34 +168,27 @@ public class AiController : ControllerBase
         [FromQuery] Guid clinicId, [FromQuery] Guid? leadId, [FromQuery] Guid? procedureId, [FromQuery] DateOnly? date,
         [FromQuery] int? days, CancellationToken ct = default)
     {
-        try
+        // With leadId (always passed by the n8n workflow, never chosen by the AI) the reply also carries the patient's own
+        // upcoming appointments and the backend's canCreateNewBooking decision — kept separate from the requested date and slots.
+        // Read-only: this endpoint never books, reschedules or cancels.
+        PatientBookingContext? context = null;
+        if (leadId is { } lead)
         {
-            // With leadId (always passed by the n8n workflow, never chosen by the AI) the reply also carries the patient's own
-            // upcoming appointments and the backend's canCreateNewBooking decision — kept separate from the requested date and slots.
-            // Read-only: this endpoint never books, reschedules or cancels.
-            PatientBookingContext? context = null;
-            if (leadId is { } lead)
-            {
-                context = await _appointments.GetBookingContextAsync(clinicId, lead, ct);
-                if (context is null) return NotFound(new { error = "Lead not found for this clinic." });
-            }
-
-            var result = await _availability.GetSlotsAsync(clinicId, procedureId, date, days ?? (date is null ? 7 : 1), ct);
-            if (context is null) return Ok(result);
-
-            return Ok(result with
-            {
-                RequestedDate = date?.ToString("yyyy-MM-dd") ?? result.Today,
-                HasUpcomingAppointment = context.HasUpcomingAppointment,
-                CanCreateNewBooking = context.CanCreateNewBooking,
-                BookingBlockReason = context.BookingBlockReason,
-                ExistingUpcomingAppointments = context.ExistingUpcomingAppointments
-            });
+            context = await _appointments.GetBookingContextAsync(clinicId, lead, ct);
+            if (context is null) return NotFound(new { error = "Lead not found for this clinic." });
         }
-        catch (ArgumentException ex)
+
+        var result = await _availability.GetSlotsAsync(clinicId, procedureId, date, days ?? (date is null ? 7 : 1), ct);
+        if (context is null) return Ok(result);
+
+        return Ok(result with
         {
-            return BadRequest(new { error = ex.Message });
-        }
+            RequestedDate = date?.ToString("yyyy-MM-dd") ?? result.Today,
+            HasUpcomingAppointment = context.HasUpcomingAppointment,
+            CanCreateNewBooking = context.CanCreateNewBooking,
+            BookingBlockReason = context.BookingBlockReason,
+            ExistingUpcomingAppointments = context.ExistingUpcomingAppointments
+        });
     }
 
     /// <summary>schedule_consultation — the ONE tool the AI uses to book or move a consultation. The BACKEND decides which from the real
@@ -296,10 +283,6 @@ public class AiController : ControllerBase
         catch (SlotUnavailableException ex)
         {
             return Conflict(new { error = ex.Message, slotUnavailable = true });
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { error = ex.Message });
         }
     }
 

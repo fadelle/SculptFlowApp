@@ -17,6 +17,7 @@ namespace PlasticSurgery.Controllers.Integrations;
 [ApiController]
 [Route("api/messages")]
 [RequireIngestKey]
+[ApiErrors]
 public class MessagesController : ControllerBase
 {
     private readonly IMessageService _messages;
@@ -29,18 +30,11 @@ public class MessagesController : ControllerBase
     [HttpPost("ingest")]
     public async Task<ActionResult<IngestMessageResult>> Ingest([FromBody] IngestMessageRequest request, CancellationToken ct)
     {
-        try
+        var result = await _messages.IngestAsync(request, ct);
+        if (!result.Found)
         {
-            var result = await _messages.IngestAsync(request, ct);
-            if (!result.Found)
-            {
-                return NotFound(new { error = "Conversation (or, for a status update, the referenced message) was not found for this clinic." });
-            }
-            return Ok(result);
+            return NotFound(new { error = "Conversation (or, for a status update, the referenced message) was not found for this clinic." });
         }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { error = ex.Message });
-        }
+        return Ok(result);
     }
 }

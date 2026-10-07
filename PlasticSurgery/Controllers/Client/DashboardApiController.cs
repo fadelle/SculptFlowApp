@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PlasticSurgery.Business.Contracts.Managers;
+using PlasticSurgery.Controllers.Filters;
 
 namespace PlasticSurgery.Controllers.Client;
 
@@ -12,6 +13,7 @@ namespace PlasticSurgery.Controllers.Client;
 /// never from a clinicId the browser supplies, per the MVP's auth scope decision.
 /// </summary>
 [Authorize]
+[ApiErrors]
 public abstract class DashboardApiController : ControllerBase
 {
     private readonly ICurrentClinicContext _clinicContext;
