@@ -1,7 +1,6 @@
-using Microsoft.Extensions.Options;
 using PlasticSurgery.Business.Contracts.Engines.Billing;
+using PlasticSurgery.Business.Contracts.Managers;
 using PlasticSurgery.Business.Contracts.Services.Billing;
-using PlasticSurgery.Common.Configs;
 
 namespace PlasticSurgery.Business.Jobs;
 
@@ -16,32 +15,27 @@ namespace PlasticSurgery.Business.Jobs;
 public class BillingMaintenanceWorker : BackgroundService
 {
     private readonly IServiceScopeFactory _scopes;
-    private readonly BillingOptions _options;
     private readonly ILogger<BillingMaintenanceWorker> _logger;
+    private readonly IConfigManager _config;
 
-    public BillingMaintenanceWorker(IServiceScopeFactory scopes, IOptions<BillingOptions> options, ILogger<BillingMaintenanceWorker> logger)
+    public BillingMaintenanceWorker(IServiceScopeFactory scopes, ILogger<BillingMaintenanceWorker> logger, IConfigManager config)
     {
+        _config = config;
         _scopes = scopes;
-        _options = options.Value;
         _logger = logger;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        if (!_options.Enabled)
-        {
-            _logger.LogInformation("Billing is disabled (Billing:Enabled = false); the billing maintenance worker is idle.");
-            return;
-        }
-
-        var interval = TimeSpan.FromMinutes(Math.Clamp(_options.MaintenanceIntervalMinutes, 1, 60));
+        // Billing:Enabled and the interval are settings (IConfigManager), so both are read on every cycle: switching
+        // billing on or off, or changing the interval, takes effect without a restart.
         try
         {
             await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken); // let the app finish starting
             while (!stoppingToken.IsCancellationRequested)
             {
-                await RunOnceAsync(stoppingToken);
-                await Task.Delay(interval, stoppingToken);
+                if (_config.BillingEnabled) await RunOnceAsync(stoppingToken);
+                await Task.Delay(TimeSpan.FromMinutes(_config.BillingMaintenanceIntervalMinutes), stoppingToken);
             }
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)

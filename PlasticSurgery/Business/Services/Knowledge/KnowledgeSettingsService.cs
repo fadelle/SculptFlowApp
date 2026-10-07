@@ -1,4 +1,4 @@
-using System.Globalization;
+using PlasticSurgery.Business.Contracts.Managers;
 using PlasticSurgery.Business.Contracts.Services.Knowledge;
 using PlasticSurgery.Business.Engines.Knowledge;
 using PlasticSurgery.Common.Enums;
@@ -13,20 +13,23 @@ namespace PlasticSurgery.Business.Services.Knowledge;
 
 public class KnowledgeSettingsService : IKnowledgeSettingsService
 {
-    public const int MinChunkSizeTokens = 50;
-    public const int MaxChunkSizeTokens = 1000;
-    public const int MinTopK = 1;
-    public const int MaxTopK = 10;
+    // Bounds for what a clinic may choose, read through IConfigManager (Knowledge section of ConfigDefaults).
+    private int MinChunkSizeTokens => _config.KnowledgeMinChunkSizeTokens;
+    private int MaxChunkSizeTokens => _config.KnowledgeMaxChunkSizeTokens;
+    private int MinTopK => _config.KnowledgeMinTopK;
+    private int MaxTopK => _config.KnowledgeMaxTopK;
 
     private readonly IKnowledgeSettingsRepository _settings;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IConfiguration _configuration;
+    private readonly IConfigManager _config;
 
-    public KnowledgeSettingsService(IKnowledgeSettingsRepository settings, IUnitOfWork unitOfWork, IConfiguration configuration)
+    public KnowledgeSettingsService(IKnowledgeSettingsRepository settings, IUnitOfWork unitOfWork, IConfiguration configuration, IConfigManager config)
     {
         _settings = settings;
         _unitOfWork = unitOfWork;
         _configuration = configuration;
+        _config = config;
     }
 
     public async Task<KnowledgeSettingsResponse> GetAsync(Guid clinicId, CancellationToken ct = default)
@@ -39,14 +42,14 @@ public class KnowledgeSettingsService : IKnowledgeSettingsService
         {
             Id = Guid.NewGuid(),
             ClinicId = clinicId,
-            EmbeddingModel = ConfigString("Embeddings:Model", "text-embedding-3-small"),
-            VectorDimension = ConfigInt("Embeddings:Dimensions", 1536),
+            EmbeddingModel = _config.EmbeddingsModel,
+            VectorDimension = _config.EmbeddingsDimensions,
             SimilarityMethod = KnowledgeSimilarityMethod.Cosine,
             VectorIndexType = KnowledgeVectorIndexType.None,
-            ChunkSizeTokens = Math.Clamp(ConfigInt("Knowledge:ChunkMaxChars", 1000) / KnowledgeChunkingService.CharsPerToken, MinChunkSizeTokens, MaxChunkSizeTokens),
-            ChunkOverlapTokens = (int)Math.Round(ConfigInt("Knowledge:ChunkOverlapChars", 150) / (double)KnowledgeChunkingService.CharsPerToken),
+            ChunkSizeTokens = Math.Clamp(_config.KnowledgeChunkMaxChars / KnowledgeChunkingService.CharsPerToken, MinChunkSizeTokens, MaxChunkSizeTokens),
+            ChunkOverlapTokens = (int)Math.Round(_config.KnowledgeChunkOverlapChars / (double)KnowledgeChunkingService.CharsPerToken),
             TopK = 5,
-            MinimumSimilarity = Math.Clamp(ConfigDouble("Knowledge:MinScore", 0.30), 0, 1),
+            MinimumSimilarity = (double)_config.KnowledgeMinScore,
             CreatedAt = now,
             UpdatedAt = now
         };
@@ -83,9 +86,9 @@ public class KnowledgeSettingsService : IKnowledgeSettingsService
         return ToResponse(row);
     }
 
-    private static void Validate(UpdateKnowledgeSettingsRequest r)
+    private void Validate(UpdateKnowledgeSettingsRequest r)
     {
-        if (r.ChunkSizeTokens is < MinChunkSizeTokens or > MaxChunkSizeTokens)
+        if (r.ChunkSizeTokens < MinChunkSizeTokens || r.ChunkSizeTokens > MaxChunkSizeTokens)
         {
             throw new ArgumentException($"Chunk size must be between {MinChunkSizeTokens} and {MaxChunkSizeTokens} tokens.");
         }
@@ -93,7 +96,7 @@ public class KnowledgeSettingsService : IKnowledgeSettingsService
         {
             throw new ArgumentException("Chunk overlap must be between 0 and half the chunk size.");
         }
-        if (r.TopK is < MinTopK or > MaxTopK)
+        if (r.TopK < MinTopK || r.TopK > MaxTopK)
         {
             throw new ArgumentException($"Top K must be between {MinTopK} and {MaxTopK}.");
         }
@@ -106,9 +109,6 @@ public class KnowledgeSettingsService : IKnowledgeSettingsService
     private string ConfigString(string key, string fallback) => _configuration[key] is { Length: > 0 } v ? v : fallback;
 
     private int ConfigInt(string key, int fallback) => int.TryParse(_configuration[key], out var v) && v > 0 ? v : fallback;
-
-    private double ConfigDouble(string key, double fallback) =>
-        double.TryParse(_configuration[key], NumberStyles.Float, CultureInfo.InvariantCulture, out var v) ? v : fallback;
 
     private static KnowledgeSettingsResponse ToResponse(KnowledgeSearchSettings s) => new(
         s.EmbeddingModel, s.VectorDimension, s.SimilarityMethod, s.VectorIndexType,

@@ -5,6 +5,7 @@ using DocumentFormat.OpenXml.Wordprocessing;
 using UglyToad.PdfPig;
 using UglyToad.PdfPig.DocumentLayoutAnalysis.TextExtractor;
 using PlasticSurgery.Business.Contracts.Engines.Knowledge;
+using PlasticSurgery.Business.Contracts.Managers;
 using PlasticSurgery.Common.Exceptions;
 using PlasticSurgery.Common.Helpers;
 
@@ -23,13 +24,15 @@ public class DocumentTextExtractor : IDocumentTextExtractor
         _ => "application/octet-stream"
     };
 
-    private readonly int _maxChars;
+    private readonly IConfigManager _config;
 
-    public DocumentTextExtractor(IConfiguration configuration)
+    private int _maxChars => _config.KnowledgeMaxExtractedChars;
+
+    public DocumentTextExtractor(IConfigManager config)
     {
         // A safety valve against huge documents (embedding cost) and decompression bombs (a tiny DOCX
         // that expands to gigabytes) — extraction stops as soon as the text exceeds this.
-        _maxChars = Math.Max(1_000, configuration.GetValue("Knowledge:MaxExtractedChars", 250_000));
+        _config = config;
     }
 
     public Task<string> ExtractAsync(Stream content, string fileName, CancellationToken ct = default) =>

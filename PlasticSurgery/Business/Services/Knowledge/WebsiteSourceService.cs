@@ -1,7 +1,7 @@
 using PlasticSurgery.Business.Contracts.Jobs;
+using PlasticSurgery.Business.Contracts.Managers;
 using PlasticSurgery.Business.Contracts.Services.Knowledge;
 using PlasticSurgery.Business.Engines.WebScraping;
-using PlasticSurgery.Common.Configs;
 using PlasticSurgery.Common.Enums;
 using PlasticSurgery.Common.Exceptions;
 using PlasticSurgery.Common.Helpers;
@@ -20,17 +20,17 @@ public sealed class WebsiteSourceService : IWebsiteSourceService
     private readonly IKnowledgeService _knowledge;
     private readonly IWebsiteScrapeQueue _queue;
     private readonly SsrfGuard _guard;
-    private readonly WebsiteScrapeOptions _options;
+    private readonly IConfigManager _config;
 
     public WebsiteSourceService(
-        IWebsiteSourceRepository websites, IUnitOfWork unitOfWork, IKnowledgeService knowledge, IWebsiteScrapeQueue queue, SsrfGuard guard, WebsiteScrapeOptions options)
+        IWebsiteSourceRepository websites, IUnitOfWork unitOfWork, IKnowledgeService knowledge, IWebsiteScrapeQueue queue, SsrfGuard guard, IConfigManager config)
     {
         _websites = websites;
         _unitOfWork = unitOfWork;
         _knowledge = knowledge;
         _queue = queue;
         _guard = guard;
-        _options = options;
+        _config = config;
     }
 
     public async Task<WebsiteSourceResponse> CreateAsync(Guid clinicId, CreateWebsiteSourceRequest request, CancellationToken ct = default)
@@ -65,9 +65,9 @@ public sealed class WebsiteSourceService : IWebsiteSourceService
         var category = string.IsNullOrWhiteSpace(request.Category) ? KnowledgeCategory.General : request.Category.Trim().ToLowerInvariant();
         if (category.Length > 50) throw new ArgumentException("Category must be 50 characters or fewer.");
 
-        if (await _websites.CountSourcesAsync(clinicId, ct) >= _options.MaxSourcesPerClinic)
+        if (await _websites.CountSourcesAsync(clinicId, ct) >= _config.WebScrapingMaxSourcesPerClinic)
         {
-            throw new ArgumentException($"You can add up to {_options.MaxSourcesPerClinic} websites. Delete one you no longer need first.");
+            throw new ArgumentException($"You can add up to {_config.WebScrapingMaxSourcesPerClinic} websites. Delete one you no longer need first.");
         }
         if (await _websites.SourceUrlExistsAsync(clinicId, normalized, ct))
         {

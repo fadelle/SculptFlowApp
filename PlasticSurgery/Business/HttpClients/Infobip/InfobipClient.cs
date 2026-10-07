@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using PlasticSurgery.Business.Contracts.HttpClients.Infobip;
+using PlasticSurgery.Business.Contracts.Managers;
 using PlasticSurgery.Common.Exceptions;
 using PlasticSurgery.Entities.Dtos.Infobip;
 
@@ -19,9 +20,11 @@ public class InfobipClient : IInfobipClient
     private readonly HttpClient _http;
     private readonly IConfiguration _configuration;
     private readonly ILogger<InfobipClient> _logger;
+    private readonly IConfigManager _config;
 
-    public InfobipClient(HttpClient http, IConfiguration configuration, ILogger<InfobipClient> logger)
+    public InfobipClient(HttpClient http, IConfiguration configuration, ILogger<InfobipClient> logger, IConfigManager config)
     {
+        _config = config;
         _http = http;
         _configuration = configuration;
         _logger = logger;
@@ -42,7 +45,7 @@ public class InfobipClient : IInfobipClient
         }
     }
 
-    private int MaxSendAttempts => Math.Clamp(_configuration.GetValue("Infobip:MaxSendAttempts", 3), 1, 5);
+    private int MaxSendAttempts => _config.InfobipMaxSendAttempts;
 
     public bool IsConfigured => !string.IsNullOrEmpty(ApiKey) && !string.IsNullOrEmpty(BaseUrl);
 

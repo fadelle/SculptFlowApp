@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.RegularExpressions;
 using PlasticSurgery.Business.Contracts.Engines.Knowledge;
+using PlasticSurgery.Business.Contracts.Managers;
 
 namespace PlasticSurgery.Business.Engines.Knowledge;
 
@@ -23,18 +24,18 @@ public class KnowledgeChunkingService : IKnowledgeChunkingService
     private static readonly Regex ParagraphSplit = new(@"\n\s*\n", RegexOptions.Compiled);
     private static readonly Regex SentenceSplit = new(@"(?<=[.!?])\s+", RegexOptions.Compiled);
 
-    private readonly int _minChars;
+    private readonly IConfigManager _config;
 
-    public KnowledgeChunkingService(IConfiguration configuration)
+    public KnowledgeChunkingService(IConfigManager config)
     {
-        _minChars = int.TryParse(configuration["Knowledge:ChunkMinChars"], out var v) && v > 0 ? v : 200;
+        _config = config;
     }
 
     public IReadOnlyList<string> Chunk(string content, int chunkSizeTokens, int chunkOverlapTokens)
     {
         var max = Math.Max(200, chunkSizeTokens * CharsPerToken);
         var overlap = Math.Clamp(chunkOverlapTokens * CharsPerToken, 0, max / 2);
-        var min = Math.Clamp(_minChars, 0, max);
+        var min = Math.Clamp(_config.KnowledgeChunkMinChars, 0, max);
 
         var text = (content ?? string.Empty).Replace("\r\n", "\n").Trim();
         if (text.Length == 0) return Array.Empty<string>();

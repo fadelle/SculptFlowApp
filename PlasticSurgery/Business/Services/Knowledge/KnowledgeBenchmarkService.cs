@@ -5,6 +5,7 @@ using System.Text.Json;
 using PlasticSurgery.Business.Contracts.Engines.KnowledgeBenchmark;
 using PlasticSurgery.Business.Contracts.HttpClients.N8n;
 using PlasticSurgery.Business.Contracts.Jobs;
+using PlasticSurgery.Business.Contracts.Managers;
 using PlasticSurgery.Business.Contracts.Services.Knowledge;
 using PlasticSurgery.Common.Enums;
 using PlasticSurgery.Common.Exceptions;
@@ -20,15 +21,16 @@ namespace PlasticSurgery.Business.Services.Knowledge;
 
 public partial class KnowledgeBenchmarkService : IKnowledgeBenchmarkService
 {
-    public const int GenerationSampleSize = 20;
-    private const int MinSourceChunkChars = 80;
-    private const int SamplePoolSize = 60;
+    // Tunables read through IConfigManager (Benchmark section of ConfigDefaults).
+    private int GenerationSampleSize => _config.BenchmarkGenerationSampleSize;
+    private int MinSourceChunkChars => _config.BenchmarkMinSourceChunkChars;
+    private int SamplePoolSize => _config.BenchmarkSamplePoolSize;
     private const int MaxQuestionChars = 500;
     private const int PreviewChars = 300;
     private const int RetrievedPreviewChars = 240;
-    private const int MaxConsecutiveErrors = 5;
+    private int MaxConsecutiveErrors => _config.BenchmarkMaxConsecutiveErrors;
     /// <summary>A run that has been pending/running longer than this is treated as dead so it can't block new runs forever.</summary>
-    private static readonly TimeSpan StaleRunAge = TimeSpan.FromHours(2);
+    private TimeSpan StaleRunAge => TimeSpan.FromHours(_config.BenchmarkStaleRunHours);
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -41,6 +43,7 @@ public partial class KnowledgeBenchmarkService : IKnowledgeBenchmarkService
     private readonly IKnowledgeBenchmarkScorer _scorer;
     private readonly IKnowledgeBenchmarkRunQueue _queue;
     private readonly ILogger<KnowledgeBenchmarkService> _logger;
+    private readonly IConfigManager _config;
 
     public KnowledgeBenchmarkService(
         IKnowledgeBenchmarkRepository benchmark,
@@ -51,8 +54,9 @@ public partial class KnowledgeBenchmarkService : IKnowledgeBenchmarkService
         IKnowledgeBenchmarkGeneratorClient generator,
         IKnowledgeBenchmarkScorer scorer,
         IKnowledgeBenchmarkRunQueue queue,
-        ILogger<KnowledgeBenchmarkService> logger)
+        ILogger<KnowledgeBenchmarkService> logger, IConfigManager config)
     {
+        _config = config;
         _benchmark = benchmark;
         _documents = documents;
         _unitOfWork = unitOfWork;

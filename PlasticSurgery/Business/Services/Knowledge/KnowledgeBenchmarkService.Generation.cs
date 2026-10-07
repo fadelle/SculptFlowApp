@@ -11,10 +11,10 @@ namespace PlasticSurgery.Business.Services.Knowledge;
 public partial class KnowledgeBenchmarkService
 {
     /// <summary>A pending generation with no callback after this long is marked failed (and its late callback refused).</summary>
-    private static readonly TimeSpan GenerationTimeout = TimeSpan.FromMinutes(30);
+    private TimeSpan GenerationTimeout => TimeSpan.FromMinutes(_config.BenchmarkGenerationTimeoutMinutes);
     private const int MaxRawResponseChars = 100_000;
     private const int MaxRejectedStored = 100;
-    private const int MaxQuestionsPerChunk = 3;
+    private int MaxQuestionsPerChunk => _config.BenchmarkMaxQuestionsPerChunk;
 
     private sealed record SentChunkRow(Guid DocumentId, Guid ChunkId, string DocumentTitle);
 

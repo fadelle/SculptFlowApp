@@ -1,7 +1,6 @@
-using Microsoft.Extensions.Options;
+using PlasticSurgery.Business.Contracts.Managers;
 using PlasticSurgery.Business.Contracts.Services.Billing;
 using PlasticSurgery.Business.Engines.Billing;
-using PlasticSurgery.Common.Configs;
 using PlasticSurgery.Common.Enums;
 using PlasticSurgery.Common.Statics;
 using PlasticSurgery.Entities.Dtos.Billing;
@@ -14,17 +13,15 @@ namespace PlasticSurgery.Business.Services.Billing;
 
 public class BillingQueryService : IBillingQueryService
 {
-    private const int RecentTransactions = 15;
-
     private readonly IBillingUnitOfWorkFactory _units;
-    private readonly BillingOptions _options;
     private readonly TimeProvider _time;
     private readonly IProviderBillingService _providerBilling;
+    private readonly IConfigManager _config;
 
-    public BillingQueryService(IBillingUnitOfWorkFactory units, IOptions<BillingOptions> options, TimeProvider time, IProviderBillingService providerBilling)
+    public BillingQueryService(IBillingUnitOfWorkFactory units, TimeProvider time, IProviderBillingService providerBilling, IConfigManager config)
     {
+        _config = config;
         _units = units;
-        _options = options.Value;
         _time = time;
         _providerBilling = providerBilling;
     }
@@ -122,7 +119,7 @@ public class BillingQueryService : IBillingQueryService
             accounts.TryGetValue(c.Id, out var a);
             subscriptions.TryGetValue(c.Id, out var s);
             return new BillingAccountRow(c.Id, c.Name, s?.Plan?.Code, s?.Status, s?.CurrentPeriodEnd,
-                a?.WalletBalance ?? 0, a?.IncludedCreditBalance ?? 0, a?.ReservedAmount ?? 0, a?.Currency.Trim() ?? _options.NormalizedCurrency);
+                a?.WalletBalance ?? 0, a?.IncludedCreditBalance ?? 0, a?.ReservedAmount ?? 0, a?.Currency.Trim() ?? _config.BillingCurrency);
         }).ToList();
     }
 
@@ -169,7 +166,7 @@ public class BillingQueryService : IBillingQueryService
         var revenue = rows.Sum(r => r.Revenue);
         var paidBySculptFlowCost = rows.Where(r => r.ProviderBilling == ProviderBillingResponsibility.PlatformFunded).Sum(r => r.ProviderCost);
         var paidExternallyCost = rows.Where(r => r.ProviderBilling != ProviderBillingResponsibility.PlatformFunded).Sum(r => r.ProviderCost);
-        return new BillingReport(from, to, _options.NormalizedCurrency, rows, revenue, paidBySculptFlowCost, paidExternallyCost,
+        return new BillingReport(from, to, _config.BillingCurrency, rows, revenue, paidBySculptFlowCost, paidExternallyCost,
             revenue - paidBySculptFlowCost, subscriptionRevenue, topUps);
     }
 
@@ -183,7 +180,7 @@ public class BillingQueryService : IBillingQueryService
         var plan = subscription?.Plan;
 
         DateTimeOffset? graceEnds = subscription?.Status == SubscriptionStatus.PastDue && subscription.PastDueSince is DateTimeOffset pastDueSince
-            ? pastDueSince.AddDays(Math.Max(0, _options.GracePeriodDays))
+            ? pastDueSince.AddDays(_config.BillingGracePeriodDays)
             : null;
         var hasAccess = subscription is not null && (subscription.Status == SubscriptionStatus.Active
                                                      || (subscription.Status == SubscriptionStatus.PastDue && now < graceEnds));
@@ -212,14 +209,14 @@ public class BillingQueryService : IBillingQueryService
                 ClinicPaidByLabel(a.ProviderBilling, a.Channel, a.OmniUsageBilling), a.OmniUsageBilling))
             .ToList();
 
-        var (recent, _) = await unit.Ledger.ListAsync(clinicId, 0, RecentTransactions, ct);
+        var (recent, _) = await unit.Ledger.ListAsync(clinicId, 0, _config.BillingRecentTransactions, ct);
 
         var wallet = account?.WalletBalance ?? 0;
         var credit = account?.IncludedCreditBalance ?? 0;
         var reserved = account?.ReservedAmount ?? 0;
         return new ClinicBillingSummary(
-            _options.Enabled,
-            account?.Currency.Trim() ?? _options.NormalizedCurrency,
+            _config.BillingEnabled,
+            account?.Currency.Trim() ?? _config.BillingCurrency,
             plan?.Code, plan?.Name, plan?.Price, plan?.BillingPeriod,
             subscription?.Status, hasAccess,
             subscription?.CurrentPeriodStart, subscription?.CurrentPeriodEnd,

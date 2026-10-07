@@ -9,10 +9,11 @@ namespace PlasticSurgery.Persistence.Contracts.Campaigns;
 /// </summary>
 public interface ICampaignAudienceRepository
 {
-    /// <summary>Tracked leads matching the audience.</summary>
-    Task<List<Lead>> ListEligibleLeadsAsync(Guid clinicId, string audienceType, CampaignAudienceFilters filters,
+    /// <summary>Tracked leads matching the audience. <paramref name="defaultInactiveDays"/> applies to a reactivation
+    /// audience whose filters don't set inactiveDays.</summary>
+    Task<List<Lead>> ListEligibleLeadsAsync(Guid clinicId, string audienceType, CampaignAudienceFilters filters, int defaultInactiveDays,
         CancellationToken ct = default);
 
-    Task<int> CountEligibleLeadsAsync(Guid clinicId, string audienceType, CampaignAudienceFilters filters,
+    Task<int> CountEligibleLeadsAsync(Guid clinicId, string audienceType, CampaignAudienceFilters filters, int defaultInactiveDays,
         CancellationToken ct = default);
 }

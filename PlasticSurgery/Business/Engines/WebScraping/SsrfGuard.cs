@@ -1,6 +1,6 @@
 using System.Net;
 using System.Net.Sockets;
-using PlasticSurgery.Common.Configs;
+using PlasticSurgery.Business.Contracts.Managers;
 using PlasticSurgery.Common.Exceptions;
 
 namespace PlasticSurgery.Business.Engines.WebScraping;
@@ -20,25 +20,26 @@ namespace PlasticSurgery.Business.Engines.WebScraping;
 /// and IPv4-mapped/6to4/Teredo/NAT64 forms of any of those. Numeric tricks (2130706433, 0x7f.1) are parsed
 /// by System.Uri into a real IP before any check runs.
 ///
-/// The one exception is <see cref="WebsiteScrapeOptions.DevAllowedHosts"/> — exact "host:port" entries that
+/// The one exception is the WebScraping / DevAllowedHosts setting — exact "host:port" entries that
 /// are honoured ONLY in the Development environment, so tests can crawl a local fake site.
 /// </summary>
 public sealed class SsrfGuard
 {
-    private readonly HashSet<string> _devAllowed;
+    private readonly IConfigManager _config;
+    private readonly bool _isDevelopment;
 
-    public SsrfGuard(WebsiteScrapeOptions options, IHostEnvironment environment, ILogger<SsrfGuard> logger)
+    public SsrfGuard(IConfigManager config, IHostEnvironment environment)
     {
-        _devAllowed = environment.IsDevelopment()
-            ? new HashSet<string>(options.DevAllowedHosts.Select(h => h.Trim().ToLowerInvariant()), StringComparer.Ordinal)
-            : new HashSet<string>();
-        if (_devAllowed.Count > 0)
-        {
-            logger.LogWarning("Website crawler: DEVELOPMENT-ONLY SSRF exemptions active for {Hosts}.", string.Join(", ", _devAllowed));
-        }
+        _config = config;
+        _isDevelopment = environment.IsDevelopment();
     }
 
-    private bool IsDevAllowed(string host, int port) => _devAllowed.Contains($"{host.ToLowerInvariant()}:{port}");
+    /// <summary>Exact "host:port" exemptions from the WebScraping / DevAllowedHosts setting (comma-separated), honoured
+    /// only in the Development environment.</summary>
+    private bool IsDevAllowed(string host, int port) =>
+        _isDevelopment
+        && _config.WebScrapingDevAllowedHosts.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Any(h => string.Equals(h, $"{host}:{port}", StringComparison.OrdinalIgnoreCase));
 
     public async Task ValidateUrlAsync(Uri uri, CancellationToken ct = default)
     {

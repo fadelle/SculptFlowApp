@@ -5,6 +5,7 @@ using PlasticSurgery.Persistence.Contracts.Calendars;
 using PlasticSurgery.Persistence.Contracts.Campaigns;
 using PlasticSurgery.Persistence.Contracts.Channels;
 using PlasticSurgery.Persistence.Contracts.Clinics;
+using PlasticSurgery.Persistence.Contracts.Configuration;
 using PlasticSurgery.Persistence.Contracts.Dashboard;
 using PlasticSurgery.Persistence.Contracts.Events;
 using PlasticSurgery.Persistence.Contracts.Inbox;
@@ -22,6 +23,7 @@ using PlasticSurgery.Persistence.Repositories.Calendars;
 using PlasticSurgery.Persistence.Repositories.Campaigns;
 using PlasticSurgery.Persistence.Repositories.Channels;
 using PlasticSurgery.Persistence.Repositories.Clinics;
+using PlasticSurgery.Persistence.Repositories.Configuration;
 using PlasticSurgery.Persistence.Repositories.Dashboard;
 using PlasticSurgery.Persistence.Repositories.Events;
 using PlasticSurgery.Persistence.Repositories.Inbox;
@@ -46,6 +48,7 @@ public static class PersistenceModule
         services.AddScoped<IUnitOfWork, UnitOfWork>();
 
         services.AddScoped<IClinicRepository, ClinicRepository>();
+        services.AddScoped<ISettingRepository, SettingRepository>();
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IEventLogRepository, EventLogRepository>();
         services.AddScoped<ILeadRepository, LeadRepository>();

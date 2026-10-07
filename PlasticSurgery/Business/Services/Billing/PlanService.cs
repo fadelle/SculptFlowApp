@@ -1,7 +1,6 @@
 using System.Text.RegularExpressions;
-using Microsoft.Extensions.Options;
+using PlasticSurgery.Business.Contracts.Managers;
 using PlasticSurgery.Business.Contracts.Services.Billing;
-using PlasticSurgery.Common.Configs;
 using PlasticSurgery.Common.Enums;
 using PlasticSurgery.Common.Statics;
 using PlasticSurgery.Entities.Models;
@@ -14,14 +13,14 @@ namespace PlasticSurgery.Business.Services.Billing;
 public partial class PlanService : IPlanService
 {
     private readonly IBillingUnitOfWorkFactory _units;
-    private readonly BillingOptions _options;
     private readonly TimeProvider _time;
     private readonly ILogger<PlanService> _logger;
+    private readonly IConfigManager _config;
 
-    public PlanService(IBillingUnitOfWorkFactory units, IOptions<BillingOptions> options, TimeProvider time, ILogger<PlanService> logger)
+    public PlanService(IBillingUnitOfWorkFactory units, TimeProvider time, ILogger<PlanService> logger, IConfigManager config)
     {
+        _config = config;
         _units = units;
-        _options = options.Value;
         _time = time;
         _logger = logger;
     }
@@ -47,7 +46,7 @@ public partial class PlanService : IPlanService
         if (await unit.Plans.CodeExistsAsync(code, ct)) throw new ArgumentException($"A plan with code '{code}' already exists.");
 
         var now = _time.GetUtcNow();
-        var plan = new SubscriptionPlan { Id = Guid.NewGuid(), Code = code, Currency = _options.NormalizedCurrency, CreatedAt = now };
+        var plan = new SubscriptionPlan { Id = Guid.NewGuid(), Code = code, Currency = _config.BillingCurrency, CreatedAt = now };
         await ApplyAsync(unit, plan, request, now, ct);
         unit.Plans.Add(plan);
         ReplaceEntitlements(unit, plan, request.Entitlements ?? new Dictionary<string, string>(), now);

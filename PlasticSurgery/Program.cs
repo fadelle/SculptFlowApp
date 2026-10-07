@@ -26,6 +26,7 @@ using PlasticSurgery.Business.Contracts.Services.Calendars;
 using PlasticSurgery.Business.Contracts.Services.Campaigns;
 using PlasticSurgery.Business.Contracts.Services.Channels;
 using PlasticSurgery.Business.Contracts.Services.Clinics;
+using PlasticSurgery.Business.Contracts.Services.Configuration;
 using PlasticSurgery.Business.Contracts.Services.Dashboard;
 using PlasticSurgery.Business.Contracts.Services.Inbox;
 using PlasticSurgery.Business.Contracts.Services.Knowledge;
@@ -60,6 +61,7 @@ using PlasticSurgery.Business.Services.Calendars;
 using PlasticSurgery.Business.Services.Campaigns;
 using PlasticSurgery.Business.Services.Channels;
 using PlasticSurgery.Business.Services.Clinics;
+using PlasticSurgery.Business.Services.Configuration;
 using PlasticSurgery.Business.Services.Dashboard;
 using PlasticSurgery.Business.Services.Inbox;
 using PlasticSurgery.Business.Services.Knowledge;
@@ -166,6 +168,10 @@ builder.Services.AddScoped<IClinicRegistrationService, ClinicRegistrationService
 builder.Services.AddScoped<IClinicProfileService, ClinicProfileService>();
 builder.Services.AddScoped<IStaffService, StaffService>();
 builder.Services.AddScoped<IAutomationCleanupService, AutomationCleanupService>();
+builder.Services.AddScoped<ISettingsService, SettingsService>();
+// Settings by section + key: config.settings, else the constant default in Common/Statics/ConfigDefaults.
+builder.Services.AddSingleton<IConfigManager, ConfigManager>();
+builder.Services.AddHostedService<ConfigRefreshJob>();
 builder.Services.AddScoped<ILeadService, LeadService>();
 builder.Services.AddScoped<IProcedureService, ProcedureService>();
 builder.Services.AddScoped<IAvailabilityService, AvailabilityService>();
@@ -205,8 +211,9 @@ builder.Services.AddHttpClient<MetaWhatsAppProvider>();
 builder.Services.AddScoped<IWhatsAppProvider>(sp => sp.GetRequiredService<MetaWhatsAppProvider>());
 // Infobip: SculptFlow's own account (Infobip:BaseUrl / Infobip:ApiKey env vars). The key travels only in the
 // Authorization header, which HttpClient logging never prints; the client itself logs no bodies or numbers.
-builder.Services.AddHttpClient<IInfobipClient, InfobipClient>(client =>
-    client.Timeout = TimeSpan.FromSeconds(Math.Clamp(builder.Configuration.GetValue("Infobip:TimeoutSeconds", 20), 5, 120)));
+// The timeout is a setting (Infobip:TimeoutSeconds in ConfigDefaults); it's read whenever a client is created.
+builder.Services.AddHttpClient<IInfobipClient, InfobipClient>((sp, client) =>
+    client.Timeout = TimeSpan.FromSeconds(sp.GetRequiredService<IConfigManager>().InfobipTimeoutSeconds));
 builder.Services.AddScoped<IWhatsAppProvider, InfobipWhatsAppProvider>();
 // Template review for the same providers, picked by the same WhatsApp:Provider switch (see IWhatsAppTemplateProvider).
 builder.Services.AddScoped<IWhatsAppTemplateProvider, MetaWhatsAppTemplateProvider>();
@@ -234,7 +241,6 @@ builder.Services.AddScoped<IKnowledgeSearchService, KnowledgeSearchService>();
 // Knowledge Base WEBSITE SCRAPING — a standalone ingestion subsystem (Integrations/Knowledge/WebScraping). It owns
 // crawling/URL identity/fetching/extraction/page state/change detection and hands clean text to IKnowledgeService,
 // so pages flow through the SAME chunking/embedding/search as manual entries and uploads.
-builder.Services.AddSingleton(sp => PlasticSurgery.Common.Configs.WebsiteScrapeOptions.Resolve(sp.GetRequiredService<IConfiguration>()));
 builder.Services.AddSingleton<SsrfGuard>();
 builder.Services.AddSingleton<IHtmlContentExtractor, HtmlContentExtractor>();
 builder.Services.AddSingleton<IWebsiteScrapeQueue, WebsiteScrapeQueue>();

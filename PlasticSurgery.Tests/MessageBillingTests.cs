@@ -141,7 +141,6 @@ public class MessageBillingTests
             await db.SaveChangesAsync();
         }
 
-        var options = Options.Create(h.Options);
         // The clinic's WhatsApp account (SculptFlow's Infobip sender), optionally with an admin override of who pays.
         var accountId = await h.ConnectChannelAsync(clinic, ChannelType.WhatsApp, ChannelProvider.Infobip);
         if (providerBilling is not null || omniUsageBilling is not null)
@@ -151,7 +150,7 @@ public class MessageBillingTests
 
         var messageBilling = new MessageBillingService(h.Billing,
             new IChannelBillingPolicy[] { new WhatsAppBillingPolicy(Config(), Options.Create(new WhatsAppBillingOptions())), new TelegramBillingPolicy() },
-            h.ProviderBilling, h.Factory, options, h.Time, NullLogger<MessageBillingService>.Instance);
+            h.ProviderBilling, h.Factory, h.Time, NullLogger<MessageBillingService>.Instance, h.Config);
 
         return new Setup
         {
@@ -298,7 +297,7 @@ public class MessageBillingTests
     public async Task WithBillingOff_SendsWorkExactlyAsBefore()
     {
         var s = await SetupAsync(wallet: 0m, subscribe: false);
-        s.H.Options.Enabled = false;
+        s.H.SetSetting("Billing", "Enabled", "false");
 
         var message = await s.SendTemplateAsync(s.MarketingTemplate);
         await s.StatusAsync(message.Id, "delivered");

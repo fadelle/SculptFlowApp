@@ -1,4 +1,5 @@
 using PlasticSurgery.Business.Contracts.HttpClients.TikTok;
+using PlasticSurgery.Business.Contracts.Managers;
 using PlasticSurgery.Business.Contracts.Services.Notifications;
 using PlasticSurgery.Business.Contracts.Services.TikTok;
 using PlasticSurgery.Common.Enums;
@@ -14,15 +15,17 @@ public class TikTokIntegrationService : ITikTokIntegrationService
 {
     // Same margin as CalendarIntegrationService — refresh proactively rather than hand out a token that
     // might expire mid-request, or wait for something else to notice it's stale.
-    private static readonly TimeSpan TokenRefreshMargin = TimeSpan.FromMinutes(5);
+    private TimeSpan TokenRefreshMargin => TimeSpan.FromMinutes(_config.IntegrationsTokenRefreshMarginMinutes);
 
     private readonly ITikTokIntegrationRepository _tikTok;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ITikTokProviderClient _provider;
     private readonly INotificationService _notifications;
+    private readonly IConfigManager _config;
 
-    public TikTokIntegrationService(ITikTokIntegrationRepository tikTok, IUnitOfWork unitOfWork, ITikTokProviderClient provider, INotificationService notifications)
+    public TikTokIntegrationService(ITikTokIntegrationRepository tikTok, IUnitOfWork unitOfWork, ITikTokProviderClient provider, INotificationService notifications, IConfigManager config)
     {
+        _config = config;
         _tikTok = tikTok;
         _unitOfWork = unitOfWork;
         _provider = provider;

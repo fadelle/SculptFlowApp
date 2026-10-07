@@ -19,9 +19,8 @@ public static class BillingModule
 {
     public static IServiceCollection AddBilling(this IServiceCollection services, IConfiguration configuration)
     {
-        services.Configure<BillingOptions>(configuration.GetSection(BillingOptions.Section));
-        services.Configure<WhatsAppBillingOptions>(configuration.GetSection(BillingOptions.Section + ":WhatsApp"));
-        services.Configure<ProviderBillingOptions>(configuration.GetSection(BillingOptions.Section + ":ProviderBilling"));
+        services.Configure<WhatsAppBillingOptions>(configuration.GetSection("Billing:WhatsApp"));
+        services.Configure<ProviderBillingOptions>(configuration.GetSection("Billing:ProviderBilling"));
         services.AddSingleton(TimeProvider.System);
 
         services.AddScoped<IBillingUnitOfWorkFactory, BillingUnitOfWorkFactory>();

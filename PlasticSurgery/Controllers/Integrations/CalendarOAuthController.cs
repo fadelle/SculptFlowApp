@@ -21,7 +21,7 @@ namespace PlasticSurgery.Controllers.Integrations;
 public class CalendarOAuthController : Controller
 {
     private const string StatePurpose = "PlasticSurgery.CalendarOAuthState";
-    private static readonly TimeSpan StateLifetime = TimeSpan.FromMinutes(15);
+    private TimeSpan StateLifetime => TimeSpan.FromMinutes(_config.IntegrationsOAuthStateLifetimeMinutes);
     private const string SettingsPagePath = "/settings/calendar-integrations";
 
     private readonly ICurrentClinicContext _clinicContext;
@@ -30,12 +30,14 @@ public class CalendarOAuthController : Controller
     private readonly IConfiguration _configuration;
     private readonly ITimeLimitedDataProtector _stateProtector;
     private readonly ILogger<CalendarOAuthController> _logger;
+    private readonly IConfigManager _config;
 
     public CalendarOAuthController(
         ICalendarIntegrationService calendar, ICurrentClinicContext clinicContext,
         IEnumerable<ICalendarProviderClient> providerClients, IConfiguration configuration,
-        IDataProtectionProvider dataProtection, ILogger<CalendarOAuthController> logger)
+        IDataProtectionProvider dataProtection, ILogger<CalendarOAuthController> logger, IConfigManager config)
     {
+        _config = config;
         _clinicContext = clinicContext;
         _calendar = calendar;
         _providerClients = providerClients;

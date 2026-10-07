@@ -1,7 +1,6 @@
 using System.Globalization;
-using Microsoft.Extensions.Options;
+using PlasticSurgery.Business.Contracts.Managers;
 using PlasticSurgery.Business.Contracts.Services.Billing;
-using PlasticSurgery.Common.Configs;
 using PlasticSurgery.Common.Enums;
 using PlasticSurgery.Common.Exceptions;
 using PlasticSurgery.Common.Statics;
@@ -15,23 +14,23 @@ public class EntitlementService : IEntitlementService
 {
     private readonly IClinicSubscriptionRepository _subscriptions;
     private readonly IChannelIntegrationRepository _integrations;
-    private readonly BillingOptions _options;
     private readonly TimeProvider _time;
     private readonly ILogger<EntitlementService> _logger;
+    private readonly IConfigManager _config;
     private readonly Dictionary<Guid, ClinicEntitlements> _cache = new(); // per request (scoped service)
 
-    public EntitlementService(IClinicSubscriptionRepository subscriptions, IChannelIntegrationRepository integrations, IOptions<BillingOptions> options, TimeProvider time, ILogger<EntitlementService> logger)
+    public EntitlementService(IClinicSubscriptionRepository subscriptions, IChannelIntegrationRepository integrations, TimeProvider time, ILogger<EntitlementService> logger, IConfigManager config)
     {
+        _config = config;
         _subscriptions = subscriptions;
         _integrations = integrations;
-        _options = options.Value;
         _time = time;
         _logger = logger;
     }
 
     public async Task<ClinicEntitlements> GetAsync(Guid clinicId, CancellationToken ct = default)
     {
-        if (!_options.Enabled) return ClinicEntitlements.Unrestricted;
+        if (!_config.BillingEnabled) return ClinicEntitlements.Unrestricted;
         if (_cache.TryGetValue(clinicId, out var cached)) return cached;
 
         var subscription = await _subscriptions.GetWithEntitlementsReadOnlyAsync(clinicId, ct);
@@ -46,7 +45,7 @@ public class EntitlementService : IEntitlementService
             var now = _time.GetUtcNow();
             var hasAccess = subscription.Status == SubscriptionStatus.Active
                 || (subscription.Status == SubscriptionStatus.PastDue
-                    && now < (subscription.PastDueSince ?? now).AddDays(Math.Max(0, _options.GracePeriodDays)));
+                    && now < (subscription.PastDueSince ?? now).AddDays(_config.BillingGracePeriodDays));
             var values = subscription.Plan.Entitlements.ToDictionary(x => x.EntitlementKey, x => x.Value);
             result = new ClinicEntitlements(true, hasAccess, subscription.Status, subscription.Plan.Code, subscription.Plan.Name,
                 subscription.CurrentPeriodEnd, values);

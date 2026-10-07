@@ -1,5 +1,6 @@
 using PlasticSurgery.Business.Contracts.HttpClients.Calendars;
 using PlasticSurgery.Business.Contracts.HttpClients.N8n;
+using PlasticSurgery.Business.Contracts.Managers;
 using PlasticSurgery.Business.Contracts.Services.Calendars;
 using PlasticSurgery.Business.Contracts.Services.Notifications;
 using PlasticSurgery.Common.Enums;
@@ -18,7 +19,7 @@ public class CalendarIntegrationService : ICalendarIntegrationService
 {
     // A token this close to expiring is refreshed proactively rather than handed to n8n or used for a calendar
     // listing call that might fail mid-flight.
-    private static readonly TimeSpan TokenRefreshMargin = TimeSpan.FromMinutes(5);
+    private TimeSpan TokenRefreshMargin => TimeSpan.FromMinutes(_config.IntegrationsTokenRefreshMarginMinutes);
 
     private readonly ICalendarIntegrationRepository _calendars;
     private readonly IClinicRepository _clinics;
@@ -26,11 +27,13 @@ public class CalendarIntegrationService : ICalendarIntegrationService
     private readonly ICalendarSyncNotifier _notifier;
     private readonly INotificationService _notifications;
     private readonly IEnumerable<ICalendarProviderClient> _providerClients;
+    private readonly IConfigManager _config;
 
     public CalendarIntegrationService(
         ICalendarIntegrationRepository calendars, IClinicRepository clinics, IUnitOfWork unitOfWork, ICalendarSyncNotifier notifier, INotificationService notifications,
-        IEnumerable<ICalendarProviderClient> providerClients)
+        IEnumerable<ICalendarProviderClient> providerClients, IConfigManager config)
     {
+        _config = config;
         _calendars = calendars;
         _clinics = clinics;
         _unitOfWork = unitOfWork;

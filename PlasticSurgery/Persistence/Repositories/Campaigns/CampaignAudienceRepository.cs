@@ -18,10 +18,6 @@ public class CampaignAudienceRepository : ICampaignAudienceRepository
         AppointmentStatus.Booked, AppointmentStatus.Confirmed, AppointmentStatus.Rescheduled, AppointmentStatus.Attended
     };
 
-    /// <summary>Default lookback when a campaign's filters don't specify inactiveDays — matches the
-    /// "60 days" example in the reactivation business rule.</summary>
-    private const int DefaultInactiveDays = 60;
-
     private readonly ApplicationDbContext _db;
 
     public CampaignAudienceRepository(ApplicationDbContext db)
@@ -30,17 +26,17 @@ public class CampaignAudienceRepository : ICampaignAudienceRepository
     }
 
     public Task<List<Lead>> ListEligibleLeadsAsync(Guid clinicId, string audienceType, CampaignAudienceFilters filters,
-        CancellationToken ct = default) =>
-        BuildQuery(clinicId, audienceType, filters).ToListAsync(ct);
+        int defaultInactiveDays, CancellationToken ct = default) =>
+        BuildQuery(clinicId, audienceType, filters, defaultInactiveDays).ToListAsync(ct);
 
     public Task<int> CountEligibleLeadsAsync(Guid clinicId, string audienceType, CampaignAudienceFilters filters,
-        CancellationToken ct = default) =>
-        BuildQuery(clinicId, audienceType, filters).CountAsync(ct);
+        int defaultInactiveDays, CancellationToken ct = default) =>
+        BuildQuery(clinicId, audienceType, filters, defaultInactiveDays).CountAsync(ct);
 
     /// <summary>Mandatory exclusions (always) + audience-type-specific rules. This is the ONLY place
     /// eligibility is computed — "all_eligible" is deliberately not "every lead row", it's this same
     /// mandatory-exclusion base with no further narrowing.</summary>
-    private IQueryable<Lead> BuildQuery(Guid clinicId, string audienceType, CampaignAudienceFilters filters)
+    private IQueryable<Lead> BuildQuery(Guid clinicId, string audienceType, CampaignAudienceFilters filters, int defaultInactiveDays)
     {
         var contactable = _db.Leads.Where(l =>
             l.ClinicId == clinicId &&
@@ -51,7 +47,7 @@ public class CampaignAudienceRepository : ICampaignAudienceRepository
         return audienceType switch
         {
             CampaignAudienceType.AllEligible => contactable,
-            CampaignAudienceType.ReactivationNoConsultation => ApplyReactivationRules(contactable, filters),
+            CampaignAudienceType.ReactivationNoConsultation => ApplyReactivationRules(contactable, filters, defaultInactiveDays),
             CampaignAudienceType.Custom => ApplyCustomFilters(contactable, filters),
             _ => contactable.Where(_ => false)
         };
@@ -61,9 +57,9 @@ public class CampaignAudienceRepository : ICampaignAudienceRepository
     /// reached a booked/confirmed/completed consultation. Nothing here reads a stored flag; every
     /// condition is derived live from leads/conversations/appointments (see class remarks in
     /// ICampaignAudienceService).</summary>
-    private static IQueryable<Lead> ApplyReactivationRules(IQueryable<Lead> query, CampaignAudienceFilters filters)
+    private static IQueryable<Lead> ApplyReactivationRules(IQueryable<Lead> query, CampaignAudienceFilters filters, int defaultInactiveDays)
     {
-        var cutoff = DateTimeOffset.UtcNow.AddDays(-(filters.InactiveDays ?? DefaultInactiveDays));
+        var cutoff = DateTimeOffset.UtcNow.AddDays(-(filters.InactiveDays ?? defaultInactiveDays));
 
         query = query.Where(l =>
             // Prior interest/activity: an actual conversation happened, or the lead was manually

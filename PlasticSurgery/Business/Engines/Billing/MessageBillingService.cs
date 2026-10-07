@@ -1,7 +1,6 @@
-using Microsoft.Extensions.Options;
 using PlasticSurgery.Business.Contracts.Engines.Billing;
+using PlasticSurgery.Business.Contracts.Managers;
 using PlasticSurgery.Business.Contracts.Services.Billing;
-using PlasticSurgery.Common.Configs;
 using PlasticSurgery.Common.Enums;
 using PlasticSurgery.Common.Exceptions;
 using PlasticSurgery.Common.Statics;
@@ -17,25 +16,25 @@ public class MessageBillingService : IMessageBillingService
     private readonly IEnumerable<IChannelBillingPolicy> _policies;
     private readonly IProviderBillingService _providerBilling;
     private readonly IBillingUnitOfWorkFactory _units;
-    private readonly BillingOptions _options;
     private readonly TimeProvider _time;
     private readonly ILogger<MessageBillingService> _logger;
+    private readonly IConfigManager _config;
 
     public MessageBillingService(IBillingService billing, IEnumerable<IChannelBillingPolicy> policies, IProviderBillingService providerBilling,
-        IBillingUnitOfWorkFactory units, IOptions<BillingOptions> options, TimeProvider time, ILogger<MessageBillingService> logger)
+        IBillingUnitOfWorkFactory units, TimeProvider time, ILogger<MessageBillingService> logger, IConfigManager config)
     {
+        _config = config;
         _billing = billing;
         _policies = policies;
         _providerBilling = providerBilling;
         _units = units;
-        _options = options.Value;
         _time = time;
         _logger = logger;
     }
 
     public async Task<MessageBillingHold?> ReserveOutboundAsync(OutboundMessageBillingContext message, CancellationToken ct = default)
     {
-        if (!_options.Enabled) return null;
+        if (!_config.BillingEnabled) return null;
 
         var policy = PolicyFor(message.Channel);
         if (policy is null)
@@ -126,7 +125,7 @@ public class MessageBillingService : IMessageBillingService
 
     public async Task DeliveryStatusChangedAsync(Message message, string? status, CancellationToken ct = default)
     {
-        if (!_options.Enabled || string.IsNullOrWhiteSpace(status) || message.Direction != MessageDirection.Outbound) return;
+        if (!_config.BillingEnabled || string.IsNullOrWhiteSpace(status) || message.Direction != MessageDirection.Outbound) return;
         var policy = PolicyFor(message.Channel);
         if (policy is null) return;
 
@@ -155,8 +154,8 @@ public class MessageBillingService : IMessageBillingService
 
     public async Task<int> ResolveStaleReservationsAsync(CancellationToken ct = default)
     {
-        if (!_options.Enabled) return 0;
-        var cutoff = _time.GetUtcNow().AddHours(-Math.Max(1, _options.ReservationTimeoutHours));
+        if (!_config.BillingEnabled) return 0;
+        var cutoff = _time.GetUtcNow().AddHours(-_config.BillingReservationTimeoutHours);
 
         List<BillingUsageRecord> stale;
         Dictionary<Guid, Message> messages;
@@ -184,7 +183,7 @@ public class MessageBillingService : IMessageBillingService
                 if (usage.ChargeStatus == ChargeStatus.Reserved)
                 {
                     _logger.LogWarning("Billing: usage {IdempotencyKey} for clinic {ClinicId} had no outcome after {Hours}h; {Action}.",
-                        usage.IdempotencyKey, usage.ClinicId, _options.ReservationTimeoutHours, action == DeliveryBillingAction.Settle ? "settled (message was delivered)" : "released");
+                        usage.IdempotencyKey, usage.ClinicId, _config.BillingReservationTimeoutHours, action == DeliveryBillingAction.Settle ? "settled (message was delivered)" : "released");
                 }
             }
             catch (Exception ex) when (ex is not OperationCanceledException)

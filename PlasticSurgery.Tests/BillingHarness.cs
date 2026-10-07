@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using PlasticSurgery.Business.Managers;
 using PlasticSurgery.Business.Services.Billing;
 using PlasticSurgery.Common.Configs;
 using PlasticSurgery.Common.Enums;
@@ -34,19 +35,34 @@ public sealed class BillingHarness
         if (interceptors.Length > 0) builder.AddInterceptors(interceptors);
         DbOptions = builder.Options;
         Time = new ManualTimeProvider(new DateTimeOffset(DateTimeOffset.UtcNow.UtcDateTime.Date.AddHours(12), TimeSpan.Zero));
-        Options = new BillingOptions { Enabled = enabled, Currency = "USD", GracePeriodDays = graceDays, ReservationTimeoutHours = 72 };
+        // Settings (IConfigManager) as the tests want them; RefreshAsync is never called, so nothing reads config.settings.
+        Config = new ConfigManager(null!, NullLogger<ConfigManager>.Instance);
+        SetSetting("Billing", "Enabled", enabled ? "true" : "false");
+        SetSetting("Billing", "GracePeriodDays", graceDays.ToString());
+        SetSetting("Billing", "ReservationTimeoutHours", "72");
+        SetSetting("Billing", "Currency", "USD");
         Factory = new BillingUnitOfWorkFactory(DbOptions);
-        var options = Microsoft.Extensions.Options.Options.Create(Options);
-        Billing = new BillingService(Factory, options, Time, NullLogger<BillingService>.Instance);
-        Subscriptions = new SubscriptionService(Factory, options, Time, NullLogger<SubscriptionService>.Instance);
-        Plans = new PlanService(Factory, options, Time, NullLogger<PlanService>.Instance);
-        RateCards = new RateCardService(Factory, options, Time, NullLogger<RateCardService>.Instance);
+        Billing = new BillingService(Factory, Time, NullLogger<BillingService>.Instance, Config);
+        Subscriptions = new SubscriptionService(Factory, Time, NullLogger<SubscriptionService>.Instance, Config);
+        Plans = new PlanService(Factory, Time, NullLogger<PlanService>.Instance, Config);
+        RateCards = new RateCardService(Factory, Time, NullLogger<RateCardService>.Instance, Config);
         ProviderBilling = new ProviderBillingService(Factory, Microsoft.Extensions.Options.Options.Create(new ProviderBillingOptions()), Time,
             NullLogger<ProviderBillingService>.Instance);
-        Queries = new BillingQueryService(Factory, options, Time, ProviderBilling);
+        Queries = new BillingQueryService(Factory, Time, ProviderBilling, Config);
     }
 
     public ProviderBillingService ProviderBilling { get; }
+
+    /// <summary>The settings the billing code reads (Billing:Enabled, GracePeriodDays, ...), set per test.</summary>
+    public ConfigManager Config { get; }
+
+    private readonly Dictionary<(string, string), string> _settings = new();
+
+    public void SetSetting(string section, string key, string value)
+    {
+        _settings[(section, key)] = value;
+        Config.Apply(_settings.Select(s => new ConfigSetting { Section = s.Key.Item1, Key = s.Key.Item2, Value = s.Value }));
+    }
 
     /// <summary>A connected channel account (channel_integrations row) for the clinic.</summary>
     public async Task<Guid> ConnectChannelAsync(Guid clinicId, string channel, string? provider = null)
@@ -64,7 +80,6 @@ public sealed class BillingHarness
 
     public DbContextOptions<ApplicationDbContext> DbOptions { get; }
     public ManualTimeProvider Time { get; }
-    public BillingOptions Options { get; }
     public BillingUnitOfWorkFactory Factory { get; }
     public BillingService Billing { get; }
     public SubscriptionService Subscriptions { get; }
@@ -78,8 +93,7 @@ public sealed class BillingHarness
         Entitlements(Db());
 
     public EntitlementService Entitlements(ApplicationDbContext db) =>
-        new(new ClinicSubscriptionRepository(db), new ChannelIntegrationRepository(db), Microsoft.Extensions.Options.Options.Create(Options),
-            Time, NullLogger<EntitlementService>.Instance);
+        new(new ClinicSubscriptionRepository(db), new ChannelIntegrationRepository(db), Time, NullLogger<EntitlementService>.Instance, Config);
 
     public static string Unique(string prefix) => $"{prefix}_{Guid.NewGuid():N}"[..Math.Min(prefix.Length + 13, 50)];
 

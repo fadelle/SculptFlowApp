@@ -1,7 +1,6 @@
-using Microsoft.Extensions.Options;
+using PlasticSurgery.Business.Contracts.Managers;
 using PlasticSurgery.Business.Contracts.Services.Billing;
 using PlasticSurgery.Business.Engines.Billing;
-using PlasticSurgery.Common.Configs;
 using PlasticSurgery.Common.Enums;
 using PlasticSurgery.Common.Exceptions;
 using PlasticSurgery.Common.Statics;
@@ -15,14 +14,14 @@ namespace PlasticSurgery.Business.Services.Billing;
 public class SubscriptionService : ISubscriptionService
 {
     private readonly IBillingUnitOfWorkFactory _units;
-    private readonly BillingOptions _options;
     private readonly TimeProvider _time;
     private readonly ILogger<SubscriptionService> _logger;
+    private readonly IConfigManager _config;
 
-    public SubscriptionService(IBillingUnitOfWorkFactory units, IOptions<BillingOptions> options, TimeProvider time, ILogger<SubscriptionService> logger)
+    public SubscriptionService(IBillingUnitOfWorkFactory units, TimeProvider time, ILogger<SubscriptionService> logger, IConfigManager config)
     {
+        _config = config;
         _units = units;
-        _options = options.Value;
         _time = time;
         _logger = logger;
     }
@@ -45,7 +44,7 @@ public class SubscriptionService : ISubscriptionService
 
         await using var unit = _units.Create();
         await using var tx = await unit.BeginTransactionAsync(ct);
-        var account = await unit.Accounts.LockAsync(request.ClinicId, _options.NormalizedCurrency, ct);
+        var account = await unit.Accounts.LockAsync(request.ClinicId, _config.BillingCurrency, ct);
 
         var subscription = await unit.Subscriptions.GetWithPlanAsync(request.ClinicId, ct);
         if (await unit.Ledger.KeyExistsAsync(request.ClinicId, chargeKey, ct))
@@ -122,7 +121,7 @@ public class SubscriptionService : ISubscriptionService
 
         await using var unit = _units.Create();
         await using var tx = await unit.BeginTransactionAsync(ct);
-        var account = await unit.Accounts.LockAsync(clinicId, _options.NormalizedCurrency, ct);
+        var account = await unit.Accounts.LockAsync(clinicId, _config.BillingCurrency, ct);
 
         var subscription = await unit.Subscriptions.GetWithPlanAsync(clinicId, ct);
         if (subscription is null || subscription.Status is SubscriptionStatus.Expired or SubscriptionStatus.Cancelled)
@@ -172,10 +171,10 @@ public class SubscriptionService : ISubscriptionService
                 subscription.Status = SubscriptionStatus.PastDue;
                 subscription.PastDueSince = now;
                 BillingLedger.LogEvent(unit, clinicId, BillingEventTypes.SubscriptionPastDue, BillingSource.Worker,
-                    new { plan = plan.Code, due = plan.Price, currency = account.Currency, wallet = account.WalletBalance, graceDays = _options.GracePeriodDays }, now);
+                    new { plan = plan.Code, due = plan.Price, currency = account.Currency, wallet = account.WalletBalance, graceDays = _config.BillingGracePeriodDays }, now);
                 outcome = RenewalOutcome.PastDue;
             }
-            else if (now >= (subscription.PastDueSince ?? now).AddDays(Math.Max(0, _options.GracePeriodDays)))
+            else if (now >= (subscription.PastDueSince ?? now).AddDays(_config.BillingGracePeriodDays))
             {
                 subscription.Status = SubscriptionStatus.Expired;
                 subscription.EndedAt = now;
@@ -211,7 +210,7 @@ public class SubscriptionService : ISubscriptionService
 
         await using var unit = _units.Create();
         await using var tx = await unit.BeginTransactionAsync(ct);
-        var account = await unit.Accounts.LockAsync(clinicId, _options.NormalizedCurrency, ct);
+        var account = await unit.Accounts.LockAsync(clinicId, _config.BillingCurrency, ct);
 
         var subscription = await unit.Subscriptions.GetWithPlanAsync(clinicId, ct);
         if (subscription is null) return null;
@@ -246,7 +245,7 @@ public class SubscriptionService : ISubscriptionService
         var now = _time.GetUtcNow();
         await using var unit = _units.Create();
         await using var tx = await unit.BeginTransactionAsync(ct);
-        await unit.Accounts.LockAsync(clinicId, _options.NormalizedCurrency, ct);
+        await unit.Accounts.LockAsync(clinicId, _config.BillingCurrency, ct);
 
         var subscription = await unit.Subscriptions.GetWithPlanAsync(clinicId, ct);
         if (subscription is null || !subscription.CancelAtPeriodEnd

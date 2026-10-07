@@ -38,16 +38,18 @@ This README is only a short orientation.
 1. **Database.** Run against a Postgres instance with pgvector (Supabase or local), in order:
    ```
    psql "<connection string>" -f Database/schema.sql
+   psql "<connection string>" -f Database/seed-config.sql   # every setting with its default (never overwrites)
    psql "<connection string>" -f Database/seed.sql   # optional demo clinic, procedures and leads
    ```
-   Both are idempotent.
+   Both are idempotent. Tables live in one Postgres schema per area (`core`, `crm`, `billing`, ...); running
+   `schema.sql` on a database created before 2026-10-07 moves its tables out of `public` (back it up first).
 
 2. **Secrets.** From the `PlasticSurgery` project folder, use user-secrets (never commit real values):
    ```
    dotnet user-secrets set "ConnectionStrings:Postgres" "Host=...;Port=5432;Database=...;Username=...;Password=..."
    ```
    Use key=value format (not a `postgresql://` URI) and, for Supabase, the session pooler host. The other secrets
-   (`Meta:*`, `N8n:*`, `Embeddings:ApiKey`) are listed in `PROJECT_HANDOFF.md` §20.
+   (`Meta:*`, `N8n:*`; the embeddings API key is set on the admin portal's Configuration page) are listed in `PROJECT_HANDOFF.md` §20.
 
 3. **Run.**
    ```

@@ -200,11 +200,11 @@ public class KnowledgeBenchmarkRepository : IKnowledgeBenchmarkRepository
             @"select x.""ChunkId"", x.""DocumentId"", x.""Title"", x.""Content"" from (
                 select c.id as ""ChunkId"", d.id as ""DocumentId"", d.title as ""Title"", c.content as ""Content"",
                        row_number() over (partition by d.id order by random()) as rn
-                from knowledge_chunks c
-                join knowledge_documents d on d.id = c.knowledge_document_id
+                from knowledge.knowledge_chunks c
+                join knowledge.knowledge_documents d on d.id = c.knowledge_document_id
                 where c.clinic_id = @clinic and d.clinic_id = @clinic and d.is_active = true
                   and char_length(c.content) >= @minChars
-                  and not exists (select 1 from knowledge_retrieval_benchmark_cases b
+                  and not exists (select 1 from knowledge.knowledge_retrieval_benchmark_cases b
                                   where b.clinic_id = @clinic and b.expected_chunk_id = c.id)
                   -- Blog post-meta teasers ('482 Views 0 Comments', '... Read More') make poor benchmark questions:
                   -- they are byline/navigation noise, not the article's own answer to anything. This only narrows

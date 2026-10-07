@@ -1,8 +1,8 @@
 using System.Net;
 using System.Text;
 using PlasticSurgery.Business.Contracts.HttpClients.WebScraping;
+using PlasticSurgery.Business.Contracts.Managers;
 using PlasticSurgery.Business.Engines.WebScraping;
-using PlasticSurgery.Common.Configs;
 using PlasticSurgery.Common.Enums;
 using PlasticSurgery.Common.Exceptions;
 using PlasticSurgery.Entities.Dtos.WebScraping;
@@ -13,30 +13,30 @@ public sealed class WebsiteFetchClient : IWebsiteFetchClient
 {
     private readonly HttpClient _http;
     private readonly SsrfGuard _guard;
-    private readonly WebsiteScrapeOptions _options;
+    private readonly IConfigManager _config;
     private readonly ILogger<WebsiteFetchClient> _logger;
 
-    public WebsiteFetchClient(HttpClient http, SsrfGuard guard, WebsiteScrapeOptions options, ILogger<WebsiteFetchClient> logger)
+    public WebsiteFetchClient(HttpClient http, SsrfGuard guard, IConfigManager config, ILogger<WebsiteFetchClient> logger)
     {
         _http = http;
         _guard = guard;
-        _options = options;
+        _config = config;
         _logger = logger;
     }
 
     public async Task<FetchResult> FetchPageAsync(Uri url, string? etag, string? lastModified, Func<Uri, bool> isSameSite, CancellationToken ct = default)
     {
         var current = url;
-        for (var hop = 0; hop <= _options.MaxRedirects; hop++)
+        for (var hop = 0; hop <= _config.WebScrapingMaxRedirects; hop++)
         {
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            timeout.CancelAfter(TimeSpan.FromSeconds(_options.RequestTimeoutSeconds));
+            timeout.CancelAfter(TimeSpan.FromSeconds(_config.WebScrapingRequestTimeoutSeconds));
             try
             {
                 await _guard.ValidateUrlAsync(current, timeout.Token);
 
                 using var request = new HttpRequestMessage(HttpMethod.Get, current);
-                request.Headers.UserAgent.ParseAdd(_options.UserAgent);
+                request.Headers.UserAgent.ParseAdd(_config.WebScrapingUserAgent);
                 request.Headers.Accept.ParseAdd("text/html,application/xhtml+xml;q=0.9,*/*;q=0.1");
                 request.Headers.AcceptLanguage.ParseAdd("en;q=0.9,*;q=0.5");
                 if (hop == 0)
@@ -79,15 +79,15 @@ public sealed class WebsiteFetchClient : IWebsiteFetchClient
                     return Fail(url, current, FetchErrorKind.NotHtml, $"Not an HTML page (content type: {contentType ?? "unknown"}).", status, contentType);
                 }
 
-                if (response.Content.Headers.ContentLength is { } declared && declared > _options.MaxResponseBytes)
+                if (response.Content.Headers.ContentLength is { } declared && declared > _config.WebScrapingMaxResponseBytes)
                 {
-                    return Fail(url, current, FetchErrorKind.TooLarge, $"Page is larger than the {_options.MaxResponseBytes / 1000} KB limit.", status, contentType);
+                    return Fail(url, current, FetchErrorKind.TooLarge, $"Page is larger than the {_config.WebScrapingMaxResponseBytes / 1000} KB limit.", status, contentType);
                 }
 
                 var body = await ReadCappedAsync(response, timeout.Token);
                 if (body is null)
                 {
-                    return Fail(url, current, FetchErrorKind.TooLarge, $"Page is larger than the {_options.MaxResponseBytes / 1000} KB limit.", status, contentType);
+                    return Fail(url, current, FetchErrorKind.TooLarge, $"Page is larger than the {_config.WebScrapingMaxResponseBytes / 1000} KB limit.", status, contentType);
                 }
 
                 return new FetchResult
@@ -103,7 +103,7 @@ public sealed class WebsiteFetchClient : IWebsiteFetchClient
             }
             catch (OperationCanceledException) when (!ct.IsCancellationRequested)
             {
-                return Fail(url, current, FetchErrorKind.Timeout, $"Timed out after {_options.RequestTimeoutSeconds} seconds.");
+                return Fail(url, current, FetchErrorKind.Timeout, $"Timed out after {_config.WebScrapingRequestTimeoutSeconds} seconds.");
             }
             catch (UnsafeUrlException ex)
             {
@@ -120,19 +120,19 @@ public sealed class WebsiteFetchClient : IWebsiteFetchClient
                 return Fail(url, current, FetchErrorKind.Network, "Could not connect to the website.");
             }
         }
-        return Fail(url, current, FetchErrorKind.TooManyRedirects, $"More than {_options.MaxRedirects} redirects.");
+        return Fail(url, current, FetchErrorKind.TooManyRedirects, $"More than {_config.WebScrapingMaxRedirects} redirects.");
     }
 
     public async Task<RobotsFetchResult> FetchRobotsAsync(Uri origin, CancellationToken ct = default)
     {
         var robotsUrl = new Uri(origin, "/robots.txt");
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        timeout.CancelAfter(TimeSpan.FromSeconds(_options.RequestTimeoutSeconds));
+        timeout.CancelAfter(TimeSpan.FromSeconds(_config.WebScrapingRequestTimeoutSeconds));
         try
         {
             await _guard.ValidateUrlAsync(robotsUrl, timeout.Token);
             using var request = new HttpRequestMessage(HttpMethod.Get, robotsUrl);
-            request.Headers.UserAgent.ParseAdd(_options.UserAgent);
+            request.Headers.UserAgent.ParseAdd(_config.WebScrapingUserAgent);
             using var response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
             var status = (int)response.StatusCode;
 
@@ -140,7 +140,7 @@ public sealed class WebsiteFetchClient : IWebsiteFetchClient
             if (!response.IsSuccessStatusCode) return new RobotsFetchResult(RobotsTxt.AllowAll, false, null); // 3xx/4xx: no rules published
 
             var body = await ReadCappedAsync(response, timeout.Token, 512_000) ?? Array.Empty<byte>();
-            var token = _options.UserAgent.Split('/')[0];
+            var token = _config.WebScrapingUserAgent.Split('/')[0];
             return new RobotsFetchResult(RobotsTxt.Parse(Encoding.UTF8.GetString(body), token), false, null);
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
@@ -155,7 +155,7 @@ public sealed class WebsiteFetchClient : IWebsiteFetchClient
 
     private async Task<byte[]?> ReadCappedAsync(HttpResponseMessage response, CancellationToken ct, int? cap = null)
     {
-        var limit = cap ?? _options.MaxResponseBytes;
+        var limit = cap ?? _config.WebScrapingMaxResponseBytes;
         await using var stream = await response.Content.ReadAsStreamAsync(ct);
         using var ms = new MemoryStream();
         var buffer = new byte[16 * 1024];

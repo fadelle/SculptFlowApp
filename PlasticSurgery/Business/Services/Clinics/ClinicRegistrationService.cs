@@ -4,10 +4,10 @@ using System.Security.Claims;
 using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Identity;
+using PlasticSurgery.Business.Contracts.Managers;
 using PlasticSurgery.Business.Contracts.Services.Billing;
 using PlasticSurgery.Business.Contracts.Services.Clinics;
 using PlasticSurgery.Business.Contracts.Services.Knowledge;
-using PlasticSurgery.Common.Configs;
 using PlasticSurgery.Common.Enums;
 using PlasticSurgery.Entities.Dtos.Clinics;
 using PlasticSurgery.Entities.Models;
@@ -35,13 +35,14 @@ public partial class ClinicRegistrationService : IClinicRegistrationService
     private readonly IKnowledgeSettingsService _knowledgeSettings;
     private readonly ILogger<ClinicRegistrationService> _logger;
     private readonly ISubscriptionService _subscriptions;
-    private readonly BillingOptions _billing;
+    private readonly IConfigManager _config;
 
     public ClinicRegistrationService(
         IClinicRepository clinics, IBillingAccountRepository billingAccounts, IUnitOfWork unitOfWork, UserManager<IdentityUser> users, IKnowledgeSettingsService knowledgeSettings,
         ILogger<ClinicRegistrationService> logger, ISubscriptionService subscriptions,
-        Microsoft.Extensions.Options.IOptions<BillingOptions> billing)
+        IConfigManager config)
     {
+        _config = config;
         _clinics = clinics;
         _billingAccounts = billingAccounts;
         _unitOfWork = unitOfWork;
@@ -49,7 +50,6 @@ public partial class ClinicRegistrationService : IClinicRegistrationService
         _knowledgeSettings = knowledgeSettings;
         _logger = logger;
         _subscriptions = subscriptions;
-        _billing = billing.Value;
     }
 
     public async Task<ClinicRegistrationResult> RegisterAsync(RegisterClinicRequest request, CancellationToken ct = default)
@@ -146,7 +146,7 @@ public partial class ClinicRegistrationService : IClinicRegistrationService
                 {
                     Id = Guid.NewGuid(),
                     ClinicId = clinic.Id,
-                    Currency = _billing.NormalizedCurrency,
+                    Currency = _config.BillingCurrency,
                     CreatedAt = now,
                     UpdatedAt = now
                 });
@@ -186,17 +186,18 @@ public partial class ClinicRegistrationService : IClinicRegistrationService
     /// account still exists and an admin can assign a plan, so this only logs.</summary>
     private async Task StartSignupPlanAsync(Guid clinicId, CancellationToken ct)
     {
-        if (!_billing.Enabled || string.IsNullOrWhiteSpace(_billing.SignupPlanCode)) return;
+        var signupPlan = _config.BillingSignupPlanCode.Trim();
+        if (!_config.BillingEnabled || signupPlan.Length == 0) return;
         try
         {
             await _subscriptions.StartAsync(new StartSubscriptionRequest(
-                clinicId, _billing.SignupPlanCode, $"signup:{clinicId}", ChargeFirstPeriod: false,
+                clinicId, signupPlan, $"signup:{clinicId}", ChargeFirstPeriod: false,
                 Source: BillingSource.System, Reason: "Plan at signup"), ct);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogError(ex, "Billing: couldn't start the signup plan {Plan} for new clinic {ClinicId}; assign one from the admin API.",
-                _billing.SignupPlanCode, clinicId);
+                signupPlan, clinicId);
         }
     }
 

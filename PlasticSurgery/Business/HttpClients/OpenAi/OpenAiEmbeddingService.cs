@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using PlasticSurgery.Business.Contracts.HttpClients.OpenAi;
+using PlasticSurgery.Business.Contracts.Managers;
 
 namespace PlasticSurgery.Business.HttpClients.OpenAi;
 
@@ -18,38 +19,39 @@ namespace PlasticSurgery.Business.HttpClients.OpenAi;
 /// </summary>
 public class OpenAiEmbeddingService : IEmbeddingService
 {
-    private const int MaxInputsPerRequest = 64;
-
     private readonly HttpClient _http;
     private readonly IConfiguration _configuration;
+    private readonly IConfigManager _config;
 
-    public OpenAiEmbeddingService(HttpClient http, IConfiguration configuration)
+    public OpenAiEmbeddingService(HttpClient http, IConfiguration configuration, IConfigManager config)
     {
+        _config = config;
         _http = http;
         _configuration = configuration;
     }
 
-    private string Model => _configuration["Embeddings:Model"] is { Length: > 0 } m ? m : "text-embedding-3-small";
-    private string BaseUrl => (_configuration["Embeddings:BaseUrl"] is { Length: > 0 } u ? u : "https://api.openai.com/v1").TrimEnd('/');
+    private string Model => _config.EmbeddingsModel;
+    private string BaseUrl => _config.EmbeddingsBaseUrl.TrimEnd('/');
 
-    public int Dimensions => int.TryParse(_configuration["Embeddings:Dimensions"], out var d) && d > 0 ? d : 1536;
+    public int Dimensions => _config.EmbeddingsDimensions;
 
     public async Task<float[]> EmbedAsync(string text, string? model = null, int? dimensions = null, CancellationToken ct = default) =>
         (await EmbedBatchAsync(new[] { text }, model, dimensions, ct))[0];
 
     public async Task<IReadOnlyList<float[]>> EmbedBatchAsync(IReadOnlyList<string> texts, string? model = null, int? dimensions = null, CancellationToken ct = default)
     {
-        var apiKey = _configuration["Embeddings:ApiKey"];
+        var apiKey = _config.EmbeddingsApiKey;
         if (string.IsNullOrWhiteSpace(apiKey))
         {
             throw new InvalidOperationException(
-                "Embeddings:ApiKey is not configured — set it via user-secrets or the Embeddings__ApiKey environment variable.");
+                "The embeddings API key isn't set: set Embeddings / ApiKey on the admin portal's Configuration page.");
         }
 
         var results = new List<float[]>(texts.Count);
-        for (var offset = 0; offset < texts.Count; offset += MaxInputsPerRequest)
+        var batchSize = _config.EmbeddingsMaxInputsPerRequest;
+        for (var offset = 0; offset < texts.Count; offset += batchSize)
         {
-            var batch = texts.Skip(offset).Take(MaxInputsPerRequest).ToList();
+            var batch = texts.Skip(offset).Take(batchSize).ToList();
             results.AddRange(await EmbedOneRequestAsync(batch, apiKey, model ?? Model, dimensions ?? Dimensions, ct));
         }
         return results;

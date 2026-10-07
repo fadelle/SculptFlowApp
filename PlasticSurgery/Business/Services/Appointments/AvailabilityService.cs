@@ -1,4 +1,6 @@
+using PlasticSurgery.Business.Contracts.Managers;
 using PlasticSurgery.Business.Contracts.Services.Appointments;
+using PlasticSurgery.Common.Statics;
 using PlasticSurgery.Entities.Dtos.Appointments;
 using PlasticSurgery.Entities.Models;
 using PlasticSurgery.Entities.Responses.Appointments;
@@ -11,25 +13,30 @@ namespace PlasticSurgery.Business.Services.Appointments;
 
 public class AvailabilityService : IAvailabilityService
 {
-    private const int DefaultDurationMinutes = 30;
-    private const int DefaultBufferMinutes = 0;
-    private const int DefaultNoticeMinutes = 240;
-    private const int DefaultHorizonDays = 60;
-    private const int MaxRangeDays = 14;
+    // Defaults for clinics without their own booking settings, read through IConfigManager (config.settings, else
+    // the constants in Common/Statics/ConfigDefaults).
+    private int DefaultDurationMinutes => _config.AvailabilityDefaultDurationMinutes;
+    private int DefaultBufferMinutes => _config.AvailabilityDefaultBufferMinutes;
+    private int DefaultNoticeMinutes => _config.AvailabilityDefaultNoticeMinutes;
+    private int DefaultHorizonDays => _config.AvailabilityDefaultHorizonDays;
+    private int MaxRangeDays => _config.AvailabilityMaxRangeDays;
 
     private readonly IAvailabilityRepository _availability;
     private readonly IClinicRepository _clinics;
     private readonly IProcedureRepository _procedures;
     private readonly IAppointmentRepository _appointments;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IConfigManager _config;
 
-    public AvailabilityService(IAvailabilityRepository availability, IClinicRepository clinics, IProcedureRepository procedures, IAppointmentRepository appointments, IUnitOfWork unitOfWork)
+    public AvailabilityService(IAvailabilityRepository availability, IClinicRepository clinics, IProcedureRepository procedures, IAppointmentRepository appointments, IUnitOfWork unitOfWork,
+        IConfigManager config)
     {
         _availability = availability;
         _clinics = clinics;
         _procedures = procedures;
         _appointments = appointments;
         _unitOfWork = unitOfWork;
+        _config = config;
     }
 
     // ------------------------------------------------------------------ slots

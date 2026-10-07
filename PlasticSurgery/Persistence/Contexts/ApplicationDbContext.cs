@@ -65,6 +65,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
     public DbSet<BillingUsageRecord> BillingUsageRecords => Set<BillingUsageRecord>();
     public DbSet<BillingLedgerEntry> BillingLedgerEntries => Set<BillingLedgerEntry>();
     public DbSet<ChannelAccountBillingSettings> ChannelAccountBillingSettings => Set<ChannelAccountBillingSettings>();
+    public DbSet<ConfigSetting> ConfigSettings => Set<ConfigSetting>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -78,7 +79,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
         // ---------------------------------------------------------------
         modelBuilder.Entity<IdentityUser>(e =>
         {
-            e.ToTable("identity_users");
+            e.ToTable("identity_users", "identity");
             e.Property(u => u.Id).HasColumnName("id");
             e.Property(u => u.UserName).HasColumnName("user_name").HasMaxLength(256);
             e.Property(u => u.NormalizedUserName).HasColumnName("normalized_user_name").HasMaxLength(256);
@@ -98,7 +99,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
 
         modelBuilder.Entity<IdentityUserClaim<string>>(e =>
         {
-            e.ToTable("identity_user_claims");
+            e.ToTable("identity_user_claims", "identity");
             e.Property(c => c.Id).HasColumnName("id");
             e.Property(c => c.UserId).HasColumnName("user_id");
             e.Property(c => c.ClaimType).HasColumnName("claim_type");
@@ -107,7 +108,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
 
         modelBuilder.Entity<IdentityUserLogin<string>>(e =>
         {
-            e.ToTable("identity_user_logins");
+            e.ToTable("identity_user_logins", "identity");
             e.Property(l => l.LoginProvider).HasColumnName("login_provider");
             e.Property(l => l.ProviderKey).HasColumnName("provider_key");
             e.Property(l => l.ProviderDisplayName).HasColumnName("provider_display_name");
@@ -116,7 +117,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
 
         modelBuilder.Entity<IdentityUserToken<string>>(e =>
         {
-            e.ToTable("identity_user_tokens");
+            e.ToTable("identity_user_tokens", "identity");
             e.Property(t => t.UserId).HasColumnName("user_id");
             e.Property(t => t.LoginProvider).HasColumnName("login_provider");
             e.Property(t => t.Name).HasColumnName("name");
@@ -128,7 +129,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
         // ---------------------------------------------------------------
         modelBuilder.Entity<Clinic>(e =>
         {
-            e.ToTable("clinics");
+            e.ToTable("clinics", "core");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
             e.Property(x => x.Name).HasColumnName("name").HasMaxLength(200).IsRequired();
@@ -152,7 +153,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
         // ---------------------------------------------------------------
         modelBuilder.Entity<Procedure>(e =>
         {
-            e.ToTable("procedures");
+            e.ToTable("procedures", "core");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
             e.Property(x => x.ClinicId).HasColumnName("clinic_id");
@@ -175,7 +176,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
         // ---------------------------------------------------------------
         modelBuilder.Entity<Lead>(e =>
         {
-            e.ToTable("leads");
+            e.ToTable("leads", "crm");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
             e.Property(x => x.ClinicId).HasColumnName("clinic_id");
@@ -226,7 +227,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
         // ---------------------------------------------------------------
         modelBuilder.Entity<Conversation>(e =>
         {
-            e.ToTable("conversations");
+            e.ToTable("conversations", "crm");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
             e.Property(x => x.ClinicId).HasColumnName("clinic_id");
@@ -258,7 +259,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
         // ---------------------------------------------------------------
         modelBuilder.Entity<Message>(e =>
         {
-            e.ToTable("messages");
+            e.ToTable("messages", "crm");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
             e.Property(x => x.ClinicId).HasColumnName("clinic_id");
@@ -310,7 +311,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
         // ---------------------------------------------------------------
         modelBuilder.Entity<Appointment>(e =>
         {
-            e.ToTable("appointments");
+            e.ToTable("appointments", "scheduling");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
             e.Property(x => x.ClinicId).HasColumnName("clinic_id");
@@ -345,7 +346,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
         // ---------------------------------------------------------------
         modelBuilder.Entity<ProcedureBooking>(e =>
         {
-            e.ToTable("procedure_bookings");
+            e.ToTable("procedure_bookings", "scheduling");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
             e.Property(x => x.ClinicId).HasColumnName("clinic_id");
@@ -379,7 +380,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
         // ---------------------------------------------------------------
         modelBuilder.Entity<EventLog>(e =>
         {
-            e.ToTable("events");
+            e.ToTable("events", "activity");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
             e.Property(x => x.ClinicId).HasColumnName("clinic_id");
@@ -417,7 +418,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
         // ---------------------------------------------------------------
         modelBuilder.Entity<ChannelIntegration>(e =>
         {
-            e.ToTable("channel_integrations");
+            e.ToTable("channel_integrations", "channels");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
             e.Property(x => x.ClinicId).HasColumnName("clinic_id");
@@ -480,7 +481,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
         // ---------------------------------------------------------------
         modelBuilder.Entity<WhatsAppTemplate>(e =>
         {
-            e.ToTable("whatsapp_templates");
+            e.ToTable("whatsapp_templates", "channels");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
             e.Property(x => x.ClinicId).HasColumnName("clinic_id");
@@ -523,7 +524,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
         // ---------------------------------------------------------------
         modelBuilder.Entity<Campaign>(e =>
         {
-            e.ToTable("campaigns");
+            e.ToTable("campaigns", "marketing");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
             e.Property(x => x.ClinicId).HasColumnName("clinic_id");
@@ -558,7 +559,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
         // ---------------------------------------------------------------
         modelBuilder.Entity<CampaignRecipient>(e =>
         {
-            e.ToTable("campaign_recipients");
+            e.ToTable("campaign_recipients", "marketing");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
             e.Property(x => x.ClinicId).HasColumnName("clinic_id");
@@ -607,7 +608,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
         // ---------------------------------------------------------------
         modelBuilder.Entity<WhatsAppHealthEvent>(e =>
         {
-            e.ToTable("whatsapp_health_events");
+            e.ToTable("whatsapp_health_events", "channels");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
             e.Property(x => x.ClinicId).HasColumnName("clinic_id");
@@ -640,7 +641,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
         // ---------------------------------------------------------------
         modelBuilder.Entity<ClinicAvailabilityRule>(e =>
         {
-            e.ToTable("clinic_availability_rules");
+            e.ToTable("clinic_availability_rules", "scheduling");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
             e.Property(x => x.ClinicId).HasColumnName("clinic_id");
@@ -655,7 +656,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
 
         modelBuilder.Entity<ClinicBookingSettings>(e =>
         {
-            e.ToTable("clinic_booking_settings");
+            e.ToTable("clinic_booking_settings", "scheduling");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
             e.Property(x => x.ClinicId).HasColumnName("clinic_id");
@@ -670,7 +671,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
 
         modelBuilder.Entity<ClinicAvailabilityException>(e =>
         {
-            e.ToTable("clinic_availability_exceptions");
+            e.ToTable("clinic_availability_exceptions", "scheduling");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
             e.Property(x => x.ClinicId).HasColumnName("clinic_id");
@@ -690,7 +691,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
         // ---------------------------------------------------------------
         modelBuilder.Entity<ClinicUser>(e =>
         {
-            e.ToTable("clinic_users");
+            e.ToTable("clinic_users", "identity");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
             e.Property(x => x.ClinicId).HasColumnName("clinic_id");
@@ -724,7 +725,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
         // ---------------------------------------------------------------
         modelBuilder.Entity<Notification>(e =>
         {
-            e.ToTable("notifications");
+            e.ToTable("notifications", "activity");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
             e.Property(x => x.ClinicId).HasColumnName("clinic_id");
@@ -754,7 +755,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
         // ---------------------------------------------------------------
         modelBuilder.Entity<CalendarIntegration>(e =>
         {
-            e.ToTable("calendar_integrations");
+            e.ToTable("calendar_integrations", "scheduling");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
             e.Property(x => x.ClinicId).HasColumnName("clinic_id");
@@ -782,7 +783,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
 
         modelBuilder.Entity<CalendarIntegrationCalendar>(e =>
         {
-            e.ToTable("calendar_integration_calendars");
+            e.ToTable("calendar_integration_calendars", "scheduling");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
             e.Property(x => x.CalendarIntegrationId).HasColumnName("calendar_integration_id");
@@ -797,7 +798,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
 
         modelBuilder.Entity<AppointmentCalendarSync>(e =>
         {
-            e.ToTable("appointment_calendar_syncs");
+            e.ToTable("appointment_calendar_syncs", "scheduling");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
             e.Property(x => x.AppointmentId).HasColumnName("appointment_id");
@@ -822,7 +823,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
         // ---------------------------------------------------------------
         modelBuilder.Entity<TikTokIntegration>(e =>
         {
-            e.ToTable("tiktok_integrations");
+            e.ToTable("tiktok_integrations", "channels");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
             e.Property(x => x.ClinicId).HasColumnName("clinic_id");
@@ -851,7 +852,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
         // ---------------------------------------------------------------
         modelBuilder.Entity<KnowledgeDocument>(e =>
         {
-            e.ToTable("knowledge_documents");
+            e.ToTable("knowledge_documents", "knowledge");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
             e.Property(x => x.ClinicId).HasColumnName("clinic_id");
@@ -878,7 +879,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
         // Website scraping (see Integrations/Knowledge/WebScraping): crawl STATE only — no text, no vectors.
         modelBuilder.Entity<KnowledgeWebsiteSource>(e =>
         {
-            e.ToTable("knowledge_website_sources");
+            e.ToTable("knowledge_website_sources", "knowledge");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
             e.Property(x => x.ClinicId).HasColumnName("clinic_id");
@@ -901,7 +902,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
 
         modelBuilder.Entity<KnowledgeWebsitePage>(e =>
         {
-            e.ToTable("knowledge_website_pages");
+            e.ToTable("knowledge_website_pages", "knowledge");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
             e.Property(x => x.ClinicId).HasColumnName("clinic_id");
@@ -938,7 +939,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
 
         modelBuilder.Entity<KnowledgeWebsiteScrapeRun>(e =>
         {
-            e.ToTable("knowledge_website_scrape_runs");
+            e.ToTable("knowledge_website_scrape_runs", "knowledge");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
             e.Property(x => x.ClinicId).HasColumnName("clinic_id");
@@ -965,7 +966,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
 
         modelBuilder.Entity<KnowledgeChunk>(e =>
         {
-            e.ToTable("knowledge_chunks");
+            e.ToTable("knowledge_chunks", "knowledge");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
             e.Property(x => x.ClinicId).HasColumnName("clinic_id");
@@ -989,7 +990,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
         // never block or slow production ingestion (stale cases are detected in code instead).
         modelBuilder.Entity<KnowledgeRetrievalBenchmarkCase>(e =>
         {
-            e.ToTable("knowledge_retrieval_benchmark_cases");
+            e.ToTable("knowledge_retrieval_benchmark_cases", "knowledge");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
             e.Property(x => x.ClinicId).HasColumnName("clinic_id");
@@ -1014,7 +1015,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
 
         modelBuilder.Entity<KnowledgeRetrievalBenchmarkGeneration>(e =>
         {
-            e.ToTable("knowledge_retrieval_benchmark_generations");
+            e.ToTable("knowledge_retrieval_benchmark_generations", "knowledge");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id").ValueGeneratedNever(); // the app supplies it (it is the generationId)
             e.Property(x => x.ClinicId).HasColumnName("clinic_id");
@@ -1036,7 +1037,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
 
         modelBuilder.Entity<KnowledgeRetrievalBenchmarkRun>(e =>
         {
-            e.ToTable("knowledge_retrieval_benchmark_runs");
+            e.ToTable("knowledge_retrieval_benchmark_runs", "knowledge");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
             e.Property(x => x.ClinicId).HasColumnName("clinic_id");
@@ -1077,7 +1078,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
 
         modelBuilder.Entity<KnowledgeRetrievalBenchmarkResult>(e =>
         {
-            e.ToTable("knowledge_retrieval_benchmark_results");
+            e.ToTable("knowledge_retrieval_benchmark_results", "knowledge");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
             e.Property(x => x.ClinicId).HasColumnName("clinic_id");
@@ -1118,7 +1119,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
         // One settings row per clinic (unique clinic_id) — see KnowledgeSearchSettings.
         modelBuilder.Entity<KnowledgeSearchSettings>(e =>
         {
-            e.ToTable("knowledge_search_settings");
+            e.ToTable("knowledge_search_settings", "knowledge");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
             e.Property(x => x.ClinicId).HasColumnName("clinic_id");
@@ -1139,6 +1140,20 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.HasIndex(x => x.ClinicId)
                 .IsUnique()
                 .HasDatabaseName("ux_knowledge_search_settings_clinic_id");
+        });
+
+        // Stored settings (config.settings), read through IConfigManager — see ConfigSetting and ConfigDefaults.
+        modelBuilder.Entity<ConfigSetting>(e =>
+        {
+            e.ToTable("settings", "config");
+            e.HasKey(x => new { x.Section, x.Key });
+            e.Property(x => x.Section).HasColumnName("section").HasMaxLength(100);
+            e.Property(x => x.Key).HasColumnName("key").HasMaxLength(100);
+            e.Property(x => x.Value).HasColumnName("value").IsRequired();
+            e.Property(x => x.Description).HasColumnName("description");
+            e.Property(x => x.UpdatedBy).HasColumnName("updated_by").HasMaxLength(200);
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+            e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
         });
 
         // ---------------------------------------------------------------

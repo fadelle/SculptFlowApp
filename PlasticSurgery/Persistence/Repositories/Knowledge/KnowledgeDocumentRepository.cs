@@ -52,7 +52,7 @@ public class KnowledgeDocumentRepository : IKnowledgeDocumentRepository
         for (var i = 0; i < pieces.Count; i++)
         {
             await _db.Database.ExecuteSqlRawAsync(
-                @"insert into knowledge_chunks (id, clinic_id, knowledge_document_id, chunk_index, content, embedding, created_at, updated_at)
+                @"insert into knowledge.knowledge_chunks (id, clinic_id, knowledge_document_id, chunk_index, content, embedding, created_at, updated_at)
                   values (@id, @clinic, @doc, @idx, @content, @embedding::vector, @now, @now)",
                 new object[]
                 {
@@ -74,8 +74,8 @@ public class KnowledgeDocumentRepository : IKnowledgeDocumentRepository
         var rows = await _db.Database.SqlQueryRaw<SearchRow>(
             @"select c.id as ""ChunkId"", d.id as ""DocumentId"", d.title as ""Title"", d.category as ""Category"", c.content as ""Content"",
                      (1 - (c.embedding <=> @q::vector))::double precision as ""Score""
-              from knowledge_chunks c
-              join knowledge_documents d on d.id = c.knowledge_document_id
+              from knowledge.knowledge_chunks c
+              join knowledge.knowledge_documents d on d.id = c.knowledge_document_id
               where c.clinic_id = @clinic and d.clinic_id = @clinic and d.is_active = true
               order by c.embedding <=> @q::vector
               limit @lim",

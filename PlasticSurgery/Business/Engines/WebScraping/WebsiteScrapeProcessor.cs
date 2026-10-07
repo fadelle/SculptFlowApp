@@ -3,8 +3,8 @@ using System.Text;
 using System.Text.Json;
 using PlasticSurgery.Business.Contracts.Engines.WebScraping;
 using PlasticSurgery.Business.Contracts.HttpClients.WebScraping;
+using PlasticSurgery.Business.Contracts.Managers;
 using PlasticSurgery.Business.Contracts.Services.Knowledge;
-using PlasticSurgery.Common.Configs;
 using PlasticSurgery.Common.Enums;
 using PlasticSurgery.Common.Exceptions;
 using PlasticSurgery.Common.Helpers;
@@ -43,12 +43,12 @@ public sealed class WebsiteScrapeProcessor : IWebsiteScrapeProcessor
     private readonly IWebsiteFetchClient _fetch;
     private readonly IHtmlContentExtractor _extractor;
     private readonly SsrfGuard _guard;
-    private readonly WebsiteScrapeOptions _options;
+    private readonly IConfigManager _config;
     private readonly ILogger<WebsiteScrapeProcessor> _logger;
 
     public WebsiteScrapeProcessor(
         IWebsiteSourceRepository websites, IKnowledgeDocumentRepository documents, IUnitOfWork unitOfWork, IKnowledgeService knowledge, IWebsiteFetchClient fetch, IHtmlContentExtractor extractor,
-        SsrfGuard guard, WebsiteScrapeOptions options, ILogger<WebsiteScrapeProcessor> logger)
+        SsrfGuard guard, IConfigManager config, ILogger<WebsiteScrapeProcessor> logger)
     {
         _websites = websites;
         _documents = documents;
@@ -57,7 +57,7 @@ public sealed class WebsiteScrapeProcessor : IWebsiteScrapeProcessor
         _fetch = fetch;
         _extractor = extractor;
         _guard = guard;
-        _options = options;
+        _config = config;
         _logger = logger;
     }
 
@@ -132,7 +132,7 @@ public sealed class WebsiteScrapeProcessor : IWebsiteScrapeProcessor
     {
         var start = new Uri(source.NormalizedStartUrl);
         var notes = new List<string>();
-        var deadline = DateTimeOffset.UtcNow.AddMinutes(_options.MaxRunMinutes);
+        var deadline = DateTimeOffset.UtcNow.AddMinutes(_config.WebScrapingMaxRunMinutes);
 
         try { await _guard.ValidateUrlAsync(start, ct); }
         catch (UnsafeUrlException ex) { await FinishAsync(run, source, WebsiteScrapeStatus.Failed, ex.Message); return; }
@@ -145,7 +145,7 @@ public sealed class WebsiteScrapeProcessor : IWebsiteScrapeProcessor
             return;
         }
         var robots = robotsResult.Robots ?? RobotsTxt.AllowAll;
-        var delayMs = Math.Max(_options.PolitenessDelayMs, (int)Math.Min((robots.CrawlDelaySeconds ?? 0) * 1000, 5000));
+        var delayMs = Math.Max(_config.WebScrapingPolitenessDelayMs, (int)Math.Min((robots.CrawlDelaySeconds ?? 0) * 1000, 5000));
 
         var existing = await _websites.MapPagesByUrlAsync(source.ClinicId, source.Id, ct);
 
@@ -165,7 +165,7 @@ public sealed class WebsiteScrapeProcessor : IWebsiteScrapeProcessor
             if (DateTimeOffset.UtcNow > deadline)
             {
                 truncated = true;
-                notes.Add($"The {_options.MaxRunMinutes}-minute crawl time limit was reached.");
+                notes.Add($"The {_config.WebScrapingMaxRunMinutes}-minute crawl time limit was reached.");
                 break;
             }
 
@@ -240,7 +240,7 @@ public sealed class WebsiteScrapeProcessor : IWebsiteScrapeProcessor
                           && startPage.Outcome is Outcome.Failed or Outcome.Missing or Outcome.Skipped;
         if (truncated)
         {
-            notes.Add($"Crawl limits reached (max {_options.MaxPages} pages, depth {_options.MaxDepth}) — some pages were not visited, so no missing pages were removed.");
+            notes.Add($"Crawl limits reached (max {_config.WebScrapingMaxPages} pages, depth {_config.WebScrapingMaxDepth}) — some pages were not visited, so no missing pages were removed.");
         }
         else if (!startFailed)
         {
@@ -299,7 +299,7 @@ public sealed class WebsiteScrapeProcessor : IWebsiteScrapeProcessor
         var results = new CrawledPage[frontier.Count];
         await Parallel.ForEachAsync(
             Enumerable.Range(0, frontier.Count),
-            new ParallelOptions { MaxDegreeOfParallelism = _options.MaxConcurrency, CancellationToken = ct },
+            new ParallelOptions { MaxDegreeOfParallelism = _config.WebScrapingMaxConcurrency, CancellationToken = ct },
             async (i, token) => results[i] = await FetchOneAsync(frontier[i].Url, frontier[i].Depth, robots, delayMs, existing, start, token));
         return results.ToList();
     }
@@ -375,9 +375,9 @@ public sealed class WebsiteScrapeProcessor : IWebsiteScrapeProcessor
 
             if (LooksLikeCrawlTrap(u, pathVariants)) continue;
 
-            if (page.InternalLinks.Count < _options.MaxLinksPerPage && !page.InternalLinks.Contains(norm)) page.InternalLinks.Add(norm);
+            if (page.InternalLinks.Count < _config.WebScrapingMaxLinksPerPage && !page.InternalLinks.Contains(norm)) page.InternalLinks.Add(norm);
             if (seen.Contains(norm)) continue;
-            if (level + 1 > _options.MaxDepth || seen.Count >= _options.MaxPages) { truncated = true; continue; }
+            if (level + 1 > _config.WebScrapingMaxDepth || seen.Count >= _config.WebScrapingMaxPages) { truncated = true; continue; }
             seen.Add(norm);
             next.Add((norm, level + 1));
         }
@@ -417,7 +417,7 @@ public sealed class WebsiteScrapeProcessor : IWebsiteScrapeProcessor
         var path = u.GetLeftPart(UriPartial.Path);
         if (!pathVariants.TryGetValue(path, out var set)) pathVariants[path] = set = new HashSet<string>(StringComparer.Ordinal);
         set.Add(query);
-        return set.Count > _options.MaxQueryVariantsPerPath;
+        return set.Count > _config.WebScrapingMaxQueryVariantsPerPath;
     }
 
     // =====================================================================================================
@@ -528,7 +528,7 @@ public sealed class WebsiteScrapeProcessor : IWebsiteScrapeProcessor
             }
 
             cp.Text = KnowledgeTextNormalizer.Normalize(Render(cp.Blocks!));
-            if (cp.Text.Length < _options.MinTextChars)
+            if (cp.Text.Length < _config.WebScrapingMinTextChars)
             {
                 cp.Outcome = Outcome.Skipped;
                 cp.Reason = cp.Text.Length == 0
@@ -536,10 +536,10 @@ public sealed class WebsiteScrapeProcessor : IWebsiteScrapeProcessor
                     : $"Too little text ({cp.Text.Length} characters).";
                 continue;
             }
-            if (cp.Text.Length > _options.MaxTextChars)
+            if (cp.Text.Length > _config.WebScrapingMaxTextChars)
             {
                 cp.Outcome = Outcome.Skipped;
-                cp.Reason = $"Too much text ({cp.Text.Length:N0} characters; limit {_options.MaxTextChars:N0}).";
+                cp.Reason = $"Too much text ({cp.Text.Length:N0} characters; limit {_config.WebScrapingMaxTextChars:N0}).";
                 continue;
             }
             cp.Hash = Sha256(cp.Text.Normalize(NormalizationForm.FormC));

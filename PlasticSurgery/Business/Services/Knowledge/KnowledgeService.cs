@@ -1,5 +1,6 @@
 using PlasticSurgery.Business.Contracts.Engines.Knowledge;
 using PlasticSurgery.Business.Contracts.HttpClients.OpenAi;
+using PlasticSurgery.Business.Contracts.Managers;
 using PlasticSurgery.Business.Contracts.Services.Knowledge;
 using PlasticSurgery.Business.Engines.Knowledge;
 using PlasticSurgery.Common.Enums;
@@ -24,10 +25,11 @@ public class KnowledgeService : IKnowledgeService
     private readonly IEmbeddingService _embeddings;
     private readonly IKnowledgeSettingsService _settings;
     private readonly IDocumentTextExtractor _extractor;
+    private readonly IConfigManager _config;
 
     public KnowledgeService(
         IKnowledgeDocumentRepository documents, IUnitOfWork unitOfWork, IKnowledgeChunkingService chunking, IEmbeddingService embeddings,
-        IKnowledgeSettingsService settings, IDocumentTextExtractor extractor, IConfiguration configuration)
+        IKnowledgeSettingsService settings, IDocumentTextExtractor extractor, IConfigManager config)
     {
         _documents = documents;
         _unitOfWork = unitOfWork;
@@ -37,10 +39,10 @@ public class KnowledgeService : IKnowledgeService
         _extractor = extractor;
         // Hard ceiling of 25 MB even if configured higher — Kestrel's own request limit is ~30 MB, and
         // the whole file is buffered in memory for parsing.
-        MaxUploadBytes = Math.Clamp(configuration.GetValue("Knowledge:MaxUploadBytes", 5L * 1024 * 1024), 1024, 25L * 1024 * 1024);
+        _config = config;
     }
 
-    public long MaxUploadBytes { get; }
+    public long MaxUploadBytes => _config.KnowledgeMaxUploadBytes;
 
     public async Task<IReadOnlyList<KnowledgeDocumentResponse>> ListAsync(Guid clinicId, CancellationToken ct = default)
     {

@@ -1,8 +1,7 @@
 using System.Text.RegularExpressions;
-using Microsoft.Extensions.Options;
+using PlasticSurgery.Business.Contracts.Managers;
 using PlasticSurgery.Business.Contracts.Services.Billing;
 using PlasticSurgery.Business.Engines.Billing;
-using PlasticSurgery.Common.Configs;
 using PlasticSurgery.Common.Enums;
 using PlasticSurgery.Common.Exceptions;
 using PlasticSurgery.Common.Helpers;
@@ -17,17 +16,17 @@ namespace PlasticSurgery.Business.Services.Billing;
 public partial class RateCardService : IRateCardService
 {
     /// <summary>A new version may start this far in the past (clock skew between the admin tool and the server).</summary>
-    private static readonly TimeSpan BackdateTolerance = TimeSpan.FromMinutes(5);
-
     private readonly IBillingUnitOfWorkFactory _units;
-    private readonly BillingOptions _options;
     private readonly TimeProvider _time;
     private readonly ILogger<RateCardService> _logger;
+    private readonly IConfigManager _config;
 
-    public RateCardService(IBillingUnitOfWorkFactory units, IOptions<BillingOptions> options, TimeProvider time, ILogger<RateCardService> logger)
+    private TimeSpan BackdateTolerance => TimeSpan.FromMinutes(_config.BillingRateBackdateToleranceMinutes);
+
+    public RateCardService(IBillingUnitOfWorkFactory units, TimeProvider time, ILogger<RateCardService> logger, IConfigManager config)
     {
+        _config = config;
         _units = units;
-        _options = options.Value;
         _time = time;
         _logger = logger;
     }
@@ -169,7 +168,7 @@ public partial class RateCardService : IRateCardService
             Unit = string.IsNullOrWhiteSpace(request.Unit) ? "unit" : request.Unit.Trim().ToLowerInvariant(),
             ProviderCost = request.ProviderCost,
             ClientRate = request.ClientRate,
-            Currency = _options.NormalizedCurrency,
+            Currency = _config.BillingCurrency,
             EffectiveFrom = from,
             EffectiveTo = to,
             Notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim(),

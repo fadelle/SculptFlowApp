@@ -1,7 +1,6 @@
-using Microsoft.Extensions.Options;
+using PlasticSurgery.Business.Contracts.Managers;
 using PlasticSurgery.Business.Contracts.Services.Billing;
 using PlasticSurgery.Business.Engines.Billing;
-using PlasticSurgery.Common.Configs;
 using PlasticSurgery.Common.Enums;
 using PlasticSurgery.Common.Helpers;
 using PlasticSurgery.Common.Statics;
@@ -19,14 +18,14 @@ public class BillingService : IBillingService
     public const int MaxKeyLength = 150;
 
     private readonly IBillingUnitOfWorkFactory _units;
-    private readonly BillingOptions _options;
     private readonly TimeProvider _time;
     private readonly ILogger<BillingService> _logger;
+    private readonly IConfigManager _config;
 
-    public BillingService(IBillingUnitOfWorkFactory units, IOptions<BillingOptions> options, TimeProvider time, ILogger<BillingService> logger)
+    public BillingService(IBillingUnitOfWorkFactory units, TimeProvider time, ILogger<BillingService> logger, IConfigManager config)
     {
+        _config = config;
         _units = units;
-        _options = options.Value;
         _time = time;
         _logger = logger;
     }
@@ -45,7 +44,7 @@ public class BillingService : IBillingService
 
         await using var unit = _units.Create();
         await using var tx = await unit.BeginTransactionAsync(ct);
-        var account = await unit.Accounts.LockAsync(e.ClinicId, _options.NormalizedCurrency, ct);
+        var account = await unit.Accounts.LockAsync(e.ClinicId, _config.BillingCurrency, ct);
 
         var existing = await unit.Usage.FindByKeyReadOnlyAsync(e.ClinicId, e.IdempotencyKey, ct);
         if (existing is not null)
@@ -141,7 +140,7 @@ public class BillingService : IBillingService
 
         await using var unit = _units.Create();
         await using var tx = await unit.BeginTransactionAsync(ct);
-        var account = await unit.Accounts.LockAsync(clinicId, _options.NormalizedCurrency, ct);
+        var account = await unit.Accounts.LockAsync(clinicId, _config.BillingCurrency, ct);
 
         var usage = await unit.Usage.FindByKeyAsync(clinicId, idempotencyKey, ct);
         if (usage is null)
@@ -208,7 +207,7 @@ public class BillingService : IBillingService
 
         await using var unit = _units.Create();
         await using var tx = await unit.BeginTransactionAsync(ct);
-        var account = await unit.Accounts.LockAsync(clinicId, _options.NormalizedCurrency, ct);
+        var account = await unit.Accounts.LockAsync(clinicId, _config.BillingCurrency, ct);
 
         var usage = await unit.Usage.FindByKeyAsync(clinicId, idempotencyKey, ct);
         if (usage is null)
@@ -263,7 +262,7 @@ public class BillingService : IBillingService
 
         await using var unit = _units.Create();
         await using var tx = await unit.BeginTransactionAsync(ct);
-        var account = await unit.Accounts.LockAsync(clinicId, _options.NormalizedCurrency, ct);
+        var account = await unit.Accounts.LockAsync(clinicId, _config.BillingCurrency, ct);
 
         var usage = await unit.Usage.GetAsync(clinicId, usageRecordId, ct);
         if (usage is null) return new UsageResult(UsageOutcome.NotFound, null, null, null, false);
@@ -309,7 +308,7 @@ public class BillingService : IBillingService
 
         await using var unit = _units.Create();
         await using var tx = await unit.BeginTransactionAsync(ct);
-        var account = await unit.Accounts.LockAsync(request.ClinicId, _options.NormalizedCurrency, ct);
+        var account = await unit.Accounts.LockAsync(request.ClinicId, _config.BillingCurrency, ct);
 
         var existing = await unit.Ledger.FindByKeyReadOnlyAsync(request.ClinicId, key, ct);
         if (existing is not null)
@@ -348,7 +347,7 @@ public class BillingService : IBillingService
 
         await using var unit = _units.Create();
         await using var tx = await unit.BeginTransactionAsync(ct);
-        var account = await unit.Accounts.LockAsync(request.ClinicId, _options.NormalizedCurrency, ct);
+        var account = await unit.Accounts.LockAsync(request.ClinicId, _config.BillingCurrency, ct);
 
         var existing = await unit.Ledger.FindByKeyReadOnlyAsync(request.ClinicId, key, ct);
         if (existing is not null)

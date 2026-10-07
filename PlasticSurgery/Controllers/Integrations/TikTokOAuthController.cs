@@ -19,7 +19,7 @@ namespace PlasticSurgery.Controllers.Integrations;
 public class TikTokOAuthController : Controller
 {
     private const string StatePurpose = "PlasticSurgery.TikTokOAuthState";
-    private static readonly TimeSpan StateLifetime = TimeSpan.FromMinutes(15);
+    private TimeSpan StateLifetime => TimeSpan.FromMinutes(_config.IntegrationsOAuthStateLifetimeMinutes);
     private const string SettingsPagePath = "/settings/integrations";
 
     private readonly ICurrentClinicContext _clinicContext;
@@ -28,11 +28,13 @@ public class TikTokOAuthController : Controller
     private readonly IConfiguration _configuration;
     private readonly ITimeLimitedDataProtector _stateProtector;
     private readonly ILogger<TikTokOAuthController> _logger;
+    private readonly IConfigManager _config;
 
     public TikTokOAuthController(
         ICurrentClinicContext clinicContext, ITikTokIntegrationService tiktok, ITikTokProviderClient provider,
-        IConfiguration configuration, IDataProtectionProvider dataProtection, ILogger<TikTokOAuthController> logger)
+        IConfiguration configuration, IDataProtectionProvider dataProtection, ILogger<TikTokOAuthController> logger, IConfigManager config)
     {
+        _config = config;
         _clinicContext = clinicContext;
         _tiktok = tiktok;
         _provider = provider;

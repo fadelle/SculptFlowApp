@@ -53,7 +53,9 @@ staff, or campaign — lives in one unified conversation history per lead, in Po
 
 ## 3. Database tables / entities
 
-All tables are `clinic_id`-scoped except Identity tables (scoped via `clinic_users`).
+All tables are `clinic_id`-scoped except Identity tables (scoped via `clinic_users`). Since 2026-10-07 each table lives in
+the Postgres schema of its area (`core.clinics`, `crm.leads`, ...; table in `CLAUDE.md` → "Database schemas"); the names
+below are unqualified.
 
 | Table | Purpose |
 |---|---|
@@ -949,7 +951,15 @@ Render sets `PORT` itself; the Dockerfile sets `ASPNETCORE_ENVIRONMENT`/`ASPNETC
     `billing.rate_cards`, `billing.rates` (exclusion constraint incl. `provider_billing` + immutability trigger),
     `billing.usage_records` (`charge_status` + `provider_outcome`, final-row guard trigger), `billing.ledger_entries`
     (append-only trigger, `seq` identity), `billing.channel_account_settings` (provider billing override per connected channel
-    account) — **NOT applied to Supabase yet**; tested on local throwaway databases only
+    account) — applied to Supabase by Mohammad on 2026-10-06 (after billing merged to main as `4f67100`)
+20. **Schema split + configuration overrides** (2026-10-07, branch `refactor/architecture`): every table moved out of
+    `public` into `core`, `identity`, `crm`, `scheduling`, `channels`, `marketing`, `knowledge`, `activity` (the top of
+    `schema.sql` creates the schemas and moves tables still in `public` with `alter table … set schema`; data, indexes, FKs
+    and triggers move with them); `config.settings` (settings by section + key, read through `IConfigManager`, one typed property per setting, with constant defaults in `ConfigDefaults`; 56 settings moved there from appsettings and constants (incl. `Billing:Currency` and `Embeddings:BaseUrl/Model/Dimensions/ApiKey`; the API key is a masked secret setting and must be entered on the Configuration page, the `Embeddings__ApiKey` env var no longer applies), seeded by `Database/seed-config.sql`, so env vars such as `Billing__Enabled` no longer apply: set them on the admin portal's Configuration page; see `docs/configuration.md`); the
+    `campaign_recipients` column rename is now guarded so the file re-runs cleanly. **NOT applied to Supabase yet.**
+    To apply: back up, run `schema.sql`, and deploy the main app and the admin portal together (both map the new schemas;
+    an old build of either breaks the moment the tables move). Tested: old database + seed → new `schema.sql` twice gives
+    the same structure as a fresh database (`pg_dump -s` identical).
 
 No migration was needed for Procedures, lead/appointment editing, or the audience UI.
 
