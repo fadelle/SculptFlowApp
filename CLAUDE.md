@@ -84,7 +84,8 @@ Every table lives in its area's Postgres schema, never `public` (only `set_updat
   `extensions`, `graphql`, `vault`: Supabase reserves them).
 - `Database/schema.sql`, every `ToTable`, and raw SQL are schema-qualified (`crm.leads`). Changes stay re-runnable (guard
   renames/constraint adds in `do $$` blocks).
-- When a table moves or is added, update the admin portal's `ApplicationDbContext` copy in the same change.
+- The admin portal has no copy of these tables (it reads and writes only through `/api/platform-admin`), so a table change
+  only needs the main app's code, plus the platform-admin API shapes if a portal page shows that data.
 
 ## Configuration (standing rule, agreed 2026-10-07)
 
@@ -102,6 +103,28 @@ Full detail and the declared-settings table: `docs/configuration.md`.
 - `appsettings.json` / `Common/Configs` options hold only remaining secrets (via user-secrets/env), per-environment values
   (public URL, provider base URLs/client ids, connection strings) and structured rules (`Billing:WhatsApp`,
   `Billing:ProviderBilling`).
+
+## Caching (standing rule, agreed 2026-10-07)
+
+- Cache through `ICacheManager.GetOrCreateAsync(key, ttl, factory)` only (never a static dictionary or `IMemoryCache`
+  directly). It sits on `ICacheAdapter`: `MemoryCacheAdapter` today; a Redis adapter registered in `Program.cs` replaces
+  it without other changes.
+- Every key and lifetime lives in `Common/Statics/CacheKeys` as `area:thing:id`, so an area can be dropped by prefix.
+- Cache plain DTOs/records (stored as JSON copies), never tracked EF entities, and nothing whose staleness costs money
+  (balances, ledger) or that changes every request (messages, conversations, appointments).
+- The service that changes cached data removes its key (or prefix) right after the save; the lifetime is only a
+  safety net. Add a line to the `CacheKeys` comment naming who clears it.
+- Settings stay in `ConfigManager`'s own snapshot (read synchronously everywhere); cache clear-all reloads it.
+- Admin: `/api/platform-admin/cache` (list, get, remove key/prefix, clear all) and the portal's Cache page.
+
+## Platform-admin APIs (standing rule, agreed 2026-10-07)
+
+The SculptFlowAdmin portal reads and writes everything about clinics through `/api/platform-admin/{domain}`; it has no
+access to the main tables. Cross-clinic reads live in `Persistence/Repositories/PlatformAdmin` (+ `Entities/Dtos/PlatformAdmin`,
+`Business/Mappers/PlatformAdmin`); `Business/Services/PlatformAdmin` delegates every write to the service a clinic uses
+(so rules, provider calls and cache clearing happen once) and answers `PlatformAdminChange { clinicId }` for the portal's
+audit. Details never carry secrets. A new portal feature = endpoint here + client/service/page in the portal, with the
+portal's copy of the request/response shapes kept in step.
 
 ## Other docs (read on demand)
 

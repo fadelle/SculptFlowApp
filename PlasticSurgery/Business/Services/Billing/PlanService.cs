@@ -16,10 +16,12 @@ public partial class PlanService : IPlanService
     private readonly TimeProvider _time;
     private readonly ILogger<PlanService> _logger;
     private readonly IConfigManager _config;
+    private readonly ICacheManager _cache;
 
-    public PlanService(IBillingUnitOfWorkFactory units, TimeProvider time, ILogger<PlanService> logger, IConfigManager config)
+    public PlanService(IBillingUnitOfWorkFactory units, TimeProvider time, ILogger<PlanService> logger, IConfigManager config, ICacheManager cache)
     {
         _config = config;
+        _cache = cache;
         _units = units;
         _time = time;
         _logger = logger;
@@ -68,6 +70,7 @@ public partial class PlanService : IPlanService
         await ApplyAsync(unit, plan, request, now, ct);
         if (request.Entitlements is not null) ReplaceEntitlements(unit, plan, request.Entitlements, now);
         await unit.SaveChangesAsync(ct);
+        await _cache.RemoveByPrefixAsync(CacheKeys.EntitlementsPrefix, ct); // any clinic may be on this plan
 
         _logger.LogInformation("Billing: plan {Plan} updated ({Price} {Currency} per {Period}, credit {Credit}, active {Active}); applies from each subscriber's next renewal.",
             code, plan.Price, plan.Currency, plan.BillingPeriod, plan.IncludedUsageCredit, plan.IsActive);
@@ -82,6 +85,7 @@ public partial class PlanService : IPlanService
         if (plan is null) return null;
         ReplaceEntitlements(unit, plan, entitlements, _time.GetUtcNow());
         await unit.SaveChangesAsync(ct);
+        await _cache.RemoveByPrefixAsync(CacheKeys.EntitlementsPrefix, ct); // any clinic may be on this plan
         _logger.LogInformation("Billing: entitlements of plan {Plan} replaced: {Entitlements}.", code,
             string.Join(", ", entitlements.Select(e => $"{e.Key}={e.Value}")));
         return await GetAsync(code, ct);

@@ -4,6 +4,7 @@ using System.Security.Claims;
 using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Identity;
+using PlasticSurgery.Common.Statics;
 using PlasticSurgery.Business.Contracts.Managers;
 using PlasticSurgery.Business.Contracts.Services.Billing;
 using PlasticSurgery.Business.Contracts.Services.Clinics;
@@ -22,7 +23,7 @@ namespace PlasticSurgery.Business.Services.Clinics;
 public partial class ClinicRegistrationService : IClinicRegistrationService
 {
     /// <summary>Identity claim type the user's full name is stored under (identity_user_claims).</summary>
-    public const string FullNameClaimType = "full_name";
+    public const string FullNameClaimType = StaffClaims.FullName;
 
     private const int MaxNameLength = 200;
     private const int MaxSlugLength = 60;
