@@ -34,6 +34,8 @@ using PlasticSurgery.Persistence.Repositories.Procedures;
 using PlasticSurgery.Persistence.Repositories.TikTok;
 using PlasticSurgery.Persistence.Repositories.Users;
 using PlasticSurgery.Persistence.Repositories.WhatsApp;
+using PlasticSurgery.Persistence.Contracts.PlatformAdmin;
+using PlasticSurgery.Persistence.Repositories.PlatformAdmin;
 
 namespace PlasticSurgery.Common.Extensions;
 
@@ -75,6 +77,14 @@ public static class PersistenceModule
         // IBillingUnitOfWork instead (see BillingModule).
         services.AddScoped<IBillingAccountRepository, BillingAccountRepository>();
         services.AddScoped<IClinicSubscriptionRepository, ClinicSubscriptionRepository>();
+
+        // Platform admin (cross-clinic reads for the admin portal)
+        services.AddScoped<IClinicAdminRepository, ClinicAdminRepository>();
+        services.AddScoped<IChannelAdminRepository, ChannelAdminRepository>();
+        services.AddScoped<IStaffAdminRepository, StaffAdminRepository>();
+        services.AddScoped<ILeadAdminRepository, LeadAdminRepository>();
+        services.AddScoped<IContentAdminRepository, ContentAdminRepository>();
+        services.AddScoped<IOverviewAdminRepository, OverviewAdminRepository>();
 
         return services;
     }

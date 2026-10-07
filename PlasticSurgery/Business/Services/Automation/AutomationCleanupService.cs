@@ -1,3 +1,4 @@
+using PlasticSurgery.Business.Contracts.Managers;
 using PlasticSurgery.Business.Contracts.Services.Automation;
 using PlasticSurgery.Common.Enums;
 using PlasticSurgery.Common.Statics;
@@ -13,12 +14,14 @@ public class AutomationCleanupService : IAutomationCleanupService
     private readonly IClinicRepository _clinics;
     private readonly IUserRepository _users;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly ICacheManager _cache;
 
-    public AutomationCleanupService(IClinicRepository clinics, IUserRepository users, IUnitOfWork unitOfWork)
+    public AutomationCleanupService(IClinicRepository clinics, IUserRepository users, IUnitOfWork unitOfWork, ICacheManager cache)
     {
         _clinics = clinics;
         _users = users;
         _unitOfWork = unitOfWork;
+        _cache = cache;
     }
 
     public Task<IReadOnlyList<ClinicSummaryRow>> ListClinicsAsync(CancellationToken ct = default) =>
@@ -41,6 +44,8 @@ public class AutomationCleanupService : IAutomationCleanupService
         await _clinics.DeleteAsync(clinicId, ct);
         await _users.DeleteAsync(userIds, ct);
         await tx.CommitAsync(ct);
+        await _cache.RemoveByPrefixAsync(CacheKeys.WhatsAppRoutingPrefix, ct);
+        await _cache.RemoveAsync(CacheKeys.Entitlements(clinicId), ct);
         return AutomationDeleteOutcome.Deleted;
     }
 }

@@ -1,8 +1,10 @@
 using PlasticSurgery.Business.Contracts.HttpClients.Infobip;
 using PlasticSurgery.Business.Contracts.Services.Billing;
+using PlasticSurgery.Business.Contracts.Managers;
 using PlasticSurgery.Business.Contracts.Services.Channels;
 using PlasticSurgery.Business.Services.Inbox;
 using PlasticSurgery.Common.Enums;
+using PlasticSurgery.Common.Statics;
 using PlasticSurgery.Common.Exceptions;
 using PlasticSurgery.Common.Helpers;
 using PlasticSurgery.Entities.Dtos.Infobip;
@@ -22,10 +24,12 @@ public class InfobipWhatsAppIntegrationService : IInfobipWhatsAppIntegrationServ
     private readonly IHttpContextAccessor _http;
     private readonly ILogger<InfobipWhatsAppIntegrationService> _logger;
     private readonly IEntitlementService _entitlements;
+    private readonly ICacheManager _cache;
 
     public InfobipWhatsAppIntegrationService(
         IChannelIntegrationRepository integrations, IUnitOfWork unitOfWork, IInfobipClient client, IConfiguration configuration,
-        IHttpContextAccessor http, ILogger<InfobipWhatsAppIntegrationService> logger, IEntitlementService entitlements)
+        IHttpContextAccessor http, ILogger<InfobipWhatsAppIntegrationService> logger, IEntitlementService entitlements,
+        ICacheManager cache)
     {
         _integrations = integrations;
         _unitOfWork = unitOfWork;
@@ -34,6 +38,7 @@ public class InfobipWhatsAppIntegrationService : IInfobipWhatsAppIntegrationServ
         _http = http;
         _logger = logger;
         _entitlements = entitlements;
+        _cache = cache;
     }
 
     public async Task<ChannelIntegrationResponse> ConnectAsync(Guid clinicId, string? senderNumber, CancellationToken ct = default)
@@ -121,6 +126,7 @@ public class InfobipWhatsAppIntegrationService : IInfobipWhatsAppIntegrationServ
         row.UpdatedAt = now;
 
         await _unitOfWork.SaveChangesAsync(ct);
+        await _cache.RemoveByPrefixAsync(CacheKeys.WhatsAppRoutingPrefix, ct);
         _logger.LogInformation("Clinic {ClinicId} connected WhatsApp through Infobip (connection {ConnectionId}).", clinicId, row.Id);
         return ChannelIntegrationService.ToResponse(row);
     }

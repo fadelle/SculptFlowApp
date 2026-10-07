@@ -17,11 +17,14 @@ public class EntitlementService : IEntitlementService
     private readonly TimeProvider _time;
     private readonly ILogger<EntitlementService> _logger;
     private readonly IConfigManager _config;
+    private readonly ICacheManager _cacheManager;
     private readonly Dictionary<Guid, ClinicEntitlements> _cache = new(); // per request (scoped service)
 
-    public EntitlementService(IClinicSubscriptionRepository subscriptions, IChannelIntegrationRepository integrations, TimeProvider time, ILogger<EntitlementService> logger, IConfigManager config)
+    public EntitlementService(IClinicSubscriptionRepository subscriptions, IChannelIntegrationRepository integrations, TimeProvider time, ILogger<EntitlementService> logger, IConfigManager config,
+        ICacheManager cacheManager)
     {
         _config = config;
+        _cacheManager = cacheManager;
         _subscriptions = subscriptions;
         _integrations = integrations;
         _time = time;
@@ -33,22 +36,22 @@ public class EntitlementService : IEntitlementService
         if (!_config.BillingEnabled) return ClinicEntitlements.Unrestricted;
         if (_cache.TryGetValue(clinicId, out var cached)) return cached;
 
-        var subscription = await _subscriptions.GetWithEntitlementsReadOnlyAsync(clinicId, ct);
+        var snapshot = (await _cacheManager.GetOrCreateAsync(CacheKeys.Entitlements(clinicId), CacheKeys.EntitlementsTtl,
+            async token => await LoadSnapshotAsync(clinicId, token), ct))!;
 
         ClinicEntitlements result;
-        if (subscription?.Plan is null)
+        if (snapshot.PlanCode is null)
         {
             result = new ClinicEntitlements(true, false, null, null, null, null, new Dictionary<string, string>());
         }
         else
         {
             var now = _time.GetUtcNow();
-            var hasAccess = subscription.Status == SubscriptionStatus.Active
-                || (subscription.Status == SubscriptionStatus.PastDue
-                    && now < (subscription.PastDueSince ?? now).AddDays(_config.BillingGracePeriodDays));
-            var values = subscription.Plan.Entitlements.ToDictionary(x => x.EntitlementKey, x => x.Value);
-            result = new ClinicEntitlements(true, hasAccess, subscription.Status, subscription.Plan.Code, subscription.Plan.Name,
-                subscription.CurrentPeriodEnd, values);
+            var hasAccess = snapshot.Status == SubscriptionStatus.Active
+                || (snapshot.Status == SubscriptionStatus.PastDue
+                    && now < (snapshot.PastDueSince ?? now).AddDays(_config.BillingGracePeriodDays));
+            result = new ClinicEntitlements(true, hasAccess, snapshot.Status, snapshot.PlanCode, snapshot.PlanName,
+                snapshot.CurrentPeriodEnd, snapshot.Entitlements);
         }
         _cache[clinicId] = result;
         return result;
@@ -99,5 +102,13 @@ public class EntitlementService : IEntitlementService
         {
             await EnsureWithinLimitAsync(clinicId, EntitlementKeys.MaxWhatsAppNumbers, 1, ct);
         }
+    }
+
+    private async Task<SubscriptionSnapshot> LoadSnapshotAsync(Guid clinicId, CancellationToken ct)
+    {
+        var subscription = await _subscriptions.GetWithEntitlementsReadOnlyAsync(clinicId, ct);
+        if (subscription?.Plan is null) return new SubscriptionSnapshot(null, null, null, null, null, new Dictionary<string, string>());
+        return new SubscriptionSnapshot(subscription.Status, subscription.PastDueSince, subscription.Plan.Code, subscription.Plan.Name,
+            subscription.CurrentPeriodEnd, subscription.Plan.Entitlements.ToDictionary(x => x.EntitlementKey, x => x.Value));
     }
 }

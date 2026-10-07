@@ -1,7 +1,9 @@
 using System.Text.Json;
 using PlasticSurgery.Business.Contracts.Engines.WhatsApp;
 using PlasticSurgery.Business.Engines.WhatsApp.Handlers;
+using PlasticSurgery.Business.Contracts.Managers;
 using PlasticSurgery.Common.Enums;
+using PlasticSurgery.Common.Statics;
 using PlasticSurgery.Entities.Dtos.WhatsApp;
 using PlasticSurgery.Entities.Models;
 using PlasticSurgery.Entities.Responses.WhatsApp;
@@ -20,9 +22,11 @@ public class MetaWebhookProcessor : IMetaWebhookProcessor
     private readonly HistoryHandler _historyHandler;
     private readonly AppStateSyncHandler _appStateSyncHandler;
     private readonly UnknownEventHandler _unknownEventHandler;
+    private readonly ICacheManager _cache;
 
     public MetaWebhookProcessor(
         IChannelIntegrationRepository integrations,
+        ICacheManager cache,
         CustomerMessageHandler customerMessageHandler,
         BusinessAppEchoHandler businessAppEchoHandler,
         MessageStatusHandler messageStatusHandler,
@@ -33,6 +37,7 @@ public class MetaWebhookProcessor : IMetaWebhookProcessor
         UnknownEventHandler unknownEventHandler)
     {
         _integrations = integrations;
+        _cache = cache;
         _customerMessageHandler = customerMessageHandler;
         _businessAppEchoHandler = businessAppEchoHandler;
         _messageStatusHandler = messageStatusHandler;
@@ -91,16 +96,22 @@ public class MetaWebhookProcessor : IMetaWebhookProcessor
     /// "which clinic does this belong to"; nothing downstream re-derives it from the payload.</summary>
     private async Task<ResolvedClinic?> ResolveClinicAsync(ParsedMetaEvent evt, CancellationToken ct)
     {
-        ChannelIntegration? integration = null;
+        // Cached (every incoming message asks this); ChannelIntegrationService and InfobipWhatsAppIntegrationService drop
+        // CacheKeys.WhatsAppRoutingPrefix whenever a connection changes.
+        ResolvedClinic? resolved = null;
         if (!string.IsNullOrWhiteSpace(evt.PhoneNumberId))
         {
-            integration = await _integrations.FindWhatsAppByPhoneNumberIdAsync(evt.PhoneNumberId, ct);
+            resolved = await _cache.GetOrCreateAsync(CacheKeys.WhatsAppByPhoneNumberId(evt.PhoneNumberId), CacheKeys.WhatsAppRoutingTtl,
+                async token => ToResolved(await _integrations.FindWhatsAppByPhoneNumberIdAsync(evt.PhoneNumberId, token)), ct);
         }
-        if (integration is null && !string.IsNullOrWhiteSpace(evt.WabaId))
+        if (resolved is null && !string.IsNullOrWhiteSpace(evt.WabaId))
         {
-            integration = await _integrations.FindWhatsAppByWabaIdAsync(evt.WabaId, ct);
+            resolved = await _cache.GetOrCreateAsync(CacheKeys.WhatsAppByWabaId(evt.WabaId), CacheKeys.WhatsAppRoutingTtl,
+                async token => ToResolved(await _integrations.FindWhatsAppByWabaIdAsync(evt.WabaId, token)), ct);
         }
-
-        return integration is null ? null : new ResolvedClinic(integration.ClinicId, integration.Id);
+        return resolved;
     }
+
+    private static ResolvedClinic? ToResolved(ChannelIntegration? integration) =>
+        integration is null ? null : new ResolvedClinic(integration.ClinicId, integration.Id);
 }

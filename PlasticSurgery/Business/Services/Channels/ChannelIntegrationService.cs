@@ -1,8 +1,10 @@
 using System.Security.Cryptography;
 using PlasticSurgery.Business.Contracts.HttpClients.Meta;
 using PlasticSurgery.Business.Contracts.Services.Billing;
+using PlasticSurgery.Business.Contracts.Managers;
 using PlasticSurgery.Business.Contracts.Services.Channels;
 using PlasticSurgery.Common.Enums;
+using PlasticSurgery.Common.Statics;
 using PlasticSurgery.Entities.Models;
 using PlasticSurgery.Entities.Requests.Channels;
 using PlasticSurgery.Entities.Responses.Channels;
@@ -18,15 +20,17 @@ public class ChannelIntegrationService : IChannelIntegrationService
     private readonly IMetaGraphClient _graph;
     private readonly ITelegramIntegrationService _telegram;
     private readonly IEntitlementService _entitlements;
+    private readonly ICacheManager _cache;
 
     public ChannelIntegrationService(IChannelIntegrationRepository integrations, IUnitOfWork unitOfWork, IMetaGraphClient graph, ITelegramIntegrationService telegram,
-        IEntitlementService entitlements)
+        IEntitlementService entitlements, ICacheManager cache)
     {
         _integrations = integrations;
         _unitOfWork = unitOfWork;
         _graph = graph;
         _telegram = telegram;
         _entitlements = entitlements;
+        _cache = cache;
     }
 
     public async Task<IReadOnlyList<ChannelIntegrationResponse>> ListAsync(Guid clinicId, CancellationToken ct = default)
@@ -119,6 +123,7 @@ public class ChannelIntegrationService : IChannelIntegrationService
         row.UpdatedAt = now;
 
         await _unitOfWork.SaveChangesAsync(ct);
+        await _cache.RemoveByPrefixAsync(CacheKeys.WhatsAppRoutingPrefix, ct);
         return ToResponse(row);
     }
 
@@ -146,6 +151,7 @@ public class ChannelIntegrationService : IChannelIntegrationService
         row.UpdatedAt = DateTimeOffset.UtcNow;
 
         await _unitOfWork.SaveChangesAsync(ct);
+        await _cache.RemoveByPrefixAsync(CacheKeys.WhatsAppRoutingPrefix, ct);
     }
 
     public async Task<ChannelIntegrationResponse> ConnectWhatsAppAsync(ConnectWhatsAppRequest request, CancellationToken ct = default)

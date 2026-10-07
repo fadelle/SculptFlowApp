@@ -17,10 +17,12 @@ public class SubscriptionService : ISubscriptionService
     private readonly TimeProvider _time;
     private readonly ILogger<SubscriptionService> _logger;
     private readonly IConfigManager _config;
+    private readonly ICacheManager _cache;
 
-    public SubscriptionService(IBillingUnitOfWorkFactory units, TimeProvider time, ILogger<SubscriptionService> logger, IConfigManager config)
+    public SubscriptionService(IBillingUnitOfWorkFactory units, TimeProvider time, ILogger<SubscriptionService> logger, IConfigManager config, ICacheManager cache)
     {
         _config = config;
+        _cache = cache;
         _units = units;
         _time = time;
         _logger = logger;
@@ -107,6 +109,7 @@ public class SubscriptionService : ISubscriptionService
 
         await unit.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
+        await _cache.RemoveAsync(CacheKeys.Entitlements(request.ClinicId), ct);
 
         _logger.LogInformation("Billing: clinic {ClinicId} {Action} plan {Plan} until {PeriodEnd} (charged {Price} {Currency}, credit {Credit}) by {Actor}.",
             request.ClinicId, isNew ? "started" : "changed to", plan.Code, subscription.CurrentPeriodEnd, price, account.Currency,
@@ -191,6 +194,7 @@ public class SubscriptionService : ISubscriptionService
         subscription.UpdatedAt = now;
         await unit.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
+        await _cache.RemoveAsync(CacheKeys.Entitlements(clinicId), ct);
 
         if (outcome == RenewalOutcome.Renewed)
         {
@@ -235,6 +239,7 @@ public class SubscriptionService : ISubscriptionService
 
         await unit.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
+        await _cache.RemoveAsync(CacheKeys.Entitlements(clinicId), ct);
         _logger.LogInformation("Billing: subscription of clinic {ClinicId} cancelled ({When}) by {Actor}.",
             clinicId, immediately ? "now" : "at period end", actor ?? source);
         return subscription;
@@ -258,6 +263,7 @@ public class SubscriptionService : ISubscriptionService
         BillingLedger.LogEvent(unit, clinicId, BillingEventTypes.SubscriptionResumed, source, new { plan = subscription.Plan?.Code, actor }, now);
         await unit.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
+        await _cache.RemoveAsync(CacheKeys.Entitlements(clinicId), ct);
         return subscription;
     }
 

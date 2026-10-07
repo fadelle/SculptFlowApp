@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using PlasticSurgery.Business.Managers;
+using PlasticSurgery.Business.Providers.Caching;
 using PlasticSurgery.Business.Services.Billing;
 using PlasticSurgery.Common.Configs;
 using PlasticSurgery.Common.Enums;
@@ -41,10 +42,11 @@ public sealed class BillingHarness
         SetSetting("Billing", "GracePeriodDays", graceDays.ToString());
         SetSetting("Billing", "ReservationTimeoutHours", "72");
         SetSetting("Billing", "Currency", "USD");
+        Cache = new CacheManager(new MemoryCacheAdapter(Time), NullLogger<CacheManager>.Instance);
         Factory = new BillingUnitOfWorkFactory(DbOptions);
         Billing = new BillingService(Factory, Time, NullLogger<BillingService>.Instance, Config);
-        Subscriptions = new SubscriptionService(Factory, Time, NullLogger<SubscriptionService>.Instance, Config);
-        Plans = new PlanService(Factory, Time, NullLogger<PlanService>.Instance, Config);
+        Subscriptions = new SubscriptionService(Factory, Time, NullLogger<SubscriptionService>.Instance, Config, Cache);
+        Plans = new PlanService(Factory, Time, NullLogger<PlanService>.Instance, Config, Cache);
         RateCards = new RateCardService(Factory, Time, NullLogger<RateCardService>.Instance, Config);
         ProviderBilling = new ProviderBillingService(Factory, Microsoft.Extensions.Options.Options.Create(new ProviderBillingOptions()), Time,
             NullLogger<ProviderBillingService>.Instance);
@@ -55,6 +57,7 @@ public sealed class BillingHarness
 
     /// <summary>The settings the billing code reads (Billing:Enabled, GracePeriodDays, ...), set per test.</summary>
     public ConfigManager Config { get; }
+    public CacheManager Cache { get; }
 
     private readonly Dictionary<(string, string), string> _settings = new();
 
@@ -93,7 +96,7 @@ public sealed class BillingHarness
         Entitlements(Db());
 
     public EntitlementService Entitlements(ApplicationDbContext db) =>
-        new(new ClinicSubscriptionRepository(db), new ChannelIntegrationRepository(db), Time, NullLogger<EntitlementService>.Instance, Config);
+        new(new ClinicSubscriptionRepository(db), new ChannelIntegrationRepository(db), Time, NullLogger<EntitlementService>.Instance, Config, Cache);
 
     public static string Unique(string prefix) => $"{prefix}_{Guid.NewGuid():N}"[..Math.Min(prefix.Length + 13, 50)];
 

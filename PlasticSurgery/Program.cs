@@ -18,7 +18,13 @@ using PlasticSurgery.Business.Contracts.HttpClients.TikTok;
 using PlasticSurgery.Business.Contracts.HttpClients.WebScraping;
 using PlasticSurgery.Business.Contracts.Jobs;
 using PlasticSurgery.Business.Contracts.Managers;
+using PlasticSurgery.Business.Contracts.Providers.Caching;
 using PlasticSurgery.Business.Contracts.Providers.Channels;
+using PlasticSurgery.Business.Contracts.Services.Caching;
+using PlasticSurgery.Business.Providers.Caching;
+using PlasticSurgery.Business.Services.Caching;
+using PlasticSurgery.Business.Contracts.Services.PlatformAdmin;
+using PlasticSurgery.Business.Services.PlatformAdmin;
 using PlasticSurgery.Business.Contracts.Providers.WhatsApp;
 using PlasticSurgery.Business.Contracts.Services.Appointments;
 using PlasticSurgery.Business.Contracts.Services.Automation;
@@ -172,6 +178,18 @@ builder.Services.AddScoped<ISettingsService, SettingsService>();
 // Settings by section + key: config.settings, else the constant default in Common/Statics/ConfigDefaults.
 builder.Services.AddSingleton<IConfigManager, ConfigManager>();
 builder.Services.AddHostedService<ConfigRefreshJob>();
+// Cache: ICacheManager over ICacheAdapter (in-memory now; register a Redis adapter here instead to share it across
+// instances). Keys and lifetimes: Common/Statics/CacheKeys.
+builder.Services.AddSingleton<ICacheAdapter, MemoryCacheAdapter>();
+builder.Services.AddSingleton<ICacheManager, CacheManager>();
+builder.Services.AddScoped<ICacheAdminService, CacheAdminService>();
+// Platform admin: the cross-clinic APIs the admin portal calls (/api/platform-admin/{clinics,channels,staff,leads,content,overview}).
+builder.Services.AddScoped<IClinicAdminService, ClinicAdminService>();
+builder.Services.AddScoped<IChannelAdminService, ChannelAdminService>();
+builder.Services.AddScoped<IStaffAdminService, StaffAdminService>();
+builder.Services.AddScoped<ILeadAdminService, LeadAdminService>();
+builder.Services.AddScoped<IContentAdminService, ContentAdminService>();
+builder.Services.AddScoped<IOverviewAdminService, OverviewAdminService>();
 builder.Services.AddScoped<ILeadService, LeadService>();
 builder.Services.AddScoped<IProcedureService, ProcedureService>();
 builder.Services.AddScoped<IAvailabilityService, AvailabilityService>();
