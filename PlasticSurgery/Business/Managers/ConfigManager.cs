@@ -129,7 +129,9 @@ public class ConfigManager : IConfigManager
 
     /// <summary>Replaces the in-memory values with these rows (RefreshAsync uses it; tests call it directly).</summary>
     public void Apply(IEnumerable<ConfigSetting> rows) =>
-        _values = rows.ToDictionary(r => (r.Section.ToLowerInvariant(), r.Key.ToLowerInvariant()), r => r.Value);
+        // Rows that differ only by letter case collapse to one setting (last one wins) instead of failing every refresh.
+        _values = rows.GroupBy(r => (r.Section.ToLowerInvariant(), r.Key.ToLowerInvariant()))
+            .ToDictionary(g => g.Key, g => g.Last().Value);
 
     // ------------------------------------------------------------------------------------------------------------
 

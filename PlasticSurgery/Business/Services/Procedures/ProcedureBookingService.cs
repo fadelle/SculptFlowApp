@@ -34,6 +34,10 @@ public class ProcedureBookingService : IProcedureBookingService
     {
         // A new procedure booking may only reference one of this clinic's ACTIVE procedures.
         await _procedures.EnsureUsableAsync(request.ClinicId, request.ProcedureId, ct);
+        if (!await _leads.ExistsAsync(request.ClinicId, request.LeadId, ct))
+        {
+            throw new ArgumentException("Lead not found for this clinic.");
+        }
 
         var booking = new ProcedureBooking
         {

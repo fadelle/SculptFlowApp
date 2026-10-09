@@ -181,7 +181,7 @@
   Razor Pages dashboard, the .NET API and its workers, the WhatsApp/Telegram/calendar/knowledge integrations, the n8n
   workflows as seen from the app, and the PostgreSQL schema. Written from the code, not from older docs.</p>
   <div class="meta">
-    <span class="pill">Last verified against code: 2026-10-07</span>
+    <span class="pill">Last verified against code: 2026-10-09</span>
     <span class="pill">Code baseline: <code>12fad04</code> (main) + branch <code>feature/subscription-billing</code></span>
     <span class="pill">.NET 10 · EF Core / Npgsql · PostgreSQL + pgvector · SignalR</span>
   </div>
@@ -704,7 +704,7 @@ values that fit their type and range (400); <code>X-Admin-Actor</code> is stored
 <h4>Other server-to-server and provider endpoints</h4>
 <div class="table-wrap"><table>
 <tr><th>Endpoint</th><th>Auth</th><th>Purpose</th></tr>
-<tr><td><code>GET/POST /api/integrations/whatsapp/webhook</code></td><td><span class="tag t-open">open</span></td><td>Meta handshake and every Meta delivery (§5.1).</td></tr>
+<tr><td><code>GET/POST /api/integrations/whatsapp/webhook</code></td><td><span class="tag t-open">open</span></td><td>Meta handshake and every Meta delivery (§5.1); POSTs need a valid <code>X-Hub-Signature-256</code> (<code>Meta:AppSecret</code>).</td></tr>
 <tr><td><code>POST /api/integrations/telegram/webhook/{connectionId}</code></td><td><span class="tag t-open">secret header</span></td><td>Telegram updates (§5.4).</td></tr>
 <tr><td><code>POST /api/integrations/whatsapp/account/events?token=…</code></td><td><span class="tag t-open">secret in URL</span></td><td>Infobip account-level template updates (status, category, quality), token = <code>Infobip:WebhookToken</code>; 404 until it is set. Matched to a clinic by template id.</td></tr>
 <tr><td><code>POST /api/integrations/whatsapp/connections/{connectionId}/events?token=…</code></td><td><span class="tag t-open">secret in URL</span></td><td>Infobip inbound messages, delivery reports and seen reports for one clinic's sender (§5.4b).</td></tr>
@@ -1118,7 +1118,6 @@ Those keys are no longer read from appsettings or environment variables; the tab
 <h2>10. Known gaps and risks (from the code)</h2>
 <div class="table-wrap"><table>
 <tr><th>Area</th><th>Gap</th><th>Impact</th></tr>
-<tr><td>Meta webhook</td><td>No <code>X-Hub-Signature-256</code> verification on POST.</td><td>Anyone who knows the URL can forge inbound events.</td></tr>
 <tr><td>Infobip webhook</td><td>Authenticated by a per-connection secret in the URL, not Infobip's HMAC signing.</td><td>The URL is a credential; anyone holding it can post events for that one clinic. Move to HMAC once its header format is confirmed.</td></tr>
 <tr><td>Infobip coverage</td><td>No health events or media download through Infobip; leads need a phone number (BSUID-only senders are logged, not stored).</td><td>Templates approved through Infobip must be created again after switching back to Meta (different WhatsApp account).</td></tr>
 <tr><td>n8n trust</td><td>AI endpoints trust a caller-supplied <code>clinicId</code> behind one shared key.</td><td>A leaked key reaches every clinic. Derive clinic from the conversation server-side.</td></tr>
@@ -1194,6 +1193,8 @@ Those keys are no longer read from appsettings or environment variables; the tab
 <tr><td>2026-10-07</td><td>Errors: one <code>[ApiErrors]</code> exception filter replaces the per-action try/catch in the JSON API controllers (same statuses and <code>{ error }</code> bodies; unhandled duplicate/overlap/not-found now 409/404 instead of 500). Knowledge chunks are inserted 200 per statement (<code>unnest</code> of arrays) instead of one statement per chunk. §4.6.</td></tr>
 <tr><td>2026-10-07</td><td>Caching: <code>ICacheManager</code> over <code>ICacheAdapter</code> (<code>MemoryCacheAdapter</code> now; a Redis adapter can replace it). Keys and lifetimes in <code>Common/Statics/CacheKeys</code>; values stored as JSON copies. Cached: clinic entitlements (cleared by <code>SubscriptionService</code>/<code>PlanService</code>) and the WhatsApp clinic lookup for incoming Meta webhooks (cleared when a channel connection is saved or disconnected). New <code>/api/platform-admin/cache</code>.</td></tr>
 <tr><td>2026-10-07</td><td>Admin portal APIs: <code>/api/platform-admin/{clinics,channels,staff,leads,content,overview}</code> for every read and write the SculptFlowAdmin portal makes (it no longer touches the main tables). Writes reuse the clinic-side services. <code>StaffClaims.FullName</code> moved to <code>Common/Statics</code>.</td></tr>
+<tr><td>2026-10-08</td><td>Bug fixes from the unit-test pass: Meta webhook POSTs are rejected unless <code>X-Hub-Signature-256</code> matches (HMAC-SHA256 of the raw body with <code>Meta:AppSecret</code>; no secret configured = rejected) and the AI is triggered once per conversation in a batch; dashboard appointment create and procedure-booking create reject another clinic's lead; embedding provider errors no longer echo the response body; ingest key compared in constant time; decimal settings reject thousands separators: §5.1, §10, §11.</td></tr>
+<tr><td>2026-10-09</td><td>Creating a campaign with malformed audience-filter JSON now fails with 400 instead of targeting everyone; the calendar sync-callback controller uses <code>[ApiErrors]</code>; the anonymous TikTok webhook logs only the body size: §4, §5.</td></tr>
 </table></div>
 </section>
 

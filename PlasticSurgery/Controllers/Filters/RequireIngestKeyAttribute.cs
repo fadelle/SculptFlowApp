@@ -31,7 +31,8 @@ public class RequireIngestKeyAttribute : Attribute, IAsyncActionFilter
             return;
         }
 
-        if (string.IsNullOrEmpty(provided) || provided != expected)
+        if (string.IsNullOrEmpty(provided) || !System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(
+                System.Text.Encoding.UTF8.GetBytes(provided), System.Text.Encoding.UTF8.GetBytes(expected)))
         {
             context.Result = new UnauthorizedObjectResult(new { error = $"Missing or invalid {HeaderName} header." });
             return;

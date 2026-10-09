@@ -14,6 +14,7 @@ namespace PlasticSurgery.Controllers.Integrations;
 [ApiController]
 [Route("api/calendar-integrations")]
 [RequireIngestKey]
+[ApiErrors]
 public class CalendarIntegrationsIngestController : ControllerBase
 {
     private readonly ICalendarIntegrationService _calendar;

@@ -132,6 +132,10 @@ public class AppointmentService : IAppointmentService
 
     public async Task<AppointmentResponse> CreateAsync(CreateAppointmentRequest request, CancellationToken ct = default)
     {
+        if (!await _leads.ExistsAsync(request.ClinicId, request.LeadId, ct))
+        {
+            throw new ArgumentException("Lead not found for this clinic.");
+        }
         var appointment = await CreateCoreAsync(request, ct);
         await NotifyChangedAsync(request.ClinicId, appointment, "created", ct);
         return appointment;
