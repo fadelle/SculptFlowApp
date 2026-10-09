@@ -342,6 +342,8 @@ builder.Services.AddRazorPages(options =>
     // Authenticated by the short-lived Google external cookie, not yet by an app session (see GoogleAuthController).
     options.Conventions.AllowAnonymousToPage("/Account/CompleteGoogleSignup");
     options.Conventions.AllowAnonymousToPage("/Error");
+    // The friendly 404/400 page (UseStatusCodePagesWithReExecute below) must render for signed-out visitors too.
+    options.Conventions.AllowAnonymousToPage("/Status");
 });
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
@@ -379,6 +381,13 @@ if (app.Environment.IsDevelopment())
         options.SwaggerEndpoint("/swagger/v1/swagger.json", "Plastic Surgery Clinic API v1");
     });
 }
+
+// Pages with an error status and no body (404, 400…) show the friendly Status page instead of the browser's blank one.
+// Not for the JSON APIs, the SignalR hubs or static files: those keep their plain status.
+app.UseWhen(ctx => !ctx.Request.Path.StartsWithSegments("/api")
+                   && !ctx.Request.Path.StartsWithSegments("/hubs")
+                   && !Path.HasExtension(ctx.Request.Path.Value),
+    branch => branch.UseStatusCodePagesWithReExecute("/Status", "?code={0}"));
 
 app.UseHttpsRedirection();
 

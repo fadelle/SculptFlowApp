@@ -1,0 +1,37 @@
+@model PlasticSurgery.Entities.Dtos.Ui.PageMessagesModel
+@* A page's messages (docs/UI_GUIDE.md §6.6, §0.4). Error → an inline alert: a plain headline, the message, and any
+   provider/technical text under "Technical details". Success → a toast after the redirect, or an inline alert when it is
+   too long to read in a toast (it usually says what happens next). *@
+@{
+    const int toastMaxLength = 90;
+    var status = Model.Status?.Trim();
+    var (summary, details) = UiTextHelper.SplitError(Model.Error);
+}
+@if (!string.IsNullOrEmpty(summary))
+{
+    <div class="au-alert au-alert--error" role="alert">
+        <span class="au-icon au-alert__icon" aria-hidden="true">error</span>
+        <div class="au-alert__body">
+            <div class="au-alert__title">That didn't go through</div>
+            @summary
+            @if (details is not null)
+            {
+                <details class="alert-details"><summary>Technical details</summary><div>@details</div></details>
+            }
+        </div>
+    </div>
+}
+@if (!string.IsNullOrEmpty(status))
+{
+    if (status.Length <= toastMaxLength)
+    {
+        <div hidden data-au-toast="success">@status</div>
+    }
+    else
+    {
+        <div class="au-alert au-alert--success" role="status">
+            <span class="au-icon au-alert__icon" aria-hidden="true">check_circle</span>
+            <div class="au-alert__body">@status</div>
+        </div>
+    }
+}

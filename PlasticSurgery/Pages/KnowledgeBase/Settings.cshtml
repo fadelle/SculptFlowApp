@@ -7,27 +7,25 @@
 
 @if (!Model.ClinicConfigured)
 {
-    <div class="alert alert-warning">No clinic configured yet — see the Dashboard page for setup steps.</div>
+    <partial name="_NoClinic" />
 }
 else
 {
-    if (!string.IsNullOrEmpty(Model.StatusMessage))
-    {
-        <div class="alert alert-info mb-3">@Model.StatusMessage</div>
-    }
-    if (!string.IsNullOrEmpty(Model.ErrorMessage))
-    {
-        <div class="alert alert-warning mb-3">@Model.ErrorMessage</div>
-    }
+    <div class="au-back-header">
+        <a class="au-icon-btn au-icon-btn--bordered" href="/KnowledgeBase" aria-label="Back to Knowledge Base" title="Back to Knowledge Base">
+            <span class="au-icon" aria-hidden="true">arrow_back</span>
+        </a>
+        <div class="min-w-0">
+            <h2 class="au-back-header__title">Search tuning</h2>
+            <span class="au-back-header__sub">How the AI assistant finds answers in your Knowledge Base.</span>
+        </div>
+    </div>
 
-    <a href="/KnowledgeBase" class="back-link">← Knowledge Base</a>
+    <partial name="_Messages" model="new PageMessagesModel(Model.StatusMessage, Model.ErrorMessage)" />
 
-    <div class="card p-5 mw-640 mt-2">
-        <form method="post" class="integration-form">
-            <div>
-                <h3 class="m-0">Search tuning</h3>
-                <div class="cell-sub">Changes apply to entries saved from now on. Re-save an entry to use the new values.</div>
-            </div>
+    <section class="au-panel au-panel--round au-panel--pad mw-640">
+        <form method="post">
+            <p class="au-help m-0">Changes apply to entries saved from now on. Re-save an entry to use the new values.</p>
 
             <label class="set-row">
                 <div>
@@ -35,7 +33,7 @@ else
                     <div class="cell-sub">Chunk size · tokens, @Settings.KnowledgeMinChunkSizeTokens–@Settings.KnowledgeMaxChunkSizeTokens</div>
                     <div class="cell-sub">About 4 characters per token.</div>
                 </div>
-                <input type="number" name="ChunkSizeTokens" value="@Model.ChunkSizeTokens" class="text-input set-input" min="@Settings.KnowledgeMinChunkSizeTokens" max="@Settings.KnowledgeMaxChunkSizeTokens" required />
+                <input type="number" name="ChunkSizeTokens" value="@Model.ChunkSizeTokens" class="au-input set-input" min="@Settings.KnowledgeMinChunkSizeTokens" max="@Settings.KnowledgeMaxChunkSizeTokens" required />
             </label>
 
             <label class="set-row">
@@ -44,7 +42,7 @@ else
                     <div class="cell-sub">Chunk overlap · tokens</div>
                     <div class="cell-sub">So nothing is cut in half. Up to half the piece size.</div>
                 </div>
-                <input type="number" name="ChunkOverlapTokens" value="@Model.ChunkOverlapTokens" class="text-input set-input" min="0" max="500" required />
+                <input type="number" name="ChunkOverlapTokens" value="@Model.ChunkOverlapTokens" class="au-input set-input" min="0" max="500" required />
             </label>
 
             <label class="set-row">
@@ -53,7 +51,7 @@ else
                     <div class="cell-sub">Top K · @Settings.KnowledgeMinTopK–@Settings.KnowledgeMaxTopK</div>
                     <div class="cell-sub">The most pieces the AI gets back for one question.</div>
                 </div>
-                <input type="number" name="TopK" value="@Model.TopK" class="text-input set-input" min="@Settings.KnowledgeMinTopK" max="@Settings.KnowledgeMaxTopK" required />
+                <input type="number" name="TopK" value="@Model.TopK" class="au-input set-input" min="@Settings.KnowledgeMinTopK" max="@Settings.KnowledgeMaxTopK" required />
             </label>
 
             <label class="set-row">
@@ -62,17 +60,17 @@ else
                     <div class="cell-sub">Minimum similarity · 0–1</div>
                     <div class="cell-sub">Higher is stricter. Unrelated questions return nothing.</div>
                 </div>
-                <input type="text" inputmode="decimal" name="MinimumSimilarity" value="@Model.MinimumSimilarity" class="text-input set-input" required />
+                <input type="text" inputmode="decimal" name="MinimumSimilarity" value="@Model.MinimumSimilarity" class="au-input set-input" required />
             </label>
 
-            <div class="flex items-center gap-2 mt-1">
-                <button type="submit" class="btn btn-primary btn-sm">Save settings</button>
-                <a href="/KnowledgeBase" class="btn btn-sm">Cancel</a>
+            <div class="au-form-actions">
+                <a href="/KnowledgeBase" class="au-btn au-btn--text">Cancel</a>
+                <button type="submit" class="au-btn au-btn--primary">Save settings</button>
             </div>
         </form>
-    </div>
+    </section>
 
-    <details class="card tech mw-640 mt-3">
+    <details class="au-panel au-panel--round tech mw-640 mt-3">
         <summary>Technical setup (read-only)</summary>
         <div class="inbox-lead-info-row"><span>Embedding model</span><strong>@Model.Current.EmbeddingModel</strong></div>
         <div class="inbox-lead-info-row"><span>Vector dimension</span><strong>@Model.Current.VectorDimension</strong></div>

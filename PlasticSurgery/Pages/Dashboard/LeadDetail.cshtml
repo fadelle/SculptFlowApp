@@ -6,11 +6,13 @@
 
 @if (!Model.ClinicConfigured)
 {
-    <div class="alert alert-warning">No clinic configured yet — see the Dashboard page for setup steps.</div>
+    <partial name="_NoClinic" />
 }
 else if (Model.Lead is null)
 {
-    <div class="alert alert-warning">Lead not found.</div>
+    var missing = new EmptyStateModel(Icon: "person_off", Title: "This person isn't in your list",
+        ActionLabel: "Back to Interested People", ActionHref: "/dashboard/leads", ActionIcon: "arrow_back");
+    <div class="au-panel au-panel--round"><partial name="_EmptyState" model="missing" /></div>
 }
 else
 {
@@ -19,102 +21,96 @@ else
     // Inbox search matches name, phone or procedure — the phone is the most specific.
     var inboxSearch = !string.IsNullOrWhiteSpace(lead.Phone) ? lead.Phone : lead.FullName;
 
-    <a href="/dashboard/leads" class="back-link mb-2">&larr; Interested People</a>
-
-    if (!string.IsNullOrEmpty(Model.StatusMessage))
-    {
-        <div class="alert alert-info mb-3">@Model.StatusMessage</div>
-    }
-    if (!string.IsNullOrEmpty(Model.ErrorMessage))
-    {
-        <div class="alert alert-warning mb-3">@Model.ErrorMessage</div>
-    }
-
-    <div class="card profile-header mb-3">
-        <span class="avatar-md">@(string.IsNullOrWhiteSpace(Model.Lead.FullName) ? "?" : Model.Lead.FullName.Trim()[..1])</span>
-        <div class="profile-header-main">
-            <div class="profile-header-name">@(Model.Lead.FullName ?? "—")</div>
-            <div class="text-muted text-md">
-                @(Model.Lead.Phone ?? "—") &middot; @(Model.Lead.ProcedureName ?? "No procedure on file")
-            </div>
-        </div>
-        <div class="flex items-center gap-1 flex-wrap">
-            <span class="badge @StatusBadgeHelper.CssClass(Model.Lead.Status)">@FilterLabelHelper.Label(Model.Lead.Status)</span>
-            <span class="badge @StatusBadgeHelper.CssClass(Model.Lead.QualificationStatus)">@FilterLabelHelper.Label(Model.Lead.QualificationStatus)</span>
-            @if (!string.IsNullOrWhiteSpace(inboxSearch))
-            {
-                <a class="btn btn-sm" href="/inbox?search=@Uri.EscapeDataString(inboxSearch)">Open in Inbox</a>
-            }
+    <div class="au-back-header">
+        <a class="au-icon-btn au-icon-btn--bordered" href="/dashboard/leads" aria-label="Back to Interested People" title="Back to Interested People">
+            <span class="au-icon" aria-hidden="true">arrow_back</span>
+        </a>
+        <span class="avatar-md" aria-hidden="true">@(string.IsNullOrWhiteSpace(lead.FullName) ? "?" : lead.FullName.Trim()[..1])</span>
+        <div class="min-w-0">
+            <h2 class="au-back-header__title">@(lead.FullName ?? "—")</h2>
+            <span class="au-back-header__sub">@(lead.Phone ?? "No phone") · @(lead.ProcedureName ?? "No procedure on file")</span>
         </div>
     </div>
-
-    <div class="lead-grid">
-    <div class="card p-5">
-        <div class="eyebrow mb-2">Details</div>
-        <div class="inbox-lead-info-row"><span>Phone</span><strong>@(lead.Phone ?? "—")</strong></div>
-        <div class="inbox-lead-info-row"><span>Email</span><strong>@(lead.Email ?? "—")</strong></div>
-        <div class="inbox-lead-info-row"><span>Procedure</span><strong>@(lead.ProcedureName ?? "—")</strong></div>
-        <div class="inbox-lead-info-row"><span>City</span><strong>@(lead.City ?? "—")</strong></div>
-        <div class="inbox-lead-info-row"><span>Timeline</span><strong>@(lead.DesiredTimeline ?? "—")</strong></div>
-        <div class="inbox-lead-info-row"><span>Last contact</span><strong>@LocalTimeHelper.Time(lead.LastContactAt)</strong></div>
-        <div class="inbox-lead-info-row"><span>Next follow-up</span><strong class="@(followupOverdue ? "overdue" : "")">@LocalTimeHelper.Time(lead.NextFollowupAt)@(followupOverdue ? " · overdue" : "")</strong></div>
-        <div class="inbox-lead-info-row"><span>Lead since</span><strong>@LocalTimeHelper.Time(lead.CreatedAt, "date")</strong></div>
-        @if (!string.IsNullOrWhiteSpace(lead.Notes))
+    <div class="detail-chips">
+        <span class="badge @StatusBadgeHelper.CssClass(lead.Status)">@FilterLabelHelper.Label(lead.Status)</span>
+        <span class="badge @StatusBadgeHelper.CssClass(lead.QualificationStatus)">@FilterLabelHelper.Label(lead.QualificationStatus)</span>
+        @if (!string.IsNullOrWhiteSpace(inboxSearch))
         {
-            <div class="lead-notes">
-                <span class="eyebrow">Notes</span>
-                <p>@lead.Notes</p>
-            </div>
+            <a class="au-btn au-btn--outlined au-btn--sm" href="/inbox?search=@Uri.EscapeDataString(inboxSearch)"><span class="au-icon" aria-hidden="true">chat</span>Open in Inbox</a>
         }
     </div>
 
-    <div class="card p-5">
-        <div class="flex items-center gap-2 mb-2">
-            <span class="eyebrow">Update lead</span>
-            <button type="button" class="status-help-trigger" data-status-help-trigger title="What do these mean?">?</button>
-        </div>
-        <form method="post" class="integration-form">
-            <label class="field">
-                <span>Lead status</span>
-                <select name="Status" class="select">
-                    @foreach (var s in Model.StatusOptions)
-                    {
-                        <option value="@s" selected="@(s == Model.Status)">@FilterLabelHelper.Label(s)</option>
-                    }
-                </select>
-            </label>
+    <partial name="_Messages" model="new PageMessagesModel(Model.StatusMessage, Model.ErrorMessage)" />
 
-            <label class="field">
-                <span>Qualification status</span>
-                <select name="QualificationStatus" class="select">
-                    @foreach (var s in Model.QualificationOptions)
-                    {
-                        <option value="@s" selected="@(s == Model.QualificationStatus)">@FilterLabelHelper.Label(s)</option>
-                    }
-                </select>
-            </label>
+    <div class="lead-grid">
+        <section class="au-panel au-panel--round au-panel--pad" aria-labelledby="lead-details-title">
+            <div class="au-panel__head"><h3 class="au-panel__title" id="lead-details-title">Details</h3></div>
+            <dl class="au-detail-rows">
+                <div class="au-detail-row"><dt>Phone</dt><dd>@(lead.Phone ?? "—")</dd></div>
+                <div class="au-detail-row"><dt>Email</dt><dd>@(lead.Email ?? "—")</dd></div>
+                <div class="au-detail-row"><dt>Procedure</dt><dd>@(lead.ProcedureName ?? "—")</dd></div>
+                <div class="au-detail-row"><dt>City</dt><dd>@(lead.City ?? "—")</dd></div>
+                <div class="au-detail-row"><dt>Timeline</dt><dd>@(lead.DesiredTimeline ?? "—")</dd></div>
+                <div class="au-detail-row"><dt>Last contact</dt><dd>@LocalTimeHelper.Time(lead.LastContactAt)</dd></div>
+                <div class="au-detail-row"><dt>Next follow-up</dt><dd class="@(followupOverdue ? "overdue" : "")">@LocalTimeHelper.Time(lead.NextFollowupAt)@(followupOverdue ? " · overdue" : "")</dd></div>
+                <div class="au-detail-row"><dt>Lead since</dt><dd>@LocalTimeHelper.Time(lead.CreatedAt, "date")</dd></div>
+            </dl>
+            @if (!string.IsNullOrWhiteSpace(lead.Notes))
+            {
+                <div class="lead-notes">
+                    <span class="au-eyebrow">Notes</span>
+                    <p>@lead.Notes</p>
+                </div>
+            }
+        </section>
 
-            <label class="field">
-                <span>Lead source</span>
-                <select name="SourceChoice" id="source-choice" class="select" onchange="document.getElementById('custom-source-field').style.display = this.value === 'other' ? '' : 'none';">
-                    @foreach (var s in Model.SourceOptions)
-                    {
-                        <option value="@s" selected="@(s == Model.SourceChoice)">@s</option>
-                    }
-                    <option value="other" selected="@(Model.SourceChoice == "other")">Other…</option>
-                </select>
-            </label>
-
-            <label class="field" id="custom-source-field" style="display:@(Model.SourceChoice == "other" ? "" : "none")">
-                <span>Custom source</span>
-                <input type="text" name="CustomSource" value="@Model.CustomSource" class="text-input" placeholder="e.g. trade show" />
-            </label>
-
-            <div class="flex items-center gap-2 mt-2">
-                <button type="submit" class="btn btn-primary btn-sm">Save</button>
+        <section class="au-panel au-panel--round au-panel--pad" aria-labelledby="lead-update-title">
+            <div class="au-panel__head">
+                <h3 class="au-panel__title" id="lead-update-title">Update this person</h3>
+                <button type="button" class="status-help-trigger" data-status-help-trigger title="What do these mean?" aria-label="What do these statuses mean?">?</button>
             </div>
-        </form>
-    </div>
+            <form method="post" class="au-stack">
+                <div class="au-form-field">
+                    <label class="au-form-label" for="lead-status">Lead status</label>
+                    <select name="Status" id="lead-status" class="au-select">
+                        @foreach (var s in Model.StatusOptions)
+                        {
+                            <option value="@s" selected="@(s == Model.Status)">@FilterLabelHelper.Label(s)</option>
+                        }
+                    </select>
+                </div>
+
+                <div class="au-form-field">
+                    <label class="au-form-label" for="lead-qualification">Qualification</label>
+                    <select name="QualificationStatus" id="lead-qualification" class="au-select">
+                        @foreach (var s in Model.QualificationOptions)
+                        {
+                            <option value="@s" selected="@(s == Model.QualificationStatus)">@FilterLabelHelper.Label(s)</option>
+                        }
+                    </select>
+                </div>
+
+                <div class="au-form-field">
+                    <label class="au-form-label" for="source-choice">Where they came from</label>
+                    <select name="SourceChoice" id="source-choice" class="au-select" onchange="document.getElementById('custom-source-field').style.display = this.value === 'other' ? '' : 'none';">
+                        @foreach (var s in Model.SourceOptions)
+                        {
+                            <option value="@s" selected="@(s == Model.SourceChoice)">@s</option>
+                        }
+                        <option value="other" selected="@(Model.SourceChoice == "other")">Other…</option>
+                    </select>
+                </div>
+
+                <div class="au-form-field" id="custom-source-field" style="display:@(Model.SourceChoice == "other" ? "" : "none")">
+                    <label class="au-form-label" for="custom-source">Other source</label>
+                    <input type="text" name="CustomSource" id="custom-source" value="@Model.CustomSource" class="au-input" placeholder="e.g. trade show" />
+                </div>
+
+                <div class="au-form-actions">
+                    <button type="submit" class="au-btn au-btn--primary">Save changes</button>
+                </div>
+            </form>
+        </section>
     </div>
 
     <partial name="_StatusHelp" />

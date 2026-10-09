@@ -1,34 +1,8 @@
-// Sidebar extras, loaded on every authenticated page (Pages/Shared/_Layout.cshtml):
-//  - the user menu under the avatar (theme toggle, API docs, sign out)
-//  - the unread count next to "Inbox"
+// The unread count next to "Inbox" in the sidebar, loaded on every authenticated page (Pages/Shared/_Layout.cshtml).
+// (The user menu, theme toggle and sidebar drawer are the Aurora kit's: aurora.js.)
 // The count comes from the same GET /api/conversations the Inbox uses (summing unreadCount), and
 // SignalR only says "something changed, re-fetch" — same principle as inbox.js and notifications.js.
 (function () {
-  // ---------------------------------------------------------------------
-  // User menu
-  // ---------------------------------------------------------------------
-  var menuBtn = document.getElementById('user-menu-btn');
-  var menu = document.getElementById('user-menu');
-  if (menuBtn && menu) {
-    var setMenu = function (open) {
-      menu.hidden = !open;
-      menuBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
-    };
-    menuBtn.addEventListener('click', function (e) {
-      e.stopPropagation();
-      setMenu(menu.hidden);
-    });
-    document.addEventListener('click', function (e) {
-      if (!menu.hidden && !menu.contains(e.target)) setMenu(false);
-    });
-    document.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape' && !menu.hidden) { setMenu(false); menuBtn.focus(); }
-    });
-  }
-
-  // ---------------------------------------------------------------------
-  // Inbox unread count
-  // ---------------------------------------------------------------------
   var badge = document.getElementById('sidebar-inbox-badge');
   if (!badge) return;
 

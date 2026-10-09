@@ -1,0 +1,62 @@
+@using PlasticSurgery.Common.Statics
+@inject IWebHostEnvironment Env
+@* The glass header (docs/UI_GUIDE.md §3.1, §5): menu button (drawer on phones, icon rail on desktop), page title,
+   notification bell (ids read by notifications.js), theme toggle, user menu. *@
+@{
+    var signedIn = User.Identity?.IsAuthenticated == true;
+    var email = User.Identity?.Name ?? "";
+    var fullName = User.FindFirst(StaffClaims.FullName)?.Value;
+    var displayName = string.IsNullOrWhiteSpace(fullName) ? email : fullName;
+}
+<div class="au-header__bar header-bar">
+    <button type="button" class="au-icon-btn" data-au-sidebar-toggle aria-label="Show or hide the menu" title="Menu">
+        <span class="au-icon" aria-hidden="true">menu</span>
+    </button>
+    <div class="au-header__title-wrap"><h1 class="au-header__title">@ViewData["Title"]</h1></div>
+    <div class="au-header__tools">
+        @if (signedIn)
+        {
+            <div class="notif-bell-wrap">
+                <button type="button" class="au-icon-btn au-icon-btn--bordered notif-bell" id="notif-bell" aria-label="Notifications" title="Notifications">
+                    <span class="au-icon" aria-hidden="true">notifications</span>
+                    <span class="notif-bell-badge" id="notif-bell-badge" hidden>0</span>
+                </button>
+                <div class="notif-dropdown" id="notif-dropdown" hidden>
+                    <div class="notif-dropdown-header">
+                        <span>Notifications</span>
+                        <button type="button" class="notif-mark-all" id="notif-mark-all">Mark all read</button>
+                    </div>
+                    <div class="notif-dropdown-body" id="notif-dropdown-body">
+                        <div class="notif-empty">No notifications yet.</div>
+                    </div>
+                </div>
+            </div>
+        }
+        <button type="button" class="au-icon-btn au-icon-btn--bordered" data-au-theme-toggle aria-label="Switch between light and dark mode">
+            <span class="au-icon" aria-hidden="true">dark_mode</span>
+        </button>
+        @if (signedIn)
+        {
+            <details class="au-dropdown au-user-menu">
+                <summary aria-label="Account menu for @displayName" title="@displayName">
+                    <span class="au-avatar" aria-hidden="true">@UiTextHelper.Initials(displayName)</span>
+                    <span class="au-icon" aria-hidden="true">expand_more</span>
+                </summary>
+                <div class="au-menu au-menu--end">
+                    <span class="au-user-menu__who"><strong>@displayName</strong>@if (displayName != email)
+                        {
+                            <span>@email</span>
+                        }</span>
+                    @if (Env.IsDevelopment())
+                    {
+                        @* Swagger is only mapped in Development (Program.cs). *@
+                        <a class="au-menu__item" href="/swagger" target="_blank" rel="noopener"><span class="au-icon" aria-hidden="true">code</span>API docs (Swagger)</a>
+                    }
+                    <form method="post" asp-page="/Account/Logout">
+                        <button type="submit" class="au-menu__item au-menu__item--danger"><span class="au-icon" aria-hidden="true">logout</span>Sign out</button>
+                    </form>
+                </div>
+            </details>
+        }
+    </div>
+</div>

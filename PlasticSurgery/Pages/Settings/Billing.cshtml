@@ -20,161 +20,176 @@
 
 @if (!Model.ClinicConfigured || s is null)
 {
-    <div class="alert alert-warning">No clinic configured yet — see the Dashboard page for setup steps.</div>
+    <partial name="_NoClinic" />
 }
 else
 {
     var badge = StatusBadge(s.SubscriptionStatus);
-    <p class="text-muted mw-640">Your plan gives you access to MySculptFlow's features. Messages SculptFlow bills you for (such as
-        WhatsApp templates sent through SculptFlow's account) are paid from your plan's included credit first, then from your prepaid
-        balance. Messages on an account you pay the provider for yourself never touch your balance. To add funds or change your plan,
-        contact SculptFlow support.</p>
+    <div class="au-page-head">
+        <p class="au-page-head__sub mw-720">Your plan gives you access to MySculptFlow's features. Messages SculptFlow bills you for (such as
+            WhatsApp templates sent through SculptFlow's account) are paid from your plan's included credit first, then from your prepaid
+            balance. Messages on an account you pay the provider for yourself never touch your balance. To add funds or change your plan,
+            contact SculptFlow support.</p>
+    </div>
 
-    @if (!s.BillingEnabled)
+    @if (s.SubscriptionStatus == "past_due")
     {
-        <div class="alert alert-info mt-2">Billing isn't switched on for your account yet, so nothing is charged and every feature is available.</div>
-    }
-    else if (s.SubscriptionStatus == "past_due")
-    {
-        <div class="alert alert-warning mt-2">Your plan's renewal couldn't be paid.
-            @if (s.GraceEndsAt is not null)
-            {
-                <text>Everything keeps working until @LocalTimeHelper.Time(s.GraceEndsAt.Value, "date"); add funds before then to keep sending messages.</text>
-            }
+        <div class="au-alert au-alert--warning" role="status">
+            <span class="au-icon au-alert__icon" aria-hidden="true">warning</span>
+            <div class="au-alert__body">
+                <div class="au-alert__title">Your plan's renewal couldn't be paid</div>
+                @if (s.GraceEndsAt is not null)
+                {
+                    <text>Everything keeps working until @LocalTimeHelper.Time(s.GraceEndsAt.Value, "date"); add funds before then to keep sending messages.</text>
+                }
+            </div>
         </div>
     }
     else if (!s.HasAccess)
     {
-        <div class="alert alert-warning mt-2">You don't have an active plan, so messages, campaigns and the AI agent are paused. Your data is still here.
-            Contact SculptFlow support to start a plan.</div>
+        <div class="au-alert au-alert--warning" role="status">
+            <span class="au-icon au-alert__icon" aria-hidden="true">warning</span>
+            <div class="au-alert__body">
+                <div class="au-alert__title">You don't have an active plan</div>
+                Messages, campaigns and the AI agent are paused, and your data is still here. Contact SculptFlow support to start a plan.
+            </div>
+        </div>
     }
 
-    <div class="section-heading"><h2>Plan</h2></div>
-    <div class="stat-grid">
-        <div class="stat-card stat-card-accent">
-            <div class="label">Current plan</div>
-            <div class="value">@(s.PlanName ?? "None")</div>
-            <div class="hint"><span class="badge @badge.Css">@badge.Text</span>
-                @if (s.PlanPrice is not null) { <text>· @Money(s.PlanPrice.Value) / @s.BillingPeriod</text> }</div>
+    <h2 class="section-title">Plan</h2>
+    <div class="au-grid au-grid--4">
+        <div class="au-stat stat-accent">
+            <span class="au-eyebrow">Current plan</span>
+            <div class="au-stat__value">@(s.PlanName ?? "None")</div>
+            <span class="au-stat__hint"><span class="badge @badge.Css">@badge.Text</span>
+                @if (s.PlanPrice is not null) { <text>· @Money(s.PlanPrice.Value) / @s.BillingPeriod</text> }</span>
         </div>
-        <div class="stat-card">
-            <div class="label">@(s.CancelAtPeriodEnd ? "Ends on" : "Renews on")</div>
-            <div class="value">@LocalTimeHelper.Time(s.CurrentPeriodEnd, "date")</div>
+        <div class="au-stat">
+            <span class="au-eyebrow">@(s.CancelAtPeriodEnd ? "Ends on" : "Renews on")</span>
+            <div class="au-stat__value">@LocalTimeHelper.Time(s.CurrentPeriodEnd, "date")</div>
             @if (s.CurrentPeriodStart is not null)
             {
-                <div class="hint">Period started @LocalTimeHelper.Time(s.CurrentPeriodStart.Value, "date")</div>
+                <span class="au-stat__hint">Period started @LocalTimeHelper.Time(s.CurrentPeriodStart.Value, "date")</span>
             }
         </div>
-        <div class="stat-card">
-            <div class="label">Included credit left</div>
-            <div class="value">@Money(s.IncludedCreditRemaining)</div>
-            <div class="hint">of @Money(s.PlanIncludedCredit) this period</div>
+        <div class="au-stat">
+            <span class="au-eyebrow">Included credit left</span>
+            <div class="au-stat__value">@Money(s.IncludedCreditRemaining)</div>
+            <span class="au-stat__hint">of @Money(s.PlanIncludedCredit) this period</span>
         </div>
-        <div class="stat-card">
-            <div class="label">Prepaid balance</div>
-            <div class="value">@Money(s.WalletBalance)</div>
-            <div class="hint">@Money(s.ReservedAmount) held for messages in progress · @Money(s.Spendable) available</div>
+        <div class="au-stat">
+            <span class="au-eyebrow">Prepaid balance</span>
+            <div class="au-stat__value">@Money(s.WalletBalance)</div>
+            <span class="au-stat__hint">@Money(s.ReservedAmount) held for messages in progress · @Money(s.Spendable) available</span>
         </div>
     </div>
 
-    <div class="section-heading"><h2>What your plan includes</h2></div>
-    <div class="table-card table-scroll">
-        <table class="data-table">
-            <tbody>
-                @foreach (var e in s.Entitlements)
-                {
-                    <tr>
-                        <td>@e.Label</td>
-                        <td>@EntitlementValue(e)</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    </div>
-
-    @if (s.ChannelAccounts.Count > 0)
-    {
-        <div class="section-heading"><h2>Your messaging accounts</h2></div>
-        <div class="table-card table-scroll">
-            <table class="data-table">
-                <thead><tr><th>Channel</th><th>Account</th><th>Message costs</th></tr></thead>
+    <h2 class="section-title">What your plan includes</h2>
+    <div class="au-table-card">
+        <div class="au-table-scroll">
+            <table class="au-table au-table--stack">
+                <thead><tr><th>Feature</th><th>Your plan</th></tr></thead>
                 <tbody>
-                    @foreach (var a in s.ChannelAccounts)
-                    {
-                        <tr><td>@a.ChannelLabel</td><td>@(a.DisplayName ?? "—")</td><td>@a.PaidBy</td></tr>
-                    }
-                </tbody>
-            </table>
-        </div>
-    }
-
-    <div class="section-heading">
-        <h2>Charged by SculptFlow this period</h2>
-        <span class="cell-sub">since @LocalTimeHelper.Time(s.UsageSince, "date")</span>
-    </div>
-    @if (s.Usage.Count == 0)
-    {
-        <div class="card empty-card"><p class="text-muted m-0">Nothing charged yet this period.</p></div>
-    }
-    else
-    {
-        <div class="table-card table-scroll">
-            <table class="data-table">
-                <thead><tr><th>Type</th><th>Count</th><th>Charged</th></tr></thead>
-                <tbody>
-                    @foreach (var u in s.Usage)
-                    {
-                        <tr><td>@u.Label</td><td>@u.Count</td><td>@Money(u.Amount)</td></tr>
-                    }
-                    <tr><td><strong>Total</strong></td><td></td><td><strong>@Money(s.UsageTotal)</strong></td></tr>
-                </tbody>
-            </table>
-        </div>
-    }
-
-    @if (s.ProviderDirectUsage.Count > 0)
-    {
-        <div class="section-heading">
-            <h2>Not charged by SculptFlow</h2>
-            <span class="cell-sub">paid directly to the provider, or free — never taken from your balance</span>
-        </div>
-        <div class="table-card table-scroll">
-            <table class="data-table">
-                <thead><tr><th>Type</th><th>Count</th><th>Who pays</th></tr></thead>
-                <tbody>
-                    @foreach (var u in s.ProviderDirectUsage)
-                    {
-                        <tr><td>@u.Label</td><td>@u.Count</td><td>@u.PaidBy</td></tr>
-                    }
-                </tbody>
-            </table>
-        </div>
-    }
-
-    <div class="section-heading"><h2>Recent transactions</h2></div>
-    @if (s.RecentTransactions.Count == 0)
-    {
-        <div class="card empty-card"><p class="text-muted m-0">No transactions yet.</p></div>
-    }
-    else
-    {
-        <div class="table-card table-scroll">
-            <table class="data-table">
-                <thead><tr><th>Date</th><th>Description</th><th>From</th><th>Amount</th><th>Balance after</th></tr></thead>
-                <tbody>
-                    @foreach (var t in s.RecentTransactions)
+                    @foreach (var e in s.Entitlements)
                     {
                         <tr>
-                            <td class="cell-sub" @LocalTimeHelper.Title(t.CreatedAt)>@LocalTimeHelper.Time(t.CreatedAt, "datetime-year")</td>
-                            <td>@t.Label@(string.IsNullOrWhiteSpace(t.Reason) ? "" : " — " + t.Reason)</td>
-                            <td>@(t.BalanceType == "wallet" ? "Prepaid balance" : "Included credit")</td>
-                            <td>@(t.Amount > 0 ? "+" : t.Amount < 0 ? "−" : "")@UnitMoney(Math.Abs(t.Amount))</td>
-                            <td>@UnitMoney(t.BalanceAfter)</td>
+                            <td data-label="Feature">@e.Label</td>
+                            <td data-label="Your plan">@EntitlementValue(e)</td>
                         </tr>
                     }
                 </tbody>
             </table>
         </div>
-        <p class="text-subtle text-sm mt-2">Full history: <code>GET /api/billing/transactions</code> and <code>/api/billing/usage</code>.</p>
+    </div>
+
+    @if (s.ChannelAccounts.Count > 0)
+    {
+        <h2 class="section-title">Your messaging accounts</h2>
+        <div class="au-table-card">
+            <div class="au-table-scroll">
+                <table class="au-table au-table--stack">
+                    <thead><tr><th>Channel</th><th>Account</th><th>Message costs</th></tr></thead>
+                    <tbody>
+                        @foreach (var a in s.ChannelAccounts)
+                        {
+                            <tr><td data-label="Channel">@a.ChannelLabel</td><td data-label="Account">@(a.DisplayName ?? "—")</td><td data-label="Message costs">@a.PaidBy</td></tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+
+    <h2 class="section-title">Charged by SculptFlow this period <span class="section-title__sub">since @LocalTimeHelper.Time(s.UsageSince, "date")</span></h2>
+    @if (s.Usage.Count == 0)
+    {
+        var none = new EmptyStateModel(Icon: "receipt_long", Title: "Nothing charged yet this period");
+        <div class="au-panel au-panel--round"><partial name="_EmptyState" model="none" /></div>
+    }
+    else
+    {
+        <div class="au-table-card">
+            <div class="au-table-scroll">
+                <table class="au-table au-table--stack">
+                    <thead><tr><th>Type</th><th class="au-right">Count</th><th class="au-right">Charged</th></tr></thead>
+                    <tbody>
+                        @foreach (var u in s.Usage)
+                        {
+                            <tr><td data-label="Type">@u.Label</td><td data-label="Count" class="au-right">@u.Count</td><td data-label="Charged" class="au-right">@Money(u.Amount)</td></tr>
+                        }
+                        <tr class="total-row"><td data-label="Type"><strong>Total</strong></td><td class="au-right"></td><td data-label="Charged" class="au-right"><strong>@Money(s.UsageTotal)</strong></td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+
+    @if (s.ProviderDirectUsage.Count > 0)
+    {
+        <h2 class="section-title">Not charged by SculptFlow <span class="section-title__sub">paid directly to the provider, or free — never taken from your balance</span></h2>
+        <div class="au-table-card">
+            <div class="au-table-scroll">
+                <table class="au-table au-table--stack">
+                    <thead><tr><th>Type</th><th class="au-right">Count</th><th>Who pays</th></tr></thead>
+                    <tbody>
+                        @foreach (var u in s.ProviderDirectUsage)
+                        {
+                            <tr><td data-label="Type">@u.Label</td><td data-label="Count" class="au-right">@u.Count</td><td data-label="Who pays">@u.PaidBy</td></tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+
+    <h2 class="section-title">Recent transactions</h2>
+    @if (s.RecentTransactions.Count == 0)
+    {
+        var none = new EmptyStateModel(Icon: "account_balance_wallet", Title: "No transactions yet",
+            Text: "Top-ups, plan renewals and message charges show up here.");
+        <div class="au-panel au-panel--round"><partial name="_EmptyState" model="none" /></div>
+    }
+    else
+    {
+        <div class="au-table-card">
+            <div class="au-table-scroll">
+                <table class="au-table au-table--stack">
+                    <thead><tr><th>Date</th><th>Description</th><th>From</th><th class="au-right">Amount</th><th class="au-right">Balance after</th></tr></thead>
+                    <tbody>
+                        @foreach (var t in s.RecentTransactions)
+                        {
+                            <tr>
+                                <td data-label="Date" class="cell-sub" @LocalTimeHelper.Title(t.CreatedAt)>@LocalTimeHelper.Time(t.CreatedAt, "datetime-year")</td>
+                                <td data-label="Description" class="au-wrap">@t.Label@(string.IsNullOrWhiteSpace(t.Reason) ? "" : " — " + t.Reason)</td>
+                                <td data-label="From">@(t.BalanceType == "wallet" ? "Prepaid balance" : "Included credit")</td>
+                                <td data-label="Amount" class="au-right">@(t.Amount > 0 ? "+" : t.Amount < 0 ? "−" : "")@UnitMoney(Math.Abs(t.Amount))</td>
+                                <td data-label="Balance after" class="au-right">@UnitMoney(t.BalanceAfter)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <p class="au-help mt-2">Showing your most recent transactions. For a full statement, contact SculptFlow support.</p>
     }
 }

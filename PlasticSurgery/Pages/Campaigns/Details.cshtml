@@ -17,7 +17,7 @@
 
 @if (!Model.ClinicConfigured)
 {
-    <div class="alert alert-warning">No clinic configured yet — see the Dashboard page for setup steps.</div>
+    <partial name="_NoClinic" />
 }
 else if (Model.Details is not null)
 {
@@ -36,47 +36,45 @@ else if (Model.Details is not null)
         : c.StartedAt is not null ? ("Started", c.StartedAt)
         : ("Created", (DateTimeOffset?)c.CreatedAt);
     var canSend = c.Status is CampaignStatus.Draft or CampaignStatus.Scheduled or CampaignStatus.Running;
-    var sendLabel = c.Status == CampaignStatus.Running ? "Send to the rest" : $"Send now to {st.TotalRecipients - st.Skipped} {(st.TotalRecipients - st.Skipped == 1 ? "lead" : "leads")}";
+    var sendCount = st.TotalRecipients - st.Skipped;
+    var sendLabel = c.Status == CampaignStatus.Running ? "Send to the rest" : $"Send now to {sendCount} {(sendCount == 1 ? "lead" : "leads")}";
+    // Sending can't be undone, so the button asks first (the kit's styled confirm).
+    var sendConfirm = c.Status == CampaignStatus.Running
+        ? "Send this campaign to everyone who hasn't had it yet? The WhatsApp messages go out straight away and can't be called back."
+        : $"Send this campaign now to {sendCount} {(sendCount == 1 ? "person" : "people")}? The WhatsApp messages go out straight away and can't be called back.";
     var groups = d.Recipients.GroupBy(r => Group(r.Status)).ToDictionary(g => g.Key, g => g.Count());
 
-    <a href="/Campaigns" class="back-link">&larr; Campaigns</a>
-
-    if (!string.IsNullOrEmpty(Model.StatusMessage))
-    {
-        <div class="alert alert-info mt-2">@Model.StatusMessage</div>
-    }
-    if (!string.IsNullOrEmpty(Model.ErrorMessage))
-    {
-        <div class="alert alert-warning mt-2">@Model.ErrorMessage</div>
-    }
-
-    <div class="card camp-head mt-2">
-        <div class="flex-1">
-            <div class="flex items-center gap-2 flex-wrap">
-                <h2 class="m-0">@c.Name</h2>
-                <span class="badge @StatusBadgeHelper.CssClass(c.Status)">@FilterLabelHelper.Label(c.Status)</span>
-            </div>
-            <div class="text-muted text-md mt-1">Template <strong>@(c.TemplateName ?? "—")</strong> · @audience · @whenLabel @LocalTimeHelper.Time(whenAt)</div>
-        </div>
-        <div class="flex items-center gap-2 flex-wrap">
-            @if (canSend)
-            {
-                <form method="post" asp-page-handler="Send">
-                    <button type="submit" class="btn btn-primary btn-sm">@sendLabel</button>
-                </form>
-            }
-            @if (canSend)
-            {
-                <form method="post" asp-page-handler="Cancel" onsubmit="return confirm('Cancel this campaign? People not messaged yet won\'t be.');">
-                    <button type="submit" class="btn btn-sm btn-danger">Cancel campaign</button>
-                </form>
-            }
+    <div class="au-back-header">
+        <a class="au-icon-btn au-icon-btn--bordered" href="/Campaigns" aria-label="Back to Campaigns" title="Back to Campaigns">
+            <span class="au-icon" aria-hidden="true">arrow_back</span>
+        </a>
+        <div class="min-w-0">
+            <h2 class="au-back-header__title">@c.Name</h2>
+            <span class="au-back-header__sub">Template @(c.TemplateName ?? "—") · @audience · @whenLabel @LocalTimeHelper.Time(whenAt)</span>
         </div>
     </div>
+    <div class="detail-chips">
+        <span class="badge @StatusBadgeHelper.CssClass(c.Status)">@FilterLabelHelper.Label(c.Status)</span>
+        @if (canSend)
+        {
+            <span class="au-spacer"></span>
+            <form method="post" asp-page-handler="Cancel"
+                  data-au-confirm="Cancel this campaign? People who haven't been messaged yet won't be."
+                  data-au-confirm-title="Cancel campaign" data-au-confirm-label="Cancel campaign" data-au-confirm-tone="danger">
+                <button type="submit" class="au-btn au-btn--danger-outlined au-btn--sm">Cancel campaign</button>
+            </form>
+            <form method="post" asp-page-handler="Send"
+                  data-au-confirm="@sendConfirm" data-au-confirm-title="Send campaign" data-au-confirm-label="@sendLabel">
+                <button type="submit" class="au-btn au-btn--primary au-btn--sm"><span class="au-icon" aria-hidden="true">send</span>@sendLabel</button>
+            </form>
+        }
+    </div>
+
+    <partial name="_Messages" model="new PageMessagesModel(Model.StatusMessage, Model.ErrorMessage)" />
 
     @if (st.TotalRecipients > 0)
     {
-        <div class="prog prog-lg mt-3" title="@($"{st.TotalRecipients} recipients · {st.Sent} sent · {st.Delivered} delivered · {st.Read} read · {st.Failed} failed")">
+        <div class="prog prog-lg" title="@($"{st.TotalRecipients} recipients · {st.Sent} sent · {st.Delivered} delivered · {st.Read} read · {st.Failed} failed")">
             <div class="prog-bar">
                 <i class="p-read" style="width:@Width(st.Read, st.TotalRecipients)%"></i><i class="p-deliv" style="width:@Width(Math.Max(st.Delivered - st.Read, 0), st.TotalRecipients)%"></i><i class="p-sent" style="width:@Width(Math.Max(st.Sent - st.Delivered, 0), st.TotalRecipients)%"></i><i class="p-fail" style="width:@Width(st.Failed, st.TotalRecipients)%"></i>
             </div>
@@ -101,7 +99,7 @@ else if (Model.Details is not null)
                 @if (i > 0) { <span class="funnel-arrow" aria-hidden="true">&rsaquo;</span> }
                 <div class="eyebrow">@steps[i].Label</div>
                 <div class="funnel-num">@steps[i].Value</div>
-                <div class="cell-sub">@(string.IsNullOrEmpty(steps[i].Hint) ? " " : steps[i].Hint)</div>
+                <div class="cell-sub">@(string.IsNullOrEmpty(steps[i].Hint) ? " " : steps[i].Hint)</div>
             </div>
         }
     </div>
@@ -115,59 +113,68 @@ else if (Model.Details is not null)
 
     @if (!string.IsNullOrWhiteSpace(d.TemplateBody))
     {
-        <details class="card tpl-card mt-3">
+        <details class="au-panel au-panel--round tpl-card mt-3">
             <summary>Message sent</summary>
             <div class="wa-preview"><div class="wa-bubble">@d.TemplateBody<span class="wa-time">&nbsp;</span></div></div>
             <div class="text-subtle text-xs mt-1">Blanks like {{1}} were filled in for each person.</div>
         </details>
     }
 
-    @if (d.Recipients.Count > 0)
+    <h2 class="section-title">Recipients</h2>
+    @if (d.Recipients.Count == 0)
     {
-        <div class="inbox-filters mt-3 mb-2" id="recipient-tabs">
+        var empty = new EmptyStateModel(Icon: "group_off", Title: "Nobody was added to this campaign",
+            Text: "Its audience matched no one when it was created. Start a new campaign with a different audience.",
+            ActionLabel: "New campaign", ActionHref: "/Campaigns/Create");
+        <div class="au-panel au-panel--round"><partial name="_EmptyState" model="empty" /></div>
+    }
+    else
+    {
+        @* #recipient-tabs, tr[data-group] and #recipient-tab-empty are read by the script at the bottom. *@
+        <div class="inbox-filters mb-2" id="recipient-tabs" role="tablist" aria-label="Show recipients">
             <button type="button" class="inbox-filter active" data-tab="all">All <span class="inbox-filter-count">@d.Recipients.Count</span></button>
             <button type="button" class="inbox-filter" data-tab="read">Read <span class="inbox-filter-count">@(groups.GetValueOrDefault("read"))</span></button>
             <button type="button" class="inbox-filter" data-tab="problem">Not delivered <span class="inbox-filter-count">@(groups.GetValueOrDefault("problem"))</span></button>
             <button type="button" class="inbox-filter" data-tab="waiting">Waiting <span class="inbox-filter-count">@(groups.GetValueOrDefault("waiting"))</span></button>
         </div>
-    }
 
-    <div class="table-card table-scroll @(d.Recipients.Count == 0 ? "mt-3" : "")">
-        <table class="data-table">
-            <thead>
-                <tr><th>Lead</th><th>Phone</th><th>Status</th><th>Last update</th></tr>
-            </thead>
-            <tbody>
-                @foreach (var r in d.Recipients)
-                {
-                    var (lastLabel, lastAt) = r.ReadAt is not null ? ("Read", r.ReadAt)
-                        : r.DeliveredAt is not null ? ("Delivered", r.DeliveredAt)
-                        : r.SentAt is not null ? ("Sent", r.SentAt)
-                        : r.FailedAt is not null ? ("Failed", r.FailedAt)
-                        : r.QueuedAt is not null ? ("Queued", r.QueuedAt)
-                        : ("", (DateTimeOffset?)null);
-                    var problem = r.SkipReason ?? r.FailureReason;
-                    <tr class="row-link" data-href="/dashboard/leads/@r.LeadId" data-group="@Group(r.Status)">
-                        <td><a class="cell-person" href="/dashboard/leads/@r.LeadId"><span class="avatar-sm">@(string.IsNullOrWhiteSpace(r.LeadFullName) ? "?" : r.LeadFullName.Trim()[..1])</span>@(r.LeadFullName ?? "—")</a></td>
-                        <td>@r.PhoneNumber</td>
-                        <td>
-                            <span class="badge @StatusBadgeHelper.CssClass(r.Status)">@FilterLabelHelper.Label(r.Status)</span>
-                            @if (!string.IsNullOrWhiteSpace(problem))
-                            {
-                                <div class="cell-err">@problem</div>
-                            }
-                        </td>
-                        <td class="cell-sub">@lastLabel @LocalTimeHelper.Time(lastAt)</td>
-                    </tr>
-                }
-                @if (d.Recipients.Count == 0)
-                {
-                    <tr class="empty-row"><td colspan="4">Nobody was added to this campaign — the audience matched 0 leads when it was created.</td></tr>
-                }
-                <tr class="empty-row" id="recipient-tab-empty" hidden><td colspan="4">No one in this tab.</td></tr>
-            </tbody>
-        </table>
-    </div>
+        <div class="au-table-card">
+            <div class="au-table-scroll">
+                <table class="au-table au-table--stack">
+                    <thead>
+                        <tr><th>Lead</th><th>Phone</th><th>Status</th><th>Last update</th></tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var r in d.Recipients)
+                        {
+                            var (lastLabel, lastAt) = r.ReadAt is not null ? ("Read", r.ReadAt)
+                                : r.DeliveredAt is not null ? ("Delivered", r.DeliveredAt)
+                                : r.SentAt is not null ? ("Sent", r.SentAt)
+                                : r.FailedAt is not null ? ("Failed", r.FailedAt)
+                                : r.QueuedAt is not null ? ("Queued", r.QueuedAt)
+                                : ("", (DateTimeOffset?)null);
+                            var problem = r.SkipReason ?? r.FailureReason;
+                            <tr class="row-link" data-href="/dashboard/leads/@r.LeadId" data-group="@Group(r.Status)">
+                                <td data-label="Lead"><a class="cell-person" href="/dashboard/leads/@r.LeadId"><span class="avatar-sm">@(string.IsNullOrWhiteSpace(r.LeadFullName) ? "?" : r.LeadFullName.Trim()[..1])</span>@(r.LeadFullName ?? "—")</a></td>
+                                <td data-label="Phone">@r.PhoneNumber</td>
+                                <td data-label="Status" class="au-wrap">
+                                    <div>
+                                        <span class="badge @StatusBadgeHelper.CssClass(r.Status)">@FilterLabelHelper.Label(r.Status)</span>
+                                        @if (!string.IsNullOrWhiteSpace(problem))
+                                        {
+                                            <div class="cell-err">@problem</div>
+                                        }
+                                    </div>
+                                </td>
+                                <td data-label="Last update" class="cell-sub">@lastLabel @LocalTimeHelper.Time(lastAt)</td>
+                            </tr>
+                        }
+                        <tr class="empty-row" id="recipient-tab-empty" hidden><td colspan="4">No one in this tab.</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
 
     <script>
         (function () {

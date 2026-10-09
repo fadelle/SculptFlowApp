@@ -15,61 +15,64 @@
 
 @if (!Model.ClinicConfigured)
 {
-    <div class="alert alert-warning">No clinic configured yet — see the Dashboard page for setup steps.</div>
+    <partial name="_NoClinic" />
 }
 else
 {
-    <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
-        <p class="text-muted m-0 mw-640">Everyone who can sign in to <strong>@Model.ClinicName</strong> and see its leads, conversations and settings.</p>
-        <span title="Coming soon"><button type="button" class="btn btn-sm" disabled>+ Invite staff</button></span>
+    <div class="au-page-head">
+        <p class="au-page-head__sub mw-640">Everyone who can sign in to <strong>@Model.ClinicName</strong> and see its leads, conversations and settings.</p>
+        <div class="au-page-head__actions">
+            <span title="Coming soon"><button type="button" class="au-btn au-btn--outlined" disabled><span class="au-icon" aria-hidden="true">person_add</span>Invite staff</button></span>
+        </div>
     </div>
 
     if (members.Count == 0)
     {
-        <div class="card empty-card">
-            <h3>No staff yet</h3>
-            <p class="text-muted">People you add will be able to sign in and work on this clinic.</p>
-        </div>
+        var empty = new EmptyStateModel(Icon: "badge", Title: "No staff yet",
+            Text: "People you add will be able to sign in and work on this clinic. To add someone for now, contact support.");
+        <div class="au-panel au-panel--round"><partial name="_EmptyState" model="empty" /></div>
     }
     else
     {
-        <div class="section-heading">
-            <h2>@members.Count @(members.Count == 1 ? "person" : "people")</h2>
-            <span class="cell-sub">@members.Count(m => m.IsActive) active</span>
+        <div class="section-head">
+            <h2 class="section-title">@members.Count @(members.Count == 1 ? "person" : "people")</h2>
+            <span class="au-toolbar__meta">@members.Count(m => m.IsActive) active</span>
         </div>
-        <div class="table-card table-scroll">
-            <table class="data-table">
-                <thead>
-                    <tr>
-                        <th>Name</th>
-                        <th>Email</th>
-                        <th>Status</th>
-                        <th>Joined</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var m in members)
-                    {
-                        var name = DisplayName(m);
-                        <tr class="@(m.IsActive ? "" : "row-dim")">
-                            <td>
-                                <div class="kb-title">
-                                    <span class="avatar @(m.IsActive ? "" : "avatar-off")">@Initials(name)</span>
-                                    <span class="row-title">@name</span>
-                                    @if (m.UserId == Model.CurrentUserId)
-                                    {
-                                        <span class="badge badge-teal">You</span>
-                                    }
-                                </div>
-                            </td>
-                            <td>@(m.Email ?? "—")</td>
-                            <td><span class="badge @(m.IsActive ? "badge-green" : "badge-gray")">@(m.IsActive ? "Active" : "Can't sign in")</span></td>
-                            <td class="cell-sub" @LocalTimeHelper.Title(m.JoinedAt, "date")>Joined @LocalTimeHelper.Time(m.JoinedAt, "month-year")</td>
+        <div class="au-table-card">
+            <div class="au-table-scroll">
+                <table class="au-table au-table--stack">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Email</th>
+                            <th>Status</th>
+                            <th>Joined</th>
                         </tr>
-                    }
-                </tbody>
-            </table>
+                    </thead>
+                    <tbody>
+                        @foreach (var m in members)
+                        {
+                            var name = DisplayName(m);
+                            <tr class="@(m.IsActive ? "" : "row-dim")">
+                                <td data-label="Name">
+                                    <div class="kb-title">
+                                        <span class="avatar @(m.IsActive ? "" : "avatar-off")">@Initials(name)</span>
+                                        <span class="row-title">@name</span>
+                                        @if (m.UserId == Model.CurrentUserId)
+                                        {
+                                            <span class="badge badge-teal">You</span>
+                                        }
+                                    </div>
+                                </td>
+                                <td data-label="Email">@(m.Email ?? "—")</td>
+                                <td data-label="Status"><span class="badge @(m.IsActive ? "badge-green" : "badge-gray")">@(m.IsActive ? "Active" : "Can't sign in")</span></td>
+                                <td data-label="Joined" class="cell-sub" @LocalTimeHelper.Title(m.JoinedAt, "date")>Joined @LocalTimeHelper.Time(m.JoinedAt, "month-year")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
         </div>
-        <p class="text-subtle text-sm mt-2">Inviting new staff isn't available yet. For now, contact support to add someone.</p>
+        <p class="au-help mt-2">Inviting new staff isn't available yet. For now, contact support to add someone.</p>
     }
 }

@@ -1,19 +1,23 @@
 @page
 @model ErrorModel
 @{
-    ViewData["Title"] = "Error";
+    ViewData["Title"] = "Something went wrong";
+    // Always the plain layout: the shell reads the clinic from the database, which may be what just failed.
+    Layout = "_AuthLayout";
+    var signedIn = User.Identity?.IsAuthenticated == true;
 }
-
-<div class="alert alert-warning">
-    <strong>An error occurred while processing your request.</strong>
-    @if (Model.ShowRequestId)
-    {
-        <div class="mt-1">Request ID: <code>@Model.RequestId</code></div>
-    }
+<div class="au-fullpage-msg">
+    <div class="au-fullpage-msg__inner">
+        <div class="au-fullpage-msg__code">Oops</div>
+        <h2 class="au-h3 m-0">Something went wrong on our side</h2>
+        <p class="au-muted m-0">Please try again in a moment. If it keeps happening, contact SculptFlow support and quote the reference below.</p>
+        @if (Model.ShowRequestId)
+        {
+            <span class="au-copy" title="Reference for support">Reference <span class="au-mono">@Model.Reference</span></span>
+        }
+        <div class="au-row au-row--wrap fullpage-actions">
+            <button type="button" class="au-btn au-btn--outlined" onclick="history.back()"><span class="au-icon" aria-hidden="true">arrow_back</span>Go back</button>
+            <a class="au-btn au-btn--primary" href="@(signedIn ? "/dashboard" : "/Account/Login")"><span class="au-icon" aria-hidden="true">space_dashboard</span>Back to the dashboard</a>
+        </div>
+    </div>
 </div>
-
-<p class="text-muted mt-3">
-    Enable the <strong>Development</strong> environment (set <code>ASPNETCORE_ENVIRONMENT=Development</code>
-    and restart) for a detailed error page. Don't do this for deployed/production apps — it can leak
-    exception details to end users.
-</p>

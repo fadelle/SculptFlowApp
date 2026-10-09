@@ -56,6 +56,9 @@ public class IndexModel : PageModel
     [TempData]
     public string? ErrorMessage { get; set; }
 
+    /// <summary>True when a new template failed validation: the page shows the popup again with the typed values.</summary>
+    public bool ReopenNewTemplate { get; private set; }
+
     public async Task<IActionResult> OnGetAsync(CancellationToken ct)
     {
         await LoadAsync(ct);
@@ -81,9 +84,16 @@ public class IndexModel : PageModel
                 ? $"Template '{template.Name}' was saved as a draft, but Meta submission failed: {template.RejectionReason}"
                 : null;
         }
-        catch (ArgumentException ex)
+        catch (Exception ex) when (ex is ArgumentException or DuplicateRecordException)
         {
-            ErrorMessage = ex.Message;
+            // Nothing was saved: show the form again with what was typed, instead of redirecting it away. A duplicate is the
+            // unique (clinic, name, language) index: the clinic already has a template with this name.
+            ErrorMessage = ex is DuplicateRecordException
+                ? $"You already have a template called '{Name}' in this language. Choose another name."
+                : ex.Message;
+            ReopenNewTemplate = true;
+            await LoadAsync(ct);
+            return Page();
         }
 
         return RedirectToPage();

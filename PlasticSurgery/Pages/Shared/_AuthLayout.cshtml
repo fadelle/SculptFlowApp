@@ -1,0 +1,30 @@
+@* Pages without the shell — sign in, sign up, finish Google sign-up, and error pages for signed-out visitors
+   (docs/UI_GUIDE.md §6.5): the same <head> as _Layout and a centred card. *@
+@{
+    var pageTitle = ViewData["Title"] as string;
+}
+<!DOCTYPE html>
+<html lang="en" data-au-app="client" data-brand="teal">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@(string.IsNullOrEmpty(pageTitle) ? "MySculptFlow" : $"{pageTitle} · MySculptFlow")</title>
+    <partial name="_ThemeScript" />
+    <link rel="icon" type="image/svg+xml" href="~/logo.svg" />
+    <link rel="icon" href="~/favicon.ico" sizes="32x32" />
+    <link rel="stylesheet" href="~/css/fonts.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/aurora.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+</head>
+<body>
+    <button type="button" class="au-icon-btn au-icon-btn--bordered au-auth-theme" data-au-theme-toggle aria-label="Switch between light and dark mode">
+        <span class="au-icon" aria-hidden="true">dark_mode</span>
+    </button>
+    <main class="au-auth" id="main">
+        @RenderBody()
+    </main>
+    <div class="au-toasts" aria-live="polite"></div>
+    <script src="~/js/aurora.js" asp-append-version="true"></script>
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

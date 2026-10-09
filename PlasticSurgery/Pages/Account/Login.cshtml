@@ -1,60 +1,52 @@
 @page "/Account/Login"
 @model PlasticSurgery.Pages.Account.LoginModel
 @{
-    Layout = null;
+    ViewData["Title"] = "Sign in";
+    Layout = "_AuthLayout";
 }
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Sign in - MySculptFlow</title>
-    <link rel="icon" type="image/svg+xml" href="~/logo.svg" />
-    <link rel="icon" href="~/favicon.ico" sizes="32x32" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@@400;500;600;700&display=swap" />
-    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
-    <script>try { var t = localStorage.getItem('sf-theme'); if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t); } catch (e) { }</script>
-</head>
-<body class="auth-body">
-    <div class="auth-split">
-        <partial name="_AuthSide" />
-        <main class="auth-main">
-            <div class="auth-form">
-                <h1 class="auth-h">Welcome back</h1>
-                <p class="text-muted mb-3">Sign in to your clinic.</p>
-
-                @if (!string.IsNullOrEmpty(Model.ErrorMessage))
-                {
-                    <div class="auth-error" role="alert"><span aria-hidden="true">!</span><div>@Model.ErrorMessage</div></div>
-                }
-
-                <partial name="_GoogleButton" model="Model.ReturnUrl" />
-
-                <form method="post" class="integration-form" data-auth-form>
-                    <label class="field">
-                        <span>Email</span>
-                        <input type="email" name="Email" value="@Model.Email" class="text-input" autocomplete="username" placeholder="you@yourclinic.com" required autofocus="@string.IsNullOrEmpty(Model.Email)" />
-                    </label>
-                    <label class="field">
-                        <span>Password</span>
-                        <span class="pw-wrap">
-                            <input type="password" name="Password" class="text-input" autocomplete="current-password" required data-pw autofocus="@(!string.IsNullOrEmpty(Model.Email))" />
-                            <button type="button" class="pw-eye" data-pw-toggle aria-label="Show password" title="Show password">👁</button>
-                        </span>
-                    </label>
-                    <div class="caps-warn" data-caps hidden>⇪ Caps Lock is on</div>
-
-                    <button type="submit" class="btn btn-primary auth-submit" data-busy-label="Signing in…">Sign in</button>
-                </form>
-
-                <p class="text-subtle auth-footer-left">
-                    New to MySculptFlow? <a href="/Account/Register@(string.IsNullOrEmpty(Model.ReturnUrl) ? "" : "?ReturnUrl=" + Uri.EscapeDataString(Model.ReturnUrl))">Create a clinic account</a>
-                </p>
-            </div>
-        </main>
+@* auth.js reads [data-auth-form], [data-busy-label], [data-pw], [data-pw-toggle] and [data-caps]. data-au-no-busy: auth.js
+   shows its own "Signing in…" state, so the kit doesn't add a second spinner. *@
+<div class="au-auth__card">
+    <div class="au-auth__brand">
+        <span class="au-brand__mark"><img class="auth-logo" src="~/logo.svg" alt="" width="56" height="56" /></span>
+        <div>
+            <h1 class="au-auth__title">Welcome back</h1>
+            <p class="au-auth__sub">Sign in to your clinic.</p>
+        </div>
     </div>
+
+    @if (!string.IsNullOrEmpty(Model.ErrorMessage))
+    {
+        <div class="au-alert au-alert--error" role="alert">
+            <span class="au-icon au-alert__icon" aria-hidden="true">error</span>
+            <div class="au-alert__body">@Model.ErrorMessage</div>
+        </div>
+    }
+
+    <partial name="_GoogleButton" model="Model.ReturnUrl" />
+
+    <form method="post" class="au-auth__form" data-auth-form data-au-no-busy>
+        <div class="au-form-field">
+            <label class="au-form-label" for="login-email">Email</label>
+            <input type="email" name="Email" id="login-email" value="@Model.Email" class="au-input" autocomplete="username" placeholder="you@yourclinic.com" required autofocus="@string.IsNullOrEmpty(Model.Email)" />
+        </div>
+        <div class="au-form-field">
+            <label class="au-form-label" for="login-password">Password</label>
+            <span class="pw-wrap">
+                <input type="password" name="Password" id="login-password" class="au-input" autocomplete="current-password" required data-pw autofocus="@(!string.IsNullOrEmpty(Model.Email))" />
+                <button type="button" class="pw-eye" data-pw-toggle aria-label="Show password" title="Show password">👁</button>
+            </span>
+        </div>
+        <div class="caps-warn" data-caps hidden>⇪ Caps Lock is on</div>
+
+        <button type="submit" class="au-btn au-btn--primary au-btn--lg au-btn--block" data-busy-label="Signing in…">Sign in</button>
+    </form>
+
+    <p class="au-auth__foot">
+        New to MySculptFlow? <a class="au-link" href="/Account/Register@(string.IsNullOrEmpty(Model.ReturnUrl) ? "" : "?ReturnUrl=" + Uri.EscapeDataString(Model.ReturnUrl))">Create a clinic account</a>
+    </p>
+</div>
+
+@section Scripts {
     <script src="~/js/auth.js" asp-append-version="true"></script>
-</body>
-</html>
+}

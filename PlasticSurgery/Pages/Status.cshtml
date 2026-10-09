@@ -1,0 +1,33 @@
+@page
+@model PlasticSurgery.Pages.StatusModel
+@{
+    var (title, text) = Model.Code switch
+    {
+        404 => ("Page not found", "There's nothing at this address. It may have moved, or what it pointed to was deleted."),
+        400 => ("That didn't work", "The page may have been open for a long time. Reload it and try again."),
+        403 => ("Not allowed", "Your account can't open this page."),
+        _ => ("Something went wrong", "Please try again in a moment.")
+    };
+    ViewData["Title"] = title;
+    // Inside the shell when signed in; the plain auth card otherwise (docs/UI_GUIDE.md §6.6, §0.4).
+    Layout = User.Identity?.IsAuthenticated == true ? "_Layout" : "_AuthLayout";
+    var signedIn = User.Identity?.IsAuthenticated == true;
+}
+<div class="au-fullpage-msg">
+    <div class="au-fullpage-msg__inner">
+        <div class="au-fullpage-msg__code">@Model.Code</div>
+        <h2 class="au-h3 m-0">@title</h2>
+        <p class="au-muted m-0">@text</p>
+        <div class="au-row au-row--wrap fullpage-actions">
+            <button type="button" class="au-btn au-btn--outlined" onclick="history.back()"><span class="au-icon" aria-hidden="true">arrow_back</span>Go back</button>
+            @if (signedIn)
+            {
+                <a class="au-btn au-btn--primary" href="/dashboard"><span class="au-icon" aria-hidden="true">space_dashboard</span>Back to the dashboard</a>
+            }
+            else
+            {
+                <a class="au-btn au-btn--primary" href="/Account/Login"><span class="au-icon" aria-hidden="true">login</span>Sign in</a>
+            }
+        </div>
+    </div>
+</div>

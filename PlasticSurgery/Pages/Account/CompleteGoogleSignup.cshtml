@@ -1,55 +1,46 @@
 @page "/Account/CompleteGoogleSignup"
 @model PlasticSurgery.Pages.Account.CompleteGoogleSignupModel
 @{
-    Layout = null;
+    ViewData["Title"] = "Finish signing up";
+    Layout = "_AuthLayout";
 }
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Finish signing up - MySculptFlow</title>
-    <link rel="icon" type="image/svg+xml" href="~/logo.svg" />
-    <link rel="icon" href="~/favicon.ico" sizes="32x32" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@@400;500;600;700&display=swap" />
-    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
-    <script>try { var t = localStorage.getItem('sf-theme'); if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t); } catch (e) { }</script>
-</head>
-<body class="auth-body">
-    <div class="auth-split">
-        <partial name="_AuthSide" />
-        <main class="auth-main">
-            <div class="auth-form">
-                <h1 class="auth-h">One last step</h1>
-                <p class="text-muted mb-3">Name your clinic and you're in. This creates your own clinic workspace.</p>
-
-                @if (!string.IsNullOrEmpty(Model.ErrorMessage))
-                {
-                    <div class="auth-error" role="alert"><span aria-hidden="true">!</span><div>@Model.ErrorMessage</div></div>
-                }
-
-                <div class="auth-identity">
-                    Signing up with Google as
-                    <strong>@(string.IsNullOrWhiteSpace(Model.FullName) ? Model.Email : Model.FullName)</strong>
-                    @if (!string.IsNullOrWhiteSpace(Model.FullName)) { <span class="text-subtle"> · @Model.Email</span> }
-                </div>
-
-                <form method="post" class="integration-form" data-auth-form>
-                    <input type="hidden" name="ReturnUrl" value="@Model.ReturnUrl" />
-                    <label class="field">
-                        <span>Clinic name</span>
-                        <input type="text" name="ClinicName" value="@Model.ClinicName" class="text-input" autocomplete="organization" maxlength="200" required autofocus
-                               placeholder="e.g. Glow Aesthetic Clinic" />
-                    </label>
-                    <button type="submit" class="btn btn-primary auth-submit" data-busy-label="Creating your clinic…">Create my clinic</button>
-                </form>
-
-                <p class="text-subtle auth-footer-left"><a href="/Account/Login">Use a different account</a></p>
-            </div>
-        </main>
+<div class="au-auth__card">
+    <div class="au-auth__brand">
+        <span class="au-brand__mark"><img class="auth-logo" src="~/logo.svg" alt="" width="56" height="56" /></span>
+        <div>
+            <h1 class="au-auth__title">One last step</h1>
+            <p class="au-auth__sub">Name your clinic and you're in. This creates your own clinic workspace.</p>
+        </div>
     </div>
+
+    @if (!string.IsNullOrEmpty(Model.ErrorMessage))
+    {
+        <div class="au-alert au-alert--error" role="alert">
+            <span class="au-icon au-alert__icon" aria-hidden="true">error</span>
+            <div class="au-alert__body">@Model.ErrorMessage</div>
+        </div>
+    }
+
+    <div class="auth-identity">
+        Signing up with Google as
+        <strong>@(string.IsNullOrWhiteSpace(Model.FullName) ? Model.Email : Model.FullName)</strong>
+        @if (!string.IsNullOrWhiteSpace(Model.FullName)) { <span class="text-subtle"> · @Model.Email</span> }
+    </div>
+
+    @* auth.js reads [data-auth-form] and [data-busy-label]. *@
+    <form method="post" class="au-auth__form" data-auth-form data-au-no-busy>
+        <input type="hidden" name="ReturnUrl" value="@Model.ReturnUrl" />
+        <div class="au-form-field">
+            <label class="au-form-label" for="google-clinic">Clinic name</label>
+            <input type="text" name="ClinicName" id="google-clinic" value="@Model.ClinicName" class="au-input" autocomplete="organization" maxlength="200" required autofocus
+                   placeholder="e.g. Glow Aesthetic Clinic" />
+        </div>
+        <button type="submit" class="au-btn au-btn--primary au-btn--lg au-btn--block" data-busy-label="Creating your clinic…">Create my clinic</button>
+    </form>
+
+    <p class="au-auth__foot"><a class="au-link" href="/Account/Login">Use a different account</a></p>
+</div>
+
+@section Scripts {
     <script src="~/js/auth.js" asp-append-version="true"></script>
-</body>
-</html>
+}

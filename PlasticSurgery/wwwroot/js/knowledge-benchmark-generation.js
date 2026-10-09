@@ -69,6 +69,15 @@
         return d.toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
     }
 
+    // Ask before a destructive action: the Aurora kit's styled dialog (aurora.js), or the browser's own if the kit is
+    // missing. Resolves true when confirmed.
+    function ask(title, message, confirmLabel) {
+        if (window.Aurora && window.Aurora.confirm) {
+            return window.Aurora.confirm({ title: title, message: message, confirmLabel: confirmLabel, tone: 'danger' });
+        }
+        return Promise.resolve(window.confirm(message));
+    }
+
     function showMessage(text, kind, detailsList) {
         var box = $('bmg-message');
         box.textContent = '';
@@ -275,10 +284,12 @@
     }
 
     function deleteCase(c) {
-        if (!window.confirm('Delete this test case? Past run results keep their record of it.')) return;
-        api('DELETE', '/cases/' + c.id)
-            .then(function () { return Promise.all([loadCases(), loadSummary()]); })
-            .catch(function (e) { showMessage(e.message, 'error'); });
+        ask('Delete test case', 'Delete this test case? Past run results keep their record of it.', 'Delete').then(function (ok) {
+            if (!ok) return;
+            api('DELETE', '/cases/' + c.id)
+                .then(function () { return Promise.all([loadCases(), loadSummary()]); })
+                .catch(function (e) { showMessage(e.message, 'error'); });
+        });
     }
 
     // ---------------------------------------------------------------- overlay: case detail/edit + failed-case analysis

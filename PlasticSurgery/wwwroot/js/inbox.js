@@ -53,6 +53,21 @@
     });
   }
 
+  // A failed send shows as an error toast (the Aurora kit, aurora.js); a plain alert if the kit is missing.
+  // Ask before a destructive action: the Aurora kit's styled dialog (aurora.js), or the browser's own if the kit is
+  // missing. Resolves true when confirmed.
+  function ask(title, message, confirmLabel) {
+    if (window.Aurora && window.Aurora.confirm) {
+      return window.Aurora.confirm({ title: title, message: message, confirmLabel: confirmLabel, tone: 'danger' });
+    }
+    return Promise.resolve(window.confirm(message));
+  }
+
+  function showError(message) {
+    if (window.Aurora && window.Aurora.toast) window.Aurora.toast.error(message);
+    else alert(message);
+  }
+
   function apiPost(path, body) {
     return fetch(path, {
       method: 'POST',
@@ -577,7 +592,7 @@
       .catch(function (err) {
         removeOptimisticMessage();
         composerInputEl.value = content; // give the text back so they can retry
-        alert('Could not send: ' + err.message);
+        showError('Could not send: ' + err.message);
       })
       .then(function () { composerSendEl.disabled = false; });
   });
@@ -678,7 +693,7 @@
         return Promise.all([refreshCurrentConversation(), loadConversationList()]);
       })
       .catch(function (err) {
-        alert('Could not send template: ' + err.message);
+        showError('Could not send template: ' + err.message);
       })
       .then(function () { sendBtn.disabled = false; });
   });
@@ -714,9 +729,12 @@
   btnClose.addEventListener('click', function () {
     setMoreMenu(false);
     if (!currentConversationId) return;
-    if (!confirm('Close this conversation?')) return;
-    apiPost(withClinic('/api/conversations/' + currentConversationId + '/close'))
-      .then(function () { return Promise.all([refreshCurrentConversation(), loadConversationList()]); });
+    var id = currentConversationId;
+    ask('Close conversation', 'Close this conversation?', 'Close conversation').then(function (ok) {
+      if (!ok) return;
+      apiPost(withClinic('/api/conversations/' + id + '/close'))
+        .then(function () { return Promise.all([refreshCurrentConversation(), loadConversationList()]); });
+    });
   });
 
   // Wire up the server-rendered initial list rows (before any SignalR/refresh replaces them).
