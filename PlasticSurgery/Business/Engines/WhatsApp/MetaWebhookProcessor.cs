@@ -50,10 +50,18 @@ public class MetaWebhookProcessor : IMetaWebhookProcessor
 
     public async Task<WhatsAppWebhookResponse> ProcessAsync(JsonElement root, CancellationToken ct = default)
     {
+        var results = await ProcessAllAsync(root, ct);
+        // One summary for callers that can only act on a single event: an AI-eligible customer message wins if any exists,
+        // otherwise the most recently processed event.
+        return results.FirstOrDefault(r => r.ShouldRunAi) ?? results[^1];
+    }
+
+    public async Task<IReadOnlyList<WhatsAppWebhookResponse>> ProcessAllAsync(JsonElement root, CancellationToken ct = default)
+    {
         var parsedEvents = MetaWebhookParser.Parse(root);
         if (parsedEvents.Count == 0)
         {
-            return new WhatsAppWebhookResponse(true, "unknown", false, null);
+            return [new WhatsAppWebhookResponse(true, "unknown", false, null)];
         }
 
         var results = new List<WhatsAppWebhookResponse>(parsedEvents.Count);
@@ -83,11 +91,8 @@ public class MetaWebhookProcessor : IMetaWebhookProcessor
             results.Add(response);
         }
 
-        // Multiple events in one payload: every one was already persisted/broadcast above via its
-        // own handler call. This single return value is only what n8n needs to decide whether to
-        // run the AI — an AI-eligible customer message wins if any exists; otherwise the most
-        // recently processed event, so there's still something coherent to report.
-        return results.FirstOrDefault(r => r.ShouldRunAi) ?? results[^1];
+        // Every event was already persisted/broadcast above via its own handler call.
+        return results;
     }
 
     /// <summary>Resolves the trusted clinic for a parsed event from its own stored WhatsApp

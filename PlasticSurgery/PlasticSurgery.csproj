@@ -24,4 +24,8 @@
     <PackageReference Include="Swashbuckle.AspNetCore" Version="7.*" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="PlasticSurgery.Tests" />
+  </ItemGroup>
+
 </Project>

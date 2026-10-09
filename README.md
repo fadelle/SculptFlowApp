@@ -40,6 +40,7 @@ This README is only a short orientation.
    psql "<connection string>" -f Database/schema.sql
    psql "<connection string>" -f Database/seed-config.sql   # every setting with its default (never overwrites)
    psql "<connection string>" -f Database/seed.sql   # optional demo clinic, procedures and leads
+   psql "<connection string>" -f Database/seed-demo.sql   # optional fully populated demo clinic (re-runnable, dummy data; sign-in and placeholder password in the file header, change it)
    ```
    Both are idempotent. Tables live in one Postgres schema per area (`core`, `crm`, `billing`, ...); running
    `schema.sql` on a database created before 2026-10-07 moves its tables out of `public` (back it up first).

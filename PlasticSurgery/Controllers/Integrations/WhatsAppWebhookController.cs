@@ -29,11 +29,7 @@ namespace PlasticSurgery.Controllers.Integrations;
 /// POST /api/conversations/{conversationId}/messages/send, which still rechecks conversation.mode
 /// immediately before actually sending (see ConversationsController.SendMessage).
 ///
-/// NOTE — not implemented here, flagged for awareness: Meta signs real webhook POSTs with an
-/// X-Hub-Signature-256 header (HMAC-SHA256 over the raw body, keyed with Meta:AppSecret). Verifying
-/// it is the actual authenticity check for this endpoint once Meta calls it directly (the GET
-/// handshake only covers the one-time subscription setup, not each delivery) — wasn't requested
-/// here, so this endpoint currently accepts any POST body without that check.
+/// Authenticity: every POST must carry Meta's X-Hub-Signature-256 (HMAC-SHA256 over the raw body, keyed with Meta:AppSecret).
 /// </summary>
 [ApiController]
 [Route("api/integrations/whatsapp/webhook")]
@@ -77,23 +73,72 @@ public class WhatsAppWebhookController : ControllerBase
         return StatusCode(StatusCodes.Status403Forbidden);
     }
 
-    /// <summary>Every WhatsApp webhook delivery from Meta. Reuses the exact same
-    /// MetaWebhookParser -> MetaWebhookProcessor -> Handlers pipeline the earlier n8n-relayed
-    /// endpoint used — see the class doc comment for what's unchanged vs. new here.</summary>
+    /// <summary>Every WhatsApp webhook delivery from Meta. The raw body must carry a valid X-Hub-Signature-256 (HMAC-SHA256 keyed with
+    /// Meta:AppSecret) or nothing is processed. Then it reuses the MetaWebhookParser -> MetaWebhookProcessor -> Handlers pipeline.
+    /// One batch can hold messages from several patients, so the AI is triggered once per conversation (the last message wins).</summary>
     [HttpPost]
-    public async Task<IActionResult> Receive([FromBody] JsonElement rawBody, CancellationToken ct)
+    public async Task<IActionResult> Receive(CancellationToken ct)
     {
-        var result = await _webhookProcessor.ProcessAsync(rawBody, ct);
+        using var buffer = new MemoryStream();
+        await Request.Body.CopyToAsync(buffer, ct);
+        var body = buffer.ToArray();
 
-        if (result.ShouldRunAi && result.ClinicId.HasValue && result.ConversationId.HasValue)
+        if (!HasValidSignature(body))
+        {
+            return Unauthorized();
+        }
+
+        JsonElement rawBody;
+        try
+        {
+            using var document = JsonDocument.Parse(body);
+            rawBody = document.RootElement.Clone();
+        }
+        catch (JsonException)
+        {
+            return BadRequest();
+        }
+
+        var results = await _webhookProcessor.ProcessAllAsync(rawBody, ct);
+        var aiTriggers = results
+            .Where(r => r.ShouldRunAi && r.ClinicId.HasValue && r.ConversationId.HasValue)
+            .GroupBy(r => r.ConversationId!.Value)
+            .Select(g => g.Last());
+        foreach (var result in aiTriggers)
         {
             await _aiTrigger.NotifyAsync(new AiTriggerPayload(
-                result.ClinicId.Value, result.ConversationId.Value, result.LeadId, result.MessageId,
+                result.ClinicId!.Value, result.ConversationId!.Value, result.LeadId, result.MessageId,
                 Channel: "whatsapp", MessageType: result.MessageType, MessageText: result.Content,
                 SelectedValue: result.SelectedValue), ct);
         }
 
         // Meta only needs a fast 200 acknowledgement — the response body isn't inspected.
         return Ok();
+    }
+
+    /// <summary>Meta signs every delivery: "sha256=" + hex(HMAC-SHA256(raw body, Meta:AppSecret)). Without a configured secret
+    /// nothing is accepted, so a missing setting can never silently reopen the endpoint.</summary>
+    private bool HasValidSignature(byte[] body)
+    {
+        var secret = _configuration["Meta:AppSecret"];
+        if (string.IsNullOrEmpty(secret))
+        {
+            _logger.LogError("Meta:AppSecret is not configured; rejecting WhatsApp webhook delivery.");
+            return false;
+        }
+
+        var provided = Request.Headers["X-Hub-Signature-256"].FirstOrDefault();
+        var expected = "sha256=" + Convert.ToHexString(
+            System.Security.Cryptography.HMACSHA256.HashData(System.Text.Encoding.UTF8.GetBytes(secret), body)).ToLowerInvariant();
+        if (string.IsNullOrEmpty(provided))
+        {
+            _logger.LogWarning("WhatsApp webhook delivery rejected: missing X-Hub-Signature-256.");
+            return false;
+        }
+
+        var ok = System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(
+            System.Text.Encoding.UTF8.GetBytes(provided.ToLowerInvariant()), System.Text.Encoding.UTF8.GetBytes(expected));
+        if (!ok) _logger.LogWarning("WhatsApp webhook delivery rejected: invalid X-Hub-Signature-256.");
+        return ok;
     }
 }

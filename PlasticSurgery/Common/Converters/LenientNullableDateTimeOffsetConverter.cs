@@ -9,6 +9,7 @@ public sealed class LenientNullableDateTimeOffsetConverter : JsonConverter<DateT
     public override DateTimeOffset? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
         if (reader.TokenType == JsonTokenType.Null) return null;
+        if (reader.TokenType != JsonTokenType.String) throw new JsonException("A date/time must be a string.");
         var text = reader.GetString();
         if (LenientJson.IsEmpty(text)) return null;
         return DateTimeOffset.TryParse(text, System.Globalization.CultureInfo.InvariantCulture,

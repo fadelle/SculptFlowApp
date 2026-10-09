@@ -17,4 +17,7 @@ namespace PlasticSurgery.Business.Contracts.Engines.WhatsApp;
 public interface IMetaWebhookProcessor
 {
     Task<WhatsAppWebhookResponse> ProcessAsync(JsonElement root, CancellationToken ct = default);
+
+    /// <summary>Every event's response, in payload order (one batch can carry messages for several conversations).</summary>
+    Task<IReadOnlyList<WhatsAppWebhookResponse>> ProcessAllAsync(JsonElement root, CancellationToken ct = default);
 }

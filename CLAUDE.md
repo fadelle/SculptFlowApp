@@ -1,6 +1,6 @@
 # SculptFlow — instructions for AI assistants
 
-Never `git commit` or push unless Mohammad says so.
+Shared rules (no commits, token saving, model choice): see the workspace root `..\CLAUDE.md`.
 
 ## Design doc (standing rule)
 
@@ -134,6 +134,3 @@ portal's copy of the request/response shapes kept in step.
 
 **Do not read `PROJECT_HANDOFF.md` unless Mohammad asks** (old Omni → new app migration notes, not being implemented).
 Others: `README.md` (setup), `docs/billing.md`, `docs/configuration.md`, `docs/system-design.html`.
-
-Keep threads short; if a task is unrelated to the current thread's task or the thread has grown long, suggest or start a
-new thread.
