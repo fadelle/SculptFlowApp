@@ -28,6 +28,22 @@ public record CampaignAudienceFilters(
 {
     private static readonly JsonSerializerOptions Options = new(JsonSerializerDefaults.Web);
 
+    /// <summary>Strict check for new campaigns: malformed filters must fail the request instead of silently targeting
+    /// everyone (<see cref="Parse"/> stays lenient so already-stored campaigns keep resolving).</summary>
+    public static void Validate(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return;
+        try
+        {
+            if (JsonSerializer.Deserialize<CampaignAudienceFilters>(json, Options) is null)
+                throw new ArgumentException("The audience filters are not valid.");
+        }
+        catch (JsonException)
+        {
+            throw new ArgumentException("The audience filters are not valid.");
+        }
+    }
+
     public static CampaignAudienceFilters Parse(string? json)
     {
         if (string.IsNullOrWhiteSpace(json)) return new CampaignAudienceFilters();

@@ -23,8 +23,11 @@ public class OpenAiEmbeddingService : IEmbeddingService
     private readonly IConfiguration _configuration;
     private readonly IConfigManager _config;
 
-    public OpenAiEmbeddingService(HttpClient http, IConfiguration configuration, IConfigManager config)
+    private readonly ILogger<OpenAiEmbeddingService>? _logger;
+
+    public OpenAiEmbeddingService(HttpClient http, IConfiguration configuration, IConfigManager config, ILogger<OpenAiEmbeddingService>? logger = null)
     {
+        _logger = logger;
         _config = config;
         _http = http;
         _configuration = configuration;
@@ -93,7 +96,9 @@ public class OpenAiEmbeddingService : IEmbeddingService
 
         if ((int)status is < 200 or >= 300)
         {
-            throw new InvalidOperationException($"Embedding request failed ({(int)status}): {Truncate(body)}");
+            // The body can echo a masked copy of the API key and this message reaches clinic users, so only log it.
+            _logger?.LogWarning("Embedding request failed ({Status}): {Body}", (int)status, Truncate(body));
+            throw new InvalidOperationException($"The embedding service is unavailable (HTTP {(int)status}).");
         }
 
         var vectors = new float[batch.Count][];

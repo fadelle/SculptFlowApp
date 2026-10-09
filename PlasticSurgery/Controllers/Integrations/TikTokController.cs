@@ -33,7 +33,8 @@ public class TikTokController : ControllerBase
     [HttpPost]
     public IActionResult Receive([FromBody] JsonElement rawBody)
     {
-        _logger.LogInformation("TikTok webhook received: {Body}", rawBody.GetRawText());
+        // Anonymous endpoint: log only a size, never the caller-controlled body (log flooding / injection).
+        _logger.LogInformation("TikTok webhook received ({Length} characters).", rawBody.GetRawText().Length);
         return Ok();
     }
 }

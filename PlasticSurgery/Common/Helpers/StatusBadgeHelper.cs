@@ -92,7 +92,7 @@ public static class StatusBadgeHelper
     public static string TemplateStatusLabel(string? status)
     {
         if (status is null) return "Unknown";
-        if (KnownTemplateStatuses.Contains(status)) return Capitalize(status);
+        if (KnownTemplateStatuses.Contains(status)) return Capitalize(status.ToLowerInvariant());
         return "Problem";
     }
 

@@ -40,5 +40,5 @@ public class RequirePlatformAdminKeyAttribute : Attribute, IAsyncActionFilter
 
     /// <summary>The acting admin from X-Admin-Actor (trimmed to 200 chars), or "admin-api" when absent.</summary>
     public static string Actor(HttpRequest request) =>
-        request.Headers[ActorHeaderName].FirstOrDefault() is { Length: > 0 } a ? a.Trim()[..Math.Min(a.Trim().Length, 200)] : "admin-api";
+        request.Headers[ActorHeaderName].FirstOrDefault()?.Trim() is { Length: > 0 } a ? a[..Math.Min(a.Length, 200)] : "admin-api";
 }

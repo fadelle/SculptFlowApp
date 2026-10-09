@@ -108,6 +108,8 @@ public class CampaignService : ICampaignService
             throw new ArgumentException($"Unknown audience type '{audienceType}'.", nameof(request));
         }
 
+        CampaignAudienceFilters.Validate(request.AudienceFilters);
+
         var explicitLeadIds = request.LeadIds.Distinct().ToList();
         List<Lead> leads;
         if (explicitLeadIds.Count > 0)

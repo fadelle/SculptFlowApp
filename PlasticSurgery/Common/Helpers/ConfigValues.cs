@@ -17,7 +17,7 @@ public static class ConfigValues
                 if (!int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var i)) return "Enter a whole number.";
                 return Range(definition, i);
             case ConfigValueType.Decimal:
-                if (!decimal.TryParse(value, NumberStyles.Number, CultureInfo.InvariantCulture, out var d)) return "Enter a number (use . for decimals).";
+                if (!decimal.TryParse(value, DecimalStyles, CultureInfo.InvariantCulture, out var d)) return "Enter a number (use . for decimals).";
                 return Range(definition, d);
             case ConfigValueType.Bool:
                 return bool.TryParse(value, out _) ? null : "Enter true or false.";
@@ -29,9 +29,12 @@ public static class ConfigValues
 
     public static int ToInt(string value) => int.Parse(value, NumberStyles.Integer, CultureInfo.InvariantCulture);
 
-    public static decimal ToDecimal(string value) => decimal.Parse(value, NumberStyles.Number, CultureInfo.InvariantCulture);
+    public static decimal ToDecimal(string value) => decimal.Parse(value, DecimalStyles, CultureInfo.InvariantCulture);
 
     public static bool ToBool(string value) => bool.Parse(value);
+
+    // No thousands separators: "1,5" must not be read as 15.
+    private const NumberStyles DecimalStyles = NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint;
 
     private static string? Range(ConfigDefinition definition, decimal value)
     {
