@@ -26,112 +26,127 @@
 
 @if (!Model.ClinicConfigured)
 {
-    <div class="alert alert-warning">No clinic configured yet — see the Dashboard page for setup steps.</div>
+    <partial name="_NoClinic" />
 }
 else
 {
-    <form method="get" class="filter-bar" id="leads-filters">
-        <input type="search" name="Search" value="@Model.Search" placeholder="Search by name or phone…" class="text-input search-input" aria-label="Search leads" autocomplete="off" />
-        <select name="Status" class="select" aria-label="Status" onchange="this.form.requestSubmit()">
-            <option value="">All statuses</option>
-            @foreach (var status in Model.AllStatuses)
+    <div class="au-page-head">
+        <p class="au-page-head__sub">Everyone who has shown interest in your clinic. Open a person to update their status.</p>
+    </div>
+
+    @* #leads-filters and #leads-results are read by wwwroot/js/leads.js (live search swaps the results in place). *@
+    <form method="get" class="au-toolbar" id="leads-filters">
+        <div class="au-toolbar__filters">
+            <input type="search" name="Search" value="@Model.Search" placeholder="Search by name or phone…" class="au-input search-input leads-search" aria-label="Search leads" autocomplete="off" />
+            <select name="Status" class="au-select" aria-label="Status" onchange="this.form.requestSubmit()">
+                <option value="">All statuses</option>
+                @foreach (var status in Model.AllStatuses)
+                {
+                    <option value="@status" selected="@(status == Model.Status)">@FilterLabelHelper.Label(status)</option>
+                }
+            </select>
+            <select name="Source" class="au-select" aria-label="Source" onchange="this.form.requestSubmit()">
+                <option value="">All sources</option>
+                @foreach (var source in Model.AllSources)
+                {
+                    <option value="@source" selected="@(string.Equals(source, Model.Source, StringComparison.OrdinalIgnoreCase))">@FilterLabelHelper.Label(source)</option>
+                }
+            </select>
+        </div>
+        <div class="au-toolbar__actions">
+            @if (filtered)
             {
-                <option value="@status" selected="@(status == Model.Status)">@FilterLabelHelper.Label(status)</option>
+                <a class="au-btn au-btn--text" href="/dashboard/leads">Clear</a>
             }
-        </select>
-        <select name="Source" class="select" aria-label="Source" onchange="this.form.requestSubmit()">
-            <option value="">All sources</option>
-            @foreach (var source in Model.AllSources)
-            {
-                <option value="@source" selected="@(string.Equals(source, Model.Source, StringComparison.OrdinalIgnoreCase))">@FilterLabelHelper.Label(source)</option>
-            }
-        </select>
-        <button type="submit" class="btn btn-sm">Search</button>
+            <button type="submit" class="au-btn au-btn--outlined"><span class="au-icon" aria-hidden="true">search</span>Search</button>
+        </div>
     </form>
 
     <div id="leads-results">
-        <div class="table-card table-scroll">
-            <table class="data-table">
-                <thead>
-                    <tr>
-                        <th>Name</th>
-                        <th>Phone</th>
-                        <th>Procedure</th>
-                        <th>Source</th>
-                        <th>Status</th>
-                        <th>Qualification</th>
-                        <th>Last contact</th>
-                        <th>Next follow-up</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var lead in Model.Leads)
-                    {
-                        var channel = SourceChannel(lead.Source);
-                        var overdue = lead.NextFollowupAt is not null && lead.NextFollowupAt < now;
-                        <tr class="row-link" data-href="/dashboard/leads/@lead.Id">
-                            <td><a class="cell-person" href="/dashboard/leads/@lead.Id"><span class="avatar-sm">@(string.IsNullOrWhiteSpace(lead.FullName) ? "?" : lead.FullName.Trim()[..1])</span>@(lead.FullName ?? "—")</a></td>
-                            <td>@(lead.Phone ?? "—")</td>
-                            <td>@(lead.ProcedureName ?? "—")</td>
-                            <td>
-                                @if (channel is null)
-                                {
-                                    @(string.IsNullOrWhiteSpace(lead.Source) ? "—" : FilterLabelHelper.Label(lead.Source))
-                                }
-                                else
-                                {
-                                    var svg = ChannelIconHelper.Svg(channel);
-                                    <span class="source-icon" style="background:@(channel == "google" ? "#4285F4" : ChannelIconHelper.Hex(channel))" title="@FilterLabelHelper.Label(lead.Source)" aria-label="@FilterLabelHelper.Label(lead.Source)">
-                                        @if (svg is not null) { @Html.Raw(svg) } else { @(channel == "google" ? "G" : ChannelIconHelper.Initials(channel)) }
-                                    </span>
-                                }
-                            </td>
-                            <td><span class="badge @StatusBadgeHelper.CssClass(lead.Status)">@FilterLabelHelper.Label(lead.Status)</span></td>
-                            <td><span class="badge @StatusBadgeHelper.CssClass(lead.QualificationStatus)">@FilterLabelHelper.Label(lead.QualificationStatus)</span></td>
-                            <td>@LocalTimeHelper.Time(lead.LastContactAt)</td>
-                            <td>
-                                @if (overdue)
-                                {
-                                    <span class="overdue" title="This follow-up date has passed">@LocalTimeHelper.Time(lead.NextFollowupAt) · overdue</span>
-                                }
-                                else
-                                {
-                                    @LocalTimeHelper.Time(lead.NextFollowupAt)
-                                }
-                            </td>
-                        </tr>
-                    }
-                    @if (Model.Leads.Count == 0)
-                    {
-                        <tr class="empty-row">
-                            <td colspan="8">
-                                @if (filtered)
-                                {
-                                    @:No one matches these filters. <a class="link" href="/dashboard/leads">Clear filters</a>
-                                }
-                                else
-                                {
-                                    @:No interested people yet.
-                                }
-                            </td>
-                        </tr>
-                    }
-                </tbody>
-            </table>
-        </div>
-
-        <div class="table-footer mt-2">
-            <span class="count">@Model.TotalCount total lead(s)</span>
-            @if (Model.TotalPages > 1)
+        <div class="au-table-card">
+            @if (Model.Leads.Count == 0)
             {
-                <ul class="pagination">
-                    @for (var p = 1; p <= Model.TotalPages; p++)
+                var empty = filtered
+                    ? new EmptyStateModel(Icon: "search_off", Title: "No one matches these filters",
+                        Text: "Try a different name, phone, status or source.", ActionLabel: "Clear filters", ActionHref: "/dashboard/leads", ActionIcon: "filter_alt_off")
+                    : new EmptyStateModel(Icon: "group", Title: "No interested people yet",
+                        Text: "People who message your clinic or fill in one of your forms show up here.",
+                        ActionLabel: "Connect a messaging channel", ActionHref: "/settings/integrations", ActionIcon: "hub");
+                <partial name="_EmptyState" model="empty" />
+            }
+            else
+            {
+                <div class="au-table-scroll">
+                    <table class="au-table au-table--stack">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Phone</th>
+                                <th>Procedure</th>
+                                <th>Source</th>
+                                <th>Status</th>
+                                <th>Qualification</th>
+                                <th>Last contact</th>
+                                <th>Next follow-up</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var lead in Model.Leads)
+                            {
+                                var channel = SourceChannel(lead.Source);
+                                var overdue = lead.NextFollowupAt is not null && lead.NextFollowupAt < now;
+                                <tr class="row-link" data-href="/dashboard/leads/@lead.Id">
+                                    <td data-label="Name"><a class="cell-person" href="/dashboard/leads/@lead.Id"><span class="avatar-sm">@(string.IsNullOrWhiteSpace(lead.FullName) ? "?" : lead.FullName.Trim()[..1])</span>@(lead.FullName ?? "—")</a></td>
+                                    <td data-label="Phone">@(lead.Phone ?? "—")</td>
+                                    <td data-label="Procedure">@(lead.ProcedureName ?? "—")</td>
+                                    <td data-label="Source">
+                                        @if (channel is null)
+                                        {
+                                            @(string.IsNullOrWhiteSpace(lead.Source) ? "—" : FilterLabelHelper.Label(lead.Source))
+                                        }
+                                        else
+                                        {
+                                            var svg = ChannelIconHelper.Svg(channel);
+                                            <span class="source-icon" style="background:@(channel == "google" ? "#4285F4" : ChannelIconHelper.Hex(channel))" title="@FilterLabelHelper.Label(lead.Source)" aria-label="@FilterLabelHelper.Label(lead.Source)">
+                                                @if (svg is not null) { @Html.Raw(svg) } else { @(channel == "google" ? "G" : ChannelIconHelper.Initials(channel)) }
+                                            </span>
+                                        }
+                                    </td>
+                                    <td data-label="Status"><span class="badge @StatusBadgeHelper.CssClass(lead.Status)">@FilterLabelHelper.Label(lead.Status)</span></td>
+                                    <td data-label="Qualification"><span class="badge @StatusBadgeHelper.CssClass(lead.QualificationStatus)">@FilterLabelHelper.Label(lead.QualificationStatus)</span></td>
+                                    <td data-label="Last contact">@LocalTimeHelper.Time(lead.LastContactAt)</td>
+                                    <td data-label="Next follow-up">
+                                        @if (overdue)
+                                        {
+                                            <span class="overdue" title="This follow-up date has passed">@LocalTimeHelper.Time(lead.NextFollowupAt) · overdue</span>
+                                        }
+                                        else
+                                        {
+                                            @LocalTimeHelper.Time(lead.NextFollowupAt)
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+            @if (Model.TotalCount > 0)
+            {
+                <div class="au-pager">
+                    <span class="au-pager__count"><strong>@Model.TotalCount</strong> @(Model.TotalCount == 1 ? "person" : "people")</span>
+                    @if (Model.TotalPages > 1)
                     {
-                        <li class="@(p == Model.PageNumber ? "active" : "")">
-                            <a href="@PageLink(p)">@p</a>
-                        </li>
+                        <ul class="pagination" aria-label="Pages">
+                            @for (var p = 1; p <= Model.TotalPages; p++)
+                            {
+                                <li class="@(p == Model.PageNumber ? "active" : "")">
+                                    <a href="@PageLink(p)" aria-current="@(p == Model.PageNumber ? "page" : null)">@p</a>
+                                </li>
+                            }
+                        </ul>
                     }
-                </ul>
+                </div>
             }
         </div>
     </div>

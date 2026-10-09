@@ -1,0 +1,59 @@
+@inject ICurrentClinicContext CurrentClinic
+@inject IConfigManager Settings
+@* The dark sidebar (docs/UI_GUIDE.md §5, §0.4): brand + clinic name, then the four groups of links in their old order.
+   #sidebar-inbox-badge is filled by sidebar.js / inbox.js. *@
+@{
+    var clinicName = (await CurrentClinic.GetClinicAsync())?.Name;
+    var path = Context.Request.Path.Value ?? "";
+    bool IsActive(string prefix) => path.Equals(prefix, StringComparison.OrdinalIgnoreCase)
+        || path.StartsWith(prefix + "/", StringComparison.OrdinalIgnoreCase);
+    var dashboardActive = IsActive("/dashboard") && !IsActive("/dashboard/leads") && !IsActive("/dashboard/appointments");
+}
+@functions {
+    // One nav row; the label doubles as the tooltip when the sidebar is collapsed to icons.
+    private static Microsoft.AspNetCore.Html.IHtmlContent Row(string href, string icon, string label, bool active, string? extra = null)
+    {
+        var current = active ? " is-active\" aria-current=\"page" : "";
+        var enc = System.Text.Encodings.Web.HtmlEncoder.Default;
+        return new Microsoft.AspNetCore.Html.HtmlString(
+            $"<div class=\"au-nav-row\"><a class=\"au-nav-item{current}\" href=\"{enc.Encode(href)}\" title=\"{enc.Encode(label)}\">"
+            + $"<span class=\"au-icon\" aria-hidden=\"true\">{icon}</span><span class=\"au-nav-item__label\">{enc.Encode(label)}</span>{extra}</a></div>");
+    }
+}
+<nav class="au-sidebar" aria-label="Main navigation">
+    <a class="au-brand" href="/dashboard">
+        <span class="au-brand__mark"><img class="au-brand__logo" src="~/logo.svg" alt="" width="38" height="38" /></span>
+        <span class="au-brand__text">
+            <span class="au-brand__name">MySculptFlow</span>
+            <span class="au-brand__sub" title="@clinicName">@(string.IsNullOrWhiteSpace(clinicName) ? "Clinic Dashboard" : clinicName)</span>
+        </span>
+    </a>
+    <div class="au-side-rule"></div>
+    <div class="au-side-scroll">
+        <div class="au-side-section">Daily work</div>
+        @Row("/dashboard", "space_dashboard", "Dashboard", dashboardActive) @* icon:space_dashboard *@
+        @Row("/inbox", "chat", "Inbox", IsActive("/inbox"),
+            "<span class=\"au-nav-count sidebar-badge\" id=\"sidebar-inbox-badge\" hidden></span>") @* icon:chat *@
+        @Row("/dashboard/leads", "group", "Interested People", IsActive("/dashboard/leads")) @* icon:group *@
+        @Row("/dashboard/appointments", "calendar_month", "Appointments", IsActive("/dashboard/appointments")) @* icon:calendar_month *@
+
+        <div class="au-side-section">Marketing</div>
+        @Row("/Campaigns", "campaign", "Campaigns", IsActive("/Campaigns")) @* icon:campaign *@
+        @Row("/WhatsApp/Templates", "description", "WhatsApp Templates", IsActive("/WhatsApp/Templates")) @* icon:description *@
+        @Row("/WhatsApp/Health", "monitor_heart", "WhatsApp Health", IsActive("/WhatsApp/Health")) @* icon:monitor_heart *@
+
+        <div class="au-side-section">Clinic setup</div>
+        @Row("/Procedures", "medical_services", "Procedures", IsActive("/Procedures")) @* icon:medical_services *@
+        @Row("/KnowledgeBase", "menu_book", "Knowledge Base", IsActive("/KnowledgeBase")) @* icon:menu_book *@
+
+        <div class="au-side-section">Settings</div>
+        @Row("/settings/clinic-info", "apartment", "Clinic Info", IsActive("/settings/clinic-info")) @* icon:apartment *@
+        @Row("/Staff", "badge", "Staff", IsActive("/Staff")) @* icon:badge *@
+        @Row("/settings/integrations", "hub", "Messaging Integrations", IsActive("/settings/integrations")) @* icon:hub *@
+        @Row("/settings/calendar-integrations", "event_available", "Calendar Integrations", IsActive("/settings/calendar-integrations")) @* icon:event_available *@
+        @if (Settings.BillingEnabled)
+        {
+            @Row("/settings/billing", "credit_card", "Billing", IsActive("/settings/billing")) @* icon:credit_card *@
+        }
+    </div>
+</nav>

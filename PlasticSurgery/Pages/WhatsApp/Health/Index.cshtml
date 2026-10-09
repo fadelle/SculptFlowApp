@@ -2,6 +2,7 @@
 @model PlasticSurgery.Pages.WhatsApp.Health.IndexModel
 @{
     ViewData["Title"] = "WhatsApp Health";
+    ViewData["SignalRFirst"] = true; // the layout loads the SignalR client before this page's scripts
 
     // ---- Presentation only: plain-language wording for Meta's raw values ----
     static (string Label, string Css, string Explain)? Quality(string? rating) => (rating ?? "").ToUpperInvariant() switch
@@ -12,31 +13,30 @@
         _ => null
     };
     static string Nice(string? value) => string.IsNullOrWhiteSpace(value) ? "—" : FilterLabelHelper.Label(value.ToLowerInvariant());
+    // Material Symbols names (docs/tools/icon-font.js reads the icon:… notes).
     static (string Icon, string Label) EventKind(string type) => type switch
     {
-        WhatsAppHealthEventType.PhoneNumberQualityUpdate => ("★", "Quality"),
-        WhatsAppHealthEventType.PhoneNumberNameUpdate => ("✎", "Display name"),
-        WhatsAppHealthEventType.AccountUpdate => ("◉", "Account"),
-        WhatsAppHealthEventType.AccountReviewUpdate => ("✔", "Account review"),
-        WhatsAppHealthEventType.ConnectionUpdate => ("⇄", "Connection"),
-        WhatsAppHealthEventType.TemplateProblem => ("▤", "Template"),
-        WhatsAppHealthEventType.WebhookProblem => ("⚠", "Webhook"),
-        _ => ("•", "Other")
+        WhatsAppHealthEventType.PhoneNumberQualityUpdate => ("star", "Quality"), @* icon:star *@
+        WhatsAppHealthEventType.PhoneNumberNameUpdate => ("edit", "Display name"), @* icon:edit *@
+        WhatsAppHealthEventType.AccountUpdate => ("account_circle", "Account"), @* icon:account_circle *@
+        WhatsAppHealthEventType.AccountReviewUpdate => ("verified", "Account review"), @* icon:verified *@
+        WhatsAppHealthEventType.ConnectionUpdate => ("sync_alt", "Connection"), @* icon:sync_alt *@
+        WhatsAppHealthEventType.TemplateProblem => ("description", "Template"), @* icon:description *@
+        WhatsAppHealthEventType.WebhookProblem => ("warning", "Webhook"), @* icon:warning *@
+        _ => ("circle", "Other") @* icon:circle *@
     };
 }
 
 @if (!Model.ClinicConfigured)
 {
-    <div class="alert alert-warning">No clinic configured yet — see the Dashboard page for setup steps.</div>
+    <partial name="_NoClinic" />
 }
 else if (Model.Health is null)
 {
-    <div class="card empty-card">
-        <div class="empty-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.8 19.8 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.18 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.1 9.9a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.9.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg></div>
-        <h3>WhatsApp isn't connected yet</h3>
-        <p class="text-muted">Connect your clinic's WhatsApp number to chat with patients, send reminders and run campaigns.</p>
-        <a href="/settings/integrations" class="btn btn-primary btn-sm">Connect WhatsApp</a>
-    </div>
+    var notConnected = new EmptyStateModel(Icon: "phone_iphone", Title: "WhatsApp isn't connected yet",
+        Text: "Connect your clinic's WhatsApp number to chat with patients, send reminders and run campaigns.",
+        ActionLabel: "Connect WhatsApp", ActionHref: "/settings/integrations", ActionIcon: "link");
+    <div class="au-panel au-panel--round"><partial name="_EmptyState" model="notConnected" /></div>
 }
 else
 {
@@ -49,28 +49,30 @@ else
     // server used to compute HealthLevel — see WhatsAppHealthService.RecomputeHealth).
     var (heroCss, heroIcon, heroTitle, heroText, heroTodo) = h.HealthLevel switch
     {
-        WhatsAppHealthLevel.Healthy => ("ok", "✓", "All good", "Your WhatsApp number is connected and in good standing. Messages and campaigns can go out normally.", (string?)null),
-        WhatsAppHealthLevel.Warning => ("warn", "!", "Needs attention",
+        WhatsAppHealthLevel.Healthy => ("ok", "check_circle", "All good", "Your WhatsApp number is connected and in good standing. Messages and campaigns can go out normally.", (string?)null),
+        WhatsAppHealthLevel.Warning => ("warn", "warning", "Needs attention",
             quality?.Label == "Medium" ? "Meta lowered your number's quality to Medium. This usually happens when people block or report messages."
                 : $"Meta reports your phone number as \"{Nice(h.PhoneStatus)}\".",
             quality?.Label == "Medium" ? "Send fewer marketing messages for a few days, and make sure people expect to hear from you."
                 : "Check the number in WhatsApp Manager."),
-        WhatsAppHealthLevel.Problem => ("bad", "!", "Sending may be limited",
+        WhatsAppHealthLevel.Problem => ("bad", "error", "Sending may be limited",
             accountBad ? $"Meta {Nice(h.AccountStatus).ToLowerInvariant()} your WhatsApp account, so some messages may not be delivered."
                 : reviewRejected ? "Meta rejected your business account review, so sending may be blocked."
                 : "Meta lowered your number's quality to Low and may limit how much you can send.",
             "Open WhatsApp Manager to see Meta's reason, and pause campaigns until it's fixed."),
-        WhatsAppHealthLevel.Disconnected => ("off", "⏻", "Not connected", "WhatsApp is disconnected, so no messages can be sent or received.", "Reconnect your number under Settings → Messaging Integrations."),
-        _ => ("off", "?", "Status unknown", "We haven't heard from Meta about this number yet.", (string?)null)
+        WhatsAppHealthLevel.Disconnected => ("off", "link_off", "Not connected", "WhatsApp is disconnected, so no messages can be sent or received.", "Reconnect your number under Settings → Messaging Integrations."),
+        _ => ("off", "help", "Status unknown", "We haven't heard from Meta about this number yet.", (string?)null)
     };
     var lastHeardLong = h.LastWebhookAt is null || DateTimeOffset.UtcNow - h.LastWebhookAt.Value > TimeSpan.FromHours(24);
     var problemEvents = Model.Events.Count(e => e.Severity is not null && e.Severity != WhatsAppHealthEventSeverity.Info);
 
+    @* whatsapp-health.js writes "Updated just now: …" here after a live update. *@
     <div class="alert alert-info mb-2" id="health-live-note" hidden></div>
+    @* Icons used by the banner above: *@ @* icon:link_off *@ @* icon:help *@
 
     <div id="whatsapp-health-card" data-level="@h.HealthLevel" data-quality="@h.PhoneQualityRating" data-account="@h.AccountStatus" data-review="@h.AccountReviewStatus">
         <div class="hero hero-@heroCss">
-            <div class="hero-icon" aria-hidden="true">@heroIcon</div>
+            <div class="hero-icon" aria-hidden="true"><span class="au-icon">@heroIcon</span></div>
             <div class="flex-1">
                 <div class="hero-title" id="health-status-badge">@heroTitle</div>
                 <div class="hero-text">@heroText</div>
@@ -81,12 +83,12 @@ else
             </div>
             @if (h.HealthLevel == WhatsAppHealthLevel.Disconnected)
             {
-                <a href="/settings/integrations" class="btn btn-primary btn-sm">Reconnect</a>
+                <a href="/settings/integrations" class="au-btn au-btn--primary"><span class="au-icon" aria-hidden="true">link</span>Reconnect</a>
             }
         </div>
 
         <div class="facts">
-            <div class="fact card">
+            <div class="fact au-panel au-panel--round">
                 <div class="eyebrow">Phone number</div>
                 <div class="fact-main" id="health-phone">@(h.DisplayPhoneNumber ?? "—")</div>
                 <div class="cell-sub">
@@ -104,7 +106,7 @@ else
                     }
                 </div>
             </div>
-            <div class="fact card">
+            <div class="fact au-panel au-panel--round">
                 <div class="eyebrow">Message quality</div>
                 <div class="fact-main" id="health-quality">
                     @if (quality is not null)
@@ -118,12 +120,12 @@ else
                 </div>
                 <div class="cell-sub">@(quality?.Explain ?? "Meta hasn't reported a quality rating yet.")</div>
             </div>
-            <div class="fact card">
+            <div class="fact au-panel au-panel--round">
                 <div class="eyebrow">Business account</div>
                 <div class="fact-main" id="health-account">@Nice(h.AccountStatus)</div>
                 <div class="cell-sub" id="health-review">@(h.AccountReviewStatus is null ? "" : "Meta review: " + Nice(h.AccountReviewStatus))</div>
             </div>
-            <div class="fact card">
+            <div class="fact au-panel au-panel--round">
                 <div class="eyebrow">Last heard from Meta</div>
                 <div class="fact-main" id="health-last-webhook" data-timestamp="@(h.LastWebhookAt?.ToString("O"))">
                     @if (h.LastWebhookAt is { } lastWebhook) { @LocalTimeHelper.Ago(lastWebhook) } else { <text>Never</text> }
@@ -139,11 +141,11 @@ else
         </div>
     </div>
 
-    <div class="section-heading">
-        <h2>Activity</h2>
+    <div class="section-head">
+        <h2 class="section-title">Activity</h2>
         @if (Model.Events.Count > 0)
         {
-            <div class="inbox-filters" id="health-tabs">
+            <div class="inbox-filters" id="health-tabs" role="tablist" aria-label="Show activity">
                 <button type="button" class="inbox-filter active" data-tab="all">All <span class="inbox-filter-count">@Model.Events.Count</span></button>
                 <button type="button" class="inbox-filter" data-tab="problem">Problems <span class="inbox-filter-count">@problemEvents</span></button>
             </div>
@@ -152,20 +154,19 @@ else
 
     @if (Model.Events.Count == 0)
     {
-        <div class="card empty-card small">
-            <h3>Nothing to report</h3>
-            <p class="text-muted">When Meta tells us about your number (quality, account, template problems), it shows up here.</p>
-        </div>
+        var quiet = new EmptyStateModel(Icon: "notifications_none", Title: "Nothing to report",
+            Text: "When Meta tells us about your number (quality, account, template problems), it shows up here.");
+        <div class="au-panel au-panel--round"><partial name="_EmptyState" model="quiet" /></div>
     }
     else
     {
-        <div class="card timeline" id="whatsapp-health-events">
+        <div class="au-panel au-panel--round timeline" id="whatsapp-health-events">
             @foreach (var e in Model.Events)
             {
                 var kind = EventKind(e.EventType);
                 var sev = e.Severity ?? WhatsAppHealthEventSeverity.Info;
                 <div class="tl-row" data-problem="@(sev != WhatsAppHealthEventSeverity.Info ? "1" : "0")">
-                    <span class="tl-icon sev-@sev" aria-hidden="true">@kind.Icon</span>
+                    <span class="tl-icon sev-@sev" aria-hidden="true"><span class="au-icon au-icon--sm">@kind.Icon</span></span>
                     <div class="flex-1">
                         <div class="tl-title">@(e.Message ?? kind.Label + " update")</div>
                         <div class="cell-sub">@kind.Label@(e.Status is null ? "" : " · " + Nice(e.Status).ToLowerInvariant())</div>
@@ -177,7 +178,7 @@ else
         </div>
     }
 
-    <details class="card tech mt-3">
+    <details class="au-panel au-panel--round tech mt-3">
         <summary>Technical details</summary>
         <div class="inbox-lead-info-row"><span>WhatsApp Business Account ID</span><strong id="health-waba">@(h.WabaId ?? "—")</strong></div>
         <div class="inbox-lead-info-row"><span>Phone status</span><strong>@(h.PhoneStatus ?? "—")</strong></div>
@@ -206,7 +207,6 @@ else
         })();
     </script>
 
-    <script src="https://cdn.jsdelivr.net/npm/@@microsoft/signalr@@8.0.0/dist/browser/signalr.min.js"></script>
     <script>
         window.PS_WHATSAPP_HEALTH_CONFIG = {
             clinicId: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.ClinicId.ToString())),

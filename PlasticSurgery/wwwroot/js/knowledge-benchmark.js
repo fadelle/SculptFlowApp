@@ -78,6 +78,15 @@
         return d.toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
     }
 
+    // Ask before a destructive action: the Aurora kit's styled dialog (aurora.js), or the browser's own if the kit is
+    // missing. Resolves true when confirmed.
+    function ask(title, message, confirmLabel) {
+        if (window.Aurora && window.Aurora.confirm) {
+            return window.Aurora.confirm({ title: title, message: message, confirmLabel: confirmLabel, tone: 'danger' });
+        }
+        return Promise.resolve(window.confirm(message));
+    }
+
     function showMessage(text, kind, detailsList) {
         var box = $('bm-message');
         box.textContent = '';
@@ -315,10 +324,12 @@
     }
 
     function deleteCase(c) {
-        if (!window.confirm('Delete this test case? Past run results keep their record of it.')) return;
-        api('DELETE', '/cases/' + c.id)
-            .then(function () { return Promise.all([loadCases(), loadDashboard()]); })
-            .catch(function (e) { showMessage(e.message, 'error'); });
+        ask('Delete test case', 'Delete this test case? Past run results keep their record of it.', 'Delete').then(function (ok) {
+            if (!ok) return;
+            api('DELETE', '/cases/' + c.id)
+                .then(function () { return Promise.all([loadCases(), loadDashboard()]); })
+                .catch(function (e) { showMessage(e.message, 'error'); });
+        });
     }
 
     // ---------------------------------------------------------------- generate / run
@@ -361,15 +372,19 @@
     function stopGenerating() {
         var id = state.pendingGenId;
         if (!id) return;
-        if (!window.confirm('Stop waiting for the question generator?\n\nn8n may still finish writing questions, but this generation is cancelled and its reply will be ignored. You can start a new generation right away.')) return;
-        $('bm-stop').disabled = true;
-        api('POST', '/generations/' + id + '/cancel').then(function () {
-            state.genWasRunning = false;
-            showMessage('Generation ' + id + ' was stopped. You can generate again.');
-            return refreshAll();
-        }).catch(function (e) {
-            showMessage(e.message, 'error');
-            return refreshAll();   // e.g. it had just completed — show the real state
+        ask('Stop waiting for the question generator?',
+            'n8n may still finish writing questions, but this generation is cancelled and its reply will be ignored. You can start a new generation right away.',
+            'Stop generating').then(function (ok) {
+            if (!ok) return;
+            $('bm-stop').disabled = true;
+            api('POST', '/generations/' + id + '/cancel').then(function () {
+                state.genWasRunning = false;
+                showMessage('Generation ' + id + ' was stopped. You can generate again.');
+                return refreshAll();
+            }).catch(function (e) {
+                showMessage(e.message, 'error');
+                return refreshAll();   // e.g. it had just completed — show the real state
+            });
         });
     }
 

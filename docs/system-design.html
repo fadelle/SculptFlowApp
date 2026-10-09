@@ -240,7 +240,7 @@ state: it runs the AI agent and two helper workflows, and talks to the app only 
   <text class="lbl-b" x="44" y="84">Staff dashboard</text>
   <text class="lbl-m" x="44" y="104">Razor Pages HTML</text>
   <text class="lbl-m" x="44" y="120">wwwroot/js/*.js (vanilla)</text>
-  <text class="lbl-m" x="44" y="136">site.css, Inter font</text>
+  <text class="lbl-m" x="44" y="136">Aurora kit + site.css</text>
   <text class="lbl-m" x="44" y="152">SignalR JS client (CDN)</text>
   <rect class="box" x="30" y="200" width="180" height="70" rx="8"/>
   <text class="lbl-b" x="44" y="224">Meta JS SDK</text>
@@ -488,9 +488,10 @@ branch with a fee rate.</figcaption>
 <!-- =============================================================== -->
 <section id="frontend">
 <h2>3. Frontend</h2>
-<p>Server-rendered ASP.NET Core Razor Pages with one shared layout (<code>Pages/Shared/_Layout.cshtml</code>), hand-written CSS
-and one small vanilla JS file per interactive page. There is no bundler, no npm and no frontend framework. Razor runtime
-compilation is off, so <code>.cshtml</code> changes need a rebuild.</p>
+<p>Server-rendered ASP.NET Core Razor Pages with two layouts (<code>Pages/Shared/_Layout.cshtml</code> for signed-in staff,
+<code>_AuthLayout.cshtml</code> for sign-in and error pages), the vendored "Aurora" UI kit plus an app stylesheet, and one small
+vanilla JS file per interactive page. There is no bundler, no npm and no frontend framework. Razor runtime compilation is off,
+so <code>.cshtml</code> changes need a rebuild. How screens look is governed by <code>docs/UI_GUIDE.md</code> (§0.4 = how this app applies it).</p>
 
 <h3 id="fe-pages">3.1 Page map</h3>
 <p>Two data patterns coexist: <strong>server-rendered</strong> pages whose PageModel calls services directly (forms post back with <code>OnPost*</code> handlers),
@@ -512,34 +513,41 @@ and <strong>JS-driven</strong> pages that render a shell and then call <code>/ap
 <tr><td><code>/Staff</code></td><td>Staff</td><td>server</td><td>none</td><td>StaffService</td></tr>
 <tr><td><code>/settings/integrations</code></td><td>Messaging Integrations</td><td>server + JS</td><td><code>meta-connect.js</code></td><td><code>/api/channel-integrations/**</code>, TikTokIntegrationService</td></tr>
 <tr><td><code>/settings/calendar-integrations</code></td><td>Calendar Integrations</td><td>server + JS</td><td>inline</td><td><code>/calendar-oauth/*</code>, <code>/api/calendar-integrations/**</code></td></tr>
-<tr><td><code>/settings/billing</code></td><td>Billing (only while <code>Billing:Enabled</code>)</td><td>server, read-only</td><td>none</td><td>BillingQueryService: plan, renewal date, included credit, wallet, reserved, entitlements, this period's usage, recent transactions</td></tr>
+<tr><td><code>/settings/billing</code></td><td>Billing (only while <code>Billing:Enabled</code>; the page answers 404 otherwise)</td><td>server, read-only</td><td>none</td><td>BillingQueryService: plan, renewal date, included credit, wallet, reserved, entitlements, this period's usage, recent transactions</td></tr>
+<tr><td><code>/Status?code=…</code>, <code>/Error</code></td><td>(anonymous)</td><td>server</td><td>none</td><td>Status: friendly 404/400 page via <code>UseStatusCodePagesWithReExecute</code> (not for <code>/api</code>, <code>/hubs</code> or static files), in the shell when signed in. Error: unhandled exceptions outside Development, always on <code>_AuthLayout</code>, with a short reference from the trace id.</td></tr>
 </table></div>
-<p>Shared partials: <code>_AuthSide</code>, <code>_GoogleButton</code>, <code>_StatusHelp</code> (status glossary overlay), <code>_TimeViewSwitch</code> (Clinic time / My time).
-C# view helpers in <code>Pages/Shared</code>: <code>ChannelIconHelper</code>, <code>FilterLabelHelper</code>, <code>LocalTimeHelper</code>, <code>StatusBadgeHelper</code>, <code>UrlDisplayHelper</code>, <code>ViewerTimeZone</code>.</p>
+<p>Shared partials: <code>_Sidebar</code>, <code>_Header</code>, <code>_ThemeScript</code> (pre-paint theme), <code>_Messages</code> (success toast / error alert),
+<code>_EmptyState</code>, <code>_NoClinic</code>, <code>_GoogleButton</code>, <code>_StatusHelp</code> (status glossary overlay), <code>_TimeViewSwitch</code> (Clinic time / My time).
+C# view helpers in <code>Common/Helpers</code>: <code>ChannelIconHelper</code>, <code>FilterLabelHelper</code>, <code>LocalTimeHelper</code>, <code>StatusBadgeHelper</code>,
+<code>UiTextHelper</code>, <code>UrlDisplayHelper</code>, <code>ViewerTimeZone</code>; view models in <code>Entities/Dtos/Ui</code>.</p>
 
 <h3 id="fe-js">3.2 JavaScript modules</h3>
 <p>Every file is an IIFE-style script loaded by its page; none depends on another except through globals noted below.
-Loaded on every authenticated page by the layout: <code>local-time.js</code> (head), <code>theme.js</code>, SignalR client
-(<code>@microsoft/signalr@8.0.0</code> from jsDelivr), <code>notifications.js</code>, <code>sidebar.js</code>.</p>
+Loaded by the layout: <code>local-time.js</code> (head) and <code>aurora.js</code> on every page; for signed-in staff also the SignalR
+client (<code>@microsoft/signalr@8.0.0</code> from jsDelivr, once: in <code>&lt;head&gt;</code> on pages that set <code>ViewData["SignalRFirst"]</code>
+because their own scripts use it while loading, at the end otherwise), <code>notifications.js</code> and <code>sidebar.js</code>.</p>
 <div class="table-wrap"><table>
 <tr><th>File</th><th>Responsibility</th><th>SignalR events</th></tr>
 <tr><td><code>inbox.js</code> (~800 lines)</td><td>Conversation list, thread, composer, Take Over / Return to AI / Close, template send when the 24h window is closed, unread badges, tab title count, mode-change dividers.</td><td><code>NewMessage</code>, <code>MessageStatusUpdated</code>, <code>ConversationUpdated</code>, <code>ConversationModeChanged</code>; joins <code>conversation:{id}</code></td></tr>
 <tr><td><code>appointments-calendar.js</code></td><td>Month grid, create appointment dialog, status changes, Clinic/My time reload.</td><td><code>AppointmentChanged</code></td></tr>
 <tr><td><code>notifications.js</code></td><td>Bell badge and dropdown over <code>/api/notifications</code>.</td><td><code>NotificationCreated</code></td></tr>
-<tr><td><code>sidebar.js</code></td><td>User menu (theme, API docs, sign out) and Inbox unread count (sums <code>unreadCount</code> from <code>GET /api/conversations</code>).</td><td><code>NewMessage</code>, <code>ConversationUpdated</code></td></tr>
+<tr><td><code>aurora.js</code> (vendored kit)</td><td>Theme toggle, sidebar drawer / icon rail, user menu dropdown, toasts, styled confirm (<code>data-au-confirm</code>), submit busy state and top progress bar. Opt-in by <code>data-au-*</code> markup; no business logic.</td><td>none</td></tr>
+<tr><td><code>sidebar.js</code></td><td>Inbox unread count in the sidebar (sums <code>unreadCount</code> from <code>GET /api/conversations</code>).</td><td><code>NewMessage</code>, <code>ConversationUpdated</code></td></tr>
 <tr><td><code>whatsapp-templates.js</code> / <code>templates-page.js</code></td><td>Live template status list / presentation, preview bubble, new-template popup.</td><td><code>WhatsAppTemplateUpdated</code></td></tr>
 <tr><td><code>whatsapp-health.js</code></td><td>Live health fields on <code>/WhatsApp/Health</code> and the dashboard indicator.</td><td><code>WhatsAppHealthUpdated</code></td></tr>
 <tr><td><code>knowledge-benchmark.js</code>, <code>knowledge-benchmark-generation.js</code></td><td>Benchmark dashboard, cases, runs, results, generation pages; polls run and generation progress.</td><td>none (polling)</td></tr>
 <tr><td><code>campaign-create.js</code>, <code>campaign-audience.js</code>, <code>multi-select.js</code></td><td>Template variables ("fill in the blanks"), live preview, audience picker mapped onto <code>AudienceType</code> + <code>ManualSelection</code>, matching-count preview, chip multiselect.</td><td>none</td></tr>
 <tr><td><code>meta-connect.js</code></td><td>Facebook JS SDK login for WhatsApp Embedded Signup and Facebook Page connect. Reads <code>window.PS_META_CONFIG</code>.</td><td>none</td></tr>
 <tr><td><code>local-time.js</code></td><td>Renders UTC instants in the viewer's zone, writes the <code>sf-tz</code> cookie used by server day math, handles <code>data-clinic-tz</code> and the <code>sf-time-view</code> event.</td><td>none</td></tr>
-<tr><td><code>clinic-info.js</code>, <code>knowledge-page.js</code>, <code>procedures-page.js</code>, <code>leads.js</code>, <code>auth.js</code>, <code>status-help.js</code>, <code>theme.js</code></td><td>Form niceties, search/filter, unsaved-changes bar, password checks, theme toggle.</td><td>none</td></tr>
+<tr><td><code>clinic-info.js</code>, <code>knowledge-page.js</code>, <code>procedures-page.js</code>, <code>leads.js</code>, <code>auth.js</code>, <code>status-help.js</code></td><td>Form niceties, search/filter, unsaved-changes bar, password checks.</td><td>none</td></tr>
 </table></div>
 
 <h3 id="fe-css">3.3 CSS, theming and time display</h3>
 <ul>
-  <li>One stylesheet, <code>wwwroot/css/site.css</code> (~2,700 lines), with CSS variables for light and dark. Theme follows the OS until the user picks one; the choice is stored in <code>localStorage['sf-theme']</code> and applied as <code>&lt;html data-theme&gt;</code> by an inline head script to avoid a flash. Sidebar collapse uses <code>localStorage['sf-sidebar']</code>.</li>
-  <li>Brand: <code>wwwroot/logo.svg</code> (also the favicon). User-visible name is MySculptFlow.</li>
+  <li>Styles load as <code>fonts.css → aurora.css → site.css</code>. <code>aurora.css</code> / <code>aurora.js</code> are the vendored Aurora kit, shared with the admin portal and extracted from <code>docs/UI_GUIDE.md</code>'s appendices (never edited by hand). <code>site.css</code> is the app layer: older token and class names mapped onto the kit's tokens (the page scripts still build markup with them), the brand calibration (teal, calm, AA) and per-screen styles.</li>
+  <li>Fonts are self-hosted in <code>wwwroot/fonts</code>: Inter and a Material Symbols subset holding only the icons in use, rebuilt with <code>node docs/tools/icon-font.js</code> after adding an icon.</li>
+  <li>Light and dark: the theme follows the OS until the user picks one; the choice is stored in <code>localStorage['client.themeMode']</code> and applied as <code>&lt;html data-theme&gt;</code> by <code>_ThemeScript</code> before the first paint. The collapsed sidebar rail is <code>localStorage['client.sidebarCollapsed']</code> (<code>&lt;html class="au-side-collapsed"&gt;</code>). The old <code>sf-theme</code> / <code>sf-sidebar</code> keys are read once as a fallback.</li>
+  <li>Brand: <code>wwwroot/logo.svg</code> (also the favicon), teal (<code>&lt;html data-brand="teal"&gt;</code>), dark sidebar. User-visible name is MySculptFlow.</li>
   <li>Time rule: UTC in the DB; activity in viewer time; appointments in clinic time with a switch; availability clinic-local. Server-side day boundaries use the <code>sf-tz</code> cookie via <code>ViewerTimeZone</code>.</li>
 </ul>
 </section>
@@ -1193,6 +1201,7 @@ Those keys are no longer read from appsettings or environment variables; the tab
 <tr><td>2026-10-07</td><td>Errors: one <code>[ApiErrors]</code> exception filter replaces the per-action try/catch in the JSON API controllers (same statuses and <code>{ error }</code> bodies; unhandled duplicate/overlap/not-found now 409/404 instead of 500). Knowledge chunks are inserted 200 per statement (<code>unnest</code> of arrays) instead of one statement per chunk. §4.6.</td></tr>
 <tr><td>2026-10-07</td><td>Caching: <code>ICacheManager</code> over <code>ICacheAdapter</code> (<code>MemoryCacheAdapter</code> now; a Redis adapter can replace it). Keys and lifetimes in <code>Common/Statics/CacheKeys</code>; values stored as JSON copies. Cached: clinic entitlements (cleared by <code>SubscriptionService</code>/<code>PlanService</code>) and the WhatsApp clinic lookup for incoming Meta webhooks (cleared when a channel connection is saved or disconnected). New <code>/api/platform-admin/cache</code>.</td></tr>
 <tr><td>2026-10-07</td><td>Admin portal APIs: <code>/api/platform-admin/{clinics,channels,staff,leads,content,overview}</code> for every read and write the SculptFlowAdmin portal makes (it no longer touches the main tables). Writes reuse the clinic-side services. <code>StaffClaims.FullName</code> moved to <code>Common/Statics</code>.</td></tr>
+<tr><td>2026-10-09</td><td>Aurora UI (branch <code>feature/aurora-ui</code>, appearance only; <code>docs/UI_GUIDE.md</code>): vendored kit <code>aurora.css</code>/<code>aurora.js</code>, self-hosted fonts and icon subset (<code>docs/tools/icon-font.js</code>), new layouts and partials (<code>_AuthLayout</code>, <code>_ThemeScript</code>, <code>_Sidebar</code>, <code>_Header</code>, <code>_Messages</code>, <code>_EmptyState</code>, <code>_NoClinic</code>; <code>_AuthSide</code> removed), <code>site.css</code> rewritten as the app layer, every screen and the sign-in pages restyled; <code>theme.js</code> removed (the kit owns the theme toggle and drawer), <code>sidebar.js</code> keeps only the Inbox count. New <code>/Status</code> page for 404/400 (<code>UseStatusCodePagesWithReExecute</code>), friendlier <code>/Error</code>. Fixes: Interested People keeps local times after a live search; WhatsApp Templates keeps the typed template when it fails validation; <code>/settings/billing</code> answers 404 while billing is off; the SignalR client loads once per page; Dashboard revenue no longer depends on the server culture; every <code>confirm()</code> (inline and in <code>inbox.js</code> / the benchmark scripts) replaced by the kit's styled confirm, and "Send now" on a campaign now asks first; Inbox send failures show as toasts; a template name the clinic already uses shows "You already have a template called…" in the reopened popup instead of an HTTP 500 (the JSON API still answers 409); Swagger link only in Development. §3.</td></tr>
 <tr><td>2026-10-08</td><td>Bug fixes from the unit-test pass: Meta webhook POSTs are rejected unless <code>X-Hub-Signature-256</code> matches (HMAC-SHA256 of the raw body with <code>Meta:AppSecret</code>; no secret configured = rejected) and the AI is triggered once per conversation in a batch; dashboard appointment create and procedure-booking create reject another clinic's lead; embedding provider errors no longer echo the response body; ingest key compared in constant time; decimal settings reject thousands separators: §5.1, §10, §11.</td></tr>
 <tr><td>2026-10-09</td><td>Creating a campaign with malformed audience-filter JSON now fails with 400 instead of targeting everyone; the calendar sync-callback controller uses <code>[ApiErrors]</code>; the anonymous TikTok webhook logs only the body size: §4, §5.</td></tr>
 </table></div>

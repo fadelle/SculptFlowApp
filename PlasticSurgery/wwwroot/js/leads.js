@@ -25,6 +25,8 @@
         var fresh = new DOMParser().parseFromString(html, 'text/html').getElementById('leads-results');
         if (!fresh) throw new Error('no results in response');
         results.innerHTML = fresh.innerHTML;
+        // The swapped-in <time data-local> cells still hold the server's UTC text: show them in the viewer's time again.
+        if (window.SculptTime) window.SculptTime.render(results);
         history.replaceState(null, '', url);
       })
       .catch(function () { form.submit(); }); // fall back to a normal page load

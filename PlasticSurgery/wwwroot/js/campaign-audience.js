@@ -27,8 +27,6 @@
     custom: document.getElementById('custom-panel'),
     manual: document.getElementById('manual-recipients')
   };
-  var advancedToggle = document.getElementById('advanced-filters-toggle');
-  var advancedFilters = document.getElementById('advanced-filters');
   if (!radios.length || !audienceTypeField || !manualSelectionField) return;
 
   function localMidnightUtc(dateStr, addDays) {
@@ -154,14 +152,6 @@
   }
 
   radios.forEach(function (r) { r.addEventListener('change', onAudienceChanged); });
-
-  if (advancedToggle && advancedFilters) {
-    advancedToggle.addEventListener('click', function () {
-      var expanded = advancedFilters.style.display !== 'none';
-      advancedFilters.style.display = expanded ? 'none' : 'block';
-      advancedToggle.textContent = expanded ? 'Advanced filters ▾' : 'Advanced filters ▴';
-    });
-  }
 
   // Any change inside the reactivation/custom panels (selects, dates, text inputs, or a checkbox
   // toggled via the multi-select chips widget) should refresh the count — delegate on the form so

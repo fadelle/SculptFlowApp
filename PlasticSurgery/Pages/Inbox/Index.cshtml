@@ -2,6 +2,7 @@
 @model PlasticSurgery.Pages.Inbox.IndexModel
 @{
     ViewData["Title"] = "Inbox";
+    ViewData["SignalRFirst"] = true; // the layout loads the SignalR client before this page's scripts
 
     // Presentation only — mirrors initials()/modeLabel() in wwwroot/js/inbox.js, which re-renders this list on load.
     static string Initials(string? name)
@@ -15,10 +16,12 @@
 
 @if (!Model.ClinicConfigured)
 {
-    <div class="alert alert-warning">No clinic configured yet — see the Dashboard page for setup steps.</div>
+    <partial name="_NoClinic" />
 }
 else
 {
+    @* Every id, data-* attribute and inbox-* class below is read by wwwroot/js/inbox.js (it re-renders the list and the
+       thread); only the static controls use kit classes. *@
     <div class="inbox-shell" id="inbox-shell">
         <div class="inbox-sidebar">
             <div class="inbox-list-head">
@@ -73,13 +76,16 @@ else
 
         <div class="inbox-thread" id="inbox-thread">
             <div class="inbox-empty" id="inbox-empty">
-                <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-                <p>Select a conversation to view it here.</p>
+                <span class="au-empty__icon"><span class="au-icon" aria-hidden="true">forum</span></span>
+                <p class="empty-title">Pick a conversation</p>
+                <p class="empty-text">When a patient writes to your clinic, the conversation shows up on the left.</p>
             </div>
 
             <div class="inbox-thread-inner" id="inbox-thread-inner" hidden>
                 <div class="inbox-thread-header">
-                    <button type="button" class="btn btn-ghost btn-sm inbox-back" id="inbox-btn-back" aria-label="Back to conversations">&larr;</button>
+                    <button type="button" class="au-icon-btn inbox-back" id="inbox-btn-back" aria-label="Back to conversations" title="Back to conversations">
+                        <span class="au-icon" aria-hidden="true">arrow_back</span>
+                    </button>
                     <span class="inbox-avatar" id="inbox-thread-avatar"></span>
                     <div class="inbox-thread-who">
                         <div class="inbox-thread-name" id="inbox-thread-name"></div>
@@ -87,16 +93,19 @@ else
                     </div>
                     <div class="inbox-thread-actions">
                         <span class="inbox-mode" id="inbox-thread-mode"></span>
-                        <button type="button" class="btn btn-sm" id="inbox-btn-takeover">Take Over</button>
-                        <button type="button" class="btn btn-sm" id="inbox-btn-return-ai">Return to AI</button>
-                        <button type="button" class="btn btn-ghost btn-sm" id="inbox-btn-info" title="Customer info" aria-label="Customer info">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
-                            Info
+                        <button type="button" class="au-btn au-btn--outlined au-btn--sm" id="inbox-btn-takeover">Take over</button>
+                        <button type="button" class="au-btn au-btn--outlined au-btn--sm" id="inbox-btn-return-ai">Return to AI</button>
+                        <button type="button" class="au-btn au-btn--text au-btn--sm" id="inbox-btn-info" title="Customer info" aria-label="Customer info">
+                            <span class="au-icon" aria-hidden="true">info</span>Info
                         </button>
                         <div class="inbox-more">
-                            <button type="button" class="btn btn-ghost btn-sm" id="inbox-btn-more" title="More actions" aria-label="More actions" aria-haspopup="menu" aria-expanded="false">&hellip;</button>
+                            <button type="button" class="au-icon-btn au-icon-btn--sm" id="inbox-btn-more" title="More actions" aria-label="More actions" aria-haspopup="menu" aria-expanded="false">
+                                <span class="au-icon" aria-hidden="true">more_horiz</span>
+                            </button>
                             <div class="inbox-more-menu" id="inbox-more-menu" role="menu" hidden>
-                                <button type="button" class="user-menu-item user-menu-danger" id="inbox-btn-close" role="menuitem">Close conversation</button>
+                                <button type="button" class="user-menu-item user-menu-danger" id="inbox-btn-close" role="menuitem">
+                                    <span class="au-icon" aria-hidden="true">block</span>Close conversation
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -105,26 +114,32 @@ else
                 <div class="inbox-messages" id="inbox-messages"></div>
 
                 <div class="inbox-window-closed-notice" id="inbox-window-closed-notice" hidden>
-                    The 24-hour WhatsApp customer service window is closed — send an approved template to reach this lead.
+                    The 24-hour WhatsApp window is closed. To reach this person, send an approved template.
                 </div>
 
                 <form class="inbox-composer" id="inbox-composer">
-                    <textarea class="inbox-composer-input" id="inbox-composer-input" placeholder="Write a reply…" rows="2"></textarea>
+                    <textarea class="inbox-composer-input" id="inbox-composer-input" placeholder="Write a reply…" rows="2" aria-label="Your reply"></textarea>
                     <div class="inbox-composer-bar">
-                        <button type="button" class="btn btn-ghost btn-sm" id="inbox-btn-send-template">Send Template</button>
+                        <button type="button" class="au-btn au-btn--text-primary au-btn--sm" id="inbox-btn-send-template">
+                            <span class="au-icon" aria-hidden="true">description</span>Send template
+                        </button>
                         <span class="inbox-composer-hint">Enter to send · Shift+Enter for a new line</span>
-                        <button type="submit" class="btn btn-primary btn-sm" id="inbox-composer-send">Send</button>
+                        <button type="submit" class="au-btn au-btn--primary au-btn--sm" id="inbox-composer-send">
+                            <span class="au-icon" aria-hidden="true">send</span>Send
+                        </button>
                     </div>
                 </form>
 
                 <form class="inbox-template-picker" id="inbox-template-picker" hidden>
                     <span class="eyebrow">Send an approved template</span>
-                    <select class="select" id="inbox-template-select"></select>
+                    <select class="select" id="inbox-template-select" aria-label="Template"></select>
                     <div id="inbox-template-variables"></div>
                     <div id="inbox-template-preview" class="inbox-template-preview"></div>
                     <div class="flex items-center gap-2">
-                        <button type="submit" class="btn btn-primary btn-sm" id="inbox-template-send">Send</button>
-                        <button type="button" class="btn btn-ghost btn-sm" id="inbox-template-cancel">Cancel</button>
+                        <button type="submit" class="au-btn au-btn--primary au-btn--sm" id="inbox-template-send">
+                            <span class="au-icon" aria-hidden="true">send</span>Send
+                        </button>
+                        <button type="button" class="au-btn au-btn--text au-btn--sm" id="inbox-template-cancel">Cancel</button>
                     </div>
                 </form>
             </div>
@@ -132,7 +147,9 @@ else
 
         <aside class="inbox-lead-info" id="inbox-lead-info" hidden>
             <div class="inbox-lead-head">
-                <button type="button" class="btn btn-ghost btn-sm inbox-lead-close" id="inbox-lead-close" aria-label="Hide customer info">&times;</button>
+                <button type="button" class="au-icon-btn au-icon-btn--sm inbox-lead-close" id="inbox-lead-close" aria-label="Hide customer info" title="Hide customer info">
+                    <span class="au-icon" aria-hidden="true">close</span>
+                </button>
                 <span class="inbox-avatar inbox-avatar-lg" id="inbox-lead-avatar"></span>
                 <strong id="inbox-lead-name">—</strong>
                 <span class="badge badge-gray" id="inbox-lead-status">—</span>
@@ -156,14 +173,13 @@ else
             </div>
 
             <div class="inbox-lead-actions">
-                <a class="btn" id="inbox-lead-profile" href="#">Open full profile</a>
-                <a class="btn" href="/dashboard/appointments">Go to Appointments</a>
+                <a class="au-btn au-btn--outlined" id="inbox-lead-profile" href="#"><span class="au-icon" aria-hidden="true">person</span>Open full profile</a>
+                <a class="au-btn au-btn--outlined" href="/dashboard/appointments"><span class="au-icon" aria-hidden="true">calendar_month</span>Go to Appointments</a>
             </div>
         </aside>
     </div>
 }
 
-<script src="https://cdn.jsdelivr.net/npm/@@microsoft/signalr@@8.0.0/dist/browser/signalr.min.js"></script>
 <script>
     window.PS_INBOX_CONFIG = {
         clinicId: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.ClinicId.ToString())),

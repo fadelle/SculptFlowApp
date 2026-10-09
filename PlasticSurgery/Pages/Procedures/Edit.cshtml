@@ -6,52 +6,57 @@
 
 @if (!Model.ClinicConfigured)
 {
-    <div class="alert alert-warning">No clinic configured yet — see the Dashboard page for setup steps.</div>
+    <partial name="_NoClinic" />
 }
 else
 {
-    <a href="/Procedures" class="back-link">← Procedures</a>
+    <div class="au-back-header">
+        <a class="au-icon-btn au-icon-btn--bordered" href="/Procedures" aria-label="Back to Procedures" title="Back to Procedures">
+            <span class="au-icon" aria-hidden="true">arrow_back</span>
+        </a>
+        <div class="min-w-0">
+            <h2 class="au-back-header__title">@(Model.IsNew ? "Add a procedure" : Model.Name)</h2>
+            <span class="au-back-header__sub">@(Model.IsNew ? "A treatment your clinic offers." : "Edit this procedure.")</span>
+        </div>
+    </div>
 
-    if (!string.IsNullOrEmpty(Model.ErrorMessage))
-    {
-        <div class="alert alert-warning mb-3 mt-2">@Model.ErrorMessage</div>
-    }
+    <partial name="_Messages" model="new PageMessagesModel(null, Model.ErrorMessage)" />
 
-    <div class="card p-5 mw-640 mt-2">
-        <form method="post" class="integration-form">
-            <div class="form-row-2">
-                <label class="field">
-                    <span>Name</span>
-                    <input type="text" name="Name" id="proc-name" value="@Model.Name" class="text-input" maxlength="200" required placeholder="e.g. Rhinoplasty" />
-                </label>
-                <label class="field">
-                    <span>Short code <em class="opt">optional</em></span>
-                    <input type="text" name="Code" id="proc-code" value="@Model.Code" class="text-input" maxlength="100" placeholder="e.g. RHINO" />
-                    <small class="text-subtle">Suggested from the name. Used in reports.</small>
-                </label>
+    @* #proc-name, #proc-code, #proc-desc and #proc-desc-count are read by procedures-page.js (code suggestion, counter). *@
+    <section class="au-panel au-panel--round au-panel--pad mw-720">
+        <form method="post">
+            <div class="au-form-grid">
+                <div class="au-form-field">
+                    <label class="au-form-label" for="proc-name">Name<span class="au-required">*</span></label>
+                    <input type="text" name="Name" id="proc-name" value="@Model.Name" class="au-input" maxlength="200" required placeholder="e.g. Rhinoplasty" />
+                </div>
+                <div class="au-form-field">
+                    <label class="au-form-label" for="proc-code">Short code <span class="opt">optional</span></label>
+                    <input type="text" name="Code" id="proc-code" value="@Model.Code" class="au-input" maxlength="100" placeholder="e.g. RHINO" />
+                    <span class="au-help">Suggested from the name. Used in reports.</span>
+                </div>
+                <div class="au-form-field">
+                    <label class="au-form-label" for="proc-duration">Consultation length (minutes)</label>
+                    <input type="number" name="DurationMinutes" id="proc-duration" value="@Model.DurationMinutes" class="au-input" min="1" max="480" placeholder="e.g. 30" />
+                </div>
+                <div class="au-form-field au-span-2">
+                    <label class="au-form-label" for="proc-desc">Short description <span class="opt">optional</span></label>
+                    <textarea name="Description" id="proc-desc" rows="3" class="au-textarea" maxlength="500" placeholder="One or two sentences patients would understand.">@Model.Description</textarea>
+                    <span class="au-help counter" id="proc-desc-count">0 / 500</span>
+                </div>
             </div>
 
-            <label class="field">
-                <span>Consultation length (minutes)</span>
-                <input type="number" name="DurationMinutes" value="@Model.DurationMinutes" class="text-input" min="1" max="480" placeholder="e.g. 30" style="max-width:160px" />
-            </label>
-
-            <label class="field">
-                <span>Short description <em class="opt">optional</em></span>
-                <textarea name="Description" id="proc-desc" rows="3" class="text-input" maxlength="500" placeholder="One or two sentences patients would understand.">@Model.Description</textarea>
-                <small class="text-subtle counter" id="proc-desc-count">0 / 500</small>
-            </label>
-
-            <div class="kb-hint">
-                💡 Prices, preparation and recovery go in the <a href="/KnowledgeBase">Knowledge Base</a>, so the AI assistant can answer patients with them.
+            <div class="au-alert" role="note">
+                <span class="au-icon au-alert__icon" aria-hidden="true">lightbulb</span>
+                <div class="au-alert__body">Prices, preparation and recovery go in the <a class="au-link" href="/KnowledgeBase">Knowledge Base</a>, so the AI assistant can answer patients with them.</div>
             </div>
 
-            <div class="flex items-center gap-2 mt-2">
-                <button type="submit" class="btn btn-primary btn-sm">@(Model.IsNew ? "Add procedure" : "Save changes")</button>
-                <a href="/Procedures" class="btn btn-sm">Cancel</a>
+            <div class="au-form-actions">
+                <a href="/Procedures" class="au-btn au-btn--text">Cancel</a>
+                <button type="submit" class="au-btn au-btn--primary">@(Model.IsNew ? "Add procedure" : "Save changes")</button>
             </div>
         </form>
-    </div>
+    </section>
 
     <script src="~/js/procedures-page.js" asp-append-version="true"></script>
 }

@@ -1,0 +1,14 @@
+@model PlasticSurgery.Entities.Dtos.Ui.EmptyStateModel
+@* An empty state (docs/UI_GUIDE.md §6.2, §8): what is empty, and the next step as a button. *@
+<div class="au-empty">
+    <span class="au-empty__icon"><span class="au-icon" aria-hidden="true">@Model.Icon</span></span>
+    <div class="empty-title">@Model.Title</div>
+    @if (!string.IsNullOrEmpty(Model.Text))
+    {
+        <p class="empty-text">@Model.Text</p>
+    }
+    @if (!string.IsNullOrEmpty(Model.ActionLabel) && !string.IsNullOrEmpty(Model.ActionHref))
+    {
+        <a class="au-btn au-btn--primary" href="@Model.ActionHref"><span class="au-icon" aria-hidden="true">@Model.ActionIcon</span>@Model.ActionLabel</a>
+    }
+</div>

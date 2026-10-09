@@ -23,36 +23,37 @@
 
 @if (!Model.ClinicConfigured)
 {
-    <div class="alert alert-warning">No clinic configured yet — see the Dashboard page for setup steps.</div>
+    <partial name="_NoClinic" />
 }
 else
 {
-    <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
-        <p class="text-muted m-0">Send one approved WhatsApp template to many leads. Replies land in each lead's Inbox conversation.</p>
-        <a href="/Campaigns/Create" class="btn btn-primary btn-sm">+ New campaign</a>
+    <div class="au-page-head">
+        <p class="au-page-head__sub">Send one approved WhatsApp template to many leads. Replies land in each lead's Inbox conversation.</p>
+        <div class="au-page-head__actions">
+            <a href="/Campaigns/Create" class="au-btn au-btn--primary"><span class="au-icon" aria-hidden="true">add</span>New campaign</a>
+        </div>
     </div>
 
     @if (Model.Campaigns.Count == 0)
     {
-        <div class="card empty-card">
-            <div class="empty-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4Z"/></svg></div>
-            <h3>No campaigns yet</h3>
-            <p class="text-muted">Bring old leads back or announce an offer with one approved WhatsApp template.</p>
-            <a href="/Campaigns/Create" class="btn btn-primary btn-sm">+ New campaign</a>
-        </div>
+        var empty = new EmptyStateModel(Icon: "campaign", Title: "No campaigns yet",
+            Text: "Bring old leads back or announce an offer with one approved WhatsApp template.",
+            ActionLabel: "New campaign", ActionHref: "/Campaigns/Create");
+        <div class="au-panel au-panel--round"><partial name="_EmptyState" model="empty" /></div>
     }
     else
     {
         var groups = Model.Campaigns.GroupBy(c => Group(c.Status)).ToDictionary(g => g.Key, g => g.Count());
-        <div class="inbox-filters mb-2" id="campaign-tabs">
+        @* #campaign-tabs, tr[data-group] and #campaign-tab-empty are read by the script at the bottom. *@
+        <div class="inbox-filters mb-2" id="campaign-tabs" role="tablist" aria-label="Show campaigns">
             <button type="button" class="inbox-filter active" data-tab="all">All <span class="inbox-filter-count">@Model.Campaigns.Count</span></button>
             <button type="button" class="inbox-filter" data-tab="active">Active <span class="inbox-filter-count">@(groups.GetValueOrDefault("active"))</span></button>
             <button type="button" class="inbox-filter" data-tab="draft">Drafts <span class="inbox-filter-count">@(groups.GetValueOrDefault("draft"))</span></button>
             <button type="button" class="inbox-filter" data-tab="finished">Finished <span class="inbox-filter-count">@(groups.GetValueOrDefault("finished"))</span></button>
         </div>
 
-        <div class="table-card tip-safe">
-            <table class="data-table">
+        <div class="au-table-card tip-safe">
+            <table class="au-table au-table--stack">
                 <thead>
                     <tr>
                         <th>Campaign</th>
@@ -62,7 +63,7 @@ else
                             <span class="th-with-tip">
                                 Progress
                                 <span class="info-tip" tabindex="0" role="button" aria-label="What the progress bar shows" aria-describedby="progress-tip">
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+                                    <span class="au-icon au-icon--sm" aria-hidden="true">info</span>
                                     <span class="info-tip-box" role="tooltip" id="progress-tip">
                                         <strong>How far each campaign has got</strong>
                                         <span class="tip-row"><i class="p-read"></i> Read: opened by the lead</span>
@@ -91,33 +92,33 @@ else
                             : c.Status == CampaignStatus.Draft ? "Not sent yet"
                             : c.Failed > 0 ? $"{c.Failed} failed" : "Nothing sent";
                         <tr class="row-link" data-href="/Campaigns/@c.Id" data-group="@Group(c.Status)">
-                            <td><a href="/Campaigns/@c.Id"><strong>@c.Name</strong></a><div class="cell-sub">@(c.TemplateName ?? "—")</div></td>
-                            <td><span class="badge @StatusBadgeHelper.CssClass(c.Status)">@FilterLabelHelper.Label(c.Status)</span></td>
-                            <td>@c.TotalRecipients<div class="cell-sub">@AudienceLabel(c.AudienceType, c.ManuallySelected)</div></td>
-                            <td class="prog-cell">
+                            <td data-label="Campaign"><div><a href="/Campaigns/@c.Id"><strong>@c.Name</strong></a><div class="cell-sub">@(c.TemplateName ?? "—")</div></div></td>
+                            <td data-label="Status"><span class="badge @StatusBadgeHelper.CssClass(c.Status)">@FilterLabelHelper.Label(c.Status)</span></td>
+                            <td data-label="Audience"><div>@c.TotalRecipients <span class="cell-sub">@(c.TotalRecipients == 1 ? "person" : "people")</span><div class="cell-sub">@AudienceLabel(c.AudienceType, c.ManuallySelected)</div></div></td>
+                            <td data-label="Progress" class="prog-cell">
                                 <div class="prog" title="@($"{c.TotalRecipients} recipients · {c.Sent} sent · {c.Delivered} delivered · {c.Read} read · {c.Failed} failed")">
                                     <div class="prog-bar"><i class="p-read" style="width:@readW%"></i><i class="p-deliv" style="width:@delivW%"></i><i class="p-sent" style="width:@sentW%"></i><i class="p-fail" style="width:@failW%"></i></div>
                                     <div class="prog-text">@progressText</div>
                                 </div>
                             </td>
-                            <td>
+                            <td data-label="Replies">
                                 @if (c.Replied > 0)
                                 {
-                                    <strong>@c.Replied</strong> <span class="cell-sub">(@Pct(c.Replied, c.Sent))</span>
+                                    <span><strong>@c.Replied</strong> <span class="cell-sub">(@Pct(c.Replied, c.Sent))</span></span>
                                 }
                                 else
                                 {
                                     @:—
                                 }
                             </td>
-                            <td>
+                            <td data-label="When">
                                 @if (c.ScheduledAt is not null && c.Status == CampaignStatus.Scheduled)
                                 {
-                                    <span class="text-md">Scheduled</span><div class="cell-sub">@LocalTimeHelper.Time(c.ScheduledAt)</div>
+                                    <div><span class="text-md">Scheduled</span><div class="cell-sub">@LocalTimeHelper.Time(c.ScheduledAt)</div></div>
                                 }
                                 else
                                 {
-                                    <span class="text-md">Created</span><div class="cell-sub">@LocalTimeHelper.Time(c.CreatedAt)</div>
+                                    <div><span class="text-md">Created</span><div class="cell-sub">@LocalTimeHelper.Time(c.CreatedAt)</div></div>
                                 }
                             </td>
                         </tr>

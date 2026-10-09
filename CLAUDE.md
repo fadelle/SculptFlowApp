@@ -10,6 +10,10 @@ keys), update it in the same change: section 12 maps change kinds to sections; u
 header; add a change-log row in section 12; note any drift you find in section 11. Write from the code, not from
 `PROJECT_HANDOFF.md` (can be stale). Keep it plain HTML + CSS, no build step, no external scripts.
 
+## UI (standing rule, agreed 2026-10-09)
+
+UI: follow docs/UI_GUIDE.md for every screen; keep it up to date.
+
 ## Code architecture (standing rule, agreed 2026-10-06)
 
 The admin portal (`..\SculptFlowAdmin`) uses the same layout. Namespace = folder path (`PlasticSurgery.Business.Services.Leads`).

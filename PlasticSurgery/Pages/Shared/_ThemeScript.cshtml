@@ -1,0 +1,17 @@
+@* Stamps the theme (and the collapsed sidebar rail) on <html> before the first paint, so dark mode never flashes white.
+   Keys follow aurora.js (data-au-app="client" → client.themeMode, client.sidebarCollapsed); the pre-Aurora keys
+   (sf-theme, sf-sidebar) are read once as a fallback so a saved choice survives the redesign. *@
+<script>
+    (function () {
+        try {
+            var ls = localStorage, r = document.documentElement;
+            var saved = ls.getItem('client.themeMode') || ls.getItem('sf-theme');
+            var mode = saved === 'light' || saved === 'dark' ? saved
+                : (window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+            r.setAttribute('data-theme', mode);
+            r.style.backgroundColor = mode === 'dark' ? '#070b15' : '#f2f5fa';
+            var rail = ls.getItem('client.sidebarCollapsed');
+            if (rail === '1' || (rail === null && ls.getItem('sf-sidebar') === 'collapsed')) r.classList.add('au-side-collapsed');
+        } catch (e) { }
+    })();
+</script>

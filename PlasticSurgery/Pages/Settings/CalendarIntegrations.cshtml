@@ -6,20 +6,15 @@
 
 @if (!Model.ClinicConfigured)
 {
-    <div class="alert alert-warning">No clinic configured yet — see the Dashboard page for setup steps.</div>
+    <partial name="_NoClinic" />
 }
 else
 {
-    if (!string.IsNullOrEmpty(Model.StatusMessage))
-    {
-        <div class="alert alert-info mb-3">@Model.StatusMessage</div>
-    }
-    if (!string.IsNullOrEmpty(Model.ErrorMessage))
-    {
-        <div class="alert alert-warning mb-3">@Model.ErrorMessage</div>
-    }
+    <partial name="_Messages" model="new PageMessagesModel(Model.StatusMessage, Model.ErrorMessage)" />
 
-    <p class="text-muted mb-2">Show your SculptFlow appointments in Google or Outlook. <span class="one-way">SculptFlow → your calendar</span></p>
+    <div class="au-page-head">
+        <p class="au-page-head__sub">Show your SculptFlow appointments in Google or Outlook. <span class="one-way">SculptFlow → your calendar</span></p>
+    </div>
     <p class="cell-sub mb-3">Booking, moving or cancelling here updates your calendar. Changes made in Google or Outlook don't come back.</p>
 
     <div class="int-grid int-grid-even">
@@ -121,35 +116,35 @@ else
             <div class="int-foot">
                 @if (pending || failed)
                 {
-                    <a href="/calendar-oauth/@provider/connect" class="btn btn-primary btn-sm">@(pending ? "Start again" : "Try again")</a>
+                    <a href="/calendar-oauth/@provider/connect" class="au-btn au-btn--primary au-btn--sm">@(pending ? "Start again" : "Try again")</a>
                     <form method="post" asp-page-handler="Disconnect" class="inline-form">
                         <input type="hidden" name="provider" value="@provider" />
-                        <button type="submit" class="btn btn-ghost btn-sm">Cancel / reset</button>
+                        <button type="submit" class="au-btn au-btn--text au-btn--sm">Cancel / reset</button>
                     </form>
                 }
                 else if (!connected)
                 {
-                    <a href="/calendar-oauth/@provider/connect" class="btn btn-primary btn-sm">Connect</a>
+                    <a href="/calendar-oauth/@provider/connect" class="au-btn au-btn--primary au-btn--sm">Connect</a>
                 }
                 else
                 {
                     @if (unhealthy)
                     {
-                        <a href="/calendar-oauth/@provider/connect" class="btn btn-primary btn-sm">Reconnect</a>
+                        <a href="/calendar-oauth/@provider/connect" class="au-btn au-btn--primary au-btn--sm">Reconnect</a>
                     }
-                    <button type="button" class="btn btn-sm @(hasCalendar || unhealthy ? "btn-ghost" : "btn-primary")" data-open="@modalId">@(hasCalendar ? "Change calendar" : "Choose calendar")</button>
+                    <button type="button" class="au-btn au-btn--sm @(hasCalendar || unhealthy ? "au-btn--text" : "au-btn--primary")" data-open="@modalId">@(hasCalendar ? "Change calendar" : "Choose calendar")</button>
                     @if (hasCalendar)
                     {
                         <form method="post" asp-page-handler="SetSyncEnabled" class="inline-form">
                             <input type="hidden" name="provider" value="@provider" />
                             <input type="hidden" name="enabled" value="@((!info!.SyncEnabled).ToString().ToLowerInvariant())" />
-                            <button type="submit" class="btn btn-ghost btn-sm">@(info.SyncEnabled ? "Turn sync off" : "Turn sync on")</button>
+                            <button type="submit" class="au-btn au-btn--text au-btn--sm">@(info.SyncEnabled ? "Turn sync off" : "Turn sync on")</button>
                         </form>
                     }
                     <form method="post" asp-page-handler="Disconnect" class="inline-form int-foot-end"
-                          onsubmit="return confirm('Disconnect @title? Appointments will stop syncing there until reconnected.');">
+                          data-au-confirm="Disconnect @title? Appointments stop syncing to it until you connect it again." data-au-confirm-title="Disconnect @title" data-au-confirm-label="Disconnect" data-au-confirm-tone="danger">
                         <input type="hidden" name="provider" value="@provider" />
-                        <button type="submit" class="btn btn-ghost btn-sm btn-danger-text">Disconnect</button>
+                        <button type="submit" class="au-btn au-btn--text au-btn--sm btn-danger-text">Disconnect</button>
                     </form>
                 }
             </div>
@@ -168,7 +163,7 @@ else
                                 <div class="cell-sub">Where new @shortName appointments are added.</div>
                             </div>
                         </div>
-                        <button type="button" class="modal-x" data-close aria-label="Close">×</button>
+                        <button type="button" class="au-icon-btn" data-close aria-label="Close" title="Close"><span class="au-icon" aria-hidden="true">close</span></button>
                     </div>
                     <div class="integration-form">
                         <label class="field">
@@ -188,7 +183,7 @@ else
                                 </select>
                                 <form method="post" asp-page-handler="RefreshCalendars" class="inline-form">
                                     <input type="hidden" name="provider" value="@provider" />
-                                    <button type="submit" class="btn btn-ghost btn-sm" title="Refresh the list of calendars" aria-label="Refresh calendars">↻</button>
+                                    <button type="submit" class="au-icon-btn au-icon-btn--bordered" title="Refresh the list of calendars" aria-label="Refresh calendars"><span class="au-icon" aria-hidden="true">refresh</span></button>
                                 </form>
                             </span>
                             @if (info.AvailableCalendars.Count == 0)
@@ -198,8 +193,8 @@ else
                         </label>
                         <form method="post" asp-page-handler="SelectCalendar" id="@(modalId)-form" class="flex items-center gap-2">
                             <input type="hidden" name="provider" value="@provider" />
-                            <button type="submit" class="btn btn-primary btn-sm">Save</button>
-                            <button type="button" class="btn btn-sm" data-close>Cancel</button>
+                            <button type="submit" class="au-btn au-btn--primary au-btn--sm">Save</button>
+                            <button type="button" class="au-btn au-btn--outlined au-btn--sm" data-close>Cancel</button>
                         </form>
                     </div>
                 </div>

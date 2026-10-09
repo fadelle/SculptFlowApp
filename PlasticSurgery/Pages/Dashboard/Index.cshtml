@@ -2,6 +2,7 @@
 @model PlasticSurgery.Pages.Dashboard.IndexModel
 @{
     ViewData["Title"] = "Dashboard";
+    ViewData["SignalRFirst"] = true; // the layout loads the SignalR client before this page's scripts
 
     // Presentation only: "36% of interested people" under a funnel card ("—" when there's nothing to compare to).
     static string Rate(int part, int whole) => whole > 0 ? $"{Math.Round(part * 100.0 / whole)}%" : "—";
@@ -9,9 +10,13 @@
 
 @if (!Model.ClinicConfigured)
 {
-    <div class="alert alert-warning">
-        Your account isn't linked to a clinic yet. New accounts get their own clinic when they register;
-        an account created before that change may need a <code>clinic_users</code> row pointing at its clinic.
+    <div class="au-alert au-alert--warning" role="status">
+        <span class="au-icon au-alert__icon" aria-hidden="true">warning</span>
+        <div class="au-alert__body">
+            <div class="au-alert__title">Your account isn't linked to a clinic yet</div>
+            New accounts get their own clinic when they register. If you signed up before that, ask SculptFlow support to
+            link your account to your clinic.
+        </div>
     </div>
 }
 else
@@ -32,9 +37,9 @@ else
     var whatsAppLabel = Model.WhatsAppHealth is null ? "Not connected"
         : whatsAppLevel == "healthy" ? "Healthy" : "Attention Required";
 
-    <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
-        <p class="text-muted m-0">@Model.ClinicName</p>
-        <div class="flex items-center gap-2 flex-wrap">
+    <div class="au-page-head">
+        <p class="au-page-head__sub">@Model.ClinicName: what needs you, and how this period is going.</p>
+        <div class="au-page-head__actions">
             <form method="get" class="period-form" id="period-form">
                 <select name="Period" class="select" id="period-select" aria-label="Period">
                     @foreach (var (value, label) in PlasticSurgery.Pages.Dashboard.IndexModel.Periods)
@@ -46,10 +51,10 @@ else
                     <input type="date" name="From" class="text-input" value="@Model.From?.ToString("yyyy-MM-dd")" aria-label="From" />
                     <span class="text-subtle">–</span>
                     <input type="date" name="To" class="text-input" value="@Model.To?.ToString("yyyy-MM-dd")" aria-label="To" />
-                    <button type="submit" class="btn btn-sm">Apply</button>
+                    <button type="submit" class="au-btn au-btn--outlined">Apply</button>
                 </span>
             </form>
-            <a href="/WhatsApp/Health" class="health-pill">
+            <a href="/WhatsApp/Health" class="health-pill" title="WhatsApp connection health">
                 <span id="dashboard-whatsapp-health-dot" class="health-dot @whatsAppDotClass"></span>
                 <span class="text-muted">WhatsApp</span>
                 <span id="dashboard-whatsapp-health-label">@whatsAppLabel</span>
@@ -57,113 +62,129 @@ else
         </div>
     </div>
 
-    <div class="section-heading mt-0"><h2>Needs attention</h2></div>
+    <h2 class="section-title">Needs your attention</h2>
     @if (attention.ConversationsNeedingStaff + attention.OverdueFollowups + attention.AppointmentsNeedingOutcome == 0)
     {
-        <div class="attn-clear">All clear: nothing is waiting on you.</div>
+        <div class="au-alert au-alert--success" role="status">
+            <span class="au-icon au-alert__icon" aria-hidden="true">check_circle</span>
+            <div class="au-alert__body">All clear: nothing is waiting on you.</div>
+        </div>
     }
     else
     {
-        <div class="attn-row">
+        <div class="au-grid au-grid--3">
             @if (attention.ConversationsNeedingStaff > 0)
             {
-                <a class="attn" href="/inbox?filter=needs">
-                    <span class="attn-num">@attention.ConversationsNeedingStaff</span>
-                    <span>@(attention.ConversationsNeedingStaff == 1 ? "conversation waiting for you" : "conversations waiting for you")</span>
-                    <span class="arrow">&rarr;</span>
+                <a class="au-action-card" href="/inbox?filter=needs">
+                    <span class="au-icon-tile" style="--tile: var(--au-warning)"><span class="au-icon" aria-hidden="true">forum</span></span>
+                    <span><span class="au-action-card__title">@attention.ConversationsNeedingStaff @(attention.ConversationsNeedingStaff == 1 ? "conversation is" : "conversations are") waiting for you</span>
+                        <span class="au-action-card__text">Reply in the Inbox.</span></span>
+                    <span class="au-icon au-action-card__arrow" aria-hidden="true">arrow_forward</span>
                 </a>
             }
             @if (attention.OverdueFollowups > 0)
             {
-                <a class="attn" href="/dashboard/leads">
-                    <span class="attn-num">@attention.OverdueFollowups</span>
-                    <span>@(attention.OverdueFollowups == 1 ? "overdue follow-up" : "overdue follow-ups")</span>
-                    <span class="arrow">&rarr;</span>
+                <a class="au-action-card" href="/dashboard/leads">
+                    <span class="au-icon-tile" style="--tile: var(--au-warning)"><span class="au-icon" aria-hidden="true">schedule</span></span>
+                    <span><span class="au-action-card__title">@attention.OverdueFollowups overdue @(attention.OverdueFollowups == 1 ? "follow-up" : "follow-ups")</span>
+                        <span class="au-action-card__text">Get back to these people.</span></span>
+                    <span class="au-icon au-action-card__arrow" aria-hidden="true">arrow_forward</span>
                 </a>
             }
             @if (attention.AppointmentsNeedingOutcome > 0)
             {
-                <a class="attn" href="/dashboard/appointments">
-                    <span class="attn-num">@attention.AppointmentsNeedingOutcome</span>
-                    <span>@(attention.AppointmentsNeedingOutcome == 1 ? "past appointment without an outcome" : "past appointments without an outcome")</span>
-                    <span class="arrow">&rarr;</span>
+                <a class="au-action-card" href="/dashboard/appointments">
+                    <span class="au-icon-tile" style="--tile: var(--au-warning)"><span class="au-icon" aria-hidden="true">event_note</span></span>
+                    <span><span class="au-action-card__title">@attention.AppointmentsNeedingOutcome past @(attention.AppointmentsNeedingOutcome == 1 ? "appointment needs" : "appointments need") an outcome</span>
+                        <span class="au-action-card__text">Mark them attended, no-show or canceled.</span></span>
+                    <span class="au-icon au-action-card__arrow" aria-hidden="true">arrow_forward</span>
                 </a>
             }
         </div>
     }
 
-    <div class="section-heading"><h2>Patient funnel <span class="text-subtle text-sm fw-normal">· @Model.RangeLabel</span></h2></div>
-    <div class="stat-grid">
-        <div class="stat-card stat-card-accent">
-            <div class="label">Interested people</div>
-            <div class="value">@s.NewInterestedPeople</div>
+    <h2 class="section-title">Patient funnel <span class="section-title__sub">@Model.RangeLabel</span></h2>
+    <div class="au-grid au-grid--4">
+        <div class="au-stat stat-accent">
+            <span class="au-eyebrow">Interested people</span>
+            <div class="au-stat__value">@s.NewInterestedPeople</div>
+            <span class="au-stat__hint">New in this period</span>
         </div>
-        <div class="stat-card">
-            <div class="label">Consultations booked</div>
-            <div class="value">@s.ConsultationsBooked</div>
-            <div class="conv">@Rate(s.ConsultationsBooked, s.NewInterestedPeople) of interested people</div>
+        <div class="au-stat">
+            <span class="au-eyebrow">Consultations booked</span>
+            <div class="au-stat__value">@s.ConsultationsBooked</div>
+            <span class="au-stat__hint">@Rate(s.ConsultationsBooked, s.NewInterestedPeople) of interested people</span>
         </div>
-        <div class="stat-card">
-            <div class="label">Consultations attended</div>
-            <div class="value">@s.ConsultationsAttended</div>
-            <div class="conv">@Rate(s.ConsultationsAttended, s.ConsultationsBooked) of booked</div>
+        <div class="au-stat">
+            <span class="au-eyebrow">Consultations attended</span>
+            <div class="au-stat__value">@s.ConsultationsAttended</div>
+            <span class="au-stat__hint">@Rate(s.ConsultationsAttended, s.ConsultationsBooked) of booked</span>
         </div>
-        <div class="stat-card">
-            <div class="label">Surgeries booked</div>
-            <div class="value">@s.SurgeriesBooked</div>
-            <div class="conv">@Rate(s.SurgeriesBooked, s.ConsultationsAttended) of attended</div>
-        </div>
-    </div>
-
-    <div class="section-heading"><h2>Results</h2></div>
-    <div class="stat-grid">
-        <div class="stat-card">
-            <div class="label">Revenue (completed surgeries)</div>
-            <div class="value">@s.Revenue.ToString("C0")</div>
+        <div class="au-stat">
+            <span class="au-eyebrow">Surgeries booked</span>
+            <div class="au-stat__value">@s.SurgeriesBooked</div>
+            <span class="au-stat__hint">@Rate(s.SurgeriesBooked, s.ConsultationsAttended) of attended</span>
         </div>
     </div>
 
-    <div class="section-heading"><h2>By procedure</h2></div>
-    <div class="table-card table-scroll">
-        <table class="data-table">
-            <thead>
-                <tr><th>Procedure</th><th>Interested</th><th>Bookings</th><th>Completed</th><th>Revenue</th></tr>
-            </thead>
-            <tbody>
-                @foreach (var p in Model.Procedures)
-                {
-                    <tr>
-                        <td><strong>@p.ProcedureName</strong></td>
-                        <td>@p.LeadCount</td>
-                        <td>@p.BookingCount</td>
-                        <td>@p.CompletedCount</td>
-                        <td>@p.CompletedRevenue.ToString("C0")</td>
-                    </tr>
-                }
-                @if (Model.Procedures.Count == 0)
-                {
-                    <tr class="empty-row"><td colspan="5">No procedures set up yet. <a class="link" href="/Procedures">Add one</a></td></tr>
-                }
-            </tbody>
-        </table>
+    <h2 class="section-title">Results</h2>
+    <div class="au-grid au-grid--4">
+        <div class="au-stat">
+            <span class="au-eyebrow">Revenue from completed surgeries</span>
+            <div class="au-stat__value">@UiTextHelper.Amount(s.Revenue)</div>
+            <span class="au-stat__hint">In this period</span>
+        </div>
     </div>
 
-    <div class="section-heading"><h2>Jump to</h2></div>
-    <div class="quick-links">
-        <a class="quick-link" href="/inbox">
-            <span class="quick-link-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
-            <div><strong>Inbox</strong><span>Reply to patients</span></div>
-            <span class="arrow">&rarr;</span>
+    <h2 class="section-title">By procedure</h2>
+    <div class="au-table-card">
+        @if (Model.Procedures.Count == 0)
+        {
+            var empty = new EmptyStateModel(Icon: "medical_services", Title: "No procedures yet",
+                Text: "Add the procedures your clinic offers to see interest and bookings for each one.",
+                ActionLabel: "Add a procedure", ActionHref: "/Procedures/Edit");
+            <partial name="_EmptyState" model="empty" />
+        }
+        else
+        {
+            <div class="au-table-scroll">
+                <table class="au-table au-table--stack">
+                    <thead>
+                        <tr><th>Procedure</th><th class="au-right">Interested</th><th class="au-right">Bookings</th><th class="au-right">Completed</th><th class="au-right">Revenue</th></tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var p in Model.Procedures)
+                        {
+                            <tr>
+                                <td data-label="Procedure"><strong>@p.ProcedureName</strong></td>
+                                <td data-label="Interested" class="au-right">@p.LeadCount</td>
+                                <td data-label="Bookings" class="au-right">@p.BookingCount</td>
+                                <td data-label="Completed" class="au-right">@p.CompletedCount</td>
+                                <td data-label="Revenue" class="au-right">@UiTextHelper.Amount(p.CompletedRevenue)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+
+    <h2 class="section-title">Jump to</h2>
+    <div class="au-grid au-grid--3">
+        <a class="au-action-card" href="/inbox">
+            <span class="au-icon-tile"><span class="au-icon" aria-hidden="true">chat</span></span>
+            <span><span class="au-action-card__title">Inbox</span><span class="au-action-card__text">Reply to patients.</span></span>
+            <span class="au-icon au-action-card__arrow" aria-hidden="true">arrow_forward</span>
         </a>
-        <a class="quick-link" href="/dashboard/leads">
-            <span class="quick-link-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg></span>
-            <div><strong>Interested People</strong><span>Every lead and their status</span></div>
-            <span class="arrow">&rarr;</span>
+        <a class="au-action-card" href="/dashboard/leads">
+            <span class="au-icon-tile"><span class="au-icon" aria-hidden="true">group</span></span>
+            <span><span class="au-action-card__title">Interested People</span><span class="au-action-card__text">Every lead and their status.</span></span>
+            <span class="au-icon au-action-card__arrow" aria-hidden="true">arrow_forward</span>
         </a>
-        <a class="quick-link" href="/dashboard/appointments">
-            <span class="quick-link-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></span>
-            <div><strong>Appointments</strong><span>Consultations and surgeries</span></div>
-            <span class="arrow">&rarr;</span>
+        <a class="au-action-card" href="/dashboard/appointments">
+            <span class="au-icon-tile"><span class="au-icon" aria-hidden="true">calendar_month</span></span>
+            <span><span class="au-action-card__title">Appointments</span><span class="au-action-card__text">Consultations and surgeries.</span></span>
+            <span class="au-icon au-action-card__arrow" aria-hidden="true">arrow_forward</span>
         </a>
     </div>
 
@@ -184,7 +205,6 @@ else
         })();
     </script>
 
-    <script src="https://cdn.jsdelivr.net/npm/@@microsoft/signalr@@8.0.0/dist/browser/signalr.min.js"></script>
     <script>
         window.PS_DASHBOARD_CONFIG = {
             clinicId: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.ClinicId.ToString())),

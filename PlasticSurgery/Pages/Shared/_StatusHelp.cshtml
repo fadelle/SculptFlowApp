@@ -2,10 +2,10 @@
    Campaign creation page (the two places staff pick from these four status/source fields). Static
    reference content, not DB-driven; update this file if a status value's meaning changes. *@
 <div id="status-help-overlay" class="status-help-overlay" hidden>
-    <div class="status-help-card card">
+    <div class="status-help-card card" role="dialog" aria-modal="true" aria-labelledby="status-help-title">
         <div class="status-help-header">
-            <h3>What do these mean?</h3>
-            <button type="button" class="btn btn-sm" id="status-help-close">Close</button>
+            <h3 id="status-help-title">What do these mean?</h3>
+            <button type="button" class="au-icon-btn" id="status-help-close" aria-label="Close" title="Close"><span class="au-icon" aria-hidden="true">close</span></button>
         </div>
 
         <section class="status-help-section">

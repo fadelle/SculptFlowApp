@@ -2,28 +2,31 @@
 @model PlasticSurgery.Pages.Dashboard.AppointmentsModel
 @{
     ViewData["Title"] = "Appointments";
+    ViewData["SignalRFirst"] = true; // the layout loads the SignalR client before this page's scripts
 }
 
 @if (!Model.ClinicConfigured)
 {
-    <div class="alert alert-warning">No clinic configured yet — see the Dashboard page for setup steps.</div>
+    <partial name="_NoClinic" />
 }
 else
 {
+    @* Everything below is driven by wwwroot/js/appointments-calendar.js through the cal-* ids; only the static controls
+       use kit classes. *@
     <div id="cal-message"></div>
     <div id="cal-outcome"></div>
     <div class="today-line" id="cal-today-line" hidden></div>
 
     <div class="cal-header">
         <div class="cal-nav">
-            <button type="button" class="cal-nav-btn" id="cal-prev" title="Previous month" aria-label="Previous month">&larr;</button>
-            <div class="cal-title" id="cal-title">&nbsp;</div>
-            <button type="button" class="cal-nav-btn" id="cal-next" title="Next month" aria-label="Next month">&rarr;</button>
-            <button type="button" class="btn btn-sm" id="cal-today">Today</button>
+            <button type="button" class="au-icon-btn au-icon-btn--bordered" id="cal-prev" title="Previous month" aria-label="Previous month"><span class="au-icon" aria-hidden="true">chevron_left</span></button>
+            <div class="cal-title" id="cal-title" aria-live="polite">&nbsp;</div>
+            <button type="button" class="au-icon-btn au-icon-btn--bordered" id="cal-next" title="Next month" aria-label="Next month"><span class="au-icon" aria-hidden="true">chevron_right</span></button>
+            <button type="button" class="au-btn au-btn--outlined au-btn--sm" id="cal-today">Today</button>
         </div>
-        <div class="flex items-center gap-2">
+        <div class="cal-header__actions">
             <partial name="_TimeViewSwitch" model="Model.ClinicTimezone" />
-            <button type="button" class="btn btn-primary btn-sm" id="cal-new">+ New Appointment</button>
+            <button type="button" class="au-btn au-btn--primary" id="cal-new"><span class="au-icon" aria-hidden="true">add</span>New appointment</button>
         </div>
     </div>
 
@@ -46,30 +49,30 @@ else
 
     @* ---------- Day drawer: every appointment for the clicked day ---------- *@
     <div class="cal-drawer-overlay" id="cal-drawer-overlay" hidden></div>
-    <div class="cal-drawer" id="cal-drawer" hidden>
+    <div class="cal-drawer" id="cal-drawer" role="dialog" aria-modal="true" aria-labelledby="cal-drawer-title" hidden>
         <div class="cal-drawer-header">
             <h3 class="cal-drawer-title" id="cal-drawer-title">&nbsp;</h3>
             <div class="flex items-center gap-2">
-                <button type="button" class="btn btn-sm" id="cal-drawer-add">+ New</button>
-                <button type="button" class="btn btn-sm" id="cal-drawer-close">Close</button>
+                <button type="button" class="au-btn au-btn--outlined au-btn--sm" id="cal-drawer-add"><span class="au-icon" aria-hidden="true">add</span>New</button>
+                <button type="button" class="au-icon-btn" id="cal-drawer-close" aria-label="Close" title="Close"><span class="au-icon" aria-hidden="true">close</span></button>
             </div>
         </div>
         <div class="cal-drawer-body" id="cal-drawer-body"></div>
     </div>
 
-    @* ---------- New Appointment ---------- *@
+    @* ---------- New appointment ---------- *@
     <div class="bm-overlay" id="cal-new-overlay" hidden>
         <div class="card cal-modal" role="dialog" aria-modal="true" aria-labelledby="cal-new-title">
             <div class="modal-head">
-                <h3 id="cal-new-title" class="card-title">New Appointment</h3>
-                <button type="button" class="modal-x" id="cal-new-close" aria-label="Close">&times;</button>
+                <h3 id="cal-new-title" class="card-title">New appointment</h3>
+                <button type="button" class="au-icon-btn" id="cal-new-close" aria-label="Close" title="Close"><span class="au-icon" aria-hidden="true">close</span></button>
             </div>
-            <div id="cal-new-error" class="connect-error text-sm"></div>
-            <div class="integration-form">
-                <div class="field">
-                    <span>Patient (lead)</span>
+            <div id="cal-new-error" class="connect-error modal-error" role="alert"></div>
+            <div class="au-stack">
+                <div class="au-form-field">
+                    <label class="au-form-label" for="cal-new-lead-search">Patient<span class="au-required">*</span></label>
                     <div class="picker" id="cal-new-lead-picker">
-                        <input type="text" id="cal-new-lead-search" class="text-input search-input" placeholder="Search by name or phone…" autocomplete="off" aria-label="Search patients" />
+                        <input type="text" id="cal-new-lead-search" class="au-input search-input" placeholder="Search by name or phone…" autocomplete="off" />
                         <div class="picker-chip" id="cal-new-lead-chip" hidden>
                             <span class="avatar-sm" id="cal-new-lead-chip-avatar"></span>
                             <span class="picker-chip-label" id="cal-new-lead-chip-label"></span>
@@ -79,46 +82,46 @@ else
                     </div>
                     <input type="hidden" id="cal-new-lead-id" />
                 </div>
-                <label class="field">
-                    <span>Procedure <small class="text-subtle">(optional)</small></span>
-                    <select id="cal-new-procedure" class="select"><option value="">Loading…</option></select>
-                </label>
-                <div class="form-row">
-                    <label class="field flex-1">
-                        <span>Date</span>
-                        <input type="date" id="cal-new-date" class="text-input" required />
-                    </label>
-                    <label class="field flex-1">
-                        <span>Time</span>
-                        <input type="time" id="cal-new-time" class="text-input" value="09:00" required />
-                        <span class="text-subtle text-sm" id="cal-new-tz-hint"></span>
-                    </label>
-                    <label class="field flex-1">
-                        <span>Duration (min)</span>
-                        <input type="number" id="cal-new-duration" class="text-input" value="30" min="5" max="1440" step="5" list="cal-duration-options" />
+                <div class="au-form-field">
+                    <label class="au-form-label" for="cal-new-procedure">Procedure <span class="opt">optional</span></label>
+                    <select id="cal-new-procedure" class="au-select"><option value="">Loading…</option></select>
+                </div>
+                <div class="au-form-grid cal-when">
+                    <div class="au-form-field">
+                        <label class="au-form-label" for="cal-new-date">Date<span class="au-required">*</span></label>
+                        <input type="date" id="cal-new-date" class="au-input" required />
+                    </div>
+                    <div class="au-form-field">
+                        <label class="au-form-label" for="cal-new-time">Time<span class="au-required">*</span></label>
+                        <input type="time" id="cal-new-time" class="au-input" value="09:00" required />
+                        <span class="au-help" id="cal-new-tz-hint"></span>
+                    </div>
+                    <div class="au-form-field au-span-2">
+                        <label class="au-form-label" for="cal-new-duration">Length (minutes)</label>
+                        <input type="number" id="cal-new-duration" class="au-input" value="30" min="5" max="1440" step="5" list="cal-duration-options" />
                         <datalist id="cal-duration-options">
                             <option value="15"></option><option value="30"></option><option value="45"></option><option value="60"></option>
                             <option value="90"></option><option value="120"></option><option value="180"></option><option value="240"></option>
                         </datalist>
-                    </label>
+                        <span class="au-help" id="cal-new-range"></span>
+                    </div>
                 </div>
-                <div class="text-subtle text-sm" id="cal-new-range"></div>
-                <label class="field">
-                    <span>Location <small class="text-subtle">(optional)</small></span>
-                    <select id="cal-new-location" class="select">
+                <div class="au-form-field">
+                    <label class="au-form-label" for="cal-new-location">Where <span class="opt">optional</span></label>
+                    <select id="cal-new-location" class="au-select">
                         <option value="">Not set</option>
                         <option value="in_person">In person</option>
                         <option value="video">Video call</option>
                         <option value="phone">Phone</option>
                     </select>
-                </label>
-                <label class="field">
-                    <span>Notes <small class="text-subtle">(optional)</small></span>
-                    <textarea id="cal-new-notes" class="text-input" rows="2"></textarea>
-                </label>
-                <div class="flex items-center gap-2 mt-1">
-                    <button type="button" class="btn btn-primary btn-sm" id="cal-new-save">Create appointment</button>
-                    <button type="button" class="btn btn-sm" id="cal-new-cancel">Cancel</button>
+                </div>
+                <div class="au-form-field">
+                    <label class="au-form-label" for="cal-new-notes">Notes <span class="opt">optional</span></label>
+                    <textarea id="cal-new-notes" class="au-textarea" rows="2"></textarea>
+                </div>
+                <div class="au-form-actions">
+                    <button type="button" class="au-btn au-btn--text" id="cal-new-cancel">Cancel</button>
+                    <button type="button" class="au-btn au-btn--primary" id="cal-new-save">Create appointment</button>
                 </div>
             </div>
         </div>
@@ -128,24 +131,24 @@ else
     <div class="bm-overlay" id="cal-appt-overlay" hidden>
         <div class="card cal-modal" role="dialog" aria-modal="true" aria-labelledby="cal-appt-name">
             <div class="modal-head">
-                <div class="flex items-center gap-2">
+                <div class="flex items-center gap-2 min-w-0">
                     <span class="avatar-md" id="cal-appt-avatar"></span>
-                    <div>
+                    <div class="min-w-0">
                         <h3 id="cal-appt-name" class="card-title"></h3>
                         <div class="text-muted text-sm" id="cal-appt-when"></div>
                     </div>
                 </div>
-                <button type="button" class="modal-x" id="cal-appt-close" aria-label="Close">&times;</button>
+                <button type="button" class="au-icon-btn" id="cal-appt-close" aria-label="Close" title="Close"><span class="au-icon" aria-hidden="true">close</span></button>
             </div>
-            <div id="cal-appt-error" class="connect-error text-sm"></div>
+            <div id="cal-appt-error" class="connect-error modal-error" role="alert"></div>
             <div class="mb-2">
                 <div class="inbox-lead-info-row"><span>Procedure</span><strong id="cal-appt-procedure">—</strong></div>
-                <div class="inbox-lead-info-row"><span>Location</span><strong id="cal-appt-location">—</strong></div>
+                <div class="inbox-lead-info-row"><span>Where</span><strong id="cal-appt-location">—</strong></div>
                 <div class="inbox-lead-info-row" id="cal-appt-notes-row"><span>Notes</span><strong id="cal-appt-notes">—</strong></div>
             </div>
-            <label class="field mb-2">
-                <span>Status</span>
-                <select id="cal-appt-status" class="select">
+            <div class="au-form-field">
+                <label class="au-form-label" for="cal-appt-status">Status</label>
+                <select id="cal-appt-status" class="au-select">
                     <option value="booked">Booked</option>
                     <option value="confirmed">Confirmed</option>
                     <option value="attended">Attended</option>
@@ -153,16 +156,17 @@ else
                     <option value="canceled">Canceled</option>
                     <option value="rescheduled">Rescheduled</option>
                 </select>
-            </label>
-            <div class="flex items-center gap-2 flex-wrap">
-                <button type="button" class="btn btn-primary btn-sm" id="cal-appt-save">Save</button>
-                <button type="button" class="btn btn-sm" id="cal-appt-cancel">Cancel</button>
-                <a class="link text-sm" id="cal-appt-lead" href="#" style="margin-left:auto">Open patient</a>
-                <a class="link text-sm" id="cal-appt-full" href="#">Open full page</a>
+            </div>
+            <div class="cal-appt-links">
+                <a class="au-link" id="cal-appt-lead" href="#">Open patient</a>
+                <a class="au-link" id="cal-appt-full" href="#">Open full page</a>
+            </div>
+            <div class="au-form-actions">
+                <button type="button" class="au-btn au-btn--text" id="cal-appt-cancel">Cancel</button>
+                <button type="button" class="au-btn au-btn--primary" id="cal-appt-save">Save</button>
             </div>
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/@@microsoft/signalr@@8.0.0/dist/browser/signalr.min.js"></script>
     <script src="~/js/appointments-calendar.js" asp-append-version="true"></script>
 }

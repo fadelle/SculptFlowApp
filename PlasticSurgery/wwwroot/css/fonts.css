@@ -1,0 +1,16 @@
+/* Self-hosted fonts (docs/UI_GUIDE.md §3.2, §0.4). The icon font holds only the icons the app uses:
+   after adding an icon, run `node docs/tools/icon-font.js` from the repo root to rebuild it. */
+@font-face {
+  font-family: 'Inter Variable';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('../fonts/inter-latin-wght-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Material Symbols Outlined';
+  font-style: normal;
+  font-weight: 100 700;
+  font-display: block;
+  src: url('../fonts/material-symbols-outlined.woff2') format('woff2');
+}
