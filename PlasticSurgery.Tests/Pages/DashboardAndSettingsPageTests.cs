@@ -74,13 +74,20 @@ public class SimpleListPageTests
         await noHealth.OnGetAsync(default);
         Assert.False(noHealth.ClinicConfigured);
 
+        static PlasticSurgery.Business.Contracts.Managers.IConfigManager BillingOn()
+        {
+            var config = new Mock<PlasticSurgery.Business.Contracts.Managers.IConfigManager>();
+            config.SetupGet(c => c.BillingEnabled).Returns(true);
+            return config.Object;
+        }
+
         var billing = new Mock<IBillingQueryService>();
         billing.Setup(b => b.GetSummaryAsync(Glow.Id, It.IsAny<CancellationToken>())).ReturnsAsync(Blank<ClinicBillingSummary>());
-        var billingPage = new PlasticSurgery.Pages.Settings.BillingModel(ClinicContext(Glow).Object, billing.Object).Attach();
+        var billingPage = new PlasticSurgery.Pages.Settings.BillingModel(ClinicContext(Glow).Object, billing.Object, BillingOn()).Attach();
         await billingPage.OnGetAsync(default);
         Assert.True(billingPage.ClinicConfigured);
         Assert.NotNull(billingPage.Summary);
-        var noBilling = new PlasticSurgery.Pages.Settings.BillingModel(ClinicContext(null).Object, billing.Object).Attach();
+        var noBilling = new PlasticSurgery.Pages.Settings.BillingModel(ClinicContext(null).Object, billing.Object, BillingOn()).Attach();
         await noBilling.OnGetAsync(default);
         Assert.False(noBilling.ClinicConfigured);
     }

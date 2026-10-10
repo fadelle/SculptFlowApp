@@ -317,6 +317,34 @@ public class MessageServiceTests
         Assert.Equal(MessageOrigin.TelegramCustomer, saved!.Origin);
     }
 
+    [Theory]
+    [InlineData(IngestEventType.CustomerMessage, true)]
+    [InlineData(IngestEventType.BusinessAppEcho, false)]
+    [InlineData(IngestEventType.AiMessage, false)]
+    public async Task Only_a_customer_message_reopens_a_closed_conversation(string eventType, bool reopens)
+    {
+        var c = Conv();
+        c.Status = ConversationStatus.Closed;
+
+        await Sut().IngestAsync(Ingest(c.Id, eventType));
+
+        Assert.Equal(reopens ? ConversationStatus.Active : ConversationStatus.Closed, c.Status);
+        _events.Verify(e => e.Log(_clinicId, EventTypes.ConversationReopened, _leadId, c.Id, null, MessageOrigin.WhatsAppCustomer, "{}"), reopens ? Times.Once() : Times.Never());
+        _notifier.Verify(n => n.ConversationUpdatedAsync(_clinicId, c.Id, It.IsAny<CancellationToken>()), reopens ? Times.Once() : Times.Never());
+    }
+
+    [Fact]
+    public async Task A_customer_message_in_an_active_conversation_is_not_reported_as_a_reopen()
+    {
+        var c = Conv();
+
+        await Sut().IngestAsync(Ingest(c.Id, IngestEventType.CustomerMessage));
+
+        Assert.Equal(ConversationStatus.Active, c.Status);
+        _events.Verify(e => e.Log(It.IsAny<Guid>(), EventTypes.ConversationReopened, It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<string?>(), It.IsAny<string>()), Times.Never);
+        _notifier.Verify(n => n.ConversationUpdatedAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
     [Fact]
     public async Task Duplicate_external_ids_are_not_stored_twice()
     {

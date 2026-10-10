@@ -19,6 +19,7 @@ public static class EventTypes
     // Inbox / WhatsApp messaging events — see MessageService and ConversationService.
     public const string ReturnedToAi = "returned_to_ai";
     public const string ConversationClosed = "conversation_closed";
+    public const string ConversationReopened = "conversation_reopened";
     public const string CustomerMessageReceived = "customer_message_received";
     public const string StaffMessageSentDashboard = "staff_message_sent_dashboard";
     public const string StaffMessageSentWhatsAppApp = "staff_message_sent_whatsapp_app";

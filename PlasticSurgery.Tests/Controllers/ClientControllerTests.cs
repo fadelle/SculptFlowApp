@@ -165,6 +165,7 @@ public class ConversationsControllerTests : ClientControllerTestBase
         Assert.IsType<NotFoundResult>((await Sut().TakeOver(id, default)).Result);
         Assert.IsType<NotFoundResult>((await Sut().ReturnToAi(id, default)).Result);
         Assert.IsType<NotFoundResult>((await Sut().Close(id, default)).Result);
+        Assert.IsType<NotFoundResult>((await Sut().Reopen(id, default)).Result);
         Assert.IsType<NotFoundResult>((await Sut().AddMessage(id, new CreateMessageRequest("inbound", "lead", "whatsapp", null, "x", null), default)).Result);
         Assert.IsType<NotFoundResult>((await Sut().SendTemplateMessage(id, new SendTemplateMessageRequest(Guid.NewGuid(), null), default)).Result);
         Assert.IsType<NotFoundResult>(await Sut().MarkRead(id, default));
@@ -175,9 +176,11 @@ public class ConversationsControllerTests : ClientControllerTestBase
         _conversations.Setup(c => c.TakeOverAsync(ClinicId, id, It.IsAny<CancellationToken>())).ReturnsAsync(convo);
         _conversations.Setup(c => c.ReturnToAiAsync(ClinicId, id, It.IsAny<CancellationToken>())).ReturnsAsync(convo);
         _conversations.Setup(c => c.CloseAsync(ClinicId, id, It.IsAny<CancellationToken>())).ReturnsAsync(convo);
+        _conversations.Setup(c => c.ReopenAsync(ClinicId, id, It.IsAny<CancellationToken>())).ReturnsAsync(convo);
         Assert.IsType<OkObjectResult>((await Sut().TakeOver(id, default)).Result);
         Assert.IsType<OkObjectResult>((await Sut().ReturnToAi(id, default)).Result);
         Assert.IsType<OkObjectResult>((await Sut().Close(id, default)).Result);
+        Assert.IsType<OkObjectResult>((await Sut().Reopen(id, default)).Result);
     }
 
     [Fact]
@@ -192,6 +195,7 @@ public class ConversationsControllerTests : ClientControllerTestBase
         IsForbid(await Sut().TakeOver(id, default));
         IsForbid(await Sut().ReturnToAi(id, default));
         IsForbid(await Sut().Close(id, default));
+        IsForbid(await Sut().Reopen(id, default));
         Assert.IsType<ForbidResult>(await Sut().MarkRead(id, default));
     }
 

@@ -244,6 +244,52 @@ public class ConversationServiceTests
     }
 
     [Fact]
+    public async Task Reopen_brings_a_closed_conversation_back_logs_and_broadcasts()
+    {
+        var c = Conv();
+        c.Status = ConversationStatus.Closed;
+
+        var r = await Sut().ReopenAsync(_clinicId, c.Id);
+
+        Assert.Equal(ConversationStatus.Active, r!.Status);
+        Assert.Equal(ConversationStatus.Active, c.Status);
+        _events.Verify(e => e.Log(_clinicId, EventTypes.ConversationReopened, null, c.Id, null, "dashboard", "{}"), Times.Once);
+        _notifier.Verify(n => n.ConversationUpdatedAsync(_clinicId, c.Id, It.IsAny<CancellationToken>()), Times.Once);
+        _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Reopen_leaves_an_active_conversation_alone_and_returns_null_for_an_unknown_one()
+    {
+        var c = Conv();
+
+        var r = await Sut().ReopenAsync(_clinicId, c.Id);
+
+        Assert.Equal(ConversationStatus.Active, r!.Status);
+        _events.Verify(e => e.Log(It.IsAny<Guid>(), EventTypes.ConversationReopened, It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<string?>(), It.IsAny<string>()), Times.Never);
+        _notifier.Verify(n => n.ConversationUpdatedAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+        _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+        Assert.Null(await Sut().ReopenAsync(_clinicId, Guid.NewGuid()));
+    }
+
+    [Fact]
+    public async Task A_patient_message_added_through_the_generic_path_reopens_but_a_staff_message_does_not()
+    {
+        var closedForPatient = Conv();
+        closedForPatient.Status = ConversationStatus.Closed;
+        await Sut().AddMessageAsync(_clinicId, closedForPatient.Id, Msg("inbound", "lead"));
+        Assert.Equal(ConversationStatus.Active, closedForPatient.Status);
+        _events.Verify(e => e.Log(_clinicId, EventTypes.ConversationReopened, null, closedForPatient.Id, null, MessageOrigin.WhatsAppCustomer, "{}"), Times.Once);
+        _notifier.Verify(n => n.ConversationUpdatedAsync(_clinicId, closedForPatient.Id, It.IsAny<CancellationToken>()), Times.Once);
+
+        var closedForStaff = Conv();
+        closedForStaff.Status = ConversationStatus.Closed;
+        await Sut().AddMessageAsync(_clinicId, closedForStaff.Id, Msg("outbound", "staff"));
+        Assert.Equal(ConversationStatus.Closed, closedForStaff.Status);
+        _notifier.Verify(n => n.ConversationUpdatedAsync(_clinicId, closedForStaff.Id, It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
     public async Task List_delegates_to_the_repository()
     {
         _conversations.Setup(r => r.ListInboxAsync(_clinicId, 2, 3, It.IsAny<CancellationToken>()))

@@ -158,6 +158,13 @@ public class ConversationService : IConversationService
         conversation.LastMessageDirection = request.Direction;
         conversation.UpdatedAt = now;
 
+        // A patient's message reopens a closed conversation (same rule as MessageService.IngestAsync).
+        var reopened = request.Direction == MessageDirection.Inbound && ConversationStatusSync.ReopenIfNotActive(conversation, now);
+        if (reopened)
+        {
+            _events.Log(clinicId, EventTypes.ConversationReopened, conversationId: conversationId, source: message.Origin);
+        }
+
         var lead = await _leads.GetByIdAsync(conversation.LeadId, ct);
         if (lead is not null)
         {
@@ -170,6 +177,7 @@ public class ConversationService : IConversationService
         }
 
         await _unitOfWork.SaveChangesAsync(ct);
+        if (reopened) await _notifier.ConversationUpdatedAsync(clinicId, conversationId, ct);
         return InboxMapper.ToResponse(message);
     }
 
@@ -238,6 +246,25 @@ public class ConversationService : IConversationService
         conversation.Status = ConversationStatus.Closed;
         conversation.UpdatedAt = DateTimeOffset.UtcNow;
         _events.Log(clinicId, EventTypes.ConversationClosed, conversationId: conversationId, source: "dashboard");
+
+        await _unitOfWork.SaveChangesAsync(ct);
+        await _notifier.ConversationUpdatedAsync(clinicId, conversationId, ct);
+
+        return InboxMapper.ToResponse(conversation);
+    }
+
+    public async Task<ConversationResponse?> ReopenAsync(Guid clinicId, Guid conversationId, CancellationToken ct = default)
+    {
+        var conversation = await _conversations.GetAsync(clinicId, conversationId, ct);
+        if (conversation is null) return null;
+
+        // Already in the working list: nothing to change, nothing to log or broadcast.
+        if (!ConversationStatusSync.ReopenIfNotActive(conversation, DateTimeOffset.UtcNow))
+        {
+            return InboxMapper.ToResponse(conversation);
+        }
+
+        _events.Log(clinicId, EventTypes.ConversationReopened, conversationId: conversationId, source: "dashboard");
 
         await _unitOfWork.SaveChangesAsync(ct);
         await _notifier.ConversationUpdatedAsync(clinicId, conversationId, ct);

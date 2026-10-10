@@ -24,6 +24,7 @@
   var composerSendEl = document.getElementById('inbox-composer-send');
   var btnTakeover = document.getElementById('inbox-btn-takeover');
   var btnReturnAi = document.getElementById('inbox-btn-return-ai');
+  var btnReopen = document.getElementById('inbox-btn-reopen');
   var btnClose = document.getElementById('inbox-btn-close');
   var btnMore = document.getElementById('inbox-btn-more');
   var moreMenuEl = document.getElementById('inbox-more-menu');
@@ -422,6 +423,7 @@
     btnReturnAi.hidden = conversation.mode === 'ai';
     var closed = conversation.status === 'closed' || conversation.status === 'archived';
     btnMore.hidden = closed; // "⋯" only holds Close conversation for now
+    btnReopen.hidden = !closed; // a closed conversation offers Reopen instead
     setMoreMenu(false);
 
     // Backend is authoritative for this (see MessageService.SendAsync's ServiceWindowClosedException)
@@ -707,6 +709,12 @@
   btnReturnAi.addEventListener('click', function () {
     if (!currentConversationId) return;
     apiPost(withClinic('/api/conversations/' + currentConversationId + '/return-to-ai'))
+      .then(function () { return Promise.all([refreshCurrentConversation(), loadConversationList()]); });
+  });
+
+  btnReopen.addEventListener('click', function () {
+    if (!currentConversationId) return;
+    apiPost(withClinic('/api/conversations/' + currentConversationId + '/reopen'))
       .then(function () { return Promise.all([refreshCurrentConversation(), loadConversationList()]); });
   });
 

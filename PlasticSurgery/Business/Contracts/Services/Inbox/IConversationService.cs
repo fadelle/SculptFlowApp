@@ -49,6 +49,11 @@ public interface IConversationService
 
     Task<ConversationResponse?> CloseAsync(Guid clinicId, Guid conversationId, CancellationToken ct = default);
 
+    /// <summary>Staff brings a closed conversation back into the working list. A conversation that is already
+    /// active is returned unchanged (no event, no broadcast); null if it isn't in this clinic. A patient's next
+    /// message does the same automatically — see MessageService.IngestAsync.</summary>
+    Task<ConversationResponse?> ReopenAsync(Guid clinicId, Guid conversationId, CancellationToken ct = default);
+
     /// <summary>Does the conversation belong to this clinic? Used before letting a caller subscribe to it.</summary>
     Task<bool> BelongsToClinicAsync(Guid clinicId, Guid conversationId, CancellationToken ct = default);
 }

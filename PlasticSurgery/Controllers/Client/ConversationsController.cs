@@ -207,4 +207,17 @@ public class ConversationsController : ControllerBase
         var conversation = await _conversations.CloseAsync(clinicId.Value, id, ct);
         return conversation is null ? NotFound() : Ok(conversation);
     }
+
+    /// <summary>Staff brings a closed conversation back into the working list (a patient's next message does the
+    /// same automatically).</summary>
+    [Authorize]
+    [HttpPost("{id:guid}/reopen")]
+    public async Task<ActionResult<ConversationResponse>> Reopen(Guid id, CancellationToken ct)
+    {
+        var clinicId = await _clinicContext.GetClinicIdAsync(ct);
+        if (clinicId is null) return Forbid();
+
+        var conversation = await _conversations.ReopenAsync(clinicId.Value, id, ct);
+        return conversation is null ? NotFound() : Ok(conversation);
+    }
 }

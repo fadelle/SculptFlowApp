@@ -448,6 +448,7 @@ public class MessageService : IMessageService
         // The 24h WhatsApp service window only ever opens/extends on a genuine customer message —
         // business_app_echo, ai_message (and elsewhere: dashboard, campaign sends) must NOT touch
         // this, or staff/AI could keep a window open indefinitely just by replying to themselves.
+        var reopened = false;
         if (request.EventType == IngestEventType.CustomerMessage)
         {
             conversation.LastCustomerMessageAt = now;
@@ -456,6 +457,10 @@ public class MessageService : IMessageService
             {
                 conversation.ServiceWindowExpiresAt = now.AddHours(24);
             }
+
+            // A patient writing again brings a closed conversation back into the working list. Only a genuine
+            // customer message does — an echo from the Business app or an AI message never reopens one.
+            reopened = ConversationStatusSync.ReopenIfNotActive(conversation, now);
         }
 
         var modeChanged = false;
@@ -489,6 +494,11 @@ public class MessageService : IMessageService
 
         _events.Log(request.ClinicId, eventType,
             leadId: request.LeadId, conversationId: request.ConversationId, source: origin);
+        if (reopened)
+        {
+            _events.Log(request.ClinicId, EventTypes.ConversationReopened,
+                leadId: request.LeadId, conversationId: request.ConversationId, source: origin);
+        }
 
         await _unitOfWork.SaveChangesAsync(ct);
 
@@ -497,6 +507,11 @@ public class MessageService : IMessageService
         if (modeChanged)
         {
             await _notifier.ConversationModeChangedAsync(request.ClinicId, request.ConversationId, ConversationMode.Human, ct);
+        }
+        if (reopened)
+        {
+            // Other open Inboxes move the conversation out of the Closed tab right away.
+            await _notifier.ConversationUpdatedAsync(request.ClinicId, request.ConversationId, ct);
         }
 
         if (request.LeadWasNewlyCreated)
