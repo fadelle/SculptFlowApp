@@ -76,6 +76,65 @@ public class TelegramBotClient : ITelegramBotClient
         return result.GetProperty("message_id").GetInt64();
     }
 
+    public async Task<TelegramFileInfo> GetFileAsync(string botToken, string fileId, CancellationToken ct = default)
+    {
+        var result = await CallAsync(botToken, "getFile", new { file_id = fileId }, ct);
+        var path = result.ValueKind == JsonValueKind.Object && result.TryGetProperty("file_path", out var p) ? p.GetString() : null;
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            throw new TelegramApiException("Telegram has no downloadable file for this id (it may have expired).");
+        }
+
+        long? size = result.TryGetProperty("file_size", out var s) && s.ValueKind == JsonValueKind.Number ? s.GetInt64() : null;
+        return new TelegramFileInfo(path, size);
+    }
+
+    public async Task<byte[]> DownloadFileAsync(string botToken, string filePath, int maxBytes, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(botToken))
+        {
+            throw new TelegramApiException("No Telegram bot token is configured.", errorCode: 401);
+        }
+        // The path comes from Telegram's own getFile answer; refuse anything that could leave the file area anyway.
+        if (string.IsNullOrWhiteSpace(filePath) || filePath.StartsWith('/') || filePath.Contains(".."))
+        {
+            throw new TelegramApiException("Telegram returned an unusable file path.");
+        }
+
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, $"{_apiBaseUrl}/file/bot{botToken}/{filePath}");
+            using var response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new TelegramApiException($"Telegram could not provide the file (HTTP {(int)response.StatusCode}).", (int)response.StatusCode);
+            }
+            if (response.Content.Headers.ContentLength is { } declared && declared > maxBytes)
+            {
+                throw new TelegramApiException($"The file is larger than the {maxBytes} byte limit.");
+            }
+
+            await using var stream = await response.Content.ReadAsStreamAsync(ct);
+            using var buffer = new MemoryStream();
+            var chunk = new byte[81920];
+            int read;
+            while ((read = await stream.ReadAsync(chunk, ct)) > 0)
+            {
+                buffer.Write(chunk, 0, read);
+                if (buffer.Length > maxBytes)
+                {
+                    throw new TelegramApiException($"The file is larger than the {maxBytes} byte limit.");
+                }
+            }
+            return buffer.ToArray();
+        }
+        catch (Exception ex) when ((ex is HttpRequestException || ex is TaskCanceledException) && !ct.IsCancellationRequested)
+        {
+            // Same rule as CallAsync: nothing URL-shaped (so no token) in the message.
+            throw new TelegramApiException($"Could not reach Telegram ({ex.GetType().Name}).");
+        }
+    }
+
     private async Task<JsonElement> CallAsync(string botToken, string method, object payload, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(botToken))

@@ -27,6 +27,9 @@ public class MessageRepository : IMessageRepository
         _db.Messages.FirstOrDefaultAsync(m =>
             m.ClinicId == clinicId && m.Channel == channel && m.ExternalMessageId == externalMessageId, ct);
 
+    public Task<Message?> GetForClinicReadOnlyAsync(Guid clinicId, Guid messageId, CancellationToken ct = default) =>
+        _db.Messages.AsNoTracking().FirstOrDefaultAsync(m => m.ClinicId == clinicId && m.Id == messageId, ct);
+
     public Task<string?> GetExternalIdAsync(Guid messageId, CancellationToken ct = default) =>
         _db.Messages.Where(m => m.Id == messageId).Select(m => m.ExternalMessageId).FirstOrDefaultAsync(ct);
 

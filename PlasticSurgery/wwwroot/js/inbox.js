@@ -396,7 +396,7 @@
         ? '<div class="inbox-msg-failure">' + escapeHtml(m.failureReason) + '</div>' : '';
       bubble.innerHTML =
         bubbleLabel(m.origin) +
-        '<div class="inbox-msg-content">' + escapeHtml(m.content || '') + '</div>' +
+        '<div class="inbox-msg-content">' + (window.InboxVoice && window.InboxVoice.isVoice(m) ? window.InboxVoice.html(m) : escapeHtml(m.content || '')) + '</div>' +
         failureNote +
         '<div class="inbox-msg-time" title="' + escapeHtml(formatTime(m.createdAt)) + '">' + formatClock(m.createdAt) + ' ' + tick + '</div>';
 

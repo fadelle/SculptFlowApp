@@ -210,6 +210,52 @@ public class TelegramBotClientTests
         Assert.Equal(2, _http.Requests.Count);
     }
 
+    [Fact]
+    public async Task GetFile_returns_the_path_and_size_and_refuses_an_answer_without_a_path()
+    {
+        _http.Enqueue(HttpStatusCode.OK, Ok("{\"file_id\":\"f\",\"file_path\":\"voice/file_1.oga\",\"file_size\":2048}"));
+        var info = await Sut().GetFileAsync("123:AAA", "FILEID");
+        Assert.Equal(("voice/file_1.oga", (long?)2048), (info.FilePath, info.FileSize));
+        Assert.Equal("https://api.telegram.org/bot123:AAA/getFile", _http.Requests[0].Uri.ToString());
+        Assert.Contains("\"file_id\":\"FILEID\"", _http.Requests[0].Body);
+
+        _http.Enqueue(HttpStatusCode.OK, Ok("{\"file_id\":\"f\"}"));
+        await Assert.ThrowsAsync<TelegramApiException>(() => Sut().GetFileAsync("t", "f"));
+    }
+
+    [Fact]
+    public async Task DownloadFile_reads_the_bytes_from_the_file_area_and_enforces_the_size_limit()
+    {
+        var audio = new byte[] { 1, 2, 3, 4, 5 };
+        _http.Enqueue(_ => new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(audio) });
+        Assert.Equal(audio, await Sut().DownloadFileAsync("123:AAA", "voice/file_1.oga", 100));
+        Assert.Equal("https://api.telegram.org/file/bot123:AAA/voice/file_1.oga", _http.Requests[0].Uri.ToString());
+
+        _http.Enqueue(_ => new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(audio) });
+        await Assert.ThrowsAsync<TelegramApiException>(() => Sut().DownloadFileAsync("t", "voice/a.oga", 4)); // content-length over the limit
+
+        _http.Enqueue(_ => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StreamContent(new MemoryStream(audio)) }); // no length: caught while reading
+        await Assert.ThrowsAsync<TelegramApiException>(() => Sut().DownloadFileAsync("t", "voice/a.oga", 4));
+    }
+
+    [Fact]
+    public async Task DownloadFile_failures_never_leak_the_token_and_odd_paths_are_refused()
+    {
+        _http.Enqueue(HttpStatusCode.NotFound, "");
+        var notFound = await Assert.ThrowsAsync<TelegramApiException>(() => Sut().DownloadFileAsync("123:SECRET", "voice/a.oga", 100));
+        Assert.Contains("404", notFound.Message);
+        Assert.DoesNotContain("SECRET", notFound.Message);
+
+        _http.EnqueueThrow(new HttpRequestException("https://api.telegram.org/file/bot123:SECRET/voice/a.oga failed"));
+        var unreachable = await Assert.ThrowsAsync<TelegramApiException>(() => Sut().DownloadFileAsync("123:SECRET", "voice/a.oga", 100));
+        Assert.DoesNotContain("SECRET", unreachable.Message);
+
+        foreach (var bad in new[] { "", "/etc/passwd", "../x.oga" })
+            await Assert.ThrowsAsync<TelegramApiException>(() => Sut().DownloadFileAsync("t", bad, 100));
+        await Assert.ThrowsAsync<TelegramApiException>(() => Sut().DownloadFileAsync(" ", "voice/a.oga", 100));
+        Assert.Equal(2, _http.Requests.Count); // the refused calls never went out
+    }
+
     [Theory]
     [InlineData(401, "Unauthorized", "rejected the bot token")]
     [InlineData(403, "Forbidden", "blocked the bot")]

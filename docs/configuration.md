@@ -92,6 +92,7 @@ Generated from `Common/Statics/ConfigDefaults`; keep this table in step when you
 | Integrations | TokenRefreshMarginMinutes | 5 | int 0–60 | Calendar and TikTok access tokens are refreshed this long before they expire. |
 | Infobip | TimeoutSeconds | 20 | int 5–120 | Timeout of one call to Infobip. |
 | Infobip | MaxSendAttempts | 3 | int 1–5 | Total tries for a send Infobip clearly refused (429/503/no connection). |
+| Voice | MaxBytes | 10485760 | int 1024–20971520 | Largest voice note (bytes) the Inbox will download from the provider to play or forward. |
 | Dashboard | LeadsPageSize | 25 | int 5–200 | Leads per page on the dashboard. |
 
 Only the Infobip HTTP timeout needs a new HTTP client to pick a change up (a new one is created per request scope), and the

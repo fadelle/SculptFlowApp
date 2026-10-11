@@ -20,6 +20,8 @@ using PlasticSurgery.Business.Contracts.Jobs;
 using PlasticSurgery.Business.Contracts.Managers;
 using PlasticSurgery.Business.Contracts.Providers.Caching;
 using PlasticSurgery.Business.Contracts.Providers.Channels;
+using PlasticSurgery.Business.Contracts.Providers.Media;
+using PlasticSurgery.Business.Providers.Media;
 using PlasticSurgery.Business.Contracts.Services.Caching;
 using PlasticSurgery.Business.Providers.Caching;
 using PlasticSurgery.Business.Services.Caching;
@@ -317,6 +319,9 @@ builder.Services.AddScoped<ITelegramIntegrationService, TelegramIntegrationServi
 builder.Services.AddScoped<ITelegramWebhookProcessor, TelegramWebhookProcessor>();
 builder.Services.AddScoped<IChannelSender, WhatsAppChannelSender>();
 builder.Services.AddScoped<IChannelSender, TelegramChannelSender>();
+// Voice notes: one media source per channel (resolved by Message.Channel, like IChannelSender) + the Inbox playback service.
+builder.Services.AddScoped<IVoiceMediaSource, TelegramVoiceMediaSource>();
+builder.Services.AddScoped<IMessageMediaService, MessageMediaService>();
 
 // Subscriptions & usage billing — an internal module (Billing/, docs/billing.md): plans + entitlements, prepaid
 // wallet + included credit, rate cards, usage records, the ledger, and one maintenance worker. Off until

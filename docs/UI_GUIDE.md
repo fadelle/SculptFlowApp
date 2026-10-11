@@ -105,7 +105,7 @@ section wins**. Copy says *patient* where the guide says *customer*: the people 
   text (AA). The page scripts (Inbox, calendar, templates, benchmark) emit the same classes.
 - **Script hooks a restyle must keep:** every `id`, `data-*` and `name` the scripts read; classes that are hooks
   (`seg-opt`, `aud-card`, `cat-card`, `kb-choice`, `seg-cards`, `var-*`, `ms-*`, `week-row`, `inbox-filter`,
-  `inbox-conv-item`, `time-view-switch`, `row-actions`); a popup's card stays the direct child of its overlay (backdrop
+  `inbox-conv-item`, `inbox-voice` (the Inbox voice-note player), `time-view-switch`, `row-actions`); a popup's card stays the direct child of its overlay (backdrop
   clicks close on `e.target === overlay`); `templates-page.js` reads a row's second cell and copies `.row-actions`;
   `leads.js` swaps `#leads-results`; elements whose class a script rewrites (`[data-pw-rule]`, `[data-pw-match]`,
   `[data-status-for]`, `#inbox-lead-status`, `#inbox-thread-mode`, `[data-role=status]`, the dashboard health dot) keep

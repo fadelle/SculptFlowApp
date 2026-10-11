@@ -122,6 +122,8 @@ public static class ConfigDefaults
         "Timeout of one call to Infobip.", 5, 120);
     public static readonly ConfigDefinition InfobipMaxSendAttempts = new("Infobip", "MaxSendAttempts", "3", ConfigValueType.Int,
         "Total tries for a send Infobip clearly refused (429/503/no connection).", 1, 5);
+    public static readonly ConfigDefinition VoiceMaxBytes = new("Voice", "MaxBytes", "10485760", ConfigValueType.Int,
+        "Largest voice note (bytes) the Inbox will download from the provider to play or forward.", 1024, 20971520);
     public static readonly ConfigDefinition DashboardLeadsPageSize = new("Dashboard", "LeadsPageSize", "25", ConfigValueType.Int,
         "Leads per page on the dashboard.", 5, 200);
 
@@ -190,6 +192,8 @@ public static class ConfigDefaults
 
         InfobipTimeoutSeconds,
         InfobipMaxSendAttempts,
+
+        VoiceMaxBytes,
 
         DashboardLeadsPageSize
     ];

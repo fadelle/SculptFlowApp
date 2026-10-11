@@ -99,6 +99,9 @@ public class ConfigManager : IConfigManager
     public int InfobipTimeoutSeconds => GetInt(ConfigDefaults.InfobipTimeoutSeconds);
     public int InfobipMaxSendAttempts => GetInt(ConfigDefaults.InfobipMaxSendAttempts);
 
+    // ---- Voice
+    public int VoiceMaxBytes => GetInt(ConfigDefaults.VoiceMaxBytes);
+
     // ---- Dashboard
     public int DashboardLeadsPageSize => GetInt(ConfigDefaults.DashboardLeadsPageSize);
 

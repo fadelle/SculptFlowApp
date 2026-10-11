@@ -185,6 +185,10 @@ public interface IConfigManager
     /// <summary>Total tries for a send Infobip clearly refused (429/503/no connection). Default 3.</summary>
     int InfobipMaxSendAttempts { get; }
 
+    // ---- Voice
+    /// <summary>Largest voice note (bytes) the Inbox will download from the provider to play or forward. Default 10485760.</summary>
+    int VoiceMaxBytes { get; }
+
     // ---- Dashboard
     /// <summary>Leads per page on the dashboard. Default 25.</summary>
     int DashboardLeadsPageSize { get; }

@@ -270,6 +270,8 @@ public class ConversationAndMessageRepositoryTests(PostgresFixture fixture) : Re
         Assert.Null(await repo.FindByExternalIdAsync(c.Id, "telegram", "ext-a"));
         Assert.Equal("ext-a", await repo.GetExternalIdAsync(first.Id));
         Assert.Null(await repo.GetExternalIdAsync(second.Id));
+        Assert.Equal(first.Id, (await repo.GetForClinicReadOnlyAsync(c.Id, first.Id))!.Id);
+        Assert.Null(await repo.GetForClinicReadOnlyAsync(Guid.NewGuid(), first.Id));
         Assert.Equal(2, (await repo.ListByIdsReadOnlyAsync([first.Id, third.Id, Guid.NewGuid()])).Count);
 
         var added = MakeMessage(convo, content: "d");

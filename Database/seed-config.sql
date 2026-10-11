@@ -67,5 +67,6 @@ insert into config.settings (section, key, value, updated_by) values
   ('Integrations', 'TokenRefreshMarginMinutes', '5', 'seed'),
   ('Infobip', 'TimeoutSeconds', '20', 'seed'),
   ('Infobip', 'MaxSendAttempts', '3', 'seed'),
+  ('Voice', 'MaxBytes', '10485760', 'seed'),
   ('Dashboard', 'LeadsPageSize', '25', 'seed')
 on conflict (section, key) do nothing;
