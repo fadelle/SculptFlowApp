@@ -25,6 +25,7 @@ public class NotificationsController : DashboardApiController
         var clinicId = await GetClinicIdAsync(ct);
         if (clinicId is null) return Forbid();
 
+        skip = Math.Max(skip, 0);
         take = Math.Clamp(take, 1, 100);
         return Ok(await _notifications.ListAsync(clinicId.Value, skip, take, ct));
     }

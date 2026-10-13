@@ -121,6 +121,11 @@ public class ChannelIntegrationService : IChannelIntegrationService
 
     public async Task DisconnectAsync(Guid clinicId, string channel, CancellationToken ct = default)
     {
+        if (!ChannelType.All.Contains(channel))
+        {
+            throw new ArgumentException($"Unknown channel '{channel}'.", nameof(channel));
+        }
+
         if (channel == ChannelType.Telegram)
         {
             // Also removes the webhook at Telegram — see TelegramIntegrationService.DisconnectAsync.

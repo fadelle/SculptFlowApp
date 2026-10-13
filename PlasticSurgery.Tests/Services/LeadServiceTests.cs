@@ -9,8 +9,12 @@ public class LeadServiceTests
     private readonly Mock<IUnitOfWork> _uow = new();
     private readonly Mock<IEventLogger> _events = new();
     private readonly Mock<IProcedureService> _procedures = new();
+    private readonly Mock<IClinicRepository> _clinics = new();
 
-    private LeadService Sut() => new(_leads.Object, _uow.Object, _events.Object, _procedures.Object);
+    public LeadServiceTests() =>
+        _clinics.Setup(c => c.GetReadOnlyAsync(_clinicId, It.IsAny<CancellationToken>())).ReturnsAsync(new Clinic { Id = _clinicId, Name = "Test" });
+
+    private LeadService Sut() => new(_leads.Object, _uow.Object, _events.Object, _procedures.Object, _clinics.Object);
 
     private Lead Existing(string status = LeadStatus.New) => new()
     {
@@ -61,6 +65,34 @@ public class LeadServiceTests
         await Sut().CreateOrGetAsync(Create(null, null));
         _leads.Verify(l => l.FindByExternalIdAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
         _leads.Verify(l => l.LoadProcedureAsync(It.IsAny<Lead>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Create_for_an_unknown_clinic_is_not_found_and_saves_nothing()
+    {
+        var request = Create("ext3") with { ClinicId = Guid.NewGuid() };
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => Sut().CreateOrGetAsync(request));
+        _leads.Verify(l => l.Add(It.IsAny<Lead>()), Times.Never);
+        _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Create_without_a_name_phone_or_email_is_rejected()
+    {
+        var request = Create(null) with { FullName = " ", FirstName = null, LastName = "", Phone = null, Email = null };
+        await Assert.ThrowsAsync<ArgumentException>(() => Sut().CreateOrGetAsync(request));
+        _leads.Verify(l => l.Add(It.IsAny<Lead>()), Times.Never);
+    }
+
+    [Theory]
+    [InlineData("Ann", null, null)]
+    [InlineData(null, "961711", null)]
+    [InlineData(null, null, "a@x.com")]
+    public async Task Create_needs_only_one_of_name_phone_or_email(string? first, string? phone, string? email)
+    {
+        var request = Create(null) with { FullName = null, FirstName = first, LastName = null, Phone = phone, Email = email };
+        var (_, created) = await Sut().CreateOrGetAsync(request);
+        Assert.True(created);
     }
 
     [Fact]

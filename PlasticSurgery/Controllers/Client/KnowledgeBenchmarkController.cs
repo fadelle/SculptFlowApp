@@ -46,7 +46,7 @@ public class KnowledgeBenchmarkController : DashboardApiController
     {
         var clinicId = await GetClinicIdAsync(ct);
         if (clinicId is null) return Forbid();
-        return Ok(await _benchmark.ListCasesAsync(clinicId.Value, new BenchmarkCaseFilter(view, generationId), skip, take, ct));
+        return Ok(await _benchmark.ListCasesAsync(clinicId.Value, new BenchmarkCaseFilter(view, generationId), Math.Max(skip, 0), take, ct));
     }
 
     [HttpGet("cases/{id:guid}")]
@@ -205,7 +205,7 @@ public class KnowledgeBenchmarkController : DashboardApiController
     {
         var clinicId = await GetClinicIdAsync(ct);
         if (clinicId is null) return Forbid();
-        var results = await _benchmark.ListResultsAsync(clinicId.Value, id, classification, skip, take, ct);
+        var results = await _benchmark.ListResultsAsync(clinicId.Value, id, classification, Math.Max(skip, 0), take, ct);
         return results is null ? NotFound() : Ok(results);
     }
 

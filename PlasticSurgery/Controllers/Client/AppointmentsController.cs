@@ -91,6 +91,7 @@ public class AppointmentsController : DashboardApiController
         var clinicId = await GetClinicIdAsync(ct);
         if (clinicId is null) return Forbid();
 
+        skip = Math.Max(skip, 0);
         take = Math.Clamp(take, 1, 200);
         var (items, totalCount) = await _appointments.ListAsync(clinicId.Value, status, from, to, skip, take, ct);
         return Ok(new { items, totalCount, skip, take });

@@ -35,7 +35,7 @@ public class WhatsAppHealthController : DashboardApiController
         var clinicId = await GetClinicIdAsync(ct);
         if (clinicId is null) return Forbid();
 
-        var events = await _health.GetHealthEventsAsync(clinicId.Value, skip, Math.Clamp(take, 1, 200), ct);
+        var events = await _health.GetHealthEventsAsync(clinicId.Value, Math.Max(skip, 0), Math.Clamp(take, 1, 200), ct);
         return Ok(events);
     }
 }

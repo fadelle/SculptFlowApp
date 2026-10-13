@@ -8,6 +8,7 @@ using PlasticSurgery.Entities.Models;
 using PlasticSurgery.Entities.Requests.Leads;
 using PlasticSurgery.Entities.Responses.Leads;
 using PlasticSurgery.Persistence.Contracts;
+using PlasticSurgery.Persistence.Contracts.Clinics;
 using PlasticSurgery.Persistence.Contracts.Leads;
 
 namespace PlasticSurgery.Business.Services.Leads;
@@ -18,17 +19,26 @@ public class LeadService : ILeadService
     private readonly IUnitOfWork _unitOfWork;
     private readonly IEventLogger _events;
     private readonly IProcedureService _procedures;
+    private readonly IClinicRepository _clinics;
 
-    public LeadService(ILeadRepository leads, IUnitOfWork unitOfWork, IEventLogger events, IProcedureService procedures)
+    public LeadService(ILeadRepository leads, IUnitOfWork unitOfWork, IEventLogger events, IProcedureService procedures, IClinicRepository clinics)
     {
         _leads = leads;
         _unitOfWork = unitOfWork;
         _events = events;
         _procedures = procedures;
+        _clinics = clinics;
     }
 
+    /// <summary>Public intake (n8n / lead forms). The clinic must exist (404 otherwise, never a foreign-key 500) and the lead
+    /// needs at least one way to identify or reach the person: a name, phone or email.</summary>
     public async Task<(LeadResponse Lead, bool WasCreated)> CreateOrGetAsync(CreateLeadRequest request, CancellationToken ct = default)
     {
+        if (await _clinics.GetReadOnlyAsync(request.ClinicId, ct) is null)
+        {
+            throw new KeyNotFoundException("Clinic not found.");
+        }
+
         if (!string.IsNullOrWhiteSpace(request.ExternalLeadId))
         {
             var existing = await _leads.FindByExternalIdAsync(request.ClinicId, request.ExternalLeadId, ct);
@@ -37,6 +47,11 @@ public class LeadService : ILeadService
             {
                 return (LeadMapper.ToResponse(existing), false);
             }
+        }
+
+        if (new[] { request.FullName, request.FirstName, request.LastName, request.Phone, request.Email }.All(string.IsNullOrWhiteSpace))
+        {
+            throw new ArgumentException("A lead needs a name, phone or email.");
         }
 
         var lead = new Lead

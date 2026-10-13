@@ -31,12 +31,22 @@ public class ConversationServiceTests
     public async Task Create_validates_channel_and_starts_in_ai_mode()
     {
         await Assert.ThrowsAsync<ArgumentException>(() => Sut().CreateAsync(new CreateConversationRequest(_clinicId, _leadId, "pigeon", null)));
+        _leads.Setup(l => l.GetAsync(_clinicId, _leadId, It.IsAny<CancellationToken>())).ReturnsAsync(new Lead { Id = _leadId, ClinicId = _clinicId });
         Conversation? added = null;
         _conversations.Setup(r => r.Add(It.IsAny<Conversation>())).Callback<Conversation>(c => added = c);
         var r = await Sut().CreateAsync(new CreateConversationRequest(_clinicId, _leadId, ConversationChannel.Telegram, "t1"));
         Assert.Equal((ConversationMode.Ai, true, false, ConversationStatus.Active, "t1"), (added!.Mode, added.AiEnabled, added.HumanTakeover, added.Status, added.ExternalThreadId));
         Assert.Equal(added.Id, r.Id);
         _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Create_for_a_lead_this_clinic_doesnt_have_is_not_found()
+    {
+        // Covers both a lead that doesn't exist and another clinic's lead: the lookup is scoped to the clinic.
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => Sut().CreateAsync(new CreateConversationRequest(_clinicId, Guid.NewGuid(), ConversationChannel.Website, null)));
+        _conversations.Verify(r => r.Add(It.IsAny<Conversation>()), Times.Never);
+        _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -116,6 +126,7 @@ public class ConversationServiceTests
     public async Task AddMessage_validates_direction_and_returns_null_for_unknown_conversation()
     {
         await Assert.ThrowsAsync<ArgumentException>(() => Sut().AddMessageAsync(_clinicId, Guid.NewGuid(), Msg("sideways", "lead")));
+        await Assert.ThrowsAsync<ArgumentException>(() => Sut().AddMessageAsync(_clinicId, Guid.NewGuid(), Msg("inbound", "martian")));
         Assert.Null(await Sut().AddMessageAsync(_clinicId, Guid.NewGuid(), Msg("inbound", "lead")));
     }
 

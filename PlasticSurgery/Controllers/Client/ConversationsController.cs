@@ -54,7 +54,7 @@ public class ConversationsController : ControllerBase
         var clinicId = await _clinicContext.GetClinicIdAsync(ct);
         if (clinicId is null) return Forbid();
 
-        var (items, totalCount) = await _conversations.ListAsync(clinicId.Value, skip, Math.Clamp(take, 1, 200), ct);
+        var (items, totalCount) = await _conversations.ListAsync(clinicId.Value, Math.Max(skip, 0), Math.Clamp(take, 1, 200), ct);
         return Ok(new { items, totalCount });
     }
 

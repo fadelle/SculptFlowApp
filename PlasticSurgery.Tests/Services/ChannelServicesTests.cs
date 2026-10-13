@@ -88,6 +88,13 @@ public class ChannelIntegrationServiceTests
     }
 
     [Fact]
+    public async Task Disconnect_rejects_an_unknown_channel_type()
+    {
+        await Assert.ThrowsAsync<ArgumentException>(() => Sut().DisconnectAsync(_clinicId, "pigeon"));
+        _repo.Verify(r => r.GetAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
     public async Task ConnectWhatsApp_with_a_code_discovers_waba_and_number_registers_and_saves()
     {
         _graph.Setup(g => g.ExchangeCodeForTokenAsync("code", "https://r", It.IsAny<CancellationToken>())).ReturnsAsync("tok");

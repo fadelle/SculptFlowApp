@@ -34,6 +34,10 @@ public class WhatsAppTemplateServiceTests
     [InlineData("bogus", "n", "b")]
     [InlineData("marketing", " ", "b")]
     [InlineData("marketing", "n", " ")]
+    [InlineData("marketing", "Bad Name!", "b")]
+    [InlineData("marketing", "Promo", "b")]
+    [InlineData("marketing", "spring sale", "b")]
+    [InlineData("marketing", "promo-2", "b")]
     public async Task Create_validates(string category, string name, string body) =>
         await Assert.ThrowsAsync<ArgumentException>(() => Sut().CreateAsync(Create(category, name, body)));
 

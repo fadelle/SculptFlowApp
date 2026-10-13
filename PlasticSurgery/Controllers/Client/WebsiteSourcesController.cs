@@ -57,7 +57,7 @@ public class WebsiteSourcesController : DashboardApiController
         var clinicId = await GetClinicIdAsync(ct);
         if (clinicId is null) return Forbid();
         if (await _websites.GetAsync(clinicId.Value, id, ct) is null) return NotFound();
-        return Ok(await _websites.ListPagesAsync(clinicId.Value, id, status, skip, take, ct));
+        return Ok(await _websites.ListPagesAsync(clinicId.Value, id, status, Math.Max(skip, 0), take, ct));
     }
 
     [HttpPost("{id:guid}/rescrape")]

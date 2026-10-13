@@ -37,7 +37,24 @@ public class ConversationService : IConversationService
         _notifications = notifications;
     }
 
+    /// <summary>Staff opening a conversation: the lead must be one of this clinic's (404 otherwise, never a foreign-key 500
+    /// or a conversation tied to another clinic's lead).</summary>
     public async Task<ConversationResponse> CreateAsync(CreateConversationRequest request, CancellationToken ct = default)
+    {
+        if (!ConversationChannel.All.Contains(request.Channel))
+        {
+            throw new ArgumentException($"Invalid channel '{request.Channel}'.", nameof(request));
+        }
+        if (await _leads.GetAsync(request.ClinicId, request.LeadId, ct) is null)
+        {
+            throw new KeyNotFoundException("Lead not found.");
+        }
+
+        return await CreateCoreAsync(request, ct);
+    }
+
+    /// <summary>Creates the row without the lead lookup — for callers that just resolved or created the lead themselves.</summary>
+    private async Task<ConversationResponse> CreateCoreAsync(CreateConversationRequest request, CancellationToken ct)
     {
         if (!ConversationChannel.All.Contains(request.Channel))
         {
@@ -74,7 +91,7 @@ public class ConversationService : IConversationService
         var existing = await _conversations.FindForLeadAsync(clinicId, leadId, channel, ct);
         if (existing is not null) return InboxMapper.ToResponse(existing);
 
-        return await CreateAsync(new CreateConversationRequest(clinicId, leadId, channel, ExternalThreadId: null), ct);
+        return await CreateCoreAsync(new CreateConversationRequest(clinicId, leadId, channel, ExternalThreadId: null), ct);
     }
 
     public async Task<ConversationResponse> GetOrCreateForLeadAsync(
@@ -125,6 +142,10 @@ public class ConversationService : IConversationService
         if (!MessageDirection.Inbound.Equals(request.Direction) && !MessageDirection.Outbound.Equals(request.Direction))
         {
             throw new ArgumentException($"Invalid message direction '{request.Direction}'.", nameof(request));
+        }
+        if (request.SenderType is not (MessageSenderType.Lead or MessageSenderType.Ai or MessageSenderType.Staff or MessageSenderType.System))
+        {
+            throw new ArgumentException($"Invalid sender type '{request.SenderType}'.", nameof(request));
         }
 
         var conversation = await _conversations.GetAsync(clinicId, conversationId, ct);
