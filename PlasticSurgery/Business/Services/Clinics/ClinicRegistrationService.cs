@@ -53,8 +53,15 @@ public partial class ClinicRegistrationService : IClinicRegistrationService
         _subscriptions = subscriptions;
     }
 
+    /// <summary>What a refused signup says while Accounts:SignupEnabled is off.</summary>
+    public const string SignupClosedMessage = "New clinic sign-ups are closed right now. Contact MySculptFlow to get an account.";
+
+    public bool IsSignupOpen => _config.AccountsSignupEnabled;
+
     public async Task<ClinicRegistrationResult> RegisterAsync(RegisterClinicRequest request, CancellationToken ct = default)
     {
+        if (!IsSignupOpen) return ClinicRegistrationResult.Fail(SignupClosedMessage);
+
         var fullName = (request.FullName ?? string.Empty).Trim();
         var clinicName = (request.ClinicName ?? string.Empty).Trim();
         var email = (request.Email ?? string.Empty).Trim();
@@ -76,6 +83,8 @@ public partial class ClinicRegistrationService : IClinicRegistrationService
 
     public async Task<ClinicRegistrationResult> RegisterExternalAsync(RegisterExternalClinicRequest request, CancellationToken ct = default)
     {
+        if (!IsSignupOpen) return ClinicRegistrationResult.Fail(SignupClosedMessage);
+
         var fullName = (request.FullName ?? string.Empty).Trim();
         var clinicName = (request.ClinicName ?? string.Empty).Trim();
         var email = (request.Email ?? string.Empty).Trim();

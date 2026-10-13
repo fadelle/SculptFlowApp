@@ -206,22 +206,9 @@ public class CampaignService : ICampaignService
         if (campaign is null) return null;
         await _entitlements.EnsureFeatureAsync(clinicId, EntitlementKeys.Campaigns, ct);
 
-        if (campaign.Status is CampaignStatus.Draft or CampaignStatus.Scheduled)
+        if (campaign.Status is CampaignStatus.Draft or CampaignStatus.Scheduled or CampaignStatus.Paused)
         {
-            var pending = await _campaigns.ListRecipientsInStatusAsync(id, new[] { CampaignRecipientStatus.Pending }, ct);
-
-            var now = DateTimeOffset.UtcNow;
-            foreach (var r in pending)
-            {
-                r.Status = CampaignRecipientStatus.Queued;
-                r.QueuedAt = now;
-                r.UpdatedAt = now;
-            }
-
-            campaign.Status = CampaignStatus.Running;
-            campaign.StartedAt = now;
-            campaign.UpdatedAt = now;
-            await _unitOfWork.SaveChangesAsync(ct);
+            await StartAsync(campaign, ct);
         }
         else if (campaign.Status != CampaignStatus.Running)
         {
@@ -229,6 +216,26 @@ public class CampaignService : ICampaignService
         }
 
         return await ProcessBatchAsync(clinicId, id, batchSize, ct);
+    }
+
+    /// <summary>Draft/Scheduled/Paused -> Running: queues every recipient still Pending (a stopped campaign that never
+    /// started still has them) and keeps the first StartedAt when a stopped campaign is resumed.</summary>
+    private async Task StartAsync(Campaign campaign, CancellationToken ct)
+    {
+        var pending = await _campaigns.ListRecipientsInStatusAsync(campaign.Id, new[] { CampaignRecipientStatus.Pending }, ct);
+
+        var now = DateTimeOffset.UtcNow;
+        foreach (var r in pending)
+        {
+            r.Status = CampaignRecipientStatus.Queued;
+            r.QueuedAt = now;
+            r.UpdatedAt = now;
+        }
+
+        campaign.Status = CampaignStatus.Running;
+        campaign.StartedAt ??= now;
+        campaign.UpdatedAt = now;
+        await _unitOfWork.SaveChangesAsync(ct);
     }
 
     public async Task<ProcessCampaignBatchResult?> ProcessBatchAsync(Guid clinicId, Guid id, int batchSize = 20, CancellationToken ct = default)
@@ -243,19 +250,40 @@ public class CampaignService : ICampaignService
         }
         await _entitlements.EnsureFeatureAsync(clinicId, EntitlementKeys.Campaigns, ct);
 
+        // One sender per campaign at a time (the Send button and the background sender, or two app instances), so
+        // nobody is messaged twice. If another sender has it, it is already sending: report progress and step aside.
+        await using var sendingLock = await _campaigns.TryLockForSendingAsync(id, ct);
+        if (sendingLock is null)
+        {
+            var remaining = await _campaigns.CountRecipientsInStatusAsync(id, CampaignRecipientStatus.Queued, ct);
+            return new ProcessCampaignBatchResult(0, 0, 0, remaining, false);
+        }
+
         var batch = await _campaigns.ListQueuedBatchAsync(id, batchSize, ct);
 
+        var processed = 0;
         var succeeded = 0;
         var failed = 0;
+        var stillRunning = true;
         foreach (var recipient in batch)
         {
+            // Read fresh before every message, so Stop or Cancel pressed mid-batch halts sending at once.
+            if (await _campaigns.GetStatusReadOnlyAsync(id, ct) != CampaignStatus.Running)
+            {
+                stillRunning = false;
+                break;
+            }
+
             var ok = await ProcessRecipientAsync(clinicId, recipient, ct);
+            processed++;
             if (ok) succeeded++; else failed++;
         }
 
         var remainingQueued = await _campaigns.CountRecipientsInStatusAsync(id, CampaignRecipientStatus.Queued, ct);
 
-        var completed = remainingQueued == 0;
+        // Only a campaign that is still running completes: a stopped or cancelled one keeps the status staff gave it.
+        var completed = remainingQueued == 0 && stillRunning
+                        && await _campaigns.GetStatusReadOnlyAsync(id, ct) == CampaignStatus.Running;
         if (completed)
         {
             campaign.Status = CampaignStatus.Completed;
@@ -264,7 +292,53 @@ public class CampaignService : ICampaignService
             await _unitOfWork.SaveChangesAsync(ct);
         }
 
-        return new ProcessCampaignBatchResult(batch.Count, succeeded, failed, remainingQueued, completed);
+        return new ProcessCampaignBatchResult(processed, succeeded, failed, remainingQueued, completed);
+    }
+
+    public Task<IReadOnlyList<DueCampaign>> ListDueAsync(CancellationToken ct = default) =>
+        _campaigns.ListDueForSendingReadOnlyAsync(DateTimeOffset.UtcNow, ct);
+
+    public async Task<ProcessCampaignBatchResult?> SendDueAsync(Guid clinicId, Guid id, int batchSize, CancellationToken ct = default)
+    {
+        var campaign = await _campaigns.GetAsync(clinicId, id, ct);
+        if (campaign is null) return null;
+
+        if (campaign.Status == CampaignStatus.Scheduled)
+        {
+            // Re-checked here (the list can be a minute old): never start one before its time, or one staff stopped.
+            if (campaign.ScheduledAt is null || campaign.ScheduledAt > DateTimeOffset.UtcNow) return null;
+            await _entitlements.EnsureFeatureAsync(clinicId, EntitlementKeys.Campaigns, ct);
+            await StartAsync(campaign, ct);
+        }
+        else if (campaign.Status != CampaignStatus.Running)
+        {
+            return null; // stopped, cancelled or finished since it was listed
+        }
+
+        return await ProcessBatchAsync(clinicId, id, batchSize, ct);
+    }
+
+    public async Task<CampaignResponse?> StopAsync(Guid clinicId, Guid id, CancellationToken ct = default)
+    {
+        var campaign = await _campaigns.GetAsync(clinicId, id, ct);
+        if (campaign is null) return null;
+        if (campaign.Status is not (CampaignStatus.Scheduled or CampaignStatus.Running))
+        {
+            throw new InvalidOperationException($"Only a scheduled or sending campaign can be stopped (this one is '{campaign.Status}').");
+        }
+
+        // Set-based and conditional: the sender may be finishing it right now, and a finished campaign must stay finished.
+        var now = DateTimeOffset.UtcNow;
+        var stopped = await _campaigns.TryChangeStatusAsync(clinicId, id,
+            new[] { CampaignStatus.Scheduled, CampaignStatus.Running }, CampaignStatus.Paused, now, ct);
+        if (!stopped)
+        {
+            throw new InvalidOperationException("The campaign finished or changed before it could be stopped. Refresh the page to see where it is.");
+        }
+
+        campaign.Status = CampaignStatus.Paused;
+        campaign.UpdatedAt = now;
+        return ToResponse(campaign);
     }
 
     /// <summary>Sends one recipient's template and records the outcome. A single recipient's failure (bad phone

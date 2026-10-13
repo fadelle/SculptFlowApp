@@ -12,6 +12,10 @@ namespace PlasticSurgery.Common.Statics;
 /// </summary>
 public static class ConfigDefaults
 {
+    public static readonly ConfigDefinition AccountsSignupEnabled = new("Accounts", "SignupEnabled", "true", ConfigValueType.Bool,
+        "Whether anyone can create a new clinic from the Register page or \"Continue with Google\". Off = only existing accounts can sign in.");
+    public static readonly ConfigDefinition AccountsSignupsPerIpPerHour = new("Accounts", "SignupsPerIpPerHour", "20", ConfigValueType.Int,
+        "Most sign-up attempts one IP address may make per hour (Register and the Google clinic-name step).", 1, 1000);
     public static readonly ConfigDefinition AvailabilityDefaultDurationMinutes = new("Availability", "DefaultDurationMinutes", "30", ConfigValueType.Int,
         "Consultation length (minutes) for clinics that haven't set their own booking settings.", 5, 480);
     public static readonly ConfigDefinition AvailabilityDefaultBufferMinutes = new("Availability", "DefaultBufferMinutes", "0", ConfigValueType.Int,
@@ -104,6 +108,12 @@ public static class ConfigDefaults
         "Most generated questions accepted per chunk.", 1, 10);
     public static readonly ConfigDefinition CampaignsDefaultInactiveDays = new("Campaigns", "DefaultInactiveDays", "60", ConfigValueType.Int,
         "Default \"inactive for\" days of a reactivation audience.", 1, 3650);
+    public static readonly ConfigDefinition CampaignsBookingAttributionDays = new("Campaigns", "BookingAttributionDays", "14", ConfigValueType.Int,
+        "A consultation booked this many days after a patient replied to a campaign counts as that campaign's booking.", 1, 365);
+    public static readonly ConfigDefinition CampaignsSenderIntervalSeconds = new("Campaigns", "SenderIntervalSeconds", "60", ConfigValueType.Int,
+        "How often the campaign sender starts campaigns whose scheduled time has come and sends the next batch of every running campaign.", 10, 3600);
+    public static readonly ConfigDefinition CampaignsSendBatchSize = new("Campaigns", "SendBatchSize", "20", ConfigValueType.Int,
+        "Most messages the campaign sender sends per campaign each time it runs.", 1, 500);
     public static readonly ConfigDefinition EmbeddingsBaseUrl = new("Embeddings", "BaseUrl", "https://api.openai.com/v1", ConfigValueType.String,
         "Base URL of the OpenAI-compatible embeddings API.", Pattern: @"^https?://\S+$");
     public static readonly ConfigDefinition EmbeddingsModel = new("Embeddings", "Model", "text-embedding-3-small", ConfigValueType.String,
@@ -125,6 +135,9 @@ public static class ConfigDefaults
 
     public static readonly IReadOnlyList<ConfigDefinition> All =
     [
+        AccountsSignupEnabled,
+        AccountsSignupsPerIpPerHour,
+
         AvailabilityDefaultDurationMinutes,
         AvailabilityDefaultBufferMinutes,
         AvailabilityDefaultNoticeMinutes,
@@ -176,6 +189,9 @@ public static class ConfigDefaults
         BenchmarkMaxQuestionsPerChunk,
 
         CampaignsDefaultInactiveDays,
+        CampaignsBookingAttributionDays,
+        CampaignsSenderIntervalSeconds,
+        CampaignsSendBatchSize,
 
         EmbeddingsBaseUrl,
         EmbeddingsModel,

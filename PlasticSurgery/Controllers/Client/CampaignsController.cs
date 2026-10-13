@@ -100,9 +100,9 @@ public class CampaignsController : DashboardApiController
         return campaign is null ? NotFound() : Ok(campaign);
     }
 
-    /// <summary>Starts (or, if already Running, continues) sending — queues every Pending recipient
-    /// on first call, then processes one bounded batch. Safe to call repeatedly; keep calling until
-    /// the result's CampaignCompleted is true. See ICampaignService for the batching rationale.</summary>
+    /// <summary>Starts (or, if already Running, continues; if Paused, resumes) sending — queues every Pending
+    /// recipient, then processes one bounded batch. The background sender sends the rest, so one call is
+    /// enough; calling again is safe. See ICampaignService for the batching rationale.</summary>
     [HttpPost("{id:guid}/send")]
     public async Task<ActionResult<ProcessCampaignBatchResult>> Send(Guid id, [FromQuery] int batchSize = 20, CancellationToken ct = default)
     {
@@ -123,6 +123,18 @@ public class CampaignsController : DashboardApiController
 
         var result = await _campaigns.ProcessBatchAsync(clinicId.Value, id, batchSize, ct);
         return result is null ? NotFound() : Ok(result);
+    }
+
+    /// <summary>Stops a scheduled or sending campaign (status paused): nothing more goes out until it is resumed with
+    /// /send, or ended with /cancel. 422 when it isn't scheduled or sending.</summary>
+    [HttpPost("{id:guid}/stop")]
+    public async Task<ActionResult<CampaignResponse>> Stop(Guid id, CancellationToken ct)
+    {
+        var clinicId = await GetClinicIdAsync(ct);
+        if (clinicId is null) return Forbid();
+
+        var campaign = await _campaigns.StopAsync(clinicId.Value, id, ct);
+        return campaign is null ? NotFound() : Ok(campaign);
     }
 
     [HttpPost("{id:guid}/cancel")]

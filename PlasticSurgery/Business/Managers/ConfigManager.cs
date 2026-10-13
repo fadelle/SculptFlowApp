@@ -26,6 +26,10 @@ public class ConfigManager : IConfigManager
         _logger = logger;
     }
 
+    // ---- Accounts
+    public bool AccountsSignupEnabled => GetBool(ConfigDefaults.AccountsSignupEnabled);
+    public int AccountsSignupsPerIpPerHour => GetInt(ConfigDefaults.AccountsSignupsPerIpPerHour);
+
     // ---- Availability
     public int AvailabilityDefaultDurationMinutes => GetInt(ConfigDefaults.AvailabilityDefaultDurationMinutes);
     public int AvailabilityDefaultBufferMinutes => GetInt(ConfigDefaults.AvailabilityDefaultBufferMinutes);
@@ -83,6 +87,9 @@ public class ConfigManager : IConfigManager
 
     // ---- Campaigns
     public int CampaignsDefaultInactiveDays => GetInt(ConfigDefaults.CampaignsDefaultInactiveDays);
+    public int CampaignsBookingAttributionDays => GetInt(ConfigDefaults.CampaignsBookingAttributionDays);
+    public int CampaignsSenderIntervalSeconds => GetInt(ConfigDefaults.CampaignsSenderIntervalSeconds);
+    public int CampaignsSendBatchSize => GetInt(ConfigDefaults.CampaignsSendBatchSize);
 
     // ---- Embeddings
     public string EmbeddingsBaseUrl => GetString(ConfigDefaults.EmbeddingsBaseUrl);

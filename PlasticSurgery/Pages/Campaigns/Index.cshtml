@@ -89,11 +89,12 @@ else
                         var failW = Width(c.Failed, c.TotalRecipients);
                         var progressText = c.Sent > 0 ? $"{c.Delivered} delivered · {c.Read} read"
                             : c.Status == CampaignStatus.Scheduled ? "Waiting to send"
+                            : c.Status == CampaignStatus.Paused ? "Stopped before sending"
                             : c.Status == CampaignStatus.Draft ? "Not sent yet"
                             : c.Failed > 0 ? $"{c.Failed} failed" : "Nothing sent";
                         <tr class="row-link" data-href="/Campaigns/@c.Id" data-group="@Group(c.Status)">
                             <td data-label="Campaign"><div><a href="/Campaigns/@c.Id"><strong>@c.Name</strong></a><div class="cell-sub">@(c.TemplateName ?? "—")</div></div></td>
-                            <td data-label="Status"><span class="badge @StatusBadgeHelper.CssClass(c.Status)">@FilterLabelHelper.Label(c.Status)</span></td>
+                            <td data-label="Status"><span class="badge @StatusBadgeHelper.CssClass(c.Status)">@StatusBadgeHelper.CampaignStatusLabel(c.Status)</span></td>
                             <td data-label="Audience"><div>@c.TotalRecipients <span class="cell-sub">@(c.TotalRecipients == 1 ? "person" : "people")</span><div class="cell-sub">@AudienceLabel(c.AudienceType, c.ManuallySelected)</div></div></td>
                             <td data-label="Progress" class="prog-cell">
                                 <div class="prog" title="@($"{c.TotalRecipients} recipients · {c.Sent} sent · {c.Delivered} delivered · {c.Read} read · {c.Failed} failed")">

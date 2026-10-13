@@ -245,4 +245,64 @@ public class QueueAndWorkerTests
         await worker.StartAsync(CancellationToken.None);
         await worker.StopAsync(CancellationToken.None);
     }
+
+    private static CampaignSenderWorker CampaignSender(ICampaignService campaigns, int batchSize = 20)
+    {
+        var services = new ServiceCollection();
+        services.AddScoped(_ => campaigns);
+        var config = new Mock<IConfigManager>();
+        config.SetupGet(c => c.CampaignsSendBatchSize).Returns(batchSize);
+        return new CampaignSenderWorker(services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(), NullLogger<CampaignSenderWorker>.Instance, config.Object);
+    }
+
+    [Fact]
+    public async Task Campaign_sender_sends_every_due_campaign_with_the_configured_batch_size()
+    {
+        var clinicId = Guid.NewGuid();
+        var scheduled = new DueCampaign(Guid.NewGuid(), clinicId, CampaignStatus.Scheduled);
+        var running = new DueCampaign(Guid.NewGuid(), clinicId, CampaignStatus.Running);
+        var stopped = new DueCampaign(Guid.NewGuid(), clinicId, CampaignStatus.Running);
+        var campaigns = new Mock<ICampaignService>();
+        campaigns.Setup(c => c.ListDueAsync(It.IsAny<CancellationToken>())).ReturnsAsync(new List<DueCampaign> { scheduled, running, stopped });
+        campaigns.Setup(c => c.SendDueAsync(clinicId, scheduled.Id, 7, It.IsAny<CancellationToken>())).ReturnsAsync(new ProcessCampaignBatchResult(3, 3, 0, 0, true));
+        campaigns.Setup(c => c.SendDueAsync(clinicId, running.Id, 7, It.IsAny<CancellationToken>())).ReturnsAsync(new ProcessCampaignBatchResult(7, 6, 1, 40, false));
+        campaigns.Setup(c => c.SendDueAsync(clinicId, stopped.Id, 7, It.IsAny<CancellationToken>())).ReturnsAsync((ProcessCampaignBatchResult?)null);
+
+        var processed = await CampaignSender(campaigns.Object, batchSize: 7).RunOnceAsync(CancellationToken.None);
+
+        Assert.Equal(10, processed);
+        campaigns.Verify(c => c.SendDueAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), 7, It.IsAny<CancellationToken>()), Times.Exactly(3));
+    }
+
+    [Fact]
+    public async Task Campaign_sender_keeps_going_when_one_campaign_is_out_of_credit_or_fails()
+    {
+        var clinicId = Guid.NewGuid();
+        var broke = new DueCampaign(Guid.NewGuid(), clinicId, CampaignStatus.Running);
+        var noPlan = new DueCampaign(Guid.NewGuid(), clinicId, CampaignStatus.Running);
+        var crashing = new DueCampaign(Guid.NewGuid(), clinicId, CampaignStatus.Running);
+        var fine = new DueCampaign(Guid.NewGuid(), clinicId, CampaignStatus.Running);
+        var campaigns = new Mock<ICampaignService>();
+        campaigns.Setup(c => c.ListDueAsync(It.IsAny<CancellationToken>())).ReturnsAsync(new List<DueCampaign> { broke, noPlan, crashing, fine });
+        campaigns.Setup(c => c.SendDueAsync(clinicId, broke.Id, It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new BillingDeniedException(UsageFailureReason.InsufficientFunds, "out of credit"));
+        campaigns.Setup(c => c.SendDueAsync(clinicId, noPlan.Id, It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new EntitlementDeniedException("campaigns", "upgrade"));
+        campaigns.Setup(c => c.SendDueAsync(clinicId, crashing.Id, It.IsAny<int>(), It.IsAny<CancellationToken>())).ThrowsAsync(new Exception("db down"));
+        campaigns.Setup(c => c.SendDueAsync(clinicId, fine.Id, It.IsAny<int>(), It.IsAny<CancellationToken>())).ReturnsAsync(new ProcessCampaignBatchResult(2, 2, 0, 0, true));
+
+        Assert.Equal(2, await CampaignSender(campaigns.Object).RunOnceAsync(CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Campaign_sender_survives_a_failed_listing_and_stops_quietly()
+    {
+        var campaigns = new Mock<ICampaignService>();
+        campaigns.Setup(c => c.ListDueAsync(It.IsAny<CancellationToken>())).ThrowsAsync(new Exception("db down"));
+        var worker = CampaignSender(campaigns.Object);
+        Assert.Equal(0, await worker.RunOnceAsync(CancellationToken.None));
+
+        await worker.StartAsync(CancellationToken.None);
+        await worker.StopAsync(CancellationToken.None);
+    }
 }

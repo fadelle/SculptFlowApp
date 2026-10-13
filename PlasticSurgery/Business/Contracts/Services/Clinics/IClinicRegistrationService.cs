@@ -23,6 +23,10 @@ namespace PlasticSurgery.Business.Contracts.Services.Clinics;
 /// </summary>
 public interface IClinicRegistrationService
 {
+    /// <summary>Whether self-signup is allowed right now (setting Accounts:SignupEnabled). When it isn't, both Register
+    /// methods refuse with <c>SignupClosedMessage</c> before creating anything.</summary>
+    bool IsSignupOpen { get; }
+
     Task<ClinicRegistrationResult> RegisterAsync(RegisterClinicRequest request, CancellationToken ct = default);
 
     /// <summary>Same NEW USER -> NEW CLINIC rule and the same single transaction as <see cref="RegisterAsync"/>,

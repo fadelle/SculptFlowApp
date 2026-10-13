@@ -21,6 +21,8 @@ public class CampaignServiceTests
         _template = new WhatsAppTemplate { Id = Guid.NewGuid(), ClinicId = _clinicId, Name = "promo", Body = "Hi {{1}}" };
         _templates.Setup(t => t.GetAsync(_clinicId, _template.Id, It.IsAny<CancellationToken>())).ReturnsAsync(_template);
         _audience.Setup(a => a.GetSkipReasonIfNotContactable(It.IsAny<Lead>())).Returns((string?)null);
+        // By default this sender gets the campaign's sending lock.
+        _campaigns.Setup(r => r.TryLockForSendingAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync(Mock.Of<IAsyncDisposable>());
     }
 
     private CampaignService Sut() => new(_campaigns.Object, _templates.Object, _leads.Object, _messageRows.Object, _uow.Object,
@@ -32,6 +34,8 @@ public class CampaignServiceTests
         _campaigns.Setup(r => r.GetAsync(_clinicId, c.Id, It.IsAny<CancellationToken>())).ReturnsAsync(c);
         _campaigns.Setup(r => r.GetByIdAsync(c.Id, It.IsAny<CancellationToken>())).ReturnsAsync(c);
         _campaigns.Setup(r => r.GetWithTemplateAsync(_clinicId, c.Id, It.IsAny<CancellationToken>())).ReturnsAsync(c);
+        // The "fresh" status read follows the entity, so a test changes it by setting c.Status.
+        _campaigns.Setup(r => r.GetStatusReadOnlyAsync(c.Id, It.IsAny<CancellationToken>())).ReturnsAsync(() => c.Status);
         return c;
     }
 
@@ -271,6 +275,222 @@ public class CampaignServiceTests
         var r = await Sut().CancelAsync(_clinicId, c.Id);
         Assert.Equal(CampaignStatus.Cancelled, r!.Status);
         Assert.All(new[] { p, q }, x => Assert.Equal((CampaignRecipientStatus.Failed, "Campaign cancelled."), (x.Status, x.FailureReason)));
+    }
+
+    // ---------------------------------------------------------------- stop / resume / background sending
+
+    /// <summary>Every lead gets a WhatsApp conversation, so each template send goes through.</summary>
+    private void SendsSucceed()
+    {
+        _conversations.Setup(x => x.GetOrCreateForLeadAsync(_clinicId, It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Guid _, Guid leadId, string _, CancellationToken _) =>
+                new ConversationResponse(Guid.NewGuid(), _clinicId, leadId, "whatsapp", "active", "ai", true, false, null, null, null, false, DateTimeOffset.UtcNow));
+    }
+
+    [Fact]
+    public async Task Stop_pauses_a_scheduled_or_running_campaign_and_rejects_the_rest()
+    {
+        Assert.Null(await Sut().StopAsync(_clinicId, Guid.NewGuid()));
+        foreach (var status in new[] { CampaignStatus.Draft, CampaignStatus.Paused, CampaignStatus.Completed, CampaignStatus.Cancelled })
+        {
+            await Assert.ThrowsAsync<InvalidOperationException>(() => Sut().StopAsync(_clinicId, MakeCampaign(status).Id));
+        }
+        _campaigns.Verify(r => r.TryChangeStatusAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<string>(),
+            It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()), Times.Never);
+
+        foreach (var status in new[] { CampaignStatus.Scheduled, CampaignStatus.Running })
+        {
+            var c = MakeCampaign(status);
+            _campaigns.Setup(r => r.TryChangeStatusAsync(_clinicId, c.Id,
+                    It.Is<IReadOnlyCollection<string>>(s => s.Contains(CampaignStatus.Scheduled) && s.Contains(CampaignStatus.Running) && s.Count == 2),
+                    CampaignStatus.Paused, It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(true);
+
+            var r = await Sut().StopAsync(_clinicId, c.Id);
+
+            Assert.Equal(CampaignStatus.Paused, r!.Status);
+            // Set-based, so nothing is saved through the unit of work (a racing completion can't be overwritten).
+            _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+        }
+    }
+
+    [Fact]
+    public async Task Stop_refuses_when_the_campaign_finished_in_the_meantime()
+    {
+        var c = MakeCampaign(CampaignStatus.Running);
+        _campaigns.Setup(r => r.TryChangeStatusAsync(_clinicId, c.Id, It.IsAny<IReadOnlyCollection<string>>(), CampaignStatus.Paused,
+            It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>())).ReturnsAsync(false);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => Sut().StopAsync(_clinicId, c.Id));
+        Assert.Contains("finished or changed", ex.Message);
+        Assert.Equal(CampaignStatus.Running, c.Status);
+    }
+
+    [Fact]
+    public async Task Send_on_a_stopped_campaign_resumes_it_queues_leftovers_and_keeps_the_first_start_time()
+    {
+        var c = MakeCampaign(CampaignStatus.Paused);
+        var started = DateTimeOffset.UtcNow.AddHours(-2);
+        c.StartedAt = started;
+        var pending = Recipient(c, CampaignRecipientStatus.Pending);
+        _campaigns.Setup(x => x.ListRecipientsInStatusAsync(c.Id, It.Is<IReadOnlyCollection<string>>(s => s.Contains(CampaignRecipientStatus.Pending)), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<CampaignRecipient> { pending });
+        _campaigns.Setup(x => x.ListQueuedBatchAsync(c.Id, 20, It.IsAny<CancellationToken>())).ReturnsAsync(new List<CampaignRecipient> { pending });
+        _campaigns.Setup(x => x.CountRecipientsInStatusAsync(c.Id, CampaignRecipientStatus.Queued, It.IsAny<CancellationToken>())).ReturnsAsync(0);
+        SendsSucceed();
+
+        var result = await Sut().SendAsync(_clinicId, c.Id);
+
+        Assert.Equal((1, true), (result!.Succeeded, result.CampaignCompleted));
+        Assert.Equal((CampaignStatus.Completed, started), (c.Status, c.StartedAt));
+        Assert.Equal(CampaignRecipientStatus.Sent, pending.Status);
+        Assert.NotNull(pending.QueuedAt);
+    }
+
+    [Fact]
+    public async Task Stopping_mid_batch_halts_before_the_next_message_and_the_campaign_stays_stopped()
+    {
+        var c = MakeCampaign(CampaignStatus.Running);
+        var first = Recipient(c, CampaignRecipientStatus.Queued);
+        var second = Recipient(c, CampaignRecipientStatus.Queued);
+        _campaigns.Setup(x => x.ListQueuedBatchAsync(c.Id, 20, It.IsAny<CancellationToken>())).ReturnsAsync(new List<CampaignRecipient> { first, second });
+        _campaigns.Setup(x => x.CountRecipientsInStatusAsync(c.Id, CampaignRecipientStatus.Queued, It.IsAny<CancellationToken>())).ReturnsAsync(1);
+        SendsSucceed();
+        // Staff press Stop while the first message is going out.
+        _messages.Setup(m => m.SendCampaignTemplateAsync(_clinicId, It.IsAny<Guid>(), _template.Id, It.IsAny<IReadOnlyList<string>>(), c.Id, first.Id, It.IsAny<CancellationToken>()))
+            .Callback(() => c.Status = CampaignStatus.Paused)
+            .ReturnsAsync((MessageResponse?)null);
+
+        var result = await Sut().ProcessBatchAsync(_clinicId, c.Id);
+
+        Assert.Equal((1, 1, 0, 1, false), (result!.Processed, result.Succeeded, result.Failed, result.RemainingQueued, result.CampaignCompleted));
+        Assert.Equal((CampaignRecipientStatus.Sent, CampaignRecipientStatus.Queued), (first.Status, second.Status));
+        _messages.Verify(m => m.SendCampaignTemplateAsync(_clinicId, It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<IReadOnlyList<string>>(), c.Id, second.Id, It.IsAny<CancellationToken>()), Times.Never);
+        Assert.Equal(CampaignStatus.Paused, c.Status);
+    }
+
+    [Fact]
+    public async Task A_campaign_cancelled_during_its_last_batch_is_not_marked_completed()
+    {
+        var c = MakeCampaign(CampaignStatus.Running);
+        var only = Recipient(c, CampaignRecipientStatus.Queued);
+        _campaigns.Setup(x => x.ListQueuedBatchAsync(c.Id, 20, It.IsAny<CancellationToken>())).ReturnsAsync(new List<CampaignRecipient> { only });
+        _campaigns.Setup(x => x.CountRecipientsInStatusAsync(c.Id, CampaignRecipientStatus.Queued, It.IsAny<CancellationToken>())).ReturnsAsync(0);
+        SendsSucceed();
+        _messages.Setup(m => m.SendCampaignTemplateAsync(_clinicId, It.IsAny<Guid>(), _template.Id, It.IsAny<IReadOnlyList<string>>(), c.Id, only.Id, It.IsAny<CancellationToken>()))
+            .Callback(() => c.Status = CampaignStatus.Cancelled)
+            .ReturnsAsync((MessageResponse?)null);
+
+        var result = await Sut().ProcessBatchAsync(_clinicId, c.Id);
+
+        Assert.False(result!.CampaignCompleted);
+        Assert.Equal(CampaignStatus.Cancelled, c.Status);
+        Assert.Null(c.CompletedAt);
+    }
+
+    [Fact]
+    public async Task While_another_sender_holds_the_campaign_nothing_is_sent()
+    {
+        var c = MakeCampaign(CampaignStatus.Running);
+        _campaigns.Setup(r => r.TryLockForSendingAsync(c.Id, It.IsAny<CancellationToken>())).ReturnsAsync((IAsyncDisposable?)null);
+        _campaigns.Setup(x => x.CountRecipientsInStatusAsync(c.Id, CampaignRecipientStatus.Queued, It.IsAny<CancellationToken>())).ReturnsAsync(7);
+
+        var result = await Sut().ProcessBatchAsync(_clinicId, c.Id);
+
+        Assert.Equal((0, 7, false), (result!.Processed, result.RemainingQueued, result.CampaignCompleted));
+        _campaigns.Verify(x => x.ListQueuedBatchAsync(It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
+        Assert.Equal(CampaignStatus.Running, c.Status);
+    }
+
+    [Fact]
+    public async Task The_sending_lock_is_released_after_a_batch_even_when_it_stops_on_billing()
+    {
+        var c = MakeCampaign(CampaignStatus.Running);
+        var released = 0;
+        var handle = new Mock<IAsyncDisposable>();
+        handle.Setup(h => h.DisposeAsync()).Callback(() => released++).Returns(ValueTask.CompletedTask);
+        _campaigns.Setup(r => r.TryLockForSendingAsync(c.Id, It.IsAny<CancellationToken>())).ReturnsAsync(handle.Object);
+        var r = Recipient(c, CampaignRecipientStatus.Queued);
+        _campaigns.Setup(x => x.ListQueuedBatchAsync(c.Id, 20, It.IsAny<CancellationToken>())).ReturnsAsync(new List<CampaignRecipient> { r });
+        _campaigns.Setup(x => x.CountRecipientsInStatusAsync(c.Id, CampaignRecipientStatus.Queued, It.IsAny<CancellationToken>())).ReturnsAsync(1);
+
+        await Sut().ProcessBatchAsync(_clinicId, c.Id);
+        Assert.Equal(1, released);
+
+        _conversations.Setup(x => x.GetOrCreateForLeadAsync(_clinicId, r.LeadId, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new BillingDeniedException(UsageFailureReason.InsufficientFunds, "out of credit"));
+        r.Status = CampaignRecipientStatus.Queued;
+        await Assert.ThrowsAsync<BillingDeniedException>(() => Sut().ProcessBatchAsync(_clinicId, c.Id));
+        Assert.Equal(2, released);
+    }
+
+    [Fact]
+    public async Task SendDue_starts_a_scheduled_campaign_only_once_its_time_has_come()
+    {
+        Assert.Null(await Sut().SendDueAsync(_clinicId, Guid.NewGuid(), 20));
+
+        var early = MakeCampaign(CampaignStatus.Scheduled);
+        early.ScheduledAt = DateTimeOffset.UtcNow.AddMinutes(10);
+        Assert.Null(await Sut().SendDueAsync(_clinicId, early.Id, 20));
+        Assert.Equal(CampaignStatus.Scheduled, early.Status);
+
+        var noTime = MakeCampaign(CampaignStatus.Scheduled);
+        Assert.Null(await Sut().SendDueAsync(_clinicId, noTime.Id, 20));
+
+        var due = MakeCampaign(CampaignStatus.Scheduled);
+        due.ScheduledAt = DateTimeOffset.UtcNow.AddMinutes(-1);
+        var p = Recipient(due, CampaignRecipientStatus.Pending);
+        _campaigns.Setup(x => x.ListRecipientsInStatusAsync(due.Id, It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>())).ReturnsAsync(new List<CampaignRecipient> { p });
+        _campaigns.Setup(x => x.ListQueuedBatchAsync(due.Id, 5, It.IsAny<CancellationToken>())).ReturnsAsync(new List<CampaignRecipient> { p });
+        _campaigns.Setup(x => x.CountRecipientsInStatusAsync(due.Id, CampaignRecipientStatus.Queued, It.IsAny<CancellationToken>())).ReturnsAsync(0);
+        SendsSucceed();
+
+        var result = await Sut().SendDueAsync(_clinicId, due.Id, 5);
+
+        Assert.Equal((1, true), (result!.Succeeded, result.CampaignCompleted));
+        Assert.NotNull(due.StartedAt);
+        Assert.Equal(CampaignRecipientStatus.Sent, p.Status);
+    }
+
+    [Fact]
+    public async Task SendDue_continues_running_campaigns_and_leaves_stopped_or_finished_ones_alone()
+    {
+        foreach (var status in new[] { CampaignStatus.Paused, CampaignStatus.Draft, CampaignStatus.Cancelled, CampaignStatus.Completed })
+        {
+            var c = MakeCampaign(status);
+            Assert.Null(await Sut().SendDueAsync(_clinicId, c.Id, 20));
+            Assert.Equal(status, c.Status);
+        }
+        _messages.Verify(m => m.SendCampaignTemplateAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<IReadOnlyList<string>>(), It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+
+        var running = MakeCampaign(CampaignStatus.Running);
+        var q = Recipient(running, CampaignRecipientStatus.Queued);
+        _campaigns.Setup(x => x.ListQueuedBatchAsync(running.Id, 3, It.IsAny<CancellationToken>())).ReturnsAsync(new List<CampaignRecipient> { q });
+        _campaigns.Setup(x => x.CountRecipientsInStatusAsync(running.Id, CampaignRecipientStatus.Queued, It.IsAny<CancellationToken>())).ReturnsAsync(4);
+        SendsSucceed();
+
+        var result = await Sut().SendDueAsync(_clinicId, running.Id, 3);
+
+        Assert.Equal((1, 4, false), (result!.Succeeded, result.RemainingQueued, result.CampaignCompleted));
+    }
+
+    [Fact]
+    public async Task ListDue_asks_the_repository_for_campaigns_due_now()
+    {
+        var due = new List<DueCampaign> { new(Guid.NewGuid(), _clinicId, CampaignStatus.Running) };
+        _campaigns.Setup(r => r.ListDueForSendingReadOnlyAsync(It.Is<DateTimeOffset>(t => Math.Abs((t - DateTimeOffset.UtcNow).TotalSeconds) < 5), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(due);
+        Assert.Same(due, await Sut().ListDueAsync());
+    }
+
+    [Fact]
+    public async Task Cancel_also_ends_a_stopped_campaign()
+    {
+        var c = MakeCampaign(CampaignStatus.Paused);
+        var q = Recipient(c, CampaignRecipientStatus.Queued);
+        _campaigns.Setup(x => x.ListRecipientsInStatusAsync(c.Id, It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>())).ReturnsAsync(new List<CampaignRecipient> { q });
+        var r = await Sut().CancelAsync(_clinicId, c.Id);
+        Assert.Equal((CampaignStatus.Cancelled, CampaignRecipientStatus.Failed), (r!.Status, q.Status));
     }
 
     // ---------------------------------------------------------------- reads / stats

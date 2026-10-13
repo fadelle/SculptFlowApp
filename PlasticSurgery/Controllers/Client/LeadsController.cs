@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PlasticSurgery.Business.Contracts.Managers;
 using PlasticSurgery.Business.Contracts.Services.Leads;
+using PlasticSurgery.Controllers.Filters;
 using PlasticSurgery.Entities.Requests.Leads;
 using PlasticSurgery.Entities.Responses.Leads;
 
@@ -9,9 +10,9 @@ namespace PlasticSurgery.Controllers.Client;
 
 /// <summary>
 /// Lead intake and management. Dashboard actions (List/GetById/Update/UpdateStatus) require login
-/// and resolve clinicId server-side via DashboardApiController — never from the browser. Create
-/// stays open: it's the n8n/Meta-webhook intake path (see its own doc comment), which has no logged
-/// -in user to resolve a clinic from, so it still takes ClinicId explicitly in the body.
+/// and resolve clinicId server-side via DashboardApiController — never from the browser. Create is
+/// the n8n intake path (see its own doc comment): no logged-in user, so it takes ClinicId in the body
+/// and is trusted only through the X-Ingest-Key header.
 /// </summary>
 [ApiController]
 [Route("api/leads")]
@@ -25,11 +26,11 @@ public class LeadsController : DashboardApiController
     }
 
     /// <summary>Creates a lead, or returns the existing one if ExternalLeadId was already seen for
-    /// this clinic — safe for n8n/Meta webhooks to retry without creating duplicates. Intake-only:
-    /// no logged-in user is calling this, so ClinicId comes from the trusted caller's request body,
-    /// same as before. (Not currently ingest-key protected — flagged as a pre-existing gap, not
-    /// something this change introduces.)</summary>
+    /// this clinic — safe for n8n to retry without creating duplicates. Intake-only: no logged-in user
+    /// is calling this, so ClinicId comes from the request body, which is why the caller must hold the
+    /// ingest key (without it anyone could add leads to any clinic). No key = 401.</summary>
     [AllowAnonymous]
+    [RequireIngestKey]
     [HttpPost]
     public async Task<ActionResult<LeadResponse>> Create([FromBody] CreateLeadRequest request, CancellationToken ct)
     {

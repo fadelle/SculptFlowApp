@@ -15,6 +15,7 @@ using PlasticSurgery.Entities.Requests.Appointments;
 using PlasticSurgery.Entities.Responses.Appointments;
 using PlasticSurgery.Persistence.Contracts;
 using PlasticSurgery.Persistence.Contracts.Appointments;
+using PlasticSurgery.Persistence.Contracts.Campaigns;
 using PlasticSurgery.Persistence.Contracts.Clinics;
 using PlasticSurgery.Persistence.Contracts.Leads;
 using PlasticSurgery.Persistence.Contracts.Procedures;
@@ -35,11 +36,16 @@ public class AppointmentService : IAppointmentService
     private readonly IInboxNotifier _notifier;
     private readonly INotificationService _notifications;
     private readonly ICalendarIntegrationService _calendarSync;
+    private readonly ICampaignRepository _campaigns;
+    private readonly IConfigManager _config;
 
     public AppointmentService(
         IAppointmentRepository appointments, ILeadRepository leads, IClinicRepository clinics, IProcedureRepository procedureRows, IUnitOfWork unitOfWork, IEventLogger events, IProcedureService procedures, IAvailabilityService availability,
-        IInboxNotifier notifier, INotificationService notifications, ICalendarIntegrationService calendarSync)
+        IInboxNotifier notifier, INotificationService notifications, ICalendarIntegrationService calendarSync,
+        ICampaignRepository campaigns, IConfigManager config)
     {
+        _campaigns = campaigns;
+        _config = config;
         _appointments = appointments;
         _leads = leads;
         _clinics = clinics;
@@ -177,6 +183,17 @@ public class AppointmentService : IAppointmentService
         }
 
         _events.Log(request.ClinicId, EventTypes.ConsultationBooked, leadId: request.LeadId, appointmentId: appointment.Id);
+
+        // Credit the campaign the patient replied to: the booking shows up in that campaign's "Booked" figure.
+        var now = DateTimeOffset.UtcNow;
+        var campaignSend = await _campaigns.FindLatestRepliedAwaitingBookingAsync(
+            request.ClinicId, request.LeadId, now.AddDays(-_config.CampaignsBookingAttributionDays), ct);
+        if (campaignSend is not null)
+        {
+            campaignSend.Status = CampaignRecipientStatus.Booked;
+            campaignSend.BookedAt = now;
+            campaignSend.UpdatedAt = now;
+        }
 
         await _unitOfWork.SaveChangesAsync(ct);
 

@@ -18,6 +18,16 @@
         </div>
     </div>
 
+    @if (!Model.SignupOpen)
+    {
+        <div class="au-alert au-alert--warning" role="status">
+            <span class="au-icon au-alert__icon" aria-hidden="true">info</span>
+            <div class="au-alert__body">New clinic sign-ups are closed right now. Contact MySculptFlow to get an account.</div>
+        </div>
+        <p class="au-auth__foot">Already have an account? <a class="au-link" href="@loginUrl">Sign in</a></p>
+    }
+    else
+    {
     @if (!string.IsNullOrEmpty(Model.ErrorMessage))
     {
         <div class="au-alert au-alert--error" role="alert">
@@ -73,6 +83,7 @@
     </form>
 
     <p class="au-auth__foot">Already have an account? <a class="au-link" href="@loginUrl">Sign in</a></p>
+    }
 </div>
 
 @section Scripts {

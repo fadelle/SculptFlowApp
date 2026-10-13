@@ -65,6 +65,7 @@ public class ProcedureBookingService : IProcedureBookingService
         var booking = await _bookings.GetAsync(clinicId, id, ct);
         if (booking is null) return null;
 
+        var previousStatus = booking.Status;
         if (request.Status is not null)
         {
             if (!ProcedureBookingStatus.All.Contains(request.Status))
@@ -83,7 +84,9 @@ public class ProcedureBookingService : IProcedureBookingService
 
         booking.UpdatedAt = DateTimeOffset.UtcNow;
 
-        if (request.Status == ProcedureBookingStatus.Completed)
+        // The surgery counts as booked from the moment the booking is confirmed (booked, deposit paid or completed), once:
+        // moving on from booked to completed must not log a second procedure_booked event.
+        if (IsConfirmed(request.Status) && !IsConfirmed(previousStatus))
         {
             var lead = await _leads.GetByIdAsync(booking.LeadId, ct);
             if (lead is not null)
@@ -99,6 +102,9 @@ public class ProcedureBookingService : IProcedureBookingService
         await _unitOfWork.SaveChangesAsync(ct);
         return await ToResponseAsync(booking, ct);
     }
+
+    private static bool IsConfirmed(string? status) =>
+        status is ProcedureBookingStatus.Booked or ProcedureBookingStatus.DepositPaid or ProcedureBookingStatus.Completed;
 
     public async Task<(IReadOnlyList<ProcedureBookingResponse> Items, int TotalCount)> ListAsync(
         Guid clinicId, string? status, int skip, int take, CancellationToken ct = default)

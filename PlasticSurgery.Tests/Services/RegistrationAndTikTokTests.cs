@@ -28,9 +28,28 @@ public class ClinicRegistrationServiceTests
         _config.SetupGet(c => c.BillingCurrency).Returns("USD");
         _config.SetupGet(c => c.BillingSignupPlanCode).Returns(" starter ");
         _config.SetupGet(c => c.BillingEnabled).Returns(true);
+        _config.SetupGet(c => c.AccountsSignupEnabled).Returns(true);
     }
 
     private ClinicRegistrationService Sut() => new(_clinics.Object, _accounts.Object, _uow.Object, _users.Object, _knowledge.Object, NullLogger<ClinicRegistrationService>.Instance, _subscriptions.Object, _config.Object);
+
+    [Fact]
+    public async Task With_signups_switched_off_neither_registration_creates_anything()
+    {
+        _config.SetupGet(c => c.AccountsSignupEnabled).Returns(false);
+        Assert.False(Sut().IsSignupOpen);
+
+        var normal = await Sut().RegisterAsync(Req());
+        var google = await Sut().RegisterExternalAsync(new RegisterExternalClinicRequest("Gina", "Glow", "g@x.com", "Google", "key-1", "Google"));
+
+        Assert.All(new[] { normal, google }, r => Assert.Equal(ClinicRegistrationService.SignupClosedMessage, Assert.Single(r.Errors)));
+        _uow.Verify(u => u.BeginTransactionAsync(It.IsAny<CancellationToken>()), Times.Never);
+        _users.Verify(u => u.CreateAsync(It.IsAny<IdentityUser>()), Times.Never);
+        _users.Verify(u => u.CreateAsync(It.IsAny<IdentityUser>(), It.IsAny<string>()), Times.Never);
+
+        _config.SetupGet(c => c.AccountsSignupEnabled).Returns(true);
+        Assert.True(Sut().IsSignupOpen);
+    }
 
     private static RegisterClinicRequest Req(string? name = "Ann Lee", string? clinic = "Glow Clinic", string? email = "ann@x.com", string? pw = "Passw0rd!", string? confirm = "Passw0rd!") =>
         new(name, clinic, email, pw, confirm);

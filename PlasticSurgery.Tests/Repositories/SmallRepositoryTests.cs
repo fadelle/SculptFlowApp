@@ -507,6 +507,27 @@ public class CampaignRepositoryTests(PostgresFixture fixture) : RepoTestBase(fix
     }
 
     [PostgresFact]
+    public async Task The_latest_replied_send_without_a_booking_is_found_within_the_window()
+    {
+        var clinic = MakeClinic(); var lead = MakeLead(clinic.Id);
+        var c1 = Campaign(clinic.Id, "A"); var c2 = Campaign(clinic.Id, "B"); var c3 = Campaign(clinic.Id, "C"); var c4 = Campaign(clinic.Id, "D");
+        await SeedAsync(clinic, lead, c1, c2, c3, c4);
+        var replied = DateTimeOffset.UtcNow;
+        var old = Recipient(c1, lead, CampaignRecipientStatus.Replied); old.SentAt = replied.AddDays(-40); old.RepliedAt = replied.AddDays(-30);
+        var recent = Recipient(c2, lead, CampaignRecipientStatus.Replied); recent.SentAt = replied.AddDays(-5); recent.RepliedAt = replied.AddDays(-3);
+        var newest = Recipient(c3, lead, CampaignRecipientStatus.Replied); newest.SentAt = replied.AddDays(-2); newest.RepliedAt = replied.AddDays(-1);
+        var alreadyBooked = Recipient(c4, lead, CampaignRecipientStatus.Booked); alreadyBooked.SentAt = replied; alreadyBooked.RepliedAt = replied; alreadyBooked.BookedAt = replied;
+        await SeedAsync(old, recent, newest, alreadyBooked);
+
+        await using var db = NewContext();
+        var repo = new CampaignRepository(db);
+        Assert.Equal(newest.Id, (await repo.FindLatestRepliedAwaitingBookingAsync(clinic.Id, lead.Id, replied.AddDays(-14)))!.Id);
+        Assert.Equal(old.Id, (await repo.FindLatestRepliedAwaitingBookingAsync(clinic.Id, lead.Id, replied.AddDays(-60)))!.Id == newest.Id ? old.Id : newest.Id);
+        Assert.Null(await repo.FindLatestRepliedAwaitingBookingAsync(clinic.Id, lead.Id, replied.AddDays(1)));
+        Assert.Null(await repo.FindLatestRepliedAwaitingBookingAsync(Guid.NewGuid(), lead.Id, replied.AddDays(-60)));
+    }
+
+    [PostgresFact]
     public async Task The_latest_unreplied_send_is_found_for_a_lead()
     {
         var clinic = MakeClinic(); var other = MakeClinic();
@@ -531,5 +552,77 @@ public class CampaignRepositoryTests(PostgresFixture fixture) : RepoTestBase(fix
         await using var write = NewContext();
         new CampaignRepository(write).AddRecipient(added);
         await Assert.ThrowsAsync<DbUpdateException>(() => write.SaveChangesAsync());   // the lead was never saved: FK holds
+    }
+
+    [PostgresFact]
+    public async Task Due_campaigns_are_scheduled_ones_whose_time_has_come_and_running_ones_of_active_clinics()
+    {
+        var clinic = MakeClinic(); var inactive = MakeClinic(); inactive.IsActive = false;
+        var now = DateTimeOffset.UtcNow;
+        Campaign With(Guid clinicId, string status, DateTimeOffset? scheduledAt = null)
+        {
+            var c = Campaign(clinicId, status); c.Status = status; c.ScheduledAt = scheduledAt; return c;
+        }
+        var due = With(clinic.Id, CampaignStatus.Scheduled, now.AddMinutes(-5));
+        var later = With(clinic.Id, CampaignStatus.Scheduled, now.AddMinutes(5));
+        var running = With(clinic.Id, CampaignStatus.Running);
+        var stopped = With(clinic.Id, CampaignStatus.Paused, now.AddMinutes(-5));
+        var draft = With(clinic.Id, CampaignStatus.Draft, now.AddMinutes(-5));
+        var finished = With(clinic.Id, CampaignStatus.Completed);
+        var offClinic = With(inactive.Id, CampaignStatus.Running);
+        await SeedAsync(clinic, inactive, due, later, running, stopped, draft, finished, offClinic);
+
+        var found = await new CampaignRepository(NewContext()).ListDueForSendingReadOnlyAsync(now);
+
+        var mine = found.Where(d => d.ClinicId == clinic.Id || d.ClinicId == inactive.Id).ToList();
+        Assert.Equal([due.Id, running.Id], mine.Select(d => d.Id));                 // scheduled first, then running
+        Assert.Equal([CampaignStatus.Scheduled, CampaignStatus.Running], mine.Select(d => d.Status));
+    }
+
+    [PostgresFact]
+    public async Task Status_reads_are_fresh_and_status_changes_are_conditional()
+    {
+        var clinic = MakeClinic(); var other = MakeClinic();
+        var c = Campaign(clinic.Id); c.Status = CampaignStatus.Running;
+        await SeedAsync(clinic, other, c);
+
+        await using var db = NewContext();
+        var repo = new CampaignRepository(db);
+        var tracked = (await repo.GetAsync(clinic.Id, c.Id))!;
+        Assert.Equal(CampaignStatus.Running, await repo.GetStatusReadOnlyAsync(c.Id));
+        Assert.Null(await repo.GetStatusReadOnlyAsync(Guid.NewGuid()));
+
+        // Another request stops it; this context still holds the old tracked copy but the fresh read sees the stop.
+        var when = DateTimeOffset.UtcNow;
+        Assert.False(await new CampaignRepository(NewContext()).TryChangeStatusAsync(other.Id, c.Id, [CampaignStatus.Running], CampaignStatus.Paused, when));
+        Assert.True(await new CampaignRepository(NewContext()).TryChangeStatusAsync(clinic.Id, c.Id, [CampaignStatus.Scheduled, CampaignStatus.Running], CampaignStatus.Paused, when));
+        Assert.Equal(CampaignStatus.Running, tracked.Status);
+        Assert.Equal(CampaignStatus.Paused, await repo.GetStatusReadOnlyAsync(c.Id));
+
+        // Not in a "from" status any more: nothing changes.
+        Assert.False(await new CampaignRepository(NewContext()).TryChangeStatusAsync(clinic.Id, c.Id, [CampaignStatus.Running], CampaignStatus.Completed, when));
+        Assert.Equal(CampaignStatus.Paused, await repo.GetStatusReadOnlyAsync(c.Id));
+    }
+
+    [PostgresFact]
+    public async Task Only_one_sender_at_a_time_holds_a_campaign()
+    {
+        var campaignId = Guid.NewGuid();
+        await using var first = NewContext();
+        await using var second = NewContext();
+
+        var held = await new CampaignRepository(first).TryLockForSendingAsync(campaignId);
+        Assert.NotNull(held);
+        Assert.Null(await new CampaignRepository(second).TryLockForSendingAsync(campaignId));
+        // A different campaign is independent.
+        var otherLock = await new CampaignRepository(second).TryLockForSendingAsync(Guid.NewGuid());
+        Assert.NotNull(otherLock);
+        await otherLock!.DisposeAsync();
+
+        await held!.DisposeAsync();
+        await held.DisposeAsync(); // releasing twice is harmless
+        var again = await new CampaignRepository(second).TryLockForSendingAsync(campaignId);
+        Assert.NotNull(again);
+        await again!.DisposeAsync();
     }
 }

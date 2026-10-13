@@ -137,9 +137,30 @@ public class AccountPageTests
     {
         var signIn = SignIn();
         signIn.Setup(s => s.GetExternalLoginInfoAsync(null)).ReturnsAsync(Info("g@x.com", true));
-        var model = new CompleteGoogleSignupModel(signIn.Object, Mock.Of<IClinicRegistrationService>()).Attach();
+        var model = new CompleteGoogleSignupModel(signIn.Object, Mock.Of<IClinicRegistrationService>(r => r.IsSignupOpen)).Attach();
         Assert.IsType<PageResult>(await model.OnGetAsync());
         Assert.Equal(("g@x.com", "Gina Google"), (model.Email, model.FullName));
+    }
+
+    [Fact]
+    public async Task Complete_signup_while_signups_are_closed_drops_the_google_identity_and_says_why()
+    {
+        var signIn = SignIn();
+        signIn.Setup(s => s.GetExternalLoginInfoAsync(null)).ReturnsAsync(Info("g@x.com", true));
+        var auth = new Mock<IAuthenticationService>();
+        var model = new CompleteGoogleSignupModel(signIn.Object, Mock.Of<IClinicRegistrationService>(r => !r.IsSignupOpen))
+            .Attach(configure: http => http.RequestServices = new ServiceCollection().AddSingleton(auth.Object).BuildServiceProvider());
+
+        Assert.Equal("/Account/Login?externalError=signup_closed", RedirectTarget(await model.OnGetAsync()));
+        auth.Verify(a => a.SignOutAsync(It.IsAny<Microsoft.AspNetCore.Http.HttpContext>(), IdentityConstants.ExternalScheme, It.IsAny<AuthenticationProperties?>()), Times.Once);
+        Assert.NotNull(PlasticSurgery.Common.Configs.GoogleLoginSettings.ErrorMessage("signup_closed"));
+    }
+
+    [Fact]
+    public void Register_page_reports_whether_signups_are_open()
+    {
+        Assert.True(new RegisterModel(Mock.Of<IClinicRegistrationService>(r => r.IsSignupOpen), SignIn().Object).SignupOpen);
+        Assert.False(new RegisterModel(Mock.Of<IClinicRegistrationService>(r => !r.IsSignupOpen), SignIn().Object).SignupOpen);
     }
 
     [Fact]

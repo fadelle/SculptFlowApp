@@ -1,7 +1,7 @@
 -- =====================================================================
 -- Configuration seed: one config.settings row per setting declared in
 -- PlasticSurgery/Common/Statics/ConfigDefaults.cs, with its default value.
--- GENERATED from ConfigDefaults (56 settings); regenerate it when a setting is added.
+-- GENERATED from ConfigDefaults (60 settings); regenerate it when a setting is added.
 --
 -- Safe to re-run: a row that already exists is left alone, so values
 -- changed from the admin portal's Configuration page are never reset.
@@ -12,6 +12,8 @@
 -- changed or reset on the Configuration page.
 -- =====================================================================
 insert into config.settings (section, key, value, updated_by) values
+  ('Accounts', 'SignupEnabled', 'true', 'seed'),
+  ('Accounts', 'SignupsPerIpPerHour', '20', 'seed'),
   ('Availability', 'DefaultDurationMinutes', '30', 'seed'),
   ('Availability', 'DefaultBufferMinutes', '0', 'seed'),
   ('Availability', 'DefaultNoticeMinutes', '240', 'seed'),
@@ -58,6 +60,9 @@ insert into config.settings (section, key, value, updated_by) values
   ('Benchmark', 'GenerationTimeoutMinutes', '30', 'seed'),
   ('Benchmark', 'MaxQuestionsPerChunk', '3', 'seed'),
   ('Campaigns', 'DefaultInactiveDays', '60', 'seed'),
+  ('Campaigns', 'BookingAttributionDays', '14', 'seed'),
+  ('Campaigns', 'SenderIntervalSeconds', '60', 'seed'),
+  ('Campaigns', 'SendBatchSize', '20', 'seed'),
   ('Embeddings', 'BaseUrl', 'https://api.openai.com/v1', 'seed'),
   ('Embeddings', 'Model', 'text-embedding-3-small', 'seed'),
   ('Embeddings', 'Dimensions', '1536', 'seed'),

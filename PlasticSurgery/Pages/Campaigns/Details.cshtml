@@ -35,13 +35,21 @@ else if (Model.Details is not null)
         : c.CompletedAt is not null ? ("Finished", c.CompletedAt)
         : c.StartedAt is not null ? ("Started", c.StartedAt)
         : ("Created", (DateTimeOffset?)c.CreatedAt);
-    var canSend = c.Status is CampaignStatus.Draft or CampaignStatus.Scheduled or CampaignStatus.Running;
+    // Draft: Send now. Scheduled: Stop (hold it) or Send now. Running: Stop (the background sender keeps sending
+    // otherwise). Paused ("Stopped"): Resume. Cancel ends any of them for good.
+    var canCancel = c.Status is CampaignStatus.Draft or CampaignStatus.Scheduled or CampaignStatus.Running or CampaignStatus.Paused;
+    var canStop = c.Status is CampaignStatus.Scheduled or CampaignStatus.Running;
+    var canSend = c.Status is CampaignStatus.Draft or CampaignStatus.Scheduled or CampaignStatus.Paused;
     var sendCount = st.TotalRecipients - st.Skipped;
-    var sendLabel = c.Status == CampaignStatus.Running ? "Send to the rest" : $"Send now to {sendCount} {(sendCount == 1 ? "lead" : "leads")}";
+    var waitingCount = st.Pending + st.Queued;
+    var sendLabel = c.Status == CampaignStatus.Paused ? "Resume sending" : $"Send now to {sendCount} {(sendCount == 1 ? "lead" : "leads")}";
     // Sending can't be undone, so the button asks first (the kit's styled confirm).
-    var sendConfirm = c.Status == CampaignStatus.Running
-        ? "Send this campaign to everyone who hasn't had it yet? The WhatsApp messages go out straight away and can't be called back."
+    var sendConfirm = c.Status == CampaignStatus.Paused
+        ? $"Resume this campaign? The {waitingCount} {(waitingCount == 1 ? "person" : "people")} not messaged yet will get it, starting straight away. WhatsApp messages can't be called back."
         : $"Send this campaign now to {sendCount} {(sendCount == 1 ? "person" : "people")}? The WhatsApp messages go out straight away and can't be called back.";
+    var stopConfirm = c.Status == CampaignStatus.Scheduled
+        ? "Stop this scheduled campaign? It won't go out at its scheduled time. You can resume or cancel it later."
+        : "Stop sending this campaign? Nobody else will be messaged until you resume it. Messages already sent can't be called back.";
     var groups = d.Recipients.GroupBy(r => Group(r.Status)).ToDictionary(g => g.Key, g => g.Count());
 
     <div class="au-back-header">
@@ -54,8 +62,8 @@ else if (Model.Details is not null)
         </div>
     </div>
     <div class="detail-chips">
-        <span class="badge @StatusBadgeHelper.CssClass(c.Status)">@FilterLabelHelper.Label(c.Status)</span>
-        @if (canSend)
+        <span class="badge @StatusBadgeHelper.CssClass(c.Status)">@StatusBadgeHelper.CampaignStatusLabel(c.Status)</span>
+        @if (canCancel)
         {
             <span class="au-spacer"></span>
             <form method="post" asp-page-handler="Cancel"
@@ -63,9 +71,19 @@ else if (Model.Details is not null)
                   data-au-confirm-title="Cancel campaign" data-au-confirm-label="Cancel campaign" data-au-confirm-tone="danger">
                 <button type="submit" class="au-btn au-btn--danger-outlined au-btn--sm">Cancel campaign</button>
             </form>
+        }
+        @if (canStop)
+        {
+            <form method="post" asp-page-handler="Stop"
+                  data-au-confirm="@stopConfirm" data-au-confirm-title="Stop campaign" data-au-confirm-label="Stop campaign">
+                <button type="submit" class="au-btn au-btn--outlined au-btn--sm"><span class="au-icon" aria-hidden="true">pause</span>Stop campaign</button>
+            </form>
+        }
+        @if (canSend)
+        {
             <form method="post" asp-page-handler="Send"
-                  data-au-confirm="@sendConfirm" data-au-confirm-title="Send campaign" data-au-confirm-label="@sendLabel">
-                <button type="submit" class="au-btn au-btn--primary au-btn--sm"><span class="au-icon" aria-hidden="true">send</span>@sendLabel</button>
+                  data-au-confirm="@sendConfirm" data-au-confirm-title="@(c.Status == CampaignStatus.Paused ? "Resume campaign" : "Send campaign")" data-au-confirm-label="@sendLabel">
+                <button type="submit" class="au-btn au-btn--primary au-btn--sm"><span class="au-icon" aria-hidden="true">@(c.Status == CampaignStatus.Paused ? "play_arrow" : "send")</span>@sendLabel</button>
             </form>
         }
     </div>

@@ -46,6 +46,13 @@ public class LeadsAndAppointmentsControllerTests : ClientControllerTestBase
     }
 
     [Fact]
+    public void Lead_intake_needs_the_ingest_key_because_it_takes_the_clinic_from_the_body()
+    {
+        var create = typeof(LeadsController).GetMethod(nameof(LeadsController.Create))!;
+        Assert.NotEmpty(create.GetCustomAttributes(typeof(PlasticSurgery.Controllers.Filters.RequireIngestKeyAttribute), inherit: true));
+    }
+
+    [Fact]
     public async Task Lead_reads_are_scoped_to_the_signed_in_clinic_and_paging_is_clamped()
     {
         _leads.Setup(l => l.ListAsync(ClinicId, "new", null, "q", 5, 200, It.IsAny<CancellationToken>())).ReturnsAsync((new List<LeadResponse>() as IReadOnlyList<LeadResponse>, 0));
@@ -281,6 +288,11 @@ public class CampaignKnowledgeAndProcedureControllerTests : ClientControllerTest
         Assert.IsType<NotFoundResult>((await Campaigns().Send(id, 20, default)).Result);
         Assert.IsType<NotFoundResult>((await Campaigns().ProcessBatch(id, 20, default)).Result);
         Assert.IsType<NotFoundResult>((await Campaigns().Cancel(id, default)).Result);
+        Assert.IsType<NotFoundResult>((await Campaigns().Stop(id, default)).Result);
+        var stopped = new CampaignResponse(id, ClinicId, "Spring", CampaignType.Custom, CampaignChannel.WhatsApp, null, null,
+            CampaignAudienceType.Custom, null, CampaignStatus.Paused, null, null, null, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow);
+        _campaigns.Setup(c => c.StopAsync(ClinicId, id, It.IsAny<CancellationToken>())).ReturnsAsync(stopped);
+        Assert.Same(stopped, Assert.IsType<OkObjectResult>((await Campaigns().Stop(id, default)).Result).Value);
 
         CreateCampaignRequest? seen = null;
         _campaigns.Setup(c => c.CreateAsync(It.IsAny<CreateCampaignRequest>(), It.IsAny<CancellationToken>())).Callback<CreateCampaignRequest, CancellationToken>((r, _) => seen = r)
@@ -293,6 +305,7 @@ public class CampaignKnowledgeAndProcedureControllerTests : ClientControllerTest
         NoClinic();
         IsForbid(await Campaigns().List(default));
         IsForbid(await Campaigns().Cancel(id, default));
+        IsForbid(await Campaigns().Stop(id, default));
     }
 
     [Fact]

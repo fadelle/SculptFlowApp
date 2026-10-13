@@ -50,8 +50,27 @@ public class DetailsModel : PageModel
             var result = await _campaigns.SendAsync(clinic.Id, id, batchSize: 20, ct);
             StatusMessage = result is null
                 ? null
-                : $"Processed {result.Processed} ({result.Succeeded} sent, {result.Failed} failed). " +
-                  (result.CampaignCompleted ? "Campaign completed." : $"{result.RemainingQueued} still waiting — click \"Send to the rest\" to continue.");
+                : result.CampaignCompleted
+                    ? $"Campaign completed: {result.Succeeded} sent, {result.Failed} failed."
+                    : $"Sending. {result.Succeeded} sent so far, {result.Failed} failed; the other {result.RemainingQueued} go out automatically in the background. Refresh to see progress.";
+        }
+        catch (InvalidOperationException ex)
+        {
+            ErrorMessage = ex.Message;
+        }
+
+        return RedirectToPage(new { id });
+    }
+
+    public async Task<IActionResult> OnPostStopAsync(Guid id, CancellationToken ct)
+    {
+        var clinic = await _clinicContext.GetClinicAsync(ct);
+        if (clinic is null) return RedirectToPage();
+
+        try
+        {
+            await _campaigns.StopAsync(clinic.Id, id, ct);
+            StatusMessage = "Campaign stopped. Nobody else will be messaged until you resume it.";
         }
         catch (InvalidOperationException ex)
         {

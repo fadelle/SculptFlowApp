@@ -44,6 +44,9 @@ public class RegisterModel : PageModel
 
     public string? ErrorMessage { get; set; }
 
+    /// <summary>False while Accounts:SignupEnabled is off: the page then explains that and shows no form.</summary>
+    public bool SignupOpen => _registration.IsSignupOpen;
+
     public void OnGet()
     {
     }

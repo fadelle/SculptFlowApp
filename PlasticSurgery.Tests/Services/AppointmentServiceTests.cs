@@ -43,8 +43,37 @@ public class AppointmentServiceTests
             .ReturnsAsync((Guid _, Guid? _, DateTimeOffset s, DateTimeOffset? e, Guid? _, CancellationToken _) => new SlotCheck(null, e ?? s.AddMinutes(30)));
     }
 
+    private readonly Mock<ICampaignRepository> _campaignRepo = new();
+    private readonly Mock<IConfigManager> _config = new();
+
     private AppointmentService Sut() => new(_appointments.Object, _leads.Object, _clinics.Object, _procedureRows.Object, _uow.Object,
-        _events.Object, _procedures.Object, _availability.Object, _notifier.Object, _notifications.Object, _calendar.Object);
+        _events.Object, _procedures.Object, _availability.Object, _notifier.Object, _notifications.Object, _calendar.Object,
+        _campaignRepo.Object, _config.Object);
+
+    [Fact]
+    public async Task A_booking_is_credited_to_the_campaign_the_patient_replied_to()
+    {
+        _config.SetupGet(c => c.CampaignsBookingAttributionDays).Returns(14);
+        _leads.Setup(l => l.ExistsAsync(_clinicId, _leadId, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        var send = new CampaignRecipient { Id = Guid.NewGuid(), Status = CampaignRecipientStatus.Replied, RepliedAt = DateTimeOffset.UtcNow.AddDays(-2) };
+        _campaignRepo.Setup(r => r.FindLatestRepliedAwaitingBookingAsync(_clinicId, _leadId, It.Is<DateTimeOffset>(d => d < DateTimeOffset.UtcNow.AddDays(-13) && d > DateTimeOffset.UtcNow.AddDays(-15)), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(send);
+
+        await Sut().CreateAsync(Req());
+
+        Assert.Equal(CampaignRecipientStatus.Booked, send.Status);
+        Assert.NotNull(send.BookedAt);
+    }
+
+    [Fact]
+    public async Task A_booking_without_a_recent_campaign_reply_credits_nothing()
+    {
+        _leads.Setup(l => l.ExistsAsync(_clinicId, _leadId, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        _config.SetupGet(c => c.CampaignsBookingAttributionDays).Returns(14);
+        await Sut().CreateAsync(Req());
+        _campaignRepo.Verify(r => r.FindLatestRepliedAwaitingBookingAsync(_clinicId, _leadId, It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()), Times.Once);
+        _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.AtLeastOnce);
+    }
 
     private Appointment MakeAppointment(string status = AppointmentStatus.Booked, int daysAhead = 3, Guid? procedureId = null)
     {

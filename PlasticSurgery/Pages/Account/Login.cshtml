@@ -1,5 +1,6 @@
 @page "/Account/Login"
 @model PlasticSurgery.Pages.Account.LoginModel
+@inject PlasticSurgery.Business.Contracts.Services.Clinics.IClinicRegistrationService Registration
 @{
     ViewData["Title"] = "Sign in";
     Layout = "_AuthLayout";
@@ -42,9 +43,12 @@
         <button type="submit" class="au-btn au-btn--primary au-btn--lg au-btn--block" data-busy-label="Signing in…">Sign in</button>
     </form>
 
+    @if (Registration.IsSignupOpen)
+    {
     <p class="au-auth__foot">
         New to MySculptFlow? <a class="au-link" href="/Account/Register@(string.IsNullOrEmpty(Model.ReturnUrl) ? "" : "?ReturnUrl=" + Uri.EscapeDataString(Model.ReturnUrl))">Create a clinic account</a>
     </p>
+    }
 </div>
 
 @section Scripts {

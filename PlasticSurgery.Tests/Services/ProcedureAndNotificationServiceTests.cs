@@ -182,14 +182,37 @@ public class ProcedureBookingServiceTests
         _events.Verify(e => e.Log(_clinicId, EventTypes.ProcedureBooked, b.LeadId, null, null, null, "{\"amount\": null}"), Times.Once);
     }
 
-    [Fact(Skip = "BUG-07: the lead only becomes 'surgery_booked' (and procedure_booked is only logged) when the booking is marked Completed, not when it is marked Booked/DepositPaid - confirm intended behaviour with the product owner")]
-    public async Task Marking_a_booking_as_booked_moves_the_lead_to_surgery_booked()
+    [Theory]
+    [InlineData(ProcedureBookingStatus.Booked)]
+    [InlineData(ProcedureBookingStatus.DepositPaid)]
+    public async Task Marking_a_booking_as_booked_moves_the_lead_to_surgery_booked(string status)
     {
         var lead = new Lead { Id = Guid.NewGuid(), Status = LeadStatus.ConsultationAttended };
         _leads.Setup(l => l.GetByIdAsync(lead.Id, It.IsAny<CancellationToken>())).ReturnsAsync(lead);
         var b = Booking(leadId: lead.Id);
-        await Sut().UpdateAsync(_clinicId, b.Id, new UpdateProcedureBookingRequest(ProcedureBookingStatus.Booked, null, null, null, null, null, null));
+        await Sut().UpdateAsync(_clinicId, b.Id, new UpdateProcedureBookingRequest(status, null, null, null, null, null, null));
         Assert.Equal(LeadStatus.SurgeryBooked, lead.Status);
+        _events.Verify(e => e.Log(_clinicId, EventTypes.ProcedureBooked, lead.Id, null, null, null, It.IsAny<string>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Moving_from_booked_to_completed_does_not_log_a_second_procedure_booked_event()
+    {
+        var lead = new Lead { Id = Guid.NewGuid(), Status = LeadStatus.SurgeryBooked };
+        _leads.Setup(l => l.GetByIdAsync(lead.Id, It.IsAny<CancellationToken>())).ReturnsAsync(lead);
+        var b = Booking(ProcedureBookingStatus.Booked, lead.Id);
+        await Sut().UpdateAsync(_clinicId, b.Id, new UpdateProcedureBookingRequest(ProcedureBookingStatus.Completed, null, null, 900m, null, null, null));
+        _events.Verify(e => e.Log(It.IsAny<Guid>(), EventTypes.ProcedureBooked, It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<string?>(), It.IsAny<string>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Earlier_stages_leave_the_lead_alone()
+    {
+        var lead = new Lead { Id = Guid.NewGuid(), Status = LeadStatus.ConsultationAttended };
+        _leads.Setup(l => l.GetByIdAsync(lead.Id, It.IsAny<CancellationToken>())).ReturnsAsync(lead);
+        var b = Booking(leadId: lead.Id);
+        await Sut().UpdateAsync(_clinicId, b.Id, new UpdateProcedureBookingRequest(ProcedureBookingStatus.Quoted, null, null, null, null, null, null));
+        Assert.Equal(LeadStatus.ConsultationAttended, lead.Status);
     }
 
     [Fact]

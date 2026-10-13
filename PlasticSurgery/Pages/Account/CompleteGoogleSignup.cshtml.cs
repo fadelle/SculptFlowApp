@@ -36,7 +36,14 @@ public class CompleteGoogleSignupModel : PageModel
     public async Task<IActionResult> OnGetAsync()
     {
         var info = await LoadVerifiedAsync();
-        return info is null ? Redirect("/Account/Login?externalError=unverified") : Page();
+        if (info is null) return Redirect("/Account/Login?externalError=unverified");
+        if (!_registration.IsSignupOpen)
+        {
+            // Nobody has this Google address and no new clinic can be created: drop the held identity and say why.
+            await HttpContext.SignOutAsync(IdentityConstants.ExternalScheme);
+            return Redirect("/Account/Login?externalError=signup_closed");
+        }
+        return Page();
     }
 
     public async Task<IActionResult> OnPostAsync(CancellationToken ct)

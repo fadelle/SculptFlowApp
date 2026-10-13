@@ -11,6 +11,13 @@ namespace PlasticSurgery.Business.Contracts.Managers;
 /// </summary>
 public interface IConfigManager
 {
+    // ---- Accounts
+    /// <summary>Whether anyone can create a new clinic (Register page and "Continue with Google"). Default true.</summary>
+    bool AccountsSignupEnabled { get; }
+
+    /// <summary>Most sign-up attempts one IP address may make per hour. Default 20.</summary>
+    int AccountsSignupsPerIpPerHour { get; }
+
     // ---- Availability
     /// <summary>Consultation length (minutes) for clinics that haven't set their own booking settings. Default 30.</summary>
     int AvailabilityDefaultDurationMinutes { get; }
@@ -154,6 +161,15 @@ public interface IConfigManager
     // ---- Campaigns
     /// <summary>Default "inactive for" days of a reactivation audience. Default 60.</summary>
     int CampaignsDefaultInactiveDays { get; }
+
+    /// <summary>Days after a campaign reply within which a booked consultation is attributed to that campaign.</summary>
+    int CampaignsBookingAttributionDays { get; }
+
+    /// <summary>Seconds between campaign sender runs (start due scheduled campaigns, send the next batch of running ones). Default 60.</summary>
+    int CampaignsSenderIntervalSeconds { get; }
+
+    /// <summary>Most messages the campaign sender sends per campaign each run. Default 20.</summary>
+    int CampaignsSendBatchSize { get; }
 
     // ---- Embeddings
     /// <summary>Base URL of the OpenAI-compatible embeddings API. Default https://api.openai.com/v1.</summary>

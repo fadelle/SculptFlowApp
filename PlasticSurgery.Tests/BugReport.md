@@ -5,7 +5,8 @@
 **Fixed, with the formerly skipped test now running:** BUG-01, 02, 06, 08, 09, 10, 11, 12, 13, 14, 15.
 **Withdrawn:** BUG-03. The code comments show it is intended: AI appointment ids go stale, so with one upcoming appointment the backend picks it itself (the test now pins that).
 **Also fixed (2026-10-09):** NOTE-01 (malformed campaign filters now rejected at creation), the logging and missing `[ApiErrors]` parts of NOTE-05 (the TikTok webhook is still anonymous).
-**Still open:** BUG-05 (campaign "Booked" stat is a feature gap), BUG-07 (needs a product decision, test still skipped), and every NOTE row.
+**Fixed (2026-10-13):** BUG-05 (a booking after a campaign reply now credits that campaign; window = setting `Campaigns:BookingAttributionDays`, default 14) and BUG-07 (a procedure booking confirms the lead at booked / deposit paid / completed, logged once). No test is skipped any more.
+**Still open:** the NOTE rows only (NOTE-02, 03, 04, 06, 07, 08).
 Behaviour changes worth knowing: the Meta webhook now answers 401 unless `Meta:AppSecret` is configured and the delivery is signed; `IMetaWebhookProcessor` gained `ProcessAllAsync`; the embedding error message is now "The embedding service is unavailable (HTTP nnn)".
 
 The table below is the original report (rows kept for history).

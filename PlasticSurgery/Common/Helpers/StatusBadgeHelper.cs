@@ -102,5 +102,10 @@ public static class StatusBadgeHelper
     public static string TemplateStatusCssClass(string? status) =>
         status is not null && KnownTemplateStatuses.Contains(status) ? CssClass(status) : "badge-red";
 
+    /// <summary>Label for a campaign status. Stored "paused" is what the Stop button sets, so staff read it as "Stopped";
+    /// every other status uses the shared FilterLabelHelper wording.</summary>
+    public static string CampaignStatusLabel(string? status) =>
+        string.Equals(status, "paused", StringComparison.OrdinalIgnoreCase) ? "Stopped" : FilterLabelHelper.Label(status);
+
     private static string Capitalize(string s) => s.Length == 0 ? s : char.ToUpperInvariant(s[0]) + s[1..];
 }

@@ -31,12 +31,14 @@ constant default declared in `Common/Statics/ConfigDefaults`.
 from user-secrets in development and environment variables in production. This covers connection strings, API keys,
 client secrets, public URLs and provider ids. They never go in `config.settings`.
 
-## Declared settings (56)
+## Declared settings (60)
 
 Generated from `Common/Statics/ConfigDefaults`; keep this table in step when you add one.
 
 | Section | Key | Default | Type / range | Meaning |
 |---|---|---|---|---|
+| Accounts | SignupEnabled | true | bool | Whether anyone can create a new clinic from the Register page or "Continue with Google". Off = only existing accounts can sign in. |
+| Accounts | SignupsPerIpPerHour | 20 | int 1–1000 | Most sign-up attempts one IP address may make per hour (Register and the Google clinic-name step). |
 | Availability | DefaultDurationMinutes | 30 | int 5–480 | Consultation length (minutes) for clinics that haven't set their own booking settings. |
 | Availability | DefaultBufferMinutes | 0 | int 0–240 | Gap (minutes) between consultations for clinics that haven't set their own booking settings. |
 | Availability | DefaultNoticeMinutes | 240 | int 0–10080 | Minimum notice (minutes) before a bookable slot, for clinics that haven't set their own. |
@@ -83,6 +85,9 @@ Generated from `Common/Statics/ConfigDefaults`; keep this table in step when you
 | Benchmark | GenerationTimeoutMinutes | 30 | int 1–240 | How long to wait for n8n to send generated questions. |
 | Benchmark | MaxQuestionsPerChunk | 3 | int 1–10 | Most generated questions accepted per chunk. |
 | Campaigns | DefaultInactiveDays | 60 | int 1–3650 | Default "inactive for" days of a reactivation audience. |
+| Campaigns | BookingAttributionDays | 14 | int 1–365 | A consultation booked this many days after a patient replied to a campaign counts as that campaign's booking. |
+| Campaigns | SenderIntervalSeconds | 60 | int 10–3600 | How often the campaign sender starts campaigns whose scheduled time has come and sends the next batch of every running campaign. |
+| Campaigns | SendBatchSize | 20 | int 1–500 | Most messages the campaign sender sends per campaign each time it runs. |
 | Embeddings | BaseUrl | https://api.openai.com/v1 | string | Base URL of the OpenAI-compatible embeddings API. |
 | Embeddings | Model | text-embedding-3-small | string | Embedding model. Stored vectors are tied to it: changing it means re-embedding every knowledge document. |
 | Embeddings | Dimensions | 1536 | int 1–4096 | Vector size the model returns. Must equal the vector(N) size of knowledge.knowledge_chunks.embedding (1536). |

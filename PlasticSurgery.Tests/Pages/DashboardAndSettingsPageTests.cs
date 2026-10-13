@@ -513,9 +513,9 @@ public class CampaignDetailsPageTests
         var model = new CampaignDetails(ClinicContext(Glow).Object, campaigns.Object).Attach();
 
         Assert.IsType<RedirectToPageResult>(await model.OnPostSendAsync(id, default));
-        Assert.Contains("Processed 20 (18 sent, 2 failed). 5 still waiting", model.StatusMessage);
+        Assert.Contains("18 sent so far, 2 failed; the other 5 go out automatically", model.StatusMessage);
         await model.OnPostSendAsync(id, default);
-        Assert.Contains("Campaign completed.", model.StatusMessage);
+        Assert.Equal("Campaign completed: 5 sent, 0 failed.", model.StatusMessage);
         await model.OnPostSendAsync(id, default);
         Assert.Null(model.StatusMessage);
         await model.OnPostSendAsync(id, default);
@@ -541,4 +541,30 @@ public class CampaignDetailsPageTests
         var none = new CampaignDetails(ClinicContext(null).Object, campaigns.Object).Attach();
         Assert.IsType<RedirectToPageResult>(await none.OnPostCancelAsync(id, default));
     }
+
+    [Fact]
+    public async Task Stopping_reports_success_or_the_error()
+    {
+        var id = Guid.NewGuid();
+        var campaigns = new Mock<ICampaignService>();
+        var model = new CampaignDetails(ClinicContext(Glow).Object, campaigns.Object).Attach();
+        Assert.IsType<RedirectToPageResult>(await model.OnPostStopAsync(id, default));
+        Assert.Contains("Campaign stopped", model.StatusMessage);
+        campaigns.Verify(c => c.StopAsync(Glow.Id, id, It.IsAny<CancellationToken>()), Times.Once);
+
+        campaigns.Setup(c => c.StopAsync(Glow.Id, id, It.IsAny<CancellationToken>())).ThrowsAsync(new InvalidOperationException("Only a scheduled or sending campaign can be stopped."));
+        await model.OnPostStopAsync(id, default);
+        Assert.Equal("Only a scheduled or sending campaign can be stopped.", model.ErrorMessage);
+
+        var none = new CampaignDetails(ClinicContext(null).Object, campaigns.Object).Attach();
+        Assert.IsType<RedirectToPageResult>(await none.OnPostStopAsync(id, default));
+        campaigns.Verify(c => c.StopAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
+    }
+
+    [Theory]
+    [InlineData("paused", "Stopped")]
+    [InlineData("running", "Running")]
+    [InlineData("scheduled", "Scheduled")]
+    public void Campaign_status_labels_call_a_stopped_campaign_stopped(string status, string label) =>
+        Assert.Equal(label, StatusBadgeHelper.CampaignStatusLabel(status));
 }

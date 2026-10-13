@@ -151,14 +151,19 @@ if (GoogleLoginSettings.IsEnabled(builder.Configuration))
 
 // Behind Render's proxy the app only ever sees plain HTTP; trusting X-Forwarded-Proto makes Request.Scheme
 // https again, which Google's redirect_uri (built from the request) and Secure cookies both depend on.
+// X-Forwarded-For gives the real client IP for the sign-up rate limit; with the default ForwardLimit of 1 only the
+// address Render itself appended (the last one) is used, so a client can't pick its own by sending the header.
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
-    options.ForwardedHeaders = ForwardedHeaders.XForwardedProto;
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedProto | ForwardedHeaders.XForwardedFor;
     options.KnownIPNetworks.Clear();
     options.KnownProxies.Clear();
 });
 
 builder.Services.AddAuthorization();
+
+// Sign-up attempts per IP per hour (Accounts:SignupsPerIpPerHour); everything else is unlimited.
+builder.Services.AddSignupRateLimiting();
 
 // ---------------------------------------------------------------------
 // Application services — shared by both the API controllers and the
@@ -231,6 +236,8 @@ builder.Services.AddSignalR();
 builder.Services.AddScoped<IWhatsAppTemplateService, WhatsAppTemplateService>();
 builder.Services.AddScoped<ICampaignAudienceService, CampaignAudienceService>();
 builder.Services.AddScoped<ICampaignService, CampaignService>();
+// Starts scheduled campaigns on time and keeps sending running ones (Campaigns:SenderIntervalSeconds / SendBatchSize).
+builder.Services.AddHostedService<CampaignSenderWorker>();
 builder.Services.AddScoped<IWhatsAppHealthService, WhatsAppHealthService>();
 
 // Clinic Knowledge Base — dashboard CRUD, chunking, embeddings (Embeddings:* config) and the semantic
@@ -381,6 +388,8 @@ app.UseWhen(ctx => !ctx.Request.Path.StartsWithSegments("/api")
 app.UseHttpsRedirection();
 
 app.UseRouting();
+
+app.UseRateLimiter();
 
 app.UseAuthentication();
 app.UseAuthorization();
