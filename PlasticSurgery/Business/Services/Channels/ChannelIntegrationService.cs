@@ -84,14 +84,6 @@ public class ChannelIntegrationService : IChannelIntegrationService
             _integrations.Add(row);
         }
 
-        if (request.Channel == ChannelType.WhatsApp)
-        {
-            // This form and Embedded Signup (ConnectWhatsAppAsync) are both Meta Cloud API connections.
-            // Infobip connections go through InfobipWhatsAppIntegrationService instead.
-            row.Provider = ChannelProvider.Meta;
-            row.ProviderSenderId = null;
-        }
-
         row.DisplayName = request.DisplayName;
         row.PhoneNumberId = request.PhoneNumberId;
         row.WhatsAppBusinessId = request.WhatsAppBusinessId;
@@ -239,6 +231,5 @@ public class ChannelIntegrationService : IChannelIntegrationService
         HasAccessToken: !string.IsNullOrEmpty(c.AccessToken),
         HasWebhookVerifyToken: !string.IsNullOrEmpty(c.WebhookVerifyToken),
         c.LastVerifiedAt, c.LastError, c.UpdatedAt, c.Pin,
-        c.TelegramBotId, c.TelegramBotUsername, c.WebhookStatus, c.WebhookRegisteredAt, c.LastWebhookAt,
-        c.Channel == ChannelType.WhatsApp ? ChannelProvider.Of(c) : null, c.ProviderSenderId);
+        c.TelegramBotId, c.TelegramBotUsername, c.WebhookStatus, c.WebhookRegisteredAt, c.LastWebhookAt);
 }

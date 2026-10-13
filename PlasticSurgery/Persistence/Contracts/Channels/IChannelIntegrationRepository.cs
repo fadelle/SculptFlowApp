@@ -29,9 +29,6 @@ public interface IChannelIntegrationRepository
     /// <summary>Is this Telegram bot connected to a different clinic?</summary>
     Task<bool> IsTelegramBotConnectedElsewhereAsync(string botId, Guid clinicId, CancellationToken ct = default);
 
-    /// <summary>Is this Infobip WhatsApp sender connected to a different clinic?</summary>
-    Task<bool> IsInfobipSenderConnectedElsewhereAsync(string sender, Guid clinicId, CancellationToken ct = default);
-
     /// <summary>Connected channels of the clinic other than <paramref name="exceptChannel"/>.</summary>
     Task<int> CountConnectedExceptAsync(Guid clinicId, string exceptChannel, CancellationToken ct = default);
 

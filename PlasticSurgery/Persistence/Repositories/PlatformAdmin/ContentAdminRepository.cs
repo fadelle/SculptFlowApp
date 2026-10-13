@@ -59,7 +59,7 @@ public class ContentAdminRepository : IContentAdminRepository
         if (clinicId.HasValue) q = q.Where(t => t.ClinicId == clinicId.Value);
         if (!string.IsNullOrWhiteSpace(status)) q = q.Where(t => t.Status == status);
         return q.OrderBy(t => t.Clinic!.Name).ThenBy(t => t.Name)
-            .Select(t => new TemplateRow(t.Id, t.ClinicId, t.Clinic!.Name, t.Name, t.Provider ?? "meta", t.Category, t.Language, t.Status,
+            .Select(t => new TemplateRow(t.Id, t.ClinicId, t.Clinic!.Name, t.Name, t.Category, t.Language, t.Status,
                 t.QualityRating, t.RejectionReason, t.Body, t.UpdatedAt))
             .Take(1000).ToListAsync(ct);
     }

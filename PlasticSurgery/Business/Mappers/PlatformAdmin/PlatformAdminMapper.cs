@@ -11,12 +11,12 @@ public static class PlatformAdminMapper
         c.ConsultationInfo, c.IsActive, c.CreatedAt, c.UpdatedAt);
 
     /// <summary>Expects Clinic to be loaded.</summary>
-    public static ChannelDetail ToDetail(ChannelIntegration r, string? infobipWebhookUrl) => new(
+    public static ChannelDetail ToDetail(ChannelIntegration r) => new(
         r.Id, r.ClinicId, Ref(r.Clinic), r.Channel, r.Status, r.DisplayName, r.PhoneNumberId, r.WhatsAppBusinessId, r.PageId,
         r.InstagramBusinessId, !string.IsNullOrEmpty(r.AccessToken), r.TelegramBotId, r.TelegramBotUsername, r.WebhookStatus,
-        r.WebhookRegisteredAt, r.Provider, r.ProviderSenderId, r.LastVerifiedAt, r.LastError, r.MetaBusinessId, r.VerifiedName,
+        r.WebhookRegisteredAt, r.LastVerifiedAt, r.LastError, r.MetaBusinessId, r.VerifiedName,
         r.AccountStatus, r.AccountReviewStatus, r.PhoneQualityRating, r.PhoneStatus, r.NameStatus, r.IsHealthy, r.HealthLevel,
-        r.LastProblemCode, r.LastProblemMessage, r.LastWebhookAt, r.LastHealthEventAt, r.CreatedAt, r.UpdatedAt, infobipWebhookUrl);
+        r.LastProblemCode, r.LastProblemMessage, r.LastWebhookAt, r.LastHealthEventAt, r.CreatedAt, r.UpdatedAt);
 
     public static HealthEventRow ToRow(WhatsAppHealthEvent e) =>
         new(e.Id, e.EventType, e.Severity, e.Status, e.Code, e.Message, e.OccurredAt);

@@ -124,7 +124,7 @@ public class ProviderBillingTests
     {
         var h = new BillingHarness(_db.ConnectionString);
         var clinic = await h.CreateClinicAsync();
-        var whatsapp = await h.ConnectChannelAsync(clinic, ChannelType.WhatsApp, ChannelProvider.Meta);
+        var whatsapp = await h.ConnectChannelAsync(clinic, ChannelType.WhatsApp);
         await h.ConnectChannelAsync(clinic, ChannelType.Telegram);
 
         var waDefault = await h.ProviderBilling.ResolveAsync(clinic, ChannelType.WhatsApp, ChannelProvider.Meta);
@@ -146,10 +146,6 @@ public class ProviderBillingTests
         Assert.Equal(ProviderBillingResponsibility.CustomerDirect, overridden.Responsibility);
         Assert.False(overridden.ChargesUsage);
         Assert.Equal(ProviderBillingService.SourceAccount, overridden.Source);
-
-        // The override was set for the Meta connection: if the account now goes through another provider, it no longer applies.
-        var viaInfobip = await h.ProviderBilling.ResolveAsync(clinic, ChannelType.WhatsApp, ChannelProvider.Infobip);
-        Assert.Equal(ProviderBillingResponsibility.PlatformFunded, viaInfobip.Responsibility);
 
         var reset = await h.ProviderBilling.ResetAsync(whatsapp, "back to defaults", "ops@sculptflow");
         Assert.Equal(ProviderBillingService.SourceDefault, reset!.Source);

@@ -90,26 +90,23 @@ Generated from `Common/Statics/ConfigDefaults`; keep this table in step when you
 | Embeddings | MaxInputsPerRequest | 64 | int 1–2048 | Texts sent to the embeddings API in one request. |
 | Integrations | OAuthStateLifetimeMinutes | 15 | int 1–120 | How long a calendar or TikTok connect link stays valid. |
 | Integrations | TokenRefreshMarginMinutes | 5 | int 0–60 | Calendar and TikTok access tokens are refreshed this long before they expire. |
-| Infobip | TimeoutSeconds | 20 | int 5–120 | Timeout of one call to Infobip. |
-| Infobip | MaxSendAttempts | 3 | int 1–5 | Total tries for a send Infobip clearly refused (429/503/no connection). |
 | Voice | MaxBytes | 10485760 | int 1024–20971520 | Largest voice note (bytes) the Inbox will download from the provider to play or forward. |
 | Dashboard | LeadsPageSize | 25 | int 5–200 | Leads per page on the dashboard. |
 
-Only the Infobip HTTP timeout needs a new HTTP client to pick a change up (a new one is created per request scope), and the
-billing worker reads its switch and interval on every cycle. Everything else is read where it is used, so a change applies
-at once.
+The billing worker reads its switch and interval on every cycle. Everything else is read where it is used, so a change
+applies at once.
 
 ## What stays outside the configuration manager
 
 - **Secrets** (user-secrets / environment variables): `ConnectionStrings:Postgres`, `PlatformAdmin:ApiKey`,
-  `N8n:IngestApiKey`, `Meta:AppSecret`, `Meta:WebhookVerifyToken`, `Infobip:ApiKey`, `Infobip:WebhookToken`, every
+  `N8n:IngestApiKey`, `Meta:AppSecret`, `Meta:WebhookVerifyToken`, every
   `ClientSecret`. The one exception is the embeddings API key, which Mohammad moved into the configuration manager as a
   **secret setting** (`IsSecret` in `ConfigDefaults`): it is stored in `config.settings` like the others, but the settings
   API and the Configuration page only say whether it is set, the admin audit log never records it, and the manager never
   logs it. The seed script stores it empty; set it on the Configuration page.
-- **Per environment** (appsettings / environment variables): `App:PublicBaseUrl`, `Infobip:BaseUrl`, `Telegram:ApiBaseUrl`,
+- **Per environment** (appsettings / environment variables): `App:PublicBaseUrl`, `Telegram:ApiBaseUrl`,
   the n8n webhook URLs, `Meta:AppId` / `GraphApiVersion` / login config ids, the Google, Microsoft and TikTok client ids and
-  `TenantId`, `WhatsApp:Provider`, `Logging`, `AllowedHosts`.
+  `TenantId`, `Logging`, `AllowedHosts`.
 - **Structured rules** in appsettings: `Billing:WhatsApp:*` and `Billing:ProviderBilling:Defaults:*` (lists and maps).
 - **Constants** that are data or protocol limits: column lengths, Telegram's 4096-character limit, characters per token,
   the billing idempotency key length, clinic slug rules, preview lengths, API paging limits.

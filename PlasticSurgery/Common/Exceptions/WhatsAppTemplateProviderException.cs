@@ -1,7 +1,6 @@
 namespace PlasticSurgery.Common.Exceptions;
 
-/// <summary>The provider refused a template. Message is shown to clinic staff, so it must be provider-neutral
-/// (it never names Infobip — see the white-label rule in PROJECT_HANDOFF.md §29).</summary>
+/// <summary>Meta refused a template. The message is stored as the template's rejection reason and shown to staff.</summary>
 public class WhatsAppTemplateProviderException : Exception
 {
     public WhatsAppTemplateProviderException(string message) : base(message) { }

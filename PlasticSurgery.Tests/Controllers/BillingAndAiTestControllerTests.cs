@@ -250,7 +250,7 @@ public class BillingAdminControllerTests
         var ok = Assert.IsType<OkObjectResult>(Sut().ProviderBillingModes());
         var text = System.Text.Json.JsonSerializer.Serialize(ok.Value);
         Assert.Contains("whatsapp", text);
-        Assert.Contains("infobip", text);
+        Assert.DoesNotContain("infobip", text);
         _providerBilling.Verify(p => p.DefaultFor("whatsapp", "meta"), Times.Once);
         _providerBilling.Verify(p => p.DefaultFor("telegram", null), Times.Once);
     }

@@ -50,13 +50,11 @@ public class CreateModel : PageModel
     private readonly ILeadService _leads;
     private readonly IProcedureService _procedures;
     private readonly ICampaignService _campaigns;
-    private readonly IConfiguration _configuration;
 
-    public CreateModel(ICurrentClinicContext clinicContext, IWhatsAppTemplateService templates, ILeadService leads, IProcedureService procedures, ICampaignService campaigns, IConfiguration configuration)
+    public CreateModel(ICurrentClinicContext clinicContext, IWhatsAppTemplateService templates, ILeadService leads, IProcedureService procedures, ICampaignService campaigns)
     {
         _clinicContext = clinicContext;
         _templates = templates;
-        _configuration = configuration;
         _leads = leads;
         _procedures = procedures;
         _campaigns = campaigns;
@@ -345,12 +343,7 @@ public class CreateModel : PageModel
         ViewerTimezone = ViewerTimeZone.Resolve(Request, clinic.Timezone).Id;
 
         var allTemplates = await _templates.ListAsync(clinic.Id, ct);
-        // Only templates approved on the WhatsApp setup in use now (see WhatsAppTemplate.Provider).
-        var activeProvider = WhatsAppService.ActiveProviderName(_configuration);
-        ApprovedTemplates = allTemplates
-            .Where(t => t.Status == WhatsAppTemplateStatus.Approved
-                        && (string.IsNullOrWhiteSpace(t.Provider) ? ChannelProvider.Meta : t.Provider) == activeProvider)
-            .ToList();
+        ApprovedTemplates = allTemplates.Where(t => t.Status == WhatsAppTemplateStatus.Approved).ToList();
 
         if (WhatsAppTemplateId.HasValue)
         {

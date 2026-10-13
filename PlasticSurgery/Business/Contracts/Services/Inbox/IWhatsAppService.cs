@@ -1,8 +1,8 @@
 namespace PlasticSurgery.Business.Contracts.Services.Inbox;
 
 /// <summary>
-/// Sends outbound WhatsApp messages through the active provider (WhatsApp:Provider — Meta Cloud API or
-/// Infobip, see IWhatsAppProvider), using whichever WhatsApp ChannelIntegration the clinic has connected
+/// Sends outbound WhatsApp messages through the Meta Cloud API (IWhatsAppProvider), using whichever WhatsApp
+/// ChannelIntegration the clinic has connected
 /// (Settings → Messaging Integrations). This is the one place that ever sends WhatsApp — MessageService is the only caller, so the
 /// dashboard, template sends, campaigns, and (eventually) n8n all go through the same sending
 /// logic instead of each reimplementing it.

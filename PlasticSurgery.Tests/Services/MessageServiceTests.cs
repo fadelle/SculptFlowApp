@@ -20,7 +20,6 @@ public class MessageServiceTests
     private readonly Mock<INotificationService> _notifications = new();
     private readonly Mock<IMessageBillingService> _billing = new();
     private readonly Mock<IEntitlementService> _entitlements = new();
-    private IConfiguration _configuration = new ConfigurationBuilder().Build();
     private readonly MessageBillingHold _hold = new(Guid.Empty, "key", BillingSettlementTrigger.OnProviderAccepted);
     private readonly Lead _lead;
 
@@ -35,7 +34,7 @@ public class MessageServiceTests
     }
 
     private MessageService Sut() => new(_conversations.Object, _messages.Object, _leads.Object, _templates.Object, _campaigns.Object, _uow.Object,
-        _whatsApp.Object, [_sender.Object], _notifier.Object, _events.Object, _notifications.Object, _configuration, _billing.Object, _entitlements.Object);
+        _whatsApp.Object, [_sender.Object], _notifier.Object, _events.Object, _notifications.Object, _billing.Object, _entitlements.Object);
 
     private Conversation Conv(string mode = ConversationMode.Ai, string channel = ConversationChannel.WhatsApp, bool windowOpen = true)
     {
@@ -152,10 +151,10 @@ public class MessageServiceTests
 
     // ---------------------------------------------------------------- templates
 
-    private WhatsAppTemplate Template(string status = WhatsAppTemplateStatus.Approved, string? provider = null) => new()
+    private WhatsAppTemplate Template(string status = WhatsAppTemplateStatus.Approved) => new()
     {
         Id = Guid.NewGuid(), ClinicId = _clinicId, Name = "promo", Language = "en", Body = "Hi {{1}}, offer {{2}}!", Status = status,
-        Category = "MARKETING", CurrentCategory = "UTILITY", Provider = provider
+        Category = "MARKETING", CurrentCategory = "UTILITY"
     };
 
     private Template_ Setup(WhatsAppTemplate t) { _templates.Setup(r => r.GetAsync(_clinicId, t.Id, It.IsAny<CancellationToken>())).ReturnsAsync(t); return new Template_(t); }
@@ -215,27 +214,12 @@ public class MessageServiceTests
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => Sut().SendTemplateAsync(_clinicId, c.Id, new SendTemplateMessageRequest(pending.Id, null)));
         Assert.Contains("isn't approved", ex.Message);
 
-        var other = Template(provider: "infobip");
-        Setup(other);
-        var ex2 = await Assert.ThrowsAsync<InvalidOperationException>(() => Sut().SendTemplateAsync(_clinicId, c.Id, new SendTemplateMessageRequest(other.Id, null)));
-        Assert.Contains("previous WhatsApp setup", ex2.Message);
-
         _lead.Phone = null;
         var ok = Template();
         Setup(ok);
         var ex3 = await Assert.ThrowsAsync<InvalidOperationException>(() => Sut().SendTemplateAsync(_clinicId, c.Id, new SendTemplateMessageRequest(ok.Id, null)));
         Assert.Contains("no phone number", ex3.Message);
         _billing.Verify(b => b.ReserveOutboundAsync(It.IsAny<OutboundMessageBillingContext>(), It.IsAny<CancellationToken>()), Times.Never);
-    }
-
-    [Fact]
-    public async Task Template_provider_follows_configuration()
-    {
-        _configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["WhatsApp:Provider"] = " Infobip " }).Build();
-        var c = Conv();
-        var t = Template(provider: "infobip");
-        Setup(t);
-        Assert.NotNull(await Sut().SendTemplateAsync(_clinicId, c.Id, new SendTemplateMessageRequest(t.Id, null)));
     }
 
     [Fact]

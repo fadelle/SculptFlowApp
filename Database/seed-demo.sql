@@ -135,25 +135,25 @@ begin
         page_id, instagram_business_id, access_token, webhook_verify_token, pin, last_verified_at, last_error,
         meta_business_id, verified_name, account_status, account_review_status, phone_quality_rating, phone_status, name_status,
         is_healthy, health_level, last_problem_code, last_problem_message, last_webhook_at, last_health_event_at,
-        telegram_bot_id, telegram_bot_username, webhook_status, webhook_registered_at, provider, provider_sender_id, created_at) values
+        telegram_bot_id, telegram_bot_username, webhook_status, webhook_registered_at, created_at) values
     (pg_temp.did(20), c, 'whatsapp', 'connected', '+1 305 555 0100', 'demo-sculptflow-phone-0001', 'demo-waba-0001',
         null, null, 'DEMO-NOT-A-REAL-TOKEN', 'demo-verify-token-whatsapp', null, now() - interval '1 hour', null,
         'demo-meta-business-0001', 'Aurora Aesthetic Clinic', 'APPROVED', 'APPROVED', 'GREEN', 'CONNECTED', 'APPROVED',
         true, 'healthy', null, null, now() - interval '5 minutes', now() - interval '3 days',
-        null, null, null, null, null, null, now() - interval '100 days'),
+        null, null, null, null, now() - interval '100 days'),
     (pg_temp.did(21), c, 'instagram', 'connected', '@aurora.aesthetic.demo', null, null,
         'demo-page-0001', 'demo-ig-business-0001', 'DEMO-NOT-A-REAL-TOKEN', 'demo-verify-token-instagram', null, now() - interval '1 day', null,
         null, null, null, null, null, null, null, true, 'healthy', null, null, now() - interval '2 hours', null,
-        null, null, null, null, null, null, now() - interval '95 days'),
+        null, null, null, null, now() - interval '95 days'),
     (pg_temp.did(22), c, 'facebook', 'error', 'Aurora Aesthetic (Facebook page)', null, null,
         'demo-page-0002', null, 'DEMO-NOT-A-REAL-TOKEN', 'demo-verify-token-facebook', null, now() - interval '9 days',
         'The access token expired. Reconnect the page.', null, null, null, null, null, null, null,
         false, 'error', 'TOKEN_EXPIRED', 'The access token expired. Reconnect the page.', now() - interval '9 days', now() - interval '9 days',
-        null, null, null, null, null, null, now() - interval '95 days'),
+        null, null, null, null, now() - interval '95 days'),
     (pg_temp.did(23), c, 'telegram', 'connected', '@aurora_demo_bot', null, null,
         null, null, 'DEMO-NOT-A-REAL-TOKEN', 'demo-secret-token-telegram', null, now() - interval '2 days', null,
         null, null, null, null, null, null, null, true, 'healthy', null, null, now() - interval '20 minutes', null,
-        '9000000001', 'aurora_demo_bot', 'active', now() - interval '80 days', null, null, now() - interval '80 days');
+        '9000000001', 'aurora_demo_bot', 'active', now() - interval '80 days', now() - interval '80 days');
 
   insert into channels.whatsapp_health_events (id, clinic_id, channel_integration_id, event_type, severity, status, code, message, raw_metadata, occurred_at) values
     (pg_temp.did(30), c, pg_temp.did(20), 'phone_number_quality_update', 'warning', 'YELLOW', 'QUALITY_MEDIUM', 'Quality rating dropped to medium.', '{"demo": true}', now() - interval '12 days'),
@@ -518,8 +518,8 @@ begin
   insert into billing.subscriptions (id, clinic_id, plan_id, status, current_period_start, current_period_end, cancel_at_period_end)
   values (pg_temp.did(1211), c, v_plan, 'active', now() - interval '12 days', now() + interval '18 days', false);
 
-  insert into billing.channel_account_settings (channel_integration_id, clinic_id, provider_billing, omni_usage_billing, applies_to_provider, reason, updated_by)
-  values (pg_temp.did(20), c, 'platform_funded', true, null, 'Demo default', 'seed-demo');
+  insert into billing.channel_account_settings (channel_integration_id, clinic_id, provider_billing, omni_usage_billing, reason, updated_by)
+  values (pg_temp.did(20), c, 'platform_funded', true, 'Demo default', 'seed-demo');
 
   insert into billing.usage_records (id, clinic_id, billing_account_id, idempotency_key, event_type, channel, channel_integration_id,
         quantity, unit, country_code, provider_billing, rate_id, rate_card_id, rate_source, unit_provider_cost, unit_price, provider_cost,

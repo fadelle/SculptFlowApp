@@ -40,10 +40,6 @@ public class ChannelsAdminController : ControllerBase
     [HttpPost("{id:guid}/disconnect")]
     public async Task<IActionResult> Disconnect(Guid id, CancellationToken ct) => Ok(await _channels.DisconnectAsync(id, ct));
 
-    [HttpPost("whatsapp/infobip/{clinicId:guid}")]
-    public async Task<IActionResult> ConnectInfobip(Guid clinicId, [FromBody] InfobipSenderBody request, CancellationToken ct) =>
-        Ok(await _channels.ConnectInfobipSenderAsync(clinicId, request.Sender, ct));
-
     [HttpGet("calendars")]
     public async Task<IActionResult> Calendars([FromQuery] Guid? clinicId, CancellationToken ct) => Ok(await _channels.ListCalendarsAsync(clinicId, ct));
 

@@ -3,7 +3,6 @@ using PlasticSurgery.Business.Contracts.Services.Channels;
 using PlasticSurgery.Business.Contracts.Services.PlatformAdmin;
 using PlasticSurgery.Business.Contracts.Services.TikTok;
 using PlasticSurgery.Business.Mappers.PlatformAdmin;
-using PlasticSurgery.Common.Enums;
 using PlasticSurgery.Entities.Dtos.PlatformAdmin;
 using PlasticSurgery.Persistence.Contracts.PlatformAdmin;
 
@@ -13,16 +12,14 @@ public class ChannelAdminService : IChannelAdminService
 {
     private readonly IChannelAdminRepository _repository;
     private readonly IChannelIntegrationService _channels;
-    private readonly IInfobipWhatsAppIntegrationService _infobip;
     private readonly ICalendarIntegrationService _calendars;
     private readonly ITikTokIntegrationService _tikTok;
 
     public ChannelAdminService(IChannelAdminRepository repository, IChannelIntegrationService channels,
-        IInfobipWhatsAppIntegrationService infobip, ICalendarIntegrationService calendars, ITikTokIntegrationService tikTok)
+        ICalendarIntegrationService calendars, ITikTokIntegrationService tikTok)
     {
         _repository = repository;
         _channels = channels;
-        _infobip = infobip;
         _calendars = calendars;
         _tikTok = tikTok;
     }
@@ -33,11 +30,7 @@ public class ChannelAdminService : IChannelAdminService
     public async Task<ChannelDetail?> GetChannelAsync(Guid id, CancellationToken ct)
     {
         var row = await _repository.GetChannelAsync(id, ct);
-        if (row is null) return null;
-        var webhookUrl = ChannelProvider.Of(row) == ChannelProvider.Infobip && row.Status == ChannelIntegrationStatus.Connected
-            ? await _infobip.GetWebhookUrlAsync(row.ClinicId, ct)
-            : null;
-        return PlatformAdminMapper.ToDetail(row, webhookUrl);
+        return row is null ? null : PlatformAdminMapper.ToDetail(row);
     }
 
     public async Task<List<HealthEventRow>> HealthEventsAsync(Guid channelIntegrationId, CancellationToken ct) =>
@@ -52,12 +45,6 @@ public class ChannelAdminService : IChannelAdminService
         var row = await _repository.GetChannelAsync(id, ct) ?? throw new KeyNotFoundException("Channel connection not found.");
         await _channels.DisconnectAsync(row.ClinicId, row.Channel, ct);
         return new PlatformAdminChange(row.ClinicId);
-    }
-
-    public async Task<ChannelDetail> ConnectInfobipSenderAsync(Guid clinicId, string? senderNumber, CancellationToken ct)
-    {
-        var connected = await _infobip.ConnectAsync(clinicId, senderNumber, ct);
-        return await GetChannelAsync(connected.Id, ct) ?? throw new KeyNotFoundException("Channel connection not found.");
     }
 
     public async Task<PlatformAdminChange> DisconnectCalendarAsync(Guid id, CancellationToken ct)

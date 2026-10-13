@@ -1,4 +1,3 @@
-using Microsoft.Extensions.Configuration;
 using PlasticSurgery.Business.Services.WhatsApp;
 
 namespace PlasticSurgery.Tests.Services;
@@ -12,23 +11,21 @@ public class WhatsAppTemplateServiceTests
     private readonly Mock<IWhatsAppTemplateProvider> _provider = new();
     private readonly Mock<IInboxNotifier> _notifier = new();
     private readonly Mock<IEventLogger> _events = new();
-    private IConfiguration _configuration = new ConfigurationBuilder().Build();
     private ChannelIntegration? _integration;
 
     public WhatsAppTemplateServiceTests()
     {
-        _provider.SetupGet(p => p.Name).Returns(ChannelProvider.Meta);
         _provider.Setup(p => p.IsReady(It.IsAny<ChannelIntegration>())).Returns(true);
         _integrations.Setup(i => i.GetAsync(_clinicId, ChannelType.WhatsApp, It.IsAny<CancellationToken>())).ReturnsAsync(() => _integration);
         Connect();
     }
 
-    private void Connect(string provider = ChannelProvider.Meta) => _integration = new ChannelIntegration
+    private void Connect() => _integration = new ChannelIntegration
     {
-        Id = Guid.NewGuid(), ClinicId = _clinicId, Channel = ChannelType.WhatsApp, Status = ChannelIntegrationStatus.Connected, Provider = provider, WhatsAppBusinessId = "W1"
+        Id = Guid.NewGuid(), ClinicId = _clinicId, Channel = ChannelType.WhatsApp, Status = ChannelIntegrationStatus.Connected, WhatsAppBusinessId = "W1"
     };
 
-    private WhatsAppTemplateService Sut() => new(_templates.Object, _integrations.Object, _uow.Object, [_provider.Object], _configuration, _notifier.Object, _events.Object);
+    private WhatsAppTemplateService Sut() => new(_templates.Object, _integrations.Object, _uow.Object, _provider.Object, _notifier.Object, _events.Object);
 
     private CreateWhatsAppTemplateRequest Create(string category = "marketing", string name = "promo", string body = "Hi", string language = "") =>
         new(_clinicId, name, category, language, body, null, null, null, null, null);
@@ -47,22 +44,13 @@ public class WhatsAppTemplateServiceTests
         _templates.Setup(t => t.Add(It.IsAny<WhatsAppTemplate>())).Callback<WhatsAppTemplate>(t => added = t);
         _provider.Setup(p => p.SubmitAsync(_integration!, It.IsAny<WhatsAppTemplate>(), It.IsAny<CancellationToken>())).ReturnsAsync(new WhatsAppTemplateSubmitResult("meta-1", "PENDING"));
         var r = await Sut().CreateAsync(Create());
-        Assert.Equal(("en_US", "meta-1", WhatsAppTemplateStatus.Pending, null), (added!.Language, added.MetaTemplateId, added.Status, added.Provider));
+        Assert.Equal(("en_US", "meta-1", WhatsAppTemplateStatus.Pending), (added!.Language, added.MetaTemplateId, added.Status));
         Assert.Equal(WhatsAppTemplateStatus.Pending, r.Status);
     }
 
     [Fact]
-    public async Task Create_stamps_non_meta_providers_and_stays_draft_when_nothing_is_connected()
+    public async Task Create_stays_draft_when_nothing_is_connected()
     {
-        _provider.SetupGet(p => p.Name).Returns(ChannelProvider.Infobip);
-        _configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["WhatsApp:Provider"] = "infobip" }).Build();
-        Connect(ChannelProvider.Infobip);
-        WhatsAppTemplate? added = null;
-        _templates.Setup(t => t.Add(It.IsAny<WhatsAppTemplate>())).Callback<WhatsAppTemplate>(t => added = t);
-        _provider.Setup(p => p.SubmitAsync(It.IsAny<ChannelIntegration>(), It.IsAny<WhatsAppTemplate>(), It.IsAny<CancellationToken>())).ReturnsAsync(new WhatsAppTemplateSubmitResult("ib-1", "approved"));
-        await Sut().CreateAsync(Create());
-        Assert.Equal(("infobip", WhatsAppTemplateStatus.Approved), (added!.Provider, added.Status));
-
         _integration = null;
         var draft = await Sut().CreateAsync(Create(name: "other"));
         Assert.Equal(WhatsAppTemplateStatus.Draft, draft.Status);
@@ -76,16 +64,9 @@ public class WhatsAppTemplateServiceTests
         Assert.Equal((WhatsAppTemplateStatus.Rejected, "Body too long"), (r.Status, r.RejectionReason));
     }
 
-    [Fact]
-    public async Task Unknown_provider_name_makes_templates_unavailable()
+    private WhatsAppTemplate Existing(string? metaId = null, string status = WhatsAppTemplateStatus.Draft)
     {
-        _configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["WhatsApp:Provider"] = "twilio" }).Build();
-        await Assert.ThrowsAsync<InvalidOperationException>(() => Sut().CreateAsync(Create()));
-    }
-
-    private WhatsAppTemplate Existing(string? metaId = null, string? provider = null, string status = WhatsAppTemplateStatus.Draft)
-    {
-        var t = new WhatsAppTemplate { Id = Guid.NewGuid(), ClinicId = _clinicId, Name = "promo", Body = "b", MetaTemplateId = metaId, Provider = provider, Status = status };
+        var t = new WhatsAppTemplate { Id = Guid.NewGuid(), ClinicId = _clinicId, Name = "promo", Body = "b", MetaTemplateId = metaId, Status = status };
         _templates.Setup(r => r.GetAsync(_clinicId, t.Id, It.IsAny<CancellationToken>())).ReturnsAsync(t);
         return t;
     }
@@ -126,10 +107,8 @@ public class WhatsAppTemplateServiceTests
     }
 
     [Fact]
-    public async Task Sync_refuses_templates_from_another_provider_or_without_a_connection()
+    public async Task Sync_refuses_without_a_connection()
     {
-        var other = Existing("meta-1", provider: "infobip");
-        await Assert.ThrowsAsync<InvalidOperationException>(() => Sut().SyncStatusAsync(_clinicId, other.Id));
         var mine = Existing("meta-2");
         _integration = null;
         await Assert.ThrowsAsync<InvalidOperationException>(() => Sut().SyncStatusAsync(_clinicId, mine.Id));
@@ -195,12 +174,6 @@ public class WhatsAppTemplateServiceTests
     [InlineData("IN_APPEAL", "in_appeal")]
     public void Status_mapping(string meta, string expected) => Assert.Equal(expected, WhatsAppTemplateService.MapMetaStatus(meta));
 
-    [Fact]
-    public void Template_provider_defaults_to_meta()
-    {
-        Assert.Equal(ChannelProvider.Meta, WhatsAppTemplateService.TemplateProviderOf(new WhatsAppTemplate { Provider = " " }));
-        Assert.Equal("infobip", WhatsAppTemplateService.TemplateProviderOf(new WhatsAppTemplate { Provider = "infobip" }));
-    }
 }
 
 public class WhatsAppHealthServiceTests

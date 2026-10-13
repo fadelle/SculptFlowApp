@@ -354,13 +354,13 @@ public class WalletAndUsageTests
     {
         var (h, clinic, evt) = await SetupAsync(price: 0.08m, providerCost: 0.05m, topUp: 10m);
         var messageId = Guid.NewGuid();
-        var e = h.Event(clinic, evt, country: "lb", provider: "Infobip") with { MessageId = messageId, Channel = "whatsapp" };
+        var e = h.Event(clinic, evt, country: "lb", provider: "Meta") with { MessageId = messageId, Channel = "whatsapp" };
         var reserved = await h.Billing.ReserveAsync(e);
         await h.Billing.SettleAsync(clinic, e.IdempotencyKey);
 
         var usage = await h.UsageAsync(reserved.UsageRecordId!.Value);
         Assert.Equal("LB", usage.CountryCode);
-        Assert.Equal("infobip", usage.Provider);
+        Assert.Equal("meta", usage.Provider);
         Assert.Equal("whatsapp", usage.Channel);
         Assert.Equal(messageId, usage.MessageId);
         Assert.Equal("USD", usage.Currency.Trim());

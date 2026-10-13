@@ -30,13 +30,6 @@ public class BillingMathTests
 public class SmallHelperTests
 {
     [Theory]
-    [InlineData(null, "")]
-    [InlineData("+961 (70) 123-456", "96170123456")]
-    [InlineData("abc", "")]
-    public void InfobipNumbers_keeps_digits_only(string? input, string expected) =>
-        Assert.Equal(expected, InfobipNumbers.Normalize(input));
-
-    [Theory]
     [InlineData(null, true)]
     [InlineData("", true)]
     [InlineData("  NULL ", true)]
@@ -75,24 +68,6 @@ public class SmallHelperTests
     public void UrlDisplay_strips_scheme_and_decodes(string? url, string expected) =>
         Assert.Equal(expected, UrlDisplayHelper.Readable(url));
 
-    [Fact]
-    public void InfobipWebhookUrls_build_escapes_secret_and_trims_base()
-    {
-        var id = Guid.NewGuid();
-        Assert.Equal($"https://x.com/api/integrations/whatsapp/connections/{id}/events?token=a%2Bb%26c",
-            InfobipWebhookUrls.Build("https://x.com/", id, "a+b&c"));
-    }
-
-    [Fact]
-    public void InfobipWebhookUrls_ForConnection_needs_base_url_and_token()
-    {
-        var cfg = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["App:PublicBaseUrl"] = " https://x.com/ " }).Build();
-        var empty = new ConfigurationBuilder().Build();
-        var withToken = new ChannelIntegration { Id = Guid.NewGuid(), WebhookVerifyToken = "t" };
-        Assert.EndsWith("?token=t", InfobipWebhookUrls.ForConnection(cfg, withToken));
-        Assert.Null(InfobipWebhookUrls.ForConnection(empty, withToken));
-        Assert.Null(InfobipWebhookUrls.ForConnection(cfg, new ChannelIntegration { Id = Guid.NewGuid() }));
-    }
 }
 
 public class ViewerTimeZoneTests

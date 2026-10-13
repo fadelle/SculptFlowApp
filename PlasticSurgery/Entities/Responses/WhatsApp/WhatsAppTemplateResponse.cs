@@ -22,8 +22,5 @@ public record WhatsAppTemplateResponse(
     string? PreviousCategory = null,
     string? CurrentCategory = null,
     string? ComponentsJson = null,
-    DateTimeOffset? LastMetaEventAt = null,
-    /// <summary>Provider the template was submitted through (null = meta). Server-side only — never serialized,
-    /// so the browser can't see which provider we use.</summary>
-    [property: System.Text.Json.Serialization.JsonIgnore] string? Provider = null
+    DateTimeOffset? LastMetaEventAt = null
 );

@@ -68,13 +68,13 @@ public sealed class BillingHarness
     }
 
     /// <summary>A connected channel account (channel_integrations row) for the clinic.</summary>
-    public async Task<Guid> ConnectChannelAsync(Guid clinicId, string channel, string? provider = null)
+    public async Task<Guid> ConnectChannelAsync(Guid clinicId, string channel)
     {
         await using var db = Db();
         var id = Guid.NewGuid();
         db.ChannelIntegrations.Add(new ChannelIntegration
         {
-            Id = id, ClinicId = clinicId, Channel = channel, Provider = provider, Status = ChannelIntegrationStatus.Connected,
+            Id = id, ClinicId = clinicId, Channel = channel, Status = ChannelIntegrationStatus.Connected,
             DisplayName = channel + " test", CreatedAt = Time.Now, UpdatedAt = Time.Now
         });
         await db.SaveChangesAsync();

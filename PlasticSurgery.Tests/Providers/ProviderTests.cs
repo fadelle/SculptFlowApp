@@ -27,7 +27,6 @@ public class MetaWhatsAppProviderTests
         Assert.True(Sut().IsReady(Integration()));
         Assert.False(Sut().IsReady(new ChannelIntegration { PhoneNumberId = "P1" }));
         Assert.False(Sut().IsReady(new ChannelIntegration { AccessToken = "t" }));
-        Assert.Equal(ChannelProvider.Meta, Sut().Name);
     }
 
     [Fact]
@@ -63,58 +62,9 @@ public class MetaWhatsAppProviderTests
     }
 }
 
-public class InfobipWhatsAppProviderTests
-{
-    private readonly Mock<IInfobipClient> _client = new();
-    private readonly IConfiguration _configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["App:PublicBaseUrl"] = "https://app.example.com" }).Build();
-
-    private InfobipWhatsAppProvider Sut() => new(_client.Object, _configuration, NullLogger<InfobipWhatsAppProvider>.Instance);
-
-    private static ChannelIntegration Integration() => new() { Id = Guid.NewGuid(), ProviderSenderId = "447000", WebhookVerifyToken = "tok", Provider = ChannelProvider.Infobip };
-
-    [Fact]
-    public async Task Text_is_sent_from_the_sender_to_a_digits_only_number_with_a_notify_url()
-    {
-        InfobipWhatsAppTextMessage? sent = null;
-        _client.Setup(c => c.SendWhatsAppTextAsync(It.IsAny<InfobipWhatsAppTextMessage>(), It.IsAny<CancellationToken>()))
-            .Callback<InfobipWhatsAppTextMessage, CancellationToken>((m, _) => sent = m).ReturnsAsync(new InfobipSendResult("srv-1", "PENDING", null));
-        var integration = Integration();
-        Assert.Equal("srv-1", await Sut().SendTextAsync(integration, "+961 70 123 456", "hi"));
-        Assert.Equal(("447000", "96170123456", "hi"), (sent!.From, sent.To, sent.Content.Text));
-        Assert.Contains($"/connections/{integration.Id}/events?token=tok", sent.NotifyUrl);
-        Assert.True(Guid.TryParse(sent.MessageId, out _));
-        Assert.True(Sut().IsReady(integration));
-        Assert.False(Sut().IsReady(new ChannelIntegration()));
-    }
-
-    [Fact]
-    public async Task Template_parameters_are_positional()
-    {
-        InfobipWhatsAppTemplateMessage? sent = null;
-        _client.Setup(c => c.SendWhatsAppTemplateAsync(It.IsAny<InfobipWhatsAppTemplateMessage>(), It.IsAny<CancellationToken>()))
-            .Callback<InfobipWhatsAppTemplateMessage, CancellationToken>((m, _) => sent = m).ReturnsAsync(new InfobipSendResult("t-1", null, null));
-        await Sut().SendTemplateAsync(Integration(), "96170", new WhatsAppTemplateSend("promo", "en", ["Ann"]));
-        Assert.Equal(("promo", "en", "Ann"), (sent!.Content.TemplateName, sent.Content.Language, sent.Content.TemplateData.Body.Placeholders[0]));
-    }
-
-    [Theory]
-    [InlineData(true, false, "in time")]
-    [InlineData(false, true, "didn't accept")]
-    [InlineData(false, false, "right now")]
-    public async Task Provider_errors_become_neutral_messages_that_never_mention_infobip(bool timeout, bool rejected, string expected)
-    {
-        var ex = new InfobipApiException("Infobip internal detail", rejected ? 400 : 503, null) { IsTimeout = timeout };
-        _client.Setup(c => c.SendWhatsAppTextAsync(It.IsAny<InfobipWhatsAppTextMessage>(), It.IsAny<CancellationToken>())).ThrowsAsync(ex);
-        var thrown = await Assert.ThrowsAsync<WhatsAppSendException>(() => Sut().SendTextAsync(Integration(), "961", "hi"));
-        Assert.Contains(expected, thrown.Message);
-        Assert.DoesNotContain("nfobip", thrown.Message);
-    }
-}
-
 public class WhatsAppTemplateProviderTests
 {
     private readonly Mock<IMetaGraphClient> _meta = new();
-    private readonly Mock<IInfobipClient> _infobip = new();
 
     private static WhatsAppTemplate Template(string body = "Hi {{1}}, offer {{2}}", string? header = null, string? headerContent = null, string? footer = null, string? buttons = null, string? variables = null) => new()
     {
@@ -155,73 +105,6 @@ public class WhatsAppTemplateProviderTests
         Assert.Equal(("REJECTED", "why"), (status.Status, status.RejectedReason));
     }
 
-    private static string Request(WhatsAppTemplate t) => JsonSerializer.Serialize(InfobipWhatsAppTemplateProvider.BuildRequest(t));
-
-    [Fact]
-    public void Infobip_request_has_body_examples_from_variables_or_samples()
-    {
-        var json = Request(Template(variables: "[\"Ann\",\"\"]"));
-        Assert.Contains("\"category\":\"MARKETING\"", json);
-        Assert.Contains("\"examples\":[\"Ann\",\"Sample 2\"]", json);
-        Assert.Contains("\"language\":\"en_US\"", json);
-        Assert.DoesNotContain("examples", Request(Template(body: "No placeholders")));
-        Assert.Contains("Sample 1", Request(Template(body: "Hi {{1}}", variables: "not json")));
-    }
-
-    [Fact]
-    public void Infobip_request_headers_footer_and_buttons()
-    {
-        var text = Request(Template(header: "text", headerContent: "Hi {{1}}", footer: "Bye"));
-        Assert.Contains("\"header\":{\"format\":\"TEXT\",\"text\":\"Hi {{1}}\",\"example\":\"Sample\"}", text);
-        Assert.Contains("\"footer\":{\"text\":\"Bye\"}", text);
-        Assert.Contains("\"format\":\"VIDEO\"", Request(Template(header: "video", headerContent: "https://x/v.mp4")));
-
-        var buttons = Request(Template(buttons: "[{\"type\":\"quick_reply\",\"text\":\"Yes\"},{\"type\":\"PHONE_NUMBER\",\"text\":\"Call\",\"phone_number\":\"+961\"},{\"type\":\"URL\",\"text\":\"Open\",\"url\":\"https://x/{{1}}\",\"example\":[\"https://x/1\"]},{\"type\":\"URL\",\"text\":\"Plain\",\"url\":\"https://x\"},{\"type\":\"OTHER\"}]"));
-        Assert.Contains("\"type\":\"QUICK_REPLY\"", buttons);
-        Assert.Contains("\"phoneNumber\":\"\\u002B961\"", buttons);
-        Assert.Contains("\"example\":\"https://x/1\"", buttons);
-        Assert.DoesNotContain("OTHER", buttons);
-        Assert.DoesNotContain("\"buttons\"", Request(Template(buttons: "{\"not\":\"array\"}")));
-    }
-
-    [Theory]
-    [InlineData(null, "PENDING")]
-    [InlineData("", "PENDING")]
-    [InlineData("unknown", "PENDING")]
-    [InlineData("first_paused", "PAUSED")]
-    [InlineData("SECOND_PAUSED", "PAUSED")]
-    [InlineData("reinstated", "APPROVED")]
-    [InlineData("rejected", "REJECTED")]
-    public void Infobip_status_mapping(string? input, string expected) => Assert.Equal(expected, InfobipWhatsAppTemplateProvider.ToWhatsAppStatus(input));
-
-    [Fact]
-    public async Task Infobip_provider_submit_status_and_neutral_errors()
-    {
-        var provider = new InfobipWhatsAppTemplateProvider(_infobip.Object, NullLogger<InfobipWhatsAppTemplateProvider>.Instance);
-        var integration = new ChannelIntegration { ProviderSenderId = "447000" };
-        Assert.True(provider.IsReady(integration));
-        Assert.False(provider.IsReady(new ChannelIntegration()));
-
-        _infobip.Setup(c => c.CreateWhatsAppTemplateAsync("447000", It.IsAny<object>(), It.IsAny<CancellationToken>())).ReturnsAsync(new InfobipTemplateInfo("77", "FIRST_PAUSED"));
-        var r = await provider.SubmitAsync(integration, Template());
-        Assert.Equal(("77", "PAUSED"), (r.ProviderTemplateId, r.Status));
-
-        _infobip.Setup(c => c.GetWhatsAppTemplateAsync("447000", "tpl-1", It.IsAny<CancellationToken>())).ReturnsAsync(new InfobipTemplateInfo("tpl-1", "APPROVED"));
-        Assert.Equal("APPROVED", (await provider.GetStatusAsync(integration, Template())).Status);
-
-        _infobip.Setup(c => c.CreateWhatsAppTemplateAsync(It.IsAny<string>(), It.IsAny<object>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new InfobipApiException("Infobip rejected", 400) { Detail = "name invalid" });
-        Assert.Contains("name invalid", (await Assert.ThrowsAsync<WhatsAppTemplateProviderException>(() => provider.SubmitAsync(integration, Template()))).Message);
-        _infobip.Setup(c => c.CreateWhatsAppTemplateAsync(It.IsAny<string>(), It.IsAny<object>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new InfobipApiException("x", 400) { Detail = "Infobip internal" });
-        var neutral = await Assert.ThrowsAsync<WhatsAppTemplateProviderException>(() => provider.SubmitAsync(integration, Template()));
-        Assert.DoesNotContain("nfobip", neutral.Message);
-        _infobip.Setup(c => c.CreateWhatsAppTemplateAsync(It.IsAny<string>(), It.IsAny<object>(), It.IsAny<CancellationToken>())).ThrowsAsync(new InfobipApiException("x", 503));
-        Assert.Contains("Retry submit", (await Assert.ThrowsAsync<WhatsAppTemplateProviderException>(() => provider.SubmitAsync(integration, Template()))).Message);
-
-        _infobip.Setup(c => c.GetWhatsAppTemplateAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>())).ThrowsAsync(new InfobipApiException("x", 500));
-        await Assert.ThrowsAsync<InvalidOperationException>(() => provider.GetStatusAsync(integration, Template()));
-    }
 }
 
 public class WhatsAppServiceAndSenderTests
@@ -229,56 +112,37 @@ public class WhatsAppServiceAndSenderTests
     private readonly Guid _clinicId = Guid.NewGuid();
     private readonly Mock<IChannelIntegrationRepository> _integrations = new();
     private readonly Mock<IWhatsAppProvider> _meta = new();
-    private readonly Mock<IWhatsAppProvider> _infobip = new();
 
     public WhatsAppServiceAndSenderTests()
     {
-        _meta.SetupGet(p => p.Name).Returns(ChannelProvider.Meta);
         _meta.Setup(p => p.IsReady(It.IsAny<ChannelIntegration>())).Returns(true);
         _meta.Setup(p => p.SendTextAsync(It.IsAny<ChannelIntegration>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync("meta-id");
         _meta.Setup(p => p.SendTemplateAsync(It.IsAny<ChannelIntegration>(), It.IsAny<string>(), It.IsAny<WhatsAppTemplateSend>(), It.IsAny<CancellationToken>())).ReturnsAsync("meta-tpl");
-        _infobip.SetupGet(p => p.Name).Returns(ChannelProvider.Infobip);
-        _infobip.Setup(p => p.IsReady(It.IsAny<ChannelIntegration>())).Returns(true);
-        _infobip.Setup(p => p.SendTextAsync(It.IsAny<ChannelIntegration>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync("ib-id");
     }
 
-    private WhatsAppService Sut(string? provider = null) => new(_integrations.Object, [_meta.Object, _infobip.Object],
-        new ConfigurationBuilder().AddInMemoryCollection(provider is null ? new Dictionary<string, string?>() : new Dictionary<string, string?> { ["WhatsApp:Provider"] = provider }).Build());
+    private WhatsAppService Sut() => new(_integrations.Object, _meta.Object);
 
-    private void Connected(string provider = ChannelProvider.Meta, string status = ChannelIntegrationStatus.Connected) =>
+    private void Connected(string status = ChannelIntegrationStatus.Connected) =>
         _integrations.Setup(i => i.GetReadOnlyAsync(_clinicId, ChannelType.WhatsApp, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new ChannelIntegration { ClinicId = _clinicId, Channel = ChannelType.WhatsApp, Status = status, Provider = provider });
-
-    [Theory]
-    [InlineData(null, "meta")]
-    [InlineData("  ", "meta")]
-    [InlineData(" INFOBIP ", "infobip")]
-    public void Active_provider_name_is_normalised(string? configured, string expected) =>
-        Assert.Equal(expected, WhatsAppService.ActiveProviderName(new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["WhatsApp:Provider"] = configured }).Build()));
+            .ReturnsAsync(new ChannelIntegration { ClinicId = _clinicId, Channel = ChannelType.WhatsApp, Status = status });
 
     [Fact]
-    public async Task Messages_go_through_the_active_provider()
+    public async Task Messages_go_through_the_meta_provider()
     {
         Connected();
         Assert.Equal("meta-id", await Sut().SendTextMessageAsync(_clinicId, "961", "hi"));
         Assert.Equal("meta-tpl", await Sut().SendTemplateMessageAsync(_clinicId, "961", "promo", "en", ["a"]));
-        Connected(ChannelProvider.Infobip);
-        Assert.Equal("ib-id", await Sut("infobip").SendTextMessageAsync(_clinicId, "961", "hi"));
     }
 
     [Fact]
-    public async Task Sending_is_refused_when_not_connected_not_ready_or_on_another_provider()
+    public async Task Sending_is_refused_when_not_connected_or_not_ready()
     {
         await Assert.ThrowsAsync<WhatsAppSendException>(() => Sut().SendTextMessageAsync(_clinicId, "961", "hi")); // no integration
         Connected(status: ChannelIntegrationStatus.Disconnected);
         await Assert.ThrowsAsync<WhatsAppSendException>(() => Sut().SendTextMessageAsync(_clinicId, "961", "hi"));
-        Connected(ChannelProvider.Infobip);
-        var ex = await Assert.ThrowsAsync<WhatsAppSendException>(() => Sut().SendTextMessageAsync(_clinicId, "961", "hi")); // connected via infobip, meta active
-        Assert.Contains("different provider", ex.Message);
         Connected();
         _meta.Setup(p => p.IsReady(It.IsAny<ChannelIntegration>())).Returns(false);
         await Assert.ThrowsAsync<WhatsAppSendException>(() => Sut().SendTextMessageAsync(_clinicId, "961", "hi"));
-        await Assert.ThrowsAsync<WhatsAppSendException>(() => Sut("carrier-pigeon").SendTextMessageAsync(_clinicId, "961", "hi"));
     }
 
     [Fact]
