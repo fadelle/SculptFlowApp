@@ -177,9 +177,9 @@ public class ChannelIntegrationRepositoryTests(PostgresFixture fixture) : RepoTe
     public async Task Connected_elsewhere_checks_and_connection_counts()
     {
         var c = MakeClinic(); var other = MakeClinic();
-        var bot = "bot-" + Guid.NewGuid().ToString("N")[..8]; var sender = "S-" + Guid.NewGuid().ToString("N")[..8];
+        var bot = "bot-" + Guid.NewGuid().ToString("N")[..8];
         var tg = Integration(other.Id, ChannelType.Telegram); tg.TelegramBotId = bot;
-        var wa = Integration(other.Id, ChannelType.WhatsApp); wa.Provider = ChannelProvider.Infobip; wa.ProviderSenderId = sender;
+        var wa = Integration(other.Id, ChannelType.WhatsApp);
         var mine = Integration(c.Id, ChannelType.Telegram);
         var down = Integration(c.Id, ChannelType.WhatsApp, ChannelIntegrationStatus.Disconnected);
         await SeedAsync(c, other, tg, wa, mine, down);
@@ -188,8 +188,6 @@ public class ChannelIntegrationRepositoryTests(PostgresFixture fixture) : RepoTe
         var repo = new ChannelIntegrationRepository(db);
         Assert.True(await repo.IsTelegramBotConnectedElsewhereAsync(bot, c.Id));
         Assert.False(await repo.IsTelegramBotConnectedElsewhereAsync(bot, other.Id));
-        Assert.True(await repo.IsInfobipSenderConnectedElsewhereAsync(sender, c.Id));
-        Assert.False(await repo.IsInfobipSenderConnectedElsewhereAsync(sender, other.Id));
         Assert.Equal(1, await repo.CountConnectedExceptAsync(c.Id, ChannelType.WhatsApp));
         Assert.Equal(0, await repo.CountConnectedExceptAsync(c.Id, ChannelType.Telegram));
     }
@@ -219,13 +217,12 @@ public class WhatsAppRepositoryTests(PostgresFixture fixture) : RepoTestBase(fix
     };
 
     [PostgresFact]
-    public async Task Templates_are_found_by_id_name_and_provider_id()
+    public async Task Templates_are_found_by_id_name_and_meta_id()
     {
         var c = MakeClinic(); var other = MakeClinic();
         var t1 = Template(c.Id, "welcome", daysAgo: 2); t1.MetaTemplateId = "meta-1";
         var t2 = Template(c.Id, "welcome", "ar", daysAgo: 1);
-        var infobip = Template(other.Id, "promo"); infobip.MetaTemplateId = "ib-" + Guid.NewGuid().ToString("N")[..8]; infobip.Provider = ChannelProvider.Infobip;
-        await SeedAsync(c, other, t1, t2, infobip);
+        await SeedAsync(c, other, t1, t2);
 
         await using var db = NewContext();
         var repo = new WhatsAppTemplateRepository(db);
@@ -236,8 +233,6 @@ public class WhatsAppRepositoryTests(PostgresFixture fixture) : RepoTestBase(fix
         Assert.Null(await repo.FindByProviderTemplateIdAsync(other.Id, "meta-1"));
         Assert.Equal(t2.Id, (await repo.FindByNameAsync(c.Id, "welcome", "ar"))!.Id);
         Assert.Null(await repo.FindByNameAsync(c.Id, "welcome", "fr"));
-        Assert.Equal(other.Id, await repo.FindInfobipTemplateClinicIdAsync(infobip.MetaTemplateId));
-        Assert.Null(await repo.FindInfobipTemplateClinicIdAsync("meta-1"));   // a Meta-owned id is not an Infobip template
 
         var added = Template(c.Id, "new");
         repo.Add(added);

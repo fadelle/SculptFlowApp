@@ -1,6 +1,5 @@
 using Microsoft.Extensions.Options;
 using PlasticSurgery.Business.Contracts.Engines.Billing;
-using PlasticSurgery.Business.Services.Inbox;
 using PlasticSurgery.Common.Configs;
 using PlasticSurgery.Common.Enums;
 using PlasticSurgery.Common.Helpers;
@@ -10,24 +9,22 @@ using PlasticSurgery.Entities.Models;
 namespace PlasticSurgery.Business.Engines.Billing;
 
 /// <summary>
-/// WhatsApp's billing rules (both providers): translates a WhatsApp send into a generic billable event, and a
-/// provider status into settle / release. The billing core never sees a Meta or Infobip shape.
-///   template  -> whatsapp_{category}_message, 1 message, priced by the recipient's country + active provider,
+/// WhatsApp's billing rules: translates a WhatsApp send into a generic billable event, and a Meta delivery status
+/// into settle / release. The billing core never sees a Meta shape.
+///   template  -> whatsapp_{category}_message, 1 message, priced by the recipient's country (provider "meta"),
 ///                settled when "delivered"/"read" arrives, released on "failed"
 ///   free-form -> not billable by default (Meta doesn't charge replies inside the 24h window)
 /// </summary>
 public class WhatsAppBillingPolicy : IChannelBillingPolicy
 {
-    private readonly IConfiguration _configuration;
     private readonly Dictionary<string, string> _categoryEvents;
     private readonly string? _serviceMessageEvent;
     private readonly HashSet<string> _freeInsideWindow;
     private readonly HashSet<string> _billableStatuses;
     private readonly HashSet<string> _nonBillableStatuses;
 
-    public WhatsAppBillingPolicy(IConfiguration configuration, IOptions<WhatsAppBillingOptions> options)
+    public WhatsAppBillingPolicy(IOptions<WhatsAppBillingOptions> options)
     {
-        _configuration = configuration;
         var o = options.Value;
         _categoryEvents = new Dictionary<string, string>(
             o.TemplateCategoryEvents is { Count: > 0 } ? o.TemplateCategoryEvents : WhatsAppBillingOptions.DefaultCategoryEvents,
@@ -63,7 +60,7 @@ public class WhatsAppBillingPolicy : IChannelBillingPolicy
             Unit: "message",
             CountryCode: PhoneCountry.FromPhone(message.RecipientAddress),
             Operator: null,
-            Provider: WhatsAppService.ActiveProviderName(_configuration),
+            Provider: ChannelProvider.Meta,
             SettleWhen: BillingSettlementTrigger.OnDeliveryStatus);
     }
 

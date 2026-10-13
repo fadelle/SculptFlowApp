@@ -9,7 +9,7 @@ using PlasticSurgery.Entities.Models;
 namespace PlasticSurgery.Business.Providers.WhatsApp;
 
 /// <summary>Template review directly with Meta (Graph /{waba-id}/message_templates) using the clinic's own
-/// Embedded Signup token. Moved here unchanged from WhatsAppTemplateService when the provider seam was added.</summary>
+/// Embedded Signup token.</summary>
 public class MetaWhatsAppTemplateProvider : IWhatsAppTemplateProvider
 {
     private readonly IMetaGraphClient _meta;
@@ -19,7 +19,6 @@ public class MetaWhatsAppTemplateProvider : IWhatsAppTemplateProvider
         _meta = meta;
     }
 
-    public string Name => ChannelProvider.Meta;
 
     public bool IsReady(ChannelIntegration integration) =>
         !string.IsNullOrEmpty(integration.WhatsAppBusinessId) && !string.IsNullOrEmpty(integration.AccessToken);

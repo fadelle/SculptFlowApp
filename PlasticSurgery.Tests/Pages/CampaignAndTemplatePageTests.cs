@@ -29,14 +29,11 @@ public class CampaignCreatePageTests
             .ReturnsAsync(Blank<CampaignResponse>() with { Id = Guid.NewGuid() });
     }
 
-    private CampaignCreate Sut(Clinic? clinic = null, bool none = false, Dictionary<string, string?>? config = null)
-    {
-        var configuration = ControllerTestKit.Config((config ?? new()).Select(kv => (kv.Key, kv.Value)).ToArray());
-        return new CampaignCreate(ClinicContext(none ? null : clinic ?? Glow).Object, _templates.Object, _leads.Object, _procedures.Object, _campaigns.Object, configuration).Attach();
-    }
+    private CampaignCreate Sut(Clinic? clinic = null, bool none = false) =>
+        new CampaignCreate(ClinicContext(none ? null : clinic ?? Glow).Object, _templates.Object, _leads.Object, _procedures.Object, _campaigns.Object).Attach();
 
-    private static WhatsAppTemplateResponse Template(Guid id, string status = WhatsAppTemplateStatus.Approved, string? provider = null, string body = "Hello {{1}}, see you {{2}} {{1}}") =>
-        Blank<WhatsAppTemplateResponse>() with { Id = id, Status = status, Provider = provider, Body = body };
+    private static WhatsAppTemplateResponse Template(Guid id, string status = WhatsAppTemplateStatus.Approved, string body = "Hello {{1}}, see you {{2}} {{1}}") =>
+        Blank<WhatsAppTemplateResponse>() with { Id = id, Status = status, Body = body };
 
     private static LeadResponse Lead(Guid id, string? full, string? first, string? phone) =>
         Blank<LeadResponse>() with { Id = id, FullName = full, FirstName = first, Phone = phone };
@@ -44,13 +41,12 @@ public class CampaignCreatePageTests
     // ---- load -------------------------------------------------------------------------------------------------
 
     [Fact]
-    public async Task Only_approved_templates_of_the_active_provider_are_offered_and_placeholders_are_found()
+    public async Task Only_approved_templates_are_offered_and_placeholders_are_found()
     {
         var approved = Guid.NewGuid();
         _templates.Setup(t => t.ListAsync(Glow.Id, It.IsAny<CancellationToken>())).ReturnsAsync(new List<WhatsAppTemplateResponse>
         {
             Template(approved), Template(Guid.NewGuid(), WhatsAppTemplateStatus.Pending),
-            Template(Guid.NewGuid(), provider: "infobip"),
         });
         var model = Sut(); model.WhatsAppTemplateId = approved;
         Assert.IsType<PageResult>(await model.OnGetAsync(default));

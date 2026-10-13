@@ -24,9 +24,8 @@ public class ChannelAdminRepository : IChannelAdminRepository
         if (problemsOnly) q = q.Where(c => c.Status == ChannelIntegrationStatus.Error || !c.IsHealthy || c.LastError != null);
         return q.OrderBy(c => c.Clinic!.Name).ThenBy(c => c.Channel)
             .Select(c => new ChannelRow(c.Id, c.ClinicId, c.Clinic!.Name, c.Channel,
-                c.Provider ?? (c.Channel == ChannelType.Telegram ? "telegram" : ChannelProvider.Meta),
                 c.Status, c.DisplayName,
-                c.ProviderSenderId ?? c.PhoneNumberId ?? c.TelegramBotUsername ?? c.PageId,
+                c.PhoneNumberId ?? c.TelegramBotUsername ?? c.PageId,
                 c.HealthLevel, c.IsHealthy, c.LastProblemMessage, c.LastError, c.WebhookStatus, c.LastWebhookAt,
                 c.LastVerifiedAt, c.UpdatedAt))
             .ToListAsync(ct);

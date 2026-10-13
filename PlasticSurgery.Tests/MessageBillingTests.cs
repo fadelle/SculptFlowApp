@@ -71,10 +71,9 @@ public class MessageBillingTests
 
         public MessageService NewMessageService(ApplicationDbContext db)
         {
-            var config = Config();
             return new MessageService(new ConversationRepository(db), new MessageRepository(db), new LeadRepository(db),
                 new WhatsAppTemplateRepository(db), new CampaignRepository(db), new UnitOfWork(db), WhatsApp, new IChannelSender[] { new WhatsAppChannelSender(WhatsApp) },
-                NullProxy<IInboxNotifier>.Create(), new EventLogger(new EventLogRepository(db)), NullProxy<INotificationService>.Create(), config,
+                NullProxy<IInboxNotifier>.Create(), new EventLogger(new EventLogRepository(db)), NullProxy<INotificationService>.Create(),
                 MessageBilling, H.Entitlements(db));
         }
 
@@ -98,9 +97,6 @@ public class MessageBillingTests
             return await db.BillingUsageRecords.AsNoTracking().SingleOrDefaultAsync(u => u.MessageId == messageId);
         }
     }
-
-    private static IConfiguration Config() =>
-        new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["WhatsApp:Provider"] = "infobip" }).Build();
 
     private async Task<Setup> SetupAsync(decimal wallet, bool subscribe = true, bool serviceWindowOpen = false,
         string? providerBilling = null, bool? omniUsageBilling = null)
@@ -128,7 +124,7 @@ public class MessageBillingTests
         WhatsAppTemplate Template(string category) => new()
         {
             Id = Guid.NewGuid(), ClinicId = clinic, Name = "t_" + category + Guid.NewGuid().ToString("N")[..6], Category = category,
-            Language = "en", Status = WhatsAppTemplateStatus.Approved, Body = "Hello", Provider = ChannelProvider.Infobip,
+            Language = "en", Status = WhatsAppTemplateStatus.Approved, Body = "Hello",
             CreatedAt = now, UpdatedAt = now
         };
         var marketing = Template(WhatsAppTemplateCategory.Marketing);
@@ -141,15 +137,15 @@ public class MessageBillingTests
             await db.SaveChangesAsync();
         }
 
-        // The clinic's WhatsApp account (SculptFlow's Infobip sender), optionally with an admin override of who pays.
-        var accountId = await h.ConnectChannelAsync(clinic, ChannelType.WhatsApp, ChannelProvider.Infobip);
+        // The clinic's WhatsApp account, optionally with an admin override of who pays.
+        var accountId = await h.ConnectChannelAsync(clinic, ChannelType.WhatsApp);
         if (providerBilling is not null || omniUsageBilling is not null)
         {
             await h.ProviderBilling.SetAsync(accountId, new ChannelAccountBillingChange(providerBilling, omniUsageBilling, "test arrangement", "tests"));
         }
 
         var messageBilling = new MessageBillingService(h.Billing,
-            new IChannelBillingPolicy[] { new WhatsAppBillingPolicy(Config(), Options.Create(new WhatsAppBillingOptions())), new TelegramBillingPolicy() },
+            new IChannelBillingPolicy[] { new WhatsAppBillingPolicy(Options.Create(new WhatsAppBillingOptions())), new TelegramBillingPolicy() },
             h.ProviderBilling, h.Factory, h.Time, NullLogger<MessageBillingService>.Instance, h.Config);
 
         return new Setup
@@ -171,7 +167,7 @@ public class MessageBillingTests
         Assert.Equal(ChargeStatus.Reserved, usage!.ChargeStatus);
         Assert.Equal(BillableEventTypes.WhatsAppMarketingMessage, usage.EventType);
         Assert.Equal("LB", usage.CountryCode);
-        Assert.Equal("infobip", usage.Provider);
+        Assert.Equal(ChannelProvider.Meta, usage.Provider);
         Assert.Equal(0.07m, usage.Amount);
         Assert.Equal(MessageBillingKeys.For(ConversationChannel.WhatsApp, message.Id), usage.IdempotencyKey);
         Assert.Equal(0.07m, (await s.H.AccountAsync(s.Clinic)).ReservedAmount);
@@ -232,7 +228,6 @@ public class MessageBillingTests
         var denied = await Assert.ThrowsAsync<BillingDeniedException>(() => s.SendTemplateAsync(s.MarketingTemplate));
 
         Assert.Equal(UsageFailureReason.InsufficientFunds, denied.Reason);
-        Assert.DoesNotContain("infobip", denied.Message, StringComparison.OrdinalIgnoreCase); // white-label
         Assert.Equal(0, s.WhatsApp.Sends);
         await s.H.AssertReconciledAsync(s.Clinic);
     }
@@ -455,6 +450,5 @@ public class MessageBillingTests
         Assert.Equal("Paid by you directly to Meta", direct.PaidBy);
         var account = Assert.Single(summary.ChannelAccounts);
         Assert.False(account.ChargedBySculptFlow);
-        Assert.DoesNotContain("infobip", account.PaidBy, StringComparison.OrdinalIgnoreCase);
     }
 }

@@ -92,12 +92,12 @@ public class RatingTests
         var evt = BillingHarness.Unique("wa_marketing");
         await h.AddRateAsync(card, evt, 0.10m);                                   // anywhere
         await h.AddRateAsync(card, evt, 0.07m, country: "LB");                    // Lebanon
-        await h.AddRateAsync(card, evt, 0.06m, country: "LB", provider: "infobip"); // Lebanon through Infobip
+        await h.AddRateAsync(card, evt, 0.06m, country: "LB", provider: "meta");    // Lebanon through Meta
         await h.TopUpAsync(clinic, 10m);
 
         Assert.Equal(0.10m, (await h.Billing.ReserveAsync(h.Event(clinic, evt, country: "FR"))).Amount);
-        Assert.Equal(0.07m, (await h.Billing.ReserveAsync(h.Event(clinic, evt, country: "LB", provider: "meta"))).Amount);
-        Assert.Equal(0.06m, (await h.Billing.ReserveAsync(h.Event(clinic, evt, country: "lb", provider: "INFOBIP"))).Amount);
+        Assert.Equal(0.07m, (await h.Billing.ReserveAsync(h.Event(clinic, evt, country: "LB", provider: "other"))).Amount);
+        Assert.Equal(0.06m, (await h.Billing.ReserveAsync(h.Event(clinic, evt, country: "lb", provider: "META"))).Amount);
     }
 
     [PostgresFact]

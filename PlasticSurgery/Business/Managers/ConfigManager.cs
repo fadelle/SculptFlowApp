@@ -95,10 +95,6 @@ public class ConfigManager : IConfigManager
     public int IntegrationsOAuthStateLifetimeMinutes => GetInt(ConfigDefaults.IntegrationsOAuthStateLifetimeMinutes);
     public int IntegrationsTokenRefreshMarginMinutes => GetInt(ConfigDefaults.IntegrationsTokenRefreshMarginMinutes);
 
-    // ---- Infobip
-    public int InfobipTimeoutSeconds => GetInt(ConfigDefaults.InfobipTimeoutSeconds);
-    public int InfobipMaxSendAttempts => GetInt(ConfigDefaults.InfobipMaxSendAttempts);
-
     // ---- Voice
     public int VoiceMaxBytes => GetInt(ConfigDefaults.VoiceMaxBytes);
 

@@ -1657,27 +1657,30 @@ create trigger trg_tiktok_integrations_updated_at before update on channels.tikt
   for each row execute function set_updated_at();
 
 -- ---------------------------------------------------------------
--- WhatsApp provider (BSP) per connection — Infobip for the MVP, Meta Cloud API directly later.
--- Which provider WhatsApp uses is a global switch (WhatsApp:Provider config), not a column; these say
--- which provider a row was connected through. provider null = 'meta' (every row from before this).
--- Infobip rows: provider_sender_id = the business WhatsApp number (digits only), webhook_verify_token =
--- the per-connection webhook secret; the Infobip API key/base URL are SculptFlow-wide env vars, never here.
--- Infobip webhook URL: /api/integrations/whatsapp/connections/{channel_integrations.id}/events?token={webhook_verify_token} (provider-neutral on purpose)
--- Free text (no CHECK): new BSPs shouldn't need a schema change.
+-- Infobip removed (2026-10-12): WhatsApp is Meta Cloud API only, one provider per channel. Drops what the
+-- Infobip period added. Before dropping, Infobip-connected WhatsApp rows are disconnected (they have no Meta
+-- credentials; the clinic reconnects with Facebook sign-in) and templates approved through Infobip go back to
+-- draft so staff can resubmit them to Meta (Retry submit). Re-runnable: does nothing once the columns are gone.
 -- ---------------------------------------------------------------
-alter table channels.channel_integrations add column if not exists provider varchar(30);
-alter table channels.channel_integrations add column if not exists provider_sender_id varchar(100);
-
--- One Infobip sender can serve only one clinic at a time (SculptFlow's single Infobip account holds every
--- clinic's number). Partial on connected so a disconnected clinic doesn't block reassigning the number.
-create unique index if not exists ux_channel_integrations_provider_sender
-  on channels.channel_integrations(channel, provider, provider_sender_id)
-  where provider_sender_id is not null and status = 'connected';
-
--- Which WhatsApp provider a template was submitted through (null = 'meta', every template from before this).
--- A WhatsApp approval only holds on the account it was reviewed on, so the app sends/syncs a template only while
--- its provider is the active one (WhatsApp:Provider). meta_template_id holds that provider's template id.
-alter table channels.whatsapp_templates add column if not exists provider varchar(30);
+do $$
+begin
+  if exists (select 1 from information_schema.columns
+             where table_schema = 'channels' and table_name = 'channel_integrations' and column_name = 'provider') then
+    update channels.channel_integrations
+       set status = 'disconnected', webhook_verify_token = null, display_name = null, updated_at = now()
+     where provider = 'infobip';
+  end if;
+  if exists (select 1 from information_schema.columns
+             where table_schema = 'channels' and table_name = 'whatsapp_templates' and column_name = 'provider') then
+    update channels.whatsapp_templates
+       set status = 'draft', meta_template_id = null, rejection_reason = null, updated_at = now()
+     where provider = 'infobip';
+  end if;
+end $$;
+drop index if exists channels.ux_channel_integrations_provider_sender;
+alter table channels.channel_integrations drop column if exists provider;
+alter table channels.channel_integrations drop column if exists provider_sender_id;
+alter table channels.whatsapp_templates drop column if exists provider;
 
 -- =====================================================================
 -- SUBSCRIPTIONS & USAGE BILLING — schema "billing"  (module: PlasticSurgery/Billing, guide: docs/billing.md)
@@ -1870,21 +1873,21 @@ create trigger trg_subscriptions_updated_at before update on billing.subscriptio
 
 -- Provider billing settings of one connected channel account (channels.channel_integrations row): who pays the upstream
 -- provider, and whether SculptFlow charges usage on it. No row (or null values) = the defaults (channel/provider
--- defaults in code + Billing:ProviderBilling:Defaults). applies_to_provider: the override only holds while the
--- account is connected through that provider (a reconnect through another provider falls back to the defaults).
+-- defaults in code + Billing:ProviderBilling:Defaults).
 create table if not exists billing.channel_account_settings (
   channel_integration_id  uuid primary key references channels.channel_integrations(id) on delete cascade,
   clinic_id               uuid not null references core.clinics(id) on delete cascade,
   provider_billing        varchar(30) check (provider_billing in
                             ('customer_direct','platform_funded','external_provider_direct','no_provider_usage_fee')),
   omni_usage_billing      boolean,
-  applies_to_provider     varchar(30),
   reason                  text,
   updated_by              varchar(200),
   created_at              timestamptz not null default now(),
   updated_at              timestamptz not null default now()
 );
 create index if not exists ix_channel_account_settings_clinic on billing.channel_account_settings(clinic_id);
+-- applies_to_provider (override held only while on the same WhatsApp provider) went with Infobip (2026-10-12).
+alter table billing.channel_account_settings drop column if exists applies_to_provider;
 drop trigger if exists trg_channel_account_settings_updated_at on billing.channel_account_settings;
 create trigger trg_channel_account_settings_updated_at before update on billing.channel_account_settings
   for each row execute function public.set_updated_at();

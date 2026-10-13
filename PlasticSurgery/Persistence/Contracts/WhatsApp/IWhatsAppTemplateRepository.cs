@@ -15,7 +15,4 @@ public interface IWhatsAppTemplateRepository
     Task<WhatsAppTemplate?> FindByProviderTemplateIdAsync(Guid clinicId, string providerTemplateId, CancellationToken ct = default);
 
     Task<WhatsAppTemplate?> FindByNameAsync(Guid clinicId, string name, string language, CancellationToken ct = default);
-
-    /// <summary>The clinic owning an Infobip template, by the provider's template id; null when unknown.</summary>
-    Task<Guid?> FindInfobipTemplateClinicIdAsync(string? providerTemplateId, CancellationToken ct = default);
 }

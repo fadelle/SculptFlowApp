@@ -2,14 +2,12 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
-using PlasticSurgery.Business.Contracts.Engines.Infobip;
 using PlasticSurgery.Business.Contracts.Engines.Knowledge;
 using PlasticSurgery.Business.Contracts.Engines.KnowledgeBenchmark;
 using PlasticSurgery.Business.Contracts.Engines.Telegram;
 using PlasticSurgery.Business.Contracts.Engines.WebScraping;
 using PlasticSurgery.Business.Contracts.Engines.WhatsApp;
 using PlasticSurgery.Business.Contracts.HttpClients.Calendars;
-using PlasticSurgery.Business.Contracts.HttpClients.Infobip;
 using PlasticSurgery.Business.Contracts.HttpClients.Meta;
 using PlasticSurgery.Business.Contracts.HttpClients.N8n;
 using PlasticSurgery.Business.Contracts.HttpClients.OpenAi;
@@ -44,7 +42,6 @@ using PlasticSurgery.Business.Contracts.Services.Procedures;
 using PlasticSurgery.Business.Contracts.Services.Staff;
 using PlasticSurgery.Business.Contracts.Services.TikTok;
 using PlasticSurgery.Business.Contracts.Services.WhatsApp;
-using PlasticSurgery.Business.Engines.Infobip;
 using PlasticSurgery.Business.Engines.Knowledge;
 using PlasticSurgery.Business.Engines.KnowledgeBenchmark;
 using PlasticSurgery.Business.Engines.Telegram;
@@ -52,7 +49,6 @@ using PlasticSurgery.Business.Engines.WebScraping;
 using PlasticSurgery.Business.Engines.WhatsApp;
 using PlasticSurgery.Business.Engines.WhatsApp.Handlers;
 using PlasticSurgery.Business.HttpClients.Calendars;
-using PlasticSurgery.Business.HttpClients.Infobip;
 using PlasticSurgery.Business.HttpClients.Meta;
 using PlasticSurgery.Business.HttpClients.N8n;
 using PlasticSurgery.Business.HttpClients.OpenAi;
@@ -225,21 +221,9 @@ builder.Services.AddScoped<IInboxNotifier, InboxNotifier>();
 builder.Services.AddScoped<IMessageService, MessageService>();
 builder.Services.AddScoped<IWhatsAppService, WhatsAppService>();
 
-// WhatsApp providers (BSPs) behind IWhatsAppService — the global WhatsApp:Provider setting picks one
-// (see Business/Contracts/Providers/WhatsApp/IWhatsAppProvider.cs). Same concrete-type-then-forward pattern as ICalendarProviderClient.
-builder.Services.AddHttpClient<MetaWhatsAppProvider>();
-builder.Services.AddScoped<IWhatsAppProvider>(sp => sp.GetRequiredService<MetaWhatsAppProvider>());
-// Infobip: SculptFlow's own account (Infobip:BaseUrl / Infobip:ApiKey env vars). The key travels only in the
-// Authorization header, which HttpClient logging never prints; the client itself logs no bodies or numbers.
-// The timeout is a setting (Infobip:TimeoutSeconds in ConfigDefaults); it's read whenever a client is created.
-builder.Services.AddHttpClient<IInfobipClient, InfobipClient>((sp, client) =>
-    client.Timeout = TimeSpan.FromSeconds(sp.GetRequiredService<IConfigManager>().InfobipTimeoutSeconds));
-builder.Services.AddScoped<IWhatsAppProvider, InfobipWhatsAppProvider>();
-// Template review for the same providers, picked by the same WhatsApp:Provider switch (see IWhatsAppTemplateProvider).
+// The Meta Cloud API behind IWhatsAppService (sends) and IWhatsAppTemplateService (template review).
+builder.Services.AddHttpClient<IWhatsAppProvider, MetaWhatsAppProvider>();
 builder.Services.AddScoped<IWhatsAppTemplateProvider, MetaWhatsAppTemplateProvider>();
-builder.Services.AddScoped<IWhatsAppTemplateProvider, InfobipWhatsAppTemplateProvider>();
-builder.Services.AddScoped<IInfobipWhatsAppIntegrationService, InfobipWhatsAppIntegrationService>();
-builder.Services.AddScoped<IInfobipWhatsAppWebhookProcessor, InfobipWhatsAppWebhookProcessor>();
 builder.Services.AddSignalR();
 
 // WhatsApp Templates & Campaigns — see Business/Contracts/Services/WhatsApp/IWhatsAppTemplateService.cs and ICampaignService.cs

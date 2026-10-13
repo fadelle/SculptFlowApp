@@ -21,9 +21,6 @@ public interface IChannelAdminService
 
     Task<PlatformAdminChange> DisconnectAsync(Guid id, CancellationToken ct);
 
-    /// <summary>Connects (or moves) the clinic's WhatsApp to an Infobip sender, checked live against Infobip.</summary>
-    Task<ChannelDetail> ConnectInfobipSenderAsync(Guid clinicId, string? senderNumber, CancellationToken ct);
-
     Task<PlatformAdminChange> DisconnectCalendarAsync(Guid id, CancellationToken ct);
 
     Task<PlatformAdminChange> SetCalendarSyncAsync(Guid id, bool enabled, CancellationToken ct);

@@ -143,31 +143,22 @@ public class IntegrationsPageTests
     private readonly Mock<IChannelIntegrationService> _integrations = new();
     private readonly Mock<ITelegramIntegrationService> _telegram = new();
     private readonly Mock<ITikTokIntegrationService> _tiktok = new();
-    private readonly Mock<IInfobipWhatsAppIntegrationService> _infobip = new();
 
     private IntegrationsPage Sut(bool none = false, params (string Key, string? Value)[] config) =>
-        new IntegrationsPage(ClinicContext(none ? null : Glow).Object, _integrations.Object, ControllerTestKit.Config(config), _telegram.Object, _tiktok.Object, _infobip.Object).Attach();
+        new IntegrationsPage(ClinicContext(none ? null : Glow).Object, _integrations.Object, ControllerTestKit.Config(config), _telegram.Object, _tiktok.Object).Attach();
 
     [Fact]
-    public async Task The_page_lists_channels_by_name_and_shows_the_webhook_url_only_for_the_alternate_provider()
+    public async Task The_page_lists_channels_by_name()
     {
         _integrations.Setup(i => i.ListAsync(Glow.Id, It.IsAny<CancellationToken>())).ReturnsAsync(new List<ChannelIntegrationResponse>
         {
             Blank<ChannelIntegrationResponse>() with { Channel = "telegram" }, Blank<ChannelIntegrationResponse>() with { Channel = "whatsapp" },
         });
         _tiktok.Setup(t => t.GetAsync(Glow.Id, It.IsAny<CancellationToken>())).ReturnsAsync(Blank<TikTokIntegrationResponse>());
-        _infobip.Setup(i => i.GetWebhookUrlAsync(Glow.Id, It.IsAny<CancellationToken>())).ReturnsAsync("https://hooks.example/x");
 
         var meta = Sut();
         Assert.IsType<PageResult>(await meta.OnGetAsync(default));
         Assert.Equal((true, Glow.Id, 2), (meta.ClinicConfigured, meta.ClinicId, meta.Channels.Count));
-        Assert.False(meta.UsesInfobipWhatsApp);
-        Assert.Null(meta.InfobipWebhookUrl);
-
-        var alternate = Sut(false, ("WhatsApp:Provider", ChannelProvider.Infobip));
-        await alternate.OnGetAsync(default);
-        Assert.True(alternate.UsesInfobipWhatsApp);
-        Assert.Equal("https://hooks.example/x", alternate.InfobipWebhookUrl);
 
         var none = Sut(true);
         await none.OnGetAsync(default);
@@ -225,20 +216,6 @@ public class IntegrationsPageTests
         await model.OnPostConnectTelegramAsync(default);
         Assert.Equal("Could not connect Telegram: Paste the bot token.", model.ErrorMessage);
         Assert.IsType<RedirectToPageResult>(await Sut(true).OnPostConnectTelegramAsync(default));
-    }
-
-    [Fact]
-    public async Task Whatsapp_number_connect_reports_the_result_or_the_failure()
-    {
-        _infobip.SetupSequence(i => i.ConnectAsync(Glow.Id, "+961123", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Blank<ChannelIntegrationResponse>() with { DisplayName = "+961 123" })
-            .ThrowsAsync(new InvalidOperationException("Number not registered."));
-        var model = Sut(); model.WhatsAppSenderNumber = "+961123";
-        await model.OnPostConnectWhatsAppNumberAsync(default);
-        Assert.Equal("WhatsApp connected — +961 123.", model.StatusMessage);
-        await model.OnPostConnectWhatsAppNumberAsync(default);
-        Assert.Equal("Could not connect WhatsApp: Number not registered.", model.ErrorMessage);
-        Assert.IsType<RedirectToPageResult>(await Sut(true).OnPostConnectWhatsAppNumberAsync(default));
     }
 
     [Fact]

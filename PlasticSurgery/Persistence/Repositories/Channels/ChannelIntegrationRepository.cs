@@ -48,11 +48,6 @@ public class ChannelIntegrationRepository : IChannelIntegrationRepository
             c.Channel == ChannelType.Telegram && c.TelegramBotId == botId
             && c.Status == ChannelIntegrationStatus.Connected && c.ClinicId != clinicId, ct);
 
-    public Task<bool> IsInfobipSenderConnectedElsewhereAsync(string sender, Guid clinicId, CancellationToken ct = default) =>
-        _db.ChannelIntegrations.AnyAsync(c =>
-            c.Channel == ChannelType.WhatsApp && c.Provider == ChannelProvider.Infobip && c.ProviderSenderId == sender
-            && c.Status == ChannelIntegrationStatus.Connected && c.ClinicId != clinicId, ct);
-
     public Task<int> CountConnectedExceptAsync(Guid clinicId, string exceptChannel, CancellationToken ct = default) =>
         _db.ChannelIntegrations.AsNoTracking()
             .CountAsync(c => c.ClinicId == clinicId && c.Channel != exceptChannel && c.Status == ChannelIntegrationStatus.Connected, ct);

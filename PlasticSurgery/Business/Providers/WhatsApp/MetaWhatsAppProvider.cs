@@ -9,8 +9,8 @@ using PlasticSurgery.Entities.Models;
 namespace PlasticSurgery.Business.Providers.WhatsApp;
 
 /// <summary>Meta Cloud API directly (graph.facebook.com/{v}/{PhoneNumberId}/messages) with the clinic's own
-/// access token from Embedded Signup. Moved here unchanged from WhatsAppService when the provider seam was
-/// added — see Business/Contracts/Providers/WhatsApp/IWhatsAppProvider.cs.</summary>
+/// access token from Embedded Signup.
+/// See Business/Contracts/Providers/WhatsApp/IWhatsAppProvider.cs.</summary>
 public class MetaWhatsAppProvider : IWhatsAppProvider
 {
     private readonly HttpClient _http;
@@ -22,7 +22,6 @@ public class MetaWhatsAppProvider : IWhatsAppProvider
         _configuration = configuration;
     }
 
-    public string Name => ChannelProvider.Meta;
 
     private string Version => _configuration["Meta:GraphApiVersion"] ?? "v21.0";
 

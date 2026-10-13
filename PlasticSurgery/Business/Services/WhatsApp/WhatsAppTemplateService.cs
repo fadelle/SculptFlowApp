@@ -2,7 +2,6 @@ using System.Text.Json;
 using PlasticSurgery.Business.Contracts.Managers;
 using PlasticSurgery.Business.Contracts.Providers.WhatsApp;
 using PlasticSurgery.Business.Contracts.Services.WhatsApp;
-using PlasticSurgery.Business.Services.Inbox;
 using PlasticSurgery.Common.Enums;
 using PlasticSurgery.Common.Exceptions;
 using PlasticSurgery.Common.Statics;
@@ -20,39 +19,27 @@ public class WhatsAppTemplateService : IWhatsAppTemplateService
     private readonly IWhatsAppTemplateRepository _templates;
     private readonly IChannelIntegrationRepository _integrations;
     private readonly IUnitOfWork _unitOfWork;
-    private readonly IEnumerable<IWhatsAppTemplateProvider> _providers;
-    private readonly IConfiguration _configuration;
+    private readonly IWhatsAppTemplateProvider _provider;
     private readonly IInboxNotifier _notifier;
     private readonly IEventLogger _events;
 
     public WhatsAppTemplateService(
-        IWhatsAppTemplateRepository templates, IChannelIntegrationRepository integrations, IUnitOfWork unitOfWork, IEnumerable<IWhatsAppTemplateProvider> providers, IConfiguration configuration,
+        IWhatsAppTemplateRepository templates, IChannelIntegrationRepository integrations, IUnitOfWork unitOfWork, IWhatsAppTemplateProvider provider,
         IInboxNotifier notifier, IEventLogger events)
     {
         _templates = templates;
         _integrations = integrations;
         _unitOfWork = unitOfWork;
-        _providers = providers;
-        _configuration = configuration;
+        _provider = provider;
         _notifier = notifier;
         _events = events;
     }
 
-    /// <summary>The template provider for the active WhatsApp:Provider (see IWhatsAppTemplateProvider).</summary>
-    private IWhatsAppTemplateProvider ActiveProvider()
-    {
-        var name = WhatsAppService.ActiveProviderName(_configuration);
-        return _providers.FirstOrDefault(p => p.Name == name)
-            ?? throw new InvalidOperationException("WhatsApp templates aren't available right now.");
-    }
-
-    /// <summary>The clinic's WhatsApp row, but only when it's connected through the active provider and has what
-    /// that provider needs — a row from the other provider counts as "no connected number".</summary>
-    private async Task<ChannelIntegration?> ReadyIntegrationAsync(Guid clinicId, IWhatsAppTemplateProvider provider, CancellationToken ct)
+    /// <summary>The clinic's WhatsApp row, but only when it's connected and has what template management needs.</summary>
+    private async Task<ChannelIntegration?> ReadyIntegrationAsync(Guid clinicId, CancellationToken ct)
     {
         var integration = await _integrations.GetAsync(clinicId, ChannelType.WhatsApp, ct);
-        return integration is not null && integration.Status == ChannelIntegrationStatus.Connected
-               && ChannelProvider.Of(integration) == provider.Name && provider.IsReady(integration)
+        return integration is not null && integration.Status == ChannelIntegrationStatus.Connected && _provider.IsReady(integration)
             ? integration
             : null;
     }
@@ -123,14 +110,12 @@ public class WhatsAppTemplateService : IWhatsAppTemplateService
         return ToResponse(template);
     }
 
-    /// <summary>Sends a template that has no MetaTemplateId yet for WhatsApp review through the active provider.
-    /// Returns false (and leaves it a draft) when the clinic has no WhatsApp number connected through that provider.
-    /// A provider refusal is kept on the row as Rejected + RejectionReason so the user doesn't lose their work and
+    /// <summary>Sends a template that has no MetaTemplateId yet to Meta for review. Returns false (and leaves it a
+    /// draft) when the clinic has no connected WhatsApp number. A Meta refusal is kept on the row as Rejected + RejectionReason so the user doesn't lose their work and
     /// can retry.</summary>
     private async Task<bool> SubmitForReviewAsync(WhatsAppTemplate template, CancellationToken ct)
     {
-        var provider = ActiveProvider();
-        var integration = await ReadyIntegrationAsync(template.ClinicId, provider, ct);
+        var integration = await ReadyIntegrationAsync(template.ClinicId, ct);
         if (integration is null)
         {
             return false;
@@ -138,13 +123,11 @@ public class WhatsAppTemplateService : IWhatsAppTemplateService
 
         try
         {
-            var result = await provider.SubmitAsync(integration, template, ct);
+            var result = await _provider.SubmitAsync(integration, template, ct);
 
             template.MetaTemplateId = result.ProviderTemplateId;
             template.Status = MapMetaStatus(result.Status);
             template.RejectionReason = null;
-            // Null for Meta keeps Meta rows exactly as they were before providers existed.
-            template.Provider = provider.Name == ChannelProvider.Meta ? null : provider.Name;
             template.UpdatedAt = DateTimeOffset.UtcNow;
             await _unitOfWork.SaveChangesAsync(ct);
         }
@@ -168,29 +151,18 @@ public class WhatsAppTemplateService : IWhatsAppTemplateService
             return ToResponse(template);
         }
 
-        var provider = ActiveProvider();
-        if (TemplateProviderOf(template) != provider.Name)
-        {
-            throw new InvalidOperationException(
-                "This template was approved for your previous WhatsApp setup and can't be used now. Create it again to send it for review.");
-        }
-
-        var integration = await ReadyIntegrationAsync(clinicId, provider, ct)
+        var integration = await ReadyIntegrationAsync(clinicId, ct)
             ?? throw new InvalidOperationException("This clinic doesn't have a connected WhatsApp number to sync against.");
 
-        var result = await provider.GetStatusAsync(integration, template, ct);
+        var result = await _provider.GetStatusAsync(integration, template, ct);
         template.Status = MapMetaStatus(result.Status);
-        // Some providers only report a reason through their webhook; don't wipe one we already have.
+        // Meta may report a rejection without repeating the reason; don't wipe one we already have.
         template.RejectionReason = result.RejectedReason ?? (template.Status == WhatsAppTemplateStatus.Rejected ? template.RejectionReason : null);
         template.UpdatedAt = DateTimeOffset.UtcNow;
         await _unitOfWork.SaveChangesAsync(ct);
 
         return ToResponse(template);
     }
-
-    /// <summary>The provider a template was submitted through; null (every pre-provider row) means Meta.</summary>
-    public static string TemplateProviderOf(WhatsAppTemplate template) =>
-        string.IsNullOrWhiteSpace(template.Provider) ? ChannelProvider.Meta : template.Provider;
 
     public async Task<WhatsAppTemplateResponse> ApplyMetaEventAsync(WhatsAppTemplateEventRequest request, CancellationToken ct = default)
     {
@@ -288,6 +260,6 @@ public class WhatsAppTemplateService : IWhatsAppTemplateService
         t.HeaderType, t.HeaderContent, t.Body, t.Footer, t.ButtonsJson, t.VariablesJson,
         t.RejectionReason, t.CreatedAt, t.UpdatedAt,
         t.ChannelIntegrationId, t.QualityRating, t.PreviousCategory, t.CurrentCategory,
-        t.ComponentsJson, t.LastMetaEventAt, t.Provider
+        t.ComponentsJson, t.LastMetaEventAt
     );
 }

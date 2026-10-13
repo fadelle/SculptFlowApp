@@ -31,13 +31,4 @@ public class WhatsAppTemplateRepository : IWhatsAppTemplateRepository
 
     public Task<WhatsAppTemplate?> FindByNameAsync(Guid clinicId, string name, string language, CancellationToken ct = default) =>
         _db.WhatsAppTemplates.FirstOrDefaultAsync(t => t.ClinicId == clinicId && t.Name == name && t.Language == language, ct);
-
-    public async Task<Guid?> FindInfobipTemplateClinicIdAsync(string? providerTemplateId, CancellationToken ct = default)
-    {
-        var owner = await _db.WhatsAppTemplates.AsNoTracking()
-            .Where(t => t.MetaTemplateId == providerTemplateId && t.Provider == ChannelProvider.Infobip)
-            .Select(t => new { t.ClinicId })
-            .FirstOrDefaultAsync(ct);
-        return owner?.ClinicId;
-    }
 }

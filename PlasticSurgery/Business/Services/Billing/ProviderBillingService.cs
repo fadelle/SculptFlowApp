@@ -16,9 +16,9 @@ public class ProviderBillingService : IProviderBillingService
     public const string SourceAccount = "account";
     public const string SourceDefault = "default";
 
-    /// <summary>Built-in defaults. WhatsApp stays SculptFlow-funded for every provider, which is what billing did before
-    /// responsibilities existed (SculptFlow's Infobip account really is funded by SculptFlow; a clinic's own Meta WABA is
-    /// usually paid by the clinic — set that per account, or Defaults:whatsapp_meta = customer_direct).
+    /// <summary>Built-in defaults. WhatsApp stays SculptFlow-funded, which is what billing did before responsibilities
+    /// existed (a clinic's own Meta WABA is usually paid by the clinic — set that per account, or
+    /// Defaults:whatsapp_meta = customer_direct).
     /// Channels without a normal per-message provider fee are no_provider_usage_fee.</summary>
     private static readonly Dictionary<string, string> BuiltInDefaults = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -69,7 +69,7 @@ public class ProviderBillingService : IProviderBillingService
     {
         await using var unit = _units.Create();
         var account = await unit.Channels.GetReadOnlyAsync(clinicId, channel, ct);
-        var currentProvider = NormalizeProvider(provider) ?? (account is null ? null : AccountProvider(account.Channel, account.Provider));
+        var currentProvider = NormalizeProvider(provider) ?? AccountProvider(channel);
 
         ChannelAccountBillingSettings? settings = null;
         if (account is not null)
@@ -115,8 +115,6 @@ public class ProviderBillingService : IProviderBillingService
         }
         settings.ProviderBilling = responsibility;
         settings.OmniUsageBilling = change.OmniUsageBilling;
-        // Holds only while the account stays on this provider: a reconnect through another one falls back to defaults.
-        settings.AppliesToProvider = AccountProvider(account.Channel, account.Provider);
         settings.Reason = change.Reason.Trim();
         settings.UpdatedBy = BillingMath.Truncate(change.Actor, 200);
         settings.UpdatedAt = now;
@@ -167,8 +165,7 @@ public class ProviderBillingService : IProviderBillingService
 
     private ProviderBillingSetting Resolve(string channel, string? currentProvider, Guid? accountId, ChannelAccountBillingSettings? settings)
     {
-        var applies = settings is not null
-                      && (settings.AppliesToProvider is null || string.Equals(settings.AppliesToProvider, currentProvider, StringComparison.OrdinalIgnoreCase));
+        var applies = settings is not null;
         var responsibility = applies && settings!.ProviderBilling is not null ? settings.ProviderBilling : DefaultFor(channel, currentProvider);
         var charges = applies && settings!.OmniUsageBilling is bool overridden
             ? overridden
@@ -178,19 +175,18 @@ public class ProviderBillingService : IProviderBillingService
 
     private ChannelAccountBilling ToView(ChannelIntegration account, ChannelAccountBillingSettings? settings)
     {
-        var provider = AccountProvider(account.Channel, account.Provider);
+        var provider = AccountProvider(account.Channel);
         var resolved = Resolve(account.Channel, provider, account.Id, settings);
         return new ChannelAccountBilling(
             account.Id, account.Channel, provider, account.Status, account.DisplayName,
             resolved.Responsibility, ProviderBillingResponsibility.AdminLabel(resolved.Responsibility), resolved.ChargesUsage, resolved.Source,
-            DefaultFor(account.Channel, provider), settings?.ProviderBilling, settings?.OmniUsageBilling, settings?.AppliesToProvider,
+            DefaultFor(account.Channel, provider), settings?.ProviderBilling, settings?.OmniUsageBilling,
             settings?.Reason, settings?.UpdatedBy, settings?.UpdatedAt);
     }
 
-    /// <summary>The provider an account goes through: WhatsApp rows record theirs (null = meta); other channels have one.</summary>
-    private static string? AccountProvider(string channel, string? provider) =>
-        channel == ChannelType.WhatsApp ? (string.IsNullOrWhiteSpace(provider) ? ChannelProvider.Meta : provider.Trim().ToLowerInvariant())
-                                        : NormalizeProvider(provider);
+    /// <summary>The provider an account goes through: Meta for WhatsApp; other channels don't name one.</summary>
+    private static string? AccountProvider(string channel) =>
+        string.Equals(channel, ChannelType.WhatsApp, StringComparison.OrdinalIgnoreCase) ? ChannelProvider.Meta : null;
 
     private static string? NormalizeProvider(string? provider) =>
         string.IsNullOrWhiteSpace(provider) ? null : provider.Trim().ToLowerInvariant();

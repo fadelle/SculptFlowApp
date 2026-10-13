@@ -40,17 +40,15 @@ public class MessageService : IMessageService
     private readonly IInboxNotifier _notifier;
     private readonly IEventLogger _events;
     private readonly INotificationService _notifications;
-    private readonly IConfiguration _configuration;
     private readonly IMessageBillingService _billing;
     private readonly IEntitlementService _entitlements;
 
     public MessageService(
         IConversationRepository conversations, IMessageRepository messages, ILeadRepository leads,
         IWhatsAppTemplateRepository templates, ICampaignRepository campaigns, IUnitOfWork unitOfWork, IWhatsAppService whatsApp, IEnumerable<IChannelSender> senders,
-        IInboxNotifier notifier, IEventLogger events, INotificationService notifications, IConfiguration configuration,
+        IInboxNotifier notifier, IEventLogger events, INotificationService notifications,
         IMessageBillingService billing, IEntitlementService entitlements)
     {
-        _configuration = configuration;
         _conversations = conversations;
         _messages = messages;
         _leads = leads;
@@ -274,12 +272,6 @@ public class MessageService : IMessageService
         {
             throw new InvalidOperationException(
                 $"Template '{template.Name}' isn't approved yet (status: {template.Status}) — Meta only allows sending approved templates.");
-        }
-        // An approval only holds on the WhatsApp account it was reviewed on (see WhatsAppTemplate.Provider).
-        if (WhatsAppTemplateService.TemplateProviderOf(template) != WhatsAppService.ActiveProviderName(_configuration))
-        {
-            throw new InvalidOperationException(
-                $"Template '{template.Name}' was approved for your previous WhatsApp setup and can't be sent now. Create it again to send it for review.");
         }
 
         var toPhone = conversation.Lead?.Phone
@@ -565,7 +557,7 @@ public class MessageService : IMessageService
             return new IngestMessageResult(Found: false, Deduplicated: false, null);
         }
 
-        // Providers retry callbacks and don't guarantee order (Infobip can report "seen" before "delivered").
+        // Providers retry callbacks and don't guarantee order ("read" can arrive before "delivered").
         // A repeat of the status the message already has is a no-op, and an older step arriving late
         // (delivered after read) only fills its own timestamp — it never moves the status backwards.
         var incoming = request.DeliveryStatus?.ToLowerInvariant();

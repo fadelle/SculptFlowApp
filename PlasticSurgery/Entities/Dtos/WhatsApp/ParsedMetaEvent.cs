@@ -3,9 +3,7 @@ using PlasticSurgery.Common.Enums;
 namespace PlasticSurgery.Entities.Dtos.WhatsApp;
 
 /// <summary>
-/// One normalized WhatsApp event — extracted from a raw Meta webhook payload by MetaWebhookParser, or from an
-/// Infobip webhook by Integrations/Infobip/InfobipWhatsAppWebhookParser (same shape, so both providers share
-/// the same Handlers).
+/// One normalized event extracted from a raw Meta WhatsApp webhook payload by MetaWebhookParser.
 /// This is the boundary: MetaWebhookProcessor and every Handler work only with this shape — none of
 /// them touch entry[].changes[].value... directly. See MetaWebhookParser's own doc comment for how
 /// defensively it's built (unrecognized fields degrade to null/Unknown rather than throwing).
@@ -19,8 +17,6 @@ public class ParsedMetaEvent
     // identity by itself, and none of this ever comes from n8n.
     public string? PhoneNumberId { get; init; }
     public string? WabaId { get; init; }
-    /// <summary>Infobip only — our business sender number the event was addressed to (digits only).</summary>
-    public string? ProviderSenderId { get; init; }
 
     // CustomerMessage / BusinessAppEcho
     public string? CustomerWaId { get; init; }

@@ -203,7 +203,7 @@ public class BillingAdminController : ControllerBase
             label = ProviderBillingResponsibility.AdminLabel(m),
             omniUsageBillingByDefault = m == ProviderBillingResponsibility.PlatformFunded
         }),
-        defaults = new[] { "whatsapp:meta", "whatsapp:infobip", "telegram", "facebook", "instagram", "sms", "viber", "email" }
+        defaults = new[] { "whatsapp:meta", "telegram", "facebook", "instagram", "sms", "viber", "email" }
             .Select(k => k.Split(':'))
             .Select(p => new { channel = p[0], provider = p.Length > 1 ? p[1] : null, providerBilling = _providerBilling.DefaultFor(p[0], p.Length > 1 ? p[1] : null) })
     });

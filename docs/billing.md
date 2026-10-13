@@ -57,17 +57,16 @@ accounts can differ.
 | Value | Admin label | Meaning | SculptFlow usage billing by default |
 |---|---|---|---|
 | `customer_direct` | Customer pays provider directly | e.g. the clinic's own WABA with its own Meta payment method | off |
-| `platform_funded` | SculptFlow pays provider | SculptFlow's Infobip account, an SMS aggregator SculptFlow owns | **on** |
-| `external_provider_direct` | Customer pays external provider | the clinic's own Infobip/Viber/… account that SculptFlow only integrates | off |
+| `platform_funded` | SculptFlow pays provider | an SMS aggregator SculptFlow owns | **on** |
+| `external_provider_direct` | Customer pays external provider | the clinic's own Viber/SMS/… provider account that SculptFlow only integrates | off |
 | `no_provider_usage_fee` | No provider usage fee | Telegram, Messenger, TikTok conversations | off |
 
-Resolution (`ProviderBillingService.ResolveAsync`): the account's override in `billing.channel_account_settings` (only
-while the account is still connected through the provider it was set for) → `Billing:ProviderBilling:Defaults`
+Resolution (`ProviderBillingService.ResolveAsync`): the account's override in `billing.channel_account_settings` → `Billing:ProviderBilling:Defaults`
 `"{channel}_{provider}"` → `"{channel}"` → built-in defaults. Built-ins: WhatsApp, SMS, Viber, RCS, email, voice =
 `platform_funded`; Telegram, Facebook/Messenger, Instagram, TikTok, website = `no_provider_usage_fee`.
 
-WhatsApp defaults to `platform_funded` for every provider because that's how billing behaved before this concept existed.
-A clinic connected through Meta's own Embedded Signup usually pays Meta itself: set that account to `customer_direct`, or
+WhatsApp defaults to `platform_funded` because that's how billing behaved before this concept existed. A clinic
+connected through Meta's Embedded Signup usually pays Meta itself: set that account to `customer_direct`, or
 set `Billing:ProviderBilling:Defaults:whatsapp_meta = customer_direct` once that's the norm.
 
 The account override can also set **SculptFlow usage billing** explicitly: on for a customer-paid account (a SculptFlow usage
@@ -144,7 +143,7 @@ arrangement → record or reserve (key `{channel}:message:{messageId}`) → prov
 settle or release. A failure to record *uncharged* usage is logged and never blocks the message.
 
 - **WhatsApp** (`Business/Engines/Billing/WhatsAppBillingPolicy.cs`): template category → `whatsapp_{category}_message`,
-  country from the lead's number, provider = `WhatsApp:Provider`, outcome on delivered/read/failed. Free-form replies and
+  country from the lead's number, provider `meta`, outcome on delivered/read/failed. Free-form replies and
   utility templates inside the 24h window are not recorded (configurable under `Billing:WhatsApp`).
 - **Telegram**: `telegram_message` per outbound message; default `no_provider_usage_fee` → recorded, never charged.
 
@@ -153,7 +152,7 @@ settle or release. A failure to record *uncharged* usage is logged and never blo
 | Situation | Provider billing | Usage record | Wallet / credit / ledger |
 |---|---|---|---|
 | Customer-funded WABA (clinic's own Meta card) | `customer_direct` | yes, Meta's cost recorded as paid by the clinic | untouched |
-| SculptFlow-funded WhatsApp (SculptFlow's Infobip sender) | `platform_funded` | yes, cost + SculptFlow price | reserved, then credit/wallet + ledger |
+| SculptFlow-funded WhatsApp (today's default) | `platform_funded` | yes, cost + SculptFlow price | reserved, then credit/wallet + ledger |
 | SMS through SculptFlow's aggregator (future) | `platform_funded` | yes, `sms_segment` × segments, destination pricing | reserved, then credit/wallet + ledger |
 | Viber on the clinic's own provider account (future) | `external_provider_direct` | yes | untouched (unless a SculptFlow fee is turned on) |
 | Messenger / TikTok / Telegram conversations | `no_provider_usage_fee` | yes (or nothing, if the policy doesn't describe it) | untouched — monetized through the subscription |
@@ -189,7 +188,7 @@ Deactivate instead of deleting. Assign: `POST /clinics/{id}/subscription` with `
 
 ```
 POST /api/platform-admin/billing/rate-cards/default/rates
-{ "eventType": "whatsapp_marketing_message", "countryCode": "LB", "provider": "infobip", "unit": "message",
+{ "eventType": "whatsapp_marketing_message", "countryCode": "LB", "provider": "meta", "unit": "message",
   "providerCost": 0.055, "clientRate": 0.07, "providerBilling": null }
 ```
 

@@ -269,25 +269,20 @@ public class ChannelAdminServiceTests
     private readonly Guid _clinicId = Guid.NewGuid();
     private readonly Mock<IChannelAdminRepository> _repo = new();
     private readonly Mock<IChannelIntegrationService> _channels = new();
-    private readonly Mock<IInfobipWhatsAppIntegrationService> _infobip = new();
     private readonly Mock<ICalendarIntegrationService> _calendars = new();
     private readonly Mock<ITikTokIntegrationService> _tikTok = new();
 
-    private ChannelAdminService Sut() => new(_repo.Object, _channels.Object, _infobip.Object, _calendars.Object, _tikTok.Object);
+    private ChannelAdminService Sut() => new(_repo.Object, _channels.Object, _calendars.Object, _tikTok.Object);
 
     [Fact]
-    public async Task Channel_detail_includes_the_infobip_webhook_url_only_for_connected_infobip_numbers()
+    public async Task Channel_detail_never_exposes_the_access_token()
     {
         Assert.Null(await Sut().GetChannelAsync(Guid.NewGuid(), default));
-        var row = new ChannelIntegration { Id = Guid.NewGuid(), ClinicId = _clinicId, Channel = ChannelType.WhatsApp, Status = ChannelIntegrationStatus.Connected, Provider = ChannelProvider.Infobip, AccessToken = "secret" };
+        var row = new ChannelIntegration { Id = Guid.NewGuid(), ClinicId = _clinicId, Channel = ChannelType.WhatsApp, Status = ChannelIntegrationStatus.Connected, AccessToken = "secret" };
         _repo.Setup(r => r.GetChannelAsync(row.Id, It.IsAny<CancellationToken>())).ReturnsAsync(row);
-        _infobip.Setup(i => i.GetWebhookUrlAsync(_clinicId, It.IsAny<CancellationToken>())).ReturnsAsync("https://hook");
         var detail = await Sut().GetChannelAsync(row.Id, default);
-        Assert.Equal(("https://hook", true), (detail!.InfobipWebhookUrl, detail.HasAccessToken));
+        Assert.True(detail!.HasAccessToken);
         Assert.DoesNotContain("secret", System.Text.Json.JsonSerializer.Serialize(detail));
-
-        row.Provider = ChannelProvider.Meta;
-        Assert.Null((await Sut().GetChannelAsync(row.Id, default))!.InfobipWebhookUrl);
     }
 
     [Fact]
@@ -315,12 +310,9 @@ public class ChannelAdminServiceTests
     }
 
     [Fact]
-    public async Task Connecting_an_infobip_sender_returns_the_new_detail()
+    public async Task Lists_and_health_events_delegate_to_the_repository()
     {
-        var row = new ChannelIntegration { Id = Guid.NewGuid(), ClinicId = _clinicId, Channel = ChannelType.WhatsApp, Status = ChannelIntegrationStatus.Connected, Provider = ChannelProvider.Infobip };
-        _infobip.Setup(i => i.ConnectAsync(_clinicId, "+447", It.IsAny<CancellationToken>())).ReturnsAsync(new ChannelIntegrationResponse(row.Id, _clinicId, "whatsapp", "connected", null, null, null, null, null, true, true, null, null, DateTimeOffset.UtcNow));
-        _repo.Setup(r => r.GetChannelAsync(row.Id, It.IsAny<CancellationToken>())).ReturnsAsync(row);
-        Assert.Equal(row.Id, (await Sut().ConnectInfobipSenderAsync(_clinicId, "+447", default)).Id);
+        var row = new ChannelIntegration { Id = Guid.NewGuid(), ClinicId = _clinicId, Channel = ChannelType.WhatsApp, Status = ChannelIntegrationStatus.Connected };
         await Sut().ListChannelsAsync(_clinicId, null, true, default);
         await Sut().ListCalendarsAsync(_clinicId, default);
         await Sut().ListTikTokAsync(_clinicId, default);
@@ -464,10 +456,10 @@ public class PlatformAdminMapperTests
     public void Mappers_copy_fields_and_never_expose_the_access_token()
     {
         var clinic = new Clinic { Id = Guid.NewGuid(), Name = "C", Slug = "c", Timezone = "UTC" };
-        var channel = new ChannelIntegration { Id = Guid.NewGuid(), ClinicId = clinic.Id, Clinic = clinic, Channel = "whatsapp", AccessToken = "secret", Provider = "infobip" };
-        var detail = PlatformAdminMapper.ToDetail(channel, "https://hook");
-        Assert.Equal((true, "C", "https://hook"), (detail.HasAccessToken, detail.Clinic!.Name, detail.InfobipWebhookUrl));
-        Assert.False(PlatformAdminMapper.ToDetail(new ChannelIntegration { Channel = "whatsapp" }, null).HasAccessToken);
+        var channel = new ChannelIntegration { Id = Guid.NewGuid(), ClinicId = clinic.Id, Clinic = clinic, Channel = "whatsapp", AccessToken = "secret" };
+        var detail = PlatformAdminMapper.ToDetail(channel);
+        Assert.Equal((true, "C"), (detail.HasAccessToken, detail.Clinic!.Name));
+        Assert.False(PlatformAdminMapper.ToDetail(new ChannelIntegration { Channel = "whatsapp" }).HasAccessToken);
 
         var ev = new WhatsAppHealthEvent { Id = Guid.NewGuid(), EventType = "x", Severity = "info" };
         Assert.Equal("x", PlatformAdminMapper.ToRow(ev).EventType);

@@ -28,7 +28,7 @@ public class PureBillingRuleTests
     public void RateSelector_PrefersTheClientCard_ThenThePlanCard_ThenTheDefault()
     {
         var order = new[] { ClientCard, PlanCard, DefaultCard };
-        var defaultSpecific = Rate(DefaultCard, 1m, country: "LB", provider: "infobip");
+        var defaultSpecific = Rate(DefaultCard, 1m, country: "LB", provider: "meta");
         var planGeneric = Rate(PlanCard, 2m);
         Assert.Equal(2m, RateSelector.Select(new[] { defaultSpecific, planGeneric }, order)!.ClientRate);
 
@@ -41,7 +41,7 @@ public class PureBillingRuleTests
     {
         var order = new[] { DefaultCard };
         var any = Rate(DefaultCard, 1m);
-        var provider = Rate(DefaultCard, 2m, provider: "infobip");
+        var provider = Rate(DefaultCard, 2m, provider: "meta");
         var country = Rate(DefaultCard, 3m, country: "LB");
         var countryOperator = Rate(DefaultCard, 4m, country: "LB", op: "alfa");
 
@@ -98,24 +98,21 @@ public class PureBillingRuleTests
     public void PhoneCountry_ResolvesTheDestinationCountry(string? phone, string? expected) =>
         Assert.Equal(expected, PhoneCountry.FromPhone(phone));
 
-    private static WhatsAppBillingPolicy Policy(WhatsAppBillingOptions? options = null, string provider = "infobip")
-    {
-        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["WhatsApp:Provider"] = provider }).Build();
-        return new WhatsAppBillingPolicy(config, Options.Create(options ?? new WhatsAppBillingOptions()));
-    }
+    private static WhatsAppBillingPolicy Policy(WhatsAppBillingOptions? options = null) =>
+        new(Options.Create(options ?? new WhatsAppBillingOptions()));
 
     private static OutboundMessageBillingContext Message(OutboundMessageKind kind, string? category = null, bool windowOpen = false) =>
         new(Guid.NewGuid(), ConversationChannel.WhatsApp, Guid.NewGuid(), Guid.NewGuid(), null, kind, category, windowOpen, "+9613123456");
 
     [Fact]
-    public void WhatsAppPolicy_TemplatesAreBilledByCategory_ToTheRecipientsCountry_AndActiveProvider()
+    public void WhatsAppPolicy_TemplatesAreBilledByCategory_ToTheRecipientsCountry_ThroughMeta()
     {
         var decision = Policy().DescribeOutbound(Message(OutboundMessageKind.Template, "MARKETING"));
         Assert.NotNull(decision);
         Assert.Equal(BillableEventTypes.WhatsAppMarketingMessage, decision!.EventType);
         Assert.Equal(1, decision.Quantity);
         Assert.Equal("LB", decision.CountryCode);
-        Assert.Equal("infobip", decision.Provider);
+        Assert.Equal(ChannelProvider.Meta, decision.Provider);
         Assert.Equal(BillingSettlementTrigger.OnDeliveryStatus, decision.SettleWhen);
 
         Assert.Equal(BillableEventTypes.WhatsAppAuthenticationMessage,

@@ -52,16 +52,6 @@ public class ChannelIntegration
     public string? WebhookStatus { get; set; }
     public DateTimeOffset? WebhookRegisteredAt { get; set; }
 
-    // WhatsApp provider (BSP). Null = Meta Cloud API directly (every row created before Infobip existed).
-    // Infobip rows keep only the sender number here: the API key and base URL are SculptFlow-wide config
-    // (Infobip:ApiKey / Infobip:BaseUrl), and WebhookVerifyToken holds the per-connection webhook secret.
-    // See Business/Contracts/Providers/WhatsApp/IWhatsAppProvider.cs and Integrations/Infobip.
-    /// <summary>One of <see cref="ChannelProvider"/>; null means <see cref="ChannelProvider.Meta"/>.</summary>
-    public string? Provider { get; set; }
-    /// <summary>The provider's sender identifier — for Infobip WhatsApp, the business number in
-    /// international format, digits only (e.g. "447860099299").</summary>
-    public string? ProviderSenderId { get; set; }
-
     public DateTimeOffset? LastVerifiedAt { get; set; }
     public string? LastError { get; set; }
 

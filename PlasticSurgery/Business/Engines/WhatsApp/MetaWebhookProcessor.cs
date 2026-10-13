@@ -101,7 +101,7 @@ public class MetaWebhookProcessor : IMetaWebhookProcessor
     /// "which clinic does this belong to"; nothing downstream re-derives it from the payload.</summary>
     private async Task<ResolvedClinic?> ResolveClinicAsync(ParsedMetaEvent evt, CancellationToken ct)
     {
-        // Cached (every incoming message asks this); ChannelIntegrationService and InfobipWhatsAppIntegrationService drop
+        // Cached (every incoming message asks this); ChannelIntegrationService drops
         // CacheKeys.WhatsAppRoutingPrefix whenever a connection changes.
         ResolvedClinic? resolved = null;
         if (!string.IsNullOrWhiteSpace(evt.PhoneNumberId))

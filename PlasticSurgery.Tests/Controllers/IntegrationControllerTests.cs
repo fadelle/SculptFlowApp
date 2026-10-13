@@ -219,21 +219,6 @@ public class WebhookControllerTests
         Assert.Equal(status, ((IStatusCodeActionResult)await controller.Receive(id, ControllerTestKit.Json("{}"), default)).StatusCode ?? 200);
     }
 
-    [Theory]
-    [InlineData(WebhookReceiveOutcome.NotFound, 404)]
-    [InlineData(WebhookReceiveOutcome.Forbidden, 403)]
-    [InlineData(WebhookReceiveOutcome.Accepted, 200)]
-    public async Task Infobip_webhooks_map_outcomes_for_connection_and_account_events(WebhookReceiveOutcome outcome, int status)
-    {
-        var processor = new Mock<IInfobipWhatsAppWebhookProcessor>();
-        var id = Guid.NewGuid();
-        processor.Setup(p => p.ReceiveAsync(id, "tok", It.IsAny<JsonElement>(), It.IsAny<CancellationToken>())).ReturnsAsync(outcome);
-        processor.Setup(p => p.ReceiveAccountEventAsync("tok", It.IsAny<JsonElement>(), It.IsAny<CancellationToken>())).ReturnsAsync(outcome);
-        var controller = new InfobipWhatsAppWebhookController(processor.Object).With();
-        Assert.Equal(status, ((IStatusCodeActionResult)await controller.Receive(id, "tok", ControllerTestKit.Json("{}"), default)).StatusCode ?? 200);
-        Assert.Equal(status, ((IStatusCodeActionResult)await controller.ReceiveAccountEvent("tok", ControllerTestKit.Json("{}"), default)).StatusCode ?? 200);
-    }
-
     [Fact]
     public async Task Ingest_endpoints_return_404_for_unknown_conversations_and_pass_results_through()
     {

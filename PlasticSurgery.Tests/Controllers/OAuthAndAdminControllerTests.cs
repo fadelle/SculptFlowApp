@@ -295,9 +295,9 @@ public class IngestAndAdminControllerTests
         var channels = new Mock<IChannelAdminService>();
         var ch = new ChannelsAdminController(channels.Object).With();
         Assert.IsType<NotFoundResult>(await ch.Get(id, default));
-        await ch.List(null, null, true, default); await ch.HealthEvents(id, default); await ch.Disconnect(id, default); await ch.ConnectInfobip(id, new InfobipSenderBody("+44"), default);
+        await ch.List(null, null, true, default); await ch.HealthEvents(id, default); await ch.Disconnect(id, default);
         await ch.Calendars(null, default); await ch.DisconnectCalendar(id, default); await ch.SetCalendarSync(id, new FlagBody(true), default); await ch.TikTok(null, default); await ch.DisconnectTikTok(id, default);
-        channels.Verify(s => s.ConnectInfobipSenderAsync(id, "+44", It.IsAny<CancellationToken>()), Times.Once);
+        channels.Verify(s => s.DisconnectAsync(id, It.IsAny<CancellationToken>()), Times.Once);
 
         var overview = new Mock<IOverviewAdminService>();
         var ov = new OverviewAdminController(overview.Object).With();

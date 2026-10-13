@@ -11,9 +11,6 @@ public class ChannelAccountBillingSettings
     public string? ProviderBilling { get; set; }
     /// <summary>Does SculptFlow charge usage on this account? Null = the default (yes only when SculptFlow pays the provider).</summary>
     public bool? OmniUsageBilling { get; set; }
-    /// <summary>The override only holds while the account is connected through this provider (null = any), so a
-    /// reconnect through another provider falls back to the defaults instead of inheriting the wrong arrangement.</summary>
-    public string? AppliesToProvider { get; set; }
     public string? Reason { get; set; }
     public string? UpdatedBy { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
