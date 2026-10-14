@@ -216,6 +216,14 @@ public interface IConfigManager
     /// <summary>Rating cards, rates and who pays the provider per channel account. Lifetime in minutes. Default 60.</summary>
     int CacheBillingRatesMinutes { get; }
 
+    // ---- Monitoring (API timings: RequestTimingMiddleware, ApiTimingFlushJob)
+    /// <summary>Whether request timings are recorded and slow requests logged. Default true.</summary>
+    bool MonitoringEnabled { get; }
+    /// <summary>A request at least this slow (ms) is logged as a warning and counted as slow. Default 1000.</summary>
+    int MonitoringSlowRequestMs { get; }
+    /// <summary>Days of per-minute API timing rows kept. Default 30.</summary>
+    int MonitoringRetentionDays { get; }
+
     // ---- generic access
 
     string GetString(string section, string key);

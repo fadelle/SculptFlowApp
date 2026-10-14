@@ -78,6 +78,9 @@ using PlasticSurgery.Business.Services.WhatsApp;
 using PlasticSurgery.Common.Configs;
 using PlasticSurgery.Common.Extensions;
 using PlasticSurgery.Hubs;
+using PlasticSurgery.Middleware;
+using PlasticSurgery.Business.Contracts.Services.Monitoring;
+using PlasticSurgery.Business.Services.Monitoring;
 using PlasticSurgery.Persistence.Contexts;
 using PlasticSurgery.Persistence.Helpers;
 
@@ -198,6 +201,12 @@ builder.Services.AddScoped<ILeadAdminService, LeadAdminService>();
 builder.Services.AddScoped<IContentAdminService, ContentAdminService>();
 builder.Services.AddScoped<IKnowledgeBenchmarkAdminService, KnowledgeBenchmarkAdminService>();
 builder.Services.AddScoped<IOverviewAdminService, OverviewAdminService>();
+builder.Services.AddScoped<IApiTimingAdminService, ApiTimingAdminService>();
+// API timings: RequestTimingMiddleware records every request in memory; ApiTimingFlushJob writes one row per route per
+// minute to activity.api_route_stats and trims it (Monitoring:Enabled / SlowRequestMs / RetentionDays).
+builder.Services.AddSingleton<IApiTimingCollector, ApiTimingCollector>();
+builder.Services.AddScoped<IApiTimingService, ApiTimingService>();
+builder.Services.AddHostedService<ApiTimingFlushJob>();
 builder.Services.AddScoped<ILeadService, LeadService>();
 builder.Services.AddScoped<IProcedureService, ProcedureService>();
 builder.Services.AddScoped<IAvailabilityService, AvailabilityService>();
@@ -393,6 +402,9 @@ app.UseWhen(ctx => !ctx.Request.Path.StartsWithSegments("/api")
 app.UseHttpsRedirection();
 
 app.UseRouting();
+
+// After routing (the matched route template names the timing), before everything that can be slow or fail.
+app.UseMiddleware<RequestTimingMiddleware>();
 
 app.UseRateLimiter();
 

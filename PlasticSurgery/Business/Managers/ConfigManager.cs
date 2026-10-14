@@ -116,6 +116,11 @@ public class ConfigManager : IConfigManager
     public int CacheChannelsMinutes => GetInt(ConfigDefaults.CacheChannelsMinutes);
     public int CacheBillingRatesMinutes => GetInt(ConfigDefaults.CacheBillingRatesMinutes);
 
+    // ---- Monitoring
+    public bool MonitoringEnabled => GetBool(ConfigDefaults.MonitoringEnabled);
+    public int MonitoringSlowRequestMs => GetInt(ConfigDefaults.MonitoringSlowRequestMs);
+    public int MonitoringRetentionDays => GetInt(ConfigDefaults.MonitoringRetentionDays);
+
     // ---- generic access
 
     public string GetString(string section, string key) => GetString(Definition(section, key));

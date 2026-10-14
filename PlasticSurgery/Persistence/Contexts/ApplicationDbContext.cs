@@ -66,6 +66,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
     public DbSet<BillingLedgerEntry> BillingLedgerEntries => Set<BillingLedgerEntry>();
     public DbSet<ChannelAccountBillingSettings> ChannelAccountBillingSettings => Set<ChannelAccountBillingSettings>();
     public DbSet<ConfigSetting> ConfigSettings => Set<ConfigSetting>();
+    public DbSet<ApiRouteStat> ApiRouteStats => Set<ApiRouteStat>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -1151,6 +1152,26 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.Property(x => x.UpdatedBy).HasColumnName("updated_by").HasMaxLength(200);
             e.Property(x => x.CreatedAt).HasColumnName("created_at");
             e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
+        });
+
+        // Per-minute API timings (activity.api_route_stats) — see ApiRouteStat and ApiTimingFlushJob.
+        modelBuilder.Entity<ApiRouteStat>(e =>
+        {
+            e.ToTable("api_route_stats", "activity");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id").UseIdentityAlwaysColumn();
+            e.Property(x => x.BucketStart).HasColumnName("bucket_start");
+            e.Property(x => x.Method).HasColumnName("method").HasMaxLength(10).IsRequired();
+            e.Property(x => x.Route).HasColumnName("route").HasMaxLength(300).IsRequired();
+            e.Property(x => x.RequestCount).HasColumnName("request_count");
+            e.Property(x => x.ErrorCount).HasColumnName("error_count");
+            e.Property(x => x.ClientErrorCount).HasColumnName("client_error_count");
+            e.Property(x => x.SlowCount).HasColumnName("slow_count");
+            e.Property(x => x.TotalMs).HasColumnName("total_ms");
+            e.Property(x => x.P95Ms).HasColumnName("p95_ms");
+            e.Property(x => x.MaxMs).HasColumnName("max_ms");
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+            e.HasIndex(x => x.BucketStart);
         });
 
         // ---------------------------------------------------------------

@@ -26,6 +26,7 @@ The admin portal (`..\SculptFlowAdmin`) uses the same layout. Namespace = folder
 | `Controllers/Filters` | Auth/filter attributes (`RequireIngestKey`, `RequirePlatformAdminKey`, `ApiErrors`) |
 | `Pages/` | Razor Pages (PageModels follow the controller rules) |
 | `Hubs/` | SignalR hubs |
+| `Middleware/` | ASP.NET Core middleware (`RequestTimingMiddleware`: per-route API timings) |
 | `Business/Services/<Feature>` | What controllers and PageModels call |
 | `Business/Engines/<Feature>` | Backend/background logic: webhook processing, parsers, billing rules, chunking, scoring, scraping |
 | `Business/Managers` | Cross-cutting helpers with state/dependencies: current clinic, event log, live notifications |
@@ -79,7 +80,7 @@ Every table lives in its area's Postgres schema, never `public` (only `set_updat
 | `channels` | channel_integrations, whatsapp_templates, whatsapp_health_events, tiktok_integrations |
 | `marketing` | campaigns, campaign_recipients |
 | `knowledge` | every knowledge_* table |
-| `activity` | events, notifications |
+| `activity` | events, notifications, api_route_stats (API timings) |
 | `billing` | plans, rate cards, subscriptions, accounts, usage, ledger, channel account settings |
 | `config` | settings (configuration overrides) |
 | `admin` | the admin portal's own tables (SculptFlowAdmin repo) |

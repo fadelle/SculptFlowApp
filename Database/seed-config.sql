@@ -77,7 +77,10 @@ insert into config.settings (section, key, value, updated_by) values
   ('Cache', 'ProceduresMinutes', '60', 'seed'),
   ('Cache', 'SchedulingMinutes', '60', 'seed'),
   ('Cache', 'ChannelsMinutes', '60', 'seed'),
-  ('Cache', 'BillingRatesMinutes', '60', 'seed')
+  ('Cache', 'BillingRatesMinutes', '60', 'seed'),
+  ('Monitoring', 'Enabled', 'true', 'seed'),
+  ('Monitoring', 'SlowRequestMs', '1000', 'seed'),
+  ('Monitoring', 'RetentionDays', '30', 'seed')
 on conflict (section, key) do nothing;
 
 -- Infobip was removed (2026-10-12); drop its settings from databases seeded before that.

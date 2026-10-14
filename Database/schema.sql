@@ -18,7 +18,7 @@
 --   channels    channel integrations, WhatsApp templates/health, TikTok
 --   marketing   campaigns, campaign recipients
 --   knowledge   the knowledge base, website scraping, retrieval benchmarks
---   activity    events, notifications
+--   activity    events, notifications, API timings (api_route_stats)
 --   billing     plans, rate cards, subscriptions, wallets, usage, ledger
 --   config      settings (configuration overrides)
 -- public keeps only the shared set_updated_at() function and extensions.
@@ -2061,6 +2061,32 @@ drop trigger if exists trg_settings_updated_at on config.settings;
 create trigger trg_settings_updated_at
   before update on config.settings
   for each row execute function public.set_updated_at();
+
+-- =====================================================================
+-- API timings: activity.api_route_stats
+--
+-- How long each route takes in production. RequestTimingMiddleware records every request in memory (no database
+-- write per request); ApiTimingFlushJob writes one row per (method, route template) per minute and deletes rows older
+-- than Monitoring:RetentionDays. Several app instances each write their own rows; readers sum them. total_ms (not an
+-- average) is stored so any period's average is sum(total_ms) / sum(request_count). p95_ms is the 95th percentile of
+-- that minute only. Read by GET /api/platform-admin/api-timings (the admin portal's API timings page).
+-- =====================================================================
+create table if not exists activity.api_route_stats (
+  id                  bigint generated always as identity primary key,
+  bucket_start        timestamptz not null,
+  method              varchar(10) not null,
+  route               varchar(300) not null,
+  request_count       int not null,
+  error_count         int not null default 0,
+  client_error_count  int not null default 0,
+  slow_count          int not null default 0,
+  total_ms            double precision not null,
+  p95_ms              double precision not null,
+  max_ms              double precision not null,
+  created_at          timestamptz not null default now()
+);
+
+create index if not exists ix_api_route_stats_bucket_start on activity.api_route_stats(bucket_start);
 
 -- UTC guard: every moment in time is stored as timestamptz (UTC); only the clinic-local availability columns
 -- (clinic_availability_rules/exceptions start_time/end_time/date, read together with clinics.timezone) are

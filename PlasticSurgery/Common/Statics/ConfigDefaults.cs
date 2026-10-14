@@ -144,6 +144,12 @@ public static class ConfigDefaults
         "Minutes a cached copy is kept: Channel connections, TikTok connection and WhatsApp templates. Changes clear it at once; this is only how long an untouched copy lives.", 1, 1440);
     public static readonly ConfigDefinition CacheBillingRatesMinutes = new("Cache", "BillingRatesMinutes", "60", ConfigValueType.Int,
         "Minutes a cached copy is kept: Rating cards, rates and who pays the provider per channel account. Changes clear it at once; this is only how long an untouched copy lives.", 1, 1440);
+    public static readonly ConfigDefinition MonitoringEnabled = new("Monitoring", "Enabled", "true", ConfigValueType.Bool,
+        "Whether request timings are recorded (per route, summarised every minute into activity.api_route_stats) and slow requests are logged. Off = nothing is recorded.");
+    public static readonly ConfigDefinition MonitoringSlowRequestMs = new("Monitoring", "SlowRequestMs", "1000", ConfigValueType.Int,
+        "A request taking at least this many milliseconds is logged as a warning and counted as slow.", 50, 120000);
+    public static readonly ConfigDefinition MonitoringRetentionDays = new("Monitoring", "RetentionDays", "30", ConfigValueType.Int,
+        "Days of per-minute API timing rows kept; older rows are deleted by the flush job.", 1, 365);
 
     public static readonly IReadOnlyList<ConfigDefinition> All =
     [
@@ -223,7 +229,11 @@ public static class ConfigDefaults
         CacheProceduresMinutes,
         CacheSchedulingMinutes,
         CacheChannelsMinutes,
-        CacheBillingRatesMinutes
+        CacheBillingRatesMinutes,
+
+        MonitoringEnabled,
+        MonitoringSlowRequestMs,
+        MonitoringRetentionDays
     ];
 
     /// <summary>The declared setting for (section, key), ignoring case; null when there is none.</summary>
