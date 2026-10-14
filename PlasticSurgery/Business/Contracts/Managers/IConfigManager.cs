@@ -202,6 +202,20 @@ public interface IConfigManager
     /// <summary>Leads per page on the dashboard. Default 25.</summary>
     int DashboardLeadsPageSize { get; }
 
+    // ---- Cache (lifetimes of the table caches, read by CacheManager.LifetimeOf)
+    /// <summary>Clinic rows (signed-in clinic, the bot's clinic info). Lifetime in minutes. Default 60.</summary>
+    int CacheClinicsMinutes { get; }
+    /// <summary>Which clinic a signed-in user belongs to. Keep it short: it is how long a removed staff member could keep access if a removal were ever missed. Lifetime in minutes. Default 10.</summary>
+    int CacheStaffLookupMinutes { get; }
+    /// <summary>A clinic's procedures. Lifetime in minutes. Default 60.</summary>
+    int CacheProceduresMinutes { get; }
+    /// <summary>Weekly hours, booking settings, closed dates and calendar connections. Lifetime in minutes. Default 60.</summary>
+    int CacheSchedulingMinutes { get; }
+    /// <summary>Channel connections, TikTok connection and WhatsApp templates. Lifetime in minutes. Default 60.</summary>
+    int CacheChannelsMinutes { get; }
+    /// <summary>Rating cards, rates and who pays the provider per channel account. Lifetime in minutes. Default 60.</summary>
+    int CacheBillingRatesMinutes { get; }
+
     // ---- generic access
 
     string GetString(string section, string key);

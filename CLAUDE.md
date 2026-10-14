@@ -114,10 +114,19 @@ Full detail and the declared-settings table: `docs/configuration.md`.
   directly). It sits on `ICacheAdapter`: `MemoryCacheAdapter` today; a Redis adapter registered in `Program.cs` replaces
   it without other changes.
 - Every key and lifetime lives in `Common/Statics/CacheKeys` as `area:thing:id`, so an area can be dropped by prefix.
-- Cache plain DTOs/records (stored as JSON copies), never tracked EF entities, and nothing whose staleness costs money
-  (balances, ledger) or that changes every request (messages, conversations, appointments).
-- The service that changes cached data removes its key (or prefix) right after the save; the lifetime is only a
-  safety net. Add a line to the `CacheKeys` comment naming who clears it.
+- Cache plain DTOs/records or read-only entity copies (stored as JSON copies), never tracked EF entities, and nothing
+  whose staleness costs money (balances, ledger) or that changes every request (messages, conversations, appointments).
+- Table caches (agreed 2026-10-14) live in the repository's `...ReadOnlyAsync` reads: clinics, clinic memberships,
+  procedures, availability rules/settings/exceptions, calendar connections, channel connections, TikTok, WhatsApp
+  templates, rating cards, rates, channel account billing. Code that will change a row loads it tracked (uncached).
+  Their lifetimes are settings, one per `CacheArea` (`Cache:*Minutes`), passed as an area to `CacheReads`, never as a
+  fixed `TimeSpan`.
+- Clearing is automatic for tracked saves: `Persistence/Helpers/CacheInvalidationInterceptor` removes the keys
+  `CacheKeys.EvictionsFor(row)` names for every added/changed/deleted row after the save, and again when its transaction
+  commits or rolls back. A new cached table = keys in `CacheKeys` + a case in `EvictionsFor`. Set-based writes
+  (`ExecuteUpdate`/`ExecuteDelete`, raw SQL) bypass it, so their repository method removes the keys itself.
+- Other caches (computed results, e.g. entitlements): the service that changes the data removes its key (or prefix)
+  right after the save; the lifetime is only a safety net. Add a line to the `CacheKeys` comment naming who clears it.
 - Settings stay in `ConfigManager`'s own snapshot (read synchronously everywhere); cache clear-all reloads it.
 - Admin: `/api/platform-admin/cache` (list, get, remove key/prefix, clear all) and the portal's Cache page.
 

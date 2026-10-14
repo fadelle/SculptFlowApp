@@ -46,13 +46,13 @@ public class WhatsAppTemplateService : IWhatsAppTemplateService
 
     public async Task<IReadOnlyList<WhatsAppTemplateResponse>> ListAsync(Guid clinicId, CancellationToken ct = default)
     {
-        var templates = await _templates.ListForClinicAsync(clinicId, ct);
+        var templates = await _templates.ListForClinicReadOnlyAsync(clinicId, ct);
         return templates.Select(ToResponse).ToList();
     }
 
     public async Task<WhatsAppTemplateResponse?> GetByIdAsync(Guid clinicId, Guid id, CancellationToken ct = default)
     {
-        var template = await _templates.GetAsync(clinicId, id, ct);
+        var template = await _templates.GetReadOnlyAsync(clinicId, id, ct);
         return template is null ? null : ToResponse(template);
     }
 

@@ -157,7 +157,7 @@ public class MessageServiceTests
         Category = "MARKETING", CurrentCategory = "UTILITY"
     };
 
-    private Template_ Setup(WhatsAppTemplate t) { _templates.Setup(r => r.GetAsync(_clinicId, t.Id, It.IsAny<CancellationToken>())).ReturnsAsync(t); return new Template_(t); }
+    private Template_ Setup(WhatsAppTemplate t) { _templates.Setup(r => r.GetReadOnlyAsync(_clinicId, t.Id, It.IsAny<CancellationToken>())).ReturnsAsync(t); return new Template_(t); }
 
     private sealed record Template_(WhatsAppTemplate T);
 

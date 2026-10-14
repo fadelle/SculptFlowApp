@@ -1,4 +1,7 @@
 using Microsoft.EntityFrameworkCore;
+using PlasticSurgery.Business.Contracts.Managers;
+using PlasticSurgery.Common.Statics;
+using PlasticSurgery.Persistence.Helpers;
 using PlasticSurgery.Common.Enums;
 using PlasticSurgery.Entities.Dtos.Billing;
 using PlasticSurgery.Entities.Models;
@@ -10,10 +13,12 @@ namespace PlasticSurgery.Persistence.Repositories.Billing;
 public class BillingRateCardRepository : IBillingRateCardRepository
 {
     private readonly ApplicationDbContext _db;
+    private readonly ICacheManager? _cache;
 
-    public BillingRateCardRepository(ApplicationDbContext db)
+    public BillingRateCardRepository(ApplicationDbContext db, ICacheManager? cache = null)
     {
         _db = db;
+        _cache = cache;
     }
 
     public async Task<IReadOnlyList<BillingRateCard>> ListReadOnlyAsync(CancellationToken ct = default) =>
@@ -75,7 +80,11 @@ public class BillingRateCardRepository : IBillingRateCardRepository
 
     public void AddRate(BillingRate rate) => _db.BillingRates.Add(rate);
 
-    public async Task<IReadOnlyList<RatingCard>> ListRatingCardsAsync(Guid clinicId, CancellationToken ct = default)
+    public async Task<IReadOnlyList<RatingCard>> ListRatingCardsAsync(Guid clinicId, CancellationToken ct = default) =>
+        (await _cache.ReadThroughAsync(CacheKeys.RatingCards(clinicId), CacheArea.BillingRates,
+            token => LoadRatingCardsAsync(clinicId, token), ct))!;
+
+    private async Task<List<RatingCard>?> LoadRatingCardsAsync(Guid clinicId, CancellationToken ct)
     {
         var result = new List<RatingCard>();
 
@@ -100,15 +109,26 @@ public class BillingRateCardRepository : IBillingRateCardRepository
 
     public async Task<IReadOnlyList<BillingRate>> ListCandidateRatesAsync(IReadOnlyCollection<Guid> cardIds, string eventType,
         DateTimeOffset at, string? countryCode, string? @operator, string? provider, string? responsibility, bool exactResponsibility,
-        CancellationToken ct = default) =>
-        await _db.BillingRates.AsNoTracking()
-            .Where(r => cardIds.Contains(r.RateCardId) && r.EventType == eventType
-                        && r.EffectiveFrom <= at && (r.EffectiveTo == null || r.EffectiveTo > at)
-                        && (r.CountryCode == null || r.CountryCode == countryCode)
-                        && (r.Operator == null || r.Operator == @operator)
-                        && (r.Provider == null || r.Provider == provider)
-                        && (exactResponsibility
-                            ? r.ProviderBilling == responsibility
-                            : r.ProviderBilling == null || r.ProviderBilling == responsibility))
-            .ToListAsync(ct);
+        CancellationToken ct = default)
+    {
+        var candidates = new List<BillingRate>();
+        foreach (var cardId in cardIds.Distinct())
+        {
+            candidates.AddRange((await ListAllRatesReadOnlyAsync(cardId, ct)).Where(r =>
+                r.EventType == eventType
+                && r.EffectiveFrom <= at && (r.EffectiveTo == null || r.EffectiveTo > at)
+                && (r.CountryCode == null || r.CountryCode == countryCode)
+                && (r.Operator == null || r.Operator == @operator)
+                && (r.Provider == null || r.Provider == provider)
+                && (exactResponsibility
+                    ? r.ProviderBilling == responsibility
+                    : r.ProviderBilling == null || r.ProviderBilling == responsibility)));
+        }
+        return candidates;
+    }
+
+    /// <summary>Every rate of the card, all versions, read-only (cached; rates are rated against on every charged event).</summary>
+    private async Task<List<BillingRate>> ListAllRatesReadOnlyAsync(Guid cardId, CancellationToken ct) =>
+        (await _cache.ReadThroughAsync(CacheKeys.Rates(cardId), CacheArea.BillingRates,
+            async token => await _db.BillingRates.AsNoTracking().Where(r => r.RateCardId == cardId).ToListAsync(token), ct))!;
 }

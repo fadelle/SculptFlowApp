@@ -263,7 +263,7 @@ public class MessageService : IMessageService
                 $"Templates are WhatsApp-only — this conversation is on '{conversation.Channel}'.");
         }
 
-        var template = await _templates.GetAsync(clinicId, whatsAppTemplateId, ct);
+        var template = await _templates.GetReadOnlyAsync(clinicId, whatsAppTemplateId, ct);
         if (template is null)
         {
             throw new ArgumentException("Template not found for this clinic.", nameof(whatsAppTemplateId));

@@ -17,7 +17,7 @@ public interface IClinicRepository
 
     void AddMembership(ClinicUser membership);
 
-    /// <summary>The clinic of the user's active membership, or null.</summary>
+    /// <summary>The clinic of the user's active membership, or null. Read-only copy (cached).</summary>
     Task<Clinic?> GetClinicOfActiveMemberAsync(string userId, CancellationToken ct = default);
 
     Task<Guid?> GetClinicIdOfActiveMemberAsync(string userId, CancellationToken ct = default);

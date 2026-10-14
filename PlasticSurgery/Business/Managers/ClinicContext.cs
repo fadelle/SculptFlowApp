@@ -13,5 +13,5 @@ public class ClinicContext : IClinicContext
         _clinics = clinics;
     }
 
-    public Task<Clinic?> GetByIdAsync(Guid clinicId, CancellationToken ct = default) => _clinics.GetAsync(clinicId, ct);
+    public Task<Clinic?> GetByIdAsync(Guid clinicId, CancellationToken ct = default) => _clinics.GetReadOnlyAsync(clinicId, ct);
 }

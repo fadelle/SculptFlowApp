@@ -229,13 +229,13 @@ public class EntitlementServiceTests
     }
 
     [Fact]
-    public async Task Entitlements_are_resolved_once_per_service_instance()
+    public async Task Entitlements_are_read_through_the_cache_manager_every_time()
     {
         Subscribe(SubscriptionStatus.Active);
         var sut = Sut();
         await sut.GetAsync(_clinicId);
         await sut.GetAsync(_clinicId);
-        _cache.Verify(c => c.GetOrCreateAsync(It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<Func<CancellationToken, Task<SubscriptionSnapshot?>>>(), It.IsAny<CancellationToken>()), Times.Once);
+        _cache.Verify(c => c.GetOrCreateAsync(CacheKeys.Entitlements(_clinicId), It.IsAny<TimeSpan>(), It.IsAny<Func<CancellationToken, Task<SubscriptionSnapshot?>>>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
     }
 }
 

@@ -169,7 +169,7 @@ public class ChannelIntegrationRepositoryTests(PostgresFixture fixture) : RepoTe
         Assert.Equal(wa.Id, (await repo.FindWhatsAppByPhoneNumberIdAsync(phone))!.Id);
         Assert.Null(await repo.FindWhatsAppByPhoneNumberIdAsync("nope"));
         Assert.Equal(wa.Id, (await repo.FindWhatsAppByWabaIdAsync(waba))!.Id);
-        Assert.Equal(2, (await repo.ListForClinicAsync(c.Id)).Count);
+        Assert.Equal(2, (await repo.ListForClinicReadOnlyAsync(c.Id)).Count);
         Assert.Equal([ChannelType.Telegram, ChannelType.WhatsApp], (await repo.ListForClinicReadOnlyAsync(c.Id)).Select(i => i.Channel).Order());
     }
 
@@ -228,7 +228,7 @@ public class WhatsAppRepositoryTests(PostgresFixture fixture) : RepoTestBase(fix
         var repo = new WhatsAppTemplateRepository(db);
         Assert.NotNull(await repo.GetAsync(c.Id, t1.Id));
         Assert.Null(await repo.GetAsync(other.Id, t1.Id));
-        Assert.Equal([t2.Id, t1.Id], (await repo.ListForClinicAsync(c.Id)).Select(t => t.Id));
+        Assert.Equal([t2.Id, t1.Id], (await repo.ListForClinicReadOnlyAsync(c.Id)).Select(t => t.Id));
         Assert.Equal(t1.Id, (await repo.FindByProviderTemplateIdAsync(c.Id, "meta-1"))!.Id);
         Assert.Null(await repo.FindByProviderTemplateIdAsync(other.Id, "meta-1"));
         Assert.Equal(t2.Id, (await repo.FindByNameAsync(c.Id, "welcome", "ar"))!.Id);
@@ -237,7 +237,7 @@ public class WhatsAppRepositoryTests(PostgresFixture fixture) : RepoTestBase(fix
         var added = Template(c.Id, "new");
         repo.Add(added);
         await db.SaveChangesAsync();
-        Assert.Equal(3, (await new WhatsAppTemplateRepository(NewContext()).ListForClinicAsync(c.Id)).Count);
+        Assert.Equal(3, (await new WhatsAppTemplateRepository(NewContext()).ListForClinicReadOnlyAsync(c.Id)).Count);
     }
 
     [PostgresFact]
@@ -383,7 +383,7 @@ public class CalendarRepositoryTests(PostgresFixture fixture) : RepoTestBase(fix
         var repo = new CalendarIntegrationRepository(db);
         Assert.Single((await repo.GetWithCalendarsAsync(c.Id, "google"))!.Calendars);
         Assert.Null(await repo.GetWithCalendarsAsync(other.Id, "google"));
-        Assert.Equal(2, (await repo.ListWithCalendarsAsync(c.Id)).Count);
+        Assert.Equal(2, (await repo.ListWithCalendarsReadOnlyAsync(c.Id)).Count);
         Assert.NotNull(await repo.GetByIdAsync(c.Id, google.Id));
         Assert.Null(await repo.GetByIdAsync(other.Id, google.Id));
     }

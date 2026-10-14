@@ -44,7 +44,7 @@ public class CalendarIntegrationService : ICalendarIntegrationService
 
     public async Task<IReadOnlyList<CalendarIntegrationResponse>> ListAsync(Guid clinicId, CancellationToken ct = default)
     {
-        var existing = (await _calendars.ListWithCalendarsAsync(clinicId, ct)).ToDictionary(c => c.Provider);
+        var existing = (await _calendars.ListWithCalendarsReadOnlyAsync(clinicId, ct)).ToDictionary(c => c.Provider);
 
         return CalendarProvider.All
             .Select(provider => existing.TryGetValue(provider, out var row)

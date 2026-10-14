@@ -15,24 +15,26 @@ using PlasticSurgery.Persistence.Repositories.Clinics;
 using PlasticSurgery.Persistence.Repositories.Events;
 using PlasticSurgery.Persistence.Repositories.Inbox;
 
+using PlasticSurgery.Business.Contracts.Managers;
+
 namespace PlasticSurgery.Persistence.Repositories.Billing;
 
 public sealed class BillingUnitOfWork : IBillingUnitOfWork
 {
     private readonly ApplicationDbContext _db;
 
-    public BillingUnitOfWork(ApplicationDbContext db)
+    public BillingUnitOfWork(ApplicationDbContext db, ICacheManager? cache = null)
     {
         _db = db;
         Accounts = new BillingAccountRepository(db);
         Usage = new BillingUsageRepository(db);
         Ledger = new BillingLedgerRepository(db);
         Plans = new BillingPlanRepository(db);
-        RateCards = new BillingRateCardRepository(db);
+        RateCards = new BillingRateCardRepository(db, cache);
         Subscriptions = new ClinicSubscriptionRepository(db);
-        ChannelBilling = new ChannelAccountBillingRepository(db);
-        Channels = new ChannelIntegrationRepository(db);
-        Clinics = new ClinicRepository(db);
+        ChannelBilling = new ChannelAccountBillingRepository(db, cache);
+        Channels = new ChannelIntegrationRepository(db, cache);
+        Clinics = new ClinicRepository(db, cache);
         Messages = new MessageRepository(db);
         Events = new EventLogRepository(db);
     }

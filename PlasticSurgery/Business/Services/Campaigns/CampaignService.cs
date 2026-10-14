@@ -96,7 +96,7 @@ public class CampaignService : ICampaignService
         }
         await _entitlements.EnsureFeatureAsync(request.ClinicId, EntitlementKeys.Campaigns, ct);
 
-        var template = await _templates.GetAsync(request.ClinicId, request.WhatsAppTemplateId, ct);
+        var template = await _templates.GetReadOnlyAsync(request.ClinicId, request.WhatsAppTemplateId, ct);
         if (template is null)
         {
             throw new ArgumentException("Template not found for this clinic.", nameof(request));

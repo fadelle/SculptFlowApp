@@ -108,6 +108,14 @@ public class ConfigManager : IConfigManager
     // ---- Dashboard
     public int DashboardLeadsPageSize => GetInt(ConfigDefaults.DashboardLeadsPageSize);
 
+    // ---- Cache
+    public int CacheClinicsMinutes => GetInt(ConfigDefaults.CacheClinicsMinutes);
+    public int CacheStaffLookupMinutes => GetInt(ConfigDefaults.CacheStaffLookupMinutes);
+    public int CacheProceduresMinutes => GetInt(ConfigDefaults.CacheProceduresMinutes);
+    public int CacheSchedulingMinutes => GetInt(ConfigDefaults.CacheSchedulingMinutes);
+    public int CacheChannelsMinutes => GetInt(ConfigDefaults.CacheChannelsMinutes);
+    public int CacheBillingRatesMinutes => GetInt(ConfigDefaults.CacheBillingRatesMinutes);
+
     // ---- generic access
 
     public string GetString(string section, string key) => GetString(Definition(section, key));

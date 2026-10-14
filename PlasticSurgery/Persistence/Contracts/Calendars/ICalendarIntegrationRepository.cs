@@ -10,9 +10,9 @@ public interface ICalendarIntegrationRepository
     /// <summary>With Calendars loaded.</summary>
     Task<CalendarIntegration?> GetWithCalendarsAsync(Guid clinicId, string provider, CancellationToken ct = default);
 
-    /// <summary>All of the clinic's connections, with Calendars loaded.</summary>
-    Task<IReadOnlyList<CalendarIntegration>> ListWithCalendarsAsync(Guid clinicId, CancellationToken ct = default);
 
+    /// <summary>Read-only copies of all of the clinic's connections, with Calendars loaded (cached).</summary>
+    Task<IReadOnlyList<CalendarIntegration>> ListWithCalendarsReadOnlyAsync(Guid clinicId, CancellationToken ct = default);
     Task<CalendarIntegration?> GetByIdAsync(Guid clinicId, Guid integrationId, CancellationToken ct = default);
 
     /// <summary>Connected connections with sync on, a selected calendar and an access token.</summary>

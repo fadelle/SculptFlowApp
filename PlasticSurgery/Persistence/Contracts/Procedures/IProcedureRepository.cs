@@ -4,7 +4,7 @@ namespace PlasticSurgery.Persistence.Contracts.Procedures;
 
 public interface IProcedureRepository
 {
-    /// <summary>The clinic's procedures ordered by name.</summary>
+    /// <summary>The clinic's procedures ordered by name. Read-only copies (cached).</summary>
     Task<IReadOnlyList<Procedure>> ListAsync(Guid clinicId, bool activeOnly, CancellationToken ct = default);
 
     /// <summary>Tracked.</summary>

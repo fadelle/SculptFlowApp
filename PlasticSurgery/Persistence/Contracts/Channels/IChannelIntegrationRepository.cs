@@ -2,7 +2,8 @@ using PlasticSurgery.Entities.Models;
 
 namespace PlasticSurgery.Persistence.Contracts.Channels;
 
-/// <summary>A clinic's messaging channel connections (one row per clinic and channel).</summary>
+/// <summary>A clinic's messaging channel connections (one row per clinic and channel). The ReadOnly reads, GetIdAsync and
+/// CountConnectedExceptAsync answer from the cache (CacheKeys.ChannelIntegrations / ChannelIntegration).</summary>
 public interface IChannelIntegrationRepository
 {
     void Add(ChannelIntegration integration);

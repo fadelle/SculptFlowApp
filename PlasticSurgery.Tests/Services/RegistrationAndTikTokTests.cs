@@ -215,6 +215,7 @@ public class TikTokIntegrationServiceTests
     {
         _config.SetupGet(c => c.IntegrationsTokenRefreshMarginMinutes).Returns(5);
         _repo.Setup(r => r.GetAsync(_clinicId, It.IsAny<CancellationToken>())).ReturnsAsync(() => _row);
+        _repo.Setup(r => r.GetReadOnlyAsync(_clinicId, It.IsAny<CancellationToken>())).ReturnsAsync(() => _row);
         _repo.Setup(r => r.Add(It.IsAny<TikTokIntegration>())).Callback<TikTokIntegration>(t => _row = t);
     }
 

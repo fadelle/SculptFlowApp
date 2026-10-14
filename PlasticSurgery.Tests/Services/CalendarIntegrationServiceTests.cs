@@ -45,7 +45,7 @@ public class CalendarIntegrationServiceTests
     public async Task List_returns_every_provider_with_disconnected_placeholders()
     {
         Connected();
-        _calendars.Setup(c => c.ListWithCalendarsAsync(_clinicId, It.IsAny<CancellationToken>())).ReturnsAsync(new List<CalendarIntegration> { _row! });
+        _calendars.Setup(c => c.ListWithCalendarsReadOnlyAsync(_clinicId, It.IsAny<CancellationToken>())).ReturnsAsync(new List<CalendarIntegration> { _row! });
         var list = await Sut().ListAsync(_clinicId);
         Assert.Equal(CalendarProvider.All.Count, list.Count);
         Assert.Equal(CalendarIntegrationStatus.Connected, list.Single(l => l.Provider == CalendarProvider.Google).Status);

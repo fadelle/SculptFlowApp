@@ -18,7 +18,6 @@ public class EntitlementService : IEntitlementService
     private readonly ILogger<EntitlementService> _logger;
     private readonly IConfigManager _config;
     private readonly ICacheManager _cacheManager;
-    private readonly Dictionary<Guid, ClinicEntitlements> _cache = new(); // per request (scoped service)
 
     public EntitlementService(IClinicSubscriptionRepository subscriptions, IChannelIntegrationRepository integrations, TimeProvider time, ILogger<EntitlementService> logger, IConfigManager config,
         ICacheManager cacheManager)
@@ -34,8 +33,6 @@ public class EntitlementService : IEntitlementService
     public async Task<ClinicEntitlements> GetAsync(Guid clinicId, CancellationToken ct = default)
     {
         if (!_config.BillingEnabled) return ClinicEntitlements.Unrestricted;
-        if (_cache.TryGetValue(clinicId, out var cached)) return cached;
-
         var snapshot = (await _cacheManager.GetOrCreateAsync(CacheKeys.Entitlements(clinicId), CacheKeys.EntitlementsTtl,
             async token => await LoadSnapshotAsync(clinicId, token), ct))!;
 
@@ -53,7 +50,6 @@ public class EntitlementService : IEntitlementService
             result = new ClinicEntitlements(true, hasAccess, snapshot.Status, snapshot.PlanCode, snapshot.PlanName,
                 snapshot.CurrentPeriodEnd, snapshot.Entitlements);
         }
-        _cache[clinicId] = result;
         return result;
     }
 

@@ -19,7 +19,7 @@ public class CampaignServiceTests
     public CampaignServiceTests()
     {
         _template = new WhatsAppTemplate { Id = Guid.NewGuid(), ClinicId = _clinicId, Name = "promo", Body = "Hi {{1}}" };
-        _templates.Setup(t => t.GetAsync(_clinicId, _template.Id, It.IsAny<CancellationToken>())).ReturnsAsync(_template);
+        _templates.Setup(t => t.GetReadOnlyAsync(_clinicId, _template.Id, It.IsAny<CancellationToken>())).ReturnsAsync(_template);
         _audience.Setup(a => a.GetSkipReasonIfNotContactable(It.IsAny<Lead>())).Returns((string?)null);
         // By default this sender gets the campaign's sending lock.
         _campaigns.Setup(r => r.TryLockForSendingAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync(Mock.Of<IAsyncDisposable>());

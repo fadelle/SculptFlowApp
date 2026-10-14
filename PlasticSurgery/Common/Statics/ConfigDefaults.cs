@@ -132,6 +132,18 @@ public static class ConfigDefaults
         "Largest voice note (bytes) the Inbox will download from the provider to play or forward.", 1024, 20971520);
     public static readonly ConfigDefinition DashboardLeadsPageSize = new("Dashboard", "LeadsPageSize", "25", ConfigValueType.Int,
         "Leads per page on the dashboard.", 5, 200);
+    public static readonly ConfigDefinition CacheClinicsMinutes = new("Cache", "ClinicsMinutes", "60", ConfigValueType.Int,
+        "Minutes a cached copy is kept: Clinic rows (signed-in clinic, the bot's clinic info). Changes clear it at once; this is only how long an untouched copy lives.", 1, 1440);
+    public static readonly ConfigDefinition CacheStaffLookupMinutes = new("Cache", "StaffLookupMinutes", "10", ConfigValueType.Int,
+        "Minutes a cached copy is kept: Which clinic a signed-in user belongs to. Keep it short: it is how long a removed staff member could keep access if a removal were ever missed. Changes clear it at once; this is only how long an untouched copy lives.", 1, 1440);
+    public static readonly ConfigDefinition CacheProceduresMinutes = new("Cache", "ProceduresMinutes", "60", ConfigValueType.Int,
+        "Minutes a cached copy is kept: A clinic's procedures. Changes clear it at once; this is only how long an untouched copy lives.", 1, 1440);
+    public static readonly ConfigDefinition CacheSchedulingMinutes = new("Cache", "SchedulingMinutes", "60", ConfigValueType.Int,
+        "Minutes a cached copy is kept: Weekly hours, booking settings, closed dates and calendar connections. Changes clear it at once; this is only how long an untouched copy lives.", 1, 1440);
+    public static readonly ConfigDefinition CacheChannelsMinutes = new("Cache", "ChannelsMinutes", "60", ConfigValueType.Int,
+        "Minutes a cached copy is kept: Channel connections, TikTok connection and WhatsApp templates. Changes clear it at once; this is only how long an untouched copy lives.", 1, 1440);
+    public static readonly ConfigDefinition CacheBillingRatesMinutes = new("Cache", "BillingRatesMinutes", "60", ConfigValueType.Int,
+        "Minutes a cached copy is kept: Rating cards, rates and who pays the provider per channel account. Changes clear it at once; this is only how long an untouched copy lives.", 1, 1440);
 
     public static readonly IReadOnlyList<ConfigDefinition> All =
     [
@@ -204,7 +216,14 @@ public static class ConfigDefaults
 
         VoiceMaxBytes,
 
-        DashboardLeadsPageSize
+        DashboardLeadsPageSize,
+
+        CacheClinicsMinutes,
+        CacheStaffLookupMinutes,
+        CacheProceduresMinutes,
+        CacheSchedulingMinutes,
+        CacheChannelsMinutes,
+        CacheBillingRatesMinutes
     ];
 
     /// <summary>The declared setting for (section, key), ignoring case; null when there is none.</summary>

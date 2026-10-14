@@ -23,7 +23,7 @@ public interface IAvailabilityRepository
     Task<IReadOnlyList<ClinicAvailabilityException>> ListExceptionsAsync(Guid clinicId, DateOnly from, DateOnly to,
         CancellationToken ct = default);
 
-    /// <summary>From <paramref name="fromDate"/> on, ordered by date.</summary>
+    /// <summary>Read-only, from <paramref name="fromDate"/> on, ordered by date.</summary>
     Task<IReadOnlyList<ClinicAvailabilityException>> ListExceptionsFromAsync(Guid clinicId, DateOnly fromDate, CancellationToken ct = default);
 
     /// <summary>Tracked.</summary>

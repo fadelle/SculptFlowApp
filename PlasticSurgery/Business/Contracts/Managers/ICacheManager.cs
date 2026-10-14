@@ -1,3 +1,4 @@
+using PlasticSurgery.Common.Enums;
 using PlasticSurgery.Entities.Dtos.Caching;
 
 namespace PlasticSurgery.Business.Contracts.Managers;
@@ -13,9 +14,15 @@ public interface ICacheManager
     Task<T?> GetOrCreateAsync<T>(string key, TimeSpan ttl, Func<CancellationToken, Task<T?>> factory, CancellationToken ct = default)
         where T : class;
 
+    /// <summary>How long a table cache of this area is kept (the Cache settings, read each time).</summary>
+    TimeSpan LifetimeOf(CacheArea area);
+
     Task<bool> RemoveAsync(string key, CancellationToken ct = default);
 
     Task<int> RemoveByPrefixAsync(string prefix, CancellationToken ct = default);
+
+    /// <summary>Removes each key or prefix (duplicates once). Failures are logged, never thrown.</summary>
+    Task RemoveAsync(IEnumerable<CacheEviction> evictions, CancellationToken ct = default);
 
     Task<IReadOnlyList<CacheEntryInfo>> ListAsync(string? prefix = null, CancellationToken ct = default);
 

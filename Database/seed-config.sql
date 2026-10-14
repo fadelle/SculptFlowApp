@@ -71,7 +71,13 @@ insert into config.settings (section, key, value, updated_by) values
   ('Integrations', 'OAuthStateLifetimeMinutes', '15', 'seed'),
   ('Integrations', 'TokenRefreshMarginMinutes', '5', 'seed'),
   ('Voice', 'MaxBytes', '10485760', 'seed'),
-  ('Dashboard', 'LeadsPageSize', '25', 'seed')
+  ('Dashboard', 'LeadsPageSize', '25', 'seed'),
+  ('Cache', 'ClinicsMinutes', '60', 'seed'),
+  ('Cache', 'StaffLookupMinutes', '10', 'seed'),
+  ('Cache', 'ProceduresMinutes', '60', 'seed'),
+  ('Cache', 'SchedulingMinutes', '60', 'seed'),
+  ('Cache', 'ChannelsMinutes', '60', 'seed'),
+  ('Cache', 'BillingRatesMinutes', '60', 'seed')
 on conflict (section, key) do nothing;
 
 -- Infobip was removed (2026-10-12); drop its settings from databases seeded before that.

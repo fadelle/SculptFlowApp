@@ -72,6 +72,7 @@ public class WhatsAppTemplateServiceTests
     {
         var t = new WhatsAppTemplate { Id = Guid.NewGuid(), ClinicId = _clinicId, Name = "promo", Body = "b", MetaTemplateId = metaId, Status = status };
         _templates.Setup(r => r.GetAsync(_clinicId, t.Id, It.IsAny<CancellationToken>())).ReturnsAsync(t);
+        _templates.Setup(r => r.GetReadOnlyAsync(_clinicId, t.Id, It.IsAny<CancellationToken>())).ReturnsAsync(t);
         return t;
     }
 
@@ -122,7 +123,7 @@ public class WhatsAppTemplateServiceTests
     public async Task List_and_GetById_map_templates()
     {
         var t = Existing();
-        _templates.Setup(r => r.ListForClinicAsync(_clinicId, It.IsAny<CancellationToken>())).ReturnsAsync(new List<WhatsAppTemplate> { t });
+        _templates.Setup(r => r.ListForClinicReadOnlyAsync(_clinicId, It.IsAny<CancellationToken>())).ReturnsAsync(new List<WhatsAppTemplate> { t });
         Assert.Single(await Sut().ListAsync(_clinicId));
         Assert.Equal(t.Id, (await Sut().GetByIdAsync(_clinicId, t.Id))!.Id);
         Assert.Null(await Sut().GetByIdAsync(_clinicId, Guid.NewGuid()));

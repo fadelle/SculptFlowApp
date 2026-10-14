@@ -34,14 +34,16 @@ public class TikTokIntegrationService : ITikTokIntegrationService
 
     public async Task<TikTokIntegrationResponse> GetAsync(Guid clinicId, CancellationToken ct = default)
     {
-        var row = await _tikTok.GetAsync(clinicId, ct);
+        var row = await _tikTok.GetReadOnlyAsync(clinicId, ct);
         if (row is null)
         {
             return new TikTokIntegrationResponse(Guid.Empty, clinicId, TikTokIntegrationStatus.Disconnected, null, null, true, null);
         }
 
-        if (row.Status == TikTokIntegrationStatus.Connected)
+        if (row.Status == TikTokIntegrationStatus.Connected && !HasFreshAccessToken(row))
         {
+            // The token refresh saves, so it works on the tracked row (the cached copy is read-only).
+            row = await _tikTok.GetAsync(clinicId, ct) ?? row;
             await EnsureFreshAccessTokenAsync(row, ct);
         }
 
@@ -128,10 +130,13 @@ public class TikTokIntegrationService : ITikTokIntegrationService
     /// the connection unhealthy (notifying once, on the transition) and does NOT throw if there's no refresh
     /// token, the refresh token itself has expired, or TikTok rejects the refresh — callers should treat the
     /// row's IsHealthy/LastProblemMessage as the source of truth afterward rather than relying on an exception.</summary>
+    private bool HasFreshAccessToken(TikTokIntegration row) =>
+        !string.IsNullOrWhiteSpace(row.AccessToken) && row.TokenExpiresAt is { } expires
+        && expires - DateTimeOffset.UtcNow > TokenRefreshMargin;
+
     private async Task EnsureFreshAccessTokenAsync(TikTokIntegration row, CancellationToken ct)
     {
-        if (!string.IsNullOrWhiteSpace(row.AccessToken) && row.TokenExpiresAt is { } expires
-            && expires - DateTimeOffset.UtcNow > TokenRefreshMargin)
+        if (HasFreshAccessToken(row))
         {
             return;
         }

@@ -1,6 +1,9 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using PlasticSurgery.Business.Contracts.Managers;
 using PlasticSurgery.Business.Contracts.Providers.Caching;
+using PlasticSurgery.Common.Enums;
+using PlasticSurgery.Common.Statics;
 using PlasticSurgery.Entities.Dtos.Caching;
 
 namespace PlasticSurgery.Business.Managers;
@@ -8,16 +11,33 @@ namespace PlasticSurgery.Business.Managers;
 /// <summary>Singleton. JSON (de)serialization and failure handling on top of whichever ICacheAdapter is registered.</summary>
 public class CacheManager : ICacheManager
 {
-    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
+    // IgnoreCycles: read-only entity copies can hold a loaded navigation that points back (connection ↔ its calendars).
+    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web) { ReferenceHandler = ReferenceHandler.IgnoreCycles };
 
     private readonly ICacheAdapter _adapter;
     private readonly ILogger<CacheManager> _logger;
+    private readonly IConfigManager? _config;
 
-    public CacheManager(ICacheAdapter adapter, ILogger<CacheManager> logger)
+    // config is optional so tests and tools can build it alone; without it the declared defaults apply.
+    public CacheManager(ICacheAdapter adapter, ILogger<CacheManager> logger, IConfigManager? config = null)
     {
         _adapter = adapter;
         _logger = logger;
+        _config = config;
     }
+
+    public TimeSpan LifetimeOf(CacheArea area) => TimeSpan.FromMinutes(area switch
+    {
+        CacheArea.Clinics => _config?.CacheClinicsMinutes ?? Default(ConfigDefaults.CacheClinicsMinutes),
+        CacheArea.StaffLookup => _config?.CacheStaffLookupMinutes ?? Default(ConfigDefaults.CacheStaffLookupMinutes),
+        CacheArea.Procedures => _config?.CacheProceduresMinutes ?? Default(ConfigDefaults.CacheProceduresMinutes),
+        CacheArea.Scheduling => _config?.CacheSchedulingMinutes ?? Default(ConfigDefaults.CacheSchedulingMinutes),
+        CacheArea.Channels => _config?.CacheChannelsMinutes ?? Default(ConfigDefaults.CacheChannelsMinutes),
+        CacheArea.BillingRates => _config?.CacheBillingRatesMinutes ?? Default(ConfigDefaults.CacheBillingRatesMinutes),
+        _ => throw new ArgumentOutOfRangeException(nameof(area), area, null),
+    });
+
+    private static int Default(Entities.Dtos.Configuration.ConfigDefinition setting) => int.Parse(setting.DefaultValue);
 
     public async Task<T?> GetOrCreateAsync<T>(string key, TimeSpan ttl, Func<CancellationToken, Task<T?>> factory, CancellationToken ct = default)
         where T : class
@@ -79,6 +99,15 @@ public class CacheManager : ICacheManager
         var info = await _adapter.GetInfoAsync(key, ct);
         var json = info is null ? null : await _adapter.GetAsync(key, ct);
         return json is null ? null : (info!, json);
+    }
+
+    public async Task RemoveAsync(IEnumerable<CacheEviction> evictions, CancellationToken ct = default)
+    {
+        foreach (var eviction in evictions.Distinct())
+        {
+            if (eviction.IsPrefix) await RemoveByPrefixAsync(eviction.Value, ct);
+            else await RemoveAsync(eviction.Value, ct);
+        }
     }
 
     public Task<int> ClearAsync(CancellationToken ct = default) => _adapter.ClearAsync(ct);

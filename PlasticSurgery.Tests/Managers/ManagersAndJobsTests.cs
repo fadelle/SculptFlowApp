@@ -60,7 +60,7 @@ public class ClinicContextTests
     public async Task Clinic_context_loads_by_id()
     {
         var clinic = new Clinic { Id = Guid.NewGuid() };
-        _clinics.Setup(c => c.GetAsync(clinic.Id, It.IsAny<CancellationToken>())).ReturnsAsync(clinic);
+        _clinics.Setup(c => c.GetReadOnlyAsync(clinic.Id, It.IsAny<CancellationToken>())).ReturnsAsync(clinic);
         Assert.Same(clinic, await new ClinicContext(_clinics.Object).GetByIdAsync(clinic.Id));
     }
 }

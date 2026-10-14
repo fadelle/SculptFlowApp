@@ -79,6 +79,7 @@ using PlasticSurgery.Common.Configs;
 using PlasticSurgery.Common.Extensions;
 using PlasticSurgery.Hubs;
 using PlasticSurgery.Persistence.Contexts;
+using PlasticSurgery.Persistence.Helpers;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -93,7 +94,10 @@ var connectionString = builder.Configuration.GetConnectionString("Postgres")
         "Missing ConnectionStrings:Postgres. Set it in appsettings.Development.json " +
         "(local dev) or via user-secrets / environment variables (production, e.g. Supabase).");
 
-builder.Services.AddDbContext<ApplicationDbContext>(options => options.UseNpgsql(connectionString));
+// Every save clears the cache keys of the rows it changes (Persistence/Helpers/CacheInvalidationInterceptor).
+builder.Services.AddSingleton<CacheInvalidationInterceptor>();
+builder.Services.AddDbContext<ApplicationDbContext>((services, options) => options.UseNpgsql(connectionString)
+    .AddInterceptors(services.GetRequiredService<CacheInvalidationInterceptor>()));
 // Repositories + unit of work (Persistence/), all sharing the request's DbContext.
 builder.Services.AddPersistence();
 
