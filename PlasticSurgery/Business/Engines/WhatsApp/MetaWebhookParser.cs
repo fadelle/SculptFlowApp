@@ -304,7 +304,10 @@ public static class MetaWebhookParser
         WabaId = wabaId,
         HealthEventType = field,
         HealthStatus = GetString(value, "event") ?? GetString(value, "status") ?? GetString(value, "decision"),
-        HealthQualityRating = GetString(value, "current_limit") ?? GetString(value, "quality_rating"),
+        // phone_number_quality_update carries the event (FLAGGED, UNFLAGGED, UPGRADE, DOWNGRADE, ONBOARDING) and
+        // current_limit (a messaging TIER such as TIER_10K), never a green/yellow/red rating. The tier is not a quality
+        // rating, so only an explicit quality_rating is mapped here; the tier stays in the raw payload.
+        HealthQualityRating = GetString(value, "quality_rating"),
         HealthCode = GetString(value, "code"),
         HealthMessage = GetString(value, "message") ?? GetString(value, "display_phone_number"),
         RawFieldName = field,

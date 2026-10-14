@@ -1,4 +1,5 @@
 using PlasticSurgery.Entities.Dtos.PlatformAdmin;
+using PlasticSurgery.Entities.Requests.Channels;
 
 namespace PlasticSurgery.Business.Contracts.Services.PlatformAdmin;
 
@@ -26,4 +27,7 @@ public interface IChannelAdminService
     Task<PlatformAdminChange> SetCalendarSyncAsync(Guid id, bool enabled, CancellationToken ct);
 
     Task<PlatformAdminChange> DisconnectTikTokAsync(Guid id, CancellationToken ct);
+
+    /// <summary>Inspects an access token (or exchanges an embedded-signup code first) with SculptFlow's own Meta app.</summary>
+    Task<WhatsAppTokenDebugResult> DebugWhatsAppTokenAsync(DebugTokenRequest request, CancellationToken ct);
 }

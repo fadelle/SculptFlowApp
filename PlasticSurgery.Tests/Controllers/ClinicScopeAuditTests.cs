@@ -16,8 +16,7 @@ public class ClinicScopeAuditTests
 {
     private static readonly HashSet<string> NoClinicCheckByDesign = new()
     {
-        "LeadsController.Create",                     // public lead capture, clinic comes from the request (NOTE-03)
-        "ChannelIntegrationsController.DebugWhatsAppToken", // not clinic specific (NOTE-04)
+        "LeadsController.Create",                     // n8n ingest-key endpoint, clinic comes from the request
         "ConversationsController.SendMessage",        // AI sends use the ingest key; staff path is covered in ConversationsControllerTests
     };
 

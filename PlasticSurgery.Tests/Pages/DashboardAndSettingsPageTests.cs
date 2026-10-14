@@ -93,7 +93,7 @@ public class SimpleListPageTests
     }
 
     [Fact]
-    public async Task Appointments_and_benchmark_pages_only_need_the_clinic()
+    public async Task Appointments_page_only_needs_the_clinic()
     {
         var appointments = new PlasticSurgery.Pages.Dashboard.AppointmentsModel(ClinicContext(SomeClinic(timezone: "Asia/Beirut")).Object).Attach();
         await appointments.OnGetAsync(default);
@@ -104,13 +104,6 @@ public class SimpleListPageTests
         var none = new PlasticSurgery.Pages.Dashboard.AppointmentsModel(ClinicContext(null).Object).Attach();
         await none.OnGetAsync(default);
         Assert.False(none.ClinicConfigured);
-
-        var benchmark = new PlasticSurgery.Pages.KnowledgeBase.BenchmarkModel(ClinicContext(Glow).Object).Attach();
-        await benchmark.OnGetAsync(default);
-        Assert.True(benchmark.ClinicConfigured);
-        var generation = new PlasticSurgery.Pages.KnowledgeBase.Benchmark.GenerationModel(ClinicContext(null).Object).Attach();
-        await generation.OnGetAsync(default);
-        Assert.False(generation.ClinicConfigured);
     }
 }
 

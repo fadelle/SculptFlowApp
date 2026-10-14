@@ -200,14 +200,20 @@ public class WhatsAppHealthService : IWhatsAppHealthService
 
         if (c.PhoneStatus is not null && BadPhoneStatuses.Contains(c.PhoneStatus.ToLowerInvariant()))
         {
-            return (true, WhatsAppHealthLevel.Warning, c.PhoneStatus, $"Phone number status is '{c.PhoneStatus}'.");
+            var message = c.PhoneStatus.ToLowerInvariant() switch
+            {
+                "flagged" => "Meta flagged this phone number because of its message quality; sending may be limited.",
+                "downgrade" => "Meta lowered this phone number's daily messaging limit because of its message quality.",
+                _ => $"Phone number status is '{c.PhoneStatus}'."
+            };
+            return (true, WhatsAppHealthLevel.Warning, c.PhoneStatus, message);
         }
 
         return (true, WhatsAppHealthLevel.Healthy, null, null);
     }
 
     private static readonly HashSet<string> BadAccountStatuses = new() { "disabled", "banned", "restricted" };
-    private static readonly HashSet<string> BadPhoneStatuses = new() { "flagged", "restricted", "banned" };
+    private static readonly HashSet<string> BadPhoneStatuses = new() { "flagged", "downgrade", "restricted", "banned" };
 
     private static WhatsAppHealthResponse ToHealthResponse(ChannelIntegration c) => new(
         c.Id, c.ClinicId, c.Status == ChannelIntegrationStatus.Connected,

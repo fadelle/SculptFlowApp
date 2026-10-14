@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using PlasticSurgery.Business.Contracts.Services.PlatformAdmin;
 using PlasticSurgery.Controllers.Filters;
 using PlasticSurgery.Entities.Requests.PlatformAdmin;
+using PlasticSurgery.Entities.Requests.Channels;
 
 namespace PlasticSurgery.Controllers.Admin;
 
@@ -39,6 +40,11 @@ public class ChannelsAdminController : ControllerBase
 
     [HttpPost("{id:guid}/disconnect")]
     public async Task<IActionResult> Disconnect(Guid id, CancellationToken ct) => Ok(await _channels.DisconnectAsync(id, ct));
+
+    /// <summary>Platform-admin diagnostic: what Meta says about an access token or an embedded-signup code.</summary>
+    [HttpPost("whatsapp/debug-token")]
+    public async Task<IActionResult> DebugWhatsAppToken([FromBody] DebugTokenRequest request, CancellationToken ct) =>
+        Ok(await _channels.DebugWhatsAppTokenAsync(request, ct));
 
     [HttpGet("calendars")]
     public async Task<IActionResult> Calendars([FromQuery] Guid? clinicId, CancellationToken ct) => Ok(await _channels.ListCalendarsAsync(clinicId, ct));

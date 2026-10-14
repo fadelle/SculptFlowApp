@@ -192,6 +192,7 @@ builder.Services.AddScoped<IChannelAdminService, ChannelAdminService>();
 builder.Services.AddScoped<IStaffAdminService, StaffAdminService>();
 builder.Services.AddScoped<ILeadAdminService, LeadAdminService>();
 builder.Services.AddScoped<IContentAdminService, ContentAdminService>();
+builder.Services.AddScoped<IKnowledgeBenchmarkAdminService, KnowledgeBenchmarkAdminService>();
 builder.Services.AddScoped<IOverviewAdminService, OverviewAdminService>();
 builder.Services.AddScoped<ILeadService, LeadService>();
 builder.Services.AddScoped<IProcedureService, ProcedureService>();

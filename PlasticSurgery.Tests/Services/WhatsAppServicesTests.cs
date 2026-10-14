@@ -241,6 +241,12 @@ public class WhatsAppHealthServiceTests
     [InlineData(WhatsAppHealthEventType.PhoneNumberQualityUpdate, null, "YELLOW", WhatsAppHealthLevel.Warning)]
     [InlineData(WhatsAppHealthEventType.PhoneNumberQualityUpdate, "FLAGGED", "GREEN", WhatsAppHealthLevel.Warning)]
     [InlineData(WhatsAppHealthEventType.PhoneNumberQualityUpdate, "CONNECTED", "GREEN", WhatsAppHealthLevel.Healthy)]
+    // Meta's real phone_number_quality_update events carry no colour: the event name alone drives the level.
+    [InlineData(WhatsAppHealthEventType.PhoneNumberQualityUpdate, "FLAGGED", null, WhatsAppHealthLevel.Warning)]
+    [InlineData(WhatsAppHealthEventType.PhoneNumberQualityUpdate, "DOWNGRADE", null, WhatsAppHealthLevel.Warning)]
+    [InlineData(WhatsAppHealthEventType.PhoneNumberQualityUpdate, "UNFLAGGED", null, WhatsAppHealthLevel.Healthy)]
+    [InlineData(WhatsAppHealthEventType.PhoneNumberQualityUpdate, "UPGRADE", null, WhatsAppHealthLevel.Healthy)]
+    [InlineData(WhatsAppHealthEventType.PhoneNumberQualityUpdate, "ONBOARDING", null, WhatsAppHealthLevel.Healthy)]
     [InlineData(WhatsAppHealthEventType.PhoneNumberNameUpdate, "APPROVED", null, WhatsAppHealthLevel.Healthy)]
     [InlineData(WhatsAppHealthEventType.ConnectionUpdate, null, null, WhatsAppHealthLevel.Healthy)]
     [InlineData("something_else", "X", "RED", WhatsAppHealthLevel.Healthy)]

@@ -27,7 +27,7 @@ This README is only a short orientation.
   (`get_available_slots`, `schedule_consultation`, `cancel_consultation`, `get_my_appointments`)
 - WhatsApp Embedded Signup, templates, health monitoring; Telegram bot channel
 - Campaigns with audience picker (old leads who never booked, all contactable, custom filters, manual)
-- Knowledge Base: manual entries, PDF/DOCX/TXT upload, website crawling, semantic search, retrieval benchmark
+- Knowledge Base: manual entries, PDF/DOCX/TXT upload, website crawling, semantic search (its retrieval benchmark is run from the admin portal)
 - Staff notification bell; Calendar Integrations (one-way Google/Outlook sync through a separate n8n workflow)
 - Self-service registration (new user → new isolated clinic), Staff list, Clinic Info settings
 - Subscriptions & prepaid usage billing (plans + entitlements, wallet, rate cards, billable events, ledger) — off until

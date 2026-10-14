@@ -18,7 +18,6 @@ public class EndpointProtectionAuditTests
         ["WhatsAppWebhookController.Verify"] = "Meta handshake, checked against Meta:WebhookVerifyToken",
         ["WhatsAppWebhookController.Receive"] = "Meta delivery, checked with X-Hub-Signature-256",
         ["TelegramWebhookController.Receive"] = "per-connection secret header",
-        ["LeadsController.Create"] = "public lead capture (see NOTE-03)",
         ["GoogleAuthController.Start"] = "public sign-in page (anti-forgery token)",
         ["GoogleAuthController.Callback"] = "Google OAuth callback",
         ["TikTokController.Reachable"] = "TikTok reachability check",

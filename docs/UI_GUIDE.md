@@ -90,7 +90,7 @@ section wins**. Copy says *patient* where the guide says *customer*: the people 
   script are gone). Confirms are `data-au-confirm` + `-title` + `-label` (+ `-tone="danger"` for deletes and disconnects;
   sending a campaign uses the primary tone) on the form; inside a script, call `Aurora.confirm({ title, message,
   confirmLabel, tone })` (a Promise) through the script's `ask()` helper, which falls back to the browser's `confirm()`
-  when the kit isn't loaded (`inbox.js`, both benchmark scripts). Server toasts come from `_Messages`; client
+  when the kit isn't loaded (`inbox.js`). Server toasts come from `_Messages`; client
   toasts via `Aurora.toast` (Inbox send failures). Submit busy/progress is automatic; the sign-in forms carry
   `data-au-no-busy` because `auth.js` shows its own "Signing in…". **Not used:** `data-au-href` (pages have their own
   row-click scripts on `tr[data-href]`) and `data-au-open` dialogs (popups stay `.bm-overlay > .card`, driven by their
@@ -102,7 +102,7 @@ section wins**. Copy says *patient* where the guide says *customer*: the people 
 - **Status tones (A11):** `StatusBadgeHelper` (colour) + `FilterLabelHelper` (plain label) is the one map; add a status
   there. Colours: `badge-green` success, `badge-amber` waiting, `badge-red` problem, `badge-blue` information,
   `badge-gray` inactive/past, `badge-purple` AI, `badge-teal` brand. Light mode uses the darker shade of each tone for the
-  text (AA). The page scripts (Inbox, calendar, templates, benchmark) emit the same classes.
+  text (AA). The page scripts (Inbox, calendar, templates) emit the same classes.
 - **Script hooks a restyle must keep:** every `id`, `data-*` and `name` the scripts read; classes that are hooks
   (`seg-opt`, `aud-card`, `cat-card`, `kb-choice`, `seg-cards`, `var-*`, `ms-*`, `week-row`, `inbox-filter`,
   `inbox-conv-item`, `inbox-voice` (the Inbox voice-note player), `time-view-switch`, `row-actions`); a popup's card stays the direct child of its overlay (backdrop

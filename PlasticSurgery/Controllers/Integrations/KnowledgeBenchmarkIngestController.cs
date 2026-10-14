@@ -14,8 +14,8 @@ namespace PlasticSurgery.Controllers.Integrations;
 /// <summary>
 /// The endpoint the benchmark's n8n question-generator workflow calls when it has finished writing the questions:
 /// <c>POST /api/knowledge/benchmark/generations/{generationId}/questions</c> with the <c>X-Ingest-Key</c> header, like every other
-/// server-to-server call from n8n. A separate controller from KnowledgeBenchmarkController because that one is cookie-login
-/// only — n8n has no session.
+/// server-to-server call from n8n. The benchmark itself is driven from the admin portal (KnowledgeBenchmarkAdminController,
+/// platform-admin key); this callback is the only part on the ingest key, because n8n has neither key nor session.
 ///
 /// Trust model: the request supplies NO clinic. The generationId in the URL names a generation this app created (and stored
 /// with the exact chunks it sent); the clinic and the allowed chunk set come from that stored row, and every returned id is

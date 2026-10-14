@@ -272,7 +272,7 @@ public class ChannelAdminServiceTests
     private readonly Mock<ICalendarIntegrationService> _calendars = new();
     private readonly Mock<ITikTokIntegrationService> _tikTok = new();
 
-    private ChannelAdminService Sut() => new(_repo.Object, _channels.Object, _calendars.Object, _tikTok.Object);
+    private ChannelAdminService Sut() => new(_repo.Object, _channels.Object, _calendars.Object, _tikTok.Object, Mock.Of<IMetaGraphClient>());
 
     [Fact]
     public async Task Channel_detail_never_exposes_the_access_token()

@@ -187,8 +187,10 @@ public class MetaWebhookParserTests
     {
         var e = Assert.Single(P(Change(field, """{"phone_number_id":"PN9","event":"FLAGGED","current_limit":"TIER_1K","code":"7","display_phone_number":"+1"}""")));
         Assert.Equal(ParsedMetaEventKind.WhatsAppHealth, e.Kind);
-        Assert.Equal((field, "PN9", "FLAGGED", "TIER_1K", "7"), (e.HealthEventType, e.PhoneNumberId, e.HealthStatus, e.HealthQualityRating, e.HealthCode));
+        // current_limit is a messaging tier, not a quality rating: it must not end up in the rating field.
+        Assert.Equal((field, "PN9", "FLAGGED", null, "7"), (e.HealthEventType, e.PhoneNumberId, e.HealthStatus, e.HealthQualityRating, e.HealthCode));
         Assert.Equal("+1", e.HealthMessage);
+        Assert.Equal("GREEN", Assert.Single(P(Change(field, """{"phone_number_id":"PN9","event":"CONNECTED","quality_rating":"GREEN"}"""))).HealthQualityRating);
         Assert.Equal("PN2", Assert.Single(P(Change(field, """{"metadata":{"phone_number_id":"PN2"},"decision":"APPROVED"}"""))).PhoneNumberId);
     }
 

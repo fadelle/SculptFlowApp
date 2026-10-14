@@ -1,9 +1,11 @@
 using PlasticSurgery.Business.Contracts.Services.Calendars;
+using PlasticSurgery.Business.Contracts.HttpClients.Meta;
 using PlasticSurgery.Business.Contracts.Services.Channels;
 using PlasticSurgery.Business.Contracts.Services.PlatformAdmin;
 using PlasticSurgery.Business.Contracts.Services.TikTok;
 using PlasticSurgery.Business.Mappers.PlatformAdmin;
 using PlasticSurgery.Entities.Dtos.PlatformAdmin;
+using PlasticSurgery.Entities.Requests.Channels;
 using PlasticSurgery.Persistence.Contracts.PlatformAdmin;
 
 namespace PlasticSurgery.Business.Services.PlatformAdmin;
@@ -14,14 +16,28 @@ public class ChannelAdminService : IChannelAdminService
     private readonly IChannelIntegrationService _channels;
     private readonly ICalendarIntegrationService _calendars;
     private readonly ITikTokIntegrationService _tikTok;
+    private readonly IMetaGraphClient _graph;
 
     public ChannelAdminService(IChannelAdminRepository repository, IChannelIntegrationService channels,
-        ICalendarIntegrationService calendars, ITikTokIntegrationService tikTok)
+        ICalendarIntegrationService calendars, ITikTokIntegrationService tikTok, IMetaGraphClient graph)
     {
+        _graph = graph;
         _repository = repository;
         _channels = channels;
         _calendars = calendars;
         _tikTok = tikTok;
+    }
+
+    public async Task<WhatsAppTokenDebugResult> DebugWhatsAppTokenAsync(DebugTokenRequest request, CancellationToken ct)
+    {
+        var token = !string.IsNullOrWhiteSpace(request.AccessToken)
+            ? request.AccessToken
+            : !string.IsNullOrWhiteSpace(request.Code)
+                ? await _graph.ExchangeCodeForTokenAsync(request.Code, request.RedirectUri, ct)
+                : throw new ArgumentException("Either AccessToken or Code must be provided.");
+        var scopes = await _graph.GetGrantedScopesAsync(token, ct);
+        var wabas = await _graph.GetClientWhatsAppBusinessAccountsAsync(token, ct);
+        return new WhatsAppTokenDebugResult(scopes, wabas);
     }
 
     public Task<List<ChannelRow>> ListChannelsAsync(Guid? clinicId, string? channel, bool problemsOnly, CancellationToken ct) =>

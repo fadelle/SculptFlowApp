@@ -1,5 +1,4 @@
 using Microsoft.AspNetCore.Mvc;
-using PlasticSurgery.Business.Contracts.HttpClients.Meta;
 using PlasticSurgery.Business.Contracts.Managers;
 using PlasticSurgery.Business.Contracts.Services.Channels;
 using PlasticSurgery.Common.Exceptions;
@@ -18,16 +17,14 @@ namespace PlasticSurgery.Controllers.Client;
 public class ChannelIntegrationsController : DashboardApiController
 {
     private readonly IChannelIntegrationService _integrations;
-    private readonly IMetaGraphClient _graph;
     private readonly ITelegramIntegrationService _telegram;
 
     public ChannelIntegrationsController(
-        IChannelIntegrationService integrations, IMetaGraphClient graph, ITelegramIntegrationService telegram,
+        IChannelIntegrationService integrations, ITelegramIntegrationService telegram,
         ICurrentClinicContext clinicContext)
         : base(clinicContext)
     {
         _integrations = integrations;
-        _graph = graph;
         _telegram = telegram;
     }
 
@@ -110,32 +107,6 @@ public class ChannelIntegrationsController : DashboardApiController
         {
             return Problem(detail: ex.Message, statusCode: StatusCodes.Status502BadGateway,
                 title: "Could not complete WhatsApp connection.");
-        }
-    }
-
-    /// <summary>
-    /// DEBUG-ONLY: exchanges a WhatsApp Embedded Signup code for a token and reports exactly what
-    /// scopes Meta actually granted it — used to diagnose why the phone-number picker step isn't
-    /// showing up in the popup, independent of whether that step ever ran. Remove once resolved.
-    /// </summary>
-    [HttpPost("whatsapp/debug-token")]
-    public async Task<IActionResult> DebugWhatsAppToken([FromBody] DebugTokenRequest request, CancellationToken ct)
-    {
-        try
-        {
-            var token = !string.IsNullOrWhiteSpace(request.AccessToken)
-                ? request.AccessToken
-                : !string.IsNullOrWhiteSpace(request.Code)
-                    ? await _graph.ExchangeCodeForTokenAsync(request.Code, request.RedirectUri, ct)
-                    : throw new InvalidOperationException("Either AccessToken or Code must be provided.");
-            var scopes = await _graph.GetGrantedScopesAsync(token, ct);
-            var clientWabas = await _graph.GetClientWhatsAppBusinessAccountsAsync(token, ct);
-            return Ok(new { scopes, clientWabas });
-        }
-        catch (Exception ex) when (ex is MetaGraphApiException or InvalidOperationException)
-        {
-            return Problem(detail: ex.Message, statusCode: StatusCodes.Status502BadGateway,
-                title: "Could not inspect token.");
         }
     }
 

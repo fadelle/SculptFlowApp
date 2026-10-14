@@ -6,7 +6,9 @@
 **Withdrawn:** BUG-03. The code comments show it is intended: AI appointment ids go stale, so with one upcoming appointment the backend picks it itself (the test now pins that).
 **Also fixed (2026-10-09):** NOTE-01 (malformed campaign filters now rejected at creation), the logging and missing `[ApiErrors]` parts of NOTE-05 (the TikTok webhook is still anonymous).
 **Fixed (2026-10-13):** BUG-05 (a booking after a campaign reply now credits that campaign; window = setting `Campaigns:BookingAttributionDays`, default 14) and BUG-07 (a procedure booking confirms the lead at booked / deposit paid / completed, logged once). No test is skipped any more.
-**Still open:** the NOTE rows only (NOTE-02, 03, 04, 06, 07, 08).
+NOTE-03 is resolved by the ingest-key requirement on `POST /api/leads` (made in the MVP readiness review).
+**Fixed (2026-10-13, second round):** NOTE-04 (the token inspector is now a platform-admin endpoint, `POST /api/platform-admin/channels/whatsapp/debug-token`, removed from the clinic API), NOTE-05 (the TikTok webhook verifies `TikTok-Signature`, rejects old timestamps, and is rejected outright when `TikTok:ClientSecret` is missing) and NOTE-02 (Meta's `current_limit` is a messaging tier, not a colour: it is no longer stored as a quality rating; FLAGGED and DOWNGRADE events raise a warning and UNFLAGGED clears it).
+**Still open:** NOTE-06, 07, 08.
 Behaviour changes worth knowing: the Meta webhook now answers 401 unless `Meta:AppSecret` is configured and the delivery is signed; `IMetaWebhookProcessor` gained `ProcessAllAsync`; the embedding error message is now "The embedding service is unavailable (HTTP nnn)".
 
 The table below is the original report (rows kept for history).

@@ -12,8 +12,9 @@ namespace PlasticSurgery.Business.Contracts.Services.Knowledge;
 /// Orchestrates the Knowledge Retrieval Benchmark: sampling source chunks, validating generated questions, storing
 /// cases, detecting stale ones, executing runs and reading results back. It is a CLIENT of the production retrieval
 /// engine (<see cref="IKnowledgeSearchService"/>) — it never owns or duplicates retrieval — and nothing in the
-/// production Knowledge Base depends on it. Every method is scoped to a clinic id that the caller took from
-/// CurrentClinicContext (or, for <see cref="ExecuteRunAsync"/>, from the run row that was created that way).
+/// production Knowledge Base depends on it. Every method is scoped to a clinic id: the clinic the admin portal picked
+/// (via <see cref="PlatformAdmin.IKnowledgeBenchmarkAdminService"/>, which checks it exists), or, for
+/// <see cref="ExecuteRunAsync"/> and the n8n callback, the clinic stored on the run/generation row.
 /// </summary>
 public interface IKnowledgeBenchmarkService
 {
