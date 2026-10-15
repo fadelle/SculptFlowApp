@@ -75,7 +75,7 @@ Every table lives in its area's Postgres schema, never `public` (only `set_updat
 |---|---|
 | `core` | clinics, procedures |
 | `identity` | identity_users/_claims/_logins/_tokens, clinic_users |
-| `crm` | leads, conversations, messages |
+| `crm` | leads, conversations, messages, inbox_settings |
 | `scheduling` | appointments, procedure_bookings, availability rules/exceptions, clinic_booking_settings, calendar integrations and syncs |
 | `channels` | channel_integrations, whatsapp_templates, whatsapp_health_events, tiktok_integrations |
 | `marketing` | campaigns, campaign_recipients |
@@ -117,7 +117,7 @@ Full detail and the declared-settings table: `docs/configuration.md`.
 - Every key and lifetime lives in `Common/Statics/CacheKeys` as `area:thing:id`, so an area can be dropped by prefix.
 - Cache plain DTOs/records or read-only entity copies (stored as JSON copies), never tracked EF entities, and nothing
   whose staleness costs money (balances, ledger) or that changes every request (messages, conversations, appointments).
-- Table caches (agreed 2026-10-14) live in the repository's `...ReadOnlyAsync` reads: clinics, clinic memberships,
+- Table caches (agreed 2026-10-14) live in the repository's `...ReadOnlyAsync` reads: clinics, inbox settings, clinic memberships,
   procedures, availability rules/settings/exceptions, calendar connections, channel connections, TikTok, WhatsApp
   templates, rating cards, rates, channel account billing. Code that will change a row loads it tracked (uncached).
   Their lifetimes are settings, one per `CacheArea` (`Cache:*Minutes`), passed as an area to `CacheReads`, never as a

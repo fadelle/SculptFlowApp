@@ -45,7 +45,8 @@ await _entitlements.EnsureWithinLimitAsync(clinicId, EntitlementKeys.MaxAgents, 
 ```
 
 Keys live in `Common/Statics/EntitlementKeys.cs`: features take `true`/`false`, limits a number or `unlimited`. A key a plan doesn't
-list is off / 0. Wired today: sending (subscription active), campaigns, AI trigger (`ai_agent`), channel connects
+list is off / 0. Wired today: sending (subscription active), campaigns, the AI bot (`ai_agent`: AI trigger, conversation
+routing and Return to AI, see `InboxSettingsService`), channel connects
 (`max_channel_connections`, `max_whatsapp_numbers`). `max_agents`, `api_access` and `advanced_reporting` are defined but
 nothing checks them yet.
 

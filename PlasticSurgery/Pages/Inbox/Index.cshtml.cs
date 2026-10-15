@@ -15,9 +15,11 @@ public class IndexModel : PageModel
 {
     private readonly ICurrentClinicContext _clinicContext;
     private readonly IConversationService _conversations;
+    private readonly IInboxSettingsService _inboxSettings;
 
-    public IndexModel(ICurrentClinicContext clinicContext, IConversationService conversations)
+    public IndexModel(ICurrentClinicContext clinicContext, IConversationService conversations, IInboxSettingsService inboxSettings)
     {
+        _inboxSettings = inboxSettings;
         _clinicContext = clinicContext;
         _conversations = conversations;
     }
@@ -25,6 +27,9 @@ public class IndexModel : PageModel
     public bool ClinicConfigured { get; private set; }
     public Guid ClinicId { get; private set; }
     public IReadOnlyList<ConversationListRow> Conversations { get; private set; } = Array.Empty<ConversationListRow>();
+
+    /// <summary>The plan includes the AI agent; without it inbox.js hides Return to AI (the API refuses it too).</summary>
+    public bool AiAgentAvailable { get; private set; }
 
     public async Task OnGetAsync(CancellationToken ct)
     {
@@ -37,6 +42,7 @@ public class IndexModel : PageModel
 
         ClinicConfigured = true;
         ClinicId = clinic.Id;
+        AiAgentAvailable = (await _inboxSettings.GetAsync(clinic.Id, ct)).PlanIncludesAiBot;
 
         var (items, _) = await _conversations.ListAsync(clinic.Id, skip: 0, take: 50, ct);
         Conversations = items;

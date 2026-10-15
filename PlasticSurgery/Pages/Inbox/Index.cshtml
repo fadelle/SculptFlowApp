@@ -184,6 +184,7 @@ else
 <script>
     window.PS_INBOX_CONFIG = {
         clinicId: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.ClinicId.ToString())),
+        aiAgentAvailable: @(Model.AiAgentAvailable ? "true" : "false"),
         hubUrl: '/hubs/inbox'
     };
 </script>

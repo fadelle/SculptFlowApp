@@ -13,8 +13,19 @@ public class ConversationServiceTests
     private readonly Mock<IInboxNotifier> _notifier = new();
     private readonly Mock<IEventLogger> _events = new();
     private readonly Mock<INotificationService> _notifications = new();
+    private readonly Mock<IInboxSettingsService> _inboxSettings = new();
 
-    private ConversationService Sut() => new(_conversations.Object, _messages.Object, _leads.Object, _uow.Object, _notifier.Object, _events.Object, _notifications.Object);
+    public ConversationServiceTests() => InboxSettings(planIncludesBot: true, newConversations: true, reopenedConversations: true);
+
+    private ConversationService Sut() => new(_conversations.Object, _messages.Object, _leads.Object, _uow.Object, _notifier.Object, _events.Object, _notifications.Object, _inboxSettings.Object);
+
+    private void InboxSettings(bool planIncludesBot, bool newConversations, bool reopenedConversations)
+    {
+        var settings = new InboxSettingsDto(planIncludesBot, newConversations, reopenedConversations);
+        _inboxSettings.Setup(a => a.GetAsync(_clinicId, It.IsAny<CancellationToken>())).ReturnsAsync(settings);
+        _inboxSettings.Setup(a => a.InitialModeAsync(_clinicId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(settings.AiBotAnswersNew ? ConversationMode.Ai : ConversationMode.Human);
+    }
 
     private Conversation Conv(string mode = ConversationMode.Ai, string? externalThread = null)
     {
@@ -298,6 +309,56 @@ public class ConversationServiceTests
         await Sut().AddMessageAsync(_clinicId, closedForStaff.Id, Msg("outbound", "staff"));
         Assert.Equal(ConversationStatus.Closed, closedForStaff.Status);
         _notifier.Verify(n => n.ConversationUpdatedAsync(_clinicId, closedForStaff.Id, It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    // ---------------------------------------------------------------- AI bot routing
+
+    [Theory]
+    [InlineData(true, true, ConversationMode.Ai)]
+    [InlineData(true, false, ConversationMode.Human)]
+    [InlineData(false, true, ConversationMode.Human)]
+    public async Task A_new_conversation_starts_with_the_bot_only_when_plan_and_clinic_allow_it(bool plan, bool newOn, string expected)
+    {
+        InboxSettings(plan, newOn, reopenedConversations: true);
+        Conversation? added = null;
+        _conversations.Setup(r => r.Add(It.IsAny<Conversation>())).Callback<Conversation>(c => added = c);
+
+        await Sut().GetOrCreateForLeadAsync(_clinicId, _leadId, "whatsapp");
+        Assert.Equal((expected, expected == ConversationMode.Ai, expected == ConversationMode.Human), (added!.Mode, added.AiEnabled, added.HumanTakeover));
+
+        added = null;
+        _uow.Setup(u => u.TrySaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        await Sut().GetOrCreateForLeadAsync(_clinicId, _leadId, "telegram", "chat-9");
+        Assert.Equal(expected, added!.Mode);
+    }
+
+    [Fact]
+    public async Task Return_to_ai_is_refused_when_the_plan_has_no_ai_agent()
+    {
+        InboxSettings(planIncludesBot: false, newConversations: true, reopenedConversations: true);
+        var c = Conv(ConversationMode.Human);
+
+        var ex = await Assert.ThrowsAsync<EntitlementDeniedException>(() => Sut().ReturnToAiAsync(_clinicId, c.Id));
+        Assert.Equal(EntitlementKeys.AiAgent, ex.Entitlement);
+        Assert.Equal(ConversationMode.Human, c.Mode);
+        _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task A_patient_reopening_through_the_generic_path_goes_to_staff_when_the_clinic_says_so()
+    {
+        InboxSettings(planIncludesBot: true, newConversations: true, reopenedConversations: false);
+        var closed = Conv();
+        closed.Status = ConversationStatus.Closed;
+
+        await Sut().AddMessageAsync(_clinicId, closed.Id, Msg("inbound", "lead"));
+
+        Assert.Equal((ConversationStatus.Active, ConversationMode.Human), (closed.Status, closed.Mode));
+        _notifier.Verify(n => n.ConversationModeChangedAsync(_clinicId, closed.Id, ConversationMode.Human, It.IsAny<CancellationToken>()), Times.Once);
+
+        var active = Conv();
+        await Sut().AddMessageAsync(_clinicId, active.Id, Msg("inbound", "lead"));
+        Assert.Equal(ConversationMode.Ai, active.Mode);
     }
 
     [Fact]

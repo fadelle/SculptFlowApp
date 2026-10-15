@@ -42,13 +42,15 @@ public class MessageService : IMessageService
     private readonly INotificationService _notifications;
     private readonly IMessageBillingService _billing;
     private readonly IEntitlementService _entitlements;
+    private readonly IInboxSettingsService _inboxSettings;
 
     public MessageService(
         IConversationRepository conversations, IMessageRepository messages, ILeadRepository leads,
         IWhatsAppTemplateRepository templates, ICampaignRepository campaigns, IUnitOfWork unitOfWork, IWhatsAppService whatsApp, IEnumerable<IChannelSender> senders,
         IInboxNotifier notifier, IEventLogger events, INotificationService notifications,
-        IMessageBillingService billing, IEntitlementService entitlements)
+        IMessageBillingService billing, IEntitlementService entitlements, IInboxSettingsService inboxSettings)
     {
+        _inboxSettings = inboxSettings;
         _conversations = conversations;
         _messages = messages;
         _leads = leads;
@@ -460,6 +462,21 @@ public class MessageService : IMessageService
         {
             ConversationModeSync.Apply(conversation, ConversationMode.Human, now);
             modeChanged = true;
+        }
+        else if (request.EventType == IngestEventType.CustomerMessage && conversation.Mode == ConversationMode.Ai)
+        {
+            // The bot can't answer when the plan no longer includes the AI agent, and the clinic may send conversations a
+            // patient reopens straight to staff. Either way the conversation goes to human mode (same state as a handoff),
+            // so it lands in staff's needs-attention list and n8n is never called (see aiEligible below).
+            var inboxSettings = await _inboxSettings.GetAsync(request.ClinicId, ct);
+            if (!inboxSettings.PlanIncludesAiBot || (reopened && !inboxSettings.AiBotAnswersReopened))
+            {
+                ConversationModeSync.Apply(conversation, ConversationMode.Human, now);
+                modeChanged = true;
+                _events.Log(request.ClinicId, EventTypes.HumanHandoff, leadId: request.LeadId,
+                    conversationId: request.ConversationId, source: MessageOrigin.System,
+                    metadataJson: inboxSettings.PlanIncludesAiBot ? "{\"reason\":\"reopened_to_staff\"}" : "{\"reason\":\"plan_without_ai_agent\"}");
+            }
         }
 
         var lead = await _leads.GetByIdAsync(request.LeadId, ct);

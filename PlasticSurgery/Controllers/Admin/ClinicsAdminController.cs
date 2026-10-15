@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PlasticSurgery.Business.Contracts.Services.PlatformAdmin;
 using PlasticSurgery.Controllers.Filters;
+using PlasticSurgery.Entities.Requests.Inbox;
 using PlasticSurgery.Entities.Requests.PlatformAdmin;
 
 namespace PlasticSurgery.Controllers.Admin;
@@ -45,4 +46,13 @@ public class ClinicsAdminController : ControllerBase
     [HttpPut("{id:guid}/active")]
     public async Task<IActionResult> SetActive(Guid id, [FromBody] ActiveBody request, CancellationToken ct) =>
         Ok(await _clinics.SetActiveAsync(id, request.Active, ct));
+
+    /// <summary>{ planIncludesBot, newConversations, reopenedConversations, botAnswersNew, botAnswersReopened }.</summary>
+    [HttpGet("{id:guid}/inbox-settings")]
+    public async Task<IActionResult> GetInboxSettings(Guid id, CancellationToken ct) => Ok(await _clinics.GetInboxSettingsAsync(id, ct));
+
+    /// <summary>Body { newConversations, reopenedConversations }: whether the AI bot answers new / reopened conversations.</summary>
+    [HttpPut("{id:guid}/inbox-settings")]
+    public async Task<IActionResult> UpdateInboxSettings(Guid id, [FromBody] UpdateInboxSettingsRequest request, CancellationToken ct) =>
+        Ok(await _clinics.UpdateInboxSettingsAsync(id, request, ct));
 }

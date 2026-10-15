@@ -1,6 +1,9 @@
+using PlasticSurgery.Business.Contracts.Services.Inbox;
 using PlasticSurgery.Business.Contracts.Services.PlatformAdmin;
 using PlasticSurgery.Business.Mappers.PlatformAdmin;
+using PlasticSurgery.Entities.Dtos.Inbox;
 using PlasticSurgery.Entities.Dtos.PlatformAdmin;
+using PlasticSurgery.Entities.Requests.Inbox;
 using PlasticSurgery.Entities.Requests.PlatformAdmin;
 using PlasticSurgery.Entities.Responses.Billing;
 using PlasticSurgery.Persistence.Contracts;
@@ -13,9 +16,11 @@ public class ClinicAdminService : IClinicAdminService
     private readonly IClinicAdminRepository _repository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly TimeProvider _time;
+    private readonly IInboxSettingsService _inboxSettings;
 
-    public ClinicAdminService(IClinicAdminRepository repository, IUnitOfWork unitOfWork, TimeProvider time)
+    public ClinicAdminService(IClinicAdminRepository repository, IUnitOfWork unitOfWork, TimeProvider time, IInboxSettingsService inboxSettings)
     {
+        _inboxSettings = inboxSettings;
         _repository = repository;
         _unitOfWork = unitOfWork;
         _time = time;
@@ -59,6 +64,15 @@ public class ClinicAdminService : IClinicAdminService
         clinic.IsActive = active;
         clinic.UpdatedAt = _time.GetUtcNow();
         await _unitOfWork.SaveChangesAsync(ct);
+        return new PlatformAdminChange(id);
+    }
+
+    public Task<InboxSettingsDto> GetInboxSettingsAsync(Guid id, CancellationToken ct) => _inboxSettings.GetAsync(id, ct);
+
+    public async Task<PlatformAdminChange> UpdateInboxSettingsAsync(Guid id, UpdateInboxSettingsRequest request, CancellationToken ct)
+    {
+        if (request is null) throw new ArgumentException("Send newConversations and reopenedConversations.");
+        await _inboxSettings.UpdateAsync(id, request, ct);
         return new PlatformAdminChange(id);
     }
 

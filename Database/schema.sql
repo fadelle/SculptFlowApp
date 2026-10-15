@@ -13,7 +13,7 @@
 -- Tables live in one Postgres schema per area (never in public):
 --   core        clinics, procedures
 --   identity    ASP.NET Identity users/claims/logins/tokens, clinic_users
---   crm         leads, conversations, messages
+--   crm         leads, conversations, messages, inbox settings
 --   scheduling  appointments, procedure bookings, availability, calendar sync
 --   channels    channel integrations, WhatsApp templates/health, TikTok
 --   marketing   campaigns, campaign recipients
@@ -2087,6 +2087,36 @@ create table if not exists activity.api_route_stats (
 );
 
 create index if not exists ix_api_route_stats_bucket_start on activity.api_route_stats(bucket_start);
+
+-- =====================================================================
+-- Inbox settings: crm.inbox_settings
+--
+-- How a clinic's Inbox handles conversations (Business/Services/Inbox/InboxSettingsService). One column per setting, so
+-- a new setting is a new column here. Today: whether the AI bot answers new conversations and conversations a patient
+-- reopens (off = they start with / move to staff, human mode); they only take effect while the plan includes the
+-- ai_agent entitlement. A clinic without a row uses the column defaults, so existing clinics keep the bot on.
+-- channel_integration_id null = the clinic-wide row (the only kind used today); a row per channel connection can be
+-- added later to override the clinic-wide one for that channel.
+-- =====================================================================
+create table if not exists crm.inbox_settings (
+  id                             uuid primary key default gen_random_uuid(),
+  clinic_id                      uuid not null references core.clinics(id) on delete cascade,
+  channel_integration_id         uuid references channels.channel_integrations(id) on delete cascade,
+  ai_bot_new_conversations       boolean not null default true,
+  ai_bot_reopened_conversations  boolean not null default true,
+  created_at                     timestamptz not null default now(),
+  updated_at                     timestamptz not null default now()
+);
+
+create unique index if not exists ux_inbox_settings_clinic_wide on crm.inbox_settings(clinic_id)
+  where channel_integration_id is null;
+create unique index if not exists ux_inbox_settings_channel on crm.inbox_settings(channel_integration_id)
+  where channel_integration_id is not null;
+
+drop trigger if exists trg_inbox_settings_updated_at on crm.inbox_settings;
+create trigger trg_inbox_settings_updated_at
+  before update on crm.inbox_settings
+  for each row execute function public.set_updated_at();
 
 -- UTC guard: every moment in time is stored as timestamptz (UTC); only the clinic-local availability columns
 -- (clinic_availability_rules/exceptions start_time/end_time/date, read together with clinics.timezone) are

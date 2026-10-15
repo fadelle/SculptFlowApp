@@ -23,6 +23,7 @@ using PlasticSurgery.Entities.Responses.Inbox;
 using PlasticSurgery.Persistence.Contexts;
 using PlasticSurgery.Persistence.Repositories;
 using PlasticSurgery.Persistence.Repositories.Campaigns;
+using PlasticSurgery.Persistence.Repositories.Clinics;
 using PlasticSurgery.Persistence.Repositories.Events;
 using PlasticSurgery.Persistence.Repositories.Inbox;
 using PlasticSurgery.Persistence.Repositories.Leads;
@@ -74,7 +75,7 @@ public class MessageBillingTests
             return new MessageService(new ConversationRepository(db), new MessageRepository(db), new LeadRepository(db),
                 new WhatsAppTemplateRepository(db), new CampaignRepository(db), new UnitOfWork(db), WhatsApp, new IChannelSender[] { new WhatsAppChannelSender(WhatsApp) },
                 NullProxy<IInboxNotifier>.Create(), new EventLogger(new EventLogRepository(db)), NullProxy<INotificationService>.Create(),
-                MessageBilling, H.Entitlements(db));
+                MessageBilling, H.Entitlements(db), new InboxSettingsService(new InboxSettingsRepository(db), new ClinicRepository(db), H.Entitlements(db), new UnitOfWork(db)));
         }
 
         public async Task<MessageResponse> SendTemplateAsync(Guid templateId)

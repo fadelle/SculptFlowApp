@@ -20,6 +20,10 @@ else
     <nav class="au-tabs page-tabs" aria-label="Clinic info sections">
         <a asp-page="/Settings/ClinicInfo" class="au-tab @(Model.ActiveTab == "general" ? "is-active" : "")" aria-current="@(Model.ActiveTab == "general" ? "page" : null)"><span class="au-icon" aria-hidden="true">apartment</span>Clinic details</a>
         <a asp-page="/Settings/ClinicInfo" asp-route-tab="availability" class="au-tab @(Model.ActiveTab == "availability" ? "is-active" : "")" aria-current="@(Model.ActiveTab == "availability" ? "page" : null)"><span class="au-icon" aria-hidden="true">schedule</span>Opening hours &amp; booking</a>
+        @if (Model.InboxSettings?.PlanIncludesAiBot == true)
+        {
+            <a asp-page="/Settings/ClinicInfo" asp-route-tab="ai" class="au-tab @(Model.ActiveTab == "ai" ? "is-active" : "")" aria-current="@(Model.ActiveTab == "ai" ? "page" : null)"><span class="au-icon" aria-hidden="true">smart_toy</span>AI assistant</a>
+        }
     </nav>
 
     @* clinic-info.js reads [data-dirty-form], [data-save-bar], [data-save-text], [data-discard], #clinic-website(-open), the
@@ -94,6 +98,38 @@ else
                     <button type="reset" class="au-btn au-btn--text" data-discard hidden>Discard</button>
                     <button type="submit" class="au-btn au-btn--primary">Save changes</button>
                 </div>
+            </div>
+        </form>
+    }
+    else if (Model.ActiveTab == "ai" && Model.InboxSettings is { } bot)
+    {
+        <p class="au-page-head__sub mb-3">Choose when the AI assistant replies to patients. When it's off, the conversation goes straight to your team in the Inbox.</p>
+
+        <form method="post" asp-page-handler="SaveAiBot" class="au-panel au-panel--round integration-form clinic-form" id="inbox-settings-form">
+            <div class="set-section">
+                <div class="set-section-head"><strong>New conversations</strong><div class="cell-sub">A patient writing to you for the first time.</div></div>
+                <div class="set-section-body">
+                    <label class="au-check">
+                        <input type="checkbox" class="au-switch" role="switch" name="AiBotNewConversations" value="true" checked="@bot.AiBotNewConversations" />
+                        AI assistant replies first
+                    </label>
+                    <small class="text-subtle">Off: new conversations start with your team.</small>
+                </div>
+            </div>
+
+            <div class="set-section">
+                <div class="set-section-head"><strong>Reopened conversations</strong><div class="cell-sub">A patient writing again after you closed the conversation.</div></div>
+                <div class="set-section-body">
+                    <label class="au-check">
+                        <input type="checkbox" class="au-switch" role="switch" name="AiBotReopenedConversations" value="true" checked="@bot.AiBotReopenedConversations" />
+                        AI assistant keeps replying
+                    </label>
+                    <small class="text-subtle">Off: a reopened conversation goes to your team. You can still hand any conversation back to the AI from the Inbox.</small>
+                </div>
+            </div>
+
+            <div class="save-row">
+                <button type="submit" class="au-btn au-btn--primary">Save AI assistant settings</button>
             </div>
         </form>
     }

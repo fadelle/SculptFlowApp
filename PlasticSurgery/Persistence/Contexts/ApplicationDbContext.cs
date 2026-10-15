@@ -50,6 +50,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
     public DbSet<ClinicUser> ClinicUsers => Set<ClinicUser>();
     public DbSet<ClinicAvailabilityRule> ClinicAvailabilityRules => Set<ClinicAvailabilityRule>();
     public DbSet<ClinicBookingSettings> ClinicBookingSettings => Set<ClinicBookingSettings>();
+    public DbSet<InboxSettings> InboxSettings => Set<InboxSettings>();
     public DbSet<ClinicAvailabilityException> ClinicAvailabilityExceptions => Set<ClinicAvailabilityException>();
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<CalendarIntegration> CalendarIntegrations => Set<CalendarIntegration>();
@@ -665,6 +666,23 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.Property(x => x.CreatedAt).HasColumnName("created_at");
             e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
             e.HasOne<Clinic>().WithMany().HasForeignKey(x => x.ClinicId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<InboxSettings>(e =>
+        {
+            e.ToTable("inbox_settings", "crm");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.ClinicId).HasColumnName("clinic_id");
+            e.Property(x => x.ChannelIntegrationId).HasColumnName("channel_integration_id");
+            e.Property(x => x.AiBotNewConversations).HasColumnName("ai_bot_new_conversations");
+            e.Property(x => x.AiBotReopenedConversations).HasColumnName("ai_bot_reopened_conversations");
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+            e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
+            e.HasOne<Clinic>().WithMany().HasForeignKey(x => x.ClinicId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<ChannelIntegration>().WithMany().HasForeignKey(x => x.ChannelIntegrationId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(x => x.ClinicId).IsUnique().HasFilter("channel_integration_id is null");
+            e.HasIndex(x => x.ChannelIntegrationId).IsUnique().HasFilter("channel_integration_id is not null");
         });
 
         modelBuilder.Entity<ClinicAvailabilityException>(e =>

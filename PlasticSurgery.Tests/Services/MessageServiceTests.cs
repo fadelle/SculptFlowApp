@@ -20,11 +20,13 @@ public class MessageServiceTests
     private readonly Mock<INotificationService> _notifications = new();
     private readonly Mock<IMessageBillingService> _billing = new();
     private readonly Mock<IEntitlementService> _entitlements = new();
+    private readonly Mock<IInboxSettingsService> _inboxSettings = new();
     private readonly MessageBillingHold _hold = new(Guid.Empty, "key", BillingSettlementTrigger.OnProviderAccepted);
     private readonly Lead _lead;
 
     public MessageServiceTests()
     {
+        InboxSettings(planIncludesBot: true, reopenedConversations: true);
         _lead = new Lead { Id = _leadId, ClinicId = _clinicId, FullName = "Ann Lee", Phone = "96170123456" };
         _sender.SetupGet(s => s.Channel).Returns(ConversationChannel.WhatsApp);
         _sender.Setup(s => s.SendTextAsync(It.IsAny<Conversation>(), It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync("wamid.sent");
@@ -34,7 +36,11 @@ public class MessageServiceTests
     }
 
     private MessageService Sut() => new(_conversations.Object, _messages.Object, _leads.Object, _templates.Object, _campaigns.Object, _uow.Object,
-        _whatsApp.Object, [_sender.Object], _notifier.Object, _events.Object, _notifications.Object, _billing.Object, _entitlements.Object);
+        _whatsApp.Object, [_sender.Object], _notifier.Object, _events.Object, _notifications.Object, _billing.Object, _entitlements.Object, _inboxSettings.Object);
+
+    private void InboxSettings(bool planIncludesBot, bool reopenedConversations) =>
+        _inboxSettings.Setup(a => a.GetAsync(_clinicId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new InboxSettingsDto(planIncludesBot, AiBotNewConversations: true, reopenedConversations));
 
     private Conversation Conv(string mode = ConversationMode.Ai, string channel = ConversationChannel.WhatsApp, bool windowOpen = true)
     {
@@ -315,6 +321,52 @@ public class MessageServiceTests
         Assert.Equal(reopens ? ConversationStatus.Active : ConversationStatus.Closed, c.Status);
         _events.Verify(e => e.Log(_clinicId, EventTypes.ConversationReopened, _leadId, c.Id, null, MessageOrigin.WhatsAppCustomer, "{}"), reopens ? Times.Once() : Times.Never());
         _notifier.Verify(n => n.ConversationUpdatedAsync(_clinicId, c.Id, It.IsAny<CancellationToken>()), reopens ? Times.Once() : Times.Never());
+    }
+
+    [Theory]
+    [InlineData(true, true, ConversationMode.Ai)]      // bot on for reopened: stays with the AI
+    [InlineData(true, false, ConversationMode.Human)]  // clinic sends reopened conversations to staff
+    [InlineData(false, true, ConversationMode.Human)]  // plan without the AI agent: always staff
+    public async Task A_reopened_conversation_follows_the_clinics_ai_bot_setting(bool planIncludesBot, bool reopenedOn, string expectedMode)
+    {
+        InboxSettings(planIncludesBot, reopenedOn);
+        var c = Conv();
+        c.Status = ConversationStatus.Closed;
+
+        var r = await Sut().IngestAsync(Ingest(c.Id, IngestEventType.CustomerMessage));
+
+        Assert.Equal((ConversationStatus.Active, expectedMode, expectedMode == ConversationMode.Ai), (c.Status, c.Mode, r.AiEligible));
+        Assert.Equal(expectedMode, r.ConversationMode);
+        var handedOff = expectedMode == ConversationMode.Human;
+        _notifier.Verify(n => n.ConversationModeChangedAsync(_clinicId, c.Id, ConversationMode.Human, It.IsAny<CancellationToken>()), handedOff ? Times.Once() : Times.Never());
+        _events.Verify(e => e.Log(_clinicId, EventTypes.HumanHandoff, _leadId, c.Id, null, MessageOrigin.System, It.IsAny<string>()), handedOff ? Times.Once() : Times.Never());
+    }
+
+    [Fact]
+    public async Task A_customer_message_in_an_ai_conversation_goes_to_staff_when_the_plan_lost_the_ai_agent()
+    {
+        InboxSettings(planIncludesBot: false, reopenedConversations: true);
+        var c = Conv();
+
+        var r = await Sut().IngestAsync(Ingest(c.Id, IngestEventType.CustomerMessage));
+
+        Assert.Equal((ConversationMode.Human, false, true), (c.Mode, r.AiEligible, c.HumanTakeover));
+        _events.Verify(e => e.Log(_clinicId, EventTypes.HumanHandoff, _leadId, c.Id, null, MessageOrigin.System, "{\"reason\":\"plan_without_ai_agent\"}"), Times.Once);
+    }
+
+    [Fact]
+    public async Task The_reopened_switch_does_not_touch_an_active_ai_conversation_or_a_human_one()
+    {
+        InboxSettings(planIncludesBot: true, reopenedConversations: false);
+        var active = Conv();
+        Assert.True((await Sut().IngestAsync(Ingest(active.Id, IngestEventType.CustomerMessage))).AiEligible);
+        Assert.Equal(ConversationMode.Ai, active.Mode);
+
+        var human = Conv(ConversationMode.Human);
+        human.Status = ConversationStatus.Closed;
+        await Sut().IngestAsync(Ingest(human.Id, IngestEventType.CustomerMessage, externalId: "ext2"));
+        Assert.Equal(ConversationMode.Human, human.Mode);
+        _notifier.Verify(n => n.ConversationModeChangedAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]

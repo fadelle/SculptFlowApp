@@ -182,6 +182,7 @@ builder.Services.AddScoped<IClinicContext, ClinicContext>();
 builder.Services.AddScoped<ICurrentClinicContext, CurrentClinicContext>();
 builder.Services.AddScoped<IClinicRegistrationService, ClinicRegistrationService>();
 builder.Services.AddScoped<IClinicProfileService, ClinicProfileService>();
+builder.Services.AddScoped<IInboxSettingsService, InboxSettingsService>();
 builder.Services.AddScoped<IStaffService, StaffService>();
 builder.Services.AddScoped<IAutomationCleanupService, AutomationCleanupService>();
 builder.Services.AddScoped<ISettingsService, SettingsService>();

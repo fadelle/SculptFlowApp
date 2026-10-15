@@ -41,12 +41,14 @@ public class SimpleListPageTests
         var conversations = new Mock<IConversationService>();
         conversations.Setup(c => c.ListAsync(Glow.Id, 0, 50, It.IsAny<CancellationToken>()))
             .ReturnsAsync((new List<ConversationListRow>() as IReadOnlyList<ConversationListRow>, 0)).Verifiable();
-        var model = new InboxIndex(ClinicContext(Glow).Object, conversations.Object).Attach();
+        var inboxSettings = new Mock<IInboxSettingsService>();
+        inboxSettings.Setup(a => a.GetAsync(Glow.Id, It.IsAny<CancellationToken>())).ReturnsAsync(new InboxSettingsDto(false, true, true));
+        var model = new InboxIndex(ClinicContext(Glow).Object, conversations.Object, inboxSettings.Object).Attach();
         await model.OnGetAsync(default);
-        Assert.Equal((true, Glow.Id), (model.ClinicConfigured, model.ClinicId));
+        Assert.Equal((true, Glow.Id, false), (model.ClinicConfigured, model.ClinicId, model.AiAgentAvailable));
         conversations.Verify();
 
-        var none = new InboxIndex(ClinicContext(null).Object, conversations.Object).Attach();
+        var none = new InboxIndex(ClinicContext(null).Object, conversations.Object, inboxSettings.Object).Attach();
         await none.OnGetAsync(default);
         Assert.False(none.ClinicConfigured);
     }

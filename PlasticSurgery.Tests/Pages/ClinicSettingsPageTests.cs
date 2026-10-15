@@ -16,8 +16,14 @@ public class ClinicInfoPageTests
     };
     private readonly Mock<IClinicProfileService> _profile = new();
     private readonly Mock<IAvailabilityService> _availability = new();
+    private readonly Mock<IInboxSettingsService> _inboxSettings = new();
 
-    private ClinicInfo Sut(bool none = false) => new ClinicInfo(ClinicContext(none ? null : Glow).Object, _profile.Object, _availability.Object).Attach();
+    public ClinicInfoPageTests() => InboxSettings(planIncludesBot: true);
+
+    private ClinicInfo Sut(bool none = false) => new ClinicInfo(ClinicContext(none ? null : Glow).Object, _profile.Object, _availability.Object, _inboxSettings.Object).Attach();
+
+    private void InboxSettings(bool planIncludesBot) =>
+        _inboxSettings.Setup(a => a.GetAsync(Glow.Id, It.IsAny<CancellationToken>())).ReturnsAsync(new InboxSettingsDto(planIncludesBot, true, false));
 
     private static AvailabilitySettingsDto Settings() => Blank<AvailabilitySettingsDto>() with { Timezone = "UTC", Days = [], Booking = Blank<BookingRulesDto>() };
 
@@ -55,6 +61,36 @@ public class ClinicInfoPageTests
         Assert.True(model.ClinicConfigured);
 
         Assert.IsType<RedirectToPageResult>(await Sut(true).OnPostAsync(default));
+    }
+
+    [Fact]
+    public async Task The_ai_assistant_tab_shows_only_when_the_plan_includes_the_bot()
+    {
+        var model = Sut();
+        await model.OnGetAsync("ai", default);
+        Assert.Equal(("ai", true, false), (model.ActiveTab, model.InboxSettings!.AiBotNewConversations, model.InboxSettings.AiBotReopenedConversations));
+
+        InboxSettings(planIncludesBot: false);
+        var without = Sut();
+        await without.OnGetAsync("ai", default);
+        Assert.Equal(("general", false), (without.ActiveTab, without.InboxSettings!.PlanIncludesAiBot));
+    }
+
+    [Fact]
+    public async Task Saving_the_ai_switches_needs_the_plan_to_include_the_bot()
+    {
+        var model = Sut(); model.AiBotNewConversations = false; model.AiBotReopenedConversations = true;
+        var redirect = Assert.IsType<RedirectToPageResult>(await model.OnPostSaveAiBotAsync(default));
+        Assert.Equal(("ai", "AI assistant settings saved."), (redirect.RouteValues!["tab"], model.StatusMessage));
+        _inboxSettings.Verify(a => a.UpdateAsync(Glow.Id, new UpdateInboxSettingsRequest(false, true), It.IsAny<CancellationToken>()), Times.Once);
+
+        InboxSettings(planIncludesBot: false);
+        var stale = Sut();
+        Assert.IsType<RedirectToPageResult>(await stale.OnPostSaveAiBotAsync(default));
+        Assert.Equal("Your plan doesn't include the AI assistant.", stale.StatusMessage);
+        _inboxSettings.Verify(a => a.UpdateAsync(It.IsAny<Guid>(), It.IsAny<UpdateInboxSettingsRequest>(), It.IsAny<CancellationToken>()), Times.Once);
+
+        Assert.IsType<RedirectToPageResult>(await Sut(true).OnPostSaveAiBotAsync(default));
     }
 
     [Fact]

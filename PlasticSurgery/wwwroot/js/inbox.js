@@ -420,7 +420,8 @@
     modeEl.className = 'inbox-mode inbox-mode-' + conversation.mode;
     // Only offer the switch that makes sense for the current mode.
     btnTakeover.hidden = conversation.mode === 'human';
-    btnReturnAi.hidden = conversation.mode === 'ai';
+    // Without the AI agent in the plan nothing would answer, so the conversation stays with staff.
+    btnReturnAi.hidden = conversation.mode === 'ai' || cfg.aiAgentAvailable === false;
     var closed = conversation.status === 'closed' || conversation.status === 'archived';
     btnMore.hidden = closed; // "⋯" only holds Close conversation for now
     btnReopen.hidden = !closed; // a closed conversation offers Reopen instead

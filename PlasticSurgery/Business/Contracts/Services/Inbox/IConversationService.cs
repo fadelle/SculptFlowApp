@@ -44,7 +44,8 @@ public interface IConversationService
     /// by the AI agent's handoff_to_human tool — see Controllers/Integrations/AiController.cs.</summary>
     Task<ConversationResponse?> HandoffToHumanAsync(Guid clinicId, Guid conversationId, string? reason, CancellationToken ct = default);
 
-    /// <summary>Staff hands the conversation back — AI may auto-reply again.</summary>
+    /// <summary>Staff hands the conversation back — AI may auto-reply again. Throws EntitlementDeniedException (422) when
+    /// the clinic's plan doesn't include the AI agent.</summary>
     Task<ConversationResponse?> ReturnToAiAsync(Guid clinicId, Guid conversationId, CancellationToken ct = default);
 
     Task<ConversationResponse?> CloseAsync(Guid clinicId, Guid conversationId, CancellationToken ct = default);

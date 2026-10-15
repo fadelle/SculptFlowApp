@@ -1,4 +1,6 @@
+using PlasticSurgery.Entities.Dtos.Inbox;
 using PlasticSurgery.Entities.Dtos.PlatformAdmin;
+using PlasticSurgery.Entities.Requests.Inbox;
 using PlasticSurgery.Entities.Requests.PlatformAdmin;
 using PlasticSurgery.Entities.Responses.Billing;
 
@@ -19,4 +21,10 @@ public interface IClinicAdminService
     Task<PlatformAdminChange> UpdateAsync(Guid id, ClinicUpdate update, CancellationToken ct);
 
     Task<PlatformAdminChange> SetActiveAsync(Guid id, bool active, CancellationToken ct);
+
+    /// <summary>The clinic's AI bot switches and whether its plan includes the AI agent. Throws KeyNotFoundException.</summary>
+    Task<InboxSettingsDto> GetInboxSettingsAsync(Guid id, CancellationToken ct);
+
+    /// <summary>Saves the clinic's AI bot switches through IInboxSettingsService. Throws KeyNotFoundException.</summary>
+    Task<PlatformAdminChange> UpdateInboxSettingsAsync(Guid id, UpdateInboxSettingsRequest request, CancellationToken ct);
 }

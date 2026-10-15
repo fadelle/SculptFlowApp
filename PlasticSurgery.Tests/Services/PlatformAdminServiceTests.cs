@@ -117,8 +117,22 @@ public class ClinicAdminServiceTests
 {
     private readonly Mock<IClinicAdminRepository> _repo = new();
     private readonly Mock<IUnitOfWork> _uow = new();
+    private readonly Mock<IInboxSettingsService> _inboxSettings = new();
 
-    private ClinicAdminService Sut() => new(_repo.Object, _uow.Object, TimeProvider.System);
+    private ClinicAdminService Sut() => new(_repo.Object, _uow.Object, TimeProvider.System, _inboxSettings.Object);
+
+    [Fact]
+    public async Task Ai_bot_reads_and_writes_go_through_the_clinic_ai_bot_service()
+    {
+        var id = Guid.NewGuid();
+        _inboxSettings.Setup(a => a.GetAsync(id, It.IsAny<CancellationToken>())).ReturnsAsync(new InboxSettingsDto(true, true, false));
+        Assert.False((await Sut().GetInboxSettingsAsync(id, default)).AiBotReopenedConversations);
+
+        var change = await Sut().UpdateInboxSettingsAsync(id, new UpdateInboxSettingsRequest(false, true), default);
+        Assert.Equal(id, change.ClinicId);
+        _inboxSettings.Verify(a => a.UpdateAsync(id, new UpdateInboxSettingsRequest(false, true), It.IsAny<CancellationToken>()), Times.Once);
+        await Assert.ThrowsAsync<ArgumentException>(() => Sut().UpdateInboxSettingsAsync(id, null!, default));
+    }
 
     private static ClinicUpdate Update(string name = " Glow ", string tz = "Asia/Beirut") => new(name, " 961 ", " ", "https://x", "lb", tz, " Street ", null, "info");
 

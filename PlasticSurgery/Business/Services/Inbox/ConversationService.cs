@@ -3,6 +3,7 @@ using PlasticSurgery.Business.Contracts.Services.Inbox;
 using PlasticSurgery.Business.Contracts.Services.Notifications;
 using PlasticSurgery.Business.Mappers.Inbox;
 using PlasticSurgery.Common.Enums;
+using PlasticSurgery.Common.Exceptions;
 using PlasticSurgery.Common.Helpers;
 using PlasticSurgery.Common.Statics;
 using PlasticSurgery.Entities.Dtos.Inbox;
@@ -24,10 +25,13 @@ public class ConversationService : IConversationService
     private readonly IInboxNotifier _notifier;
     private readonly IEventLogger _events;
     private readonly INotificationService _notifications;
+    private readonly IInboxSettingsService _inboxSettings;
 
     public ConversationService(IConversationRepository conversations, IMessageRepository messages, ILeadRepository leads,
-        IUnitOfWork unitOfWork, IInboxNotifier notifier, IEventLogger events, INotificationService notifications)
+        IUnitOfWork unitOfWork, IInboxNotifier notifier, IEventLogger events, INotificationService notifications,
+        IInboxSettingsService inboxSettings)
     {
+        _inboxSettings = inboxSettings;
         _conversations = conversations;
         _messages = messages;
         _leads = leads;
@@ -61,12 +65,14 @@ public class ConversationService : IConversationService
             throw new ArgumentException($"Invalid channel '{request.Channel}'.", nameof(request));
         }
 
-        var conversation = AddNew(request);
+        var conversation = AddNew(request, await _inboxSettings.InitialModeAsync(request.ClinicId, ct));
         await _unitOfWork.SaveChangesAsync(ct);
         return InboxMapper.ToResponse(conversation);
     }
 
-    private Conversation AddNew(CreateConversationRequest request)
+    /// <summary><paramref name="mode"/> comes from IInboxSettingsService.InitialModeAsync: human when the plan lacks the AI
+    /// agent or the clinic turned the bot off for new conversations.</summary>
+    private Conversation AddNew(CreateConversationRequest request, string mode)
     {
         var conversation = new Conversation
         {
@@ -76,9 +82,9 @@ public class ConversationService : IConversationService
             Channel = request.Channel,
             ExternalThreadId = request.ExternalThreadId,
             Status = ConversationStatus.Active,
-            Mode = ConversationMode.Ai,
-            AiEnabled = true,
-            HumanTakeover = false,
+            Mode = mode,
+            AiEnabled = mode == ConversationMode.Ai,
+            HumanTakeover = mode == ConversationMode.Human,
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow
         };
@@ -113,7 +119,8 @@ public class ConversationService : IConversationService
         {
             throw new ArgumentException($"Invalid channel '{channel}'.", nameof(channel));
         }
-        var created = AddNew(new CreateConversationRequest(clinicId, leadId, channel, externalThreadId));
+        var created = AddNew(new CreateConversationRequest(clinicId, leadId, channel, externalThreadId),
+            await _inboxSettings.InitialModeAsync(clinicId, ct));
         if (await _unitOfWork.TrySaveChangesAsync(ct))
         {
             return InboxMapper.ToResponse(created);
@@ -186,6 +193,14 @@ public class ConversationService : IConversationService
             _events.Log(clinicId, EventTypes.ConversationReopened, conversationId: conversationId, source: message.Origin);
         }
 
+        // Same reopen routing as MessageService.IngestAsync: the clinic (or its plan) may send reopened conversations to staff.
+        var handedToStaff = reopened && conversation.Mode == ConversationMode.Ai
+            && !(await _inboxSettings.GetAsync(clinicId, ct)).AiBotAnswersReopened;
+        if (handedToStaff)
+        {
+            ConversationModeSync.Apply(conversation, ConversationMode.Human, now);
+        }
+
         var lead = await _leads.GetByIdAsync(conversation.LeadId, ct);
         if (lead is not null)
         {
@@ -199,6 +214,7 @@ public class ConversationService : IConversationService
 
         await _unitOfWork.SaveChangesAsync(ct);
         if (reopened) await _notifier.ConversationUpdatedAsync(clinicId, conversationId, ct);
+        if (handedToStaff) await _notifier.ConversationModeChangedAsync(clinicId, conversationId, ConversationMode.Human, ct);
         return InboxMapper.ToResponse(message);
     }
 
@@ -233,8 +249,15 @@ public class ConversationService : IConversationService
     public Task<ConversationResponse?> TakeOverAsync(Guid clinicId, Guid conversationId, CancellationToken ct = default) =>
         SetModeAsync(clinicId, conversationId, ConversationMode.Human, EventTypes.HumanHandoff, "dashboard", "{}", ct);
 
-    public Task<ConversationResponse?> ReturnToAiAsync(Guid clinicId, Guid conversationId, CancellationToken ct = default) =>
-        SetModeAsync(clinicId, conversationId, ConversationMode.Ai, EventTypes.ReturnedToAi, "dashboard", "{}", ct);
+    public async Task<ConversationResponse?> ReturnToAiAsync(Guid clinicId, Guid conversationId, CancellationToken ct = default)
+    {
+        // Without the AI agent in the plan nothing would answer, so the conversation must stay with staff.
+        if (!(await _inboxSettings.GetAsync(clinicId, ct)).PlanIncludesAiBot)
+        {
+            throw new EntitlementDeniedException(EntitlementKeys.AiAgent, "Your plan doesn't include the AI agent.");
+        }
+        return await SetModeAsync(clinicId, conversationId, ConversationMode.Ai, EventTypes.ReturnedToAi, "dashboard", "{}", ct);
+    }
 
     public async Task<ConversationResponse?> HandoffToHumanAsync(Guid clinicId, Guid conversationId, string? reason, CancellationToken ct = default)
     {

@@ -43,6 +43,11 @@ public static class CacheKeys
     public const string MembershipPrefix = "identity:membership:";
     public static string Membership(string userId) => MembershipPrefix + userId;
 
+    // ---- Crm: a clinic's clinic-wide Inbox settings row, or none (InboxSettingsRepository.GetForClinicReadOnlyAsync; read
+    // on every incoming patient message to decide whether the AI bot answers).
+    public const string InboxSettingsPrefix = "crm:inbox-settings:";
+    public static string InboxSettings(Guid clinicId) => InboxSettingsPrefix + clinicId.ToString("N");
+
     // ---- Scheduling: weekly rules, booking settings and date exceptions (every free-slot search reads all three).
     public const string AvailabilityPrefix = "scheduling:availability:";
     public static string AvailabilityRules(Guid clinicId) => AvailabilityPrefix + "rules:" + clinicId.ToString("N");
@@ -97,6 +102,9 @@ public static class CacheKeys
             case ClinicBookingSettings b:
                 yield return CacheEviction.Key(BookingSettings(b.ClinicId));
                 break;
+            case Models.InboxSettings i:
+                yield return CacheEviction.Key(InboxSettings(i.ClinicId));
+                break;
             case ClinicAvailabilityException e:
                 yield return CacheEviction.Key(AvailabilityExceptions(e.ClinicId));
                 break;
@@ -145,6 +153,7 @@ public static class CacheKeys
         CacheEviction.Key(Procedures(clinicId)),
         CacheEviction.Key(AvailabilityRules(clinicId)),
         CacheEviction.Key(BookingSettings(clinicId)),
+        CacheEviction.Key(InboxSettings(clinicId)),
         CacheEviction.Key(AvailabilityExceptions(clinicId)),
         CacheEviction.Key(Calendars(clinicId)),
         CacheEviction.Key(ChannelIntegrations(clinicId)),

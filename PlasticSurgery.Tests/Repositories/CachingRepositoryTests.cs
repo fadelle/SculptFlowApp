@@ -3,6 +3,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using PlasticSurgery.Business.Managers;
 using PlasticSurgery.Business.Providers.Caching;
+using PlasticSurgery.Business.Services.Inbox;
+using PlasticSurgery.Persistence.Repositories.Inbox;
 using PlasticSurgery.Persistence.Contexts;
 using PlasticSurgery.Persistence.Helpers;
 using PlasticSurgery.Persistence.Repositories.Appointments;
@@ -68,6 +70,53 @@ public class CachingRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixt
 
         await using var read = CachedContext();
         Assert.Equal("Saved", (await new ClinicRepository(read, _cache).GetReadOnlyAsync(c.Id))!.Name);
+    }
+
+    [PostgresFact]
+    public async Task Inbox_settings_default_to_the_bot_on_and_each_save_reaches_the_next_cached_read()
+    {
+        var c = MakeClinic("Inbox");
+        await SeedAsync(c);
+        var entitlements = new Mock<IEntitlementService>();
+        entitlements.Setup(e => e.GetAsync(c.Id, It.IsAny<CancellationToken>())).ReturnsAsync(ClinicEntitlements.Unrestricted);
+        InboxSettingsService Service(ApplicationDbContext db) => new(new InboxSettingsRepository(db, _cache), new ClinicRepository(db, _cache),
+            entitlements.Object, new PlasticSurgery.Persistence.Repositories.UnitOfWork(db));
+
+        // No row yet: the defaults (an existing clinic keeps the bot on), and "no row" is cached.
+        await using (var db = CachedContext())
+        {
+            Assert.Equal(new InboxSettingsDto(true, true, true), await Service(db).GetAsync(c.Id));
+        }
+
+        // The first save creates the clinic-wide row and clears the cached "no row".
+        await using (var db = CachedContext())
+        {
+            await Service(db).UpdateAsync(c.Id, new UpdateInboxSettingsRequest(false, true));
+        }
+        await using (var db = CachedContext())
+        {
+            var after = await Service(db).GetAsync(c.Id);
+            Assert.Equal((false, true, ConversationMode.Human),
+                (after.AiBotNewConversations, after.AiBotReopenedConversations, await Service(db).InitialModeAsync(c.Id)));
+        }
+
+        // A later save updates the same row.
+        await using (var db = CachedContext())
+        {
+            await Service(db).UpdateAsync(c.Id, new UpdateInboxSettingsRequest(true, false));
+        }
+        await using (var db = CachedContext())
+        {
+            Assert.Equal(new InboxSettingsDto(true, true, false), await Service(db).GetAsync(c.Id));
+            Assert.Equal(1, await db.InboxSettings.CountAsync(s => s.ClinicId == c.Id));
+        }
+
+        // Only one clinic-wide row per clinic.
+        await using (var db = NewContext())
+        {
+            db.InboxSettings.Add(new InboxSettings { Id = Guid.NewGuid(), ClinicId = c.Id, CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow });
+            await Assert.ThrowsAsync<DuplicateRecordException>(() => new PlasticSurgery.Persistence.Repositories.UnitOfWork(db).SaveChangesAsync());
+        }
     }
 
     [PostgresFact]
