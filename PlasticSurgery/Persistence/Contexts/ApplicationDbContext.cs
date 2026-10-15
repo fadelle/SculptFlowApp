@@ -68,6 +68,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
     public DbSet<ChannelAccountBillingSettings> ChannelAccountBillingSettings => Set<ChannelAccountBillingSettings>();
     public DbSet<ConfigSetting> ConfigSettings => Set<ConfigSetting>();
     public DbSet<ApiRouteStat> ApiRouteStats => Set<ApiRouteStat>();
+    public DbSet<AppLog> AppLogs => Set<AppLog>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -1190,6 +1191,34 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.Property(x => x.MaxMs).HasColumnName("max_ms");
             e.Property(x => x.CreatedAt).HasColumnName("created_at");
             e.HasIndex(x => x.BucketStart);
+        });
+
+        // Saved warnings and errors (activity.app_logs) — see AppLog and AppLogFlushJob. No foreign keys on purpose.
+        modelBuilder.Entity<AppLog>(e =>
+        {
+            e.ToTable("app_logs", "activity");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id").UseIdentityAlwaysColumn();
+            e.Property(x => x.OccurredAt).HasColumnName("occurred_at");
+            e.Property(x => x.Level).HasColumnName("level").HasMaxLength(12).IsRequired();
+            e.Property(x => x.Category).HasColumnName("category").HasMaxLength(300).IsRequired();
+            e.Property(x => x.Message).HasColumnName("message").IsRequired();
+            e.Property(x => x.MessageTemplate).HasColumnName("message_template").HasMaxLength(1000);
+            e.Property(x => x.ExceptionType).HasColumnName("exception_type").HasMaxLength(300);
+            e.Property(x => x.ExceptionMessage).HasColumnName("exception_message");
+            e.Property(x => x.StackTrace).HasColumnName("stack_trace");
+            e.Property(x => x.Fingerprint).HasColumnName("fingerprint").HasMaxLength(16).IsRequired();
+            e.Property(x => x.RepeatCount).HasColumnName("repeat_count");
+            e.Property(x => x.TraceId).HasColumnName("trace_id").HasMaxLength(32);
+            e.Property(x => x.ClinicId).HasColumnName("clinic_id");
+            e.Property(x => x.ConversationId).HasColumnName("conversation_id");
+            e.Property(x => x.MessageId).HasColumnName("message_id");
+            e.Property(x => x.Method).HasColumnName("method").HasMaxLength(10);
+            e.Property(x => x.Route).HasColumnName("route").HasMaxLength(300);
+            e.Property(x => x.Instance).HasColumnName("instance").HasMaxLength(100);
+            e.Property(x => x.Properties).HasColumnName("properties").HasColumnType("jsonb").IsRequired();
+            e.HasIndex(x => x.OccurredAt);
+            e.HasIndex(x => new { x.Fingerprint, x.OccurredAt });
         });
 
         // ---------------------------------------------------------------

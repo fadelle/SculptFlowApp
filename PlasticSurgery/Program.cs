@@ -22,6 +22,7 @@ using PlasticSurgery.Business.Contracts.Providers.Media;
 using PlasticSurgery.Business.Providers.Media;
 using PlasticSurgery.Business.Contracts.Services.Caching;
 using PlasticSurgery.Business.Providers.Caching;
+using PlasticSurgery.Business.Providers.Logging;
 using PlasticSurgery.Business.Services.Caching;
 using PlasticSurgery.Business.Contracts.Services.PlatformAdmin;
 using PlasticSurgery.Business.Services.PlatformAdmin;
@@ -208,6 +209,13 @@ builder.Services.AddScoped<IApiTimingAdminService, ApiTimingAdminService>();
 builder.Services.AddSingleton<IApiTimingCollector, ApiTimingCollector>();
 builder.Services.AddScoped<IApiTimingService, ApiTimingService>();
 builder.Services.AddHostedService<ApiTimingFlushJob>();
+// Error log: DatabaseLoggerProvider (an extra logging provider, so every ILogger also writes here) queues warnings and
+// errors in memory; AppLogFlushJob writes them to activity.app_logs and trims it (ErrorLog:* settings).
+builder.Services.AddSingleton<IAppLogCollector, AppLogCollector>();
+builder.Services.AddSingleton<ILoggerProvider, DatabaseLoggerProvider>();
+builder.Services.AddScoped<IAppLogService, AppLogService>();
+builder.Services.AddScoped<IAppLogAdminService, AppLogAdminService>();
+builder.Services.AddHostedService<AppLogFlushJob>();
 builder.Services.AddScoped<ILeadService, LeadService>();
 builder.Services.AddScoped<IProcedureService, ProcedureService>();
 builder.Services.AddScoped<IAvailabilityService, AvailabilityService>();

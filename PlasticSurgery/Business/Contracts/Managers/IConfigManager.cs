@@ -224,6 +224,20 @@ public interface IConfigManager
     /// <summary>Days of per-minute API timing rows kept. Default 30.</summary>
     int MonitoringRetentionDays { get; }
 
+    // ---- Error log (activity.app_logs: DatabaseLoggerProvider, AppLogFlushJob)
+    /// <summary>Whether logged warnings/errors are also saved to activity.app_logs. Default true.</summary>
+    bool ErrorLogEnabled { get; }
+    /// <summary>Lowest level saved ("Warning", "Error" or "Critical", as written). Default "Warning".</summary>
+    string ErrorLogMinimumLevel { get; }
+    /// <summary>Days saved warnings are kept. Default 14.</summary>
+    int ErrorLogWarningRetentionDays { get; }
+    /// <summary>Days saved errors and criticals are kept. Default 90.</summary>
+    int ErrorLogErrorRetentionDays { get; }
+    /// <summary>Most rows saved per minute per fingerprint; the rest become one repeat-count row. Default 20.</summary>
+    int ErrorLogMaxPerFingerprintPerMinute { get; }
+    /// <summary>Comma-separated logger name prefixes never saved. Default empty.</summary>
+    string ErrorLogExcludedCategories { get; }
+
     // ---- generic access
 
     string GetString(string section, string key);

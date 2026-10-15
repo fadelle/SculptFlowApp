@@ -80,7 +80,7 @@ Every table lives in its area's Postgres schema, never `public` (only `set_updat
 | `channels` | channel_integrations, whatsapp_templates, whatsapp_health_events, tiktok_integrations |
 | `marketing` | campaigns, campaign_recipients |
 | `knowledge` | every knowledge_* table |
-| `activity` | events, notifications, api_route_stats (API timings) |
+| `activity` | events, notifications, api_route_stats (API timings), app_logs (error log) |
 | `billing` | plans, rate cards, subscriptions, accounts, usage, ledger, channel account settings |
 | `config` | settings (configuration overrides) |
 | `admin` | the admin portal's own tables (SculptFlowAdmin repo) |

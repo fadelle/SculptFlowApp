@@ -106,9 +106,17 @@ Generated from `Common/Statics/ConfigDefaults`; keep this table in step when you
 | Monitoring | Enabled | true | bool | Whether request timings are recorded (per method + route template, in memory, summarised every minute into `activity.api_route_stats`) and slow requests are logged. Off = nothing is recorded. |
 | Monitoring | SlowRequestMs | 1000 | int 50–120000 | A request taking at least this many milliseconds is logged as a warning ("Slow request ...") and counted in that minute's slow count. |
 | Monitoring | RetentionDays | 30 | int 1–365 | Days of per-minute API timing rows kept; the flush job deletes older rows. |
+| ErrorLog | Enabled | true | bool | Whether warnings and errors the app logs are also saved to `activity.app_logs` (the admin portal's Errors page). Off = only the console log. |
+| ErrorLog | MinimumLevel | Warning | text `Warning`, `Error` or `Critical` | Lowest level saved. |
+| ErrorLog | WarningRetentionDays | 14 | int 1–365 | Days saved warnings are kept; the flush job deletes older ones every hour. |
+| ErrorLog | ErrorRetentionDays | 90 | int 1–365 | Days saved errors and criticals are kept; the flush job deletes older ones every hour. |
+| ErrorLog | MaxPerFingerprintPerMinute | 20 | int 1–1000 | Most rows saved per minute for one problem (same logger, template, exception type and top stack frame); the rest of that minute is saved as one row with a repeat count, so an outage can't flood the table. |
+| ErrorLog | ExcludedCategories | (empty) | text | Comma-separated logger name prefixes never saved, e.g. `Microsoft.EntityFrameworkCore.Query` for a noisy framework warning. |
 
-The billing worker reads its switch and interval on every cycle. Everything else is read where it is used, so a change
-applies at once.
+The billing worker reads its switch and interval on every cycle. The `ErrorLog` switch, minimum level, cap and
+excluded categories are copied into the logger by its flush job every 5 seconds (the logging path can't read settings
+itself, since reading settings can log), so a change applies within 5 seconds. Everything else is read where it is
+used, so a change applies at once.
 
 ## What stays outside the configuration manager
 

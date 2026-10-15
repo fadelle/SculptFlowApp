@@ -2,9 +2,26 @@
 @model PlasticSurgery.Pages.Settings.IntegrationsModel
 @{
     ViewData["Title"] = "Messaging Integrations";
-    var allChannels = new[] { ChannelType.WhatsApp, ChannelType.Instagram, ChannelType.Facebook, ChannelType.Telegram };
-    var connectedCount = allChannels.Count(ch => Model.Channels.TryGetValue(ch, out var i) && i.Status == ChannelIntegrationStatus.Connected && !NeedsAttention(i));
-    var attentionCount = allChannels.Count(ch => Model.Channels.TryGetValue(ch, out var i) && NeedsAttention(i));
+    // One entry per card on the page: the summary total, counts and rendering all come from this list.
+    (bool Connected, bool Attention) MessagingState(string ch) =>
+        Model.Channels.TryGetValue(ch, out var i)
+            ? (i.Status == ChannelIntegrationStatus.Connected && !NeedsAttention(i), NeedsAttention(i))
+            : (false, false);
+    var cards = new List<(bool Connected, bool Attention, Func<Task> Render)>
+    {
+        (MessagingState(ChannelType.WhatsApp).Connected, MessagingState(ChannelType.WhatsApp).Attention,
+            () => RenderChannelCard(ChannelType.WhatsApp, "WA", "#25D366", "WhatsApp Business", "Chat with patients, send reminders and campaigns.", "Chat with patients on WhatsApp, and send reminders and campaigns.", oauth: true)),
+        (MessagingState(ChannelType.Instagram).Connected, MessagingState(ChannelType.Instagram).Attention,
+            () => RenderChannelCard(ChannelType.Instagram, "IG", "#C13584", "Instagram", "Answer Instagram direct messages.", "Patients' Instagram DMs arrive in your Inbox, and the AI assistant can answer them.", oauth: false)),
+        (MessagingState(ChannelType.Facebook).Connected, MessagingState(ChannelType.Facebook).Attention,
+            () => RenderChannelCard(ChannelType.Facebook, "FB", "#1877F2", "Facebook Messenger", "Answer messages sent to your Facebook page.", "Messages to your Facebook page arrive in your Inbox, and the AI assistant can answer them.", oauth: true)),
+        (MessagingState(ChannelType.Telegram).Connected, MessagingState(ChannelType.Telegram).Attention,
+            () => RenderTelegramCard()),
+        (Model.TikTok?.Status == TikTokIntegrationStatus.Connected, Model.TikTok?.Status == TikTokIntegrationStatus.Error,
+            () => RenderTikTokCard()),
+    };
+    var connectedCount = cards.Count(c => c.Connected);
+    var attentionCount = cards.Count(c => c.Attention);
 }
 
 @if (!Model.ClinicConfigured)
@@ -19,7 +36,7 @@ else
         <p class="au-page-head__sub">Connect the apps patients message you on. Messages from all of them arrive in your Inbox.</p>
     </div>
     <div class="int-summary">
-        <strong>@connectedCount of @allChannels.Length channels connected</strong>
+        <strong>@connectedCount of @cards.Count channels connected</strong>
         @if (attentionCount > 0)
         {
             <span class="text-danger-soft"> · @attentionCount need@(attentionCount == 1 ? "s" : "") attention</span>
@@ -27,11 +44,10 @@ else
     </div>
 
     <div class="int-grid int-grid-even">
-        @{ await RenderChannelCard(ChannelType.WhatsApp, "WA", "#25D366", "WhatsApp Business", "Chat with patients, send reminders and campaigns.", "Chat with patients on WhatsApp, and send reminders and campaigns.", oauth: true); }
-        @{ await RenderChannelCard(ChannelType.Instagram, "IG", "#C13584", "Instagram", "Answer Instagram direct messages.", "Patients' Instagram DMs arrive in your Inbox, and the AI assistant can answer them.", oauth: false); }
-        @{ await RenderChannelCard(ChannelType.Facebook, "FB", "#1877F2", "Facebook Messenger", "Answer messages sent to your Facebook page.", "Messages to your Facebook page arrive in your Inbox, and the AI assistant can answer them.", oauth: true); }
-        @{ await RenderTelegramCard(); }
-        @{ await RenderTikTokCard(); }
+        @foreach (var card in cards)
+        {
+            await card.Render();
+        }
     </div>
 }
 

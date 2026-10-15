@@ -80,8 +80,12 @@ insert into config.settings (section, key, value, updated_by) values
   ('Cache', 'BillingRatesMinutes', '60', 'seed'),
   ('Monitoring', 'Enabled', 'true', 'seed'),
   ('Monitoring', 'SlowRequestMs', '1000', 'seed'),
-  ('Monitoring', 'RetentionDays', '30', 'seed')
+  ('Monitoring', 'RetentionDays', '30', 'seed'),
+  ('ErrorLog', 'Enabled', 'true', 'seed'),
+  ('ErrorLog', 'MinimumLevel', 'Warning', 'seed'),
+  ('ErrorLog', 'WarningRetentionDays', '14', 'seed'),
+  ('ErrorLog', 'ErrorRetentionDays', '90', 'seed'),
+  ('ErrorLog', 'MaxPerFingerprintPerMinute', '20', 'seed'),
+  ('ErrorLog', 'ExcludedCategories', '', 'seed')
 on conflict (section, key) do nothing;
 
--- Infobip was removed (2026-10-12); drop its settings from databases seeded before that.
-delete from config.settings where section = 'Infobip';

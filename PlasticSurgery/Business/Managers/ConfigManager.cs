@@ -121,6 +121,14 @@ public class ConfigManager : IConfigManager
     public int MonitoringSlowRequestMs => GetInt(ConfigDefaults.MonitoringSlowRequestMs);
     public int MonitoringRetentionDays => GetInt(ConfigDefaults.MonitoringRetentionDays);
 
+    // ---- Error log
+    public bool ErrorLogEnabled => GetBool(ConfigDefaults.ErrorLogEnabled);
+    public string ErrorLogMinimumLevel => GetString(ConfigDefaults.ErrorLogMinimumLevel);
+    public int ErrorLogWarningRetentionDays => GetInt(ConfigDefaults.ErrorLogWarningRetentionDays);
+    public int ErrorLogErrorRetentionDays => GetInt(ConfigDefaults.ErrorLogErrorRetentionDays);
+    public int ErrorLogMaxPerFingerprintPerMinute => GetInt(ConfigDefaults.ErrorLogMaxPerFingerprintPerMinute);
+    public string ErrorLogExcludedCategories => GetString(ConfigDefaults.ErrorLogExcludedCategories);
+
     // ---- generic access
 
     public string GetString(string section, string key) => GetString(Definition(section, key));

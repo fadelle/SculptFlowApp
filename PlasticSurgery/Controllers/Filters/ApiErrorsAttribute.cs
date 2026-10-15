@@ -18,6 +18,8 @@ namespace PlasticSurgery.Controllers.Filters;
 /// </list>
 /// Anything else stays a 500. A controller catches an exception itself only when its response must differ from this
 /// (an n8n tool contract, a redirect, a different status for that one action).
+/// A 502/503 is also logged as an error (it is a provider or setup failure, not the caller's mistake), so it reaches the
+/// error log; 4xx answers are not logged.
 /// Applied to the clinic dashboard APIs (DashboardApiController and ConversationsController), the platform-admin APIs
 /// and the n8n/AI integration APIs. Not to provider webhooks, which must keep answering 500 so the provider retries.
 /// </summary>
@@ -27,6 +29,12 @@ public sealed class ApiErrorsAttribute : ExceptionFilterAttribute
     public override void OnException(ExceptionContext context)
     {
         if (StatusFor(context.Exception) is not { } status) return;
+        if (status >= StatusCodes.Status500InternalServerError)
+        {
+            context.HttpContext.RequestServices?.GetService<ILoggerFactory>()?.CreateLogger<ApiErrorsAttribute>()
+                .LogError(context.Exception, "{Action} answered {StatusCode}: {Error}",
+                    context.ActionDescriptor.DisplayName, status, context.Exception.Message);
+        }
         context.Result = new ObjectResult(new { error = context.Exception.Message }) { StatusCode = status };
         context.ExceptionHandled = true;
     }

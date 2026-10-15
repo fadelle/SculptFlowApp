@@ -151,6 +151,20 @@ public static class ConfigDefaults
     public static readonly ConfigDefinition MonitoringRetentionDays = new("Monitoring", "RetentionDays", "30", ConfigValueType.Int,
         "Days of per-minute API timing rows kept; older rows are deleted by the flush job.", 1, 365);
 
+    // Error log (activity.app_logs): DatabaseLoggerProvider, AppLogCollector, AppLogFlushJob.
+    public static readonly ConfigDefinition ErrorLogEnabled = new("ErrorLog", "Enabled", "true", ConfigValueType.Bool,
+        "Whether warnings and errors the app logs are also saved to activity.app_logs (the admin portal's Errors page). Off = only the console log.");
+    public static readonly ConfigDefinition ErrorLogMinimumLevel = new("ErrorLog", "MinimumLevel", "Warning", ConfigValueType.String,
+        "Lowest level saved: Warning, Error or Critical.", Pattern: "^(?i:warning|error|critical)$");
+    public static readonly ConfigDefinition ErrorLogWarningRetentionDays = new("ErrorLog", "WarningRetentionDays", "14", ConfigValueType.Int,
+        "Days saved warnings are kept; older ones are deleted by the flush job.", 1, 365);
+    public static readonly ConfigDefinition ErrorLogErrorRetentionDays = new("ErrorLog", "ErrorRetentionDays", "90", ConfigValueType.Int,
+        "Days saved errors and criticals are kept; older ones are deleted by the flush job.", 1, 365);
+    public static readonly ConfigDefinition ErrorLogMaxPerFingerprintPerMinute = new("ErrorLog", "MaxPerFingerprintPerMinute", "20", ConfigValueType.Int,
+        "Most rows saved per minute for one problem (same place, template and exception); the rest of that minute is saved as one row with a repeat count.", 1, 1000);
+    public static readonly ConfigDefinition ErrorLogExcludedCategories = new("ErrorLog", "ExcludedCategories", "", ConfigValueType.String,
+        "Comma-separated logger name prefixes never saved (e.g. a noisy framework warning). Empty = none.");
+
     public static readonly IReadOnlyList<ConfigDefinition> All =
     [
         AccountsSignupEnabled,
@@ -233,7 +247,13 @@ public static class ConfigDefaults
 
         MonitoringEnabled,
         MonitoringSlowRequestMs,
-        MonitoringRetentionDays
+        MonitoringRetentionDays,
+        ErrorLogEnabled,
+        ErrorLogMinimumLevel,
+        ErrorLogWarningRetentionDays,
+        ErrorLogErrorRetentionDays,
+        ErrorLogMaxPerFingerprintPerMinute,
+        ErrorLogExcludedCategories
     ];
 
     /// <summary>The declared setting for (section, key), ignoring case; null when there is none.</summary>

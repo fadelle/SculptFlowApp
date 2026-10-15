@@ -2089,6 +2089,46 @@ create table if not exists activity.api_route_stats (
 create index if not exists ix_api_route_stats_bucket_start on activity.api_route_stats(bucket_start);
 
 -- =====================================================================
+-- Error log: activity.app_logs
+--
+-- Every warning, error and critical the app logs (any ILogger call, including the framework's "unhandled exception"
+-- log). DatabaseLoggerProvider queues each entry in memory (AppLogCollector, no database write on the caller's path);
+-- AppLogFlushJob writes them in batches every few seconds and deletes warnings older than ErrorLog:WarningRetentionDays
+-- and errors/criticals older than ErrorLog:ErrorRetentionDays. fingerprint (hash of category + message template +
+-- exception type + top stack frame) groups one problem across its values. At most ErrorLog:MaxPerFingerprintPerMinute
+-- rows per fingerprint per minute are written; the rest of that minute becomes one extra row whose repeat_count says how
+-- many occurrences it stands for. trace_id is the request's W3C trace id. No foreign keys: a log row must outlive the
+-- clinic, conversation or message it mentions, and inserts stay cheap. Read by GET /api/platform-admin/logs.
+-- =====================================================================
+create table if not exists activity.app_logs (
+  id                 bigint generated always as identity primary key,
+  occurred_at        timestamptz not null,
+  level              varchar(12) not null,
+  category           varchar(300) not null,
+  message            text not null,
+  message_template   varchar(1000),
+  exception_type     varchar(300),
+  exception_message  text,
+  stack_trace        text,
+  fingerprint        varchar(16) not null,
+  repeat_count       int not null default 1,
+  trace_id           varchar(32),
+  clinic_id          uuid,
+  conversation_id    uuid,
+  message_id         uuid,
+  method             varchar(10),
+  route              varchar(300),
+  instance           varchar(100),
+  properties         jsonb not null default '{}'::jsonb,
+  constraint ck_app_logs_level check (level in ('Warning','Error','Critical'))
+);
+
+create index if not exists ix_app_logs_occurred_at on activity.app_logs(occurred_at);
+create index if not exists ix_app_logs_fingerprint on activity.app_logs(fingerprint, occurred_at desc);
+create index if not exists ix_app_logs_trace_id on activity.app_logs(trace_id) where trace_id is not null;
+create index if not exists ix_app_logs_clinic on activity.app_logs(clinic_id, occurred_at desc) where clinic_id is not null;
+
+-- =====================================================================
 -- Inbox settings: crm.inbox_settings
 --
 -- How a clinic's Inbox handles conversations (Business/Services/Inbox/InboxSettingsService). One column per setting, so
