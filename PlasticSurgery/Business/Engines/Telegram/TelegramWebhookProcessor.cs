@@ -1,6 +1,8 @@
+using PlasticSurgery.Common.Statics;
 using System.Text.Json;
 using PlasticSurgery.Business.Contracts.Engines.Telegram;
 using PlasticSurgery.Business.Contracts.HttpClients.N8n;
+using PlasticSurgery.Business.Contracts.Managers;
 using PlasticSurgery.Business.Contracts.Services.Inbox;
 using PlasticSurgery.Business.Contracts.Services.Leads;
 using PlasticSurgery.Common.Enums;
@@ -8,6 +10,7 @@ using PlasticSurgery.Common.Exceptions;
 using PlasticSurgery.Common.Helpers;
 using PlasticSurgery.Entities.Dtos.Ai;
 using PlasticSurgery.Entities.Dtos.Inbox;
+using PlasticSurgery.Entities.Dtos.Monitoring;
 using PlasticSurgery.Entities.Dtos.Telegram;
 using PlasticSurgery.Entities.Models;
 using PlasticSurgery.Entities.Requests.Inbox;
@@ -23,11 +26,13 @@ public class TelegramWebhookProcessor : ITelegramWebhookProcessor
     private readonly IConversationService _conversations;
     private readonly IMessageService _messages;
     private readonly ILogger<TelegramWebhookProcessor> _logger;
+    private readonly IMessageTracer _tracer;
 
     public TelegramWebhookProcessor(
         IChannelIntegrationRepository integrations, IAiTriggerNotifier aiTrigger, ILeadService leads, IConversationService conversations, IMessageService messages,
-        ILogger<TelegramWebhookProcessor> logger)
+        ILogger<TelegramWebhookProcessor> logger, IMessageTracer tracer)
     {
+        _tracer = tracer;
         _integrations = integrations;
         _aiTrigger = aiTrigger;
         _leads = leads;
@@ -48,14 +53,17 @@ public class TelegramWebhookProcessor : ITelegramWebhookProcessor
         var now = DateTimeOffset.UtcNow;
         await _integrations.TouchLastWebhookAsync(connectionId, now, ct);
 
+        var channelIds = new TraceIds(clinicId, Channel: ConversationChannel.Telegram);
         if (parsed.Kind != TelegramUpdateKind.CustomerMessage || parsed.Message is null)
         {
+            _tracer.Step(TraceSteps.WebhookIgnored, TraceOutcomes.Skipped, channelIds, detail: new { reason = parsed.IgnoredReason });
             _logger.LogInformation("Ignoring Telegram update {UpdateId} for connection {ConnectionId}: {Reason}",
                 parsed.UpdateId, connectionId, parsed.IgnoredReason);
             return new TelegramWebhookResult(false, "ignored", false, clinicId);
         }
 
         var msg = parsed.Message;
+        _tracer.Step(TraceSteps.WebhookReceived, TraceOutcomes.Ok, channelIds, detail: new { type = msg.MessageType });
 
         // Telegram has no phone number for us: the person is identified by their Telegram chat id,
         // scoped to this clinic (the unique index is (clinic_id, external_lead_id)).
@@ -89,6 +97,9 @@ public class TelegramWebhookProcessor : ITelegramWebhookProcessor
             // Two deliveries of the same update raced past the "already ingested?" check; the unique
             // index kept exactly one row. The other delivery owns the AI trigger, so this one must not.
             _logger.LogInformation("Duplicate Telegram message {ChatId}:{MessageId} lost the insert race.", msg.ChatId, msg.MessageId);
+            _tracer.Step(TraceSteps.MessageDeduplicated, TraceOutcomes.Skipped,
+                channelIds with { ConversationId = conversation.Id, ExternalMessageId = ExternalMessageId(msg.ChatId.ToString(), msg.MessageId) },
+                detail: new { reason = "insert_race" });
             return new TelegramWebhookResult(true, "customer_message", false, clinicId, conversation.Id, lead.Id, Deduplicated: true);
         }
 
@@ -125,12 +136,16 @@ public class TelegramWebhookProcessor : ITelegramWebhookProcessor
             || connection.Channel != ChannelType.Telegram
             || connection.Status != ChannelIntegrationStatus.Connected)
         {
+            _tracer.Step(TraceSteps.WebhookRejected, TraceOutcomes.Failed, new TraceIds(Channel: ConversationChannel.Telegram),
+                detail: new { reason = "unknown_connection" });
             return WebhookReceiveOutcome.NotFound;
         }
 
         if (!TelegramWebhookSecret.Matches(connection.WebhookVerifyToken, secret))
         {
             _logger.LogWarning("Telegram webhook secret mismatch for connection {ConnectionId}.", connectionId);
+            _tracer.Step(TraceSteps.WebhookRejected, TraceOutcomes.Failed, new TraceIds(connection.ClinicId, Channel: ConversationChannel.Telegram),
+                detail: new { reason = "secret" });
             return WebhookReceiveOutcome.Forbidden;
         }
 

@@ -238,6 +238,14 @@ public interface IConfigManager
     /// <summary>Comma-separated logger name prefixes never saved. Default empty.</summary>
     string ErrorLogExcludedCategories { get; }
 
+    // ---- Message trace (activity.message_trace_steps: MessageTracer, MessageTraceFlushJob)
+    /// <summary>Whether message steps are recorded. Default true.</summary>
+    bool MessageTraceEnabled { get; }
+    /// <summary>Days trace steps are kept. Default 14.</summary>
+    int MessageTraceRetentionDays { get; }
+    /// <summary>Days a trace with a failed step is kept. Default 60.</summary>
+    int MessageTraceFailedRetentionDays { get; }
+
     // ---- generic access
 
     string GetString(string section, string key);

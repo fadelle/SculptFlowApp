@@ -112,6 +112,9 @@ Generated from `Common/Statics/ConfigDefaults`; keep this table in step when you
 | ErrorLog | ErrorRetentionDays | 90 | int 1–365 | Days saved errors and criticals are kept; the flush job deletes older ones every hour. |
 | ErrorLog | MaxPerFingerprintPerMinute | 20 | int 1–1000 | Most rows saved per minute for one problem (same logger, template, exception type and top stack frame); the rest of that minute is saved as one row with a repeat count, so an outage can't flood the table. |
 | ErrorLog | ExcludedCategories | (empty) | text | Comma-separated logger name prefixes never saved, e.g. `Microsoft.EntityFrameworkCore.Query` for a noisy framework warning. |
+| MessageTrace | Enabled | true | bool | Whether each step a message takes (webhook, inbox, bot, send) is recorded in `activity.message_trace_steps` for the admin portal's Message traces pages. Off = nothing new is recorded. |
+| MessageTrace | RetentionDays | 14 | int 1–365 | Days trace steps are kept; the flush job deletes older ones every hour (except traces with a failed step, see below). |
+| MessageTrace | FailedRetentionDays | 60 | int 1–365 | Days a trace with at least one failed step is kept (when longer than RetentionDays). |
 
 The billing worker reads its switch and interval on every cycle. The `ErrorLog` switch, minimum level, cap and
 excluded categories are copied into the logger by its flush job every 5 seconds (the logging path can't read settings

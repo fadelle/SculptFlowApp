@@ -65,6 +65,7 @@ namespace PlasticSurgery.Controllers.Integrations;
 [Route("api/ai")]
 [RequireIngestKey]
 [ApiErrors]
+[TraceBotTool]
 public class AiController : ControllerBase
 {
     private readonly IClinicContext _clinicContext;

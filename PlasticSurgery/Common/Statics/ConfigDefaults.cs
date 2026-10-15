@@ -165,6 +165,14 @@ public static class ConfigDefaults
     public static readonly ConfigDefinition ErrorLogExcludedCategories = new("ErrorLog", "ExcludedCategories", "", ConfigValueType.String,
         "Comma-separated logger name prefixes never saved (e.g. a noisy framework warning). Empty = none.");
 
+    // Message trace (activity.message_trace_steps): MessageTracer, MessageTraceFlushJob.
+    public static readonly ConfigDefinition MessageTraceEnabled = new("MessageTrace", "Enabled", "true", ConfigValueType.Bool,
+        "Whether each step a message takes (webhook, inbox, bot, send) is recorded for the admin portal's message trace. Off = nothing new is recorded.");
+    public static readonly ConfigDefinition MessageTraceRetentionDays = new("MessageTrace", "RetentionDays", "14", ConfigValueType.Int,
+        "Days trace steps are kept; older ones are deleted by the flush job (traces with a failed step follow FailedRetentionDays).", 1, 365);
+    public static readonly ConfigDefinition MessageTraceFailedRetentionDays = new("MessageTrace", "FailedRetentionDays", "60", ConfigValueType.Int,
+        "Days a trace with at least one failed step is kept (when longer than RetentionDays).", 1, 365);
+
     public static readonly IReadOnlyList<ConfigDefinition> All =
     [
         AccountsSignupEnabled,
@@ -253,7 +261,10 @@ public static class ConfigDefaults
         ErrorLogWarningRetentionDays,
         ErrorLogErrorRetentionDays,
         ErrorLogMaxPerFingerprintPerMinute,
-        ErrorLogExcludedCategories
+        ErrorLogExcludedCategories,
+        MessageTraceEnabled,
+        MessageTraceRetentionDays,
+        MessageTraceFailedRetentionDays
     ];
 
     /// <summary>The declared setting for (section, key), ignoring case; null when there is none.</summary>

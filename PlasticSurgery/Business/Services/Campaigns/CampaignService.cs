@@ -1,3 +1,4 @@
+using PlasticSurgery.Common.Helpers;
 using System.Text.Json;
 using PlasticSurgery.Business.Contracts.Services.Billing;
 using PlasticSurgery.Business.Contracts.Services.Campaigns;
@@ -347,6 +348,8 @@ public class CampaignService : ICampaignService
     /// continues where it left off after a top-up instead of burning the rest of the audience as failed.</summary>
     private async Task<bool> ProcessRecipientAsync(Guid clinicId, CampaignRecipient recipient, CancellationToken ct)
     {
+        // Each recipient's send is its own story in the message trace (not one trace for the whole batch).
+        using var trace = TraceContext.StartNew("campaign.send");
         try
         {
             var campaign = await _campaigns.GetByIdAsync(recipient.CampaignId, ct)

@@ -57,6 +57,8 @@ public static class PersistenceModule
         services.AddScoped<IEventLogRepository, EventLogRepository>();
         services.AddScoped<IApiRouteStatRepository, ApiRouteStatRepository>();
         services.AddScoped<IAppLogRepository, AppLogRepository>();
+        services.AddScoped<IMessageTraceStepRepository, MessageTraceStepRepository>();
+        services.AddScoped<IMessageTraceAdminRepository, MessageTraceAdminRepository>();
         services.AddScoped<ILeadRepository, LeadRepository>();
         services.AddScoped<IProcedureRepository, ProcedureRepository>();
         services.AddScoped<IProcedureBookingRepository, ProcedureBookingRepository>();

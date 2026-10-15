@@ -25,6 +25,7 @@ public abstract class WebhookTestBase
     protected readonly Mock<IWhatsAppTemplateService> Templates = new();
     protected readonly Mock<IChannelIntegrationRepository> Integrations = new();
     protected readonly Mock<IAiTriggerNotifier> AiTrigger = new();
+    protected readonly Mock<IMessageTracer> Tracer = new();
     protected readonly ResolvedClinic Clinic;
 
     protected WebhookTestBase()
@@ -168,7 +169,8 @@ public class MetaWebhookProcessorTests : WebhookTestBase
         new HealthEventHandler(Health.Object),
         new HistoryHandler(Uow.Object, Events.Object),
         new AppStateSyncHandler(Uow.Object, Events.Object),
-        new UnknownEventHandler(Uow.Object, Events.Object));
+        new UnknownEventHandler(Uow.Object, Events.Object),
+        Tracer.Object);
 
     private static string Body(string phoneNumberId = "P1", string waId = "961700", string messageId = "m1") =>
         "{\"entry\":[{\"id\":\"W1\",\"changes\":[{\"field\":\"messages\",\"value\":{\"metadata\":{\"phone_number_id\":\"" + phoneNumberId + "\"},"
@@ -244,7 +246,7 @@ public class TelegramWebhookProcessorTests : WebhookTestBase
         Id = ConnectionId, ClinicId = ClinicId, Channel = channel, Status = status, WebhookVerifyToken = secret
     };
 
-    private TelegramWebhookProcessor Sut() => new(Integrations.Object, AiTrigger.Object, Leads.Object, Conversations.Object, Messages.Object, NullLogger<TelegramWebhookProcessor>.Instance);
+    private TelegramWebhookProcessor Sut() => new(Integrations.Object, AiTrigger.Object, Leads.Object, Conversations.Object, Messages.Object, NullLogger<TelegramWebhookProcessor>.Instance, Tracer.Object);
 
     private static JsonElement Update(string text = "hello") =>
         J("{\"update_id\":1,\"message\":{\"message_id\":7,\"date\":1700000000,\"chat\":{\"id\":42,\"type\":\"private\"},\"from\":{\"id\":42,\"is_bot\":false,\"first_name\":\"Ann\",\"username\":\"ann\"},\"text\":\"" + text + "\"}}");

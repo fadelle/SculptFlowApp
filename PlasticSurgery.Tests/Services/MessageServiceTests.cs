@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using PlasticSurgery.Business.Services.Inbox;
+using PlasticSurgery.Entities.Dtos.Monitoring;
 
 namespace PlasticSurgery.Tests.Services;
 
@@ -21,6 +22,7 @@ public class MessageServiceTests
     private readonly Mock<IMessageBillingService> _billing = new();
     private readonly Mock<IEntitlementService> _entitlements = new();
     private readonly Mock<IInboxSettingsService> _inboxSettings = new();
+    private readonly Mock<IMessageTracer> _tracer = new();
     private readonly MessageBillingHold _hold = new(Guid.Empty, "key", BillingSettlementTrigger.OnProviderAccepted);
     private readonly Lead _lead;
 
@@ -36,7 +38,7 @@ public class MessageServiceTests
     }
 
     private MessageService Sut() => new(_conversations.Object, _messages.Object, _leads.Object, _templates.Object, _campaigns.Object, _uow.Object,
-        _whatsApp.Object, [_sender.Object], _notifier.Object, _events.Object, _notifications.Object, _billing.Object, _entitlements.Object, _inboxSettings.Object);
+        _whatsApp.Object, [_sender.Object], _notifier.Object, _events.Object, _notifications.Object, _billing.Object, _entitlements.Object, _inboxSettings.Object, _tracer.Object);
 
     private void InboxSettings(bool planIncludesBot, bool reopenedConversations) =>
         _inboxSettings.Setup(a => a.GetAsync(_clinicId, It.IsAny<CancellationToken>()))
@@ -537,5 +539,127 @@ public class MessageServiceTests
         FoundMessage(Outbound("read", recipient.Id));
         await Sut().IngestAsync(Status("delivered"));
         Assert.Equal(CampaignRecipientStatus.Read, recipient.Status);
+    }
+
+    // ---------------------------------------------------------------- message trace
+
+    private List<(string Step, string Outcome, TraceIds Ids, string Detail)> RecordSteps()
+    {
+        var steps = new List<(string, string, TraceIds, string)>();
+        _tracer.Setup(t => t.Step(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<TraceIds>(), It.IsAny<double?>(), It.IsAny<object?>()))
+            .Callback<string, string, TraceIds, double?, object?>((s, o, ids, _, d) => steps.Add((s, o, ids, System.Text.Json.JsonSerializer.Serialize(d))));
+        return steps;
+    }
+
+    [Fact]
+    public async Task A_staff_send_records_its_steps_and_stamps_the_message_with_the_trace()
+    {
+        var c = Conv();
+        var steps = RecordSteps();
+        Message? saved = null;
+        _messages.Setup(m => m.Add(It.IsAny<Message>())).Callback<Message>(m => saved = m);
+        using var activity = new System.Diagnostics.Activity("test").Start();
+
+        await Sut().SendAsync(_clinicId, c.Id, new SendMessageRequest("hello"));
+
+        Assert.Equal([TraceSteps.SendRequested, TraceSteps.SendProviderAccepted], steps.Select(s => s.Step));
+        Assert.Equal((_clinicId, c.Id, saved!.Id, ConversationChannel.WhatsApp), (steps[0].Ids.ClinicId!.Value, steps[0].Ids.ConversationId!.Value, steps[0].Ids.MessageId!.Value, steps[0].Ids.Channel));
+        Assert.Contains("\"kind\":\"staff\"", steps[0].Detail);
+        Assert.Equal("wamid.sent", steps[1].Ids.ExternalMessageId);
+        Assert.Equal(activity.TraceId.ToHexString(), saved.TraceId);
+    }
+
+    [Fact]
+    public async Task A_refused_or_blocked_send_records_why()
+    {
+        var c = Conv();
+        var steps = RecordSteps();
+        _sender.Setup(s => s.SendTextAsync(It.IsAny<Conversation>(), It.IsAny<string>(), It.IsAny<CancellationToken>())).ThrowsAsync(new ChannelSendException("blocked by Meta"));
+        await Assert.ThrowsAsync<ChannelSendException>(() => Sut().SendAsync(_clinicId, c.Id, new SendMessageRequest("hello")));
+        Assert.Equal((TraceSteps.SendProviderFailed, TraceOutcomes.Failed), (steps[^1].Step, steps[^1].Outcome));
+        Assert.Contains("blocked by Meta", steps[^1].Detail);
+
+        steps.Clear();
+        _entitlements.Setup(e => e.EnsureCanSendMessagesAsync(_clinicId, It.IsAny<CancellationToken>())).ThrowsAsync(new EntitlementDeniedException("messages", "No active plan"));
+        await Assert.ThrowsAsync<EntitlementDeniedException>(() => Sut().SendAiReplyAsync(_clinicId, c.Id, "hi"));
+        Assert.Equal([TraceSteps.SendRequested, TraceSteps.SendBlocked], steps.Select(s => s.Step));
+        Assert.Contains("ai", steps[0].Detail);
+
+        steps.Clear();
+        var human = Conv(ConversationMode.Human);
+        await Assert.ThrowsAsync<ConversationNotInAiModeException>(() => Sut().SendAiReplyAsync(_clinicId, human.Id, "hi"));
+        Assert.Equal((TraceSteps.SendRejectedMode, TraceOutcomes.Skipped), (steps.Single().Step, steps.Single().Outcome));
+    }
+
+    [Fact]
+    public async Task A_template_send_records_the_template_and_campaign_kind()
+    {
+        var c = Conv();
+        var t = new WhatsAppTemplate { Id = Guid.NewGuid(), ClinicId = _clinicId, Name = "promo", Language = "en", Body = "Hi", Status = WhatsAppTemplateStatus.Approved, Category = "MARKETING" };
+        _templates.Setup(r => r.GetReadOnlyAsync(_clinicId, t.Id, It.IsAny<CancellationToken>())).ReturnsAsync(t);
+        var steps = RecordSteps();
+        await Sut().SendCampaignTemplateAsync(_clinicId, c.Id, t.Id, [], Guid.NewGuid(), Guid.NewGuid());
+        Assert.Equal([TraceSteps.SendRequested, TraceSteps.SendProviderAccepted], steps.Select(s => s.Step));
+        Assert.Contains("\"kind\":\"campaign\"", steps[0].Detail);
+        Assert.Contains("promo", steps[0].Detail);
+    }
+
+    [Fact]
+    public async Task An_ai_eligible_customer_message_records_saved_and_inbox_and_no_bot_skip()
+    {
+        var c = Conv();
+        var steps = RecordSteps();
+        Message? saved = null;
+        _messages.Setup(m => m.Add(It.IsAny<Message>())).Callback<Message>(m => saved = m);
+        using var activity = new System.Diagnostics.Activity("test").Start();
+
+        await Sut().IngestAsync(Ingest(c.Id, IngestEventType.CustomerMessage));
+
+        Assert.Equal([TraceSteps.MessageSaved, TraceSteps.InboxNotified], steps.Select(s => s.Step));
+        Assert.Equal((saved!.Id, "ext1"), (steps[0].Ids.MessageId!.Value, steps[0].Ids.ExternalMessageId));
+        Assert.Equal(activity.TraceId.ToHexString(), saved.TraceId);
+    }
+
+    [Fact]
+    public async Task A_customer_message_the_bot_will_not_see_records_the_reason()
+    {
+        var steps = RecordSteps();
+        await Sut().IngestAsync(Ingest(Conv(ConversationMode.Human).Id, IngestEventType.CustomerMessage));
+        Assert.Contains("conversation_with_staff", steps.Single(s => s.Step == TraceSteps.BotSkipped).Detail);
+
+        steps.Clear();
+        await Sut().IngestAsync(Ingest(Conv().Id, IngestEventType.CustomerMessage, externalId: "e2", messageType: "image"));
+        Assert.Contains("message_type_not_supported", steps.Single(s => s.Step == TraceSteps.BotSkipped).Detail);
+
+        steps.Clear();
+        InboxSettings(planIncludesBot: false, reopenedConversations: true);
+        await Sut().IngestAsync(Ingest(Conv().Id, IngestEventType.CustomerMessage, externalId: "e3"));
+        Assert.Contains("plan_without_ai_agent", steps.Single(s => s.Step == TraceSteps.ConversationModeChanged).Detail);
+        Assert.Contains("plan_without_ai_agent", steps.Single(s => s.Step == TraceSteps.BotSkipped).Detail);
+
+        steps.Clear();
+        var closed = Conv();
+        closed.Status = ConversationStatus.Closed;
+        InboxSettings(planIncludesBot: true, reopenedConversations: false);
+        await Sut().IngestAsync(Ingest(closed.Id, IngestEventType.CustomerMessage, externalId: "e4"));
+        Assert.Contains(steps, s => s.Step == TraceSteps.ConversationReopened);
+        Assert.Contains("reopened_to_staff", steps.Single(s => s.Step == TraceSteps.BotSkipped).Detail);
+
+        steps.Clear();
+        await Sut().IngestAsync(Ingest(Conv().Id, IngestEventType.BusinessAppEcho, externalId: "e5"));
+        Assert.Contains("staff_replied_from_business_app", steps.Single(s => s.Step == TraceSteps.ConversationModeChanged).Detail);
+        Assert.DoesNotContain(steps, s => s.Step == TraceSteps.BotSkipped); // not a customer message
+    }
+
+    [Fact]
+    public async Task A_duplicate_delivery_records_a_skip()
+    {
+        var c = Conv();
+        var existing = new Message { Id = Guid.NewGuid(), ClinicId = _clinicId, ConversationId = c.Id, LeadId = _leadId, Direction = MessageDirection.Inbound, SenderType = MessageSenderType.Lead, Channel = ConversationChannel.WhatsApp };
+        _messages.Setup(m => m.FindByExternalIdAsync(_clinicId, ConversationChannel.WhatsApp, "ext1", It.IsAny<CancellationToken>())).ReturnsAsync(existing);
+        var steps = RecordSteps();
+        await Sut().IngestAsync(Ingest(c.Id, IngestEventType.CustomerMessage));
+        var step = steps.Single();
+        Assert.Equal((TraceSteps.MessageDeduplicated, TraceOutcomes.Skipped, existing.Id), (step.Step, step.Outcome, step.Ids.MessageId!.Value));
     }
 }

@@ -52,6 +52,10 @@ public class Message
     public DateTimeOffset? ReceivedAt { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
 
+    /// <summary>The W3C trace id of the request that created this message (activity.message_trace_steps), so its delivery
+    /// statuses and the AI reply it caused show in one timeline. Null for messages saved before tracing existed.</summary>
+    public string? TraceId { get; set; }
+
     public Conversation? Conversation { get; set; }
     public Lead? Lead { get; set; }
 }

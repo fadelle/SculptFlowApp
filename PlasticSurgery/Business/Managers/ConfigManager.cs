@@ -129,6 +129,11 @@ public class ConfigManager : IConfigManager
     public int ErrorLogMaxPerFingerprintPerMinute => GetInt(ConfigDefaults.ErrorLogMaxPerFingerprintPerMinute);
     public string ErrorLogExcludedCategories => GetString(ConfigDefaults.ErrorLogExcludedCategories);
 
+    // ---- Message trace
+    public bool MessageTraceEnabled => GetBool(ConfigDefaults.MessageTraceEnabled);
+    public int MessageTraceRetentionDays => GetInt(ConfigDefaults.MessageTraceRetentionDays);
+    public int MessageTraceFailedRetentionDays => GetInt(ConfigDefaults.MessageTraceFailedRetentionDays);
+
     // ---- generic access
 
     public string GetString(string section, string key) => GetString(Definition(section, key));

@@ -117,7 +117,7 @@ public class WebhookControllerTests
     private readonly Mock<IAiTriggerNotifier> _ai = new();
 
     private WhatsAppWebhookController Sut(string? verifyToken = "verify-me") =>
-        new WhatsAppWebhookController(_processor.Object, _ai.Object, ControllerTestKit.Config(("Meta:WebhookVerifyToken", verifyToken)), NullLogger<WhatsAppWebhookController>.Instance).With();
+        new WhatsAppWebhookController(_processor.Object, _ai.Object, ControllerTestKit.Config(("Meta:WebhookVerifyToken", verifyToken)), NullLogger<WhatsAppWebhookController>.Instance, Mock.Of<IMessageTracer>()).With();
 
     [Fact]
     public void Meta_handshake_echoes_the_challenge_only_for_the_right_token()
@@ -134,7 +134,7 @@ public class WebhookControllerTests
         var sig = signature == "valid"
             ? "sha256=" + Convert.ToHexString(System.Security.Cryptography.HMACSHA256.HashData(Encoding.UTF8.GetBytes(Secret), Encoding.UTF8.GetBytes(body))).ToLowerInvariant()
             : signature;
-        return new WhatsAppWebhookController(_processor.Object, _ai.Object, ControllerTestKit.Config(("Meta:AppSecret", Secret)), NullLogger<WhatsAppWebhookController>.Instance)
+        return new WhatsAppWebhookController(_processor.Object, _ai.Object, ControllerTestKit.Config(("Meta:AppSecret", Secret)), NullLogger<WhatsAppWebhookController>.Instance, Mock.Of<IMessageTracer>())
             .With(ctx =>
             {
                 ctx.Request.Body = new MemoryStream(Encoding.UTF8.GetBytes(body));
@@ -195,7 +195,7 @@ public class WebhookControllerTests
     [Fact]
     public async Task Without_a_configured_app_secret_nothing_is_accepted()
     {
-        var controller = new WhatsAppWebhookController(_processor.Object, _ai.Object, ControllerTestKit.Config(), NullLogger<WhatsAppWebhookController>.Instance)
+        var controller = new WhatsAppWebhookController(_processor.Object, _ai.Object, ControllerTestKit.Config(), NullLogger<WhatsAppWebhookController>.Instance, Mock.Of<IMessageTracer>())
             .With(ctx => ctx.Request.Body = new MemoryStream(Encoding.UTF8.GetBytes("{}")));
         Assert.IsType<UnauthorizedResult>(await controller.Receive(default));
         _processor.Verify(p => p.ProcessAllAsync(It.IsAny<JsonElement>(), It.IsAny<CancellationToken>()), Times.Never);

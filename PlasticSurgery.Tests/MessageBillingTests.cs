@@ -75,7 +75,7 @@ public class MessageBillingTests
             return new MessageService(new ConversationRepository(db), new MessageRepository(db), new LeadRepository(db),
                 new WhatsAppTemplateRepository(db), new CampaignRepository(db), new UnitOfWork(db), WhatsApp, new IChannelSender[] { new WhatsAppChannelSender(WhatsApp) },
                 NullProxy<IInboxNotifier>.Create(), new EventLogger(new EventLogRepository(db)), NullProxy<INotificationService>.Create(),
-                MessageBilling, H.Entitlements(db), new InboxSettingsService(new InboxSettingsRepository(db), new ClinicRepository(db), H.Entitlements(db), new UnitOfWork(db)));
+                MessageBilling, H.Entitlements(db), new InboxSettingsService(new InboxSettingsRepository(db), new ClinicRepository(db), H.Entitlements(db), new UnitOfWork(db)), Mock.Of<IMessageTracer>());
         }
 
         public async Task<MessageResponse> SendTemplateAsync(Guid templateId)

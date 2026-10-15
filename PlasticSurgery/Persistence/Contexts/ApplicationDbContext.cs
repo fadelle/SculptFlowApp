@@ -69,6 +69,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
     public DbSet<ConfigSetting> ConfigSettings => Set<ConfigSetting>();
     public DbSet<ApiRouteStat> ApiRouteStats => Set<ApiRouteStat>();
     public DbSet<AppLog> AppLogs => Set<AppLog>();
+    public DbSet<MessageTraceStep> MessageTraceSteps => Set<MessageTraceStep>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -290,6 +291,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.Property(x => x.SentAt).HasColumnName("sent_at");
             e.Property(x => x.ReceivedAt).HasColumnName("received_at");
             e.Property(x => x.CreatedAt).HasColumnName("created_at");
+            e.Property(x => x.TraceId).HasColumnName("trace_id").HasMaxLength(32);
 
             e.HasOne(x => x.Conversation).WithMany(c => c.Messages)
                 .HasForeignKey(x => x.ConversationId).OnDelete(DeleteBehavior.Cascade);
@@ -1219,6 +1221,29 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.Property(x => x.Properties).HasColumnName("properties").HasColumnType("jsonb").IsRequired();
             e.HasIndex(x => x.OccurredAt);
             e.HasIndex(x => new { x.Fingerprint, x.OccurredAt });
+        });
+
+        // Message trace steps (activity.message_trace_steps) — see MessageTraceStep and MessageTraceFlushJob. No foreign keys.
+        modelBuilder.Entity<MessageTraceStep>(e =>
+        {
+            e.ToTable("message_trace_steps", "activity");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id").UseIdentityAlwaysColumn();
+            e.Property(x => x.TraceId).HasColumnName("trace_id").HasMaxLength(32).IsRequired();
+            e.Property(x => x.OccurredAt).HasColumnName("occurred_at");
+            e.Property(x => x.Step).HasColumnName("step").HasMaxLength(60).IsRequired();
+            e.Property(x => x.Outcome).HasColumnName("outcome").HasMaxLength(12).IsRequired();
+            e.Property(x => x.DurationMs).HasColumnName("duration_ms");
+            e.Property(x => x.ClinicId).HasColumnName("clinic_id");
+            e.Property(x => x.ConversationId).HasColumnName("conversation_id");
+            e.Property(x => x.MessageId).HasColumnName("message_id");
+            e.Property(x => x.ExternalMessageId).HasColumnName("external_message_id").HasMaxLength(200);
+            e.Property(x => x.Channel).HasColumnName("channel").HasMaxLength(50);
+            e.Property(x => x.N8nExecutionId).HasColumnName("n8n_execution_id").HasMaxLength(100);
+            e.Property(x => x.Detail).HasColumnName("detail").HasColumnType("jsonb").IsRequired();
+            e.Property(x => x.Instance).HasColumnName("instance").HasMaxLength(100);
+            e.HasIndex(x => new { x.TraceId, x.OccurredAt });
+            e.HasIndex(x => x.OccurredAt);
         });
 
         // ---------------------------------------------------------------

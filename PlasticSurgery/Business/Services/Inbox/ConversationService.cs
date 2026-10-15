@@ -177,7 +177,8 @@ public class ConversationService : IConversationService
             Origin = request.Origin ?? InferOrigin(request.Direction, request.SenderType, request.Channel),
             SentAt = request.Direction == MessageDirection.Outbound ? now : null,
             ReceivedAt = request.Direction == MessageDirection.Inbound ? now : null,
-            CreatedAt = now
+            CreatedAt = now,
+            TraceId = TraceContext.CurrentTraceId()
         };
 
         _messages.Add(message);

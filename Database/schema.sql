@@ -2129,6 +2129,47 @@ create index if not exists ix_app_logs_trace_id on activity.app_logs(trace_id) w
 create index if not exists ix_app_logs_clinic on activity.app_logs(clinic_id, occurred_at desc) where clinic_id is not null;
 
 -- =====================================================================
+-- Message trace: activity.message_trace_steps (+ crm.messages.trace_id)
+--
+-- One row per step a message takes through the app that nothing else records: webhook received/rejected, clinic not
+-- found, duplicate delivery, saved, inbox notified, conversation reopened / moved to staff, bot skipped (and why),
+-- bot triggered or failed (n8n), the bot's tool calls, send requested / blocked / rejected, provider accepted or failed.
+-- trace_id is the W3C trace id of the request (n8n sends it back as traceparent, so the bot's callbacks join the same
+-- trace). Delivery statuses, billing and business events are not copied here: the trace view reads them from
+-- crm.messages, billing.usage_records and activity.events. MessageTracer queues steps in memory; MessageTraceFlushJob
+-- writes them every few seconds and deletes steps older than MessageTrace:RetentionDays, keeping traces with a failed
+-- step until MessageTrace:FailedRetentionDays. No foreign keys (steps outlive the rows they mention; inserts stay cheap).
+-- crm.messages.trace_id links a message to the trace it was created in, so its later delivery statuses and the AI
+-- reply it caused show in the same timeline. Read by /api/platform-admin/message-traces.
+-- =====================================================================
+create table if not exists activity.message_trace_steps (
+  id                   bigint generated always as identity primary key,
+  trace_id             varchar(32) not null,
+  occurred_at          timestamptz not null,
+  step                 varchar(60) not null,
+  outcome              varchar(12) not null,
+  duration_ms          double precision,
+  clinic_id            uuid,
+  conversation_id      uuid,
+  message_id           uuid,
+  external_message_id  varchar(200),
+  channel              varchar(50),
+  n8n_execution_id     varchar(100),
+  detail               jsonb not null default '{}'::jsonb,
+  instance             varchar(100),
+  constraint ck_message_trace_steps_outcome check (outcome in ('ok','skipped','failed'))
+);
+
+create index if not exists ix_trace_steps_trace on activity.message_trace_steps(trace_id, occurred_at);
+create index if not exists ix_trace_steps_message on activity.message_trace_steps(message_id) where message_id is not null;
+create index if not exists ix_trace_steps_conversation on activity.message_trace_steps(conversation_id, occurred_at desc) where conversation_id is not null;
+create index if not exists ix_trace_steps_failed on activity.message_trace_steps(occurred_at desc) where outcome = 'failed';
+create index if not exists ix_trace_steps_occurred_at on activity.message_trace_steps(occurred_at);
+
+alter table crm.messages add column if not exists trace_id varchar(32);
+create index if not exists ix_messages_trace_id on crm.messages(trace_id) where trace_id is not null;
+
+-- =====================================================================
 -- Inbox settings: crm.inbox_settings
 --
 -- How a clinic's Inbox handles conversations (Business/Services/Inbox/InboxSettingsService). One column per setting, so

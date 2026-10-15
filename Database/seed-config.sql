@@ -86,6 +86,9 @@ insert into config.settings (section, key, value, updated_by) values
   ('ErrorLog', 'WarningRetentionDays', '14', 'seed'),
   ('ErrorLog', 'ErrorRetentionDays', '90', 'seed'),
   ('ErrorLog', 'MaxPerFingerprintPerMinute', '20', 'seed'),
-  ('ErrorLog', 'ExcludedCategories', '', 'seed')
+  ('ErrorLog', 'ExcludedCategories', '', 'seed'),
+  ('MessageTrace', 'Enabled', 'true', 'seed'),
+  ('MessageTrace', 'RetentionDays', '14', 'seed'),
+  ('MessageTrace', 'FailedRetentionDays', '60', 'seed')
 on conflict (section, key) do nothing;
 

@@ -216,6 +216,12 @@ builder.Services.AddSingleton<ILoggerProvider, DatabaseLoggerProvider>();
 builder.Services.AddScoped<IAppLogService, AppLogService>();
 builder.Services.AddScoped<IAppLogAdminService, AppLogAdminService>();
 builder.Services.AddHostedService<AppLogFlushJob>();
+// Message trace: IMessageTracer records each step a message takes (webhook, inbox, bot, send) in memory under the
+// request's trace id; MessageTraceFlushJob writes them to activity.message_trace_steps and trims it (MessageTrace:*).
+builder.Services.AddSingleton<IMessageTracer, MessageTracer>();
+builder.Services.AddScoped<IMessageTraceService, MessageTraceService>();
+builder.Services.AddScoped<IMessageTraceAdminService, MessageTraceAdminService>();
+builder.Services.AddHostedService<MessageTraceFlushJob>();
 builder.Services.AddScoped<ILeadService, LeadService>();
 builder.Services.AddScoped<IProcedureService, ProcedureService>();
 builder.Services.AddScoped<IAvailabilityService, AvailabilityService>();

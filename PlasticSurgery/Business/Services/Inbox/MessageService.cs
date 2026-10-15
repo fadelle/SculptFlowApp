@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using PlasticSurgery.Business.Contracts.Engines.Billing;
 using PlasticSurgery.Business.Contracts.Managers;
 using PlasticSurgery.Business.Contracts.Providers.Channels;
@@ -12,6 +13,7 @@ using PlasticSurgery.Common.Helpers;
 using PlasticSurgery.Common.Statics;
 using PlasticSurgery.Entities.Dtos.Billing;
 using PlasticSurgery.Entities.Dtos.Inbox;
+using PlasticSurgery.Entities.Dtos.Monitoring;
 using PlasticSurgery.Entities.Models;
 using PlasticSurgery.Entities.Requests.Inbox;
 using PlasticSurgery.Entities.Responses.Inbox;
@@ -43,13 +45,15 @@ public class MessageService : IMessageService
     private readonly IMessageBillingService _billing;
     private readonly IEntitlementService _entitlements;
     private readonly IInboxSettingsService _inboxSettings;
+    private readonly IMessageTracer _tracer;
 
     public MessageService(
         IConversationRepository conversations, IMessageRepository messages, ILeadRepository leads,
         IWhatsAppTemplateRepository templates, ICampaignRepository campaigns, IUnitOfWork unitOfWork, IWhatsAppService whatsApp, IEnumerable<IChannelSender> senders,
         IInboxNotifier notifier, IEventLogger events, INotificationService notifications,
-        IMessageBillingService billing, IEntitlementService entitlements, IInboxSettingsService inboxSettings)
+        IMessageBillingService billing, IEntitlementService entitlements, IInboxSettingsService inboxSettings, IMessageTracer tracer)
     {
+        _tracer = tracer;
         _inboxSettings = inboxSettings;
         _conversations = conversations;
         _messages = messages;
@@ -77,6 +81,43 @@ public class MessageService : IMessageService
             conversation.IsServiceWindowOpen(DateTimeOffset.UtcNow), conversation.Lead?.Phone), ct);
     }
 
+    /// <summary>PrepareBillingAsync, recording a refusal (no subscription, empty wallet) in the message trace.</summary>
+    private async Task<MessageBillingHold?> PrepareTracedBillingAsync(Conversation conversation, Guid messageId, OutboundMessageKind kind,
+        string? templateCategory, Guid? campaignId, CancellationToken ct)
+    {
+        try
+        {
+            return await PrepareBillingAsync(conversation, messageId, kind, templateCategory, campaignId, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _tracer.Step(TraceSteps.SendBlocked, TraceOutcomes.Failed, Ids(conversation, messageId), detail: new { error = TraceText.Error(ex) });
+            throw;
+        }
+    }
+
+    /// <summary>The provider call, timed and recorded in the message trace (accepted with its id, or failed and why).</summary>
+    private async Task<string> SendTracedAsync(Conversation conversation, Guid messageId, Func<Task<string>> send)
+    {
+        var started = Stopwatch.GetTimestamp();
+        try
+        {
+            var externalMessageId = await send();
+            _tracer.Step(TraceSteps.SendProviderAccepted, TraceOutcomes.Ok, Ids(conversation, messageId, externalMessageId),
+                Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+            return externalMessageId;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _tracer.Step(TraceSteps.SendProviderFailed, TraceOutcomes.Failed, Ids(conversation, messageId),
+                Stopwatch.GetElapsedTime(started).TotalMilliseconds, new { error = TraceText.Error(ex) });
+            throw;
+        }
+    }
+
+    private static TraceIds Ids(Conversation conversation, Guid? messageId = null, string? externalMessageId = null) =>
+        new(conversation.ClinicId, conversation.Id, messageId, conversation.Channel, externalMessageId);
+
     /// <summary>Picks the outbound adapter for a conversation's channel (WhatsApp, Telegram, ...).</summary>
     private IChannelSender ResolveSender(string channel) =>
         _senders.FirstOrDefault(s => s.Channel == channel)
@@ -94,7 +135,8 @@ public class MessageService : IMessageService
         if (conversation is null) return null;
 
         var messageId = Guid.NewGuid();
-        var billingHold = await PrepareBillingAsync(conversation, messageId, OutboundMessageKind.Text, null, null, ct);
+        _tracer.Step(TraceSteps.SendRequested, TraceOutcomes.Ok, Ids(conversation, messageId), detail: new { kind = "staff" });
+        var billingHold = await PrepareTracedBillingAsync(conversation, messageId, OutboundMessageKind.Text, null, null, ct);
 
         // Channel-specific rules (WhatsApp's 24h window + phone, Telegram's connected bot + chat id)
         // live in the IChannelSender for this conversation's channel. The actual API call happens
@@ -103,7 +145,8 @@ public class MessageService : IMessageService
         string externalMessageId;
         try
         {
-            externalMessageId = await ResolveSender(conversation.Channel).SendTextAsync(conversation, request.Content, ct);
+            externalMessageId = await SendTracedAsync(conversation, messageId,
+                () => ResolveSender(conversation.Channel).SendTextAsync(conversation, request.Content, ct));
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -128,7 +171,8 @@ public class MessageService : IMessageService
             ExternalMessageId = externalMessageId,
             IsAiGenerated = false,
             SentAt = now,
-            CreatedAt = now
+            CreatedAt = now,
+            TraceId = TraceContext.CurrentTraceId()
         };
         _messages.Add(message);
 
@@ -178,16 +222,19 @@ public class MessageService : IMessageService
         // trust the "mode":"ai" the original webhook response carried.
         if (conversation.Mode != ConversationMode.Ai)
         {
+            _tracer.Step(TraceSteps.SendRejectedMode, TraceOutcomes.Skipped, Ids(conversation), detail: new { kind = "ai", mode = conversation.Mode });
             throw new ConversationNotInAiModeException(conversation.Mode);
         }
 
         var messageId = Guid.NewGuid();
-        var billingHold = await PrepareBillingAsync(conversation, messageId, OutboundMessageKind.Text, null, null, ct);
+        _tracer.Step(TraceSteps.SendRequested, TraceOutcomes.Ok, Ids(conversation, messageId), detail: new { kind = "ai" });
+        var billingHold = await PrepareTracedBillingAsync(conversation, messageId, OutboundMessageKind.Text, null, null, ct);
 
         string externalMessageId;
         try
         {
-            externalMessageId = await ResolveSender(conversation.Channel).SendTextAsync(conversation, content, ct);
+            externalMessageId = await SendTracedAsync(conversation, messageId,
+                () => ResolveSender(conversation.Channel).SendTextAsync(conversation, content, ct));
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -211,7 +258,8 @@ public class MessageService : IMessageService
             ExternalMessageId = externalMessageId,
             IsAiGenerated = true,
             SentAt = now,
-            CreatedAt = now
+            CreatedAt = now,
+            TraceId = TraceContext.CurrentTraceId()
         };
         _messages.Add(message);
 
@@ -281,14 +329,16 @@ public class MessageService : IMessageService
 
         // Meta may re-categorize an approved template (CurrentCategory, from its webhook); it's billed as what it is now.
         var messageId = Guid.NewGuid();
-        var billingHold = await PrepareBillingAsync(conversation, messageId, OutboundMessageKind.Template,
+        _tracer.Step(TraceSteps.SendRequested, TraceOutcomes.Ok, Ids(conversation, messageId),
+            detail: new { kind = origin == MessageOrigin.Campaign ? "campaign" : "template", template = template.Name });
+        var billingHold = await PrepareTracedBillingAsync(conversation, messageId, OutboundMessageKind.Template,
             string.IsNullOrWhiteSpace(template.CurrentCategory) ? template.Category : template.CurrentCategory, campaignId, ct);
 
         string externalMessageId;
         try
         {
-            externalMessageId = await _whatsApp.SendTemplateMessageAsync(
-                clinicId, toPhone, template.Name, template.Language, bodyParameters, ct);
+            externalMessageId = await SendTracedAsync(conversation, messageId, () => _whatsApp.SendTemplateMessageAsync(
+                clinicId, toPhone, template.Name, template.Language, bodyParameters, ct));
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -316,7 +366,8 @@ public class MessageService : IMessageService
             CampaignRecipientId = campaignRecipientId,
             IsAiGenerated = false,
             SentAt = now,
-            CreatedAt = now
+            CreatedAt = now,
+            TraceId = TraceContext.CurrentTraceId()
         };
         _messages.Add(message);
 
@@ -388,6 +439,9 @@ public class MessageService : IMessageService
             var existing = await _messages.FindByExternalIdAsync(request.ClinicId, request.Channel, request.ExternalMessageId, ct);
             if (existing is not null)
             {
+                _tracer.Step(TraceSteps.MessageDeduplicated, TraceOutcomes.Skipped,
+                    new TraceIds(request.ClinicId, request.ConversationId, existing.Id, request.Channel, request.ExternalMessageId),
+                    detail: new { eventType = request.EventType });
                 return new IngestMessageResult(Found: true, Deduplicated: true, InboxMapper.ToResponse(existing),
                     conversation.Mode, AiEligible: false);
             }
@@ -431,7 +485,8 @@ public class MessageService : IMessageService
             IsAiGenerated = isAiGenerated,
             SentAt = direction == MessageDirection.Outbound ? request.SentAt ?? now : null,
             ReceivedAt = direction == MessageDirection.Inbound ? request.ReceivedAt ?? now : null,
-            CreatedAt = now
+            CreatedAt = now,
+            TraceId = TraceContext.CurrentTraceId()
         };
         _messages.Add(message);
 
@@ -458,10 +513,12 @@ public class MessageService : IMessageService
         }
 
         var modeChanged = false;
+        string? modeReason = null;
         if (moveToHuman && conversation.Mode != ConversationMode.Human)
         {
             ConversationModeSync.Apply(conversation, ConversationMode.Human, now);
             modeChanged = true;
+            modeReason = "staff_replied_from_business_app";
         }
         else if (request.EventType == IngestEventType.CustomerMessage && conversation.Mode == ConversationMode.Ai)
         {
@@ -473,6 +530,7 @@ public class MessageService : IMessageService
             {
                 ConversationModeSync.Apply(conversation, ConversationMode.Human, now);
                 modeChanged = true;
+                modeReason = inboxSettings.PlanIncludesAiBot ? "reopened_to_staff" : "plan_without_ai_agent";
                 _events.Log(request.ClinicId, EventTypes.HumanHandoff, leadId: request.LeadId,
                     conversationId: request.ConversationId, source: MessageOrigin.System,
                     metadataJson: inboxSettings.PlanIncludesAiBot ? "{\"reason\":\"reopened_to_staff\"}" : "{\"reason\":\"plan_without_ai_agent\"}");
@@ -511,8 +569,15 @@ public class MessageService : IMessageService
 
         await _unitOfWork.SaveChangesAsync(ct);
 
+        var ids = new TraceIds(request.ClinicId, request.ConversationId, message.Id, request.Channel, request.ExternalMessageId);
+        _tracer.Step(TraceSteps.MessageSaved, TraceOutcomes.Ok, ids,
+            detail: new { eventType = request.EventType, direction, sender = senderType, type = message.MessageType });
+        if (reopened) _tracer.Step(TraceSteps.ConversationReopened, TraceOutcomes.Ok, ids);
+        if (modeChanged) _tracer.Step(TraceSteps.ConversationModeChanged, TraceOutcomes.Ok, ids, detail: new { mode = ConversationMode.Human, reason = modeReason });
+
         await _notifier.NewMessageAsync(request.ClinicId, request.ConversationId, message.Id, request.LeadId,
             direction, senderType, origin, now, ct);
+        _tracer.Step(TraceSteps.InboxNotified, TraceOutcomes.Ok, ids);
         if (modeChanged)
         {
             await _notifier.ConversationModeChangedAsync(request.ClinicId, request.ConversationId, ConversationMode.Human, ct);
@@ -551,6 +616,12 @@ public class MessageService : IMessageService
         var aiEligible = request.EventType == IngestEventType.CustomerMessage
             && conversation.Mode == ConversationMode.Ai
             && AiEligibleMessageTypes.Contains(message.MessageType);
+        if (request.EventType == IngestEventType.CustomerMessage && !aiEligible)
+        {
+            // Why the bot won't see this message: the most specific reason first.
+            var reason = modeReason ?? (conversation.Mode != ConversationMode.Ai ? "conversation_with_staff" : "message_type_not_supported");
+            _tracer.Step(TraceSteps.BotSkipped, TraceOutcomes.Skipped, ids, detail: new { reason, type = message.MessageType });
+        }
 
         return new IngestMessageResult(Found: true, Deduplicated: false, InboxMapper.ToResponse(message),
             conversation.Mode, aiEligible);

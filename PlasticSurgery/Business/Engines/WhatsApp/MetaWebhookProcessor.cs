@@ -4,6 +4,7 @@ using PlasticSurgery.Business.Engines.WhatsApp.Handlers;
 using PlasticSurgery.Business.Contracts.Managers;
 using PlasticSurgery.Common.Enums;
 using PlasticSurgery.Common.Statics;
+using PlasticSurgery.Entities.Dtos.Monitoring;
 using PlasticSurgery.Entities.Dtos.WhatsApp;
 using PlasticSurgery.Entities.Models;
 using PlasticSurgery.Entities.Responses.WhatsApp;
@@ -23,6 +24,7 @@ public class MetaWebhookProcessor : IMetaWebhookProcessor
     private readonly AppStateSyncHandler _appStateSyncHandler;
     private readonly UnknownEventHandler _unknownEventHandler;
     private readonly ICacheManager _cache;
+    private readonly IMessageTracer _tracer;
 
     public MetaWebhookProcessor(
         IChannelIntegrationRepository integrations,
@@ -34,8 +36,10 @@ public class MetaWebhookProcessor : IMetaWebhookProcessor
         HealthEventHandler healthEventHandler,
         HistoryHandler historyHandler,
         AppStateSyncHandler appStateSyncHandler,
-        UnknownEventHandler unknownEventHandler)
+        UnknownEventHandler unknownEventHandler,
+        IMessageTracer tracer)
     {
+        _tracer = tracer;
         _integrations = integrations;
         _cache = cache;
         _customerMessageHandler = customerMessageHandler;
@@ -61,7 +65,15 @@ public class MetaWebhookProcessor : IMetaWebhookProcessor
         var parsedEvents = MetaWebhookParser.Parse(root);
         if (parsedEvents.Count == 0)
         {
+            _tracer.Step(TraceSteps.WebhookIgnored, TraceOutcomes.Skipped, new TraceIds(Channel: ConversationChannel.WhatsApp),
+                detail: new { reason = "no_events" });
             return [new WhatsAppWebhookResponse(true, "unknown", false, null)];
+        }
+        // Delivery statuses alone aren't a step: the trace view reads them from the message they update.
+        if (parsedEvents.Any(e => e.Kind != ParsedMetaEventKind.MessageStatus))
+        {
+            _tracer.Step(TraceSteps.WebhookReceived, TraceOutcomes.Ok, new TraceIds(Channel: ConversationChannel.WhatsApp),
+                detail: new { events = parsedEvents.Count, kinds = string.Join(",", parsedEvents.Select(e => e.Kind.ToString()).Distinct()) });
         }
 
         var results = new List<WhatsAppWebhookResponse>(parsedEvents.Count);
@@ -70,6 +82,8 @@ public class MetaWebhookProcessor : IMetaWebhookProcessor
             var clinic = await ResolveClinicAsync(evt, ct);
             if (clinic is null)
             {
+                _tracer.Step(TraceSteps.WebhookClinicUnresolved, TraceOutcomes.Skipped,
+                    new TraceIds(Channel: ConversationChannel.WhatsApp, ExternalMessageId: evt.ExternalMessageId), detail: new { kind = evt.Kind.ToString() });
                 // Can't attribute this event to a clinic we know about — acknowledge without
                 // guessing. Common right after a webhook is first configured, before any clinic has
                 // connected the matching phone number/WABA yet.

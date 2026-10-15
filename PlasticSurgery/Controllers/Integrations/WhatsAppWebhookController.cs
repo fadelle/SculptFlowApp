@@ -2,6 +2,9 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using PlasticSurgery.Business.Contracts.Engines.WhatsApp;
 using PlasticSurgery.Business.Contracts.HttpClients.N8n;
+using PlasticSurgery.Business.Contracts.Managers;
+using PlasticSurgery.Common.Statics;
+using PlasticSurgery.Entities.Dtos.Monitoring;
 using PlasticSurgery.Entities.Dtos.Ai;
 
 namespace PlasticSurgery.Controllers.Integrations;
@@ -39,11 +42,13 @@ public class WhatsAppWebhookController : ControllerBase
     private readonly IAiTriggerNotifier _aiTrigger;
     private readonly IConfiguration _configuration;
     private readonly ILogger<WhatsAppWebhookController> _logger;
+    private readonly IMessageTracer _tracer;
 
     public WhatsAppWebhookController(
         IMetaWebhookProcessor webhookProcessor, IAiTriggerNotifier aiTrigger,
-        IConfiguration configuration, ILogger<WhatsAppWebhookController> logger)
+        IConfiguration configuration, ILogger<WhatsAppWebhookController> logger, IMessageTracer tracer)
     {
+        _tracer = tracer;
         _webhookProcessor = webhookProcessor;
         _aiTrigger = aiTrigger;
         _configuration = configuration;
@@ -85,6 +90,7 @@ public class WhatsAppWebhookController : ControllerBase
 
         if (!HasValidSignature(body))
         {
+            _tracer.Step(TraceSteps.WebhookRejected, TraceOutcomes.Failed, new TraceIds(Channel: Channel), detail: new { reason = "signature" });
             return Unauthorized();
         }
 
@@ -96,6 +102,7 @@ public class WhatsAppWebhookController : ControllerBase
         }
         catch (JsonException)
         {
+            _tracer.Step(TraceSteps.WebhookRejected, TraceOutcomes.Failed, new TraceIds(Channel: Channel), detail: new { reason = "invalid_json" });
             return BadRequest();
         }
 
@@ -108,7 +115,7 @@ public class WhatsAppWebhookController : ControllerBase
         {
             await _aiTrigger.NotifyAsync(new AiTriggerPayload(
                 result.ClinicId!.Value, result.ConversationId!.Value, result.LeadId, result.MessageId,
-                Channel: "whatsapp", MessageType: result.MessageType, MessageText: result.Content,
+                Channel: Channel, MessageType: result.MessageType, MessageText: result.Content,
                 SelectedValue: result.SelectedValue), ct);
         }
 
@@ -118,6 +125,8 @@ public class WhatsAppWebhookController : ControllerBase
 
     /// <summary>Meta signs every delivery: "sha256=" + hex(HMAC-SHA256(raw body, Meta:AppSecret)). Without a configured secret
     /// nothing is accepted, so a missing setting can never silently reopen the endpoint.</summary>
+    private const string Channel = "whatsapp";
+
     private bool HasValidSignature(byte[] body)
     {
         var secret = _configuration["Meta:AppSecret"];

@@ -234,7 +234,7 @@ public class N8nNotifierTests
         AiAllowed(true);
         _http.Enqueue(HttpStatusCode.OK, "{}");
         var payload = Payload();
-        await new AiTriggerNotifier(_http.CreateClient(), Cfg(), NullLogger<AiTriggerNotifier>.Instance, _entitlements.Object).NotifyAsync(payload);
+        await new AiTriggerNotifier(_http.CreateClient(), Cfg(), NullLogger<AiTriggerNotifier>.Instance, _entitlements.Object, Mock.Of<IMessageTracer>()).NotifyAsync(payload);
         var req = Assert.Single(_http.Requests);
         Assert.Equal("https://n8n.example/webhook/ai", req.Uri.ToString());
         Assert.Contains($"\"conversationId\":\"{payload.ConversationId}\"", req.Body);
@@ -245,22 +245,22 @@ public class N8nNotifierTests
     public async Task Ai_trigger_is_skipped_without_a_url_or_without_the_ai_feature_and_never_throws()
     {
         AiAllowed(false);
-        var sut = new AiTriggerNotifier(_http.CreateClient(), Cfg(), NullLogger<AiTriggerNotifier>.Instance, _entitlements.Object);
+        var sut = new AiTriggerNotifier(_http.CreateClient(), Cfg(), NullLogger<AiTriggerNotifier>.Instance, _entitlements.Object, Mock.Of<IMessageTracer>());
         await sut.NotifyAsync(Payload());
         Assert.Empty(_http.Requests);
 
         _settings.Remove("N8n:AiWebhookUrl");
-        await new AiTriggerNotifier(_http.CreateClient(), Cfg(), NullLogger<AiTriggerNotifier>.Instance, _entitlements.Object).NotifyAsync(Payload());
+        await new AiTriggerNotifier(_http.CreateClient(), Cfg(), NullLogger<AiTriggerNotifier>.Instance, _entitlements.Object, Mock.Of<IMessageTracer>()).NotifyAsync(Payload());
         Assert.Empty(_http.Requests);
 
         _settings["N8n:AiWebhookUrl"] = "https://n8n.example/webhook/ai";
         AiAllowed(true);
         _http.Enqueue(HttpStatusCode.InternalServerError, "oops");
-        await new AiTriggerNotifier(_http.CreateClient(), Cfg(), NullLogger<AiTriggerNotifier>.Instance, _entitlements.Object).NotifyAsync(Payload());
+        await new AiTriggerNotifier(_http.CreateClient(), Cfg(), NullLogger<AiTriggerNotifier>.Instance, _entitlements.Object, Mock.Of<IMessageTracer>()).NotifyAsync(Payload());
         _http.EnqueueThrow(new HttpRequestException("down"));
-        await new AiTriggerNotifier(_http.CreateClient(), Cfg(), NullLogger<AiTriggerNotifier>.Instance, _entitlements.Object).NotifyAsync(Payload());
+        await new AiTriggerNotifier(_http.CreateClient(), Cfg(), NullLogger<AiTriggerNotifier>.Instance, _entitlements.Object, Mock.Of<IMessageTracer>()).NotifyAsync(Payload());
         _entitlements.Setup(e => e.GetAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ThrowsAsync(new InvalidOperationException("db"));
-        await new AiTriggerNotifier(_http.CreateClient(), Cfg(), NullLogger<AiTriggerNotifier>.Instance, _entitlements.Object).NotifyAsync(Payload());
+        await new AiTriggerNotifier(_http.CreateClient(), Cfg(), NullLogger<AiTriggerNotifier>.Instance, _entitlements.Object, Mock.Of<IMessageTracer>()).NotifyAsync(Payload());
     }
 
     [Fact]
