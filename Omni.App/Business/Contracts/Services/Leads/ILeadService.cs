@@ -15,7 +15,7 @@ public interface ILeadService
     Task<LeadResponse?> GetByIdAsync(Guid clientId, Guid id, CancellationToken ct = default);
 
     Task<(IReadOnlyList<LeadResponse> Items, int TotalCount)> ListAsync(
-        Guid clientId, string? status, Guid? procedureId, string? search, int skip, int take, CancellationToken ct = default);
+        Guid clientId, string? status, Guid? serviceId, string? search, int skip, int take, CancellationToken ct = default);
 
     Task<LeadResponse?> UpdateAsync(Guid clientId, Guid id, UpdateLeadRequest request, CancellationToken ct = default);
 
@@ -25,7 +25,7 @@ public interface ILeadService
     /// <summary>The client's pipeline stages in order, labelled in the user's language (status filters, badges, dropdowns).</summary>
     Task<IReadOnlyList<PipelineStageOption>> ListStagesAsync(Guid clientId, CancellationToken ct = default);
 
-    /// <summary>Narrower update for the AI agent's update_lead tool — procedure interest, language,
+    /// <summary>Narrower update for the AI agent's update_lead tool — service interest, language,
     /// timeline, notes, follow-up date, and qualification status only. See UpdateLeadContextRequest
     /// for why identity fields are excluded.</summary>
     Task<LeadResponse?> UpdateContextAsync(Guid clientId, Guid id, UpdateLeadContextRequest request, CancellationToken ct = default);

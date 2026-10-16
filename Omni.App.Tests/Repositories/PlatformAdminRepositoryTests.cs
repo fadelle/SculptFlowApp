@@ -11,27 +11,27 @@ namespace Omni.App.Tests.Repositories;
 /// </summary>
 public class PlatformAdminRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixture)
 {
-    private sealed record World(Client Client, Procedure Procedure, Lead Lead, Conversation Conversation, Message Inbound, Message Failed,
+    private sealed record World(Client Client, Service Service, Lead Lead, Conversation Conversation, Message Inbound, Message Failed,
         Appointment Upcoming, ChannelIntegration WhatsApp);
 
     private async Task<World> SeedWorldAsync(string? clientName = null)
     {
         var client = MakeClient(clientName);
         client.Email = "owner@" + client.Slug + ".test";
-        var proc = MakeProcedure(client.Id, "Rhinoplasty");
-        var lead = MakeLead(client.Id, "Alice Wong", "+9611", proc.Id);
+        var svc = MakeService(client.Id, "Rhinoplasty");
+        var lead = MakeLead(client.Id, "Alice Wong", "+9611", svc.Id);
         var convo = MakeConversation(client.Id, lead.Id, lastMessageAt: DateTimeOffset.UtcNow);
         var inbound = MakeMessage(convo, content: "hello world", createdAt: DateTimeOffset.UtcNow.AddHours(-1));
         var failed = MakeMessage(convo, MessageDirection.Outbound, MessageOrigin.Ai, "oops", DateTimeOffset.UtcNow.AddMinutes(-30));
         failed.SenderType = "ai"; failed.DeliveryStatus = "failed"; failed.FailedAt = DateTimeOffset.UtcNow; failed.FailureCode = "131026";
-        var upcoming = MakeAppointment(client.Id, lead.Id, DateTimeOffset.UtcNow.AddDays(2), procedureId: proc.Id);
+        var upcoming = MakeAppointment(client.Id, lead.Id, DateTimeOffset.UtcNow.AddDays(2), serviceId: svc.Id);
         var wa = new ChannelIntegration
         {
             Id = Guid.NewGuid(), ClientId = client.Id, Channel = ChannelType.WhatsApp, Status = ChannelIntegrationStatus.Connected,
             IsHealthy = false, LastProblemMessage = "token expired", CreatedAt = Now, UpdatedAt = Now,
         };
-        await SeedAsync(client, proc, lead, convo, inbound, failed, upcoming, wa);
-        return new World(client, proc, lead, convo, inbound, failed, upcoming, wa);
+        await SeedAsync(client, svc, lead, convo, inbound, failed, upcoming, wa);
+        return new World(client, svc, lead, convo, inbound, failed, upcoming, wa);
     }
 
     // ---- clients ----------------------------------------------------------------------------------------------
@@ -63,7 +63,7 @@ public class PlatformAdminRepositoryTests(PostgresFixture fixture) : RepoTestBas
         Assert.NotNull(await repo.GetForUpdateAsync(w.Client.Id));
 
         var counts = await repo.CountsAsync(w.Client.Id);
-        Assert.Equal((1, 1, 2, 1, 1), (counts.Leads, counts.Conversations, counts.Messages, counts.UpcomingAppointments, counts.Procedures));
+        Assert.Equal((1, 1, 2, 1, 1), (counts.Leads, counts.Conversations, counts.Messages, counts.UpcomingAppointments, counts.Services));
         Assert.Equal(1, counts.FailedMessagesLast7Days);
     }
 
@@ -133,14 +133,14 @@ public class PlatformAdminRepositoryTests(PostgresFixture fixture) : RepoTestBas
     public async Task Leads_conversations_messages_and_appointments_are_listed_and_filtered()
     {
         var w = await SeedWorldAsync();
-        var evt = new EventLog { Id = Guid.NewGuid(), ClientId = w.Client.Id, LeadId = w.Lead.Id, EventType = EventTypes.ProcedureBooked, CreatedAt = Now };
+        var evt = new EventLog { Id = Guid.NewGuid(), ClientId = w.Client.Id, LeadId = w.Lead.Id, EventType = EventTypes.OrderConfirmed, CreatedAt = Now };
         await SeedAsync(evt);
 
         await using var db = NewContext();
         var repo = new LeadAdminRepository(db);
 
         var leads = await repo.ListLeadsAsync(w.Client.Id, null, null, 1);
-        Assert.Equal((w.Lead.Id, "Rhinoplasty"), (leads.Items[0].Id, leads.Items[0].ProcedureName));
+        Assert.Equal((w.Lead.Id, "Rhinoplasty"), (leads.Items[0].Id, leads.Items[0].ServiceName));
         Assert.Single((await repo.ListLeadsAsync(w.Client.Id, LeadStatus.New, "alice", 1)).Items);
         Assert.Empty((await repo.ListLeadsAsync(w.Client.Id, LeadStatus.Lost, null, 1)).Items);
         Assert.Empty((await repo.ListLeadsAsync(w.Client.Id, null, "zzz", 1)).Items);
@@ -169,10 +169,10 @@ public class PlatformAdminRepositoryTests(PostgresFixture fixture) : RepoTestBas
         Assert.NotNull(await repo.GetAppointmentForUpdateAsync(w.Upcoming.Id));
     }
 
-    // ---- campaigns, templates, procedures, knowledge ----------------------------------------------------------------
+    // ---- campaigns, templates, services, knowledge ----------------------------------------------------------------
 
     [PostgresFact]
-    public async Task Campaigns_templates_procedures_knowledge_and_websites_are_listed()
+    public async Task Campaigns_templates_services_knowledge_and_websites_are_listed()
     {
         var w = await SeedWorldAsync();
         var template = new WhatsAppTemplate { Id = Guid.NewGuid(), ClientId = w.Client.Id, Name = "promo", Body = "b", Status = WhatsAppTemplateStatus.Approved, CreatedAt = Now, UpdatedAt = Now };
@@ -216,8 +216,8 @@ public class PlatformAdminRepositoryTests(PostgresFixture fixture) : RepoTestBas
         Assert.Equal(template.Id, Assert.Single(await repo.ListTemplatesAsync(w.Client.Id, null)).Id);
         Assert.Single(await repo.ListTemplatesAsync(w.Client.Id, WhatsAppTemplateStatus.Approved));
         Assert.Empty(await repo.ListTemplatesAsync(w.Client.Id, WhatsAppTemplateStatus.Rejected));
-        Assert.Equal(2, (await repo.ListProceduresAsync(w.Client.Id) is var procs ? procs.Count + 1 : 0));   // one procedure…
-        Assert.Equal(w.Procedure.Id, (await repo.GetProcedureAsync(w.Procedure.Id))!.Id);
+        Assert.Equal(2, (await repo.ListServicesAsync(w.Client.Id) is var procs ? procs.Count + 1 : 0));   // one service…
+        Assert.Equal(w.Service.Id, (await repo.GetServiceAsync(w.Service.Id))!.Id);
 
         Assert.Equal(doc.Id, Assert.Single((await repo.ListDocumentsAsync(w.Client.Id, null, null, 1)).Items).Id);
         Assert.Single((await repo.ListDocumentsAsync(w.Client.Id, "pric", true, 1)).Items);

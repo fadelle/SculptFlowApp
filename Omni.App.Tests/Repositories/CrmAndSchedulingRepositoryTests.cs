@@ -14,16 +14,16 @@ public class LeadRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixture
     public async Task Lookups_are_scoped_to_the_client()
     {
         var a = MakeClient(); var b = MakeClient();
-        var proc = MakeProcedure(a.Id);
-        var lead = MakeLead(a.Id, "Ann Smith", "+1555", proc.Id);
+        var svc = MakeService(a.Id);
+        var lead = MakeLead(a.Id, "Ann Smith", "+1555", svc.Id);
         lead.ExternalLeadId = "ext-1";
-        await SeedAsync(a, b, proc, lead);
+        await SeedAsync(a, b, svc, lead);
 
         await using var db = NewContext();
         var repo = new LeadRepository(db);
         Assert.Equal(lead.Id, (await repo.GetAsync(a.Id, lead.Id))!.Id);
         Assert.Null(await repo.GetAsync(b.Id, lead.Id));
-        Assert.NotNull((await repo.GetAsync(a.Id, lead.Id))!.Procedure);
+        Assert.NotNull((await repo.GetAsync(a.Id, lead.Id))!.Service);
         Assert.NotNull(await repo.GetByIdAsync(lead.Id));
         Assert.NotNull(await repo.FindByExternalIdAsync(a.Id, "ext-1"));
         Assert.Null(await repo.FindByExternalIdAsync(b.Id, "ext-1"));
@@ -39,13 +39,13 @@ public class LeadRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixture
     public async Task List_filters_searches_orders_and_pages()
     {
         var c = MakeClient(); var other = MakeClient();
-        var proc = MakeProcedure(c.Id);
-        var l1 = MakeLead(c.Id, "Alice Wong", "111", proc.Id, LeadStatus.New, Now.AddDays(-3));
+        var svc = MakeService(c.Id);
+        var l1 = MakeLead(c.Id, "Alice Wong", "111", svc.Id, LeadStatus.New, Now.AddDays(-3));
         var l2 = MakeLead(c.Id, "bob alison", "222", null, LeadStatus.Contacted, Now.AddDays(-2));
         var l3 = MakeLead(c.Id, "Carol", "333", null, LeadStatus.New, Now.AddDays(-1));
         l3.Email = "ALI@example.com";
         var foreign = MakeLead(other.Id, "Alice Foreign");
-        await SeedAsync(c, other, proc, l1, l2, l3, foreign);
+        await SeedAsync(c, other, svc, l1, l2, l3, foreign);
 
         await using var db = NewContext();
         var repo = new LeadRepository(db);
@@ -55,7 +55,7 @@ public class LeadRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixture
         Assert.Equal([l3.Id, l2.Id, l1.Id], all.Select(l => l.Id));   // newest first
 
         Assert.Equal(2, (await repo.ListAsync(c.Id, LeadStatus.New, null, null, 0, 50)).TotalCount);
-        Assert.Equal([l1.Id], (await repo.ListAsync(c.Id, null, proc.Id, null, 0, 50)).Items.Select(l => l.Id));
+        Assert.Equal([l1.Id], (await repo.ListAsync(c.Id, null, svc.Id, null, 0, 50)).Items.Select(l => l.Id));
         var ali = await repo.ListAsync(c.Id, null, null, " ali ", 0, 50);   // name, e-mail, case-insensitive, trimmed
         Assert.Equal(3, ali.TotalCount);
         Assert.Single((await repo.ListAsync(c.Id, null, null, "222", 0, 50)).Items);
@@ -91,18 +91,18 @@ public class LeadRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixture
     }
 
     [PostgresFact]
-    public async Task LoadProcedure_fills_the_navigation()
+    public async Task LoadService_fills_the_navigation()
     {
         var c = MakeClient();
-        var proc = MakeProcedure(c.Id, "Facelift");
-        var lead = MakeLead(c.Id, procedureId: proc.Id);
-        await SeedAsync(c, proc, lead);
+        var svc = MakeService(c.Id, "Facelift");
+        var lead = MakeLead(c.Id, serviceId: svc.Id);
+        await SeedAsync(c, svc, lead);
         await using var db = NewContext();
         var repo = new LeadRepository(db);
         var tracked = (await repo.GetByIdAsync(lead.Id))!;
-        Assert.Null(tracked.Procedure);
-        await repo.LoadProcedureAsync(tracked);
-        Assert.Equal("Facelift", tracked.Procedure!.Name);
+        Assert.Null(tracked.Service);
+        await repo.LoadServiceAsync(tracked);
+        Assert.Equal("Facelift", tracked.Service!.Name);
     }
 }
 
@@ -209,8 +209,8 @@ public class ConversationAndMessageRepositoryTests(PostgresFixture fixture) : Re
     public async Task Inbox_lists_newest_first_with_last_message_and_unread_count()
     {
         var c = MakeClient();
-        var proc = MakeProcedure(c.Id, "Rhinoplasty");
-        var leadA = MakeLead(c.Id, "Ann", "1", proc.Id); var leadB = MakeLead(c.Id, "Bob", "2");
+        var svc = MakeService(c.Id, "Rhinoplasty");
+        var leadA = MakeLead(c.Id, "Ann", "1", svc.Id); var leadB = MakeLead(c.Id, "Bob", "2");
         var old = MakeConversation(c.Id, leadA.Id, lastMessageAt: Now.AddHours(-5));
         var recent = MakeConversation(c.Id, leadB.Id, "telegram", lastMessageAt: Now.AddHours(-1));
         recent.LastReadAt = Now.AddHours(-3);
@@ -220,7 +220,7 @@ public class ConversationAndMessageRepositoryTests(PostgresFixture fixture) : Re
         var n1 = MakeMessage(recent, content: "read", createdAt: Now.AddHours(-4));
         var n2 = MakeMessage(recent, content: "unread 1", createdAt: Now.AddHours(-2));
         var n3 = MakeMessage(recent, content: "unread 2", createdAt: Now.AddHours(-1));
-        await SeedAsync(c, proc, leadA, leadB, old, recent, m1, m2, m3, n1, n2, n3);
+        await SeedAsync(c, svc, leadA, leadB, old, recent, m1, m2, m3, n1, n2, n3);
 
         await using var db = NewContext();
         var repo = new ConversationRepository(db);
@@ -231,7 +231,7 @@ public class ConversationAndMessageRepositoryTests(PostgresFixture fixture) : Re
         Assert.Equal(2, items[0].UnreadCount);
         Assert.Equal("reply", items[1].LastMessagePreview);        // the system note is skipped
         Assert.Equal(1, items[1].UnreadCount);                      // never read: every inbound counts
-        Assert.Equal("Rhinoplasty", items[1].ProcedureName);
+        Assert.Equal("Rhinoplasty", items[1].ServiceName);
 
         Assert.Equal(old.Id, Assert.Single((await repo.ListInboxAsync(c.Id, 1, 10)).Items).Id);
     }
@@ -301,19 +301,19 @@ public class ConversationAndMessageRepositoryTests(PostgresFixture fixture) : Re
 
 public class AppointmentRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixture)
 {
-    private async Task<(Client Client, Lead Lead, Procedure Proc)> SeedBaseAsync(int? duration = 45)
+    private async Task<(Client Client, Lead Lead, Service Proc)> SeedBaseAsync(int? duration = 45)
     {
-        var c = MakeClient(); var proc = MakeProcedure(c.Id, duration: duration); var lead = MakeLead(c.Id, procedureId: proc.Id);
-        await SeedAsync(c, proc, lead);
-        return (c, lead, proc);
+        var c = MakeClient(); var svc = MakeService(c.Id, duration: duration); var lead = MakeLead(c.Id, serviceId: svc.Id);
+        await SeedAsync(c, svc, lead);
+        return (c, lead, svc);
     }
 
     [PostgresFact]
     public async Task Gets_are_scoped_and_include_what_they_promise()
     {
-        var (c, lead, proc) = await SeedBaseAsync();
+        var (c, lead, svc) = await SeedBaseAsync();
         var other = MakeClient();
-        var appt = MakeAppointment(c.Id, lead.Id, Now.AddDays(1), procedureId: proc.Id);
+        var appt = MakeAppointment(c.Id, lead.Id, Now.AddDays(1), serviceId: svc.Id);
         await SeedAsync(other, appt);
 
         await using var db = NewContext();
@@ -322,11 +322,11 @@ public class AppointmentRepositoryTests(PostgresFixture fixture) : RepoTestBase(
         Assert.Null(await repo.GetAsync(other.Id, appt.Id));
         var detailed = (await repo.GetWithDetailsAsync(c.Id, appt.Id))!;
         Assert.NotNull(detailed.Lead);
-        Assert.NotNull(detailed.Procedure);
+        Assert.NotNull(detailed.Service);
         Assert.NotNull(await repo.GetForLeadAsync(c.Id, lead.Id, appt.Id));
         Assert.Null(await repo.GetForLeadAsync(c.Id, Guid.NewGuid(), appt.Id));
-        Assert.Equal("Rhinoplasty", (await repo.GetWithProcedureReadOnlyAsync(appt.Id))!.Procedure!.Name);
-        Assert.Null(await repo.GetWithProcedureReadOnlyAsync(Guid.NewGuid()));
+        Assert.Equal("Rhinoplasty", (await repo.GetWithServiceReadOnlyAsync(appt.Id))!.Service!.Name);
+        Assert.Null(await repo.GetWithServiceReadOnlyAsync(Guid.NewGuid()));
     }
 
     [PostgresFact]
@@ -394,7 +394,7 @@ public class AppointmentRepositoryTests(PostgresFixture fixture) : RepoTestBase(
     public async Task Busy_rows_skip_canceled_rescheduled_and_the_excluded_appointment()
     {
         var (c, lead, _) = await SeedBaseAsync(duration: 45);
-        var busy = MakeAppointment(c.Id, lead.Id, Now.AddHours(1), procedureId: (await NewContext().Procedures.FirstAsync(p => p.ClientId == c.Id)).Id);
+        var busy = MakeAppointment(c.Id, lead.Id, Now.AddHours(1), serviceId: (await NewContext().Services.FirstAsync(p => p.ClientId == c.Id)).Id);
         var excluded = MakeAppointment(c.Id, lead.Id, Now.AddHours(2));
         var canceled = MakeAppointment(c.Id, lead.Id, Now.AddHours(3), AppointmentStatus.Canceled);
         var moved = MakeAppointment(c.Id, lead.Id, Now.AddHours(4), AppointmentStatus.Rescheduled);
@@ -406,15 +406,15 @@ public class AppointmentRepositoryTests(PostgresFixture fixture) : RepoTestBase(
         var rows = await repo.ListBusyAsync(c.Id, Now, Now.AddDays(1), excluded.Id);
         var row = Assert.Single(rows);
         Assert.Equal(busy.ScheduledStart, row.ScheduledStart);
-        Assert.Equal(45, row.ProcedureMinutes);
+        Assert.Equal(45, row.ServiceMinutes);
         Assert.Equal(2, (await repo.ListBusyAsync(c.Id, Now, Now.AddDays(1), null)).Count);
     }
 
     [PostgresFact]
     public async Task Details_are_loaded_on_demand_and_the_booking_lock_can_be_taken()
     {
-        var (c, lead, proc) = await SeedBaseAsync();
-        var appt = MakeAppointment(c.Id, lead.Id, Now.AddDays(1), procedureId: proc.Id);
+        var (c, lead, svc) = await SeedBaseAsync();
+        var appt = MakeAppointment(c.Id, lead.Id, Now.AddDays(1), serviceId: svc.Id);
         var noProc = MakeAppointment(c.Id, lead.Id, Now.AddDays(2));
         await SeedAsync(appt, noProc);
 
@@ -423,10 +423,10 @@ public class AppointmentRepositoryTests(PostgresFixture fixture) : RepoTestBase(
         var tracked = (await repo.GetAsync(c.Id, appt.Id))!;
         await repo.LoadDetailsAsync(tracked);
         Assert.NotNull(tracked.Lead);
-        Assert.NotNull(tracked.Procedure);
+        Assert.NotNull(tracked.Service);
         var plain = (await repo.GetAsync(c.Id, noProc.Id))!;
         await repo.LoadDetailsAsync(plain);
-        Assert.Null(plain.Procedure);
+        Assert.Null(plain.Service);
 
         await using var tx = await db.Database.BeginTransactionAsync();
         await repo.LockClientForBookingAsync(c.Id);

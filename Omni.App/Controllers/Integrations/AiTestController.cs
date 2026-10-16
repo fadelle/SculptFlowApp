@@ -25,7 +25,7 @@ namespace Omni.App.Controllers.Integrations;
 [ApiErrors]
 public class AiTestController : ControllerBase
 {
-    private static readonly Guid FakeProcedureId = Guid.Parse("00000000-0000-0000-0000-0000000000bb");
+    private static readonly Guid FakeServiceId = Guid.Parse("00000000-0000-0000-0000-0000000000bb");
 
     /// <summary>GET /api/ai/test/codes — lists every code this controller can return, and which endpoint simulates it.
     /// Call this first to see what's available.</summary>
@@ -113,7 +113,7 @@ public class AiTestController : ControllerBase
 
     [NonAction]
     public static UpcomingAppointmentResponse Existing(string label, string date, string time) => new(
-        Guid.NewGuid(), "booked", "consultation", FakeProcedureId, "Rhinoplasty",
+        Guid.NewGuid(), "booked", "consultation", FakeServiceId, "Rhinoplasty",
         DateTimeOffset.Parse($"{date}T{time}:00+03:00"), DateTimeOffset.Parse($"{date}T{time}:00+03:00").AddMinutes(30),
         date, time, label);
 }

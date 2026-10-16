@@ -61,15 +61,15 @@ public abstract class RepoTestBase
         UpdatedAt = Now,
     };
 
-    protected static Procedure MakeProcedure(Guid clientId, string name = "Rhinoplasty", bool active = true, int? duration = null) => new()
+    protected static Service MakeService(Guid clientId, string name = "Rhinoplasty", bool active = true, int? duration = null) => new()
     {
         Id = Guid.NewGuid(), ClientId = clientId, Name = name, IsActive = active, ConsultationDuration = duration, CreatedAt = Now, UpdatedAt = Now,
     };
 
-    protected static Lead MakeLead(Guid clientId, string? name = "Ann", string? phone = null, Guid? procedureId = null, string status = LeadStatus.New,
+    protected static Lead MakeLead(Guid clientId, string? name = "Ann", string? phone = null, Guid? serviceId = null, string status = LeadStatus.New,
         DateTimeOffset? createdAt = null) => new()
     {
-        Id = Guid.NewGuid(), ClientId = clientId, FullName = name, Phone = phone, ProcedureId = procedureId, Status = status,
+        Id = Guid.NewGuid(), ClientId = clientId, FullName = name, Phone = phone, ServiceId = serviceId, Status = status,
         CreatedAt = createdAt ?? Now, UpdatedAt = createdAt ?? Now,
     };
 
@@ -88,9 +88,9 @@ public abstract class RepoTestBase
     };
 
     protected static Appointment MakeAppointment(Guid clientId, Guid leadId, DateTimeOffset start, string status = AppointmentStatus.Booked,
-        Guid? procedureId = null, DateTimeOffset? end = null) => new()
+        Guid? serviceId = null, DateTimeOffset? end = null) => new()
     {
-        Id = Guid.NewGuid(), ClientId = clientId, LeadId = leadId, ProcedureId = procedureId, ScheduledStart = start, ScheduledEnd = end,
+        Id = Guid.NewGuid(), ClientId = clientId, LeadId = leadId, ServiceId = serviceId, ScheduledStart = start, ScheduledEnd = end,
         Status = status, CreatedAt = Now, UpdatedAt = Now,
     };
 }

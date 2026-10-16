@@ -6,7 +6,7 @@ public class Lead
 {
     public Guid Id { get; set; }
     public Guid ClientId { get; set; }
-    public Guid? ProcedureId { get; set; }
+    public Guid? ServiceId { get; set; }
 
     public string? FullName { get; set; }
     public string? FirstName { get; set; }
@@ -40,8 +40,8 @@ public class Lead
     public DateTimeOffset UpdatedAt { get; set; }
 
     public Client? Client { get; set; }
-    public Procedure? Procedure { get; set; }
+    public Service? Service { get; set; }
     public ICollection<Conversation> Conversations { get; set; } = new List<Conversation>();
     public ICollection<Appointment> Appointments { get; set; } = new List<Appointment>();
-    public ICollection<ProcedureBooking> ProcedureBookings { get; set; } = new List<ProcedureBooking>();
+    public ICollection<Order> Orders { get; set; } = new List<Order>();
 }

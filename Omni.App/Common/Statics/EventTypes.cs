@@ -12,7 +12,7 @@ public static class EventTypes
     public const string ConsultationAttended = "consultation_attended";
     public const string ConsultationNoShow = "consultation_no_show";
     public const string HumanHandoff = "human_handoff";
-    public const string ProcedureBooked = "procedure_booked";
+    public const string OrderConfirmed = "order_confirmed";
     public const string MessageFailed = "message_failed";
     public const string FollowupScheduled = "followup_scheduled";
 

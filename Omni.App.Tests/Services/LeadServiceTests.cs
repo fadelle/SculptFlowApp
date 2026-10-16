@@ -8,14 +8,14 @@ public class LeadServiceTests
     private readonly Mock<ILeadRepository> _leads = new();
     private readonly Mock<IUnitOfWork> _uow = new();
     private readonly Mock<IEventLogger> _events = new();
-    private readonly Mock<IProcedureService> _procedures = new();
+    private readonly Mock<ICatalogService> _services = new();
     private readonly Mock<IClientRepository> _clients = new();
     private readonly Mock<IBusinessTypeService> _businessTypes = TextKit.PermissiveBusinessTypes();
 
     public LeadServiceTests() =>
         _clients.Setup(c => c.GetReadOnlyAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(new Client { Id = _clientId, Name = "Test" });
 
-    private LeadService Sut() => new(_leads.Object, _uow.Object, _events.Object, _procedures.Object, _clients.Object, _businessTypes.Object);
+    private LeadService Sut() => new(_leads.Object, _uow.Object, _events.Object, _services.Object, _clients.Object, _businessTypes.Object);
 
     private Lead Existing(string status = LeadStatus.New) => new()
     {
@@ -30,8 +30,8 @@ public class LeadServiceTests
         return lead;
     }
 
-    private CreateLeadRequest Create(string? externalId = null, Guid? procedureId = null) =>
-        new(_clientId, procedureId, "Ann Lee", "Ann", "Lee", "961711", "a@x.com", "instagram", "story", "spring", externalId, "en", "Beirut", "asap", "notes", false);
+    private CreateLeadRequest Create(string? externalId = null, Guid? serviceId = null) =>
+        new(_clientId, serviceId, "Ann Lee", "Ann", "Lee", "961711", "a@x.com", "instagram", "story", "spring", externalId, "en", "Beirut", "asap", "notes", false);
 
     [Fact]
     public async Task Create_returns_the_existing_lead_for_a_known_external_id()
@@ -45,27 +45,27 @@ public class LeadServiceTests
     }
 
     [Fact]
-    public async Task Create_builds_a_new_lead_logs_the_event_and_loads_the_procedure()
+    public async Task Create_builds_a_new_lead_logs_the_event_and_loads_the_service()
     {
         Lead? added = null;
         _leads.Setup(l => l.Add(It.IsAny<Lead>())).Callback<Lead>(l => added = l);
-        var proc = Guid.NewGuid();
-        var (r, created) = await Sut().CreateOrGetAsync(Create("ext2", proc));
+        var svc = Guid.NewGuid();
+        var (r, created) = await Sut().CreateOrGetAsync(Create("ext2", svc));
         Assert.True(created);
         Assert.Equal((LeadStatus.New, LeadQualificationStatus.Unknown, false), (added!.Status, added.QualificationStatus, added.MarketingOptIn));
         Assert.Equal(("Ann Lee", "instagram", "spring", "ext2"), (added.FullName, added.Source, added.CampaignName, added.ExternalLeadId));
         _events.Verify(e => e.Log(_clientId, EventTypes.LeadCreated, added.Id, null, null, "instagram", "{}"), Times.Once);
-        _leads.Verify(l => l.LoadProcedureAsync(added, It.IsAny<CancellationToken>()), Times.Once);
+        _leads.Verify(l => l.LoadServiceAsync(added, It.IsAny<CancellationToken>()), Times.Once);
         _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
         Assert.Equal(added.Id, r.Id);
     }
 
     [Fact]
-    public async Task Create_without_external_id_or_procedure_skips_lookup_and_procedure_load()
+    public async Task Create_without_external_id_or_service_skips_lookup_and_service_load()
     {
         await Sut().CreateOrGetAsync(Create(null, null));
         _leads.Verify(l => l.FindByExternalIdAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
-        _leads.Verify(l => l.LoadProcedureAsync(It.IsAny<Lead>(), It.IsAny<CancellationToken>()), Times.Never);
+        _leads.Verify(l => l.LoadServiceAsync(It.IsAny<Lead>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -111,27 +111,27 @@ public class LeadServiceTests
     }
 
     [Fact]
-    public async Task Update_changes_only_supplied_fields_and_validates_a_changed_procedure()
+    public async Task Update_changes_only_supplied_fields_and_validates_a_changed_service()
     {
         var lead = Found();
-        var proc = Guid.NewGuid();
-        var r = await Sut().UpdateAsync(_clientId, lead.Id, new UpdateLeadRequest(proc, "New Name", null, null, null, "e@x.com", null, null, null, "n", null));
-        Assert.Equal(("New Name", "Beirut", "961700", "e@x.com", "n", proc), (lead.FullName, lead.City, lead.Phone, lead.Email, lead.Notes, lead.ProcedureId));
+        var svc = Guid.NewGuid();
+        var r = await Sut().UpdateAsync(_clientId, lead.Id, new UpdateLeadRequest(svc, "New Name", null, null, null, "e@x.com", null, null, null, "n", null));
+        Assert.Equal(("New Name", "Beirut", "961700", "e@x.com", "n", svc), (lead.FullName, lead.City, lead.Phone, lead.Email, lead.Notes, lead.ServiceId));
         Assert.Equal("New Name", r!.FullName);
-        _procedures.Verify(p => p.EnsureUsableAsync(_clientId, proc, It.IsAny<CancellationToken>()), Times.Once);
-        _leads.Verify(l => l.LoadProcedureAsync(lead, It.IsAny<CancellationToken>()), Times.Once);
+        _services.Verify(p => p.EnsureUsableAsync(_clientId, svc, It.IsAny<CancellationToken>()), Times.Once);
+        _leads.Verify(l => l.LoadServiceAsync(lead, It.IsAny<CancellationToken>()), Times.Once);
 
-        // resubmitting the current procedure is not re-validated (it may be inactive by now)
-        await Sut().UpdateAsync(_clientId, lead.Id, new UpdateLeadRequest(proc, null, null, null, null, null, null, null, null, null, null));
-        _procedures.Verify(p => p.EnsureUsableAsync(_clientId, proc, It.IsAny<CancellationToken>()), Times.Once);
+        // resubmitting the current service is not re-validated (it may be inactive by now)
+        await Sut().UpdateAsync(_clientId, lead.Id, new UpdateLeadRequest(svc, null, null, null, null, null, null, null, null, null, null));
+        _services.Verify(p => p.EnsureUsableAsync(_clientId, svc, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
-    public async Task Update_returns_null_for_unknown_lead_and_propagates_procedure_errors()
+    public async Task Update_returns_null_for_unknown_lead_and_propagates_service_errors()
     {
         Assert.Null(await Sut().UpdateAsync(_clientId, Guid.NewGuid(), new UpdateLeadRequest(null, "x", null, null, null, null, null, null, null, null, null)));
         var lead = Found();
-        _procedures.Setup(p => p.EnsureUsableAsync(_clientId, It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ThrowsAsync(new ArgumentException("inactive"));
+        _services.Setup(p => p.EnsureUsableAsync(_clientId, It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ThrowsAsync(new ArgumentException("inactive"));
         await Assert.ThrowsAsync<ArgumentException>(() => Sut().UpdateAsync(_clientId, lead.Id, new UpdateLeadRequest(Guid.NewGuid(), null, null, null, null, null, null, null, null, null, null)));
         Assert.Equal("Old Name", lead.FullName);
     }
@@ -187,12 +187,12 @@ public class LeadServiceTests
     {
         var lead = Found();
         var follow = DateTimeOffset.UtcNow.AddDays(2);
-        var proc = Guid.NewGuid();
-        var r = await Sut().UpdateContextAsync(_clientId, lead.Id, new UpdateLeadContextRequest(proc, "ar", "Tripoli", "soon", "likes X", follow, LeadQualificationStatus.Hot));
-        Assert.Equal(("ar", "Tripoli", "soon", "likes X", follow, LeadQualificationStatus.Hot, proc),
-            (lead.PreferredLanguage, lead.City, lead.DesiredTimeline, lead.Notes, lead.NextFollowupAt, lead.QualificationStatus, lead.ProcedureId));
+        var svc = Guid.NewGuid();
+        var r = await Sut().UpdateContextAsync(_clientId, lead.Id, new UpdateLeadContextRequest(svc, "ar", "Tripoli", "soon", "likes X", follow, LeadQualificationStatus.Hot));
+        Assert.Equal(("ar", "Tripoli", "soon", "likes X", follow, LeadQualificationStatus.Hot, svc),
+            (lead.PreferredLanguage, lead.City, lead.DesiredTimeline, lead.Notes, lead.NextFollowupAt, lead.QualificationStatus, lead.ServiceId));
         Assert.NotNull(r);
-        _procedures.Verify(p => p.EnsureUsableAsync(_clientId, proc, It.IsAny<CancellationToken>()), Times.Once);
+        _services.Verify(p => p.EnsureUsableAsync(_clientId, svc, It.IsAny<CancellationToken>()), Times.Once);
 
         await Assert.ThrowsAsync<ArgumentException>(() => Sut().UpdateContextAsync(_clientId, lead.Id, new UpdateLeadContextRequest(null, null, null, null, null, null, "bogus")));
         Assert.Null(await Sut().UpdateContextAsync(_clientId, Guid.NewGuid(), new UpdateLeadContextRequest(null, null, null, null, null, null, null)));

@@ -5,7 +5,7 @@ using Microsoft.AspNetCore.Mvc.RazorPages;
 using Omni.App.Business.Contracts.Managers;
 using Omni.App.Business.Contracts.Services.Campaigns;
 using Omni.App.Business.Contracts.Services.Leads;
-using Omni.App.Business.Contracts.Services.Procedures;
+using Omni.App.Business.Contracts.Services.Catalog;
 using Omni.App.Business.Contracts.Services.WhatsApp;
 using Omni.App.Business.Services.Inbox;
 using Omni.App.Common.Enums;
@@ -13,7 +13,7 @@ using Omni.App.Common.Helpers;
 using Omni.App.Entities.Dtos.Campaigns;
 using Omni.App.Entities.Requests.Campaigns;
 using Omni.App.Entities.Responses.Leads;
-using Omni.App.Entities.Responses.Procedures;
+using Omni.App.Entities.Responses.Catalog;
 using Omni.App.Entities.Responses.WhatsApp;
 
 namespace Omni.App.Pages.Campaigns;
@@ -48,22 +48,22 @@ public class CreateModel : PageModel
     private readonly ICurrentClientContext _clientContext;
     private readonly IWhatsAppTemplateService _templates;
     private readonly ILeadService _leads;
-    private readonly IProcedureService _procedures;
+    private readonly ICatalogService _services;
     private readonly ICampaignService _campaigns;
 
-    public CreateModel(ICurrentClientContext clientContext, IWhatsAppTemplateService templates, ILeadService leads, IProcedureService procedures, ICampaignService campaigns)
+    public CreateModel(ICurrentClientContext clientContext, IWhatsAppTemplateService templates, ILeadService leads, ICatalogService services, ICampaignService campaigns)
     {
         _clientContext = clientContext;
         _templates = templates;
         _leads = leads;
-        _procedures = procedures;
+        _services = services;
         _campaigns = campaigns;
     }
 
     public bool ClientConfigured { get; private set; }
     public IReadOnlyList<WhatsAppTemplateResponse> ApprovedTemplates { get; private set; } = Array.Empty<WhatsAppTemplateResponse>();
     public IReadOnlyList<LeadResponse> Leads { get; private set; } = Array.Empty<LeadResponse>();
-    public IReadOnlyList<ProcedureResponse> Procedures { get; private set; } = Array.Empty<ProcedureResponse>();
+    public IReadOnlyList<ServiceResponse> Services { get; private set; } = Array.Empty<ServiceResponse>();
     public IReadOnlyList<string> LeadSources { get; private set; } = Array.Empty<string>();
     public WhatsAppTemplateResponse? SelectedTemplate { get; private set; }
     public IReadOnlyList<int> PlaceholderNumbers { get; private set; } = Array.Empty<int>();
@@ -94,13 +94,13 @@ public class CreateModel : PageModel
     [BindProperty]
     public int InactiveDays { get; set; } = 60;
     [BindProperty]
-    public Guid? ReactivationProcedureId { get; set; }
+    public Guid? ReactivationServiceId { get; set; }
     [BindProperty]
     public string? ReactivationSource { get; set; }
 
     // "Build a custom audience" — common filters (shown immediately)
     [BindProperty]
-    public Guid? CustomProcedureId { get; set; }
+    public Guid? CustomServiceId { get; set; }
     [BindProperty]
     public int? CustomInactiveDays { get; set; }
 
@@ -213,7 +213,7 @@ public class CreateModel : PageModel
             {
                 // Resolve each recipient's own {{n}} values: a {LeadFullName}/{LeadFirstName}/{LeadPhone}
                 // token becomes that lead's own data, anything else is sent as literal text to everyone.
-                var selectedLeads = await _leads.ListAsync(client.Id, status: null, procedureId: null, search: null, skip: 0, take: 5000, ct);
+                var selectedLeads = await _leads.ListAsync(client.Id, status: null, serviceId: null, search: null, skip: 0, take: 5000, ct);
                 var leadsById = selectedLeads.Items.Where(l => LeadIds.Contains(l.Id)).ToDictionary(l => l.Id);
 
                 variablesByLeadId = new Dictionary<Guid, IReadOnlyList<string>>();
@@ -300,14 +300,14 @@ public class CreateModel : PageModel
         {
             filters = new CampaignAudienceFilters(
                 InactiveDays: InactiveDays,
-                ProcedureId: ReactivationProcedureId,
+                ServiceId: ReactivationServiceId,
                 Sources: string.IsNullOrWhiteSpace(ReactivationSource) ? null : new[] { ReactivationSource });
         }
         else if (AudienceType == CampaignAudienceType.Custom)
         {
             filters = new CampaignAudienceFilters(
                 InactiveDays: CustomInactiveDays,
-                ProcedureId: CustomProcedureId,
+                ServiceId: CustomServiceId,
                 LeadStatuses: CustomLeadStatuses.Count > 0 ? CustomLeadStatuses : null,
                 Sources: CustomSources.Count > 0 ? CustomSources : null,
                 QualificationStatuses: CustomQualificationStatuses.Count > 0 ? CustomQualificationStatuses : null,
@@ -360,10 +360,10 @@ public class CreateModel : PageModel
             }
         }
 
-        var (items, _) = await _leads.ListAsync(client.Id, status: null, procedureId: null, Search, skip: 0, take: 200, ct);
+        var (items, _) = await _leads.ListAsync(client.Id, status: null, serviceId: null, Search, skip: 0, take: 200, ct);
         Leads = items;
 
-        Procedures = await _procedures.ListAsync(client.Id, activeOnly: true, ct);
+        Services = await _services.ListAsync(client.Id, activeOnly: true, ct);
         LeadSources = await _leads.GetDistinctSourcesAsync(client.Id, ct);
         Stages = await _leads.ListStagesAsync(client.Id, ct);
     }

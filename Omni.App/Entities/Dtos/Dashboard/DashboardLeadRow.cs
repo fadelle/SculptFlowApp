@@ -5,7 +5,7 @@ public record DashboardLeadRow(
     Guid Id,
     string? FullName,
     string? Phone,
-    string? ProcedureName,
+    string? ServiceName,
     string? Source,
     string Status,
     string QualificationStatus,

@@ -36,7 +36,7 @@ else
             <div class="inbox-list" id="inbox-list">
                 @foreach (var c in Model.Conversations)
                 {
-                    <div class="inbox-conv-item" data-conversation-id="@c.Id" data-lead-name="@(c.LeadFullName ?? "Unknown")" data-procedure-name="@(c.ProcedureName ?? "")" data-channel="@c.Channel">
+                    <div class="inbox-conv-item" data-conversation-id="@c.Id" data-lead-name="@(c.LeadFullName ?? "Unknown")" data-service-name="@(c.ServiceName ?? "")" data-channel="@c.Channel">
                         <span class="inbox-avatar">
                             @Initials(c.LeadFullName)
                             <span class="inbox-channel-icon" style="background:@Omni.App.Common.Helpers.ChannelIconHelper.Hex(c.Channel)" title="@c.Channel">
@@ -56,9 +56,9 @@ else
                                 <span class="inbox-conv-name">@(c.LeadFullName ?? "Unknown")</span>
                                 <span class="inbox-conv-time" data-timestamp="@((c.LastMessageAt ?? c.CreatedAt).ToString("O"))"></span>
                             </div>
-                            @if (!string.IsNullOrEmpty(c.ProcedureName))
+                            @if (!string.IsNullOrEmpty(c.ServiceName))
                             {
-                                <div class="inbox-conv-procedure">@c.ProcedureName</div>
+                                <div class="inbox-conv-service">@c.ServiceName</div>
                             }
                             <div class="inbox-conv-bottom">
                                 <span class="inbox-conv-preview">@(c.LastMessagePreview ?? "No messages yet")</span>
@@ -89,7 +89,7 @@ else
                     <span class="inbox-avatar" id="inbox-thread-avatar"></span>
                     <div class="inbox-thread-who">
                         <div class="inbox-thread-name" id="inbox-thread-name"></div>
-                        <div class="inbox-thread-procedure text-subtle" id="inbox-thread-procedure"></div>
+                        <div class="inbox-thread-service text-subtle" id="inbox-thread-service"></div>
                     </div>
                     <div class="inbox-thread-actions">
                         <span class="inbox-mode" id="inbox-thread-mode"></span>
@@ -166,7 +166,7 @@ else
                 <span class="eyebrow">Details</span>
                 <div class="inbox-lead-info-row"><span>Phone</span><strong id="inbox-lead-phone">—</strong></div>
                 <div class="inbox-lead-info-row"><span>Email</span><strong id="inbox-lead-email">—</strong></div>
-                <div class="inbox-lead-info-row"><span>Procedure</span><strong id="inbox-lead-procedure">—</strong></div>
+                <div class="inbox-lead-info-row"><span>Service</span><strong id="inbox-lead-service">—</strong></div>
                 <div class="inbox-lead-info-row"><span>Source</span><strong id="inbox-lead-source">—</strong></div>
                 <div class="inbox-lead-info-row"><span>Timeline</span><strong id="inbox-lead-timeline">—</strong></div>
                 <div class="inbox-lead-info-row"><span>Next follow-up</span><strong id="inbox-lead-followup">—</strong></div>

@@ -45,7 +45,7 @@ public class ConversationRepository : IConversationRepository
         CancellationToken ct = default)
     {
         var query = _db.Conversations
-            .Include(c => c.Lead).ThenInclude(l => l!.Procedure)
+            .Include(c => c.Lead).ThenInclude(l => l!.Service)
             .Where(c => c.ClientId == clientId);
 
         var totalCount = await query.CountAsync(ct);
@@ -55,7 +55,7 @@ public class ConversationRepository : IConversationRepository
             .Skip(skip)
             .Take(take)
             .Select(c => new ConversationListRow(
-                c.Id, c.LeadId, c.Lead!.FullName, c.Lead.Phone, c.Lead.Procedure != null ? c.Lead.Procedure.Name : null,
+                c.Id, c.LeadId, c.Lead!.FullName, c.Lead.Phone, c.Lead.Service != null ? c.Lead.Service.Name : null,
                 c.Channel, c.Status, c.Mode,
                 _db.Messages.Where(m => m.ConversationId == c.Id && m.Origin != MessageOrigin.System).OrderByDescending(m => m.CreatedAt).Select(m => m.Content).FirstOrDefault(),
                 c.LastMessageDirection, c.LastMessageAt, c.CreatedAt,

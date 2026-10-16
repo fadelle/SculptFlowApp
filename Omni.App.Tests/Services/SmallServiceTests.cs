@@ -273,10 +273,10 @@ public class StaffDashboardClientProfileTests
         Assert.Equal((3, 2, 1), (a.ConversationsNeedingStaff, a.OverdueFollowups, a.AppointmentsNeedingOutcome));
         await sut.GetLeadsAsync(_clientId, "new", "q", "src", 0, 10);
         await sut.GetAppointmentsAsync(_clientId, "booked", "q", 0, 10);
-        await sut.GetProcedureStatsAsync(_clientId);
+        await sut.GetServiceStatsAsync(_clientId);
         repo.Verify(r => r.ListLeadsAsync(_clientId, "new", "q", "src", 0, 10, It.IsAny<CancellationToken>()), Times.Once);
         repo.Verify(r => r.ListAppointmentsAsync(_clientId, "booked", "q", 0, 10, It.IsAny<CancellationToken>()), Times.Once);
-        repo.Verify(r => r.GetProcedureStatsAsync(_clientId, null, null, It.IsAny<CancellationToken>()), Times.Once);
+        repo.Verify(r => r.GetServiceStatsAsync(_clientId, null, null, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

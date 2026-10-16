@@ -11,13 +11,13 @@ public interface IAvailabilityService
     /// <summary>Open slots for the local dates [from, from + days - 1] (default from = today in the client's timezone),
     /// after weekly schedule + exceptions + duration + buffer + minimum notice + booking horizon + existing appointments.
     /// A client with no open weekday configured gets Configured = false and no slots — never "open 24/7".
-    /// Throws ArgumentException for an unknown or inactive procedure.</summary>
-    Task<AvailabilityResponse> GetSlotsAsync(Guid clientId, Guid? procedureId, DateOnly? from, int days, CancellationToken ct = default);
+    /// Throws ArgumentException for an unknown or inactive service.</summary>
+    Task<AvailabilityResponse> GetSlotsAsync(Guid clientId, Guid? serviceId, DateOnly? from, int days, CancellationToken ct = default);
 
     /// <summary>The final booking check: is [start, end) still bookable right now? Error is null when yes, otherwise a
     /// human-readable reason. Same rules as slot generation, but validates the requested interval instead of a grid.
     /// excludeAppointmentId ignores one appointment (the one being rescheduled) so it does not block its own new time.</summary>
-    Task<SlotCheck> CheckSlotAsync(Guid clientId, Guid? procedureId, DateTimeOffset start, DateTimeOffset? end, Guid? excludeAppointmentId = null, CancellationToken ct = default);
+    Task<SlotCheck> CheckSlotAsync(Guid clientId, Guid? serviceId, DateTimeOffset start, DateTimeOffset? end, Guid? excludeAppointmentId = null, CancellationToken ct = default);
 
     Task<AvailabilitySettingsDto> GetSettingsAsync(Guid clientId, CancellationToken ct = default);
 

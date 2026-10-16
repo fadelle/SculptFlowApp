@@ -1,10 +1,10 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
-using Omni.App.Entities.Responses.Procedures;
+using Omni.App.Entities.Responses.Catalog;
 using static Omni.App.Tests.Pages.PageKit;
 using DashboardIndex = Omni.App.Pages.Dashboard.IndexModel;
-using ProcedureIndex = Omni.App.Pages.Procedures.IndexModel;
-using ProcedureEdit = Omni.App.Pages.Procedures.EditModel;
+using ServiceIndex = Omni.App.Pages.Services.IndexModel;
+using ServiceEdit = Omni.App.Pages.Services.EditModel;
 using StaffIndex = Omni.App.Pages.Staff.IndexModel;
 using InboxIndex = Omni.App.Pages.Inbox.IndexModel;
 using CampaignIndex = Omni.App.Pages.Campaigns.IndexModel;
@@ -122,8 +122,8 @@ public class DashboardPageTests
         dashboard.Setup(d => d.GetSummaryAsync(Glow.Id, It.IsAny<DateTimeOffset?>(), It.IsAny<DateTimeOffset?>(), It.IsAny<CancellationToken>()))
             .Callback<Guid, DateTimeOffset?, DateTimeOffset?, CancellationToken>((_, f, t, _) => { seenFrom = f; seenTo = t; })
             .ReturnsAsync(Blank<DashboardSummaryResponse>());
-        dashboard.Setup(d => d.GetProcedureStatsAsync(Glow.Id, It.IsAny<DateTimeOffset?>(), It.IsAny<DateTimeOffset?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new List<DashboardProcedureRow>());
+        dashboard.Setup(d => d.GetServiceStatsAsync(Glow.Id, It.IsAny<DateTimeOffset?>(), It.IsAny<DateTimeOffset?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<DashboardServiceRow>());
         dashboard.Setup(d => d.GetAttentionAsync(Glow.Id, It.IsAny<CancellationToken>())).ReturnsAsync(Blank<DashboardAttentionResponse>());
         var health = new Mock<IWhatsAppHealthService>();
         var model = new DashboardIndex(ClientContext(Glow).Object, dashboard.Object, health.Object) { Period = period, From = from, To = to }.Attach();
@@ -406,82 +406,82 @@ public class DashboardPageTests
     }
 }
 
-public class ProcedurePageTests
+public class ServicePageTests
 {
     private static readonly Client Glow = SomeClient();
 
     [Fact]
-    public async Task Procedure_list_loads_and_toggling_reports_the_result()
+    public async Task Service_list_loads_and_toggling_reports_the_result()
     {
-        var procedures = new Mock<IProcedureService>();
-        procedures.Setup(p => p.ListAsync(Glow.Id, false, It.IsAny<CancellationToken>())).ReturnsAsync(new List<ProcedureResponse>());
+        var services = new Mock<ICatalogService>();
+        services.Setup(p => p.ListAsync(Glow.Id, false, It.IsAny<CancellationToken>())).ReturnsAsync(new List<ServiceResponse>());
         var id = Guid.NewGuid();
-        procedures.SetupSequence(p => p.SetActiveAsync(Glow.Id, id, It.IsAny<bool>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((ProcedureResponse?)null)
-            .ReturnsAsync(Blank<ProcedureResponse>() with { Name = "Botox" })
-            .ReturnsAsync(Blank<ProcedureResponse>() with { Name = "Botox" });
-        var model = new ProcedureIndex(ClientContext(Glow).Object, procedures.Object).Attach();
+        services.SetupSequence(p => p.SetActiveAsync(Glow.Id, id, It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ServiceResponse?)null)
+            .ReturnsAsync(Blank<ServiceResponse>() with { Name = "Botox" })
+            .ReturnsAsync(Blank<ServiceResponse>() with { Name = "Botox" });
+        var model = new ServiceIndex(ClientContext(Glow).Object, services.Object).Attach();
 
         await model.OnGetAsync(default);
         Assert.True(model.ClientConfigured);
 
         await model.OnPostToggleAsync(id, true, default);
-        Assert.Equal("Procedure not found.", model.ErrorMessage);
+        Assert.Equal("Service not found.", model.ErrorMessage);
         await model.OnPostToggleAsync(id, false, default);
         Assert.Contains("Botox deactivated", model.StatusMessage);
         await model.OnPostToggleAsync(id, true, default);
         Assert.Equal("Botox is active again.", model.StatusMessage);
 
-        var none = new ProcedureIndex(ClientContext(null).Object, procedures.Object).Attach();
+        var none = new ServiceIndex(ClientContext(null).Object, services.Object).Attach();
         await none.OnGetAsync(default);
         Assert.False(none.ClientConfigured);
         Assert.IsType<RedirectToPageResult>(await none.OnPostToggleAsync(id, true, default));
     }
 
     [Fact]
-    public async Task Procedure_edit_loads_an_existing_procedure_or_starts_blank()
+    public async Task Service_edit_loads_an_existing_service_or_starts_blank()
     {
         var id = Guid.NewGuid();
-        var procedures = new Mock<IProcedureService>();
-        procedures.Setup(p => p.GetByIdAsync(Glow.Id, id, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Blank<ProcedureResponse>() with { Name = "Facelift", Code = "FL", ConsultationDuration = 45, Description = "d" });
-        var edit = new ProcedureEdit(ClientContext(Glow).Object, procedures.Object) { Id = id }.Attach();
+        var services = new Mock<ICatalogService>();
+        services.Setup(p => p.GetByIdAsync(Glow.Id, id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Blank<ServiceResponse>() with { Name = "Facelift", Code = "FL", ConsultationDuration = 45, Description = "d" });
+        var edit = new ServiceEdit(ClientContext(Glow).Object, services.Object) { Id = id }.Attach();
         Assert.IsType<PageResult>(await edit.OnGetAsync(default));
         Assert.Equal(("Facelift", "FL", 45, "d", false), (edit.Name, edit.Code, edit.DurationMinutes, edit.Description, edit.IsNew));
 
-        var fresh = new ProcedureEdit(ClientContext(Glow).Object, procedures.Object).Attach();
+        var fresh = new ServiceEdit(ClientContext(Glow).Object, services.Object).Attach();
         Assert.IsType<PageResult>(await fresh.OnGetAsync(default));
         Assert.True(fresh.IsNew);
 
-        var missing = new ProcedureEdit(ClientContext(Glow).Object, procedures.Object) { Id = Guid.NewGuid() }.Attach();
+        var missing = new ServiceEdit(ClientContext(Glow).Object, services.Object) { Id = Guid.NewGuid() }.Attach();
         Assert.IsType<NotFoundResult>(await missing.OnGetAsync(default));
-        var none = new ProcedureEdit(ClientContext(null).Object, procedures.Object).Attach();
+        var none = new ServiceEdit(ClientContext(null).Object, services.Object).Attach();
         Assert.IsType<PageResult>(await none.OnGetAsync(default));
         Assert.False(none.ClientConfigured);
     }
 
     [Fact]
-    public async Task Procedure_edit_creates_updates_and_reports_problems()
+    public async Task Service_edit_creates_updates_and_reports_problems()
     {
         var id = Guid.NewGuid();
-        var procedures = new Mock<IProcedureService>();
-        var create = new ProcedureEdit(ClientContext(Glow).Object, procedures.Object) { Name = "Botox", Code = "B", Description = "d", DurationMinutes = 20 }.Attach();
-        Assert.Equal("page:/Procedures/Index", RedirectTarget(await create.OnPostAsync(default)));
-        procedures.Verify(p => p.CreateAsync(new CreateProcedureRequest(Glow.Id, "Botox", "B", "d", 20), It.IsAny<CancellationToken>()), Times.Once);
+        var services = new Mock<ICatalogService>();
+        var create = new ServiceEdit(ClientContext(Glow).Object, services.Object) { Name = "Botox", Code = "B", Description = "d", DurationMinutes = 20 }.Attach();
+        Assert.Equal("page:/Services/Index", RedirectTarget(await create.OnPostAsync(default)));
+        services.Verify(p => p.CreateAsync(new CreateServiceRequest(Glow.Id, "Botox", "B", "d", 20), It.IsAny<CancellationToken>()), Times.Once);
         Assert.Equal("Saved.", create.TempData["StatusMessage"]);
 
-        var update = new ProcedureEdit(ClientContext(Glow).Object, procedures.Object) { Id = id, Name = "Botox" }.Attach();
+        var update = new ServiceEdit(ClientContext(Glow).Object, services.Object) { Id = id, Name = "Botox" }.Attach();
         Assert.IsType<NotFoundResult>(await update.OnPostAsync(default));          // UpdateAsync returns null
 
-        procedures.Setup(p => p.UpdateAsync(Glow.Id, id, It.IsAny<UpdateProcedureRequest>(), It.IsAny<CancellationToken>())).ReturnsAsync(Blank<ProcedureResponse>());
-        Assert.Equal("page:/Procedures/Index", RedirectTarget(await update.OnPostAsync(default)));
+        services.Setup(p => p.UpdateAsync(Glow.Id, id, It.IsAny<UpdateServiceRequest>(), It.IsAny<CancellationToken>())).ReturnsAsync(Blank<ServiceResponse>());
+        Assert.Equal("page:/Services/Index", RedirectTarget(await update.OnPostAsync(default)));
 
-        procedures.Setup(p => p.UpdateAsync(Glow.Id, id, It.IsAny<UpdateProcedureRequest>(), It.IsAny<CancellationToken>())).ThrowsAsync(new ArgumentException("Name taken."));
+        services.Setup(p => p.UpdateAsync(Glow.Id, id, It.IsAny<UpdateServiceRequest>(), It.IsAny<CancellationToken>())).ThrowsAsync(new ArgumentException("Name taken."));
         Assert.IsType<PageResult>(await update.OnPostAsync(default));
         Assert.Equal("Name taken.", update.ErrorMessage);
 
-        var none = new ProcedureEdit(ClientContext(null).Object, procedures.Object).Attach();
-        Assert.Equal("page:/Procedures/Index", RedirectTarget(await none.OnPostAsync(default)));
+        var none = new ServiceEdit(ClientContext(null).Object, services.Object).Attach();
+        Assert.Equal("page:/Services/Index", RedirectTarget(await none.OnPostAsync(default)));
     }
 }
 

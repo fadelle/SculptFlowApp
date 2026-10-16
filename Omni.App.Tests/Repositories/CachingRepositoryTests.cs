@@ -9,7 +9,7 @@ using Omni.App.Persistence.Contexts;
 using Omni.App.Persistence.Helpers;
 using Omni.App.Persistence.Repositories.Appointments;
 using Omni.App.Persistence.Repositories.Clients;
-using Omni.App.Persistence.Repositories.Procedures;
+using Omni.App.Persistence.Repositories.Catalog;
 
 namespace Omni.App.Tests.Repositories;
 
@@ -181,23 +181,23 @@ public class CachingRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixt
     }
 
     [PostgresFact]
-    public async Task Procedures_and_availability_reread_after_their_rows_change()
+    public async Task Services_and_availability_reread_after_their_rows_change()
     {
         var c = MakeClient();
-        var botox = MakeProcedure(c.Id, "Botox");
+        var botox = MakeService(c.Id, "Botox");
         await SeedAsync(c, botox);
 
         await using (var db = CachedContext())
         {
-            var repo = new ProcedureRepository(db, _cache);
+            var repo = new ServiceRepository(db, _cache);
             Assert.Equal(["Botox"], (await repo.ListAsync(c.Id, activeOnly: true)).Select(p => p.Name));
             Assert.Null(await new AvailabilityRepository(db, _cache).GetBookingSettingsReadOnlyAsync(c.Id));
         }
 
         await using (var db = CachedContext())
         {
-            new ProcedureRepository(db, _cache).Add(MakeProcedure(c.Id, "Abdominoplasty"));
-            (await new ProcedureRepository(db, _cache).GetAsync(c.Id, botox.Id))!.IsActive = false;
+            new ServiceRepository(db, _cache).Add(MakeService(c.Id, "Abdominoplasty"));
+            (await new ServiceRepository(db, _cache).GetAsync(c.Id, botox.Id))!.IsActive = false;
             new AvailabilityRepository(db, _cache).AddBookingSettings(new BookingSettings
             {
                 Id = Guid.NewGuid(), ClientId = c.Id, DefaultConsultationDurationMinutes = 45, BufferMinutes = 5,
@@ -207,9 +207,9 @@ public class CachingRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixt
         }
 
         await using var read = CachedContext();
-        var procedures = new ProcedureRepository(read, _cache);
-        Assert.Equal(["Abdominoplasty"], (await procedures.ListAsync(c.Id, activeOnly: true)).Select(p => p.Name));
-        Assert.Equal(["Abdominoplasty", "Botox"], (await procedures.ListAsync(c.Id, activeOnly: false)).Select(p => p.Name));
+        var services = new ServiceRepository(read, _cache);
+        Assert.Equal(["Abdominoplasty"], (await services.ListAsync(c.Id, activeOnly: true)).Select(p => p.Name));
+        Assert.Equal(["Abdominoplasty", "Botox"], (await services.ListAsync(c.Id, activeOnly: false)).Select(p => p.Name));
         Assert.Equal(45, (await new AvailabilityRepository(read, _cache).GetBookingSettingsReadOnlyAsync(c.Id))!.DefaultConsultationDurationMinutes);
     }
 
@@ -217,16 +217,16 @@ public class CachingRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixt
     public async Task Deleting_a_client_clears_what_was_cached_about_it()
     {
         var c = MakeClient();
-        await SeedAsync(c, MakeProcedure(c.Id));
+        await SeedAsync(c, MakeService(c.Id));
         await using var db = CachedContext();
         var clients = new ClientRepository(db, _cache);
         Assert.NotNull(await clients.GetReadOnlyAsync(c.Id));
-        Assert.Single(await new ProcedureRepository(db, _cache).ListAsync(c.Id, false));
+        Assert.Single(await new ServiceRepository(db, _cache).ListAsync(c.Id, false));
 
         await clients.DeleteAsync(c.Id);
 
         Assert.Null(await _cache.GetRawAsync(CacheKeys.Client(c.Id)));
-        Assert.Null(await _cache.GetRawAsync(CacheKeys.Procedures(c.Id)));
+        Assert.Null(await _cache.GetRawAsync(CacheKeys.Services(c.Id)));
         Assert.Null(await clients.GetReadOnlyAsync(c.Id));
     }
 }

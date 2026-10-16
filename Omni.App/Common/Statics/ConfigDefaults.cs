@@ -136,8 +136,8 @@ public static class ConfigDefaults
         "Minutes a cached copy is kept: Client rows (signed-in client, the bot's client info). Changes clear it at once; this is only how long an untouched copy lives.", 1, 1440);
     public static readonly ConfigDefinition CacheStaffLookupMinutes = new("Cache", "StaffLookupMinutes", "10", ConfigValueType.Int,
         "Minutes a cached copy is kept: Which client a signed-in user belongs to. Keep it short: it is how long a removed staff member could keep access if a removal were ever missed. Changes clear it at once; this is only how long an untouched copy lives.", 1, 1440);
-    public static readonly ConfigDefinition CacheProceduresMinutes = new("Cache", "ProceduresMinutes", "60", ConfigValueType.Int,
-        "Minutes a cached copy is kept: A client's procedures. Changes clear it at once; this is only how long an untouched copy lives.", 1, 1440);
+    public static readonly ConfigDefinition CacheServicesMinutes = new("Cache", "ServicesMinutes", "60", ConfigValueType.Int,
+        "Minutes a cached copy is kept: A client's services. Changes clear it at once; this is only how long an untouched copy lives.", 1, 1440);
     public static readonly ConfigDefinition CacheSchedulingMinutes = new("Cache", "SchedulingMinutes", "60", ConfigValueType.Int,
         "Minutes a cached copy is kept: Weekly hours, booking settings, closed dates and calendar connections. Changes clear it at once; this is only how long an untouched copy lives.", 1, 1440);
     public static readonly ConfigDefinition CacheChannelsMinutes = new("Cache", "ChannelsMinutes", "60", ConfigValueType.Int,
@@ -250,7 +250,7 @@ public static class ConfigDefaults
 
         CacheClientsMinutes,
         CacheStaffLookupMinutes,
-        CacheProceduresMinutes,
+        CacheServicesMinutes,
         CacheSchedulingMinutes,
         CacheChannelsMinutes,
         CacheBillingRatesMinutes,

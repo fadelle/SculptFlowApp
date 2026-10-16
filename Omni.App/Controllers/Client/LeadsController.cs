@@ -43,7 +43,7 @@ public class LeadsController : DashboardApiController
     [HttpGet]
     public async Task<ActionResult<object>> List(
         [FromQuery] string? status,
-        [FromQuery] Guid? procedureId,
+        [FromQuery] Guid? serviceId,
         [FromQuery] string? search,
         [FromQuery] int skip = 0,
         [FromQuery] int take = 50,
@@ -54,7 +54,7 @@ public class LeadsController : DashboardApiController
 
         skip = Math.Max(skip, 0);
         take = Math.Clamp(take, 1, 200);
-        var (items, totalCount) = await _leads.ListAsync(clientId.Value, status, procedureId, search, skip, take, ct);
+        var (items, totalCount) = await _leads.ListAsync(clientId.Value, status, serviceId, search, skip, take, ct);
         return Ok(new { items, totalCount, skip, take });
     }
 

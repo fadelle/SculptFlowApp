@@ -1,7 +1,7 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
-using Omni.App.Entities.Responses.Procedures;using Omni.App.Tests.Controllers;
+using Omni.App.Entities.Responses.Catalog;using Omni.App.Tests.Controllers;
 using static Omni.App.Tests.Pages.PageKit;
 using CampaignCreate = Omni.App.Pages.Campaigns.CreateModel;
 using TemplateIndex = Omni.App.Pages.WhatsApp.Templates.IndexModel;
@@ -13,7 +13,7 @@ public class CampaignCreatePageTests
     private static readonly Client Glow = SomeClient(timezone: "UTC");
     private readonly Mock<IWhatsAppTemplateService> _templates = new();
     private readonly Mock<ILeadService> _leads = new();
-    private readonly Mock<IProcedureService> _procedures = new();
+    private readonly Mock<ICatalogService> _services = new();
     private readonly Mock<ICampaignService> _campaigns = new();
     private CreateCampaignRequest? _created;
 
@@ -22,7 +22,7 @@ public class CampaignCreatePageTests
         _leads.Setup(l => l.ListAsync(It.IsAny<Guid>(), It.IsAny<string?>(), It.IsAny<Guid?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((new List<LeadResponse>() as IReadOnlyList<LeadResponse>, 0));
         _leads.Setup(l => l.GetDistinctSourcesAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync(new List<string> { "web" });
-        _procedures.Setup(p => p.ListAsync(It.IsAny<Guid>(), true, It.IsAny<CancellationToken>())).ReturnsAsync(new List<ProcedureResponse>());
+        _services.Setup(p => p.ListAsync(It.IsAny<Guid>(), true, It.IsAny<CancellationToken>())).ReturnsAsync(new List<ServiceResponse>());
         _templates.Setup(t => t.ListAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync(new List<WhatsAppTemplateResponse>());
         _campaigns.Setup(c => c.CreateAsync(It.IsAny<CreateCampaignRequest>(), It.IsAny<CancellationToken>()))
             .Callback<CreateCampaignRequest, CancellationToken>((r, _) => _created = r)
@@ -30,7 +30,7 @@ public class CampaignCreatePageTests
     }
 
     private CampaignCreate Sut(Client? client = null, bool none = false) =>
-        new CampaignCreate(ClientContext(none ? null : client ?? Glow).Object, _templates.Object, _leads.Object, _procedures.Object, _campaigns.Object).Attach();
+        new CampaignCreate(ClientContext(none ? null : client ?? Glow).Object, _templates.Object, _leads.Object, _services.Object, _campaigns.Object).Attach();
 
     private static WhatsAppTemplateResponse Template(Guid id, string status = WhatsAppTemplateStatus.Approved, string body = "Hello {{1}}, see you {{2}} {{1}}") =>
         Blank<WhatsAppTemplateResponse>() with { Id = id, Status = status, Body = body };

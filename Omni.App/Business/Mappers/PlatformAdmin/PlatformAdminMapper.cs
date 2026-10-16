@@ -21,9 +21,9 @@ public static class PlatformAdminMapper
     public static HealthEventRow ToRow(WhatsAppHealthEvent e) =>
         new(e.Id, e.EventType, e.Severity, e.Status, e.Code, e.Message, e.OccurredAt);
 
-    /// <summary>Expects Client and Procedure (when set) to be loaded.</summary>
+    /// <summary>Expects Client and Service (when set) to be loaded.</summary>
     public static LeadDetail ToDetail(Lead l) => new(
-        l.Id, l.ClientId, Ref(l.Client), l.ProcedureId, l.Procedure is null ? null : new NamedRef(l.Procedure.Id, l.Procedure.Name),
+        l.Id, l.ClientId, Ref(l.Client), l.ServiceId, l.Service is null ? null : new NamedRef(l.Service.Id, l.Service.Name),
         l.FullName, l.FirstName, l.LastName, l.Phone, l.Email, l.Source, l.SourceDetail, l.CampaignName, l.ExternalLeadId, l.Status,
         l.QualificationStatus, l.PreferredLanguage, l.CountryCode, l.City, l.DesiredTimeline, l.Notes, l.MarketingOptIn, l.OptedOutAt,
         l.LastContactAt, l.NextFollowupAt, l.CreatedAt, l.UpdatedAt);

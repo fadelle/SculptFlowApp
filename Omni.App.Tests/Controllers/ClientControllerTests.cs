@@ -252,14 +252,14 @@ public class ConversationsControllerTests : ClientControllerTestBase
     private const string RequireIngestKeyAttributeName = "X-Ingest-Key";
 }
 
-public class CampaignKnowledgeAndProcedureControllerTests : ClientControllerTestBase
+public class CampaignKnowledgeAndServiceControllerTests : ClientControllerTestBase
 {
     private readonly Mock<ICampaignService> _campaigns = new();
     private readonly Mock<ICampaignAudienceService> _audience = new();
     private readonly Mock<IKnowledgeService> _knowledge = new();
     private readonly Mock<IKnowledgeSettingsService> _settings = new();
-    private readonly Mock<IProcedureService> _procedures = new();
-    private readonly Mock<IProcedureBookingService> _bookings = new();
+    private readonly Mock<ICatalogService> _services = new();
+    private readonly Mock<IOrderService> _orders = new();
 
     private CampaignsController Campaigns() => new CampaignsController(_campaigns.Object, _audience.Object, Client.Object).With();
     private KnowledgeController Knowledge() => new KnowledgeController(_knowledge.Object, _settings.Object, Client.Object).With();
@@ -352,27 +352,27 @@ public class CampaignKnowledgeAndProcedureControllerTests : ClientControllerTest
     }
 
     [Fact]
-    public async Task Procedures_and_bookings_scope_to_the_client()
+    public async Task Services_and_orders_scope_to_the_client()
     {
-        var procedures = new ProceduresController(_procedures.Object, Client.Object).With();
+        var services = new ServicesController(_services.Object, Client.Object).With();
         var id = Guid.NewGuid();
-        Assert.IsType<NotFoundResult>((await procedures.GetById(id, default)).Result);
-        Assert.IsType<NotFoundResult>((await procedures.Update(id, new UpdateProcedureRequest("n", null, null, null), default)).Result);
-        Assert.IsType<NotFoundResult>((await procedures.SetActive(id, new SetProcedureActiveRequest(false), default)).Result);
-        CreateProcedureRequest? seen = null;
-        _procedures.Setup(p => p.CreateAsync(It.IsAny<CreateProcedureRequest>(), It.IsAny<CancellationToken>())).Callback<CreateProcedureRequest, CancellationToken>((r, _) => seen = r)
-            .ReturnsAsync(new ProcedureResponse(id, ClientId, "n", null, null, null, true));
-        Assert.IsType<CreatedAtActionResult>((await procedures.Create(new CreateProcedureRequest(Guid.NewGuid(), "n", null, null, null), default)).Result);
+        Assert.IsType<NotFoundResult>((await services.GetById(id, default)).Result);
+        Assert.IsType<NotFoundResult>((await services.Update(id, new UpdateServiceRequest("n", null, null, null), default)).Result);
+        Assert.IsType<NotFoundResult>((await services.SetActive(id, new SetServiceActiveRequest(false), default)).Result);
+        CreateServiceRequest? seen = null;
+        _services.Setup(p => p.CreateAsync(It.IsAny<CreateServiceRequest>(), It.IsAny<CancellationToken>())).Callback<CreateServiceRequest, CancellationToken>((r, _) => seen = r)
+            .ReturnsAsync(new ServiceResponse(id, ClientId, "n", null, null, null, true));
+        Assert.IsType<CreatedAtActionResult>((await services.Create(new CreateServiceRequest(Guid.NewGuid(), "n", null, null, null), default)).Result);
         Assert.Equal(ClientId, seen!.ClientId);
-        _procedures.Setup(p => p.ListAsync(ClientId, false, It.IsAny<CancellationToken>())).ReturnsAsync(new List<ProcedureResponse>());
-        Assert.IsType<OkObjectResult>((await procedures.List(false, default)).Result);
+        _services.Setup(p => p.ListAsync(ClientId, false, It.IsAny<CancellationToken>())).ReturnsAsync(new List<ServiceResponse>());
+        Assert.IsType<OkObjectResult>((await services.List(false, default)).Result);
 
-        var bookingsController = new ProcedureBookingsController(_bookings.Object, Client.Object).With();
-        Assert.IsType<NotFoundResult>((await bookingsController.Update(id, new UpdateProcedureBookingRequest(null, null, null, null, null, null, null), default)).Result);
-        _bookings.Setup(b => b.ListAsync(ClientId, "quoted", 0, 200, It.IsAny<CancellationToken>())).ReturnsAsync((new List<ProcedureBookingResponse>() as IReadOnlyList<ProcedureBookingResponse>, 0));
-        Assert.IsType<OkObjectResult>((await bookingsController.List("quoted", 0, 9999, default)).Result);
+        var ordersController = new OrdersController(_orders.Object, Client.Object).With();
+        Assert.IsType<NotFoundResult>((await ordersController.Update(id, new UpdateOrderRequest(null, null, null, null, null, null, null), default)).Result);
+        _orders.Setup(b => b.ListAsync(ClientId, "quoted", 0, 200, It.IsAny<CancellationToken>())).ReturnsAsync((new List<OrderResponse>() as IReadOnlyList<OrderResponse>, 0));
+        Assert.IsType<OkObjectResult>((await ordersController.List("quoted", 0, 9999, default)).Result);
         NoClient();
-        IsForbid(await procedures.List(true, default));
-        IsForbid(await bookingsController.List(null, 0, 10, default));
+        IsForbid(await services.List(true, default));
+        IsForbid(await ordersController.List(null, 0, 10, default));
     }
 }

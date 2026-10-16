@@ -12,7 +12,7 @@ namespace Omni.App.Business.Contracts.Services.Clients;
 /// <summary>
 /// Normal registration ALWAYS means NEW USER -> NEW CLIENT. It never attaches an account to an existing
 /// client (joining one will be a separate invitation/staff flow), so a new signup starts with an empty,
-/// fully isolated tenant: no leads, conversations, messages, appointments, procedures, Knowledge Base,
+/// fully isolated tenant: no leads, conversations, messages, appointments, services, Knowledge Base,
 /// campaigns or channel connections — every one of those is scoped by client_id, and nothing here copies
 /// or shares data from another client.
 ///

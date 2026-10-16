@@ -25,7 +25,7 @@ else
         <span class="avatar-md" aria-hidden="true">@(string.IsNullOrWhiteSpace(appt.LeadFullName) ? "?" : appt.LeadFullName.Trim()[..1])</span>
         <div class="min-w-0">
             <h2 class="au-back-header__title">@(appt.LeadFullName ?? "—")</h2>
-            <span class="au-back-header__sub">@(appt.ProcedureName ?? "No procedure on file") · @LocalTimeHelper.Time(appt.ScheduledStart, "datetime-year", clientTimeZone: Model.ClientTimezone)</span>
+            <span class="au-back-header__sub">@(appt.ServiceName ?? "No service on file") · @LocalTimeHelper.Time(appt.ScheduledStart, "datetime-year", clientTimeZone: Model.ClientTimezone)</span>
         </div>
     </div>
     <div class="detail-chips">

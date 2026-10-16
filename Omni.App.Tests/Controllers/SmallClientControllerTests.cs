@@ -14,17 +14,17 @@ public class SmallClientControllerTests : ClientControllerTestBase
     private DashboardController Dashboard() => new DashboardController(_dashboard.Object, Client.Object).With();
 
     [Fact]
-    public async Task Dashboard_summary_attention_and_procedures_use_the_signed_in_client()
+    public async Task Dashboard_summary_attention_and_services_use_the_signed_in_client()
     {
         var from = DateTimeOffset.UtcNow.AddDays(-7);
         var to = DateTimeOffset.UtcNow;
         _dashboard.Setup(d => d.GetSummaryAsync(ClientId, from, to, It.IsAny<CancellationToken>())).ReturnsAsync(Blank<DashboardSummaryResponse>()).Verifiable();
         _dashboard.Setup(d => d.GetAttentionAsync(ClientId, It.IsAny<CancellationToken>())).ReturnsAsync(Blank<DashboardAttentionResponse>()).Verifiable();
-        _dashboard.Setup(d => d.GetProcedureStatsAsync(ClientId, from, to, It.IsAny<CancellationToken>())).ReturnsAsync(new List<DashboardProcedureRow>()).Verifiable();
+        _dashboard.Setup(d => d.GetServiceStatsAsync(ClientId, from, to, It.IsAny<CancellationToken>())).ReturnsAsync(new List<DashboardServiceRow>()).Verifiable();
         var sut = Dashboard();
         Assert.IsType<OkObjectResult>((await sut.Summary(from, to, default)).Result);
         Assert.IsType<OkObjectResult>((await sut.Attention(default)).Result);
-        Assert.IsType<OkObjectResult>((await sut.Procedures(from, to, default)).Result);
+        Assert.IsType<OkObjectResult>((await sut.Services(from, to, default)).Result);
         _dashboard.Verify();
     }
 

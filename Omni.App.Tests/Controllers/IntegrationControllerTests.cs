@@ -243,14 +243,14 @@ public class AiControllerTests
     private readonly Guid _clientId = Guid.NewGuid();
     private readonly Guid _leadId = Guid.NewGuid();
     private readonly Mock<IClientContext> _clients = new();
-    private readonly Mock<IProcedureService> _procedures = new();
+    private readonly Mock<ICatalogService> _services = new();
     private readonly Mock<ILeadService> _leads = new();
     private readonly Mock<IAppointmentService> _appointments = new();
     private readonly Mock<IAvailabilityService> _availability = new();
     private readonly Mock<IConversationService> _conversations = new();
     private readonly Mock<IKnowledgeSearchService> _search = new();
 
-    private AiController Sut() => new AiController(_clients.Object, _procedures.Object, _leads.Object, _appointments.Object, _availability.Object, _conversations.Object, _search.Object).With();
+    private AiController Sut() => new AiController(_clients.Object, _services.Object, _leads.Object, _appointments.Object, _availability.Object, _conversations.Object, _search.Object).With();
 
     private static UpcomingAppointmentResponse Upcoming(Guid? id = null) => new(id ?? Guid.NewGuid(), "booked", "consultation", null, null, DateTimeOffset.UtcNow, null, "2026-01-01", "10:00", "Thursday, Jan 1 at 10:00 AM");
 
@@ -266,15 +266,15 @@ public class AiControllerTests
     }
 
     [Fact]
-    public async Task Client_info_procedures_and_lead_lookups()
+    public async Task Client_info_services_and_lead_lookups()
     {
         Assert.IsType<NotFoundResult>((await Sut().GetClientInfo(_clientId, default)).Result);
         _clients.Setup(c => c.GetByIdAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(new Client { Id = _clientId, Name = "Glow", Timezone = "Asia/Beirut" });
         var info = (ClientInfoResponse)Assert.IsType<OkObjectResult>((await Sut().GetClientInfo(_clientId, default)).Result).Value!;
         Assert.Equal(("Glow", "Asia/Beirut"), (info.Name, info.Timezone));
 
-        await Sut().GetProcedures(_clientId, default);
-        _procedures.Verify(p => p.ListAsync(_clientId, true, It.IsAny<CancellationToken>()), Times.Once);
+        await Sut().GetServices(_clientId, default);
+        _services.Verify(p => p.ListAsync(_clientId, true, It.IsAny<CancellationToken>()), Times.Once);
 
         Assert.IsType<NotFoundResult>((await Sut().GetLeadContext(_leadId, _clientId, default)).Result);
         Assert.IsType<NotFoundResult>((await Sut().UpdateLead(_leadId, _clientId, new UpdateLeadContextRequest(null, null, null, null, null, null, null), default)).Result);
@@ -334,7 +334,7 @@ public class AiControllerTests
         Assert.Equal("SLOT_UNAVAILABLE", Result(Sut().BookConsultation(_clientId, request, default)).Code);
         _appointments.Setup(a => a.BookAvailableSlotAsync(It.IsAny<CreateAppointmentRequest>(), It.IsAny<CancellationToken>())).ThrowsAsync(new ArgumentException("Lead not found for this client."));
         Assert.Equal("LEAD_NOT_FOUND", Result(Sut().BookConsultation(_clientId, request, default)).Code);
-        _appointments.Setup(a => a.BookAvailableSlotAsync(It.IsAny<CreateAppointmentRequest>(), It.IsAny<CancellationToken>())).ThrowsAsync(new ArgumentException("Procedure inactive"));
+        _appointments.Setup(a => a.BookAvailableSlotAsync(It.IsAny<CreateAppointmentRequest>(), It.IsAny<CancellationToken>())).ThrowsAsync(new ArgumentException("Service inactive"));
         Assert.Equal("INVALID_REQUEST", Result(Sut().BookConsultation(_clientId, request, default)).Code);
     }
 

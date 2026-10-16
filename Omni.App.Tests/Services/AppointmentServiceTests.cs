@@ -13,11 +13,11 @@ public class AppointmentServiceTests
     private readonly Mock<IAppointmentRepository> _appointments = new();
     private readonly Mock<ILeadRepository> _leads = new();
     private readonly Mock<IClientRepository> _clients = new();
-    private readonly Mock<IProcedureRepository> _procedureRows = new();
+    private readonly Mock<IServiceRepository> _serviceRows = new();
     private readonly Mock<IUnitOfWork> _uow = new();
     private readonly Mock<IUnitOfWorkTransaction> _tx = new();
     private readonly Mock<IEventLogger> _events = new();
-    private readonly Mock<IProcedureService> _procedures = new();
+    private readonly Mock<ICatalogService> _services = new();
     private readonly Mock<IAvailabilityService> _availability = new();
     private readonly Mock<IInboxNotifier> _notifier = new();
     private readonly Mock<INotificationService> _notifications = new();
@@ -46,8 +46,8 @@ public class AppointmentServiceTests
     private readonly Mock<ICampaignRepository> _campaignRepo = new();
     private readonly Mock<IConfigManager> _config = new();
 
-    private AppointmentService Sut() => new(_appointments.Object, _leads.Object, _clients.Object, _procedureRows.Object, _uow.Object,
-        _events.Object, _procedures.Object, _availability.Object, _notifier.Object, _notifications.Object, _calendar.Object,
+    private AppointmentService Sut() => new(_appointments.Object, _leads.Object, _clients.Object, _serviceRows.Object, _uow.Object,
+        _events.Object, _services.Object, _availability.Object, _notifier.Object, _notifications.Object, _calendar.Object,
         _campaignRepo.Object, _config.Object);
 
     [Fact]
@@ -75,11 +75,11 @@ public class AppointmentServiceTests
         _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.AtLeastOnce);
     }
 
-    private Appointment MakeAppointment(string status = AppointmentStatus.Booked, int daysAhead = 3, Guid? procedureId = null)
+    private Appointment MakeAppointment(string status = AppointmentStatus.Booked, int daysAhead = 3, Guid? serviceId = null)
     {
         var a = new Appointment
         {
-            Id = Guid.NewGuid(), ClientId = _clientId, LeadId = _leadId, ProcedureId = procedureId, Status = status, AppointmentType = "consultation",
+            Id = Guid.NewGuid(), ClientId = _clientId, LeadId = _leadId, ServiceId = serviceId, Status = status, AppointmentType = "consultation",
             ScheduledStart = DateTimeOffset.UtcNow.AddDays(daysAhead).Date.AddHours(10), Lead = _lead
         };
         a.ScheduledStart = new DateTimeOffset(a.ScheduledStart.DateTime, TimeSpan.Zero);
@@ -92,12 +92,12 @@ public class AppointmentServiceTests
         _upcoming.Add(a);
         _appointments.Setup(r => r.GetForLeadAsync(_clientId, _leadId, a.Id, It.IsAny<CancellationToken>())).ReturnsAsync(a);
         _appointments.Setup(r => r.GetAsync(_clientId, a.Id, It.IsAny<CancellationToken>())).ReturnsAsync(a);
-        _appointments.Setup(r => r.GetWithProcedureReadOnlyAsync(a.Id, It.IsAny<CancellationToken>())).ReturnsAsync(a);
+        _appointments.Setup(r => r.GetWithServiceReadOnlyAsync(a.Id, It.IsAny<CancellationToken>())).ReturnsAsync(a);
         _appointments.Setup(r => r.GetWithDetailsAsync(_clientId, a.Id, It.IsAny<CancellationToken>())).ReturnsAsync(a);
     }
 
-    private CreateAppointmentRequest Req(DateTimeOffset? start = null, Guid? procedureId = null) =>
-        new(_clientId, _leadId, procedureId, "", start ?? DateTimeOffset.UtcNow.AddDays(2), null, null, null, "note");
+    private CreateAppointmentRequest Req(DateTimeOffset? start = null, Guid? serviceId = null) =>
+        new(_clientId, _leadId, serviceId, "", start ?? DateTimeOffset.UtcNow.AddDays(2), null, null, null, "note");
 
     // ---------------------------------------------------------------- booking
 
@@ -108,14 +108,14 @@ public class AppointmentServiceTests
         _appointments.Setup(a => a.Add(It.IsAny<Appointment>())).Callback<Appointment>(a => saved = a);
         var procId = Guid.NewGuid();
 
-        var r = await Sut().BookAvailableSlotAsync(Req(procedureId: procId));
+        var r = await Sut().BookAvailableSlotAsync(Req(serviceId: procId));
 
         Assert.Equal(saved!.Id, r.Id);
         Assert.Equal(("consultation", AppointmentStatus.Booked), (saved.AppointmentType, saved.Status));
         Assert.Equal(saved.ScheduledStart.AddMinutes(30), saved.ScheduledEnd);
         Assert.Equal(LeadStatus.ConsultationBooked, _lead.Status);
         _appointments.Verify(a => a.LockClientForBookingAsync(_clientId, It.IsAny<CancellationToken>()), Times.Once);
-        _procedures.Verify(p => p.EnsureUsableAsync(_clientId, procId, It.IsAny<CancellationToken>()), Times.Once);
+        _services.Verify(p => p.EnsureUsableAsync(_clientId, procId, It.IsAny<CancellationToken>()), Times.Once);
         _events.Verify(e => e.Log(_clientId, EventTypes.ConsultationBooked, _leadId, null, saved.Id, null, "{}"), Times.Once);
         _tx.Verify(t => t.CommitAsync(It.IsAny<CancellationToken>()), Times.Once);
         _notifier.Verify(n => n.AppointmentChangedAsync(_clientId, saved.Id, "created", It.IsAny<CancellationToken>()), Times.Once);
@@ -217,16 +217,16 @@ public class AppointmentServiceTests
     }
 
     [Fact]
-    public async Task Reschedule_uses_the_procedure_only_when_it_is_still_active()
+    public async Task Reschedule_uses_the_service_only_when_it_is_still_active()
     {
         var procId = Guid.NewGuid();
-        var a = MakeAppointment(procedureId: procId);
+        var a = MakeAppointment(serviceId: procId);
         Setup(a);
-        _procedureRows.Setup(p => p.IsActiveAsync(procId, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        _serviceRows.Setup(p => p.IsActiveAsync(procId, It.IsAny<CancellationToken>())).ReturnsAsync(true);
         await Sut().RescheduleAsync(_clientId, _leadId, a.Id, DateTimeOffset.UtcNow.AddDays(5), null, null);
         _availability.Verify(x => x.CheckSlotAsync(_clientId, procId, It.IsAny<DateTimeOffset>(), It.IsAny<DateTimeOffset?>(), a.Id, It.IsAny<CancellationToken>()), Times.Once);
 
-        _procedureRows.Setup(p => p.IsActiveAsync(procId, It.IsAny<CancellationToken>())).ReturnsAsync(false);
+        _serviceRows.Setup(p => p.IsActiveAsync(procId, It.IsAny<CancellationToken>())).ReturnsAsync(false);
         await Sut().RescheduleAsync(_clientId, _leadId, a.Id, DateTimeOffset.UtcNow.AddDays(6), null, null);
         _availability.Verify(x => x.CheckSlotAsync(_clientId, null, It.IsAny<DateTimeOffset>(), It.IsAny<DateTimeOffset?>(), a.Id, It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -391,9 +391,9 @@ public class AppointmentServiceTests
     [Fact]
     public async Task Schedule_turns_argument_errors_into_invalid_request()
     {
-        _procedures.Setup(p => p.EnsureUsableAsync(_clientId, It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ThrowsAsync(new ArgumentException("Procedure is inactive"));
-        var o = await Sut().ScheduleAsync(_clientId, _leadId, new ScheduleConsultationRequest(DateTimeOffset.UtcNow.AddDays(3), ProcedureId: Guid.NewGuid()));
-        Assert.Equal(("INVALID_REQUEST", "Procedure is inactive"), (o.Code, o.Message));
+        _services.Setup(p => p.EnsureUsableAsync(_clientId, It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ThrowsAsync(new ArgumentException("Service is inactive"));
+        var o = await Sut().ScheduleAsync(_clientId, _leadId, new ScheduleConsultationRequest(DateTimeOffset.UtcNow.AddDays(3), ServiceId: Guid.NewGuid()));
+        Assert.Equal(("INVALID_REQUEST", "Service is inactive"), (o.Code, o.Message));
     }
 
     [Fact]

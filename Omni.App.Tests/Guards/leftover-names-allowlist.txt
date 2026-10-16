@@ -15,8 +15,8 @@ path: PROJECT_HANDOFF.md
 # One-off data migrations read the old table and column names.
 path: Database/migrations/**
 
-# The demo seed is a populated clinic (names, messages, knowledge text); its data stays clinic-flavoured.
-path: Database/seed-demo.sql | clinic
+# The demo seed is a populated clinic (names, messages, knowledge text, template variables); its data stays clinic-flavoured.
+path: Database/seed-demo.sql | clinic,procedure
 
 # Tests name the built-in business type through this one constant (Support/TextKit.cs); the type's own code is data.
 token: TextKit.Clinic

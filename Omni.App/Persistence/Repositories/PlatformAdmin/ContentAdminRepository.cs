@@ -64,13 +64,13 @@ public class ContentAdminRepository : IContentAdminRepository
             .Take(1000).ToListAsync(ct);
     }
 
-    public Task<List<ProcedureRow>> ListProceduresAsync(Guid? clientId, CancellationToken ct = default)
+    public Task<List<ServiceRow>> ListServicesAsync(Guid? clientId, CancellationToken ct = default)
     {
-        var q = _db.Procedures.AsNoTracking().AsQueryable();
+        var q = _db.Services.AsNoTracking().AsQueryable();
         if (clientId.HasValue) q = q.Where(p => p.ClientId == clientId.Value);
         return q.OrderBy(p => p.Client!.Name).ThenBy(p => p.Name)
-            .Select(p => new ProcedureRow(p.Id, p.ClientId, p.Client!.Name, p.Name, p.Code, p.ConsultationDuration, p.IsActive,
-                _db.Leads.Count(l => l.ProcedureId == p.Id), p.UpdatedAt))
+            .Select(p => new ServiceRow(p.Id, p.ClientId, p.Client!.Name, p.Name, p.Code, p.ConsultationDuration, p.IsActive,
+                _db.Leads.Count(l => l.ServiceId == p.Id), p.UpdatedAt))
             .Take(2000).ToListAsync(ct);
     }
 
@@ -112,6 +112,6 @@ public class ContentAdminRepository : IContentAdminRepository
             .ToListAsync(ct);
     }
 
-    public Task<Procedure?> GetProcedureAsync(Guid id, CancellationToken ct = default) =>
-        _db.Procedures.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id, ct);
+    public Task<Service?> GetServiceAsync(Guid id, CancellationToken ct = default) =>
+        _db.Services.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id, ct);
 }

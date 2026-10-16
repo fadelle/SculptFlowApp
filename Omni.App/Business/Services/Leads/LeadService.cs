@@ -1,7 +1,7 @@
 using Omni.App.Business.Contracts.Managers;
 using Omni.App.Business.Contracts.Services.BusinessTypes;
 using Omni.App.Business.Contracts.Services.Leads;
-using Omni.App.Business.Contracts.Services.Procedures;
+using Omni.App.Business.Contracts.Services.Catalog;
 using Omni.App.Business.Mappers.Leads;
 using Omni.App.Common.Enums;
 using Omni.App.Common.Helpers;
@@ -21,18 +21,18 @@ public class LeadService : ILeadService
     private readonly ILeadRepository _leads;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IEventLogger _events;
-    private readonly IProcedureService _procedures;
+    private readonly ICatalogService _services;
     private readonly IClientRepository _clients;
     private readonly IBusinessTypeService _businessTypes;
 
-    public LeadService(ILeadRepository leads, IUnitOfWork unitOfWork, IEventLogger events, IProcedureService procedures, IClientRepository clients,
+    public LeadService(ILeadRepository leads, IUnitOfWork unitOfWork, IEventLogger events, ICatalogService services, IClientRepository clients,
         IBusinessTypeService businessTypes)
     {
         _businessTypes = businessTypes;
         _leads = leads;
         _unitOfWork = unitOfWork;
         _events = events;
-        _procedures = procedures;
+        _services = services;
         _clients = clients;
     }
 
@@ -64,7 +64,7 @@ public class LeadService : ILeadService
         {
             Id = Guid.NewGuid(),
             ClientId = request.ClientId,
-            ProcedureId = request.ProcedureId,
+            ServiceId = request.ServiceId,
             FullName = request.FullName,
             FirstName = request.FirstName,
             LastName = request.LastName,
@@ -90,9 +90,9 @@ public class LeadService : ILeadService
 
         await _unitOfWork.SaveChangesAsync(ct);
 
-        if (lead.ProcedureId is not null)
+        if (lead.ServiceId is not null)
         {
-            await _leads.LoadProcedureAsync(lead, ct);
+            await _leads.LoadServiceAsync(lead, ct);
         }
 
         return (LeadMapper.ToResponse(lead), true);
@@ -106,9 +106,9 @@ public class LeadService : ILeadService
     }
 
     public async Task<(IReadOnlyList<LeadResponse> Items, int TotalCount)> ListAsync(
-        Guid clientId, string? status, Guid? procedureId, string? search, int skip, int take, CancellationToken ct = default)
+        Guid clientId, string? status, Guid? serviceId, string? search, int skip, int take, CancellationToken ct = default)
     {
-        var (items, totalCount) = await _leads.ListAsync(clientId, status, procedureId, search, skip, take, ct);
+        var (items, totalCount) = await _leads.ListAsync(clientId, status, serviceId, search, skip, take, ct);
         return (items.Select(LeadMapper.ToResponse).ToList(), totalCount);
     }
 
@@ -118,14 +118,14 @@ public class LeadService : ILeadService
 
         if (lead is null) return null;
 
-        // Only a CHANGE of procedure interest is validated — resubmitting the lead's current
-        // (possibly now-inactive) procedure must keep working.
-        if (request.ProcedureId is { } newProcedureId && newProcedureId != lead.ProcedureId)
+        // Only a CHANGE of service interest is validated — resubmitting the lead's current
+        // (possibly now-inactive) service must keep working.
+        if (request.ServiceId is { } newServiceId && newServiceId != lead.ServiceId)
         {
-            await _procedures.EnsureUsableAsync(clientId, newProcedureId, ct);
+            await _services.EnsureUsableAsync(clientId, newServiceId, ct);
         }
 
-        if (request.ProcedureId is not null) lead.ProcedureId = request.ProcedureId;
+        if (request.ServiceId is not null) lead.ServiceId = request.ServiceId;
         if (request.FullName is not null) lead.FullName = request.FullName;
         if (request.FirstName is not null) lead.FirstName = request.FirstName;
         if (request.LastName is not null) lead.LastName = request.LastName;
@@ -139,9 +139,9 @@ public class LeadService : ILeadService
 
         lead.UpdatedAt = DateTimeOffset.UtcNow;
 
-        if (request.ProcedureId is not null)
+        if (request.ServiceId is not null)
         {
-            await _leads.LoadProcedureAsync(lead, ct);
+            await _leads.LoadServiceAsync(lead, ct);
         }
 
         await _unitOfWork.SaveChangesAsync(ct);
@@ -214,12 +214,12 @@ public class LeadService : ILeadService
         var lead = await _leads.GetAsync(clientId, id, ct);
         if (lead is null) return null;
 
-        if (request.ProcedureId is { } newProcedureId && newProcedureId != lead.ProcedureId)
+        if (request.ServiceId is { } newServiceId && newServiceId != lead.ServiceId)
         {
-            await _procedures.EnsureUsableAsync(clientId, newProcedureId, ct);
+            await _services.EnsureUsableAsync(clientId, newServiceId, ct);
         }
 
-        if (request.ProcedureId is not null) lead.ProcedureId = request.ProcedureId;
+        if (request.ServiceId is not null) lead.ServiceId = request.ServiceId;
         if (request.PreferredLanguage is not null) lead.PreferredLanguage = request.PreferredLanguage;
         if (request.City is not null) lead.City = request.City;
         if (request.DesiredTimeline is not null) lead.DesiredTimeline = request.DesiredTimeline;
@@ -229,9 +229,9 @@ public class LeadService : ILeadService
 
         lead.UpdatedAt = DateTimeOffset.UtcNow;
 
-        if (request.ProcedureId is not null)
+        if (request.ServiceId is not null)
         {
-            await _leads.LoadProcedureAsync(lead, ct);
+            await _leads.LoadServiceAsync(lead, ct);
         }
 
         await _unitOfWork.SaveChangesAsync(ct);

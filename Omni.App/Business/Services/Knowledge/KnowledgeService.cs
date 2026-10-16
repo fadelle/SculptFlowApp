@@ -219,7 +219,7 @@ public class KnowledgeService : IKnowledgeService
         if (pieces.Count == 0) throw new ArgumentException("Content is required.");
 
         // The title is part of what gets embedded so a chunk like "Yes, you stay overnight" still
-        // carries which procedure/topic it's about; the stored (and returned) chunk text stays plain.
+        // carries which service/topic it's about; the stored (and returned) chunk text stays plain.
         var vectors = await _embeddings.EmbedBatchAsync(
             pieces.Select(p => $"{title}\n\n{p}").ToList(), settings.EmbeddingModel, settings.VectorDimension, ct);
         return (pieces, vectors);

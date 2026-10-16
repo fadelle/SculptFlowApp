@@ -75,7 +75,7 @@ public class CampaignAudienceRepository : ICampaignAudienceRepository
     }
 
     /// <summary>Client-defined filters — no "never booked" requirement, just whichever optional
-    /// fields the client set. Common ones (leadStatuses, sources, procedureId, inactiveDays) are
+    /// fields the client set. Common ones (leadStatuses, sources, serviceId, inactiveDays) are
     /// shared with reactivation; everything past that (qualification, dates, appointment status,
     /// country/city/language) only ever applies here — the custom-audience "Advanced filters"
     /// section in the Campaign creation UI.</summary>
@@ -133,9 +133,9 @@ public class CampaignAudienceRepository : ICampaignAudienceRepository
 
     private static IQueryable<Lead> ApplyOptionalScopingFilters(IQueryable<Lead> query, CampaignAudienceFilters filters)
     {
-        if (filters.ProcedureId.HasValue)
+        if (filters.ServiceId.HasValue)
         {
-            query = query.Where(l => l.ProcedureId == filters.ProcedureId.Value);
+            query = query.Where(l => l.ServiceId == filters.ServiceId.Value);
         }
         if (filters.LeadStatuses is { Count: > 0 })
         {

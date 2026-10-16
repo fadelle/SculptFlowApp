@@ -5,7 +5,7 @@ namespace Omni.App.Entities.Dtos.Campaigns;
 
 /// <summary>Optional filters for Campaign.AudienceFilters (jsonb). Deliberately a small fixed set
 /// of fields, not a generic query language — see CampaignAudienceService for how each is applied.
-/// Every field is optional; an absent field means "don't filter on this." InactiveDays/ProcedureId/
+/// Every field is optional; an absent field means "don't filter on this." InactiveDays/ServiceId/
 /// Sources are used by both the reactivation and custom audiences; everything below Sources is
 /// "advanced" — offered only in the custom-audience builder's progressive-disclosure section, per
 /// the Campaign creation UI (see wwwroot/js/campaign-audience.js). Every field maps to an existing
@@ -13,7 +13,7 @@ namespace Omni.App.Entities.Dtos.Campaigns;
 /// Appointment.Status) — no schema change, just more ways to slice data that already exists.</summary>
 public record CampaignAudienceFilters(
     [property: JsonPropertyName("inactiveDays")] int? InactiveDays = null,
-    [property: JsonPropertyName("procedureId")] Guid? ProcedureId = null,
+    [property: JsonPropertyName("serviceId")] Guid? ServiceId = null,
     [property: JsonPropertyName("leadStatuses")] IReadOnlyList<string>? LeadStatuses = null,
     [property: JsonPropertyName("sources")] IReadOnlyList<string>? Sources = null,
     [property: JsonPropertyName("qualificationStatuses")] IReadOnlyList<string>? QualificationStatuses = null,

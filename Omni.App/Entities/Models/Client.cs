@@ -28,6 +28,6 @@ public class Client
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 
-    public ICollection<Procedure> Procedures { get; set; } = new List<Procedure>();
+    public ICollection<Service> Services { get; set; } = new List<Service>();
     public ICollection<Lead> Leads { get; set; } = new List<Lead>();
 }

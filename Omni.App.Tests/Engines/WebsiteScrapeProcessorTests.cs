@@ -82,7 +82,7 @@ public class WebsiteScrapeProcessorTests
             new SsrfGuard(_config.Object, env.Object), _config.Object, NullLogger<WebsiteScrapeProcessor>.Instance);
     }
 
-    private static string Text(string seed) => string.Join(" ", Enumerable.Repeat($"{seed} describes this procedure in a reasonable amount of detail.", 4));
+    private static string Text(string seed) => string.Join(" ", Enumerable.Repeat($"{seed} describes this service in a reasonable amount of detail.", 4));
 
     private static string Html(string title, string body, string head = "", params string[] links) =>
         $"<html><head><title>{title}</title>{head}</head><body><main><h1>{title}</h1><p>{body}</p>{string.Concat(links.Select(l => $"<a href=\"{l}\">link</a>"))}</main></body></html>";

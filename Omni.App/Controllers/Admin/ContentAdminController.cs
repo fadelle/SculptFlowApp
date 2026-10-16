@@ -8,7 +8,7 @@ namespace Omni.App.Controllers.Admin;
 
 /// <summary>
 /// Platform-admin content API (internal; called by the Omni.Admin portal): campaigns, WhatsApp templates,
-/// procedures and the knowledge base across clients. Writes answer { clientId }. Errors: 400 invalid input, 404 not
+/// services and the knowledge base across clients. Writes answer { clientId }. Errors: 400 invalid input, 404 not
 /// found, 422 not allowed now (e.g. cancelling a finished campaign).
 /// </summary>
 [ApiController]
@@ -44,12 +44,12 @@ public class ContentAdminController : ControllerBase
     public async Task<IActionResult> Templates([FromQuery] Guid? clientId, [FromQuery] string? status, CancellationToken ct) =>
         Ok(await _content.ListTemplatesAsync(clientId, status, ct));
 
-    [HttpGet("procedures")]
-    public async Task<IActionResult> Procedures([FromQuery] Guid? clientId, CancellationToken ct) => Ok(await _content.ListProceduresAsync(clientId, ct));
+    [HttpGet("services")]
+    public async Task<IActionResult> Services([FromQuery] Guid? clientId, CancellationToken ct) => Ok(await _content.ListServicesAsync(clientId, ct));
 
-    [HttpPut("procedures/{id:guid}/active")]
-    public async Task<IActionResult> SetProcedureActive(Guid id, [FromBody] ActiveBody request, CancellationToken ct) =>
-        Ok(await _content.SetProcedureActiveAsync(id, request.Active, ct));
+    [HttpPut("services/{id:guid}/active")]
+    public async Task<IActionResult> SetServiceActive(Guid id, [FromBody] ActiveBody request, CancellationToken ct) =>
+        Ok(await _content.SetServiceActiveAsync(id, request.Active, ct));
 
     [HttpGet("knowledge")]
     public async Task<IActionResult> Documents([FromQuery] Guid? clientId, [FromQuery] string? search, [FromQuery] bool? active,

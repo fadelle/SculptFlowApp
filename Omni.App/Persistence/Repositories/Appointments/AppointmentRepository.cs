@@ -24,19 +24,19 @@ public class AppointmentRepository : IAppointmentRepository
     public Task<Appointment?> GetWithDetailsAsync(Guid clientId, Guid appointmentId, CancellationToken ct = default) =>
         _db.Appointments
             .Include(a => a.Lead)
-            .Include(a => a.Procedure)
+            .Include(a => a.Service)
             .FirstOrDefaultAsync(a => a.ClientId == clientId && a.Id == appointmentId, ct);
 
     public Task<Appointment?> GetForLeadAsync(Guid clientId, Guid leadId, Guid appointmentId, CancellationToken ct = default) =>
         _db.Appointments.FirstOrDefaultAsync(a => a.ClientId == clientId && a.LeadId == leadId && a.Id == appointmentId, ct);
 
-    public Task<Appointment?> GetWithProcedureReadOnlyAsync(Guid appointmentId, CancellationToken ct = default) =>
-        _db.Appointments.AsNoTracking().Include(a => a.Procedure).FirstOrDefaultAsync(a => a.Id == appointmentId, ct);
+    public Task<Appointment?> GetWithServiceReadOnlyAsync(Guid appointmentId, CancellationToken ct = default) =>
+        _db.Appointments.AsNoTracking().Include(a => a.Service).FirstOrDefaultAsync(a => a.Id == appointmentId, ct);
 
     public async Task<IReadOnlyList<Appointment>> ListUpcomingForLeadAsync(Guid clientId, Guid leadId, DateTimeOffset now,
         CancellationToken ct = default) =>
         await _db.Appointments.AsNoTracking()
-            .Include(a => a.Procedure)
+            .Include(a => a.Service)
             .Where(a => a.ClientId == clientId && a.LeadId == leadId && a.ScheduledStart > now
                         && (a.Status == AppointmentStatus.Booked || a.Status == AppointmentStatus.Confirmed))
             .OrderBy(a => a.ScheduledStart)
@@ -47,7 +47,7 @@ public class AppointmentRepository : IAppointmentRepository
     {
         var query = _db.Appointments
             .Include(a => a.Lead)
-            .Include(a => a.Procedure)
+            .Include(a => a.Service)
             .Where(a => a.ClientId == clientId);
 
         if (!string.IsNullOrWhiteSpace(status)) query = query.Where(a => a.Status == status);
@@ -63,7 +63,7 @@ public class AppointmentRepository : IAppointmentRepository
         DateTimeOffset toUtc, CancellationToken ct = default) =>
         await _db.Appointments
             .Include(a => a.Lead)
-            .Include(a => a.Procedure)
+            .Include(a => a.Service)
             .Where(a => a.ClientId == clientId && a.ScheduledStart >= fromUtc && a.ScheduledStart < toUtc)
             .OrderBy(a => a.ScheduledStart)
             .ToListAsync(ct);
@@ -79,15 +79,15 @@ public class AppointmentRepository : IAppointmentRepository
                         && a.Status != AppointmentStatus.Canceled && a.Status != AppointmentStatus.Rescheduled
                         && a.ScheduledStart >= lowUtc && a.ScheduledStart < highUtc)
             .Select(a => new BusyAppointmentRow(a.ScheduledStart, a.ScheduledEnd,
-                a.Procedure != null ? a.Procedure.ConsultationDuration : null))
+                a.Service != null ? a.Service.ConsultationDuration : null))
             .ToListAsync(ct);
 
     public async Task LoadDetailsAsync(Appointment appointment, CancellationToken ct = default)
     {
         await _db.Entry(appointment).Reference(x => x.Lead).LoadAsync(ct);
-        if (appointment.ProcedureId is not null)
+        if (appointment.ServiceId is not null)
         {
-            await _db.Entry(appointment).Reference(x => x.Procedure).LoadAsync(ct);
+            await _db.Entry(appointment).Reference(x => x.Service).LoadAsync(ct);
         }
     }
 

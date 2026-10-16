@@ -115,9 +115,9 @@ section wins**. Copy says *patient* where the guide says *customer*: the people 
   `leads.js` swaps `#leads-results`; elements whose class a script rewrites (`[data-pw-rule]`, `[data-pw-match]`,
   `[data-status-for]`, `#inbox-lead-status`, `#inbox-thread-mode`, `[data-role=status]`, the dashboard health dot) keep
   plain classes; `[hidden] { display: none !important }` stays in `site.css`.
-- **Recipes as built** (copy a page of the same kind): *list* `Procedures/Index` (page head → toolbar → `.au-table-card`
+- **Recipes as built** (copy a page of the same kind): *list* `Services/Index` (page head → toolbar → `.au-table-card`
   with `.au-table--stack` and `data-label`s, or `_EmptyState`); *detail* `Dashboard/LeadDetail` (`.au-back-header` →
-  `.detail-chips` → panels with `.au-detail-rows`); *form* `Procedures/Edit` (stacked `.au-form-field`s in a panel,
+  `.detail-chips` → panels with `.au-detail-rows`); *form* `Services/Edit` (stacked `.au-form-field`s in a panel,
   `.au-form-actions`); *settings with sections* `Settings/BusinessInfo`; *popup* `WhatsApp/Templates` (`.bm-overlay >
   .card`); *sign-in* `Account/Login` (`.au-auth__card`). Multi-part table cells wrap their content in one `<div>` so the
   stacked phone layout keeps label and value side by side.

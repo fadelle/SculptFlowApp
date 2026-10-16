@@ -7,7 +7,7 @@ public class Appointment
     public Guid Id { get; set; }
     public Guid ClientId { get; set; }
     public Guid LeadId { get; set; }
-    public Guid? ProcedureId { get; set; }
+    public Guid? ServiceId { get; set; }
 
     public string AppointmentType { get; set; } = "consultation";
     public string Status { get; set; } = AppointmentStatus.Booked;
@@ -24,6 +24,6 @@ public class Appointment
     public DateTimeOffset UpdatedAt { get; set; }
 
     public Lead? Lead { get; set; }
-    public Procedure? Procedure { get; set; }
-    public ICollection<ProcedureBooking> ProcedureBookings { get; set; } = new List<ProcedureBooking>();
+    public Service? Service { get; set; }
+    public ICollection<Order> Orders { get; set; } = new List<Order>();
 }

@@ -58,14 +58,14 @@
 
   function reactivationFilters() {
     var filters = { inactiveDays: parseInt(val('inactive-days'), 10) };
-    if (val('reactivation-procedure')) filters.procedureId = val('reactivation-procedure');
+    if (val('reactivation-service')) filters.serviceId = val('reactivation-service');
     if (val('reactivation-source')) filters.sources = [val('reactivation-source')];
     return filters;
   }
 
   function customFilters() {
     var filters = {};
-    if (val('custom-procedure')) filters.procedureId = val('custom-procedure');
+    if (val('custom-service')) filters.serviceId = val('custom-service');
     if (val('custom-inactive-days')) filters.inactiveDays = parseInt(val('custom-inactive-days'), 10);
 
     var leadStatuses = checkedValues('CustomLeadStatuses');
@@ -160,8 +160,8 @@
   if (form) {
     form.addEventListener('change', function (e) {
       var t = e.target;
-      if (t.matches('#inactive-days, #reactivation-procedure, #reactivation-source, ' +
-        '#custom-procedure, #custom-inactive-days, #custom-created-after, #custom-created-before, ' +
+      if (t.matches('#inactive-days, #reactivation-service, #reactivation-source, ' +
+        '#custom-service, #custom-inactive-days, #custom-created-after, #custom-created-before, ' +
         '#custom-last-contacted-after, #custom-last-contacted-before, ' +
         'input[name="CustomLeadStatuses"], input[name="CustomQualificationStatuses"], ' +
         'input[name="CustomSources"], input[name="CustomAppointmentStatuses"]')) {

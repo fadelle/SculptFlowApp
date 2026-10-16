@@ -283,7 +283,7 @@ public class CalendarIntegrationService : ICalendarIntegrationService
 
             var client = await _clients.GetReadOnlyAsync(clientId, ct);
             var timezone = client?.Timezone ?? "UTC";
-            var title = $"{appointment.LeadFullName ?? "Patient"} — {appointment.ProcedureName ?? appointment.AppointmentType}";
+            var title = $"{appointment.LeadFullName ?? "Patient"} — {appointment.ServiceName ?? appointment.AppointmentType}";
             var description = BuildDescription(appointment);
             var link = $"/dashboard/appointments/{appointment.Id}";
 

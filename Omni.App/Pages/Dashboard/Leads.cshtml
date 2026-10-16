@@ -82,7 +82,7 @@ else
                             <tr>
                                 <th>Name</th>
                                 <th>Phone</th>
-                                <th>Procedure</th>
+                                <th>Service</th>
                                 <th>Source</th>
                                 <th>Status</th>
                                 <th>Qualification</th>
@@ -98,7 +98,7 @@ else
                                 <tr class="row-link" data-href="/dashboard/leads/@lead.Id">
                                     <td data-label="Name"><a class="cell-person" href="/dashboard/leads/@lead.Id"><span class="avatar-sm">@(string.IsNullOrWhiteSpace(lead.FullName) ? "?" : lead.FullName.Trim()[..1])</span>@(lead.FullName ?? "—")</a></td>
                                     <td data-label="Phone">@(lead.Phone ?? "—")</td>
-                                    <td data-label="Procedure">@(lead.ProcedureName ?? "—")</td>
+                                    <td data-label="Service">@(lead.ServiceName ?? "—")</td>
                                     <td data-label="Source">
                                         @if (channel is null)
                                         {

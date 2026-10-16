@@ -207,8 +207,8 @@ public interface IConfigManager
     int CacheClientsMinutes { get; }
     /// <summary>Which client a signed-in user belongs to. Keep it short: it is how long a removed staff member could keep access if a removal were ever missed. Lifetime in minutes. Default 10.</summary>
     int CacheStaffLookupMinutes { get; }
-    /// <summary>A client's procedures. Lifetime in minutes. Default 60.</summary>
-    int CacheProceduresMinutes { get; }
+    /// <summary>A client's services. Lifetime in minutes. Default 60.</summary>
+    int CacheServicesMinutes { get; }
     /// <summary>Weekly hours, booking settings, closed dates and calendar connections. Lifetime in minutes. Default 60.</summary>
     int CacheSchedulingMinutes { get; }
     /// <summary>Channel connections, TikTok connection and WhatsApp templates. Lifetime in minutes. Default 60.</summary>

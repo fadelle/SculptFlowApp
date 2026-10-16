@@ -34,13 +34,13 @@ public class LeadAdminRepository : ILeadAdminRepository
         return q.OrderByDescending(l => l.CreatedAt)
             .Select(l => new LeadRow(l.Id, l.ClientId, l.Client!.Name,
                 l.FullName ?? ((l.FirstName ?? "") + " " + (l.LastName ?? "")).Trim(),
-                l.Phone, l.Email, l.Source, l.Status, l.QualificationStatus, l.Procedure != null ? l.Procedure.Name : null,
+                l.Phone, l.Email, l.Source, l.Status, l.QualificationStatus, l.Service != null ? l.Service.Name : null,
                 l.MarketingOptIn, l.LastContactAt, l.CreatedAt))
             .ToPagedAsync(page, ct: ct);
     }
 
     public Task<Lead?> GetLeadAsync(Guid id, CancellationToken ct = default) =>
-        _db.Leads.AsNoTracking().Include(l => l.Client).Include(l => l.Procedure).FirstOrDefaultAsync(l => l.Id == id, ct);
+        _db.Leads.AsNoTracking().Include(l => l.Client).Include(l => l.Service).FirstOrDefaultAsync(l => l.Id == id, ct);
 
     public Task<List<EventLog>> LeadEventsAsync(Guid leadId, CancellationToken ct = default) =>
         _db.Events.AsNoTracking().Where(e => e.LeadId == leadId).OrderByDescending(e => e.CreatedAt).Take(100).ToListAsync(ct);
@@ -106,7 +106,7 @@ public class LeadAdminRepository : ILeadAdminRepository
                 _db.Clients.Where(x => x.Id == a.ClientId).Select(x => x.Name).FirstOrDefault() ?? "",
                 _db.Clients.Where(x => x.Id == a.ClientId).Select(x => x.Timezone).FirstOrDefault() ?? "UTC",
                 a.LeadId, a.Lead!.FullName ?? ((a.Lead.FirstName ?? "") + " " + (a.Lead.LastName ?? "")).Trim(),
-                a.Procedure != null ? a.Procedure.Name : null, a.Status, a.ScheduledStart, a.ScheduledEnd, a.Notes, a.CreatedAt))
+                a.Service != null ? a.Service.Name : null, a.Status, a.ScheduledStart, a.ScheduledEnd, a.Notes, a.CreatedAt))
             .ToPagedAsync(page, ct: ct);
     }
 

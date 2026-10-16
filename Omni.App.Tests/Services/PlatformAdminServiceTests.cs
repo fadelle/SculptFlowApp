@@ -87,10 +87,10 @@ public class LeadAdminServiceTests
     public async Task Reads_map_entities_and_clamp_message_counts()
     {
         Assert.Null(await Sut().GetLeadAsync(Guid.NewGuid(), default));
-        var lead = new Lead { Id = Guid.NewGuid(), ClientId = _clientId, FullName = "Ann", Client = new Client { Id = _clientId, Name = "C" }, Procedure = new Procedure { Id = Guid.NewGuid(), Name = "Rhino" } };
+        var lead = new Lead { Id = Guid.NewGuid(), ClientId = _clientId, FullName = "Ann", Client = new Client { Id = _clientId, Name = "C" }, Service = new Service { Id = Guid.NewGuid(), Name = "Rhino" } };
         _repo.Setup(r => r.GetLeadAsync(lead.Id, It.IsAny<CancellationToken>())).ReturnsAsync(lead);
         var detail = await Sut().GetLeadAsync(lead.Id, default);
-        Assert.Equal(("Ann", "C", "Rhino"), (detail!.FullName, detail.Client!.Name, detail.Procedure!.Name));
+        Assert.Equal(("Ann", "C", "Rhino"), (detail!.FullName, detail.Client!.Name, detail.Service!.Name));
 
         _repo.Setup(r => r.LeadEventsAsync(lead.Id, It.IsAny<CancellationToken>())).ReturnsAsync(new List<EventLog> { new() { Id = Guid.NewGuid(), EventType = "x", Metadata = "{}" } });
         Assert.Single(await Sut().LeadEventsAsync(lead.Id, default));
@@ -360,11 +360,11 @@ public class ContentAndOverviewAdminServiceTests
     private readonly Guid _clientId = Guid.NewGuid();
     private readonly Mock<IContentAdminRepository> _repo = new();
     private readonly Mock<ICampaignService> _campaigns = new();
-    private readonly Mock<IProcedureService> _procedures = new();
+    private readonly Mock<ICatalogService> _services = new();
     private readonly Mock<IKnowledgeService> _knowledge = new();
     private readonly Mock<IKnowledgeSettingsService> _settings = new();
 
-    private ContentAdminService Sut() => new(_repo.Object, _campaigns.Object, _procedures.Object, _knowledge.Object, _settings.Object);
+    private ContentAdminService Sut() => new(_repo.Object, _campaigns.Object, _services.Object, _knowledge.Object, _settings.Object);
 
     [Fact]
     public async Task Campaign_cancel_goes_through_the_campaign_service()
@@ -376,14 +376,14 @@ public class ContentAndOverviewAdminServiceTests
     }
 
     [Fact]
-    public async Task Procedure_document_and_settings_changes_use_the_client_services()
+    public async Task Service_document_and_settings_changes_use_the_client_services()
     {
-        await Assert.ThrowsAsync<KeyNotFoundException>(() => Sut().SetProcedureActiveAsync(Guid.NewGuid(), true, default));
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => Sut().SetServiceActiveAsync(Guid.NewGuid(), true, default));
         await Assert.ThrowsAsync<KeyNotFoundException>(() => Sut().SetDocumentActiveAsync(Guid.NewGuid(), true, default));
-        var proc = new Procedure { Id = Guid.NewGuid(), ClientId = _clientId };
-        _repo.Setup(r => r.GetProcedureAsync(proc.Id, It.IsAny<CancellationToken>())).ReturnsAsync(proc);
-        Assert.Equal(_clientId, (await Sut().SetProcedureActiveAsync(proc.Id, false, default)).ClientId);
-        _procedures.Verify(p => p.SetActiveAsync(_clientId, proc.Id, false, It.IsAny<CancellationToken>()), Times.Once);
+        var svc = new Service { Id = Guid.NewGuid(), ClientId = _clientId };
+        _repo.Setup(r => r.GetServiceAsync(svc.Id, It.IsAny<CancellationToken>())).ReturnsAsync(svc);
+        Assert.Equal(_clientId, (await Sut().SetServiceActiveAsync(svc.Id, false, default)).ClientId);
+        _services.Verify(p => p.SetActiveAsync(_clientId, svc.Id, false, It.IsAny<CancellationToken>()), Times.Once);
 
         var doc = new KnowledgeDocument { Id = Guid.NewGuid(), ClientId = _clientId, Title = "T", Client = new Client { Id = _clientId, Name = "C" } };
         _repo.Setup(r => r.GetDocumentAsync(doc.Id, It.IsAny<CancellationToken>())).ReturnsAsync(doc);
@@ -407,7 +407,7 @@ public class ContentAndOverviewAdminServiceTests
         await Sut().GetCampaignAsync(Guid.NewGuid(), default);
         await Sut().RecipientsAsync(Guid.NewGuid(), null, 1, default);
         await Sut().ListTemplatesAsync(_clientId, null, default);
-        await Sut().ListProceduresAsync(_clientId, default);
+        await Sut().ListServicesAsync(_clientId, default);
         await Sut().ListDocumentsAsync(_clientId, "q", true, 1, default);
         await Sut().ListWebsitesAsync(_clientId, default);
         _repo.Verify(r => r.ListCampaignsAsync(_clientId, "draft", 1, It.IsAny<CancellationToken>()), Times.Once);

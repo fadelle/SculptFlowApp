@@ -7,7 +7,7 @@ using Omni.App.Entities.Responses.Appointments;
 using Omni.App.Persistence.Contracts;
 using Omni.App.Persistence.Contracts.Appointments;
 using Omni.App.Persistence.Contracts.Clients;
-using Omni.App.Persistence.Contracts.Procedures;
+using Omni.App.Persistence.Contracts.Catalog;
 
 namespace Omni.App.Business.Services.Appointments;
 
@@ -23,17 +23,17 @@ public class AvailabilityService : IAvailabilityService
 
     private readonly IAvailabilityRepository _availability;
     private readonly IClientRepository _clients;
-    private readonly IProcedureRepository _procedures;
+    private readonly IServiceRepository _services;
     private readonly IAppointmentRepository _appointments;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IConfigManager _config;
 
-    public AvailabilityService(IAvailabilityRepository availability, IClientRepository clients, IProcedureRepository procedures, IAppointmentRepository appointments, IUnitOfWork unitOfWork,
+    public AvailabilityService(IAvailabilityRepository availability, IClientRepository clients, IServiceRepository services, IAppointmentRepository appointments, IUnitOfWork unitOfWork,
         IConfigManager config)
     {
         _availability = availability;
         _clients = clients;
-        _procedures = procedures;
+        _services = services;
         _appointments = appointments;
         _unitOfWork = unitOfWork;
         _config = config;
@@ -42,12 +42,12 @@ public class AvailabilityService : IAvailabilityService
     // ------------------------------------------------------------------ slots
 
     public async Task<AvailabilityResponse> GetSlotsAsync(
-        Guid clientId, Guid? procedureId, DateOnly? from, int days, CancellationToken ct = default)
+        Guid clientId, Guid? serviceId, DateOnly? from, int days, CancellationToken ct = default)
     {
         var ctx = await LoadAsync(clientId, ct);
         if (ctx is null) return NotConfigured("UTC", DefaultDurationMinutes, DateOnly.FromDateTime(DateTime.UtcNow), "Client not found.");
 
-        var duration = await ResolveDurationAsync(clientId, procedureId, ctx.Booking.DefaultConsultationDurationMinutes, ct);
+        var duration = await ResolveDurationAsync(clientId, serviceId, ctx.Booking.DefaultConsultationDurationMinutes, ct);
         var nowUtc = DateTimeOffset.UtcNow;
         var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(nowUtc, ctx.Tz).DateTime);
 
@@ -126,14 +126,14 @@ public class AvailabilityService : IAvailabilityService
     }
 
     public async Task<SlotCheck> CheckSlotAsync(
-        Guid clientId, Guid? procedureId, DateTimeOffset start, DateTimeOffset? end, Guid? excludeAppointmentId = null, CancellationToken ct = default)
+        Guid clientId, Guid? serviceId, DateTimeOffset start, DateTimeOffset? end, Guid? excludeAppointmentId = null, CancellationToken ct = default)
     {
         var ctx = await LoadAsync(clientId, ct);
         var fallbackEnd = end ?? start.AddMinutes(DefaultDurationMinutes);
         if (ctx is null) return new SlotCheck("Client not found.", fallbackEnd);
         if (!ctx.Configured) return new SlotCheck("This client hasn't set up its appointment availability yet.", fallbackEnd);
 
-        var duration = await ResolveDurationAsync(clientId, procedureId, ctx.Booking.DefaultConsultationDurationMinutes, ct);
+        var duration = await ResolveDurationAsync(clientId, serviceId, ctx.Booking.DefaultConsultationDurationMinutes, ct);
         var slotEnd = end ?? start.AddMinutes(duration);
         if (slotEnd <= start) return new SlotCheck("The appointment must end after it starts.", slotEnd);
 
@@ -313,18 +313,18 @@ public class AvailabilityService : IAvailabilityService
     private static AvailabilityResponse NotConfigured(string tz, int duration, DateOnly today, string message) =>
         new(false, tz, today.ToString("yyyy-MM-dd"), duration, string.Empty, string.Empty, message, Array.Empty<AvailableSlotResponse>());
 
-    /// <summary>Procedure's own consultation duration when it is active and has one; otherwise the client default.
-    /// A procedure that is unknown for this client or inactive is rejected — it can't be newly booked.</summary>
-    private async Task<int> ResolveDurationAsync(Guid clientId, Guid? procedureId, int clientDefault, CancellationToken ct)
+    /// <summary>Service's own consultation duration when it is active and has one; otherwise the client default.
+    /// A service that is unknown for this client or inactive is rejected — it can't be newly booked.</summary>
+    private async Task<int> ResolveDurationAsync(Guid clientId, Guid? serviceId, int clientDefault, CancellationToken ct)
     {
-        if (procedureId is null) return clientDefault;
+        if (serviceId is null) return clientDefault;
 
-        var procedure = await _procedures.GetReadOnlyAsync(clientId, procedureId.Value, ct);
+        var service = await _services.GetReadOnlyAsync(clientId, serviceId.Value, ct);
 
-        if (procedure is null) throw new ArgumentException("Procedure not found for this client.");
-        if (!procedure.IsActive) throw new ArgumentException($"Procedure '{procedure.Name}' is inactive and can't be newly booked.");
+        if (service is null) throw new ArgumentException("Service not found for this client.");
+        if (!service.IsActive) throw new ArgumentException($"Service '{service.Name}' is inactive and can't be newly booked.");
 
-        return procedure.ConsultationDuration is > 0 ? procedure.ConsultationDuration.Value : clientDefault;
+        return service.ConsultationDuration is > 0 ? service.ConsultationDuration.Value : clientDefault;
     }
 
     private async Task<Ctx?> LoadAsync(Guid clientId, CancellationToken ct)
@@ -349,7 +349,7 @@ public class AvailabilityService : IAvailabilityService
     }
 
     /// <summary>Blocking appointments that could touch the searched dates. An appointment with no end time occupies its
-    /// procedure's consultation duration, or the client default.</summary>
+    /// service's consultation duration, or the client default.</summary>
     private async Task<List<(DateTimeOffset Start, DateTimeOffset End)>> LoadBusyAsync(
         Guid clientId, Ctx ctx, DateOnly from, DateOnly to, CancellationToken ct, Guid? excludeAppointmentId = null)
     {
@@ -359,7 +359,7 @@ public class AvailabilityService : IAvailabilityService
         var rows = await _appointments.ListBusyAsync(clientId, lowUtc, highUtc, excludeAppointmentId, ct);
 
         return rows.Select(a => (a.ScheduledStart,
-            a.ScheduledEnd ?? a.ScheduledStart.AddMinutes(a.ProcedureMinutes is > 0 ? a.ProcedureMinutes.Value : ctx.Booking.DefaultConsultationDurationMinutes)))
+            a.ScheduledEnd ?? a.ScheduledStart.AddMinutes(a.ServiceMinutes is > 0 ? a.ServiceMinutes.Value : ctx.Booking.DefaultConsultationDurationMinutes)))
             .ToList();
     }
 

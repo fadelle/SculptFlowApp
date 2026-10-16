@@ -3,7 +3,7 @@ using Omni.App.Business.Contracts.Managers;
 using Omni.App.Business.Contracts.Services.Appointments;
 using Omni.App.Business.Contracts.Services.Calendars;
 using Omni.App.Business.Contracts.Services.Notifications;
-using Omni.App.Business.Contracts.Services.Procedures;
+using Omni.App.Business.Contracts.Services.Catalog;
 using Omni.App.Business.Mappers.Appointments;
 using Omni.App.Common.Enums;
 using Omni.App.Common.Exceptions;
@@ -18,7 +18,7 @@ using Omni.App.Persistence.Contracts.Appointments;
 using Omni.App.Persistence.Contracts.Campaigns;
 using Omni.App.Persistence.Contracts.Clients;
 using Omni.App.Persistence.Contracts.Leads;
-using Omni.App.Persistence.Contracts.Procedures;
+using Omni.App.Persistence.Contracts.Catalog;
 
 namespace Omni.App.Business.Services.Appointments;
 
@@ -27,10 +27,10 @@ public class AppointmentService : IAppointmentService
     private readonly IAppointmentRepository _appointments;
     private readonly ILeadRepository _leads;
     private readonly IClientRepository _clients;
-    private readonly IProcedureRepository _procedureRows;
+    private readonly IServiceRepository _serviceRows;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IEventLogger _events;
-    private readonly IProcedureService _procedures;
+    private readonly ICatalogService _services;
 
     private readonly IAvailabilityService _availability;
     private readonly IInboxNotifier _notifier;
@@ -40,7 +40,7 @@ public class AppointmentService : IAppointmentService
     private readonly IConfigManager _config;
 
     public AppointmentService(
-        IAppointmentRepository appointments, ILeadRepository leads, IClientRepository clients, IProcedureRepository procedureRows, IUnitOfWork unitOfWork, IEventLogger events, IProcedureService procedures, IAvailabilityService availability,
+        IAppointmentRepository appointments, ILeadRepository leads, IClientRepository clients, IServiceRepository serviceRows, IUnitOfWork unitOfWork, IEventLogger events, ICatalogService services, IAvailabilityService availability,
         IInboxNotifier notifier, INotificationService notifications, ICalendarIntegrationService calendarSync,
         ICampaignRepository campaigns, IConfigManager config)
     {
@@ -49,10 +49,10 @@ public class AppointmentService : IAppointmentService
         _appointments = appointments;
         _leads = leads;
         _clients = clients;
-        _procedureRows = procedureRows;
+        _serviceRows = serviceRows;
         _unitOfWork = unitOfWork;
         _events = events;
-        _procedures = procedures;
+        _services = services;
         _availability = availability;
         _notifier = notifier;
         _notifications = notifications;
@@ -93,7 +93,7 @@ public class AppointmentService : IAppointmentService
         var (tz, upcoming) = await LoadUpcomingAsync(request.ClientId, request.LeadId, ct);
         if (upcoming.Count > 0) throw new LeadAlreadyBookedException(ToUpcoming(upcoming[0], tz));
 
-        var check = await _availability.CheckSlotAsync(request.ClientId, request.ProcedureId, request.ScheduledStart, request.ScheduledEnd, ct: ct);
+        var check = await _availability.CheckSlotAsync(request.ClientId, request.ServiceId, request.ScheduledStart, request.ScheduledEnd, ct: ct);
         if (check.Error is not null) throw new SlotUnavailableException(check.Error);
 
         var appointment = await CreateCoreAsync(request with { ScheduledEnd = check.End }, ct);
@@ -127,7 +127,7 @@ public class AppointmentService : IAppointmentService
         // A [[time:…]] marker, not text: notifications.js shows it in each viewer's own timezone (OmniTime.expand).
         var whenLabel = $"[[time:{appointment.ScheduledStart.ToUniversalTime():yyyy-MM-dd'T'HH:mm:ss'Z'}]]";
         var who = string.IsNullOrWhiteSpace(appointment.LeadFullName) ? "A patient" : appointment.LeadFullName!;
-        var what = string.IsNullOrWhiteSpace(appointment.ProcedureName) ? "a consultation" : appointment.ProcedureName!;
+        var what = string.IsNullOrWhiteSpace(appointment.ServiceName) ? "a consultation" : appointment.ServiceName!;
         var verb = change switch { "created" => "booked", "rescheduled" => "moved to", _ => "canceled for" };
 
         await _notifications.CreateAsync(clientId, type, title!,
@@ -149,10 +149,10 @@ public class AppointmentService : IAppointmentService
 
     private async Task<AppointmentResponse> CreateCoreAsync(CreateAppointmentRequest request, CancellationToken ct)
     {
-        // A new booking may only reference one of this client's ACTIVE procedures.
-        if (request.ProcedureId is { } procedureId)
+        // A new booking may only reference one of this client's ACTIVE services.
+        if (request.ServiceId is { } serviceId)
         {
-            await _procedures.EnsureUsableAsync(request.ClientId, procedureId, ct);
+            await _services.EnsureUsableAsync(request.ClientId, serviceId, ct);
         }
 
         var appointment = new Appointment
@@ -160,7 +160,7 @@ public class AppointmentService : IAppointmentService
             Id = Guid.NewGuid(),
             ClientId = request.ClientId,
             LeadId = request.LeadId,
-            ProcedureId = request.ProcedureId,
+            ServiceId = request.ServiceId,
             AppointmentType = string.IsNullOrWhiteSpace(request.AppointmentType) ? "consultation" : request.AppointmentType,
             Status = AppointmentStatus.Booked,
             // Npgsql only stores UTC-offset values; callers (n8n) send the client-local offset returned by get_available_slots.
@@ -262,11 +262,11 @@ public class AppointmentService : IAppointmentService
             throw new ArgumentException("This appointment is already in the past and can't be rescheduled. Book a new one instead.");
         }
 
-        // A procedure that was deactivated since booking can't be newly booked, but must not trap the patient in an old time:
+        // A service that was deactivated since booking can't be newly booked, but must not trap the patient in an old time:
         // fall back to the client's default duration for it.
-        var procedureId = await ActiveProcedureOrNullAsync(appointment.ProcedureId, ct);
+        var serviceId = await ActiveServiceOrNullAsync(appointment.ServiceId, ct);
 
-        var check = await _availability.CheckSlotAsync(clientId, procedureId, newStart, newEnd, excludeAppointmentId: appointment.Id, ct: ct);
+        var check = await _availability.CheckSlotAsync(clientId, serviceId, newStart, newEnd, excludeAppointmentId: appointment.Id, ct: ct);
         if (check.Error is not null) throw new SlotUnavailableException(check.Error);
 
         appointment.ScheduledStart = newStart.ToUniversalTime();
@@ -340,7 +340,7 @@ public class AppointmentService : IAppointmentService
             if (!context.HasUpcomingAppointment)
             {
                 var created = await BookAvailableSlotAsync(new CreateAppointmentRequest(
-                    clientId, leadId, request.ProcedureId,
+                    clientId, leadId, request.ServiceId,
                     string.IsNullOrWhiteSpace(request.AppointmentType) ? "consultation" : request.AppointmentType,
                     request.ScheduledStart, null, null, null, request.Notes), ct);
                 return new ScheduleOutcome("created", "BOOKED", "Appointment booked.",
@@ -367,7 +367,7 @@ public class AppointmentService : IAppointmentService
             }
 
             // Read-only pre-check, so the patient is never asked to confirm a move to a time that cannot work.
-            var check = await _availability.CheckSlotAsync(clientId, await ActiveProcedureOrNullAsync(target?.ProcedureId ?? request.ProcedureId, ct),
+            var check = await _availability.CheckSlotAsync(clientId, await ActiveServiceOrNullAsync(target?.ServiceId ?? request.ServiceId, ct),
                 request.ScheduledStart, null, excludeAppointmentId: target?.Id, ct: ct);
             if (check.Error is not null)
             {
@@ -418,11 +418,11 @@ public class AppointmentService : IAppointmentService
         return client is null ? TimeZoneInfo.Utc : ResolveTimeZone(client);
     }
 
-    /// <summary>A procedure id only when that procedure is still active — a deactivated one falls back to the client's default duration.</summary>
-    private async Task<Guid?> ActiveProcedureOrNullAsync(Guid? procedureId, CancellationToken ct)
+    /// <summary>A service id only when that service is still active — a deactivated one falls back to the client's default duration.</summary>
+    private async Task<Guid?> ActiveServiceOrNullAsync(Guid? serviceId, CancellationToken ct)
     {
-        if (procedureId is not { } id) return null;
-        return await _procedureRows.IsActiveAsync(id, ct) ? id : null;
+        if (serviceId is not { } id) return null;
+        return await _serviceRows.IsActiveAsync(id, ct) ? id : null;
     }
 
     private async Task<UpcomingAppointmentResponse?> ToLocalAsync(Guid clientId, Guid leadId, Guid appointmentId, CancellationToken ct)
@@ -464,7 +464,7 @@ public class AppointmentService : IAppointmentService
 
             // CancelAsync returns the stored (UTC) appointment; report it the way the patient should hear it — client-local.
             var tz = await GetTimeZoneAsync(clientId, ct);
-            var entity = await _appointments.GetWithProcedureReadOnlyAsync(canceled.Id, ct)
+            var entity = await _appointments.GetWithServiceReadOnlyAsync(canceled.Id, ct)
                 ?? throw new InvalidOperationException("Canceled appointment not found.");
             return new CancelOutcome("canceled", "CANCELED", "Appointment canceled.", Appointment: ToUpcoming(entity, tz));
         }
@@ -513,7 +513,7 @@ public class AppointmentService : IAppointmentService
         var start = TimeZoneInfo.ConvertTime(a.ScheduledStart, tz);
         DateTimeOffset? end = a.ScheduledEnd is null ? null : TimeZoneInfo.ConvertTime(a.ScheduledEnd.Value, tz);
         return new UpcomingAppointmentResponse(
-            a.Id, a.Status, a.AppointmentType, a.ProcedureId, a.Procedure?.Name, start, end,
+            a.Id, a.Status, a.AppointmentType, a.ServiceId, a.Service?.Name, start, end,
             start.ToString("yyyy-MM-dd"), start.ToString("HH:mm"),
             LabelFor(start));
     }
@@ -553,7 +553,7 @@ public class AppointmentService : IAppointmentService
         {
             var local = TimeZoneInfo.ConvertTime(a.ScheduledStart, tz);
             return new CalendarAppointmentResponse(
-                a.Id, a.LeadId, a.Lead?.FullName, a.ProcedureId, a.Procedure?.Name, a.Status,
+                a.Id, a.LeadId, a.Lead?.FullName, a.ServiceId, a.Service?.Name, a.Status,
                 a.ScheduledStart, a.ScheduledEnd,
                 local.ToString("yyyy-MM-dd"), local.ToString("HH:mm"));
         }).ToList();

@@ -16,7 +16,7 @@
   var emptyEl = document.getElementById('inbox-empty');
   var threadEl = document.getElementById('inbox-thread-inner');
   var nameEl = document.getElementById('inbox-thread-name');
-  var procedureEl = document.getElementById('inbox-thread-procedure');
+  var serviceEl = document.getElementById('inbox-thread-service');
   var modeEl = document.getElementById('inbox-thread-mode');
   var messagesEl = document.getElementById('inbox-messages');
   var composerEl = document.getElementById('inbox-composer');
@@ -239,11 +239,11 @@
       div.className = 'inbox-conv-item' + (c.id === currentConversationId ? ' active' : '') + (unreadCount > 0 ? ' unread' : '') + (closed ? ' closed' : '');
       div.setAttribute('data-conversation-id', c.id);
       div.setAttribute('data-lead-name', c.leadFullName || 'Unknown');
-      div.setAttribute('data-procedure-name', c.procedureName || '');
+      div.setAttribute('data-service-name', c.serviceName || '');
       div.setAttribute('data-channel', c.channel || '');
       div.setAttribute('data-mode', c.mode || '');
       div.setAttribute('data-closed', closed ? 'true' : 'false');
-      div.setAttribute('data-search', ((c.leadFullName || '') + ' ' + (c.leadPhone || '') + ' ' + (c.procedureName || '')).toLowerCase());
+      div.setAttribute('data-search', ((c.leadFullName || '') + ' ' + (c.leadPhone || '') + ' ' + (c.serviceName || '')).toLowerCase());
 
       // "Needs Human" means AI is paused, the customer spoke last, AND staff haven't opened it yet
       // — not just "mode is human". Staff sending from the dashboard also sets mode to human, but
@@ -268,7 +268,7 @@
             (unreadCount > 0 ? '<span class="inbox-unread-badge" title="' + unreadCount + ' unread">' + (unreadCount > 99 ? '99+' : unreadCount) + '</span>' : '') +
             '<span class="inbox-conv-time" data-timestamp="' + (c.lastMessageAt || c.createdAt) + '"></span>' +
           '</div>' +
-          (c.procedureName ? '<div class="inbox-conv-procedure">' + escapeHtml(c.procedureName) + '</div>' : '') +
+          (c.serviceName ? '<div class="inbox-conv-service">' + escapeHtml(c.serviceName) + '</div>' : '') +
           '<div class="inbox-conv-bottom">' +
             '<span class="inbox-conv-preview">' + escapeHtml(c.lastMessagePreview || 'No messages yet') + '</span>' +
             modePill +
@@ -406,7 +406,7 @@
     messagesEl.scrollTop = messagesEl.scrollHeight;
   }
 
-  // ConversationResponse (from the API) doesn't carry lead/procedure display info — that's a
+  // ConversationResponse (from the API) doesn't carry lead/service display info — that's a
   // list-only concern (ConversationListRow). We already have it on the clicked list item's own
   // data attributes, so read it from there instead of adding it to the conversation DTO.
   function renderConversationHeader(conversation) {
@@ -414,8 +414,8 @@
     var leadName = (listItem && listItem.getAttribute('data-lead-name')) || 'Unknown';
     nameEl.textContent = leadName;
     threadAvatarEl.textContent = initials(leadName);
-    var procedure = (listItem && listItem.getAttribute('data-procedure-name')) || '';
-    procedureEl.textContent = [procedure, channelLabel(conversation.channel)].filter(Boolean).join(' · ');
+    var service = (listItem && listItem.getAttribute('data-service-name')) || '';
+    serviceEl.textContent = [service, channelLabel(conversation.channel)].filter(Boolean).join(' · ');
     modeEl.textContent = conversation.mode === 'ai' ? 'AI is replying' : (conversation.mode === 'human' ? 'Staff is replying' : 'Awaiting approval');
     modeEl.className = 'inbox-mode inbox-mode-' + conversation.mode;
     // Only offer the switch that makes sense for the current mode.
@@ -495,7 +495,7 @@
       statusEl.className = 'badge ' + (LEAD_STATUS_BADGES[lead.status] || 'badge-gray');
       document.getElementById('inbox-lead-phone').textContent = lead.phone || '—';
       document.getElementById('inbox-lead-email').textContent = lead.email || '—';
-      document.getElementById('inbox-lead-procedure').textContent = lead.procedureName || '—';
+      document.getElementById('inbox-lead-service').textContent = lead.serviceName || '—';
       document.getElementById('inbox-lead-source').textContent = lead.source || '—';
       document.getElementById('inbox-lead-timeline').textContent = lead.desiredTimeline || '—';
       document.getElementById('inbox-lead-followup').textContent = formatDate(lead.nextFollowupAt);

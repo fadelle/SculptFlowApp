@@ -8,7 +8,7 @@ public static class KnowledgeCategory
     public const string Faq = "faq";
     public const string Policy = "policy";
     public const string Doctor = "doctor";
-    public const string Procedure = "procedure";
+    public const string Service = "service";
     public const string Pricing = "pricing";
     public const string Consultation = "consultation";
     public const string Payment = "payment";
@@ -21,7 +21,7 @@ public static class KnowledgeCategory
         (Faq, "FAQ"),
         (Policy, "Policy"),
         (Doctor, "Doctor"),
-        (Procedure, "Procedure Information"),
+        (Service, "Service Information"),
         (Pricing, "Pricing"),
         (Consultation, "Consultation"),
         (Payment, "Payment / Financing"),

@@ -8,7 +8,7 @@ public class AvailabilityServiceTests
     private readonly Guid _clientId = Guid.NewGuid();
     private readonly Mock<IAvailabilityRepository> _availability = new();
     private readonly Mock<IClientRepository> _clients = new();
-    private readonly Mock<IProcedureRepository> _procedures = new();
+    private readonly Mock<IServiceRepository> _services = new();
     private readonly Mock<IAppointmentRepository> _appointments = new();
     private readonly Mock<IUnitOfWork> _uow = new();
     private readonly Mock<IConfigManager> _config = new();
@@ -41,7 +41,7 @@ public class AvailabilityServiceTests
     }
 
     private AvailabilityService Sut() =>
-        new(_availability.Object, _clients.Object, _procedures.Object, _appointments.Object, _uow.Object, _config.Object);
+        new(_availability.Object, _clients.Object, _services.Object, _appointments.Object, _uow.Object, _config.Object);
 
     private void OpenEveryDay(string start = "09:00", string end = "17:00")
     {
@@ -123,7 +123,7 @@ public class AvailabilityServiceTests
     }
 
     [Fact]
-    public async Task Busy_row_without_end_uses_procedure_minutes_then_default()
+    public async Task Busy_row_without_end_uses_service_minutes_then_default()
     {
         OpenEveryDay("09:00", "11:00");
         var day = Today.AddDays(2);
@@ -156,20 +156,20 @@ public class AvailabilityServiceTests
     }
 
     [Fact]
-    public async Task Procedure_duration_overrides_default_and_bad_procedures_are_rejected()
+    public async Task Service_duration_overrides_default_and_bad_services_are_rejected()
     {
         OpenEveryDay("09:00", "11:00");
-        var proc = new Procedure { Id = Guid.NewGuid(), ClientId = _clientId, Name = "Rhino", IsActive = true, ConsultationDuration = 60 };
-        _procedures.Setup(p => p.GetReadOnlyAsync(_clientId, proc.Id, It.IsAny<CancellationToken>())).ReturnsAsync(proc);
-        var r = await Sut().GetSlotsAsync(_clientId, proc.Id, Today.AddDays(2), 1);
+        var svc = new Service { Id = Guid.NewGuid(), ClientId = _clientId, Name = "Rhino", IsActive = true, ConsultationDuration = 60 };
+        _services.Setup(p => p.GetReadOnlyAsync(_clientId, svc.Id, It.IsAny<CancellationToken>())).ReturnsAsync(svc);
+        var r = await Sut().GetSlotsAsync(_clientId, svc.Id, Today.AddDays(2), 1);
         Assert.Equal(60, r.DurationMinutes);
         Assert.Equal(["09:00", "10:00"], r.Slots.Select(s => s.Time));
 
-        proc.ConsultationDuration = null;
-        Assert.Equal(30, (await Sut().GetSlotsAsync(_clientId, proc.Id, Today.AddDays(2), 1)).DurationMinutes);
+        svc.ConsultationDuration = null;
+        Assert.Equal(30, (await Sut().GetSlotsAsync(_clientId, svc.Id, Today.AddDays(2), 1)).DurationMinutes);
 
-        proc.IsActive = false;
-        await Assert.ThrowsAsync<ArgumentException>(() => Sut().GetSlotsAsync(_clientId, proc.Id, null, 1));
+        svc.IsActive = false;
+        await Assert.ThrowsAsync<ArgumentException>(() => Sut().GetSlotsAsync(_clientId, svc.Id, null, 1));
         await Assert.ThrowsAsync<ArgumentException>(() => Sut().GetSlotsAsync(_clientId, Guid.NewGuid(), null, 1));
     }
 

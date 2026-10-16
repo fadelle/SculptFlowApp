@@ -3,7 +3,7 @@ namespace Omni.App.Entities.Requests.Appointments;
 public record CreateAppointmentRequest(
     Guid ClientId,
     Guid LeadId,
-    Guid? ProcedureId,
+    Guid? ServiceId,
     string AppointmentType,
     DateTimeOffset ScheduledStart,
     DateTimeOffset? ScheduledEnd,

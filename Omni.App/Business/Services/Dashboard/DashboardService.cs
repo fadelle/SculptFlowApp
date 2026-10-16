@@ -37,9 +37,9 @@ public class DashboardService : IDashboardService
         Guid clientId, string? status, string? search, int skip, int take, CancellationToken ct = default) =>
         _dashboard.ListAppointmentsAsync(clientId, status, search, skip, take, ct);
 
-    public Task<IReadOnlyList<DashboardProcedureRow>> GetProcedureStatsAsync(
+    public Task<IReadOnlyList<DashboardServiceRow>> GetServiceStatsAsync(
         Guid clientId, DateTimeOffset? from = null, DateTimeOffset? to = null, CancellationToken ct = default) =>
-        _dashboard.GetProcedureStatsAsync(clientId, from, to, ct);
+        _dashboard.GetServiceStatsAsync(clientId, from, to, ct);
 
     public async Task<DashboardAttentionResponse> GetAttentionAsync(Guid clientId, CancellationToken ct = default)
     {

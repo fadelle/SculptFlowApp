@@ -322,7 +322,7 @@ public class IngestAndAdminControllerTests
         Assert.IsType<NotFoundResult>(await cc.Document(id, default));
         Assert.IsType<NotFoundResult>(await cc.SearchSettings(id, default));
         await cc.Campaigns(null, null, 1, default); await cc.Recipients(id, null, 1, default); await cc.CancelCampaign(id, default); await cc.Templates(null, null, default);
-        await cc.Procedures(null, default); await cc.SetProcedureActive(id, new ActiveBody(true), default); await cc.Documents(null, null, null, 1, default);
+        await cc.Services(null, default); await cc.SetServiceActive(id, new ActiveBody(true), default); await cc.Documents(null, null, null, 1, default);
         await cc.SetDocumentActive(id, new ActiveBody(true), default); await cc.Websites(null, default); await cc.UpdateSearchSettings(id, new SearchSettingsBody(4, 0.4), default);
         content.Verify(s => s.UpdateSearchSettingsAsync(id, 4, 0.4, It.IsAny<CancellationToken>()), Times.Once);
 

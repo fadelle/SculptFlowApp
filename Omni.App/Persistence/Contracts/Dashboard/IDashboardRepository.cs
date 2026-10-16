@@ -14,8 +14,8 @@ public interface IDashboardRepository
     Task<(IReadOnlyList<DashboardAppointmentRow> Items, int TotalCount)> ListAppointmentsAsync(Guid clientId, string? status,
         string? search, int skip, int take, CancellationToken ct = default);
 
-    /// <summary>Per procedure, ordered by completed revenue (highest first).</summary>
-    Task<IReadOnlyList<DashboardProcedureRow>> GetProcedureStatsAsync(Guid clientId, DateTimeOffset? from, DateTimeOffset? to,
+    /// <summary>Per service, ordered by completed revenue (highest first).</summary>
+    Task<IReadOnlyList<DashboardServiceRow>> GetServiceStatsAsync(Guid clientId, DateTimeOffset? from, DateTimeOffset? to,
         CancellationToken ct = default);
 
     Task<DashboardAttentionCounts> GetAttentionCountsAsync(Guid clientId, DateTimeOffset now, CancellationToken ct = default);

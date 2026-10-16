@@ -12,7 +12,7 @@
 --
 -- Covers: dashboard (leads across the pipeline, revenue, appointments), inbox (WhatsApp, Telegram,
 -- Instagram, Facebook conversations: AI / human / approval modes, unread, service window), leads,
--- procedure bookings, appointments (+ calendar sync), staff, procedures, knowledge base (manual,
+-- orders, appointments (+ calendar sync), staff, services, knowledge base (manual,
 -- upload and website entries), WhatsApp templates, campaigns with recipients, notifications,
 -- activity events, client info, availability + booking rules + date exceptions, channel
 -- connections (+ health history), TikTok, billing (plan, subscription, wallet, usage, ledger).
@@ -96,9 +96,9 @@ begin
     (pg_temp.did(4), c, 'de000000-0000-4000-8000-0000000000a3', true, now() - interval '60 days');
 
   -- ---------------------------------------------------------------
-  -- 3. Procedures
+  -- 3. Services
   -- ---------------------------------------------------------------
-  insert into core.procedures (id, client_id, name, code, description, consultation_duration, is_active) values
+  insert into core.services (id, client_id, name, code, description, consultation_duration, is_active) values
     (pg_temp.did(10), c, 'Rhinoplasty',          'RHINO',      'Reshaping of the nose for function or appearance.', 45, true),
     (pg_temp.did(11), c, 'Liposuction',          'LIPO',       'Targeted removal of stubborn fat deposits.', 30, true),
     (pg_temp.did(12), c, 'Facelift',             'FACELIFT',   'Lifts and tightens the face and neck.', 45, true),
@@ -110,7 +110,7 @@ begin
   -- ---------------------------------------------------------------
   -- 4. Leads (spread across the whole pipeline)
   -- ---------------------------------------------------------------
-  insert into crm.leads (id, client_id, procedure_id, full_name, first_name, last_name, phone, email, source, source_detail,
+  insert into crm.leads (id, client_id, service_id, full_name, first_name, last_name, phone, email, source, source_detail,
                          campaign_name, external_lead_id, status, qualification_status, preferred_language, country_code,
                          city, desired_timeline, notes, marketing_opt_in, opted_out_at, last_contact_at, next_followup_at, created_at) values
     (pg_temp.did(100), c, pg_temp.did(10), 'Sarah Mitchell',  'Sarah',  'Mitchell', '+1 305 555 0111', 'sarah.mitchell@example.test', 'instagram', 'Reel: nose reshaping FAQ', 'Spring Consultation Offer', 'demo-ig-001', 'surgery_booked', 'hot',  'en', 'US', 'Miami',       'Within 2 months', 'Wants a natural result. Deposit paid.', true, null, now() - interval '2 days', null, now() - interval '25 days'),
@@ -280,9 +280,9 @@ begin
   from _m;
 
   -- ---------------------------------------------------------------
-  -- 9. Appointments + procedure bookings
+  -- 9. Appointments + orders
   -- ---------------------------------------------------------------
-  insert into scheduling.appointments (id, client_id, lead_id, procedure_id, appointment_type, status, scheduled_start, scheduled_end,
+  insert into scheduling.appointments (id, client_id, lead_id, service_id, appointment_type, status, scheduled_start, scheduled_end,
                                        location_type, location_name, notes, created_at) values
     (pg_temp.did(300), c, pg_temp.did(100), pg_temp.did(10), 'consultation', 'attended',  pg_temp.at(-18, '10:00'), pg_temp.at(-18, '10:45'), 'in_person', 'Aurora Aesthetic Clinic, Suite 12', 'Discussed goals; quote prepared.', now() - interval '25 days'),
     (pg_temp.did(301), c, pg_temp.did(100), pg_temp.did(10), 'surgery',      'booked',    pg_temp.at(21, '08:00'),  pg_temp.at(21, '11:00'),  'in_person', 'Aurora Surgical Suite', 'Pre-op bloodwork required.', now() - interval '10 days'),
@@ -298,9 +298,9 @@ begin
     (pg_temp.did(311), c, pg_temp.did(108), pg_temp.did(12), 'consultation', 'canceled',  pg_temp.at(-100, '10:00'),pg_temp.at(-100, '10:45'), 'in_person', 'Aurora Aesthetic Clinic, Suite 12', 'Patient canceled, found another clinic.', now() - interval '130 days'),
     (pg_temp.did(312), c, pg_temp.did(104), pg_temp.did(13), 'consultation', 'booked',    pg_temp.at(3, '13:00'),   pg_temp.at(3, '13:30'),   'in_person', 'Aurora Aesthetic Clinic, Suite 12', 'Wants to discuss financing.', now() - interval '20 minutes');
 
-  insert into scheduling.procedure_bookings (id, client_id, lead_id, procedure_id, appointment_id, status, quoted_amount, deposit_amount,
-                                             final_amount, currency_code, procedure_date, notes, created_at) values
-    (pg_temp.did(320), c, pg_temp.did(100), pg_temp.did(10), pg_temp.did(301), 'booked',       6500, 1500, null, 'USD', pg_temp.at(21, '08:00'), 'Deposit received.', now() - interval '10 days'),
+  insert into crm.orders (id, client_id, lead_id, service_id, appointment_id, status, quoted_amount, deposit_amount,
+                                             final_amount, currency_code, service_date, notes, created_at) values
+    (pg_temp.did(320), c, pg_temp.did(100), pg_temp.did(10), pg_temp.did(301), 'confirmed',    6500, 1500, null, 'USD', pg_temp.at(21, '08:00'), 'Deposit received.', now() - interval '10 days'),
     (pg_temp.did(321), c, pg_temp.did(109), pg_temp.did(13), pg_temp.did(304), 'quoted',       7800, null, null, 'USD', null, 'Awaiting decision.', now() - interval '4 days'),
     (pg_temp.did(322), c, pg_temp.did(110), pg_temp.did(11), pg_temp.did(306), 'completed',    5200, 1000, 5000, 'USD', pg_temp.at(-8, '08:00'), 'Final price after loyalty discount.', now() - interval '35 days'),
     (pg_temp.did(323), c, pg_temp.did(101), pg_temp.did(11), pg_temp.did(302), 'considering',  null, null, null, 'USD', null, null, now() - interval '7 days'),
@@ -372,9 +372,9 @@ begin
       'Q: How long is recovery? A: It depends on the procedure; most patients return to desk work within 1-2 weeks. Q: Is surgery painful? A: Discomfort is managed with medication. Q: Do you offer virtual consultations? A: Yes, by video for initial enquiries.', true, 'manual', null, null, null, null, now() - interval '70 days'),
     (pg_temp.did(506), c, 'Pre-operative instructions', 'preparation',
       'Stop smoking and blood-thinning supplements two weeks before surgery. Do not eat or drink after midnight the night before. Arrange for someone to drive you home and stay with you for the first night.', true, 'upload', 'pre-op-instructions.pdf', 'application/pdf', 184320, null, now() - interval '50 days'),
-    (pg_temp.did(507), c, 'Rhinoplasty (from website)', 'procedure',
+    (pg_temp.did(507), c, 'Rhinoplasty (from website)', 'service',
       'Rhinoplasty reshapes the nose to improve harmony with your face or to correct breathing issues. Procedures take 2-3 hours under general anaesthesia. Swelling subsides over several weeks and the final result appears after about a year.', true, 'website', null, null, null, 'https://aurora-demo.test/procedures/rhinoplasty', now() - interval '30 days'),
-    (pg_temp.did(508), c, 'Botox and fillers (from website)', 'procedure',
+    (pg_temp.did(508), c, 'Botox and fillers (from website)', 'service',
       'Botox and dermal fillers smooth wrinkles and restore volume with minimal downtime. Results appear within days and last 3-6 months for Botox and 6-18 months for fillers. Treatments take about 20 minutes.', true, 'website', null, null, null, 'https://aurora-demo.test/procedures/injectables', now() - interval '30 days'),
     (pg_temp.did(509), c, 'Old winter promotion (archived)', 'pricing',
       'Winter promotion: 10% off facelifts booked before January. This offer has ended.', false, 'manual', null, null, null, null, now() - interval '200 days');
@@ -391,7 +391,7 @@ begin
 
   insert into knowledge.knowledge_website_sources (id, client_id, start_url, normalized_start_url, host, crawl_mode, category,
                                                    is_active, status, last_scraped_at) values
-    (pg_temp.did(530), c, 'https://aurora-demo.test/', 'https://aurora-demo.test/', 'aurora-demo.test', 'crawl_site', 'procedure',
+    (pg_temp.did(530), c, 'https://aurora-demo.test/', 'https://aurora-demo.test/', 'aurora-demo.test', 'crawl_site', 'service',
      true, 'completed', now() - interval '30 days');
 
   insert into knowledge.knowledge_website_pages (id, client_id, website_source_id, url, normalized_url, title, http_status, content_type,
@@ -473,7 +473,7 @@ begin
     (pg_temp.did(900), c, pg_temp.did(100), pg_temp.did(200), null,             'lead_created',           'instagram', '{}', now() - interval '25 days'),
     (pg_temp.did(901), c, pg_temp.did(100), pg_temp.did(200), pg_temp.did(300), 'consultation_booked',    'ai',        '{}', now() - interval '25 days' + interval '10 minutes'),
     (pg_temp.did(902), c, pg_temp.did(100), null,             pg_temp.did(300), 'consultation_attended',  'staff',     '{}', now() - interval '18 days'),
-    (pg_temp.did(903), c, pg_temp.did(100), null,             pg_temp.did(301), 'procedure_booked',       'staff',     '{"amount": 6500, "deposit": 1500}', now() - interval '10 days'),
+    (pg_temp.did(903), c, pg_temp.did(100), null,             pg_temp.did(301), 'order_confirmed',       'staff',     '{"amount": 6500, "deposit": 1500}', now() - interval '10 days'),
     (pg_temp.did(904), c, pg_temp.did(101), pg_temp.did(201), pg_temp.did(302), 'consultation_booked',    'ai',        '{}', now() - interval '7 days'),
     (pg_temp.did(905), c, pg_temp.did(102), null,             pg_temp.did(303), 'consultation_no_show',   'staff',     '{}', now() - interval '2 days'),
     (pg_temp.did(906), c, pg_temp.did(103), pg_temp.did(203), null,             'lead_created',           'website',   '{}', now() - interval '2 hours'),
@@ -481,7 +481,7 @@ begin
     (pg_temp.did(908), c, pg_temp.did(105), pg_temp.did(205), pg_temp.did(310), 'consultation_booked',    'staff',     '{}', now() - interval '2 hours'),
     (pg_temp.did(909), c, pg_temp.did(106), pg_temp.did(206), null,             'message_failed',         'whatsapp',  '{"code": "131047"}', now() - interval '25 hours'),
     (pg_temp.did(910), c, pg_temp.did(109), null,             pg_temp.did(304), 'consultation_attended',  'staff',     '{}', now() - interval '4 days'),
-    (pg_temp.did(911), c, pg_temp.did(110), null,             pg_temp.did(306), 'procedure_booked',       'staff',     '{"amount": 5000}', now() - interval '35 days'),
+    (pg_temp.did(911), c, pg_temp.did(110), null,             pg_temp.did(306), 'order_confirmed',       'staff',     '{"amount": 5000}', now() - interval '35 days'),
     (pg_temp.did(912), c, pg_temp.did(108), null,             null,             'lead_contacted',         'campaign',  '{"campaign": "Old Lead Reactivation"}', now() - interval '2 hours'),
     (pg_temp.did(913), c, pg_temp.did(111), pg_temp.did(210), pg_temp.did(307), 'consultation_booked',    'ai',        '{}', now() - interval '1 day'),
     (pg_temp.did(914), c, pg_temp.did(113), pg_temp.did(211), null,             'conversation_closed',    'staff',     '{}', now() - interval '10 days');

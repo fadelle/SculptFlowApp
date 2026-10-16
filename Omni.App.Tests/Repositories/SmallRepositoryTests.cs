@@ -7,25 +7,26 @@ using Omni.App.Persistence.Repositories.Configuration;
 using Omni.App.Persistence.Repositories.Events;
 using Omni.App.Persistence.Repositories.Knowledge;
 using Omni.App.Persistence.Repositories.Notifications;
-using Omni.App.Persistence.Repositories.Procedures;
+using Omni.App.Persistence.Repositories.Catalog;
+using Omni.App.Persistence.Repositories.Orders;
 using Omni.App.Persistence.Repositories.TikTok;
 using Omni.App.Persistence.Repositories.Users;
 using Omni.App.Persistence.Repositories.WhatsApp;
 
 namespace Omni.App.Tests.Repositories;
 
-public class ProcedureRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixture)
+public class ServiceRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixture)
 {
     [PostgresFact]
-    public async Task Procedures_are_listed_by_name_and_filtered_to_active()
+    public async Task Services_are_listed_by_name_and_filtered_to_active()
     {
         var c = MakeClient(); var other = MakeClient();
-        var b = MakeProcedure(c.Id, "Botox"); var a = MakeProcedure(c.Id, "Abdominoplasty"); var off = MakeProcedure(c.Id, "Chin", active: false);
-        var foreign = MakeProcedure(other.Id, "Foreign");
+        var b = MakeService(c.Id, "Botox"); var a = MakeService(c.Id, "Abdominoplasty"); var off = MakeService(c.Id, "Chin", active: false);
+        var foreign = MakeService(other.Id, "Foreign");
         await SeedAsync(c, other, b, a, off, foreign);
 
         await using var db = NewContext();
-        var repo = new ProcedureRepository(db);
+        var repo = new ServiceRepository(db);
         Assert.Equal(["Abdominoplasty", "Botox", "Chin"], (await repo.ListAsync(c.Id, false)).Select(p => p.Name));
         Assert.Equal(["Abdominoplasty", "Botox"], (await repo.ListAsync(c.Id, true)).Select(p => p.Name));
     }
@@ -34,11 +35,11 @@ public class ProcedureRepositoryTests(PostgresFixture fixture) : RepoTestBase(fi
     public async Task Lookups_activity_and_name_clashes()
     {
         var c = MakeClient(); var other = MakeClient();
-        var p = MakeProcedure(c.Id, "Rhinoplasty"); var off = MakeProcedure(c.Id, "Retired", active: false);
+        var p = MakeService(c.Id, "Rhinoplasty"); var off = MakeService(c.Id, "Retired", active: false);
         await SeedAsync(c, other, p, off);
 
         await using var db = NewContext();
-        var repo = new ProcedureRepository(db);
+        var repo = new ServiceRepository(db);
         Assert.NotNull(await repo.GetAsync(c.Id, p.Id));
         Assert.Null(await repo.GetAsync(other.Id, p.Id));
         Assert.NotNull(await repo.GetReadOnlyAsync(c.Id, p.Id));
@@ -51,32 +52,32 @@ public class ProcedureRepositoryTests(PostgresFixture fixture) : RepoTestBase(fi
         Assert.False(await repo.NameExistsAsync(c.Id, "RHINOPLASTY", p.Id));   // renaming itself is fine
         Assert.False(await repo.NameExistsAsync(other.Id, "Rhinoplasty", null));
 
-        var added = MakeProcedure(c.Id, "Facelift");
+        var added = MakeService(c.Id, "Facelift");
         repo.Add(added);
         await db.SaveChangesAsync();
         await using var check = NewContext();
-        Assert.True(await new ProcedureRepository(check).NameExistsAsync(c.Id, "facelift", null));
+        Assert.True(await new ServiceRepository(check).NameExistsAsync(c.Id, "facelift", null));
     }
 }
 
-public class ProcedureBookingRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixture)
+public class OrderRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixture)
 {
     [PostgresFact]
-    public async Task Bookings_are_scoped_filtered_ordered_and_loadable()
+    public async Task Orders_are_scoped_filtered_ordered_and_loadable()
     {
         var c = MakeClient(); var other = MakeClient();
-        var proc = MakeProcedure(c.Id); var lead = MakeLead(c.Id);
-        ProcedureBooking Booking(string status, int daysAgo) => new()
+        var svc = MakeService(c.Id); var lead = MakeLead(c.Id);
+        Order MakeOrder(string status, int daysAgo) => new()
         {
-            Id = Guid.NewGuid(), ClientId = c.Id, LeadId = lead.Id, ProcedureId = proc.Id, Status = status,
+            Id = Guid.NewGuid(), ClientId = c.Id, LeadId = lead.Id, ServiceId = svc.Id, Status = status,
             CreatedAt = Now.AddDays(-daysAgo), UpdatedAt = Now.AddDays(-daysAgo),
         };
-        var older = Booking(ProcedureBookingStatus.Considering, 2);
-        var newer = Booking(ProcedureBookingStatus.Booked, 1);
-        await SeedAsync(c, other, proc, lead, older, newer);
+        var older = MakeOrder(OrderStatus.Considering, 2);
+        var newer = MakeOrder(OrderStatus.Confirmed, 1);
+        await SeedAsync(c, other, svc, lead, older, newer);
 
         await using var db = NewContext();
-        var repo = new ProcedureBookingRepository(db);
+        var repo = new OrderRepository(db);
         Assert.NotNull(await repo.GetAsync(c.Id, older.Id));
         Assert.Null(await repo.GetAsync(other.Id, older.Id));
 
@@ -84,16 +85,16 @@ public class ProcedureBookingRepositoryTests(PostgresFixture fixture) : RepoTest
         Assert.Equal(2, total);
         Assert.Equal([newer.Id, older.Id], items.Select(b => b.Id));
         Assert.NotNull(items[0].Lead);
-        Assert.NotNull(items[0].Procedure);
-        Assert.Equal([newer.Id], (await repo.ListAsync(c.Id, ProcedureBookingStatus.Booked, 0, 10)).Items.Select(b => b.Id));
+        Assert.NotNull(items[0].Service);
+        Assert.Equal([newer.Id], (await repo.ListAsync(c.Id, OrderStatus.Confirmed, 0, 10)).Items.Select(b => b.Id));
         Assert.Equal([older.Id], (await repo.ListAsync(c.Id, null, 1, 10)).Items.Select(b => b.Id));
 
-        var fresh = new ProcedureBooking { Id = Guid.NewGuid(), ClientId = c.Id, LeadId = lead.Id, ProcedureId = proc.Id, CreatedAt = Now, UpdatedAt = Now };
+        var fresh = new Order { Id = Guid.NewGuid(), ClientId = c.Id, LeadId = lead.Id, ServiceId = svc.Id, CreatedAt = Now, UpdatedAt = Now };
         repo.Add(fresh);
         await db.SaveChangesAsync();
         await repo.LoadDetailsAsync(fresh);
         Assert.NotNull(fresh.Lead);
-        Assert.NotNull(fresh.Procedure);
+        Assert.NotNull(fresh.Service);
     }
 }
 
@@ -352,7 +353,7 @@ public class UserSettingsAndEventRepositoryTests(PostgresFixture fixture) : Repo
     {
         var c = MakeClient();
         await SeedAsync(c);
-        var entry = new EventLog { Id = Guid.NewGuid(), ClientId = c.Id, EventType = EventTypes.ProcedureBooked, CreatedAt = Now };
+        var entry = new EventLog { Id = Guid.NewGuid(), ClientId = c.Id, EventType = EventTypes.OrderConfirmed, CreatedAt = Now };
         await using (var db = NewContext())
         {
             new EventLogRepository(db).Add(entry);

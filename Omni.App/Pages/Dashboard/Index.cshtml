@@ -136,13 +136,13 @@ else
         </div>
     </div>
 
-    <h2 class="section-title">By procedure</h2>
+    <h2 class="section-title">By service</h2>
     <div class="au-table-card">
-        @if (Model.Procedures.Count == 0)
+        @if (Model.Services.Count == 0)
         {
-            var empty = new EmptyStateModel(Icon: "medical_services", Title: "No procedures yet",
-                Text: "Add the procedures your client offers to see interest and bookings for each one.",
-                ActionLabel: "Add a procedure", ActionHref: "/Procedures/Edit");
+            var empty = new EmptyStateModel(Icon: "medical_services", Title: "No services yet",
+                Text: "Add the services your client offers to see interest and bookings for each one.",
+                ActionLabel: "Add a service", ActionHref: "/Services/Edit");
             <partial name="_EmptyState" model="empty" />
         }
         else
@@ -150,15 +150,15 @@ else
             <div class="au-table-scroll">
                 <table class="au-table au-table--stack">
                     <thead>
-                        <tr><th>Procedure</th><th class="au-right">Interested</th><th class="au-right">Bookings</th><th class="au-right">Completed</th><th class="au-right">Revenue</th></tr>
+                        <tr><th>Service</th><th class="au-right">Interested</th><th class="au-right">Bookings</th><th class="au-right">Completed</th><th class="au-right">Revenue</th></tr>
                     </thead>
                     <tbody>
-                        @foreach (var p in Model.Procedures)
+                        @foreach (var p in Model.Services)
                         {
                             <tr>
-                                <td data-label="Procedure"><strong>@p.ProcedureName</strong></td>
+                                <td data-label="Service"><strong>@p.ServiceName</strong></td>
                                 <td data-label="Interested" class="au-right">@p.LeadCount</td>
-                                <td data-label="Bookings" class="au-right">@p.BookingCount</td>
+                                <td data-label="Bookings" class="au-right">@p.OrderCount</td>
                                 <td data-label="Completed" class="au-right">@p.CompletedCount</td>
                                 <td data-label="Revenue" class="au-right">@UiTextHelper.Amount(p.CompletedRevenue)</td>
                             </tr>

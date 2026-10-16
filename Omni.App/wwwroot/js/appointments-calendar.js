@@ -1,6 +1,6 @@
-/* Appointments — month calendar. Reads/writes the existing /api/appointments, /api/leads and /api/procedures APIs
+/* Appointments — month calendar. Reads/writes the existing /api/appointments, /api/leads and /api/services APIs
    (the same appointments table used by AI bookings, staff edits and everything else — this page owns no data of
-   its own). Every value from the server is written with textContent (never innerHTML), so a lead/procedure name
+   its own). Every value from the server is written with textContent (never innerHTML), so a lead/service name
    can't inject markup. */
 (function () {
     'use strict';
@@ -147,8 +147,8 @@
         var kids = [el('div', { class: 'cal-day-num', text: String(dayNum) })];
         var shown = items.slice(0, 3);
         shown.forEach(function (a) {
-            // Chip shows just the time (bold) and a short name; the procedure is in the tooltip and the day drawer.
-            var title = a.localTime + ' ' + (a.leadFullName || 'Unknown') + (a.procedureName ? ' - ' + a.procedureName : '') + ' (' + statusLabel(a.status) + ')';
+            // Chip shows just the time (bold) and a short name; the service is in the tooltip and the day drawer.
+            var title = a.localTime + ' ' + (a.leadFullName || 'Unknown') + (a.serviceName ? ' - ' + a.serviceName : '') + ' (' + statusLabel(a.status) + ')';
             kids.push(el('div', { class: 'cal-chip status-' + a.status, title: title, onclick: function (e) { e.stopPropagation(); openAppointment(a); } }, [
                 el('b', { text: a.localTime }), ' ' + shortName(a.leadFullName)
             ]));
@@ -226,7 +226,7 @@
                         el('span', { class: 'cal-appt-time', text: a.localTime }),
                         el('div', { class: 'agenda-row-main' }, [
                             el('div', { class: 'cal-appt-name', text: a.leadFullName || 'Unknown patient' }),
-                            el('div', { class: 'cal-appt-procedure', text: a.procedureName || 'No procedure on file' })
+                            el('div', { class: 'cal-appt-service', text: a.serviceName || 'No service on file' })
                         ]),
                         el('span', { class: 'badge ' + badgeClass(a.status), text: statusLabel(a.status) })
                     ]));
@@ -269,7 +269,7 @@
                     el('span', { class: 'badge ' + badgeClass(a.status), text: statusLabel(a.status) })
                 ]),
                 el('div', { class: 'cal-appt-name', text: a.leadFullName || 'Unknown patient' }),
-                el('div', { class: 'cal-appt-procedure', text: a.procedureName || 'No procedure on file' })
+                el('div', { class: 'cal-appt-service', text: a.serviceName || 'No service on file' })
             ]));
         });
     }
@@ -294,7 +294,7 @@
         $('cal-appt-avatar').textContent = initialOf(a.leadFullName);
         $('cal-appt-name').textContent = a.leadFullName || 'Unknown patient';
         $('cal-appt-when').textContent = d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }) + ' · ' + a.localTime;
-        $('cal-appt-procedure').textContent = a.procedureName || 'No procedure on file';
+        $('cal-appt-service').textContent = a.serviceName || 'No service on file';
         $('cal-appt-location').textContent = '…';
         $('cal-appt-notes').textContent = '…';
         $('cal-appt-notes-row').hidden = false;
@@ -362,7 +362,7 @@
         $('cal-new-location').value = '';
         $('cal-new-notes').value = '';
         updateRange();
-        loadProcedures();
+        loadServices();
         $('cal-new-overlay').hidden = false;
         $('cal-new-lead-search').focus();
     }
@@ -376,12 +376,12 @@
 
     function closeNewAppointment() { $('cal-new-overlay').hidden = true; }
 
-    function loadProcedures() {
-        var sel = $('cal-new-procedure');
-        api('GET', '/api/procedures').then(function (procedures) {
+    function loadServices() {
+        var sel = $('cal-new-service');
+        api('GET', '/api/services').then(function (services) {
             sel.textContent = '';
-            sel.appendChild(el('option', { value: '', text: 'No procedure' }));
-            procedures.forEach(function (p) { sel.appendChild(el('option', { value: p.id, text: p.name })); });
+            sel.appendChild(el('option', { value: '', text: 'No service' }));
+            services.forEach(function (p) { sel.appendChild(el('option', { value: p.id, text: p.name })); });
         }).catch(function (e) { showMessage(e.message, 'error'); });
     }
 
@@ -398,14 +398,14 @@
                     el('span', { class: 'avatar-sm', text: initialOf(lead.fullName) }),
                     el('span', { class: 'picker-option-main' }, [
                         el('span', { class: 'picker-option-name', text: lead.fullName || 'Unnamed' }),
-                        el('span', { class: 'picker-option-sub', text: [lead.phone, lead.procedureName].filter(Boolean).join(' · ') })
+                        el('span', { class: 'picker-option-sub', text: [lead.phone, lead.serviceName].filter(Boolean).join(' · ') })
                     ])
                 ]));
             });
         }).catch(function () { /* transient — staff can retype */ });
     }
 
-    /** Picked patient shows as a chip (with × to change); their lead's procedure pre-fills the Procedure field. */
+    /** Picked patient shows as a chip (with × to change); their lead's service pre-fills the Service field. */
     function pickLead(lead) {
         var label = (lead.fullName || 'Unnamed') + (lead.phone ? ' · ' + lead.phone : '');
         state.selectedLead = { id: lead.id, label: label };
@@ -415,10 +415,10 @@
         $('cal-new-lead-chip-avatar').textContent = initialOf(lead.fullName);
         $('cal-new-lead-chip-label').textContent = label;
         $('cal-new-lead-chip').hidden = false;
-        if (lead.procedureId) {
-            var sel = $('cal-new-procedure');
-            var hasOption = Array.prototype.some.call(sel.options, function (o) { return o.value === lead.procedureId; });
-            if (hasOption) sel.value = lead.procedureId;
+        if (lead.serviceId) {
+            var sel = $('cal-new-service');
+            var hasOption = Array.prototype.some.call(sel.options, function (o) { return o.value === lead.serviceId; });
+            if (hasOption) sel.value = lead.serviceId;
         }
     }
 
@@ -449,7 +449,7 @@
         var body = {
             clientId: '00000000-0000-0000-0000-000000000000', // ignored server-side — the client always comes from the logged-in user
             leadId: leadId,
-            procedureId: $('cal-new-procedure').value || null,
+            serviceId: $('cal-new-service').value || null,
             appointmentType: 'consultation',
             scheduledStart: startIso,
             scheduledEnd: endIso,

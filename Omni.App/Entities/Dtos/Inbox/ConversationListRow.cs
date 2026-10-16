@@ -6,7 +6,7 @@ public record ConversationListRow(
     Guid LeadId,
     string? LeadFullName,
     string? LeadPhone,
-    string? ProcedureName,
+    string? ServiceName,
     string Channel,
     string Status,
     string Mode,

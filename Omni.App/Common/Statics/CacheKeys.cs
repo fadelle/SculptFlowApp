@@ -38,9 +38,9 @@ public static class CacheKeys
     public const string BusinessTypesPrefix = "core:business-type:";
     public const string BusinessTypes = BusinessTypesPrefix + "all";
 
-    // ---- Core: a client's procedures, all of them by name (ProcedureRepository.ListAsync / GetReadOnlyAsync filter it).
-    public const string ProceduresPrefix = "core:procedures:";
-    public static string Procedures(Guid clientId) => ProceduresPrefix + clientId.ToString("N");
+    // ---- Core: a client's services, all of them by name (ServiceRepository.ListAsync / GetReadOnlyAsync filter it).
+    public const string ServicesPrefix = "core:services:";
+    public static string Services(Guid clientId) => ServicesPrefix + clientId.ToString("N");
 
     // ---- Identity: which client a signed-in user is an active member of (read on every signed-in request). Short
     // lifetime (Cache:StaffLookupMinutes) because a removed staff member must lose access quickly even if a removal were
@@ -102,8 +102,8 @@ public static class CacheKeys
             case ClientUser m:
                 yield return CacheEviction.Key(Membership(m.UserId));
                 break;
-            case Procedure p:
-                yield return CacheEviction.Key(Procedures(p.ClientId));
+            case Service p:
+                yield return CacheEviction.Key(Services(p.ClientId));
                 break;
             case AvailabilityRule r:
                 yield return CacheEviction.Key(AvailabilityRules(r.ClientId));
@@ -159,7 +159,7 @@ public static class CacheKeys
     public static IEnumerable<CacheEviction> EvictionsForClient(Guid clientId) =>
     [
         CacheEviction.Key(Client(clientId)),
-        CacheEviction.Key(Procedures(clientId)),
+        CacheEviction.Key(Services(clientId)),
         CacheEviction.Key(AvailabilityRules(clientId)),
         CacheEviction.Key(BookingSettings(clientId)),
         CacheEviction.Key(InboxSettings(clientId)),

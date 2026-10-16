@@ -6,7 +6,7 @@ namespace Omni.App.Entities.Requests.Ai;
 /// ClientId, which the AI controller takes from the query string like every other AI endpoint.</summary>
 public record BookConsultationRequest(
     Guid LeadId,
-    [property: System.Text.Json.Serialization.JsonConverter(typeof(LenientNullableGuidConverter))] Guid? ProcedureId,
+    [property: System.Text.Json.Serialization.JsonConverter(typeof(LenientNullableGuidConverter))] Guid? ServiceId,
     string? AppointmentType,
     DateTimeOffset ScheduledStart,
     [property: System.Text.Json.Serialization.JsonConverter(typeof(LenientNullableDateTimeOffsetConverter))] DateTimeOffset? ScheduledEnd,

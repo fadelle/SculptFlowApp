@@ -27,12 +27,12 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
     public DbSet<Client> Clients => Set<Client>();
     public DbSet<BusinessType> BusinessTypes => Set<BusinessType>();
     public DbSet<PipelineStage> PipelineStages => Set<PipelineStage>();
-    public DbSet<Procedure> Procedures => Set<Procedure>();
+    public DbSet<Service> Services => Set<Service>();
     public DbSet<Lead> Leads => Set<Lead>();
     public DbSet<Conversation> Conversations => Set<Conversation>();
     public DbSet<Message> Messages => Set<Message>();
     public DbSet<Appointment> Appointments => Set<Appointment>();
-    public DbSet<ProcedureBooking> ProcedureBookings => Set<ProcedureBooking>();
+    public DbSet<Order> Orders => Set<Order>();
     public DbSet<EventLog> Events => Set<EventLog>();
     public DbSet<ChannelIntegration> ChannelIntegrations => Set<ChannelIntegration>();
     public DbSet<WhatsAppTemplate> WhatsAppTemplates => Set<WhatsAppTemplate>();
@@ -189,11 +189,11 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
         });
 
         // ---------------------------------------------------------------
-        // procedures
+        // services
         // ---------------------------------------------------------------
-        modelBuilder.Entity<Procedure>(e =>
+        modelBuilder.Entity<Service>(e =>
         {
-            e.ToTable("procedures", "core");
+            e.ToTable("services", "core");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
             e.Property(x => x.ClientId).HasColumnName("client_id");
@@ -205,7 +205,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.Property(x => x.CreatedAt).HasColumnName("created_at");
             e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
 
-            e.HasOne(x => x.Client).WithMany(c => c.Procedures)
+            e.HasOne(x => x.Client).WithMany(c => c.Services)
                 .HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Cascade);
 
             e.HasIndex(x => x.ClientId);
@@ -220,7 +220,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
             e.Property(x => x.ClientId).HasColumnName("client_id");
-            e.Property(x => x.ProcedureId).HasColumnName("procedure_id");
+            e.Property(x => x.ServiceId).HasColumnName("service_id");
             e.Property(x => x.FullName).HasColumnName("full_name").HasMaxLength(200);
             e.Property(x => x.FirstName).HasColumnName("first_name").HasMaxLength(100);
             e.Property(x => x.LastName).HasColumnName("last_name").HasMaxLength(100);
@@ -247,14 +247,14 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
 
             e.HasOne(x => x.Client).WithMany(c => c.Leads)
                 .HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Cascade);
-            e.HasOne(x => x.Procedure).WithMany()
-                .HasForeignKey(x => x.ProcedureId).OnDelete(DeleteBehavior.SetNull);
+            e.HasOne(x => x.Service).WithMany()
+                .HasForeignKey(x => x.ServiceId).OnDelete(DeleteBehavior.SetNull);
 
             e.HasIndex(x => x.ClientId);
             e.HasIndex(x => new { x.ClientId, x.Phone });
             e.HasIndex(x => new { x.ClientId, x.Email });
             e.HasIndex(x => x.Status);
-            e.HasIndex(x => x.ProcedureId);
+            e.HasIndex(x => x.ServiceId);
             e.HasIndex(x => x.CreatedAt);
             e.HasIndex(x => new { x.ClientId, x.ExternalLeadId })
                 .IsUnique()
@@ -357,7 +357,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.Property(x => x.Id).HasColumnName("id");
             e.Property(x => x.ClientId).HasColumnName("client_id");
             e.Property(x => x.LeadId).HasColumnName("lead_id");
-            e.Property(x => x.ProcedureId).HasColumnName("procedure_id");
+            e.Property(x => x.ServiceId).HasColumnName("service_id");
             e.Property(x => x.AppointmentType).HasColumnName("appointment_type").HasMaxLength(50).IsRequired();
             e.Property(x => x.Status).HasColumnName("status").HasMaxLength(50).IsRequired();
             e.Property(x => x.ScheduledStart).HasColumnName("scheduled_start").IsRequired();
@@ -373,8 +373,8 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
 
             e.HasOne(x => x.Lead).WithMany(l => l.Appointments)
                 .HasForeignKey(x => x.LeadId).OnDelete(DeleteBehavior.Cascade);
-            e.HasOne(x => x.Procedure).WithMany()
-                .HasForeignKey(x => x.ProcedureId).OnDelete(DeleteBehavior.SetNull);
+            e.HasOne(x => x.Service).WithMany()
+                .HasForeignKey(x => x.ServiceId).OnDelete(DeleteBehavior.SetNull);
 
             e.HasIndex(x => x.ClientId);
             e.HasIndex(x => x.LeadId);
@@ -383,32 +383,32 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
         });
 
         // ---------------------------------------------------------------
-        // procedure_bookings
+        // orders
         // ---------------------------------------------------------------
-        modelBuilder.Entity<ProcedureBooking>(e =>
+        modelBuilder.Entity<Order>(e =>
         {
-            e.ToTable("procedure_bookings", "scheduling");
+            e.ToTable("orders", "crm");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
             e.Property(x => x.ClientId).HasColumnName("client_id");
             e.Property(x => x.LeadId).HasColumnName("lead_id");
-            e.Property(x => x.ProcedureId).HasColumnName("procedure_id");
+            e.Property(x => x.ServiceId).HasColumnName("service_id");
             e.Property(x => x.AppointmentId).HasColumnName("appointment_id");
             e.Property(x => x.Status).HasColumnName("status").HasMaxLength(50).IsRequired();
             e.Property(x => x.QuotedAmount).HasColumnName("quoted_amount").HasColumnType("numeric(12,2)");
             e.Property(x => x.DepositAmount).HasColumnName("deposit_amount").HasColumnType("numeric(12,2)");
             e.Property(x => x.FinalAmount).HasColumnName("final_amount").HasColumnType("numeric(12,2)");
             e.Property(x => x.CurrencyCode).HasColumnName("currency_code").HasMaxLength(3);
-            e.Property(x => x.ProcedureDate).HasColumnName("procedure_date");
+            e.Property(x => x.ServiceDate).HasColumnName("service_date");
             e.Property(x => x.Notes).HasColumnName("notes");
             e.Property(x => x.CreatedAt).HasColumnName("created_at");
             e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
 
-            e.HasOne(x => x.Lead).WithMany(l => l.ProcedureBookings)
+            e.HasOne(x => x.Lead).WithMany(l => l.Orders)
                 .HasForeignKey(x => x.LeadId).OnDelete(DeleteBehavior.Cascade);
-            e.HasOne(x => x.Procedure).WithMany()
-                .HasForeignKey(x => x.ProcedureId).OnDelete(DeleteBehavior.Restrict);
-            e.HasOne(x => x.Appointment).WithMany(a => a.ProcedureBookings)
+            e.HasOne(x => x.Service).WithMany()
+                .HasForeignKey(x => x.ServiceId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.Appointment).WithMany(a => a.Orders)
                 .HasForeignKey(x => x.AppointmentId).OnDelete(DeleteBehavior.SetNull);
 
             e.HasIndex(x => x.ClientId);

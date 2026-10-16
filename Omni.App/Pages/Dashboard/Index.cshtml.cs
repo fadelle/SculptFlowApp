@@ -56,7 +56,7 @@ public class IndexModel : PageModel
     public Guid ClientId { get; private set; }
     public DashboardSummaryResponse? Summary { get; private set; }
     public DashboardAttentionResponse? Attention { get; private set; }
-    public IReadOnlyList<DashboardProcedureRow> Procedures { get; private set; } = Array.Empty<DashboardProcedureRow>();
+    public IReadOnlyList<DashboardServiceRow> Services { get; private set; } = Array.Empty<DashboardServiceRow>();
     /// <summary>Human-readable description of the selected range, e.g. "Sep 1 – Sep 30, 2026".</summary>
     public string RangeLabel { get; private set; } = "All time";
     /// <summary>Null means "no WhatsApp connection yet" — the indicator shows a neutral state, not
@@ -89,7 +89,7 @@ public class IndexModel : PageModel
         DateTimeOffset? to = toDate is null ? null : LocalMidnightUtc(toDate.Value.AddDays(1), tz);
 
         Summary = await _dashboard.GetSummaryAsync(client.Id, from, to, ct);
-        Procedures = await _dashboard.GetProcedureStatsAsync(client.Id, from, to, ct);
+        Services = await _dashboard.GetServiceStatsAsync(client.Id, from, to, ct);
         Attention = await _dashboard.GetAttentionAsync(client.Id, ct);
         WhatsAppHealth = await _whatsAppHealth.GetHealthAsync(client.Id, ct);
     }

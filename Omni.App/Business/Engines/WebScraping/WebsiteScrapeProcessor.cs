@@ -479,7 +479,7 @@ public sealed class WebsiteScrapeProcessor : IWebsiteScrapeProcessor
             cp.Canonical = ResolveCanonical(cp, origin);
         }
 
-        // 2. Canonical aliases: /procedure?utm=… whose canonical is /procedure → not a page of its own.
+        // 2. Canonical aliases: /service?utm=… whose canonical is /service → not a page of its own.
         foreach (var cp in all.Where(p => p.Outcome == Outcome.Content && p.Canonical is not null))
         {
             var target = FollowCanonical(cp, byUrl);

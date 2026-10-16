@@ -3,8 +3,8 @@ namespace Omni.App.Entities.Responses.Leads;
 public record LeadResponse(
     Guid Id,
     Guid ClientId,
-    Guid? ProcedureId,
-    string? ProcedureName,
+    Guid? ServiceId,
+    string? ServiceName,
     string? FullName,
     string? FirstName,
     string? LastName,

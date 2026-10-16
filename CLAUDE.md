@@ -73,10 +73,10 @@ Every table lives in its area's Postgres schema, never `public` (only `set_updat
 
 | Schema | Tables |
 |---|---|
-| `core` | business_types, clients, procedures |
+| `core` | business_types, clients, services |
 | `identity` | identity_users/_claims/_logins/_tokens, client_users |
-| `crm` | pipeline_stages, leads, conversations, messages, inbox_settings |
-| `scheduling` | appointments, procedure_bookings, availability rules/exceptions, booking_settings, calendar integrations and syncs |
+| `crm` | pipeline_stages, leads, orders, conversations, messages, inbox_settings |
+| `scheduling` | appointments, availability rules/exceptions, booking_settings, calendar integrations and syncs |
 | `channels` | channel_integrations, whatsapp_templates, whatsapp_health_events, tiktok_integrations |
 | `marketing` | campaigns, campaign_recipients |
 | `knowledge` | every knowledge_* table |
@@ -118,7 +118,7 @@ Full detail and the declared-settings table: `docs/configuration.md`.
 - Cache plain DTOs/records or read-only entity copies (stored as JSON copies), never tracked EF entities, and nothing
   whose staleness costs money (balances, ledger) or that changes every request (messages, conversations, appointments).
 - Table caches (agreed 2026-10-14) live in the repository's `...ReadOnlyAsync` reads: clients, business types (with stages),
-  inbox settings, client memberships, procedures, availability rules/settings/exceptions, calendar connections, channel connections, TikTok, WhatsApp
+  inbox settings, client memberships, services, availability rules/settings/exceptions, calendar connections, channel connections, TikTok, WhatsApp
   templates, rating cards, rates, channel account billing. Code that will change a row loads it tracked (uncached).
   Their lifetimes are settings, one per `CacheArea` (`Cache:*Minutes`), passed as an area to `CacheReads`, never as a
   fixed `TimeSpan`.

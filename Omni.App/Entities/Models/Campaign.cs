@@ -32,7 +32,7 @@ public class Campaign
     /// <summary>How the recipient list is determined — see <see cref="CampaignAudienceType"/>.</summary>
     public string AudienceType { get; set; } = CampaignAudienceType.Custom;
 
-    /// <summary>Optional filters for AudienceType (inactiveDays, procedureId, leadStatuses,
+    /// <summary>Optional filters for AudienceType (inactiveDays, serviceId, leadStatuses,
     /// sources, ...) — see CampaignAudienceFilters. Raw JSON, not queried directly; a campaign
     /// audience is only ever computed once at creation time into CampaignRecipient rows (the
     /// snapshot), never re-derived from these filters afterward.</summary>

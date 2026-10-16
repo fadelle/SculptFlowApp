@@ -5,7 +5,7 @@ public record DashboardAppointmentRow(
     Guid Id,
     string? LeadFullName,
     string? LeadPhone,
-    string? ProcedureName,
+    string? ServiceName,
     string Status,
     DateTimeOffset ScheduledStart,
     string? LocationType

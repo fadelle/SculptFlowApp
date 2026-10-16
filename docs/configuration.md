@@ -99,7 +99,7 @@ Generated from `Common/Statics/ConfigDefaults`; keep this table in step when you
 | Dashboard | LeadsPageSize | 25 | int 5–200 | Leads per page on the dashboard. |
 | Cache | ClientsMinutes | 60 | int 1–1440 | Client rows (signed-in client, the bot's client info). Saving a change clears the cached copy at once; this is only how long an untouched copy lives. |
 | Cache | StaffLookupMinutes | 10 | int 1–1440 | Which client a signed-in user belongs to. Keep it short: it is how long a removed staff member could keep access if a removal were ever missed. Saving a change clears the cached copy at once; this is only how long an untouched copy lives. |
-| Cache | ProceduresMinutes | 60 | int 1–1440 | A client's procedures. Saving a change clears the cached copy at once; this is only how long an untouched copy lives. |
+| Cache | ServicesMinutes | 60 | int 1–1440 | A client's services. Saving a change clears the cached copy at once; this is only how long an untouched copy lives. |
 | Cache | SchedulingMinutes | 60 | int 1–1440 | Weekly hours, booking settings, closed dates and calendar connections. Saving a change clears the cached copy at once; this is only how long an untouched copy lives. |
 | Cache | ChannelsMinutes | 60 | int 1–1440 | Channel connections, TikTok connection and WhatsApp templates. Saving a change clears the cached copy at once; this is only how long an untouched copy lives. |
 | Cache | BillingRatesMinutes | 60 | int 1–1440 | Rating cards, rates and who pays the provider per channel account. Saving a change clears the cached copy at once; this is only how long an untouched copy lives. |

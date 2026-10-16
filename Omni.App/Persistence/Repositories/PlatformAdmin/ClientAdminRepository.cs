@@ -62,8 +62,8 @@ public class ClientAdminRepository : IClientAdminRepository
             await _db.Messages.CountAsync(m => m.ClientId == id && m.CreatedAt >= weekAgo && m.FailedAt != null, ct),
             await _db.Appointments.CountAsync(a => a.ClientId == id && a.ScheduledStart >= now
                 && a.Status != AppointmentStatus.Canceled && a.Status != AppointmentStatus.Rescheduled, ct),
-            await _db.Procedures.CountAsync(p => p.ClientId == id, ct),
-            await _db.Procedures.CountAsync(p => p.ClientId == id && p.IsActive, ct),
+            await _db.Services.CountAsync(p => p.ClientId == id, ct),
+            await _db.Services.CountAsync(p => p.ClientId == id && p.IsActive, ct),
             await _db.KnowledgeDocuments.CountAsync(d => d.ClientId == id, ct),
             await _db.Campaigns.CountAsync(c => c.ClientId == id, ct),
             await _db.Campaigns.CountAsync(c => c.ClientId == id && c.Status == CampaignStatus.Running, ct),

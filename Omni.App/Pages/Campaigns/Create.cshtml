@@ -128,7 +128,7 @@ else
                         <label class="aud-card">
                             <input type="radio" name="AudienceChoice" value="custom" data-audience-choice checked="@(Model.AudienceChoice == "custom")" />
                             <span class="aud-title">Custom audience</span>
-                            <span class="aud-desc">Filter by procedure, status, source, dates…</span>
+                            <span class="aud-desc">Filter by service, status, source, dates…</span>
                         </label>
                         <label class="aud-card">
                             <input type="radio" name="AudienceChoice" value="manual" data-audience-choice checked="@(Model.AudienceChoice == "manual")" />
@@ -152,12 +152,12 @@ else
                                 </select>
                             </label>
                             <label class="field">
-                                <span>Procedure</span>
-                                <select name="ReactivationProcedureId" id="reactivation-procedure" class="select">
-                                    <option value="">All procedures</option>
-                                    @foreach (var p in Model.Procedures)
+                                <span>Service</span>
+                                <select name="ReactivationServiceId" id="reactivation-service" class="select">
+                                    <option value="">All services</option>
+                                    @foreach (var p in Model.Services)
                                     {
-                                        <option value="@p.Id" selected="@(p.Id == Model.ReactivationProcedureId)">@p.Name</option>
+                                        <option value="@p.Id" selected="@(p.Id == Model.ReactivationServiceId)">@p.Name</option>
                                     }
                                 </select>
                             </label>
@@ -196,12 +196,12 @@ else
                     <div id="custom-panel" class="aud-panel" hidden>
                         <div class="filter-grid" id="advanced-filters">
                             <label class="field">
-                                <span>Procedure</span>
-                                <select name="CustomProcedureId" id="custom-procedure" class="select">
-                                    <option value="">All procedures</option>
-                                    @foreach (var p in Model.Procedures)
+                                <span>Service</span>
+                                <select name="CustomServiceId" id="custom-service" class="select">
+                                    <option value="">All services</option>
+                                    @foreach (var p in Model.Services)
                                     {
-                                        <option value="@p.Id" selected="@(p.Id == Model.CustomProcedureId)">@p.Name</option>
+                                        <option value="@p.Id" selected="@(p.Id == Model.CustomServiceId)">@p.Name</option>
                                     }
                                 </select>
                             </label>

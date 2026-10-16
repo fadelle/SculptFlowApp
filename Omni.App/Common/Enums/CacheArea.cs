@@ -5,7 +5,7 @@ public enum CacheArea
 {
     Clients,
     StaffLookup,
-    Procedures,
+    Services,
     Scheduling,
     Channels,
     BillingRates,

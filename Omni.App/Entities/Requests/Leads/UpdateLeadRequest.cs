@@ -1,7 +1,7 @@
 namespace Omni.App.Entities.Requests.Leads;
 
 public record UpdateLeadRequest(
-    Guid? ProcedureId,
+    Guid? ServiceId,
     string? FullName,
     string? FirstName,
     string? LastName,

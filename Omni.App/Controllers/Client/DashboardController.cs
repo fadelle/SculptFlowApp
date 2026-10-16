@@ -63,14 +63,14 @@ public class DashboardController : DashboardApiController
         return Ok(new { items, totalCount, skip, take });
     }
 
-    [HttpGet("procedures")]
-    public async Task<ActionResult<IReadOnlyList<DashboardProcedureRow>>> Procedures(
+    [HttpGet("services")]
+    public async Task<ActionResult<IReadOnlyList<DashboardServiceRow>>> Services(
         [FromQuery] DateTimeOffset? from, [FromQuery] DateTimeOffset? to, CancellationToken ct)
     {
         var clientId = await GetClientIdAsync(ct);
         if (clientId is null) return Forbid();
 
-        var stats = await _dashboard.GetProcedureStatsAsync(clientId.Value, from, to, ct);
+        var stats = await _dashboard.GetServiceStatsAsync(clientId.Value, from, to, ct);
         return Ok(stats);
     }
 }

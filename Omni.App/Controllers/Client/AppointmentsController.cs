@@ -23,12 +23,12 @@ public class AppointmentsController : DashboardApiController
     /// <summary>Open slots from the client's structured availability — same calculation the AI's get_available_slots uses.</summary>
     [HttpGet("available")]
     public async Task<ActionResult<AvailabilityResponse>> GetAvailable(
-        [FromQuery] Guid? procedureId, [FromQuery] DateOnly? date, [FromQuery] int? days, CancellationToken ct = default)
+        [FromQuery] Guid? serviceId, [FromQuery] DateOnly? date, [FromQuery] int? days, CancellationToken ct = default)
     {
         var clientId = await GetClientIdAsync(ct);
         if (clientId is null) return Forbid();
 
-        return Ok(await _availability.GetSlotsAsync(clientId.Value, procedureId, date, days ?? (date is null ? 7 : 1), ct));
+        return Ok(await _availability.GetSlotsAsync(clientId.Value, serviceId, date, days ?? (date is null ? 7 : 1), ct));
     }
 
     [HttpPost]

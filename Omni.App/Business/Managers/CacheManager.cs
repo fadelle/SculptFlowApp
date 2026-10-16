@@ -30,7 +30,7 @@ public class CacheManager : ICacheManager
     {
         CacheArea.Clients => _config?.CacheClientsMinutes ?? Default(ConfigDefaults.CacheClientsMinutes),
         CacheArea.StaffLookup => _config?.CacheStaffLookupMinutes ?? Default(ConfigDefaults.CacheStaffLookupMinutes),
-        CacheArea.Procedures => _config?.CacheProceduresMinutes ?? Default(ConfigDefaults.CacheProceduresMinutes),
+        CacheArea.Services => _config?.CacheServicesMinutes ?? Default(ConfigDefaults.CacheServicesMinutes),
         CacheArea.Scheduling => _config?.CacheSchedulingMinutes ?? Default(ConfigDefaults.CacheSchedulingMinutes),
         CacheArea.Channels => _config?.CacheChannelsMinutes ?? Default(ConfigDefaults.CacheChannelsMinutes),
         CacheArea.BillingRates => _config?.CacheBillingRatesMinutes ?? Default(ConfigDefaults.CacheBillingRatesMinutes),

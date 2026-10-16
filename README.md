@@ -23,7 +23,7 @@ This README is only a short orientation.
 ## Main features
 
 - Inbox (WhatsApp + Telegram) with AI / human modes, take over / return to AI, unread tracking, 24h WhatsApp window
-- Leads, procedures, appointments month calendar, structured client availability, AI booking tools
+- Leads, services, appointments month calendar, structured client availability, AI booking tools
   (`get_available_slots`, `schedule_consultation`, `cancel_consultation`, `get_my_appointments`)
 - WhatsApp Embedded Signup, templates, health monitoring; Telegram bot channel
 - Campaigns with audience picker (old leads who never booked, all contactable, custom filters, manual)
@@ -39,7 +39,7 @@ This README is only a short orientation.
    ```
    psql "<connection string>" -f Database/schema.sql
    psql "<connection string>" -f Database/seed-config.sql   # every setting with its default (never overwrites)
-   psql "<connection string>" -f Database/seed.sql   # optional demo client, procedures and leads
+   psql "<connection string>" -f Database/seed.sql   # optional demo client, services and leads
    psql "<connection string>" -f Database/seed-demo.sql   # optional fully populated demo client (re-runnable, dummy data; sign-in and placeholder password in the file header, change it)
    ```
    Both are idempotent. Tables live in one Postgres schema per area (`core`, `crm`, `billing`, ...); running

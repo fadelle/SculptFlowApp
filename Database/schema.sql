@@ -11,10 +11,10 @@
 -- Idempotent: safe to re-run (uses IF NOT EXISTS / OR REPLACE).
 --
 -- Tables live in one Postgres schema per area (never in public):
---   core        business types, clients, procedures
+--   core        business types, clients, services
 --   identity    ASP.NET Identity users/claims/logins/tokens, client_users
---   crm         pipeline stages, leads, conversations, messages, inbox settings
---   scheduling  appointments, procedure bookings, availability, calendar sync
+--   crm         pipeline stages, leads, orders, conversations, messages, inbox settings
+--   scheduling  appointments, availability, calendar sync
 --   channels    channel integrations, WhatsApp templates/health, TikTok
 --   marketing   campaigns, campaign recipients
 --   knowledge   the knowledge base, website scraping, retrieval benchmarks
@@ -59,7 +59,7 @@ declare t record;
 begin
   for t in select * from (values
     ('clients', 'core'),
-    ('procedures', 'core'),
+    ('services', 'core'),
     ('identity_users', 'identity'),
     ('identity_user_claims', 'identity'),
     ('identity_user_logins', 'identity'),
@@ -69,7 +69,7 @@ begin
     ('conversations', 'crm'),
     ('messages', 'crm'),
     ('appointments', 'scheduling'),
-    ('procedure_bookings', 'scheduling'),
+    ('orders', 'crm'),
     ('availability_rules', 'scheduling'),
     ('availability_exceptions', 'scheduling'),
     ('booking_settings', 'scheduling'),
@@ -262,9 +262,9 @@ end $$;
 create index if not exists ix_clients_business_type_code on core.clients(business_type_code);
 
 -- ---------------------------------------------------------------------
--- 2. procedures  (catalog of services a client offers)
+-- 2. services  (catalog of services a client offers)
 -- ---------------------------------------------------------------------
-create table if not exists core.procedures (
+create table if not exists core.services (
   id                     uuid primary key default gen_random_uuid(),
   client_id              uuid not null references core.clients(id) on delete cascade,
   name                   varchar(200) not null,
@@ -276,11 +276,11 @@ create table if not exists core.procedures (
   updated_at             timestamptz not null default now()
 );
 
-create index if not exists ix_procedures_client_id on core.procedures(client_id);
+create index if not exists ix_services_client_id on core.services(client_id);
 
-drop trigger if exists trg_procedures_updated_at on core.procedures;
-create trigger trg_procedures_updated_at
-  before update on core.procedures
+drop trigger if exists trg_services_updated_at on core.services;
+create trigger trg_services_updated_at
+  before update on core.services
   for each row execute function set_updated_at();
 
 -- ---------------------------------------------------------------------
@@ -289,7 +289,7 @@ create trigger trg_procedures_updated_at
 create table if not exists crm.leads (
   id                    uuid primary key default gen_random_uuid(),
   client_id             uuid not null references core.clients(id) on delete cascade,
-  procedure_id          uuid references core.procedures(id) on delete set null,
+  service_id            uuid references core.services(id) on delete set null,
 
   full_name             varchar(200),
   first_name            varchar(100),
@@ -337,7 +337,7 @@ create index if not exists ix_leads_client_id on crm.leads(client_id);
 create index if not exists ix_leads_client_phone on crm.leads(client_id, phone);
 create index if not exists ix_leads_client_email on crm.leads(client_id, email);
 create index if not exists ix_leads_status on crm.leads(status);
-create index if not exists ix_leads_procedure_id on crm.leads(procedure_id);
+create index if not exists ix_leads_service_id on crm.leads(service_id);
 create index if not exists ix_leads_created_at on crm.leads(created_at);
 create index if not exists ix_leads_next_followup_at on crm.leads(next_followup_at) where next_followup_at is not null;
 
@@ -420,7 +420,7 @@ create table if not exists scheduling.appointments (
   id                    uuid primary key default gen_random_uuid(),
   client_id             uuid not null references core.clients(id) on delete cascade,
   lead_id               uuid not null references crm.leads(id) on delete cascade,
-  procedure_id          uuid references core.procedures(id) on delete set null,
+  service_id            uuid references core.services(id) on delete set null,
 
   appointment_type      varchar(50) not null default 'consultation',
   status                varchar(50) not null default 'booked',
@@ -452,13 +452,13 @@ create trigger trg_appointments_updated_at
   for each row execute function set_updated_at();
 
 -- ---------------------------------------------------------------------
--- 7. procedure_bookings  (a lead actually booking/undergoing a procedure)
+-- 7. orders  (a lead buying a service: quoted, deposit paid, confirmed, completed)
 -- ---------------------------------------------------------------------
-create table if not exists scheduling.procedure_bookings (
+create table if not exists crm.orders (
   id                uuid primary key default gen_random_uuid(),
   client_id         uuid not null references core.clients(id) on delete cascade,
   lead_id           uuid not null references crm.leads(id) on delete cascade,
-  procedure_id      uuid not null references core.procedures(id) on delete restrict,
+  service_id        uuid not null references core.services(id) on delete restrict,
   appointment_id    uuid references scheduling.appointments(id) on delete set null,
 
   status            varchar(50) not null default 'considering',
@@ -466,24 +466,24 @@ create table if not exists scheduling.procedure_bookings (
   deposit_amount    numeric(12,2),
   final_amount      numeric(12,2),
   currency_code     varchar(3),
-  procedure_date    timestamptz,
+  service_date      timestamptz,
   notes             text,
 
   created_at        timestamptz not null default now(),
   updated_at        timestamptz not null default now(),
 
-  constraint ck_procedure_bookings_status check (status in (
-    'considering','quoted','deposit_paid','booked','completed','canceled','lost'
+  constraint ck_orders_status check (status in (
+    'considering','quoted','deposit_paid','confirmed','completed','canceled','lost'
   ))
 );
 
-create index if not exists ix_procedure_bookings_client_id on scheduling.procedure_bookings(client_id);
-create index if not exists ix_procedure_bookings_lead_id on scheduling.procedure_bookings(lead_id);
-create index if not exists ix_procedure_bookings_status on scheduling.procedure_bookings(status);
+create index if not exists ix_orders_client_id on crm.orders(client_id);
+create index if not exists ix_orders_lead_id on crm.orders(lead_id);
+create index if not exists ix_orders_status on crm.orders(status);
 
-drop trigger if exists trg_procedure_bookings_updated_at on scheduling.procedure_bookings;
-create trigger trg_procedure_bookings_updated_at
-  before update on scheduling.procedure_bookings
+drop trigger if exists trg_orders_updated_at on crm.orders;
+create trigger trg_orders_updated_at
+  before update on crm.orders
   for each row execute function set_updated_at();
 
 -- ---------------------------------------------------------------------
@@ -1079,7 +1079,7 @@ create table if not exists knowledge.knowledge_documents (
   id          uuid primary key default gen_random_uuid(),
   client_id   uuid not null references core.clients(id) on delete cascade,
   title       varchar(200) not null,
-  -- Extensible string (general, faq, policy, doctor, procedure, pricing, payment, consultation,
+  -- Extensible string (general, faq, policy, doctor, service, pricing, payment, consultation,
   -- preparation, recovery, ...) — deliberately no CHECK, like campaigns.campaign_type.
   category    varchar(50) not null default 'general',
   content     text not null,

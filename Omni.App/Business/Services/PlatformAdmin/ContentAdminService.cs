@@ -1,7 +1,7 @@
 using Omni.App.Business.Contracts.Services.Campaigns;
 using Omni.App.Business.Contracts.Services.Knowledge;
 using Omni.App.Business.Contracts.Services.PlatformAdmin;
-using Omni.App.Business.Contracts.Services.Procedures;
+using Omni.App.Business.Contracts.Services.Catalog;
 using Omni.App.Business.Mappers.PlatformAdmin;
 using Omni.App.Entities.Dtos.PlatformAdmin;
 using Omni.App.Entities.Requests.Knowledge;
@@ -15,16 +15,16 @@ public class ContentAdminService : IContentAdminService
 {
     private readonly IContentAdminRepository _repository;
     private readonly ICampaignService _campaigns;
-    private readonly IProcedureService _procedures;
+    private readonly ICatalogService _services;
     private readonly IKnowledgeService _knowledge;
     private readonly IKnowledgeSettingsService _knowledgeSettings;
 
-    public ContentAdminService(IContentAdminRepository repository, ICampaignService campaigns, IProcedureService procedures,
+    public ContentAdminService(IContentAdminRepository repository, ICampaignService campaigns, ICatalogService services,
         IKnowledgeService knowledge, IKnowledgeSettingsService knowledgeSettings)
     {
         _repository = repository;
         _campaigns = campaigns;
-        _procedures = procedures;
+        _services = services;
         _knowledge = knowledge;
         _knowledgeSettings = knowledgeSettings;
     }
@@ -40,7 +40,7 @@ public class ContentAdminService : IContentAdminService
     public Task<List<TemplateRow>> ListTemplatesAsync(Guid? clientId, string? status, CancellationToken ct) =>
         _repository.ListTemplatesAsync(clientId, status, ct);
 
-    public Task<List<ProcedureRow>> ListProceduresAsync(Guid? clientId, CancellationToken ct) => _repository.ListProceduresAsync(clientId, ct);
+    public Task<List<ServiceRow>> ListServicesAsync(Guid? clientId, CancellationToken ct) => _repository.ListServicesAsync(clientId, ct);
 
     public Task<PagedResponse<KnowledgeDocRow>> ListDocumentsAsync(Guid? clientId, string? search, bool? active, int page, CancellationToken ct) =>
         _repository.ListDocumentsAsync(clientId, search, active, page, ct);
@@ -60,11 +60,11 @@ public class ContentAdminService : IContentAdminService
         return new PlatformAdminChange(campaign.ClientId);
     }
 
-    public async Task<PlatformAdminChange> SetProcedureActiveAsync(Guid id, bool active, CancellationToken ct)
+    public async Task<PlatformAdminChange> SetServiceActiveAsync(Guid id, bool active, CancellationToken ct)
     {
-        var procedure = await _repository.GetProcedureAsync(id, ct) ?? throw new KeyNotFoundException("Procedure not found.");
-        await _procedures.SetActiveAsync(procedure.ClientId, id, active, ct);
-        return new PlatformAdminChange(procedure.ClientId);
+        var service = await _repository.GetServiceAsync(id, ct) ?? throw new KeyNotFoundException("Service not found.");
+        await _services.SetActiveAsync(service.ClientId, id, active, ct);
+        return new PlatformAdminChange(service.ClientId);
     }
 
     public async Task<PlatformAdminChange> SetDocumentActiveAsync(Guid id, bool active, CancellationToken ct)

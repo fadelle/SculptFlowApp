@@ -14,7 +14,7 @@ public interface IContentAdminRepository
 
     Task<List<TemplateRow>> ListTemplatesAsync(Guid? clientId, string? status, CancellationToken ct = default);
 
-    Task<List<ProcedureRow>> ListProceduresAsync(Guid? clientId, CancellationToken ct = default);
+    Task<List<ServiceRow>> ListServicesAsync(Guid? clientId, CancellationToken ct = default);
 
     Task<PagedResponse<KnowledgeDocRow>> ListDocumentsAsync(Guid? clientId, string? search, bool? active, int page,
         CancellationToken ct = default);
@@ -25,6 +25,6 @@ public interface IContentAdminRepository
 
     Task<List<WebsiteSourceRow>> ListWebsitesAsync(Guid? clientId, CancellationToken ct = default);
 
-    Task<Procedure?> GetProcedureAsync(Guid id, CancellationToken ct = default);
+    Task<Service?> GetServiceAsync(Guid id, CancellationToken ct = default);
 
 }

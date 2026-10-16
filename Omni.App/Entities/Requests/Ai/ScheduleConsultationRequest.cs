@@ -8,7 +8,7 @@ namespace Omni.App.Entities.Requests.Ai;
 public record ScheduleConsultationRequest(
     /// <summary>The exact "start" of the chosen slot from get_available_slots.</summary>
     DateTimeOffset ScheduledStart,
-    [property: System.Text.Json.Serialization.JsonConverter(typeof(LenientNullableGuidConverter))] Guid? ProcedureId = null,
+    [property: System.Text.Json.Serialization.JsonConverter(typeof(LenientNullableGuidConverter))] Guid? ServiceId = null,
     string? AppointmentType = null,
     string? Notes = null,
     /// <summary>Why the patient is changing an existing appointment (only used when it is moved).</summary>

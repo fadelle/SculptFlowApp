@@ -15,31 +15,31 @@ public class LeadRepository : ILeadRepository
     }
 
     public Task<Lead?> GetAsync(Guid clientId, Guid leadId, CancellationToken ct = default) =>
-        _db.Leads.Include(l => l.Procedure).FirstOrDefaultAsync(l => l.ClientId == clientId && l.Id == leadId, ct);
+        _db.Leads.Include(l => l.Service).FirstOrDefaultAsync(l => l.ClientId == clientId && l.Id == leadId, ct);
 
     public Task<Lead?> GetByIdAsync(Guid leadId, CancellationToken ct = default) =>
         _db.Leads.FirstOrDefaultAsync(l => l.Id == leadId, ct);
 
     public Task<Lead?> FindByExternalIdAsync(Guid clientId, string externalLeadId, CancellationToken ct = default) =>
-        _db.Leads.Include(l => l.Procedure)
+        _db.Leads.Include(l => l.Service)
             .FirstOrDefaultAsync(l => l.ClientId == clientId && l.ExternalLeadId == externalLeadId, ct);
 
     public Task<Lead?> FindByPhoneAsync(Guid clientId, string phone, CancellationToken ct = default) =>
-        _db.Leads.Include(l => l.Procedure).FirstOrDefaultAsync(l => l.ClientId == clientId && l.Phone == phone, ct);
+        _db.Leads.Include(l => l.Service).FirstOrDefaultAsync(l => l.ClientId == clientId && l.Phone == phone, ct);
 
-    public async Task<(IReadOnlyList<Lead> Items, int TotalCount)> ListAsync(Guid clientId, string? status, Guid? procedureId,
+    public async Task<(IReadOnlyList<Lead> Items, int TotalCount)> ListAsync(Guid clientId, string? status, Guid? serviceId,
         string? search, int skip, int take, CancellationToken ct = default)
     {
-        var query = _db.Leads.Include(l => l.Procedure).Where(l => l.ClientId == clientId);
+        var query = _db.Leads.Include(l => l.Service).Where(l => l.ClientId == clientId);
 
         if (!string.IsNullOrWhiteSpace(status))
         {
             query = query.Where(l => l.Status == status);
         }
 
-        if (procedureId.HasValue)
+        if (serviceId.HasValue)
         {
-            query = query.Where(l => l.ProcedureId == procedureId);
+            query = query.Where(l => l.ServiceId == serviceId);
         }
 
         if (!string.IsNullOrWhiteSpace(search))
@@ -81,8 +81,8 @@ public class LeadRepository : ILeadRepository
 
     public void Add(Lead lead) => _db.Leads.Add(lead);
 
-    public Task LoadProcedureAsync(Lead lead, CancellationToken ct = default) =>
-        _db.Entry(lead).Reference(l => l.Procedure).LoadAsync(ct);
+    public Task LoadServiceAsync(Lead lead, CancellationToken ct = default) =>
+        _db.Entry(lead).Reference(l => l.Service).LoadAsync(ct);
 
     public Task<List<Lead>> ListByIdsAsync(Guid clientId, IReadOnlyCollection<Guid> leadIds, CancellationToken ct = default) =>
         _db.Leads.Where(l => l.ClientId == clientId && leadIds.Contains(l.Id)).ToListAsync(ct);

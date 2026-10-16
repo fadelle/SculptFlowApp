@@ -18,7 +18,7 @@ else
 {
     var lead = Model.Lead;
     var followupOverdue = lead.NextFollowupAt is not null && lead.NextFollowupAt < DateTimeOffset.UtcNow;
-    // Inbox search matches name, phone or procedure — the phone is the most specific.
+    // Inbox search matches name, phone or service — the phone is the most specific.
     var inboxSearch = !string.IsNullOrWhiteSpace(lead.Phone) ? lead.Phone : lead.FullName;
 
     <div class="au-back-header">
@@ -28,7 +28,7 @@ else
         <span class="avatar-md" aria-hidden="true">@(string.IsNullOrWhiteSpace(lead.FullName) ? "?" : lead.FullName.Trim()[..1])</span>
         <div class="min-w-0">
             <h2 class="au-back-header__title">@(lead.FullName ?? "—")</h2>
-            <span class="au-back-header__sub">@(lead.Phone ?? "No phone") · @(lead.ProcedureName ?? "No procedure on file")</span>
+            <span class="au-back-header__sub">@(lead.Phone ?? "No phone") · @(lead.ServiceName ?? "No service on file")</span>
         </div>
     </div>
     <div class="detail-chips">
@@ -48,7 +48,7 @@ else
             <dl class="au-detail-rows">
                 <div class="au-detail-row"><dt>Phone</dt><dd>@(lead.Phone ?? "—")</dd></div>
                 <div class="au-detail-row"><dt>Email</dt><dd>@(lead.Email ?? "—")</dd></div>
-                <div class="au-detail-row"><dt>Procedure</dt><dd>@(lead.ProcedureName ?? "—")</dd></div>
+                <div class="au-detail-row"><dt>Service</dt><dd>@(lead.ServiceName ?? "—")</dd></div>
                 <div class="au-detail-row"><dt>City</dt><dd>@(lead.City ?? "—")</dd></div>
                 <div class="au-detail-row"><dt>Timeline</dt><dd>@(lead.DesiredTimeline ?? "—")</dd></div>
                 <div class="au-detail-row"><dt>Last contact</dt><dd>@LocalTimeHelper.Time(lead.LastContactAt)</dd></div>

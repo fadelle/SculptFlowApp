@@ -73,8 +73,8 @@ public class HtmlContentExtractorTests
     [Fact]
     public void Tables_are_flattened_to_pipe_separated_rows()
     {
-        var page = Extract("<html><body><table><tr><th>Procedure</th><th>Price</th></tr><tr><td>Rhino</td><td>$5,000</td></tr></table></body></html>");
-        Assert.Equal(["Procedure | Price", "Rhino | $5,000"], page.Blocks.Select(b => b.Text));
+        var page = Extract("<html><body><table><tr><th>Service</th><th>Price</th></tr><tr><td>Rhino</td><td>$5,000</td></tr></table></body></html>");
+        Assert.Equal(["Service | Price", "Rhino | $5,000"], page.Blocks.Select(b => b.Text));
     }
 
     [Fact]
@@ -124,7 +124,7 @@ public class HtmlContentExtractorTests
         var page = Extract($"""
             <html><body>
               <div>Outside main text</div>
-              <main><h1>Procedure</h1><p>{Long("Real content about the procedure.")}</p></main>
+              <main><h1>Service</h1><p>{Long("Real content about the service.")}</p></main>
               <footer>
                 <p>© 2026 Client</p>
                 <p>Call us: +961 70 123 456</p>
@@ -135,7 +135,7 @@ public class HtmlContentExtractorTests
             """);
         var texts = page.Blocks.Select(b => b.Text).ToList();
         Assert.DoesNotContain("Outside main text", texts);
-        Assert.Contains("Procedure", texts);
+        Assert.Contains("Service", texts);
         Assert.Contains("Call us: +961 70 123 456", texts);
         Assert.Contains("info@client.example.com", texts);
         Assert.Contains("Mon-Fri 9-5", texts);

@@ -11,7 +11,7 @@ public interface IAppointmentService
     /// simultaneous attempts for one slot cannot both succeed — that the slot is still bookable per IAvailabilityService
     /// (weekly schedule, exceptions, notice, horizon, existing appointments, buffer), that the lead belongs to this client, and that
     /// the lead has no other upcoming booked/confirmed appointment (LeadAlreadyBookedException). Fills in a missing end time from the
-    /// procedure/default duration. Throws SlotUnavailableException when it is not. Used by the AI's book_consultation.</summary>
+    /// service/default duration. Throws SlotUnavailableException when it is not. Used by the AI's book_consultation.</summary>
     Task<AppointmentResponse> BookAvailableSlotAsync(CreateAppointmentRequest request, CancellationToken ct = default);
 
     Task<AppointmentResponse> CreateAsync(CreateAppointmentRequest request, CancellationToken ct = default);

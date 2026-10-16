@@ -5,7 +5,7 @@ namespace Omni.App.Entities.Requests.Leads;
 /// from the lead's actual source (webhook/intake), not the AI's judgment. Only null fields are left
 /// unchanged — same partial-update semantics as UpdateLeadRequest.</summary>
 public record UpdateLeadContextRequest(
-    Guid? ProcedureId,
+    Guid? ServiceId,
     string? PreferredLanguage,
     string? City,
     string? DesiredTimeline,

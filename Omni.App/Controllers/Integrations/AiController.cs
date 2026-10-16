@@ -4,7 +4,7 @@ using Omni.App.Business.Contracts.Services.Appointments;
 using Omni.App.Business.Contracts.Services.Inbox;
 using Omni.App.Business.Contracts.Services.Knowledge;
 using Omni.App.Business.Contracts.Services.Leads;
-using Omni.App.Business.Contracts.Services.Procedures;
+using Omni.App.Business.Contracts.Services.Catalog;
 using Omni.App.Common.Exceptions;
 using Omni.App.Common.Statics;
 using Omni.App.Controllers.Filters;
@@ -20,7 +20,7 @@ using Omni.App.Entities.Responses.Appointments;
 using Omni.App.Entities.Responses.Inbox;
 using Omni.App.Entities.Responses.Knowledge;
 using Omni.App.Entities.Responses.Leads;
-using Omni.App.Entities.Responses.Procedures;
+using Omni.App.Entities.Responses.Catalog;
 
 namespace Omni.App.Controllers.Integrations;
 
@@ -45,7 +45,7 @@ namespace Omni.App.Controllers.Integrations;
 ///
 ///   search_knowledge   → client-approved informational content: hours, address, parking,
 ///                               policies, consultation info, pricing, payment/financing, doctors,
-///                               procedure explanations, preparation, recovery, FAQs.
+///                               service explanations, preparation, recovery, FAQs.
 ///                               ("Where is the client?", "What happens at a rhinoplasty consultation?")
 ///   get_lead_context          → what is currently known about THIS lead.
 ///   update_lead               → write real lead/business data (interest, language, qualification...).
@@ -57,8 +57,8 @@ namespace Omni.App.Controllers.Integrations;
 ///   get_client_info  — hours/address/consultation rules also belong in the Knowledge Base, so this
 ///                      may become redundant. Kept working until the Knowledge Base is proven; then
 ///                      decide whether it is still needed.
-///   get_procedures   — stays. The Knowledge Base EXPLAINS procedures in prose; get_procedures returns
-///                      the authoritative structured records (procedure id, name, active flag,
+///   get_services   — stays. The Knowledge Base EXPLAINS services in prose; get_services returns
+///                      the authoritative structured records (service id, name, active flag,
 ///                      consultation duration) that booking and business logic depend on.
 /// </summary>
 [ApiController]
@@ -69,7 +69,7 @@ namespace Omni.App.Controllers.Integrations;
 public class AiController : ControllerBase
 {
     private readonly IClientContext _clientContext;
-    private readonly IProcedureService _procedures;
+    private readonly ICatalogService _services;
     private readonly ILeadService _leads;
     private readonly IAppointmentService _appointments;
     private readonly IAvailabilityService _availability;
@@ -77,12 +77,12 @@ public class AiController : ControllerBase
     private readonly IKnowledgeSearchService _knowledgeSearch;
 
     public AiController(
-        IClientContext clientContext, IProcedureService procedures, ILeadService leads,
+        IClientContext clientContext, ICatalogService services, ILeadService leads,
         IAppointmentService appointments, IAvailabilityService availability, IConversationService conversations,
         IKnowledgeSearchService knowledgeSearch)
     {
         _clientContext = clientContext;
-        _procedures = procedures;
+        _services = services;
         _leads = leads;
         _appointments = appointments;
         _availability = availability;
@@ -91,7 +91,7 @@ public class AiController : ControllerBase
     }
 
     /// <summary>search_knowledge — semantic search over the client's approved Knowledge Base.
-    /// For INFORMATION questions only (hours, address, policies, pricing, doctors, procedure
+    /// For INFORMATION questions only (hours, address, policies, pricing, doctors, service
     /// explanations, recovery, FAQs) — not lead data, availability, bookings or handoff. clientId is the
     /// one n8n already has in context; the AI supplies only the query text. Returns relevant chunks
     /// (possibly none) — never a composed answer.</summary>
@@ -127,19 +127,19 @@ public class AiController : ControllerBase
             client.Address, client.OperatingHours, client.ConsultationInfo, client.Timezone));
     }
 
-    /// <summary>get_procedures — the structured, authoritative procedure records (id, name, active flag,
-    /// consultation duration) needed for booking. Use search_knowledge to EXPLAIN a procedure;
-    /// use this when an actual procedure id/record is needed.</summary>
-    [HttpGet("procedures")]
-    public async Task<ActionResult<IReadOnlyList<ProcedureResponse>>> GetProcedures(
+    /// <summary>get_services — the structured, authoritative service records (id, name, active flag,
+    /// consultation duration) needed for booking. Use search_knowledge to EXPLAIN a service;
+    /// use this when an actual service id/record is needed.</summary>
+    [HttpGet("services")]
+    public async Task<ActionResult<IReadOnlyList<ServiceResponse>>> GetServices(
         [FromQuery] Guid clientId, CancellationToken ct = default)
     {
-        // Always ACTIVE procedures only — the AI must never see (and so never suggest or book) an
-        // inactive one. Historical use of inactive procedures (existing leads/appointments/bookings,
+        // Always ACTIVE services only — the AI must never see (and so never suggest or book) an
+        // inactive one. Historical use of inactive services (existing leads/appointments/bookings,
         // Campaign filtering) goes through the normal backend queries, not this tool. There is
         // deliberately no activeOnly switch here; a stray activeOnly=false query param is ignored.
-        var procedures = await _procedures.ListAsync(clientId, activeOnly: true, ct);
-        return Ok(procedures);
+        var services = await _services.ListAsync(clientId, activeOnly: true, ct);
+        return Ok(services);
     }
 
     /// <summary>get_lead_context — what's already known about the person the AI is talking to.</summary>
@@ -150,7 +150,7 @@ public class AiController : ControllerBase
         return lead is null ? NotFound() : Ok(lead);
     }
 
-    /// <summary>update_lead — procedure interest, language, timeline, notes, follow-up, qualification.
+    /// <summary>update_lead — service interest, language, timeline, notes, follow-up, qualification.
     /// Cannot change identity fields (name/phone/email) — those come from the lead's actual source.</summary>
     [HttpPatch("leads/{leadId:guid}")]
     public async Task<ActionResult<LeadResponse>> UpdateLead(
@@ -161,12 +161,12 @@ public class AiController : ControllerBase
     }
 
     /// <summary>get_available_slots — real open consultation slots from the client's structured availability (weekly schedule,
-    /// date exceptions, booking rules, procedure duration, existing appointments), in the client's timezone. `date` is a local
+    /// date exceptions, booking rules, service duration, existing appointments), in the client's timezone. `date` is a local
     /// "yyyy-MM-dd" (default today); `days` (1-14, default 1 when a date is given, else 7) searches that many days from it.
     /// Never computed by the AI. A client that hasn't configured availability returns configured=false and no slots.</summary>
     [HttpGet("appointments/available")]
     public async Task<ActionResult<AvailabilityResponse>> GetAvailableSlots(
-        [FromQuery] Guid clientId, [FromQuery] Guid? leadId, [FromQuery] Guid? procedureId, [FromQuery] DateOnly? date,
+        [FromQuery] Guid clientId, [FromQuery] Guid? leadId, [FromQuery] Guid? serviceId, [FromQuery] DateOnly? date,
         [FromQuery] int? days, CancellationToken ct = default)
     {
         // With leadId (always passed by the n8n workflow, never chosen by the AI) the reply also carries the patient's own
@@ -179,7 +179,7 @@ public class AiController : ControllerBase
             if (context is null) return NotFound(new { error = "Lead not found for this client." });
         }
 
-        var result = await _availability.GetSlotsAsync(clientId, procedureId, date, days ?? (date is null ? 7 : 1), ct);
+        var result = await _availability.GetSlotsAsync(clientId, serviceId, date, days ?? (date is null ? 7 : 1), ct);
         if (context is null) return Ok(result);
 
         return Ok(result with
@@ -221,7 +221,7 @@ public class AiController : ControllerBase
         try
         {
             var appointment = await _appointments.BookAvailableSlotAsync(new CreateAppointmentRequest(
-                clientId, request.LeadId, request.ProcedureId,
+                clientId, request.LeadId, request.ServiceId,
                 string.IsNullOrWhiteSpace(request.AppointmentType) ? "consultation" : request.AppointmentType,
                 request.ScheduledStart, request.ScheduledEnd, request.LocationType, request.LocationName, request.Notes), ct);
             // Report the booking in the CLIENT's local time (like get_available_slots), never the stored UTC value the AI
