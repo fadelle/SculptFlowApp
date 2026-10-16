@@ -1,3 +1,4 @@
+@inject ITextContext TextContext
 @* The Aurora shell for signed-in client staff (docs/UI_GUIDE.md §3.1, §5, §0.4): dark sidebar, glass header with the
    notification bell, theme toggle and user menu, toasts. Kept simple on purpose: no palette, scope, favourites or tabs. *@
 @{
@@ -9,12 +10,13 @@
     const string signalRUrl = "https://cdn.jsdelivr.net/npm/@microsoft/signalr@8.0.0/dist/browser/signalr.min.js";
 }
 <!DOCTYPE html>
-<html lang="en" data-au-app="client" data-brand="teal">
+<html lang="@TextContext.Language" dir="@TextContext.Direction" data-au-app="client" data-brand="teal">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>@(string.IsNullOrEmpty(pageTitle) ? "Omni" : $"{pageTitle} · Omni")</title>
     <partial name="_ThemeScript" />
+    <partial name="_TextScript" />
     <link rel="icon" type="image/svg+xml" href="~/logo.svg" />
     <link rel="icon" href="~/favicon.ico" sizes="32x32" />
     <link rel="stylesheet" href="~/css/fonts.css" asp-append-version="true" />

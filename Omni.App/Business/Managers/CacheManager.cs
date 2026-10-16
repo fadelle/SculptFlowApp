@@ -34,6 +34,7 @@ public class CacheManager : ICacheManager
         CacheArea.Scheduling => _config?.CacheSchedulingMinutes ?? Default(ConfigDefaults.CacheSchedulingMinutes),
         CacheArea.Channels => _config?.CacheChannelsMinutes ?? Default(ConfigDefaults.CacheChannelsMinutes),
         CacheArea.BillingRates => _config?.CacheBillingRatesMinutes ?? Default(ConfigDefaults.CacheBillingRatesMinutes),
+        CacheArea.BusinessTypes => _config?.CacheBusinessTypesMinutes ?? Default(ConfigDefaults.CacheBusinessTypesMinutes),
         _ => throw new ArgumentOutOfRangeException(nameof(area), area, null),
     });
 

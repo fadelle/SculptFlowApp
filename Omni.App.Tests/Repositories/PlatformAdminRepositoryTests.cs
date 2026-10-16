@@ -268,7 +268,7 @@ public class UnitOfWorkTests(PostgresFixture fixture) : RepoTestBase(fixture)
         await SeedAsync(c);
         await using var db = NewContext();
         var uow = new UnitOfWork(db);
-        db.Clients.Add(new Client { Id = Guid.NewGuid(), Name = "dup", Slug = c.Slug, CreatedAt = Now, UpdatedAt = Now });
+        db.Clients.Add(new Client { Id = Guid.NewGuid(), Name = "dup", Slug = c.Slug, BusinessTypeCode = TextKit.Clinic, CreatedAt = Now, UpdatedAt = Now });
         var ex = await Assert.ThrowsAsync<DuplicateRecordException>(() => uow.SaveChangesAsync());
         Assert.NotNull(ex);
         Assert.True(uow.IsDuplicateRecord(ex));
@@ -281,7 +281,7 @@ public class UnitOfWorkTests(PostgresFixture fixture) : RepoTestBase(fixture)
         await SeedAsync(c);
         await using var db = NewContext();
         var uow = new UnitOfWork(db);
-        db.Clients.Add(new Client { Id = Guid.NewGuid(), Name = "dup", Slug = c.Slug, CreatedAt = Now, UpdatedAt = Now });
+        db.Clients.Add(new Client { Id = Guid.NewGuid(), Name = "dup", Slug = c.Slug, BusinessTypeCode = TextKit.Clinic, CreatedAt = Now, UpdatedAt = Now });
         Assert.False(await uow.TrySaveChangesAsync());
         Assert.Empty(db.ChangeTracker.Entries());
 

@@ -115,6 +115,7 @@ public class ConfigManager : IConfigManager
     public int CacheSchedulingMinutes => GetInt(ConfigDefaults.CacheSchedulingMinutes);
     public int CacheChannelsMinutes => GetInt(ConfigDefaults.CacheChannelsMinutes);
     public int CacheBillingRatesMinutes => GetInt(ConfigDefaults.CacheBillingRatesMinutes);
+    public int CacheBusinessTypesMinutes => GetInt(ConfigDefaults.CacheBusinessTypesMinutes);
 
     // ---- Monitoring
     public bool MonitoringEnabled => GetBool(ConfigDefaults.MonitoringEnabled);

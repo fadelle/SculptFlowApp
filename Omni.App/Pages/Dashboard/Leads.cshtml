@@ -40,9 +40,9 @@ else
             <input type="search" name="Search" value="@Model.Search" placeholder="Search by name or phone…" class="au-input search-input leads-search" aria-label="Search leads" autocomplete="off" />
             <select name="Status" class="au-select" aria-label="Status" onchange="this.form.requestSubmit()">
                 <option value="">All statuses</option>
-                @foreach (var status in Model.AllStatuses)
+                @foreach (var stage in Model.Stages)
                 {
-                    <option value="@status" selected="@(status == Model.Status)">@FilterLabelHelper.Label(status)</option>
+                    <option value="@stage.Key" selected="@(stage.Key == Model.Status)">@stage.Label</option>
                 }
             </select>
             <select name="Source" class="au-select" aria-label="Source" onchange="this.form.requestSubmit()">
@@ -112,7 +112,7 @@ else
                                             </span>
                                         }
                                     </td>
-                                    <td data-label="Status"><span class="badge @StatusBadgeHelper.CssClass(lead.Status)">@FilterLabelHelper.Label(lead.Status)</span></td>
+                                    <td data-label="Status"><span class="badge @StageDisplay.CssClass(Model.Stages, lead.Status)">@StageDisplay.Label(Model.Stages, lead.Status)</span></td>
                                     <td data-label="Qualification"><span class="badge @StatusBadgeHelper.CssClass(lead.QualificationStatus)">@FilterLabelHelper.Label(lead.QualificationStatus)</span></td>
                                     <td data-label="Last contact">@LocalTimeHelper.Time(lead.LastContactAt)</td>
                                     <td data-label="Next follow-up">

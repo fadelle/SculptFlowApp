@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.Extensions.DependencyInjection;
+using Omni.App.Business.Services.Clients;
 using Omni.App.Pages.Account;
 using SignInResult = Microsoft.AspNetCore.Identity.SignInResult;
 using static Omni.App.Tests.Pages.PageKit;
@@ -79,7 +80,7 @@ public class AccountPageTests
         registration.Setup(r => r.RegisterAsync(It.IsAny<RegisterClientRequest>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(ClientRegistrationResult.Fail("Email taken.", "Password too short."));
         var signIn = SignIn();
-        var model = new RegisterModel(registration.Object, signIn.Object) { Email = "a@x.com", Password = "x" }.Attach();
+        var model = new RegisterModel(registration.Object, signIn.Object, TextKit.PermissiveBusinessTypes().Object, TextKit.Localizer()) { Email = "a@x.com", Password = "x" }.Attach();
 
         Assert.IsType<PageResult>(await model.OnPostAsync(default));
         Assert.Equal("Email taken. Password too short.", model.ErrorMessage);
@@ -96,15 +97,33 @@ public class AccountPageTests
             .Callback<RegisterClientRequest, CancellationToken>((r, _) => seen = r)
             .ReturnsAsync(new ClientRegistrationResult(true, user, null, []));
         var signIn = SignIn();
-        var model = new RegisterModel(registration.Object, signIn.Object)
+        var model = new RegisterModel(registration.Object, signIn.Object, TextKit.PermissiveBusinessTypes().Object, TextKit.Localizer())
         {
             FullName = "Ann", ClientName = "Glow", Email = "a@x.com", Password = "pw", ConfirmPassword = "pw", ReturnUrl = "/knowledge",
+            BusinessTypeCode = TextKit.General,
         }.Attach();
 
         Assert.Equal("/knowledge", RedirectTarget(await model.OnPostAsync(default)));
-        Assert.Equal(new RegisterClientRequest("Ann", "Glow", "a@x.com", "pw", "pw"), seen);
+        Assert.Equal(new RegisterClientRequest("Ann", "Glow", "a@x.com", "pw", "pw", TextKit.General), seen);
         signIn.Verify(s => s.SignInAsync(user, true, null), Times.Once);
-        new RegisterModel(registration.Object, signIn.Object).Attach().OnGet();
+        await new RegisterModel(registration.Object, signIn.Object, TextKit.PermissiveBusinessTypes().Object, TextKit.Localizer()).Attach().OnGetAsync(default);
+    }
+
+    [Fact]
+    public async Task Register_offers_the_active_business_types_and_localizes_a_missing_choice()
+    {
+        var registration = new Mock<IClientRegistrationService>();
+        registration.Setup(r => r.RegisterAsync(It.IsAny<RegisterClientRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(ClientRegistrationResult.Fail(ClientRegistrationService.BusinessTypeRequiredKey));
+        var model = new RegisterModel(registration.Object, SignIn().Object, TextKit.PermissiveBusinessTypes().Object, TextKit.Localizer()).Attach();
+
+        await model.OnGetAsync(default);
+        Assert.Equal([TextKit.Clinic, TextKit.General], model.BusinessTypes.Select(t => t.Code));
+
+        var failed = new RegisterModel(registration.Object, SignIn().Object, TextKit.PermissiveBusinessTypes().Object, TextKit.Localizer()).Attach();
+        Assert.IsType<PageResult>(await failed.OnPostAsync(default));
+        Assert.Equal("Choose what kind of business you run.", failed.ErrorMessage);
+        Assert.Equal(2, failed.BusinessTypes.Count);                 // the picker is filled again
     }
 
     // ---- complete google signup -------------------------------------------------------------------------------
@@ -126,7 +145,7 @@ public class AccountPageTests
     {
         var signIn = SignIn();
         signIn.Setup(s => s.GetExternalLoginInfoAsync(null)).ReturnsAsync(email is null ? null : Info(email, verified));
-        var model = new CompleteGoogleSignupModel(signIn.Object, Mock.Of<IClientRegistrationService>()).Attach();
+        var model = new CompleteGoogleSignupModel(signIn.Object, Mock.Of<IClientRegistrationService>(), TextKit.PermissiveBusinessTypes().Object, TextKit.Localizer()).Attach();
 
         Assert.Equal("/Account/Login?externalError=unverified", RedirectTarget(await model.OnGetAsync()));
         Assert.Equal("/Account/Login?externalError=unverified", RedirectTarget(await model.OnPostAsync(default)));
@@ -137,9 +156,10 @@ public class AccountPageTests
     {
         var signIn = SignIn();
         signIn.Setup(s => s.GetExternalLoginInfoAsync(null)).ReturnsAsync(Info("g@x.com", true));
-        var model = new CompleteGoogleSignupModel(signIn.Object, Mock.Of<IClientRegistrationService>(r => r.IsSignupOpen)).Attach();
+        var model = new CompleteGoogleSignupModel(signIn.Object, Mock.Of<IClientRegistrationService>(r => r.IsSignupOpen), TextKit.PermissiveBusinessTypes().Object, TextKit.Localizer()).Attach();
         Assert.IsType<PageResult>(await model.OnGetAsync());
         Assert.Equal(("g@x.com", "Gina Google"), (model.Email, model.FullName));
+        Assert.Equal([TextKit.Clinic, TextKit.General], model.BusinessTypes.Select(t => t.Code));
     }
 
     [Fact]
@@ -148,7 +168,7 @@ public class AccountPageTests
         var signIn = SignIn();
         signIn.Setup(s => s.GetExternalLoginInfoAsync(null)).ReturnsAsync(Info("g@x.com", true));
         var auth = new Mock<IAuthenticationService>();
-        var model = new CompleteGoogleSignupModel(signIn.Object, Mock.Of<IClientRegistrationService>(r => !r.IsSignupOpen))
+        var model = new CompleteGoogleSignupModel(signIn.Object, Mock.Of<IClientRegistrationService>(r => !r.IsSignupOpen), TextKit.PermissiveBusinessTypes().Object, TextKit.Localizer())
             .Attach(configure: http => http.RequestServices = new ServiceCollection().AddSingleton(auth.Object).BuildServiceProvider());
 
         Assert.Equal("/Account/Login?externalError=signup_closed", RedirectTarget(await model.OnGetAsync()));
@@ -159,8 +179,8 @@ public class AccountPageTests
     [Fact]
     public void Register_page_reports_whether_signups_are_open()
     {
-        Assert.True(new RegisterModel(Mock.Of<IClientRegistrationService>(r => r.IsSignupOpen), SignIn().Object).SignupOpen);
-        Assert.False(new RegisterModel(Mock.Of<IClientRegistrationService>(r => !r.IsSignupOpen), SignIn().Object).SignupOpen);
+        Assert.True(new RegisterModel(Mock.Of<IClientRegistrationService>(r => r.IsSignupOpen), SignIn().Object, TextKit.PermissiveBusinessTypes().Object, TextKit.Localizer()).SignupOpen);
+        Assert.False(new RegisterModel(Mock.Of<IClientRegistrationService>(r => !r.IsSignupOpen), SignIn().Object, TextKit.PermissiveBusinessTypes().Object, TextKit.Localizer()).SignupOpen);
     }
 
     [Fact]
@@ -175,11 +195,13 @@ public class AccountPageTests
         var signIn = SignIn();
         signIn.Setup(s => s.GetExternalLoginInfoAsync(null)).ReturnsAsync(Info("g@x.com", true));
         var auth = new Mock<IAuthenticationService>();
-        var model = new CompleteGoogleSignupModel(signIn.Object, registration.Object) { ClientName = "Glow", ReturnUrl = "https://evil.example/" }
+        var model = new CompleteGoogleSignupModel(signIn.Object, registration.Object, TextKit.PermissiveBusinessTypes().Object, TextKit.Localizer())
+            { ClientName = "Glow", BusinessTypeCode = TextKit.General, ReturnUrl = "https://evil.example/" }
             .Attach(configure: http => http.RequestServices = new ServiceCollection().AddSingleton(auth.Object).BuildServiceProvider());
 
         Assert.Equal("/dashboard", RedirectTarget(await model.OnPostAsync(default)));       // an external return url is ignored
         Assert.Equal("Glow", seen!.ClientName);
+        Assert.Equal(TextKit.General, seen.BusinessTypeCode);
         Assert.Equal("g@x.com", seen.Email);
         signIn.Verify(s => s.SignInAsync(user, true, "Google"), Times.Once);
         auth.Verify(a => a.SignOutAsync(It.IsAny<Microsoft.AspNetCore.Http.HttpContext>(), IdentityConstants.ExternalScheme, It.IsAny<AuthenticationProperties?>()), Times.Once);
@@ -193,9 +215,10 @@ public class AccountPageTests
             .ReturnsAsync(ClientRegistrationResult.Fail("Client name is required."));
         var signIn = SignIn();
         signIn.Setup(s => s.GetExternalLoginInfoAsync(null)).ReturnsAsync(Info("g@x.com", true));
-        var model = new CompleteGoogleSignupModel(signIn.Object, registration.Object).Attach();
+        var model = new CompleteGoogleSignupModel(signIn.Object, registration.Object, TextKit.PermissiveBusinessTypes().Object, TextKit.Localizer()).Attach();
         Assert.IsType<PageResult>(await model.OnPostAsync(default));
         Assert.Equal("Client name is required.", model.ErrorMessage);
+        Assert.Equal(2, model.BusinessTypes.Count);
         signIn.Verify(s => s.SignInAsync(It.IsAny<IdentityUser>(), It.IsAny<bool>(), It.IsAny<string?>()), Times.Never);
     }
 

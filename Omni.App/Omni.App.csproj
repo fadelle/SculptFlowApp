@@ -28,4 +28,10 @@
     <InternalsVisibleTo Include="Omni.App.Tests" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- UI strings, one file per language, read by TextCatalog (Business/Managers) as "i18n/{language}.json". -->
+    <EmbeddedResource Include="Resources\i18n\*.json" LogicalName="i18n/%(Filename)%(Extension)" />
+    <Content Remove="Resources\i18n\*.json" />
+  </ItemGroup>
+
 </Project>

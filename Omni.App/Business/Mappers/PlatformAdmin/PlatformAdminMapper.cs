@@ -8,7 +8,7 @@ public static class PlatformAdminMapper
 {
     public static ClientDetail ToDetail(Client c) => new(
         c.Id, c.Name, c.Slug, c.Phone, c.Email, c.Website, c.CountryCode, c.Timezone, c.Address, c.OperatingHours,
-        c.ConsultationInfo, c.IsActive, c.CreatedAt, c.UpdatedAt);
+        c.ConsultationInfo, c.IsActive, c.CreatedAt, c.UpdatedAt, c.BusinessTypeCode, c.DefaultLanguage);
 
     /// <summary>Expects Client to be loaded.</summary>
     public static ChannelDetail ToDetail(ChannelIntegration r) => new(

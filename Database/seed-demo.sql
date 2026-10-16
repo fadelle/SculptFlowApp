@@ -67,13 +67,13 @@ begin
   -- 1. Client + info the AI quotes
   -- ---------------------------------------------------------------
   insert into core.clients (id, name, slug, phone, email, website, country_code, timezone,
-                            address, operating_hours, consultation_info, is_active, created_at)
+                            address, operating_hours, consultation_info, business_type_code, is_active, created_at)
   values (c, 'Aurora Aesthetic Clinic', 'demo-omni', '+1 305 555 0100', 'hello@aurora-demo.test',
           'https://aurora-demo.test', 'US', 'America/New_York',
           '500 Example Avenue, Suite 12, Miami, FL 33101 (fictional address)',
           'Mon-Fri 9:00-17:00, Sat 10:00-14:00, closed Sunday',
           'Consultations last 30-45 minutes and cost $75, credited toward your procedure. Bring a photo ID and a list of current medications. Free parking in the building garage.',
-          true, now() - interval '120 days');
+          'clinic', true, now() - interval '120 days');
 
   -- ---------------------------------------------------------------
   -- 2. Staff (identity users + client memberships)

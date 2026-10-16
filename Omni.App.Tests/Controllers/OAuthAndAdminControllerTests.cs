@@ -222,13 +222,43 @@ public class IngestAndAdminControllerTests
     private static async Task<IActionResult> Run(Func<Task<IActionResult>> action) => await action();
 
     [Fact]
+    public async Task Business_type_endpoints_pass_requests_through()
+    {
+        var types = new Mock<IBusinessTypeService>();
+        var response = new BusinessTypeResponse("salon", new Dictionary<string, string>(), new Dictionary<string, IReadOnlyDictionary<string, TermForms>>(),
+            "", true, 0, [], 0, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow);
+        var request = new SaveBusinessTypeRequest("salon", null, null, null, 0, null);
+        types.Setup(t => t.GetAsync("salon", It.IsAny<CancellationToken>())).ReturnsAsync(response);
+        types.Setup(t => t.CreateAsync(request, It.IsAny<CancellationToken>())).ReturnsAsync(response);
+        types.Setup(t => t.UpdateAsync("salon", request, It.IsAny<CancellationToken>())).ReturnsAsync(response);
+        types.Setup(t => t.SetActiveAsync("salon", false, It.IsAny<CancellationToken>())).ReturnsAsync(response);
+        types.Setup(t => t.ListAsync(It.IsAny<CancellationToken>())).ReturnsAsync([response]);
+        var c = new BusinessTypesAdminController(types.Object).With();
+
+        Assert.Equal([response], (IEnumerable<BusinessTypeResponse>)Assert.IsType<OkObjectResult>(await c.List(default)).Value!);
+        Assert.Same(response, Assert.IsType<OkObjectResult>(await c.Get("salon", default)).Value);
+        Assert.Same(response, Assert.IsType<OkObjectResult>(await c.Create(request, default)).Value);
+        Assert.Same(response, Assert.IsType<OkObjectResult>(await c.Update("salon", request, default)).Value);
+        Assert.Same(response, Assert.IsType<OkObjectResult>(await c.SetActive("salon", new ActiveBody(false), default)).Value);
+
+        var id = Guid.NewGuid();
+        var clients = new Mock<IClientAdminService>();
+        var preview = new BusinessTypeChangePreview(id, TextKit.Clinic, TextKit.General, 0, []);
+        clients.Setup(s => s.PreviewBusinessTypeChangeAsync(id, TextKit.General, It.IsAny<CancellationToken>())).ReturnsAsync(preview);
+        clients.Setup(s => s.ChangeBusinessTypeAsync(id, TextKit.General, It.IsAny<CancellationToken>())).ReturnsAsync(new PlatformAdminChange(id));
+        var cc = new ClientsAdminController(clients.Object).With();
+        Assert.Same(preview, Assert.IsType<OkObjectResult>(await cc.PreviewBusinessType(id, TextKit.General, default)).Value);
+        Assert.Equal(new PlatformAdminChange(id), Assert.IsType<OkObjectResult>(await cc.ChangeBusinessType(id, new ChangeBusinessTypeRequest(TextKit.General), default)).Value);
+    }
+
+    [Fact]
     public async Task Platform_admin_controllers_pass_requests_through_and_map_missing_rows_to_404()
     {
         var id = Guid.NewGuid();
         var clients = new Mock<IClientAdminService>();
         var c = new ClientsAdminController(clients.Object).With();
         Assert.IsType<NotFoundResult>(await c.Get(id, default));
-        clients.Setup(s => s.GetAsync(id, It.IsAny<CancellationToken>())).ReturnsAsync(new ClientDetail(id, "n", "s", null, null, null, null, "UTC", null, null, null, true, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow));
+        clients.Setup(s => s.GetAsync(id, It.IsAny<CancellationToken>())).ReturnsAsync(new ClientDetail(id, "n", "s", null, null, null, null, "UTC", null, null, null, true, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, "general", "en"));
         Assert.IsType<OkObjectResult>(await c.Get(id, default));
         await c.List("q", true, 1, default); await c.Options(default); await c.Counts(id, default);
         await c.SetActive(id, new ActiveBody(false), default);

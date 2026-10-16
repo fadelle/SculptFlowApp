@@ -102,7 +102,12 @@ section wins**. Copy says *patient* where the guide says *customer*: the people 
 - **Status tones (A11):** `StatusBadgeHelper` (colour) + `FilterLabelHelper` (plain label) is the one map; add a status
   there. Colours: `badge-green` success, `badge-amber` waiting, `badge-red` problem, `badge-blue` information,
   `badge-gray` inactive/past, `badge-purple` AI, `badge-teal` brand. Light mode uses the darker shade of each tone for the
-  text (AA). The page scripts (Inbox, calendar, templates) emit the same classes.
+  text (AA). The page scripts (Inbox, calendar, templates) emit the same classes. A contact's **stage** takes its label
+  from the client's business type and its colour from the stage category (`StageDisplay`: open blue, booked amber,
+  attended green, no-show and needs-human red, converted teal, closed-lost gray).
+- **Words and languages:** new or edited copy goes into `Resources/i18n/en.json` (`@T["key"]`, `omniText.t('key')`) and
+  names people and things through the business-type placeholders (`{contact}`, `{Services}`…), never a fixed word; see
+  the repo `CLAUDE.md` "UI text" rule. `<html lang dir>` follows the request language (right-to-left comes in Milestone B).
 - **Script hooks a restyle must keep:** every `id`, `data-*` and `name` the scripts read; classes that are hooks
   (`seg-opt`, `aud-card`, `cat-card`, `kb-choice`, `seg-cards`, `var-*`, `ms-*`, `week-row`, `inbox-filter`,
   `inbox-conv-item`, `inbox-voice` (the Inbox voice-note player), `time-view-switch`, `row-actions`); a popup's card stays the direct child of its overlay (backdrop

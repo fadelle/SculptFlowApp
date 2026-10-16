@@ -11,9 +11,9 @@
 -- Idempotent: safe to re-run (uses IF NOT EXISTS / OR REPLACE).
 --
 -- Tables live in one Postgres schema per area (never in public):
---   core        clients, procedures
+--   core        business types, clients, procedures
 --   identity    ASP.NET Identity users/claims/logins/tokens, client_users
---   crm         leads, conversations, messages, inbox settings
+--   crm         pipeline stages, leads, conversations, messages, inbox settings
 --   scheduling  appointments, procedure bookings, availability, calendar sync
 --   channels    channel integrations, WhatsApp templates/health, TikTok
 --   marketing   campaigns, campaign recipients
@@ -104,6 +104,120 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------
+-- 0. business types and their pipeline stages
+-- Every client has one business type (clients.business_type_code). The type
+-- supplies the words the dashboard uses (terminology: contact, member,
+-- service, booking, order, client, singular and plural, per language), the
+-- AI assistant's profile, and the stages a contact moves through. Code, reports
+-- and the AI work with a stage's category; people see its label. Edited in the
+-- admin portal (/api/platform-admin/business-types).
+--   name         {"en": "Salon", "ar": "...", "fr": "..."}
+--   terminology  {"en": {"contact": {"one": "patient", "other": "patients"}, ...}, "ar": {...}}
+--   labels       {"en": "Consultation booked", "ar": "...", "fr": "..."}
+-- English is required everywhere; other languages fall back to it.
+-- ---------------------------------------------------------------------
+create table if not exists core.business_types (
+  code         varchar(50) primary key,
+  name         jsonb not null default '{}'::jsonb,
+  terminology  jsonb not null default '{}'::jsonb,
+  ai_profile   text not null default '',
+  is_active    boolean not null default true,
+  sort_order   int not null default 0,
+  created_at   timestamptz not null default now(),
+  updated_at   timestamptz not null default now(),
+  constraint ck_business_types_code check (code ~ '^[a-z][a-z0-9_]{1,49}$')
+);
+
+drop trigger if exists trg_business_types_updated_at on core.business_types;
+create trigger trg_business_types_updated_at
+  before update on core.business_types
+  for each row execute function set_updated_at();
+
+create table if not exists crm.pipeline_stages (
+  business_type_code  varchar(50) not null references core.business_types(code) on delete cascade,
+  key                 varchar(50) not null,
+  category            varchar(30) not null,
+  labels              jsonb not null default '{}'::jsonb,
+  sort_order          int not null default 0,
+  created_at          timestamptz not null default now(),
+  updated_at          timestamptz not null default now(),
+  constraint pk_pipeline_stages primary key (business_type_code, key),
+  constraint ck_pipeline_stages_key check (key ~ '^[a-z][a-z0-9_]{0,49}$'),
+  constraint ck_pipeline_stages_category check (category in (
+    'open','booked','attended','no_show','converted','closed_lost','needs_human'
+  ))
+);
+
+drop trigger if exists trg_pipeline_stages_updated_at on crm.pipeline_stages;
+create trigger trg_pipeline_stages_updated_at
+  before update on crm.pipeline_stages
+  for each row execute function set_updated_at();
+
+-- The two built-in types, seeded once: a type that already exists is left exactly as the admin portal left it
+-- (re-running this file never brings back a stage or a word someone changed). Arabic and French words come in
+-- Milestone B. The ai_profile texts are placeholders until the n8n workflows read them.
+-- leftover-ok-begin: the built-in clinic business type (its stage keys, labels and words are clinic data)
+do $$
+begin
+  if not exists (select 1 from core.business_types where code = 'clinic') then
+    insert into core.business_types (code, name, terminology, ai_profile, sort_order) values (
+      'clinic',
+      '{"en": "Clinic"}',
+      '{"en": {
+         "contact": {"one": "patient", "other": "patients"},
+         "member":  {"one": "team member", "other": "team members"},
+         "service": {"one": "procedure", "other": "procedures"},
+         "booking": {"one": "consultation", "other": "consultations"},
+         "order":   {"one": "procedure booking", "other": "procedure bookings"},
+         "client":  {"one": "clinic", "other": "clinics"}}}',
+      'Placeholder: the clinic assistant profile moves here from the n8n workflow prompt.',
+      10);
+    insert into crm.pipeline_stages (business_type_code, key, category, labels, sort_order) values
+      ('clinic', 'new',                   'open',        '{"en": "New"}',                    10),
+      ('clinic', 'contacted',             'open',        '{"en": "Contacted"}',              20),
+      ('clinic', 'qualified',             'open',        '{"en": "Qualified"}',              30),
+      ('clinic', 'consultation_booked',   'booked',      '{"en": "Consultation booked"}',    40),
+      ('clinic', 'consultation_attended', 'attended',    '{"en": "Consultation attended"}',  50),
+      ('clinic', 'no_show',               'no_show',     '{"en": "No-show"}',                60),
+      ('clinic', 'surgery_booked',        'converted',   '{"en": "Procedure booked"}',       70),
+      ('clinic', 'not_interested',        'closed_lost', '{"en": "Not interested"}',         80),
+      ('clinic', 'lost',                  'closed_lost', '{"en": "Lost"}',                   90),
+      ('clinic', 'needs_human',           'needs_human', '{"en": "Needs human"}',           100),
+      ('clinic', 'medical_question',      'needs_human', '{"en": "Medical question"}',      110);
+  end if;
+end $$;
+-- leftover-ok-end
+
+do $$
+begin
+  if not exists (select 1 from core.business_types where code = 'general') then
+    insert into core.business_types (code, name, terminology, ai_profile, sort_order) values (
+      'general',
+      '{"en": "General business"}',
+      '{"en": {
+         "contact": {"one": "contact", "other": "contacts"},
+         "member":  {"one": "member", "other": "members"},
+         "service": {"one": "service", "other": "services"},
+         "booking": {"one": "booking", "other": "bookings"},
+         "order":   {"one": "order", "other": "orders"},
+         "client":  {"one": "business", "other": "businesses"}}}',
+      'Placeholder: the general assistant profile moves here from the n8n workflow prompt.',
+      20);
+    insert into crm.pipeline_stages (business_type_code, key, category, labels, sort_order) values
+      ('general', 'new',            'open',        '{"en": "New"}',            10),
+      ('general', 'contacted',      'open',        '{"en": "Contacted"}',      20),
+      ('general', 'qualified',      'open',        '{"en": "Qualified"}',      30),
+      ('general', 'booked',         'booked',      '{"en": "Booked"}',         40),
+      ('general', 'attended',       'attended',    '{"en": "Attended"}',       50),
+      ('general', 'no_show',        'no_show',     '{"en": "No-show"}',        60),
+      ('general', 'customer',       'converted',   '{"en": "Customer"}',       70),
+      ('general', 'not_interested', 'closed_lost', '{"en": "Not interested"}', 80),
+      ('general', 'lost',           'closed_lost', '{"en": "Lost"}',           90),
+      ('general', 'needs_human',    'needs_human', '{"en": "Needs human"}',   100);
+  end if;
+end $$;
+
+-- ---------------------------------------------------------------------
 -- 1. clients
 -- ---------------------------------------------------------------------
 create table if not exists core.clients (
@@ -118,15 +232,34 @@ create table if not exists core.clients (
   address            text,
   operating_hours    text,
   consultation_info  text,
+  business_type_code varchar(50) not null constraint fk_clients_business_type references core.business_types(code),
+  default_language   varchar(10) not null default 'en',
   is_active     boolean not null default true,
   created_at    timestamptz not null default now(),
-  updated_at    timestamptz not null default now()
+  updated_at    timestamptz not null default now(),
+  constraint ck_clients_default_language check (default_language in ('en','ar','fr'))
 );
 
 drop trigger if exists trg_clients_updated_at on core.clients;
 create trigger trg_clients_updated_at
   before update on core.clients
   for each row execute function set_updated_at();
+
+-- Clients created before business types existed get the first built-in type. The default only fills those rows; it is dropped
+-- right after, so every new client names its type (Register, Google sign-up).
+-- leftover-ok-begin: existing clients become the built-in clinic type
+alter table core.clients add column if not exists business_type_code varchar(50) not null default 'clinic'
+  constraint fk_clients_business_type references core.business_types(code);
+-- leftover-ok-end
+alter table core.clients alter column business_type_code drop default;
+alter table core.clients add column if not exists default_language varchar(10) not null default 'en';
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'ck_clients_default_language') then
+    alter table core.clients add constraint ck_clients_default_language check (default_language in ('en','ar','fr'));
+  end if;
+end $$;
+create index if not exists ix_clients_business_type_code on core.clients(business_type_code);
 
 -- ---------------------------------------------------------------------
 -- 2. procedures  (catalog of services a client offers)
@@ -190,10 +323,6 @@ create table if not exists crm.leads (
   created_at            timestamptz not null default now(),
   updated_at            timestamptz not null default now(),
 
-  constraint ck_leads_status check (status in (
-    'new','contacted','qualified','consultation_booked','consultation_attended',
-    'no_show','surgery_booked','not_interested','needs_human','lost'
-  )),
   constraint ck_leads_qualification_status check (qualification_status in (
     'unknown','hot','warm','cold','needs_human','medical_question','spam'
   ))
@@ -216,6 +345,10 @@ drop trigger if exists trg_leads_updated_at on crm.leads;
 create trigger trg_leads_updated_at
   before update on crm.leads
   for each row execute function set_updated_at();
+
+-- status holds a stage key of the client's business type (crm.pipeline_stages). Types are edited in the admin
+-- portal, so the allowed values are checked in code, not by a fixed check constraint.
+alter table crm.leads drop constraint if exists ck_leads_status;
 
 -- ---------------------------------------------------------------------
 -- 4. conversations

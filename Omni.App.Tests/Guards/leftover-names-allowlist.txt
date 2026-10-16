@@ -18,6 +18,9 @@ path: Database/migrations/**
 # The demo seed is a populated clinic (names, messages, knowledge text); its data stays clinic-flavoured.
 path: Database/seed-demo.sql | clinic
 
+# Tests name the built-in business type through this one constant (Support/TextKit.cs); the type's own code is data.
+token: TextKit.Clinic
+
 # Third-party browser libraries, if any are added.
 path: Omni.App/wwwroot/lib/**
 

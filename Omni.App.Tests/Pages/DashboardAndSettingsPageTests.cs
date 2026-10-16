@@ -238,9 +238,12 @@ public class DashboardPageTests
         {
             Status = "new", Search = "ann", Source = "web", PageNumber = -3,
         }.Attach();
+        IReadOnlyList<PipelineStageOption> stages = [new("new", StageCategory.Open, "New")];
+        leads.Setup(l => l.ListStagesAsync(Glow.Id, It.IsAny<CancellationToken>())).ReturnsAsync(stages);
         await model.OnGetAsync(default);
         Assert.Equal((1, 60, 3, 25), (model.PageNumber, model.TotalCount, model.TotalPages, model.PageSize));
         Assert.Equal(["web"], model.AllSources);
+        Assert.Same(stages, model.Stages);
         dashboard.Verify();
 
         var none = new Omni.App.Pages.Dashboard.LeadsModel(ClientContext(null).Object, dashboard.Object, leads.Object, config.Object).Attach();
@@ -271,10 +274,10 @@ public class DashboardPageTests
     public async Task Lead_detail_404s_for_an_unknown_lead_and_is_empty_without_a_client()
     {
         var leads = new Mock<ILeadService>();
-        var model = new Omni.App.Pages.Dashboard.LeadDetailModel(ClientContext(Glow).Object, leads.Object) { Id = Guid.NewGuid() }.Attach();
+        var model = new Omni.App.Pages.Dashboard.LeadDetailModel(ClientContext(Glow).Object, leads.Object, TextKit.Localizer()) { Id = Guid.NewGuid() }.Attach();
         Assert.IsType<NotFoundResult>(await model.OnGetAsync(default));
 
-        var none = new Omni.App.Pages.Dashboard.LeadDetailModel(ClientContext(null).Object, leads.Object).Attach();
+        var none = new Omni.App.Pages.Dashboard.LeadDetailModel(ClientContext(null).Object, leads.Object, TextKit.Localizer()).Attach();
         Assert.IsType<PageResult>(await none.OnGetAsync(default));
         Assert.False(none.ClientConfigured);
     }
@@ -289,8 +292,11 @@ public class DashboardPageTests
         var leads = new Mock<ILeadService>();
         leads.Setup(l => l.GetByIdAsync(Glow.Id, id, It.IsAny<CancellationToken>())).ReturnsAsync(Lead("contacted", source));
         leads.Setup(l => l.GetDistinctSourcesAsync(Glow.Id, It.IsAny<CancellationToken>())).ReturnsAsync(new List<string> { "WEB" });
-        var model = new Omni.App.Pages.Dashboard.LeadDetailModel(ClientContext(Glow).Object, leads.Object) { Id = id }.Attach();
+        var model = new Omni.App.Pages.Dashboard.LeadDetailModel(ClientContext(Glow).Object, leads.Object, TextKit.Localizer()) { Id = id }.Attach();
+        IReadOnlyList<PipelineStageOption> stages = [new("contacted", StageCategory.Open, "Reached out")];
+        leads.Setup(l => l.ListStagesAsync(Glow.Id, It.IsAny<CancellationToken>())).ReturnsAsync(stages);
         Assert.IsType<PageResult>(await model.OnGetAsync(default));
+        Assert.Same(stages, model.Stages);
         Assert.Equal(("contacted", "hot", choice), (model.Status, model.QualificationStatus, model.SourceChoice));
         Assert.Equal(custom, model.CustomSource);
         Assert.Contains("facebook", model.SourceOptions);                     // suggested sources are always offered
@@ -304,7 +310,7 @@ public class DashboardPageTests
         var leads = new Mock<ILeadService>();
         leads.Setup(l => l.GetByIdAsync(Glow.Id, id, It.IsAny<CancellationToken>())).ReturnsAsync(Lead(source: "tiktok"));
         leads.Setup(l => l.GetDistinctSourcesAsync(Glow.Id, It.IsAny<CancellationToken>())).ReturnsAsync(new List<string>());
-        var model = new Omni.App.Pages.Dashboard.LeadDetailModel(ClientContext(Glow).Object, leads.Object) { Id = id }.Attach();
+        var model = new Omni.App.Pages.Dashboard.LeadDetailModel(ClientContext(Glow).Object, leads.Object, TextKit.Localizer()) { Id = id }.Attach();
         await model.OnGetAsync(default);
         Assert.Contains("tiktok", model.SourceOptions);
     }
@@ -318,7 +324,7 @@ public class DashboardPageTests
         leads.Setup(l => l.UpdateStatusAsync(Glow.Id, id, It.IsAny<UpdateLeadStatusRequest>(), It.IsAny<CancellationToken>()))
             .Callback<Guid, Guid, UpdateLeadStatusRequest, CancellationToken>((_, _, r, _) => seen = r)
             .ReturnsAsync(Lead());
-        var model = new Omni.App.Pages.Dashboard.LeadDetailModel(ClientContext(Glow).Object, leads.Object)
+        var model = new Omni.App.Pages.Dashboard.LeadDetailModel(ClientContext(Glow).Object, leads.Object, TextKit.Localizer())
         {
             Id = id, Status = "qualified", QualificationStatus = "warm", SourceChoice = "other", CustomSource = "  podcast ",
         }.Attach();
@@ -337,7 +343,7 @@ public class DashboardPageTests
         var leads = new Mock<ILeadService>();
         leads.Setup(l => l.GetByIdAsync(Glow.Id, id, It.IsAny<CancellationToken>())).ReturnsAsync(Lead());
         leads.Setup(l => l.GetDistinctSourcesAsync(Glow.Id, It.IsAny<CancellationToken>())).ReturnsAsync(new List<string>());
-        var model = new Omni.App.Pages.Dashboard.LeadDetailModel(ClientContext(Glow).Object, leads.Object) { Id = id, SourceChoice = "web" }.Attach();
+        var model = new Omni.App.Pages.Dashboard.LeadDetailModel(ClientContext(Glow).Object, leads.Object, TextKit.Localizer()) { Id = id, SourceChoice = "web" }.Attach();
 
         Assert.IsType<NotFoundResult>(await model.OnPostAsync(default));          // the service returns null
 
@@ -347,7 +353,12 @@ public class DashboardPageTests
         Assert.Equal("Invalid status.", model.ErrorMessage);
         Assert.NotNull(model.Lead);                                                // the page reloads its data to redisplay
 
-        var none = new Omni.App.Pages.Dashboard.LeadDetailModel(ClientContext(null).Object, leads.Object).Attach();
+        leads.Setup(l => l.UpdateStatusAsync(Glow.Id, id, It.IsAny<UpdateLeadStatusRequest>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new ArgumentException("leads.errors.unknownStage").WithArgs("vip"));
+        await model.OnPostAsync(default);
+        Assert.Equal("'vip' isn't one of your contact stages.", model.ErrorMessage); // a keyed message is shown in words
+
+        var none = new Omni.App.Pages.Dashboard.LeadDetailModel(ClientContext(null).Object, leads.Object, TextKit.Localizer()).Attach();
         Assert.IsType<RedirectToPageResult>(await none.OnPostAsync(default));
     }
 

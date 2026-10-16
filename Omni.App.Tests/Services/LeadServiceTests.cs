@@ -10,11 +10,12 @@ public class LeadServiceTests
     private readonly Mock<IEventLogger> _events = new();
     private readonly Mock<IProcedureService> _procedures = new();
     private readonly Mock<IClientRepository> _clients = new();
+    private readonly Mock<IBusinessTypeService> _businessTypes = TextKit.PermissiveBusinessTypes();
 
     public LeadServiceTests() =>
         _clients.Setup(c => c.GetReadOnlyAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(new Client { Id = _clientId, Name = "Test" });
 
-    private LeadService Sut() => new(_leads.Object, _uow.Object, _events.Object, _procedures.Object, _clients.Object);
+    private LeadService Sut() => new(_leads.Object, _uow.Object, _events.Object, _procedures.Object, _clients.Object, _businessTypes.Object);
 
     private Lead Existing(string status = LeadStatus.New) => new()
     {
@@ -165,9 +166,20 @@ public class LeadServiceTests
     [Fact]
     public async Task UpdateStatus_validates_input_and_missing_lead()
     {
-        await Assert.ThrowsAsync<ArgumentException>(() => Sut().UpdateStatusAsync(_clientId, Guid.NewGuid(), new UpdateLeadStatusRequest("bogus", null)));
+        _businessTypes.Setup(t => t.IsStageOfClientAsync(_clientId, "bogus", It.IsAny<CancellationToken>())).ReturnsAsync(false);
+        var unknown = await Assert.ThrowsAsync<ArgumentException>(() => Sut().UpdateStatusAsync(_clientId, Guid.NewGuid(), new UpdateLeadStatusRequest("bogus", null)));
+        Assert.Equal("leads.errors.unknownStage", unknown.Message);
+        Assert.Equal("'bogus' isn't one of your contact stages.", TextKit.Localizer().Localize(unknown));
         await Assert.ThrowsAsync<ArgumentException>(() => Sut().UpdateStatusAsync(_clientId, Guid.NewGuid(), new UpdateLeadStatusRequest(LeadStatus.New, "bogus")));
         Assert.Null(await Sut().UpdateStatusAsync(_clientId, Guid.NewGuid(), new UpdateLeadStatusRequest(LeadStatus.New, null)));
+    }
+
+    [Fact]
+    public async Task ListStages_returns_the_clients_business_type_stages()
+    {
+        IReadOnlyList<PipelineStageOption> stages = [new("new", StageCategory.Open, "New"), new("booked", StageCategory.Booked, "Booked")];
+        _businessTypes.Setup(t => t.ListStagesForClientAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(stages);
+        Assert.Same(stages, await Sut().ListStagesAsync(_clientId));
     }
 
     [Fact]

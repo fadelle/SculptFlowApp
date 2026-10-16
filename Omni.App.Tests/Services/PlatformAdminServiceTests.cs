@@ -14,17 +14,22 @@ public class LeadAdminServiceTests
     private readonly TimeProvider _time = TimeProvider.System;
     private readonly Guid _clientId = Guid.NewGuid();
 
-    private LeadAdminService Sut() => new(_repo.Object, _uow.Object, _conversations.Object, _appointments.Object, _time);
+    private readonly Mock<IBusinessTypeService> _businessTypes = TextKit.PermissiveBusinessTypes();
+
+    private LeadAdminService Sut() => new(_repo.Object, _uow.Object, _conversations.Object, _appointments.Object, _time, _businessTypes.Object);
 
     [Fact]
     public async Task Lead_update_validates_values_and_tracks_opt_out_transitions()
     {
-        await Assert.ThrowsAsync<ArgumentException>(() => Sut().UpdateLeadAsync(Guid.NewGuid(), new LeadUpdate("bogus", "hot", true, null), default));
         await Assert.ThrowsAsync<ArgumentException>(() => Sut().UpdateLeadAsync(Guid.NewGuid(), new LeadUpdate("new", "bogus", true, null), default));
         await Assert.ThrowsAsync<KeyNotFoundException>(() => Sut().UpdateLeadAsync(Guid.NewGuid(), new LeadUpdate("new", "hot", true, null), default));
 
         var lead = new Lead { Id = Guid.NewGuid(), ClientId = _clientId, MarketingOptIn = true };
         _repo.Setup(r => r.GetLeadForUpdateAsync(lead.Id, It.IsAny<CancellationToken>())).ReturnsAsync(lead);
+        // The status must be a stage of the lead's client's business type.
+        _businessTypes.Setup(t => t.IsStageOfClientAsync(_clientId, "bogus", It.IsAny<CancellationToken>())).ReturnsAsync(false);
+        var unknown = await Assert.ThrowsAsync<ArgumentException>(() => Sut().UpdateLeadAsync(lead.Id, new LeadUpdate("bogus", "hot", true, null), default));
+        Assert.Equal("'bogus' isn't one of your contact stages.", TextKit.Localizer().Localize(unknown));
         var change = await Sut().UpdateLeadAsync(lead.Id, new LeadUpdate("qualified", "hot", false, "  call back  "), default);
         Assert.Equal(_clientId, change.ClientId);
         Assert.Equal(("qualified", "hot", false, "call back"), (lead.Status, lead.QualificationStatus, lead.MarketingOptIn, lead.Notes));
@@ -119,7 +124,22 @@ public class ClientAdminServiceTests
     private readonly Mock<IUnitOfWork> _uow = new();
     private readonly Mock<IInboxSettingsService> _inboxSettings = new();
 
-    private ClientAdminService Sut() => new(_repo.Object, _uow.Object, TimeProvider.System, _inboxSettings.Object);
+    private readonly Mock<IBusinessTypeService> _businessTypes = new();
+
+    private ClientAdminService Sut() => new(_repo.Object, _uow.Object, TimeProvider.System, _inboxSettings.Object, _businessTypes.Object);
+
+    [Fact]
+    public async Task Business_type_preview_and_change_go_through_the_business_type_service()
+    {
+        var id = Guid.NewGuid();
+        var preview = new BusinessTypeChangePreview(id, TextKit.Clinic, TextKit.General, 0, []);
+        _businessTypes.Setup(t => t.PreviewClientChangeAsync(id, TextKit.General, It.IsAny<CancellationToken>())).ReturnsAsync(preview);
+        _businessTypes.Setup(t => t.ChangeClientTypeAsync(id, TextKit.General, It.IsAny<CancellationToken>())).ReturnsAsync(preview).Verifiable();
+
+        Assert.Same(preview, await Sut().PreviewBusinessTypeChangeAsync(id, TextKit.General, default));
+        Assert.Equal(id, (await Sut().ChangeBusinessTypeAsync(id, TextKit.General, default)).ClientId);
+        _businessTypes.Verify();
+    }
 
     [Fact]
     public async Task Ai_bot_reads_and_writes_go_through_the_client_ai_bot_service()

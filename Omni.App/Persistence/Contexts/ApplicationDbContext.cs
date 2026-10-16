@@ -25,6 +25,8 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
     }
 
     public DbSet<Client> Clients => Set<Client>();
+    public DbSet<BusinessType> BusinessTypes => Set<BusinessType>();
+    public DbSet<PipelineStage> PipelineStages => Set<PipelineStage>();
     public DbSet<Procedure> Procedures => Set<Procedure>();
     public DbSet<Lead> Leads => Set<Lead>();
     public DbSet<Conversation> Conversations => Set<Conversation>();
@@ -146,10 +148,44 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.Property(x => x.Address).HasColumnName("address");
             e.Property(x => x.OperatingHours).HasColumnName("operating_hours");
             e.Property(x => x.ConsultationInfo).HasColumnName("consultation_info");
+            e.Property(x => x.BusinessTypeCode).HasColumnName("business_type_code").HasMaxLength(50).IsRequired();
+            e.Property(x => x.DefaultLanguage).HasColumnName("default_language").HasMaxLength(10).IsRequired();
             e.Property(x => x.IsActive).HasColumnName("is_active");
             e.Property(x => x.CreatedAt).HasColumnName("created_at");
             e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
             e.HasIndex(x => x.Slug).IsUnique();
+            e.HasOne<BusinessType>().WithMany().HasForeignKey(x => x.BusinessTypeCode).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // ---------------------------------------------------------------
+        // business types and their pipeline stages
+        // ---------------------------------------------------------------
+        modelBuilder.Entity<BusinessType>(e =>
+        {
+            e.ToTable("business_types", "core");
+            e.HasKey(x => x.Code);
+            e.Property(x => x.Code).HasColumnName("code").HasMaxLength(50);
+            e.Property(x => x.NameJson).HasColumnName("name").HasColumnType("jsonb").IsRequired();
+            e.Property(x => x.TerminologyJson).HasColumnName("terminology").HasColumnType("jsonb").IsRequired();
+            e.Property(x => x.AiProfile).HasColumnName("ai_profile").IsRequired();
+            e.Property(x => x.IsActive).HasColumnName("is_active");
+            e.Property(x => x.SortOrder).HasColumnName("sort_order");
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+            e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
+            e.HasMany(x => x.Stages).WithOne().HasForeignKey(x => x.BusinessTypeCode).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<PipelineStage>(e =>
+        {
+            e.ToTable("pipeline_stages", "crm");
+            e.HasKey(x => new { x.BusinessTypeCode, x.Key });
+            e.Property(x => x.BusinessTypeCode).HasColumnName("business_type_code").HasMaxLength(50);
+            e.Property(x => x.Key).HasColumnName("key").HasMaxLength(50);
+            e.Property(x => x.Category).HasColumnName("category").HasMaxLength(30).IsRequired();
+            e.Property(x => x.LabelsJson).HasColumnName("labels").HasColumnType("jsonb").IsRequired();
+            e.Property(x => x.SortOrder).HasColumnName("sort_order");
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+            e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
         });
 
         // ---------------------------------------------------------------

@@ -1,3 +1,4 @@
+using Omni.App.Entities.Dtos.BusinessTypes;
 using Omni.App.Entities.Models;
 using Omni.App.Entities.Requests.Leads;
 using Omni.App.Entities.Responses.Leads;
@@ -18,7 +19,11 @@ public interface ILeadService
 
     Task<LeadResponse?> UpdateAsync(Guid clientId, Guid id, UpdateLeadRequest request, CancellationToken ct = default);
 
+    /// <summary>Status must be a stage key of the client's business type (ArgumentException otherwise).</summary>
     Task<LeadResponse?> UpdateStatusAsync(Guid clientId, Guid id, UpdateLeadStatusRequest request, CancellationToken ct = default);
+
+    /// <summary>The client's pipeline stages in order, labelled in the user's language (status filters, badges, dropdowns).</summary>
+    Task<IReadOnlyList<PipelineStageOption>> ListStagesAsync(Guid clientId, CancellationToken ct = default);
 
     /// <summary>Narrower update for the AI agent's update_lead tool — procedure interest, language,
     /// timeline, notes, follow-up date, and qualification status only. See UpdateLeadContextRequest

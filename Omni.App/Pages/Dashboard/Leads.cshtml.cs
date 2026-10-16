@@ -4,6 +4,7 @@ using Omni.App.Business.Contracts.Managers;
 using Omni.App.Business.Contracts.Services.Dashboard;
 using Omni.App.Business.Contracts.Services.Leads;
 using Omni.App.Common.Enums;
+using Omni.App.Entities.Dtos.BusinessTypes;
 using Omni.App.Entities.Dtos.Dashboard;
 
 namespace Omni.App.Pages.Dashboard;
@@ -43,7 +44,8 @@ public class LeadsModel : PageModel
     public bool ClientConfigured { get; private set; }
     public IReadOnlyList<DashboardLeadRow> Leads { get; private set; } = Array.Empty<DashboardLeadRow>();
     public int TotalCount { get; private set; }
-    public IReadOnlyList<string> AllStatuses { get; } = LeadStatus.All.OrderBy(s => s).ToList();
+    /// <summary>The client's pipeline stages in order, labelled (status filter and badges).</summary>
+    public IReadOnlyList<PipelineStageOption> Stages { get; private set; } = Array.Empty<PipelineStageOption>();
     /// <summary>Every source value this client's leads actually have, for the source filter.</summary>
     public IReadOnlyList<string> AllSources { get; private set; } = Array.Empty<string>();
 
@@ -64,6 +66,7 @@ public class LeadsModel : PageModel
         Leads = items;
         TotalCount = totalCount;
         AllSources = await _leads.GetDistinctSourcesAsync(client.Id, ct);
+        Stages = await _leads.ListStagesAsync(client.Id, ct);
     }
 
     public int TotalPages => (int)Math.Ceiling(TotalCount / (double)PageSize);

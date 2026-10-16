@@ -144,6 +144,8 @@ public static class ConfigDefaults
         "Minutes a cached copy is kept: Channel connections, TikTok connection and WhatsApp templates. Changes clear it at once; this is only how long an untouched copy lives.", 1, 1440);
     public static readonly ConfigDefinition CacheBillingRatesMinutes = new("Cache", "BillingRatesMinutes", "60", ConfigValueType.Int,
         "Minutes a cached copy is kept: Rating cards, rates and who pays the provider per channel account. Changes clear it at once; this is only how long an untouched copy lives.", 1, 1440);
+    public static readonly ConfigDefinition CacheBusinessTypesMinutes = new("Cache", "BusinessTypesMinutes", "60", ConfigValueType.Int,
+        "Minutes a cached copy is kept: Business types with their pipeline stages and words. Changes clear it at once; this is only how long an untouched copy lives.", 1, 1440);
     public static readonly ConfigDefinition MonitoringEnabled = new("Monitoring", "Enabled", "true", ConfigValueType.Bool,
         "Whether request timings are recorded (per route, summarised every minute into activity.api_route_stats) and slow requests are logged. Off = nothing is recorded.");
     public static readonly ConfigDefinition MonitoringSlowRequestMs = new("Monitoring", "SlowRequestMs", "1000", ConfigValueType.Int,
@@ -252,6 +254,7 @@ public static class ConfigDefaults
         CacheSchedulingMinutes,
         CacheChannelsMinutes,
         CacheBillingRatesMinutes,
+        CacheBusinessTypesMinutes,
 
         MonitoringEnabled,
         MonitoringSlowRequestMs,

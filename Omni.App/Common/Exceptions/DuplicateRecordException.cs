@@ -10,4 +10,10 @@ public class DuplicateRecordException : Exception
         : base("The record already exists.", innerException)
     {
     }
+
+    /// <summary>A duplicate a service spotted before saving (the message may be a strings-file key, see TextError).</summary>
+    public DuplicateRecordException(string message)
+        : base(message)
+    {
+    }
 }

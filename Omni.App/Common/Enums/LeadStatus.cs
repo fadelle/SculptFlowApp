@@ -1,6 +1,8 @@
 namespace Omni.App.Common.Enums;
 
-/// <summary>Allowed values for Lead.Status — must match the CHECK constraint in Database/schema.sql.</summary>
+/// <summary>The stage keys the code itself moves a lead to (keys of the first built-in business type, crm.pipeline_stages);
+/// what a client may use is its own business type's stages (IBusinessTypeService). Milestone A S6 replaces these with
+/// stage categories.</summary>
 public static class LeadStatus
 {
     public const string New = "new";
@@ -13,10 +15,4 @@ public static class LeadStatus
     public const string NotInterested = "not_interested";
     public const string NeedsHuman = "needs_human";
     public const string Lost = "lost";
-
-    public static readonly IReadOnlySet<string> All = new HashSet<string>
-    {
-        New, Contacted, Qualified, ConsultationBooked, ConsultationAttended,
-        NoShow, SurgeryBooked, NotInterested, NeedsHuman, Lost
-    };
 }

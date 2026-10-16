@@ -1,8 +1,10 @@
 using Omni.App.Business.Contracts.Services.Appointments;
+using Omni.App.Business.Contracts.Services.BusinessTypes;
 using Omni.App.Business.Contracts.Services.Inbox;
 using Omni.App.Business.Contracts.Services.PlatformAdmin;
 using Omni.App.Business.Mappers.PlatformAdmin;
 using Omni.App.Common.Enums;
+using Omni.App.Common.Helpers;
 using Omni.App.Entities.Dtos.PlatformAdmin;
 using Omni.App.Entities.Requests.PlatformAdmin;
 using Omni.App.Entities.Responses.Billing;
@@ -18,10 +20,12 @@ public class LeadAdminService : ILeadAdminService
     private readonly IConversationService _conversations;
     private readonly IAppointmentService _appointments;
     private readonly TimeProvider _time;
+    private readonly IBusinessTypeService _businessTypes;
 
     public LeadAdminService(ILeadAdminRepository repository, IUnitOfWork unitOfWork, IConversationService conversations,
-        IAppointmentService appointments, TimeProvider time)
+        IAppointmentService appointments, TimeProvider time, IBusinessTypeService businessTypes)
     {
+        _businessTypes = businessTypes;
         _repository = repository;
         _unitOfWork = unitOfWork;
         _conversations = conversations;
@@ -58,9 +62,10 @@ public class LeadAdminService : ILeadAdminService
 
     public async Task<PlatformAdminChange> UpdateLeadAsync(Guid id, LeadUpdate update, CancellationToken ct)
     {
-        if (!LeadStatus.All.Contains(update.Status)) throw new ArgumentException("Unknown lead status.");
         if (!LeadQualificationStatus.All.Contains(update.QualificationStatus)) throw new ArgumentException("Unknown qualification.");
         var lead = await _repository.GetLeadForUpdateAsync(id, ct) ?? throw new KeyNotFoundException("Lead not found.");
+        if (!await _businessTypes.IsStageOfClientAsync(lead.ClientId, update.Status, ct))
+            throw new ArgumentException("leads.errors.unknownStage").WithArgs(update.Status);
         var now = _time.GetUtcNow();
         lead.Status = update.Status;
         lead.QualificationStatus = update.QualificationStatus;

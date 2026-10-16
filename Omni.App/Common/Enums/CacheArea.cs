@@ -8,5 +8,6 @@ public enum CacheArea
     Procedures,
     Scheduling,
     Channels,
-    BillingRates
+    BillingRates,
+    BusinessTypes
 }

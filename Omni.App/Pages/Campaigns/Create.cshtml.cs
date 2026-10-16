@@ -68,7 +68,9 @@ public class CreateModel : PageModel
     public WhatsAppTemplateResponse? SelectedTemplate { get; private set; }
     public IReadOnlyList<int> PlaceholderNumbers { get; private set; } = Array.Empty<int>();
 
-    public IReadOnlyList<string> LeadStatusOptions { get; } = LeadStatus.All.OrderBy(s => s).ToList();
+    /// <summary>The client's pipeline stages in order, labelled (lead status filter and badges).</summary>
+    public IReadOnlyList<Entities.Dtos.BusinessTypes.PipelineStageOption> Stages { get; private set; } =
+        Array.Empty<Entities.Dtos.BusinessTypes.PipelineStageOption>();
     public IReadOnlyList<string> QualificationStatusOptions { get; } = LeadQualificationStatus.All.OrderBy(s => s).ToList();
     public IReadOnlyList<string> AppointmentStatusOptions { get; } = AppointmentStatus.All.OrderBy(s => s).ToList();
 
@@ -363,5 +365,6 @@ public class CreateModel : PageModel
 
         Procedures = await _procedures.ListAsync(client.Id, activeOnly: true, ct);
         LeadSources = await _leads.GetDistinctSourcesAsync(client.Id, ct);
+        Stages = await _leads.ListStagesAsync(client.Id, ct);
     }
 }

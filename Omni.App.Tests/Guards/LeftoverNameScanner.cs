@@ -7,11 +7,15 @@ namespace Omni.App.Tests.Guards;
 /// <summary>
 /// Finds old product/domain words (clinic, lead, appointment, SculptFlow…) in the repo's tracked files, for
 /// <see cref="LeftoverNamesTests"/>. Skips binary files, paths and literal tokens listed in
-/// <c>Guards/leftover-names-allowlist.txt</c>, and any line carrying a <c>leftover-ok: &lt;reason&gt;</c> marker.
+/// <c>Guards/leftover-names-allowlist.txt</c>, any line carrying a <c>leftover-ok: &lt;reason&gt;</c> marker, and every line
+/// between a <c>leftover-ok-begin: &lt;reason&gt;</c> line and the next <c>leftover-ok-end</c> line (a block of data such as
+/// the built-in clinic business type's seed rows).
 /// </summary>
 public static class LeftoverNameScanner
 {
     public const string LineMarker = "leftover-ok:";
+    public const string BlockBegin = "leftover-ok-begin:";
+    public const string BlockEnd = "leftover-ok-end";
     public const string AllowlistPath = "Omni.App.Tests/Guards/leftover-names-allowlist.txt";
 
     /// <summary>Every old word and how it's matched. "lead" only as a word or identifier part (Lead, lead_, leadId,
@@ -121,14 +125,31 @@ public static class LeftoverNameScanner
         return new Regex(pattern.Append('$').ToString(), RegexOptions.IgnoreCase);
     }
 
-    /// <summary>Every old-word hit in one file's text that the allowlist and line markers don't excuse.</summary>
+    /// <summary>Every old-word hit in one file's text that the allowlist and markers don't excuse. Throws for a block that
+    /// is never closed (or closed without being opened), so a stray marker can't hide the rest of a file.</summary>
     public static IEnumerable<Hit> Scan(string path, string text, Allowlist allowlist)
     {
+        if (allowlist.Paths.Any(p => p.Words is null && p.Path.IsMatch(path))) yield break;
         var lines = text.Split('\n');
+        var inBlock = false;
         for (var i = 0; i < lines.Length; i++)
         {
             var line = lines[i];
-            if (line.Contains(LineMarker, StringComparison.Ordinal)) continue;
+            // A line naming both markers (documentation) opens nothing.
+            if (line.Contains(BlockBegin, StringComparison.Ordinal) && line.Contains(BlockEnd, StringComparison.Ordinal)) continue;
+            if (line.Contains(BlockBegin, StringComparison.Ordinal))
+            {
+                if (inBlock) throw new InvalidDataException($"{path}:{i + 1}: '{BlockBegin}' inside an open block.");
+                inBlock = true;
+                continue;
+            }
+            if (line.Contains(BlockEnd, StringComparison.Ordinal))
+            {
+                if (!inBlock) throw new InvalidDataException($"{path}:{i + 1}: '{BlockEnd}' without '{BlockBegin}'.");
+                inBlock = false;
+                continue;
+            }
+            if (inBlock || line.Contains(LineMarker, StringComparison.Ordinal)) continue;
             foreach (var token in allowlist.Tokens) line = line.Replace(token, " ", StringComparison.OrdinalIgnoreCase);
             foreach (var (word, regex) in Words)
             {
@@ -137,6 +158,7 @@ public static class LeftoverNameScanner
                 yield return new Hit(word, path, i + 1, text1.Length > 160 ? text1[..160] + "…" : text1);
             }
         }
+        if (inBlock) throw new InvalidDataException($"{path}: '{BlockBegin}' is never closed with '{BlockEnd}'.");
     }
 
     /// <summary>Scans every tracked text file under <paramref name="root"/>.</summary>

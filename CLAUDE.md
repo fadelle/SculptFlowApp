@@ -73,9 +73,9 @@ Every table lives in its area's Postgres schema, never `public` (only `set_updat
 
 | Schema | Tables |
 |---|---|
-| `core` | clients, procedures |
+| `core` | business_types, clients, procedures |
 | `identity` | identity_users/_claims/_logins/_tokens, client_users |
-| `crm` | leads, conversations, messages, inbox_settings |
+| `crm` | pipeline_stages, leads, conversations, messages, inbox_settings |
 | `scheduling` | appointments, procedure_bookings, availability rules/exceptions, booking_settings, calendar integrations and syncs |
 | `channels` | channel_integrations, whatsapp_templates, whatsapp_health_events, tiktok_integrations |
 | `marketing` | campaigns, campaign_recipients |
@@ -117,8 +117,8 @@ Full detail and the declared-settings table: `docs/configuration.md`.
 - Every key and lifetime lives in `Common/Statics/CacheKeys` as `area:thing:id`, so an area can be dropped by prefix.
 - Cache plain DTOs/records or read-only entity copies (stored as JSON copies), never tracked EF entities, and nothing
   whose staleness costs money (balances, ledger) or that changes every request (messages, conversations, appointments).
-- Table caches (agreed 2026-10-14) live in the repository's `...ReadOnlyAsync` reads: clients, inbox settings, client memberships,
-  procedures, availability rules/settings/exceptions, calendar connections, channel connections, TikTok, WhatsApp
+- Table caches (agreed 2026-10-14) live in the repository's `...ReadOnlyAsync` reads: clients, business types (with stages),
+  inbox settings, client memberships, procedures, availability rules/settings/exceptions, calendar connections, channel connections, TikTok, WhatsApp
   templates, rating cards, rates, channel account billing. Code that will change a row loads it tracked (uncached).
   Their lifetimes are settings, one per `CacheArea` (`Cache:*Minutes`), passed as an area to `CacheReads`, never as a
   fixed `TimeSpan`.
@@ -130,6 +130,18 @@ Full detail and the declared-settings table: `docs/configuration.md`.
   right after the save; the lifetime is only a safety net. Add a line to the `CacheKeys` comment naming who clears it.
 - Settings stay in `ConfigManager`'s own snapshot (read synchronously everywhere); cache clear-all reloads it.
 - Admin: `/api/platform-admin/cache` (list, get, remove key/prefix, clear all) and the portal's Cache page.
+
+## UI text and business types (standing rule, Milestone A S3)
+
+- Every UI string a change writes or edits goes into `Omni.App/Resources/i18n/en.json` (flat keys `area.element.state`):
+  Razor `@T["key"]`, JS `omniText.t('key', [args])`, server messages `throw new ArgumentException("key").WithArgs(...)`
+  (`[ApiErrors]` and `TextError.Localize` turn keys into text; a plain message still shows as written).
+- Placeholders: `{0}`… for arguments; `{contact}` `{contacts}` `{Contact}` `{Contacts}` (same for member, service, booking,
+  order, client) for the client's business-type words. Never glue a word into a sentence Arabic can't follow.
+  `Guards/UiTextKeysTests` fails on a missing or unused key or an unknown placeholder.
+- Business types (`core.business_types`) give each client its words, AI profile and pipeline stages
+  (`crm.pipeline_stages`). Code and reports work with stage **categories** (`StageCategory`), never one type's stage keys
+  (the `LeadStatus` writes move to categories in S6); people see labels. No code branches on a business type's code.
 
 ## Platform-admin APIs (standing rule, agreed 2026-10-07)
 

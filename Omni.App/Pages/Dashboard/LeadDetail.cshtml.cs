@@ -1,8 +1,11 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.Extensions.Localization;
 using Omni.App.Business.Contracts.Managers;
 using Omni.App.Business.Contracts.Services.Leads;
 using Omni.App.Common.Enums;
+using Omni.App.Common.Helpers;
+using Omni.App.Entities.Dtos.BusinessTypes;
 using Omni.App.Entities.Models;
 using Omni.App.Entities.Requests.Leads;
 using Omni.App.Entities.Responses.Leads;
@@ -21,11 +24,13 @@ public class LeadDetailModel : PageModel
 {
     private readonly ICurrentClientContext _clientContext;
     private readonly ILeadService _leads;
+    private readonly IStringLocalizer _text;
 
-    public LeadDetailModel(ICurrentClientContext clientContext, ILeadService leads)
+    public LeadDetailModel(ICurrentClientContext clientContext, ILeadService leads, IStringLocalizer text)
     {
         _clientContext = clientContext;
         _leads = leads;
+        _text = text;
     }
 
     [BindProperty(SupportsGet = true)]
@@ -34,7 +39,8 @@ public class LeadDetailModel : PageModel
     public bool ClientConfigured { get; private set; }
     public LeadResponse? Lead { get; private set; }
 
-    public IReadOnlyList<string> StatusOptions { get; } = LeadStatus.All.OrderBy(s => s).ToList();
+    /// <summary>The client's pipeline stages in order, labelled (status badge and dropdown).</summary>
+    public IReadOnlyList<PipelineStageOption> Stages { get; private set; } = Array.Empty<PipelineStageOption>();
     public IReadOnlyList<string> QualificationOptions { get; } = LeadQualificationStatus.All.OrderBy(s => s).ToList();
 
     /// <summary>Distinct sources already on file for this client, unioned with a small starter set
@@ -97,7 +103,7 @@ public class LeadDetailModel : PageModel
         }
         catch (ArgumentException ex)
         {
-            ErrorMessage = ex.Message;
+            ErrorMessage = _text.Localize(ex);
             await LoadAsync(ct);
             return Page();
         }
@@ -116,6 +122,7 @@ public class LeadDetailModel : PageModel
 
         Lead = await _leads.GetByIdAsync(client.Id, Id, ct);
         if (Lead is null) return;
+        Stages = await _leads.ListStagesAsync(client.Id, ct);
 
         var distinctSources = await _leads.GetDistinctSourcesAsync(client.Id, ct);
         var options = new List<string>(distinctSources);

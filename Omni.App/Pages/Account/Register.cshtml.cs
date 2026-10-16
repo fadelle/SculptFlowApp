@@ -1,7 +1,10 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.Extensions.Localization;
+using Omni.App.Business.Contracts.Services.BusinessTypes;
 using Omni.App.Business.Contracts.Services.Clients;
+using Omni.App.Entities.Dtos.BusinessTypes;
 using Omni.App.Entities.Requests.Clients;
 
 namespace Omni.App.Pages.Account;
@@ -16,11 +19,16 @@ public class RegisterModel : PageModel
 {
     private readonly IClientRegistrationService _registration;
     private readonly SignInManager<IdentityUser> _signInManager;
+    private readonly IBusinessTypeService _businessTypes;
+    private readonly IStringLocalizer _text;
 
-    public RegisterModel(IClientRegistrationService registration, SignInManager<IdentityUser> signInManager)
+    public RegisterModel(IClientRegistrationService registration, SignInManager<IdentityUser> signInManager, IBusinessTypeService businessTypes,
+        IStringLocalizer text)
     {
         _registration = registration;
         _signInManager = signInManager;
+        _businessTypes = businessTypes;
+        _text = text;
     }
 
     [BindProperty]
@@ -31,6 +39,13 @@ public class RegisterModel : PageModel
 
     [BindProperty]
     public string Email { get; set; } = string.Empty;
+
+    /// <summary>The kind of business (core.business_types.code); required.</summary>
+    [BindProperty]
+    public string BusinessTypeCode { get; set; } = string.Empty;
+
+    /// <summary>The active business types for the picker, named in the visitor's language.</summary>
+    public IReadOnlyList<BusinessTypeOption> BusinessTypes { get; private set; } = Array.Empty<BusinessTypeOption>();
 
     // Passwords are deliberately never echoed back into the form after a failed attempt.
     [BindProperty]
@@ -47,18 +62,20 @@ public class RegisterModel : PageModel
     /// <summary>False while Accounts:SignupEnabled is off: the page then explains that and shows no form.</summary>
     public bool SignupOpen => _registration.IsSignupOpen;
 
-    public void OnGet()
+    public async Task OnGetAsync(CancellationToken ct)
     {
+        BusinessTypes = await _businessTypes.ListOptionsAsync(ct);
     }
 
     public async Task<IActionResult> OnPostAsync(CancellationToken ct)
     {
         var result = await _registration.RegisterAsync(
-            new RegisterClientRequest(FullName, ClientName, Email, Password, ConfirmPassword), ct);
+            new RegisterClientRequest(FullName, ClientName, Email, Password, ConfirmPassword, BusinessTypeCode), ct);
 
         if (!result.Succeeded)
         {
-            ErrorMessage = string.Join(" ", result.Errors);
+            ErrorMessage = string.Join(" ", result.Errors.Select(e => _text[e].Value));
+            BusinessTypes = await _businessTypes.ListOptionsAsync(ct);
             return Page();
         }
 

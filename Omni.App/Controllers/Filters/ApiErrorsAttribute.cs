@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
+using Microsoft.Extensions.Localization;
 using Omni.App.Common.Exceptions;
+using Omni.App.Common.Helpers;
 
 namespace Omni.App.Controllers.Filters;
 
@@ -16,7 +18,9 @@ namespace Omni.App.Controllers.Filters;
 /// <item>502: the provider refused or failed (channel send, Meta Graph API, benchmark question generator).</item>
 /// <item>503: the benchmark question generator isn't configured.</item>
 /// </list>
-/// Anything else stays a 500. A controller catches an exception itself only when its response must differ from this
+/// Anything else stays a 500. The message is put into the request's language: a service throws with a strings-file key
+/// (and its arguments, see <see cref="TextError"/>) and the key's text is answered; a message that isn't a key is answered
+/// as written. A controller catches an exception itself only when its response must differ from this
 /// (an n8n tool contract, a redirect, a different status for that one action).
 /// A 502/503 is also logged as an error (it is a provider or setup failure, not the caller's mistake), so it reaches the
 /// error log; 4xx answers are not logged.
@@ -35,9 +39,13 @@ public sealed class ApiErrorsAttribute : ExceptionFilterAttribute
                 .LogError(context.Exception, "{Action} answered {StatusCode}: {Error}",
                     context.ActionDescriptor.DisplayName, status, context.Exception.Message);
         }
-        context.Result = new ObjectResult(new { error = context.Exception.Message }) { StatusCode = status };
+        context.Result = new ObjectResult(new { error = Localize(context.HttpContext, context.Exception) }) { StatusCode = status };
         context.ExceptionHandled = true;
     }
+
+    /// <summary>The exception's message in the request's language when it is a strings-file key, else as written.</summary>
+    public static string Localize(HttpContext http, Exception exception) =>
+        http.RequestServices?.GetService<IStringLocalizer>().Localize(exception) ?? exception.Message;
 
     /// <summary>The HTTP status for an exception, or null to let it become a 500. Order matters: specific types first,
     /// because some of them derive from InvalidOperationException.</summary>

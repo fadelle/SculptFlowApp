@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Omni.App.Business.Contracts.Services.PlatformAdmin;
 using Omni.App.Controllers.Filters;
+using Omni.App.Entities.Requests.BusinessTypes;
 using Omni.App.Entities.Requests.Inbox;
 using Omni.App.Entities.Requests.PlatformAdmin;
 
@@ -9,7 +10,7 @@ namespace Omni.App.Controllers.Admin;
 
 /// <summary>
 /// Platform-admin clients API (internal; called by the Omni.Admin portal). Writes answer { clientId } so the portal
-/// can file its audit entry. Errors: 400 invalid input, 404 no such client.
+/// can file its audit entry. Errors: 400 invalid input, 404 no such client (or business type), 422 inactive business type.
 /// </summary>
 [ApiController]
 [AllowAnonymous]
@@ -55,4 +56,15 @@ public class ClientsAdminController : ControllerBase
     [HttpPut("{id:guid}/inbox-settings")]
     public async Task<IActionResult> UpdateInboxSettings(Guid id, [FromBody] UpdateInboxSettingsRequest request, CancellationToken ct) =>
         Ok(await _clients.UpdateInboxSettingsAsync(id, request, ct));
+
+    /// <summary>?to=code: { clientId, fromCode, toCode, contactCount, moves: [{ fromKey, fromLabel, category, count, toKey, toLabel }] }.
+    /// Changes nothing.</summary>
+    [HttpGet("{id:guid}/business-type/preview")]
+    public async Task<IActionResult> PreviewBusinessType(Guid id, [FromQuery] string? to, CancellationToken ct) =>
+        Ok(await _clients.PreviewBusinessTypeChangeAsync(id, to, ct));
+
+    /// <summary>Body { businessTypeCode }: moves the client to that type and its contacts to the matching stages.</summary>
+    [HttpPut("{id:guid}/business-type")]
+    public async Task<IActionResult> ChangeBusinessType(Guid id, [FromBody] ChangeBusinessTypeRequest request, CancellationToken ct) =>
+        Ok(await _clients.ChangeBusinessTypeAsync(id, request.BusinessTypeCode, ct));
 }

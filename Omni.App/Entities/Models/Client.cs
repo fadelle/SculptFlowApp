@@ -17,6 +17,13 @@ public class Client
     public string? Address { get; set; }
     public string? OperatingHours { get; set; }
     public string? ConsultationInfo { get; set; }
+
+    /// <summary>core.business_types.code: the words, stages and AI profile this client uses. Chosen at sign-up; changed
+    /// only by a platform admin (PUT /api/platform-admin/clients/{id}/business-type), which also moves contacts' stages.</summary>
+    public string BusinessTypeCode { get; set; } = string.Empty;
+
+    /// <summary>The language the dashboard opens in when the user has none of their own (<see cref="Common.Enums.AppLanguage"/>).</summary>
+    public string DefaultLanguage { get; set; } = Common.Enums.AppLanguage.English;
     public bool IsActive { get; set; } = true;
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }

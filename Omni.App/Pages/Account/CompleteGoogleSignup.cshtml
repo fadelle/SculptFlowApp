@@ -9,7 +9,7 @@
         <span class="au-brand__mark"><img class="auth-logo" src="~/logo.svg" alt="" width="56" height="56" /></span>
         <div>
             <h1 class="au-auth__title">One last step</h1>
-            <p class="au-auth__sub">Name your client and you're in. This creates your own client workspace.</p>
+            <p class="au-auth__sub">@T["signup.google.subtitle"]</p>
         </div>
     </div>
 
@@ -34,6 +34,17 @@
             <label class="au-form-label" for="google-client">Client name</label>
             <input type="text" name="ClientName" id="google-client" value="@Model.ClientName" class="au-input" autocomplete="organization" maxlength="200" required autofocus
                    placeholder="e.g. Glow Aesthetic Client" />
+        </div>
+        <div class="au-form-field">
+            <label class="au-form-label" for="google-business-type">@T["signup.businessType.label"]</label>
+            <select name="BusinessTypeCode" id="google-business-type" class="au-select" required aria-describedby="google-business-type-help">
+                <option value="" selected="@string.IsNullOrEmpty(Model.BusinessTypeCode)" disabled>@T["signup.businessType.placeholder"]</option>
+                @foreach (var type in Model.BusinessTypes)
+                {
+                    <option value="@type.Code" selected="@(type.Code == Model.BusinessTypeCode)">@type.Name</option>
+                }
+            </select>
+            <small class="au-help" id="google-business-type-help">@T["signup.businessType.help"]</small>
         </div>
         <button type="submit" class="au-btn au-btn--primary au-btn--lg au-btn--block" data-busy-label="Creating your client…">Create my client</button>
     </form>

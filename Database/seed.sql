@@ -24,8 +24,8 @@ begin
   -- clear any previous seed run for this client
   delete from core.clients where slug = 'demo-clinic'; -- leftover-ok: demo clinic data
 
-  insert into core.clients (name, slug, phone, email, timezone)
-  values ('Demo Aesthetic Clinic', 'demo-clinic', '+96170000000', 'hello@democlinic.test', 'Asia/Beirut') -- leftover-ok: demo clinic data
+  insert into core.clients (name, slug, phone, email, timezone, business_type_code)
+  values ('Demo Aesthetic Clinic', 'demo-clinic', '+96170000000', 'hello@democlinic.test', 'Asia/Beirut', 'clinic') -- leftover-ok: demo clinic data
   returning id into v_client_id;
 
   insert into core.procedures (client_id, name, code, consultation_duration)

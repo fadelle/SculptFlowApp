@@ -103,6 +103,7 @@ Generated from `Common/Statics/ConfigDefaults`; keep this table in step when you
 | Cache | SchedulingMinutes | 60 | int 1–1440 | Weekly hours, booking settings, closed dates and calendar connections. Saving a change clears the cached copy at once; this is only how long an untouched copy lives. |
 | Cache | ChannelsMinutes | 60 | int 1–1440 | Channel connections, TikTok connection and WhatsApp templates. Saving a change clears the cached copy at once; this is only how long an untouched copy lives. |
 | Cache | BillingRatesMinutes | 60 | int 1–1440 | Rating cards, rates and who pays the provider per channel account. Saving a change clears the cached copy at once; this is only how long an untouched copy lives. |
+| Cache | BusinessTypesMinutes | 60 | int 1–1440 | Business types with their pipeline stages and words. Saving a change clears the cached copy at once; this is only how long an untouched copy lives. |
 | Monitoring | Enabled | true | bool | Whether request timings are recorded (per method + route template, in memory, summarised every minute into `activity.api_route_stats`) and slow requests are logged. Off = nothing is recorded. |
 | Monitoring | SlowRequestMs | 1000 | int 50–120000 | A request taking at least this many milliseconds is logged as a warning ("Slow request ...") and counted in that minute's slow count. |
 | Monitoring | RetentionDays | 30 | int 1–365 | Days of per-minute API timing rows kept; the flush job deletes older rows. |

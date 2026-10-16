@@ -106,6 +106,19 @@ public class LeftoverNamesTests
     }
 
     [Fact]
+    public void Block_markers_excuse_every_line_between_them_and_must_be_balanced()
+    {
+        var allowlist = LeftoverNameScanner.ParseAllowlist([]);
+        const string text = "clinic one\n-- leftover-ok-begin: seed rows\nclinic two\nlead three\n-- leftover-ok-end\nclinic four";
+
+        Assert.Equal([1, 6], LeftoverNameScanner.Scan("Database/schema.sql", text, allowlist).Select(h => h.Line));
+        Assert.Throws<InvalidDataException>(() => LeftoverNameScanner.Scan("a.sql", "-- leftover-ok-begin: x\nclinic", allowlist).ToList());
+        Assert.Throws<InvalidDataException>(() => LeftoverNameScanner.Scan("a.sql", "-- leftover-ok-end\nclinic", allowlist).ToList());
+        Assert.Throws<InvalidDataException>(() =>
+            LeftoverNameScanner.Scan("a.sql", "-- leftover-ok-begin: x\n-- leftover-ok-begin: y\n-- leftover-ok-end", allowlist).ToList());
+    }
+
+    [Fact]
     public void Allowlist_rejects_unknown_lines_and_words()
     {
         Assert.Throws<FormatException>(() => LeftoverNameScanner.ParseAllowlist(["Database/**"]));

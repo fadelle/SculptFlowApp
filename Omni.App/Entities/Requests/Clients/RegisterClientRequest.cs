@@ -7,4 +7,6 @@ using Microsoft.AspNetCore.Identity;
 
 namespace Omni.App.Entities.Requests.Clients;
 
-public record RegisterClientRequest(string? FullName, string? ClientName, string? Email, string? Password, string? ConfirmPassword);
+/// <summary>Self sign-up. BusinessTypeCode must name an active business type (the Register page's picker).</summary>
+public record RegisterClientRequest(string? FullName, string? ClientName, string? Email, string? Password, string? ConfirmPassword,
+    string? BusinessTypeCode = null);

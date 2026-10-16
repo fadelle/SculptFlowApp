@@ -1,6 +1,7 @@
 using Omni.App.Persistence.Contracts;
 using Omni.App.Persistence.Contracts.Appointments;
 using Omni.App.Persistence.Contracts.Billing;
+using Omni.App.Persistence.Contracts.BusinessTypes;
 using Omni.App.Persistence.Contracts.Calendars;
 using Omni.App.Persistence.Contracts.Campaigns;
 using Omni.App.Persistence.Contracts.Channels;
@@ -19,6 +20,7 @@ using Omni.App.Persistence.Contracts.WhatsApp;
 using Omni.App.Persistence.Repositories;
 using Omni.App.Persistence.Repositories.Appointments;
 using Omni.App.Persistence.Repositories.Billing;
+using Omni.App.Persistence.Repositories.BusinessTypes;
 using Omni.App.Persistence.Repositories.Calendars;
 using Omni.App.Persistence.Repositories.Campaigns;
 using Omni.App.Persistence.Repositories.Channels;
@@ -52,6 +54,7 @@ public static class PersistenceModule
         services.AddScoped<IUnitOfWork, UnitOfWork>();
 
         services.AddScoped<IClientRepository, ClientRepository>();
+        services.AddScoped<IBusinessTypeRepository, BusinessTypeRepository>();
         services.AddScoped<ISettingRepository, SettingRepository>();
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IEventLogRepository, EventLogRepository>();

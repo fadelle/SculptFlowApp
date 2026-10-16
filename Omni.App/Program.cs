@@ -1,3 +1,6 @@
+using Microsoft.Extensions.Localization;
+using Omni.App.Business.Contracts.Services.BusinessTypes;
+using Omni.App.Business.Services.BusinessTypes;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
@@ -183,6 +186,16 @@ builder.Services.AddScoped<IEventLogger, EventLogger>();
 builder.Services.AddScoped<IClientContext, ClientContext>();
 builder.Services.AddScoped<ICurrentClientContext, CurrentClientContext>();
 builder.Services.AddScoped<IClientRegistrationService, ClientRegistrationService>();
+// Business types: the words, pipeline stages and AI profile of each kind of client (core.business_types, crm.pipeline_stages).
+builder.Services.AddScoped<IBusinessTypeService, BusinessTypeService>();
+// UI text: Resources/i18n/{language}.json (embedded) through IStringLocalizer (@T["key"] in Razor, [ApiErrors] for
+// server messages) and window.omniText in the browser; RequestTextMiddleware picks each request's language and the
+// client's business-type words.
+builder.Services.AddSingleton<ITextCatalog, TextCatalog>();
+builder.Services.AddScoped<ITerminology, Terminology>();
+builder.Services.AddScoped<ITextContext, TextContext>();
+builder.Services.AddScoped<IStringLocalizer, JsonStringLocalizer>();
+builder.Services.AddScoped(typeof(IStringLocalizer<>), typeof(JsonStringLocalizer<>));
 builder.Services.AddScoped<IClientProfileService, ClientProfileService>();
 builder.Services.AddScoped<IInboxSettingsService, InboxSettingsService>();
 builder.Services.AddScoped<IStaffService, StaffService>();
@@ -426,6 +439,9 @@ app.UseRateLimiter();
 
 app.UseAuthentication();
 app.UseAuthorization();
+
+// After authentication: the language and business-type words depend on the signed-in user's client.
+app.UseMiddleware<RequestTextMiddleware>();
 
 app.MapStaticAssets();
 app.MapGet("/", () => Results.Redirect("/dashboard"));

@@ -16,6 +16,7 @@ public class ClientRegistrationServiceTests
     private readonly Mock<IKnowledgeSettingsService> _knowledge = new();
     private readonly Mock<ISubscriptionService> _subscriptions = new();
     private readonly Mock<IConfigManager> _config = new();
+    private readonly Mock<IBusinessTypeService> _businessTypes = TextKit.PermissiveBusinessTypes();
 
     public ClientRegistrationServiceTests()
     {
@@ -31,7 +32,8 @@ public class ClientRegistrationServiceTests
         _config.SetupGet(c => c.AccountsSignupEnabled).Returns(true);
     }
 
-    private ClientRegistrationService Sut() => new(_clients.Object, _accounts.Object, _uow.Object, _users.Object, _knowledge.Object, NullLogger<ClientRegistrationService>.Instance, _subscriptions.Object, _config.Object);
+    private ClientRegistrationService Sut() => new(_clients.Object, _accounts.Object, _uow.Object, _users.Object, _knowledge.Object, NullLogger<ClientRegistrationService>.Instance, _subscriptions.Object, _config.Object,
+        _businessTypes.Object, TextKit.Context());
 
     [Fact]
     public async Task With_signups_switched_off_neither_registration_creates_anything()
@@ -40,7 +42,7 @@ public class ClientRegistrationServiceTests
         Assert.False(Sut().IsSignupOpen);
 
         var normal = await Sut().RegisterAsync(Req());
-        var google = await Sut().RegisterExternalAsync(new RegisterExternalClientRequest("Gina", "Glow", "g@x.com", "Google", "key-1", "Google"));
+        var google = await Sut().RegisterExternalAsync(new RegisterExternalClientRequest("Gina", "Glow", "g@x.com", "Google", "key-1", "Google", TextKit.Clinic));
 
         Assert.All(new[] { normal, google }, r => Assert.Equal(ClientRegistrationService.SignupClosedMessage, Assert.Single(r.Errors)));
         _uow.Verify(u => u.BeginTransactionAsync(It.IsAny<CancellationToken>()), Times.Never);
@@ -52,7 +54,7 @@ public class ClientRegistrationServiceTests
     }
 
     private static RegisterClientRequest Req(string? name = "Ann Lee", string? client = "Glow Client", string? email = "ann@x.com", string? pw = "Passw0rd!", string? confirm = "Passw0rd!") =>
-        new(name, client, email, pw, confirm);
+        new(name, client, email, pw, confirm, TextKit.Clinic);
 
     [Theory]
     [InlineData(" ", "Glow", "a@x.com", "p", "p", "Full name")]
@@ -89,12 +91,38 @@ public class ClientRegistrationServiceTests
 
         Assert.True(r.Succeeded);
         Assert.Equal(("Glow Client", "glow-client", "ann@x.com", "UTC", true), (client!.Name, client.Slug, client.Email, client.Timezone, client.IsActive));
+        Assert.Equal((TextKit.Clinic, "en"), (client.BusinessTypeCode, client.DefaultLanguage));  // the chosen type, the sign-up language
         Assert.Equal((client.Id, r.User!.Id), (membership!.ClientId, membership.UserId));
         Assert.Equal(("USD", client.Id), (account!.Currency, account.ClientId));
         _users.Verify(u => u.AddClaimAsync(r.User, It.Is<Claim>(c => c.Type == ClientRegistrationService.FullNameClaimType && c.Value == "Ann Lee")), Times.Once);
         _knowledge.Verify(k => k.GetAsync(client.Id, It.IsAny<CancellationToken>()), Times.Once);
         _tx.Verify(t => t.CommitAsync(It.IsAny<CancellationToken>()), Times.Once);
         _subscriptions.Verify(s => s.StartAsync(It.Is<StartSubscriptionRequest>(q => q.ClientId == client.Id && q.PlanCode == "starter" && !q.ChargeFirstPeriod), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(" ")]
+    [InlineData("retired")]
+    public async Task Both_registrations_need_an_active_business_type(string? code)
+    {
+        _businessTypes.Setup(t => t.IsActiveAsync("retired", It.IsAny<CancellationToken>())).ReturnsAsync(false);
+
+        var normal = await Sut().RegisterAsync(Req() with { BusinessTypeCode = code });
+        var google = await Sut().RegisterExternalAsync(new RegisterExternalClientRequest("Gina", "Glow", "g@x.com", "Google", "key-1", "Google", code));
+
+        Assert.All(new[] { normal, google }, r => Assert.Equal(ClientRegistrationService.BusinessTypeRequiredKey, Assert.Single(r.Errors)));
+        Assert.Equal("Choose what kind of business you run.", TextKit.Localizer()[ClientRegistrationService.BusinessTypeRequiredKey].Value);
+        _uow.Verify(u => u.BeginTransactionAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task A_google_sign_up_gets_the_chosen_business_type_trimmed()
+    {
+        Client? client = null;
+        _clients.Setup(c => c.Add(It.IsAny<Client>())).Callback<Client>(c => client = c);
+        Assert.True((await Sut().RegisterExternalAsync(new RegisterExternalClientRequest("Gina", "Glow", "g@x.com", "Google", "key-1", "Google", " general "))).Succeeded);
+        Assert.Equal(TextKit.General, client!.BusinessTypeCode);
     }
 
     [Fact]
@@ -171,7 +199,7 @@ public class ClientRegistrationServiceTests
     {
         IdentityUser? created = null;
         _users.Setup(u => u.CreateAsync(It.IsAny<IdentityUser>())).Callback<IdentityUser>(u => created = u).ReturnsAsync(IdentityResult.Success);
-        var r = await Sut().RegisterExternalAsync(new RegisterExternalClientRequest(" ", "Glow", "g@x.com", "Google", "key-1", "Google"));
+        var r = await Sut().RegisterExternalAsync(new RegisterExternalClientRequest(" ", "Glow", "g@x.com", "Google", "key-1", "Google", TextKit.Clinic));
         Assert.True(r.Succeeded);
         Assert.True(created!.EmailConfirmed);
         _users.Verify(u => u.AddLoginAsync(created, It.Is<UserLoginInfo>(l => l.LoginProvider == "Google" && l.ProviderKey == "key-1")), Times.Once);
@@ -181,11 +209,11 @@ public class ClientRegistrationServiceTests
     [Fact]
     public async Task External_registration_validates_and_surfaces_login_link_failures()
     {
-        Assert.False((await Sut().RegisterExternalAsync(new RegisterExternalClientRequest("n", " ", "g@x.com", "Google", "k", null))).Succeeded);
-        Assert.False((await Sut().RegisterExternalAsync(new RegisterExternalClientRequest("n", "c", "bad", "Google", "k", null))).Succeeded);
-        Assert.False((await Sut().RegisterExternalAsync(new RegisterExternalClientRequest("n", new string('c', 201), "g@x.com", "Google", "k", null))).Succeeded);
+        Assert.False((await Sut().RegisterExternalAsync(new RegisterExternalClientRequest("n", " ", "g@x.com", "Google", "k", null, TextKit.Clinic))).Succeeded);
+        Assert.False((await Sut().RegisterExternalAsync(new RegisterExternalClientRequest("n", "c", "bad", "Google", "k", null, TextKit.Clinic))).Succeeded);
+        Assert.False((await Sut().RegisterExternalAsync(new RegisterExternalClientRequest("n", new string('c', 201), "g@x.com", "Google", "k", null, TextKit.Clinic))).Succeeded);
         _users.Setup(u => u.AddLoginAsync(It.IsAny<IdentityUser>(), It.IsAny<UserLoginInfo>())).ReturnsAsync(IdentityResult.Failed(new IdentityError { Description = "already linked" }));
-        Assert.Equal("already linked", Assert.Single((await Sut().RegisterExternalAsync(new RegisterExternalClientRequest("n", "c", "g@x.com", "Google", "k", null))).Errors));
+        Assert.Equal("already linked", Assert.Single((await Sut().RegisterExternalAsync(new RegisterExternalClientRequest("n", "c", "g@x.com", "Google", "k", null, TextKit.Clinic))).Errors));
     }
 
     [Theory]

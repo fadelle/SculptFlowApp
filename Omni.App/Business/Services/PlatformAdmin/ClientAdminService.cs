@@ -1,6 +1,8 @@
+using Omni.App.Business.Contracts.Services.BusinessTypes;
 using Omni.App.Business.Contracts.Services.Inbox;
 using Omni.App.Business.Contracts.Services.PlatformAdmin;
 using Omni.App.Business.Mappers.PlatformAdmin;
+using Omni.App.Entities.Dtos.BusinessTypes;
 using Omni.App.Entities.Dtos.Inbox;
 using Omni.App.Entities.Dtos.PlatformAdmin;
 using Omni.App.Entities.Requests.Inbox;
@@ -17,10 +19,13 @@ public class ClientAdminService : IClientAdminService
     private readonly IUnitOfWork _unitOfWork;
     private readonly TimeProvider _time;
     private readonly IInboxSettingsService _inboxSettings;
+    private readonly IBusinessTypeService _businessTypes;
 
-    public ClientAdminService(IClientAdminRepository repository, IUnitOfWork unitOfWork, TimeProvider time, IInboxSettingsService inboxSettings)
+    public ClientAdminService(IClientAdminRepository repository, IUnitOfWork unitOfWork, TimeProvider time, IInboxSettingsService inboxSettings,
+        IBusinessTypeService businessTypes)
     {
         _inboxSettings = inboxSettings;
+        _businessTypes = businessTypes;
         _repository = repository;
         _unitOfWork = unitOfWork;
         _time = time;
@@ -73,6 +78,15 @@ public class ClientAdminService : IClientAdminService
     {
         if (request is null) throw new ArgumentException("Send newConversations and reopenedConversations.");
         await _inboxSettings.UpdateAsync(id, request, ct);
+        return new PlatformAdminChange(id);
+    }
+
+    public Task<BusinessTypeChangePreview> PreviewBusinessTypeChangeAsync(Guid id, string? toCode, CancellationToken ct) =>
+        _businessTypes.PreviewClientChangeAsync(id, toCode, ct);
+
+    public async Task<PlatformAdminChange> ChangeBusinessTypeAsync(Guid id, string? toCode, CancellationToken ct)
+    {
+        await _businessTypes.ChangeClientTypeAsync(id, toCode, ct);
         return new PlatformAdminChange(id);
     }
 

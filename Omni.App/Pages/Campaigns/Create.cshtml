@@ -214,7 +214,7 @@ else
                                     <option value="90" selected="@(Model.CustomInactiveDays == 90)">90+ days</option>
                                 </select>
                             </label>
-                            <div class="field"><span>Lead status</span>@{ await RenderMultiSelect("CustomLeadStatuses", "Any status", Model.LeadStatusOptions, Model.CustomLeadStatuses); }</div>
+                            <div class="field"><span>Lead status</span>@{ await RenderMultiSelect("CustomLeadStatuses", "Any status", Model.Stages.Select(s => s.Key).ToList(), Model.CustomLeadStatuses, key => StageDisplay.Label(Model.Stages, key)); }</div>
                             <div class="field"><span>Qualification</span>@{ await RenderMultiSelect("CustomQualificationStatuses", "Any", Model.QualificationStatusOptions, Model.CustomQualificationStatuses); }</div>
                             @if (Model.LeadSources.Count > 0)
                             {
@@ -272,7 +272,7 @@ else
                                             <td><input type="checkbox" name="LeadIds" value="@lead.Id" checked="@Model.LeadIds.Contains(lead.Id)" /></td>
                                             <td><div class="cell-person"><span class="avatar-sm">@(string.IsNullOrWhiteSpace(lead.FullName) ? "?" : lead.FullName.Trim()[..1])</span>@(lead.FullName ?? "—")</div></td>
                                             <td>@(lead.Phone ?? "—")</td>
-                                            <td><span class="badge @Omni.App.Common.Helpers.StatusBadgeHelper.CssClass(lead.Status)">@Omni.App.Common.Helpers.FilterLabelHelper.Label(lead.Status)</span></td>
+                                            <td><span class="badge @StageDisplay.CssClass(Model.Stages, lead.Status)">@StageDisplay.Label(Model.Stages, lead.Status)</span></td>
                                         </tr>
                                     }
                                     <tr class="empty-row" id="manual-empty" hidden="@(Model.Leads.Count > 0)"><td colspan="4">No leads match this search.</td></tr>
@@ -318,10 +318,11 @@ else
 
 @functions {
     /// <summary>Renders one filter dropdown — checkboxes with client-friendly labels
-    /// (FilterLabelHelper) wrapped in the .ms markup wwwroot/js/multi-select.js turns into a
+    /// (<paramref name="labelOf"/>, else FilterLabelHelper) wrapped in the .ms markup wwwroot/js/multi-select.js turns into a
     /// searchable chips dropdown. The checkboxes are the real, only form data; the JS is purely
     /// presentational on top.</summary>
-    private async Task RenderMultiSelect(string name, string label, IReadOnlyList<string> options, List<string> selected)
+    private async Task RenderMultiSelect(string name, string label, IReadOnlyList<string> options, List<string> selected,
+        Func<string, string>? labelOf = null)
     {
         <div class="ms" data-ms data-ms-label="@label">
             <button type="button" class="ms-trigger">
@@ -336,7 +337,7 @@ else
                     {
                         <label class="ms-option">
                             <input type="checkbox" name="@name" value="@value" checked="@selected.Contains(value)" />
-                            <span>@Omni.App.Common.Helpers.FilterLabelHelper.Label(value)</span>
+                            <span>@(labelOf?.Invoke(value) ?? Omni.App.Common.Helpers.FilterLabelHelper.Label(value))</span>
                         </label>
                     }
                 </div>

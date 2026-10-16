@@ -62,6 +62,17 @@
                    placeholder="e.g. Glow Aesthetic Client" />
         </div>
         <div class="au-form-field">
+            <label class="au-form-label" for="reg-business-type">@T["signup.businessType.label"]</label>
+            <select name="BusinessTypeCode" id="reg-business-type" class="au-select" required aria-describedby="reg-business-type-help">
+                <option value="" selected="@string.IsNullOrEmpty(Model.BusinessTypeCode)" disabled>@T["signup.businessType.placeholder"]</option>
+                @foreach (var type in Model.BusinessTypes)
+                {
+                    <option value="@type.Code" selected="@(type.Code == Model.BusinessTypeCode)">@type.Name</option>
+                }
+            </select>
+            <small class="au-help" id="reg-business-type-help">@T["signup.businessType.help"]</small>
+        </div>
+        <div class="au-form-field">
             <label class="au-form-label" for="reg-password">Password</label>
             <span class="pw-wrap">
                 <input type="password" name="Password" id="reg-password" class="au-input" autocomplete="new-password" required minlength="6" data-pw data-pw-new />

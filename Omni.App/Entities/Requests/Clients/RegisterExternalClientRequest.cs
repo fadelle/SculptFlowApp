@@ -8,6 +8,8 @@ using Microsoft.AspNetCore.Identity;
 namespace Omni.App.Entities.Requests.Clients;
 
 /// <summary>Sign-up through an external identity provider (Google): no password, the provider has already
-/// verified the email, and the provider login is linked to the new user in the same transaction.</summary>
+/// verified the email, and the provider login is linked to the new user in the same transaction. BusinessTypeCode must
+/// name an active business type.</summary>
 public record RegisterExternalClientRequest(
-    string? FullName, string? ClientName, string? Email, string LoginProvider, string ProviderKey, string? ProviderDisplayName);
+    string? FullName, string? ClientName, string? Email, string LoginProvider, string ProviderKey, string? ProviderDisplayName,
+    string? BusinessTypeCode = null);

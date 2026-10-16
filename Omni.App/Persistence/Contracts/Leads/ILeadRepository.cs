@@ -32,4 +32,11 @@ public interface ILeadRepository
     Task<string?> GetFullNameAsync(Guid leadId, CancellationToken ct = default);
 
     Task<bool> ExistsAsync(Guid clientId, Guid leadId, CancellationToken ct = default);
+
+    /// <summary>How many of the client's leads are in each status (stage key); statuses nobody is in are left out.</summary>
+    Task<IReadOnlyDictionary<string, int>> CountByStatusAsync(Guid clientId, CancellationToken ct = default);
+
+    /// <summary>Set-based: moves every lead of the client in <paramref name="fromStatus"/> to <paramref name="toStatus"/>
+    /// (a business type change). Returns how many moved.</summary>
+    Task<int> MoveStatusAsync(Guid clientId, string fromStatus, string toStatus, DateTimeOffset now, CancellationToken ct = default);
 }

@@ -215,6 +215,8 @@ public interface IConfigManager
     int CacheChannelsMinutes { get; }
     /// <summary>Rating cards, rates and who pays the provider per channel account. Lifetime in minutes. Default 60.</summary>
     int CacheBillingRatesMinutes { get; }
+    /// <summary>Business types with their stages and words (every dashboard page reads the signed-in client's). Lifetime in minutes. Default 60.</summary>
+    int CacheBusinessTypesMinutes { get; }
 
     // ---- Monitoring (API timings: RequestTimingMiddleware, ApiTimingFlushJob)
     /// <summary>Whether request timings are recorded and slow requests logged. Default true.</summary>

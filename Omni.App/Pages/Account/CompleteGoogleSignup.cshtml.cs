@@ -3,28 +3,43 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.Extensions.Localization;
+using Omni.App.Business.Contracts.Services.BusinessTypes;
 using Omni.App.Business.Contracts.Services.Clients;
 using Omni.App.Common.Configs;
+using Omni.App.Entities.Dtos.BusinessTypes;
 using Omni.App.Entities.Requests.Clients;
 
 namespace Omni.App.Pages.Account;
 
-/// <summary>The one extra step when someone signs up with Google: their client name. Google already told us who
-/// they are (held in the short-lived external cookie), so nothing else is collected; the client, membership and
-/// defaults are created by the same transaction as a normal registration (IClientRegistrationService).</summary>
+/// <summary>The one extra step when someone signs up with Google: their client name and business type. Google already
+/// told us who they are (held in the short-lived external cookie), so nothing else is collected; the client, membership
+/// and defaults are created by the same transaction as a normal registration (IClientRegistrationService).</summary>
 public class CompleteGoogleSignupModel : PageModel
 {
     private readonly SignInManager<IdentityUser> _signIn;
     private readonly IClientRegistrationService _registration;
+    private readonly IBusinessTypeService _businessTypes;
+    private readonly IStringLocalizer _text;
 
-    public CompleteGoogleSignupModel(SignInManager<IdentityUser> signIn, IClientRegistrationService registration)
+    public CompleteGoogleSignupModel(SignInManager<IdentityUser> signIn, IClientRegistrationService registration, IBusinessTypeService businessTypes,
+        IStringLocalizer text)
     {
         _signIn = signIn;
         _registration = registration;
+        _businessTypes = businessTypes;
+        _text = text;
     }
 
     [BindProperty]
     public string ClientName { get; set; } = string.Empty;
+
+    /// <summary>The kind of business (core.business_types.code); required.</summary>
+    [BindProperty]
+    public string BusinessTypeCode { get; set; } = string.Empty;
+
+    /// <summary>The active business types for the picker, named in the visitor's language.</summary>
+    public IReadOnlyList<BusinessTypeOption> BusinessTypes { get; private set; } = Array.Empty<BusinessTypeOption>();
 
     [BindProperty(SupportsGet = true)]
     public string? ReturnUrl { get; set; }
@@ -43,6 +58,7 @@ public class CompleteGoogleSignupModel : PageModel
             await HttpContext.SignOutAsync(IdentityConstants.ExternalScheme);
             return Redirect("/Account/Login?externalError=signup_closed");
         }
+        BusinessTypes = await _businessTypes.ListOptionsAsync(HttpContext.RequestAborted);
         return Page();
     }
 
@@ -52,10 +68,11 @@ public class CompleteGoogleSignupModel : PageModel
         if (info is null) return Redirect("/Account/Login?externalError=unverified");
 
         var result = await _registration.RegisterExternalAsync(new RegisterExternalClientRequest(
-            FullName, ClientName, Email, info.LoginProvider, info.ProviderKey, info.ProviderDisplayName), ct);
+            FullName, ClientName, Email, info.LoginProvider, info.ProviderKey, info.ProviderDisplayName, BusinessTypeCode), ct);
         if (!result.Succeeded)
         {
-            ErrorMessage = string.Join(" ", result.Errors);
+            ErrorMessage = string.Join(" ", result.Errors.Select(e => _text[e].Value));
+            BusinessTypes = await _businessTypes.ListOptionsAsync(ct);
             return Page();
         }
 

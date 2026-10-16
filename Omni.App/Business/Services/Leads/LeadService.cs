@@ -1,9 +1,12 @@
 using Omni.App.Business.Contracts.Managers;
+using Omni.App.Business.Contracts.Services.BusinessTypes;
 using Omni.App.Business.Contracts.Services.Leads;
 using Omni.App.Business.Contracts.Services.Procedures;
 using Omni.App.Business.Mappers.Leads;
 using Omni.App.Common.Enums;
+using Omni.App.Common.Helpers;
 using Omni.App.Common.Statics;
+using Omni.App.Entities.Dtos.BusinessTypes;
 using Omni.App.Entities.Models;
 using Omni.App.Entities.Requests.Leads;
 using Omni.App.Entities.Responses.Leads;
@@ -20,9 +23,12 @@ public class LeadService : ILeadService
     private readonly IEventLogger _events;
     private readonly IProcedureService _procedures;
     private readonly IClientRepository _clients;
+    private readonly IBusinessTypeService _businessTypes;
 
-    public LeadService(ILeadRepository leads, IUnitOfWork unitOfWork, IEventLogger events, IProcedureService procedures, IClientRepository clients)
+    public LeadService(ILeadRepository leads, IUnitOfWork unitOfWork, IEventLogger events, IProcedureService procedures, IClientRepository clients,
+        IBusinessTypeService businessTypes)
     {
+        _businessTypes = businessTypes;
         _leads = leads;
         _unitOfWork = unitOfWork;
         _events = events;
@@ -144,9 +150,9 @@ public class LeadService : ILeadService
 
     public async Task<LeadResponse?> UpdateStatusAsync(Guid clientId, Guid id, UpdateLeadStatusRequest request, CancellationToken ct = default)
     {
-        if (!LeadStatus.All.Contains(request.Status))
+        if (!await _businessTypes.IsStageOfClientAsync(clientId, request.Status, ct))
         {
-            throw new ArgumentException($"Invalid lead status '{request.Status}'.", nameof(request));
+            throw new ArgumentException("leads.errors.unknownStage").WithArgs(request.Status);
         }
 
         if (request.QualificationStatus is not null && !LeadQualificationStatus.All.Contains(request.QualificationStatus))
@@ -194,6 +200,9 @@ public class LeadService : ILeadService
         await _unitOfWork.SaveChangesAsync(ct);
         return LeadMapper.ToResponse(lead);
     }
+
+    public Task<IReadOnlyList<PipelineStageOption>> ListStagesAsync(Guid clientId, CancellationToken ct = default) =>
+        _businessTypes.ListStagesForClientAsync(clientId, ct);
 
     public async Task<LeadResponse?> UpdateContextAsync(Guid clientId, Guid id, UpdateLeadContextRequest request, CancellationToken ct = default)
     {

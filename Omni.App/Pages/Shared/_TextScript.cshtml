@@ -1,0 +1,8 @@
+@* UI strings for page scripts (wwwroot/js/omni-text.js): the request's language and the client's business-type words
+   inline, the language's strings from /i18n/{lang}.js (cached by its hash). In <head>, because page scripts may call
+   window.omniText while loading. *@
+@inject ITextContext TextContext
+@inject ITextCatalog TextCatalog
+<script>window.omniTextConfig = @Json.Serialize(new { lang = TextContext.Language, terms = TextContext.Terms });</script>
+<script src="/i18n/@(TextContext.Language).js?v=@TextCatalog.Version(TextContext.Language)"></script>
+<script src="~/js/omni-text.js" asp-append-version="true"></script>

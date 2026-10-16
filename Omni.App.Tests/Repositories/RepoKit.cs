@@ -55,6 +55,8 @@ public abstract class RepoTestBase
         Name = name ?? "Client " + Guid.NewGuid().ToString("N")[..8],
         Slug = "c-" + Guid.NewGuid().ToString("N")[..12],
         Timezone = timezone,
+        // The first built-in business type: its stage keys are the LeadStatus values the code writes.
+        BusinessTypeCode = TextKit.Clinic,
         CreatedAt = Now,
         UpdatedAt = Now,
     };

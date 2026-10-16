@@ -61,6 +61,16 @@ public class LeadRepository : ILeadRepository
         return (items, totalCount);
     }
 
+    public async Task<IReadOnlyDictionary<string, int>> CountByStatusAsync(Guid clientId, CancellationToken ct = default) =>
+        await _db.Leads.Where(l => l.ClientId == clientId)
+            .GroupBy(l => l.Status)
+            .Select(g => new { g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.Key, x => x.Count, ct);
+
+    public Task<int> MoveStatusAsync(Guid clientId, string fromStatus, string toStatus, DateTimeOffset now, CancellationToken ct = default) =>
+        _db.Leads.Where(l => l.ClientId == clientId && l.Status == fromStatus)
+            .ExecuteUpdateAsync(s => s.SetProperty(l => l.Status, toStatus).SetProperty(l => l.UpdatedAt, now), ct);
+
     public async Task<IReadOnlyList<string>> ListDistinctSourcesAsync(Guid clientId, CancellationToken ct = default) =>
         await _db.Leads
             .Where(l => l.ClientId == clientId && l.Source != null && l.Source != "")

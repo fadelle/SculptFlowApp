@@ -104,7 +104,7 @@ public sealed class BillingHarness
     {
         await using var db = Db();
         var id = Guid.NewGuid();
-        db.Clients.Add(new Client { Id = id, Name = "Test client " + id.ToString("N")[..6], Slug = "test-" + id.ToString("N"), CreatedAt = Time.Now, UpdatedAt = Time.Now });
+        db.Clients.Add(new Client { Id = id, Name = "Test client " + id.ToString("N")[..6], Slug = "test-" + id.ToString("N"), BusinessTypeCode = TextKit.Clinic, CreatedAt = Time.Now, UpdatedAt = Time.Now });
         await db.SaveChangesAsync();
         return id;
     }

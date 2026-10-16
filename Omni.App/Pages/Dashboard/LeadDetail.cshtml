@@ -32,7 +32,7 @@ else
         </div>
     </div>
     <div class="detail-chips">
-        <span class="badge @StatusBadgeHelper.CssClass(lead.Status)">@FilterLabelHelper.Label(lead.Status)</span>
+        <span class="badge @StageDisplay.CssClass(Model.Stages, lead.Status)">@StageDisplay.Label(Model.Stages, lead.Status)</span>
         <span class="badge @StatusBadgeHelper.CssClass(lead.QualificationStatus)">@FilterLabelHelper.Label(lead.QualificationStatus)</span>
         @if (!string.IsNullOrWhiteSpace(inboxSearch))
         {
@@ -73,9 +73,13 @@ else
                 <div class="au-form-field">
                     <label class="au-form-label" for="lead-status">Lead status</label>
                     <select name="Status" id="lead-status" class="au-select">
-                        @foreach (var s in Model.StatusOptions)
+                        @foreach (var stage in Model.Stages)
                         {
-                            <option value="@s" selected="@(s == Model.Status)">@FilterLabelHelper.Label(s)</option>
+                            <option value="@stage.Key" selected="@(stage.Key == Model.Status)">@stage.Label</option>
+                        }
+                        @if (!Model.Stages.Any(s => s.Key == Model.Status) && !string.IsNullOrEmpty(Model.Status))
+                        {
+                            <option value="@Model.Status" selected>@StageDisplay.Label(Model.Stages, Model.Status)</option>
                         }
                     </select>
                 </div>

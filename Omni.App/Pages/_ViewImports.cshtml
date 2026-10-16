@@ -1,3 +1,4 @@
+@using Microsoft.Extensions.Localization
 @using Omni.App
 @using Omni.App.Business.Contracts.Managers
 @using Omni.App.Common.Configs
@@ -11,4 +12,6 @@
 @using Omni.App.Entities.Responses.Staff
 @using Omni.App.Entities.Responses.WhatsApp
 @namespace Omni.App.Pages
+@* UI strings: @T["area.element.state"] (Resources/i18n/en.json; terms like {contact} are filled per client). *@
+@inject IStringLocalizer T
 @addTagHelper *, Microsoft.AspNetCore.Mvc.TagHelpers

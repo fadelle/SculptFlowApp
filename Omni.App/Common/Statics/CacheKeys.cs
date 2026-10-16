@@ -33,6 +33,11 @@ public static class CacheKeys
     public const string ClientPrefix = "core:client:";
     public static string Client(Guid clientId) => ClientPrefix + clientId.ToString("N");
 
+    // ---- Core: every business type with its pipeline stages (BusinessTypeRepository; one entry, the list is small). Read on
+    // every dashboard request for the signed-in client's words and stage labels. Any saved type or stage drops it.
+    public const string BusinessTypesPrefix = "core:business-type:";
+    public const string BusinessTypes = BusinessTypesPrefix + "all";
+
     // ---- Core: a client's procedures, all of them by name (ProcedureRepository.ListAsync / GetReadOnlyAsync filter it).
     public const string ProceduresPrefix = "core:procedures:";
     public static string Procedures(Guid clientId) => ProceduresPrefix + clientId.ToString("N");
@@ -89,6 +94,10 @@ public static class CacheKeys
         {
             case Models.Client c:
                 yield return CacheEviction.Key(Client(c.Id));
+                break;
+            case BusinessType:
+            case PipelineStage:
+                yield return CacheEviction.Prefix(BusinessTypesPrefix);
                 break;
             case ClientUser m:
                 yield return CacheEviction.Key(Membership(m.UserId));

@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Identity;
 using Omni.App.Common.Statics;
 using Omni.App.Business.Contracts.Managers;
 using Omni.App.Business.Contracts.Services.Billing;
+using Omni.App.Business.Contracts.Services.BusinessTypes;
 using Omni.App.Business.Contracts.Services.Clients;
 using Omni.App.Business.Contracts.Services.Knowledge;
 using Omni.App.Common.Enums;
@@ -37,13 +38,17 @@ public partial class ClientRegistrationService : IClientRegistrationService
     private readonly ILogger<ClientRegistrationService> _logger;
     private readonly ISubscriptionService _subscriptions;
     private readonly IConfigManager _config;
+    private readonly IBusinessTypeService _businessTypes;
+    private readonly ITextContext _text;
 
     public ClientRegistrationService(
         IClientRepository clients, IBillingAccountRepository billingAccounts, IUnitOfWork unitOfWork, UserManager<IdentityUser> users, IKnowledgeSettingsService knowledgeSettings,
         ILogger<ClientRegistrationService> logger, ISubscriptionService subscriptions,
-        IConfigManager config)
+        IConfigManager config, IBusinessTypeService businessTypes, ITextContext text)
     {
         _config = config;
+        _businessTypes = businessTypes;
+        _text = text;
         _clients = clients;
         _billingAccounts = billingAccounts;
         _unitOfWork = unitOfWork;
@@ -57,6 +62,9 @@ public partial class ClientRegistrationService : IClientRegistrationService
     public const string SignupClosedMessage = "New client sign-ups are closed right now. Contact Omni to get an account.";
 
     public bool IsSignupOpen => _config.AccountsSignupEnabled;
+
+    /// <summary>Strings-file key of the error for a missing, unknown or inactive business type (the pages localize it).</summary>
+    public const string BusinessTypeRequiredKey = "signup.errors.businessTypeRequired";
 
     public async Task<ClientRegistrationResult> RegisterAsync(RegisterClientRequest request, CancellationToken ct = default)
     {
@@ -77,8 +85,9 @@ public partial class ClientRegistrationService : IClientRegistrationService
         {
             return ClientRegistrationResult.Fail("The passwords don't match.");
         }
+        if (!await _businessTypes.IsActiveAsync(request.BusinessTypeCode, ct)) return ClientRegistrationResult.Fail(BusinessTypeRequiredKey);
 
-        return await CreateAccountAsync(fullName, clientName, email, user => _users.CreateAsync(user, password), ct);
+        return await CreateAccountAsync(fullName, clientName, email, request.BusinessTypeCode!.Trim(), user => _users.CreateAsync(user, password), ct);
     }
 
     public async Task<ClientRegistrationResult> RegisterExternalAsync(RegisterExternalClientRequest request, CancellationToken ct = default)
@@ -94,8 +103,9 @@ public partial class ClientRegistrationService : IClientRegistrationService
         if (fullName.Length > MaxNameLength) fullName = fullName[..MaxNameLength];
         if (clientName.Length > MaxNameLength) return ClientRegistrationResult.Fail($"Client name must be {MaxNameLength} characters or fewer.");
         if (!IsValidEmail(email)) return ClientRegistrationResult.Fail("Enter a valid email address.");
+        if (!await _businessTypes.IsActiveAsync(request.BusinessTypeCode, ct)) return ClientRegistrationResult.Fail(BusinessTypeRequiredKey);
 
-        return await CreateAccountAsync(fullName, clientName, email, async user =>
+        return await CreateAccountAsync(fullName, clientName, email, request.BusinessTypeCode!.Trim(), async user =>
         {
             user.EmailConfirmed = true; // the provider verified it; the caller refuses unverified emails
             var created = await _users.CreateAsync(user);
@@ -105,7 +115,8 @@ public partial class ClientRegistrationService : IClientRegistrationService
     }
 
     private async Task<ClientRegistrationResult> CreateAccountAsync(
-        string fullName, string clientName, string email, Func<IdentityUser, Task<IdentityResult>> createUser, CancellationToken ct)
+        string fullName, string clientName, string email, string businessTypeCode, Func<IdentityUser, Task<IdentityResult>> createUser,
+        CancellationToken ct)
     {
         for (var attempt = 0; attempt < MaxSlugAttempts; attempt++)
         {
@@ -137,6 +148,9 @@ public partial class ClientRegistrationService : IClientRegistrationService
                     Slug = slug,
                     Email = email,
                     Timezone = "UTC",
+                    BusinessTypeCode = businessTypeCode,
+                    // The dashboard opens in the language the owner signed up in.
+                    DefaultLanguage = _text.Language,
                     IsActive = true,
                     CreatedAt = now,
                     UpdatedAt = now

@@ -1,3 +1,4 @@
+using Omni.App.Entities.Dtos.BusinessTypes;
 using Omni.App.Entities.Dtos.Inbox;
 using Omni.App.Entities.Dtos.PlatformAdmin;
 using Omni.App.Entities.Requests.Inbox;
@@ -27,4 +28,12 @@ public interface IClientAdminService
 
     /// <summary>Saves the client's AI bot switches through IInboxSettingsService. Throws KeyNotFoundException.</summary>
     Task<PlatformAdminChange> UpdateInboxSettingsAsync(Guid id, UpdateInboxSettingsRequest request, CancellationToken ct);
+
+    /// <summary>What moving the client to business type <paramref name="toCode"/> would do: contact counts per stage and
+    /// where each group goes (IBusinessTypeService.PreviewClientChangeAsync).</summary>
+    Task<BusinessTypeChangePreview> PreviewBusinessTypeChangeAsync(Guid id, string? toCode, CancellationToken ct);
+
+    /// <summary>Moves the client to another business type and its contacts to the matching stages, in one transaction
+    /// (IBusinessTypeService.ChangeClientTypeAsync).</summary>
+    Task<PlatformAdminChange> ChangeBusinessTypeAsync(Guid id, string? toCode, CancellationToken ct);
 }

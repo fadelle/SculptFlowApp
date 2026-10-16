@@ -1,15 +1,17 @@
+@inject ITextContext TextContext
 @* Pages without the shell — sign in, sign up, finish Google sign-up, and error pages for signed-out visitors
    (docs/UI_GUIDE.md §6.5): the same <head> as _Layout and a centred card. *@
 @{
     var pageTitle = ViewData["Title"] as string;
 }
 <!DOCTYPE html>
-<html lang="en" data-au-app="client" data-brand="teal">
+<html lang="@TextContext.Language" dir="@TextContext.Direction" data-au-app="client" data-brand="teal">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>@(string.IsNullOrEmpty(pageTitle) ? "Omni" : $"{pageTitle} · Omni")</title>
     <partial name="_ThemeScript" />
+    <partial name="_TextScript" />
     <link rel="icon" type="image/svg+xml" href="~/logo.svg" />
     <link rel="icon" href="~/favicon.ico" sizes="32x32" />
     <link rel="stylesheet" href="~/css/fonts.css" asp-append-version="true" />
