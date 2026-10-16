@@ -17,9 +17,9 @@ public class EventLoggerTests
         var repo = new Mock<IEventLogRepository>();
         EventLog? added = null;
         repo.Setup(r => r.Add(It.IsAny<EventLog>())).Callback<EventLog>(e => added = e);
-        var client = Guid.NewGuid(); var lead = Guid.NewGuid(); var convo = Guid.NewGuid(); var appt = Guid.NewGuid();
-        new EventLogger(repo.Object).Log(client, "lead_created", lead, convo, appt, "n8n", "{\"a\":1}");
-        Assert.Equal((client, lead, convo, appt, "lead_created", "n8n", "{\"a\":1}"), (added!.ClientId, added.LeadId, added.ConversationId, added.BookingId, added.EventType, added.Source, added.Metadata));
+        var client = Guid.NewGuid(); var contact = Guid.NewGuid(); var convo = Guid.NewGuid(); var appt = Guid.NewGuid();
+        new EventLogger(repo.Object).Log(client, "contact_created", contact, convo, appt, "n8n", "{\"a\":1}");
+        Assert.Equal((client, contact, convo, appt, "contact_created", "n8n", "{\"a\":1}"), (added!.ClientId, added.ContactId, added.ConversationId, added.BookingId, added.EventType, added.Source, added.Metadata));
         Assert.NotEqual(Guid.Empty, added.Id);
 
         new EventLogger(repo.Object).Log(client, "x", metadataJson: "  ");
@@ -89,7 +89,7 @@ public class InboxNotifierTests
     {
         var id = Guid.NewGuid();
         var now = DateTimeOffset.UtcNow;
-        await _sut.NewMessageAsync(_clientId, id, id, id, "inbound", "lead", "whatsapp_customer", now);
+        await _sut.NewMessageAsync(_clientId, id, id, id, "inbound", "contact", "whatsapp_customer", now);
         Assert.Equal(InboxHub.ClientGroup(_clientId), _group);
         await _sut.MessageStatusUpdatedAsync(_clientId, id, id, "read", now);
         await _sut.ConversationUpdatedAsync(_clientId, id);

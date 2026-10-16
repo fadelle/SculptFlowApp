@@ -23,21 +23,21 @@ public class BookingRepository : IBookingRepository
 
     public Task<Booking?> GetWithDetailsAsync(Guid clientId, Guid bookingId, CancellationToken ct = default) =>
         _db.Bookings
-            .Include(a => a.Lead)
+            .Include(a => a.Contact)
             .Include(a => a.Service)
             .FirstOrDefaultAsync(a => a.ClientId == clientId && a.Id == bookingId, ct);
 
-    public Task<Booking?> GetForLeadAsync(Guid clientId, Guid leadId, Guid bookingId, CancellationToken ct = default) =>
-        _db.Bookings.FirstOrDefaultAsync(a => a.ClientId == clientId && a.LeadId == leadId && a.Id == bookingId, ct);
+    public Task<Booking?> GetForContactAsync(Guid clientId, Guid contactId, Guid bookingId, CancellationToken ct = default) =>
+        _db.Bookings.FirstOrDefaultAsync(a => a.ClientId == clientId && a.ContactId == contactId && a.Id == bookingId, ct);
 
     public Task<Booking?> GetWithServiceReadOnlyAsync(Guid bookingId, CancellationToken ct = default) =>
         _db.Bookings.AsNoTracking().Include(a => a.Service).FirstOrDefaultAsync(a => a.Id == bookingId, ct);
 
-    public async Task<IReadOnlyList<Booking>> ListUpcomingForLeadAsync(Guid clientId, Guid leadId, DateTimeOffset now,
+    public async Task<IReadOnlyList<Booking>> ListUpcomingForContactAsync(Guid clientId, Guid contactId, DateTimeOffset now,
         CancellationToken ct = default) =>
         await _db.Bookings.AsNoTracking()
             .Include(a => a.Service)
-            .Where(a => a.ClientId == clientId && a.LeadId == leadId && a.ScheduledStart > now
+            .Where(a => a.ClientId == clientId && a.ContactId == contactId && a.ScheduledStart > now
                         && (a.Status == BookingStatus.Booked || a.Status == BookingStatus.Confirmed))
             .OrderBy(a => a.ScheduledStart)
             .ToListAsync(ct);
@@ -46,7 +46,7 @@ public class BookingRepository : IBookingRepository
         DateTimeOffset? from, DateTimeOffset? to, int skip, int take, CancellationToken ct = default)
     {
         var query = _db.Bookings
-            .Include(a => a.Lead)
+            .Include(a => a.Contact)
             .Include(a => a.Service)
             .Where(a => a.ClientId == clientId);
 
@@ -62,7 +62,7 @@ public class BookingRepository : IBookingRepository
     public async Task<IReadOnlyList<Booking>> ListStartingBetweenAsync(Guid clientId, DateTimeOffset fromUtc,
         DateTimeOffset toUtc, CancellationToken ct = default) =>
         await _db.Bookings
-            .Include(a => a.Lead)
+            .Include(a => a.Contact)
             .Include(a => a.Service)
             .Where(a => a.ClientId == clientId && a.ScheduledStart >= fromUtc && a.ScheduledStart < toUtc)
             .OrderBy(a => a.ScheduledStart)
@@ -84,7 +84,7 @@ public class BookingRepository : IBookingRepository
 
     public async Task LoadDetailsAsync(Booking booking, CancellationToken ct = default)
     {
-        await _db.Entry(booking).Reference(x => x.Lead).LoadAsync(ct);
+        await _db.Entry(booking).Reference(x => x.Contact).LoadAsync(ct);
         if (booking.ServiceId is not null)
         {
             await _db.Entry(booking).Reference(x => x.Service).LoadAsync(ct);

@@ -21,7 +21,7 @@ public class OrderRepository : IOrderRepository
         int skip, int take, CancellationToken ct = default)
     {
         var query = _db.Orders
-            .Include(o => o.Lead)
+            .Include(o => o.Contact)
             .Include(o => o.Service)
             .Where(o => o.ClientId == clientId);
 
@@ -36,7 +36,7 @@ public class OrderRepository : IOrderRepository
 
     public async Task LoadDetailsAsync(Order order, CancellationToken ct = default)
     {
-        await _db.Entry(order).Reference(x => x.Lead).LoadAsync(ct);
+        await _db.Entry(order).Reference(x => x.Contact).LoadAsync(ct);
         await _db.Entry(order).Reference(x => x.Service).LoadAsync(ct);
     }
 }

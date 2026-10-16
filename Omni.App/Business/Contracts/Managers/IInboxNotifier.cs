@@ -13,7 +13,7 @@ namespace Omni.App.Business.Contracts.Managers;
 /// </summary>
 public interface IInboxNotifier
 {
-    Task NewMessageAsync(Guid clientId, Guid conversationId, Guid messageId, Guid leadId,
+    Task NewMessageAsync(Guid clientId, Guid conversationId, Guid messageId, Guid contactId,
         string direction, string senderType, string origin, DateTimeOffset createdAt, CancellationToken ct = default);
 
     Task MessageStatusUpdatedAsync(Guid clientId, Guid conversationId, Guid messageId, string deliveryStatus, DateTimeOffset updatedAt, CancellationToken ct = default);

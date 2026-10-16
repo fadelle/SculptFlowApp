@@ -31,7 +31,7 @@ public class SignupRateLimitingTests
     [InlineData("GET", "/Account/Register", false)]
     [InlineData("POST", "/Account/Login", false)]
     [InlineData("POST", "/Account/RegisterSomethingElse", false)]
-    [InlineData("POST", "/api/leads", false)]
+    [InlineData("POST", "/api/contacts", false)]
     public void Only_sign_up_posts_count(string method, string path, bool counts) =>
         Assert.Equal(counts, SignupRateLimiting.IsSignupAttempt(Request(method, path).Request));
 

@@ -1,0 +1,124 @@
+using Microsoft.EntityFrameworkCore;
+using Omni.App.Entities.Dtos.PlatformAdmin;
+using Omni.App.Entities.Models;
+using Omni.App.Entities.Responses.Billing;
+using Omni.App.Persistence.Contexts;
+using Omni.App.Persistence.Contracts.PlatformAdmin;
+using Omni.App.Persistence.Helpers;
+
+namespace Omni.App.Persistence.Repositories.PlatformAdmin;
+
+public class ContactAdminRepository : IContactAdminRepository
+{
+    private readonly ApplicationDbContext _db;
+
+    public ContactAdminRepository(ApplicationDbContext db)
+    {
+        _db = db;
+    }
+
+    public Task<PagedResponse<ContactRow>> ListContactsAsync(Guid? clientId, string? stage, string? search, int page, CancellationToken ct = default)
+    {
+        var q = _db.Contacts.AsNoTracking().AsQueryable();
+        if (clientId.HasValue) q = q.Where(l => l.ClientId == clientId.Value);
+        if (!string.IsNullOrWhiteSpace(stage)) q = q.Where(l => l.StageKey == stage);
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var like = QueryPaging.Like(search);
+            q = q.Where(l => (l.FullName != null && EF.Functions.ILike(l.FullName, like))
+                             || (l.FirstName != null && EF.Functions.ILike(l.FirstName, like))
+                             || (l.LastName != null && EF.Functions.ILike(l.LastName, like))
+                             || (l.Phone != null && EF.Functions.ILike(l.Phone, like))
+                             || (l.Email != null && EF.Functions.ILike(l.Email, like)));
+        }
+        return q.OrderByDescending(l => l.CreatedAt)
+            .Select(l => new ContactRow(l.Id, l.ClientId, l.Client!.Name,
+                l.FullName ?? ((l.FirstName ?? "") + " " + (l.LastName ?? "")).Trim(),
+                l.Phone, l.Email, l.Source, l.StageKey, l.Qualification, l.Service != null ? l.Service.Name : null,
+                l.MarketingOptIn, l.LastContactAt, l.CreatedAt))
+            .ToPagedAsync(page, ct: ct);
+    }
+
+    public Task<Contact?> GetContactAsync(Guid id, CancellationToken ct = default) =>
+        _db.Contacts.AsNoTracking().Include(l => l.Client).Include(l => l.Service).FirstOrDefaultAsync(l => l.Id == id, ct);
+
+    public Task<List<EventLog>> ContactEventsAsync(Guid contactId, CancellationToken ct = default) =>
+        _db.Events.AsNoTracking().Where(e => e.ContactId == contactId).OrderByDescending(e => e.CreatedAt).Take(100).ToListAsync(ct);
+
+    public Task<PagedResponse<ConversationRow>> ListConversationsAsync(Guid? clientId, Guid? contactId, string? channel, string? mode,
+        string? status, int page, CancellationToken ct = default)
+    {
+        var q = _db.Conversations.AsNoTracking().AsQueryable();
+        if (clientId.HasValue) q = q.Where(c => c.ClientId == clientId.Value);
+        if (contactId.HasValue) q = q.Where(c => c.ContactId == contactId.Value);
+        if (!string.IsNullOrWhiteSpace(channel)) q = q.Where(c => c.Channel == channel);
+        if (!string.IsNullOrWhiteSpace(mode)) q = q.Where(c => c.Mode == mode);
+        if (!string.IsNullOrWhiteSpace(status)) q = q.Where(c => c.Status == status);
+        return q.OrderByDescending(c => c.LastMessageAt ?? c.CreatedAt)
+            .Select(c => new ConversationRow(c.Id, c.ClientId,
+                _db.Clients.Where(x => x.Id == c.ClientId).Select(x => x.Name).FirstOrDefault() ?? "",
+                c.ContactId,
+                c.Contact!.FullName ?? ((c.Contact.FirstName ?? "") + " " + (c.Contact.LastName ?? "")).Trim(),
+                c.Channel, c.Status, c.Mode, c.LastMessageAt, c.LastMessageDirection,
+                c.Messages.Count(), c.CreatedAt))
+            .ToPagedAsync(page, ct: ct);
+    }
+
+    public Task<Conversation?> GetConversationAsync(Guid id, CancellationToken ct = default) =>
+        _db.Conversations.AsNoTracking().Include(c => c.Contact).FirstOrDefaultAsync(c => c.Id == id, ct);
+
+    public Task<List<Message>> MessagesAsync(Guid conversationId, int take = 500, CancellationToken ct = default) =>
+        _db.Messages.AsNoTracking().Where(m => m.ConversationId == conversationId)
+            .OrderByDescending(m => m.CreatedAt).Take(take).OrderBy(m => m.CreatedAt).ToListAsync(ct);
+
+    public Task<PagedResponse<MessageRow>> ListMessagesAsync(Guid? clientId, bool failedOnly, string? sender, string? search,
+        int page, CancellationToken ct = default)
+    {
+        var q = _db.Messages.AsNoTracking().AsQueryable();
+        if (clientId.HasValue) q = q.Where(m => m.ClientId == clientId.Value);
+        if (failedOnly) q = q.Where(m => m.FailedAt != null || m.DeliveryStatus == "failed");
+        if (!string.IsNullOrWhiteSpace(sender)) q = q.Where(m => m.SenderType == sender);
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var like = QueryPaging.Like(search);
+            q = q.Where(m => m.Content != null && EF.Functions.ILike(m.Content, like));
+        }
+        return q.OrderByDescending(m => m.CreatedAt)
+            .Select(m => new MessageRow(m.Id, m.ClientId,
+                _db.Clients.Where(x => x.Id == m.ClientId).Select(x => x.Name).FirstOrDefault() ?? "",
+                m.ConversationId, m.Channel, m.Direction, m.SenderType, m.Origin, m.Content, m.DeliveryStatus,
+                m.FailureCode, m.FailureReason, m.CreatedAt))
+            .ToPagedAsync(page, ct: ct);
+    }
+
+    public Task<PagedResponse<BookingRow>> ListBookingsAsync(Guid? clientId, Guid? contactId, string? status, bool upcomingOnly,
+        int page, CancellationToken ct = default)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var q = _db.Bookings.AsNoTracking().AsQueryable();
+        if (clientId.HasValue) q = q.Where(a => a.ClientId == clientId.Value);
+        if (contactId.HasValue) q = q.Where(a => a.ContactId == contactId.Value);
+        if (!string.IsNullOrWhiteSpace(status)) q = q.Where(a => a.Status == status);
+        q = upcomingOnly
+            ? q.Where(a => a.ScheduledStart >= now).OrderBy(a => a.ScheduledStart)
+            : q.OrderByDescending(a => a.ScheduledStart);
+        return q.Select(a => new BookingRow(a.Id, a.ClientId,
+                _db.Clients.Where(x => x.Id == a.ClientId).Select(x => x.Name).FirstOrDefault() ?? "",
+                _db.Clients.Where(x => x.Id == a.ClientId).Select(x => x.Timezone).FirstOrDefault() ?? "UTC",
+                a.ContactId, a.Contact!.FullName ?? ((a.Contact.FirstName ?? "") + " " + (a.Contact.LastName ?? "")).Trim(),
+                a.Service != null ? a.Service.Name : null, a.Status, a.ScheduledStart, a.ScheduledEnd, a.Notes, a.CreatedAt))
+            .ToPagedAsync(page, ct: ct);
+    }
+
+    /// <summary>Tracked.</summary>
+    public Task<Contact?> GetContactForUpdateAsync(Guid id, CancellationToken ct = default) =>
+        _db.Contacts.FirstOrDefaultAsync(l => l.Id == id, ct);
+
+    /// <summary>Tracked.</summary>
+    public Task<Conversation?> GetConversationForUpdateAsync(Guid id, CancellationToken ct = default) =>
+        _db.Conversations.FirstOrDefaultAsync(x => x.Id == id, ct);
+
+    /// <summary>Tracked.</summary>
+    public Task<Booking?> GetBookingForUpdateAsync(Guid id, CancellationToken ct = default) =>
+        _db.Bookings.FirstOrDefaultAsync(x => x.Id == id, ct);
+}

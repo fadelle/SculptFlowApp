@@ -7,7 +7,7 @@ public class CampaignServiceTests
     private readonly Guid _clientId = Guid.NewGuid();
     private readonly Mock<ICampaignRepository> _campaigns = new();
     private readonly Mock<IWhatsAppTemplateRepository> _templates = new();
-    private readonly Mock<ILeadRepository> _leads = new();
+    private readonly Mock<IContactRepository> _contacts = new();
     private readonly Mock<IMessageRepository> _messageRows = new();
     private readonly Mock<IUnitOfWork> _uow = new();
     private readonly Mock<IConversationService> _conversations = new();
@@ -20,12 +20,12 @@ public class CampaignServiceTests
     {
         _template = new WhatsAppTemplate { Id = Guid.NewGuid(), ClientId = _clientId, Name = "promo", Body = "Hi {{1}}" };
         _templates.Setup(t => t.GetReadOnlyAsync(_clientId, _template.Id, It.IsAny<CancellationToken>())).ReturnsAsync(_template);
-        _audience.Setup(a => a.GetSkipReasonIfNotContactable(It.IsAny<Lead>())).Returns((string?)null);
+        _audience.Setup(a => a.GetSkipReasonIfNotContactable(It.IsAny<Contact>())).Returns((string?)null);
         // By default this sender gets the campaign's sending lock.
         _campaigns.Setup(r => r.TryLockForSendingAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync(Mock.Of<IAsyncDisposable>());
     }
 
-    private CampaignService Sut() => new(_campaigns.Object, _templates.Object, _leads.Object, _messageRows.Object, _uow.Object,
+    private CampaignService Sut() => new(_campaigns.Object, _templates.Object, _contacts.Object, _messageRows.Object, _uow.Object,
         _conversations.Object, _messages.Object, _audience.Object, _entitlements.Object);
 
     private Campaign MakeCampaign(string status = CampaignStatus.Draft)
@@ -41,14 +41,14 @@ public class CampaignServiceTests
 
     private CampaignRecipient Recipient(Campaign c, string status = CampaignRecipientStatus.Pending, Guid? conversationId = null, DateTimeOffset? sentAt = null) => new()
     {
-        Id = Guid.NewGuid(), ClientId = _clientId, CampaignId = c.Id, LeadId = Guid.NewGuid(), Status = status, ConversationId = conversationId, SentAt = sentAt, PhoneNumber = "961"
+        Id = Guid.NewGuid(), ClientId = _clientId, CampaignId = c.Id, ContactId = Guid.NewGuid(), Status = status, ConversationId = conversationId, SentAt = sentAt, PhoneNumber = "961"
     };
 
     // ---------------------------------------------------------------- create
 
-    private CreateCampaignRequest Create(IReadOnlyList<Guid>? leadIds = null, string? audienceType = null, string name = "Spring",
+    private CreateCampaignRequest Create(IReadOnlyList<Guid>? contactIds = null, string? audienceType = null, string name = "Spring",
         IReadOnlyDictionary<Guid, IReadOnlyList<string>>? vars = null) =>
-        new(_clientId, name, _template.Id, leadIds ?? [], vars, null, null, audienceType, null);
+        new(_clientId, name, _template.Id, contactIds ?? [], vars, null, null, audienceType, null);
 
     [Fact]
     public async Task Create_validates_name_template_audience_and_recipients()
@@ -56,7 +56,7 @@ public class CampaignServiceTests
         await Assert.ThrowsAsync<ArgumentException>(() => Sut().CreateAsync(Create(name: " ")));
         await Assert.ThrowsAsync<ArgumentException>(() => Sut().CreateAsync(Create([Guid.NewGuid()]) with { WhatsAppTemplateId = Guid.NewGuid() }));
         await Assert.ThrowsAsync<ArgumentException>(() => Sut().CreateAsync(Create([Guid.NewGuid()], "bogus")));
-        _leads.Setup(l => l.ListByIdsAsync(_clientId, It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<CancellationToken>())).ReturnsAsync(new List<Lead>());
+        _contacts.Setup(l => l.ListByIdsAsync(_clientId, It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<CancellationToken>())).ReturnsAsync(new List<Contact>());
         await Assert.ThrowsAsync<ArgumentException>(() => Sut().CreateAsync(Create([Guid.NewGuid()])));
         _entitlements.Verify(e => e.EnsureFeatureAsync(_clientId, EntitlementKeys.Campaigns, It.IsAny<CancellationToken>()), Times.AtLeastOnce);
         _campaigns.Verify(c => c.Add(It.IsAny<Campaign>()), Times.Never);
@@ -70,7 +70,7 @@ public class CampaignServiceTests
     {
         await Assert.ThrowsAsync<ArgumentException>(() => Sut().CreateAsync(Create(audienceType: CampaignAudienceType.Custom) with { AudienceFilters = filters }));
         _campaigns.Verify(c => c.Add(It.IsAny<Campaign>()), Times.Never);
-        _audience.Verify(a => a.GetEligibleLeadsAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+        _audience.Verify(a => a.GetEligibleContactsAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -81,11 +81,11 @@ public class CampaignServiceTests
     }
 
     [Fact]
-    public async Task Create_with_explicit_leads_adds_pending_and_skipped_recipients_with_variables()
+    public async Task Create_with_explicit_contacts_adds_pending_and_skipped_recipients_with_variables()
     {
-        var ok = new Lead { Id = Guid.NewGuid(), Phone = "961700" };
-        var noPhone = new Lead { Id = Guid.NewGuid(), Phone = null };
-        _leads.Setup(l => l.ListByIdsAsync(_clientId, It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<CancellationToken>())).ReturnsAsync(new List<Lead> { ok, noPhone });
+        var ok = new Contact { Id = Guid.NewGuid(), Phone = "961700" };
+        var noPhone = new Contact { Id = Guid.NewGuid(), Phone = null };
+        _contacts.Setup(l => l.ListByIdsAsync(_clientId, It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<CancellationToken>())).ReturnsAsync(new List<Contact> { ok, noPhone });
         _audience.Setup(a => a.GetSkipReasonIfNotContactable(noPhone)).Returns("no_phone");
         var added = new List<CampaignRecipient>();
         _campaigns.Setup(c => c.AddRecipient(It.IsAny<CampaignRecipient>())).Callback<CampaignRecipient>(added.Add);
@@ -96,19 +96,19 @@ public class CampaignServiceTests
         var r = await Sut().CreateAsync(Create([ok.Id, ok.Id, noPhone.Id], vars: vars));
 
         Assert.Equal((CampaignStatus.Draft, CampaignType.Custom, CampaignAudienceType.Custom, "promo"), (campaign!.Status, campaign.CampaignType, campaign.AudienceType, r.TemplateName));
-        var first = added.Single(a => a.LeadId == ok.Id);
+        var first = added.Single(a => a.ContactId == ok.Id);
         Assert.Equal((CampaignRecipientStatus.Pending, "[\"Ann\"]", "961700"), (first.Status, first.VariablesJson, first.PhoneNumber));
-        var skipped = added.Single(a => a.LeadId == noPhone.Id);
+        var skipped = added.Single(a => a.ContactId == noPhone.Id);
         Assert.Equal((CampaignRecipientStatus.Skipped, "no_phone", ""), (skipped.Status, skipped.SkipReason, skipped.PhoneNumber));
-        _leads.Verify(l => l.ListByIdsAsync(_clientId, It.Is<IReadOnlyCollection<Guid>>(ids => ids.Count == 2), It.IsAny<CancellationToken>()), Times.Once);
+        _contacts.Verify(l => l.ListByIdsAsync(_clientId, It.Is<IReadOnlyCollection<Guid>>(ids => ids.Count == 2), It.IsAny<CancellationToken>()), Times.Once);
         _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
-    public async Task Create_without_explicit_leads_resolves_the_audience()
+    public async Task Create_without_explicit_contacts_resolves_the_audience()
     {
-        var lead = new Lead { Id = Guid.NewGuid(), Phone = "961" };
-        _audience.Setup(a => a.GetEligibleLeadsAsync(_clientId, CampaignAudienceType.AllEligible, "{}", It.IsAny<CancellationToken>())).ReturnsAsync(new List<Lead> { lead });
+        var contact = new Contact { Id = Guid.NewGuid(), Phone = "961" };
+        _audience.Setup(a => a.GetEligibleContactsAsync(_clientId, CampaignAudienceType.AllEligible, "{}", It.IsAny<CancellationToken>())).ReturnsAsync(new List<Contact> { contact });
         var r = await Sut().CreateAsync(Create(audienceType: CampaignAudienceType.AllEligible) with { AudienceFilters = "{}", CampaignType = CampaignType.Promotion });
         Assert.Equal((CampaignAudienceType.AllEligible, CampaignType.Promotion), (r.AudienceType, r.CampaignType));
     }
@@ -137,10 +137,10 @@ public class CampaignServiceTests
             .ReturnsAsync(new List<CampaignRecipient> { r1, r2 });
         _campaigns.Setup(x => x.ListQueuedBatchAsync(c.Id, 20, It.IsAny<CancellationToken>())).ReturnsAsync(new List<CampaignRecipient> { r1, r2 });
         var conv = new ConversationResponse(Guid.NewGuid(), _clientId, Guid.NewGuid(), "whatsapp", "active", "ai", true, false, null, null, null, false, DateTimeOffset.UtcNow);
-        _conversations.Setup(x => x.GetOrCreateForLeadAsync(_clientId, It.IsAny<Guid>(), ConversationChannel.WhatsApp, It.IsAny<CancellationToken>())).ReturnsAsync(conv);
+        _conversations.Setup(x => x.GetOrCreateForContactAsync(_clientId, It.IsAny<Guid>(), ConversationChannel.WhatsApp, It.IsAny<CancellationToken>())).ReturnsAsync(conv);
         var msgId = Guid.NewGuid();
         _messages.Setup(m => m.SendCampaignTemplateAsync(_clientId, conv.Id, _template.Id, It.IsAny<IReadOnlyList<string>>(), c.Id, It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((Guid _, Guid _, Guid _, IReadOnlyList<string> _, Guid _, Guid _, CancellationToken _) => new MessageResponse(msgId, conv.Id, conv.LeadId, "outbound", "staff", "campaign", "whatsapp", "template", "x", null, false, null, null, null, null, DateTimeOffset.UtcNow, null, null, null, null, null, null, null));
+            .ReturnsAsync((Guid _, Guid _, Guid _, IReadOnlyList<string> _, Guid _, Guid _, CancellationToken _) => new MessageResponse(msgId, conv.Id, conv.ContactId, "outbound", "staff", "campaign", "whatsapp", "template", "x", null, false, null, null, null, null, DateTimeOffset.UtcNow, null, null, null, null, null, null, null));
         _messageRows.Setup(m => m.GetExternalIdAsync(msgId, It.IsAny<CancellationToken>())).ReturnsAsync("wamid.1");
         _campaigns.SetupSequence(x => x.CountRecipientsInStatusAsync(c.Id, CampaignRecipientStatus.Queued, It.IsAny<CancellationToken>())).ReturnsAsync(0);
 
@@ -194,8 +194,8 @@ public class CampaignServiceTests
         _campaigns.Setup(x => x.ListQueuedBatchAsync(c.Id, 5, It.IsAny<CancellationToken>())).ReturnsAsync(new List<CampaignRecipient> { bad, good });
         _campaigns.Setup(x => x.CountRecipientsInStatusAsync(c.Id, CampaignRecipientStatus.Queued, It.IsAny<CancellationToken>())).ReturnsAsync(4);
         var conv = new ConversationResponse(Guid.NewGuid(), _clientId, Guid.NewGuid(), "whatsapp", "active", "ai", true, false, null, null, null, false, DateTimeOffset.UtcNow);
-        _conversations.Setup(x => x.GetOrCreateForLeadAsync(_clientId, bad.LeadId, It.IsAny<string>(), It.IsAny<CancellationToken>())).ThrowsAsync(new InvalidOperationException("no window"));
-        _conversations.Setup(x => x.GetOrCreateForLeadAsync(_clientId, good.LeadId, It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(conv);
+        _conversations.Setup(x => x.GetOrCreateForContactAsync(_clientId, bad.ContactId, It.IsAny<string>(), It.IsAny<CancellationToken>())).ThrowsAsync(new InvalidOperationException("no window"));
+        _conversations.Setup(x => x.GetOrCreateForContactAsync(_clientId, good.ContactId, It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(conv);
 
         var r = await Sut().ProcessBatchAsync(_clientId, c.Id, 5);
 
@@ -212,8 +212,8 @@ public class CampaignServiceTests
         var r = Recipient(c, CampaignRecipientStatus.Queued);
         r.VariablesJson = "[\"Ann\",\"20%\"]";
         _campaigns.Setup(x => x.ListQueuedBatchAsync(c.Id, 20, It.IsAny<CancellationToken>())).ReturnsAsync(new List<CampaignRecipient> { r });
-        var conv = new ConversationResponse(Guid.NewGuid(), _clientId, r.LeadId, "whatsapp", "active", "ai", true, false, null, null, null, false, DateTimeOffset.UtcNow);
-        _conversations.Setup(x => x.GetOrCreateForLeadAsync(_clientId, r.LeadId, It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(conv);
+        var conv = new ConversationResponse(Guid.NewGuid(), _clientId, r.ContactId, "whatsapp", "active", "ai", true, false, null, null, null, false, DateTimeOffset.UtcNow);
+        _conversations.Setup(x => x.GetOrCreateForContactAsync(_clientId, r.ContactId, It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(conv);
         await Sut().ProcessBatchAsync(_clientId, c.Id);
         _messages.Verify(m => m.SendCampaignTemplateAsync(_clientId, conv.Id, _template.Id, It.Is<IReadOnlyList<string>>(v => v.SequenceEqual(new[] { "Ann", "20%" })), c.Id, r.Id, It.IsAny<CancellationToken>()), Times.Once);
         Assert.Null(r.MessageId);
@@ -238,12 +238,12 @@ public class CampaignServiceTests
         var c = MakeCampaign(CampaignStatus.Running);
         var r = Recipient(c, CampaignRecipientStatus.Queued);
         _campaigns.Setup(x => x.ListQueuedBatchAsync(c.Id, 20, It.IsAny<CancellationToken>())).ReturnsAsync(new List<CampaignRecipient> { r });
-        _conversations.Setup(x => x.GetOrCreateForLeadAsync(_clientId, r.LeadId, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        _conversations.Setup(x => x.GetOrCreateForContactAsync(_clientId, r.ContactId, It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new BillingDeniedException(UsageFailureReason.InsufficientFunds, "out of credit"));
         await Assert.ThrowsAsync<BillingDeniedException>(() => Sut().ProcessBatchAsync(_clientId, c.Id));
         Assert.Equal(CampaignRecipientStatus.Queued, r.Status);
 
-        _conversations.Setup(x => x.GetOrCreateForLeadAsync(_clientId, r.LeadId, It.IsAny<string>(), It.IsAny<CancellationToken>())).ThrowsAsync(new EntitlementDeniedException("messages", "plan"));
+        _conversations.Setup(x => x.GetOrCreateForContactAsync(_clientId, r.ContactId, It.IsAny<string>(), It.IsAny<CancellationToken>())).ThrowsAsync(new EntitlementDeniedException("messages", "plan"));
         await Assert.ThrowsAsync<EntitlementDeniedException>(() => Sut().ProcessBatchAsync(_clientId, c.Id));
         Assert.Equal(CampaignRecipientStatus.Queued, r.Status);
     }
@@ -254,7 +254,7 @@ public class CampaignServiceTests
         var c = MakeCampaign(CampaignStatus.Running);
         var r = Recipient(c, CampaignRecipientStatus.Queued);
         _campaigns.Setup(x => x.ListQueuedBatchAsync(c.Id, 20, It.IsAny<CancellationToken>())).ReturnsAsync(new List<CampaignRecipient> { r });
-        _conversations.Setup(x => x.GetOrCreateForLeadAsync(_clientId, r.LeadId, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        _conversations.Setup(x => x.GetOrCreateForContactAsync(_clientId, r.ContactId, It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new BillingDeniedException(UsageFailureReason.RateNotFound, "no sub"));
         var result = await Sut().ProcessBatchAsync(_clientId, c.Id);
         Assert.Equal(1, result!.Failed);
@@ -279,12 +279,12 @@ public class CampaignServiceTests
 
     // ---------------------------------------------------------------- stop / resume / background sending
 
-    /// <summary>Every lead gets a WhatsApp conversation, so each template send goes through.</summary>
+    /// <summary>Every contact gets a WhatsApp conversation, so each template send goes through.</summary>
     private void SendsSucceed()
     {
-        _conversations.Setup(x => x.GetOrCreateForLeadAsync(_clientId, It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((Guid _, Guid leadId, string _, CancellationToken _) =>
-                new ConversationResponse(Guid.NewGuid(), _clientId, leadId, "whatsapp", "active", "ai", true, false, null, null, null, false, DateTimeOffset.UtcNow));
+        _conversations.Setup(x => x.GetOrCreateForContactAsync(_clientId, It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Guid _, Guid contactId, string _, CancellationToken _) =>
+                new ConversationResponse(Guid.NewGuid(), _clientId, contactId, "whatsapp", "active", "ai", true, false, null, null, null, false, DateTimeOffset.UtcNow));
     }
 
     [Fact]
@@ -417,7 +417,7 @@ public class CampaignServiceTests
         await Sut().ProcessBatchAsync(_clientId, c.Id);
         Assert.Equal(1, released);
 
-        _conversations.Setup(x => x.GetOrCreateForLeadAsync(_clientId, r.LeadId, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        _conversations.Setup(x => x.GetOrCreateForContactAsync(_clientId, r.ContactId, It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new BillingDeniedException(UsageFailureReason.InsufficientFunds, "out of credit"));
         r.Status = CampaignRecipientStatus.Queued;
         await Assert.ThrowsAsync<BillingDeniedException>(() => Sut().ProcessBatchAsync(_clientId, c.Id));
@@ -531,10 +531,10 @@ public class CampaignServiceTests
         Assert.Null(await Sut().GetByIdAsync(_clientId, Guid.NewGuid()));
         var c = MakeCampaign();
         var r = Recipient(c, CampaignRecipientStatus.Sent);
-        r.Lead = new Lead { FullName = "Ann" };
-        _campaigns.Setup(x => x.ListRecipientsWithLeadAsync(c.Id, It.IsAny<CancellationToken>())).ReturnsAsync(new List<CampaignRecipient> { r });
+        r.Contact = new Contact { FullName = "Ann" };
+        _campaigns.Setup(x => x.ListRecipientsWithContactAsync(c.Id, It.IsAny<CancellationToken>())).ReturnsAsync(new List<CampaignRecipient> { r });
         var d = await Sut().GetByIdAsync(_clientId, c.Id);
-        Assert.Equal((1, 1, "Hi {{1}}", "Ann"), (d!.Stats.TotalRecipients, d.Stats.Sent, d.TemplateBody, d.Recipients[0].LeadFullName));
+        Assert.Equal((1, 1, "Hi {{1}}", "Ann"), (d!.Stats.TotalRecipients, d.Stats.Sent, d.TemplateBody, d.Recipients[0].ContactFullName));
     }
 }
 
@@ -552,18 +552,18 @@ public class CampaignAudienceServiceTests
     [InlineData("961", false, false, "marketing_opt_in_false")]
     [InlineData("961", true, false, null)]
     public void Skip_reason_priority(string? phone, bool optIn, bool optedOut, string? expected) =>
-        Assert.Equal(expected, Sut().GetSkipReasonIfNotContactable(new Lead { Phone = phone, MarketingOptIn = optIn, OptedOutAt = optedOut ? DateTimeOffset.UtcNow : null }));
+        Assert.Equal(expected, Sut().GetSkipReasonIfNotContactable(new Contact { Phone = phone, MarketingOptIn = optIn, OptedOutAt = optedOut ? DateTimeOffset.UtcNow : null }));
 
     [Fact]
-    public async Task Eligible_leads_and_count_pass_parsed_filters_and_the_configured_default()
+    public async Task Eligible_contacts_and_count_pass_parsed_filters_and_the_configured_default()
     {
         _config.SetupGet(c => c.CampaignsDefaultInactiveDays).Returns(45);
         var client = Guid.NewGuid();
-        await Sut().GetEligibleLeadsAsync(client, CampaignAudienceType.AllEligible, "{\"inactiveDays\":10,\"cities\":[\"Beirut\"]}");
-        _repo.Verify(r => r.ListEligibleLeadsAsync(client, CampaignAudienceType.AllEligible,
+        await Sut().GetEligibleContactsAsync(client, CampaignAudienceType.AllEligible, "{\"inactiveDays\":10,\"cities\":[\"Beirut\"]}");
+        _repo.Verify(r => r.ListEligibleContactsAsync(client, CampaignAudienceType.AllEligible,
             It.Is<CampaignAudienceFilters>(f => f.InactiveDays == 10 && f.Cities!.Single() == "Beirut"), 45, It.IsAny<CancellationToken>()), Times.Once);
         await Sut().GetMatchingCountAsync(client, CampaignAudienceType.Custom, null);
-        _repo.Verify(r => r.CountEligibleLeadsAsync(client, CampaignAudienceType.Custom, It.Is<CampaignAudienceFilters>(f => f.InactiveDays == null), 45, It.IsAny<CancellationToken>()), Times.Once);
+        _repo.Verify(r => r.CountEligibleContactsAsync(client, CampaignAudienceType.Custom, It.Is<CampaignAudienceFilters>(f => f.InactiveDays == null), 45, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Theory]
@@ -576,8 +576,8 @@ public class CampaignAudienceServiceTests
     [Fact]
     public void Filters_parse_all_fields_case_insensitively()
     {
-        var f = CampaignAudienceFilters.Parse("{\"InactiveDays\":3,\"leadStatuses\":[\"new\"],\"createdAfter\":\"2026-01-01T00:00:00Z\"}");
-        Assert.Equal((3, "new"), (f.InactiveDays, f.LeadStatuses!.Single()));
+        var f = CampaignAudienceFilters.Parse("{\"InactiveDays\":3,\"stageKeys\":[\"new\"],\"createdAfter\":\"2026-01-01T00:00:00Z\"}");
+        Assert.Equal((3, "new"), (f.InactiveDays, f.StageKeys!.Single()));
         Assert.Equal(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), f.CreatedAfter);
     }
 }

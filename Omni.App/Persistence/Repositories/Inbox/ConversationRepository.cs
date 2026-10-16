@@ -21,11 +21,11 @@ public class ConversationRepository : IConversationRepository
     public Task<Conversation?> GetAsync(Guid clientId, Guid conversationId, CancellationToken ct = default) =>
         _db.Conversations.FirstOrDefaultAsync(c => c.ClientId == clientId && c.Id == conversationId, ct);
 
-    public Task<Conversation?> GetWithLeadAsync(Guid clientId, Guid conversationId, CancellationToken ct = default) =>
-        _db.Conversations.Include(c => c.Lead).FirstOrDefaultAsync(c => c.ClientId == clientId && c.Id == conversationId, ct);
+    public Task<Conversation?> GetWithContactAsync(Guid clientId, Guid conversationId, CancellationToken ct = default) =>
+        _db.Conversations.Include(c => c.Contact).FirstOrDefaultAsync(c => c.ClientId == clientId && c.Id == conversationId, ct);
 
-    public Task<Conversation?> FindForLeadAsync(Guid clientId, Guid leadId, string channel, CancellationToken ct = default) =>
-        _db.Conversations.FirstOrDefaultAsync(c => c.ClientId == clientId && c.LeadId == leadId && c.Channel == channel, ct);
+    public Task<Conversation?> FindForContactAsync(Guid clientId, Guid contactId, string channel, CancellationToken ct = default) =>
+        _db.Conversations.FirstOrDefaultAsync(c => c.ClientId == clientId && c.ContactId == contactId && c.Channel == channel, ct);
 
     public Task<Conversation?> FindByExternalThreadAsync(Guid clientId, string channel, string externalThreadId,
         CancellationToken ct = default) =>
@@ -45,7 +45,7 @@ public class ConversationRepository : IConversationRepository
         CancellationToken ct = default)
     {
         var query = _db.Conversations
-            .Include(c => c.Lead).ThenInclude(l => l!.Service)
+            .Include(c => c.Contact).ThenInclude(l => l!.Service)
             .Where(c => c.ClientId == clientId);
 
         var totalCount = await query.CountAsync(ct);
@@ -55,7 +55,7 @@ public class ConversationRepository : IConversationRepository
             .Skip(skip)
             .Take(take)
             .Select(c => new ConversationListRow(
-                c.Id, c.LeadId, c.Lead!.FullName, c.Lead.Phone, c.Lead.Service != null ? c.Lead.Service.Name : null,
+                c.Id, c.ContactId, c.Contact!.FullName, c.Contact.Phone, c.Contact.Service != null ? c.Contact.Service.Name : null,
                 c.Channel, c.Status, c.Mode,
                 _db.Messages.Where(m => m.ConversationId == c.Id && m.Origin != MessageOrigin.System).OrderByDescending(m => m.CreatedAt).Select(m => m.Content).FirstOrDefault(),
                 c.LastMessageDirection, c.LastMessageAt, c.CreatedAt,

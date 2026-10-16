@@ -2,7 +2,7 @@ namespace Omni.App.Entities.Requests.Orders;
 
 public record CreateOrderRequest(
     Guid ClientId,
-    Guid LeadId,
+    Guid ContactId,
     Guid ServiceId,
     Guid? BookingId,
     decimal? QuotedAmount,

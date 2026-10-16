@@ -12,8 +12,8 @@
     };
     static string AudienceLabel(string? type, bool manual) => manual ? "Picked manually" : type switch
     {
-        CampaignAudienceType.ReactivationNoBooking => "Old leads who never booked",
-        CampaignAudienceType.AllEligible => "All contactable leads",
+        CampaignAudienceType.ReactivationNoBooking => "Old contacts who never booked",
+        CampaignAudienceType.AllEligible => "All reachable contacts",
         CampaignAudienceType.Custom => "Custom audience",
         _ => "—"
     };
@@ -28,7 +28,7 @@
 else
 {
     <div class="au-page-head">
-        <p class="au-page-head__sub">Send one approved WhatsApp template to many leads. Replies land in each lead's Inbox conversation.</p>
+        <p class="au-page-head__sub">Send one approved WhatsApp template to many contacts. Replies land in each contact's Inbox conversation.</p>
         <div class="au-page-head__actions">
             <a href="/Campaigns/Create" class="au-btn au-btn--primary"><span class="au-icon" aria-hidden="true">add</span>New campaign</a>
         </div>
@@ -37,7 +37,7 @@ else
     @if (Model.Campaigns.Count == 0)
     {
         var empty = new EmptyStateModel(Icon: "campaign", Title: "No campaigns yet",
-            Text: "Bring old leads back or announce an offer with one approved WhatsApp template.",
+            Text: "Bring old contacts back or announce an offer with one approved WhatsApp template.",
             ActionLabel: "New campaign", ActionHref: "/Campaigns/Create");
         <div class="au-panel au-panel--round"><partial name="_EmptyState" model="empty" /></div>
     }
@@ -66,7 +66,7 @@ else
                                     <span class="au-icon au-icon--sm" aria-hidden="true">info</span>
                                     <span class="info-tip-box" role="tooltip" id="progress-tip">
                                         <strong>How far each campaign has got</strong>
-                                        <span class="tip-row"><i class="p-read"></i> Read: opened by the lead</span>
+                                        <span class="tip-row"><i class="p-read"></i> Read: opened by the contact</span>
                                         <span class="tip-row"><i class="p-deliv"></i> Delivered: reached their phone</span>
                                         <span class="tip-row"><i class="p-sent"></i> Sent: on its way</span>
                                         <span class="tip-row"><i class="p-fail"></i> Failed: couldn't be delivered</span>

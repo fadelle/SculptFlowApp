@@ -5,8 +5,8 @@ namespace Omni.App.Entities.Responses.Bookings;
 /// client's, or the viewer's on "My time"), so the browser can't mis-group a booking into the wrong day.</summary>
 public record CalendarBookingResponse(
     Guid Id,
-    Guid LeadId,
-    string? LeadFullName,
+    Guid ContactId,
+    string? ContactFullName,
     Guid? ServiceId,
     string? ServiceName,
     string Status,

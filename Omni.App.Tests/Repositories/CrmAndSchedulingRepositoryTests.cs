@@ -4,34 +4,34 @@ using Microsoft.EntityFrameworkCore;
 using Omni.App.Persistence.Repositories.Bookings;
 using Omni.App.Persistence.Repositories.Clients;
 using Omni.App.Persistence.Repositories.Inbox;
-using Omni.App.Persistence.Repositories.Leads;
+using Omni.App.Persistence.Repositories.Contacts;
 
 namespace Omni.App.Tests.Repositories;
 
-public class LeadRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixture)
+public class ContactRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixture)
 {
     [PostgresFact]
     public async Task Lookups_are_scoped_to_the_client()
     {
         var a = MakeClient(); var b = MakeClient();
         var svc = MakeService(a.Id);
-        var lead = MakeLead(a.Id, "Ann Smith", "+1555", svc.Id);
-        lead.ExternalLeadId = "ext-1";
-        await SeedAsync(a, b, svc, lead);
+        var contact = MakeContact(a.Id, "Ann Smith", "+1555", svc.Id);
+        contact.ExternalContactId = "ext-1";
+        await SeedAsync(a, b, svc, contact);
 
         await using var db = NewContext();
-        var repo = new LeadRepository(db);
-        Assert.Equal(lead.Id, (await repo.GetAsync(a.Id, lead.Id))!.Id);
-        Assert.Null(await repo.GetAsync(b.Id, lead.Id));
-        Assert.NotNull((await repo.GetAsync(a.Id, lead.Id))!.Service);
-        Assert.NotNull(await repo.GetByIdAsync(lead.Id));
+        var repo = new ContactRepository(db);
+        Assert.Equal(contact.Id, (await repo.GetAsync(a.Id, contact.Id))!.Id);
+        Assert.Null(await repo.GetAsync(b.Id, contact.Id));
+        Assert.NotNull((await repo.GetAsync(a.Id, contact.Id))!.Service);
+        Assert.NotNull(await repo.GetByIdAsync(contact.Id));
         Assert.NotNull(await repo.FindByExternalIdAsync(a.Id, "ext-1"));
         Assert.Null(await repo.FindByExternalIdAsync(b.Id, "ext-1"));
         Assert.NotNull(await repo.FindByPhoneAsync(a.Id, "+1555"));
         Assert.Null(await repo.FindByPhoneAsync(b.Id, "+1555"));
-        Assert.True(await repo.ExistsAsync(a.Id, lead.Id));
-        Assert.False(await repo.ExistsAsync(b.Id, lead.Id));
-        Assert.Equal("Ann Smith", await repo.GetFullNameAsync(lead.Id));
+        Assert.True(await repo.ExistsAsync(a.Id, contact.Id));
+        Assert.False(await repo.ExistsAsync(b.Id, contact.Id));
+        Assert.Equal("Ann Smith", await repo.GetFullNameAsync(contact.Id));
         Assert.Null(await repo.GetFullNameAsync(Guid.NewGuid()));
     }
 
@@ -40,21 +40,21 @@ public class LeadRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixture
     {
         var c = MakeClient(); var other = MakeClient();
         var svc = MakeService(c.Id);
-        var l1 = MakeLead(c.Id, "Alice Wong", "111", svc.Id, LeadStatus.New, Now.AddDays(-3));
-        var l2 = MakeLead(c.Id, "bob alison", "222", null, LeadStatus.Contacted, Now.AddDays(-2));
-        var l3 = MakeLead(c.Id, "Carol", "333", null, LeadStatus.New, Now.AddDays(-1));
+        var l1 = MakeContact(c.Id, "Alice Wong", "111", svc.Id, PipelineKit.New, Now.AddDays(-3));
+        var l2 = MakeContact(c.Id, "bob alison", "222", null, PipelineKit.Contacted, Now.AddDays(-2));
+        var l3 = MakeContact(c.Id, "Carol", "333", null, PipelineKit.New, Now.AddDays(-1));
         l3.Email = "ALI@example.com";
-        var foreign = MakeLead(other.Id, "Alice Foreign");
+        var foreign = MakeContact(other.Id, "Alice Foreign");
         await SeedAsync(c, other, svc, l1, l2, l3, foreign);
 
         await using var db = NewContext();
-        var repo = new LeadRepository(db);
+        var repo = new ContactRepository(db);
 
         var (all, total) = await repo.ListAsync(c.Id, null, null, null, 0, 50);
         Assert.Equal(3, total);
         Assert.Equal([l3.Id, l2.Id, l1.Id], all.Select(l => l.Id));   // newest first
 
-        Assert.Equal(2, (await repo.ListAsync(c.Id, LeadStatus.New, null, null, 0, 50)).TotalCount);
+        Assert.Equal(2, (await repo.ListAsync(c.Id, PipelineKit.New, null, null, 0, 50)).TotalCount);
         Assert.Equal([l1.Id], (await repo.ListAsync(c.Id, null, svc.Id, null, 0, 50)).Items.Select(l => l.Id));
         var ali = await repo.ListAsync(c.Id, null, null, " ali ", 0, 50);   // name, e-mail, case-insensitive, trimmed
         Assert.Equal(3, ali.TotalCount);
@@ -70,24 +70,24 @@ public class LeadRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixture
     public async Task Sources_ids_and_adding()
     {
         var c = MakeClient(); var other = MakeClient();
-        var l1 = MakeLead(c.Id); l1.Source = "web";
-        var l2 = MakeLead(c.Id); l2.Source = "ads";
-        var l3 = MakeLead(c.Id); l3.Source = "web";
-        var l4 = MakeLead(c.Id); l4.Source = "";
-        var l5 = MakeLead(c.Id);
-        var foreign = MakeLead(other.Id); foreign.Source = "referral";
+        var l1 = MakeContact(c.Id); l1.Source = "web";
+        var l2 = MakeContact(c.Id); l2.Source = "ads";
+        var l3 = MakeContact(c.Id); l3.Source = "web";
+        var l4 = MakeContact(c.Id); l4.Source = "";
+        var l5 = MakeContact(c.Id);
+        var foreign = MakeContact(other.Id); foreign.Source = "referral";
         await SeedAsync(c, other, l1, l2, l3, l4, l5, foreign);
 
         await using var db = NewContext();
-        var repo = new LeadRepository(db);
+        var repo = new ContactRepository(db);
         Assert.Equal(["ads", "web"], await repo.ListDistinctSourcesAsync(c.Id));
         Assert.Equal(2, (await repo.ListByIdsAsync(c.Id, [l1.Id, l2.Id, foreign.Id])).Count);
 
-        var added = MakeLead(c.Id, "New");
+        var added = MakeContact(c.Id, "New");
         repo.Add(added);
         await db.SaveChangesAsync();
         await using var check = NewContext();
-        Assert.True(await new LeadRepository(check).ExistsAsync(c.Id, added.Id));
+        Assert.True(await new ContactRepository(check).ExistsAsync(c.Id, added.Id));
     }
 
     [PostgresFact]
@@ -95,11 +95,11 @@ public class LeadRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixture
     {
         var c = MakeClient();
         var svc = MakeService(c.Id, "Facelift");
-        var lead = MakeLead(c.Id, serviceId: svc.Id);
-        await SeedAsync(c, svc, lead);
+        var contact = MakeContact(c.Id, serviceId: svc.Id);
+        await SeedAsync(c, svc, contact);
         await using var db = NewContext();
-        var repo = new LeadRepository(db);
-        var tracked = (await repo.GetByIdAsync(lead.Id))!;
+        var repo = new ContactRepository(db);
+        var tracked = (await repo.GetByIdAsync(contact.Id))!;
         Assert.Null(tracked.Service);
         await repo.LoadServiceAsync(tracked);
         Assert.Equal("Facelift", tracked.Service!.Name);
@@ -184,18 +184,18 @@ public class ConversationAndMessageRepositoryTests(PostgresFixture fixture) : Re
     public async Task Conversation_lookups_are_scoped_and_typed()
     {
         var c = MakeClient(); var other = MakeClient();
-        var lead = MakeLead(c.Id);
-        var convo = MakeConversation(c.Id, lead.Id, "whatsapp", "thread-1");
+        var contact = MakeContact(c.Id);
+        var convo = MakeConversation(c.Id, contact.Id, "whatsapp", "thread-1");
         convo.Mode = ConversationMode.Human;
-        await SeedAsync(c, other, lead, convo);
+        await SeedAsync(c, other, contact, convo);
 
         await using var db = NewContext();
         var repo = new ConversationRepository(db);
         Assert.NotNull(await repo.GetAsync(c.Id, convo.Id));
         Assert.Null(await repo.GetAsync(other.Id, convo.Id));
-        Assert.NotNull((await repo.GetWithLeadAsync(c.Id, convo.Id))!.Lead);
-        Assert.NotNull(await repo.FindForLeadAsync(c.Id, lead.Id, "whatsapp"));
-        Assert.Null(await repo.FindForLeadAsync(c.Id, lead.Id, "telegram"));
+        Assert.NotNull((await repo.GetWithContactAsync(c.Id, convo.Id))!.Contact);
+        Assert.NotNull(await repo.FindForContactAsync(c.Id, contact.Id, "whatsapp"));
+        Assert.Null(await repo.FindForContactAsync(c.Id, contact.Id, "telegram"));
         Assert.NotNull(await repo.FindByExternalThreadAsync(c.Id, "whatsapp", "thread-1"));
         Assert.Null(await repo.FindByExternalThreadAsync(other.Id, "whatsapp", "thread-1"));
         Assert.True(await repo.ExistsAsync(c.Id, convo.Id));
@@ -210,9 +210,9 @@ public class ConversationAndMessageRepositoryTests(PostgresFixture fixture) : Re
     {
         var c = MakeClient();
         var svc = MakeService(c.Id, "Rhinoplasty");
-        var leadA = MakeLead(c.Id, "Ann", "1", svc.Id); var leadB = MakeLead(c.Id, "Bob", "2");
-        var old = MakeConversation(c.Id, leadA.Id, lastMessageAt: Now.AddHours(-5));
-        var recent = MakeConversation(c.Id, leadB.Id, "telegram", lastMessageAt: Now.AddHours(-1));
+        var contactA = MakeContact(c.Id, "Ann", "1", svc.Id); var contactB = MakeContact(c.Id, "Bob", "2");
+        var old = MakeConversation(c.Id, contactA.Id, lastMessageAt: Now.AddHours(-5));
+        var recent = MakeConversation(c.Id, contactB.Id, "telegram", lastMessageAt: Now.AddHours(-1));
         recent.LastReadAt = Now.AddHours(-3);
         var m1 = MakeMessage(old, content: "first", createdAt: Now.AddHours(-6));
         var m2 = MakeMessage(old, MessageDirection.Outbound, MessageOrigin.Ai, "reply", Now.AddHours(-5));
@@ -220,7 +220,7 @@ public class ConversationAndMessageRepositoryTests(PostgresFixture fixture) : Re
         var n1 = MakeMessage(recent, content: "read", createdAt: Now.AddHours(-4));
         var n2 = MakeMessage(recent, content: "unread 1", createdAt: Now.AddHours(-2));
         var n3 = MakeMessage(recent, content: "unread 2", createdAt: Now.AddHours(-1));
-        await SeedAsync(c, svc, leadA, leadB, old, recent, m1, m2, m3, n1, n2, n3);
+        await SeedAsync(c, svc, contactA, contactB, old, recent, m1, m2, m3, n1, n2, n3);
 
         await using var db = NewContext();
         var repo = new ConversationRepository(db);
@@ -240,9 +240,9 @@ public class ConversationAndMessageRepositoryTests(PostgresFixture fixture) : Re
     public async Task Mark_read_updates_only_the_clients_conversation()
     {
         var c = MakeClient(); var other = MakeClient();
-        var lead = MakeLead(c.Id);
-        var convo = MakeConversation(c.Id, lead.Id);
-        await SeedAsync(c, other, lead, convo);
+        var contact = MakeContact(c.Id);
+        var convo = MakeConversation(c.Id, contact.Id);
+        await SeedAsync(c, other, contact, convo);
 
         await using var db = NewContext();
         var repo = new ConversationRepository(db);
@@ -256,12 +256,12 @@ public class ConversationAndMessageRepositoryTests(PostgresFixture fixture) : Re
     public async Task Messages_are_listed_in_order_and_found_by_external_id()
     {
         var c = MakeClient();
-        var lead = MakeLead(c.Id);
-        var convo = MakeConversation(c.Id, lead.Id);
+        var contact = MakeContact(c.Id);
+        var convo = MakeConversation(c.Id, contact.Id);
         var first = MakeMessage(convo, content: "a", createdAt: Now.AddMinutes(-3), externalId: "ext-a");
         var second = MakeMessage(convo, content: "b", createdAt: Now.AddMinutes(-2));
         var third = MakeMessage(convo, content: "c", createdAt: Now.AddMinutes(-1));
-        await SeedAsync(c, lead, convo, third, first, second);
+        await SeedAsync(c, contact, convo, third, first, second);
 
         await using var db = NewContext();
         var repo = new MessageRepository(db);
@@ -284,12 +284,12 @@ public class ConversationAndMessageRepositoryTests(PostgresFixture fixture) : Re
     public async Task Inbound_customer_times_ignore_other_origins_and_other_clients()
     {
         var c = MakeClient(); var other = MakeClient();
-        var lead = MakeLead(c.Id);
-        var convo = MakeConversation(c.Id, lead.Id);
+        var contact = MakeContact(c.Id);
+        var convo = MakeConversation(c.Id, contact.Id);
         var inbound = MakeMessage(convo, createdAt: Now);
         var outbound = MakeMessage(convo, MessageDirection.Outbound, MessageOrigin.Ai);
         var telegram = MakeMessage(convo, origin: MessageOrigin.TelegramCustomer);
-        await SeedAsync(c, other, lead, convo, inbound, outbound, telegram);
+        await SeedAsync(c, other, contact, convo, inbound, outbound, telegram);
 
         await using var db = NewContext();
         var repo = new MessageRepository(db);
@@ -301,19 +301,19 @@ public class ConversationAndMessageRepositoryTests(PostgresFixture fixture) : Re
 
 public class BookingRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixture)
 {
-    private async Task<(Client Client, Lead Lead, Service Proc)> SeedBaseAsync(int? duration = 45)
+    private async Task<(Client Client, Contact Contact, Service Proc)> SeedBaseAsync(int? duration = 45)
     {
-        var c = MakeClient(); var svc = MakeService(c.Id, duration: duration); var lead = MakeLead(c.Id, serviceId: svc.Id);
-        await SeedAsync(c, svc, lead);
-        return (c, lead, svc);
+        var c = MakeClient(); var svc = MakeService(c.Id, duration: duration); var contact = MakeContact(c.Id, serviceId: svc.Id);
+        await SeedAsync(c, svc, contact);
+        return (c, contact, svc);
     }
 
     [PostgresFact]
     public async Task Gets_are_scoped_and_include_what_they_promise()
     {
-        var (c, lead, svc) = await SeedBaseAsync();
+        var (c, contact, svc) = await SeedBaseAsync();
         var other = MakeClient();
-        var appt = MakeBooking(c.Id, lead.Id, Now.AddDays(1), serviceId: svc.Id);
+        var appt = MakeBooking(c.Id, contact.Id, Now.AddDays(1), serviceId: svc.Id);
         await SeedAsync(other, appt);
 
         await using var db = NewContext();
@@ -321,36 +321,36 @@ public class BookingRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixt
         Assert.NotNull(await repo.GetAsync(c.Id, appt.Id));
         Assert.Null(await repo.GetAsync(other.Id, appt.Id));
         var detailed = (await repo.GetWithDetailsAsync(c.Id, appt.Id))!;
-        Assert.NotNull(detailed.Lead);
+        Assert.NotNull(detailed.Contact);
         Assert.NotNull(detailed.Service);
-        Assert.NotNull(await repo.GetForLeadAsync(c.Id, lead.Id, appt.Id));
-        Assert.Null(await repo.GetForLeadAsync(c.Id, Guid.NewGuid(), appt.Id));
+        Assert.NotNull(await repo.GetForContactAsync(c.Id, contact.Id, appt.Id));
+        Assert.Null(await repo.GetForContactAsync(c.Id, Guid.NewGuid(), appt.Id));
         Assert.Equal("Rhinoplasty", (await repo.GetWithServiceReadOnlyAsync(appt.Id))!.Service!.Name);
         Assert.Null(await repo.GetWithServiceReadOnlyAsync(Guid.NewGuid()));
     }
 
     [PostgresFact]
-    public async Task Upcoming_for_a_lead_means_future_and_booked_or_confirmed()
+    public async Task Upcoming_for_a_contact_means_future_and_booked_or_confirmed()
     {
-        var (c, lead, _) = await SeedBaseAsync();
-        var future2 = MakeBooking(c.Id, lead.Id, Now.AddDays(2), BookingStatus.Confirmed);
-        var future1 = MakeBooking(c.Id, lead.Id, Now.AddDays(1));
-        var canceled = MakeBooking(c.Id, lead.Id, Now.AddDays(3), BookingStatus.Canceled);
-        var past = MakeBooking(c.Id, lead.Id, Now.AddDays(-1));
+        var (c, contact, _) = await SeedBaseAsync();
+        var future2 = MakeBooking(c.Id, contact.Id, Now.AddDays(2), BookingStatus.Confirmed);
+        var future1 = MakeBooking(c.Id, contact.Id, Now.AddDays(1));
+        var canceled = MakeBooking(c.Id, contact.Id, Now.AddDays(3), BookingStatus.Canceled);
+        var past = MakeBooking(c.Id, contact.Id, Now.AddDays(-1));
         await SeedAsync(future2, future1, canceled, past);
 
         await using var db = NewContext();
-        var upcoming = await new BookingRepository(db).ListUpcomingForLeadAsync(c.Id, lead.Id, Now);
+        var upcoming = await new BookingRepository(db).ListUpcomingForContactAsync(c.Id, contact.Id, Now);
         Assert.Equal([future1.Id, future2.Id], upcoming.Select(a => a.Id));
     }
 
     [PostgresFact]
     public async Task List_filters_by_status_and_dates_and_pages()
     {
-        var (c, lead, _) = await SeedBaseAsync();
-        var a1 = MakeBooking(c.Id, lead.Id, Now.AddDays(1));
-        var a2 = MakeBooking(c.Id, lead.Id, Now.AddDays(2), BookingStatus.Confirmed);
-        var a3 = MakeBooking(c.Id, lead.Id, Now.AddDays(3));
+        var (c, contact, _) = await SeedBaseAsync();
+        var a1 = MakeBooking(c.Id, contact.Id, Now.AddDays(1));
+        var a2 = MakeBooking(c.Id, contact.Id, Now.AddDays(2), BookingStatus.Confirmed);
+        var a3 = MakeBooking(c.Id, contact.Id, Now.AddDays(3));
         await SeedAsync(a1, a2, a3);
 
         await using var db = NewContext();
@@ -366,10 +366,10 @@ public class BookingRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixt
     [PostgresFact]
     public async Task Starting_between_is_half_open_and_ordered()
     {
-        var (c, lead, _) = await SeedBaseAsync();
-        var inside2 = MakeBooking(c.Id, lead.Id, Now.AddHours(5));
-        var inside1 = MakeBooking(c.Id, lead.Id, Now);
-        var atEnd = MakeBooking(c.Id, lead.Id, Now.AddHours(10));
+        var (c, contact, _) = await SeedBaseAsync();
+        var inside2 = MakeBooking(c.Id, contact.Id, Now.AddHours(5));
+        var inside1 = MakeBooking(c.Id, contact.Id, Now);
+        var atEnd = MakeBooking(c.Id, contact.Id, Now.AddHours(10));
         await SeedAsync(inside2, inside1, atEnd);
 
         await using var db = NewContext();
@@ -380,12 +380,12 @@ public class BookingRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixt
     [PostgresFact]
     public async Task Needing_outcome_counts_past_booked_or_confirmed_only()
     {
-        var (c, lead, _) = await SeedBaseAsync();
+        var (c, contact, _) = await SeedBaseAsync();
         await SeedAsync(
-            MakeBooking(c.Id, lead.Id, Now.AddDays(-1)),
-            MakeBooking(c.Id, lead.Id, Now.AddDays(-2), BookingStatus.Confirmed),
-            MakeBooking(c.Id, lead.Id, Now.AddDays(-3), BookingStatus.Attended),
-            MakeBooking(c.Id, lead.Id, Now.AddDays(1)));
+            MakeBooking(c.Id, contact.Id, Now.AddDays(-1)),
+            MakeBooking(c.Id, contact.Id, Now.AddDays(-2), BookingStatus.Confirmed),
+            MakeBooking(c.Id, contact.Id, Now.AddDays(-3), BookingStatus.Attended),
+            MakeBooking(c.Id, contact.Id, Now.AddDays(1)));
         await using var db = NewContext();
         Assert.Equal(2, await new BookingRepository(db).CountNeedingOutcomeAsync(c.Id, Now));
     }
@@ -393,12 +393,12 @@ public class BookingRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixt
     [PostgresFact]
     public async Task Busy_rows_skip_canceled_rescheduled_and_the_excluded_booking()
     {
-        var (c, lead, _) = await SeedBaseAsync(duration: 45);
-        var busy = MakeBooking(c.Id, lead.Id, Now.AddHours(1), serviceId: (await NewContext().Services.FirstAsync(p => p.ClientId == c.Id)).Id);
-        var excluded = MakeBooking(c.Id, lead.Id, Now.AddHours(2));
-        var canceled = MakeBooking(c.Id, lead.Id, Now.AddHours(3), BookingStatus.Canceled);
-        var moved = MakeBooking(c.Id, lead.Id, Now.AddHours(4), BookingStatus.Rescheduled);
-        var outside = MakeBooking(c.Id, lead.Id, Now.AddDays(5));
+        var (c, contact, _) = await SeedBaseAsync(duration: 45);
+        var busy = MakeBooking(c.Id, contact.Id, Now.AddHours(1), serviceId: (await NewContext().Services.FirstAsync(p => p.ClientId == c.Id)).Id);
+        var excluded = MakeBooking(c.Id, contact.Id, Now.AddHours(2));
+        var canceled = MakeBooking(c.Id, contact.Id, Now.AddHours(3), BookingStatus.Canceled);
+        var moved = MakeBooking(c.Id, contact.Id, Now.AddHours(4), BookingStatus.Rescheduled);
+        var outside = MakeBooking(c.Id, contact.Id, Now.AddDays(5));
         await SeedAsync(busy, excluded, canceled, moved, outside);
 
         await using var db = NewContext();
@@ -413,16 +413,16 @@ public class BookingRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixt
     [PostgresFact]
     public async Task Details_are_loaded_on_demand_and_the_booking_lock_can_be_taken()
     {
-        var (c, lead, svc) = await SeedBaseAsync();
-        var appt = MakeBooking(c.Id, lead.Id, Now.AddDays(1), serviceId: svc.Id);
-        var noProc = MakeBooking(c.Id, lead.Id, Now.AddDays(2));
+        var (c, contact, svc) = await SeedBaseAsync();
+        var appt = MakeBooking(c.Id, contact.Id, Now.AddDays(1), serviceId: svc.Id);
+        var noProc = MakeBooking(c.Id, contact.Id, Now.AddDays(2));
         await SeedAsync(appt, noProc);
 
         await using var db = NewContext();
         var repo = new BookingRepository(db);
         var tracked = (await repo.GetAsync(c.Id, appt.Id))!;
         await repo.LoadDetailsAsync(tracked);
-        Assert.NotNull(tracked.Lead);
+        Assert.NotNull(tracked.Contact);
         Assert.NotNull(tracked.Service);
         var plain = (await repo.GetAsync(c.Id, noProc.Id))!;
         await repo.LoadDetailsAsync(plain);
@@ -436,8 +436,8 @@ public class BookingRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixt
     [PostgresFact]
     public async Task Adding_saves_through_the_context()
     {
-        var (c, lead, _) = await SeedBaseAsync();
-        var appt = MakeBooking(c.Id, lead.Id, Now.AddDays(1));
+        var (c, contact, _) = await SeedBaseAsync();
+        var appt = MakeBooking(c.Id, contact.Id, Now.AddDays(1));
         await using (var db = NewContext())
         {
             new BookingRepository(db).Add(appt);

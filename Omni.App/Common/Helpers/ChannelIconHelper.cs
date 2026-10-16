@@ -37,7 +37,7 @@ public static class ChannelIconHelper
     };
 
     /// <summary>Brand glyph for every connectable channel (Settings → Channels &amp; Integrations cards).
-    /// Kept separate from <see cref="Svg"/> so the Inbox/Leads badges don't change.</summary>
+    /// Kept separate from <see cref="Svg"/> so the Inbox/Contacts badges don't change.</summary>
     public static string? BrandSvg(string? channel) => channel?.ToLowerInvariant() switch
     {
         "instagram" => InstagramSvg,

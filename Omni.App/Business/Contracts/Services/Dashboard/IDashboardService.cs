@@ -5,18 +5,18 @@ namespace Omni.App.Business.Contracts.Services.Dashboard;
 
 public interface IDashboardService
 {
-    /// <summary>Funnel numbers for [from, to): leads created, bookings made (created), bookings attended
+    /// <summary>Funnel numbers for [from, to): contacts created, bookings made (created), bookings attended
     /// (scheduled in range), orders created, and revenue from bookings completed in range. Null bounds are open-ended.</summary>
     Task<DashboardSummaryResponse> GetSummaryAsync(Guid clientId, DateTimeOffset? from = null, DateTimeOffset? to = null, CancellationToken ct = default);
 
     Task<DashboardAttentionResponse> GetAttentionAsync(Guid clientId, CancellationToken ct = default);
 
-    /// <summary>search matches lead full name or phone (case-insensitive substring); source, when
-    /// given, matches leads.source exactly (case-insensitive).</summary>
-    Task<(IReadOnlyList<DashboardLeadRow> Items, int TotalCount)> GetLeadsAsync(
-        Guid clientId, string? status, string? search, string? source, int skip, int take, CancellationToken ct = default);
+    /// <summary>search matches contact full name or phone (case-insensitive substring); source, when
+    /// given, matches contacts.source exactly (case-insensitive).</summary>
+    Task<(IReadOnlyList<DashboardContactRow> Items, int TotalCount)> GetContactsAsync(
+        Guid clientId, string? stage, string? search, string? source, int skip, int take, CancellationToken ct = default);
 
-    /// <summary>search matches the booking's lead full name or phone (case-insensitive substring).</summary>
+    /// <summary>search matches the booking's contact full name or phone (case-insensitive substring).</summary>
     Task<(IReadOnlyList<DashboardBookingRow> Items, int TotalCount)> GetBookingsAsync(
         Guid clientId, string? status, string? search, int skip, int take, CancellationToken ct = default);
 

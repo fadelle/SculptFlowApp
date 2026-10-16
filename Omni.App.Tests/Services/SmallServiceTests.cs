@@ -268,13 +268,13 @@ public class StaffDashboardClientProfileTests
             .ReturnsAsync(new DashboardAttentionCounts(3, 2, 1));
         var sut = new DashboardService(repo.Object);
         var s = await sut.GetSummaryAsync(_clientId);
-        Assert.Equal((10, 5, 4, 2, 1500m, 0), (s.NewInterestedPeople, s.BookingsMade, s.BookingsAttended, s.SurgeriesBooked, s.Revenue, s.OldLeadsRecovered));
+        Assert.Equal((10, 5, 4, 2, 1500m, 0), (s.NewInterestedPeople, s.BookingsMade, s.BookingsAttended, s.OrdersMade, s.Revenue, s.OldContactsRecovered));
         var a = await sut.GetAttentionAsync(_clientId);
         Assert.Equal((3, 2, 1), (a.ConversationsNeedingStaff, a.OverdueFollowups, a.BookingsNeedingOutcome));
-        await sut.GetLeadsAsync(_clientId, "new", "q", "src", 0, 10);
+        await sut.GetContactsAsync(_clientId, "new", "q", "src", 0, 10);
         await sut.GetBookingsAsync(_clientId, "booked", "q", 0, 10);
         await sut.GetServiceStatsAsync(_clientId);
-        repo.Verify(r => r.ListLeadsAsync(_clientId, "new", "q", "src", 0, 10, It.IsAny<CancellationToken>()), Times.Once);
+        repo.Verify(r => r.ListContactsAsync(_clientId, "new", "q", "src", 0, 10, It.IsAny<CancellationToken>()), Times.Once);
         repo.Verify(r => r.ListBookingsAsync(_clientId, "booked", "q", 0, 10, It.IsAny<CancellationToken>()), Times.Once);
         repo.Verify(r => r.GetServiceStatsAsync(_clientId, null, null, It.IsAny<CancellationToken>()), Times.Once);
     }

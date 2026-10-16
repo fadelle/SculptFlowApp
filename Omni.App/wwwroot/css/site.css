@@ -779,7 +779,7 @@ td .cell-sub { white-space: nowrap; }
 @keyframes sf-spin { to { transform: rotate(360deg); } }
 
 /* Detail rows: label on the left, value on the right */
-.inbox-lead-info-row {
+.inbox-contact-info-row {
   display: flex;
   justify-content: space-between;
   gap: 0.75rem;
@@ -787,9 +787,9 @@ td .cell-sub { white-space: nowrap; }
   border-bottom: 1px solid var(--border);
   font-size: 0.875rem;
 }
-.inbox-lead-info-row:last-child { border-bottom: none; }
-.inbox-lead-info-row span { flex-shrink: 0; color: var(--text-muted); }
-.inbox-lead-info-row strong { font-weight: 600; text-align: right; word-break: break-word; }
+.inbox-contact-info-row:last-child { border-bottom: none; }
+.inbox-contact-info-row span { flex-shrink: 0; color: var(--text-muted); }
+.inbox-contact-info-row strong { font-weight: 600; text-align: right; word-break: break-word; }
 
 /* Collapsible "technical" block */
 .tech { padding: 0.8rem 1rem; }
@@ -957,7 +957,7 @@ td .cell-sub { white-space: nowrap; }
   .stat-card .value { font-size: 1.5rem; }
 }
 
-/* ---- Interested People / Lead / Booking ---- */
+/* ---- Interested People / Contact / Booking ---- */
 .source-icon {
   display: inline-flex;
   align-items: center;
@@ -976,10 +976,10 @@ td .cell-sub { white-space: nowrap; }
 .profile-header-name { font-size: 1.15rem; font-weight: 700; letter-spacing: -0.01em; }
 .profile-header-name a { color: inherit; text-decoration: none; }
 .profile-header-name a:hover { color: var(--au-primary); }
-.lead-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 1rem; align-items: start; max-width: 1040px; }
-.lead-notes { margin-top: 1rem; }
-.lead-notes p { margin: 0.35rem 0 0; padding: 0.6rem 0.75rem; border-radius: var(--au-r-sm); background: var(--surface-subtle); font-size: 0.875rem; white-space: pre-wrap; }
-@media (max-width: 860px) { .lead-grid { grid-template-columns: 1fr; } }
+.contact-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 1rem; align-items: start; max-width: 1040px; }
+.contact-notes { margin-top: 1rem; }
+.contact-notes p { margin: 0.35rem 0 0; padding: 0.6rem 0.75rem; border-radius: var(--au-r-sm); background: var(--surface-subtle); font-size: 0.875rem; white-space: pre-wrap; }
+@media (max-width: 860px) { .contact-grid { grid-template-columns: 1fr; } }
 
 /* ---- Campaigns (Pages/Campaigns/*, campaign-create.js, campaign-audience.js, multi-select.js) ---- */
 /* Progress bar: read / delivered / sent / failed, grey = not sent yet */
@@ -1034,10 +1034,10 @@ td .cell-sub { white-space: nowrap; }
 .sel-count { margin-left: auto; color: var(--tone-accent); font-size: 0.8125rem; font-weight: 650; }
 .data-table tr.row-selected td,
 .au-table tbody tr.row-selected td { background: var(--accent-soft); }
-.preview-leads-list { max-height: 220px; margin-top: 0.6rem; padding: 0.5rem 0.75rem; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--au-r-sm); font-size: 0.8125rem; }
-.preview-leads-list .preview-lead-row { display: flex; justify-content: space-between; gap: 0.75rem; padding: 0.3rem 0; border-bottom: 1px solid var(--border); }
-.preview-leads-list .preview-lead-row:last-child { border-bottom: none; }
-.preview-leads-list .preview-more { padding-top: 0.4rem; color: var(--text-muted); font-size: 0.78rem; }
+.preview-contacts-list { max-height: 220px; margin-top: 0.6rem; padding: 0.5rem 0.75rem; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--au-r-sm); font-size: 0.8125rem; }
+.preview-contacts-list .preview-contact-row { display: flex; justify-content: space-between; gap: 0.75rem; padding: 0.3rem 0; border-bottom: 1px solid var(--border); }
+.preview-contacts-list .preview-contact-row:last-child { border-bottom: none; }
+.preview-contacts-list .preview-more { padding-top: 0.4rem; color: var(--text-muted); font-size: 0.78rem; }
 
 /* Multi-select with checkboxes + chips (multi-select.js); the form data is the checkboxes inside .ms-options. */
 .ms { position: relative; min-width: 190px; }
@@ -1134,7 +1134,7 @@ td .cell-sub { white-space: nowrap; }
 @media (max-width: 1100px) { .tpl-split.has-side { grid-template-columns: 1fr; } .tpl-side { position: static; } }
 @media (max-width: 760px) { .tpl-form-grid, .cat-grid { grid-template-columns: 1fr; } }
 
-/* ---- Inbox (Pages/Inbox/Index.cshtml, inbox.js): list | thread | lead details ---- */
+/* ---- Inbox (Pages/Inbox/Index.cshtml, inbox.js): list | thread | contact details ---- */
 /* The Inbox fills the viewport under the header instead of scrolling the page */
 .au-main:has(.inbox-shell) { padding: 16px; }
 .inbox-shell {
@@ -1253,25 +1253,25 @@ td .cell-sub { white-space: nowrap; }
 .inbox-template-picker { display: flex; flex-direction: column; gap: 0.5rem; padding: 0.9rem 1rem; }
 .inbox-template-preview { padding: 0.6rem 0.75rem; border-radius: var(--au-r-sm); background: var(--surface-subtle); color: var(--text-muted); font-size: 0.8125rem; white-space: pre-wrap; }
 .inbox-template-preview:empty { display: none; }
-/* --- Lead details panel --- */
-.inbox-lead-info { display: flex; flex-direction: column; flex-shrink: 0; gap: 1.25rem; width: 290px; padding: 1.25rem 1.1rem; overflow-y: auto; border-left: 1px solid var(--border); background: var(--au-paper); }
-.inbox-lead-head { position: relative; display: flex; flex-direction: column; align-items: center; gap: 0.4rem; text-align: center; }
-.inbox-lead-head strong { font-size: 1rem; }
-.inbox-lead-close { position: absolute; top: -0.4rem; right: -0.4rem; }
-.inbox-lead-section .eyebrow { display: block; margin-bottom: 0.45rem; }
-/* Lead journey: new → qualified → booking → surgery */
+/* --- Contact details panel --- */
+.inbox-contact-info { display: flex; flex-direction: column; flex-shrink: 0; gap: 1.25rem; width: 290px; padding: 1.25rem 1.1rem; overflow-y: auto; border-left: 1px solid var(--border); background: var(--au-paper); }
+.inbox-contact-head { position: relative; display: flex; flex-direction: column; align-items: center; gap: 0.4rem; text-align: center; }
+.inbox-contact-head strong { font-size: 1rem; }
+.inbox-contact-close { position: absolute; top: -0.4rem; right: -0.4rem; }
+.inbox-contact-section .eyebrow { display: block; margin-bottom: 0.45rem; }
+/* Contact journey: the first stage of each journey category (open → booked → attended → converted) */
 .journey { display: flex; gap: 4px; }
 .journey i { flex: 1; height: 6px; border-radius: 3px; background: var(--au-meter-track); }
 .journey i.on { background: var(--au-primary); }
 .journey-labels { display: flex; justify-content: space-between; margin-top: 0.4rem; color: var(--text-muted); font-size: 0.7rem; }
-.inbox-lead-actions { display: flex; flex-direction: column; gap: 0.5rem; }
-.inbox-lead-actions .btn { justify-content: center; }
+.inbox-contact-actions { display: flex; flex-direction: column; gap: 0.5rem; }
+.inbox-contact-actions .btn { justify-content: center; }
 /* "Back to list" button in the thread header — phones only */
 .inbox-back { display: none; }
 @media (max-width: 1200px) {
   .inbox-sidebar { width: 290px; }
   .inbox-shell { position: relative; }
-  .inbox-lead-info { position: absolute; top: 0; right: 0; bottom: 0; z-index: 20; box-shadow: var(--au-shadow-pop); }
+  .inbox-contact-info { position: absolute; top: 0; right: 0; bottom: 0; z-index: 20; box-shadow: var(--au-shadow-pop); }
 }
 @media (max-width: 860px) {
   .au-main:has(.inbox-shell) { padding: 0; }
@@ -1281,7 +1281,7 @@ td .cell-sub { white-space: nowrap; }
   .inbox-shell.has-thread .inbox-sidebar { display: none; }
   .inbox-shell:not(.has-thread) .inbox-thread { display: none; }
   .inbox-back { display: inline-grid; }
-  .inbox-lead-info { width: 100%; }
+  .inbox-contact-info { width: 100%; }
   .inbox-msg-bubble { max-width: 85%; }
   .inbox-composer-hint { display: none; }
 }
@@ -1336,7 +1336,7 @@ td .cell-sub { white-space: nowrap; }
 .cal-appt-time { color: var(--text-muted); font-size: 0.78rem; font-weight: 700; }
 .cal-appt-name { margin-top: 0.15rem; font-size: 0.92rem; font-weight: 650; }
 .cal-appt-service { margin-top: 0.1rem; color: var(--text-muted); font-size: 0.8125rem; }
-/* Search-and-pick field (patient picker) */
+/* Search-and-pick field (contact picker) */
 .picker { position: relative; }
 .picker-results { position: absolute; top: calc(100% + 4px); right: 0; left: 0; z-index: 5; max-height: 260px; padding: 0.3rem; overflow-y: auto; border: 1px solid var(--au-divider); border-radius: var(--au-r-md); background: var(--au-paper); box-shadow: var(--au-shadow-pop); }
 .picker-option { display: flex; align-items: center; gap: 0.6rem; width: 100%; padding: 0.5rem; border: none; border-radius: var(--au-r-xs); background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; }

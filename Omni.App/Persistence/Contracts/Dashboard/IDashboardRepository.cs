@@ -8,7 +8,7 @@ public interface IDashboardRepository
     Task<DashboardSummaryCounts> GetSummaryCountsAsync(Guid clientId, DateTimeOffset? from, DateTimeOffset? to,
         CancellationToken ct = default);
 
-    Task<(IReadOnlyList<DashboardLeadRow> Items, int TotalCount)> ListLeadsAsync(Guid clientId, string? status, string? search,
+    Task<(IReadOnlyList<DashboardContactRow> Items, int TotalCount)> ListContactsAsync(Guid clientId, string? stage, string? search,
         string? source, int skip, int take, CancellationToken ct = default);
 
     Task<(IReadOnlyList<DashboardBookingRow> Items, int TotalCount)> ListBookingsAsync(Guid clientId, string? status,

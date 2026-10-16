@@ -8,10 +8,10 @@ namespace Omni.App.Tests.Repositories;
 
 public class DashboardRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixture)
 {
-    private static Order MakeOrder(Guid clientId, Guid leadId, Guid serviceId, string status, decimal? finalAmount = null,
+    private static Order MakeOrder(Guid clientId, Guid contactId, Guid serviceId, string status, decimal? finalAmount = null,
         DateTimeOffset? created = null, DateTimeOffset? serviceDate = null) => new()
     {
-        Id = Guid.NewGuid(), ClientId = clientId, LeadId = leadId, ServiceId = serviceId, Status = status, FinalAmount = finalAmount,
+        Id = Guid.NewGuid(), ClientId = clientId, ContactId = contactId, ServiceId = serviceId, Status = status, FinalAmount = finalAmount,
         ServiceDate = serviceDate, CreatedAt = created ?? Now, UpdatedAt = created ?? Now,
     };
 
@@ -20,9 +20,9 @@ public class DashboardRepositoryTests(PostgresFixture fixture) : RepoTestBase(fi
     {
         var c = MakeClient(); var other = MakeClient();
         var svc = MakeService(c.Id);
-        var inRange = MakeLead(c.Id, createdAt: Now);
-        var tooOld = MakeLead(c.Id, createdAt: Now.AddDays(-30));
-        var foreign = MakeLead(other.Id, createdAt: Now);
+        var inRange = MakeContact(c.Id, createdAt: Now);
+        var tooOld = MakeContact(c.Id, createdAt: Now.AddDays(-30));
+        var foreign = MakeContact(other.Id, createdAt: Now);
         var attended = MakeBooking(c.Id, inRange.Id, Now, BookingStatus.Attended);
         var booked = MakeBooking(c.Id, tooOld.Id, Now.AddDays(5));
         var completed = MakeOrder(c.Id, inRange.Id, svc.Id, OrderStatus.Completed, 1500m, Now, Now);
@@ -37,23 +37,23 @@ public class DashboardRepositoryTests(PostgresFixture fixture) : RepoTestBase(fi
         Assert.Equal(1, ranged.NewInterestedPeople);
         Assert.Equal(1, ranged.BookingsAttended);
         Assert.Equal(2, ranged.BookingsMade);       // counted by when the booking was created
-        Assert.Equal(2, ranged.SurgeriesBooked);
+        Assert.Equal(2, ranged.OrdersMade);
         Assert.Equal(1500m, ranged.Revenue);
 
         var all = await repo.GetSummaryCountsAsync(c.Id, null, null);
         Assert.Equal(2, all.NewInterestedPeople);
-        Assert.Equal(3, all.SurgeriesBooked);
+        Assert.Equal(3, all.OrdersMade);
         Assert.Equal(2499m, all.Revenue);
     }
 
     [PostgresFact]
-    public async Task Lead_and_booking_lists_filter_search_and_page()
+    public async Task Contact_and_booking_lists_filter_search_and_page()
     {
         var c = MakeClient(); var other = MakeClient();
         var svc = MakeService(c.Id, "Rhinoplasty");
-        var l1 = MakeLead(c.Id, "Alice Wong", "111", svc.Id, LeadStatus.New, Now.AddDays(-2)); l1.Source = "Web";
-        var l2 = MakeLead(c.Id, "Bob", "222", null, LeadStatus.Contacted, Now.AddDays(-1)); l2.Source = "ads";
-        var foreign = MakeLead(other.Id, "Alice Foreign");
+        var l1 = MakeContact(c.Id, "Alice Wong", "111", svc.Id, PipelineKit.New, Now.AddDays(-2)); l1.Source = "Web";
+        var l2 = MakeContact(c.Id, "Bob", "222", null, PipelineKit.Contacted, Now.AddDays(-1)); l2.Source = "ads";
+        var foreign = MakeContact(other.Id, "Alice Foreign");
         var a1 = MakeBooking(c.Id, l1.Id, Now.AddDays(1), serviceId: svc.Id);
         var a2 = MakeBooking(c.Id, l2.Id, Now.AddDays(2), BookingStatus.Confirmed);
         await SeedAsync(c, other, svc, l1, l2, foreign);
@@ -61,16 +61,16 @@ public class DashboardRepositoryTests(PostgresFixture fixture) : RepoTestBase(fi
 
         await using var db = NewContext();
         var repo = new DashboardRepository(db);
-        var (leads, total) = await repo.ListLeadsAsync(c.Id, null, null, null, 0, 10);
+        var (contacts, total) = await repo.ListContactsAsync(c.Id, null, null, null, 0, 10);
         Assert.Equal(2, total);
-        Assert.Equal([l2.Id, l1.Id], leads.Select(l => l.Id));        // newest first
-        Assert.Equal("Rhinoplasty", leads[1].ServiceName);
-        Assert.Null(leads[0].ServiceName);
-        Assert.Equal([l2.Id], (await repo.ListLeadsAsync(c.Id, LeadStatus.Contacted, null, null, 0, 10)).Items.Select(l => l.Id));
-        Assert.Equal([l1.Id], (await repo.ListLeadsAsync(c.Id, null, null, " WEB ", 0, 10)).Items.Select(l => l.Id));   // source: trimmed, case-insensitive
-        Assert.Equal([l1.Id], (await repo.ListLeadsAsync(c.Id, null, "alice", null, 0, 10)).Items.Select(l => l.Id));
-        Assert.Equal([l2.Id], (await repo.ListLeadsAsync(c.Id, null, "222", null, 0, 10)).Items.Select(l => l.Id));
-        Assert.Equal([l1.Id], (await repo.ListLeadsAsync(c.Id, null, null, null, 1, 1)).Items.Select(l => l.Id));
+        Assert.Equal([l2.Id, l1.Id], contacts.Select(l => l.Id));        // newest first
+        Assert.Equal("Rhinoplasty", contacts[1].ServiceName);
+        Assert.Null(contacts[0].ServiceName);
+        Assert.Equal([l2.Id], (await repo.ListContactsAsync(c.Id, PipelineKit.Contacted, null, null, 0, 10)).Items.Select(l => l.Id));
+        Assert.Equal([l1.Id], (await repo.ListContactsAsync(c.Id, null, null, " WEB ", 0, 10)).Items.Select(l => l.Id));   // source: trimmed, case-insensitive
+        Assert.Equal([l1.Id], (await repo.ListContactsAsync(c.Id, null, "alice", null, 0, 10)).Items.Select(l => l.Id));
+        Assert.Equal([l2.Id], (await repo.ListContactsAsync(c.Id, null, "222", null, 0, 10)).Items.Select(l => l.Id));
+        Assert.Equal([l1.Id], (await repo.ListContactsAsync(c.Id, null, null, null, 1, 1)).Items.Select(l => l.Id));
 
         var (appts, apptTotal) = await repo.ListBookingsAsync(c.Id, null, null, 0, 10);
         Assert.Equal(2, apptTotal);
@@ -81,11 +81,11 @@ public class DashboardRepositoryTests(PostgresFixture fixture) : RepoTestBase(fi
     }
 
     [PostgresFact]
-    public async Task Service_stats_count_leads_bookings_and_completed_revenue_per_service()
+    public async Task Service_stats_count_contacts_bookings_and_completed_revenue_per_service()
     {
         var c = MakeClient();
         var rhino = MakeService(c.Id, "Rhinoplasty"); var botox = MakeService(c.Id, "Botox");
-        var l1 = MakeLead(c.Id, serviceId: rhino.Id); var l2 = MakeLead(c.Id, serviceId: rhino.Id); var l3 = MakeLead(c.Id, serviceId: botox.Id);
+        var l1 = MakeContact(c.Id, serviceId: rhino.Id); var l2 = MakeContact(c.Id, serviceId: rhino.Id); var l3 = MakeContact(c.Id, serviceId: botox.Id);
         var b1 = MakeOrder(c.Id, l1.Id, rhino.Id, OrderStatus.Completed, 2000m, Now, Now);
         var b2 = MakeOrder(c.Id, l2.Id, rhino.Id, OrderStatus.Confirmed, null, Now);
         var b3 = MakeOrder(c.Id, l3.Id, botox.Id, OrderStatus.Completed, 300m, Now, Now);
@@ -96,21 +96,21 @@ public class DashboardRepositoryTests(PostgresFixture fixture) : RepoTestBase(fi
         var stats = await new DashboardRepository(db).GetServiceStatsAsync(c.Id, null, null);
         Assert.Equal(["Rhinoplasty", "Botox"], stats.Select(s => s.ServiceName));      // by revenue
         var r = stats[0];
-        Assert.Equal((2, 2, 1, 2000m), (r.LeadCount, r.OrderCount, r.CompletedCount, r.CompletedRevenue));
+        Assert.Equal((2, 2, 1, 2000m), (r.ContactCount, r.OrderCount, r.CompletedCount, r.CompletedRevenue));
         Assert.Equal(300m, stats[1].CompletedRevenue);
 
         var none = await new DashboardRepository(NewContext()).GetServiceStatsAsync(c.Id, Now.AddDays(10), Now.AddDays(20));
-        Assert.All(none, s => Assert.Equal(0, s.LeadCount + s.OrderCount + s.CompletedCount));
+        Assert.All(none, s => Assert.Equal(0, s.ContactCount + s.OrderCount + s.CompletedCount));
     }
 
     [PostgresFact]
     public async Task Attention_counts_human_conversations_overdue_followups_and_missing_outcomes()
     {
         var c = MakeClient(); var other = MakeClient();
-        var open = MakeLead(c.Id);
-        var overdue = MakeLead(c.Id); overdue.NextFollowupAt = Now.AddDays(-1);
-        var overdueLost = MakeLead(c.Id, status: LeadStatus.Lost); overdueLost.NextFollowupAt = Now.AddDays(-1);
-        var future = MakeLead(c.Id); future.NextFollowupAt = Now.AddDays(1);
+        var open = MakeContact(c.Id);
+        var overdue = MakeContact(c.Id); overdue.NextFollowupAt = Now.AddDays(-1);
+        var overdueLost = MakeContact(c.Id, stage: PipelineKit.Lost); overdueLost.NextFollowupAt = Now.AddDays(-1);
+        var future = MakeContact(c.Id); future.NextFollowupAt = Now.AddDays(1);
         var human = MakeConversation(c.Id, open.Id); human.Mode = ConversationMode.Human;
         var approval = MakeConversation(c.Id, overdue.Id, "telegram"); approval.Mode = ConversationMode.Approval;
         var ai = MakeConversation(c.Id, future.Id);
@@ -127,9 +127,9 @@ public class DashboardRepositoryTests(PostgresFixture fixture) : RepoTestBase(fi
 
 public class CampaignAudienceRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixture)
 {
-    private Lead Contactable(Guid clientId, string name, Action<Lead>? tweak = null)
+    private Contact Contactable(Guid clientId, string name, Action<Contact>? tweak = null)
     {
-        var l = MakeLead(clientId, name, "+" + Guid.NewGuid().ToString("N")[..9]);
+        var l = MakeContact(clientId, name, "+" + Guid.NewGuid().ToString("N")[..9]);
         tweak?.Invoke(l);
         return l;
     }
@@ -139,8 +139,8 @@ public class CampaignAudienceRepositoryTests(PostgresFixture fixture) : RepoTest
         await using var db = NewContext();
         var repo = new CampaignAudienceRepository(db);
         var f = filters ?? new CampaignAudienceFilters();
-        var ids = (await repo.ListEligibleLeadsAsync(clientId, type, f, days)).Select(l => l.Id).ToList();
-        Assert.Equal(ids.Count, await repo.CountEligibleLeadsAsync(clientId, type, f, days));
+        var ids = (await repo.ListEligibleContactsAsync(clientId, type, f, days)).Select(l => l.Id).ToList();
+        Assert.Equal(ids.Count, await repo.CountEligibleContactsAsync(clientId, type, f, days));
         return (ids.Count, ids);
     }
 
@@ -165,12 +165,12 @@ public class CampaignAudienceRepositoryTests(PostgresFixture fixture) : RepoTest
     public async Task Reactivation_wants_prior_interest_inactivity_and_no_booked_booking()
     {
         var c = MakeClient();
-        var cold = Contactable(c.Id, "cold", l => { l.Status = LeadStatus.Contacted; l.LastContactAt = DateTimeOffset.UtcNow.AddDays(-90); });
+        var cold = Contactable(c.Id, "cold", l => { l.StageKey = PipelineKit.Contacted; l.LastContactAt = DateTimeOffset.UtcNow.AddDays(-90); });
         var untouchedNew = Contactable(c.Id, "new");                                                       // never interested
-        var recent = Contactable(c.Id, "recent", l => { l.Status = LeadStatus.Contacted; l.LastContactAt = DateTimeOffset.UtcNow.AddDays(-2); });
-        var booked = Contactable(c.Id, "booked", l => l.Status = LeadStatus.Contacted);
+        var recent = Contactable(c.Id, "recent", l => { l.StageKey = PipelineKit.Contacted; l.LastContactAt = DateTimeOffset.UtcNow.AddDays(-2); });
+        var booked = Contactable(c.Id, "booked", l => l.StageKey = PipelineKit.Contacted);
         var chatted = Contactable(c.Id, "chatted");                                                        // new, but a conversation exists
-        var chattedRecently = Contactable(c.Id, "chat-recent", l => l.Status = LeadStatus.Contacted);
+        var chattedRecently = Contactable(c.Id, "chat-recent", l => l.StageKey = PipelineKit.Contacted);
         await SeedAsync(c, cold, untouchedNew, recent, booked, chatted, chattedRecently);
         var oldConv = MakeConversation(c.Id, chatted.Id, lastMessageAt: DateTimeOffset.UtcNow.AddDays(-60));
         var freshConv = MakeConversation(c.Id, chattedRecently.Id, lastMessageAt: DateTimeOffset.UtcNow.AddDays(-1));
@@ -180,7 +180,7 @@ public class CampaignAudienceRepositoryTests(PostgresFixture fixture) : RepoTest
         var ids = (await AudienceAsync(c.Id, CampaignAudienceType.ReactivationNoBooking)).Ids;
         Assert.Equivalent(new[] { cold.Id, chatted.Id }, ids);
 
-        // A wider window pulls in the recently contacted lead; a custom inactive-days filter overrides the default.
+        // A wider window pulls in the recently contacted contact; a custom inactive-days filter overrides the default.
         var wide = (await AudienceAsync(c.Id, CampaignAudienceType.ReactivationNoBooking, new CampaignAudienceFilters(InactiveDays: 1))).Ids;
         Assert.Contains(recent.Id, wide);
         Assert.DoesNotContain(booked.Id, wide);
@@ -193,11 +193,11 @@ public class CampaignAudienceRepositoryTests(PostgresFixture fixture) : RepoTest
         var svc = MakeService(c.Id);
         var target = Contactable(c.Id, "target", l =>
         {
-            l.ServiceId = svc.Id; l.Status = LeadStatus.Qualified; l.Source = "web"; l.QualificationStatus = LeadQualificationStatus.Hot;
+            l.ServiceId = svc.Id; l.StageKey = PipelineKit.Qualified; l.Source = "web"; l.Qualification = ContactQualification.Hot;
             l.CountryCode = "LB"; l.City = "Beirut"; l.CreatedAt = Now.AddDays(-10); l.LastContactAt = Now.AddDays(-5);
         });
         var wrongCity = Contactable(c.Id, "wrong-city", l => { l.City = "Dubai"; l.CountryCode = "LB"; });
-        var wrongStatus = Contactable(c.Id, "wrong-status", l => l.Status = LeadStatus.Contacted);
+        var wrongStatus = Contactable(c.Id, "wrong-status", l => l.StageKey = PipelineKit.Contacted);
         var plain = Contactable(c.Id, "plain");
         await SeedAsync(c, svc, target, wrongCity, wrongStatus, plain);
         var attended = MakeBooking(c.Id, target.Id, Now.AddDays(-2), BookingStatus.Attended);
@@ -207,16 +207,16 @@ public class CampaignAudienceRepositoryTests(PostgresFixture fixture) : RepoTest
 
         Assert.Equal(4, (await Run(new CampaignAudienceFilters())).Count);
         Assert.Equal([target.Id], await Run(new CampaignAudienceFilters(ServiceId: svc.Id)));
-        Assert.Equal([target.Id], await Run(new CampaignAudienceFilters(LeadStatuses: [LeadStatus.Qualified])));
+        Assert.Equal([target.Id], await Run(new CampaignAudienceFilters(StageKeys: [PipelineKit.Qualified])));
         Assert.Equal([target.Id], await Run(new CampaignAudienceFilters(Sources: ["web"])));
-        Assert.Equal([target.Id], await Run(new CampaignAudienceFilters(QualificationStatuses: [LeadQualificationStatus.Hot])));
+        Assert.Equal([target.Id], await Run(new CampaignAudienceFilters(Qualifications: [ContactQualification.Hot])));
         Assert.Equal([target.Id], await Run(new CampaignAudienceFilters(Cities: ["Beirut"])));
         Assert.Equal(2, (await Run(new CampaignAudienceFilters(Countries: ["LB"]))).Count);
         Assert.Equal([target.Id], await Run(new CampaignAudienceFilters(BookingStatuses: [BookingStatus.Attended])));
         Assert.Equal([target.Id], await Run(new CampaignAudienceFilters(CreatedAfter: Now.AddDays(-11), CreatedBefore: Now.AddDays(-9))));
         Assert.Equal([target.Id], await Run(new CampaignAudienceFilters(LastContactedAfter: Now.AddDays(-6), LastContactedBefore: Now.AddDays(-4))));
         Assert.Empty(await Run(new CampaignAudienceFilters(LastContactedAfter: Now.AddDays(-1))));
-        // Inactive for 3 days: the lead contacted 5 days ago still qualifies; one who spoke yesterday would not.
+        // Inactive for 3 days: the contact messaged 5 days ago still qualifies; one who spoke yesterday would not.
         var inactive = await Run(new CampaignAudienceFilters(InactiveDays: 3));
         Assert.Contains(target.Id, inactive);
     }

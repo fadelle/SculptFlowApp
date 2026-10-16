@@ -5,8 +5,8 @@ namespace Omni.App.Business.Contracts.Services.Notifications;
 /// <summary>
 /// The client's notification center (the bell). A Notification row is created ONLY from a confirmed backend
 /// event, never from an AI intention alone — see each hook site for the exact "already succeeded" point:
-///   NEW_LEAD               — MessageService.IngestAsync, a genuinely new lead's first inbound customer message
-///                             (LeadService.GetOrCreateByPhoneAsync/GetOrCreateByExternalIdAsync's WasCreated).
+///   NEW_CONTACT               — MessageService.IngestAsync, a genuinely new contact's first inbound customer message
+///                             (ContactService.GetOrCreateByPhoneAsync/GetOrCreateByExternalIdAsync's WasCreated).
 ///   HANDOFF                 — ConversationService.HandoffToHumanAsync, after the mode is actually saved as human
 ///                             (not staff Take Over — that's the staff's own action, they already know).
 ///   BOOKING_CREATED/RESCHEDULED/CANCELED
@@ -29,7 +29,7 @@ public interface INotificationService
     /// not be undone or interrupted by a notification-only problem.</summary>
     Task CreateAsync(
         Guid clientId, string type, string title, string? message,
-        Guid? leadId = null, Guid? conversationId = null, Guid? bookingId = null, Guid? channelIntegrationId = null,
+        Guid? contactId = null, Guid? conversationId = null, Guid? bookingId = null, Guid? channelIntegrationId = null,
         string? link = null, CancellationToken ct = default);
 
     Task<NotificationListResponse> ListAsync(Guid clientId, int skip, int take, CancellationToken ct = default);

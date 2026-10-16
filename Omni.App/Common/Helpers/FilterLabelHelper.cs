@@ -1,8 +1,9 @@
 namespace Omni.App.Common.Helpers;
 
 /// <summary>
-/// Maps free-text status values (lead status, qualification status, booking status) to a
-/// client-friendly display label for the Campaign audience filter UI. Purely presentational — the
+/// Maps free-text status values (qualification, booking status, campaign status…) to a client-friendly display label.
+/// Contact stages are not here: their labels come from the client's business type (StageDisplay); a stage key the type
+/// doesn't know falls back to the mechanical label below. Purely presentational — the
 /// underlying stored/backend values (Database/schema.sql's check constraints, the *Status static
 /// classes in Data/Entities) are unchanged; this only controls what client staff read on screen.
 /// </summary>
@@ -10,30 +11,19 @@ public static class FilterLabelHelper
 {
     private static readonly Dictionary<string, string> Labels = new(StringComparer.OrdinalIgnoreCase)
     {
-        // lead statuses
-        ["new"] = "New",
-        ["contacted"] = "Contacted",
-        ["qualified"] = "Qualified",
-        ["consultation_booked"] = "Booked",
-        ["consultation_attended"] = "Attended",
-        ["no_show"] = "No-show",
-        ["surgery_booked"] = "Surgery booked",
-        ["not_interested"] = "Not interested",
-        ["needs_human"] = "Needs human review",
-        ["lost"] = "Lost",
-
-        // qualification statuses
+        // qualifications
         ["unknown"] = "Unknown",
         ["hot"] = "Hot",
         ["warm"] = "Warm",
         ["cold"] = "Cold",
-        ["medical_question"] = "Medical question",
+        ["needs_human"] = "Needs human review",
         ["spam"] = "Spam",
 
         // booking statuses
         ["booked"] = "Booked",
         ["confirmed"] = "Confirmed",
         ["attended"] = "Attended",
+        ["no_show"] = "No-show",
         ["canceled"] = "Canceled",
         ["rescheduled"] = "Rescheduled",
     };

@@ -7,6 +7,6 @@ public record InboxSettingsDto(bool PlanIncludesAiBot, bool AiBotNewConversation
     /// <summary>A brand-new conversation starts in AI mode (else human mode).</summary>
     public bool AiBotAnswersNew => PlanIncludesAiBot && AiBotNewConversations;
 
-    /// <summary>A conversation a patient reopens may stay with the AI (else it moves to human mode).</summary>
+    /// <summary>A conversation a contact reopens may stay with the AI (else it moves to human mode).</summary>
     public bool AiBotAnswersReopened => PlanIncludesAiBot && AiBotReopenedConversations;
 }

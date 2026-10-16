@@ -4,7 +4,7 @@ namespace Omni.App.Business.Contracts.Providers.Channels;
 
 /// <summary>
 /// One outbound "adapter" per messaging channel, resolved by Conversation.Channel. MessageService owns
-/// everything channel-independent (mode checks, persistence, conversation/lead bookkeeping, SignalR,
+/// everything channel-independent (mode checks, persistence, conversation/contact bookkeeping, SignalR,
 /// events) and calls <see cref="SendTextAsync"/> for the one channel-specific step: actually
 /// delivering free-form text to the external platform.
 ///
@@ -19,8 +19,8 @@ public interface IChannelSender
     /// <summary>The ConversationChannel value this sender handles.</summary>
     string Channel { get; }
 
-    /// <summary>Delivers plain text to the lead on this channel and returns the provider's external
+    /// <summary>Delivers plain text to the contact on this channel and returns the provider's external
     /// message id (stored as Message.ExternalMessageId, used for idempotency/status updates).
-    /// The conversation's Lead is loaded.</summary>
+    /// The conversation's Contact is loaded.</summary>
     Task<string> SendTextAsync(Conversation conversation, string text, CancellationToken ct = default);
 }

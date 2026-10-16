@@ -165,10 +165,10 @@ else
                     <button type="button" class="au-icon-btn" id="tpl-side-close" aria-label="Close" title="Close"><span class="au-icon" aria-hidden="true">close</span></button>
                 </div>
                 <div class="wa-preview"><div class="wa-bubble" id="tpl-side-bubble" dir="auto"></div></div>
-                <div class="inbox-lead-info-row mt-2"><span>Status</span><strong id="tpl-side-status"></strong></div>
-                <div class="inbox-lead-info-row"><span>Quality</span><strong id="tpl-side-quality"></strong></div>
-                <div class="inbox-lead-info-row"><span>Blanks</span><strong id="tpl-side-blanks"></strong></div>
-                <div class="inbox-lead-info-row"><span>Last update</span><strong id="tpl-side-updated"></strong></div>
+                <div class="inbox-contact-info-row mt-2"><span>Status</span><strong id="tpl-side-status"></strong></div>
+                <div class="inbox-contact-info-row"><span>Quality</span><strong id="tpl-side-quality"></strong></div>
+                <div class="inbox-contact-info-row"><span>Blanks</span><strong id="tpl-side-blanks"></strong></div>
+                <div class="inbox-contact-info-row"><span>Last update</span><strong id="tpl-side-updated"></strong></div>
                 <div class="flex gap-2 mt-2 flex-wrap" id="tpl-side-actions"></div>
             </aside>
         </div>
@@ -199,8 +199,8 @@ else
                             <div class="cat-grid">
                                 @foreach (var (value, title, desc) in new[]
                                 {
-                                    (WhatsAppTemplateCategory.Utility, "Utility", "Reminders, confirmations, follow-ups about something the patient asked for."),
-                                    (WhatsAppTemplateCategory.Marketing, "Marketing", "Offers, promotions, re-engaging old leads. Stricter review."),
+                                    (WhatsAppTemplateCategory.Utility, "Utility", "Reminders, confirmations, follow-ups about something the contact asked for."),
+                                    (WhatsAppTemplateCategory.Marketing, "Marketing", "Offers, promotions, re-engaging old contacts. Stricter review."),
                                     (WhatsAppTemplateCategory.Authentication, "Authentication", "One-time codes only."),
                                 })
                                 {
@@ -255,7 +255,7 @@ else
                     <div>
                         <span class="eyebrow">Live preview</span>
                         <div class="wa-preview"><div class="wa-bubble" id="tpl-preview" dir="auto"></div></div>
-                        <div class="text-subtle text-xs mt-1">Blanks are filled per person when you send, e.g. the lead's first name in Campaigns.</div>
+                        <div class="text-subtle text-xs mt-1">Blanks are filled per person when you send, e.g. the contact's first name in Campaigns.</div>
                     </div>
                 </div>
                 <div class="au-form-actions">

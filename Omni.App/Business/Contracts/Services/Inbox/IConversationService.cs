@@ -9,16 +9,16 @@ public interface IConversationService
 {
     Task<ConversationResponse> CreateAsync(CreateConversationRequest request, CancellationToken ct = default);
 
-    /// <summary>Returns the lead's existing conversation on this channel, or creates one if none
-    /// exists yet. Used by CampaignService so every campaign recipient lands in the lead's normal
+    /// <summary>Returns the contact's existing conversation on this channel, or creates one if none
+    /// exists yet. Used by CampaignService so every campaign recipient lands in the contact's normal
     /// Conversation — a Campaign never creates a separate "campaign conversation".</summary>
-    Task<ConversationResponse> GetOrCreateForLeadAsync(Guid clientId, Guid leadId, string channel, CancellationToken ct = default);
+    Task<ConversationResponse> GetOrCreateForContactAsync(Guid clientId, Guid contactId, string channel, CancellationToken ct = default);
 
     /// <summary>Same as the overload above, for channels whose conversations are identified by an
-    /// external thread id (Telegram: chat.id). Finds the (client, lead, channel) conversation — or, for
-    /// a lead with none, creates it stamped with <paramref name="externalThreadId"/>. Race-safe via the
+    /// external thread id (Telegram: chat.id). Finds the (client, contact, channel) conversation — or, for
+    /// a contact with none, creates it stamped with <paramref name="externalThreadId"/>. Race-safe via the
     /// unique index on (client_id, channel, external_thread_id).</summary>
-    Task<ConversationResponse> GetOrCreateForLeadAsync(Guid clientId, Guid leadId, string channel, string externalThreadId, CancellationToken ct = default);
+    Task<ConversationResponse> GetOrCreateForContactAsync(Guid clientId, Guid contactId, string channel, string externalThreadId, CancellationToken ct = default);
 
     Task<(ConversationResponse Conversation, IReadOnlyList<MessageResponse> Messages)?> GetByIdWithMessagesAsync(
         Guid clientId, Guid id, CancellationToken ct = default);
@@ -51,7 +51,7 @@ public interface IConversationService
     Task<ConversationResponse?> CloseAsync(Guid clientId, Guid conversationId, CancellationToken ct = default);
 
     /// <summary>Staff brings a closed conversation back into the working list. A conversation that is already
-    /// active is returned unchanged (no event, no broadcast); null if it isn't in this client. A patient's next
+    /// active is returned unchanged (no event, no broadcast); null if it isn't in this client. A contact's next
     /// message does the same automatically — see MessageService.IngestAsync.</summary>
     Task<ConversationResponse?> ReopenAsync(Guid clientId, Guid conversationId, CancellationToken ct = default);
 

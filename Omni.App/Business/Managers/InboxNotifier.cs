@@ -16,13 +16,13 @@ public class InboxNotifier : IInboxNotifier
 
     private IClientProxy ClientGroup(Guid clientId) => _hub.Clients.Group(InboxHub.ClientGroup(clientId));
 
-    public Task NewMessageAsync(Guid clientId, Guid conversationId, Guid messageId, Guid leadId,
+    public Task NewMessageAsync(Guid clientId, Guid conversationId, Guid messageId, Guid contactId,
         string direction, string senderType, string origin, DateTimeOffset createdAt, CancellationToken ct = default) =>
         ClientGroup(clientId).SendAsync("NewMessage", new
         {
             conversationId,
             messageId,
-            leadId,
+            contactId,
             direction,
             senderType,
             origin,

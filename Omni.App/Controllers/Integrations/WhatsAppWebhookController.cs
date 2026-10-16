@@ -80,7 +80,7 @@ public class WhatsAppWebhookController : ControllerBase
 
     /// <summary>Every WhatsApp webhook delivery from Meta. The raw body must carry a valid X-Hub-Signature-256 (HMAC-SHA256 keyed with
     /// Meta:AppSecret) or nothing is processed. Then it reuses the MetaWebhookParser -> MetaWebhookProcessor -> Handlers pipeline.
-    /// One batch can hold messages from several patients, so the AI is triggered once per conversation (the last message wins).</summary>
+    /// One batch can hold messages from several contacts, so the AI is triggered once per conversation (the last message wins).</summary>
     [HttpPost]
     public async Task<IActionResult> Receive(CancellationToken ct)
     {
@@ -114,7 +114,7 @@ public class WhatsAppWebhookController : ControllerBase
         foreach (var result in aiTriggers)
         {
             await _aiTrigger.NotifyAsync(new AiTriggerPayload(
-                result.ClientId!.Value, result.ConversationId!.Value, result.LeadId, result.MessageId,
+                result.ClientId!.Value, result.ConversationId!.Value, result.ContactId, result.MessageId,
                 Channel: Channel, MessageType: result.MessageType, MessageText: result.Content,
                 SelectedValue: result.SelectedValue), ct);
         }

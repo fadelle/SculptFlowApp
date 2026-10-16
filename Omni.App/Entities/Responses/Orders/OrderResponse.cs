@@ -3,8 +3,8 @@ namespace Omni.App.Entities.Responses.Orders;
 public record OrderResponse(
     Guid Id,
     Guid ClientId,
-    Guid LeadId,
-    string? LeadFullName,
+    Guid ContactId,
+    string? ContactFullName,
     Guid ServiceId,
     string? ServiceName,
     Guid? BookingId,

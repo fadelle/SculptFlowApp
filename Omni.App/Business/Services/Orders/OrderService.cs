@@ -1,4 +1,5 @@
 using Omni.App.Business.Contracts.Managers;
+using Omni.App.Business.Contracts.Services.BusinessTypes;
 using Omni.App.Business.Contracts.Services.Catalog;
 using Omni.App.Business.Contracts.Services.Orders;
 using Omni.App.Business.Mappers.Orders;
@@ -8,7 +9,7 @@ using Omni.App.Entities.Models;
 using Omni.App.Entities.Requests.Orders;
 using Omni.App.Entities.Responses.Orders;
 using Omni.App.Persistence.Contracts;
-using Omni.App.Persistence.Contracts.Leads;
+using Omni.App.Persistence.Contracts.Contacts;
 using Omni.App.Persistence.Contracts.Orders;
 
 namespace Omni.App.Business.Services.Orders;
@@ -16,35 +17,37 @@ namespace Omni.App.Business.Services.Orders;
 public class OrderService : IOrderService
 {
     private readonly IOrderRepository _orders;
-    private readonly ILeadRepository _leads;
+    private readonly IContactRepository _contacts;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IEventLogger _events;
     private readonly ICatalogService _services;
+    private readonly IBusinessTypeService _businessTypes;
 
-    public OrderService(IOrderRepository orders, ILeadRepository leads, IUnitOfWork unitOfWork,
-        IEventLogger events, ICatalogService services)
+    public OrderService(IOrderRepository orders, IContactRepository contacts, IUnitOfWork unitOfWork,
+        IEventLogger events, ICatalogService services, IBusinessTypeService businessTypes)
     {
         _orders = orders;
-        _leads = leads;
+        _contacts = contacts;
         _unitOfWork = unitOfWork;
         _events = events;
         _services = services;
+        _businessTypes = businessTypes;
     }
 
     public async Task<OrderResponse> CreateAsync(CreateOrderRequest request, CancellationToken ct = default)
     {
         // A new order may only reference one of this client's ACTIVE services.
         await _services.EnsureUsableAsync(request.ClientId, request.ServiceId, ct);
-        if (!await _leads.ExistsAsync(request.ClientId, request.LeadId, ct))
+        if (!await _contacts.ExistsAsync(request.ClientId, request.ContactId, ct))
         {
-            throw new ArgumentException("Lead not found for this client.");
+            throw new ArgumentException("Contact not found for this client.");
         }
 
         var order = new Order
         {
             Id = Guid.NewGuid(),
             ClientId = request.ClientId,
-            LeadId = request.LeadId,
+            ContactId = request.ContactId,
             ServiceId = request.ServiceId,
             BookingId = request.BookingId,
             Status = OrderStatus.Considering,
@@ -89,14 +92,15 @@ public class OrderService : IOrderService
         // confirmed to completed must not log a second order_confirmed event.
         if (IsConfirmed(request.Status) && !IsConfirmed(previousStatus))
         {
-            var lead = await _leads.GetByIdAsync(order.LeadId, ct);
-            if (lead is not null)
+            var contact = await _contacts.GetByIdAsync(order.ContactId, ct);
+            if (contact is not null)
             {
-                lead.Status = LeadStatus.SurgeryBooked;
-                lead.UpdatedAt = DateTimeOffset.UtcNow;
+                var pipeline = await _businessTypes.GetPipelineAsync(clientId, ct);
+                contact.StageKey = pipeline.MoveTo(contact.StageKey, StageCategory.Converted) ?? contact.StageKey;
+                contact.UpdatedAt = DateTimeOffset.UtcNow;
             }
 
-            _events.Log(clientId, EventTypes.OrderConfirmed, leadId: order.LeadId,
+            _events.Log(clientId, EventTypes.OrderConfirmed, contactId: order.ContactId,
                 metadataJson: $"{{\"amount\": {order.FinalAmount?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "null"}}}");
         }
 

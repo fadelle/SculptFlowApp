@@ -72,10 +72,10 @@ else
 
     <details class="au-panel au-panel--round tech mw-640 mt-3">
         <summary>Technical setup (read-only)</summary>
-        <div class="inbox-lead-info-row"><span>Embedding model</span><strong>@Model.Current.EmbeddingModel</strong></div>
-        <div class="inbox-lead-info-row"><span>Vector dimension</span><strong>@Model.Current.VectorDimension</strong></div>
-        <div class="inbox-lead-info-row"><span>Similarity method</span><strong>@KnowledgeSimilarityMethod.Label(Model.Current.SimilarityMethod)</strong></div>
-        <div class="inbox-lead-info-row"><span>Vector index type</span><strong>@KnowledgeVectorIndexType.Label(Model.Current.VectorIndexType)</strong></div>
+        <div class="inbox-contact-info-row"><span>Embedding model</span><strong>@Model.Current.EmbeddingModel</strong></div>
+        <div class="inbox-contact-info-row"><span>Vector dimension</span><strong>@Model.Current.VectorDimension</strong></div>
+        <div class="inbox-contact-info-row"><span>Similarity method</span><strong>@KnowledgeSimilarityMethod.Label(Model.Current.SimilarityMethod)</strong></div>
+        <div class="inbox-contact-info-row"><span>Vector index type</span><strong>@KnowledgeVectorIndexType.Label(Model.Current.VectorIndexType)</strong></div>
         <div class="cell-sub mt-1">
             Changing this means re-processing every entry. Contact support if you need a different setup.
             Last updated @LocalTimeHelper.Time(Model.Current.UpdatedAt, "datetime-year").

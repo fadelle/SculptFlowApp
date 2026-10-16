@@ -6,7 +6,7 @@ public class Order
 {
     public Guid Id { get; set; }
     public Guid ClientId { get; set; }
-    public Guid LeadId { get; set; }
+    public Guid ContactId { get; set; }
     public Guid ServiceId { get; set; }
     public Guid? BookingId { get; set; }
 
@@ -21,7 +21,7 @@ public class Order
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 
-    public Lead? Lead { get; set; }
+    public Contact? Contact { get; set; }
     public Service? Service { get; set; }
     public Booking? Booking { get; set; }
 }

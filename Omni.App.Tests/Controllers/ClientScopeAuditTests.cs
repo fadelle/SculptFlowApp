@@ -16,7 +16,7 @@ public class ClientScopeAuditTests
 {
     private static readonly HashSet<string> NoClientCheckByDesign = new()
     {
-        "LeadsController.Create",                     // n8n ingest-key endpoint, client comes from the request
+        "ContactsController.Create",                     // n8n ingest-key endpoint, client comes from the request
         "ConversationsController.SendMessage",        // AI sends use the ingest key; staff path is covered in ConversationsControllerTests
     };
 

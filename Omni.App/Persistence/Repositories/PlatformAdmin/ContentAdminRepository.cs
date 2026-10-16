@@ -47,8 +47,8 @@ public class ContentAdminRepository : IContentAdminRepository
         var q = _db.CampaignRecipients.AsNoTracking().Where(r => r.CampaignId == campaignId);
         if (!string.IsNullOrWhiteSpace(status)) q = q.Where(r => r.Status == status);
         return q.OrderBy(r => r.CreatedAt)
-            .Select(r => new RecipientRow(r.Id, r.LeadId,
-                r.Lead!.FullName ?? ((r.Lead.FirstName ?? "") + " " + (r.Lead.LastName ?? "")).Trim(),
+            .Select(r => new RecipientRow(r.Id, r.ContactId,
+                r.Contact!.FullName ?? ((r.Contact.FirstName ?? "") + " " + (r.Contact.LastName ?? "")).Trim(),
                 r.PhoneNumber, r.Status, r.SkipReason, r.FailureReason, r.SentAt, r.RepliedAt, r.BookedAt))
             .ToPagedAsync(page, 100, ct);
     }
@@ -70,7 +70,7 @@ public class ContentAdminRepository : IContentAdminRepository
         if (clientId.HasValue) q = q.Where(p => p.ClientId == clientId.Value);
         return q.OrderBy(p => p.Client!.Name).ThenBy(p => p.Name)
             .Select(p => new ServiceRow(p.Id, p.ClientId, p.Client!.Name, p.Name, p.Code, p.BookingDuration, p.IsActive,
-                _db.Leads.Count(l => l.ServiceId == p.Id), p.UpdatedAt))
+                _db.Contacts.Count(l => l.ServiceId == p.Id), p.UpdatedAt))
             .Take(2000).ToListAsync(ct);
     }
 

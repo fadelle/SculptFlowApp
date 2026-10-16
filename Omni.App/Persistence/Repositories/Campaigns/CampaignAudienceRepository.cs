@@ -9,8 +9,8 @@ namespace Omni.App.Persistence.Repositories.Campaigns;
 
 public class CampaignAudienceRepository : ICampaignAudienceRepository
 {
-    /// <summary>Booking statuses that mean "this lead already reached a booking" — excluded
-    /// from reactivation. Canceled/NoShow do NOT count: a lead who cancelled or didn't show never
+    /// <summary>Booking statuses that mean "this contact already reached a booking" — excluded
+    /// from reactivation. Canceled/NoShow do NOT count: a contact who cancelled or didn't show never
     /// actually had the booking, so they remain eligible for reactivation. Rescheduled counts as
     /// booked (it's a live booking moved to a new time, not an abandoned one).</summary>
     private static readonly string[] BookedOrCompletedBookingStatuses =
@@ -25,20 +25,20 @@ public class CampaignAudienceRepository : ICampaignAudienceRepository
         _db = db;
     }
 
-    public Task<List<Lead>> ListEligibleLeadsAsync(Guid clientId, string audienceType, CampaignAudienceFilters filters,
+    public Task<List<Contact>> ListEligibleContactsAsync(Guid clientId, string audienceType, CampaignAudienceFilters filters,
         int defaultInactiveDays, CancellationToken ct = default) =>
         BuildQuery(clientId, audienceType, filters, defaultInactiveDays).ToListAsync(ct);
 
-    public Task<int> CountEligibleLeadsAsync(Guid clientId, string audienceType, CampaignAudienceFilters filters,
+    public Task<int> CountEligibleContactsAsync(Guid clientId, string audienceType, CampaignAudienceFilters filters,
         int defaultInactiveDays, CancellationToken ct = default) =>
         BuildQuery(clientId, audienceType, filters, defaultInactiveDays).CountAsync(ct);
 
     /// <summary>Mandatory exclusions (always) + audience-type-specific rules. This is the ONLY place
-    /// eligibility is computed — "all_eligible" is deliberately not "every lead row", it's this same
+    /// eligibility is computed — "all_eligible" is deliberately not "every contact row", it's this same
     /// mandatory-exclusion base with no further narrowing.</summary>
-    private IQueryable<Lead> BuildQuery(Guid clientId, string audienceType, CampaignAudienceFilters filters, int defaultInactiveDays)
+    private IQueryable<Contact> BuildQuery(Guid clientId, string audienceType, CampaignAudienceFilters filters, int defaultInactiveDays)
     {
-        var contactable = _db.Leads.Where(l =>
+        var contactable = _db.Contacts.Where(l =>
             l.ClientId == clientId &&
             l.Phone != null && l.Phone != "" &&
             l.MarketingOptIn &&
@@ -53,18 +53,22 @@ public class CampaignAudienceRepository : ICampaignAudienceRepository
         };
     }
 
-    /// <summary>"Old lead reactivation" — prior interest/activity, inactive for N days, and never
+    /// <summary>"Old contact reactivation" — prior interest/activity, inactive for N days, and never
     /// reached a booked/confirmed/completed booking. Nothing here reads a stored flag; every
-    /// condition is derived live from leads/conversations/bookings (see class remarks in
+    /// condition is derived live from contacts/conversations/bookings (see class remarks in
     /// ICampaignAudienceService).</summary>
-    private static IQueryable<Lead> ApplyReactivationRules(IQueryable<Lead> query, CampaignAudienceFilters filters, int defaultInactiveDays)
+    private IQueryable<Contact> ApplyReactivationRules(IQueryable<Contact> query, CampaignAudienceFilters filters, int defaultInactiveDays)
     {
         var cutoff = DateTimeOffset.UtcNow.AddDays(-(filters.InactiveDays ?? defaultInactiveDays));
 
         query = query.Where(l =>
-            // Prior interest/activity: an actual conversation happened, or the lead was manually
-            // marked past "new" (e.g. contacted, qualified) even without a logged conversation.
-            (l.Conversations.Any() || l.Status != LeadStatus.New) &&
+            // Prior interest/activity: an actual conversation happened, or the contact was moved past its business
+            // type's entry stage (the first open stage, e.g. to contacted or qualified) even without a logged conversation.
+            (l.Conversations.Any() || l.StageKey != _db.PipelineStages
+                .Where(s => s.BusinessTypeCode == l.Client!.BusinessTypeCode && s.Category == StageCategory.Open)
+                .OrderBy(s => s.SortOrder).ThenBy(s => s.Key)
+                .Select(s => s.Key)
+                .FirstOrDefault()) &&
             // Inactive: no logged contact and no conversation activity more recent than the cutoff.
             (l.LastContactAt == null || l.LastContactAt <= cutoff) &&
             !l.Conversations.Any(c => c.LastMessageAt != null && c.LastMessageAt > cutoff) &&
@@ -75,11 +79,11 @@ public class CampaignAudienceRepository : ICampaignAudienceRepository
     }
 
     /// <summary>Client-defined filters — no "never booked" requirement, just whichever optional
-    /// fields the client set. Common ones (leadStatuses, sources, serviceId, inactiveDays) are
+    /// fields the client set. Common ones (stageKeys, sources, serviceId, inactiveDays) are
     /// shared with reactivation; everything past that (qualification, dates, booking status,
     /// country/city/language) only ever applies here — the custom-audience "Advanced filters"
     /// section in the Campaign creation UI.</summary>
-    private static IQueryable<Lead> ApplyCustomFilters(IQueryable<Lead> query, CampaignAudienceFilters filters)
+    private static IQueryable<Contact> ApplyCustomFilters(IQueryable<Contact> query, CampaignAudienceFilters filters)
     {
         if (filters.InactiveDays.HasValue)
         {
@@ -91,9 +95,9 @@ public class CampaignAudienceRepository : ICampaignAudienceRepository
 
         query = ApplyOptionalScopingFilters(query, filters);
 
-        if (filters.QualificationStatuses is { Count: > 0 })
+        if (filters.Qualifications is { Count: > 0 })
         {
-            query = query.Where(l => filters.QualificationStatuses.Contains(l.QualificationStatus));
+            query = query.Where(l => filters.Qualifications.Contains(l.Qualification));
         }
         // Npgsql only accepts UTC offsets for timestamptz; filters may arrive with any offset.
         var createdAfter = filters.CreatedAfter?.ToUniversalTime();
@@ -131,15 +135,15 @@ public class CampaignAudienceRepository : ICampaignAudienceRepository
         return query;
     }
 
-    private static IQueryable<Lead> ApplyOptionalScopingFilters(IQueryable<Lead> query, CampaignAudienceFilters filters)
+    private static IQueryable<Contact> ApplyOptionalScopingFilters(IQueryable<Contact> query, CampaignAudienceFilters filters)
     {
         if (filters.ServiceId.HasValue)
         {
             query = query.Where(l => l.ServiceId == filters.ServiceId.Value);
         }
-        if (filters.LeadStatuses is { Count: > 0 })
+        if (filters.StageKeys is { Count: > 0 })
         {
-            query = query.Where(l => filters.LeadStatuses.Contains(l.Status));
+            query = query.Where(l => filters.StageKeys.Contains(l.StageKey));
         }
         if (filters.Sources is { Count: > 0 })
         {

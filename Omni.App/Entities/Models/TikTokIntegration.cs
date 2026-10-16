@@ -10,7 +10,7 @@ namespace Omni.App.Entities.Models;
 /// relationship directly (connect, callback, token refresh, disconnect) — no n8n involvement, mirroring
 /// CalendarIntegration's v2 architecture. MVP NOTE: tokens are stored in plain text, same caveat as
 /// CalendarIntegration.AccessToken/ChannelIntegration.AccessToken — move to an encrypted column/secrets
-/// manager before this handles real patient data at scale.</summary>
+/// manager before this handles real contact data at scale.</summary>
 public class TikTokIntegration
 {
     public Guid Id { get; set; }

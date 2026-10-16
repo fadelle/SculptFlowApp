@@ -15,13 +15,9 @@ path: PROJECT_HANDOFF.md
 # One-off data migrations read the old table and column names.
 path: Database/migrations/**
 
-# The demo seed is a populated clinic (names, messages, knowledge text, template variables); its data stays clinic-flavoured.
-path: Database/seed-demo.sql | clinic,procedure,consultation,appointment
-
-# Two stage keys of the built-in clinic type (crm.pipeline_stages data) that code still writes until S6 moves it to
-# stage categories; S6 removes these tokens.
-token: consultation_booked
-token: consultation_attended
+# The demo seed is a populated clinic (names, messages, knowledge text, template variables, stage keys of the built-in
+# clinic type); its data stays clinic-flavoured.
+path: Database/seed-demo.sql | clinic,procedure,consultation,appointment,patient,surgeon,surgery
 
 # Tests name the built-in business type through this one constant (Support/TextKit.cs); the type's own code is data.
 token: TextKit.Clinic

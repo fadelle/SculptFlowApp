@@ -18,7 +18,7 @@ public record WhatsAppWebhookResponse(
     Guid? ClientId,
     Guid? WhatsAppConnectionId = null,
     Guid? ConversationId = null,
-    Guid? LeadId = null,
+    Guid? ContactId = null,
     Guid? MessageId = null,
     string? ExternalMessageId = null,
     string? Mode = null,

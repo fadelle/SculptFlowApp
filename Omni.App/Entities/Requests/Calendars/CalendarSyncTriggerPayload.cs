@@ -4,7 +4,7 @@ namespace Omni.App.Entities.Requests.Calendars;
 /// saved. ExternalEventId is set (from the stored BookingCalendarSync row) for update/cancel so n8n acts on the
 /// SAME external event instead of creating a new one; null for create. AccessToken is a short-lived OAuth token
 /// Omni refreshed just before sending this — n8n uses it as-is and must not try to refresh or store it. All
-/// patient-facing text here is exactly what should appear on the external event — n8n must not add anything else
+/// contact-facing text here is exactly what should appear on the external event — n8n must not add anything else
 /// from elsewhere.</summary>
 public record CalendarSyncTriggerPayload(
     Guid ClientId,

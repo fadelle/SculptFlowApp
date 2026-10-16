@@ -84,7 +84,7 @@ else
             }
             @if (attention.OverdueFollowups > 0)
             {
-                <a class="au-action-card" href="/dashboard/leads">
+                <a class="au-action-card" href="/dashboard/contacts">
                     <span class="au-icon-tile" style="--tile: var(--au-warning)"><span class="au-icon" aria-hidden="true">schedule</span></span>
                     <span><span class="au-action-card__title">@attention.OverdueFollowups overdue @(attention.OverdueFollowups == 1 ? "follow-up" : "follow-ups")</span>
                         <span class="au-action-card__text">Get back to these people.</span></span>
@@ -103,7 +103,7 @@ else
         </div>
     }
 
-    <h2 class="section-title">Patient funnel <span class="section-title__sub">@Model.RangeLabel</span></h2>
+    <h2 class="section-title">Contact funnel <span class="section-title__sub">@Model.RangeLabel</span></h2>
     <div class="au-grid au-grid--4">
         <div class="au-stat stat-accent">
             <span class="au-eyebrow">Interested people</span>
@@ -121,16 +121,16 @@ else
             <span class="au-stat__hint">@Rate(s.BookingsAttended, s.BookingsMade) of booked</span>
         </div>
         <div class="au-stat">
-            <span class="au-eyebrow">Surgeries booked</span>
-            <div class="au-stat__value">@s.SurgeriesBooked</div>
-            <span class="au-stat__hint">@Rate(s.SurgeriesBooked, s.BookingsAttended) of attended</span>
+            <span class="au-eyebrow">Orders made</span>
+            <div class="au-stat__value">@s.OrdersMade</div>
+            <span class="au-stat__hint">@Rate(s.OrdersMade, s.BookingsAttended) of attended</span>
         </div>
     </div>
 
     <h2 class="section-title">Results</h2>
     <div class="au-grid au-grid--4">
         <div class="au-stat">
-            <span class="au-eyebrow">Revenue from completed surgeries</span>
+            <span class="au-eyebrow">Revenue from completed orders</span>
             <div class="au-stat__value">@UiTextHelper.Amount(s.Revenue)</div>
             <span class="au-stat__hint">In this period</span>
         </div>
@@ -157,7 +157,7 @@ else
                         {
                             <tr>
                                 <td data-label="Service"><strong>@p.ServiceName</strong></td>
-                                <td data-label="Interested" class="au-right">@p.LeadCount</td>
+                                <td data-label="Interested" class="au-right">@p.ContactCount</td>
                                 <td data-label="Bookings" class="au-right">@p.OrderCount</td>
                                 <td data-label="Completed" class="au-right">@p.CompletedCount</td>
                                 <td data-label="Revenue" class="au-right">@UiTextHelper.Amount(p.CompletedRevenue)</td>
@@ -173,17 +173,17 @@ else
     <div class="au-grid au-grid--3">
         <a class="au-action-card" href="/inbox">
             <span class="au-icon-tile"><span class="au-icon" aria-hidden="true">chat</span></span>
-            <span><span class="au-action-card__title">Inbox</span><span class="au-action-card__text">Reply to patients.</span></span>
+            <span><span class="au-action-card__title">Inbox</span><span class="au-action-card__text">Reply to contacts.</span></span>
             <span class="au-icon au-action-card__arrow" aria-hidden="true">arrow_forward</span>
         </a>
-        <a class="au-action-card" href="/dashboard/leads">
+        <a class="au-action-card" href="/dashboard/contacts">
             <span class="au-icon-tile"><span class="au-icon" aria-hidden="true">group</span></span>
-            <span><span class="au-action-card__title">Interested People</span><span class="au-action-card__text">Every lead and their status.</span></span>
+            <span><span class="au-action-card__title">Interested People</span><span class="au-action-card__text">Every contact and their status.</span></span>
             <span class="au-icon au-action-card__arrow" aria-hidden="true">arrow_forward</span>
         </a>
         <a class="au-action-card" href="/dashboard/bookings">
             <span class="au-icon-tile"><span class="au-icon" aria-hidden="true">calendar_month</span></span>
-            <span><span class="au-action-card__title">Bookings</span><span class="au-action-card__text">Bookings and surgeries.</span></span>
+            <span><span class="au-action-card__title">Bookings</span><span class="au-action-card__text">Bookings and orders.</span></span>
             <span class="au-icon au-action-card__arrow" aria-hidden="true">arrow_forward</span>
         </a>
     </div>

@@ -3,7 +3,7 @@ using Omni.App.Common.Enums;
 namespace Omni.App.Entities.Models;
 
 /// <summary>
-/// Sends one approved WhatsAppTemplate to many leads. A Campaign is purely orchestration/reporting
+/// Sends one approved WhatsAppTemplate to many contacts. A Campaign is purely orchestration/reporting
 /// metadata — it never stores message content itself; every actual send still produces a normal
 /// row in the existing messages table (see CampaignService.ProcessRecipientAsync), linked back via
 /// Message.CampaignId/CampaignRecipientId.
@@ -15,7 +15,7 @@ public class Campaign
     public string Name { get; set; } = string.Empty;
 
     /// <summary>What this campaign is for — see <see cref="CampaignType"/>. Deliberately a free
-    /// string with no DB CHECK constraint (like Lead.Source) so new campaign types can be added
+    /// string with no DB CHECK constraint (like Contact.Source) so new campaign types can be added
     /// without a migration.</summary>
     public string CampaignType { get; set; } = Common.Enums.CampaignType.Custom;
 
@@ -32,7 +32,7 @@ public class Campaign
     /// <summary>How the recipient list is determined — see <see cref="CampaignAudienceType"/>.</summary>
     public string AudienceType { get; set; } = CampaignAudienceType.Custom;
 
-    /// <summary>Optional filters for AudienceType (inactiveDays, serviceId, leadStatuses,
+    /// <summary>Optional filters for AudienceType (inactiveDays, serviceId, stageKeys,
     /// sources, ...) — see CampaignAudienceFilters. Raw JSON, not queried directly; a campaign
     /// audience is only ever computed once at creation time into CampaignRecipient rows (the
     /// snapshot), never re-derived from these filters afterward.</summary>

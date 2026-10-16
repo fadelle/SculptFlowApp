@@ -22,15 +22,15 @@ else
         <a class="au-icon-btn au-icon-btn--bordered" href="/dashboard/bookings" aria-label="Back to Bookings" title="Back to Bookings">
             <span class="au-icon" aria-hidden="true">arrow_back</span>
         </a>
-        <span class="avatar-md" aria-hidden="true">@(string.IsNullOrWhiteSpace(appt.LeadFullName) ? "?" : appt.LeadFullName.Trim()[..1])</span>
+        <span class="avatar-md" aria-hidden="true">@(string.IsNullOrWhiteSpace(appt.ContactFullName) ? "?" : appt.ContactFullName.Trim()[..1])</span>
         <div class="min-w-0">
-            <h2 class="au-back-header__title">@(appt.LeadFullName ?? "—")</h2>
+            <h2 class="au-back-header__title">@(appt.ContactFullName ?? "—")</h2>
             <span class="au-back-header__sub">@(appt.ServiceName ?? "No service on file") · @LocalTimeHelper.Time(appt.ScheduledStart, "datetime-year", clientTimeZone: Model.ClientTimezone)</span>
         </div>
     </div>
     <div class="detail-chips">
         <span class="badge @StatusBadgeHelper.CssClass(appt.Status)">@FilterLabelHelper.Label(appt.Status)</span>
-        <a class="au-btn au-btn--outlined au-btn--sm" href="/dashboard/leads/@appt.LeadId"><span class="au-icon" aria-hidden="true">person</span>Open patient</a>
+        <a class="au-btn au-btn--outlined au-btn--sm" href="/dashboard/contacts/@appt.ContactId"><span class="au-icon" aria-hidden="true">person</span>Open contact</a>
         <partial name="_TimeViewSwitch" model="Model.ClientTimezone" />
     </div>
 

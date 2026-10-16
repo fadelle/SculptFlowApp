@@ -42,7 +42,7 @@ Generated from `Common/Statics/ConfigDefaults`; keep this table in step when you
 | Availability | DefaultDurationMinutes | 30 | int 5–480 | Booking length (minutes) for clients that haven't set their own booking settings. |
 | Availability | DefaultBufferMinutes | 0 | int 0–240 | Gap (minutes) between bookings for clients that haven't set their own booking settings. |
 | Availability | DefaultNoticeMinutes | 240 | int 0–10080 | Minimum notice (minutes) before a bookable slot, for clients that haven't set their own. |
-| Availability | DefaultHorizonDays | 60 | int 1–365 | How many days ahead patients can book, for clients that haven't set their own. |
+| Availability | DefaultHorizonDays | 60 | int 1–365 | How many days ahead contacts can book, for clients that haven't set their own. |
 | Availability | MaxRangeDays | 14 | int 1–60 | The most days one free-slots request may cover. |
 | Billing | Enabled | true | bool | Master switch for usage billing and plan entitlements. Off = nothing is rated or reserved and every client may use everything. |
 | Billing | GracePeriodDays | 7 | int 0–60 | How long a past-due subscription keeps working before it expires. |
@@ -85,7 +85,7 @@ Generated from `Common/Statics/ConfigDefaults`; keep this table in step when you
 | Benchmark | GenerationTimeoutMinutes | 30 | int 1–240 | How long to wait for n8n to send generated questions. |
 | Benchmark | MaxQuestionsPerChunk | 3 | int 1–10 | Most generated questions accepted per chunk. |
 | Campaigns | DefaultInactiveDays | 60 | int 1–3650 | Default "inactive for" days of a reactivation audience. |
-| Campaigns | BookingAttributionDays | 14 | int 1–365 | A booking made this many days after a patient replied to a campaign counts as that campaign's booking. |
+| Campaigns | BookingAttributionDays | 14 | int 1–365 | A booking made this many days after a contact replied to a campaign counts as that campaign's booking. |
 | Campaigns | SenderIntervalSeconds | 60 | int 10–3600 | How often the campaign sender starts campaigns whose scheduled time has come and sends the next batch of every running campaign. |
 | Campaigns | SendBatchSize | 20 | int 1–500 | Most messages the campaign sender sends per campaign each time it runs. |
 | Embeddings | BaseUrl | https://api.openai.com/v1 | string | Base URL of the OpenAI-compatible embeddings API. |
@@ -96,7 +96,7 @@ Generated from `Common/Statics/ConfigDefaults`; keep this table in step when you
 | Integrations | OAuthStateLifetimeMinutes | 15 | int 1–120 | How long a calendar or TikTok connect link stays valid. |
 | Integrations | TokenRefreshMarginMinutes | 5 | int 0–60 | Calendar and TikTok access tokens are refreshed this long before they expire. |
 | Voice | MaxBytes | 10485760 | int 1024–20971520 | Largest voice note (bytes) the Inbox will download from the provider to play or forward. |
-| Dashboard | LeadsPageSize | 25 | int 5–200 | Leads per page on the dashboard. |
+| Dashboard | ContactsPageSize | 25 | int 5–200 | Contacts per page on the dashboard. |
 | Cache | ClientsMinutes | 60 | int 1–1440 | Client rows (signed-in client, the bot's client info). Saving a change clears the cached copy at once; this is only how long an untouched copy lives. |
 | Cache | StaffLookupMinutes | 10 | int 1–1440 | Which client a signed-in user belongs to. Keep it short: it is how long a removed staff member could keep access if a removal were ever missed. Saving a change clears the cached copy at once; this is only how long an untouched copy lives. |
 | Cache | ServicesMinutes | 60 | int 1–1440 | A client's services. Saving a change clears the cached copy at once; this is only how long an untouched copy lives. |

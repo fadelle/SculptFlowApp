@@ -69,7 +69,7 @@ public sealed class RequestTimingMiddleware
         && !Path.HasExtension(context.Request.Path.Value)
         && context.Features.Get<IStatusCodeReExecuteFeature>() is null;
 
-    /// <summary>The matched route template with a leading '/', e.g. "/api/platform-admin/cache/keys" or "/Leads/Details".</summary>
+    /// <summary>The matched route template with a leading '/', e.g. "/api/platform-admin/cache/keys" or "/Contacts/Details".</summary>
     public static string RouteOf(HttpContext context)
     {
         if (context.GetEndpoint() is not RouteEndpoint endpoint) return ApiTimingLimits.UnmatchedRoute;

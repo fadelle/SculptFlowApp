@@ -8,7 +8,7 @@ namespace Omni.App.Business.Services.Inbox;
 /// <summary>
 /// Plays a voice note in the Inbox: finds the message in the caller's client, then asks the channel's own
 /// <see cref="IVoiceMediaSource"/> for the audio. Nothing is stored — the file is fetched from the provider each time (the
-/// browser caches the response), so there is no copy of a patient's recording to protect or expire.
+/// browser caches the response), so there is no copy of a contact's recording to protect or expire.
 /// </summary>
 public class MessageMediaService : IMessageMediaService
 {

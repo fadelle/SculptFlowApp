@@ -9,7 +9,7 @@ using Omni.App.Persistence.Helpers;
 using Omni.App.Persistence.Repositories;
 using Omni.App.Persistence.Repositories.BusinessTypes;
 using Omni.App.Persistence.Repositories.Clients;
-using Omni.App.Persistence.Repositories.Leads;
+using Omni.App.Persistence.Repositories.Contacts;
 
 namespace Omni.App.Tests.Repositories;
 
@@ -25,7 +25,7 @@ public class BusinessTypeRepositoryTests(PostgresFixture fixture) : RepoTestBase
             .AddInterceptors(new CacheInvalidationInterceptor(_cache)).Options);
 
     private BusinessTypeService Service(ApplicationDbContext db) => new(new BusinessTypeRepository(db, _cache), new ClientRepository(db, _cache),
-        new LeadRepository(db), new UnitOfWork(db), TextKit.Context(), TimeProvider.System);
+        new ContactRepository(db), new UnitOfWork(db), TextKit.Context(), TimeProvider.System);
 
     private static string NewCode() => "t_" + Guid.NewGuid().ToString("N")[..10];
 
@@ -60,9 +60,6 @@ public class BusinessTypeRepositoryTests(PostgresFixture fixture) : RepoTestBase
             var terms = BusinessTypeMapper.ParseTerminology(type.TerminologyJson)["en"];
             Assert.All(TermName.All, t => Assert.False(string.IsNullOrWhiteSpace(terms[t].One + terms[t].Other)));
         }
-        // The code still writes these keys (until stages are worked by category), so each is a stage of the first built-in type.
-        var codeKeys = typeof(LeadStatus).GetFields().Select(f => (string)f.GetValue(null)!);
-        Assert.All(codeKeys, k => Assert.Contains(firstType.Stages, s => s.Key == k));
         Assert.Equal("Customer", BusinessTypeMapper.LabelOf(general.Stages.Single(s => s.Key == "customer"), "fr"));
     }
 
@@ -107,8 +104,8 @@ public class BusinessTypeRepositoryTests(PostgresFixture fixture) : RepoTestBase
         await using (var db = CachedContext()) await Service(db).CreateAsync(Request(code, ("extra", StageCategory.Open), ("busy", StageCategory.Booked)));
         var client = MakeClient();
         client.BusinessTypeCode = code;
-        var lead = MakeLead(client.Id, status: "busy");
-        await SeedAsync(client, lead);
+        var contact = MakeContact(client.Id, stage: "busy");
+        await SeedAsync(client, contact);
 
         await using (var db = CachedContext())
         {
@@ -126,7 +123,7 @@ public class BusinessTypeRepositoryTests(PostgresFixture fixture) : RepoTestBase
         {
             var repo = new BusinessTypeRepository(db);
             Assert.Equal(1, (await repo.CountClientsByTypeAsync())[code]);
-            Assert.Equal(new Dictionary<string, int> { ["busy"] = 1 }, await repo.CountLeadsByStageAsync(code));
+            Assert.Equal(new Dictionary<string, int> { ["busy"] = 1 }, await repo.CountContactsByStageAsync(code));
             Assert.True(await repo.ExistsAsync(code));
             await Assert.ThrowsAsync<DuplicateRecordException>(() => Service(db).CreateAsync(Request(code)));
         }
@@ -148,15 +145,15 @@ public class BusinessTypeRepositoryTests(PostgresFixture fixture) : RepoTestBase
     [PostgresFact]
     public async Task Moving_a_client_to_another_type_moves_every_contact_to_the_matching_stage()
     {
-        var client = MakeClient();
-        var leads = new[]
+        var client = MakeClient(businessType: TextKit.Clinic);
+        var contacts = new[]
         {
-            MakeLead(client.Id, status: "contacted"), MakeLead(client.Id, status: "consultation_booked"), MakeLead(client.Id, status: "consultation_booked"), // leftover-ok: firstType stage keys
-            MakeLead(client.Id, status: "surgery_booked"), MakeLead(client.Id, status: "medical_question"), MakeLead(client.Id, status: "not_interested"), // leftover-ok: firstType stage keys
+            MakeContact(client.Id, stage: "contacted"), MakeContact(client.Id, stage: "consultation_booked"), MakeContact(client.Id, stage: "consultation_booked"), // leftover-ok: firstType stage keys
+            MakeContact(client.Id, stage: "surgery_booked"), MakeContact(client.Id, stage: "medical_question"), MakeContact(client.Id, stage: "not_interested"), // leftover-ok: firstType stage keys
         };
-        var other = MakeClient();
-        var untouched = MakeLead(other.Id, status: "consultation_booked"); // leftover-ok: firstType stage key
-        await SeedAsync([client, other, .. leads, untouched]);
+        var other = MakeClient(businessType: TextKit.Clinic);
+        var untouched = MakeContact(other.Id, stage: "consultation_booked"); // leftover-ok: firstType stage key
+        await SeedAsync([client, other, .. contacts, untouched]);
 
         await using (var db = CachedContext())
         {
@@ -172,8 +169,8 @@ public class BusinessTypeRepositoryTests(PostgresFixture fixture) : RepoTestBase
         await using var read = CachedContext();
         Assert.Equal(TextKit.General, (await read.Clients.SingleAsync(c => c.Id == client.Id)).BusinessTypeCode);
         Assert.Equal(new Dictionary<string, int> { ["contacted"] = 1, ["booked"] = 2, ["customer"] = 1, ["needs_human"] = 1, ["not_interested"] = 1 },
-            await new LeadRepository(read).CountByStatusAsync(client.Id));
-        Assert.Equal("consultation_booked", (await read.Leads.SingleAsync(l => l.Id == untouched.Id)).Status); // leftover-ok: firstType stage key
+            await new ContactRepository(read).CountByStageAsync(client.Id));
+        Assert.Equal("consultation_booked", (await read.Contacts.SingleAsync(l => l.Id == untouched.Id)).StageKey); // leftover-ok: firstType stage key
         Assert.Equal(["new", "contacted", "qualified", "booked"], (await Service(read).ListStagesForClientAsync(client.Id)).Take(4).Select(s => s.Key));
     }
 }

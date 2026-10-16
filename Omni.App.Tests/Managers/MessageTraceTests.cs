@@ -302,8 +302,8 @@ public class BotTraceTests
         await filter.OnActionExecutionAsync(handoff, () => Task.FromResult(new ActionExecutedContext(handoff, [], new object()) { Result = new NotFoundResult() }));
         Assert.Equal((TraceOutcomes.Failed, conversationId), (_steps[^1].Outcome, ids[^1].ConversationId!.Value));
 
-        var lead = Context(services, "api/ai/leads/{leadId:guid}", new() { ["leadId"] = Guid.NewGuid() });
-        await filter.OnActionExecutionAsync(lead, () => Task.FromResult(new ActionExecutedContext(lead, [], new object()) { Exception = new Exception("boom") }));
+        var contact = Context(services, "api/ai/contacts/{contactId:guid}", new() { ["contactId"] = Guid.NewGuid() });
+        await filter.OnActionExecutionAsync(contact, () => Task.FromResult(new ActionExecutedContext(contact, [], new object()) { Exception = new Exception("boom") }));
         Assert.Contains("\"status\":500", _steps[^1].Detail);
         Assert.Null(ids[^1].ConversationId); // "id" only counts for conversation routes
 
@@ -342,14 +342,14 @@ public class MessageTraceAdminTests
         _repo.Setup(r => r.StepsOfTraceReadOnlyAsync(Trace, It.IsAny<CancellationToken>())).ReturnsAsync(
         [
             Step(0, TraceSteps.WebhookReceived, detail: "{\"events\":1,\"kinds\":\"CustomerMessage\"}"),
-            Step(1, TraceSteps.MessageSaved, messageId: _inboundId, detail: "{\"sender\":\"lead\",\"type\":\"text\",\"direction\":\"inbound\"}"),
+            Step(1, TraceSteps.MessageSaved, messageId: _inboundId, detail: "{\"sender\":\"contact\",\"type\":\"text\",\"direction\":\"inbound\"}"),
             Step(2, TraceSteps.BotTriggered, detail: "{\"status\":200}"),
             Step(5, TraceSteps.BotToolCalled, detail: "{\"tool\":\"api/ai/knowledge/search\",\"status\":200}"),
             Step(8, TraceSteps.SendProviderAccepted, messageId: _replyId)
         ]);
         _repo.Setup(r => r.MessagesReadOnlyAsync(Trace, It.Is<IReadOnlyCollection<Guid>>(ids => ids.Count == 2), It.IsAny<CancellationToken>())).ReturnsAsync(
         [
-            new TraceMessageRow(_inboundId, _clientId, _conversationId, "inbound", "lead", "whatsapp_customer", "whatsapp", "text", "wamid.in", null,
+            new TraceMessageRow(_inboundId, _clientId, _conversationId, "inbound", "contact", "whatsapp_customer", "whatsapp", "text", "wamid.in", null,
                 T0.AddSeconds(1), null, null, null, null, null, null, Trace),
             new TraceMessageRow(_replyId, _clientId, _conversationId, "outbound", "ai", "ai", "whatsapp", "text", "wamid.out", "failed",
                 T0.AddSeconds(8), T0.AddSeconds(8), T0.AddSeconds(20), null, T0.AddMinutes(3), "131047", "Re-engagement window", Trace)
@@ -359,7 +359,7 @@ public class MessageTraceAdminTests
         _repo.Setup(r => r.BillingReadOnlyAsync(It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<CancellationToken>())).ReturnsAsync(
             [new TraceBillingRow(_replyId, ChargeStatus.Released, 0.05m, "USD", T0.AddSeconds(7), T0.AddSeconds(7), null, T0.AddMinutes(3), "delivery_failed", null)]);
         _repo.Setup(r => r.EventsReadOnlyAsync(It.IsAny<IReadOnlyCollection<Guid>>(), T0.AddMinutes(-1), T0.AddSeconds(8).AddMinutes(MessageTraceLimits.EventWindowMinutes), It.IsAny<CancellationToken>()))
-            .ReturnsAsync([new TraceEventRow(T0.AddSeconds(1), "customer_message_received", "whatsapp_customer", _conversationId, "{}")]);
+            .ReturnsAsync([new TraceEventRow(T0.AddSeconds(1), "contact_message_received", "whatsapp_customer", _conversationId, "{}")]);
     }
 
     [Fact]
@@ -374,7 +374,7 @@ public class MessageTraceAdminTests
         Assert.Equal(T0, trace.StartedAt);
         Assert.Equal(T0.AddMinutes(3), trace.EndedAt); // the failed delivery came later than the last step
         Assert.Equal(
-            ["webhook.received", "message.saved", "message.inbound", "customer_message_received", "bot.triggered", "bot.tool_called", "Omni.App.X",
+            ["webhook.received", "message.saved", "message.inbound", "contact_message_received", "bot.triggered", "bot.tool_called", "Omni.App.X",
              "billing.reserved", "send.provider_accepted", "message.outbound", "status.delivered", "billing.released", "status.failed"],
             trace.Entries.Select(e => e.Name));
         var failed = trace.Entries.Single(e => e.Name == "status.failed");
@@ -453,7 +453,7 @@ public class MessageTraceAdminTests
     {
         var id = Guid.NewGuid();
         var entries = MessageTraceMapper.Timeline([],
-            [new TraceMessageRow(id, _clientId, _conversationId, "inbound", "lead", "o", "telegram", "text", null, "read", T0, null, T0, T0, null, null, null, Trace),
+            [new TraceMessageRow(id, _clientId, _conversationId, "inbound", "contact", "o", "telegram", "text", null, "read", T0, null, T0, T0, null, null, null, Trace),
              new TraceMessageRow(Guid.NewGuid(), _clientId, _conversationId, "outbound", "staff", "o", "telegram", "text", null, "read", T0, T0, null, T0.AddSeconds(5), null, null, null, Trace)],
             [new TraceBillingRow(id, ChargeStatus.Settled, 0.1m, "USD", T0, T0, T0.AddSeconds(1), null, null, null),
              new TraceBillingRow(id, ChargeStatus.Failed, null, "USD", T0, null, null, null, null, "insufficient_funds"),

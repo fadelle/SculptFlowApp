@@ -35,7 +35,7 @@ public static class PhoneCountry
         var international = trimmed.StartsWith('+') || trimmed.StartsWith("00", StringComparison.Ordinal);
         var digits = new string(trimmed.Where(char.IsAsciiDigit).ToArray());
         if (trimmed.StartsWith("00", StringComparison.Ordinal)) digits = digits[2..];
-        // Stored lead numbers are usually digits-only international numbers (WhatsApp's wa_id has no "+").
+        // Stored contact numbers are usually digits-only international numbers (WhatsApp's wa_id has no "+").
         if (!international && (digits.Length < 8 || digits.StartsWith('0'))) return null;
         if (digits.Length == 0 || digits[0] == '0') return null;
 

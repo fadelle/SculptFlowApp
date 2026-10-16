@@ -66,15 +66,15 @@ public class OrderRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixtur
     public async Task Orders_are_scoped_filtered_ordered_and_loadable()
     {
         var c = MakeClient(); var other = MakeClient();
-        var svc = MakeService(c.Id); var lead = MakeLead(c.Id);
+        var svc = MakeService(c.Id); var contact = MakeContact(c.Id);
         Order MakeOrder(string status, int daysAgo) => new()
         {
-            Id = Guid.NewGuid(), ClientId = c.Id, LeadId = lead.Id, ServiceId = svc.Id, Status = status,
+            Id = Guid.NewGuid(), ClientId = c.Id, ContactId = contact.Id, ServiceId = svc.Id, Status = status,
             CreatedAt = Now.AddDays(-daysAgo), UpdatedAt = Now.AddDays(-daysAgo),
         };
         var older = MakeOrder(OrderStatus.Considering, 2);
         var newer = MakeOrder(OrderStatus.Confirmed, 1);
-        await SeedAsync(c, other, svc, lead, older, newer);
+        await SeedAsync(c, other, svc, contact, older, newer);
 
         await using var db = NewContext();
         var repo = new OrderRepository(db);
@@ -84,16 +84,16 @@ public class OrderRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixtur
         var (items, total) = await repo.ListAsync(c.Id, null, 0, 10);
         Assert.Equal(2, total);
         Assert.Equal([newer.Id, older.Id], items.Select(b => b.Id));
-        Assert.NotNull(items[0].Lead);
+        Assert.NotNull(items[0].Contact);
         Assert.NotNull(items[0].Service);
         Assert.Equal([newer.Id], (await repo.ListAsync(c.Id, OrderStatus.Confirmed, 0, 10)).Items.Select(b => b.Id));
         Assert.Equal([older.Id], (await repo.ListAsync(c.Id, null, 1, 10)).Items.Select(b => b.Id));
 
-        var fresh = new Order { Id = Guid.NewGuid(), ClientId = c.Id, LeadId = lead.Id, ServiceId = svc.Id, CreatedAt = Now, UpdatedAt = Now };
+        var fresh = new Order { Id = Guid.NewGuid(), ClientId = c.Id, ContactId = contact.Id, ServiceId = svc.Id, CreatedAt = Now, UpdatedAt = Now };
         repo.Add(fresh);
         await db.SaveChangesAsync();
         await repo.LoadDetailsAsync(fresh);
-        Assert.NotNull(fresh.Lead);
+        Assert.NotNull(fresh.Contact);
         Assert.NotNull(fresh.Service);
     }
 }
@@ -414,11 +414,11 @@ public class CalendarRepositoryTests(PostgresFixture fixture) : RepoTestBase(fix
     public async Task Calendars_can_be_replaced_and_removed_and_syncs_tracked_per_booking()
     {
         var c = MakeClient();
-        var lead = MakeLead(c.Id);
-        var appt = MakeBooking(c.Id, lead.Id, Now.AddDays(1));
+        var contact = MakeContact(c.Id);
+        var appt = MakeBooking(c.Id, contact.Id, Now.AddDays(1));
         var integration = Integration(c.Id, "google");
         var old = new CalendarIntegrationCalendar { Id = Guid.NewGuid(), CalendarIntegrationId = integration.Id, ExternalCalendarId = "old", Name = "Old", CreatedAt = Now };
-        await SeedAsync(c, lead, appt, integration, old);
+        await SeedAsync(c, contact, appt, integration, old);
 
         await using (var db = NewContext())
         {
@@ -452,9 +452,9 @@ public class CampaignRepositoryTests(PostgresFixture fixture) : RepoTestBase(fix
         Id = Guid.NewGuid(), ClientId = clientId, Name = name, CreatedAt = Now.AddDays(-daysAgo), UpdatedAt = Now,
     };
 
-    private static CampaignRecipient Recipient(Campaign c, Lead lead, string status = CampaignRecipientStatus.Queued, int minutesAgo = 0) => new()
+    private static CampaignRecipient Recipient(Campaign c, Contact contact, string status = CampaignRecipientStatus.Queued, int minutesAgo = 0) => new()
     {
-        Id = Guid.NewGuid(), ClientId = c.ClientId, CampaignId = c.Id, LeadId = lead.Id, PhoneNumber = "+1" + Guid.NewGuid().ToString("N")[..8],
+        Id = Guid.NewGuid(), ClientId = c.ClientId, CampaignId = c.Id, ContactId = contact.Id, PhoneNumber = "+1" + Guid.NewGuid().ToString("N")[..8],
         Status = status, CreatedAt = Now.AddMinutes(-minutesAgo), UpdatedAt = Now,
     };
 
@@ -486,7 +486,7 @@ public class CampaignRepositoryTests(PostgresFixture fixture) : RepoTestBase(fix
     {
         var client = MakeClient();
         var camp = Campaign(client.Id); var otherCamp = Campaign(client.Id, "Other");
-        var l1 = MakeLead(client.Id, "A", "1"); var l2 = MakeLead(client.Id, "B", "2"); var l3 = MakeLead(client.Id, "C", "3"); var l4 = MakeLead(client.Id, "D", "4");
+        var l1 = MakeContact(client.Id, "A", "1"); var l2 = MakeContact(client.Id, "B", "2"); var l3 = MakeContact(client.Id, "C", "3"); var l4 = MakeContact(client.Id, "D", "4");
         await SeedAsync(client, camp, otherCamp, l1, l2, l3, l4);
         var r1 = Recipient(camp, l1, CampaignRecipientStatus.Queued, 3);
         var r2 = Recipient(camp, l2, CampaignRecipientStatus.Queued, 2);
@@ -497,9 +497,9 @@ public class CampaignRepositoryTests(PostgresFixture fixture) : RepoTestBase(fix
         await using var db = NewContext();
         var repo = new CampaignRepository(db);
         Assert.Equal(4, (await repo.ListRecipientsAsync([camp.Id, otherCamp.Id])).Count);
-        var withLead = await repo.ListRecipientsWithLeadAsync(camp.Id);
-        Assert.Equal([r1.Id, r2.Id, r3.Id], withLead.Select(r => r.Id));
-        Assert.All(withLead, r => Assert.NotNull(r.Lead));
+        var withContact = await repo.ListRecipientsWithContactAsync(camp.Id);
+        Assert.Equal([r1.Id, r2.Id, r3.Id], withContact.Select(r => r.Id));
+        Assert.All(withContact, r => Assert.NotNull(r.Contact));
         Assert.Equal([r3.Id], (await repo.ListRecipientsInStatusAsync(camp.Id, [CampaignRecipientStatus.Sent])).Select(r => r.Id));
         Assert.Equal([r1.Id], (await repo.ListQueuedBatchAsync(camp.Id, 1)).Select(r => r.Id));
         Assert.Equal(2, await repo.CountRecipientsInStatusAsync(camp.Id, CampaignRecipientStatus.Queued));
@@ -510,49 +510,49 @@ public class CampaignRepositoryTests(PostgresFixture fixture) : RepoTestBase(fix
     [PostgresFact]
     public async Task The_latest_replied_send_without_a_booking_is_found_within_the_window()
     {
-        var client = MakeClient(); var lead = MakeLead(client.Id);
+        var client = MakeClient(); var contact = MakeContact(client.Id);
         var c1 = Campaign(client.Id, "A"); var c2 = Campaign(client.Id, "B"); var c3 = Campaign(client.Id, "C"); var c4 = Campaign(client.Id, "D");
-        await SeedAsync(client, lead, c1, c2, c3, c4);
+        await SeedAsync(client, contact, c1, c2, c3, c4);
         var replied = DateTimeOffset.UtcNow;
-        var old = Recipient(c1, lead, CampaignRecipientStatus.Replied); old.SentAt = replied.AddDays(-40); old.RepliedAt = replied.AddDays(-30);
-        var recent = Recipient(c2, lead, CampaignRecipientStatus.Replied); recent.SentAt = replied.AddDays(-5); recent.RepliedAt = replied.AddDays(-3);
-        var newest = Recipient(c3, lead, CampaignRecipientStatus.Replied); newest.SentAt = replied.AddDays(-2); newest.RepliedAt = replied.AddDays(-1);
-        var alreadyBooked = Recipient(c4, lead, CampaignRecipientStatus.Booked); alreadyBooked.SentAt = replied; alreadyBooked.RepliedAt = replied; alreadyBooked.BookedAt = replied;
+        var old = Recipient(c1, contact, CampaignRecipientStatus.Replied); old.SentAt = replied.AddDays(-40); old.RepliedAt = replied.AddDays(-30);
+        var recent = Recipient(c2, contact, CampaignRecipientStatus.Replied); recent.SentAt = replied.AddDays(-5); recent.RepliedAt = replied.AddDays(-3);
+        var newest = Recipient(c3, contact, CampaignRecipientStatus.Replied); newest.SentAt = replied.AddDays(-2); newest.RepliedAt = replied.AddDays(-1);
+        var alreadyBooked = Recipient(c4, contact, CampaignRecipientStatus.Booked); alreadyBooked.SentAt = replied; alreadyBooked.RepliedAt = replied; alreadyBooked.BookedAt = replied;
         await SeedAsync(old, recent, newest, alreadyBooked);
 
         await using var db = NewContext();
         var repo = new CampaignRepository(db);
-        Assert.Equal(newest.Id, (await repo.FindLatestRepliedAwaitingBookingAsync(client.Id, lead.Id, replied.AddDays(-14)))!.Id);
-        Assert.Equal(old.Id, (await repo.FindLatestRepliedAwaitingBookingAsync(client.Id, lead.Id, replied.AddDays(-60)))!.Id == newest.Id ? old.Id : newest.Id);
-        Assert.Null(await repo.FindLatestRepliedAwaitingBookingAsync(client.Id, lead.Id, replied.AddDays(1)));
-        Assert.Null(await repo.FindLatestRepliedAwaitingBookingAsync(Guid.NewGuid(), lead.Id, replied.AddDays(-60)));
+        Assert.Equal(newest.Id, (await repo.FindLatestRepliedAwaitingBookingAsync(client.Id, contact.Id, replied.AddDays(-14)))!.Id);
+        Assert.Equal(old.Id, (await repo.FindLatestRepliedAwaitingBookingAsync(client.Id, contact.Id, replied.AddDays(-60)))!.Id == newest.Id ? old.Id : newest.Id);
+        Assert.Null(await repo.FindLatestRepliedAwaitingBookingAsync(client.Id, contact.Id, replied.AddDays(1)));
+        Assert.Null(await repo.FindLatestRepliedAwaitingBookingAsync(Guid.NewGuid(), contact.Id, replied.AddDays(-60)));
     }
 
     [PostgresFact]
-    public async Task The_latest_unreplied_send_is_found_for_a_lead()
+    public async Task The_latest_unreplied_send_is_found_for_a_contact()
     {
         var client = MakeClient(); var other = MakeClient();
-        var camp = Campaign(client.Id); var lead = MakeLead(client.Id);
-        await SeedAsync(client, other, camp, lead);
-        var leads = Enumerable.Range(0, 4).Select(_ => MakeLead(client.Id)).ToList(); await SeedAsync(leads.Cast<object>().ToArray());
-        var oldSend = Recipient(camp, lead, CampaignRecipientStatus.Sent); oldSend.SentAt = Now.AddDays(-5);
+        var camp = Campaign(client.Id); var contact = MakeContact(client.Id);
+        await SeedAsync(client, other, camp, contact);
+        var contacts = Enumerable.Range(0, 4).Select(_ => MakeContact(client.Id)).ToList(); await SeedAsync(contacts.Cast<object>().ToArray());
+        var oldSend = Recipient(camp, contact, CampaignRecipientStatus.Sent); oldSend.SentAt = Now.AddDays(-5);
         var camp2 = Campaign(client.Id, "C2"); var camp3 = Campaign(client.Id, "C3"); var camp4 = Campaign(client.Id, "C4"); await SeedAsync(camp2, camp3, camp4);
-        var newSend = Recipient(camp2, lead, CampaignRecipientStatus.Sent); newSend.SentAt = Now.AddDays(-1);
-        var replied = Recipient(camp3, lead, CampaignRecipientStatus.Sent); replied.SentAt = Now; replied.RepliedAt = Now;
-        var unsent = Recipient(camp4, lead);
+        var newSend = Recipient(camp2, contact, CampaignRecipientStatus.Sent); newSend.SentAt = Now.AddDays(-1);
+        var replied = Recipient(camp3, contact, CampaignRecipientStatus.Sent); replied.SentAt = Now; replied.RepliedAt = Now;
+        var unsent = Recipient(camp4, contact);
         await SeedAsync(oldSend, newSend, replied, unsent);
 
         await using var db = NewContext();
         var repo = new CampaignRepository(db);
-        var found = (await repo.FindLatestAwaitingReplyAsync(client.Id, lead.Id))!;
+        var found = (await repo.FindLatestAwaitingReplyAsync(client.Id, contact.Id))!;
         Assert.Equal(newSend.Id, found.Id);
         Assert.NotNull(found.Campaign);
-        Assert.Null(await repo.FindLatestAwaitingReplyAsync(other.Id, lead.Id));
+        Assert.Null(await repo.FindLatestAwaitingReplyAsync(other.Id, contact.Id));
 
-        var added = Recipient(camp, MakeLead(client.Id));
+        var added = Recipient(camp, MakeContact(client.Id));
         await using var write = NewContext();
         new CampaignRepository(write).AddRecipient(added);
-        await Assert.ThrowsAsync<DbUpdateException>(() => write.SaveChangesAsync());   // the lead was never saved: FK holds
+        await Assert.ThrowsAsync<DbUpdateException>(() => write.SaveChangesAsync());   // the contact was never saved: FK holds
     }
 
     [PostgresFact]

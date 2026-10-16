@@ -22,27 +22,27 @@ public class DashboardRepository : IDashboardRepository
         var bookings = _db.Bookings.Where(a => a.ClientId == clientId);
         var orders = _db.Orders.Where(b => b.ClientId == clientId);
 
-        var newInterestedPeople = await InRange(_db.Leads.Where(l => l.ClientId == clientId), l => l.CreatedAt, from, to).CountAsync(ct);
+        var newInterestedPeople = await InRange(_db.Contacts.Where(l => l.ClientId == clientId), l => l.CreatedAt, from, to).CountAsync(ct);
 
         var bookingsMade = await InRange(bookings, a => a.CreatedAt, from, to).CountAsync(ct);
 
         var bookingsAttended = await InRange(bookings.Where(a => a.Status == BookingStatus.Attended), a => a.ScheduledStart, from, to)
             .CountAsync(ct);
 
-        var surgeriesBooked = await InRange(orders, b => b.CreatedAt, from, to).CountAsync(ct);
+        var ordersMade = await InRange(orders, b => b.CreatedAt, from, to).CountAsync(ct);
 
         // Revenue lands on the service date (falling back to when the order was last updated, i.e. marked completed).
         var revenue = await InRange(orders.Where(b => b.Status == OrderStatus.Completed), b => b.ServiceDate ?? b.UpdatedAt, from, to)
             .SumAsync(b => (decimal?)b.FinalAmount, ct) ?? 0m;
 
-        return new DashboardSummaryCounts(newInterestedPeople, bookingsMade, bookingsAttended, surgeriesBooked, revenue);
+        return new DashboardSummaryCounts(newInterestedPeople, bookingsMade, bookingsAttended, ordersMade, revenue);
     }
 
-    public async Task<(IReadOnlyList<DashboardLeadRow> Items, int TotalCount)> ListLeadsAsync(Guid clientId, string? status,
+    public async Task<(IReadOnlyList<DashboardContactRow> Items, int TotalCount)> ListContactsAsync(Guid clientId, string? stage,
         string? search, string? source, int skip, int take, CancellationToken ct = default)
     {
-        var query = _db.Leads.Include(l => l.Service).Where(l => l.ClientId == clientId);
-        if (!string.IsNullOrWhiteSpace(status)) query = query.Where(l => l.Status == status);
+        var query = _db.Contacts.Include(l => l.Service).Where(l => l.ClientId == clientId);
+        if (!string.IsNullOrWhiteSpace(stage)) query = query.Where(l => l.StageKey == stage);
         if (!string.IsNullOrWhiteSpace(source))
         {
             var normalizedSource = source.Trim().ToLower();
@@ -60,9 +60,9 @@ public class DashboardRepository : IDashboardRepository
             .OrderByDescending(l => l.CreatedAt)
             .Skip(skip)
             .Take(take)
-            .Select(l => new DashboardLeadRow(
-                l.Id, l.FullName, l.Phone, l.Service!.Name, l.Source, l.Status,
-                l.QualificationStatus, l.LastContactAt, l.NextFollowupAt, l.CreatedAt))
+            .Select(l => new DashboardContactRow(
+                l.Id, l.FullName, l.Phone, l.Service!.Name, l.Source, l.StageKey,
+                l.Qualification, l.LastContactAt, l.NextFollowupAt, l.CreatedAt))
             .ToListAsync(ct);
 
         return (items, totalCount);
@@ -72,7 +72,7 @@ public class DashboardRepository : IDashboardRepository
         string? status, string? search, int skip, int take, CancellationToken ct = default)
     {
         var query = _db.Bookings
-            .Include(a => a.Lead)
+            .Include(a => a.Contact)
             .Include(a => a.Service)
             .Where(a => a.ClientId == clientId);
 
@@ -80,7 +80,7 @@ public class DashboardRepository : IDashboardRepository
         if (!string.IsNullOrWhiteSpace(search))
         {
             var pattern = $"%{search.Trim()}%";
-            query = query.Where(a => EF.Functions.ILike(a.Lead!.FullName ?? "", pattern) || EF.Functions.ILike(a.Lead!.Phone ?? "", pattern));
+            query = query.Where(a => EF.Functions.ILike(a.Contact!.FullName ?? "", pattern) || EF.Functions.ILike(a.Contact!.Phone ?? "", pattern));
         }
 
         var totalCount = await query.CountAsync(ct);
@@ -90,7 +90,7 @@ public class DashboardRepository : IDashboardRepository
             .Skip(skip)
             .Take(take)
             .Select(a => new DashboardBookingRow(
-                a.Id, a.Lead!.FullName, a.Lead.Phone, a.Service!.Name, a.Status, a.ScheduledStart, a.LocationType))
+                a.Id, a.Contact!.FullName, a.Contact.Phone, a.Service!.Name, a.Status, a.ScheduledStart, a.LocationType))
             .ToListAsync(ct);
 
         return (items, totalCount);
@@ -99,7 +99,7 @@ public class DashboardRepository : IDashboardRepository
     public async Task<IReadOnlyList<DashboardServiceRow>> GetServiceStatsAsync(Guid clientId, DateTimeOffset? from,
         DateTimeOffset? to, CancellationToken ct = default)
     {
-        var leads = InRange(_db.Leads.Where(l => l.ClientId == clientId), l => l.CreatedAt, from, to);
+        var contacts = InRange(_db.Contacts.Where(l => l.ClientId == clientId), l => l.CreatedAt, from, to);
         var orders = InRange(_db.Orders.Where(b => b.ClientId == clientId), b => b.CreatedAt, from, to);
         var completed = InRange(
             _db.Orders.Where(b => b.ClientId == clientId && b.Status == OrderStatus.Completed),
@@ -111,7 +111,7 @@ public class DashboardRepository : IDashboardRepository
             {
                 p.Id,
                 p.Name,
-                LeadCount = leads.Count(l => l.ServiceId == p.Id),
+                ContactCount = contacts.Count(l => l.ServiceId == p.Id),
                 OrderCount = orders.Count(b => b.ServiceId == p.Id),
                 CompletedCount = completed.Count(b => b.ServiceId == p.Id),
                 CompletedRevenue = completed.Where(b => b.ServiceId == p.Id).Sum(b => (decimal?)b.FinalAmount) ?? 0m
@@ -120,7 +120,7 @@ public class DashboardRepository : IDashboardRepository
             .ToListAsync(ct);
 
         return services
-            .Select(p => new DashboardServiceRow(p.Id, p.Name, p.LeadCount, p.OrderCount, p.CompletedCount, p.CompletedRevenue))
+            .Select(p => new DashboardServiceRow(p.Id, p.Name, p.ContactCount, p.OrderCount, p.CompletedCount, p.CompletedRevenue))
             .ToList();
     }
 
@@ -130,9 +130,11 @@ public class DashboardRepository : IDashboardRepository
             && c.Status == ConversationStatus.Active
             && (c.Mode == ConversationMode.Human || c.Mode == ConversationMode.Approval), ct);
 
-        var overdueFollowups = await _db.Leads.CountAsync(l => l.ClientId == clientId
+        var overdueFollowups = await _db.Contacts.CountAsync(l => l.ClientId == clientId
             && l.NextFollowupAt != null && l.NextFollowupAt < now
-            && l.Status != LeadStatus.Lost && l.Status != LeadStatus.NotInterested && l.Status != LeadStatus.SurgeryBooked, ct);
+            // Contacts that are closed (lost) or already converted need no follow-up, whatever their type calls those stages.
+            && !_db.PipelineStages.Any(s => s.BusinessTypeCode == l.Client!.BusinessTypeCode && s.Key == l.StageKey
+                && (s.Category == StageCategory.ClosedLost || s.Category == StageCategory.Converted)), ct);
 
         // Same rule as the Bookings calendar's "needs an outcome" notice.
         var needsOutcome = await _db.Bookings.CountAsync(a => a.ClientId == clientId && a.ScheduledStart < now

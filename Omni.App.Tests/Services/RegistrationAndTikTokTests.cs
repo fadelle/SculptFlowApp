@@ -221,7 +221,7 @@ public class ClientRegistrationServiceTests
     [InlineData("  Café Élégance!! ", "cafe-elegance")]
     [InlineData("---", "client")]
     [InlineData("عيادة", "client")]
-    [InlineData("A & B  Surgery #1", "a-b-surgery-1")]
+    [InlineData("A & B  Studio #1", "a-b-studio-1")]
     public void Slugify(string name, string expected) => Assert.Equal(expected, ClientRegistrationService.Slugify(name));
 
     [Fact]

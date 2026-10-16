@@ -8,7 +8,7 @@ namespace Omni.App.Business.Engines.WhatsApp.Handlers;
 
 /// <summary>Handles ParsedMetaEventKind.MessageStatus (sent/delivered/read/failed/deleted) — finds
 /// the existing Message by external_message_id via IMessageService.IngestAsync's status_update
-/// path; never creates a new row. ConversationId/LeadId aren't known (and aren't needed — the
+/// path; never creates a new row. ConversationId/ContactId aren't known (and aren't needed — the
 /// existing message is looked up by external id), so Guid.Empty is passed for those unused
 /// IngestMessageRequest fields.</summary>
 public class MessageStatusHandler
@@ -31,7 +31,7 @@ public class MessageStatusHandler
         return new WhatsAppWebhookResponse(
             Processed: result.Found, EventType: "message_status", ShouldRunAi: false,
             ClientId: client.ClientId, WhatsAppConnectionId: client.ChannelIntegrationId,
-            ConversationId: result.Message?.ConversationId, LeadId: result.Message?.LeadId, MessageId: result.Message?.Id,
+            ConversationId: result.Message?.ConversationId, ContactId: result.Message?.ContactId, MessageId: result.Message?.Id,
             ExternalMessageId: evt.ExternalMessageId, Status: evt.DeliveryStatus);
     }
 }

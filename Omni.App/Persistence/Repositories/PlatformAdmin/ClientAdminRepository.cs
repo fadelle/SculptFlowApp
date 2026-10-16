@@ -32,7 +32,7 @@ public class ClientAdminRepository : IClientAdminRepository
         return await q.OrderByDescending(c => c.CreatedAt)
             .Select(c => new ClientRow(c.Id, c.Name, c.Slug, c.Email, c.Timezone, c.IsActive,
                 _db.ClientUsers.Count(u => u.ClientId == c.Id && u.IsActive),
-                _db.Leads.Count(l => l.ClientId == c.Id),
+                _db.Contacts.Count(l => l.ClientId == c.Id),
                 _db.Conversations.Count(x => x.ClientId == c.Id),
                 _db.Conversations.Where(x => x.ClientId == c.Id).Max(x => x.LastMessageAt),
                 _db.ChannelIntegrations.Where(i => i.ClientId == c.Id && i.Channel == ChannelType.WhatsApp)
@@ -54,7 +54,7 @@ public class ClientAdminRepository : IClientAdminRepository
         var weekAgo = now.AddDays(-7);
         return new ClientCounts(
             await _db.ClientUsers.CountAsync(u => u.ClientId == id && u.IsActive, ct),
-            await _db.Leads.CountAsync(l => l.ClientId == id, ct),
+            await _db.Contacts.CountAsync(l => l.ClientId == id, ct),
             await _db.Conversations.CountAsync(c => c.ClientId == id, ct),
             await _db.Messages.CountAsync(m => m.ClientId == id, ct),
             await _db.Messages.CountAsync(m => m.ClientId == id && m.CreatedAt >= weekAgo, ct),

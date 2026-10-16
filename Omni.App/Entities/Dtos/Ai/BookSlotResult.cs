@@ -8,7 +8,7 @@ namespace Omni.App.Entities.Dtos.Ai;
 /// (400) and a bad ingest key (401) use error statuses.</summary>
 public record BookSlotResult(
     bool Success,
-    /// <summary>BOOKED, EXISTING_UPCOMING_BOOKING, SLOT_UNAVAILABLE, LEAD_NOT_FOUND or INVALID_REQUEST.</summary>
+    /// <summary>BOOKED, EXISTING_UPCOMING_BOOKING, SLOT_UNAVAILABLE, CONTACT_NOT_FOUND or INVALID_REQUEST.</summary>
     string Code,
     string Message,
     /// <summary>On failure: what the AI must (not) say and do next.</summary>

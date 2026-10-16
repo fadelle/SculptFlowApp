@@ -40,7 +40,7 @@ using Omni.App.Business.Contracts.Services.Configuration;
 using Omni.App.Business.Contracts.Services.Dashboard;
 using Omni.App.Business.Contracts.Services.Inbox;
 using Omni.App.Business.Contracts.Services.Knowledge;
-using Omni.App.Business.Contracts.Services.Leads;
+using Omni.App.Business.Contracts.Services.Contacts;
 using Omni.App.Business.Contracts.Services.Notifications;
 using Omni.App.Business.Contracts.Services.Catalog;
 using Omni.App.Business.Contracts.Services.Orders;
@@ -74,7 +74,7 @@ using Omni.App.Business.Services.Configuration;
 using Omni.App.Business.Services.Dashboard;
 using Omni.App.Business.Services.Inbox;
 using Omni.App.Business.Services.Knowledge;
-using Omni.App.Business.Services.Leads;
+using Omni.App.Business.Services.Contacts;
 using Omni.App.Business.Services.Notifications;
 using Omni.App.Business.Services.Catalog;
 using Omni.App.Business.Services.Orders;
@@ -112,7 +112,7 @@ builder.Services.AddPersistence();
 
 // ---------------------------------------------------------------------
 // Authentication — ASP.NET Core Identity, authentication only. No roles, no permissions matrix:
-// this MVP deliberately ignores owner/manager/receptionist/surgeon distinctions (see ClientUser's
+// this MVP deliberately ignores owner/manager/receptionist/specialist distinctions (see ClientUser's
 // doc comment) — every logged-in user linked to a client has full access to that client's data.
 // AddIdentityCore (not the full AddIdentity<TUser,TRole>) keeps roles out entirely; cookie auth is
 // wired up explicitly below rather than via AddIdentity's built-in scheme registration, for the
@@ -211,11 +211,11 @@ builder.Services.AddHostedService<ConfigRefreshJob>();
 builder.Services.AddSingleton<ICacheAdapter, MemoryCacheAdapter>();
 builder.Services.AddSingleton<ICacheManager, CacheManager>();
 builder.Services.AddScoped<ICacheAdminService, CacheAdminService>();
-// Platform admin: the cross-client APIs the admin portal calls (/api/platform-admin/{clients,channels,staff,leads,content,overview}).
+// Platform admin: the cross-client APIs the admin portal calls (/api/platform-admin/{clients,channels,staff,contacts,content,overview}).
 builder.Services.AddScoped<IClientAdminService, ClientAdminService>();
 builder.Services.AddScoped<IChannelAdminService, ChannelAdminService>();
 builder.Services.AddScoped<IStaffAdminService, StaffAdminService>();
-builder.Services.AddScoped<ILeadAdminService, LeadAdminService>();
+builder.Services.AddScoped<IContactAdminService, ContactAdminService>();
 builder.Services.AddScoped<IContentAdminService, ContentAdminService>();
 builder.Services.AddScoped<IKnowledgeBenchmarkAdminService, KnowledgeBenchmarkAdminService>();
 builder.Services.AddScoped<IOverviewAdminService, OverviewAdminService>();
@@ -238,7 +238,7 @@ builder.Services.AddSingleton<IMessageTracer, MessageTracer>();
 builder.Services.AddScoped<IMessageTraceService, MessageTraceService>();
 builder.Services.AddScoped<IMessageTraceAdminService, MessageTraceAdminService>();
 builder.Services.AddHostedService<MessageTraceFlushJob>();
-builder.Services.AddScoped<ILeadService, LeadService>();
+builder.Services.AddScoped<IContactService, ContactService>();
 builder.Services.AddScoped<ICatalogService, CatalogService>();
 builder.Services.AddScoped<IAvailabilityService, AvailabilityService>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
@@ -345,7 +345,7 @@ builder.Services.AddScoped<UnknownEventHandler>();
 builder.Services.AddScoped<IMetaWebhookProcessor, MetaWebhookProcessor>();
 
 // Telegram (direct Bot API) — a channel adapter alongside WhatsApp. Inbound: TelegramWebhookController ->
-// TelegramWebhookProcessor -> the same Lead/Conversation/Message services. Outbound: IChannelSender
+// TelegramWebhookProcessor -> the same Contact/Conversation/Message services. Outbound: IChannelSender
 // implementations are resolved by conversation.Channel inside MessageService.
 // RemoveAllLoggers: Telegram puts the bot token in the request URL, and the default HttpClient logging
 // prints request URIs — so this client must not log at all.
@@ -394,7 +394,7 @@ builder.Services.AddSwaggerGen(options =>
     {
         Title = "Omni API",
         Version = "v1",
-        Description = "Lead intake, qualification, booking and dashboard API for clients on the platform. " +
+        Description = "Contact intake, qualification, booking and dashboard API for clients on the platform. " +
                       "Dashboard endpoints require a logged-in session and resolve clientId server-side " +
                       "via CurrentClientContext; the n8n-facing endpoints (ingest, AI tools, WhatsApp " +
                       "webhook) use a separate shared-secret header instead — see RequireIngestKeyAttribute."

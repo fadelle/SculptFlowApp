@@ -24,9 +24,9 @@ public record AvailabilityResponse(
     public string Tomorrow => DateOnly.Parse(Today).AddDays(1).ToString("yyyy-MM-dd");
     public string TomorrowDayOfWeek => DateOnly.Parse(Today).AddDays(1).DayOfWeek.ToString();
 
-    // ---- Patient booking context (get_available_slots when the workflow passes leadId). Kept SEPARATE from the searched date:
-    // ExistingUpcomingBookings is what the patient already has; RequestedDate/Slots are what they are asking about now.
-    // Null (and omitted from the JSON) when no leadId was supplied.
+    // ---- Contact booking context (get_available_slots when the workflow passes contactId). Kept SEPARATE from the searched date:
+    // ExistingUpcomingBookings is what the contact already has; RequestedDate/Slots are what they are asking about now.
+    // Null (and omitted from the JSON) when no contactId was supplied.
     private const System.Text.Json.Serialization.JsonIgnoreCondition IgnoreNull = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull;
 
     /// <summary>The local date the caller asked about ("yyyy-MM-dd"; today when no date was given). Never derived from an existing booking.</summary>
@@ -34,7 +34,7 @@ public record AvailabilityResponse(
 
     [System.Text.Json.Serialization.JsonPropertyOrder(-49)] [System.Text.Json.Serialization.JsonIgnore(Condition = IgnoreNull)] public bool? HasUpcomingBooking { get; init; }
 
-    /// <summary>The backend's decision: false when the patient has an upcoming booked/confirmed booking (book_slot would
+    /// <summary>The backend's decision: false when the contact has an upcoming booked/confirmed booking (book_slot would
     /// refuse) — use reschedule_booking instead. The AI must not infer this.</summary>
     [System.Text.Json.Serialization.JsonPropertyOrder(-48)] [System.Text.Json.Serialization.JsonIgnore(Condition = IgnoreNull)] public bool? CanCreateNewBooking { get; init; }
 

@@ -283,7 +283,7 @@ public class CalendarIntegrationService : ICalendarIntegrationService
 
             var client = await _clients.GetReadOnlyAsync(clientId, ct);
             var timezone = client?.Timezone ?? "UTC";
-            var title = $"{booking.LeadFullName ?? "Patient"} — {booking.ServiceName ?? booking.BookingType}";
+            var title = $"{booking.ContactFullName ?? "Contact"} — {booking.ServiceName ?? booking.BookingType}";
             var description = BuildDescription(booking);
             var link = $"/dashboard/bookings/{booking.Id}";
 
@@ -305,7 +305,7 @@ public class CalendarIntegrationService : ICalendarIntegrationService
 
                 // A cancelled sync row (its external event was already removed) stays cancelled forever — an
                 // booking that reaches this point again would be a fresh booking, which BookAvailableSlotAsync's
-                // own one-upcoming-per-lead guard already prevents from reusing the same booking row.
+                // own one-upcoming-per-contact guard already prevents from reusing the same booking row.
                 if (sync is not null && sync.Status == BookingCalendarSyncStatus.Canceled && syncOp != "create") continue;
 
                 string effectiveOp = syncOp;

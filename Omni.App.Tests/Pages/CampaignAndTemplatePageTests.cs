@@ -12,16 +12,16 @@ public class CampaignCreatePageTests
 {
     private static readonly Client Glow = SomeClient(timezone: "UTC");
     private readonly Mock<IWhatsAppTemplateService> _templates = new();
-    private readonly Mock<ILeadService> _leads = new();
+    private readonly Mock<IContactService> _contacts = new();
     private readonly Mock<ICatalogService> _services = new();
     private readonly Mock<ICampaignService> _campaigns = new();
     private CreateCampaignRequest? _created;
 
     public CampaignCreatePageTests()
     {
-        _leads.Setup(l => l.ListAsync(It.IsAny<Guid>(), It.IsAny<string?>(), It.IsAny<Guid?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((new List<LeadResponse>() as IReadOnlyList<LeadResponse>, 0));
-        _leads.Setup(l => l.GetDistinctSourcesAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync(new List<string> { "web" });
+        _contacts.Setup(l => l.ListAsync(It.IsAny<Guid>(), It.IsAny<string?>(), It.IsAny<Guid?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((new List<ContactResponse>() as IReadOnlyList<ContactResponse>, 0));
+        _contacts.Setup(l => l.GetDistinctSourcesAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync(new List<string> { "web" });
         _services.Setup(p => p.ListAsync(It.IsAny<Guid>(), true, It.IsAny<CancellationToken>())).ReturnsAsync(new List<ServiceResponse>());
         _templates.Setup(t => t.ListAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync(new List<WhatsAppTemplateResponse>());
         _campaigns.Setup(c => c.CreateAsync(It.IsAny<CreateCampaignRequest>(), It.IsAny<CancellationToken>()))
@@ -30,13 +30,13 @@ public class CampaignCreatePageTests
     }
 
     private CampaignCreate Sut(Client? client = null, bool none = false) =>
-        new CampaignCreate(ClientContext(none ? null : client ?? Glow).Object, _templates.Object, _leads.Object, _services.Object, _campaigns.Object).Attach();
+        new CampaignCreate(ClientContext(none ? null : client ?? Glow).Object, _templates.Object, _contacts.Object, _services.Object, _campaigns.Object).Attach();
 
     private static WhatsAppTemplateResponse Template(Guid id, string status = WhatsAppTemplateStatus.Approved, string body = "Hello {{1}}, see you {{2}} {{1}}") =>
         Blank<WhatsAppTemplateResponse>() with { Id = id, Status = status, Body = body };
 
-    private static LeadResponse Lead(Guid id, string? full, string? first, string? phone) =>
-        Blank<LeadResponse>() with { Id = id, FullName = full, FirstName = first, Phone = phone };
+    private static ContactResponse Contact(Guid id, string? full, string? first, string? phone) =>
+        Blank<ContactResponse>() with { Id = id, FullName = full, FirstName = first, Phone = phone };
 
     // ---- load -------------------------------------------------------------------------------------------------
 
@@ -53,7 +53,7 @@ public class CampaignCreatePageTests
         Assert.Equal([approved], model.ApprovedTemplates.Select(t => t.Id));
         Assert.Equal([1, 2], model.PlaceholderNumbers);
         Assert.NotNull(model.SelectedTemplate);
-        Assert.Equal(["web"], model.LeadSources);
+        Assert.Equal(["web"], model.ContactSources);
         Assert.Equal("UTC", model.ViewerTimezone);
     }
 
@@ -128,8 +128,8 @@ public class CampaignCreatePageTests
 
         Assert.IsType<RedirectToPageResult>(result);
         Assert.Equal(CampaignType.Reactivation, _created!.CampaignType);
-        Assert.Empty(_created.LeadIds);
-        Assert.Null(_created.VariablesByLeadId);
+        Assert.Empty(_created.ContactIds);
+        Assert.Null(_created.VariablesByContactId);
         var filters = CampaignAudienceFilters.Parse(_created.AudienceFilters);
         Assert.Equal((45, "web"), (filters.InactiveDays, Assert.Single(filters.Sources!)));
         _campaigns.Verify(c => c.SendAsync(Glow.Id, It.IsAny<Guid>(), 20, It.IsAny<CancellationToken>()), Times.Once);
@@ -151,7 +151,7 @@ public class CampaignCreatePageTests
     public async Task Custom_filters_become_utc_midnights_with_an_inclusive_end_date()
     {
         var model = Sut(); model.Name = "Custom"; model.WhatsAppTemplateId = Guid.NewGuid(); model.AudienceType = CampaignAudienceType.Custom; model.SendOption = "draft";
-        model.CustomInactiveDays = 10; model.CustomLeadStatuses = ["new"]; model.CustomSources = ["web"]; model.CustomQualificationStatuses = ["hot"];
+        model.CustomInactiveDays = 10; model.CustomStageKeys = ["new"]; model.CustomSources = ["web"]; model.CustomQualifications = ["hot"];
         model.CustomBookingStatuses = ["attended"]; model.CustomCountry = "LB"; model.CustomCity = "Beirut";
         model.CustomCreatedAfter = new DateTime(2026, 3, 1); model.CustomCreatedBefore = new DateTime(2026, 3, 10);
         model.CustomLastContactedAfter = new DateTime(2026, 2, 1); model.CustomLastContactedBefore = new DateTime(2026, 2, 5);
@@ -162,39 +162,39 @@ public class CampaignCreatePageTests
         Assert.Equal(new DateTimeOffset(2026, 3, 11, 0, 0, 0, TimeSpan.Zero), f.CreatedBefore);      // "before the 10th" includes the 10th
         Assert.Equal(new DateTimeOffset(2026, 2, 6, 0, 0, 0, TimeSpan.Zero), f.LastContactedBefore);
         Assert.Equal((10, "LB", "Beirut"), (f.InactiveDays, Assert.Single(f.Countries!), Assert.Single(f.Cities!)));
-        Assert.Equal(["new"], f.LeadStatuses);
+        Assert.Equal(["new"], f.StageKeys);
         Assert.Equal(["attended"], f.BookingStatuses);
-        Assert.Equal(["hot"], f.QualificationStatuses);
+        Assert.Equal(["hot"], f.Qualifications);
     }
 
     [Fact]
-    public async Task Manual_selection_resolves_per_lead_variables_in_number_order()
+    public async Task Manual_selection_resolves_per_contact_variables_in_number_order()
     {
         var ann = Guid.NewGuid(); var bob = Guid.NewGuid(); var ghost = Guid.NewGuid();
-        _leads.Setup(l => l.ListAsync(Glow.Id, null, null, null, 0, 5000, It.IsAny<CancellationToken>()))
-            .ReturnsAsync((new List<LeadResponse> { Lead(ann, "Ann Smith", "Ann", "+1"), Lead(bob, "Bob Jones", null, "+2") } as IReadOnlyList<LeadResponse>, 2));
+        _contacts.Setup(l => l.ListAsync(Glow.Id, null, null, null, 0, 5000, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((new List<ContactResponse> { Contact(ann, "Ann Smith", "Ann", "+1"), Contact(bob, "Bob Jones", null, "+2") } as IReadOnlyList<ContactResponse>, 2));
         var model = Sut(); model.Name = "Manual"; model.WhatsAppTemplateId = Guid.NewGuid(); model.AudienceType = CampaignAudienceType.Custom; model.ManualSelection = true;
-        model.SendOption = "draft"; model.LeadIds = [ann, bob, ghost];
-        model.Variables = new() { [2] = "{LeadPhone}", [1] = "{LeadFirstName}" };
+        model.SendOption = "draft"; model.ContactIds = [ann, bob, ghost];
+        model.Variables = new() { [2] = "{ContactPhone}", [1] = "{ContactFirstName}" };
         await model.OnPostAsync(default);
 
         Assert.Null(_created!.AudienceFilters);
-        Assert.Equal([ann, bob, ghost], _created.LeadIds);
-        Assert.Equal(["Ann", "+1"], _created.VariablesByLeadId![ann]);
-        Assert.Equal(["Bob Jones", "+2"], _created.VariablesByLeadId[bob]);       // no first name: falls back to the full name
-        Assert.DoesNotContain(ghost, _created.VariablesByLeadId.Keys);            // a lead that no longer exists is skipped
+        Assert.Equal([ann, bob, ghost], _created.ContactIds);
+        Assert.Equal(["Ann", "+1"], _created.VariablesByContactId![ann]);
+        Assert.Equal(["Bob Jones", "+2"], _created.VariablesByContactId[bob]);       // no first name: falls back to the full name
+        Assert.DoesNotContain(ghost, _created.VariablesByContactId.Keys);            // a contact that no longer exists is skipped
     }
 
     [Fact]
     public async Task Literal_and_full_name_variables_pass_through()
     {
         var ann = Guid.NewGuid();
-        _leads.Setup(l => l.ListAsync(Glow.Id, null, null, null, 0, 5000, It.IsAny<CancellationToken>()))
-            .ReturnsAsync((new List<LeadResponse> { Lead(ann, null, null, null) } as IReadOnlyList<LeadResponse>, 1));
+        _contacts.Setup(l => l.ListAsync(Glow.Id, null, null, null, 0, 5000, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((new List<ContactResponse> { Contact(ann, null, null, null) } as IReadOnlyList<ContactResponse>, 1));
         var model = Sut(); model.Name = "m"; model.WhatsAppTemplateId = Guid.NewGuid(); model.AudienceType = CampaignAudienceType.Custom; model.ManualSelection = true;
-        model.SendOption = "draft"; model.LeadIds = [ann]; model.Variables = new() { [1] = "{LeadFullName}", [2] = "Spring sale", [3] = "{LeadPhone}", [4] = "{LeadFirstName}" };
+        model.SendOption = "draft"; model.ContactIds = [ann]; model.Variables = new() { [1] = "{ContactFullName}", [2] = "Spring sale", [3] = "{ContactPhone}", [4] = "{ContactFirstName}" };
         await model.OnPostAsync(default);
-        Assert.Equal(["", "Spring sale", "", ""], _created!.VariablesByLeadId![ann]);
+        Assert.Equal(["", "Spring sale", "", ""], _created!.VariablesByContactId![ann]);
     }
 
     [Fact]

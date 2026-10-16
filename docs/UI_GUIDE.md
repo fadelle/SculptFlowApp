@@ -59,7 +59,7 @@ fix bugs in both copies; keep screen-specific styles out of them.
 
 ### 0.4 Omni client app — how this project applies the guide
 This app had its own hand-rolled CSS and 21 page scripts before Aurora. Where the rest of this guide is generic, **this
-section wins**. Copy says *patient* where the guide says *customer*: the people using the app are **client staff**.
+section wins**. Copy says *contact* where the guide says *customer*: the people using the app are **client staff**.
 
 - **Keep it simple** (decided 2026-10-09). Staff get the sidebar, the page title, the notification bell, the theme
   toggle and the user menu, nothing more: no palette, scope, favourites, nav filter, section tabs or breadcrumbs (A13).
@@ -112,11 +112,11 @@ section wins**. Copy says *patient* where the guide says *customer*: the people 
   (`seg-opt`, `aud-card`, `cat-card`, `kb-choice`, `seg-cards`, `var-*`, `ms-*`, `week-row`, `inbox-filter`,
   `inbox-conv-item`, `inbox-voice` (the Inbox voice-note player), `time-view-switch`, `row-actions`); a popup's card stays the direct child of its overlay (backdrop
   clicks close on `e.target === overlay`); `templates-page.js` reads a row's second cell and copies `.row-actions`;
-  `leads.js` swaps `#leads-results`; elements whose class a script rewrites (`[data-pw-rule]`, `[data-pw-match]`,
-  `[data-status-for]`, `#inbox-lead-status`, `#inbox-thread-mode`, `[data-role=status]`, the dashboard health dot) keep
+  `contacts.js` swaps `#contacts-results`; elements whose class a script rewrites (`[data-pw-rule]`, `[data-pw-match]`,
+  `[data-status-for]`, `#inbox-contact-status`, `#inbox-thread-mode`, `[data-role=status]`, the dashboard health dot) keep
   plain classes; `[hidden] { display: none !important }` stays in `site.css`.
 - **Recipes as built** (copy a page of the same kind): *list* `Services/Index` (page head → toolbar → `.au-table-card`
-  with `.au-table--stack` and `data-label`s, or `_EmptyState`); *detail* `Dashboard/LeadDetail` (`.au-back-header` →
+  with `.au-table--stack` and `data-label`s, or `_EmptyState`); *detail* `Dashboard/ContactDetail` (`.au-back-header` →
   `.detail-chips` → panels with `.au-detail-rows`); *form* `Services/Edit` (stacked `.au-form-field`s in a panel,
   `.au-form-actions`); *settings with sections* `Settings/BusinessInfo`; *popup* `WhatsApp/Templates` (`.bm-overlay >
   .card`); *sign-in* `Account/Login` (`.au-auth__card`). Multi-part table cells wrap their content in one `<div>` so the
@@ -158,7 +158,7 @@ What changes for customers:
 | A1 | **Tokens only.** Screens use kit classes or `var(--au-*)`; no raw hex/rgb in views. A new colour need = a new token (light **and** dark) in `aurora.css`. |
 | A2 | **Light and dark are both first-class.** Theme on `<html data-theme>`, stamped before first paint; the toggle lives in the header. Default = the OS preference. |
 | A3 | **One primary action per region**, the gradient button. Secondary = outlined; tertiary = text. |
-| A4 | **Plain language.** Labels, statuses and errors are written for a patient/customer, not a developer ("Awaiting payment", not `PENDING_PAYMENT`). |
+| A4 | **Plain language.** Labels, statuses and errors are written for a contact/customer, not a developer ("Awaiting payment", not `PENDING_PAYMENT`). |
 | A5 | **Errors are friendly and actionable**: what happened, what to do next, and a short reference code. Never show exception names, stack traces, SQL or HTTP internals. |
 | A6 | **Every screen has loading, empty and error states.** Empty states say what's empty and offer the next step (a button). |
 | A7 | **Destructive or irreversible actions are confirmed** (`data-au-confirm`, danger tone, default focus on Cancel) and the confirm says the consequence. |
@@ -182,7 +182,7 @@ What changes for customers:
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>@(ViewData["Title"] is string t ? $"{t} · Patient Portal" : "Patient Portal")</title>
+    <title>@(ViewData["Title"] is string t ? $"{t} · Contact Portal" : "Contact Portal")</title>
     <script>
         (function () {
             try {
@@ -207,7 +207,7 @@ What changes for customers:
         <nav class="au-sidebar" aria-label="Main navigation">           @* add au-sidebar--light for the light variant *@
             <a class="au-brand" href="~/">
                 <span class="au-brand__mark"><partial name="_BrandMark" model="38" /></span>
-                <span class="au-brand__text"><span class="au-brand__name">Nile Dental</span><span class="au-brand__sub">Patient Portal</span></span>
+                <span class="au-brand__text"><span class="au-brand__name">Nile Dental</span><span class="au-brand__sub">Contact Portal</span></span>
             </a>
             <div class="au-side-rule"></div>
             <div class="au-side-scroll">
@@ -339,7 +339,7 @@ gradient in both modes.
 └──────────────┴───────────────────────────────────────────────────────────┘
 ```
 
-- **Sidebar**: brand (38px mark, name, "Patient Portal"), a flat list of pages with optional
+- **Sidebar**: brand (38px mark, name, "Contact Portal"), a flat list of pages with optional
   section captions (`Account`), active row = indigo wash + gradient bar. Dark by default;
   `.au-sidebar--light` is a token swap if the brand calls for a lighter feel.
 - **Header**: page title, theme toggle, user menu. No breadcrumb unless the portal has real depth.
@@ -473,7 +473,7 @@ inline SVG a unique gradient id.
 ```cshtml
 @model int
 @{ var gid = "au-mark-" + Guid.NewGuid().ToString("N")[..8]; }
-<svg width="@Model" height="@Model" viewBox="0 0 32 32" role="img" aria-label="Patient Portal">
+<svg width="@Model" height="@Model" viewBox="0 0 32 32" role="img" aria-label="Contact Portal">
     <defs>
         <linearGradient id="@(gid)" x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse">
             <stop offset="0" stop-color="#6366f1" /><stop offset=".55" stop-color="#8b5cf6" /><stop offset="1" stop-color="#a855f7" />

@@ -1,6 +1,6 @@
-/* Bookings — month calendar. Reads/writes the existing /api/bookings, /api/leads and /api/services APIs
+/* Bookings — month calendar. Reads/writes the existing /api/bookings, /api/contacts and /api/services APIs
    (the same bookings table used by AI bookings, staff edits and everything else — this page owns no data of
-   its own). Every value from the server is written with textContent (never innerHTML), so a lead/service name
+   its own). Every value from the server is written with textContent (never innerHTML), so a contact/service name
    can't inject markup. */
 (function () {
     'use strict';
@@ -9,8 +9,8 @@
         year: 0, month: 0,           // the visible month (1-based month, matching the API)
         monthData: null,             // the last GET /api/bookings/calendar response (covers the grid AND the drawer)
         drawerDate: null,            // "yyyy-MM-dd" the day drawer is currently showing, or null
-        leadSearchTimer: null,
-        selectedLead: null           // { id, label } chosen in the New Booking form
+        contactSearchTimer: null,
+        selectedContact: null           // { id, label } chosen in the New Booking form
     };
 
     var WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -148,9 +148,9 @@
         var shown = items.slice(0, 3);
         shown.forEach(function (a) {
             // Chip shows just the time (bold) and a short name; the service is in the tooltip and the day drawer.
-            var title = a.localTime + ' ' + (a.leadFullName || 'Unknown') + (a.serviceName ? ' - ' + a.serviceName : '') + ' (' + statusLabel(a.status) + ')';
+            var title = a.localTime + ' ' + (a.contactFullName || 'Unknown') + (a.serviceName ? ' - ' + a.serviceName : '') + ' (' + statusLabel(a.status) + ')';
             kids.push(el('div', { class: 'cal-chip status-' + a.status, title: title, onclick: function (e) { e.stopPropagation(); openBooking(a); } }, [
-                el('b', { text: a.localTime }), ' ' + shortName(a.leadFullName)
+                el('b', { text: a.localTime }), ' ' + shortName(a.contactFullName)
             ]));
         });
         if (items.length > shown.length) {
@@ -191,7 +191,7 @@
         if (next) {
             box.appendChild(document.createTextNode(' · next at '));
             box.appendChild(el('strong', { text: next.localTime }));
-            box.appendChild(document.createTextNode(' with ' + shortName(next.leadFullName)));
+            box.appendChild(document.createTextNode(' with ' + shortName(next.contactFullName)));
         } else if (todays.length) {
             box.appendChild(document.createTextNode(' · none left for today'));
         }
@@ -225,7 +225,7 @@
                     box.appendChild(el('a', { class: 'agenda-row' + (dateIso < today ? ' past' : ''), href: '/dashboard/bookings/' + a.id, onclick: function (e) { e.preventDefault(); openBooking(a); } }, [
                         el('span', { class: 'cal-appt-time', text: a.localTime }),
                         el('div', { class: 'agenda-row-main' }, [
-                            el('div', { class: 'cal-appt-name', text: a.leadFullName || 'Unknown patient' }),
+                            el('div', { class: 'cal-appt-name', text: a.contactFullName || 'Unknown contact' }),
                             el('div', { class: 'cal-appt-service', text: a.serviceName || 'No service on file' })
                         ]),
                         el('span', { class: 'badge ' + badgeClass(a.status), text: statusLabel(a.status) })
@@ -268,7 +268,7 @@
                     el('span', { class: 'cal-appt-time', text: a.localTime }),
                     el('span', { class: 'badge ' + badgeClass(a.status), text: statusLabel(a.status) })
                 ]),
-                el('div', { class: 'cal-appt-name', text: a.leadFullName || 'Unknown patient' }),
+                el('div', { class: 'cal-appt-name', text: a.contactFullName || 'Unknown contact' }),
                 el('div', { class: 'cal-appt-service', text: a.serviceName || 'No service on file' })
             ]));
         });
@@ -291,8 +291,8 @@
     function openBooking(a) {
         state.openBooking = a;
         var d = new Date(a.localDate + 'T00:00:00');
-        $('cal-appt-avatar').textContent = initialOf(a.leadFullName);
-        $('cal-appt-name').textContent = a.leadFullName || 'Unknown patient';
+        $('cal-appt-avatar').textContent = initialOf(a.contactFullName);
+        $('cal-appt-name').textContent = a.contactFullName || 'Unknown contact';
         $('cal-appt-when').textContent = d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }) + ' · ' + a.localTime;
         $('cal-appt-service').textContent = a.serviceName || 'No service on file';
         $('cal-appt-location').textContent = '…';
@@ -301,7 +301,7 @@
         $('cal-appt-status').value = a.status;
         $('cal-appt-error').textContent = '';
         $('cal-appt-full').href = '/dashboard/bookings/' + a.id;
-        $('cal-appt-lead').href = '/dashboard/leads/' + a.leadId;
+        $('cal-appt-contact').href = '/dashboard/contacts/' + a.contactId;
         $('cal-appt-overlay').hidden = false;
 
         api('GET', '/api/bookings/' + a.id).then(function (full) {
@@ -353,7 +353,7 @@
 
     function openNewBooking(prefillDateIso) {
         $('cal-new-error').textContent = '';
-        clearLead();
+        clearContact();
         $('cal-new-date').value = prefillDateIso || state.drawerDate || todayIso();
         $('cal-new-time').value = '09:00';
         var tz = gridTimeZone();
@@ -364,7 +364,7 @@
         updateRange();
         loadServices();
         $('cal-new-overlay').hidden = false;
-        $('cal-new-lead-search').focus();
+        $('cal-new-contact-search').focus();
     }
 
     /** "09:00 – 09:30" under the date/time/duration row. */
@@ -385,60 +385,60 @@
         }).catch(function (e) { showMessage(e.message, 'error'); });
     }
 
-    function searchLeads(query) {
-        var box = $('cal-new-lead-results');
+    function searchContacts(query) {
+        var box = $('cal-new-contact-results');
         if (!query || query.trim().length < 2) { box.textContent = ''; box.hidden = true; return; }
-        api('GET', '/api/leads?take=8&search=' + encodeURIComponent(query.trim())).then(function (res) {
+        api('GET', '/api/contacts?take=8&search=' + encodeURIComponent(query.trim())).then(function (res) {
             box.textContent = '';
             box.hidden = false;
             var items = (res && res.items) || [];
-            if (!items.length) { box.appendChild(el('div', { class: 'picker-empty', text: 'No matching patients.' })); return; }
-            items.forEach(function (lead) {
-                box.appendChild(el('button', { type: 'button', class: 'picker-option', role: 'option', onclick: function () { pickLead(lead); } }, [
-                    el('span', { class: 'avatar-sm', text: initialOf(lead.fullName) }),
+            if (!items.length) { box.appendChild(el('div', { class: 'picker-empty', text: 'No matching contacts.' })); return; }
+            items.forEach(function (contact) {
+                box.appendChild(el('button', { type: 'button', class: 'picker-option', role: 'option', onclick: function () { pickContact(contact); } }, [
+                    el('span', { class: 'avatar-sm', text: initialOf(contact.fullName) }),
                     el('span', { class: 'picker-option-main' }, [
-                        el('span', { class: 'picker-option-name', text: lead.fullName || 'Unnamed' }),
-                        el('span', { class: 'picker-option-sub', text: [lead.phone, lead.serviceName].filter(Boolean).join(' · ') })
+                        el('span', { class: 'picker-option-name', text: contact.fullName || 'Unnamed' }),
+                        el('span', { class: 'picker-option-sub', text: [contact.phone, contact.serviceName].filter(Boolean).join(' · ') })
                     ])
                 ]));
             });
         }).catch(function () { /* transient — staff can retype */ });
     }
 
-    /** Picked patient shows as a chip (with × to change); their lead's service pre-fills the Service field. */
-    function pickLead(lead) {
-        var label = (lead.fullName || 'Unnamed') + (lead.phone ? ' · ' + lead.phone : '');
-        state.selectedLead = { id: lead.id, label: label };
-        $('cal-new-lead-id').value = lead.id;
-        $('cal-new-lead-results').hidden = true;
-        $('cal-new-lead-search').hidden = true;
-        $('cal-new-lead-chip-avatar').textContent = initialOf(lead.fullName);
-        $('cal-new-lead-chip-label').textContent = label;
-        $('cal-new-lead-chip').hidden = false;
-        if (lead.serviceId) {
+    /** Picked contact shows as a chip (with × to change); their contact's service pre-fills the Service field. */
+    function pickContact(contact) {
+        var label = (contact.fullName || 'Unnamed') + (contact.phone ? ' · ' + contact.phone : '');
+        state.selectedContact = { id: contact.id, label: label };
+        $('cal-new-contact-id').value = contact.id;
+        $('cal-new-contact-results').hidden = true;
+        $('cal-new-contact-search').hidden = true;
+        $('cal-new-contact-chip-avatar').textContent = initialOf(contact.fullName);
+        $('cal-new-contact-chip-label').textContent = label;
+        $('cal-new-contact-chip').hidden = false;
+        if (contact.serviceId) {
             var sel = $('cal-new-service');
-            var hasOption = Array.prototype.some.call(sel.options, function (o) { return o.value === lead.serviceId; });
-            if (hasOption) sel.value = lead.serviceId;
+            var hasOption = Array.prototype.some.call(sel.options, function (o) { return o.value === contact.serviceId; });
+            if (hasOption) sel.value = contact.serviceId;
         }
     }
 
-    function clearLead() {
-        state.selectedLead = null;
-        $('cal-new-lead-id').value = '';
-        $('cal-new-lead-search').value = '';
-        $('cal-new-lead-search').hidden = false;
-        $('cal-new-lead-chip').hidden = true;
-        $('cal-new-lead-results').textContent = '';
-        $('cal-new-lead-results').hidden = true;
+    function clearContact() {
+        state.selectedContact = null;
+        $('cal-new-contact-id').value = '';
+        $('cal-new-contact-search').value = '';
+        $('cal-new-contact-search').hidden = false;
+        $('cal-new-contact-chip').hidden = true;
+        $('cal-new-contact-results').textContent = '';
+        $('cal-new-contact-results').hidden = true;
     }
 
     function saveNewBooking() {
         var err = $('cal-new-error');
         err.textContent = '';
-        var leadId = $('cal-new-lead-id').value;
+        var contactId = $('cal-new-contact-id').value;
         var date = $('cal-new-date').value;
         var time = $('cal-new-time').value;
-        if (!leadId) { err.textContent = 'Search for the patient and pick one from the list.'; return; }
+        if (!contactId) { err.textContent = 'Search for the contact and pick one from the list.'; return; }
         if (!date || !time) { err.textContent = 'Enter a date and time.'; return; }
 
         var timeZone = gridTimeZone() || OmniTime.viewerTimeZone || 'UTC';
@@ -448,7 +448,7 @@
 
         var body = {
             clientId: '00000000-0000-0000-0000-000000000000', // ignored server-side — the client always comes from the logged-in user
-            leadId: leadId,
+            contactId: contactId,
             serviceId: $('cal-new-service').value || null,
             bookingType: 'standard',
             scheduledStart: startIso,
@@ -519,14 +519,14 @@
         $('cal-new-cancel').addEventListener('click', closeNewBooking);
         $('cal-new-overlay').addEventListener('click', function (e) { if (e.target === $('cal-new-overlay')) closeNewBooking(); });
         $('cal-new-save').addEventListener('click', saveNewBooking);
-        $('cal-new-lead-search').addEventListener('input', function (e) {
-            state.selectedLead = null;
-            $('cal-new-lead-id').value = '';
-            clearTimeout(state.leadSearchTimer);
+        $('cal-new-contact-search').addEventListener('input', function (e) {
+            state.selectedContact = null;
+            $('cal-new-contact-id').value = '';
+            clearTimeout(state.contactSearchTimer);
             var q = e.target.value;
-            state.leadSearchTimer = setTimeout(function () { searchLeads(q); }, 250);
+            state.contactSearchTimer = setTimeout(function () { searchContacts(q); }, 250);
         });
-        $('cal-new-lead-clear').addEventListener('click', function () { clearLead(); $('cal-new-lead-search').focus(); });
+        $('cal-new-contact-clear').addEventListener('click', function () { clearContact(); $('cal-new-contact-search').focus(); });
         $('cal-new-time').addEventListener('input', updateRange);
         $('cal-new-duration').addEventListener('input', updateRange);
 

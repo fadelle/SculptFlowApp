@@ -2,12 +2,13 @@ namespace Omni.App.Common.Statics;
 
 /// <summary>Common event_type values used across the platform (not DB-enforced — events.event_type is free text).
 /// Named EventTypes (not EventType) so it can't collide with EventLog.EventType the way
-/// Lead.QualificationStatus originally did with a same-named class — see that fix's comment.</summary>
+/// Contact.Qualification originally did with a same-named class — see that fix's comment.</summary>
 public static class EventTypes
 {
-    public const string LeadCreated = "lead_created";
-    public const string LeadContacted = "lead_contacted";
-    public const string LeadQualified = "lead_qualified";
+    public const string ContactCreated = "contact_created";
+    /// <summary>A manual (dashboard) or AI stage change whose new stage's category has no event of its own; metadata
+    /// {"from","to"} holds the stage keys.</summary>
+    public const string ContactStageChanged = "contact_stage_changed";
     public const string BookingCreated = "booking_created";
     public const string BookingAttended = "booking_attended";
     public const string BookingNoShow = "booking_no_show";
@@ -20,7 +21,7 @@ public static class EventTypes
     public const string ReturnedToAi = "returned_to_ai";
     public const string ConversationClosed = "conversation_closed";
     public const string ConversationReopened = "conversation_reopened";
-    public const string CustomerMessageReceived = "customer_message_received";
+    public const string ContactMessageReceived = "contact_message_received";
     public const string StaffMessageSentDashboard = "staff_message_sent_dashboard";
     public const string StaffMessageSentWhatsAppApp = "staff_message_sent_whatsapp_app";
     public const string AiMessageSent = "ai_message_sent";

@@ -25,5 +25,5 @@ public interface IBusinessTypeRepository
     Task<IReadOnlyDictionary<string, int>> CountClientsByTypeAsync(CancellationToken ct = default);
 
     /// <summary>How many contacts of the type's clients are in each stage key (keys nobody is in are left out).</summary>
-    Task<IReadOnlyDictionary<string, int>> CountLeadsByStageAsync(string code, CancellationToken ct = default);
+    Task<IReadOnlyDictionary<string, int>> CountContactsByStageAsync(string code, CancellationToken ct = default);
 }

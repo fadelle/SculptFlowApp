@@ -1,7 +1,7 @@
 // UI strings in the browser (window.omniText), from the same files as the server (Resources/i18n/{lang}.json).
 // The layout sets window.omniTextConfig = { lang, terms } (the request's language and the client's business-type words)
 // and loads /i18n/{lang}.js, which sets window.omniStrings. Usage: omniText.t('signup.businessType.label'),
-// omniText.t('leads.errors.unknownStage', ['vip']). {0}, {1}… take the arguments; {contact}, {Contacts}… take the
+// omniText.t('contacts.errors.unknownStage', ['vip']). {0}, {1}… take the arguments; {contact}, {Contacts}… take the
 // business type's words. A missing key comes back as the key; a placeholder with no value is left as written.
 (function () {
     'use strict';

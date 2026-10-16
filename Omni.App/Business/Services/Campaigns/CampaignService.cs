@@ -13,7 +13,7 @@ using Omni.App.Entities.Responses.Campaigns;
 using Omni.App.Persistence.Contracts;
 using Omni.App.Persistence.Contracts.Campaigns;
 using Omni.App.Persistence.Contracts.Inbox;
-using Omni.App.Persistence.Contracts.Leads;
+using Omni.App.Persistence.Contracts.Contacts;
 using Omni.App.Persistence.Contracts.WhatsApp;
 
 namespace Omni.App.Business.Services.Campaigns;
@@ -22,7 +22,7 @@ public class CampaignService : ICampaignService
 {
     private readonly ICampaignRepository _campaigns;
     private readonly IWhatsAppTemplateRepository _templates;
-    private readonly ILeadRepository _leads;
+    private readonly IContactRepository _contacts;
     private readonly IMessageRepository _messageRows;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IConversationService _conversations;
@@ -30,13 +30,13 @@ public class CampaignService : ICampaignService
     private readonly ICampaignAudienceService _audience;
     private readonly IEntitlementService _entitlements;
 
-    public CampaignService(ICampaignRepository campaigns, IWhatsAppTemplateRepository templates, ILeadRepository leads,
+    public CampaignService(ICampaignRepository campaigns, IWhatsAppTemplateRepository templates, IContactRepository contacts,
         IMessageRepository messageRows, IUnitOfWork unitOfWork, IConversationService conversations, IMessageService messages, ICampaignAudienceService audience,
         IEntitlementService entitlements)
     {
         _campaigns = campaigns;
         _templates = templates;
-        _leads = leads;
+        _contacts = contacts;
         _messageRows = messageRows;
         _unitOfWork = unitOfWork;
         _conversations = conversations;
@@ -78,11 +78,11 @@ public class CampaignService : ICampaignService
         var campaign = await _campaigns.GetWithTemplateAsync(clientId, id, ct);
         if (campaign is null) return null;
 
-        var recipients = await _campaigns.ListRecipientsWithLeadAsync(id, ct);
+        var recipients = await _campaigns.ListRecipientsWithContactAsync(id, ct);
 
         var stats = await ComputeStats(clientId, recipients, ct);
         var recipientRows = recipients.Select(r => new CampaignRecipientRow(
-            r.Id, r.LeadId, r.Lead?.FullName, r.PhoneNumber, r.Status,
+            r.Id, r.ContactId, r.Contact?.FullName, r.PhoneNumber, r.Status,
             r.SkipReason, r.FailureCode, r.FailureReason,
             r.QueuedAt, r.SentAt, r.DeliveredAt, r.ReadAt, r.RepliedAt, r.BookedAt, r.FailedAt)).ToList();
 
@@ -111,25 +111,25 @@ public class CampaignService : ICampaignService
 
         CampaignAudienceFilters.Validate(request.AudienceFilters);
 
-        var explicitLeadIds = request.LeadIds.Distinct().ToList();
-        List<Lead> leads;
-        if (explicitLeadIds.Count > 0)
+        var explicitContactIds = request.ContactIds.Distinct().ToList();
+        List<Contact> contacts;
+        if (explicitContactIds.Count > 0)
         {
             // Manual selection — the caller already picked exactly who to include (the Campaign
-            // page's "pick leads yourself" escape hatch, still audience_type = custom).
-            leads = await _leads.ListByIdsAsync(request.ClientId, explicitLeadIds, ct);
+            // page's "pick contacts yourself" escape hatch, still audience_type = custom).
+            contacts = await _contacts.ListByIdsAsync(request.ClientId, explicitContactIds, ct);
         }
         else
         {
             // No explicit list — resolve the audience server-side (all_eligible / reactivation /
             // a filter-built custom audience, all via the same ICampaignAudienceService) and
             // snapshot it now. For "custom" with no filters either, this correctly resolves to
-            // "every contactable lead" (the mandatory-exclusion base with no further narrowing) —
-            // the UI always requires picking a filter or a lead first, so that's not user-reachable.
-            leads = await _audience.GetEligibleLeadsAsync(request.ClientId, audienceType, request.AudienceFilters, ct);
+            // "every reachable contact" (the mandatory-exclusion base with no further narrowing) —
+            // the UI always requires picking a filter or a contact first, so that's not user-reachable.
+            contacts = await _audience.GetEligibleContactsAsync(request.ClientId, audienceType, request.AudienceFilters, ct);
         }
 
-        if (leads.Count == 0)
+        if (contacts.Count == 0)
         {
             throw new ArgumentException("At least one recipient is required.", nameof(request));
         }
@@ -152,15 +152,15 @@ public class CampaignService : ICampaignService
         };
         _campaigns.Add(campaign);
 
-        foreach (var lead in leads)
+        foreach (var contact in contacts)
         {
-            // Mandatory exclusions apply even to a manually hand-picked lead list — see
-            // ICampaignAudienceService, the single place this rule is defined. The lead still gets a
+            // Mandatory exclusions apply even to a manually hand-picked contact list — see
+            // ICampaignAudienceService, the single place this rule is defined. The contact still gets a
             // recipient row (Skipped, with why) so the audience snapshot accounts for everyone matched,
             // per the "CampaignRecipients records who was actually selected" contract.
-            var skipReason = _audience.GetSkipReasonIfNotContactable(lead);
+            var skipReason = _audience.GetSkipReasonIfNotContactable(contact);
 
-            var variables = request.VariablesByLeadId is not null && request.VariablesByLeadId.TryGetValue(lead.Id, out var vars)
+            var variables = request.VariablesByContactId is not null && request.VariablesByContactId.TryGetValue(contact.Id, out var vars)
                 ? JsonSerializer.Serialize(vars)
                 : null;
 
@@ -169,8 +169,8 @@ public class CampaignService : ICampaignService
                 Id = Guid.NewGuid(),
                 ClientId = request.ClientId,
                 CampaignId = campaign.Id,
-                LeadId = lead.Id,
-                PhoneNumber = lead.Phone ?? string.Empty,
+                ContactId = contact.Id,
+                PhoneNumber = contact.Phone ?? string.Empty,
                 VariablesJson = variables,
                 Status = skipReason is null ? CampaignRecipientStatus.Pending : CampaignRecipientStatus.Skipped,
                 SkipReason = skipReason,
@@ -358,7 +358,7 @@ public class CampaignService : ICampaignService
             {
                 throw new InvalidOperationException("Campaign has no WhatsApp template to send.");
             }
-            var conversation = await _conversations.GetOrCreateForLeadAsync(clientId, recipient.LeadId, ConversationChannel.WhatsApp, ct);
+            var conversation = await _conversations.GetOrCreateForContactAsync(clientId, recipient.ContactId, ConversationChannel.WhatsApp, ct);
 
             var variables = string.IsNullOrEmpty(recipient.VariablesJson)
                 ? Array.Empty<string>()
@@ -422,7 +422,7 @@ public class CampaignService : ICampaignService
         return ToResponse(campaign);
     }
 
-    /// <summary>A hand-picked lead list is stored as audience_type = custom with no filters (see Pages/Campaigns/Create).</summary>
+    /// <summary>A hand-picked contact list is stored as audience_type = custom with no filters (see Pages/Campaigns/Create).</summary>
     private static bool IsManualSelection(Campaign c) =>
         c.AudienceType == CampaignAudienceType.Custom && string.IsNullOrWhiteSpace(c.AudienceFilters);
 
@@ -436,7 +436,7 @@ public class CampaignService : ICampaignService
     /// conversation any of these recipients belong to — one query regardless of how many recipients/campaigns
     /// are passed in. Raw timestamps (not aggregated to a single "earliest") because each recipient's own
     /// SentAt is the threshold a reply has to beat, and different recipients in the same batch (e.g. the same
-    /// lead contacted by two different campaigns) can have different SentAt values for the same conversation.</summary>
+    /// contact messaged by two different campaigns) can have different SentAt values for the same conversation.</summary>
     private async Task<Dictionary<Guid, List<DateTimeOffset>>> FetchInboundReplyLookupAsync(
         Guid clientId, List<CampaignRecipient> recipients, CancellationToken ct)
     {
@@ -463,7 +463,7 @@ public class CampaignService : ICampaignService
 
         // Best-effort "replied" signal: a customer inbound message landed in the recipient's conversation
         // any time after THIS recipient's own campaign message was sent — not just the conversation's
-        // earliest-ever inbound message, which could predate this campaign entirely (a lead who'd messaged
+        // earliest-ever inbound message, which could predate this campaign entirely (a contact who'd messaged
         // the client before would otherwise never count as "replied" to a later campaign).
         var replied = 0;
         foreach (var r in recipients.Where(r => r.ConversationId.HasValue && r.SentAt.HasValue))

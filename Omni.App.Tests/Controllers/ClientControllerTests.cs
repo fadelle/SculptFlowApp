@@ -24,59 +24,59 @@ public abstract class ClientControllerTestBase
     protected static void IsForbid<T>(ActionResult<T> result) => Assert.IsType<ForbidResult>(result.Result);
 }
 
-public class LeadsAndBookingsControllerTests : ClientControllerTestBase
+public class ContactsAndBookingsControllerTests : ClientControllerTestBase
 {
-    private readonly Mock<ILeadService> _leads = new();
+    private readonly Mock<IContactService> _contacts = new();
     private readonly Mock<IBookingService> _bookings = new();
     private readonly Mock<IAvailabilityService> _availability = new();
 
-    private LeadsController Leads() => new LeadsController(_leads.Object, Client.Object).With();
+    private ContactsController Contacts() => new ContactsController(_contacts.Object, Client.Object).With();
     private BookingsController Appts() => new BookingsController(_bookings.Object, _availability.Object, Client.Object).With();
 
-    private LeadResponse Lead() => new(Guid.NewGuid(), ClientId, null, null, "Ann", null, null, null, null, "web", null, null, null, "new", "unknown", null, null, null, null, true, null, null, null, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow);
+    private ContactResponse Contact() => new(Guid.NewGuid(), ClientId, null, null, "Ann", null, null, null, null, "web", null, null, null, "new", "unknown", null, null, null, null, true, null, null, null, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow);
 
     [Fact]
-    public async Task Lead_creation_is_201_for_new_and_200_for_existing()
+    public async Task Contact_creation_is_201_for_new_and_200_for_existing()
     {
-        var req = new CreateLeadRequest(ClientId, null, "Ann", null, null, null, null, "web", null, null, "ext", null, null, null, null);
-        _leads.Setup(l => l.CreateOrGetAsync(req, It.IsAny<CancellationToken>())).ReturnsAsync((Lead(), true));
-        Assert.IsType<CreatedAtActionResult>((await Leads().Create(req, default)).Result);
-        _leads.Setup(l => l.CreateOrGetAsync(req, It.IsAny<CancellationToken>())).ReturnsAsync((Lead(), false));
-        Assert.IsType<OkObjectResult>((await Leads().Create(req, default)).Result);
+        var req = new CreateContactRequest(ClientId, null, "Ann", null, null, null, null, "web", null, null, "ext", null, null, null, null);
+        _contacts.Setup(l => l.CreateOrGetAsync(req, It.IsAny<CancellationToken>())).ReturnsAsync((Contact(), true));
+        Assert.IsType<CreatedAtActionResult>((await Contacts().Create(req, default)).Result);
+        _contacts.Setup(l => l.CreateOrGetAsync(req, It.IsAny<CancellationToken>())).ReturnsAsync((Contact(), false));
+        Assert.IsType<OkObjectResult>((await Contacts().Create(req, default)).Result);
     }
 
     [Fact]
-    public void Lead_intake_needs_the_ingest_key_because_it_takes_the_client_from_the_body()
+    public void Contact_intake_needs_the_ingest_key_because_it_takes_the_client_from_the_body()
     {
-        var create = typeof(LeadsController).GetMethod(nameof(LeadsController.Create))!;
+        var create = typeof(ContactsController).GetMethod(nameof(ContactsController.Create))!;
         Assert.NotEmpty(create.GetCustomAttributes(typeof(Omni.App.Controllers.Filters.RequireIngestKeyAttribute), inherit: true));
     }
 
     [Fact]
-    public async Task Lead_reads_are_scoped_to_the_signed_in_client_and_paging_is_clamped()
+    public async Task Contact_reads_are_scoped_to_the_signed_in_client_and_paging_is_clamped()
     {
-        _leads.Setup(l => l.ListAsync(ClientId, "new", null, "q", 5, 200, It.IsAny<CancellationToken>())).ReturnsAsync((new List<LeadResponse>() as IReadOnlyList<LeadResponse>, 0));
-        Assert.IsType<OkObjectResult>((await Leads().List("new", null, "q", 5, 9999, default)).Result);
-        _leads.Setup(l => l.ListAsync(ClientId, null, null, null, 0, 1, It.IsAny<CancellationToken>())).ReturnsAsync((new List<LeadResponse>() as IReadOnlyList<LeadResponse>, 0));
-        Assert.IsType<OkObjectResult>((await Leads().List(null, null, null, 0, -4, default)).Result);
+        _contacts.Setup(l => l.ListAsync(ClientId, "new", null, "q", 5, 200, It.IsAny<CancellationToken>())).ReturnsAsync((new List<ContactResponse>() as IReadOnlyList<ContactResponse>, 0));
+        Assert.IsType<OkObjectResult>((await Contacts().List("new", null, "q", 5, 9999, default)).Result);
+        _contacts.Setup(l => l.ListAsync(ClientId, null, null, null, 0, 1, It.IsAny<CancellationToken>())).ReturnsAsync((new List<ContactResponse>() as IReadOnlyList<ContactResponse>, 0));
+        Assert.IsType<OkObjectResult>((await Contacts().List(null, null, null, 0, -4, default)).Result);
 
-        Assert.IsType<NotFoundResult>((await Leads().GetById(Guid.NewGuid(), default)).Result);
-        var lead = Lead();
-        _leads.Setup(l => l.GetByIdAsync(ClientId, lead.Id, It.IsAny<CancellationToken>())).ReturnsAsync(lead);
-        Assert.Same(lead, Ok(await Leads().GetById(lead.Id, default)));
+        Assert.IsType<NotFoundResult>((await Contacts().GetById(Guid.NewGuid(), default)).Result);
+        var contact = Contact();
+        _contacts.Setup(l => l.GetByIdAsync(ClientId, contact.Id, It.IsAny<CancellationToken>())).ReturnsAsync(contact);
+        Assert.Same(contact, Ok(await Contacts().GetById(contact.Id, default)));
     }
 
     [Fact]
-    public async Task Lead_writes_return_404_when_missing_and_everything_is_forbidden_without_a_client()
+    public async Task Contact_writes_return_404_when_missing_and_everything_is_forbidden_without_a_client()
     {
-        Assert.IsType<NotFoundResult>((await Leads().Update(Guid.NewGuid(), new UpdateLeadRequest(null, null, null, null, null, null, null, null, null, null, null), default)).Result);
-        Assert.IsType<NotFoundResult>((await Leads().UpdateStatus(Guid.NewGuid(), new UpdateLeadStatusRequest("new", null), default)).Result);
+        Assert.IsType<NotFoundResult>((await Contacts().Update(Guid.NewGuid(), new UpdateContactRequest(null, null, null, null, null, null, null, null, null, null, null), default)).Result);
+        Assert.IsType<NotFoundResult>((await Contacts().UpdateStage(Guid.NewGuid(), new UpdateContactStageRequest("new", null), default)).Result);
 
         NoClient();
-        Assert.IsType<ForbidResult>((await Leads().List(null, null, null, 0, 10, default)).Result);
-        Assert.IsType<ForbidResult>((await Leads().GetById(Guid.NewGuid(), default)).Result);
-        Assert.IsType<ForbidResult>((await Leads().Update(Guid.NewGuid(), new UpdateLeadRequest(null, null, null, null, null, null, null, null, null, null, null), default)).Result);
-        Assert.IsType<ForbidResult>((await Leads().UpdateStatus(Guid.NewGuid(), new UpdateLeadStatusRequest("new", null), default)).Result);
+        Assert.IsType<ForbidResult>((await Contacts().List(null, null, null, 0, 10, default)).Result);
+        Assert.IsType<ForbidResult>((await Contacts().GetById(Guid.NewGuid(), default)).Result);
+        Assert.IsType<ForbidResult>((await Contacts().Update(Guid.NewGuid(), new UpdateContactRequest(null, null, null, null, null, null, null, null, null, null, null), default)).Result);
+        Assert.IsType<ForbidResult>((await Contacts().UpdateStage(Guid.NewGuid(), new UpdateContactStageRequest("new", null), default)).Result);
     }
 
     [Fact]
@@ -87,7 +87,7 @@ public class LeadsAndBookingsControllerTests : ClientControllerTestBase
         CreateBookingRequest? seen = null;
         _bookings.Setup(a => a.CreateAsync(It.IsAny<CreateBookingRequest>(), It.IsAny<CancellationToken>()))
             .Callback<CreateBookingRequest, CancellationToken>((r, _) => seen = r)
-            .ReturnsAsync(new BookingResponse(Guid.NewGuid(), ClientId, req.LeadId, null, null, null, "standard", "booked", req.ScheduledStart, null, null, null, null, DateTimeOffset.UtcNow));
+            .ReturnsAsync(new BookingResponse(Guid.NewGuid(), ClientId, req.ContactId, null, null, null, "standard", "booked", req.ScheduledStart, null, null, null, null, DateTimeOffset.UtcNow));
         Assert.IsType<CreatedAtActionResult>((await Appts().Create(req, default)).Result);
         Assert.Equal(ClientId, seen!.ClientId);
     }
@@ -173,7 +173,7 @@ public class ConversationsControllerTests : ClientControllerTestBase
         Assert.IsType<NotFoundResult>((await Sut().ReturnToAi(id, default)).Result);
         Assert.IsType<NotFoundResult>((await Sut().Close(id, default)).Result);
         Assert.IsType<NotFoundResult>((await Sut().Reopen(id, default)).Result);
-        Assert.IsType<NotFoundResult>((await Sut().AddMessage(id, new CreateMessageRequest("inbound", "lead", "whatsapp", null, "x", null), default)).Result);
+        Assert.IsType<NotFoundResult>((await Sut().AddMessage(id, new CreateMessageRequest("inbound", "contact", "whatsapp", null, "x", null), default)).Result);
         Assert.IsType<NotFoundResult>((await Sut().SendTemplateMessage(id, new SendTemplateMessageRequest(Guid.NewGuid(), null), default)).Result);
         Assert.IsType<NotFoundResult>(await Sut().MarkRead(id, default));
         _conversations.Setup(c => c.MarkReadAsync(ClientId, id, It.IsAny<CancellationToken>())).ReturnsAsync(true);
@@ -269,14 +269,14 @@ public class CampaignKnowledgeAndServiceControllerTests : ClientControllerTestBa
     {
         Assert.IsType<BadRequestObjectResult>((await Campaigns().AudiencePreview("bogus", null, default)).Result);
         _audience.Setup(a => a.GetMatchingCountAsync(ClientId, CampaignAudienceType.AllEligible, "{}", It.IsAny<CancellationToken>())).ReturnsAsync(42);
-        Assert.Equal(42, Ok(await Campaigns().AudiencePreview(CampaignAudienceType.AllEligible, "{}", default)).MatchingLeads);
+        Assert.Equal(42, Ok(await Campaigns().AudiencePreview(CampaignAudienceType.AllEligible, "{}", default)).MatchingContacts);
 
-        Assert.IsType<BadRequestObjectResult>((await Campaigns().AudiencePreviewLeads("bogus", null, 5, default)).Result);
-        var leads = Enumerable.Range(0, 80).Select(i => new Lead { Id = Guid.NewGuid(), FullName = $"L{i}" }).ToList();
-        _audience.Setup(a => a.GetEligibleLeadsAsync(ClientId, CampaignAudienceType.AllEligible, null, It.IsAny<CancellationToken>())).ReturnsAsync(leads);
-        Assert.Equal((80, 10), (Ok(await Campaigns().AudiencePreviewLeads(CampaignAudienceType.AllEligible, null, 0, default)) is { } a ? (a.MatchingLeads, a.Leads.Count) : default));
-        Assert.Equal(50, Ok(await Campaigns().AudiencePreviewLeads(CampaignAudienceType.AllEligible, null, 50, default)).Leads.Count);
-        Assert.Equal(10, Ok(await Campaigns().AudiencePreviewLeads(CampaignAudienceType.AllEligible, null, 51, default)).Leads.Count);
+        Assert.IsType<BadRequestObjectResult>((await Campaigns().AudiencePreviewContacts("bogus", null, 5, default)).Result);
+        var contacts = Enumerable.Range(0, 80).Select(i => new Contact { Id = Guid.NewGuid(), FullName = $"L{i}" }).ToList();
+        _audience.Setup(a => a.GetEligibleContactsAsync(ClientId, CampaignAudienceType.AllEligible, null, It.IsAny<CancellationToken>())).ReturnsAsync(contacts);
+        Assert.Equal((80, 10), (Ok(await Campaigns().AudiencePreviewContacts(CampaignAudienceType.AllEligible, null, 0, default)) is { } a ? (a.MatchingContacts, a.Contacts.Count) : default));
+        Assert.Equal(50, Ok(await Campaigns().AudiencePreviewContacts(CampaignAudienceType.AllEligible, null, 50, default)).Contacts.Count);
+        Assert.Equal(10, Ok(await Campaigns().AudiencePreviewContacts(CampaignAudienceType.AllEligible, null, 51, default)).Contacts.Count);
     }
 
     [Fact]

@@ -70,17 +70,17 @@ else
             <div id="cal-new-error" class="connect-error modal-error" role="alert"></div>
             <div class="au-stack">
                 <div class="au-form-field">
-                    <label class="au-form-label" for="cal-new-lead-search">Patient<span class="au-required">*</span></label>
-                    <div class="picker" id="cal-new-lead-picker">
-                        <input type="text" id="cal-new-lead-search" class="au-input search-input" placeholder="Search by name or phone…" autocomplete="off" />
-                        <div class="picker-chip" id="cal-new-lead-chip" hidden>
-                            <span class="avatar-sm" id="cal-new-lead-chip-avatar"></span>
-                            <span class="picker-chip-label" id="cal-new-lead-chip-label"></span>
-                            <button type="button" class="picker-chip-x" id="cal-new-lead-clear" aria-label="Change patient">&times;</button>
+                    <label class="au-form-label" for="cal-new-contact-search">Contact<span class="au-required">*</span></label>
+                    <div class="picker" id="cal-new-contact-picker">
+                        <input type="text" id="cal-new-contact-search" class="au-input search-input" placeholder="Search by name or phone…" autocomplete="off" />
+                        <div class="picker-chip" id="cal-new-contact-chip" hidden>
+                            <span class="avatar-sm" id="cal-new-contact-chip-avatar"></span>
+                            <span class="picker-chip-label" id="cal-new-contact-chip-label"></span>
+                            <button type="button" class="picker-chip-x" id="cal-new-contact-clear" aria-label="Change contact">&times;</button>
                         </div>
-                        <div class="picker-results" id="cal-new-lead-results" role="listbox" hidden></div>
+                        <div class="picker-results" id="cal-new-contact-results" role="listbox" hidden></div>
                     </div>
-                    <input type="hidden" id="cal-new-lead-id" />
+                    <input type="hidden" id="cal-new-contact-id" />
                 </div>
                 <div class="au-form-field">
                     <label class="au-form-label" for="cal-new-service">Service <span class="opt">optional</span></label>
@@ -142,9 +142,9 @@ else
             </div>
             <div id="cal-appt-error" class="connect-error modal-error" role="alert"></div>
             <div class="mb-2">
-                <div class="inbox-lead-info-row"><span>Service</span><strong id="cal-appt-service">—</strong></div>
-                <div class="inbox-lead-info-row"><span>Where</span><strong id="cal-appt-location">—</strong></div>
-                <div class="inbox-lead-info-row" id="cal-appt-notes-row"><span>Notes</span><strong id="cal-appt-notes">—</strong></div>
+                <div class="inbox-contact-info-row"><span>Service</span><strong id="cal-appt-service">—</strong></div>
+                <div class="inbox-contact-info-row"><span>Where</span><strong id="cal-appt-location">—</strong></div>
+                <div class="inbox-contact-info-row" id="cal-appt-notes-row"><span>Notes</span><strong id="cal-appt-notes">—</strong></div>
             </div>
             <div class="au-form-field">
                 <label class="au-form-label" for="cal-appt-status">Status</label>
@@ -158,7 +158,7 @@ else
                 </select>
             </div>
             <div class="cal-appt-links">
-                <a class="au-link" id="cal-appt-lead" href="#">Open patient</a>
+                <a class="au-link" id="cal-appt-contact" href="#">Open contact</a>
                 <a class="au-link" id="cal-appt-full" href="#">Open full page</a>
             </div>
             <div class="au-form-actions">

@@ -3,7 +3,7 @@ namespace Omni.App.Entities.Models;
 /// <summary>
 /// Links a logged-in Identity user (IdentityUser.Id, string) to the client they belong to — nothing
 /// more. Deliberately no role/permission fields per the MVP scope decision: every linked user has
-/// full access to their client's data, there is no owner/manager/receptionist/surgeon distinction.
+/// full access to their client's data, there is no owner/manager/receptionist/specialist distinction.
 /// MVP assumes one active membership per user (enforced by UNIQUE(client_id, user_id), not by a
 /// separate "is this the only active row" check) — see CurrentClientContext, the one place that
 /// reads this table to resolve "the current client" for every dashboard page/API.

@@ -31,8 +31,8 @@ public class WhatsAppChannelSender : IChannelSender
                 "The 24-hour WhatsApp customer service window is closed for this conversation — send an approved template instead.");
         }
 
-        var toPhone = conversation.Lead?.Phone
-            ?? throw new InvalidOperationException("This lead has no phone number on file — can't send a WhatsApp message.");
+        var toPhone = conversation.Contact?.Phone
+            ?? throw new InvalidOperationException("This contact has no phone number on file — can't send a WhatsApp message.");
 
         return await _whatsApp.SendTextMessageAsync(conversation.ClientId, toPhone, text, ct);
     }

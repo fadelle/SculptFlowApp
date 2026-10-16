@@ -328,7 +328,7 @@ public class AiTestControllerTests
     [InlineData("CONFIRMATION_REQUIRED", false, "none")]
     [InlineData("MULTIPLE_UPCOMING_BOOKINGS", false, "none")]
     [InlineData("SLOT_UNAVAILABLE", false, "none")]
-    [InlineData("LEAD_NOT_FOUND", false, "none")]
+    [InlineData("CONTACT_NOT_FOUND", false, "none")]
     [InlineData("INVALID_REQUEST", false, "none")]
     public void Schedule_returns_the_canned_result_for_each_code(string code, bool success, string action)
     {

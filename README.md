@@ -1,9 +1,9 @@
 # Omni
 
-Multi-tenant SaaS for plastic surgery clients. A lead messages a client on WhatsApp or Telegram, an AI agent
-(orchestrated by n8n) answers from the client's Knowledge Base, qualifies the lead and makes bookings, and
+Multi-tenant SaaS for service businesses. A contact messages a client on WhatsApp or Telegram, an AI agent
+(orchestrated by n8n) answers from the client's Knowledge Base, qualifies the contact and makes bookings, and
 staff can take over any conversation from the dashboard Inbox. Clients also run WhatsApp template campaigns
-(especially old-lead reactivation) against their existing leads.
+(especially old-contact reactivation) against their existing contacts.
 
 **For the full, current state of the project read [`PROJECT_HANDOFF.md`](PROJECT_HANDOFF.md) first.** It is the
 single source of truth for architecture, tables, endpoints, config keys, migrations, decisions and open TODOs.
@@ -23,10 +23,10 @@ This README is only a short orientation.
 ## Main features
 
 - Inbox (WhatsApp + Telegram) with AI / human modes, take over / return to AI, unread tracking, 24h WhatsApp window
-- Leads, services, bookings month calendar, structured client availability, AI booking tools
+- Contacts, services, bookings month calendar, structured client availability, AI booking tools
   (`get_available_slots`, `schedule_booking`, `cancel_booking`, `get_my_bookings`)
 - WhatsApp Embedded Signup, templates, health monitoring; Telegram bot channel
-- Campaigns with audience picker (old leads who never booked, all contactable, custom filters, manual)
+- Campaigns with audience picker (old contacts who never booked, all contactable, custom filters, manual)
 - Knowledge Base: manual entries, PDF/DOCX/TXT upload, website crawling, semantic search (its retrieval benchmark is run from the admin portal)
 - Staff notification bell; Calendar Integrations (one-way Google/Outlook sync through a separate n8n workflow)
 - Self-service registration (new user → new isolated client), Staff list, Business Info settings
@@ -39,7 +39,7 @@ This README is only a short orientation.
    ```
    psql "<connection string>" -f Database/schema.sql
    psql "<connection string>" -f Database/seed-config.sql   # every setting with its default (never overwrites)
-   psql "<connection string>" -f Database/seed.sql   # optional demo client, services and leads
+   psql "<connection string>" -f Database/seed.sql   # optional demo client, services and contacts
    psql "<connection string>" -f Database/seed-demo.sql   # optional fully populated demo client (re-runnable, dummy data; sign-in and placeholder password in the file header, change it)
    ```
    Both are idempotent. Tables live in one Postgres schema per area (`core`, `crm`, `billing`, ...); running
@@ -69,5 +69,5 @@ This README is only a short orientation.
 
 See `PROJECT_HANDOFF.md` §17 (pending work) and §22 (TODOs). The most important: rotate the secrets that were
 once in git history, derive `clientId` server-side for the AI endpoints, verify Meta webhook signatures, add
-forwarded-headers handling and persistent DataProtection keys, and protect the anonymous `POST /api/leads`.
+forwarded-headers handling and persistent DataProtection keys, and protect the anonymous `POST /api/contacts`.
 Only the billing module has automated tests so far.

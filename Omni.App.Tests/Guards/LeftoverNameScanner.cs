@@ -19,17 +19,17 @@ public static class LeftoverNameScanner
     public const string AllowlistPath = "Omni.App.Tests/Guards/leftover-names-allowlist.txt";
 
     /// <summary>Every old word and how it's matched. "lead" only as a word or identifier part (Lead, lead_, leadId,
-    /// GetLeadsAsync), never inside "leading", "leader" or "mislead".</summary>
+    /// GetLeadsAsync, ILeadService), never inside "leading", "leader" or "mislead".</summary>
     public static readonly IReadOnlyDictionary<string, Regex> Words = new Dictionary<string, Regex>
     {
         ["clinic"] = Word("clinic"),
-        ["lead"] = new(@"(?:(?<![A-Za-z])[Ll]|(?<=[a-z0-9])L)eads?(?![a-z])", RegexOptions.Compiled),
+        ["lead"] = new(@"(?:(?<![A-Za-z])[Ll]|(?<=[a-z0-9])L|(?<=(?<![A-Za-z])I)L)eads?(?![a-z])", RegexOptions.Compiled),
         ["procedure"] = Word("procedure"),
         ["appointment"] = Word("appointment"),
         ["staff"] = Word("staff"),
         ["patient"] = Word("patient"),
         ["surgeon"] = Word("surgeon"),
-        ["surgery"] = Word("surgery"),
+        ["surgery"] = Word("surger(?:y|ies)"),
         ["consultation"] = Word("consultation"),
         ["sculptflow"] = Word("sculpt_?flow"),
         ["plasticsurgery"] = Word("plastic_?surgery"),

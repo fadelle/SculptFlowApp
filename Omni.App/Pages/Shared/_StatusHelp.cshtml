@@ -1,6 +1,19 @@
-@* Reusable "what do these statuses mean?" reference — included on the Lead edit page and the
-   Campaign creation page (the two places staff pick from these four status/source fields). Static
-   reference content, not DB-driven; update this file if a status value's meaning changes. *@
+@model IReadOnlyList<Omni.App.Entities.Dtos.BusinessTypes.PipelineStageOption>
+@* Reusable "what do these mean?" reference — included on the Contact edit page and the Campaign creation page (the two
+   places staff pick stages, qualifications and sources). The stage list is the client's own pipeline (the model), each
+   explained by its category; the other sections are static. *@
+@{
+    var categoryHelp = new Dictionary<string, string>
+    {
+        [StageCategory.Open] = T["stages.help.open"],
+        [StageCategory.Booked] = T["stages.help.booked"],
+        [StageCategory.Attended] = T["stages.help.attended"],
+        [StageCategory.NoShow] = T["stages.help.noShow"],
+        [StageCategory.Converted] = T["stages.help.converted"],
+        [StageCategory.ClosedLost] = T["stages.help.closedLost"],
+        [StageCategory.NeedsHuman] = T["stages.help.needsHuman"],
+    };
+}
 <div id="status-help-overlay" class="status-help-overlay" hidden>
     <div class="status-help-card card" role="dialog" aria-modal="true" aria-labelledby="status-help-title">
         <div class="status-help-header">
@@ -9,41 +22,34 @@
         </div>
 
         <section class="status-help-section">
-            <h4>Lead status</h4>
-            <p class="text-subtle">Where this person is in your funnel. Used to organize the Interested People list and to filter campaign audiences.</p>
+            <h4>@T["stages.help.title"]</h4>
+            <p class="text-subtle">@T["stages.help.intro"]</p>
             <dl>
-                <dt>New</dt><dd>Just came in — no contact made yet.</dd>
-                <dt>Contacted</dt><dd>Staff or the AI has messaged them at least once.</dd>
-                <dt>Qualified</dt><dd>Assessed as a good fit for treatment.</dd>
-                <dt>Booked</dt><dd>A booking has been scheduled.</dd>
-                <dt>Attended</dt><dd>They showed up for their booking.</dd>
-                <dt>No-show</dt><dd>They missed a scheduled booking.</dd>
-                <dt>Surgery booked</dt><dd>An order for a service has been confirmed.</dd>
-                <dt>Not interested</dt><dd>The lead declined or isn't interested.</dd>
-                <dt>Needs human review</dt><dd>The AI flagged this lead as needing a real staff member.</dd>
-                <dt>Lost</dt><dd>No longer being pursued.</dd>
+                @foreach (var stage in Model)
+                {
+                    <dt>@stage.Label</dt><dd>@(categoryHelp.TryGetValue(stage.Category, out var help) ? help : "")</dd>
+                }
             </dl>
         </section>
 
         <section class="status-help-section">
             <h4>Qualification status</h4>
-            <p class="text-subtle">How promising this lead looks — set by the AI during conversation, or by staff directly.</p>
+            <p class="text-subtle">How promising this contact looks — set by the AI during conversation, or by staff directly.</p>
             <dl>
                 <dt>Unknown</dt><dd>Not yet assessed.</dd>
                 <dt>Hot</dt><dd>High intent — likely to book soon.</dd>
                 <dt>Warm</dt><dd>Interested, but not urgent.</dd>
                 <dt>Cold</dt><dd>Low intent — unlikely to convert soon.</dd>
-                <dt>Needs human review</dt><dd>The AI couldn't confidently qualify this lead — flagged for staff.</dd>
-                <dt>Medical question</dt><dd>The lead asked a medical question the AI can't answer — needs an expert's input.</dd>
-                <dt>Spam</dt><dd>Not a genuine lead.</dd>
+                <dt>Needs human review</dt><dd>The AI couldn't confidently qualify this contact — flagged for staff.</dd>
+                <dt>Spam</dt><dd>Not a genuine contact.</dd>
             </dl>
         </section>
 
         <section class="status-help-section">
-            <h4>Lead source</h4>
+            <h4>Contact source</h4>
             <p class="text-subtle">
-                Where the lead came from. There's no fixed list — it's free text, so it grows to match
-                however your client actually acquires leads (e.g. <em>facebook</em>, <em>instagram</em>,
+                Where the contact came from. There's no fixed list — it's free text, so it grows to match
+                however your client actually acquires contacts (e.g. <em>facebook</em>, <em>instagram</em>,
                 <em>google</em>, <em>website</em>, <em>referral</em>, <em>whatsapp</em>, or anything else
                 via "Other…"). Used to filter campaigns by acquisition channel.
             </p>
@@ -54,17 +60,17 @@
             <p class="text-subtle">The state of one specific booking.</p>
             <dl>
                 <dt>Booked</dt><dd>A booking time has been scheduled.</dd>
-                <dt>Confirmed</dt><dd>The client or lead has confirmed they'll attend.</dd>
+                <dt>Confirmed</dt><dd>The client or contact has confirmed they'll attend.</dd>
                 <dt>Attended</dt><dd>The booking took place.</dd>
                 <dt>No-show</dt><dd>They didn't show up.</dd>
                 <dt>Canceled</dt><dd>The booking was canceled.</dd>
                 <dt>Rescheduled</dt><dd>The booking time was moved to a new date/time.</dd>
             </dl>
             <p class="text-subtle">
-                <strong>Matters for "Old leads who never booked":</strong> Booked, Confirmed, Rescheduled,
-                or Attended means the lead has a real booking on record, so they stop matching that
+                <strong>Matters for "Old contacts who never booked":</strong> Booked, Confirmed, Rescheduled,
+                or Attended means the contact has a real booking on record, so they stop matching that
                 reactivation audience. Canceled and No-show don't count as a successful booking — those
-                leads stay eligible for reactivation.
+                contacts stay eligible for reactivation.
             </p>
         </section>
     </div>

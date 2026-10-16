@@ -49,14 +49,14 @@ public abstract class RepoTestBase
 
     protected static readonly DateTimeOffset Now = new(2026, 6, 15, 12, 0, 0, TimeSpan.Zero);
 
-    protected static Client MakeClient(string? name = null, string timezone = "UTC") => new()
+    protected static Client MakeClient(string? name = null, string timezone = "UTC", string businessType = TextKit.General) => new()
     {
         Id = Guid.NewGuid(),
         Name = name ?? "Client " + Guid.NewGuid().ToString("N")[..8],
         Slug = "c-" + Guid.NewGuid().ToString("N")[..12],
         Timezone = timezone,
-        // The first built-in business type: its stage keys are the LeadStatus values the code writes.
-        BusinessTypeCode = TextKit.Clinic,
+        // A built-in business type (schema.sql seeds its stages); contacts default to its keys (PipelineKit).
+        BusinessTypeCode = businessType,
         CreatedAt = Now,
         UpdatedAt = Now,
     };
@@ -66,31 +66,31 @@ public abstract class RepoTestBase
         Id = Guid.NewGuid(), ClientId = clientId, Name = name, IsActive = active, BookingDuration = duration, CreatedAt = Now, UpdatedAt = Now,
     };
 
-    protected static Lead MakeLead(Guid clientId, string? name = "Ann", string? phone = null, Guid? serviceId = null, string status = LeadStatus.New,
+    protected static Contact MakeContact(Guid clientId, string? name = "Ann", string? phone = null, Guid? serviceId = null, string stage = PipelineKit.New,
         DateTimeOffset? createdAt = null) => new()
     {
-        Id = Guid.NewGuid(), ClientId = clientId, FullName = name, Phone = phone, ServiceId = serviceId, Status = status,
+        Id = Guid.NewGuid(), ClientId = clientId, FullName = name, Phone = phone, ServiceId = serviceId, StageKey = stage,
         CreatedAt = createdAt ?? Now, UpdatedAt = createdAt ?? Now,
     };
 
-    protected static Conversation MakeConversation(Guid clientId, Guid leadId, string channel = "whatsapp", string? thread = null,
+    protected static Conversation MakeConversation(Guid clientId, Guid contactId, string channel = "whatsapp", string? thread = null,
         DateTimeOffset? lastMessageAt = null) => new()
     {
-        Id = Guid.NewGuid(), ClientId = clientId, LeadId = leadId, Channel = channel, ExternalThreadId = thread,
+        Id = Guid.NewGuid(), ClientId = clientId, ContactId = contactId, Channel = channel, ExternalThreadId = thread,
         LastMessageAt = lastMessageAt, CreatedAt = Now, UpdatedAt = Now,
     };
 
     protected static Message MakeMessage(Conversation c, string direction = MessageDirection.Inbound, string origin = MessageOrigin.WhatsAppCustomer,
         string content = "hi", DateTimeOffset? createdAt = null, string? externalId = null) => new()
     {
-        Id = Guid.NewGuid(), ClientId = c.ClientId, ConversationId = c.Id, LeadId = c.LeadId, Direction = direction, SenderType = "lead",
+        Id = Guid.NewGuid(), ClientId = c.ClientId, ConversationId = c.Id, ContactId = c.ContactId, Direction = direction, SenderType = "contact",
         Channel = c.Channel, Content = content, Origin = origin, ExternalMessageId = externalId, CreatedAt = createdAt ?? Now,
     };
 
-    protected static Booking MakeBooking(Guid clientId, Guid leadId, DateTimeOffset start, string status = BookingStatus.Booked,
+    protected static Booking MakeBooking(Guid clientId, Guid contactId, DateTimeOffset start, string status = BookingStatus.Booked,
         Guid? serviceId = null, DateTimeOffset? end = null) => new()
     {
-        Id = Guid.NewGuid(), ClientId = clientId, LeadId = leadId, ServiceId = serviceId, ScheduledStart = start, ScheduledEnd = end,
+        Id = Guid.NewGuid(), ClientId = clientId, ContactId = contactId, ServiceId = serviceId, ScheduledStart = start, ScheduledEnd = end,
         Status = status, CreatedAt = Now, UpdatedAt = Now,
     };
 }

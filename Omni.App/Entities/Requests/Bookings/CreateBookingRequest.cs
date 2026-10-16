@@ -2,7 +2,7 @@ namespace Omni.App.Entities.Requests.Bookings;
 
 public record CreateBookingRequest(
     Guid ClientId,
-    Guid LeadId,
+    Guid ContactId,
     Guid? ServiceId,
     string BookingType,
     DateTimeOffset ScheduledStart,

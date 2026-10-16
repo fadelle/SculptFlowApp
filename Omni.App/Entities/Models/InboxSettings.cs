@@ -12,7 +12,7 @@ public class InboxSettings
     /// <summary>The AI bot answers a brand-new conversation (else it starts in human mode).</summary>
     public bool AiBotNewConversations { get; set; } = true;
 
-    /// <summary>The AI bot may keep answering a conversation a patient reopens (else it moves to human mode).</summary>
+    /// <summary>The AI bot may keep answering a conversation a contact reopens (else it moves to human mode).</summary>
     public bool AiBotReopenedConversations { get; set; } = true;
 
     public DateTimeOffset CreatedAt { get; set; }

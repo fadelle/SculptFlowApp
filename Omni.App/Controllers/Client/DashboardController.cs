@@ -37,16 +37,16 @@ public class DashboardController : DashboardApiController
         return Ok(await _dashboard.GetAttentionAsync(clientId.Value, ct));
     }
 
-    [HttpGet("leads")]
-    public async Task<ActionResult<object>> Leads(
-        [FromQuery] string? status, [FromQuery] string? search, [FromQuery] string? source, [FromQuery] int skip = 0, [FromQuery] int take = 50, CancellationToken ct = default)
+    [HttpGet("contacts")]
+    public async Task<ActionResult<object>> Contacts(
+        [FromQuery] string? stage, [FromQuery] string? search, [FromQuery] string? source, [FromQuery] int skip = 0, [FromQuery] int take = 50, CancellationToken ct = default)
     {
         var clientId = await GetClientIdAsync(ct);
         if (clientId is null) return Forbid();
 
         skip = Math.Max(skip, 0);
         take = Math.Clamp(take, 1, 200);
-        var (items, totalCount) = await _dashboard.GetLeadsAsync(clientId.Value, status, search, source, skip, take, ct);
+        var (items, totalCount) = await _dashboard.GetContactsAsync(clientId.Value, stage, search, source, skip, take, ct);
         return Ok(new { items, totalCount, skip, take });
     }
 

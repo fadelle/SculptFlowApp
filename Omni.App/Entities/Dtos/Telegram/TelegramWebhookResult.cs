@@ -9,7 +9,7 @@ public record TelegramWebhookResult(
     bool ShouldRunAi,
     Guid? ClientId = null,
     Guid? ConversationId = null,
-    Guid? LeadId = null,
+    Guid? ContactId = null,
     Guid? MessageId = null,
     string? MessageType = null,
     string? Content = null,

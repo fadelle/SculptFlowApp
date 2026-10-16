@@ -10,7 +10,7 @@ namespace Omni.App.Entities.Requests.Inbox;
 public record IngestMessageRequest(
     Guid ClientId,
     Guid ConversationId,
-    Guid LeadId,
+    Guid ContactId,
     string EventType,
     string Channel,
     string? Content,
@@ -32,7 +32,7 @@ public record IngestMessageRequest(
     /// column instead of our own ingestion time when provided.</summary>
     DateTimeOffset? OccurredAt = null,
     /// <summary>customer_message only, set by CustomerMessageHandler/TelegramWebhookProcessor from
-    /// ILeadService's WasCreated — drives the NEW_LEAD notification. Always false for any other caller
-    /// (e.g. the n8n ingest endpoint, which never creates a lead itself).</summary>
-    bool LeadWasNewlyCreated = false
+    /// IContactService's WasCreated — drives the NEW_CONTACT notification. Always false for any other caller
+    /// (e.g. the n8n ingest endpoint, which never creates a contact itself).</summary>
+    bool ContactWasNewlyCreated = false
 );

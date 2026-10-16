@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Omni.App.Business.Contracts.Managers;
 using Omni.App.Business.Contracts.Services.Bookings;
+using Omni.App.Business.Contracts.Services.BusinessTypes;
 using Omni.App.Business.Contracts.Services.Calendars;
 using Omni.App.Business.Contracts.Services.Notifications;
 using Omni.App.Business.Contracts.Services.Catalog;
@@ -17,7 +18,7 @@ using Omni.App.Persistence.Contracts;
 using Omni.App.Persistence.Contracts.Bookings;
 using Omni.App.Persistence.Contracts.Campaigns;
 using Omni.App.Persistence.Contracts.Clients;
-using Omni.App.Persistence.Contracts.Leads;
+using Omni.App.Persistence.Contracts.Contacts;
 using Omni.App.Persistence.Contracts.Catalog;
 
 namespace Omni.App.Business.Services.Bookings;
@@ -25,7 +26,7 @@ namespace Omni.App.Business.Services.Bookings;
 public class BookingService : IBookingService
 {
     private readonly IBookingRepository _bookings;
-    private readonly ILeadRepository _leads;
+    private readonly IContactRepository _contacts;
     private readonly IClientRepository _clients;
     private readonly IServiceRepository _serviceRows;
     private readonly IUnitOfWork _unitOfWork;
@@ -38,16 +39,18 @@ public class BookingService : IBookingService
     private readonly ICalendarIntegrationService _calendarSync;
     private readonly ICampaignRepository _campaigns;
     private readonly IConfigManager _config;
+    private readonly IBusinessTypeService _businessTypes;
 
     public BookingService(
-        IBookingRepository bookings, ILeadRepository leads, IClientRepository clients, IServiceRepository serviceRows, IUnitOfWork unitOfWork, IEventLogger events, ICatalogService services, IAvailabilityService availability,
+        IBookingRepository bookings, IContactRepository contacts, IClientRepository clients, IServiceRepository serviceRows, IUnitOfWork unitOfWork, IEventLogger events, ICatalogService services, IAvailabilityService availability,
         IInboxNotifier notifier, INotificationService notifications, ICalendarIntegrationService calendarSync,
-        ICampaignRepository campaigns, IConfigManager config)
+        ICampaignRepository campaigns, IConfigManager config, IBusinessTypeService businessTypes)
     {
         _campaigns = campaigns;
         _config = config;
+        _businessTypes = businessTypes;
         _bookings = bookings;
-        _leads = leads;
+        _contacts = contacts;
         _clients = clients;
         _serviceRows = serviceRows;
         _unitOfWork = unitOfWork;
@@ -82,16 +85,16 @@ public class BookingService : IBookingService
         // below sees the first one's booking and rejects it.
         await LockClientAsync(request.ClientId, ct);
 
-        // The lead must be one of THIS client's (a wrong or foreign id must not create a booking).
-        if (!await _leads.ExistsAsync(request.ClientId, request.LeadId, ct))
+        // The contact must be one of THIS client's (a wrong or foreign id must not create a booking).
+        if (!await _contacts.ExistsAsync(request.ClientId, request.ContactId, ct))
         {
-            throw new ArgumentException("Lead not found for this client.");
+            throw new ArgumentException("Contact not found for this client.");
         }
 
-        // One upcoming booking per lead: a second booking is refused, and the reply describes the existing one so the AI can
-        // offer to move it. Under the lock, so two simultaneous bookings for the same lead can't both pass.
-        var (tz, upcoming) = await LoadUpcomingAsync(request.ClientId, request.LeadId, ct);
-        if (upcoming.Count > 0) throw new LeadAlreadyBookedException(ToUpcoming(upcoming[0], tz));
+        // One upcoming booking per contact: a second booking is refused, and the reply describes the existing one so the AI can
+        // offer to move it. Under the lock, so two simultaneous bookings for the same contact can't both pass.
+        var (tz, upcoming) = await LoadUpcomingAsync(request.ClientId, request.ContactId, ct);
+        if (upcoming.Count > 0) throw new ContactAlreadyBookedException(ToUpcoming(upcoming[0], tz));
 
         var check = await _availability.CheckSlotAsync(request.ClientId, request.ServiceId, request.ScheduledStart, request.ScheduledEnd, ct: ct);
         if (check.Error is not null) throw new SlotUnavailableException(check.Error);
@@ -126,21 +129,21 @@ public class BookingService : IBookingService
 
         // A [[time:…]] marker, not text: notifications.js shows it in each viewer's own timezone (OmniTime.expand).
         var whenLabel = $"[[time:{booking.ScheduledStart.ToUniversalTime():yyyy-MM-dd'T'HH:mm:ss'Z'}]]";
-        var who = string.IsNullOrWhiteSpace(booking.LeadFullName) ? "A patient" : booking.LeadFullName!;
+        var who = string.IsNullOrWhiteSpace(booking.ContactFullName) ? "A contact" : booking.ContactFullName!;
         var what = string.IsNullOrWhiteSpace(booking.ServiceName) ? "a slot" : booking.ServiceName!;
         var verb = change switch { "created" => "booked", "rescheduled" => "moved to", _ => "canceled for" };
 
         await _notifications.CreateAsync(clientId, type, title!,
             $"{who} — {what} {verb} {whenLabel}.",
-            leadId: booking.LeadId, bookingId: booking.Id,
+            contactId: booking.ContactId, bookingId: booking.Id,
             link: $"/dashboard/bookings/{booking.Id}", ct: ct);
     }
 
     public async Task<BookingResponse> CreateAsync(CreateBookingRequest request, CancellationToken ct = default)
     {
-        if (!await _leads.ExistsAsync(request.ClientId, request.LeadId, ct))
+        if (!await _contacts.ExistsAsync(request.ClientId, request.ContactId, ct))
         {
-            throw new ArgumentException("Lead not found for this client.");
+            throw new ArgumentException("Contact not found for this client.");
         }
         var booking = await CreateCoreAsync(request, ct);
         await NotifyChangedAsync(request.ClientId, booking, "created", ct);
@@ -159,7 +162,7 @@ public class BookingService : IBookingService
         {
             Id = Guid.NewGuid(),
             ClientId = request.ClientId,
-            LeadId = request.LeadId,
+            ContactId = request.ContactId,
             ServiceId = request.ServiceId,
             BookingType = string.IsNullOrWhiteSpace(request.BookingType) ? "standard" : request.BookingType,
             Status = BookingStatus.Booked,
@@ -175,19 +178,20 @@ public class BookingService : IBookingService
 
         _bookings.Add(booking);
 
-        var lead = await _leads.GetAsync(request.ClientId, request.LeadId, ct);
-        if (lead is not null)
+        var contact = await _contacts.GetAsync(request.ClientId, request.ContactId, ct);
+        if (contact is not null)
         {
-            lead.Status = LeadStatus.Booked;
-            lead.UpdatedAt = DateTimeOffset.UtcNow;
+            var pipeline = await _businessTypes.GetPipelineAsync(request.ClientId, ct);
+            contact.StageKey = pipeline.MoveTo(contact.StageKey, StageCategory.Booked) ?? contact.StageKey;
+            contact.UpdatedAt = DateTimeOffset.UtcNow;
         }
 
-        _events.Log(request.ClientId, EventTypes.BookingCreated, leadId: request.LeadId, bookingId: booking.Id);
+        _events.Log(request.ClientId, EventTypes.BookingCreated, contactId: request.ContactId, bookingId: booking.Id);
 
-        // Credit the campaign the patient replied to: the booking shows up in that campaign's "Booked" figure.
+        // Credit the campaign the contact replied to: the booking shows up in that campaign's "Booked" figure.
         var now = DateTimeOffset.UtcNow;
         var campaignSend = await _campaigns.FindLatestRepliedAwaitingBookingAsync(
-            request.ClientId, request.LeadId, now.AddDays(-_config.CampaignsBookingAttributionDays), ct);
+            request.ClientId, request.ContactId, now.AddDays(-_config.CampaignsBookingAttributionDays), ct);
         if (campaignSend is not null)
         {
             campaignSend.Status = CampaignRecipientStatus.Booked;
@@ -219,20 +223,21 @@ public class BookingService : IBookingService
         booking.Status = status;
         booking.UpdatedAt = DateTimeOffset.UtcNow;
 
-        var lead = await _leads.GetByIdAsync(booking.LeadId, ct);
-        if (lead is not null)
+        var contact = await _contacts.GetByIdAsync(booking.ContactId, ct);
+        if (contact is not null)
         {
+            var pipeline = await _businessTypes.GetPipelineAsync(clientId, ct);
             if (status == BookingStatus.Attended)
             {
-                lead.Status = LeadStatus.Attended;
-                _events.Log(clientId, EventTypes.BookingAttended, leadId: lead.Id, bookingId: booking.Id);
+                contact.StageKey = pipeline.MoveTo(contact.StageKey, StageCategory.Attended) ?? contact.StageKey;
+                _events.Log(clientId, EventTypes.BookingAttended, contactId: contact.Id, bookingId: booking.Id);
             }
             else if (status == BookingStatus.NoShow)
             {
-                lead.Status = LeadStatus.NoShow;
-                _events.Log(clientId, EventTypes.BookingNoShow, leadId: lead.Id, bookingId: booking.Id);
+                contact.StageKey = pipeline.MoveTo(contact.StageKey, StageCategory.NoShow) ?? contact.StageKey;
+                _events.Log(clientId, EventTypes.BookingNoShow, contactId: contact.Id, bookingId: booking.Id);
             }
-            lead.UpdatedAt = DateTimeOffset.UtcNow;
+            contact.UpdatedAt = DateTimeOffset.UtcNow;
         }
 
         await _unitOfWork.SaveChangesAsync(ct);
@@ -242,15 +247,15 @@ public class BookingService : IBookingService
     }
 
     public async Task<BookingResponse?> RescheduleAsync(
-        Guid clientId, Guid leadId, Guid? id, DateTimeOffset newStart, DateTimeOffset? newEnd, string? reason, CancellationToken ct = default)
+        Guid clientId, Guid contactId, Guid? id, DateTimeOffset newStart, DateTimeOffset? newEnd, string? reason, CancellationToken ct = default)
     {
         await using var tx = await _unitOfWork.BeginTransactionAsync(ct);
         await LockClientAsync(clientId, ct);
 
-        // The booking must belong to this client AND this lead: the AI only ever acts on the patient it is talking to.
-        var targetId = await ResolveTargetAsync(clientId, leadId, id, ct);
+        // The booking must belong to this client AND this contact: the AI only ever acts on the contact it is talking to.
+        var targetId = await ResolveTargetAsync(clientId, contactId, id, ct);
         if (targetId is null) return null;
-        var booking = await _bookings.GetForLeadAsync(clientId, leadId, targetId.Value, ct);
+        var booking = await _bookings.GetForContactAsync(clientId, contactId, targetId.Value, ct);
         if (booking is null) return null;
 
         if (booking.Status != BookingStatus.Booked && booking.Status != BookingStatus.Confirmed)
@@ -262,7 +267,7 @@ public class BookingService : IBookingService
             throw new ArgumentException("This booking is already in the past and can't be rescheduled. Book a new one instead.");
         }
 
-        // A service that was deactivated since booking can't be newly booked, but must not trap the patient in an old time:
+        // A service that was deactivated since booking can't be newly booked, but must not trap the contact in an old time:
         // fall back to the client's default duration for it.
         var serviceId = await ActiveServiceOrNullAsync(booking.ServiceId, ct);
 
@@ -276,7 +281,7 @@ public class BookingService : IBookingService
         booking.Status = BookingStatus.Booked;
         booking.UpdatedAt = DateTimeOffset.UtcNow;
 
-        _events.Log(clientId, EventTypes.BookingRescheduled, leadId: booking.LeadId, bookingId: booking.Id,
+        _events.Log(clientId, EventTypes.BookingRescheduled, contactId: booking.ContactId, bookingId: booking.Id,
             metadataJson: JsonSerializer.Serialize(new { reason }));
 
         await _unitOfWork.SaveChangesAsync(ct);
@@ -286,11 +291,11 @@ public class BookingService : IBookingService
         return response;
     }
 
-    public async Task<BookingResponse?> CancelAsync(Guid clientId, Guid leadId, Guid? id, string? reason, CancellationToken ct = default)
+    public async Task<BookingResponse?> CancelAsync(Guid clientId, Guid contactId, Guid? id, string? reason, CancellationToken ct = default)
     {
-        var targetId = await ResolveTargetAsync(clientId, leadId, id, ct);
+        var targetId = await ResolveTargetAsync(clientId, contactId, id, ct);
         if (targetId is null) return null;
-        var booking = await _bookings.GetForLeadAsync(clientId, leadId, targetId.Value, ct);
+        var booking = await _bookings.GetForContactAsync(clientId, contactId, targetId.Value, ct);
         if (booking is null) return null;
 
         if (booking.Status == BookingStatus.Canceled) return await ToResponseAsync(booking, ct); // already done
@@ -303,7 +308,7 @@ public class BookingService : IBookingService
         booking.Status = BookingStatus.Canceled;
         booking.UpdatedAt = DateTimeOffset.UtcNow;
 
-        _events.Log(clientId, EventTypes.BookingCanceled, leadId: booking.LeadId, bookingId: booking.Id,
+        _events.Log(clientId, EventTypes.BookingCanceled, contactId: booking.ContactId, bookingId: booking.Id,
             metadataJson: JsonSerializer.Serialize(new { reason }));
 
         await _unitOfWork.SaveChangesAsync(ct);
@@ -312,22 +317,22 @@ public class BookingService : IBookingService
         return cancelResponse;
     }
 
-    public async Task<PatientBookingContext?> GetBookingContextAsync(Guid clientId, Guid leadId, CancellationToken ct = default)
+    public async Task<ContactBookingContext?> GetBookingContextAsync(Guid clientId, Guid contactId, CancellationToken ct = default)
     {
-        // A leadId from another client (or a made-up one) must look exactly like "not found" — never return its bookings.
-        if (!await _leads.ExistsAsync(clientId, leadId, ct)) return null;
+        // A contactId from another client (or a made-up one) must look exactly like "not found" — never return its bookings.
+        if (!await _contacts.ExistsAsync(clientId, contactId, ct)) return null;
 
-        var (tz, upcoming) = await LoadUpcomingAsync(clientId, leadId, ct);
+        var (tz, upcoming) = await LoadUpcomingAsync(clientId, contactId, ct);
         var existing = upcoming.Select(a => ToUpcoming(a, tz)).ToList();
         var blocked = existing.Count > 0;
-        return new PatientBookingContext(blocked, !blocked, blocked ? "existing_upcoming_booking" : null, existing);
+        return new ContactBookingContext(blocked, !blocked, blocked ? "existing_upcoming_booking" : null, existing);
     }
 
-    public async Task<ScheduleOutcome> ScheduleAsync(Guid clientId, Guid leadId, ScheduleBookingRequest request, CancellationToken ct = default)
+    public async Task<ScheduleOutcome> ScheduleAsync(Guid clientId, Guid contactId, ScheduleBookingRequest request, CancellationToken ct = default)
     {
-        // The current state always comes from the database (never from what the AI remembers). Null = the lead isn't in this client.
-        var context = await GetBookingContextAsync(clientId, leadId, ct);
-        if (context is null) return new ScheduleOutcome("none", "LEAD_NOT_FOUND", "Lead not found for this client.");
+        // The current state always comes from the database (never from what the AI remembers). Null = the contact isn't in this client.
+        var context = await GetBookingContextAsync(clientId, contactId, ct);
+        if (context is null) return new ScheduleOutcome("none", "CONTACT_NOT_FOUND", "Contact not found for this client.");
 
         var tz = await GetTimeZoneAsync(clientId, ct);
         var requestedLabel = LabelFor(TimeZoneInfo.ConvertTime(request.ScheduledStart, tz));
@@ -336,18 +341,18 @@ public class BookingService : IBookingService
         try
         {
             // 1) No upcoming booking → create. BookAvailableSlotAsync still re-checks the slot and the duplicate guard under the lock,
-            //    so a booking that landed a moment ago surfaces as LeadAlreadyBookedException below.
+            //    so a booking that landed a moment ago surfaces as ContactAlreadyBookedException below.
             if (!context.HasUpcomingBooking)
             {
                 var created = await BookAvailableSlotAsync(new CreateBookingRequest(
-                    clientId, leadId, request.ServiceId,
+                    clientId, contactId, request.ServiceId,
                     string.IsNullOrWhiteSpace(request.BookingType) ? "standard" : request.BookingType,
                     request.ScheduledStart, null, null, null, request.Notes), ct);
                 return new ScheduleOutcome("created", "BOOKED", "Booking made.",
-                    Booking: await ToLocalAsync(clientId, leadId, created.Id, ct), RequestedLabel: requestedLabel);
+                    Booking: await ToLocalAsync(clientId, contactId, created.Id, ct), RequestedLabel: requestedLabel);
             }
 
-            // 2) The patient already has an upcoming booking. Which one would be replaced?
+            // 2) The contact already has an upcoming booking. Which one would be replaced?
             // Exactly ONE upcoming booking: the backend selects it itself and bookingId is ignored completely (the AI's ids go
             // stale after any booking/cancel). Two or more: a bookingId is required and must be one of the CURRENT upcoming ones,
             // otherwise nothing is mutated.
@@ -362,11 +367,11 @@ public class BookingService : IBookingService
                 if (target is null)
                 {
                     return new ScheduleOutcome("none", "INVALID_REQUEST",
-                        "That booking is not one of this patient's current upcoming bookings.", Existing: existing, RequestedLabel: requestedLabel);
+                        "That booking is not one of this contact's current upcoming bookings.", Existing: existing, RequestedLabel: requestedLabel);
                 }
             }
 
-            // Read-only pre-check, so the patient is never asked to confirm a move to a time that cannot work.
+            // Read-only pre-check, so the contact is never asked to confirm a move to a time that cannot work.
             var check = await _availability.CheckSlotAsync(clientId, await ActiveServiceOrNullAsync(target?.ServiceId ?? request.ServiceId, ct),
                 request.ScheduledStart, null, excludeBookingId: target?.Id, ct: ct);
             if (check.Error is not null)
@@ -378,28 +383,28 @@ public class BookingService : IBookingService
             if (!request.ConfirmReplaceExisting)
             {
                 return new ScheduleOutcome("none", "CONFIRMATION_REQUIRED",
-                    "Patient already has an upcoming booking; nothing was changed.", Existing: existing, RequestedLabel: requestedLabel);
+                    "Contact already has an upcoming booking; nothing was changed.", Existing: existing, RequestedLabel: requestedLabel);
             }
 
-            // 4) Consent given. With several upcoming bookings the patient must say which one.
+            // 4) Consent given. With several upcoming bookings the contact must say which one.
             if (target is null)
             {
                 return new ScheduleOutcome("none", "MULTIPLE_UPCOMING_BOOKINGS",
-                    "Patient has more than one upcoming booking; it is unclear which to move.", Existing: existing, RequestedLabel: requestedLabel);
+                    "Contact has more than one upcoming booking; it is unclear which to move.", Existing: existing, RequestedLabel: requestedLabel);
             }
 
-            var moved = await RescheduleAsync(clientId, leadId, target.Id, request.ScheduledStart, null, request.Reason, ct);
+            var moved = await RescheduleAsync(clientId, contactId, target.Id, request.ScheduledStart, null, request.Reason, ct);
             if (moved is null)
             {
-                return new ScheduleOutcome("none", "INVALID_REQUEST", "The booking could not be found for this patient.", RequestedLabel: requestedLabel);
+                return new ScheduleOutcome("none", "INVALID_REQUEST", "The booking could not be found for this contact.", RequestedLabel: requestedLabel);
             }
             return new ScheduleOutcome("rescheduled", "RESCHEDULED", "Booking rescheduled.",
-                Booking: await ToLocalAsync(clientId, leadId, moved.Id, ct), PreviousBooking: target, RequestedLabel: requestedLabel);
+                Booking: await ToLocalAsync(clientId, contactId, moved.Id, ct), PreviousBooking: target, RequestedLabel: requestedLabel);
         }
-        catch (LeadAlreadyBookedException ex)
+        catch (ContactAlreadyBookedException ex)
         {
             // Another booking landed between the state read and the locked check: same answer as "already has one".
-            return new ScheduleOutcome("none", "CONFIRMATION_REQUIRED", "Patient already has an upcoming booking; nothing was changed.",
+            return new ScheduleOutcome("none", "CONFIRMATION_REQUIRED", "Contact already has an upcoming booking; nothing was changed.",
                 Existing: new[] { ex.Existing }, RequestedLabel: requestedLabel);
         }
         catch (SlotUnavailableException ex)
@@ -425,9 +430,9 @@ public class BookingService : IBookingService
         return await _serviceRows.IsActiveAsync(id, ct) ? id : null;
     }
 
-    private async Task<UpcomingBookingResponse?> ToLocalAsync(Guid clientId, Guid leadId, Guid bookingId, CancellationToken ct)
+    private async Task<UpcomingBookingResponse?> ToLocalAsync(Guid clientId, Guid contactId, Guid bookingId, CancellationToken ct)
     {
-        var (tz, items) = await LoadUpcomingAsync(clientId, leadId, ct);
+        var (tz, items) = await LoadUpcomingAsync(clientId, contactId, ct);
         var a = items.FirstOrDefault(x => x.Id == bookingId);
         return a is null ? null : ToUpcoming(a, tz);
     }
@@ -438,31 +443,31 @@ public class BookingService : IBookingService
         return $"{local.DayOfWeek}, {local.ToString("MMM d", inv)} at {local.ToString("h:mm tt", inv)}";
     }
 
-    public async Task<CancelOutcome> CancelBookingAsync(Guid clientId, Guid leadId, Guid? id, string? reason, CancellationToken ct = default)
+    public async Task<CancelOutcome> CancelBookingAsync(Guid clientId, Guid contactId, Guid? id, string? reason, CancellationToken ct = default)
     {
         try
         {
             // Same rule as schedule_booking: no upcoming → nothing to cancel; exactly ONE → the backend selects it and any bookingId
             // is ignored (the AI's ids go stale); two or more → the id is required and must be a CURRENT upcoming booking.
-            var context = await GetBookingContextAsync(clientId, leadId, ct);
+            var context = await GetBookingContextAsync(clientId, contactId, ct);
             var existing = context?.ExistingUpcomingBookings;
             if (existing is null || existing.Count == 0)
             {
-                return new CancelOutcome("none", "NO_UPCOMING_BOOKING", "This patient has no upcoming booking to cancel (it may already be canceled).");
+                return new CancelOutcome("none", "NO_UPCOMING_BOOKING", "This contact has no upcoming booking to cancel (it may already be canceled).");
             }
             if (existing.Count > 1 && id is { } wanted && !existing.Any(e => e.Id == wanted))
             {
                 return new CancelOutcome("none", "INVALID_REQUEST",
-                    "That booking is not one of this patient's current upcoming bookings.", Existing: existing);
+                    "That booking is not one of this contact's current upcoming bookings.", Existing: existing);
             }
 
-            var canceled = await CancelAsync(clientId, leadId, existing.Count == 1 ? null : id, reason, ct);
+            var canceled = await CancelAsync(clientId, contactId, existing.Count == 1 ? null : id, reason, ct);
             if (canceled is null)
             {
-                return new CancelOutcome("none", "NO_UPCOMING_BOOKING", "This patient has no upcoming booking to cancel (it may already be canceled).");
+                return new CancelOutcome("none", "NO_UPCOMING_BOOKING", "This contact has no upcoming booking to cancel (it may already be canceled).");
             }
 
-            // CancelAsync returns the stored (UTC) booking; report it the way the patient should hear it — client-local.
+            // CancelAsync returns the stored (UTC) booking; report it the way the contact should hear it — client-local.
             var tz = await GetTimeZoneAsync(clientId, ct);
             var entity = await _bookings.GetWithServiceReadOnlyAsync(canceled.Id, ct)
                 ?? throw new InvalidOperationException("Canceled booking not found.");
@@ -478,33 +483,33 @@ public class BookingService : IBookingService
         }
     }
 
-    public async Task<UpcomingBookingsResponse> GetUpcomingForLeadAsync(Guid clientId, Guid leadId, CancellationToken ct = default)
+    public async Task<UpcomingBookingsResponse> GetUpcomingForContactAsync(Guid clientId, Guid contactId, CancellationToken ct = default)
     {
-        var (tz, items) = await LoadUpcomingAsync(clientId, leadId, ct);
+        var (tz, items) = await LoadUpcomingAsync(clientId, contactId, ct);
         return new UpcomingBookingsResponse(tz.Id, items.Select(a => ToUpcoming(a, tz)).ToList());
     }
 
-    /// <summary>The booking a reschedule/cancel acts on: the given id, or — when the AI sends none — the lead's single upcoming
-    /// booking. Null when the lead has none; several upcoming ones (only staff can create them) need an explicit id.</summary>
-    private async Task<Guid?> ResolveTargetAsync(Guid clientId, Guid leadId, Guid? id, CancellationToken ct)
+    /// <summary>The booking a reschedule/cancel acts on: the given id, or — when the AI sends none — the contact's single upcoming
+    /// booking. Null when the contact has none; several upcoming ones (only staff can create them) need an explicit id.</summary>
+    private async Task<Guid?> ResolveTargetAsync(Guid clientId, Guid contactId, Guid? id, CancellationToken ct)
     {
         if (id is not null) return id;
 
-        var (tz, upcoming) = await LoadUpcomingAsync(clientId, leadId, ct);
+        var (tz, upcoming) = await LoadUpcomingAsync(clientId, contactId, ct);
         if (upcoming.Count == 0) return null;
         if (upcoming.Count > 1) throw new MultipleUpcomingBookingsException(upcoming.Select(a => ToUpcoming(a, tz)).ToList());
         return upcoming[0].Id;
     }
 
-    /// <summary>The lead's future booked/confirmed bookings, soonest first (canceled, rescheduled, attended and no-show never
+    /// <summary>The contact's future booked/confirmed bookings, soonest first (canceled, rescheduled, attended and no-show never
     /// count as "upcoming"), plus the client's timezone for wording them.</summary>
-    private async Task<(TimeZoneInfo Tz, List<Booking> Items)> LoadUpcomingAsync(Guid clientId, Guid leadId, CancellationToken ct)
+    private async Task<(TimeZoneInfo Tz, List<Booking> Items)> LoadUpcomingAsync(Guid clientId, Guid contactId, CancellationToken ct)
     {
         var client = await _clients.GetReadOnlyAsync(clientId, ct);
         var tz = client is null ? TimeZoneInfo.Utc : ResolveTimeZone(client);
         var now = DateTimeOffset.UtcNow;
 
-        var items = (await _bookings.ListUpcomingForLeadAsync(clientId, leadId, now, ct)).ToList();
+        var items = (await _bookings.ListUpcomingForContactAsync(clientId, contactId, now, ct)).ToList();
         return (tz, items);
     }
 
@@ -553,7 +558,7 @@ public class BookingService : IBookingService
         {
             var local = TimeZoneInfo.ConvertTime(a.ScheduledStart, tz);
             return new CalendarBookingResponse(
-                a.Id, a.LeadId, a.Lead?.FullName, a.ServiceId, a.Service?.Name, a.Status,
+                a.Id, a.ContactId, a.Contact?.FullName, a.ServiceId, a.Service?.Name, a.Status,
                 a.ScheduledStart, a.ScheduledEnd,
                 local.ToString("yyyy-MM-dd"), local.ToString("HH:mm"));
         }).ToList();

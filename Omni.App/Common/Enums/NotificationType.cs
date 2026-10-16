@@ -2,7 +2,7 @@ namespace Omni.App.Common.Enums;
 
 public static class NotificationType
 {
-    public const string NewLead = "NEW_LEAD";
+    public const string NewContact = "NEW_CONTACT";
     public const string Handoff = "HANDOFF";
     public const string BookingCreated = "BOOKING_CREATED";
     public const string BookingRescheduled = "BOOKING_RESCHEDULED";

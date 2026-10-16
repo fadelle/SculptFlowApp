@@ -11,8 +11,8 @@ namespace Omni.App.Pages.Dashboard;
 /// <summary>
 /// Staff-facing edit page for Booking Status — posts through the same
 /// IBookingService.UpdateStatusAsync the existing PATCH /api/bookings/{id}/status endpoint
-/// already uses, so nothing here duplicates that logic. Matters most for "Old leads who never
-/// booked": marking a booking Booked/Confirmed/Attended here makes the lead stop matching the
+/// already uses, so nothing here duplicates that logic. Matters most for "Old contacts who never
+/// booked": marking a booking Booked/Confirmed/Attended here makes the contact stop matching the
 /// reactivation audience on the very next count/preview, since ICampaignAudienceService always reads
 /// live booking data — see its remarks.
 /// </summary>

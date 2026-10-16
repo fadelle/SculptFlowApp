@@ -7,7 +7,7 @@ namespace Omni.App.Business.Contracts.Engines.Telegram;
 
 /// <summary>
 /// Telegram Update -> normalized Omni records. The Telegram counterpart of MetaWebhookProcessor +
-/// CustomerMessageHandler, and just as thin: parse, resolve the lead/conversation, then hand to the
+/// CustomerMessageHandler, and just as thin: parse, resolve the contact/conversation, then hand to the
 /// existing IMessageService.IngestAsync — which already persists, updates the conversation, broadcasts
 /// SignalR and decides AI eligibility. No persistence or SignalR logic is duplicated here.
 ///

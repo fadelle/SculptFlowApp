@@ -6,7 +6,7 @@ public class Booking
 {
     public Guid Id { get; set; }
     public Guid ClientId { get; set; }
-    public Guid LeadId { get; set; }
+    public Guid ContactId { get; set; }
     public Guid? ServiceId { get; set; }
 
     public string BookingType { get; set; } = "standard";
@@ -23,7 +23,7 @@ public class Booking
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 
-    public Lead? Lead { get; set; }
+    public Contact? Contact { get; set; }
     public Service? Service { get; set; }
     public ICollection<Order> Orders { get; set; } = new List<Order>();
 }

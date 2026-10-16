@@ -15,11 +15,11 @@ else
     <div class="au-page-head">
         <div class="mw-640">
             <p class="au-page-head__sub">
-                Treatments your client offers. Leads, bookings, campaigns and the AI assistant use this list.
+                Treatments your client offers. Contacts, bookings, campaigns and the AI assistant use this list.
                 <button type="button" class="link-btn" id="svc-how-btn" aria-expanded="false" aria-controls="svc-how">How it works</button>
             </p>
             <p class="au-help mt-1 mb-0" id="svc-how" hidden>
-                Services can't be deleted. Deactivate one to stop using it for new bookings while keeping past leads
+                Services can't be deleted. Deactivate one to stop using it for new bookings while keeping past contacts
                 and bookings intact. Put detailed information (pricing, recovery, preparation) in the
                 <a href="/KnowledgeBase">Knowledge Base</a>.
             </p>
@@ -32,7 +32,7 @@ else
     @if (Model.Services.Count == 0)
     {
         var empty = new EmptyStateModel(Icon: "medical_services", Title: "Add your first service",
-            Text: "Leads, bookings and the AI assistant need to know what your client offers.",
+            Text: "Contacts, bookings and the AI assistant need to know what your client offers.",
             ActionLabel: "Add service", ActionHref: "/Services/Edit");
         <div class="au-panel au-panel--round"><partial name="_EmptyState" model="empty" /></div>
     }

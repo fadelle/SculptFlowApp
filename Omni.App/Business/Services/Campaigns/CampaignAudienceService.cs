@@ -17,17 +17,17 @@ public class CampaignAudienceService : ICampaignAudienceService
         _audience = audience;
     }
 
-    public string? GetSkipReasonIfNotContactable(Lead lead)
+    public string? GetSkipReasonIfNotContactable(Contact contact)
     {
-        if (string.IsNullOrWhiteSpace(lead.Phone)) return "no_phone";
-        if (lead.OptedOutAt.HasValue) return "opted_out";
-        if (!lead.MarketingOptIn) return "marketing_opt_in_false";
+        if (string.IsNullOrWhiteSpace(contact.Phone)) return "no_phone";
+        if (contact.OptedOutAt.HasValue) return "opted_out";
+        if (!contact.MarketingOptIn) return "marketing_opt_in_false";
         return null;
     }
 
-    public Task<List<Lead>> GetEligibleLeadsAsync(Guid clientId, string audienceType, string? filtersJson, CancellationToken ct = default) =>
-        _audience.ListEligibleLeadsAsync(clientId, audienceType, CampaignAudienceFilters.Parse(filtersJson), _config.CampaignsDefaultInactiveDays, ct);
+    public Task<List<Contact>> GetEligibleContactsAsync(Guid clientId, string audienceType, string? filtersJson, CancellationToken ct = default) =>
+        _audience.ListEligibleContactsAsync(clientId, audienceType, CampaignAudienceFilters.Parse(filtersJson), _config.CampaignsDefaultInactiveDays, ct);
 
     public Task<int> GetMatchingCountAsync(Guid clientId, string audienceType, string? filtersJson, CancellationToken ct = default) =>
-        _audience.CountEligibleLeadsAsync(clientId, audienceType, CampaignAudienceFilters.Parse(filtersJson), _config.CampaignsDefaultInactiveDays, ct);
+        _audience.CountEligibleContactsAsync(clientId, audienceType, CampaignAudienceFilters.Parse(filtersJson), _config.CampaignsDefaultInactiveDays, ct);
 }

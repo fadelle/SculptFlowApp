@@ -22,19 +22,19 @@ public static class PlatformAdminMapper
         new(e.Id, e.EventType, e.Severity, e.Status, e.Code, e.Message, e.OccurredAt);
 
     /// <summary>Expects Client and Service (when set) to be loaded.</summary>
-    public static LeadDetail ToDetail(Lead l) => new(
+    public static ContactDetail ToDetail(Contact l) => new(
         l.Id, l.ClientId, Ref(l.Client), l.ServiceId, l.Service is null ? null : new NamedRef(l.Service.Id, l.Service.Name),
-        l.FullName, l.FirstName, l.LastName, l.Phone, l.Email, l.Source, l.SourceDetail, l.CampaignName, l.ExternalLeadId, l.Status,
-        l.QualificationStatus, l.PreferredLanguage, l.CountryCode, l.City, l.DesiredTimeline, l.Notes, l.MarketingOptIn, l.OptedOutAt,
+        l.FullName, l.FirstName, l.LastName, l.Phone, l.Email, l.Source, l.SourceDetail, l.CampaignName, l.ExternalContactId, l.StageKey,
+        l.Qualification, l.PreferredLanguage, l.CountryCode, l.City, l.DesiredTimeline, l.Notes, l.MarketingOptIn, l.OptedOutAt,
         l.LastContactAt, l.NextFollowupAt, l.CreatedAt, l.UpdatedAt);
 
-    public static LeadEventRow ToRow(EventLog e) =>
-        new(e.Id, e.LeadId, e.ConversationId, e.BookingId, e.EventType, e.Source, e.Metadata, e.CreatedAt);
+    public static ContactEventRow ToRow(EventLog e) =>
+        new(e.Id, e.ContactId, e.ConversationId, e.BookingId, e.EventType, e.Source, e.Metadata, e.CreatedAt);
 
-    /// <summary>Expects Lead to be loaded.</summary>
+    /// <summary>Expects Contact to be loaded.</summary>
     public static ConversationDetail ToDetail(Conversation c, DateTimeOffset now) => new(
-        c.Id, c.ClientId, c.LeadId,
-        c.Lead is null ? null : new ConversationLead(c.Lead.Id, c.Lead.FullName, c.Lead.FirstName, c.Lead.LastName, c.Lead.Phone),
+        c.Id, c.ClientId, c.ContactId,
+        c.Contact is null ? null : new ConversationContact(c.Contact.Id, c.Contact.FullName, c.Contact.FirstName, c.Contact.LastName, c.Contact.Phone),
         c.Channel, c.Status, c.Mode, c.LastMessageAt, c.ServiceWindowExpiresAt, c.IsServiceWindowOpen(now), c.CreatedAt);
 
     public static MessageDetail ToDetail(Message m) => new(

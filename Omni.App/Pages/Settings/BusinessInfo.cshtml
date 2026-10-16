@@ -31,11 +31,11 @@ else
 
     if (Model.ActiveTab == "general")
     {
-        <p class="au-page-head__sub mb-3">Your AI assistant uses these details to answer patients' questions, so it never has to guess.</p>
+        <p class="au-page-head__sub mb-3">Your AI assistant uses these details to answer contacts' questions, so it never has to guess.</p>
 
         <form method="post" class="au-panel au-panel--round integration-form client-form" id="client-form" data-dirty-form>
             <div class="set-section">
-                <div class="set-section-head"><strong>Client</strong><div class="cell-sub">The name patients see.</div></div>
+                <div class="set-section-head"><strong>Client</strong><div class="cell-sub">The name contacts see.</div></div>
                 <div class="set-section-body">
                     <label class="field">
                         <span>Client name</span>
@@ -45,7 +45,7 @@ else
             </div>
 
             <div class="set-section">
-                <div class="set-section-head"><strong>Contact</strong><div class="cell-sub">How patients reach you.</div></div>
+                <div class="set-section-head"><strong>Contact</strong><div class="cell-sub">How contacts reach you.</div></div>
                 <div class="set-section-body">
                     <div class="form-row-contact">
                         <label class="field">
@@ -68,7 +68,7 @@ else
             </div>
 
             <div class="set-section">
-                <div class="set-section-head"><strong>Location</strong><div class="cell-sub">Where patients come for bookings.</div></div>
+                <div class="set-section-head"><strong>Location</strong><div class="cell-sub">Where contacts come for bookings.</div></div>
                 <div class="set-section-body">
                     <label class="field">
                         <span>Address</span>
@@ -78,16 +78,16 @@ else
             </div>
 
             <div class="set-section">
-                <div class="set-section-head"><strong>For patients</strong><div class="cell-sub">Written the way you would say it to a patient.</div></div>
+                <div class="set-section-head"><strong>For contacts</strong><div class="cell-sub">Written the way you would say it to a contact.</div></div>
                 <div class="set-section-body">
                     <label class="field">
                         <span>Opening hours, in words</span>
                         <textarea name="OperatingHours" rows="2" class="text-input" placeholder="e.g. Mon–Fri 9am–6pm, Sat 10am–2pm, closed Sundays" dir="auto">@Model.OperatingHours</textarea>
-                        <small class="text-subtle">Only for answering questions. The times patients can actually book come from <a asp-page="/Settings/BusinessInfo" asp-route-tab="availability">Opening hours &amp; booking</a>.</small>
+                        <small class="text-subtle">Only for answering questions. The times contacts can actually book come from <a asp-page="/Settings/BusinessInfo" asp-route-tab="availability">Opening hours &amp; booking</a>.</small>
                     </label>
                     <label class="field">
                         <span>Booking rules and other info</span>
-                        <textarea name="BookingInfo" rows="3" class="text-input" placeholder="e.g. Free first booking. $50 deposit to book surgery." dir="auto">@Model.BookingInfo</textarea>
+                        <textarea name="BookingInfo" rows="3" class="text-input" placeholder="e.g. Free first booking. $50 deposit to book a service." dir="auto">@Model.BookingInfo</textarea>
                     </label>
                 </div>
             </div>
@@ -103,11 +103,11 @@ else
     }
     else if (Model.ActiveTab == "ai" && Model.InboxSettings is { } bot)
     {
-        <p class="au-page-head__sub mb-3">Choose when the AI assistant replies to patients. When it's off, the conversation goes straight to your team in the Inbox.</p>
+        <p class="au-page-head__sub mb-3">Choose when the AI assistant replies to contacts. When it's off, the conversation goes straight to your team in the Inbox.</p>
 
         <form method="post" asp-page-handler="SaveAiBot" class="au-panel au-panel--round integration-form client-form" id="inbox-settings-form">
             <div class="set-section">
-                <div class="set-section-head"><strong>New conversations</strong><div class="cell-sub">A patient writing to you for the first time.</div></div>
+                <div class="set-section-head"><strong>New conversations</strong><div class="cell-sub">A contact writing to you for the first time.</div></div>
                 <div class="set-section-body">
                     <label class="au-check">
                         <input type="checkbox" class="au-switch" role="switch" name="AiBotNewConversations" value="true" checked="@bot.AiBotNewConversations" />
@@ -118,7 +118,7 @@ else
             </div>
 
             <div class="set-section">
-                <div class="set-section-head"><strong>Reopened conversations</strong><div class="cell-sub">A patient writing again after you closed the conversation.</div></div>
+                <div class="set-section-head"><strong>Reopened conversations</strong><div class="cell-sub">A contact writing again after you closed the conversation.</div></div>
                 <div class="set-section-body">
                     <label class="au-check">
                         <input type="checkbox" class="au-switch" role="switch" name="AiBotReopenedConversations" value="true" checked="@bot.AiBotReopenedConversations" />
@@ -140,13 +140,13 @@ else
             <div class="au-alert au-alert--warning" role="status">
                 <span class="au-icon au-alert__icon" aria-hidden="true">warning</span>
                 <div class="au-alert__body">
-                    <div class="au-alert__title">Patients can't book yet</div>
+                    <div class="au-alert__title">Contacts can't book yet</div>
                     Turn on at least one day below and save, so the AI assistant can offer booking times.
                 </div>
             </div>
         }
         <p class="au-page-head__sub mb-3">
-            When patients can book. The AI assistant only offers times that fit these hours, your existing bookings and the rules below.
+            When contacts can book. The AI assistant only offers times that fit these hours, your existing bookings and the rules below.
         </p>
 
         <form method="post" asp-page-handler="SaveAvailability" class="au-panel au-panel--round integration-form client-form" id="avail-form">

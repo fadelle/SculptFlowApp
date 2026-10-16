@@ -4,7 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Omni.App.Business.Contracts.Managers;
 using Omni.App.Business.Contracts.Services.Campaigns;
-using Omni.App.Business.Contracts.Services.Leads;
+using Omni.App.Business.Contracts.Services.Contacts;
 using Omni.App.Business.Contracts.Services.Catalog;
 using Omni.App.Business.Contracts.Services.WhatsApp;
 using Omni.App.Business.Services.Inbox;
@@ -12,7 +12,7 @@ using Omni.App.Common.Enums;
 using Omni.App.Common.Helpers;
 using Omni.App.Entities.Dtos.Campaigns;
 using Omni.App.Entities.Requests.Campaigns;
-using Omni.App.Entities.Responses.Leads;
+using Omni.App.Entities.Responses.Contacts;
 using Omni.App.Entities.Responses.Catalog;
 using Omni.App.Entities.Responses.WhatsApp;
 
@@ -22,22 +22,22 @@ namespace Omni.App.Pages.Campaigns;
 /// Campaign creation: pick an approved template, pick an audience, map body variables, and choose
 /// send-now vs schedule-later.
 ///
-/// Audience is presented as three business-framed choices — "Old leads who never booked"
+/// Audience is presented as three business-framed choices — "Old contacts who never booked"
 /// (AudienceType.ReactivationNoBooking, the flagship reactivation feature), "All contactable
-/// leads" (AllEligible), and "Build a custom audience" (Custom, with a progressive-disclosure
+/// contacts" (AllEligible), and "Build a custom audience" (Custom, with a progressive-disclosure
 /// filter builder: a couple of common fields up front, the rest behind "Advanced filters" — see
 /// Create.cshtml). Internal enum values (all_eligible, reactivation_no_booking, custom) never
 /// reach the UI text, only the radio `value`s wwwroot/js/campaign-audience.js reads.
 ///
-/// "Build a custom audience" also has a "pick leads yourself" escape hatch (ManualSelection) that
+/// "Build a custom audience" also has a "pick contacts yourself" escape hatch (ManualSelection) that
 /// reveals the original search + checkbox list — still audience_type = custom under the hood, just
-/// with an explicit LeadIds list instead of AudienceFilters (see CampaignService.CreateAsync: an
+/// with an explicit ContactIds list instead of AudienceFilters (see CampaignService.CreateAsync: an
 /// explicit list always wins over filters when both could apply).
 ///
 /// See wwwroot/js/campaign-audience.js for the live match-count preview and ICampaignAudienceService
-/// for how each audience actually resolves to a lead list. Each variable box may contain literal
-/// text or a {LeadX} token, resolved per-lead before calling ICampaignService.CreateAsync — but
-/// that per-lead resolution needs to know the lead list up front, so it's only available for the
+/// for how each audience actually resolves to a contact list. Each variable box may contain literal
+/// text or a {ContactX} token, resolved per-contact before calling ICampaignService.CreateAsync — but
+/// that per-contact resolution needs to know the contact list up front, so it's only available for the
 /// manual selection (see OnPostAsync).
 /// </summary>
 public class CreateModel : PageModel
@@ -47,31 +47,31 @@ public class CreateModel : PageModel
 
     private readonly ICurrentClientContext _clientContext;
     private readonly IWhatsAppTemplateService _templates;
-    private readonly ILeadService _leads;
+    private readonly IContactService _contacts;
     private readonly ICatalogService _services;
     private readonly ICampaignService _campaigns;
 
-    public CreateModel(ICurrentClientContext clientContext, IWhatsAppTemplateService templates, ILeadService leads, ICatalogService services, ICampaignService campaigns)
+    public CreateModel(ICurrentClientContext clientContext, IWhatsAppTemplateService templates, IContactService contacts, ICatalogService services, ICampaignService campaigns)
     {
         _clientContext = clientContext;
         _templates = templates;
-        _leads = leads;
+        _contacts = contacts;
         _services = services;
         _campaigns = campaigns;
     }
 
     public bool ClientConfigured { get; private set; }
     public IReadOnlyList<WhatsAppTemplateResponse> ApprovedTemplates { get; private set; } = Array.Empty<WhatsAppTemplateResponse>();
-    public IReadOnlyList<LeadResponse> Leads { get; private set; } = Array.Empty<LeadResponse>();
+    public IReadOnlyList<ContactResponse> Contacts { get; private set; } = Array.Empty<ContactResponse>();
     public IReadOnlyList<ServiceResponse> Services { get; private set; } = Array.Empty<ServiceResponse>();
-    public IReadOnlyList<string> LeadSources { get; private set; } = Array.Empty<string>();
+    public IReadOnlyList<string> ContactSources { get; private set; } = Array.Empty<string>();
     public WhatsAppTemplateResponse? SelectedTemplate { get; private set; }
     public IReadOnlyList<int> PlaceholderNumbers { get; private set; } = Array.Empty<int>();
 
-    /// <summary>The client's pipeline stages in order, labelled (lead status filter and badges).</summary>
+    /// <summary>The client's pipeline stages in order, labelled (stage filter and badges).</summary>
     public IReadOnlyList<Entities.Dtos.BusinessTypes.PipelineStageOption> Stages { get; private set; } =
         Array.Empty<Entities.Dtos.BusinessTypes.PipelineStageOption>();
-    public IReadOnlyList<string> QualificationStatusOptions { get; } = LeadQualificationStatus.All.OrderBy(s => s).ToList();
+    public IReadOnlyList<string> QualificationOptions { get; } = ContactQualification.All.OrderBy(s => s).ToList();
     public IReadOnlyList<string> BookingStatusOptions { get; } = BookingStatus.All.OrderBy(s => s).ToList();
 
     // SupportsGet so the typed name survives picking a template (which reloads the page with ?WhatsAppTemplateId=).
@@ -90,7 +90,7 @@ public class CreateModel : PageModel
     [BindProperty]
     public string AudienceType { get; set; } = CampaignAudienceType.ReactivationNoBooking;
 
-    // "Old leads who never booked" — deliberately just three simple controls (see class remarks).
+    // "Old contacts who never booked" — deliberately just three simple controls (see class remarks).
     [BindProperty]
     public int InactiveDays { get; set; } = 60;
     [BindProperty]
@@ -106,9 +106,9 @@ public class CreateModel : PageModel
 
     // "Build a custom audience" — advanced filters (behind the expand/collapse section)
     [BindProperty]
-    public List<string> CustomLeadStatuses { get; set; } = new();
+    public List<string> CustomStageKeys { get; set; } = new();
     [BindProperty]
-    public List<string> CustomQualificationStatuses { get; set; } = new();
+    public List<string> CustomQualifications { get; set; } = new();
     [BindProperty]
     public List<string> CustomSources { get; set; } = new();
     [BindProperty]
@@ -126,10 +126,10 @@ public class CreateModel : PageModel
     [BindProperty]
     public string? CustomCity { get; set; }
 
-    /// <summary>True for the "Select leads manually" audience choice — still posts AudienceType =
+    /// <summary>True for the "Select contacts manually" audience choice — still posts AudienceType =
     /// custom (see CampaignAudienceType; there's no fourth backend enum value for it), just with an
-    /// explicit LeadIds list instead of AudienceFilters. Kept as its own flag rather than inferred
-    /// from LeadIds.Count so the four UI choices map cleanly onto the three backend audience types
+    /// explicit ContactIds list instead of AudienceFilters. Kept as its own flag rather than inferred
+    /// from ContactIds.Count so the four UI choices map cleanly onto the three backend audience types
     /// without guessing intent from what happens to be checked.</summary>
     [BindProperty]
     public bool ManualSelection { get; set; }
@@ -145,7 +145,7 @@ public class CreateModel : PageModel
         : "reactivation_no_booking";
 
     [BindProperty]
-    public List<Guid> LeadIds { get; set; } = new();
+    public List<Guid> ContactIds { get; set; } = new();
 
     [BindProperty]
     public Dictionary<int, string> Variables { get; set; } = new();
@@ -177,7 +177,7 @@ public class CreateModel : PageModel
         var client = await _clientContext.GetClientAsync(ct);
         if (client is null) return RedirectToPage();
 
-        // "Pick leads yourself" only makes sense (and is only reachable in the UI) under "Build a
+        // "Pick contacts yourself" only makes sense (and is only reachable in the UI) under "Build a
         // custom audience" — treat it as manual selection regardless in case AudienceType and this
         // checkbox ever disagree (e.g. a replayed/edited form post).
         var isManualSelection = AudienceType == CampaignAudienceType.Custom && ManualSelection;
@@ -188,7 +188,7 @@ public class CreateModel : PageModel
             await LoadAsync(ct);
             return Page();
         }
-        if (isManualSelection && LeadIds.Count == 0)
+        if (isManualSelection && ContactIds.Count == 0)
         {
             ErrorMessage = "Tick at least one person in the list, or choose one of the other audiences.";
             await LoadAsync(ct);
@@ -196,8 +196,8 @@ public class CreateModel : PageModel
         }
         if (!isManualSelection && Variables.Values.Any(v => !string.IsNullOrWhiteSpace(v)))
         {
-            // {LeadFullName}/{LeadFirstName}/{LeadPhone} tokens need the lead list up front to
-            // resolve per-recipient — for a filter-resolved audience there's no lead list here yet
+            // {ContactFullName}/{ContactFirstName}/{ContactPhone} tokens need the contact list up front to
+            // resolve per-recipient — for a filter-resolved audience there's no contact list here yet
             // (it's only resolved inside CampaignService.CreateAsync).
             ErrorMessage = "This template has blanks to fill, which only works when you pick people manually. Choose \"Pick people manually\", or a template without blanks.";
             await LoadAsync(ct);
@@ -206,29 +206,29 @@ public class CreateModel : PageModel
 
         try
         {
-            Dictionary<Guid, IReadOnlyList<string>>? variablesByLeadId = null;
-            var leadIdsForRequest = LeadIds;
+            Dictionary<Guid, IReadOnlyList<string>>? variablesByContactId = null;
+            var contactIdsForRequest = ContactIds;
 
             if (isManualSelection)
             {
-                // Resolve each recipient's own {{n}} values: a {LeadFullName}/{LeadFirstName}/{LeadPhone}
-                // token becomes that lead's own data, anything else is sent as literal text to everyone.
-                var selectedLeads = await _leads.ListAsync(client.Id, status: null, serviceId: null, search: null, skip: 0, take: 5000, ct);
-                var leadsById = selectedLeads.Items.Where(l => LeadIds.Contains(l.Id)).ToDictionary(l => l.Id);
+                // Resolve each recipient's own {{n}} values: a {ContactFullName}/{ContactFirstName}/{ContactPhone}
+                // token becomes that contact's own data, anything else is sent as literal text to everyone.
+                var selectedContacts = await _contacts.ListAsync(client.Id, stage: null, serviceId: null, search: null, skip: 0, take: 5000, ct);
+                var contactsById = selectedContacts.Items.Where(l => ContactIds.Contains(l.Id)).ToDictionary(l => l.Id);
 
-                variablesByLeadId = new Dictionary<Guid, IReadOnlyList<string>>();
+                variablesByContactId = new Dictionary<Guid, IReadOnlyList<string>>();
                 var orderedKeys = Variables.Keys.OrderBy(k => k).ToList();
-                foreach (var leadId in LeadIds)
+                foreach (var contactId in ContactIds)
                 {
-                    if (!leadsById.TryGetValue(leadId, out var lead)) continue;
-                    variablesByLeadId[leadId] = orderedKeys.Select(k => ResolveVariable(Variables[k], lead)).ToList();
+                    if (!contactsById.TryGetValue(contactId, out var contact)) continue;
+                    variablesByContactId[contactId] = orderedKeys.Select(k => ResolveVariable(Variables[k], contact)).ToList();
                 }
             }
             else
             {
                 // Audience is resolved server-side from AudienceType/AudienceFilters instead of an
                 // explicit list — see ICampaignAudienceService.
-                leadIdsForRequest = new List<Guid>();
+                contactIdsForRequest = new List<Guid>();
             }
 
             var campaignType = AudienceType == CampaignAudienceType.ReactivationNoBooking
@@ -258,7 +258,7 @@ public class CreateModel : PageModel
             }
 
             var campaign = await _campaigns.CreateAsync(new CreateCampaignRequest(
-                client.Id, Name, WhatsAppTemplateId.Value, leadIdsForRequest, variablesByLeadId, scheduledAt,
+                client.Id, Name, WhatsAppTemplateId.Value, contactIdsForRequest, variablesByContactId, scheduledAt,
                 campaignType, AudienceType, audienceFilters), ct);
 
             if (SendOption == "later" && scheduledAt.HasValue)
@@ -280,11 +280,11 @@ public class CreateModel : PageModel
         }
     }
 
-    private static string ResolveVariable(string? raw, LeadResponse lead) => raw switch
+    private static string ResolveVariable(string? raw, ContactResponse contact) => raw switch
     {
-        "{LeadFullName}" => lead.FullName ?? "",
-        "{LeadFirstName}" => lead.FirstName ?? lead.FullName ?? "",
-        "{LeadPhone}" => lead.Phone ?? "",
+        "{ContactFullName}" => contact.FullName ?? "",
+        "{ContactFirstName}" => contact.FirstName ?? contact.FullName ?? "",
+        "{ContactPhone}" => contact.Phone ?? "",
         _ => raw ?? ""
     };
 
@@ -308,9 +308,9 @@ public class CreateModel : PageModel
             filters = new CampaignAudienceFilters(
                 InactiveDays: CustomInactiveDays,
                 ServiceId: CustomServiceId,
-                LeadStatuses: CustomLeadStatuses.Count > 0 ? CustomLeadStatuses : null,
+                StageKeys: CustomStageKeys.Count > 0 ? CustomStageKeys : null,
                 Sources: CustomSources.Count > 0 ? CustomSources : null,
-                QualificationStatuses: CustomQualificationStatuses.Count > 0 ? CustomQualificationStatuses : null,
+                Qualifications: CustomQualifications.Count > 0 ? CustomQualifications : null,
                 CreatedAfter: LocalMidnightUtc(CustomCreatedAfter, viewerTz),
                 CreatedBefore: LocalMidnightUtc(CustomCreatedBefore?.AddDays(1), viewerTz),
                 LastContactedAfter: LocalMidnightUtc(CustomLastContactedAfter, viewerTz),
@@ -360,11 +360,11 @@ public class CreateModel : PageModel
             }
         }
 
-        var (items, _) = await _leads.ListAsync(client.Id, status: null, serviceId: null, Search, skip: 0, take: 200, ct);
-        Leads = items;
+        var (items, _) = await _contacts.ListAsync(client.Id, stage: null, serviceId: null, Search, skip: 0, take: 200, ct);
+        Contacts = items;
 
         Services = await _services.ListAsync(client.Id, activeOnly: true, ct);
-        LeadSources = await _leads.GetDistinctSourcesAsync(client.Id, ct);
-        Stages = await _leads.ListStagesAsync(client.Id, ct);
+        ContactSources = await _contacts.GetDistinctSourcesAsync(client.Id, ct);
+        Stages = await _contacts.ListStagesAsync(client.Id, ct);
     }
 }

@@ -23,7 +23,7 @@ public static class ConfigDefaults
     public static readonly ConfigDefinition AvailabilityDefaultNoticeMinutes = new("Availability", "DefaultNoticeMinutes", "240", ConfigValueType.Int,
         "Minimum notice (minutes) before a bookable slot, for clients that haven't set their own.", 0, 10080);
     public static readonly ConfigDefinition AvailabilityDefaultHorizonDays = new("Availability", "DefaultHorizonDays", "60", ConfigValueType.Int,
-        "How many days ahead patients can book, for clients that haven't set their own.", 1, 365);
+        "How many days ahead contacts can book, for clients that haven't set their own.", 1, 365);
     public static readonly ConfigDefinition AvailabilityMaxRangeDays = new("Availability", "MaxRangeDays", "14", ConfigValueType.Int,
         "The most days one free-slots request may cover.", 1, 60);
     public static readonly ConfigDefinition BillingEnabled = new("Billing", "Enabled", "true", ConfigValueType.Bool,
@@ -109,7 +109,7 @@ public static class ConfigDefaults
     public static readonly ConfigDefinition CampaignsDefaultInactiveDays = new("Campaigns", "DefaultInactiveDays", "60", ConfigValueType.Int,
         "Default \"inactive for\" days of a reactivation audience.", 1, 3650);
     public static readonly ConfigDefinition CampaignsBookingAttributionDays = new("Campaigns", "BookingAttributionDays", "14", ConfigValueType.Int,
-        "A booking made this many days after a patient replied to a campaign counts as that campaign's booking.", 1, 365);
+        "A booking made this many days after a contact replied to a campaign counts as that campaign's booking.", 1, 365);
     public static readonly ConfigDefinition CampaignsSenderIntervalSeconds = new("Campaigns", "SenderIntervalSeconds", "60", ConfigValueType.Int,
         "How often the campaign sender starts campaigns whose scheduled time has come and sends the next batch of every running campaign.", 10, 3600);
     public static readonly ConfigDefinition CampaignsSendBatchSize = new("Campaigns", "SendBatchSize", "20", ConfigValueType.Int,
@@ -130,8 +130,8 @@ public static class ConfigDefaults
         "Calendar and TikTok access tokens are refreshed this long before they expire.", 0, 60);
     public static readonly ConfigDefinition VoiceMaxBytes = new("Voice", "MaxBytes", "10485760", ConfigValueType.Int,
         "Largest voice note (bytes) the Inbox will download from the provider to play or forward.", 1024, 20971520);
-    public static readonly ConfigDefinition DashboardLeadsPageSize = new("Dashboard", "LeadsPageSize", "25", ConfigValueType.Int,
-        "Leads per page on the dashboard.", 5, 200);
+    public static readonly ConfigDefinition DashboardContactsPageSize = new("Dashboard", "ContactsPageSize", "25", ConfigValueType.Int,
+        "Contacts per page on the dashboard.", 5, 200);
     public static readonly ConfigDefinition CacheClientsMinutes = new("Cache", "ClientsMinutes", "60", ConfigValueType.Int,
         "Minutes a cached copy is kept: Client rows (signed-in client, the bot's client info). Changes clear it at once; this is only how long an untouched copy lives.", 1, 1440);
     public static readonly ConfigDefinition CacheStaffLookupMinutes = new("Cache", "StaffLookupMinutes", "10", ConfigValueType.Int,
@@ -246,7 +246,7 @@ public static class ConfigDefaults
 
         VoiceMaxBytes,
 
-        DashboardLeadsPageSize,
+        DashboardContactsPageSize,
 
         CacheClientsMinutes,
         CacheStaffLookupMinutes,

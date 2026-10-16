@@ -28,15 +28,15 @@ public class ApiTimingCollectorTests
     public void Drain_summarises_each_method_and_route_and_starts_a_new_window()
     {
         var sut = Sut();
-        for (var ms = 1; ms <= 100; ms++) sut.Record("GET", "/api/leads", ms <= 98 ? 200 : 500, ms, ms >= 90);
-        sut.Record("GET", "/api/leads", 404, 5, false);
-        sut.Record("POST", "/api/leads", 201, 40, false);
+        for (var ms = 1; ms <= 100; ms++) sut.Record("GET", "/api/contacts", ms <= 98 ? 200 : 500, ms, ms >= 90);
+        sut.Record("GET", "/api/contacts", 404, 5, false);
+        sut.Record("POST", "/api/contacts", 201, 40, false);
 
         var rows = sut.Drain(Start.AddMinutes(1));
 
         Assert.Equal(2, rows.Count);
         var get = rows.Single(r => r.Method == "GET");
-        Assert.Equal("/api/leads", get.Route);
+        Assert.Equal("/api/contacts", get.Route);
         Assert.Equal(101, get.RequestCount);
         Assert.Equal(2, get.ErrorCount);
         Assert.Equal(1, get.ClientErrorCount);
@@ -136,10 +136,10 @@ public class RequestTimingMiddlewareTests
     [Fact]
     public async Task Records_the_route_template_not_the_path()
     {
-        var context = Request("/api/leads/7f1c", "api/leads/{id}");
+        var context = Request("/api/contacts/7f1c", "api/contacts/{id}");
         await Sut(ctx => { ctx.Response.StatusCode = 404; return Task.CompletedTask; }).InvokeAsync(context);
 
-        _collector.Verify(c => c.Record("GET", "/api/leads/{id}", 404, It.Is<double>(ms => ms >= 0), false), Times.Once);
+        _collector.Verify(c => c.Record("GET", "/api/contacts/{id}", 404, It.Is<double>(ms => ms >= 0), false), Times.Once);
         Assert.Empty(_logger.Entries);
     }
 
@@ -154,13 +154,13 @@ public class RequestTimingMiddlewareTests
     public async Task A_request_over_the_threshold_is_logged_with_the_route_only()
     {
         _config.SetupGet(c => c.MonitoringSlowRequestMs).Returns(50);
-        var context = Request("/api/leads/secret-token", "api/leads/{id}", "POST");
+        var context = Request("/api/contacts/secret-token", "api/contacts/{id}", "POST");
         await Sut(async _ => await Task.Delay(80)).InvokeAsync(context);
 
-        _collector.Verify(c => c.Record("POST", "/api/leads/{id}", 200, It.Is<double>(ms => ms >= 50), true), Times.Once);
+        _collector.Verify(c => c.Record("POST", "/api/contacts/{id}", 200, It.Is<double>(ms => ms >= 50), true), Times.Once);
         var entry = Assert.Single(_logger.Entries);
         Assert.Equal(LogLevel.Warning, entry.Level);
-        Assert.Contains("/api/leads/{id}", entry.Message);
+        Assert.Contains("/api/contacts/{id}", entry.Message);
         Assert.DoesNotContain("secret-token", entry.Message);
     }
 
@@ -194,7 +194,7 @@ public class RequestTimingMiddlewareTests
     public void Route_names_are_rooted_and_capped()
     {
         Assert.Equal("/", RequestTimingMiddleware.RouteOf(Request("/", "")));
-        Assert.Equal("/Leads/Details", RequestTimingMiddleware.RouteOf(Request("/Leads/Details", "/Leads/Details")));
+        Assert.Equal("/Contacts/Details", RequestTimingMiddleware.RouteOf(Request("/Contacts/Details", "/Contacts/Details")));
         var longTemplate = "api/" + new string('a', 400);
         Assert.Equal(ApiTimingLimits.MaxRouteLength, RequestTimingMiddleware.RouteOf(Request("/x", longTemplate)).Length);
     }

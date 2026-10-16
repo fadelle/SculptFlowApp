@@ -14,7 +14,7 @@ public class ApiRouteStat
 
     public string Method { get; set; } = string.Empty;
 
-    /// <summary>The matched route template ("/api/leads/{id}"), never the raw path; "(unmatched)" when nothing matched.</summary>
+    /// <summary>The matched route template ("/api/contacts/{id}"), never the raw path; "(unmatched)" when nothing matched.</summary>
     public string Route { get; set; } = string.Empty;
 
     public int RequestCount { get; set; }

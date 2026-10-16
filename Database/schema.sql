@@ -13,7 +13,7 @@
 -- Tables live in one Postgres schema per area (never in public):
 --   core        business types, clients, services
 --   identity    ASP.NET Identity users/claims/logins/tokens, client_users
---   crm         pipeline stages, leads, orders, conversations, messages, inbox settings
+--   crm         pipeline stages, contacts, orders, conversations, messages, inbox settings
 --   scheduling  bookings, availability, calendar sync
 --   channels    channel integrations, WhatsApp templates/health, TikTok
 --   marketing   campaigns, campaign recipients
@@ -23,7 +23,7 @@
 --   config      settings (configuration overrides)
 -- public keeps only the shared set_updated_at() function and extensions.
 -- The admin portal's own tables live in admin.* (Omni.Admin repo).
--- Always schema-qualify table names (core.clients, crm.leads, ...).
+-- Always schema-qualify table names (core.clients, crm.contacts, ...).
 -- =====================================================================
 
 -- ---------------------------------------------------------------------
@@ -65,7 +65,7 @@ begin
     ('identity_user_logins', 'identity'),
     ('identity_user_tokens', 'identity'),
     ('client_users', 'identity'),
-    ('leads', 'crm'),
+    ('contacts', 'crm'),
     ('conversations', 'crm'),
     ('messages', 'crm'),
     ('bookings', 'scheduling'),
@@ -112,7 +112,7 @@ end $$;
 -- and the AI work with a stage's category; people see its label. Edited in the
 -- admin portal (/api/platform-admin/business-types).
 --   name         {"en": "Salon", "ar": "...", "fr": "..."}
---   terminology  {"en": {"contact": {"one": "patient", "other": "patients"}, ...}, "ar": {...}}
+--   terminology  {"en": {"contact": {"one": "contact", "other": "contacts"}, ...}, "ar": {...}}
 --   labels       {"en": "Booked", "ar": "...", "fr": "..."}
 -- English is required everywhere; other languages fall back to it.
 -- ---------------------------------------------------------------------
@@ -284,9 +284,9 @@ create trigger trg_services_updated_at
   for each row execute function set_updated_at();
 
 -- ---------------------------------------------------------------------
--- 3. leads
+-- 3. contacts
 -- ---------------------------------------------------------------------
-create table if not exists crm.leads (
+create table if not exists crm.contacts (
   id                    uuid primary key default gen_random_uuid(),
   client_id             uuid not null references core.clients(id) on delete cascade,
   service_id            uuid references core.services(id) on delete set null,
@@ -300,10 +300,12 @@ create table if not exists crm.leads (
   source                varchar(100),
   source_detail         varchar(200),
   campaign_name         varchar(200),
-  external_lead_id      varchar(200),  -- id from Meta/Instagram/website form, used for dedup
+  external_contact_id   varchar(200),  -- id from Meta/Instagram/website form, used for dedup
 
-  status                varchar(50) not null default 'new',
-  qualification_status  varchar(50) not null default 'unknown',
+  -- A stage key of the client's business type (crm.pipeline_stages). Types are edited in the admin portal, so the
+  -- allowed keys are checked in code (new contacts start at the type's first open stage), not by a check constraint.
+  stage_key             varchar(50) not null,
+  qualification         varchar(50) not null default 'unknown',
 
   preferred_language    varchar(20),
   country_code          varchar(10),
@@ -323,32 +325,28 @@ create table if not exists crm.leads (
   created_at            timestamptz not null default now(),
   updated_at            timestamptz not null default now(),
 
-  constraint ck_leads_qualification_status check (qualification_status in (
-    'unknown','hot','warm','cold','needs_human','medical_question','spam'
+  constraint ck_contacts_qualification check (qualification in (
+    'unknown','hot','warm','cold','needs_human','spam'
   ))
 );
 
--- Dedup: the same external lead (e.g. same Meta lead_id) should not be inserted twice per client.
-create unique index if not exists ux_leads_client_external_lead_id
-  on crm.leads(client_id, external_lead_id)
-  where external_lead_id is not null;
+-- Dedup: the same external contact (e.g. the same Meta form entry) should not be inserted twice per client.
+create unique index if not exists ux_contacts_client_external_contact_id
+  on crm.contacts(client_id, external_contact_id)
+  where external_contact_id is not null;
 
-create index if not exists ix_leads_client_id on crm.leads(client_id);
-create index if not exists ix_leads_client_phone on crm.leads(client_id, phone);
-create index if not exists ix_leads_client_email on crm.leads(client_id, email);
-create index if not exists ix_leads_status on crm.leads(status);
-create index if not exists ix_leads_service_id on crm.leads(service_id);
-create index if not exists ix_leads_created_at on crm.leads(created_at);
-create index if not exists ix_leads_next_followup_at on crm.leads(next_followup_at) where next_followup_at is not null;
+create index if not exists ix_contacts_client_id on crm.contacts(client_id);
+create index if not exists ix_contacts_client_phone on crm.contacts(client_id, phone);
+create index if not exists ix_contacts_client_email on crm.contacts(client_id, email);
+create index if not exists ix_contacts_client_stage_key on crm.contacts(client_id, stage_key);
+create index if not exists ix_contacts_service_id on crm.contacts(service_id);
+create index if not exists ix_contacts_created_at on crm.contacts(created_at);
+create index if not exists ix_contacts_next_followup_at on crm.contacts(next_followup_at) where next_followup_at is not null;
 
-drop trigger if exists trg_leads_updated_at on crm.leads;
-create trigger trg_leads_updated_at
-  before update on crm.leads
+drop trigger if exists trg_contacts_updated_at on crm.contacts;
+create trigger trg_contacts_updated_at
+  before update on crm.contacts
   for each row execute function set_updated_at();
-
--- status holds a stage key of the client's business type (crm.pipeline_stages). Types are edited in the admin
--- portal, so the allowed values are checked in code, not by a fixed check constraint.
-alter table crm.leads drop constraint if exists ck_leads_status;
 
 -- ---------------------------------------------------------------------
 -- 4. conversations
@@ -356,7 +354,7 @@ alter table crm.leads drop constraint if exists ck_leads_status;
 create table if not exists crm.conversations (
   id                      uuid primary key default gen_random_uuid(),
   client_id               uuid not null references core.clients(id) on delete cascade,
-  lead_id                 uuid not null references crm.leads(id) on delete cascade,
+  contact_id                 uuid not null references crm.contacts(id) on delete cascade,
   channel                 varchar(50) not null,
   external_thread_id      varchar(200),
   status                  varchar(50) not null default 'active',
@@ -374,7 +372,7 @@ create table if not exists crm.conversations (
 );
 
 create index if not exists ix_conversations_client_id on crm.conversations(client_id);
-create index if not exists ix_conversations_lead_id on crm.conversations(lead_id);
+create index if not exists ix_conversations_contact_id on crm.conversations(contact_id);
 
 drop trigger if exists trg_conversations_updated_at on crm.conversations;
 create trigger trg_conversations_updated_at
@@ -388,7 +386,7 @@ create table if not exists crm.messages (
   id                   uuid primary key default gen_random_uuid(),
   client_id            uuid not null references core.clients(id) on delete cascade,
   conversation_id      uuid not null references crm.conversations(id) on delete cascade,
-  lead_id              uuid not null references crm.leads(id) on delete cascade,
+  contact_id              uuid not null references crm.contacts(id) on delete cascade,
 
   direction            varchar(20) not null,
   sender_type          varchar(20) not null,
@@ -405,12 +403,12 @@ create table if not exists crm.messages (
   created_at           timestamptz not null default now(),
 
   constraint ck_messages_direction check (direction in ('inbound','outbound')),
-  constraint ck_messages_sender_type check (sender_type in ('lead','ai','staff','system'))
+  constraint ck_messages_sender_type check (sender_type in ('contact','ai','staff','system'))
 );
 
 create index if not exists ix_messages_client_id on crm.messages(client_id);
 create index if not exists ix_messages_conversation_id on crm.messages(conversation_id);
-create index if not exists ix_messages_lead_id on crm.messages(lead_id);
+create index if not exists ix_messages_contact_id on crm.messages(contact_id);
 create index if not exists ix_messages_created_at on crm.messages(created_at);
 
 -- ---------------------------------------------------------------------
@@ -419,7 +417,7 @@ create index if not exists ix_messages_created_at on crm.messages(created_at);
 create table if not exists scheduling.bookings (
   id                    uuid primary key default gen_random_uuid(),
   client_id             uuid not null references core.clients(id) on delete cascade,
-  lead_id               uuid not null references crm.leads(id) on delete cascade,
+  contact_id               uuid not null references crm.contacts(id) on delete cascade,
   service_id            uuid references core.services(id) on delete set null,
 
   booking_type      varchar(50) not null default 'standard',
@@ -442,7 +440,7 @@ create table if not exists scheduling.bookings (
 );
 
 create index if not exists ix_bookings_client_id on scheduling.bookings(client_id);
-create index if not exists ix_bookings_lead_id on scheduling.bookings(lead_id);
+create index if not exists ix_bookings_contact_id on scheduling.bookings(contact_id);
 create index if not exists ix_bookings_scheduled_start on scheduling.bookings(scheduled_start);
 create index if not exists ix_bookings_status on scheduling.bookings(status);
 
@@ -452,12 +450,12 @@ create trigger trg_bookings_updated_at
   for each row execute function set_updated_at();
 
 -- ---------------------------------------------------------------------
--- 7. orders  (a lead buying a service: quoted, deposit paid, confirmed, completed)
+-- 7. orders  (a contact buying a service: quoted, deposit paid, confirmed, completed)
 -- ---------------------------------------------------------------------
 create table if not exists crm.orders (
   id                uuid primary key default gen_random_uuid(),
   client_id         uuid not null references core.clients(id) on delete cascade,
-  lead_id           uuid not null references crm.leads(id) on delete cascade,
+  contact_id           uuid not null references crm.contacts(id) on delete cascade,
   service_id        uuid not null references core.services(id) on delete restrict,
   booking_id    uuid references scheduling.bookings(id) on delete set null,
 
@@ -478,7 +476,7 @@ create table if not exists crm.orders (
 );
 
 create index if not exists ix_orders_client_id on crm.orders(client_id);
-create index if not exists ix_orders_lead_id on crm.orders(lead_id);
+create index if not exists ix_orders_contact_id on crm.orders(contact_id);
 create index if not exists ix_orders_status on crm.orders(status);
 
 drop trigger if exists trg_orders_updated_at on crm.orders;
@@ -492,7 +490,7 @@ create trigger trg_orders_updated_at
 create table if not exists activity.events (
   id               uuid primary key default gen_random_uuid(),
   client_id        uuid not null references core.clients(id) on delete cascade,
-  lead_id          uuid references crm.leads(id) on delete set null,
+  contact_id          uuid references crm.contacts(id) on delete set null,
   conversation_id  uuid references crm.conversations(id) on delete set null,
   booking_id   uuid references scheduling.bookings(id) on delete set null,
   event_type       varchar(100) not null,
@@ -528,7 +526,7 @@ create table if not exists channels.channel_integrations (
 
   -- shared
   -- MVP NOTE: stored as plain text, matching the rest of this MVP (no auth yet). Move to an
-  -- encrypted column / secrets manager before connecting a real app or real patient data.
+  -- encrypted column / secrets manager before connecting a real app or real contact data.
   access_token           text,
   webhook_verify_token   varchar(200),
   -- WhatsApp only: two-step-verification PIN used to register the phone number for Cloud API use
@@ -701,7 +699,7 @@ create trigger trg_campaigns_updated_at
   for each row execute function set_updated_at();
 
 -- ---------------------------------------------------------------------
--- campaign_recipients — one row per target lead. Every actual send still produces a normal row in
+-- campaign_recipients — one row per target contact. Every actual send still produces a normal row in
 -- messages (message_id here points to it) — this table is reporting/lifecycle state, not a second
 -- message store.
 -- ---------------------------------------------------------------------
@@ -709,7 +707,7 @@ create table if not exists marketing.campaign_recipients (
   id                uuid primary key default gen_random_uuid(),
   client_id         uuid not null references core.clients(id) on delete cascade,
   campaign_id       uuid not null references marketing.campaigns(id) on delete cascade,
-  lead_id           uuid not null references crm.leads(id) on delete cascade,
+  contact_id           uuid not null references crm.contacts(id) on delete cascade,
   conversation_id   uuid references crm.conversations(id) on delete set null,
   message_id        uuid references crm.messages(id) on delete set null,
 
@@ -732,11 +730,11 @@ create table if not exists marketing.campaign_recipients (
 
 create index if not exists ix_campaign_recipients_client_id on marketing.campaign_recipients(client_id);
 create index if not exists ix_campaign_recipients_campaign_id on marketing.campaign_recipients(campaign_id);
-create index if not exists ix_campaign_recipients_lead_id on marketing.campaign_recipients(lead_id);
+create index if not exists ix_campaign_recipients_contact_id on marketing.campaign_recipients(contact_id);
 create index if not exists ix_campaign_recipients_status on marketing.campaign_recipients(status);
--- Prevent the same lead being inserted into the same campaign twice.
-create unique index if not exists ux_campaign_recipients_campaign_lead
-  on marketing.campaign_recipients(campaign_id, lead_id);
+-- Prevent the same contact being inserted into the same campaign twice.
+create unique index if not exists ux_campaign_recipients_campaign_contact
+  on marketing.campaign_recipients(campaign_id, contact_id);
 
 drop trigger if exists trg_campaign_recipients_updated_at on marketing.campaign_recipients;
 create trigger trg_campaign_recipients_updated_at
@@ -898,7 +896,7 @@ create unique index if not exists ux_whatsapp_health_events_connection_type_occu
 -- =====================================================================
 -- ASP.NET Core Identity (authentication only) + client_users
 --
--- MVP scope decision: ignore roles/permissions completely — no owner/manager/receptionist/surgeon,
+-- MVP scope decision: ignore roles/permissions completely — no owner/manager/receptionist/specialist,
 -- no permissions matrix. Identity is used ONLY to authenticate a user; client_users is the ONLY
 -- thing that ties an authenticated user to a client (assumed one active membership per user — see
 -- Services/ICurrentClientContext.cs, the sole reader of this table for every dashboard page/API).
@@ -987,14 +985,14 @@ create trigger trg_client_users_updated_at
   for each row execute function set_updated_at();
 
 -- =====================================================================
--- Campaigns + Old Lead Reactivation — data model
+-- Campaigns + Old Contact Reactivation — data model
 -- campaigns/campaign_recipients already existed (WhatsApp Templates & Campaigns, above). This adds
--- what "old lead reactivation" needs: how a campaign's audience was chosen (audience_type /
+-- what "old contact reactivation" needs: how a campaign's audience was chosen (audience_type /
 -- audience_filters, so "all eligible" / "reactivation, never booked" / "custom filter" are
--- first-class instead of always requiring an explicit lead list) and reply/booking attribution on
+-- first-class instead of always requiring an explicit contact list) and reply/booking attribution on
 -- campaign_recipients. See Services/ICampaignAudienceService.cs for how eligibility is computed —
--- deliberately NOT a stored lead.is_old_lead / incomplete_booking flag; derived live from
--- leads/conversations/bookings every time a campaign is created.
+-- deliberately NOT a stored contact.is_old_contact / incomplete_booking flag; derived live from
+-- contacts/conversations/bookings every time a campaign is created.
 -- =====================================================================
 
 alter table marketing.campaigns add column if not exists campaign_type varchar(30) not null default 'custom';
@@ -1019,7 +1017,7 @@ do $$ begin
   end if;
 end $$;
 
--- campaign_type is deliberately NOT constrained (like leads.source) — new campaign types can be
+-- campaign_type is deliberately NOT constrained (like contacts.source) — new campaign types can be
 -- added later without a migration.
 
 -- 'paused' added to the campaign status lifecycle.
@@ -1063,8 +1061,8 @@ create index if not exists ix_campaign_recipients_external_message_id
   on marketing.campaign_recipients(external_message_id) where external_message_id is not null;
 create index if not exists ix_campaign_recipients_booking_id
   on marketing.campaign_recipients(booking_id) where booking_id is not null;
--- ux_campaign_recipients_campaign_lead (UNIQUE(campaign_id, lead_id)) already exists from the
--- original campaign_recipients table above — no change needed for the "no duplicate lead in the
+-- ux_campaign_recipients_campaign_contact (UNIQUE(campaign_id, contact_id)) already exists from the
+-- original campaign_recipients table above — no change needed for the "no duplicate contact in the
 -- same campaign" requirement.
 
 
@@ -1377,7 +1375,7 @@ create index if not exists ix_kwr_client_id on knowledge.knowledge_website_scrap
 -- =====================================================================
 -- Knowledge Base: RETRIEVAL BENCHMARK (standalone diagnostic feature)
 --
---   knowledge_retrieval_benchmark_cases    one realistic patient question + the ONE chunk that answers it
+--   knowledge_retrieval_benchmark_cases    one realistic contact question + the ONE chunk that answers it
 --   knowledge_retrieval_benchmark_runs     one benchmark execution: aggregate metrics + the settings it ran with
 --   knowledge_retrieval_benchmark_results  one row per case per run: where the expected chunk/document ranked
 --
@@ -1651,11 +1649,11 @@ create table if not exists activity.notifications (
   id                      uuid primary key default gen_random_uuid(),
   client_id               uuid not null references core.clients(id) on delete cascade,
   type                    varchar(40) not null
-    check (type in ('NEW_LEAD','HANDOFF','BOOKING_CREATED','BOOKING_RESCHEDULED','BOOKING_CANCELED',
+    check (type in ('NEW_CONTACT','HANDOFF','BOOKING_CREATED','BOOKING_RESCHEDULED','BOOKING_CANCELED',
                      'CAMPAIGN_REPLY','OUTBOUND_MESSAGE_FAILED','INTEGRATION_UNHEALTHY')),
   title                   varchar(200) not null,
   message                 text,
-  lead_id                 uuid references crm.leads(id) on delete set null,
+  contact_id                 uuid references crm.contacts(id) on delete set null,
   conversation_id         uuid references crm.conversations(id) on delete set null,
   booking_id          uuid references scheduling.bookings(id) on delete set null,
   channel_integration_id  uuid references channels.channel_integrations(id) on delete set null,
@@ -1751,7 +1749,7 @@ alter table scheduling.booking_calendar_syncs add column if not exists last_oper
 -- Omni (no longer via n8n) — the client's own OAuth tokens are stored here so Omni can refresh them
 -- and hand a fresh access token to n8n's sync webhook for the one thing n8n still does (the actual create/update/
 -- cancel API call). MVP NOTE (same as channel_integrations.access_token): plain text — move to an encrypted
--- column/secrets manager before this handles real patient data at scale.
+-- column/secrets manager before this handles real contact data at scale.
 alter table scheduling.calendar_integrations add column if not exists access_token text;
 alter table scheduling.calendar_integrations add column if not exists refresh_token text;
 alter table scheduling.calendar_integrations add column if not exists token_expires_at timestamptz;
@@ -2307,7 +2305,7 @@ create index if not exists ix_messages_trace_id on crm.messages(trace_id) where 
 -- Inbox settings: crm.inbox_settings
 --
 -- How a client's Inbox handles conversations (Business/Services/Inbox/InboxSettingsService). One column per setting, so
--- a new setting is a new column here. Today: whether the AI bot answers new conversations and conversations a patient
+-- a new setting is a new column here. Today: whether the AI bot answers new conversations and conversations a contact
 -- reopens (off = they start with / move to staff, human mode); they only take effect while the plan includes the
 -- ai_agent entitlement. A client without a row uses the column defaults, so existing clients keep the bot on.
 -- channel_integration_id null = the client-wide row (the only kind used today); a row per channel connection can be

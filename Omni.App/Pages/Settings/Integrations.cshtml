@@ -10,9 +10,9 @@
     var cards = new List<(bool Connected, bool Attention, Func<Task> Render)>
     {
         (MessagingState(ChannelType.WhatsApp).Connected, MessagingState(ChannelType.WhatsApp).Attention,
-            () => RenderChannelCard(ChannelType.WhatsApp, "WA", "#25D366", "WhatsApp Business", "Chat with patients, send reminders and campaigns.", "Chat with patients on WhatsApp, and send reminders and campaigns.", oauth: true)),
+            () => RenderChannelCard(ChannelType.WhatsApp, "WA", "#25D366", "WhatsApp Business", "Chat with contacts, send reminders and campaigns.", "Chat with contacts on WhatsApp, and send reminders and campaigns.", oauth: true)),
         (MessagingState(ChannelType.Instagram).Connected, MessagingState(ChannelType.Instagram).Attention,
-            () => RenderChannelCard(ChannelType.Instagram, "IG", "#C13584", "Instagram", "Answer Instagram direct messages.", "Patients' Instagram DMs arrive in your Inbox, and the AI assistant can answer them.", oauth: false)),
+            () => RenderChannelCard(ChannelType.Instagram, "IG", "#C13584", "Instagram", "Answer Instagram direct messages.", "Contacts' Instagram DMs arrive in your Inbox, and the AI assistant can answer them.", oauth: false)),
         (MessagingState(ChannelType.Facebook).Connected, MessagingState(ChannelType.Facebook).Attention,
             () => RenderChannelCard(ChannelType.Facebook, "FB", "#1877F2", "Facebook Messenger", "Answer messages sent to your Facebook page.", "Messages to your Facebook page arrive in your Inbox, and the AI assistant can answer them.", oauth: true)),
         (MessagingState(ChannelType.Telegram).Connected, MessagingState(ChannelType.Telegram).Attention,
@@ -33,7 +33,7 @@ else
     <partial name="_Messages" model="new PageMessagesModel(Model.StatusMessage, Model.ErrorMessage)" />
 
     <div class="au-page-head">
-        <p class="au-page-head__sub">Connect the apps patients message you on. Messages from all of them arrive in your Inbox.</p>
+        <p class="au-page-head__sub">Connect the apps contacts message you on. Messages from all of them arrive in your Inbox.</p>
     </div>
     <div class="int-summary">
         <strong>@connectedCount of @cards.Count channels connected</strong>

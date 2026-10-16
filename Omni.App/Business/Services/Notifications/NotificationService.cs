@@ -23,7 +23,7 @@ public class NotificationService : INotificationService
 
     public async Task CreateAsync(
         Guid clientId, string type, string title, string? message,
-        Guid? leadId = null, Guid? conversationId = null, Guid? bookingId = null, Guid? channelIntegrationId = null,
+        Guid? contactId = null, Guid? conversationId = null, Guid? bookingId = null, Guid? channelIntegrationId = null,
         string? link = null, CancellationToken ct = default)
     {
         try
@@ -35,7 +35,7 @@ public class NotificationService : INotificationService
                 Type = type,
                 Title = title,
                 Message = message,
-                LeadId = leadId,
+                ContactId = contactId,
                 ConversationId = conversationId,
                 BookingId = bookingId,
                 ChannelIntegrationId = channelIntegrationId,

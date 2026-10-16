@@ -100,19 +100,20 @@ public class OrderServiceTests
 {
     private readonly Guid _clientId = Guid.NewGuid();
     private readonly Mock<IOrderRepository> _orders = new();
-    private readonly Mock<ILeadRepository> _leads = new();
+    private readonly Mock<IContactRepository> _contacts = new();
     private readonly Mock<IUnitOfWork> _uow = new();
     private readonly Mock<IEventLogger> _events = new();
     private readonly Mock<ICatalogService> _services = new();
+    private readonly Mock<IBusinessTypeService> _businessTypes = PipelineKit.Types();
 
     public OrderServiceTests() =>
-        _leads.Setup(l => l.ExistsAsync(_clientId, It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        _contacts.Setup(l => l.ExistsAsync(_clientId, It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync(true);
 
-    private OrderService Sut() => new(_orders.Object, _leads.Object, _uow.Object, _events.Object, _services.Object);
+    private OrderService Sut() => new(_orders.Object, _contacts.Object, _uow.Object, _events.Object, _services.Object, _businessTypes.Object);
 
-    private Order MakeOrder(string status = OrderStatus.Considering, Guid? leadId = null)
+    private Order MakeOrder(string status = OrderStatus.Considering, Guid? contactId = null)
     {
-        var b = new Order { Id = Guid.NewGuid(), ClientId = _clientId, LeadId = leadId ?? Guid.NewGuid(), ServiceId = Guid.NewGuid(), Status = status };
+        var b = new Order { Id = Guid.NewGuid(), ClientId = _clientId, ContactId = contactId ?? Guid.NewGuid(), ServiceId = Guid.NewGuid(), Status = status };
         _orders.Setup(r => r.GetAsync(_clientId, b.Id, It.IsAny<CancellationToken>())).ReturnsAsync(b);
         return b;
     }
@@ -122,10 +123,10 @@ public class OrderServiceTests
     {
         Order? added = null;
         _orders.Setup(r => r.Add(It.IsAny<Order>())).Callback<Order>(b => added = b);
-        var leadId = Guid.NewGuid();
+        var contactId = Guid.NewGuid();
         var procId = Guid.NewGuid();
-        await Sut().CreateAsync(new CreateOrderRequest(_clientId, leadId, procId, null, 1200m, "USD", "n"));
-        Assert.Equal((OrderStatus.Considering, 1200m, "USD", leadId), (added!.Status, added.QuotedAmount, added.CurrencyCode, added.LeadId));
+        await Sut().CreateAsync(new CreateOrderRequest(_clientId, contactId, procId, null, 1200m, "USD", "n"));
+        Assert.Equal((OrderStatus.Considering, 1200m, "USD", contactId), (added!.Status, added.QuotedAmount, added.CurrencyCode, added.ContactId));
         _services.Verify(p => p.EnsureUsableAsync(_clientId, procId, It.IsAny<CancellationToken>()), Times.Once);
         _orders.Verify(b => b.LoadDetailsAsync(added, It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -139,9 +140,9 @@ public class OrderServiceTests
     }
 
     [Fact]
-    public async Task Create_rejects_a_lead_from_another_client()
+    public async Task Create_rejects_a_contact_from_another_client()
     {
-        _leads.Setup(l => l.ExistsAsync(_clientId, It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync(false);
+        _contacts.Setup(l => l.ExistsAsync(_clientId, It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync(false);
         await Assert.ThrowsAsync<ArgumentException>(() => Sut().CreateAsync(new CreateOrderRequest(_clientId, Guid.NewGuid(), Guid.NewGuid(), null, null, null, null)));
     }
 
@@ -165,14 +166,14 @@ public class OrderServiceTests
     }
 
     [Fact]
-    public async Task Completing_an_order_marks_the_lead_and_logs_the_amount_invariantly()
+    public async Task Completing_an_order_marks_the_contact_and_logs_the_amount_invariantly()
     {
-        var lead = new Lead { Id = Guid.NewGuid(), Status = LeadStatus.Attended };
-        _leads.Setup(l => l.GetByIdAsync(lead.Id, It.IsAny<CancellationToken>())).ReturnsAsync(lead);
-        var b = MakeOrder(leadId: lead.Id);
+        var contact = new Contact { Id = Guid.NewGuid(), StageKey = PipelineKit.Attended };
+        _contacts.Setup(l => l.GetByIdAsync(contact.Id, It.IsAny<CancellationToken>())).ReturnsAsync(contact);
+        var b = MakeOrder(contactId: contact.Id);
         await Sut().UpdateAsync(_clientId, b.Id, new UpdateOrderRequest(OrderStatus.Completed, null, null, 1234.5m, null, null, null));
-        Assert.Equal(LeadStatus.SurgeryBooked, lead.Status);
-        _events.Verify(e => e.Log(_clientId, EventTypes.OrderConfirmed, lead.Id, null, null, null, "{\"amount\": 1234.5}"), Times.Once);
+        Assert.Equal(PipelineKit.Customer, contact.StageKey);
+        _events.Verify(e => e.Log(_clientId, EventTypes.OrderConfirmed, contact.Id, null, null, null, "{\"amount\": 1234.5}"), Times.Once);
     }
 
     [Fact]
@@ -180,40 +181,50 @@ public class OrderServiceTests
     {
         var b = MakeOrder();
         await Sut().UpdateAsync(_clientId, b.Id, new UpdateOrderRequest(OrderStatus.Completed, null, null, null, null, null, null));
-        _events.Verify(e => e.Log(_clientId, EventTypes.OrderConfirmed, b.LeadId, null, null, null, "{\"amount\": null}"), Times.Once);
+        _events.Verify(e => e.Log(_clientId, EventTypes.OrderConfirmed, b.ContactId, null, null, null, "{\"amount\": null}"), Times.Once);
     }
 
     [Theory]
     [InlineData(OrderStatus.Confirmed)]
     [InlineData(OrderStatus.DepositPaid)]
-    public async Task Confirming_an_order_moves_the_lead_to_surgery_booked(string status)
+    public async Task Confirming_an_order_moves_the_contact_to_the_converted_stage(string status)
     {
-        var lead = new Lead { Id = Guid.NewGuid(), Status = LeadStatus.Attended };
-        _leads.Setup(l => l.GetByIdAsync(lead.Id, It.IsAny<CancellationToken>())).ReturnsAsync(lead);
-        var b = MakeOrder(leadId: lead.Id);
+        var contact = new Contact { Id = Guid.NewGuid(), StageKey = PipelineKit.Attended };
+        _contacts.Setup(l => l.GetByIdAsync(contact.Id, It.IsAny<CancellationToken>())).ReturnsAsync(contact);
+        var b = MakeOrder(contactId: contact.Id);
         await Sut().UpdateAsync(_clientId, b.Id, new UpdateOrderRequest(status, null, null, null, null, null, null));
-        Assert.Equal(LeadStatus.SurgeryBooked, lead.Status);
-        _events.Verify(e => e.Log(_clientId, EventTypes.OrderConfirmed, lead.Id, null, null, null, It.IsAny<string>()), Times.Once);
+        Assert.Equal(PipelineKit.Customer, contact.StageKey);
+        _events.Verify(e => e.Log(_clientId, EventTypes.OrderConfirmed, contact.Id, null, null, null, It.IsAny<string>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Confirming_follows_the_converted_category_of_the_clients_own_pipeline()
+    {
+        _businessTypes.Use(PipelineKit.Custom());
+        var contact = new Contact { Id = Guid.NewGuid(), StageKey = "visited" };
+        _contacts.Setup(l => l.GetByIdAsync(contact.Id, It.IsAny<CancellationToken>())).ReturnsAsync(contact);
+        await Sut().UpdateAsync(_clientId, MakeOrder(contactId: contact.Id).Id, new UpdateOrderRequest(OrderStatus.Confirmed, null, null, null, null, null, null));
+        Assert.Equal("signed", contact.StageKey);
     }
 
     [Fact]
     public async Task Moving_from_confirmed_to_completed_does_not_log_a_second_order_confirmed_event()
     {
-        var lead = new Lead { Id = Guid.NewGuid(), Status = LeadStatus.SurgeryBooked };
-        _leads.Setup(l => l.GetByIdAsync(lead.Id, It.IsAny<CancellationToken>())).ReturnsAsync(lead);
-        var b = MakeOrder(OrderStatus.Confirmed, lead.Id);
+        var contact = new Contact { Id = Guid.NewGuid(), StageKey = PipelineKit.Customer };
+        _contacts.Setup(l => l.GetByIdAsync(contact.Id, It.IsAny<CancellationToken>())).ReturnsAsync(contact);
+        var b = MakeOrder(OrderStatus.Confirmed, contact.Id);
         await Sut().UpdateAsync(_clientId, b.Id, new UpdateOrderRequest(OrderStatus.Completed, null, null, 900m, null, null, null));
         _events.Verify(e => e.Log(It.IsAny<Guid>(), EventTypes.OrderConfirmed, It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<string?>(), It.IsAny<string>()), Times.Never);
     }
 
     [Fact]
-    public async Task Earlier_stages_leave_the_lead_alone()
+    public async Task Earlier_stages_leave_the_contact_alone()
     {
-        var lead = new Lead { Id = Guid.NewGuid(), Status = LeadStatus.Attended };
-        _leads.Setup(l => l.GetByIdAsync(lead.Id, It.IsAny<CancellationToken>())).ReturnsAsync(lead);
-        var b = MakeOrder(leadId: lead.Id);
+        var contact = new Contact { Id = Guid.NewGuid(), StageKey = PipelineKit.Attended };
+        _contacts.Setup(l => l.GetByIdAsync(contact.Id, It.IsAny<CancellationToken>())).ReturnsAsync(contact);
+        var b = MakeOrder(contactId: contact.Id);
         await Sut().UpdateAsync(_clientId, b.Id, new UpdateOrderRequest(OrderStatus.Quoted, null, null, null, null, null, null));
-        Assert.Equal(LeadStatus.Attended, lead.Status);
+        Assert.Equal(PipelineKit.Attended, contact.StageKey);
     }
 
     [Fact]
@@ -242,9 +253,9 @@ public class NotificationServiceTests
     {
         Notification? added = null;
         _repo.Setup(r => r.Add(It.IsAny<Notification>())).Callback<Notification>(n => added = n);
-        var lead = Guid.NewGuid();
-        await Sut().CreateAsync(_clientId, NotificationType.NewLead, "New lead", "msg", leadId: lead, link: "/x");
-        Assert.Equal((NotificationType.NewLead, "New lead", lead, false, "/x"), (added!.Type, added.Title, added.LeadId, added.IsRead, added.Link));
+        var contact = Guid.NewGuid();
+        await Sut().CreateAsync(_clientId, NotificationType.NewContact, "New contact", "msg", contactId: contact, link: "/x");
+        Assert.Equal((NotificationType.NewContact, "New contact", contact, false, "/x"), (added!.Type, added.Title, added.ContactId, added.IsRead, added.Link));
         _notifier.Verify(n => n.NotificationCreatedAsync(_clientId, It.Is<NotificationResponse>(r => r.Id == added.Id), It.IsAny<CancellationToken>()), Times.Once);
     }
 

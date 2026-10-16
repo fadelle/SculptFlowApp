@@ -16,7 +16,7 @@ UI: follow docs/UI_GUIDE.md for every screen; keep it up to date.
 
 ## Code architecture (standing rule, agreed 2026-10-06)
 
-The admin portal (`..\SculptFlowAdmin`) uses the same layout. Namespace = folder path (`Omni.App.Business.Services.Leads`).
+The admin portal (`..\SculptFlowAdmin`) uses the same layout. Namespace = folder path (`Omni.App.Business.Services.Contacts`).
 
 | Folder | What goes there |
 |---|---|
@@ -75,7 +75,7 @@ Every table lives in its area's Postgres schema, never `public` (only `set_updat
 |---|---|
 | `core` | business_types, clients, services |
 | `identity` | identity_users/_claims/_logins/_tokens, client_users |
-| `crm` | pipeline_stages, leads, orders, conversations, messages, inbox_settings |
+| `crm` | pipeline_stages, contacts, orders, conversations, messages, inbox_settings |
 | `scheduling` | bookings, availability rules/exceptions, booking_settings, calendar integrations and syncs |
 | `channels` | channel_integrations, whatsapp_templates, whatsapp_health_events, tiktok_integrations |
 | `marketing` | campaigns, campaign_recipients |
@@ -87,7 +87,7 @@ Every table lives in its area's Postgres schema, never `public` (only `set_updat
 
 - New table → its area's schema; add a schema only for a genuinely new area (never `auth`, `storage`, `realtime`,
   `extensions`, `graphql`, `vault`: Supabase reserves them).
-- `Database/schema.sql`, every `ToTable`, and raw SQL are schema-qualified (`crm.leads`). Changes stay re-runnable (guard
+- `Database/schema.sql`, every `ToTable`, and raw SQL are schema-qualified (`crm.contacts`). Changes stay re-runnable (guard
   renames/constraint adds in `do $$` blocks).
 - The admin portal has no copy of these tables (it reads and writes only through `/api/platform-admin`), so a table change
   only needs the main app's code, plus the platform-admin API shapes if a portal page shows that data.
@@ -140,8 +140,9 @@ Full detail and the declared-settings table: `docs/configuration.md`.
   order, client) for the client's business-type words. Never glue a word into a sentence Arabic can't follow.
   `Guards/UiTextKeysTests` fails on a missing or unused key or an unknown placeholder.
 - Business types (`core.business_types`) give each client its words, AI profile and pipeline stages
-  (`crm.pipeline_stages`). Code and reports work with stage **categories** (`StageCategory`), never one type's stage keys
-  (the `LeadStatus` writes move to categories in S6); people see labels. No code branches on a business type's code.
+  (`crm.pipeline_stages`). Code and reports work with stage **categories** (`StageCategory`), never one type's stage keys:
+  move a contact with `IBusinessTypeService.GetPipelineAsync` → `ClientPipeline` (`EntryKey`, `MoveTo(current, category)`,
+  `Resolve(keyOrCategory)`); people see labels. No code branches on a business type's code.
 
 ## Platform-admin APIs (standing rule, agreed 2026-10-07)
 

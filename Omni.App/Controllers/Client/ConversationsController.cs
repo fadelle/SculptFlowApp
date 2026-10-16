@@ -208,7 +208,7 @@ public class ConversationsController : ControllerBase
         return conversation is null ? NotFound() : Ok(conversation);
     }
 
-    /// <summary>Staff brings a closed conversation back into the working list (a patient's next message does the
+    /// <summary>Staff brings a closed conversation back into the working list (a contact's next message does the
     /// same automatically).</summary>
     [Authorize]
     [HttpPost("{id:guid}/reopen")]

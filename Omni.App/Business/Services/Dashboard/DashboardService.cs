@@ -19,19 +19,19 @@ public class DashboardService : IDashboardService
     {
         var counts = await _dashboard.GetSummaryCountsAsync(clientId, from, to, ct);
 
-        // Old-lead reactivation isn't built yet (Project 8) — wire this up once that project
+        // Old-contact reactivation isn't built yet (Project 8) — wire this up once that project
         // exists and reactivation attempts are tracked (e.g. via an events.event_type filter).
-        var oldLeadsRecovered = 0;
+        var oldContactsRecovered = 0;
 
         return new DashboardSummaryResponse(
             counts.NewInterestedPeople, counts.BookingsMade, counts.BookingsAttended,
-            counts.SurgeriesBooked, counts.Revenue, oldLeadsRecovered
+            counts.OrdersMade, counts.Revenue, oldContactsRecovered
         );
     }
 
-    public Task<(IReadOnlyList<DashboardLeadRow> Items, int TotalCount)> GetLeadsAsync(
-        Guid clientId, string? status, string? search, string? source, int skip, int take, CancellationToken ct = default) =>
-        _dashboard.ListLeadsAsync(clientId, status, search, source, skip, take, ct);
+    public Task<(IReadOnlyList<DashboardContactRow> Items, int TotalCount)> GetContactsAsync(
+        Guid clientId, string? stage, string? search, string? source, int skip, int take, CancellationToken ct = default) =>
+        _dashboard.ListContactsAsync(clientId, stage, search, source, skip, take, ct);
 
     public Task<(IReadOnlyList<DashboardBookingRow> Items, int TotalCount)> GetBookingsAsync(
         Guid clientId, string? status, string? search, int skip, int take, CancellationToken ct = default) =>

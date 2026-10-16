@@ -29,5 +29,5 @@ public class Client
     public DateTimeOffset UpdatedAt { get; set; }
 
     public ICollection<Service> Services { get; set; } = new List<Service>();
-    public ICollection<Lead> Leads { get; set; } = new List<Lead>();
+    public ICollection<Contact> Contacts { get; set; } = new List<Contact>();
 }

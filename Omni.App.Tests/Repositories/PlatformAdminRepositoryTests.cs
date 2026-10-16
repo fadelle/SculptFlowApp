@@ -11,7 +11,7 @@ namespace Omni.App.Tests.Repositories;
 /// </summary>
 public class PlatformAdminRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixture)
 {
-    private sealed record World(Client Client, Service Service, Lead Lead, Conversation Conversation, Message Inbound, Message Failed,
+    private sealed record World(Client Client, Service Service, Contact Contact, Conversation Conversation, Message Inbound, Message Failed,
         Booking Upcoming, ChannelIntegration WhatsApp);
 
     private async Task<World> SeedWorldAsync(string? clientName = null)
@@ -19,19 +19,19 @@ public class PlatformAdminRepositoryTests(PostgresFixture fixture) : RepoTestBas
         var client = MakeClient(clientName);
         client.Email = "owner@" + client.Slug + ".test";
         var svc = MakeService(client.Id, "Rhinoplasty");
-        var lead = MakeLead(client.Id, "Alice Wong", "+9611", svc.Id);
-        var convo = MakeConversation(client.Id, lead.Id, lastMessageAt: DateTimeOffset.UtcNow);
+        var contact = MakeContact(client.Id, "Alice Wong", "+9611", svc.Id);
+        var convo = MakeConversation(client.Id, contact.Id, lastMessageAt: DateTimeOffset.UtcNow);
         var inbound = MakeMessage(convo, content: "hello world", createdAt: DateTimeOffset.UtcNow.AddHours(-1));
         var failed = MakeMessage(convo, MessageDirection.Outbound, MessageOrigin.Ai, "oops", DateTimeOffset.UtcNow.AddMinutes(-30));
         failed.SenderType = "ai"; failed.DeliveryStatus = "failed"; failed.FailedAt = DateTimeOffset.UtcNow; failed.FailureCode = "131026";
-        var upcoming = MakeBooking(client.Id, lead.Id, DateTimeOffset.UtcNow.AddDays(2), serviceId: svc.Id);
+        var upcoming = MakeBooking(client.Id, contact.Id, DateTimeOffset.UtcNow.AddDays(2), serviceId: svc.Id);
         var wa = new ChannelIntegration
         {
             Id = Guid.NewGuid(), ClientId = client.Id, Channel = ChannelType.WhatsApp, Status = ChannelIntegrationStatus.Connected,
             IsHealthy = false, LastProblemMessage = "token expired", CreatedAt = Now, UpdatedAt = Now,
         };
-        await SeedAsync(client, svc, lead, convo, inbound, failed, upcoming, wa);
-        return new World(client, svc, lead, convo, inbound, failed, upcoming, wa);
+        await SeedAsync(client, svc, contact, convo, inbound, failed, upcoming, wa);
+        return new World(client, svc, contact, convo, inbound, failed, upcoming, wa);
     }
 
     // ---- clients ----------------------------------------------------------------------------------------------
@@ -49,7 +49,7 @@ public class PlatformAdminRepositoryTests(PostgresFixture fixture) : RepoTestBas
         var all = await repo.ListAsync(prefix, null, 1);
         Assert.Equal(2, all.Total);
         var row = all.Items.Single(r => r.Id == w.Client.Id);
-        Assert.Equal((1, 1, ChannelIntegrationStatus.Connected), (row.LeadCount, row.ConversationCount, row.WhatsAppStatus));
+        Assert.Equal((1, 1, ChannelIntegrationStatus.Connected), (row.ContactCount, row.ConversationCount, row.WhatsAppStatus));
         Assert.Equal("not set up", all.Items.Single(r => r.Id == inactive.Id).WhatsAppStatus);
 
         Assert.Equal(w.Client.Id, Assert.Single((await repo.ListAsync(prefix, true, 1)).Items).Id);
@@ -63,7 +63,7 @@ public class PlatformAdminRepositoryTests(PostgresFixture fixture) : RepoTestBas
         Assert.NotNull(await repo.GetForUpdateAsync(w.Client.Id));
 
         var counts = await repo.CountsAsync(w.Client.Id);
-        Assert.Equal((1, 1, 2, 1, 1), (counts.Leads, counts.Conversations, counts.Messages, counts.UpcomingBookings, counts.Services));
+        Assert.Equal((1, 1, 2, 1, 1), (counts.Contacts, counts.Conversations, counts.Messages, counts.UpcomingBookings, counts.Services));
         Assert.Equal(1, counts.FailedMessagesLast7Days);
     }
 
@@ -127,29 +127,29 @@ public class PlatformAdminRepositoryTests(PostgresFixture fixture) : RepoTestBas
         Assert.True(await repo.HasOtherActiveMembershipAsync(user.Id, Guid.NewGuid()));
     }
 
-    // ---- leads, conversations, messages, bookings -----------------------------------------------------------
+    // ---- contacts, conversations, messages, bookings -----------------------------------------------------------
 
     [PostgresFact]
-    public async Task Leads_conversations_messages_and_bookings_are_listed_and_filtered()
+    public async Task Contacts_conversations_messages_and_bookings_are_listed_and_filtered()
     {
         var w = await SeedWorldAsync();
-        var evt = new EventLog { Id = Guid.NewGuid(), ClientId = w.Client.Id, LeadId = w.Lead.Id, EventType = EventTypes.OrderConfirmed, CreatedAt = Now };
+        var evt = new EventLog { Id = Guid.NewGuid(), ClientId = w.Client.Id, ContactId = w.Contact.Id, EventType = EventTypes.OrderConfirmed, CreatedAt = Now };
         await SeedAsync(evt);
 
         await using var db = NewContext();
-        var repo = new LeadAdminRepository(db);
+        var repo = new ContactAdminRepository(db);
 
-        var leads = await repo.ListLeadsAsync(w.Client.Id, null, null, 1);
-        Assert.Equal((w.Lead.Id, "Rhinoplasty"), (leads.Items[0].Id, leads.Items[0].ServiceName));
-        Assert.Single((await repo.ListLeadsAsync(w.Client.Id, LeadStatus.New, "alice", 1)).Items);
-        Assert.Empty((await repo.ListLeadsAsync(w.Client.Id, LeadStatus.Lost, null, 1)).Items);
-        Assert.Empty((await repo.ListLeadsAsync(w.Client.Id, null, "zzz", 1)).Items);
-        Assert.NotNull(await repo.GetLeadAsync(w.Lead.Id));
-        Assert.Equal(evt.Id, Assert.Single(await repo.LeadEventsAsync(w.Lead.Id)).Id);
+        var contacts = await repo.ListContactsAsync(w.Client.Id, null, null, 1);
+        Assert.Equal((w.Contact.Id, "Rhinoplasty"), (contacts.Items[0].Id, contacts.Items[0].ServiceName));
+        Assert.Single((await repo.ListContactsAsync(w.Client.Id, PipelineKit.New, "alice", 1)).Items);
+        Assert.Empty((await repo.ListContactsAsync(w.Client.Id, PipelineKit.Lost, null, 1)).Items);
+        Assert.Empty((await repo.ListContactsAsync(w.Client.Id, null, "zzz", 1)).Items);
+        Assert.NotNull(await repo.GetContactAsync(w.Contact.Id));
+        Assert.Equal(evt.Id, Assert.Single(await repo.ContactEventsAsync(w.Contact.Id)).Id);
 
         var conversations = await repo.ListConversationsAsync(w.Client.Id, null, null, null, null, 1);
         Assert.Equal(2, Assert.Single(conversations.Items).MessageCount);
-        Assert.Single((await repo.ListConversationsAsync(null, w.Lead.Id, "whatsapp", ConversationMode.Ai, ConversationStatus.Active, 1)).Items);
+        Assert.Single((await repo.ListConversationsAsync(null, w.Contact.Id, "whatsapp", ConversationMode.Ai, ConversationStatus.Active, 1)).Items);
         Assert.Empty((await repo.ListConversationsAsync(w.Client.Id, null, "telegram", null, null, 1)).Items);
         Assert.NotNull(await repo.GetConversationAsync(w.Conversation.Id));
         Assert.Equal(["hello world", "oops"], (await repo.MessagesAsync(w.Conversation.Id)).Select(m => m.Content));
@@ -161,10 +161,10 @@ public class PlatformAdminRepositoryTests(PostgresFixture fixture) : RepoTestBas
         Assert.Equal(w.Inbound.Id, Assert.Single((await repo.ListMessagesAsync(w.Client.Id, false, null, "HELLO", 1)).Items).Id);
 
         Assert.Equal(w.Upcoming.Id, Assert.Single((await repo.ListBookingsAsync(w.Client.Id, null, null, false, 1)).Items).Id);
-        Assert.Single((await repo.ListBookingsAsync(w.Client.Id, w.Lead.Id, BookingStatus.Booked, true, 1)).Items);
+        Assert.Single((await repo.ListBookingsAsync(w.Client.Id, w.Contact.Id, BookingStatus.Booked, true, 1)).Items);
         Assert.Empty((await repo.ListBookingsAsync(w.Client.Id, null, BookingStatus.Canceled, false, 1)).Items);
 
-        Assert.NotNull(await repo.GetLeadForUpdateAsync(w.Lead.Id));
+        Assert.NotNull(await repo.GetContactForUpdateAsync(w.Contact.Id));
         Assert.NotNull(await repo.GetConversationForUpdateAsync(w.Conversation.Id));
         Assert.NotNull(await repo.GetBookingForUpdateAsync(w.Upcoming.Id));
     }
@@ -186,16 +186,16 @@ public class PlatformAdminRepositoryTests(PostgresFixture fixture) : RepoTestBas
         var source = new KnowledgeWebsiteSource { Id = Guid.NewGuid(), ClientId = w.Client.Id, StartUrl = "https://x.example/", NormalizedStartUrl = "https://x.example/", Host = "x.example", CreatedAt = Now, UpdatedAt = Now };
         await SeedAsync(template, doc, settings, source);
         await SeedAsync(campaign);
-        var l2 = MakeLead(w.Client.Id, "Bob", "+9612");
+        var l2 = MakeContact(w.Client.Id, "Bob", "+9612");
         await SeedAsync(l2);
         var recipient = new CampaignRecipient
         {
-            Id = Guid.NewGuid(), ClientId = w.Client.Id, CampaignId = campaign.Id, LeadId = w.Lead.Id, PhoneNumber = "+9611",
+            Id = Guid.NewGuid(), ClientId = w.Client.Id, CampaignId = campaign.Id, ContactId = w.Contact.Id, PhoneNumber = "+9611",
             Status = CampaignRecipientStatus.Sent, SentAt = Now, CreatedAt = Now, UpdatedAt = Now,
         };
         var queued = new CampaignRecipient
         {
-            Id = Guid.NewGuid(), ClientId = w.Client.Id, CampaignId = campaign.Id, LeadId = l2.Id, PhoneNumber = "+9612",
+            Id = Guid.NewGuid(), ClientId = w.Client.Id, CampaignId = campaign.Id, ContactId = l2.Id, PhoneNumber = "+9612",
             Status = CampaignRecipientStatus.Queued, CreatedAt = Now, UpdatedAt = Now,
         };
         await SeedAsync(recipient, queued);
@@ -241,7 +241,7 @@ public class PlatformAdminRepositoryTests(PostgresFixture fixture) : RepoTestBas
         var repo = new OverviewAdminRepository(db);
 
         var totals = await repo.TotalsAsync();
-        Assert.True(totals.Clients >= 1 && totals.Leads >= 1 && totals.Conversations >= 1);
+        Assert.True(totals.Clients >= 1 && totals.Contacts >= 1 && totals.Conversations >= 1);
 
         var daily = await repo.DailyMessagesAsync(3);
         Assert.NotEmpty(daily);

@@ -57,7 +57,7 @@ public class ServicesController : DashboardApiController
         return service is null ? NotFound() : Ok(service);
     }
 
-    /// <summary>Activate/deactivate — services are never deleted (leads, bookings and service
+    /// <summary>Activate/deactivate — services are never deleted (contacts, bookings and service
     /// bookings reference them).</summary>
     [HttpPost("{id:guid}/active")]
     public async Task<ActionResult<ServiceResponse>> SetActive(Guid id, [FromBody] SetServiceActiveRequest request, CancellationToken ct)

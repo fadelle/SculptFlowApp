@@ -5,7 +5,7 @@ public record DashboardSummaryResponse(
     int NewInterestedPeople,
     int BookingsMade,
     int BookingsAttended,
-    int SurgeriesBooked,
+    int OrdersMade,
     decimal Revenue,
-    int OldLeadsRecovered
+    int OldContactsRecovered
 );

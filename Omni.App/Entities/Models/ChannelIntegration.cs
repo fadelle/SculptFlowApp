@@ -10,7 +10,7 @@ namespace Omni.App.Entities.Models;
 /// MVP NOTE: AccessToken and WebhookVerifyToken are stored as plain text, matching the rest of
 /// this MVP (no auth yet — see the plan's Compliance section). Move these to an encrypted column
 /// or a secrets manager (e.g. Supabase Vault, Azure Key Vault) before connecting a real WhatsApp/
-/// Meta app or handling real patient conversations.
+/// Meta app or handling real contact conversations.
 /// </summary>
 public class ChannelIntegration
 {

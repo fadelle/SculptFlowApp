@@ -11,7 +11,7 @@ public class Notification
     public string Type { get; set; } = string.Empty;
     public string Title { get; set; } = string.Empty;
     public string? Message { get; set; }
-    public Guid? LeadId { get; set; }
+    public Guid? ContactId { get; set; }
     public Guid? ConversationId { get; set; }
     public Guid? BookingId { get; set; }
     public Guid? ChannelIntegrationId { get; set; }

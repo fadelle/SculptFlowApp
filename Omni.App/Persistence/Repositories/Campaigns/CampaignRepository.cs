@@ -104,9 +104,9 @@ public class CampaignRepository : ICampaignRepository
     public Task<List<CampaignRecipient>> ListRecipientsAsync(IReadOnlyCollection<Guid> campaignIds, CancellationToken ct = default) =>
         _db.CampaignRecipients.Where(r => campaignIds.Contains(r.CampaignId)).ToListAsync(ct);
 
-    public Task<List<CampaignRecipient>> ListRecipientsWithLeadAsync(Guid campaignId, CancellationToken ct = default) =>
+    public Task<List<CampaignRecipient>> ListRecipientsWithContactAsync(Guid campaignId, CancellationToken ct = default) =>
         _db.CampaignRecipients
-            .Include(r => r.Lead)
+            .Include(r => r.Contact)
             .Where(r => r.CampaignId == campaignId)
             .OrderBy(r => r.CreatedAt)
             .ToListAsync(ct);
@@ -130,14 +130,14 @@ public class CampaignRepository : ICampaignRepository
     public Task<CampaignRecipient?> GetRecipientAsync(Guid recipientId, CancellationToken ct = default) =>
         _db.CampaignRecipients.FirstOrDefaultAsync(r => r.Id == recipientId, ct);
 
-    public Task<CampaignRecipient?> FindLatestRepliedAwaitingBookingAsync(Guid clientId, Guid leadId, DateTimeOffset repliedSince, CancellationToken ct = default) =>
+    public Task<CampaignRecipient?> FindLatestRepliedAwaitingBookingAsync(Guid clientId, Guid contactId, DateTimeOffset repliedSince, CancellationToken ct = default) =>
         _db.CampaignRecipients
-            .Where(r => r.ClientId == clientId && r.LeadId == leadId && r.RepliedAt != null && r.RepliedAt >= repliedSince && r.BookedAt == null)
+            .Where(r => r.ClientId == clientId && r.ContactId == contactId && r.RepliedAt != null && r.RepliedAt >= repliedSince && r.BookedAt == null)
             .OrderByDescending(r => r.RepliedAt)
             .FirstOrDefaultAsync(ct);
-    public Task<CampaignRecipient?> FindLatestAwaitingReplyAsync(Guid clientId, Guid leadId, CancellationToken ct = default) =>
+    public Task<CampaignRecipient?> FindLatestAwaitingReplyAsync(Guid clientId, Guid contactId, CancellationToken ct = default) =>
         _db.CampaignRecipients
-            .Where(r => r.ClientId == clientId && r.LeadId == leadId && r.SentAt != null && r.RepliedAt == null)
+            .Where(r => r.ClientId == clientId && r.ContactId == contactId && r.SentAt != null && r.RepliedAt == null)
             .OrderByDescending(r => r.SentAt)
             .Include(r => r.Campaign)
             .FirstOrDefaultAsync(ct);

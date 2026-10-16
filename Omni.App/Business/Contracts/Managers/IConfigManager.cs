@@ -28,7 +28,7 @@ public interface IConfigManager
     /// <summary>Minimum notice (minutes) before a bookable slot, for clients that haven't set their own. Default 240.</summary>
     int AvailabilityDefaultNoticeMinutes { get; }
 
-    /// <summary>How many days ahead patients can book, for clients that haven't set their own. Default 60.</summary>
+    /// <summary>How many days ahead contacts can book, for clients that haven't set their own. Default 60.</summary>
     int AvailabilityDefaultHorizonDays { get; }
 
     /// <summary>The most days one free-slots request may cover. Default 14.</summary>
@@ -199,8 +199,8 @@ public interface IConfigManager
     int VoiceMaxBytes { get; }
 
     // ---- Dashboard
-    /// <summary>Leads per page on the dashboard. Default 25.</summary>
-    int DashboardLeadsPageSize { get; }
+    /// <summary>Contacts per page on the dashboard. Default 25.</summary>
+    int DashboardContactsPageSize { get; }
 
     // ---- Cache (lifetimes of the table caches, read by CacheManager.LifetimeOf)
     /// <summary>Client rows (signed-in client, the bot's client info). Lifetime in minutes. Default 60.</summary>

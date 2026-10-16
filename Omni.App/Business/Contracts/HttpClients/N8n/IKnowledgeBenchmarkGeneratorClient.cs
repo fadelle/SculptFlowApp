@@ -4,7 +4,7 @@ using Omni.App.Entities.Dtos.KnowledgeBenchmark;
 namespace Omni.App.Business.Contracts.HttpClients.N8n;
 
 /// <summary>
-/// The one and only link OUT to the benchmark question-generation n8n workflow (a separate workflow from the patient AI
+/// The one and only link OUT to the benchmark question-generation n8n workflow (a separate workflow from the contact AI
 /// agent). Its sole job: hand the chunks to n8n. It never searches, embeds or scores, and it does not wait for questions —
 /// n8n calls back (see KnowledgeBenchmarkIngestController) when they are ready.
 /// </summary>

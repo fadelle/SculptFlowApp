@@ -18,7 +18,17 @@
   "signup.errors.businessTypeRequired": "Choose what kind of business you run.",
   "signup.google.subtitle": "Name your {client}, choose what kind it is, and you're in. This creates your own workspace.",
 
-  "leads.errors.unknownStage": "'{0}' isn't one of your {contact} stages.",
+  "contacts.errors.unknownStage": "'{0}' isn't one of your {contact} stages.",
+
+  "stages.help.title": "Stage",
+  "stages.help.intro": "Where this {contact} is in your pipeline. Used to organize the {contacts} list and to filter campaign audiences.",
+  "stages.help.open": "Still being worked on, nothing booked yet.",
+  "stages.help.booked": "Their {booking} is scheduled.",
+  "stages.help.attended": "They came to their {booking}.",
+  "stages.help.noShow": "They missed a scheduled {booking}.",
+  "stages.help.converted": "Their {order} is confirmed.",
+  "stages.help.closedLost": "No longer being pursued.",
+  "stages.help.needsHuman": "Needs a person from your team.",
   "clients.errors.notFound": "Client not found.",
 
   "businessTypes.errors.notFound": "There is no business type '{0}'.",

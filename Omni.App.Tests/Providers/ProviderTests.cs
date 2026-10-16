@@ -153,11 +153,11 @@ public class WhatsAppServiceAndSenderTests
         var sender = new WhatsAppChannelSender(whatsApp.Object);
         Assert.Equal(ConversationChannel.WhatsApp, sender.Channel);
 
-        var closed = new Conversation { ClientId = _clientId, Channel = "whatsapp", Lead = new Lead { Phone = "961" } };
+        var closed = new Conversation { ClientId = _clientId, Channel = "whatsapp", Contact = new Contact { Phone = "961" } };
         await Assert.ThrowsAsync<ServiceWindowClosedException>(() => sender.SendTextAsync(closed, "hi"));
-        var noPhone = new Conversation { ClientId = _clientId, Channel = "whatsapp", ServiceWindowExpiresAt = DateTimeOffset.UtcNow.AddHours(1), Lead = new Lead() };
+        var noPhone = new Conversation { ClientId = _clientId, Channel = "whatsapp", ServiceWindowExpiresAt = DateTimeOffset.UtcNow.AddHours(1), Contact = new Contact() };
         await Assert.ThrowsAsync<InvalidOperationException>(() => sender.SendTextAsync(noPhone, "hi"));
-        var open = new Conversation { ClientId = _clientId, Channel = "whatsapp", ServiceWindowExpiresAt = DateTimeOffset.UtcNow.AddHours(1), Lead = new Lead { Phone = "961" } };
+        var open = new Conversation { ClientId = _clientId, Channel = "whatsapp", ServiceWindowExpiresAt = DateTimeOffset.UtcNow.AddHours(1), Contact = new Contact { Phone = "961" } };
         Assert.Equal("sent", await sender.SendTextAsync(open, "hi"));
     }
 

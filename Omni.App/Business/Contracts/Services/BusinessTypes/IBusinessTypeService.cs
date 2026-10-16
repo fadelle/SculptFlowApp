@@ -25,6 +25,10 @@ public interface IBusinessTypeService
     /// <summary>Whether <paramref name="key"/> is a stage of the client's business type.</summary>
     Task<bool> IsStageOfClientAsync(Guid clientId, string? key, CancellationToken ct = default);
 
+    /// <summary>The client's pipeline with the category lookups code uses to move contacts (<see cref="ClientPipeline.Empty"/>
+    /// when the client doesn't exist).</summary>
+    Task<ClientPipeline> GetPipelineAsync(Guid clientId, CancellationToken ct = default);
+
     // ---- Admin (platform-admin portal; English only)
 
     /// <summary>Every type, active or not, with its client count.</summary>

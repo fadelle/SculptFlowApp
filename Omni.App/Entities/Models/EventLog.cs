@@ -5,7 +5,7 @@ public class EventLog
 {
     public Guid Id { get; set; }
     public Guid ClientId { get; set; }
-    public Guid? LeadId { get; set; }
+    public Guid? ContactId { get; set; }
     public Guid? ConversationId { get; set; }
     public Guid? BookingId { get; set; }
     public string EventType { get; set; } = string.Empty;

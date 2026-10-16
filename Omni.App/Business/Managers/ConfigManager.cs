@@ -106,7 +106,7 @@ public class ConfigManager : IConfigManager
     public int VoiceMaxBytes => GetInt(ConfigDefaults.VoiceMaxBytes);
 
     // ---- Dashboard
-    public int DashboardLeadsPageSize => GetInt(ConfigDefaults.DashboardLeadsPageSize);
+    public int DashboardContactsPageSize => GetInt(ConfigDefaults.DashboardContactsPageSize);
 
     // ---- Cache
     public int CacheClientsMinutes => GetInt(ConfigDefaults.CacheClientsMinutes);

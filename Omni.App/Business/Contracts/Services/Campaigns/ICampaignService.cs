@@ -5,12 +5,12 @@ using Omni.App.Entities.Responses.Campaigns;
 namespace Omni.App.Business.Contracts.Services.Campaigns;
 
 /// <summary>
-/// Orchestrates sending one approved WhatsAppTemplate to many leads. A Campaign never stores
+/// Orchestrates sending one approved WhatsAppTemplate to many contacts. A Campaign never stores
 /// message content itself — every actual send goes through IMessageService.SendCampaignTemplateAsync,
-/// which writes a normal row to the existing messages table in the lead's own Conversation (see
-/// IConversationService.GetOrCreateForLeadAsync). Sending is always processed in small bounded
+/// which writes a normal row to the existing messages table in the contact's own Conversation (see
+/// IConversationService.GetOrCreateForContactAsync). Sending is always processed in small bounded
 /// batches (ProcessBatchAsync) rather than one giant synchronous loop over every recipient, so a
-/// campaign with thousands of leads never blocks a single HTTP request. The dashboard sends the first
+/// campaign with thousands of contacts never blocks a single HTTP request. The dashboard sends the first
 /// batch; the background sender (Business/Jobs/CampaignSenderWorker) starts scheduled campaigns when
 /// their time comes and keeps sending batches of every running campaign until it completes. Only one
 /// sender works on a campaign at a time, and Stop/Cancel are re-checked before every message.
@@ -22,7 +22,7 @@ public interface ICampaignService
     Task<CampaignDetailsResponse?> GetByIdAsync(Guid clientId, Guid id, CancellationToken ct = default);
 
     /// <summary>Creates a Campaign in Draft status plus one CampaignRecipient per (de-duplicated)
-    /// lead — nothing is sent yet.</summary>
+    /// contact — nothing is sent yet.</summary>
     Task<CampaignResponse> CreateAsync(CreateCampaignRequest request, CancellationToken ct = default);
 
     Task<CampaignResponse?> ScheduleAsync(Guid clientId, Guid id, DateTimeOffset scheduledAt, CancellationToken ct = default);

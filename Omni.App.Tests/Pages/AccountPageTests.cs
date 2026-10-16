@@ -59,7 +59,7 @@ public class AccountPageTests
     }
 
     [Theory]
-    [InlineData("/leads", "/leads")]
+    [InlineData("/contacts", "/contacts")]
     [InlineData("https://evil.example/", "/dashboard")]
     [InlineData("//evil.example", "/dashboard")]
     [InlineData(null, "/dashboard")]

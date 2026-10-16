@@ -11,10 +11,6 @@ public class LeftoverNamesTests
     /// <summary>Word × path glob still waiting for its rename session (see milestone-a-plan.md, section 5).</summary>
     public static readonly (string Word, string Glob, string ClosedBy)[] PendingScopes =
     [
-        ("lead", "**", "S6"),
-        ("patient", "**", "S6"),
-        ("surgeon", "**", "S6"),
-        ("surgery", "**", "S6"),
         ("staff", "**", "S7"),
         ("ai_agent", "**", "S7"),
         ("max_agents", "**", "S7"),
@@ -62,6 +58,7 @@ public class LeftoverNamesTests
     [InlineData("leadId", true)]
     [InlineData("GetLeadsAsync", true)]
     [InlineData("LeadDetail", true)]
+    [InlineData("ILeadService", true)]
     [InlineData("the leading edge", false)]
     [InlineData("team leader", false)]
     [InlineData("do not mislead", false)]

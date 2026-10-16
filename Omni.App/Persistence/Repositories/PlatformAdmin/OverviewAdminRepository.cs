@@ -27,8 +27,8 @@ public class OverviewAdminRepository : IOverviewAdminRepository
             await _db.Clients.CountAsync(ct),
             await _db.Clients.CountAsync(c => c.IsActive, ct),
             await _db.ClientUsers.CountAsync(u => u.IsActive, ct),
-            await _db.Leads.CountAsync(ct),
-            await _db.Leads.CountAsync(l => l.CreatedAt >= week, ct),
+            await _db.Contacts.CountAsync(ct),
+            await _db.Contacts.CountAsync(l => l.CreatedAt >= week, ct),
             await _db.Conversations.CountAsync(ct),
             await _db.Conversations.CountAsync(c => c.Mode == ConversationMode.Human && c.Status == ConversationStatus.Active, ct),
             await _db.Messages.CountAsync(m => m.CreatedAt >= day, ct),
@@ -127,7 +127,7 @@ public class OverviewAdminRepository : IOverviewAdminRepository
         _db.Clients.AsNoTracking().OrderByDescending(c => c.CreatedAt).Take(take)
             .Select(c => new ClientRow(c.Id, c.Name, c.Slug, c.Email, c.Timezone, c.IsActive,
                 _db.ClientUsers.Count(u => u.ClientId == c.Id && u.IsActive),
-                _db.Leads.Count(l => l.ClientId == c.Id),
+                _db.Contacts.Count(l => l.ClientId == c.Id),
                 _db.Conversations.Count(x => x.ClientId == c.Id),
                 _db.Conversations.Where(x => x.ClientId == c.Id).Max(x => x.LastMessageAt),
                 _db.ChannelIntegrations.Where(i => i.ClientId == c.Id && i.Channel == ChannelType.WhatsApp)
@@ -143,7 +143,7 @@ public class OverviewAdminRepository : IOverviewAdminRepository
         return q.OrderByDescending(e => e.CreatedAt)
             .Select(e => new EventRow(e.Id, e.ClientId,
                 _db.Clients.Where(x => x.Id == e.ClientId).Select(x => x.Name).FirstOrDefault() ?? "",
-                e.EventType, e.Source, e.LeadId, e.ConversationId, e.BookingId, e.Metadata, e.CreatedAt))
+                e.EventType, e.Source, e.ContactId, e.ConversationId, e.BookingId, e.Metadata, e.CreatedAt))
             .ToPagedAsync(page, ct: ct);
     }
 

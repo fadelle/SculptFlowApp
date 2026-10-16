@@ -5,19 +5,20 @@ namespace Omni.App.Tests.Services;
 public class ConversationServiceTests
 {
     private readonly Guid _clientId = Guid.NewGuid();
-    private readonly Guid _leadId = Guid.NewGuid();
+    private readonly Guid _contactId = Guid.NewGuid();
     private readonly Mock<IConversationRepository> _conversations = new();
     private readonly Mock<IMessageRepository> _messages = new();
-    private readonly Mock<ILeadRepository> _leads = new();
+    private readonly Mock<IContactRepository> _contacts = new();
     private readonly Mock<IUnitOfWork> _uow = new();
     private readonly Mock<IInboxNotifier> _notifier = new();
     private readonly Mock<IEventLogger> _events = new();
     private readonly Mock<INotificationService> _notifications = new();
     private readonly Mock<IInboxSettingsService> _inboxSettings = new();
+    private readonly Mock<IBusinessTypeService> _businessTypes = PipelineKit.Types();
 
     public ConversationServiceTests() => InboxSettings(planIncludesBot: true, newConversations: true, reopenedConversations: true);
 
-    private ConversationService Sut() => new(_conversations.Object, _messages.Object, _leads.Object, _uow.Object, _notifier.Object, _events.Object, _notifications.Object, _inboxSettings.Object);
+    private ConversationService Sut() => new(_conversations.Object, _messages.Object, _contacts.Object, _uow.Object, _notifier.Object, _events.Object, _notifications.Object, _inboxSettings.Object, _businessTypes.Object);
 
     private void InboxSettings(bool planIncludesBot, bool newConversations, bool reopenedConversations)
     {
@@ -31,7 +32,7 @@ public class ConversationServiceTests
     {
         var c = new Conversation
         {
-            Id = Guid.NewGuid(), ClientId = _clientId, LeadId = _leadId, Channel = ConversationChannel.WhatsApp, Mode = mode,
+            Id = Guid.NewGuid(), ClientId = _clientId, ContactId = _contactId, Channel = ConversationChannel.WhatsApp, Mode = mode,
             Status = ConversationStatus.Active, AiEnabled = mode == ConversationMode.Ai, HumanTakeover = mode == ConversationMode.Human, ExternalThreadId = externalThread
         };
         _conversations.Setup(r => r.GetAsync(_clientId, c.Id, It.IsAny<CancellationToken>())).ReturnsAsync(c);
@@ -41,69 +42,69 @@ public class ConversationServiceTests
     [Fact]
     public async Task Create_validates_channel_and_starts_in_ai_mode()
     {
-        await Assert.ThrowsAsync<ArgumentException>(() => Sut().CreateAsync(new CreateConversationRequest(_clientId, _leadId, "pigeon", null)));
-        _leads.Setup(l => l.GetAsync(_clientId, _leadId, It.IsAny<CancellationToken>())).ReturnsAsync(new Lead { Id = _leadId, ClientId = _clientId });
+        await Assert.ThrowsAsync<ArgumentException>(() => Sut().CreateAsync(new CreateConversationRequest(_clientId, _contactId, "pigeon", null)));
+        _contacts.Setup(l => l.GetAsync(_clientId, _contactId, It.IsAny<CancellationToken>())).ReturnsAsync(new Contact { Id = _contactId, ClientId = _clientId });
         Conversation? added = null;
         _conversations.Setup(r => r.Add(It.IsAny<Conversation>())).Callback<Conversation>(c => added = c);
-        var r = await Sut().CreateAsync(new CreateConversationRequest(_clientId, _leadId, ConversationChannel.Telegram, "t1"));
+        var r = await Sut().CreateAsync(new CreateConversationRequest(_clientId, _contactId, ConversationChannel.Telegram, "t1"));
         Assert.Equal((ConversationMode.Ai, true, false, ConversationStatus.Active, "t1"), (added!.Mode, added.AiEnabled, added.HumanTakeover, added.Status, added.ExternalThreadId));
         Assert.Equal(added.Id, r.Id);
         _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
-    public async Task Create_for_a_lead_this_client_doesnt_have_is_not_found()
+    public async Task Create_for_a_contact_this_client_doesnt_have_is_not_found()
     {
-        // Covers both a lead that doesn't exist and another client's lead: the lookup is scoped to the client.
+        // Covers both a contact that doesn't exist and another client's contact: the lookup is scoped to the client.
         await Assert.ThrowsAsync<KeyNotFoundException>(() => Sut().CreateAsync(new CreateConversationRequest(_clientId, Guid.NewGuid(), ConversationChannel.Website, null)));
         _conversations.Verify(r => r.Add(It.IsAny<Conversation>()), Times.Never);
         _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
-    public async Task GetOrCreateForLead_reuses_an_existing_conversation()
+    public async Task GetOrCreateForContact_reuses_an_existing_conversation()
     {
         var c = Conv();
-        _conversations.Setup(r => r.FindForLeadAsync(_clientId, _leadId, "whatsapp", It.IsAny<CancellationToken>())).ReturnsAsync(c);
-        Assert.Equal(c.Id, (await Sut().GetOrCreateForLeadAsync(_clientId, _leadId, "whatsapp")).Id);
+        _conversations.Setup(r => r.FindForContactAsync(_clientId, _contactId, "whatsapp", It.IsAny<CancellationToken>())).ReturnsAsync(c);
+        Assert.Equal(c.Id, (await Sut().GetOrCreateForContactAsync(_clientId, _contactId, "whatsapp")).Id);
         _conversations.Verify(r => r.Add(It.IsAny<Conversation>()), Times.Never);
     }
 
     [Fact]
-    public async Task GetOrCreateForLead_creates_when_missing()
+    public async Task GetOrCreateForContact_creates_when_missing()
     {
-        await Sut().GetOrCreateForLeadAsync(_clientId, _leadId, "whatsapp");
+        await Sut().GetOrCreateForContactAsync(_clientId, _contactId, "whatsapp");
         _conversations.Verify(r => r.Add(It.IsAny<Conversation>()), Times.Once);
     }
 
     [Fact]
-    public async Task GetOrCreateForLead_with_thread_fills_a_missing_thread_id_only()
+    public async Task GetOrCreateForContact_with_thread_fills_a_missing_thread_id_only()
     {
         var blank = Conv();
-        _conversations.Setup(r => r.FindForLeadAsync(_clientId, _leadId, "telegram", It.IsAny<CancellationToken>())).ReturnsAsync(blank);
-        await Sut().GetOrCreateForLeadAsync(_clientId, _leadId, "telegram", "chat-1");
+        _conversations.Setup(r => r.FindForContactAsync(_clientId, _contactId, "telegram", It.IsAny<CancellationToken>())).ReturnsAsync(blank);
+        await Sut().GetOrCreateForContactAsync(_clientId, _contactId, "telegram", "chat-1");
         Assert.Equal("chat-1", blank.ExternalThreadId);
 
-        await Sut().GetOrCreateForLeadAsync(_clientId, _leadId, "telegram", "chat-2");
+        await Sut().GetOrCreateForContactAsync(_clientId, _contactId, "telegram", "chat-2");
         Assert.Equal("chat-1", blank.ExternalThreadId);
     }
 
     [Fact]
-    public async Task GetOrCreateForLead_with_thread_creates_validates_and_yields_to_a_concurrent_winner()
+    public async Task GetOrCreateForContact_with_thread_creates_validates_and_yields_to_a_concurrent_winner()
     {
-        await Assert.ThrowsAsync<ArgumentException>(() => Sut().GetOrCreateForLeadAsync(_clientId, _leadId, "pigeon", "x"));
+        await Assert.ThrowsAsync<ArgumentException>(() => Sut().GetOrCreateForContactAsync(_clientId, _contactId, "pigeon", "x"));
 
         _uow.Setup(u => u.TrySaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(true);
         Conversation? added = null;
         _conversations.Setup(r => r.Add(It.IsAny<Conversation>())).Callback<Conversation>(c => added = c);
-        Assert.Equal("th", (await Sut().GetOrCreateForLeadAsync(_clientId, _leadId, "telegram", "th")) is { } r && added!.ExternalThreadId == "th" ? "th" : "");
+        Assert.Equal("th", (await Sut().GetOrCreateForContactAsync(_clientId, _contactId, "telegram", "th")) is { } r && added!.ExternalThreadId == "th" ? "th" : "");
 
         var winner = Conv(externalThread: "th2");
         _uow.Setup(u => u.TrySaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(false);
         _conversations.Setup(x => x.FindByExternalThreadAsync(_clientId, "telegram", "th2", It.IsAny<CancellationToken>())).ReturnsAsync(winner);
-        Assert.Equal(winner.Id, (await Sut().GetOrCreateForLeadAsync(_clientId, _leadId, "telegram", "th2")).Id);
+        Assert.Equal(winner.Id, (await Sut().GetOrCreateForContactAsync(_clientId, _contactId, "telegram", "th2")).Id);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => Sut().GetOrCreateForLeadAsync(_clientId, _leadId, "telegram", "th3"));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => Sut().GetOrCreateForContactAsync(_clientId, _contactId, "telegram", "th3"));
     }
 
     [Fact]
@@ -136,17 +137,17 @@ public class ConversationServiceTests
     [Fact]
     public async Task AddMessage_validates_direction_and_returns_null_for_unknown_conversation()
     {
-        await Assert.ThrowsAsync<ArgumentException>(() => Sut().AddMessageAsync(_clientId, Guid.NewGuid(), Msg("sideways", "lead")));
+        await Assert.ThrowsAsync<ArgumentException>(() => Sut().AddMessageAsync(_clientId, Guid.NewGuid(), Msg("sideways", "contact")));
         await Assert.ThrowsAsync<ArgumentException>(() => Sut().AddMessageAsync(_clientId, Guid.NewGuid(), Msg("inbound", "martian")));
-        Assert.Null(await Sut().AddMessageAsync(_clientId, Guid.NewGuid(), Msg("inbound", "lead")));
+        Assert.Null(await Sut().AddMessageAsync(_clientId, Guid.NewGuid(), Msg("inbound", "contact")));
     }
 
     [Fact]
-    public async Task Outbound_message_stamps_conversation_and_moves_a_new_lead_to_contacted()
+    public async Task Outbound_message_stamps_conversation_and_moves_a_new_contact_to_contacted()
     {
         var c = Conv();
-        var lead = new Lead { Id = _leadId, Status = LeadStatus.New };
-        _leads.Setup(l => l.GetByIdAsync(_leadId, It.IsAny<CancellationToken>())).ReturnsAsync(lead);
+        var contact = new Contact { Id = _contactId, StageKey = PipelineKit.New };
+        _contacts.Setup(l => l.GetByIdAsync(_contactId, It.IsAny<CancellationToken>())).ReturnsAsync(contact);
         Message? saved = null;
         _messages.Setup(m => m.Add(It.IsAny<Message>())).Callback<Message>(m => saved = m);
 
@@ -156,21 +157,46 @@ public class ConversationServiceTests
         Assert.NotNull(saved.SentAt);
         Assert.Null(saved.ReceivedAt);
         Assert.Equal(("outbound", saved.CreatedAt), (c.LastMessageDirection, c.LastMessageAt!.Value));
-        Assert.Equal(LeadStatus.Contacted, lead.Status);
-        Assert.NotNull(lead.LastContactAt);
+        Assert.Equal(PipelineKit.Contacted, contact.StageKey);
+        Assert.NotNull(contact.LastContactAt);
         Assert.Equal(saved.Id, r!.Id);
     }
 
+    [Theory]
+    [InlineData("in_touch", "in_touch")]   // only the entry stage moves on
+    [InlineData("visit_set", "visit_set")]
+    [InlineData("inquiry", "in_touch")]
+    public async Task The_first_reply_moves_only_an_entry_stage_contact_to_the_next_open_stage(string from, string expected)
+    {
+        _businessTypes.Use(PipelineKit.Custom());
+        var c = Conv();
+        var contact = new Contact { Id = _contactId, StageKey = from };
+        _contacts.Setup(l => l.GetByIdAsync(_contactId, It.IsAny<CancellationToken>())).ReturnsAsync(contact);
+        await Sut().AddMessageAsync(_clientId, c.Id, Msg("outbound", "staff"));
+        Assert.Equal(expected, contact.StageKey);
+    }
+
     [Fact]
-    public async Task Inbound_message_keeps_the_lead_status_and_sets_received_time()
+    public async Task A_type_with_one_open_stage_keeps_the_contact_on_reply()
+    {
+        _businessTypes.Use(new ClientPipeline([new("open_only", StageCategory.Open, "Open"), new("b", StageCategory.Booked, "B")]));
+        var c = Conv();
+        var contact = new Contact { Id = _contactId, StageKey = "open_only" };
+        _contacts.Setup(l => l.GetByIdAsync(_contactId, It.IsAny<CancellationToken>())).ReturnsAsync(contact);
+        await Sut().AddMessageAsync(_clientId, c.Id, Msg("outbound", "staff"));
+        Assert.Equal("open_only", contact.StageKey);
+    }
+
+    [Fact]
+    public async Task Inbound_message_keeps_the_contact_status_and_sets_received_time()
     {
         var c = Conv();
-        var lead = new Lead { Id = _leadId, Status = LeadStatus.New };
-        _leads.Setup(l => l.GetByIdAsync(_leadId, It.IsAny<CancellationToken>())).ReturnsAsync(lead);
+        var contact = new Contact { Id = _contactId, StageKey = PipelineKit.New };
+        _contacts.Setup(l => l.GetByIdAsync(_contactId, It.IsAny<CancellationToken>())).ReturnsAsync(contact);
         Message? saved = null;
         _messages.Setup(m => m.Add(It.IsAny<Message>())).Callback<Message>(m => saved = m);
-        await Sut().AddMessageAsync(_clientId, c.Id, Msg("inbound", "lead"));
-        Assert.Equal(LeadStatus.New, lead.Status);
+        await Sut().AddMessageAsync(_clientId, c.Id, Msg("inbound", "contact"));
+        Assert.Equal(PipelineKit.New, contact.StageKey);
         Assert.NotNull(saved!.ReceivedAt);
         Assert.Null(saved.SentAt);
         Assert.Equal(MessageOrigin.WhatsAppCustomer, saved.Origin);
@@ -179,9 +205,9 @@ public class ConversationServiceTests
     [Theory]
     [InlineData("ai", "whatsapp", MessageOrigin.Ai)]
     [InlineData("staff", "whatsapp", MessageOrigin.Dashboard)]
-    [InlineData("lead", "whatsapp", MessageOrigin.WhatsAppCustomer)]
-    [InlineData("lead", "telegram", MessageOrigin.TelegramCustomer)]
-    [InlineData("lead", "instagram", MessageOrigin.System)]
+    [InlineData("contact", "whatsapp", MessageOrigin.WhatsAppCustomer)]
+    [InlineData("contact", "telegram", MessageOrigin.TelegramCustomer)]
+    [InlineData("contact", "instagram", MessageOrigin.System)]
     [InlineData("system", "whatsapp", MessageOrigin.System)]
     public async Task Origin_is_inferred_from_sender_and_channel(string sender, string channel, string expected)
     {
@@ -234,15 +260,38 @@ public class ConversationServiceTests
     public async Task Handoff_notifies_staff_once_and_not_when_already_human()
     {
         var c = Conv();
-        _leads.Setup(l => l.GetFullNameAsync(_leadId, It.IsAny<CancellationToken>())).ReturnsAsync("Ann Lee");
+        _contacts.Setup(l => l.GetFullNameAsync(_contactId, It.IsAny<CancellationToken>())).ReturnsAsync("Ann Lee");
         await Sut().HandoffToHumanAsync(_clientId, c.Id, "wants a price");
         _notifications.Verify(n => n.CreateAsync(_clientId, NotificationType.Handoff, "AI handed off to staff", "Ann Lee needs staff attention: wants a price",
-            _leadId, c.Id, null, null, $"/inbox?conversationId={c.Id}", It.IsAny<CancellationToken>()), Times.Once);
+            _contactId, c.Id, null, null, $"/inbox?conversationId={c.Id}", It.IsAny<CancellationToken>()), Times.Once);
         _events.Verify(e => e.Log(_clientId, EventTypes.HumanHandoff, null, c.Id, null, MessageOrigin.Ai, "{\"reason\":\"wants a price\"}"), Times.Once);
 
         _conversations.Setup(r => r.IsInHumanModeAsync(_clientId, c.Id, It.IsAny<CancellationToken>())).ReturnsAsync(true);
         await Sut().HandoffToHumanAsync(_clientId, c.Id, null);
         _notifications.Verify(n => n.CreateAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Theory]
+    [InlineData("in_touch", "team")]
+    [InlineData("expert", "expert")]   // already in a needs-human stage: stays there
+    public async Task The_ai_handoff_moves_the_contact_to_the_needs_human_stage(string from, string expected)
+    {
+        _businessTypes.Use(PipelineKit.Custom());
+        var c = Conv();
+        var contact = new Contact { Id = _contactId, StageKey = from };
+        _contacts.Setup(l => l.GetByIdAsync(_contactId, It.IsAny<CancellationToken>())).ReturnsAsync(contact);
+        await Sut().HandoffToHumanAsync(_clientId, c.Id, "medical question");
+        Assert.Equal(expected, contact.StageKey);
+    }
+
+    [Fact]
+    public async Task Staff_taking_over_leaves_the_stage_alone()
+    {
+        var c = Conv();
+        var contact = new Contact { Id = _contactId, StageKey = PipelineKit.Qualified };
+        _contacts.Setup(l => l.GetByIdAsync(_contactId, It.IsAny<CancellationToken>())).ReturnsAsync(contact);
+        await Sut().TakeOverAsync(_clientId, c.Id);
+        Assert.Equal(PipelineKit.Qualified, contact.StageKey);
     }
 
     [Fact]
@@ -295,14 +344,14 @@ public class ConversationServiceTests
     }
 
     [Fact]
-    public async Task A_patient_message_added_through_the_generic_path_reopens_but_a_staff_message_does_not()
+    public async Task A_contact_message_added_through_the_generic_path_reopens_but_a_staff_message_does_not()
     {
-        var closedForPatient = Conv();
-        closedForPatient.Status = ConversationStatus.Closed;
-        await Sut().AddMessageAsync(_clientId, closedForPatient.Id, Msg("inbound", "lead"));
-        Assert.Equal(ConversationStatus.Active, closedForPatient.Status);
-        _events.Verify(e => e.Log(_clientId, EventTypes.ConversationReopened, null, closedForPatient.Id, null, MessageOrigin.WhatsAppCustomer, "{}"), Times.Once);
-        _notifier.Verify(n => n.ConversationUpdatedAsync(_clientId, closedForPatient.Id, It.IsAny<CancellationToken>()), Times.Once);
+        var closedForContact = Conv();
+        closedForContact.Status = ConversationStatus.Closed;
+        await Sut().AddMessageAsync(_clientId, closedForContact.Id, Msg("inbound", "contact"));
+        Assert.Equal(ConversationStatus.Active, closedForContact.Status);
+        _events.Verify(e => e.Log(_clientId, EventTypes.ConversationReopened, null, closedForContact.Id, null, MessageOrigin.WhatsAppCustomer, "{}"), Times.Once);
+        _notifier.Verify(n => n.ConversationUpdatedAsync(_clientId, closedForContact.Id, It.IsAny<CancellationToken>()), Times.Once);
 
         var closedForStaff = Conv();
         closedForStaff.Status = ConversationStatus.Closed;
@@ -323,12 +372,12 @@ public class ConversationServiceTests
         Conversation? added = null;
         _conversations.Setup(r => r.Add(It.IsAny<Conversation>())).Callback<Conversation>(c => added = c);
 
-        await Sut().GetOrCreateForLeadAsync(_clientId, _leadId, "whatsapp");
+        await Sut().GetOrCreateForContactAsync(_clientId, _contactId, "whatsapp");
         Assert.Equal((expected, expected == ConversationMode.Ai, expected == ConversationMode.Human), (added!.Mode, added.AiEnabled, added.HumanTakeover));
 
         added = null;
         _uow.Setup(u => u.TrySaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(true);
-        await Sut().GetOrCreateForLeadAsync(_clientId, _leadId, "telegram", "chat-9");
+        await Sut().GetOrCreateForContactAsync(_clientId, _contactId, "telegram", "chat-9");
         Assert.Equal(expected, added!.Mode);
     }
 
@@ -345,19 +394,19 @@ public class ConversationServiceTests
     }
 
     [Fact]
-    public async Task A_patient_reopening_through_the_generic_path_goes_to_staff_when_the_client_says_so()
+    public async Task A_contact_reopening_through_the_generic_path_goes_to_staff_when_the_client_says_so()
     {
         InboxSettings(planIncludesBot: true, newConversations: true, reopenedConversations: false);
         var closed = Conv();
         closed.Status = ConversationStatus.Closed;
 
-        await Sut().AddMessageAsync(_clientId, closed.Id, Msg("inbound", "lead"));
+        await Sut().AddMessageAsync(_clientId, closed.Id, Msg("inbound", "contact"));
 
         Assert.Equal((ConversationStatus.Active, ConversationMode.Human), (closed.Status, closed.Mode));
         _notifier.Verify(n => n.ConversationModeChangedAsync(_clientId, closed.Id, ConversationMode.Human, It.IsAny<CancellationToken>()), Times.Once);
 
         var active = Conv();
-        await Sut().AddMessageAsync(_clientId, active.Id, Msg("inbound", "lead"));
+        await Sut().AddMessageAsync(_clientId, active.Id, Msg("inbound", "contact"));
         Assert.Equal(ConversationMode.Ai, active.Mode);
     }
 

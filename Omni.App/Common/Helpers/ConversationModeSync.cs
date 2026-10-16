@@ -28,7 +28,7 @@ public static class ConversationModeSync
         {
             ClientId = conversation.ClientId,
             ConversationId = conversation.Id,
-            LeadId = conversation.LeadId,
+            ContactId = conversation.ContactId,
             Direction = MessageDirection.Outbound,
             SenderType = MessageSenderType.System,
             Channel = conversation.Channel,

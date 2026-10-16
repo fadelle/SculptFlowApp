@@ -34,8 +34,8 @@ public interface ICampaignRepository
 
     Task<List<CampaignRecipient>> ListRecipientsAsync(IReadOnlyCollection<Guid> campaignIds, CancellationToken ct = default);
 
-    /// <summary>Oldest first, with the lead loaded.</summary>
-    Task<List<CampaignRecipient>> ListRecipientsWithLeadAsync(Guid campaignId, CancellationToken ct = default);
+    /// <summary>Oldest first, with the contact loaded.</summary>
+    Task<List<CampaignRecipient>> ListRecipientsWithContactAsync(Guid campaignId, CancellationToken ct = default);
 
     Task<IReadOnlyList<CampaignRecipient>> ListRecipientsInStatusAsync(Guid campaignId, IReadOnlyCollection<string> statuses,
         CancellationToken ct = default);
@@ -52,10 +52,10 @@ public interface ICampaignRepository
     /// now. Dispose the handle to release the lock; it is also released if the connection closes.</summary>
     Task<IAsyncDisposable?> TryLockForSendingAsync(Guid campaignId, CancellationToken ct = default);
 
-    /// <summary>The lead's most recent campaign send still waiting for a reply (RepliedAt null), with its campaign.</summary>
-    Task<CampaignRecipient?> FindLatestAwaitingReplyAsync(Guid clientId, Guid leadId, CancellationToken ct = default);
+    /// <summary>The contact's most recent campaign send still waiting for a reply (RepliedAt null), with its campaign.</summary>
+    Task<CampaignRecipient?> FindLatestAwaitingReplyAsync(Guid clientId, Guid contactId, CancellationToken ct = default);
 
-    /// <summary>The lead's most recent campaign send that was replied to at or after <paramref name="repliedSince"/> and has not
+    /// <summary>The contact's most recent campaign send that was replied to at or after <paramref name="repliedSince"/> and has not
     /// been credited with a booking yet.</summary>
-    Task<CampaignRecipient?> FindLatestRepliedAwaitingBookingAsync(Guid clientId, Guid leadId, DateTimeOffset repliedSince, CancellationToken ct = default);
+    Task<CampaignRecipient?> FindLatestRepliedAwaitingBookingAsync(Guid clientId, Guid contactId, DateTimeOffset repliedSince, CancellationToken ct = default);
 }

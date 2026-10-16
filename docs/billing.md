@@ -144,7 +144,7 @@ arrangement → record or reserve (key `{channel}:message:{messageId}`) → prov
 settle or release. A failure to record *uncharged* usage is logged and never blocks the message.
 
 - **WhatsApp** (`Business/Engines/Billing/WhatsAppBillingPolicy.cs`): template category → `whatsapp_{category}_message`,
-  country from the lead's number, provider `meta`, outcome on delivered/read/failed. Free-form replies and
+  country from the contact's number, provider `meta`, outcome on delivered/read/failed. Free-form replies and
   utility templates inside the 24h window are not recorded (configurable under `Billing:WhatsApp`).
 - **Telegram**: `telegram_message` per outbound message; default `no_provider_usage_fee` → recorded, never charged.
 

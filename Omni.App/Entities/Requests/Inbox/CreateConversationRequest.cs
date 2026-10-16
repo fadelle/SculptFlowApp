@@ -2,7 +2,7 @@ namespace Omni.App.Entities.Requests.Inbox;
 
 public record CreateConversationRequest(
     Guid ClientId,
-    Guid LeadId,
+    Guid ContactId,
     string Channel,
     string? ExternalThreadId
 );

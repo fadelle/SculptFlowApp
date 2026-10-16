@@ -67,14 +67,14 @@ else
                                 <span>Fill in the blanks</span>
                                 @foreach (var n in Model.PlaceholderNumbers)
                                 {
-                                    var current = Model.Variables.GetValueOrDefault(n) ?? "{LeadFirstName}";
-                                    var isToken = current is "{LeadFirstName}" or "{LeadFullName}" or "{LeadPhone}";
+                                    var current = Model.Variables.GetValueOrDefault(n) ?? "{ContactFirstName}";
+                                    var isToken = current is "{ContactFirstName}" or "{ContactFullName}" or "{ContactPhone}";
                                     <div class="var-row" data-var="@n">
                                         <span class="var-tag">{{@n}}</span>
                                         <select class="select var-mode" aria-label="Value for {{@n}}">
-                                            <option value="{LeadFirstName}" selected="@(current == "{LeadFirstName}")">Lead's first name</option>
-                                            <option value="{LeadFullName}" selected="@(current == "{LeadFullName}")">Lead's full name</option>
-                                            <option value="{LeadPhone}" selected="@(current == "{LeadPhone}")">Lead's phone</option>
+                                            <option value="{ContactFirstName}" selected="@(current == "{ContactFirstName}")">Contact's first name</option>
+                                            <option value="{ContactFullName}" selected="@(current == "{ContactFullName}")">Contact's full name</option>
+                                            <option value="{ContactPhone}" selected="@(current == "{ContactPhone}")">Contact's phone</option>
                                             <option value="__text" selected="@(!isToken)">Same text for everyone…</option>
                                         </select>
                                         <input type="text" class="text-input var-text" placeholder="Text for {{@n}}" value="@(isToken ? "" : current)" hidden="@isToken" />
@@ -117,12 +117,12 @@ else
                     <div class="aud-grid">
                         <label class="aud-card">
                             <input type="radio" name="AudienceChoice" value="reactivation_no_booking" data-audience-choice checked="@(Model.AudienceChoice == "reactivation_no_booking")" />
-                            <span class="aud-title">Old leads who never booked <span class="badge badge-green">Recommended</span></span>
+                            <span class="aud-title">Old contacts who never booked <span class="badge badge-green">Recommended</span></span>
                             <span class="aud-desc">Re-engage people who showed interest but never booked.</span>
                         </label>
                         <label class="aud-card">
                             <input type="radio" name="AudienceChoice" value="all_eligible" data-audience-choice checked="@(Model.AudienceChoice == "all_eligible")" />
-                            <span class="aud-title">All contactable leads</span>
+                            <span class="aud-title">All reachable contacts</span>
                             <span class="aud-desc">Everyone you're allowed to message.</span>
                         </label>
                         <label class="aud-card">
@@ -133,14 +133,14 @@ else
                         <label class="aud-card">
                             <input type="radio" name="AudienceChoice" value="manual" data-audience-choice checked="@(Model.AudienceChoice == "manual")" />
                             <span class="aud-title">Pick people manually</span>
-                            <span class="aud-desc">Choose specific leads from your list.</span>
+                            <span class="aud-desc">Choose specific contacts from your list.</span>
                         </label>
                     </div>
 
                     <input type="hidden" name="AudienceType" id="audience-type-field" value="@Model.AudienceType" />
                     <input type="hidden" name="ManualSelection" id="manual-selection-field" value="@(Model.ManualSelection ? "true" : "false")" />
 
-                    @* Old leads who never booked *@
+                    @* Old contacts who never booked *@
                     <div id="reactivation-panel" class="aud-panel" hidden>
                         <div class="filter-row">
                             <label class="field">
@@ -161,13 +161,13 @@ else
                                     }
                                 </select>
                             </label>
-                            @if (Model.LeadSources.Count > 0)
+                            @if (Model.ContactSources.Count > 0)
                             {
                                 <label class="field">
-                                    <span>Lead source</span>
+                                    <span>Contact source</span>
                                     <select name="ReactivationSource" id="reactivation-source" class="select">
                                         <option value="">Any source</option>
-                                        @foreach (var s in Model.LeadSources)
+                                        @foreach (var s in Model.ContactSources)
                                         {
                                             <option value="@s" selected="@(s == Model.ReactivationSource)">@Omni.App.Common.Helpers.FilterLabelHelper.Label(s)</option>
                                         }
@@ -176,20 +176,20 @@ else
                             }
                         </div>
                         <div class="count-box">
-                            <div><span class="count-num" id="reactivation-match-count">—</span> <span class="text-muted">leads ready for reactivation</span></div>
-                            <button type="button" class="au-btn au-btn--outlined au-btn--sm" data-preview-btn data-preview-audience="reactivation_no_booking" data-preview-target="reactivation-preview-list">Preview leads</button>
+                            <div><span class="count-num" id="reactivation-match-count">—</span> <span class="text-muted">contacts ready for reactivation</span></div>
+                            <button type="button" class="au-btn au-btn--outlined au-btn--sm" data-preview-btn data-preview-audience="reactivation_no_booking" data-preview-target="reactivation-preview-list">Preview contacts</button>
                         </div>
-                        <div id="reactivation-preview-list" class="preview-leads-list" style="display:none"></div>
+                        <div id="reactivation-preview-list" class="preview-contacts-list" style="display:none"></div>
                     </div>
 
-                    @* All contactable leads *@
+                    @* All reachable contacts *@
                     <div id="all-eligible-panel" class="aud-panel" hidden>
                         <div class="text-subtle text-sm mt-2">Leaves out anyone without a phone number, who opted out, or who can't be messaged.</div>
                         <div class="count-box">
-                            <div><span class="count-num" id="all-eligible-match-count">—</span> <span class="text-muted">contactable leads</span></div>
-                            <button type="button" class="au-btn au-btn--outlined au-btn--sm" data-preview-btn data-preview-audience="all_eligible" data-preview-target="all-eligible-preview-list">Preview leads</button>
+                            <div><span class="count-num" id="all-eligible-match-count">—</span> <span class="text-muted">reachable contacts</span></div>
+                            <button type="button" class="au-btn au-btn--outlined au-btn--sm" data-preview-btn data-preview-audience="all_eligible" data-preview-target="all-eligible-preview-list">Preview contacts</button>
                         </div>
-                        <div id="all-eligible-preview-list" class="preview-leads-list" style="display:none"></div>
+                        <div id="all-eligible-preview-list" class="preview-contacts-list" style="display:none"></div>
                     </div>
 
                     @* Custom audience — every filter in one grid *@
@@ -214,11 +214,11 @@ else
                                     <option value="90" selected="@(Model.CustomInactiveDays == 90)">90+ days</option>
                                 </select>
                             </label>
-                            <div class="field"><span>Lead status</span>@{ await RenderMultiSelect("CustomLeadStatuses", "Any status", Model.Stages.Select(s => s.Key).ToList(), Model.CustomLeadStatuses, key => StageDisplay.Label(Model.Stages, key)); }</div>
-                            <div class="field"><span>Qualification</span>@{ await RenderMultiSelect("CustomQualificationStatuses", "Any", Model.QualificationStatusOptions, Model.CustomQualificationStatuses); }</div>
-                            @if (Model.LeadSources.Count > 0)
+                            <div class="field"><span>Stage</span>@{ await RenderMultiSelect("CustomStageKeys", "Any stage", Model.Stages.Select(s => s.Key).ToList(), Model.CustomStageKeys, key => StageDisplay.Label(Model.Stages, key)); }</div>
+                            <div class="field"><span>Qualification</span>@{ await RenderMultiSelect("CustomQualifications", "Any", Model.QualificationOptions, Model.CustomQualifications); }</div>
+                            @if (Model.ContactSources.Count > 0)
                             {
-                                <div class="field"><span>Lead source</span>@{ await RenderMultiSelect("CustomSources", "Any source", Model.LeadSources, Model.CustomSources); }</div>
+                                <div class="field"><span>Contact source</span>@{ await RenderMultiSelect("CustomSources", "Any source", Model.ContactSources, Model.CustomSources); }</div>
                             }
                             <div class="field"><span>Booking status</span>@{ await RenderMultiSelect("CustomBookingStatuses", "Any", Model.BookingStatusOptions, Model.CustomBookingStatuses); }</div>
                             <div class="field date-pair">
@@ -246,18 +246,18 @@ else
                         </div>
                         <div class="active-filters" id="custom-active-filters" hidden></div>
                         <div class="count-box">
-                            <div><span class="count-num" id="custom-match-count">—</span> <span class="text-muted">matching leads</span></div>
-                            <button type="button" class="au-btn au-btn--outlined au-btn--sm" data-preview-btn data-preview-audience="custom" data-preview-target="custom-preview-list">Preview leads</button>
+                            <div><span class="count-num" id="custom-match-count">—</span> <span class="text-muted">matching contacts</span></div>
+                            <button type="button" class="au-btn au-btn--outlined au-btn--sm" data-preview-btn data-preview-audience="custom" data-preview-target="custom-preview-list">Preview contacts</button>
                         </div>
-                        <div id="custom-preview-list" class="preview-leads-list" style="display:none"></div>
+                        <div id="custom-preview-list" class="preview-contacts-list" style="display:none"></div>
                     </div>
 
                     @* Pick people manually *@
                     <div id="manual-recipients" class="aud-panel" hidden>
                         <div class="flex items-center gap-2 mt-2 flex-wrap">
-                            <input type="search" id="lead-search-input" value="@Model.Search" class="text-input search-input manual-search" placeholder="Search by name or phone…" autocomplete="off" />
+                            <input type="search" id="contact-search-input" value="@Model.Search" class="text-input search-input manual-search" placeholder="Search by name or phone…" autocomplete="off" />
                             <span class="text-subtle text-sm" id="manual-search-hint">
-                                @(Model.Leads.Count >= 200 ? "Showing the first 200 leads. Press Enter to search all of them." : "Filters as you type.")
+                                @(Model.Contacts.Count >= 200 ? "Showing the first 200 contacts. Press Enter to search all of them." : "Filters as you type.")
                             </span>
                             <span class="sel-count" id="manual-selected-count">0 selected</span>
                         </div>
@@ -266,16 +266,16 @@ else
                             <table class="au-table">
                                 <thead><tr><th class="au-shrink"><input type="checkbox" id="manual-select-all" title="Select all shown" aria-label="Select all shown" /></th><th>Name</th><th>Phone</th><th>Status</th></tr></thead>
                                 <tbody>
-                                    @foreach (var lead in Model.Leads)
+                                    @foreach (var contact in Model.Contacts)
                                     {
-                                        <tr data-search="@(((lead.FullName ?? "") + " " + (lead.Phone ?? "")).ToLowerInvariant())">
-                                            <td><input type="checkbox" name="LeadIds" value="@lead.Id" checked="@Model.LeadIds.Contains(lead.Id)" /></td>
-                                            <td><div class="cell-person"><span class="avatar-sm">@(string.IsNullOrWhiteSpace(lead.FullName) ? "?" : lead.FullName.Trim()[..1])</span>@(lead.FullName ?? "—")</div></td>
-                                            <td>@(lead.Phone ?? "—")</td>
-                                            <td><span class="badge @StageDisplay.CssClass(Model.Stages, lead.Status)">@StageDisplay.Label(Model.Stages, lead.Status)</span></td>
+                                        <tr data-search="@(((contact.FullName ?? "") + " " + (contact.Phone ?? "")).ToLowerInvariant())">
+                                            <td><input type="checkbox" name="ContactIds" value="@contact.Id" checked="@Model.ContactIds.Contains(contact.Id)" /></td>
+                                            <td><div class="cell-person"><span class="avatar-sm">@(string.IsNullOrWhiteSpace(contact.FullName) ? "?" : contact.FullName.Trim()[..1])</span>@(contact.FullName ?? "—")</div></td>
+                                            <td>@(contact.Phone ?? "—")</td>
+                                            <td><span class="badge @StageDisplay.CssClass(Model.Stages, contact.StageKey)">@StageDisplay.Label(Model.Stages, contact.StageKey)</span></td>
                                         </tr>
                                     }
-                                    <tr class="empty-row" id="manual-empty" hidden="@(Model.Leads.Count > 0)"><td colspan="4">No leads match this search.</td></tr>
+                                    <tr class="empty-row" id="manual-empty" hidden="@(Model.Contacts.Count > 0)"><td colspan="4">No contacts match this search.</td></tr>
                                 </tbody>
                             </table>
                             </div>
@@ -308,7 +308,7 @@ else
             }
         </form>
 
-        <partial name="_StatusHelp" />
+        <partial name="_StatusHelp" model="Model.Stages" />
         <script src="~/js/multi-select.js" asp-append-version="true"></script>
         <script src="~/js/campaign-audience.js" asp-append-version="true"></script>
         <script src="~/js/campaign-create.js" asp-append-version="true"></script>

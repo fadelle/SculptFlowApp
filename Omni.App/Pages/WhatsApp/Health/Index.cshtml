@@ -34,7 +34,7 @@
 else if (Model.Health is null)
 {
     var notConnected = new EmptyStateModel(Icon: "phone_iphone", Title: "WhatsApp isn't connected yet",
-        Text: "Connect your client's WhatsApp number to chat with patients, send reminders and run campaigns.",
+        Text: "Connect your client's WhatsApp number to chat with contacts, send reminders and run campaigns.",
         ActionLabel: "Connect WhatsApp", ActionHref: "/settings/integrations", ActionIcon: "link");
     <div class="au-panel au-panel--round"><partial name="_EmptyState" model="notConnected" /></div>
 }
@@ -94,7 +94,7 @@ else
                 <div class="cell-sub">
                     @if (!string.IsNullOrWhiteSpace(h.VerifiedName))
                     {
-                        @:Shown to patients as <strong id="health-verified-name">@h.VerifiedName</strong>
+                        @:Shown to contacts as <strong id="health-verified-name">@h.VerifiedName</strong>
                         @if (!string.IsNullOrWhiteSpace(h.NameStatus))
                         {
                             <span class="badge @(string.Equals(h.NameStatus, "approved", StringComparison.OrdinalIgnoreCase) ? "badge-green" : "badge-amber")">Name @Nice(h.NameStatus).ToLowerInvariant()</span>
@@ -180,11 +180,11 @@ else
 
     <details class="au-panel au-panel--round tech mt-3">
         <summary>Technical details</summary>
-        <div class="inbox-lead-info-row"><span>WhatsApp Business Account ID</span><strong id="health-waba">@(h.WabaId ?? "—")</strong></div>
-        <div class="inbox-lead-info-row"><span>Phone status</span><strong>@(h.PhoneStatus ?? "—")</strong></div>
-        <div class="inbox-lead-info-row"><span>Account status / review</span><strong>@(h.AccountStatus ?? "—") / @(h.AccountReviewStatus ?? "—")</strong></div>
-        <div class="inbox-lead-info-row"><span>Quality rating</span><strong>@(h.PhoneQualityRating ?? "—")</strong></div>
-        <div class="inbox-lead-info-row"><span>Last problem</span><strong id="health-last-problem">@(h.LastProblemCode is null && h.LastProblemMessage is null ? "None" : $"{h.LastProblemCode} {h.LastProblemMessage}".Trim())</strong></div>
+        <div class="inbox-contact-info-row"><span>WhatsApp Business Account ID</span><strong id="health-waba">@(h.WabaId ?? "—")</strong></div>
+        <div class="inbox-contact-info-row"><span>Phone status</span><strong>@(h.PhoneStatus ?? "—")</strong></div>
+        <div class="inbox-contact-info-row"><span>Account status / review</span><strong>@(h.AccountStatus ?? "—") / @(h.AccountReviewStatus ?? "—")</strong></div>
+        <div class="inbox-contact-info-row"><span>Quality rating</span><strong>@(h.PhoneQualityRating ?? "—")</strong></div>
+        <div class="inbox-contact-info-row"><span>Last problem</span><strong id="health-last-problem">@(h.LastProblemCode is null && h.LastProblemMessage is null ? "None" : $"{h.LastProblemCode} {h.LastProblemMessage}".Trim())</strong></div>
     </details>
 
     <script>

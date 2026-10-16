@@ -46,18 +46,18 @@ public class MessageTraceRepositoryTests(PostgresFixture fixture) : RepoTestBase
     public async Task A_trace_reads_its_steps_messages_events_and_logs_and_messages_resolve_to_it()
     {
         var client = MakeClient();
-        var lead = MakeLead(client.Id);
-        var conversation = MakeConversation(client.Id, lead.Id);
+        var contact = MakeContact(client.Id);
+        var conversation = MakeConversation(client.Id, contact.Id);
         var trace = NewTrace();
         var t = new DateTimeOffset(2098, 5, 1, 9, 0, 0, TimeSpan.Zero);
         var inbound = MakeMessage(conversation, createdAt: t, externalId: "wamid." + trace);
         inbound.TraceId = trace;
         var named = MakeMessage(conversation, MessageDirection.Outbound, MessageOrigin.Ai, createdAt: t.AddSeconds(5)); // no trace id, named by a step
         var other = MakeMessage(conversation, createdAt: t.AddSeconds(1));
-        await SeedAsync(client, lead, conversation, inbound, named, other,
+        await SeedAsync(client, contact, conversation, inbound, named, other,
             Step(trace, t.AddSeconds(1), TraceSteps.SendProviderAccepted, clientId: client.Id, conversationId: conversation.Id, messageId: named.Id, externalId: "out." + trace),
             Step(trace, t, TraceSteps.MessageSaved, clientId: client.Id, conversationId: conversation.Id, messageId: inbound.Id),
-            new EventLog { Id = Guid.NewGuid(), ClientId = client.Id, ConversationId = conversation.Id, EventType = "customer_message_received", Source = "whatsapp_customer", Metadata = "{}", CreatedAt = t },
+            new EventLog { Id = Guid.NewGuid(), ClientId = client.Id, ConversationId = conversation.Id, EventType = "contact_message_received", Source = "whatsapp_customer", Metadata = "{}", CreatedAt = t },
             new EventLog { Id = Guid.NewGuid(), ClientId = client.Id, ConversationId = conversation.Id, EventType = "too_late", Metadata = "{}", CreatedAt = t.AddHours(2) },
             new AppLog { OccurredAt = t.AddSeconds(2), Level = "Error", Category = "X", Message = "boom", Fingerprint = "f", TraceId = trace, Properties = "{}" });
 
@@ -72,7 +72,7 @@ public class MessageTraceRepositoryTests(PostgresFixture fixture) : RepoTestBase
         Assert.Equal((trace, (string?)null), (messages[0].TraceId, messages[1].TraceId));
 
         var events = await repo.EventsReadOnlyAsync([conversation.Id], t.AddMinutes(-1), t.AddMinutes(10));
-        Assert.Equal("customer_message_received", Assert.Single(events).EventType);
+        Assert.Equal("contact_message_received", Assert.Single(events).EventType);
         Assert.Equal("boom", Assert.Single(await repo.LogsOfTraceReadOnlyAsync(trace)).Message);
         Assert.Empty(await repo.BillingReadOnlyAsync([inbound.Id]));
 

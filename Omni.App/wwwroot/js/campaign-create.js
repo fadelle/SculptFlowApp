@@ -4,8 +4,8 @@
 //  - "Fill in the blanks": each {{n}} dropdown writes the real Variables[n] hidden field; live WhatsApp preview
 //  - blanks only work with "Pick people manually" -> warning + Create disabled for the other audiences
 //  - audience cards highlight, custom-filter summary chips + "Clear all"
-//  - manual pick: live filter, select all, selected count, Enter = server search over all leads
-//  - Send now / Schedule toggle, and the summary bar ("template to N leads · now")
+//  - manual pick: live filter, select all, selected count, Enter = server search over all contacts
+//  - Send now / Schedule toggle, and the summary bar ("template to N contacts · now")
 (function () {
   var form = document.getElementById('campaign-form');
   if (!form) return;
@@ -27,7 +27,7 @@
 
   // ---------------------------------------------------------------- blanks + preview
   var bubble = $('wa-bubble');
-  var SAMPLE = { '{LeadFirstName}': "lead's first name", '{LeadFullName}': "lead's full name", '{LeadPhone}': "lead's phone" };
+  var SAMPLE = { '{ContactFirstName}': "contact's first name", '{ContactFullName}': "contact's full name", '{ContactPhone}': "contact's phone" };
   var varRows = document.querySelectorAll('.var-row');
 
   function syncVar(row) {
@@ -122,10 +122,10 @@
 
   // ---------------------------------------------------------------- manual pick
   var manualRows = Array.from(document.querySelectorAll('#manual-recipients tr[data-search]'));
-  var searchInput = $('lead-search-input');
+  var searchInput = $('contact-search-input');
   var selectAll = $('manual-select-all');
 
-  function selectedCount() { return form.querySelectorAll('input[name="LeadIds"]:checked').length; }
+  function selectedCount() { return form.querySelectorAll('input[name="ContactIds"]:checked').length; }
 
   function syncManual() {
     manualRows.forEach(function (r) { r.classList.toggle('row-selected', r.querySelector('input').checked); });
@@ -148,7 +148,7 @@
       if ($('manual-empty')) $('manual-empty').hidden = shown > 0;
       syncManual();
     });
-    // Enter searches ALL leads on the server (the list only holds the first 200).
+    // Enter searches ALL contacts on the server (the list only holds the first 200).
     searchInput.addEventListener('keydown', function (e) {
       if (e.key !== 'Enter') return;
       e.preventDefault();
@@ -206,7 +206,7 @@
     btn.disabled = !!problem;
     box.innerHTML = problem
       ? '<span class="summary-problem">' + esc(problem) + '</span>'
-      : '<strong>Ready:</strong> ' + esc(template) + ' to <strong>' + (n == null ? '…' : n) + (n === 1 ? ' lead' : ' leads') + '</strong> · ' + esc(when);
+      : '<strong>Ready:</strong> ' + esc(template) + ' to <strong>' + (n == null ? '…' : n) + (n === 1 ? ' contact' : ' contacts') + '</strong> · ' + esc(when);
   }
 
   document.addEventListener('campaign:count', updateSummary);

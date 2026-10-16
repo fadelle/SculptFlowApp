@@ -13,7 +13,7 @@ namespace Omni.App.Entities.Dtos.Ai;
 public record AiTriggerPayload(
     Guid ClientId,
     Guid ConversationId,
-    Guid? LeadId,
+    Guid? ContactId,
     Guid? MessageId,
     string Channel,
     string? MessageType,

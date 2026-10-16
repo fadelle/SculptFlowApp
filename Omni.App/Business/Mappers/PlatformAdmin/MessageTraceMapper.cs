@@ -32,8 +32,8 @@ public static class MessageTraceMapper
                 $"{Who(m)} {m.MessageType} message on {m.Channel}" + (m.ExternalMessageId is null ? "" : " (provider id saved)"), ids));
             // Delivery statuses come from the message row (outbound only: an inbound message has no delivery).
             if (m.Direction != MessageDirection.Outbound) continue;
-            if (m.DeliveredAt is { } delivered) entries.Add(Entry(delivered, "status", "status.delivered", TraceOutcomes.Ok, "Delivered to the patient's phone", ids));
-            if (m.ReadAt is { } read) entries.Add(Entry(read, "status", "status.read", TraceOutcomes.Ok, "Read by the patient", ids));
+            if (m.DeliveredAt is { } delivered) entries.Add(Entry(delivered, "status", "status.delivered", TraceOutcomes.Ok, "Delivered to the contact's phone", ids));
+            if (m.ReadAt is { } read) entries.Add(Entry(read, "status", "status.read", TraceOutcomes.Ok, "Read by the contact", ids));
             if (m.FailedAt is { } failed)
             {
                 entries.Add(Entry(failed, "status", "status.failed", TraceOutcomes.Failed,
@@ -86,7 +86,7 @@ public static class MessageTraceMapper
             TraceSteps.WebhookIgnored => $"Webhook ignored{on}: {D("reason")}",
             TraceSteps.MessageSaved => $"Saved to the inbox: {D("sender")} {D("type")} ({D("direction")})",
             TraceSteps.MessageDeduplicated => "Duplicate delivery; the message was already saved",
-            TraceSteps.ConversationReopened => "Closed conversation reopened by the patient",
+            TraceSteps.ConversationReopened => "Closed conversation reopened by the contact",
             TraceSteps.ConversationModeChanged => $"Conversation moved to staff: {D("reason")}",
             TraceSteps.InboxNotified => "Inbox updated for staff (live)",
             TraceSteps.BotSkipped => $"Bot not asked: {D("reason")}",
@@ -108,7 +108,7 @@ public static class MessageTraceMapper
 
     private static string Who(TraceMessageRow m) => m.SenderType switch
     {
-        MessageSenderType.Lead => "Patient",
+        MessageSenderType.Contact => "Contact",
         MessageSenderType.Ai => "AI",
         MessageSenderType.Staff => "Staff",
         _ => "System"

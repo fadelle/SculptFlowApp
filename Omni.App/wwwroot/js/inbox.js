@@ -7,9 +7,9 @@
 (function () {
   var cfg = window.PS_INBOX_CONFIG || {};
   var currentConversationId = null;
-  var currentLeadId = null;
+  var currentContactId = null;
   var currentWindowOpen = true;
-  var leadInfoCache = {}; // leadId -> LeadResponse, avoids refetching every toggle
+  var contactInfoCache = {}; // contactId -> ContactResponse, avoids refetching every toggle
   var approvedTemplates = null; // WhatsAppTemplateResponse[], lazy-loaded on first "Send Template" click
 
   var listEl = document.getElementById('inbox-list');
@@ -29,7 +29,7 @@
   var btnMore = document.getElementById('inbox-btn-more');
   var moreMenuEl = document.getElementById('inbox-more-menu');
   var btnInfo = document.getElementById('inbox-btn-info');
-  var leadInfoEl = document.getElementById('inbox-lead-info');
+  var contactInfoEl = document.getElementById('inbox-contact-info');
   var windowClosedNoticeEl = document.getElementById('inbox-window-closed-notice');
   var btnSendTemplate = document.getElementById('inbox-btn-send-template');
   var templatePickerEl = document.getElementById('inbox-template-picker');
@@ -41,7 +41,7 @@
   var threadAvatarEl = document.getElementById('inbox-thread-avatar');
   var searchEl = document.getElementById('inbox-search');
   var btnBack = document.getElementById('inbox-btn-back');
-  var btnLeadClose = document.getElementById('inbox-lead-close');
+  var btnContactClose = document.getElementById('inbox-contact-close');
   var listFilter = 'all'; // all | needs | ai | closed — purely client-side, over the list already loaded
 
   // ---------------------------------------------------------------------
@@ -238,12 +238,12 @@
       var closed = c.status === 'closed' || c.status === 'archived';
       div.className = 'inbox-conv-item' + (c.id === currentConversationId ? ' active' : '') + (unreadCount > 0 ? ' unread' : '') + (closed ? ' closed' : '');
       div.setAttribute('data-conversation-id', c.id);
-      div.setAttribute('data-lead-name', c.leadFullName || 'Unknown');
+      div.setAttribute('data-contact-name', c.contactFullName || 'Unknown');
       div.setAttribute('data-service-name', c.serviceName || '');
       div.setAttribute('data-channel', c.channel || '');
       div.setAttribute('data-mode', c.mode || '');
       div.setAttribute('data-closed', closed ? 'true' : 'false');
-      div.setAttribute('data-search', ((c.leadFullName || '') + ' ' + (c.leadPhone || '') + ' ' + (c.serviceName || '')).toLowerCase());
+      div.setAttribute('data-search', ((c.contactFullName || '') + ' ' + (c.contactPhone || '') + ' ' + (c.serviceName || '')).toLowerCase());
 
       // "Needs Human" means AI is paused, the customer spoke last, AND staff haven't opened it yet
       // — not just "mode is human". Staff sending from the dashboard also sets mode to human, but
@@ -259,12 +259,12 @@
           : '<span class="inbox-mode inbox-mode-' + escapeHtml(c.mode) + '">' + escapeHtml(modeLabel(c.mode)) + '</span>';
 
       div.innerHTML =
-        '<span class="inbox-avatar">' + escapeHtml(initials(c.leadFullName)) +
+        '<span class="inbox-avatar">' + escapeHtml(initials(c.contactFullName)) +
           '<span class="inbox-channel-icon" style="background:' + channelColor(c.channel) + '" title="' + escapeHtml(c.channel) + '">' + (channelIcon(c.channel) || channelInitials(c.channel)) + '</span>' +
         '</span>' +
         '<div class="inbox-conv-main">' +
           '<div class="inbox-conv-top">' +
-            '<span class="inbox-conv-name">' + escapeHtml(c.leadFullName || 'Unknown') + '</span>' +
+            '<span class="inbox-conv-name">' + escapeHtml(c.contactFullName || 'Unknown') + '</span>' +
             (unreadCount > 0 ? '<span class="inbox-unread-badge" title="' + unreadCount + ' unread">' + (unreadCount > 99 ? '99+' : unreadCount) + '</span>' : '') +
             '<span class="inbox-conv-time" data-timestamp="' + (c.lastMessageAt || c.createdAt) + '"></span>' +
           '</div>' +
@@ -311,17 +311,15 @@
   var TELEGRAM_SVG = '<svg viewBox="0 0 24 24" fill="#fff" xmlns="http://www.w3.org/2000/svg"><path d="M9.78 18.65l.28-4.23 7.68-6.92c.34-.31-.07-.46-.52-.19L7.74 13.3 3.64 12c-.88-.25-.89-.86.2-1.3l15.97-6.16c.73-.33 1.43.18 1.15 1.3l-2.72 12.81c-.19.91-.74 1.13-1.5.71L12.6 16.3l-1.99 1.93c-.23.23-.42.42-.83.42z"/></svg>';
   function channelIcon(channel) { return channel === 'whatsapp' ? WHATSAPP_SVG : (channel === 'telegram' ? TELEGRAM_SVG : null); }
 
-  // Lead status badge colours — mirrors the lead-status entries in Common/Helpers/StatusBadgeHelper.cs.
-  var LEAD_STATUS_BADGES = {
-    new: 'badge-blue', contacted: 'badge-amber', qualified: 'badge-purple',
-    consultation_booked: 'badge-amber', consultation_attended: 'badge-green', no_show: 'badge-red',
-    surgery_booked: 'badge-teal', not_interested: 'badge-gray', needs_human: 'badge-red', lost: 'badge-gray'
+  // The client's pipeline stages ({key, category, label}); badge colours by category mirror Common/Helpers/StageDisplay.cs,
+  // and the journey shows how far along the categories in cfg.journeyCategories a contact is (0 = off that path).
+  var STAGES = {};
+  (cfg.stages || []).forEach(function (s) { STAGES[s.key] = s; });
+  var CATEGORY_BADGES = {
+    open: 'badge-blue', booked: 'badge-amber', attended: 'badge-green', no_show: 'badge-red',
+    converted: 'badge-teal', closed_lost: 'badge-gray', needs_human: 'badge-red'
   };
-
-  // How far along new -> qualified -> booking -> surgery a lead status is (0 = off that path).
-  var JOURNEY_STEP = {
-    new: 1, contacted: 1, qualified: 2, consultation_booked: 3, consultation_attended: 3, surgery_booked: 4
-  };
+  function journeyStep(category) { return (cfg.journeyCategories || []).indexOf(category) + 1; }
 
   function escapeHtml(s) {
     var div = document.createElement('div');
@@ -406,14 +404,14 @@
     messagesEl.scrollTop = messagesEl.scrollHeight;
   }
 
-  // ConversationResponse (from the API) doesn't carry lead/service display info — that's a
+  // ConversationResponse (from the API) doesn't carry contact/service display info — that's a
   // list-only concern (ConversationListRow). We already have it on the clicked list item's own
   // data attributes, so read it from there instead of adding it to the conversation DTO.
   function renderConversationHeader(conversation) {
     var listItem = document.querySelector('.inbox-conv-item[data-conversation-id="' + conversation.id + '"]');
-    var leadName = (listItem && listItem.getAttribute('data-lead-name')) || 'Unknown';
-    nameEl.textContent = leadName;
-    threadAvatarEl.textContent = initials(leadName);
+    var contactName = (listItem && listItem.getAttribute('data-contact-name')) || 'Unknown';
+    nameEl.textContent = contactName;
+    threadAvatarEl.textContent = initials(contactName);
     var service = (listItem && listItem.getAttribute('data-service-name')) || '';
     serviceEl.textContent = [service, channelLabel(conversation.channel)].filter(Boolean).join(' · ');
     modeEl.textContent = conversation.mode === 'ai' ? 'AI is replying' : (conversation.mode === 'human' ? 'Staff is replying' : 'Awaiting approval');
@@ -456,7 +454,7 @@
     threadEl.hidden = false;
     shellEl.classList.add('has-thread'); // phones show one pane at a time
     if (switchingConversation) {
-      leadInfoEl.hidden = true; // don't show the previous conversation's lead while the new one loads
+      contactInfoEl.hidden = true; // don't show the previous conversation's contact while the new one loads
       markRead(id); // opening a conversation = reading it
       // Drop its unread marker right away instead of waiting for the round trip.
       var opened = document.querySelector('.inbox-conv-item[data-conversation-id="' + id + '"]');
@@ -472,64 +470,65 @@
     });
 
     return apiGet(withClient('/api/conversations/' + id)).then(function (result) {
-      currentLeadId = result.conversation.leadId;
+      currentContactId = result.conversation.contactId;
       renderConversationHeader(result.conversation);
       renderMessages(result.messages);
-      if (!leadInfoEl.hidden) {
-        loadLeadInfo(currentLeadId); // panel was left open across a refresh — keep it current
+      if (!contactInfoEl.hidden) {
+        loadContactInfo(currentContactId); // panel was left open across a refresh — keep it current
       }
     });
   }
 
   // ---------------------------------------------------------------------
-  // Lead info corner
+  // Contact info corner
   // ---------------------------------------------------------------------
-  function loadLeadInfo(leadId) {
-    var cached = leadInfoCache[leadId];
-    var render = function (lead) {
-      var name = lead.fullName || nameEl.textContent || 'Unknown';
-      document.getElementById('inbox-lead-name').textContent = name;
-      document.getElementById('inbox-lead-avatar').textContent = initials(name);
-      var statusEl = document.getElementById('inbox-lead-status');
-      statusEl.textContent = (lead.status || '—').replace(/_/g, ' ');
-      statusEl.className = 'badge ' + (LEAD_STATUS_BADGES[lead.status] || 'badge-gray');
-      document.getElementById('inbox-lead-phone').textContent = lead.phone || '—';
-      document.getElementById('inbox-lead-email').textContent = lead.email || '—';
-      document.getElementById('inbox-lead-service').textContent = lead.serviceName || '—';
-      document.getElementById('inbox-lead-source').textContent = lead.source || '—';
-      document.getElementById('inbox-lead-timeline').textContent = lead.desiredTimeline || '—';
-      document.getElementById('inbox-lead-followup').textContent = formatDate(lead.nextFollowupAt);
-      document.getElementById('inbox-lead-created').textContent = formatDate(lead.createdAt);
-      document.getElementById('inbox-lead-profile').href = '/dashboard/leads/' + lead.id;
+  function loadContactInfo(contactId) {
+    var cached = contactInfoCache[contactId];
+    var render = function (contact) {
+      var name = contact.fullName || nameEl.textContent || 'Unknown';
+      document.getElementById('inbox-contact-name').textContent = name;
+      document.getElementById('inbox-contact-avatar').textContent = initials(name);
+      var stage = STAGES[contact.stageKey];
+      var stageEl = document.getElementById('inbox-contact-stage');
+      stageEl.textContent = stage ? stage.label : (contact.stageKey || '—').replace(/_/g, ' ');
+      stageEl.className = 'badge ' + ((stage && CATEGORY_BADGES[stage.category]) || 'badge-gray');
+      document.getElementById('inbox-contact-phone').textContent = contact.phone || '—';
+      document.getElementById('inbox-contact-email').textContent = contact.email || '—';
+      document.getElementById('inbox-contact-service').textContent = contact.serviceName || '—';
+      document.getElementById('inbox-contact-source').textContent = contact.source || '—';
+      document.getElementById('inbox-contact-timeline').textContent = contact.desiredTimeline || '—';
+      document.getElementById('inbox-contact-followup').textContent = formatDate(contact.nextFollowupAt);
+      document.getElementById('inbox-contact-created').textContent = formatDate(contact.createdAt);
+      document.getElementById('inbox-contact-profile').href = '/dashboard/contacts/' + contact.id;
 
-      var step = JOURNEY_STEP[lead.status] || 0;
-      document.getElementById('inbox-lead-journey-wrap').hidden = step === 0; // off-path statuses (lost, no-show…) show just the badge
-      document.querySelectorAll('#inbox-lead-journey i').forEach(function (el, i) { el.classList.toggle('on', i < step); });
+      var step = stage ? journeyStep(stage.category) : 0;
+      document.getElementById('inbox-contact-journey-wrap').hidden = step === 0; // off-path stages (lost, no-show…) show just the badge
+      document.querySelectorAll('#inbox-contact-journey i').forEach(function (el, i) { el.classList.toggle('on', i < step); });
     };
 
     if (cached) {
       render(cached);
       return Promise.resolve();
     }
-    return apiGet(withClient('/api/leads/' + leadId)).then(function (lead) {
-      leadInfoCache[leadId] = lead;
-      render(lead);
+    return apiGet(withClient('/api/contacts/' + contactId)).then(function (contact) {
+      contactInfoCache[contactId] = contact;
+      render(contact);
     });
   }
 
   btnInfo.addEventListener('click', function () {
-    if (!currentLeadId) return;
-    var willShow = leadInfoEl.hidden;
-    leadInfoEl.hidden = !willShow;
-    if (willShow) loadLeadInfo(currentLeadId);
+    if (!currentContactId) return;
+    var willShow = contactInfoEl.hidden;
+    contactInfoEl.hidden = !willShow;
+    if (willShow) loadContactInfo(currentContactId);
   });
 
-  btnLeadClose.addEventListener('click', function () { leadInfoEl.hidden = true; });
+  btnContactClose.addEventListener('click', function () { contactInfoEl.hidden = true; });
 
   // Phones: back from the thread to the list.
   btnBack.addEventListener('click', function () {
     shellEl.classList.remove('has-thread');
-    leadInfoEl.hidden = true;
+    contactInfoEl.hidden = true;
   });
 
   function refreshCurrentConversation() {
@@ -760,7 +759,7 @@
     var query = new URLSearchParams(window.location.search);
     var wanted = query.get('conversationId');
     if (wanted) selectConversation(wanted);
-    // "Open in Inbox" from a lead page (/inbox?search=<phone>): pre-fill the list search, and open
+    // "Open in Inbox" from a contact page (/inbox?search=<phone>): pre-fill the list search, and open
     // the conversation straight away when exactly one matches.
     // Dashboard 'Needs attention' link (/inbox?filter=needs): open with that tab selected.
     var filterTab = query.get('filter') && document.querySelector('.inbox-filter[data-filter="' + query.get('filter') + '"]');

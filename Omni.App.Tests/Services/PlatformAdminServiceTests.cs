@@ -5,9 +5,9 @@ using Omni.App.Business.Services.PlatformAdmin;
 
 namespace Omni.App.Tests.Services;
 
-public class LeadAdminServiceTests
+public class ContactAdminServiceTests
 {
-    private readonly Mock<ILeadAdminRepository> _repo = new();
+    private readonly Mock<IContactAdminRepository> _repo = new();
     private readonly Mock<IUnitOfWork> _uow = new();
     private readonly Mock<IConversationService> _conversations = new();
     private readonly Mock<IBookingService> _bookings = new();
@@ -16,28 +16,28 @@ public class LeadAdminServiceTests
 
     private readonly Mock<IBusinessTypeService> _businessTypes = TextKit.PermissiveBusinessTypes();
 
-    private LeadAdminService Sut() => new(_repo.Object, _uow.Object, _conversations.Object, _bookings.Object, _time, _businessTypes.Object);
+    private ContactAdminService Sut() => new(_repo.Object, _uow.Object, _conversations.Object, _bookings.Object, _time, _businessTypes.Object);
 
     [Fact]
-    public async Task Lead_update_validates_values_and_tracks_opt_out_transitions()
+    public async Task Contact_update_validates_values_and_tracks_opt_out_transitions()
     {
-        await Assert.ThrowsAsync<ArgumentException>(() => Sut().UpdateLeadAsync(Guid.NewGuid(), new LeadUpdate("new", "bogus", true, null), default));
-        await Assert.ThrowsAsync<KeyNotFoundException>(() => Sut().UpdateLeadAsync(Guid.NewGuid(), new LeadUpdate("new", "hot", true, null), default));
+        await Assert.ThrowsAsync<ArgumentException>(() => Sut().UpdateContactAsync(Guid.NewGuid(), new ContactUpdate("new", "bogus", true, null), default));
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => Sut().UpdateContactAsync(Guid.NewGuid(), new ContactUpdate("new", "hot", true, null), default));
 
-        var lead = new Lead { Id = Guid.NewGuid(), ClientId = _clientId, MarketingOptIn = true };
-        _repo.Setup(r => r.GetLeadForUpdateAsync(lead.Id, It.IsAny<CancellationToken>())).ReturnsAsync(lead);
-        // The status must be a stage of the lead's client's business type.
+        var contact = new Contact { Id = Guid.NewGuid(), ClientId = _clientId, MarketingOptIn = true };
+        _repo.Setup(r => r.GetContactForUpdateAsync(contact.Id, It.IsAny<CancellationToken>())).ReturnsAsync(contact);
+        // The status must be a stage of the contact's client's business type.
         _businessTypes.Setup(t => t.IsStageOfClientAsync(_clientId, "bogus", It.IsAny<CancellationToken>())).ReturnsAsync(false);
-        var unknown = await Assert.ThrowsAsync<ArgumentException>(() => Sut().UpdateLeadAsync(lead.Id, new LeadUpdate("bogus", "hot", true, null), default));
+        var unknown = await Assert.ThrowsAsync<ArgumentException>(() => Sut().UpdateContactAsync(contact.Id, new ContactUpdate("bogus", "hot", true, null), default));
         Assert.Equal("'bogus' isn't one of your contact stages.", TextKit.Localizer().Localize(unknown));
-        var change = await Sut().UpdateLeadAsync(lead.Id, new LeadUpdate("qualified", "hot", false, "  call back  "), default);
+        var change = await Sut().UpdateContactAsync(contact.Id, new ContactUpdate("qualified", "hot", false, "  call back  "), default);
         Assert.Equal(_clientId, change.ClientId);
-        Assert.Equal(("qualified", "hot", false, "call back"), (lead.Status, lead.QualificationStatus, lead.MarketingOptIn, lead.Notes));
-        Assert.NotNull(lead.OptedOutAt);
+        Assert.Equal(("qualified", "hot", false, "call back"), (contact.StageKey, contact.Qualification, contact.MarketingOptIn, contact.Notes));
+        Assert.NotNull(contact.OptedOutAt);
 
-        await Sut().UpdateLeadAsync(lead.Id, new LeadUpdate("qualified", "hot", true, " "), default);
-        Assert.Null(lead.OptedOutAt);
-        Assert.Null(lead.Notes);
+        await Sut().UpdateContactAsync(contact.Id, new ContactUpdate("qualified", "hot", true, " "), default);
+        Assert.Null(contact.OptedOutAt);
+        Assert.Null(contact.Notes);
         _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Exactly(2));
     }
 
@@ -86,17 +86,17 @@ public class LeadAdminServiceTests
     [Fact]
     public async Task Reads_map_entities_and_clamp_message_counts()
     {
-        Assert.Null(await Sut().GetLeadAsync(Guid.NewGuid(), default));
-        var lead = new Lead { Id = Guid.NewGuid(), ClientId = _clientId, FullName = "Ann", Client = new Client { Id = _clientId, Name = "C" }, Service = new Service { Id = Guid.NewGuid(), Name = "Rhino" } };
-        _repo.Setup(r => r.GetLeadAsync(lead.Id, It.IsAny<CancellationToken>())).ReturnsAsync(lead);
-        var detail = await Sut().GetLeadAsync(lead.Id, default);
+        Assert.Null(await Sut().GetContactAsync(Guid.NewGuid(), default));
+        var contact = new Contact { Id = Guid.NewGuid(), ClientId = _clientId, FullName = "Ann", Client = new Client { Id = _clientId, Name = "C" }, Service = new Service { Id = Guid.NewGuid(), Name = "Rhino" } };
+        _repo.Setup(r => r.GetContactAsync(contact.Id, It.IsAny<CancellationToken>())).ReturnsAsync(contact);
+        var detail = await Sut().GetContactAsync(contact.Id, default);
         Assert.Equal(("Ann", "C", "Rhino"), (detail!.FullName, detail.Client!.Name, detail.Service!.Name));
 
-        _repo.Setup(r => r.LeadEventsAsync(lead.Id, It.IsAny<CancellationToken>())).ReturnsAsync(new List<EventLog> { new() { Id = Guid.NewGuid(), EventType = "x", Metadata = "{}" } });
-        Assert.Single(await Sut().LeadEventsAsync(lead.Id, default));
+        _repo.Setup(r => r.ContactEventsAsync(contact.Id, It.IsAny<CancellationToken>())).ReturnsAsync(new List<EventLog> { new() { Id = Guid.NewGuid(), EventType = "x", Metadata = "{}" } });
+        Assert.Single(await Sut().ContactEventsAsync(contact.Id, default));
 
         Assert.Null(await Sut().GetConversationAsync(Guid.NewGuid(), default));
-        var c = new Conversation { Id = Guid.NewGuid(), ClientId = _clientId, Channel = "whatsapp", ServiceWindowExpiresAt = DateTimeOffset.UtcNow.AddHours(1), Lead = lead };
+        var c = new Conversation { Id = Guid.NewGuid(), ClientId = _clientId, Channel = "whatsapp", ServiceWindowExpiresAt = DateTimeOffset.UtcNow.AddHours(1), Contact = contact };
         _repo.Setup(r => r.GetConversationAsync(c.Id, It.IsAny<CancellationToken>())).ReturnsAsync(c);
         Assert.True((await Sut().GetConversationAsync(c.Id, default))!.IsServiceWindowOpen);
 
@@ -109,11 +109,11 @@ public class LeadAdminServiceTests
     [Fact]
     public async Task List_methods_delegate()
     {
-        await Sut().ListLeadsAsync(_clientId, "new", "q", 2, default);
+        await Sut().ListContactsAsync(_clientId, "new", "q", 2, default);
         await Sut().ListConversationsAsync(_clientId, null, "whatsapp", "ai", "active", 1, default);
         await Sut().ListMessagesAsync(_clientId, true, "ai", "q", 3, default);
         await Sut().ListBookingsAsync(_clientId, null, "booked", true, 1, default);
-        _repo.Verify(r => r.ListLeadsAsync(_clientId, "new", "q", 2, It.IsAny<CancellationToken>()), Times.Once);
+        _repo.Verify(r => r.ListContactsAsync(_clientId, "new", "q", 2, It.IsAny<CancellationToken>()), Times.Once);
         _repo.Verify(r => r.ListMessagesAsync(_clientId, true, "ai", "q", 3, It.IsAny<CancellationToken>()), Times.Once);
     }
 }
@@ -505,6 +505,6 @@ public class PlatformAdminMapperTests
         var msg = new Message { Id = Guid.NewGuid(), Content = "hi", Direction = "inbound" };
         Assert.Equal("hi", PlatformAdminMapper.ToDetail(msg).Content);
         var convo = new Conversation { Id = Guid.NewGuid(), Channel = "whatsapp" };
-        Assert.Null(PlatformAdminMapper.ToDetail(convo, DateTimeOffset.UtcNow).Lead);
+        Assert.Null(PlatformAdminMapper.ToDetail(convo, DateTimeOffset.UtcNow).Contact);
     }
 }

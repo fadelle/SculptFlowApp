@@ -103,7 +103,7 @@ public class ViewerTimeZoneTests
 
 public class ConversationModeSyncTests
 {
-    private static Conversation Make(string mode) => new() { Id = Guid.NewGuid(), ClientId = Guid.NewGuid(), LeadId = Guid.NewGuid(), Mode = mode, Channel = "whatsapp" };
+    private static Conversation Make(string mode) => new() { Id = Guid.NewGuid(), ClientId = Guid.NewGuid(), ContactId = Guid.NewGuid(), Mode = mode, Channel = "whatsapp" };
 
     [Fact]
     public void Ai_to_human_sets_flags_and_adds_marker_dated_just_before_the_message()
@@ -211,7 +211,7 @@ public class LabelAndBadgeTests
     [Theory]
     [InlineData(null, "—")]
     [InlineData("", "—")]
-    [InlineData("consultation_booked", "Booked")]
+    [InlineData("needs_human", "Needs human review")]
     [InlineData("NO_SHOW", "No-show")]
     [InlineData("some_new_status", "Some new status")]
     public void FilterLabel(string? v, string expected) => Assert.Equal(expected, FilterLabelHelper.Label(v));

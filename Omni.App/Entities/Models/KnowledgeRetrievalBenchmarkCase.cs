@@ -6,7 +6,7 @@ namespace Omni.App.Entities.Models;
 // diagnostic feature: nothing in production ingestion or search reads or writes them, and no benchmark state
 // is stored on KnowledgeDocument / KnowledgeChunk.
 
-/// <summary>One realistic patient question plus the single chunk that is known to answer it. The expected
+/// <summary>One realistic contact question plus the single chunk that is known to answer it. The expected
 /// document/chunk ids are plain columns (not foreign keys) on purpose: chunks get new ids whenever their
 /// document is re-saved, and the benchmark must never block production ingestion. A case whose chunk has
 /// disappeared or changed is flagged <see cref="IsStale"/> and excluded from scoring.</summary>

@@ -11,7 +11,7 @@ namespace Omni.App.Business.Engines.Telegram;
 /// Telegram Business seam: today only the "message" update is parsed. Business-connected accounts
 /// deliver "business_message" / "business_connection" updates instead — supporting them later means
 /// adding a branch here that maps a business_message onto the same <see cref="ParsedTelegramMessage"/>
-/// (plus a business_connection_id -> channel_integration lookup in the webhook controller). Lead,
+/// (plus a business_connection_id -> channel_integration lookup in the webhook controller). Contact,
 /// Conversation, Message, Inbox, n8n and the send path would not change.
 /// </summary>
 public static class TelegramUpdateParser
@@ -41,7 +41,7 @@ public static class TelegramUpdateParser
             return Ignored(updateId, "no_chat");
         }
 
-        // Only 1:1 chats with the bot are leads; groups/supergroups/channels are not patient conversations.
+        // Only 1:1 chats with the bot are contacts; groups/supergroups/channels are not contact conversations.
         if (GetString(chat, "type") != "private")
         {
             return Ignored(updateId, "non_private_chat");

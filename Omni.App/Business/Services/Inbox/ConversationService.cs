@@ -1,4 +1,5 @@
 using Omni.App.Business.Contracts.Managers;
+using Omni.App.Business.Contracts.Services.BusinessTypes;
 using Omni.App.Business.Contracts.Services.Inbox;
 using Omni.App.Business.Contracts.Services.Notifications;
 using Omni.App.Business.Mappers.Inbox;
@@ -12,7 +13,7 @@ using Omni.App.Entities.Requests.Inbox;
 using Omni.App.Entities.Responses.Inbox;
 using Omni.App.Persistence.Contracts;
 using Omni.App.Persistence.Contracts.Inbox;
-using Omni.App.Persistence.Contracts.Leads;
+using Omni.App.Persistence.Contracts.Contacts;
 
 namespace Omni.App.Business.Services.Inbox;
 
@@ -20,44 +21,46 @@ public class ConversationService : IConversationService
 {
     private readonly IConversationRepository _conversations;
     private readonly IMessageRepository _messages;
-    private readonly ILeadRepository _leads;
+    private readonly IContactRepository _contacts;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IInboxNotifier _notifier;
     private readonly IEventLogger _events;
     private readonly INotificationService _notifications;
     private readonly IInboxSettingsService _inboxSettings;
+    private readonly IBusinessTypeService _businessTypes;
 
-    public ConversationService(IConversationRepository conversations, IMessageRepository messages, ILeadRepository leads,
+    public ConversationService(IConversationRepository conversations, IMessageRepository messages, IContactRepository contacts,
         IUnitOfWork unitOfWork, IInboxNotifier notifier, IEventLogger events, INotificationService notifications,
-        IInboxSettingsService inboxSettings)
+        IInboxSettingsService inboxSettings, IBusinessTypeService businessTypes)
     {
         _inboxSettings = inboxSettings;
+        _businessTypes = businessTypes;
         _conversations = conversations;
         _messages = messages;
-        _leads = leads;
+        _contacts = contacts;
         _unitOfWork = unitOfWork;
         _notifier = notifier;
         _events = events;
         _notifications = notifications;
     }
 
-    /// <summary>Staff opening a conversation: the lead must be one of this client's (404 otherwise, never a foreign-key 500
-    /// or a conversation tied to another client's lead).</summary>
+    /// <summary>Staff opening a conversation: the contact must be one of this client's (404 otherwise, never a foreign-key 500
+    /// or a conversation tied to another client's contact).</summary>
     public async Task<ConversationResponse> CreateAsync(CreateConversationRequest request, CancellationToken ct = default)
     {
         if (!ConversationChannel.All.Contains(request.Channel))
         {
             throw new ArgumentException($"Invalid channel '{request.Channel}'.", nameof(request));
         }
-        if (await _leads.GetAsync(request.ClientId, request.LeadId, ct) is null)
+        if (await _contacts.GetAsync(request.ClientId, request.ContactId, ct) is null)
         {
-            throw new KeyNotFoundException("Lead not found.");
+            throw new KeyNotFoundException("Contact not found.");
         }
 
         return await CreateCoreAsync(request, ct);
     }
 
-    /// <summary>Creates the row without the lead lookup — for callers that just resolved or created the lead themselves.</summary>
+    /// <summary>Creates the row without the contact lookup — for callers that just resolved or created the contact themselves.</summary>
     private async Task<ConversationResponse> CreateCoreAsync(CreateConversationRequest request, CancellationToken ct)
     {
         if (!ConversationChannel.All.Contains(request.Channel))
@@ -78,7 +81,7 @@ public class ConversationService : IConversationService
         {
             Id = Guid.NewGuid(),
             ClientId = request.ClientId,
-            LeadId = request.LeadId,
+            ContactId = request.ContactId,
             Channel = request.Channel,
             ExternalThreadId = request.ExternalThreadId,
             Status = ConversationStatus.Active,
@@ -92,18 +95,18 @@ public class ConversationService : IConversationService
         return conversation;
     }
 
-    public async Task<ConversationResponse> GetOrCreateForLeadAsync(Guid clientId, Guid leadId, string channel, CancellationToken ct = default)
+    public async Task<ConversationResponse> GetOrCreateForContactAsync(Guid clientId, Guid contactId, string channel, CancellationToken ct = default)
     {
-        var existing = await _conversations.FindForLeadAsync(clientId, leadId, channel, ct);
+        var existing = await _conversations.FindForContactAsync(clientId, contactId, channel, ct);
         if (existing is not null) return InboxMapper.ToResponse(existing);
 
-        return await CreateCoreAsync(new CreateConversationRequest(clientId, leadId, channel, ExternalThreadId: null), ct);
+        return await CreateCoreAsync(new CreateConversationRequest(clientId, contactId, channel, ExternalThreadId: null), ct);
     }
 
-    public async Task<ConversationResponse> GetOrCreateForLeadAsync(
-        Guid clientId, Guid leadId, string channel, string externalThreadId, CancellationToken ct = default)
+    public async Task<ConversationResponse> GetOrCreateForContactAsync(
+        Guid clientId, Guid contactId, string channel, string externalThreadId, CancellationToken ct = default)
     {
-        var existing = await _conversations.FindForLeadAsync(clientId, leadId, channel, ct);
+        var existing = await _conversations.FindForContactAsync(clientId, contactId, channel, ct);
         if (existing is not null)
         {
             if (string.IsNullOrEmpty(existing.ExternalThreadId))
@@ -119,7 +122,7 @@ public class ConversationService : IConversationService
         {
             throw new ArgumentException($"Invalid channel '{channel}'.", nameof(channel));
         }
-        var created = AddNew(new CreateConversationRequest(clientId, leadId, channel, externalThreadId),
+        var created = AddNew(new CreateConversationRequest(clientId, contactId, channel, externalThreadId),
             await _inboxSettings.InitialModeAsync(clientId, ct));
         if (await _unitOfWork.TrySaveChangesAsync(ct))
         {
@@ -150,7 +153,7 @@ public class ConversationService : IConversationService
         {
             throw new ArgumentException($"Invalid message direction '{request.Direction}'.", nameof(request));
         }
-        if (request.SenderType is not (MessageSenderType.Lead or MessageSenderType.Ai or MessageSenderType.Staff or MessageSenderType.System))
+        if (request.SenderType is not (MessageSenderType.Contact or MessageSenderType.Ai or MessageSenderType.Staff or MessageSenderType.System))
         {
             throw new ArgumentException($"Invalid sender type '{request.SenderType}'.", nameof(request));
         }
@@ -166,7 +169,7 @@ public class ConversationService : IConversationService
             Id = Guid.NewGuid(),
             ClientId = clientId,
             ConversationId = conversationId,
-            LeadId = conversation.LeadId,
+            ContactId = conversation.ContactId,
             Direction = request.Direction,
             SenderType = request.SenderType,
             Channel = request.Channel,
@@ -187,7 +190,7 @@ public class ConversationService : IConversationService
         conversation.LastMessageDirection = request.Direction;
         conversation.UpdatedAt = now;
 
-        // A patient's message reopens a closed conversation (same rule as MessageService.IngestAsync).
+        // A contact's message reopens a closed conversation (same rule as MessageService.IngestAsync).
         var reopened = request.Direction == MessageDirection.Inbound && ConversationStatusSync.ReopenIfNotActive(conversation, now);
         if (reopened)
         {
@@ -202,14 +205,17 @@ public class ConversationService : IConversationService
             ConversationModeSync.Apply(conversation, ConversationMode.Human, now);
         }
 
-        var lead = await _leads.GetByIdAsync(conversation.LeadId, ct);
-        if (lead is not null)
+        var contact = await _contacts.GetByIdAsync(conversation.ContactId, ct);
+        if (contact is not null)
         {
-            lead.LastContactAt = now;
-            lead.UpdatedAt = now;
-            if (lead.Status == LeadStatus.New && request.Direction == MessageDirection.Outbound)
+            contact.LastContactAt = now;
+            contact.UpdatedAt = now;
+            // The first reply moves a contact out of the entry stage to the next open stage ("new" → "contacted" in both
+            // built-in types); a type with a single open stage keeps the contact where it is.
+            if (request.Direction == MessageDirection.Outbound
+                && (await _businessTypes.GetPipelineAsync(clientId, ct)).NextAfterEntry(contact.StageKey) is { } next)
             {
-                lead.Status = LeadStatus.Contacted;
+                contact.StageKey = next;
             }
         }
 
@@ -269,14 +275,25 @@ public class ConversationService : IConversationService
         var result = await SetModeAsync(clientId, conversationId, ConversationMode.Human, EventTypes.HumanHandoff,
             MessageOrigin.Ai, System.Text.Json.JsonSerializer.Serialize(new { reason }), ct);
 
+        // The contact now needs a person: move it to the needs-human stage (it stays put when its stage already has that
+        // category, e.g. a second needs-human stage such as "Medical question").
+        if (result is not null && await _contacts.GetByIdAsync(result.ContactId, ct) is { } contact
+            && (await _businessTypes.GetPipelineAsync(clientId, ct)).MoveTo(contact.StageKey, StageCategory.NeedsHuman) is { } stage
+            && stage != contact.StageKey)
+        {
+            contact.StageKey = stage;
+            contact.UpdatedAt = DateTimeOffset.UtcNow;
+            await _unitOfWork.SaveChangesAsync(ct);
+        }
+
         if (result is not null && !wasAlreadyHuman)
         {
-            var leadName = await _leads.GetFullNameAsync(result.LeadId, ct);
+            var contactName = await _contacts.GetFullNameAsync(result.ContactId, ct);
             await _notifications.CreateAsync(clientId, NotificationType.Handoff,
                 "AI handed off to staff",
-                (string.IsNullOrWhiteSpace(leadName) ? "A conversation" : leadName) +
+                (string.IsNullOrWhiteSpace(contactName) ? "A conversation" : contactName) +
                 (string.IsNullOrWhiteSpace(reason) ? " needs staff attention." : $" needs staff attention: {reason}"),
-                leadId: result.LeadId, conversationId: conversationId,
+                contactId: result.ContactId, conversationId: conversationId,
                 link: $"/inbox?conversationId={conversationId}", ct: ct);
         }
 
@@ -339,8 +356,8 @@ public class ConversationService : IConversationService
     {
         if (senderType == MessageSenderType.Ai) return MessageOrigin.Ai;
         if (senderType == MessageSenderType.Staff) return MessageOrigin.Dashboard;
-        if (senderType == MessageSenderType.Lead && channel == ConversationChannel.WhatsApp) return MessageOrigin.WhatsAppCustomer;
-        if (senderType == MessageSenderType.Lead && channel == ConversationChannel.Telegram) return MessageOrigin.TelegramCustomer;
+        if (senderType == MessageSenderType.Contact && channel == ConversationChannel.WhatsApp) return MessageOrigin.WhatsAppCustomer;
+        if (senderType == MessageSenderType.Contact && channel == ConversationChannel.Telegram) return MessageOrigin.TelegramCustomer;
         return MessageOrigin.System;
     }
 

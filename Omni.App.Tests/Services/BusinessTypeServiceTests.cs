@@ -7,7 +7,7 @@ public class BusinessTypeServiceTests
 {
     private readonly Mock<IBusinessTypeRepository> _types = new();
     private readonly Mock<IClientRepository> _clients = new();
-    private readonly Mock<ILeadRepository> _leads = new();
+    private readonly Mock<IContactRepository> _contacts = new();
     private readonly Mock<IUnitOfWork> _uow = new();
     private readonly Mock<IUnitOfWorkTransaction> _tx = new();
     private readonly List<BusinessType> _all = [];
@@ -23,7 +23,7 @@ public class BusinessTypeServiceTests
         _types.Setup(t => t.ExistsAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((string code, CancellationToken _) => _all.Any(t => t.Code == code));
         _types.Setup(t => t.CountClientsByTypeAsync(It.IsAny<CancellationToken>())).ReturnsAsync(new Dictionary<string, int> { ["shop"] = 3 });
-        _types.Setup(t => t.CountLeadsByStageAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(new Dictionary<string, int>());
+        _types.Setup(t => t.CountContactsByStageAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(new Dictionary<string, int>());
         _uow.Setup(u => u.BeginTransactionAsync(It.IsAny<CancellationToken>())).ReturnsAsync(_tx.Object);
         _all.Add(Type("shop", "Shop", ("new", "open"), ("contacted", "open"), ("booked", "booked"), ("came", "attended"), ("no_show", "no_show"),
             ("customer", "converted"), ("lost", "closed_lost"), ("needs_human", "needs_human")));
@@ -32,7 +32,7 @@ public class BusinessTypeServiceTests
     }
 
     private BusinessTypeService Sut(string language = "en") =>
-        new(_types.Object, _clients.Object, _leads.Object, _uow.Object, TextKit.Context(language), TimeProvider.System);
+        new(_types.Object, _clients.Object, _contacts.Object, _uow.Object, TextKit.Context(language), TimeProvider.System);
 
     private static BusinessType Type(string code, string name, params (string Key, string Category)[] stages) => new()
     {
@@ -211,7 +211,7 @@ public class BusinessTypeServiceTests
     [Fact]
     public async Task Update_refuses_to_remove_a_stage_that_still_has_contacts()
     {
-        _types.Setup(t => t.CountLeadsByStageAsync("spa", It.IsAny<CancellationToken>()))
+        _types.Setup(t => t.CountContactsByStageAsync("spa", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new Dictionary<string, int> { ["fresh"] = 2, ["vip_question"] = 1, ["contacted"] = 5 });
         var request = Request(stages: _all[1].Stages.Where(s => s.Key is not ("fresh" or "vip_question"))
             .Select(s => new SaveStageRequest(s.Key, s.Category, new() { ["en"] = s.Key })).Append(new SaveStageRequest("first", "open", new() { ["en"] = "First" })).ToList());
@@ -265,13 +265,13 @@ public class BusinessTypeServiceTests
     public async Task Preview_counts_contacts_and_changes_nothing()
     {
         _clients.Setup(c => c.GetReadOnlyAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(new Client { Id = _clientId, BusinessTypeCode = "spa" });
-        _leads.Setup(l => l.CountByStatusAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(new Dictionary<string, int> { ["fresh"] = 4, ["member"] = 1 });
+        _contacts.Setup(l => l.CountByStageAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(new Dictionary<string, int> { ["fresh"] = 4, ["member"] = 1 });
 
         var preview = await Sut().PreviewClientChangeAsync(_clientId, "shop");
 
         Assert.Equal((_clientId, "spa", "shop", 5), (preview.ClientId, preview.FromCode, preview.ToCode, preview.ContactCount));
         Assert.Equal([("fresh", "new"), ("member", "customer")], preview.Moves.Select(m => (m.FromKey, m.ToKey)));
-        _leads.Verify(l => l.MoveStatusAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()), Times.Never);
+        _contacts.Verify(l => l.MoveStageAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()), Times.Never);
         Assert.Equal("Client not found.", await ErrorOf(() => Sut().PreviewClientChangeAsync(Guid.NewGuid(), "shop")));
     }
 
@@ -280,15 +280,15 @@ public class BusinessTypeServiceTests
     {
         var client = new Client { Id = _clientId, BusinessTypeCode = "spa" };
         _clients.Setup(c => c.GetAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(client);
-        _leads.Setup(l => l.CountByStatusAsync(_clientId, It.IsAny<CancellationToken>()))
+        _contacts.Setup(l => l.CountByStageAsync(_clientId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new Dictionary<string, int> { ["fresh"] = 4, ["contacted"] = 2, ["member"] = 1 });
 
         var preview = await Sut().ChangeClientTypeAsync(_clientId, "shop");
 
         Assert.Equal(7, preview.ContactCount);
-        _leads.Verify(l => l.MoveStatusAsync(_clientId, "fresh", "new", It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()), Times.Once);
-        _leads.Verify(l => l.MoveStatusAsync(_clientId, "member", "customer", It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()), Times.Once);
-        _leads.Verify(l => l.MoveStatusAsync(_clientId, "contacted", It.IsAny<string>(), It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()), Times.Never);
+        _contacts.Verify(l => l.MoveStageAsync(_clientId, "fresh", "new", It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()), Times.Once);
+        _contacts.Verify(l => l.MoveStageAsync(_clientId, "member", "customer", It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()), Times.Once);
+        _contacts.Verify(l => l.MoveStageAsync(_clientId, "contacted", It.IsAny<string>(), It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()), Times.Never);
         Assert.Equal("shop", client.BusinessTypeCode);
         _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
         _tx.Verify(t => t.CommitAsync(It.IsAny<CancellationToken>()), Times.Once);
@@ -298,7 +298,7 @@ public class BusinessTypeServiceTests
     public async Task Changing_to_the_current_type_changes_nothing()
     {
         _clients.Setup(c => c.GetAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(new Client { Id = _clientId, BusinessTypeCode = "shop" });
-        _leads.Setup(l => l.CountByStatusAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(new Dictionary<string, int> { ["new"] = 1 });
+        _contacts.Setup(l => l.CountByStageAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(new Dictionary<string, int> { ["new"] = 1 });
 
         var preview = await Sut().ChangeClientTypeAsync(_clientId, "shop");
 

@@ -301,20 +301,20 @@ public class IngestAndAdminControllerTests
     }
 
     [Fact]
-    public async Task Lead_content_channel_and_overview_admin_controllers_delegate()
+    public async Task Contact_content_channel_and_overview_admin_controllers_delegate()
     {
         var id = Guid.NewGuid();
-        var leads = new Mock<ILeadAdminService>();
-        var lc = new LeadsAdminController(leads.Object).With();
+        var contacts = new Mock<IContactAdminService>();
+        var lc = new ContactsAdminController(contacts.Object).With();
         Assert.IsType<NotFoundResult>(await lc.Get(id, default));
         Assert.IsType<NotFoundResult>(await lc.Conversation(id, default));
         await lc.List(null, null, null, 1, default); await lc.Events(id, default); await lc.Conversations(null, null, null, null, null, 1, default);
         await lc.ConversationMessages(id, 0, default); await lc.ConversationMessages(id, 25, default);
-        leads.Verify(l => l.MessagesAsync(id, 500, It.IsAny<CancellationToken>()), Times.Once);
-        leads.Verify(l => l.MessagesAsync(id, 25, It.IsAny<CancellationToken>()), Times.Once);
+        contacts.Verify(l => l.MessagesAsync(id, 500, It.IsAny<CancellationToken>()), Times.Once);
+        contacts.Verify(l => l.MessagesAsync(id, 25, It.IsAny<CancellationToken>()), Times.Once);
         await lc.SetMode(id, new ModeBody("human"), default); await lc.SetStatus(id, new StatusBody("closed"), default); await lc.SetBookingStatus(id, new StatusBody("attended"), default);
         await lc.Messages(null, true, null, null, 1, default); await lc.Bookings(null, null, null, false, 1, default);
-        leads.Verify(l => l.SetModeAsync(id, "human", It.IsAny<CancellationToken>()), Times.Once);
+        contacts.Verify(l => l.SetModeAsync(id, "human", It.IsAny<CancellationToken>()), Times.Once);
 
         var content = new Mock<IContentAdminService>();
         var cc = new ContentAdminController(content.Object).With();

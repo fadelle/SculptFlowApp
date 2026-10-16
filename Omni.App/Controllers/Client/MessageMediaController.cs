@@ -17,7 +17,7 @@ public class MessageMediaController : DashboardApiController
     }
 
     /// <summary>The audio of a voice note. Private cache: the browser may replay it without asking again, but no shared cache
-    /// may keep a patient's recording. Range requests are on so the player can seek.</summary>
+    /// may keep a contact's recording. Range requests are on so the player can seek.</summary>
     [HttpGet]
     public async Task<IActionResult> Get(Guid messageId, CancellationToken ct)
     {

@@ -14,7 +14,7 @@ public interface ITextContext
     /// <summary>"ltr" or "rtl", for the html dir attribute.</summary>
     string Direction { get; }
 
-    /// <summary>Placeholder name → word for this request ("contact" → "patient", "Contacts" → "Patients"…).</summary>
+    /// <summary>Placeholder name → word for this request ("contact" → "contact", "Contacts" → "Contacts"…).</summary>
     IReadOnlyDictionary<string, string> Terms { get; }
 
     Task InitializeAsync(CancellationToken ct = default);

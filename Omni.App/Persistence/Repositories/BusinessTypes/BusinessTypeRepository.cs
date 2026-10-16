@@ -51,11 +51,11 @@ public class BusinessTypeRepository : IBusinessTypeRepository
             .Select(g => new { g.Key, Count = g.Count() })
             .ToDictionaryAsync(x => x.Key, x => x.Count, ct);
 
-    public async Task<IReadOnlyDictionary<string, int>> CountLeadsByStageAsync(string code, CancellationToken ct = default) =>
-        await (from l in _db.Leads
+    public async Task<IReadOnlyDictionary<string, int>> CountContactsByStageAsync(string code, CancellationToken ct = default) =>
+        await (from l in _db.Contacts
                join c in _db.Clients on l.ClientId equals c.Id
                where c.BusinessTypeCode == code
-               group l by l.Status into g
+               group l by l.StageKey into g
                select new { g.Key, Count = g.Count() })
             .ToDictionaryAsync(x => x.Key, x => x.Count, ct);
 

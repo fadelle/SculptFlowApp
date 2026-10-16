@@ -12,7 +12,7 @@ using Omni.App.Entities.Responses.BusinessTypes;
 using Omni.App.Persistence.Contracts;
 using Omni.App.Persistence.Contracts.BusinessTypes;
 using Omni.App.Persistence.Contracts.Clients;
-using Omni.App.Persistence.Contracts.Leads;
+using Omni.App.Persistence.Contracts.Contacts;
 
 namespace Omni.App.Business.Services.BusinessTypes;
 
@@ -26,17 +26,17 @@ public partial class BusinessTypeService : IBusinessTypeService
 
     private readonly IBusinessTypeRepository _types;
     private readonly IClientRepository _clients;
-    private readonly ILeadRepository _leads;
+    private readonly IContactRepository _contacts;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ITextContext _text;
     private readonly TimeProvider _time;
 
-    public BusinessTypeService(IBusinessTypeRepository types, IClientRepository clients, ILeadRepository leads, IUnitOfWork unitOfWork,
+    public BusinessTypeService(IBusinessTypeRepository types, IClientRepository clients, IContactRepository contacts, IUnitOfWork unitOfWork,
         ITextContext text, TimeProvider time)
     {
         _types = types;
         _clients = clients;
-        _leads = leads;
+        _contacts = contacts;
         _unitOfWork = unitOfWork;
         _text = text;
         _time = time;
@@ -53,6 +53,9 @@ public partial class BusinessTypeService : IBusinessTypeService
 
     public async Task<bool> IsStageOfClientAsync(Guid clientId, string? key, CancellationToken ct = default) =>
         !string.IsNullOrEmpty(key) && (await StagesOfClientAsync(clientId, ct)).Any(s => s.Key == key);
+
+    public async Task<ClientPipeline> GetPipelineAsync(Guid clientId, CancellationToken ct = default) =>
+        new(await ListStagesForClientAsync(clientId, ct));
 
     public async Task<IReadOnlyList<BusinessTypeResponse>> ListAsync(CancellationToken ct = default)
     {
@@ -93,7 +96,7 @@ public partial class BusinessTypeService : IBusinessTypeService
         var removed = type.Stages.Where(s => !keep.Contains(s.Key)).ToList();
         if (removed.Count > 0)
         {
-            var inUse = await _types.CountLeadsByStageAsync(code, ct);
+            var inUse = await _types.CountContactsByStageAsync(code, ct);
             var blocked = removed.Where(s => inUse.GetValueOrDefault(s.Key) > 0).Select(s => s.Key).ToList();
             if (blocked.Count > 0) throw new InvalidOperationException("businessTypes.errors.stageInUse").WithArgs(string.Join(", ", blocked));
         }
@@ -126,7 +129,7 @@ public partial class BusinessTypeService : IBusinessTypeService
     {
         var client = await _clients.GetReadOnlyAsync(clientId, ct) ?? throw new KeyNotFoundException("clients.errors.notFound");
         var (from, to) = await LoadChangeAsync(client.BusinessTypeCode, toCode, ct);
-        return Preview(clientId, from, to, await _leads.CountByStatusAsync(clientId, ct));
+        return Preview(clientId, from, to, await _contacts.CountByStageAsync(clientId, ct));
     }
 
     public async Task<BusinessTypeChangePreview> ChangeClientTypeAsync(Guid clientId, string? toCode, CancellationToken ct = default)
@@ -134,13 +137,13 @@ public partial class BusinessTypeService : IBusinessTypeService
         await using var tx = await _unitOfWork.BeginTransactionAsync(ct);
         var client = await _clients.GetAsync(clientId, ct) ?? throw new KeyNotFoundException("clients.errors.notFound");
         var (from, to) = await LoadChangeAsync(client.BusinessTypeCode, toCode, ct);
-        var preview = Preview(clientId, from, to, await _leads.CountByStatusAsync(clientId, ct));
+        var preview = Preview(clientId, from, to, await _contacts.CountByStageAsync(clientId, ct));
         if (from.Code == to.Code) return preview;
 
         var now = _time.GetUtcNow();
         foreach (var move in preview.Moves.Where(m => m.FromKey != m.ToKey))
         {
-            await _leads.MoveStatusAsync(clientId, move.FromKey, move.ToKey, now, ct);
+            await _contacts.MoveStageAsync(clientId, move.FromKey, move.ToKey, now, ct);
         }
         client.BusinessTypeCode = to.Code;
         client.UpdatedAt = now;

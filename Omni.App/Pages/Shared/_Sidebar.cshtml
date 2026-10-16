@@ -7,7 +7,7 @@
     var path = Context.Request.Path.Value ?? "";
     bool IsActive(string prefix) => path.Equals(prefix, StringComparison.OrdinalIgnoreCase)
         || path.StartsWith(prefix + "/", StringComparison.OrdinalIgnoreCase);
-    var dashboardActive = IsActive("/dashboard") && !IsActive("/dashboard/leads") && !IsActive("/dashboard/bookings");
+    var dashboardActive = IsActive("/dashboard") && !IsActive("/dashboard/contacts") && !IsActive("/dashboard/bookings");
 }
 @functions {
     // One nav row; the label doubles as the tooltip when the sidebar is collapsed to icons.
@@ -34,7 +34,7 @@
         @Row("/dashboard", "space_dashboard", "Dashboard", dashboardActive) @* icon:space_dashboard *@
         @Row("/inbox", "chat", "Inbox", IsActive("/inbox"),
             "<span class=\"au-nav-count sidebar-badge\" id=\"sidebar-inbox-badge\" hidden></span>") @* icon:chat *@
-        @Row("/dashboard/leads", "group", "Interested People", IsActive("/dashboard/leads")) @* icon:group *@
+        @Row("/dashboard/contacts", "group", "Interested People", IsActive("/dashboard/contacts")) @* icon:group *@
         @Row("/dashboard/bookings", "calendar_month", "Bookings", IsActive("/dashboard/bookings")) @* icon:calendar_month *@
 
         <div class="au-side-section">Marketing</div>

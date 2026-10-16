@@ -26,7 +26,7 @@ using Omni.App.Persistence.Repositories.Campaigns;
 using Omni.App.Persistence.Repositories.Clients;
 using Omni.App.Persistence.Repositories.Events;
 using Omni.App.Persistence.Repositories.Inbox;
-using Omni.App.Persistence.Repositories.Leads;
+using Omni.App.Persistence.Repositories.Contacts;
 using Omni.App.Persistence.Repositories.WhatsApp;
 
 namespace Omni.App.Tests;
@@ -63,7 +63,7 @@ public class MessageBillingTests
     {
         public required BillingHarness H { get; init; }
         public required Guid Client { get; init; }
-        public required Guid Lead { get; init; }
+        public required Guid Contact { get; init; }
         public required Guid Conversation { get; init; }
         public required Guid MarketingTemplate { get; init; }
         public required Guid UtilityTemplate { get; init; }
@@ -72,7 +72,7 @@ public class MessageBillingTests
 
         public MessageService NewMessageService(ApplicationDbContext db)
         {
-            return new MessageService(new ConversationRepository(db), new MessageRepository(db), new LeadRepository(db),
+            return new MessageService(new ConversationRepository(db), new MessageRepository(db), new ContactRepository(db),
                 new WhatsAppTemplateRepository(db), new CampaignRepository(db), new UnitOfWork(db), WhatsApp, new IChannelSender[] { new WhatsAppChannelSender(WhatsApp) },
                 NullProxy<IInboxNotifier>.Create(), new EventLogger(new EventLogRepository(db)), NullProxy<INotificationService>.Create(),
                 MessageBilling, H.Entitlements(db), new InboxSettingsService(new InboxSettingsRepository(db), new ClientRepository(db), H.Entitlements(db), new UnitOfWork(db)), Mock.Of<IMessageTracer>());
@@ -88,7 +88,7 @@ public class MessageBillingTests
         {
             await using var db = H.Db();
             var external = await db.Messages.Where(m => m.Id == messageId).Select(m => m.ExternalMessageId).SingleAsync();
-            await NewMessageService(db).IngestAsync(new IngestMessageRequest(Client, Conversation, Lead, IngestEventType.StatusUpdate,
+            await NewMessageService(db).IngestAsync(new IngestMessageRequest(Client, Conversation, Contact, IngestEventType.StatusUpdate,
                 ConversationChannel.WhatsApp, null, external, status, null, null));
         }
 
@@ -115,10 +115,10 @@ public class MessageBillingTests
         if (wallet > 0) await h.TopUpAsync(client, wallet);
 
         var now = DateTimeOffset.UtcNow;
-        var lead = new Lead { Id = Guid.NewGuid(), ClientId = client, FullName = "Test patient", Phone = "9613123456", CreatedAt = now, UpdatedAt = now };
+        var contact = new Contact { Id = Guid.NewGuid(), ClientId = client, FullName = "Test contact", Phone = "9613123456", CreatedAt = now, UpdatedAt = now };
         var conversation = new Conversation
         {
-            Id = Guid.NewGuid(), ClientId = client, LeadId = lead.Id, Channel = ConversationChannel.WhatsApp, Mode = ConversationMode.Human,
+            Id = Guid.NewGuid(), ClientId = client, ContactId = contact.Id, Channel = ConversationChannel.WhatsApp, Mode = ConversationMode.Human,
             ServiceWindowExpiresAt = serviceWindowOpen ? now.AddHours(10) : null, LastCustomerMessageAt = serviceWindowOpen ? now : null,
             CreatedAt = now, UpdatedAt = now
         };
@@ -132,7 +132,7 @@ public class MessageBillingTests
         var utility = Template(WhatsAppTemplateCategory.Utility);
         await using (var db = h.Db())
         {
-            db.Leads.Add(lead);
+            db.Contacts.Add(contact);
             db.Conversations.Add(conversation);
             db.WhatsAppTemplates.AddRange(marketing, utility);
             await db.SaveChangesAsync();
@@ -151,7 +151,7 @@ public class MessageBillingTests
 
         return new Setup
         {
-            H = h, Client = client, Lead = lead.Id, Conversation = conversation.Id, MarketingTemplate = marketing.Id,
+            H = h, Client = client, Contact = contact.Id, Conversation = conversation.Id, MarketingTemplate = marketing.Id,
             UtilityTemplate = utility.Id, WhatsApp = new FakeWhatsApp(), MessageBilling = messageBilling
         };
     }

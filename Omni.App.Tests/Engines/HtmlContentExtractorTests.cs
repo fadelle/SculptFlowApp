@@ -14,7 +14,7 @@ public class HtmlContentExtractorTests
     [Fact]
     public void Title_comes_from_title_tag_then_first_h1_and_is_whitespace_cleaned()
     {
-        Assert.Equal("Rhino Surgery", Extract("<html><head><title>  Rhino \n Surgery </title></head><body><p>x</p></body></html>").Title);
+        Assert.Equal("Rhino Studio", Extract("<html><head><title>  Rhino \n Studio </title></head><body><p>x</p></body></html>").Title);
         Assert.Equal("Fallback heading", Extract("<html><body><h1> Fallback   heading </h1></body></html>").Title);
         Assert.Equal("", Extract("<html><body><p>x</p></body></html>").Title);
     }

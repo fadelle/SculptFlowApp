@@ -27,8 +27,8 @@ else if (Model.Details is not null)
     var isManual = c.AudienceType == CampaignAudienceType.Custom && string.IsNullOrWhiteSpace(c.AudienceFilters);
     var audience = isManual ? "Picked manually" : c.AudienceType switch
     {
-        CampaignAudienceType.ReactivationNoBooking => "Old leads who never booked",
-        CampaignAudienceType.AllEligible => "All contactable leads",
+        CampaignAudienceType.ReactivationNoBooking => "Old contacts who never booked",
+        CampaignAudienceType.AllEligible => "All reachable contacts",
         _ => "Custom audience"
     };
     var (whenLabel, whenAt) = c.Status == CampaignStatus.Scheduled && c.ScheduledAt is not null ? ("Scheduled for", c.ScheduledAt)
@@ -42,7 +42,7 @@ else if (Model.Details is not null)
     var canSend = c.Status is CampaignStatus.Draft or CampaignStatus.Scheduled or CampaignStatus.Paused;
     var sendCount = st.TotalRecipients - st.Skipped;
     var waitingCount = st.Pending + st.Queued;
-    var sendLabel = c.Status == CampaignStatus.Paused ? "Resume sending" : $"Send now to {sendCount} {(sendCount == 1 ? "lead" : "leads")}";
+    var sendLabel = c.Status == CampaignStatus.Paused ? "Resume sending" : $"Send now to {sendCount} {(sendCount == 1 ? "contact" : "contacts")}";
     // Sending can't be undone, so the button asks first (the kit's styled confirm).
     var sendConfirm = c.Status == CampaignStatus.Paused
         ? $"Resume this campaign? The {waitingCount} {(waitingCount == 1 ? "person" : "people")} not messaged yet will get it, starting straight away. WhatsApp messages can't be called back."
@@ -160,7 +160,7 @@ else if (Model.Details is not null)
             <div class="au-table-scroll">
                 <table class="au-table au-table--stack">
                     <thead>
-                        <tr><th>Lead</th><th>Phone</th><th>Status</th><th>Last update</th></tr>
+                        <tr><th>Contact</th><th>Phone</th><th>Status</th><th>Last update</th></tr>
                     </thead>
                     <tbody>
                         @foreach (var r in d.Recipients)
@@ -172,8 +172,8 @@ else if (Model.Details is not null)
                                 : r.QueuedAt is not null ? ("Queued", r.QueuedAt)
                                 : ("", (DateTimeOffset?)null);
                             var problem = r.SkipReason ?? r.FailureReason;
-                            <tr class="row-link" data-href="/dashboard/leads/@r.LeadId" data-group="@Group(r.Status)">
-                                <td data-label="Lead"><a class="cell-person" href="/dashboard/leads/@r.LeadId"><span class="avatar-sm">@(string.IsNullOrWhiteSpace(r.LeadFullName) ? "?" : r.LeadFullName.Trim()[..1])</span>@(r.LeadFullName ?? "—")</a></td>
+                            <tr class="row-link" data-href="/dashboard/contacts/@r.ContactId" data-group="@Group(r.Status)">
+                                <td data-label="Contact"><a class="cell-person" href="/dashboard/contacts/@r.ContactId"><span class="avatar-sm">@(string.IsNullOrWhiteSpace(r.ContactFullName) ? "?" : r.ContactFullName.Trim()[..1])</span>@(r.ContactFullName ?? "—")</a></td>
                                 <td data-label="Phone">@r.PhoneNumber</td>
                                 <td data-label="Status" class="au-wrap">
                                     <div>

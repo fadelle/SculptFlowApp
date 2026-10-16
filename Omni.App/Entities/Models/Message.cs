@@ -7,7 +7,7 @@ public class Message
     public Guid Id { get; set; }
     public Guid ClientId { get; set; }
     public Guid ConversationId { get; set; }
-    public Guid LeadId { get; set; }
+    public Guid ContactId { get; set; }
 
     public string Direction { get; set; } = string.Empty;
     public string SenderType { get; set; } = string.Empty;
@@ -57,5 +57,5 @@ public class Message
     public string? TraceId { get; set; }
 
     public Conversation? Conversation { get; set; }
-    public Lead? Lead { get; set; }
+    public Contact? Contact { get; set; }
 }

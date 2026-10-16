@@ -70,7 +70,7 @@ public class GoogleAuthControllerTests
     {
         _url.Setup(u => u.Action(It.IsAny<UrlActionContext>())).Returns("/auth/google/callback");
         _signIn.Setup(s => s.ConfigureExternalAuthenticationProperties("Google", It.IsAny<string?>(), null)).Returns(new AuthenticationProperties());
-        var result = Sut(("GoogleLogin:ClientId", "id"), ("GoogleLogin:ClientSecret", "secret")).Start("/leads");
+        var result = Sut(("GoogleLogin:ClientId", "id"), ("GoogleLogin:ClientSecret", "secret")).Start("/contacts");
         var challenge = Assert.IsType<ChallengeResult>(result);
         Assert.Contains("Google", challenge.AuthenticationSchemes);
     }
@@ -87,7 +87,7 @@ public class GoogleAuthControllerTests
     {
         _signIn.Setup(s => s.GetExternalLoginInfoAsync(null)).ReturnsAsync(Info("a@x.com", true));
         _signIn.Setup(s => s.ExternalLoginSignInAsync("Google", "key-1", true, true)).ReturnsAsync(SignInResult.Success);
-        Assert.Equal("/leads", RedirectTarget(await Sut().Callback("/leads")));
+        Assert.Equal("/contacts", RedirectTarget(await Sut().Callback("/contacts")));
         Assert.Equal("/dashboard", RedirectTarget(await Sut().Callback("https://evil.example/phish")));
         Assert.Equal("/dashboard", RedirectTarget(await Sut().Callback("//evil.example")));
         Assert.Equal("/dashboard", RedirectTarget(await Sut().Callback(null)));
@@ -154,7 +154,7 @@ public class GoogleAuthControllerTests
         LinkedLoginFails();
         _users.Setup(u => u.FindByEmailAsync("a@x.com")).ReturnsAsync(user);
         _users.Setup(u => u.AddLoginAsync(user, It.IsAny<UserLoginInfo>())).ReturnsAsync(IdentityResult.Success);
-        Assert.Equal("/leads", RedirectTarget(await Sut().Callback("/leads")));
+        Assert.Equal("/contacts", RedirectTarget(await Sut().Callback("/contacts")));
         _users.Verify(u => u.RemovePasswordAsync(It.IsAny<IdentityUser>()), Times.Never);
         _signIn.Verify(s => s.SignInAsync(user, true, "Google"), Times.Once);
     }

@@ -49,7 +49,7 @@ public static class CacheKeys
     public static string Membership(string userId) => MembershipPrefix + userId;
 
     // ---- Crm: a client's client-wide Inbox settings row, or none (InboxSettingsRepository.GetForClientReadOnlyAsync; read
-    // on every incoming patient message to decide whether the AI bot answers).
+    // on every incoming contact message to decide whether the AI bot answers).
     public const string InboxSettingsPrefix = "crm:inbox-settings:";
     public static string InboxSettings(Guid clientId) => InboxSettingsPrefix + clientId.ToString("N");
 

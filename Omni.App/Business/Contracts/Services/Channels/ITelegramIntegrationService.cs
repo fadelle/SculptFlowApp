@@ -31,6 +31,6 @@ public interface ITelegramIntegrationService
     Task<ChannelIntegrationResponse> RefreshStatusAsync(Guid clientId, CancellationToken ct = default);
 
     /// <summary>deleteWebhook (best effort), then deactivate and drop the stored token + secret.
-    /// Leads, conversations and messages are untouched.</summary>
+    /// Contacts, conversations and messages are untouched.</summary>
     Task DisconnectAsync(Guid clientId, CancellationToken ct = default);
 }

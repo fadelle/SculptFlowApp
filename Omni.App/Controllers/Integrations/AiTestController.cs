@@ -12,7 +12,7 @@ namespace Omni.App.Controllers.Integrations;
 /// be pointed at these instead of the real tools and the AI agent's reaction to each code can be watched without having to set up
 /// the exact booking state (existing bookings, closed days, race conditions...) that would otherwise be needed to trigger it.
 ///
-/// NEVER touches the database and NEVER takes clientId/leadId — it can't, since nothing here is real. The response shapes and
+/// NEVER touches the database and NEVER takes clientId/contactId — it can't, since nothing here is real. The response shapes and
 /// instruction wording are byte-for-byte what the real endpoints (Controllers/Integrations/AiController.cs) return for the same code, via the
 /// shared AiResultInstructions helper, so a test here reflects what the AI would really see.
 ///
@@ -32,10 +32,10 @@ public class AiTestController : ControllerBase
     [HttpGet("codes")]
     public ActionResult<object> ListCodes() => Ok(new
     {
-        schedule = new[] { "BOOKED", "RESCHEDULED", "CONFIRMATION_REQUIRED", "MULTIPLE_UPCOMING_BOOKINGS", "SLOT_UNAVAILABLE", "LEAD_NOT_FOUND", "INVALID_REQUEST" },
+        schedule = new[] { "BOOKED", "RESCHEDULED", "CONFIRMATION_REQUIRED", "MULTIPLE_UPCOMING_BOOKINGS", "SLOT_UNAVAILABLE", "CONTACT_NOT_FOUND", "INVALID_REQUEST" },
         cancel = new[] { "CANCELED", "NO_UPCOMING_BOOKING", "MULTIPLE_UPCOMING_BOOKINGS", "INVALID_REQUEST" },
         usage = "POST /api/ai/test/schedule?code=<one of the schedule codes> or /api/ai/test/cancel?code=<one of the cancel codes>. " +
-                "Same request body/headers as the real tool; clientId/leadId in the URL are ignored. The response is exactly what " +
+                "Same request body/headers as the real tool; clientId/contactId in the URL are ignored. The response is exactly what " +
                 "schedule_booking/cancel_booking would return for that code — point the n8n tool at this URL temporarily to test the AI's reaction."
     });
 
@@ -57,17 +57,17 @@ public class AiTestController : ControllerBase
             Booking: Existing(requestedLabel, "2026-09-29", "16:00"), PreviousBooking: target),
 
         "CONFIRMATION_REQUIRED" => Fail("CONFIRMATION_REQUIRED",
-            "Patient already has an upcoming booking; nothing was changed.", new[] { target }, requestedLabel),
+            "Contact already has an upcoming booking; nothing was changed.", new[] { target }, requestedLabel),
 
         "MULTIPLE_UPCOMING_BOOKINGS" => Fail("MULTIPLE_UPCOMING_BOOKINGS",
-            "Patient has more than one upcoming booking; it is unclear which to move.",
+            "Contact has more than one upcoming booking; it is unclear which to move.",
             new[] { target, Existing("Friday, Oct 2 at 10:00 AM", "2026-10-02", "10:00") }, requestedLabel),
 
         "SLOT_UNAVAILABLE" => Fail("SLOT_UNAVAILABLE", "That time is no longer available - it overlaps another booking.", null, requestedLabel),
 
-        "LEAD_NOT_FOUND" => Fail("LEAD_NOT_FOUND", "Lead not found for this client.", null, null),
+        "CONTACT_NOT_FOUND" => Fail("CONTACT_NOT_FOUND", "Contact not found for this client.", null, null),
 
-        "INVALID_REQUEST" => Fail("INVALID_REQUEST", "That booking is not one of this patient's current upcoming bookings.", new[] { target }, requestedLabel),
+        "INVALID_REQUEST" => Fail("INVALID_REQUEST", "That booking is not one of this contact's current upcoming bookings.", new[] { target }, requestedLabel),
 
             null or "" => throw new ArgumentException("Pass ?code=. See GET /api/ai/test/codes for the valid schedule codes."),
             _ => throw new ArgumentException($"Unknown code '{code}'. See GET /api/ai/test/codes for the valid schedule codes.")
@@ -92,13 +92,13 @@ public class AiTestController : ControllerBase
         "CANCELED" => new CancelBookingResult(true, "canceled", "CANCELED", "Booking canceled.",
             Booking: target with { Status = "canceled" }),
 
-        "NO_UPCOMING_BOOKING" => Fail("NO_UPCOMING_BOOKING", "This patient has no upcoming booking to cancel (it may already be canceled).", null),
+        "NO_UPCOMING_BOOKING" => Fail("NO_UPCOMING_BOOKING", "This contact has no upcoming booking to cancel (it may already be canceled).", null),
 
         "MULTIPLE_UPCOMING_BOOKINGS" => Fail("MULTIPLE_UPCOMING_BOOKINGS",
-            "Patient has more than one upcoming booking; it is unclear which to cancel.",
+            "Contact has more than one upcoming booking; it is unclear which to cancel.",
             new[] { target, Existing("Friday, Oct 2 at 10:00 AM", "2026-10-02", "10:00") }),
 
-        "INVALID_REQUEST" => Fail("INVALID_REQUEST", "That booking is not one of this patient's current upcoming bookings.", new[] { target }),
+        "INVALID_REQUEST" => Fail("INVALID_REQUEST", "That booking is not one of this contact's current upcoming bookings.", new[] { target }),
 
             null or "" => throw new ArgumentException("Pass ?code=. See GET /api/ai/test/codes for the valid cancel codes."),
             _ => throw new ArgumentException($"Unknown code '{code}'. See GET /api/ai/test/codes for the valid cancel codes.")

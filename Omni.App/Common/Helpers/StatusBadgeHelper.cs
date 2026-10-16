@@ -1,38 +1,27 @@
 namespace Omni.App.Common.Helpers;
 
 /// <summary>
-/// Maps the free-text status columns (leads.status, bookings.status, etc.) to a badge color
-/// class for the dashboard UI. Purely presentational — the underlying values are still whatever
+/// Maps the free-text status columns (bookings.status, contacts.qualification, etc.) to a badge color
+/// class for the dashboard UI. Contact stages are coloured by their category (StageDisplay). Purely presentational — the underlying values are still whatever
 /// Database/schema.sql's check constraints allow.
 /// </summary>
 public static class StatusBadgeHelper
 {
     private static readonly Dictionary<string, string> Colors = new(StringComparer.OrdinalIgnoreCase)
     {
-        // lead statuses
-        ["new"] = "badge-blue",
-        ["contacted"] = "badge-amber",
-        ["qualified"] = "badge-purple",
-        ["consultation_booked"] = "badge-amber",
-        ["consultation_attended"] = "badge-green",
-        ["no_show"] = "badge-red",
-        ["surgery_booked"] = "badge-teal",
-        ["not_interested"] = "badge-gray",
-        ["needs_human"] = "badge-red",
-        ["lost"] = "badge-gray",
-
-        // qualification statuses
+        // qualifications
         ["hot"] = "badge-red",
         ["warm"] = "badge-amber",
         ["cold"] = "badge-blue",
         ["unknown"] = "badge-gray",
-        ["medical_question"] = "badge-purple",
+        ["needs_human"] = "badge-red",
         ["spam"] = "badge-gray",
 
         // booking statuses
         ["booked"] = "badge-amber",
         ["confirmed"] = "badge-blue",
         ["attended"] = "badge-green",
+        ["no_show"] = "badge-red",
         ["canceled"] = "badge-gray",
         ["rescheduled"] = "badge-purple",
 

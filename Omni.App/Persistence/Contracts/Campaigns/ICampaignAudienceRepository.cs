@@ -9,11 +9,11 @@ namespace Omni.App.Persistence.Contracts.Campaigns;
 /// </summary>
 public interface ICampaignAudienceRepository
 {
-    /// <summary>Tracked leads matching the audience. <paramref name="defaultInactiveDays"/> applies to a reactivation
+    /// <summary>Tracked contacts matching the audience. <paramref name="defaultInactiveDays"/> applies to a reactivation
     /// audience whose filters don't set inactiveDays.</summary>
-    Task<List<Lead>> ListEligibleLeadsAsync(Guid clientId, string audienceType, CampaignAudienceFilters filters, int defaultInactiveDays,
+    Task<List<Contact>> ListEligibleContactsAsync(Guid clientId, string audienceType, CampaignAudienceFilters filters, int defaultInactiveDays,
         CancellationToken ct = default);
 
-    Task<int> CountEligibleLeadsAsync(Guid clientId, string audienceType, CampaignAudienceFilters filters, int defaultInactiveDays,
+    Task<int> CountEligibleContactsAsync(Guid clientId, string audienceType, CampaignAudienceFilters filters, int defaultInactiveDays,
         CancellationToken ct = default);
 }

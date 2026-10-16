@@ -10,8 +10,8 @@
 -- No real secret is stored here. The password column holds a one-way ASP.NET Identity hash of the
 -- placeholder password above, not the password itself.
 --
--- Covers: dashboard (leads across the pipeline, revenue, appointments), inbox (WhatsApp, Telegram,
--- Instagram, Facebook conversations: AI / human / approval modes, unread, service window), leads,
+-- Covers: dashboard (contacts across the pipeline, revenue, appointments), inbox (WhatsApp, Telegram,
+-- Instagram, Facebook conversations: AI / human / approval modes, unread, service window), contacts,
 -- orders, appointments (+ calendar sync), staff, services, knowledge base (manual,
 -- upload and website entries), WhatsApp templates, campaigns with recipients, notifications,
 -- activity events, client info, availability + booking rules + date exceptions, channel
@@ -108,25 +108,25 @@ begin
     (pg_temp.did(16), c, 'Laser Skin Resurfacing','LASER',     'Currently paused while the laser is serviced.', 20, false);
 
   -- ---------------------------------------------------------------
-  -- 4. Leads (spread across the whole pipeline)
+  -- 4. Contacts (spread across the whole pipeline)
   -- ---------------------------------------------------------------
-  insert into crm.leads (id, client_id, service_id, full_name, first_name, last_name, phone, email, source, source_detail,
-                         campaign_name, external_lead_id, status, qualification_status, preferred_language, country_code,
+  insert into crm.contacts (id, client_id, service_id, full_name, first_name, last_name, phone, email, source, source_detail,
+                         campaign_name, external_contact_id, stage_key, qualification, preferred_language, country_code,
                          city, desired_timeline, notes, marketing_opt_in, opted_out_at, last_contact_at, next_followup_at, created_at) values
     (pg_temp.did(100), c, pg_temp.did(10), 'Sarah Mitchell',  'Sarah',  'Mitchell', '+1 305 555 0111', 'sarah.mitchell@example.test', 'instagram', 'Reel: nose reshaping FAQ', 'Spring Consultation Offer', 'demo-ig-001', 'surgery_booked', 'hot',  'en', 'US', 'Miami',       'Within 2 months', 'Wants a natural result. Deposit paid.', true, null, now() - interval '2 days', null, now() - interval '25 days'),
-    (pg_temp.did(101), c, pg_temp.did(11), 'Daniel Brooks',   'Daniel', 'Brooks',   '+1 305 555 0112', 'daniel.brooks@example.test',  'facebook',  'Lead form', null, 'demo-fb-002', 'consultation_booked', 'warm', 'en', 'US', 'Coral Gables', '3 months', null, true, null, now() - interval '1 day', null, now() - interval '8 days'),
+    (pg_temp.did(101), c, pg_temp.did(11), 'Daniel Brooks',   'Daniel', 'Brooks',   '+1 305 555 0112', 'daniel.brooks@example.test',  'facebook',  'Contact form', null, 'demo-fb-002', 'consultation_booked', 'warm', 'en', 'US', 'Coral Gables', '3 months', null, true, null, now() - interval '1 day', null, now() - interval '8 days'),
     (pg_temp.did(102), c, pg_temp.did(12), 'Emily Carter',    'Emily',  'Carter',   '+1 305 555 0113', 'emily.carter@example.test',   'google',    'Search: facelift miami', null, null, 'no_show', 'warm', 'en', 'US', 'Miami Beach', 'ASAP', 'Missed consultation, needs a recovery message.', true, null, now() - interval '2 days', now() + interval '1 day', now() - interval '12 days'),
     (pg_temp.did(103), c, null,            'Karim Nasser',    'Karim',  'Nasser',   '+1 305 555 0114', 'karim.nasser@example.test',   'website',   'Contact form', null, 'demo-web-004', 'new', 'unknown', 'ar', 'US', 'Hialeah', null, null, true, null, null, null, now() - interval '2 hours'),
     (pg_temp.did(104), c, pg_temp.did(13), 'Olivia Reed',     'Olivia', 'Reed',     '+1 305 555 0115', 'olivia.reed@example.test',    'instagram', 'DM', null, 'demo-ig-005', 'needs_human', 'needs_human', 'en', 'US', 'Miami', '1 month', 'Asked about financing and recovery time; AI handed off.', true, null, now() - interval '35 minutes', now() + interval '3 hours', now() - interval '3 days'),
     (pg_temp.did(105), c, pg_temp.did(14), 'Noah Bennett',    'Noah',   'Bennett',  '+1 305 555 0116', 'noah.bennett@example.test',   'website',   'Chat widget', null, 'demo-web-006', 'qualified', 'hot', 'en', 'US', 'Doral', 'Within 6 weeks', null, true, null, now() - interval '3 hours', null, now() - interval '5 days'),
     (pg_temp.did(106), c, pg_temp.did(15), 'Mia Torres',      'Mia',    'Torres',   '+1 305 555 0117', 'mia.torres@example.test',     'instagram', 'Story reply', 'Botox Event Invite', 'demo-ig-007', 'contacted', 'warm', 'es', 'US', 'Miami', 'This month', null, true, null, now() - interval '1 day', now() + interval '2 days', now() - interval '4 days'),
-    (pg_temp.did(107), c, pg_temp.did(10), 'Liam Foster',     'Liam',   'Foster',   '+1 305 555 0118', 'liam.foster@example.test',    'facebook',  'Lead form', null, 'demo-fb-008', 'not_interested', 'cold', 'en', 'US', 'Orlando', null, 'Said price was too high in spring.', true, null, now() - interval '170 days', null, now() - interval '190 days'),
+    (pg_temp.did(107), c, pg_temp.did(10), 'Liam Foster',     'Liam',   'Foster',   '+1 305 555 0118', 'liam.foster@example.test',    'facebook',  'Contact form', null, 'demo-fb-008', 'not_interested', 'cold', 'en', 'US', 'Orlando', null, 'Said price was too high in spring.', true, null, now() - interval '170 days', null, now() - interval '190 days'),
     (pg_temp.did(108), c, pg_temp.did(12), 'Ava Collins',     'Ava',    'Collins',  '+1 305 555 0119', 'ava.collins@example.test',    'google',    'Search', null, 'demo-g-009', 'lost', 'cold', 'en', 'US', 'Fort Lauderdale', null, null, true, null, now() - interval '120 days', null, now() - interval '140 days'),
     (pg_temp.did(109), c, pg_temp.did(13), 'Sophia Nguyen',   'Sophia', 'Nguyen',   '+1 305 555 0120', 'sophia.nguyen@example.test',  'referral',  'Referred by Lucas P.', null, null, 'consultation_attended', 'hot', 'en', 'US', 'Miami', '2 months', 'Quote sent, waiting for her decision.', true, null, now() - interval '3 days', now() + interval '1 day', now() - interval '14 days'),
     (pg_temp.did(110), c, pg_temp.did(11), 'Lucas Perry',     'Lucas',  'Perry',    '+1 305 555 0121', 'lucas.perry@example.test',    'instagram', 'Ad: summer body', null, 'demo-ig-010', 'surgery_booked', 'hot', 'en', 'US', 'Miami', null, 'Procedure completed, great reviews.', true, null, now() - interval '6 days', null, now() - interval '60 days'),
     (pg_temp.did(111), c, pg_temp.did(12), 'Isabella Rossi',  'Isabella','Rossi',   '+1 305 555 0122', 'isabella.rossi@example.test', 'website',   'Booking page', null, null, 'consultation_booked', 'warm', 'it', 'US', 'Key Biscayne', null, null, true, null, now() - interval '1 day', null, now() - interval '6 days'),
     (pg_temp.did(112), c, null,            'Ethan Wright',    'Ethan',  'Wright',   '+1 305 555 0123', null,                          'website',   'Contact form', null, 'demo-web-012', 'new', 'spam', 'en', null, null, null, 'Marked as spam.', true, null, null, null, now() - interval '9 days'),
-    (pg_temp.did(113), c, pg_temp.did(15), 'Grace Kim',       'Grace',  'Kim',      '+1 305 555 0124', 'grace.kim@example.test',      'facebook',  'Messenger', null, 'demo-fb-013', 'contacted', 'medical_question', 'en', 'US', 'Miami', null, 'Asked a medical question; opted out of marketing.', false, now() - interval '10 days', now() - interval '10 days', null, now() - interval '30 days');
+    (pg_temp.did(113), c, pg_temp.did(15), 'Grace Kim',       'Grace',  'Kim',      '+1 305 555 0124', 'grace.kim@example.test',      'facebook',  'Messenger', null, 'demo-fb-013', 'medical_question', 'needs_human', 'en', 'US', 'Miami', null, 'Asked a medical question; opted out of marketing.', false, now() - interval '10 days', now() - interval '10 days', null, now() - interval '30 days');
 
   -- ---------------------------------------------------------------
   -- 5. Channel connections (all dummy values)
@@ -191,9 +191,9 @@ begin
 
   -- ---------------------------------------------------------------
   -- 7. Conversations
-  --    (id, lead, channel, thread id, status, mode, minutes since last message, last direction, minutes since last customer message, unread?)
+  --    (id, contact, channel, thread id, status, mode, minutes since last message, last direction, minutes since last customer message, unread?)
   -- ---------------------------------------------------------------
-  insert into crm.conversations (id, client_id, lead_id, channel, external_thread_id, status, mode, ai_enabled, human_takeover,
+  insert into crm.conversations (id, client_id, contact_id, channel, external_thread_id, status, mode, ai_enabled, human_takeover,
         last_message_at, last_message_direction, last_customer_message_at, service_window_expires_at, last_read_at, created_at) values
     (pg_temp.did(200), c, pg_temp.did(100), 'whatsapp',  null,          'active',   'ai',       true,  false, now() - interval '2 days',    'inbound',  now() - interval '2 days',    now() - interval '1 day',  now() - interval '2 days', now() - interval '25 days'),
     (pg_temp.did(201), c, pg_temp.did(101), 'whatsapp',  null,          'active',   'ai',       true,  false, now() - interval '3 hours',   'outbound', now() - interval '4 hours',   now() + interval '20 hours', now() - interval '3 hours', now() - interval '8 days'),
@@ -209,66 +209,66 @@ begin
     (pg_temp.did(211), c, pg_temp.did(113), 'facebook',  'demo-fb-thread-13','closed','human',   false, true,  now() - interval '10 days',   'inbound',  now() - interval '10 days',   now() - interval '9 days',  now() - interval '10 days', now() - interval '30 days');
 
   -- ---------------------------------------------------------------
-  -- 8. Messages  (conversation, lead, direction, sender, channel, origin, minutes ago, status, text)
+  -- 8. Messages  (conversation, contact, direction, sender, channel, origin, minutes ago, status, text)
   -- ---------------------------------------------------------------
-  create temp table _m (n int, conv uuid, lead uuid, dir text, sender text, channel text, origin text,
+  create temp table _m (n int, conv uuid, contact uuid, dir text, sender text, channel text, origin text,
                         mins_ago int, status text, body text, ai boolean) on commit drop;
   insert into _m values
    -- Sarah (WhatsApp)
-   (1, pg_temp.did(200), pg_temp.did(100), 'inbound',  'lead',  'whatsapp', 'whatsapp_customer', 36000, null, 'Hi! I saw your reel about rhinoplasty. How much does it cost?', false),
+   (1, pg_temp.did(200), pg_temp.did(100), 'inbound',  'contact',  'whatsapp', 'whatsapp_customer', 36000, null, 'Hi! I saw your reel about rhinoplasty. How much does it cost?', false),
    (2, pg_temp.did(200), pg_temp.did(100), 'outbound', 'ai',    'whatsapp', 'ai',               35995, 'read', 'Hi Sarah, thanks for reaching out! Rhinoplasty at Aurora starts from $6,000 and the final quote depends on your goals. A $75 consultation, credited toward the procedure, is the best first step. When are you hoping to have it done?', true),
-   (3, pg_temp.did(200), pg_temp.did(100), 'inbound',  'lead',  'whatsapp', 'whatsapp_customer', 35980, null, 'Within the next 2 months, ideally.', false),
+   (3, pg_temp.did(200), pg_temp.did(100), 'inbound',  'contact',  'whatsapp', 'whatsapp_customer', 35980, null, 'Within the next 2 months, ideally.', false),
    (4, pg_temp.did(200), pg_temp.did(100), 'outbound', 'ai',    'whatsapp', 'ai',               35975, 'read', 'Great, we have openings this week. Would Thursday at 10:00 or Friday at 14:00 suit you?', true),
-   (5, pg_temp.did(200), pg_temp.did(100), 'inbound',  'lead',  'whatsapp', 'whatsapp_customer', 35960, null, 'Thursday at 10 works.', false),
+   (5, pg_temp.did(200), pg_temp.did(100), 'inbound',  'contact',  'whatsapp', 'whatsapp_customer', 35960, null, 'Thursday at 10 works.', false),
    (6, pg_temp.did(200), pg_temp.did(100), 'outbound', 'staff', 'whatsapp', 'dashboard',        2900,  'read', 'Hi Sarah, Dr. Hart here. Your surgery date is confirmed. Please read the preparation guide we sent and tell me if anything is unclear.', false),
-   (7, pg_temp.did(200), pg_temp.did(100), 'inbound',  'lead',  'whatsapp', 'whatsapp_customer', 2880,  null, 'Thank you doctor, all clear. See you then!', false),
+   (7, pg_temp.did(200), pg_temp.did(100), 'inbound',  'contact',  'whatsapp', 'whatsapp_customer', 2880,  null, 'Thank you doctor, all clear. See you then!', false),
    -- Daniel (WhatsApp)
-   (10, pg_temp.did(201), pg_temp.did(101), 'inbound',  'lead', 'whatsapp', 'whatsapp_customer', 11500, null, 'Hello, I would like information about liposuction on the abdomen.', false),
+   (10, pg_temp.did(201), pg_temp.did(101), 'inbound',  'contact', 'whatsapp', 'whatsapp_customer', 11500, null, 'Hello, I would like information about liposuction on the abdomen.', false),
    (11, pg_temp.did(201), pg_temp.did(101), 'outbound', 'ai',   'whatsapp', 'ai',                11495, 'read', 'Hello Daniel! Abdominal liposuction removes stubborn fat for a more contoured shape. Recovery is typically 1-2 weeks of rest. Would you like to book a 30-minute consultation?', true),
-   (12, pg_temp.did(201), pg_temp.did(101), 'inbound',  'lead', 'whatsapp', 'whatsapp_customer', 11480, null, 'Yes please, sometime tomorrow afternoon?', false),
+   (12, pg_temp.did(201), pg_temp.did(101), 'inbound',  'contact', 'whatsapp', 'whatsapp_customer', 11480, null, 'Yes please, sometime tomorrow afternoon?', false),
    (13, pg_temp.did(201), pg_temp.did(101), 'outbound', 'ai',   'whatsapp', 'ai',                11475, 'read', 'Booked: tomorrow at 15:00 with Dr. Hart. I will send a reminder the day before.', true),
-   (14, pg_temp.did(201), pg_temp.did(101), 'inbound',  'lead', 'whatsapp', 'whatsapp_customer', 240,   null, 'Could you remind me where to park?', false),
+   (14, pg_temp.did(201), pg_temp.did(101), 'inbound',  'contact', 'whatsapp', 'whatsapp_customer', 240,   null, 'Could you remind me where to park?', false),
    (15, pg_temp.did(201), pg_temp.did(101), 'outbound', 'ai',   'whatsapp', 'ai',                180,   'delivered', 'There is free parking in the building garage, level P1. Take the elevator to Suite 12.', true),
    -- Emily (WhatsApp, no show)
-   (20, pg_temp.did(202), pg_temp.did(102), 'inbound',  'lead', 'whatsapp', 'whatsapp_customer', 7500, null, 'Hi, I want to know about facelift options.', false),
+   (20, pg_temp.did(202), pg_temp.did(102), 'inbound',  'contact', 'whatsapp', 'whatsapp_customer', 7500, null, 'Hi, I want to know about facelift options.', false),
    (21, pg_temp.did(202), pg_temp.did(102), 'outbound', 'ai',   'whatsapp', 'ai',                7495, 'read', 'Hi Emily! We offer several facelift techniques. A consultation will let Dr. Hart recommend the right one. Shall I book you in?', true),
    (22, pg_temp.did(202), pg_temp.did(102), 'outbound', 'system','whatsapp','campaign',           3000, 'delivered', 'Hi Emily, this is a reminder of your consultation at Aurora Aesthetic Clinic.', false),
    (23, pg_temp.did(202), pg_temp.did(102), 'outbound', 'ai',   'whatsapp', 'ai',                2850, 'sent', 'Hi Emily, we missed you today. Would you like to pick another time? We have openings this week.', true),
    -- Karim (Telegram, new, unread)
-   (30, pg_temp.did(203), pg_temp.did(103), 'inbound',  'lead', 'telegram', 'telegram_customer', 125, null, 'Marhaba, do you do consultations in Arabic?', false),
-   (31, pg_temp.did(203), pg_temp.did(103), 'inbound',  'lead', 'telegram', 'telegram_customer', 120, null, 'I am interested in a hair transplant but also nose surgery.', false),
+   (30, pg_temp.did(203), pg_temp.did(103), 'inbound',  'contact', 'telegram', 'telegram_customer', 125, null, 'Marhaba, do you do consultations in Arabic?', false),
+   (31, pg_temp.did(203), pg_temp.did(103), 'inbound',  'contact', 'telegram', 'telegram_customer', 120, null, 'I am interested in a hair transplant but also nose surgery.', false),
    -- Olivia (Instagram, human handoff, unread)
-   (40, pg_temp.did(204), pg_temp.did(104), 'inbound',  'lead', 'instagram','whatsapp_customer', 4300, null, 'Hi, how long is recovery after breast augmentation?', false),
+   (40, pg_temp.did(204), pg_temp.did(104), 'inbound',  'contact', 'instagram','whatsapp_customer', 4300, null, 'Hi, how long is recovery after breast augmentation?', false),
    (41, pg_temp.did(204), pg_temp.did(104), 'outbound', 'ai',   'instagram','ai',                4295, 'delivered', 'Most patients return to desk work within a week and resume exercise after 4-6 weeks. Dr. Hart will personalise this for you.', true),
-   (42, pg_temp.did(204), pg_temp.did(104), 'inbound',  'lead', 'instagram','whatsapp_customer', 40, null, 'Do you offer financing? And can I speak to someone about my medical history?', false),
+   (42, pg_temp.did(204), pg_temp.did(104), 'inbound',  'contact', 'instagram','whatsapp_customer', 40, null, 'Do you offer financing? And can I speak to someone about my medical history?', false),
    (43, pg_temp.did(204), pg_temp.did(104), 'outbound', 'system','instagram','system',            38, 'sent', 'Conversation handed to the team: the patient asked about financing and medical history.', false),
-   (44, pg_temp.did(204), pg_temp.did(104), 'inbound',  'lead', 'instagram','whatsapp_customer', 35, null, 'Hello? Is someone there?', false),
+   (44, pg_temp.did(204), pg_temp.did(104), 'inbound',  'contact', 'instagram','whatsapp_customer', 35, null, 'Hello? Is someone there?', false),
    -- Noah (Telegram, approval mode)
-   (50, pg_temp.did(205), pg_temp.did(105), 'inbound',  'lead', 'telegram', 'telegram_customer', 7200, null, 'What is the price range for a tummy tuck?', false),
+   (50, pg_temp.did(205), pg_temp.did(105), 'inbound',  'contact', 'telegram', 'telegram_customer', 7200, null, 'What is the price range for a tummy tuck?', false),
    (51, pg_temp.did(205), pg_temp.did(105), 'outbound', 'staff','telegram', 'dashboard',         7100, 'delivered', 'Hi Noah, tummy tucks at Aurora typically range from $7,500 to $11,000 depending on the extent. A consultation gives you an exact quote.', false),
-   (52, pg_temp.did(205), pg_temp.did(105), 'inbound',  'lead', 'telegram', 'telegram_customer', 180, null, 'Ok. Can I come this Saturday? And what should I bring?', false),
+   (52, pg_temp.did(205), pg_temp.did(105), 'inbound',  'contact', 'telegram', 'telegram_customer', 180, null, 'Ok. Can I come this Saturday? And what should I bring?', false),
    -- Mia (WhatsApp, Spanish)
-   (60, pg_temp.did(206), pg_temp.did(106), 'inbound',  'lead', 'whatsapp', 'whatsapp_customer', 5800, null, 'Hola, cuanto cuesta el botox?', false),
+   (60, pg_temp.did(206), pg_temp.did(106), 'inbound',  'contact', 'whatsapp', 'whatsapp_customer', 5800, null, 'Hola, cuanto cuesta el botox?', false),
    (61, pg_temp.did(206), pg_temp.did(106), 'outbound', 'ai',   'whatsapp', 'ai',                5795, 'read', 'Hola Mia! El botox comienza en $12 por unidad; la mayoria de las zonas requieren 20-40 unidades. Te gustaria agendar una cita de 20 minutos?', true),
    (62, pg_temp.did(206), pg_temp.did(106), 'outbound', 'ai',   'whatsapp', 'ai',                1500, 'failed', 'Hola Mia, te recordamos nuestra noche de Botox & Fillers.', true),
-   -- Liam / Ava (old leads, campaign)
-   (70, pg_temp.did(207), pg_temp.did(107), 'inbound',  'lead', 'whatsapp', 'whatsapp_customer', 246000, null, 'Too expensive for me right now, sorry.', false),
+   -- Liam / Ava (old contacts, campaign)
+   (70, pg_temp.did(207), pg_temp.did(107), 'inbound',  'contact', 'whatsapp', 'whatsapp_customer', 246000, null, 'Too expensive for me right now, sorry.', false),
    (71, pg_temp.did(208), pg_temp.did(108), 'outbound', 'ai',   'whatsapp', 'ai',                172800, 'read', 'Hi Ava, just checking in about your facelift enquiry.', true),
    -- Sophia (WhatsApp)
-   (80, pg_temp.did(209), pg_temp.did(109), 'inbound',  'lead', 'whatsapp', 'whatsapp_customer', 20100, null, 'Hi! Lucas told me about you. I want to ask about augmentation.', false),
+   (80, pg_temp.did(209), pg_temp.did(109), 'inbound',  'contact', 'whatsapp', 'whatsapp_customer', 20100, null, 'Hi! Lucas told me about you. I want to ask about augmentation.', false),
    (81, pg_temp.did(209), pg_temp.did(109), 'outbound', 'ai',   'whatsapp', 'ai',                20095, 'read', 'Welcome Sophia! Happy to help. Shall we schedule a consultation?', true),
    (82, pg_temp.did(209), pg_temp.did(109), 'outbound', 'staff','whatsapp', 'whatsapp_business_app', 4400, 'read', 'Hi Sophia, your quote is ready. Let me know once you have decided and I will hold a surgery date.', false),
    -- Isabella (Facebook)
-   (90, pg_temp.did(210), pg_temp.did(111), 'inbound',  'lead', 'facebook', 'whatsapp_customer', 8600, null, 'Buongiorno, vorrei prenotare una consulenza per un lifting.', false),
+   (90, pg_temp.did(210), pg_temp.did(111), 'inbound',  'contact', 'facebook', 'whatsapp_customer', 8600, null, 'Buongiorno, vorrei prenotare una consulenza per un lifting.', false),
    (91, pg_temp.did(210), pg_temp.did(111), 'outbound', 'ai',   'facebook', 'ai',                8595, 'read', 'Buongiorno Isabella! Ho prenotato una consulenza per voi tra 4 giorni alle 11:00.', true),
    -- Grace (Facebook, closed)
-   (95, pg_temp.did(211), pg_temp.did(113), 'inbound',  'lead', 'facebook', 'whatsapp_customer', 14400, null, 'I take blood thinners. Is Botox safe for me? Also please stop sending promotions.', false),
+   (95, pg_temp.did(211), pg_temp.did(113), 'inbound',  'contact', 'facebook', 'whatsapp_customer', 14400, null, 'I take blood thinners. Is Botox safe for me? Also please stop sending promotions.', false),
    (96, pg_temp.did(211), pg_temp.did(113), 'outbound', 'staff','facebook', 'dashboard',         14390, 'read', 'Hi Grace, Dr. Hart will review your medication before any treatment, and we have removed you from promotions.', false);
 
-  insert into crm.messages (id, client_id, conversation_id, lead_id, direction, sender_type, channel, origin, message_type, content,
+  insert into crm.messages (id, client_id, conversation_id, contact_id, direction, sender_type, channel, origin, message_type, content,
                             delivery_status, is_ai_generated, sent_at, received_at, delivered_at, read_at, failed_at,
                             failure_code, failure_reason, created_at)
-  select pg_temp.did(1000 + n), c, conv, lead, dir, sender, channel, origin, 'text', body, status, ai,
+  select pg_temp.did(1000 + n), c, conv, contact, dir, sender, channel, origin, 'text', body, status, ai,
          case when dir = 'outbound' then now() - make_interval(mins => mins_ago) end,
          case when dir = 'inbound'  then now() - make_interval(mins => mins_ago) end,
          case when status in ('delivered','read') then now() - make_interval(mins => mins_ago) + interval '5 seconds' end,
@@ -282,7 +282,7 @@ begin
   -- ---------------------------------------------------------------
   -- 9. Appointments + orders
   -- ---------------------------------------------------------------
-  insert into scheduling.bookings (id, client_id, lead_id, service_id, booking_type, status, scheduled_start, scheduled_end,
+  insert into scheduling.bookings (id, client_id, contact_id, service_id, booking_type, status, scheduled_start, scheduled_end,
                                        location_type, location_name, notes, created_at) values
     (pg_temp.did(300), c, pg_temp.did(100), pg_temp.did(10), 'consultation', 'attended',  pg_temp.at(-18, '10:00'), pg_temp.at(-18, '10:45'), 'in_person', 'Aurora Aesthetic Clinic, Suite 12', 'Discussed goals; quote prepared.', now() - interval '25 days'),
     (pg_temp.did(301), c, pg_temp.did(100), pg_temp.did(10), 'surgery',      'booked',    pg_temp.at(21, '08:00'),  pg_temp.at(21, '11:00'),  'in_person', 'Aurora Surgical Suite', 'Pre-op bloodwork required.', now() - interval '10 days'),
@@ -298,7 +298,7 @@ begin
     (pg_temp.did(311), c, pg_temp.did(108), pg_temp.did(12), 'consultation', 'canceled',  pg_temp.at(-100, '10:00'),pg_temp.at(-100, '10:45'), 'in_person', 'Aurora Aesthetic Clinic, Suite 12', 'Patient canceled, found another clinic.', now() - interval '130 days'),
     (pg_temp.did(312), c, pg_temp.did(104), pg_temp.did(13), 'consultation', 'booked',    pg_temp.at(3, '13:00'),   pg_temp.at(3, '13:30'),   'in_person', 'Aurora Aesthetic Clinic, Suite 12', 'Wants to discuss financing.', now() - interval '20 minutes');
 
-  insert into crm.orders (id, client_id, lead_id, service_id, booking_id, status, quoted_amount, deposit_amount,
+  insert into crm.orders (id, client_id, contact_id, service_id, booking_id, status, quoted_amount, deposit_amount,
                                              final_amount, currency_code, service_date, notes, created_at) values
     (pg_temp.did(320), c, pg_temp.did(100), pg_temp.did(10), pg_temp.did(301), 'confirmed',    6500, 1500, null, 'USD', pg_temp.at(21, '08:00'), 'Deposit received.', now() - interval '10 days'),
     (pg_temp.did(321), c, pg_temp.did(109), pg_temp.did(13), pg_temp.did(304), 'quoted',       7800, null, null, 'USD', null, 'Awaiting decision.', now() - interval '4 days'),
@@ -415,14 +415,14 @@ begin
         scheduled_at, started_at, completed_at, created_by_user_id, created_at) values
     (pg_temp.did(700), c, 'Spring Consultation Offer', pg_temp.did(41), 'completed', 'promotion', 'whatsapp', 'all_eligible', null,
         now() - interval '20 days', now() - interval '20 days', now() - interval '20 days' + interval '15 minutes', null, now() - interval '22 days'),
-    (pg_temp.did(701), c, 'Old Lead Reactivation', pg_temp.did(42), 'running', 'reactivation', 'whatsapp', 'reactivation_no_booking', '{"minDaysSinceLastContact": 90}',
+    (pg_temp.did(701), c, 'Old Contact Reactivation', pg_temp.did(42), 'running', 'reactivation', 'whatsapp', 'reactivation_no_booking', '{"minDaysSinceLastContact": 90}',
         now() - interval '2 hours', now() - interval '2 hours', null, null, now() - interval '1 day'),
     (pg_temp.did(702), c, 'Botox Event Invite', pg_temp.did(44), 'draft', 'event', 'whatsapp', 'custom', '{"procedure": "INJECTABLES"}',
         null, null, null, null, now() - interval '2 days'),
     (pg_temp.did(703), c, 'Summer Skin Refresh', pg_temp.did(41), 'scheduled', 'promotion', 'whatsapp', 'all_eligible', null,
         now() + interval '5 days', null, null, null, now() - interval '1 day');
 
-  insert into marketing.campaign_recipients (id, client_id, campaign_id, lead_id, conversation_id, phone_number, variables_json, status,
+  insert into marketing.campaign_recipients (id, client_id, campaign_id, contact_id, conversation_id, phone_number, variables_json, status,
         skip_reason, failure_code, failure_reason, queued_at, sent_at, delivered_at, read_at, replied_at, booked_at, failed_at) values
     -- completed spring offer
     (pg_temp.did(710), c, pg_temp.did(700), pg_temp.did(100), pg_temp.did(200), '+1 305 555 0111', '{"first_name":"Sarah"}', 'booked',  null, null, null, now() - interval '20 days', now() - interval '20 days', now() - interval '20 days', now() - interval '20 days', now() - interval '19 days 20 hours', now() - interval '19 days', null),
@@ -439,7 +439,7 @@ begin
     (pg_temp.did(723), c, pg_temp.did(701), pg_temp.did(103), pg_temp.did(203), '+1 305 555 0114', '{"first_name":"Karim","procedure":"your enquiry"}','pending', null, null, null, null, null, null, null, null, null, null);
 
   -- a few campaign messages in the matching conversations, linked back to template + campaign + recipient
-  insert into crm.messages (id, client_id, conversation_id, lead_id, direction, sender_type, channel, origin, message_type, content,
+  insert into crm.messages (id, client_id, conversation_id, contact_id, direction, sender_type, channel, origin, message_type, content,
         delivery_status, sent_at, delivered_at, read_at, whatsapp_template_id, campaign_id, campaign_recipient_id, created_at) values
     (pg_temp.did(1100), c, pg_temp.did(200), pg_temp.did(100), 'outbound', 'system', 'whatsapp', 'campaign', 'text',
         'Hi Sarah, book a consultation this month and the $75 fee is credited toward any procedure. Reply BOOK and we will find you a time.',
@@ -454,9 +454,9 @@ begin
   -- ---------------------------------------------------------------
   -- 14. Notifications (bell)
   -- ---------------------------------------------------------------
-  insert into activity.notifications (id, client_id, type, title, message, lead_id, conversation_id, booking_id, channel_integration_id,
+  insert into activity.notifications (id, client_id, type, title, message, contact_id, conversation_id, booking_id, channel_integration_id,
         link, is_read, read_at, created_at) values
-    (pg_temp.did(800), c, 'NEW_LEAD',               'New lead: Karim Nasser', 'Karim wrote in on Telegram about a consultation in Arabic.', pg_temp.did(103), pg_temp.did(203), null, null, '/inbox?conversationId=' || pg_temp.did(203), false, null, now() - interval '2 hours'),
+    (pg_temp.did(800), c, 'NEW_CONTACT',               'New contact: Karim Nasser', 'Karim wrote in on Telegram about a consultation in Arabic.', pg_temp.did(103), pg_temp.did(203), null, null, '/inbox?conversationId=' || pg_temp.did(203), false, null, now() - interval '2 hours'),
     (pg_temp.did(801), c, 'HANDOFF',                'Olivia Reed needs a human', 'Asked about financing and medical history on Instagram.', pg_temp.did(104), pg_temp.did(204), null, null, '/inbox?conversationId=' || pg_temp.did(204), false, null, now() - interval '38 minutes'),
     (pg_temp.did(802), c, 'BOOKING_CREATED',     'Consultation booked: Noah Bennett', 'Saturday at 10:00.', pg_temp.did(105), null, pg_temp.did(310), null, '/dashboard/bookings/' || pg_temp.did(310), false, null, now() - interval '2 hours'),
     (pg_temp.did(803), c, 'BOOKING_CREATED',     'Consultation booked: Isabella Rossi', 'Booked by the AI assistant via Facebook.', pg_temp.did(111), pg_temp.did(210), pg_temp.did(307), null, '/dashboard/bookings/' || pg_temp.did(307), true, now() - interval '20 hours', now() - interval '1 day'),
@@ -469,20 +469,20 @@ begin
   -- ---------------------------------------------------------------
   -- 15. Activity events (feed + analytics)
   -- ---------------------------------------------------------------
-  insert into activity.events (id, client_id, lead_id, conversation_id, booking_id, event_type, source, metadata, created_at) values
-    (pg_temp.did(900), c, pg_temp.did(100), pg_temp.did(200), null,             'lead_created',           'instagram', '{}', now() - interval '25 days'),
+  insert into activity.events (id, client_id, contact_id, conversation_id, booking_id, event_type, source, metadata, created_at) values
+    (pg_temp.did(900), c, pg_temp.did(100), pg_temp.did(200), null,             'contact_created',           'instagram', '{}', now() - interval '25 days'),
     (pg_temp.did(901), c, pg_temp.did(100), pg_temp.did(200), pg_temp.did(300), 'booking_created',        'ai',        '{}', now() - interval '25 days' + interval '10 minutes'),
     (pg_temp.did(902), c, pg_temp.did(100), null,             pg_temp.did(300), 'booking_attended',       'staff',     '{}', now() - interval '18 days'),
     (pg_temp.did(903), c, pg_temp.did(100), null,             pg_temp.did(301), 'order_confirmed',       'staff',     '{"amount": 6500, "deposit": 1500}', now() - interval '10 days'),
     (pg_temp.did(904), c, pg_temp.did(101), pg_temp.did(201), pg_temp.did(302), 'booking_created',        'ai',        '{}', now() - interval '7 days'),
     (pg_temp.did(905), c, pg_temp.did(102), null,             pg_temp.did(303), 'booking_no_show',        'staff',     '{}', now() - interval '2 days'),
-    (pg_temp.did(906), c, pg_temp.did(103), pg_temp.did(203), null,             'lead_created',           'website',   '{}', now() - interval '2 hours'),
+    (pg_temp.did(906), c, pg_temp.did(103), pg_temp.did(203), null,             'contact_created',           'website',   '{}', now() - interval '2 hours'),
     (pg_temp.did(907), c, pg_temp.did(104), pg_temp.did(204), null,             'human_handoff',          'ai',        '{"reason": "financing and medical history"}', now() - interval '38 minutes'),
     (pg_temp.did(908), c, pg_temp.did(105), pg_temp.did(205), pg_temp.did(310), 'booking_created',        'staff',     '{}', now() - interval '2 hours'),
     (pg_temp.did(909), c, pg_temp.did(106), pg_temp.did(206), null,             'message_failed',         'whatsapp',  '{"code": "131047"}', now() - interval '25 hours'),
     (pg_temp.did(910), c, pg_temp.did(109), null,             pg_temp.did(304), 'booking_attended',       'staff',     '{}', now() - interval '4 days'),
     (pg_temp.did(911), c, pg_temp.did(110), null,             pg_temp.did(306), 'order_confirmed',       'staff',     '{"amount": 5000}', now() - interval '35 days'),
-    (pg_temp.did(912), c, pg_temp.did(108), null,             null,             'lead_contacted',         'campaign',  '{"campaign": "Old Lead Reactivation"}', now() - interval '2 hours'),
+    (pg_temp.did(912), c, pg_temp.did(108), null,             null,             'contact_contacted',         'campaign',  '{"campaign": "Old Contact Reactivation"}', now() - interval '2 hours'),
     (pg_temp.did(913), c, pg_temp.did(111), pg_temp.did(210), pg_temp.did(307), 'booking_created',        'ai',        '{}', now() - interval '1 day'),
     (pg_temp.did(914), c, pg_temp.did(113), pg_temp.did(211), null,             'conversation_closed',    'staff',     '{}', now() - interval '10 days');
 

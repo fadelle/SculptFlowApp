@@ -133,7 +133,7 @@ public partial class KnowledgeBenchmarkService : IKnowledgeBenchmarkService
     public async Task<BenchmarkCaseResponse> CreateManualCaseAsync(Guid clientId, CreateManualBenchmarkCaseRequest request, CancellationToken ct = default)
     {
         var question = NormalizeQuestion(request.Question);
-        if (string.IsNullOrEmpty(question)) throw new ArgumentException("Enter the patient question.");
+        if (string.IsNullOrEmpty(question)) throw new ArgumentException("Enter the contact question.");
         if (question.Length > MaxQuestionChars) throw new ArgumentException($"The question must be {MaxQuestionChars} characters or fewer.");
 
         var chunk = await _benchmark.GetActiveChunkAsync(clientId, request.DocumentId, request.ChunkId, ct);

@@ -64,7 +64,7 @@ public class AvailabilityService : IAvailabilityService
             return new AvailabilityResponse(true, ctx.Tz.Id, today.ToString("yyyy-MM-dd"), duration,
                 requested.ToString("yyyy-MM-dd"), requested.ToString("yyyy-MM-dd"),
                 $"The requested date {requested:yyyy-MM-dd} is in the past. Today is {today:yyyy-MM-dd} ({today.DayOfWeek}). " +
-                "Resolve the patient's day from today's date and call again with a date that is today or later.",
+                "Resolve the contact's day from today's date and call again with a date that is today or later.",
                 Array.Empty<AvailableSlotResponse>());
         }
 

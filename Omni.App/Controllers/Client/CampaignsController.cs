@@ -21,7 +21,7 @@ public class CampaignsController : DashboardApiController
         _audience = audience;
     }
 
-    /// <summary>Read-only "Matching Leads: N" preview for the Campaign creation page — resolves the
+    /// <summary>Read-only "Matching Contacts: N" preview for the Campaign creation page — resolves the
     /// same audience CreateAsync would snapshot, without creating anything.</summary>
     [HttpGet("audience-preview")]
     public async Task<ActionResult<AudiencePreviewResponse>> AudiencePreview(
@@ -39,11 +39,11 @@ public class CampaignsController : DashboardApiController
         return Ok(new AudiencePreviewResponse(count));
     }
 
-    /// <summary>"Preview leads" on the Campaign creation page — the same audience resolution as
-    /// AudiencePreview above (ICampaignAudienceService.GetEligibleLeadsAsync), just also returning
+    /// <summary>"Preview contacts" on the Campaign creation page — the same audience resolution as
+    /// AudiencePreview above (ICampaignAudienceService.GetEligibleContactsAsync), just also returning
     /// up to `limit` names/phones instead of only a count. Read-only, no side effects.</summary>
-    [HttpGet("audience-preview/leads")]
-    public async Task<ActionResult<AudiencePreviewLeadsResponse>> AudiencePreviewLeads(
+    [HttpGet("audience-preview/contacts")]
+    public async Task<ActionResult<AudiencePreviewContactsResponse>> AudiencePreviewContacts(
         [FromQuery] string audienceType, [FromQuery] string? filters, [FromQuery] int limit, CancellationToken ct)
     {
         var clientId = await GetClientIdAsync(ct);
@@ -55,9 +55,9 @@ public class CampaignsController : DashboardApiController
         }
 
         var cappedLimit = limit is > 0 and <= 50 ? limit : 10;
-        var leads = await _audience.GetEligibleLeadsAsync(clientId.Value, audienceType, filters, ct);
-        var preview = leads.Take(cappedLimit).Select(l => new AudiencePreviewLeadRow(l.Id, l.FullName, l.Phone)).ToList();
-        return Ok(new AudiencePreviewLeadsResponse(leads.Count, preview));
+        var contacts = await _audience.GetEligibleContactsAsync(clientId.Value, audienceType, filters, ct);
+        var preview = contacts.Take(cappedLimit).Select(l => new AudiencePreviewContactRow(l.Id, l.FullName, l.Phone)).ToList();
+        return Ok(new AudiencePreviewContactsResponse(contacts.Count, preview));
     }
 
     [HttpGet]

@@ -3,8 +3,8 @@ namespace Omni.App.Entities.Responses.Bookings;
 public record BookingResponse(
     Guid Id,
     Guid ClientId,
-    Guid LeadId,
-    string? LeadFullName,
+    Guid ContactId,
+    string? ContactFullName,
     Guid? ServiceId,
     string? ServiceName,
     string BookingType,

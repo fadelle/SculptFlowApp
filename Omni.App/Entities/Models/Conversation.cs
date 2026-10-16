@@ -6,7 +6,7 @@ public class Conversation
 {
     public Guid Id { get; set; }
     public Guid ClientId { get; set; }
-    public Guid LeadId { get; set; }
+    public Guid ContactId { get; set; }
 
     public string Channel { get; set; } = string.Empty;
     public string? ExternalThreadId { get; set; }
@@ -39,7 +39,7 @@ public class Conversation
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 
-    public Lead? Lead { get; set; }
+    public Contact? Contact { get; set; }
     public ICollection<Message> Messages { get; set; } = new List<Message>();
 
     /// <summary>Whether a normal free-form WhatsApp message can be sent right now. False for

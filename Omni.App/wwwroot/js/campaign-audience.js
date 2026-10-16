@@ -3,10 +3,10 @@
 // Four client-facing radios (data-audience-choice) map onto the real posted fields — two hidden
 // inputs, #audience-type-field (AudienceType) and #manual-selection-field (ManualSelection) — so
 // the backend still only ever sees the three real audience types it already understands (see
-// CampaignAudienceType); "Select leads manually" is audience_type=custom + ManualSelection=true
+// CampaignAudienceType); "Select contacts manually" is audience_type=custom + ManualSelection=true
 // under the hood, exactly as CampaignService.CreateAsync already expects.
 //
-// All match counts and the "Preview leads" lists come from GET /api/campaigns/audience-preview(/leads)
+// All match counts and the "Preview contacts" lists come from GET /api/campaigns/audience-preview(/contacts)
 // — the same ICampaignAudienceService the backend uses to actually snapshot recipients — so nothing
 // here re-implements the eligibility rules in JavaScript; this file only reads form fields, builds
 // the filters JSON, and renders what the server already computed.
@@ -68,10 +68,10 @@
     if (val('custom-service')) filters.serviceId = val('custom-service');
     if (val('custom-inactive-days')) filters.inactiveDays = parseInt(val('custom-inactive-days'), 10);
 
-    var leadStatuses = checkedValues('CustomLeadStatuses');
-    if (leadStatuses.length) filters.leadStatuses = leadStatuses;
-    var qualificationStatuses = checkedValues('CustomQualificationStatuses');
-    if (qualificationStatuses.length) filters.qualificationStatuses = qualificationStatuses;
+    var stageKeys = checkedValues('CustomStageKeys');
+    if (stageKeys.length) filters.stageKeys = stageKeys;
+    var qualifications = checkedValues('CustomQualifications');
+    if (qualifications.length) filters.qualifications = qualifications;
     var sources = checkedValues('CustomSources');
     if (sources.length) filters.sources = sources;
     var bookingStatuses = checkedValues('CustomBookingStatuses');
@@ -133,8 +133,8 @@
     fetch(url)
       .then(function (res) { return res.ok ? res.json() : null; })
       .then(function (data) {
-        setText(countElId, data ? String(data.matchingLeads) : '—');
-        document.dispatchEvent(new CustomEvent('campaign:count', { detail: { count: data ? data.matchingLeads : null } }));
+        setText(countElId, data ? String(data.matchingContacts) : '—');
+        document.dispatchEvent(new CustomEvent('campaign:count', { detail: { count: data ? data.matchingContacts : null } }));
       })
       .catch(function () { setText(countElId, '—'); });
   }
@@ -163,7 +163,7 @@
       if (t.matches('#inactive-days, #reactivation-service, #reactivation-source, ' +
         '#custom-service, #custom-inactive-days, #custom-created-after, #custom-created-before, ' +
         '#custom-last-contacted-after, #custom-last-contacted-before, ' +
-        'input[name="CustomLeadStatuses"], input[name="CustomQualificationStatuses"], ' +
+        'input[name="CustomStageKeys"], input[name="CustomQualifications"], ' +
         'input[name="CustomSources"], input[name="CustomBookingStatuses"]')) {
         onFilterChanged();
       }
@@ -174,8 +174,8 @@
     });
   }
 
-  // "Preview leads" — reuses the exact same audience resolution as the count, just also returning
-  // names/phones for the first few matches (GET /api/campaigns/audience-preview/leads).
+  // "Preview contacts" — reuses the exact same audience resolution as the count, just also returning
+  // names/phones for the first few matches (GET /api/campaigns/audience-preview/contacts).
   document.querySelectorAll('[data-preview-btn]').forEach(function (btn) {
     btn.addEventListener('click', function () {
       var choice = btn.getAttribute('data-preview-audience');
@@ -189,20 +189,20 @@
 
       var type = CHOICE_TO_TYPE[choice];
       var filters = filtersFor(choice);
-      var url = '/api/campaigns/audience-preview/leads?audienceType=' + encodeURIComponent(type) + '&limit=10';
+      var url = '/api/campaigns/audience-preview/contacts?audienceType=' + encodeURIComponent(type) + '&limit=10';
       if (filters) url += '&filters=' + encodeURIComponent(JSON.stringify(filters));
 
       fetch(url)
         .then(function (res) { return res.ok ? res.json() : null; })
         .then(function (data) {
-          if (!data || data.leads.length === 0) { target.innerHTML = '<div class="text-subtle">No leads to show.</div>'; return; }
-          var html = data.leads.map(function (l) {
-            var name = l.fullName ? l.fullName.replace(/</g, '&lt;') : 'Unnamed lead';
+          if (!data || data.contacts.length === 0) { target.innerHTML = '<div class="text-subtle">No contacts to show.</div>'; return; }
+          var html = data.contacts.map(function (l) {
+            var name = l.fullName ? l.fullName.replace(/</g, '&lt;') : 'Unnamed contact';
             var phone = l.phone ? l.phone.replace(/</g, '&lt;') : '—';
-            return '<div class="preview-lead-row"><span>' + name + '</span><span class="text-subtle">' + phone + '</span></div>';
+            return '<div class="preview-contact-row"><span>' + name + '</span><span class="text-subtle">' + phone + '</span></div>';
           }).join('');
-          if (data.matchingLeads > data.leads.length) {
-            html += '<div class="preview-more">+' + (data.matchingLeads - data.leads.length) + ' more</div>';
+          if (data.matchingContacts > data.contacts.length) {
+            html += '<div class="preview-more">+' + (data.matchingContacts - data.contacts.length) + ' more</div>';
           }
           target.innerHTML = html;
         })

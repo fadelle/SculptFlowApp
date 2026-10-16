@@ -2,15 +2,15 @@ using Omni.App.Common.Enums;
 
 namespace Omni.App.Entities.Models;
 
-/// <summary>One target lead within a Campaign. Tracks per-recipient send/delivery lifecycle without
+/// <summary>One target contact within a Campaign. Tracks per-recipient send/delivery lifecycle without
 /// being a message store itself — the actual send produces a row in messages (Message.CampaignRecipientId
-/// points back here). Unique per (campaign, lead) — see ux_campaign_recipients_campaign_lead.</summary>
+/// points back here). Unique per (campaign, contact) — see ux_campaign_recipients_campaign_contact.</summary>
 public class CampaignRecipient
 {
     public Guid Id { get; set; }
     public Guid ClientId { get; set; }
     public Guid CampaignId { get; set; }
-    public Guid LeadId { get; set; }
+    public Guid ContactId { get; set; }
     public Guid? ConversationId { get; set; }
 
     /// <summary>The outbound Message this recipient's template send produced — see
@@ -33,7 +33,7 @@ public class CampaignRecipient
     public string? VariablesJson { get; set; }
     public string Status { get; set; } = CampaignRecipientStatus.Pending;
 
-    /// <summary>Why this lead was excluded from sending despite matching the campaign's audience
+    /// <summary>Why this contact was excluded from sending despite matching the campaign's audience
     /// (e.g. "no_phone", "opted_out") — set instead of ever creating the row, or before it's queued.
     /// Distinct from FailureCode/FailureReason, which describe a send that was attempted and failed.</summary>
     public string? SkipReason { get; set; }
@@ -57,6 +57,6 @@ public class CampaignRecipient
     public DateTimeOffset UpdatedAt { get; set; }
 
     public Campaign? Campaign { get; set; }
-    public Lead? Lead { get; set; }
+    public Contact? Contact { get; set; }
     public Booking? Booking { get; set; }
 }

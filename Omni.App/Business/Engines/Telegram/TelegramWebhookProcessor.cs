@@ -4,7 +4,7 @@ using Omni.App.Business.Contracts.Engines.Telegram;
 using Omni.App.Business.Contracts.HttpClients.N8n;
 using Omni.App.Business.Contracts.Managers;
 using Omni.App.Business.Contracts.Services.Inbox;
-using Omni.App.Business.Contracts.Services.Leads;
+using Omni.App.Business.Contracts.Services.Contacts;
 using Omni.App.Common.Enums;
 using Omni.App.Common.Exceptions;
 using Omni.App.Common.Helpers;
@@ -22,20 +22,20 @@ public class TelegramWebhookProcessor : ITelegramWebhookProcessor
 {
     private readonly IChannelIntegrationRepository _integrations;
     private readonly IAiTriggerNotifier _aiTrigger;
-    private readonly ILeadService _leads;
+    private readonly IContactService _contacts;
     private readonly IConversationService _conversations;
     private readonly IMessageService _messages;
     private readonly ILogger<TelegramWebhookProcessor> _logger;
     private readonly IMessageTracer _tracer;
 
     public TelegramWebhookProcessor(
-        IChannelIntegrationRepository integrations, IAiTriggerNotifier aiTrigger, ILeadService leads, IConversationService conversations, IMessageService messages,
+        IChannelIntegrationRepository integrations, IAiTriggerNotifier aiTrigger, IContactService contacts, IConversationService conversations, IMessageService messages,
         ILogger<TelegramWebhookProcessor> logger, IMessageTracer tracer)
     {
         _tracer = tracer;
         _integrations = integrations;
         _aiTrigger = aiTrigger;
-        _leads = leads;
+        _contacts = contacts;
         _conversations = conversations;
         _messages = messages;
         _logger = logger;
@@ -66,10 +66,10 @@ public class TelegramWebhookProcessor : ITelegramWebhookProcessor
         _tracer.Step(TraceSteps.WebhookReceived, TraceOutcomes.Ok, channelIds, detail: new { type = msg.MessageType });
 
         // Telegram has no phone number for us: the person is identified by their Telegram chat id,
-        // scoped to this client (the unique index is (client_id, external_lead_id)).
-        var (lead, leadWasCreated) = await _leads.GetOrCreateByExternalIdAsync(
+        // scoped to this client (the unique index is (client_id, external_contact_id)).
+        var (contact, contactWasCreated) = await _contacts.GetOrCreateByExternalIdAsync(
             clientId,
-            externalLeadId: $"telegram:{msg.ChatId}",
+            externalContactId: $"telegram:{msg.ChatId}",
             source: ConversationChannel.Telegram,
             fullName: DisplayName(msg),
             firstName: msg.FirstName,
@@ -77,20 +77,20 @@ public class TelegramWebhookProcessor : ITelegramWebhookProcessor
             sourceDetail: string.IsNullOrEmpty(msg.Username) ? null : "@" + msg.Username,
             ct);
 
-        var conversation = await _conversations.GetOrCreateForLeadAsync(
-            clientId, lead.Id, ConversationChannel.Telegram, msg.ChatId.ToString(), ct);
+        var conversation = await _conversations.GetOrCreateForContactAsync(
+            clientId, contact.Id, ConversationChannel.Telegram, msg.ChatId.ToString(), ct);
 
         IngestMessageResult result;
         try
         {
             result = await _messages.IngestAsync(new IngestMessageRequest(
-                clientId, conversation.Id, lead.Id, IngestEventType.CustomerMessage, ConversationChannel.Telegram,
+                clientId, conversation.Id, contact.Id, IngestEventType.CustomerMessage, ConversationChannel.Telegram,
                 msg.Content,
                 // Telegram message_ids are only unique within a chat, so the chat id is part of the key;
                 // (client_id, channel, external_message_id) is the DB-level idempotency guarantee.
                 ExternalMessageId: ExternalMessageId(msg.ChatId.ToString(), msg.MessageId),
                 DeliveryStatus: null, SentAt: null, ReceivedAt: msg.Timestamp,
-                MessageType: msg.MessageType, MetadataJson: msg.MetadataJson, LeadWasNewlyCreated: leadWasCreated), ct);
+                MessageType: msg.MessageType, MetadataJson: msg.MetadataJson, ContactWasNewlyCreated: contactWasCreated), ct);
         }
         catch (DuplicateRecordException)
         {
@@ -100,7 +100,7 @@ public class TelegramWebhookProcessor : ITelegramWebhookProcessor
             _tracer.Step(TraceSteps.MessageDeduplicated, TraceOutcomes.Skipped,
                 channelIds with { ConversationId = conversation.Id, ExternalMessageId = ExternalMessageId(msg.ChatId.ToString(), msg.MessageId) },
                 detail: new { reason = "insert_race" });
-            return new TelegramWebhookResult(true, "customer_message", false, clientId, conversation.Id, lead.Id, Deduplicated: true);
+            return new TelegramWebhookResult(true, "customer_message", false, clientId, conversation.Id, contact.Id, Deduplicated: true);
         }
 
         return new TelegramWebhookResult(
@@ -109,7 +109,7 @@ public class TelegramWebhookProcessor : ITelegramWebhookProcessor
             ShouldRunAi: result.AiEligible,
             ClientId: clientId,
             ConversationId: conversation.Id,
-            LeadId: lead.Id,
+            ContactId: contact.Id,
             MessageId: result.Message?.Id,
             MessageType: result.Message?.MessageType,
             Content: result.Message?.Content,
@@ -155,7 +155,7 @@ public class TelegramWebhookProcessor : ITelegramWebhookProcessor
         {
             // Same normalized trigger WhatsApp sends — only Channel differs. Never raw Telegram JSON.
             await _aiTrigger.NotifyAsync(new AiTriggerPayload(
-                result.ClientId.Value, result.ConversationId.Value, result.LeadId, result.MessageId,
+                result.ClientId.Value, result.ConversationId.Value, result.ContactId, result.MessageId,
                 Channel: ConversationChannel.Telegram, MessageType: result.MessageType, MessageText: result.Content,
                 SelectedValue: null), ct);
         }

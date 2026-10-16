@@ -23,7 +23,7 @@ public class InboxSettingsRepository : IInboxSettingsRepository
     public Task<InboxSettings?> GetForClientAsync(Guid clientId, CancellationToken ct = default) =>
         _db.InboxSettings.FirstOrDefaultAsync(s => s.ClientId == clientId && s.ChannelIntegrationId == null, ct);
 
-    // Read on every incoming patient message, so the client-wide row (or its absence) is cached.
+    // Read on every incoming contact message, so the client-wide row (or its absence) is cached.
     public Task<InboxSettings?> GetForClientReadOnlyAsync(Guid clientId, CancellationToken ct = default) =>
         _cache.ReadThroughValueAsync(CacheKeys.InboxSettings(clientId), CacheArea.Clients,
             token => _db.InboxSettings.AsNoTracking()

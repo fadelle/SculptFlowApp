@@ -36,9 +36,9 @@ else
             <div class="inbox-list" id="inbox-list">
                 @foreach (var c in Model.Conversations)
                 {
-                    <div class="inbox-conv-item" data-conversation-id="@c.Id" data-lead-name="@(c.LeadFullName ?? "Unknown")" data-service-name="@(c.ServiceName ?? "")" data-channel="@c.Channel">
+                    <div class="inbox-conv-item" data-conversation-id="@c.Id" data-contact-name="@(c.ContactFullName ?? "Unknown")" data-service-name="@(c.ServiceName ?? "")" data-channel="@c.Channel">
                         <span class="inbox-avatar">
-                            @Initials(c.LeadFullName)
+                            @Initials(c.ContactFullName)
                             <span class="inbox-channel-icon" style="background:@Omni.App.Common.Helpers.ChannelIconHelper.Hex(c.Channel)" title="@c.Channel">
                                 @{ var svg = Omni.App.Common.Helpers.ChannelIconHelper.Svg(c.Channel); }
                                 @if (svg is not null)
@@ -53,7 +53,7 @@ else
                         </span>
                         <div class="inbox-conv-main">
                             <div class="inbox-conv-top">
-                                <span class="inbox-conv-name">@(c.LeadFullName ?? "Unknown")</span>
+                                <span class="inbox-conv-name">@(c.ContactFullName ?? "Unknown")</span>
                                 <span class="inbox-conv-time" data-timestamp="@((c.LastMessageAt ?? c.CreatedAt).ToString("O"))"></span>
                             </div>
                             @if (!string.IsNullOrEmpty(c.ServiceName))
@@ -78,7 +78,7 @@ else
             <div class="inbox-empty" id="inbox-empty">
                 <span class="au-empty__icon"><span class="au-icon" aria-hidden="true">forum</span></span>
                 <p class="empty-title">Pick a conversation</p>
-                <p class="empty-text">When a patient writes to your client, the conversation shows up on the left.</p>
+                <p class="empty-text">When a contact writes to your client, the conversation shows up on the left.</p>
             </div>
 
             <div class="inbox-thread-inner" id="inbox-thread-inner" hidden>
@@ -146,35 +146,35 @@ else
             </div>
         </div>
 
-        <aside class="inbox-lead-info" id="inbox-lead-info" hidden>
-            <div class="inbox-lead-head">
-                <button type="button" class="au-icon-btn au-icon-btn--sm inbox-lead-close" id="inbox-lead-close" aria-label="Hide customer info" title="Hide customer info">
+        <aside class="inbox-contact-info" id="inbox-contact-info" hidden>
+            <div class="inbox-contact-head">
+                <button type="button" class="au-icon-btn au-icon-btn--sm inbox-contact-close" id="inbox-contact-close" aria-label="Hide customer info" title="Hide customer info">
                     <span class="au-icon" aria-hidden="true">close</span>
                 </button>
-                <span class="inbox-avatar inbox-avatar-lg" id="inbox-lead-avatar"></span>
-                <strong id="inbox-lead-name">—</strong>
-                <span class="badge badge-gray" id="inbox-lead-status">—</span>
+                <span class="inbox-avatar inbox-avatar-lg" id="inbox-contact-avatar"></span>
+                <strong id="inbox-contact-name">—</strong>
+                <span class="badge badge-gray" id="inbox-contact-stage">—</span>
             </div>
 
-            <div class="inbox-lead-section" id="inbox-lead-journey-wrap">
+            <div class="inbox-contact-section" id="inbox-contact-journey-wrap">
                 <span class="eyebrow">Journey</span>
-                <div class="journey" id="inbox-lead-journey"><i></i><i></i><i></i><i></i></div>
-                <div class="journey-labels"><span>New</span><span>Qualified</span><span>Consult</span><span>Surgery</span></div>
+                <div class="journey" id="inbox-contact-journey">@foreach (var _ in IndexModel.JourneyCategories){<i></i>}</div>
+                <div class="journey-labels">@foreach (var category in IndexModel.JourneyCategories){<span>@Model.JourneyLabel(category)</span>}</div>
             </div>
 
-            <div class="inbox-lead-section">
+            <div class="inbox-contact-section">
                 <span class="eyebrow">Details</span>
-                <div class="inbox-lead-info-row"><span>Phone</span><strong id="inbox-lead-phone">—</strong></div>
-                <div class="inbox-lead-info-row"><span>Email</span><strong id="inbox-lead-email">—</strong></div>
-                <div class="inbox-lead-info-row"><span>Service</span><strong id="inbox-lead-service">—</strong></div>
-                <div class="inbox-lead-info-row"><span>Source</span><strong id="inbox-lead-source">—</strong></div>
-                <div class="inbox-lead-info-row"><span>Timeline</span><strong id="inbox-lead-timeline">—</strong></div>
-                <div class="inbox-lead-info-row"><span>Next follow-up</span><strong id="inbox-lead-followup">—</strong></div>
-                <div class="inbox-lead-info-row"><span>Lead since</span><strong id="inbox-lead-created">—</strong></div>
+                <div class="inbox-contact-info-row"><span>Phone</span><strong id="inbox-contact-phone">—</strong></div>
+                <div class="inbox-contact-info-row"><span>Email</span><strong id="inbox-contact-email">—</strong></div>
+                <div class="inbox-contact-info-row"><span>Service</span><strong id="inbox-contact-service">—</strong></div>
+                <div class="inbox-contact-info-row"><span>Source</span><strong id="inbox-contact-source">—</strong></div>
+                <div class="inbox-contact-info-row"><span>Timeline</span><strong id="inbox-contact-timeline">—</strong></div>
+                <div class="inbox-contact-info-row"><span>Next follow-up</span><strong id="inbox-contact-followup">—</strong></div>
+                <div class="inbox-contact-info-row"><span>Contact since</span><strong id="inbox-contact-created">—</strong></div>
             </div>
 
-            <div class="inbox-lead-actions">
-                <a class="au-btn au-btn--outlined" id="inbox-lead-profile" href="#"><span class="au-icon" aria-hidden="true">person</span>Open full profile</a>
+            <div class="inbox-contact-actions">
+                <a class="au-btn au-btn--outlined" id="inbox-contact-profile" href="#"><span class="au-icon" aria-hidden="true">person</span>Open full profile</a>
                 <a class="au-btn au-btn--outlined" href="/dashboard/bookings"><span class="au-icon" aria-hidden="true">calendar_month</span>Go to Bookings</a>
             </div>
         </aside>
@@ -185,6 +185,8 @@ else
     window.PS_INBOX_CONFIG = {
         clientId: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.ClientId.ToString())),
         aiAgentAvailable: @(Model.AiAgentAvailable ? "true" : "false"),
+        stages: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Pipeline.Stages, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web))),
+        journeyCategories: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(IndexModel.JourneyCategories)),
         hubUrl: '/hubs/inbox'
     };
 </script>

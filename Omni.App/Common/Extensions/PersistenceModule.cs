@@ -11,7 +11,7 @@ using Omni.App.Persistence.Contracts.Dashboard;
 using Omni.App.Persistence.Contracts.Events;
 using Omni.App.Persistence.Contracts.Inbox;
 using Omni.App.Persistence.Contracts.Knowledge;
-using Omni.App.Persistence.Contracts.Leads;
+using Omni.App.Persistence.Contracts.Contacts;
 using Omni.App.Persistence.Contracts.Notifications;
 using Omni.App.Persistence.Contracts.Catalog;
 using Omni.App.Persistence.Contracts.Orders;
@@ -31,7 +31,7 @@ using Omni.App.Persistence.Repositories.Dashboard;
 using Omni.App.Persistence.Repositories.Events;
 using Omni.App.Persistence.Repositories.Inbox;
 using Omni.App.Persistence.Repositories.Knowledge;
-using Omni.App.Persistence.Repositories.Leads;
+using Omni.App.Persistence.Repositories.Contacts;
 using Omni.App.Persistence.Repositories.Notifications;
 using Omni.App.Persistence.Repositories.Catalog;
 using Omni.App.Persistence.Repositories.Orders;
@@ -64,7 +64,7 @@ public static class PersistenceModule
         services.AddScoped<IAppLogRepository, AppLogRepository>();
         services.AddScoped<IMessageTraceStepRepository, MessageTraceStepRepository>();
         services.AddScoped<IMessageTraceAdminRepository, MessageTraceAdminRepository>();
-        services.AddScoped<ILeadRepository, LeadRepository>();
+        services.AddScoped<IContactRepository, ContactRepository>();
         services.AddScoped<IServiceRepository, ServiceRepository>();
         services.AddScoped<IOrderRepository, OrderRepository>();
         services.AddScoped<INotificationRepository, NotificationRepository>();
@@ -94,7 +94,7 @@ public static class PersistenceModule
         services.AddScoped<IClientAdminRepository, ClientAdminRepository>();
         services.AddScoped<IChannelAdminRepository, ChannelAdminRepository>();
         services.AddScoped<IStaffAdminRepository, StaffAdminRepository>();
-        services.AddScoped<ILeadAdminRepository, LeadAdminRepository>();
+        services.AddScoped<IContactAdminRepository, ContactAdminRepository>();
         services.AddScoped<IContentAdminRepository, ContentAdminRepository>();
         services.AddScoped<IOverviewAdminRepository, OverviewAdminRepository>();
 

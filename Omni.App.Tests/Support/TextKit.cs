@@ -41,7 +41,8 @@ internal static class TextKit
         types.Setup(t => t.ListOptionsAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync([new BusinessTypeOption(Clinic, "Clinic"), new BusinessTypeOption(General, "General business")]); // leftover-ok: built-in type name
         types.Setup(t => t.ListStagesForClientAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync([new PipelineStageOption("new", StageCategory.Open, "New")]);
+            .ReturnsAsync(PipelineKit.General().Stages);
+        types.Setup(t => t.GetPipelineAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync(PipelineKit.General());
         return types;
     }
 }

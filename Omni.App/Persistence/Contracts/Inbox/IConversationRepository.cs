@@ -10,10 +10,10 @@ public interface IConversationRepository
 
     Task<Conversation?> GetAsync(Guid clientId, Guid conversationId, CancellationToken ct = default);
 
-    /// <summary>With Lead loaded (sends need its phone and update its last-contact time).</summary>
-    Task<Conversation?> GetWithLeadAsync(Guid clientId, Guid conversationId, CancellationToken ct = default);
+    /// <summary>With Contact loaded (sends need its phone and update its last-contact time).</summary>
+    Task<Conversation?> GetWithContactAsync(Guid clientId, Guid conversationId, CancellationToken ct = default);
 
-    Task<Conversation?> FindForLeadAsync(Guid clientId, Guid leadId, string channel, CancellationToken ct = default);
+    Task<Conversation?> FindForContactAsync(Guid clientId, Guid contactId, string channel, CancellationToken ct = default);
 
     Task<Conversation?> FindByExternalThreadAsync(Guid clientId, string channel, string externalThreadId, CancellationToken ct = default);
 

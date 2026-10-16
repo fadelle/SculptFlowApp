@@ -7,7 +7,7 @@ public record NotificationResponse(
     string Type,
     string Title,
     string? Message,
-    Guid? LeadId,
+    Guid? ContactId,
     Guid? ConversationId,
     Guid? BookingId,
     string? Link,
