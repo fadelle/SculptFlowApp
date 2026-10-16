@@ -33,9 +33,9 @@
     var languages = new[] { "en_US", "en_GB", "ar", "fr", "es", "de", "tr" };
 }
 
-@if (!Model.ClinicConfigured)
+@if (!Model.ClientConfigured)
 {
-    <partial name="_NoClinic" />
+    <partial name="_NoClient" />
 }
 else
 {
@@ -279,7 +279,7 @@ else
     }
     <script>
         window.PS_WHATSAPP_TEMPLATES_CONFIG = {
-            clinicId: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.ClinicId.ToString())),
+            clientId: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.ClientId.ToString())),
             hubUrl: '/hubs/inbox'
         };
     </script>

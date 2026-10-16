@@ -18,23 +18,23 @@ namespace Omni.App.Pages.Dashboard;
 /// </summary>
 public class AppointmentDetailModel : PageModel
 {
-    private readonly ICurrentClinicContext _clinicContext;
+    private readonly ICurrentClientContext _clientContext;
     private readonly IAppointmentService _appointments;
 
-    public AppointmentDetailModel(ICurrentClinicContext clinicContext, IAppointmentService appointments)
+    public AppointmentDetailModel(ICurrentClientContext clientContext, IAppointmentService appointments)
     {
-        _clinicContext = clinicContext;
+        _clientContext = clientContext;
         _appointments = appointments;
     }
 
     [BindProperty(SupportsGet = true)]
     public Guid Id { get; set; }
 
-    public bool ClinicConfigured { get; private set; }
+    public bool ClientConfigured { get; private set; }
     public AppointmentResponse? Appointment { get; private set; }
 
-    /// <summary>For the "Clinic time | My time" switch (_TimeViewSwitch); the header time defaults to clinic time.</summary>
-    public string ClinicTimezone { get; private set; } = "UTC";
+    /// <summary>For the "Client time | My time" switch (_TimeViewSwitch); the header time defaults to client time.</summary>
+    public string ClientTimezone { get; private set; } = "UTC";
     public IReadOnlyList<string> StatusOptions { get; } = AppointmentStatus.All.OrderBy(s => s).ToList();
 
     [BindProperty]
@@ -49,19 +49,19 @@ public class AppointmentDetailModel : PageModel
     public async Task<IActionResult> OnGetAsync(CancellationToken ct)
     {
         await LoadAsync(ct);
-        if (ClinicConfigured && Appointment is null) return NotFound();
+        if (ClientConfigured && Appointment is null) return NotFound();
         if (Appointment is not null) Status = Appointment.Status;
         return Page();
     }
 
     public async Task<IActionResult> OnPostAsync(CancellationToken ct)
     {
-        var clinic = await _clinicContext.GetClinicAsync(ct);
-        if (clinic is null) return RedirectToPage();
+        var client = await _clientContext.GetClientAsync(ct);
+        if (client is null) return RedirectToPage();
 
         try
         {
-            var appointment = await _appointments.UpdateStatusAsync(clinic.Id, Id, Status, ct);
+            var appointment = await _appointments.UpdateStatusAsync(client.Id, Id, Status, ct);
             if (appointment is null) return NotFound();
 
             StatusMessage = "Saved.";
@@ -77,15 +77,15 @@ public class AppointmentDetailModel : PageModel
 
     private async Task LoadAsync(CancellationToken ct)
     {
-        var clinic = await _clinicContext.GetClinicAsync(ct);
-        if (clinic is null)
+        var client = await _clientContext.GetClientAsync(ct);
+        if (client is null)
         {
-            ClinicConfigured = false;
+            ClientConfigured = false;
             return;
         }
 
-        ClinicConfigured = true;
-        if (!string.IsNullOrWhiteSpace(clinic.Timezone)) ClinicTimezone = clinic.Timezone;
-        Appointment = await _appointments.GetByIdAsync(clinic.Id, Id, ct);
+        ClientConfigured = true;
+        if (!string.IsNullOrWhiteSpace(client.Timezone)) ClientTimezone = client.Timezone;
+        Appointment = await _appointments.GetByIdAsync(client.Id, Id, ct);
     }
 }

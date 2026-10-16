@@ -20,7 +20,7 @@ public class BillingRate
     public string Unit { get; set; } = "unit";
     /// <summary>What the upstream provider charges per unit (paid by whoever the usage's responsibility says).</summary>
     public decimal ProviderCost { get; set; }
-    /// <summary>What Omni charges the clinic per unit. Independent of ProviderCost.</summary>
+    /// <summary>What Omni charges the client per unit. Independent of ProviderCost.</summary>
     public decimal ClientRate { get; set; }
     public string Currency { get; set; } = "USD";
     public DateTimeOffset EffectiveFrom { get; set; }

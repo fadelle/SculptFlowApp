@@ -32,17 +32,17 @@ public class ProcedureBookingService : IProcedureBookingService
 
     public async Task<ProcedureBookingResponse> CreateAsync(CreateProcedureBookingRequest request, CancellationToken ct = default)
     {
-        // A new procedure booking may only reference one of this clinic's ACTIVE procedures.
-        await _procedures.EnsureUsableAsync(request.ClinicId, request.ProcedureId, ct);
-        if (!await _leads.ExistsAsync(request.ClinicId, request.LeadId, ct))
+        // A new procedure booking may only reference one of this client's ACTIVE procedures.
+        await _procedures.EnsureUsableAsync(request.ClientId, request.ProcedureId, ct);
+        if (!await _leads.ExistsAsync(request.ClientId, request.LeadId, ct))
         {
-            throw new ArgumentException("Lead not found for this clinic.");
+            throw new ArgumentException("Lead not found for this client.");
         }
 
         var booking = new ProcedureBooking
         {
             Id = Guid.NewGuid(),
-            ClinicId = request.ClinicId,
+            ClientId = request.ClientId,
             LeadId = request.LeadId,
             ProcedureId = request.ProcedureId,
             AppointmentId = request.AppointmentId,
@@ -60,9 +60,9 @@ public class ProcedureBookingService : IProcedureBookingService
         return await ToResponseAsync(booking, ct);
     }
 
-    public async Task<ProcedureBookingResponse?> UpdateAsync(Guid clinicId, Guid id, UpdateProcedureBookingRequest request, CancellationToken ct = default)
+    public async Task<ProcedureBookingResponse?> UpdateAsync(Guid clientId, Guid id, UpdateProcedureBookingRequest request, CancellationToken ct = default)
     {
-        var booking = await _bookings.GetAsync(clinicId, id, ct);
+        var booking = await _bookings.GetAsync(clientId, id, ct);
         if (booking is null) return null;
 
         var previousStatus = booking.Status;
@@ -95,7 +95,7 @@ public class ProcedureBookingService : IProcedureBookingService
                 lead.UpdatedAt = DateTimeOffset.UtcNow;
             }
 
-            _events.Log(clinicId, EventTypes.ProcedureBooked, leadId: booking.LeadId,
+            _events.Log(clientId, EventTypes.ProcedureBooked, leadId: booking.LeadId,
                 metadataJson: $"{{\"amount\": {booking.FinalAmount?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "null"}}}");
         }
 
@@ -107,9 +107,9 @@ public class ProcedureBookingService : IProcedureBookingService
         status is ProcedureBookingStatus.Booked or ProcedureBookingStatus.DepositPaid or ProcedureBookingStatus.Completed;
 
     public async Task<(IReadOnlyList<ProcedureBookingResponse> Items, int TotalCount)> ListAsync(
-        Guid clinicId, string? status, int skip, int take, CancellationToken ct = default)
+        Guid clientId, string? status, int skip, int take, CancellationToken ct = default)
     {
-        var (items, totalCount) = await _bookings.ListAsync(clinicId, status, skip, take, ct);
+        var (items, totalCount) = await _bookings.ListAsync(clientId, status, skip, take, ct);
         return (items.Select(ProcedureMapper.ToResponse).ToList(), totalCount);
     }
 

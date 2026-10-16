@@ -11,7 +11,6 @@ public class LeftoverNamesTests
     /// <summary>Word × path glob still waiting for its rename session (see milestone-a-plan.md, section 5).</summary>
     public static readonly (string Word, string Glob, string ClosedBy)[] PendingScopes =
     [
-        ("clinic", "**", "S2"),
         ("procedure", "**", "S4"),
         ("appointment", "**", "S5"),
         ("consultation", "**", "S5"),

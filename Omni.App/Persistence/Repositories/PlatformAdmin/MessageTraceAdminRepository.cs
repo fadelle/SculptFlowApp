@@ -22,7 +22,7 @@ public class MessageTraceAdminRepository : IMessageTraceAdminRepository
         _db.MessageTraceSteps.AsNoTracking()
             .Where(s => s.TraceId == traceId)
             .OrderBy(s => s.OccurredAt).ThenBy(s => s.Id)
-            .Select(s => new TraceStepRow(s.Id, s.TraceId, s.OccurredAt, s.Step, s.Outcome, s.DurationMs, s.ClinicId, s.ConversationId,
+            .Select(s => new TraceStepRow(s.Id, s.TraceId, s.OccurredAt, s.Step, s.Outcome, s.DurationMs, s.ClientId, s.ConversationId,
                 s.MessageId, s.ExternalMessageId, s.Channel, s.N8nExecutionId, s.Detail))
             .ToListAsync(ct);
 
@@ -58,7 +58,7 @@ public class MessageTraceAdminRepository : IMessageTraceAdminRepository
         return _db.Messages.AsNoTracking()
             .Where(m => m.TraceId == traceId || ids.Contains(m.Id))
             .OrderBy(m => m.CreatedAt)
-            .Select(m => new TraceMessageRow(m.Id, m.ClinicId, m.ConversationId, m.Direction, m.SenderType, m.Origin, m.Channel, m.MessageType,
+            .Select(m => new TraceMessageRow(m.Id, m.ClientId, m.ConversationId, m.Direction, m.SenderType, m.Origin, m.Channel, m.MessageType,
                 m.ExternalMessageId, m.DeliveryStatus, m.CreatedAt, m.SentAt, m.DeliveredAt, m.ReadAt, m.FailedAt, m.FailureCode,
                 m.FailureReason, m.TraceId))
             .ToListAsync(ct);
@@ -91,16 +91,16 @@ public class MessageTraceAdminRepository : IMessageTraceAdminRepository
             .Where(l => l.TraceId == traceId)
             .OrderBy(l => l.OccurredAt).ThenBy(l => l.Id)
             .Select(l => new AppLogRow(l.Id, l.OccurredAt, l.Level, l.Category, l.Message, l.ExceptionType, l.Fingerprint, l.RepeatCount,
-                l.TraceId, l.ClinicId, l.ConversationId, l.MessageId, l.Method, l.Route))
+                l.TraceId, l.ClientId, l.ConversationId, l.MessageId, l.Method, l.Route))
             .ToListAsync(ct);
 
     public async Task<(List<TraceSummaryRow> Rows, int Total)> ListReadOnlyAsync(MessageTraceFilter filter, int skip, int take, CancellationToken ct = default)
     {
         var steps = _db.MessageTraceSteps.AsNoTracking().Where(s => s.OccurredAt >= filter.From);
-        if (filter.ClinicId is { } clinicId)
+        if (filter.ClientId is { } clientId)
         {
-            var ofClinic = steps.Where(s => s.ClinicId == clinicId).Select(s => s.TraceId);
-            steps = steps.Where(s => ofClinic.Contains(s.TraceId));
+            var ofClient = steps.Where(s => s.ClientId == clientId).Select(s => s.TraceId);
+            steps = steps.Where(s => ofClient.Contains(s.TraceId));
         }
         if (filter.ConversationId is { } conversationId)
         {
@@ -131,16 +131,16 @@ public class MessageTraceAdminRepository : IMessageTraceAdminRepository
         var page = await groups.OrderByDescending(g => g.EndedAt).ThenBy(g => g.TraceId).Skip(skip).Take(take).ToListAsync(ct);
         var traceIds = page.Select(g => g.TraceId).ToList();
 
-        // The trace's clinic/conversation/channel come from its first step that names them (webhook.received names none).
+        // The trace's client/conversation/channel come from its first step that names them (webhook.received names none).
         var namedIds = await _db.MessageTraceSteps.AsNoTracking()
-            .Where(s => traceIds.Contains(s.TraceId) && s.ClinicId != null)
+            .Where(s => traceIds.Contains(s.TraceId) && s.ClientId != null)
             .GroupBy(s => s.TraceId)
             .Select(g => g.Min(s => s.Id))
             .ToListAsync(ct);
         var stepIds = page.Select(g => g.FirstId).Concat(page.Where(g => g.FailedId != null).Select(g => g.FailedId!.Value)).Concat(namedIds).Distinct().ToList();
         var picked = await _db.MessageTraceSteps.AsNoTracking()
             .Where(s => stepIds.Contains(s.Id))
-            .Select(s => new { s.Id, s.TraceId, s.Step, s.ClinicId, s.ConversationId, s.Channel, s.Detail })
+            .Select(s => new { s.Id, s.TraceId, s.Step, s.ClientId, s.ConversationId, s.Channel, s.Detail })
             .ToDictionaryAsync(s => s.Id, ct);
         var named = picked.Values.Where(s => namedIds.Contains(s.Id)).ToDictionary(s => s.TraceId);
         var errors = await _db.AppLogs.AsNoTracking()
@@ -155,7 +155,7 @@ public class MessageTraceAdminRepository : IMessageTraceAdminRepository
             named.TryGetValue(g.TraceId, out var about);
             var failed = g.FailedId is { } failedId ? picked[failedId] : null;
             return new TraceSummaryRow(g.TraceId, g.StartedAt, g.EndedAt, g.Steps, g.FailedSteps, errors.GetValueOrDefault(g.TraceId),
-                about?.ClinicId ?? first.ClinicId, about?.ConversationId ?? first.ConversationId, about?.Channel ?? first.Channel,
+                about?.ClientId ?? first.ClientId, about?.ConversationId ?? first.ConversationId, about?.Channel ?? first.Channel,
                 first.Step, failed?.Step, failed?.Detail);
         }).ToList();
         return (rows, total);

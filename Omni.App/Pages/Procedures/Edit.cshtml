@@ -4,9 +4,9 @@
     ViewData["Title"] = Model.IsNew ? "Add Procedure" : "Edit Procedure";
 }
 
-@if (!Model.ClinicConfigured)
+@if (!Model.ClientConfigured)
 {
-    <partial name="_NoClinic" />
+    <partial name="_NoClient" />
 }
 else
 {
@@ -16,7 +16,7 @@ else
         </a>
         <div class="min-w-0">
             <h2 class="au-back-header__title">@(Model.IsNew ? "Add a procedure" : Model.Name)</h2>
-            <span class="au-back-header__sub">@(Model.IsNew ? "A treatment your clinic offers." : "Edit this procedure.")</span>
+            <span class="au-back-header__sub">@(Model.IsNew ? "A treatment your client offers." : "Edit this procedure.")</span>
         </div>
     </div>
 

@@ -22,27 +22,27 @@ public class CalendarIntegrationRepository : ICalendarIntegrationRepository
 
     public void Add(CalendarIntegration integration) => _db.CalendarIntegrations.Add(integration);
 
-    public Task<CalendarIntegration?> GetWithCalendarsAsync(Guid clinicId, string provider, CancellationToken ct = default) =>
+    public Task<CalendarIntegration?> GetWithCalendarsAsync(Guid clientId, string provider, CancellationToken ct = default) =>
         _db.CalendarIntegrations.Include(c => c.Calendars)
-            .FirstOrDefaultAsync(c => c.ClinicId == clinicId && c.Provider == provider, ct);
+            .FirstOrDefaultAsync(c => c.ClientId == clientId && c.Provider == provider, ct);
 
-    public async Task<IReadOnlyList<CalendarIntegration>> ListWithCalendarsReadOnlyAsync(Guid clinicId, CancellationToken ct = default) =>
-        (await _cache.ReadThroughAsync(CacheKeys.Calendars(clinicId), CacheArea.Scheduling,
+    public async Task<IReadOnlyList<CalendarIntegration>> ListWithCalendarsReadOnlyAsync(Guid clientId, CancellationToken ct = default) =>
+        (await _cache.ReadThroughAsync(CacheKeys.Calendars(clientId), CacheArea.Scheduling,
             async token => await _db.CalendarIntegrations.AsNoTracking()
                 .Include(c => c.Calendars)
-                .Where(c => c.ClinicId == clinicId)
+                .Where(c => c.ClientId == clientId)
                 .ToListAsync(token), ct))!;
 
-    public Task<CalendarIntegration?> GetByIdAsync(Guid clinicId, Guid integrationId, CancellationToken ct = default) =>
-        _db.CalendarIntegrations.FirstOrDefaultAsync(c => c.Id == integrationId && c.ClinicId == clinicId, ct);
+    public Task<CalendarIntegration?> GetByIdAsync(Guid clientId, Guid integrationId, CancellationToken ct = default) =>
+        _db.CalendarIntegrations.FirstOrDefaultAsync(c => c.Id == integrationId && c.ClientId == clientId, ct);
 
-    public async Task<IReadOnlyList<CalendarIntegration>> ListSyncTargetsAsync(Guid clinicId, CancellationToken ct = default)
+    public async Task<IReadOnlyList<CalendarIntegration>> ListSyncTargetsAsync(Guid clientId, CancellationToken ct = default)
     {
-        // Runs on every appointment change and most clinics sync nothing: answer "none" from the cached list first.
-        if (!(await ListWithCalendarsReadOnlyAsync(clinicId, ct)).Any(IsSyncTarget)) return Array.Empty<CalendarIntegration>();
+        // Runs on every appointment change and most clients sync nothing: answer "none" from the cached list first.
+        if (!(await ListWithCalendarsReadOnlyAsync(clientId, ct)).Any(IsSyncTarget)) return Array.Empty<CalendarIntegration>();
 
         return await _db.CalendarIntegrations
-            .Where(c => c.ClinicId == clinicId && c.Status == CalendarIntegrationStatus.Connected && c.SyncEnabled
+            .Where(c => c.ClientId == clientId && c.Status == CalendarIntegrationStatus.Connected && c.SyncEnabled
                         && c.SelectedCalendarId != null && c.AccessToken != null)
             .ToListAsync(ct);
     }

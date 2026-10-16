@@ -5,7 +5,7 @@ namespace Omni.App.Entities.Models;
 public class Lead
 {
     public Guid Id { get; set; }
-    public Guid ClinicId { get; set; }
+    public Guid ClientId { get; set; }
     public Guid? ProcedureId { get; set; }
 
     public string? FullName { get; set; }
@@ -39,7 +39,7 @@ public class Lead
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 
-    public Clinic? Clinic { get; set; }
+    public Client? Client { get; set; }
     public Procedure? Procedure { get; set; }
     public ICollection<Conversation> Conversations { get; set; } = new List<Conversation>();
     public ICollection<Appointment> Appointments { get; set; } = new List<Appointment>();

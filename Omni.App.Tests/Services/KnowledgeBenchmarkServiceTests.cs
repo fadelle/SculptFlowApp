@@ -6,7 +6,7 @@ namespace Omni.App.Tests.Services;
 
 public class KnowledgeBenchmarkServiceTests
 {
-    private readonly Guid _clinicId = Guid.NewGuid();
+    private readonly Guid _clientId = Guid.NewGuid();
     private readonly Mock<IKnowledgeBenchmarkRepository> _repo = new();
     private readonly Mock<IKnowledgeDocumentRepository> _documents = new();
     private readonly Mock<IUnitOfWork> _uow = new();
@@ -30,20 +30,20 @@ public class KnowledgeBenchmarkServiceTests
         _config.SetupGet(c => c.BenchmarkGenerationTimeoutMinutes).Returns(10);
         _config.SetupGet(c => c.BenchmarkMaxQuestionsPerChunk).Returns(2);
         _uow.Setup(u => u.BeginTransactionAsync(It.IsAny<CancellationToken>())).ReturnsAsync(_tx.Object);
-        _settings.Setup(s => s.GetAsync(_clinicId, It.IsAny<CancellationToken>())).ReturnsAsync(new KnowledgeSettingsResponse("m", 8, "cosine", "none", 200, 20, 5, 0.3, DateTimeOffset.UtcNow));
-        _repo.Setup(r => r.GetActiveChunkStatsAsync(_clinicId, It.IsAny<CancellationToken>())).ReturnsAsync(new ActiveChunkStats(10, 812.4));
-        _repo.Setup(r => r.ListAllCasesAsync(_clinicId, It.IsAny<CancellationToken>())).ReturnsAsync(() => _cases.ToList());
-        _repo.Setup(r => r.ListChunksAsync(_clinicId, It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<CancellationToken>()))
+        _settings.Setup(s => s.GetAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(new KnowledgeSettingsResponse("m", 8, "cosine", "none", 200, 20, 5, 0.3, DateTimeOffset.UtcNow));
+        _repo.Setup(r => r.GetActiveChunkStatsAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(new ActiveChunkStats(10, 812.4));
+        _repo.Setup(r => r.ListAllCasesAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(() => _cases.ToList());
+        _repo.Setup(r => r.ListChunksAsync(_clientId, It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Guid _, IReadOnlyCollection<Guid> ids, CancellationToken _) => _liveChunks.Where(c => ids.Contains(c.ChunkId)).ToList());
-        _repo.Setup(r => r.ListActiveChunksAsync(_clinicId, It.IsAny<IReadOnlyCollection<Guid>?>(), It.IsAny<CancellationToken>()))
+        _repo.Setup(r => r.ListActiveChunksAsync(_clientId, It.IsAny<IReadOnlyCollection<Guid>?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Guid _, IReadOnlyCollection<Guid>? ids, CancellationToken _) => _liveChunks.Where(c => ids is null || ids.Contains(c.ChunkId)).ToList());
-        _repo.Setup(r => r.ListDocumentStatesAsync(_clinicId, It.IsAny<CancellationToken>())).ReturnsAsync(() => _docStates.ToList());
-        _repo.Setup(r => r.ListCoveredSourceHashesAsync(_clinicId, It.IsAny<CancellationToken>())).ReturnsAsync(new List<string>());
-        _repo.Setup(r => r.ListQuestionsForChunksAsync(_clinicId, It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<CancellationToken>())).ReturnsAsync(new List<(Guid, string)>());
-        _repo.Setup(r => r.CountCasesByGenerationAsync(_clinicId, It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<CancellationToken>())).ReturnsAsync(new Dictionary<Guid, int>());
-        _repo.Setup(r => r.ListCompletedResultRanksForGenerationsAsync(_clinicId, It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<CancellationToken>())).ReturnsAsync(new List<BenchmarkResultRank>());
-        _repo.Setup(r => r.ListResultsForCasesAsync(_clinicId, It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<CancellationToken>())).ReturnsAsync(new List<KnowledgeRetrievalBenchmarkResult>());
-        _repo.Setup(r => r.ListCasesAsync(_clinicId, It.IsAny<string>(), It.IsAny<Guid?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+        _repo.Setup(r => r.ListDocumentStatesAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(() => _docStates.ToList());
+        _repo.Setup(r => r.ListCoveredSourceHashesAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(new List<string>());
+        _repo.Setup(r => r.ListQuestionsForChunksAsync(_clientId, It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<CancellationToken>())).ReturnsAsync(new List<(Guid, string)>());
+        _repo.Setup(r => r.CountCasesByGenerationAsync(_clientId, It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<CancellationToken>())).ReturnsAsync(new Dictionary<Guid, int>());
+        _repo.Setup(r => r.ListCompletedResultRanksForGenerationsAsync(_clientId, It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<CancellationToken>())).ReturnsAsync(new List<BenchmarkResultRank>());
+        _repo.Setup(r => r.ListResultsForCasesAsync(_clientId, It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<CancellationToken>())).ReturnsAsync(new List<KnowledgeRetrievalBenchmarkResult>());
+        _repo.Setup(r => r.ListCasesAsync(_clientId, It.IsAny<string>(), It.IsAny<Guid?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => (_cases.ToList() as IReadOnlyList<KnowledgeRetrievalBenchmarkCase>, _cases.Count));
         _generator.SetupGet(g => g.IsConfigured).Returns(true);
     }
@@ -64,11 +64,11 @@ public class KnowledgeBenchmarkServiceTests
     {
         var c = new KnowledgeRetrievalBenchmarkCase
         {
-            Id = Guid.NewGuid(), ClinicId = _clinicId, Question = question, ExpectedDocumentId = at.Doc, ExpectedChunkId = at.Chunk,
+            Id = Guid.NewGuid(), ClientId = _clientId, Question = question, ExpectedDocumentId = at.Doc, ExpectedChunkId = at.Chunk,
             SourceChunkHash = content is null ? null : KnowledgeBenchmarkService.Sha256Hex(content), SourceDocumentTitle = "Pricing"
         };
         _cases.Add(c);
-        _repo.Setup(r => r.GetCaseAsync(_clinicId, c.Id, It.IsAny<CancellationToken>())).ReturnsAsync(c);
+        _repo.Setup(r => r.GetCaseAsync(_clientId, c.Id, It.IsAny<CancellationToken>())).ReturnsAsync(c);
         return c;
     }
 
@@ -78,7 +78,7 @@ public class KnowledgeBenchmarkServiceTests
     public async Task A_case_whose_chunk_is_unchanged_stays_fresh()
     {
         var c = Case(LiveChunk());
-        await Sut().ListCasesAsync(_clinicId, new BenchmarkCaseFilter(), 0, 10);
+        await Sut().ListCasesAsync(_clientId, new BenchmarkCaseFilter(), 0, 10);
         Assert.False(c.IsStale);
     }
 
@@ -92,7 +92,7 @@ public class KnowledgeBenchmarkServiceTests
         var c = Case(at);
         if (scenario == "changed") _liveChunks[0] = _liveChunks[0] with { Content = "Completely different text now." };
         if (scenario == "missing") { _liveChunks.Clear(); }
-        await Sut().ListCasesAsync(_clinicId, new BenchmarkCaseFilter(), 0, 10);
+        await Sut().ListCasesAsync(_clientId, new BenchmarkCaseFilter(), 0, 10);
         Assert.True(c.IsStale);
         Assert.Equal(reason, c.StaleReason);
         _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.AtLeastOnce);
@@ -106,7 +106,7 @@ public class KnowledgeBenchmarkServiceTests
         _liveChunks.Clear();
         _docStates.Clear();
         var moved = LiveChunk(title: "New title");
-        await Sut().ListCasesAsync(_clinicId, new BenchmarkCaseFilter(), 0, 10);
+        await Sut().ListCasesAsync(_clientId, new BenchmarkCaseFilter(), 0, 10);
         Assert.False(c.IsStale);
         Assert.Equal((moved.Doc, moved.Chunk, "New title"), (c.ExpectedDocumentId, c.ExpectedChunkId, c.SourceDocumentTitle));
     }
@@ -120,7 +120,7 @@ public class KnowledgeBenchmarkServiceTests
         _docStates.Clear();
         LiveChunk();
         LiveChunk();
-        await Sut().ListCasesAsync(_clinicId, new BenchmarkCaseFilter(), 0, 10);
+        await Sut().ListCasesAsync(_clientId, new BenchmarkCaseFilter(), 0, 10);
         Assert.True(c.IsStale);
     }
 
@@ -129,11 +129,11 @@ public class KnowledgeBenchmarkServiceTests
     {
         var at = LiveChunk(title: "Pricing v2");
         var c = Case(at);
-        await Sut().GetCaseAsync(_clinicId, c.Id);
+        await Sut().GetCaseAsync(_clientId, c.Id);
         Assert.Equal("Pricing v2", c.SourceDocumentTitle);
 
-        _repo.Setup(r => r.ListAllCasesAsync(_clinicId, It.IsAny<CancellationToken>())).ThrowsAsync(new InvalidOperationException("db"));
-        Assert.Null(await Sut().GetCaseAsync(_clinicId, Guid.NewGuid()));
+        _repo.Setup(r => r.ListAllCasesAsync(_clientId, It.IsAny<CancellationToken>())).ThrowsAsync(new InvalidOperationException("db"));
+        Assert.Null(await Sut().GetCaseAsync(_clientId, Guid.NewGuid()));
         _repo.Verify(r => r.DetachAllCases(), Times.Once);
     }
 
@@ -143,10 +143,10 @@ public class KnowledgeBenchmarkServiceTests
     public async Task Manual_case_is_stored_reviewed_with_a_hash_and_preview()
     {
         var at = LiveChunk();
-        _repo.Setup(r => r.GetActiveChunkAsync(_clinicId, at.Doc, at.Chunk, It.IsAny<CancellationToken>())).ReturnsAsync(_liveChunks[0]);
+        _repo.Setup(r => r.GetActiveChunkAsync(_clientId, at.Doc, at.Chunk, It.IsAny<CancellationToken>())).ReturnsAsync(_liveChunks[0]);
         KnowledgeRetrievalBenchmarkCase? added = null;
         _repo.Setup(r => r.AddCase(It.IsAny<KnowledgeRetrievalBenchmarkCase>())).Callback<KnowledgeRetrievalBenchmarkCase>(c => added = c);
-        var r = await Sut().CreateManualCaseAsync(_clinicId, new CreateManualBenchmarkCaseRequest("  How   much\nis it? ", at.Doc, at.Chunk));
+        var r = await Sut().CreateManualCaseAsync(_clientId, new CreateManualBenchmarkCaseRequest("  How   much\nis it? ", at.Doc, at.Chunk));
         Assert.Equal(("How much is it?", BenchmarkCaseType.Manual, true), (added!.Question, added.CaseType, added.IsReviewed));
         Assert.Equal(KnowledgeBenchmarkService.Sha256Hex(_liveChunks[0].Content), added.SourceChunkHash);
         Assert.Equal(added.Id, r.Id);
@@ -156,12 +156,12 @@ public class KnowledgeBenchmarkServiceTests
     public async Task Manual_case_validation_and_duplicates()
     {
         var at = LiveChunk();
-        await Assert.ThrowsAsync<ArgumentException>(() => Sut().CreateManualCaseAsync(_clinicId, new CreateManualBenchmarkCaseRequest("  ", at.Doc, at.Chunk)));
-        await Assert.ThrowsAsync<ArgumentException>(() => Sut().CreateManualCaseAsync(_clinicId, new CreateManualBenchmarkCaseRequest(new string('q', 501), at.Doc, at.Chunk)));
-        await Assert.ThrowsAsync<ArgumentException>(() => Sut().CreateManualCaseAsync(_clinicId, new CreateManualBenchmarkCaseRequest("q?", at.Doc, at.Chunk))); // chunk not active
-        _repo.Setup(r => r.GetActiveChunkAsync(_clinicId, at.Doc, at.Chunk, It.IsAny<CancellationToken>())).ReturnsAsync(_liveChunks[0]);
+        await Assert.ThrowsAsync<ArgumentException>(() => Sut().CreateManualCaseAsync(_clientId, new CreateManualBenchmarkCaseRequest("  ", at.Doc, at.Chunk)));
+        await Assert.ThrowsAsync<ArgumentException>(() => Sut().CreateManualCaseAsync(_clientId, new CreateManualBenchmarkCaseRequest(new string('q', 501), at.Doc, at.Chunk)));
+        await Assert.ThrowsAsync<ArgumentException>(() => Sut().CreateManualCaseAsync(_clientId, new CreateManualBenchmarkCaseRequest("q?", at.Doc, at.Chunk))); // chunk not active
+        _repo.Setup(r => r.GetActiveChunkAsync(_clientId, at.Doc, at.Chunk, It.IsAny<CancellationToken>())).ReturnsAsync(_liveChunks[0]);
         _uow.Setup(u => u.SaveChangesAsync(It.IsAny<CancellationToken>())).ThrowsAsync(new DuplicateRecordException(new Exception("dup")));
-        await Assert.ThrowsAsync<ArgumentException>(() => Sut().CreateManualCaseAsync(_clinicId, new CreateManualBenchmarkCaseRequest("q?", at.Doc, at.Chunk)));
+        await Assert.ThrowsAsync<ArgumentException>(() => Sut().CreateManualCaseAsync(_clientId, new CreateManualBenchmarkCaseRequest("q?", at.Doc, at.Chunk)));
         _repo.Verify(r => r.DetachCase(It.IsAny<KnowledgeRetrievalBenchmarkCase>()), Times.Once);
     }
 
@@ -169,35 +169,35 @@ public class KnowledgeBenchmarkServiceTests
     public async Task Edit_review_and_delete_cases()
     {
         var c = Case(LiveChunk());
-        Assert.Null(await Sut().UpdateCaseQuestionAsync(_clinicId, Guid.NewGuid(), "x?"));
-        await Assert.ThrowsAsync<ArgumentException>(() => Sut().UpdateCaseQuestionAsync(_clinicId, c.Id, " "));
-        await Assert.ThrowsAsync<ArgumentException>(() => Sut().UpdateCaseQuestionAsync(_clinicId, c.Id, new string('q', 501)));
-        var updated = await Sut().UpdateCaseQuestionAsync(_clinicId, c.Id, "  New   question ");
+        Assert.Null(await Sut().UpdateCaseQuestionAsync(_clientId, Guid.NewGuid(), "x?"));
+        await Assert.ThrowsAsync<ArgumentException>(() => Sut().UpdateCaseQuestionAsync(_clientId, c.Id, " "));
+        await Assert.ThrowsAsync<ArgumentException>(() => Sut().UpdateCaseQuestionAsync(_clientId, c.Id, new string('q', 501)));
+        var updated = await Sut().UpdateCaseQuestionAsync(_clientId, c.Id, "  New   question ");
         Assert.Equal("New question", updated!.Question);
 
         _uow.Setup(u => u.SaveChangesAsync(It.IsAny<CancellationToken>())).ThrowsAsync(new DuplicateRecordException(new Exception("dup")));
-        await Assert.ThrowsAsync<ArgumentException>(() => Sut().UpdateCaseQuestionAsync(_clinicId, c.Id, "another"));
+        await Assert.ThrowsAsync<ArgumentException>(() => Sut().UpdateCaseQuestionAsync(_clientId, c.Id, "another"));
         _uow.Setup(u => u.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
 
-        Assert.Null(await Sut().SetReviewedAsync(_clinicId, Guid.NewGuid(), true));
-        Assert.True((await Sut().SetReviewedAsync(_clinicId, c.Id, true))!.IsReviewed);
+        Assert.Null(await Sut().SetReviewedAsync(_clientId, Guid.NewGuid(), true));
+        Assert.True((await Sut().SetReviewedAsync(_clientId, c.Id, true))!.IsReviewed);
         Assert.NotNull(c.ReviewedAt);
-        Assert.False((await Sut().SetReviewedAsync(_clinicId, c.Id, false))!.IsReviewed);
+        Assert.False((await Sut().SetReviewedAsync(_clientId, c.Id, false))!.IsReviewed);
         Assert.Null(c.ReviewedAt);
 
-        _repo.Setup(r => r.DeleteCaseAsync(_clinicId, c.Id, It.IsAny<CancellationToken>())).ReturnsAsync(1);
-        Assert.True(await Sut().DeleteCaseAsync(_clinicId, c.Id));
-        Assert.False(await Sut().DeleteCaseAsync(_clinicId, Guid.NewGuid()));
+        _repo.Setup(r => r.DeleteCaseAsync(_clientId, c.Id, It.IsAny<CancellationToken>())).ReturnsAsync(1);
+        Assert.True(await Sut().DeleteCaseAsync(_clientId, c.Id));
+        Assert.False(await Sut().DeleteCaseAsync(_clientId, Guid.NewGuid()));
     }
 
     [Fact]
     public async Task Source_chunks_listing_needs_an_existing_document()
     {
-        Assert.Null(await Sut().ListSourceChunksAsync(_clinicId, Guid.NewGuid()));
+        Assert.Null(await Sut().ListSourceChunksAsync(_clientId, Guid.NewGuid()));
         var doc = Guid.NewGuid();
-        _documents.Setup(d => d.ExistsAsync(_clinicId, doc, It.IsAny<CancellationToken>())).ReturnsAsync(true);
-        _repo.Setup(r => r.ListDocumentChunksAsync(_clinicId, doc, It.IsAny<CancellationToken>())).ReturnsAsync(new List<KnowledgeChunk> { new() { Id = Guid.NewGuid(), ChunkIndex = 0, Content = new string('x', 400) } });
-        var chunks = await Sut().ListSourceChunksAsync(_clinicId, doc);
+        _documents.Setup(d => d.ExistsAsync(_clientId, doc, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        _repo.Setup(r => r.ListDocumentChunksAsync(_clientId, doc, It.IsAny<CancellationToken>())).ReturnsAsync(new List<KnowledgeChunk> { new() { Id = Guid.NewGuid(), ChunkIndex = 0, Content = new string('x', 400) } });
+        var chunks = await Sut().ListSourceChunksAsync(_clientId, doc);
         Assert.Equal(161, Assert.Single(chunks!).Preview.Length); // 160 chars + ellipsis
     }
 
@@ -210,38 +210,38 @@ public class KnowledgeBenchmarkServiceTests
     public async Task Run_scope_and_generation_id_must_agree(string scope, bool withGeneration)
     {
         Guid? gid = withGeneration ? Guid.NewGuid() : null;
-        await Assert.ThrowsAsync<ArgumentException>(() => Sut().StartRunAsync(_clinicId, scope, gid));
+        await Assert.ThrowsAsync<ArgumentException>(() => Sut().StartRunAsync(_clientId, scope, gid));
     }
 
     [Fact]
     public async Task Unknown_generation_blocks_the_run()
     {
-        await Assert.ThrowsAsync<ArgumentException>(() => Sut().StartRunAsync(_clinicId, "generation", Guid.NewGuid()));
+        await Assert.ThrowsAsync<ArgumentException>(() => Sut().StartRunAsync(_clientId, "generation", Guid.NewGuid()));
     }
 
     [Fact]
     public async Task A_run_in_progress_or_an_empty_or_fully_stale_scope_cannot_start()
     {
-        _repo.Setup(r => r.HasRunInProgressAsync(_clinicId, It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>())).ReturnsAsync(true);
-        await Assert.ThrowsAsync<BenchmarkRunInProgressException>(() => Sut().StartRunAsync(_clinicId, null));
-        _repo.Setup(r => r.HasRunInProgressAsync(_clinicId, It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>())).ReturnsAsync(false);
+        _repo.Setup(r => r.HasRunInProgressAsync(_clientId, It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        await Assert.ThrowsAsync<BenchmarkRunInProgressException>(() => Sut().StartRunAsync(_clientId, null));
+        _repo.Setup(r => r.HasRunInProgressAsync(_clientId, It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>())).ReturnsAsync(false);
 
-        _repo.Setup(r => r.CountCasesInScopeAsync(_clinicId, "all", null, It.IsAny<CancellationToken>())).ReturnsAsync((0, 0));
-        await Assert.ThrowsAsync<ArgumentException>(() => Sut().StartRunAsync(_clinicId, "all"));
-        _repo.Setup(r => r.CountCasesInScopeAsync(_clinicId, "reviewed", null, It.IsAny<CancellationToken>())).ReturnsAsync((0, 0));
-        var ex = await Assert.ThrowsAsync<ArgumentException>(() => Sut().StartRunAsync(_clinicId, "reviewed"));
+        _repo.Setup(r => r.CountCasesInScopeAsync(_clientId, "all", null, It.IsAny<CancellationToken>())).ReturnsAsync((0, 0));
+        await Assert.ThrowsAsync<ArgumentException>(() => Sut().StartRunAsync(_clientId, "all"));
+        _repo.Setup(r => r.CountCasesInScopeAsync(_clientId, "reviewed", null, It.IsAny<CancellationToken>())).ReturnsAsync((0, 0));
+        var ex = await Assert.ThrowsAsync<ArgumentException>(() => Sut().StartRunAsync(_clientId, "reviewed"));
         Assert.Contains("reviewed", ex.Message);
-        _repo.Setup(r => r.CountCasesInScopeAsync(_clinicId, "all", null, It.IsAny<CancellationToken>())).ReturnsAsync((4, 4));
-        await Assert.ThrowsAsync<ArgumentException>(() => Sut().StartRunAsync(_clinicId, "all"));
+        _repo.Setup(r => r.CountCasesInScopeAsync(_clientId, "all", null, It.IsAny<CancellationToken>())).ReturnsAsync((4, 4));
+        await Assert.ThrowsAsync<ArgumentException>(() => Sut().StartRunAsync(_clientId, "all"));
     }
 
     [Fact]
     public async Task Starting_a_run_snapshots_the_settings_and_queues_it()
     {
-        _repo.Setup(r => r.CountCasesInScopeAsync(_clinicId, "generated", null, It.IsAny<CancellationToken>())).ReturnsAsync((6, 1));
+        _repo.Setup(r => r.CountCasesInScopeAsync(_clientId, "generated", null, It.IsAny<CancellationToken>())).ReturnsAsync((6, 1));
         KnowledgeRetrievalBenchmarkRun? added = null;
         _repo.Setup(r => r.AddRun(It.IsAny<KnowledgeRetrievalBenchmarkRun>())).Callback<KnowledgeRetrievalBenchmarkRun>(r => added = r);
-        var summary = await Sut().StartRunAsync(_clinicId, " GENERATED ");
+        var summary = await Sut().StartRunAsync(_clientId, " GENERATED ");
         Assert.Equal((BenchmarkRunStatus.Pending, 6, 1, "m", 5, 0.3, 10), (added!.Status, added.TotalCases, added.StaleCases, added.EmbeddingModel, added.TopK, added.MinimumSimilarity, added.IndexedChunkCount));
         Assert.Equal(812d, added.AvgChunkChars);
         _queue.Verify(q => q.Enqueue(added.Id), Times.Once);
@@ -252,9 +252,9 @@ public class KnowledgeBenchmarkServiceTests
 
     private KnowledgeRetrievalBenchmarkRun PendingRun(string scope = "all")
     {
-        var run = new KnowledgeRetrievalBenchmarkRun { Id = Guid.NewGuid(), ClinicId = _clinicId, CaseScope = scope, Status = BenchmarkRunStatus.Pending };
+        var run = new KnowledgeRetrievalBenchmarkRun { Id = Guid.NewGuid(), ClientId = _clientId, CaseScope = scope, Status = BenchmarkRunStatus.Pending };
         _repo.Setup(r => r.GetRunAsync(run.Id, It.IsAny<CancellationToken>())).ReturnsAsync(run);
-        _repo.Setup(r => r.ListCasesInScopeAsync(_clinicId, scope, null, It.IsAny<CancellationToken>())).ReturnsAsync(() => _cases.ToList());
+        _repo.Setup(r => r.ListCasesInScopeAsync(_clientId, scope, null, It.IsAny<CancellationToken>())).ReturnsAsync(() => _cases.ToList());
         return run;
     }
 
@@ -279,11 +279,11 @@ public class KnowledgeBenchmarkServiceTests
         var staleCase = Case(LiveChunk("x", "Gone"), "Stale question?", content: "something else entirely");
         staleCase.IsStale = true;
         staleCase.StaleReason = BenchmarkStaleReason.ChunkChanged;
-        _repo.Setup(r => r.ListAllCasesAsync(_clinicId, It.IsAny<CancellationToken>())).ReturnsAsync(new List<KnowledgeRetrievalBenchmarkCase>());
+        _repo.Setup(r => r.ListAllCasesAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(new List<KnowledgeRetrievalBenchmarkCase>());
         var run = PendingRun();
-        _search.Setup(s => s.SearchRankedAsync(_clinicId, hitCase.Question, null, It.IsAny<CancellationToken>()))
+        _search.Setup(s => s.SearchRankedAsync(_clientId, hitCase.Question, null, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<RankedKnowledgeChunk> { Hit(a.Doc, a.Chunk, 0.9) });
-        _search.Setup(s => s.SearchRankedAsync(_clinicId, missCase.Question, null, It.IsAny<CancellationToken>()))
+        _search.Setup(s => s.SearchRankedAsync(_clientId, missCase.Question, null, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<RankedKnowledgeChunk> { Hit(Guid.NewGuid(), Guid.NewGuid(), 0.8), Hit(b.Doc, b.Chunk, 0.1, meets: false) });
         var results = new List<KnowledgeRetrievalBenchmarkResult>();
         _repo.Setup(r => r.AddResult(It.IsAny<KnowledgeRetrievalBenchmarkResult>())).Callback<KnowledgeRetrievalBenchmarkResult>(results.Add);
@@ -309,7 +309,7 @@ public class KnowledgeBenchmarkServiceTests
         Case(at);
         Case(LiveChunk("Another chunk with enough text in it.", "B"), "second?", "Another chunk with enough text in it.");
         var run = PendingRun();
-        _search.SetupSequence(s => s.SearchRankedAsync(_clinicId, It.IsAny<string>(), null, It.IsAny<CancellationToken>()))
+        _search.SetupSequence(s => s.SearchRankedAsync(_clientId, It.IsAny<string>(), null, It.IsAny<CancellationToken>()))
             .ThrowsAsync(new HttpRequestException("openai 500"))
             .ReturnsAsync(new List<RankedKnowledgeChunk>());
         var results = new List<KnowledgeRetrievalBenchmarkResult>();
@@ -325,7 +325,7 @@ public class KnowledgeBenchmarkServiceTests
     {
         for (var i = 0; i < 4; i++) Case(LiveChunk($"Chunk number {i} with sufficient text.", $"D{i}"), $"q{i}?", $"Chunk number {i} with sufficient text.");
         var run = PendingRun();
-        _search.Setup(s => s.SearchRankedAsync(_clinicId, It.IsAny<string>(), null, It.IsAny<CancellationToken>())).ThrowsAsync(new HttpRequestException("down"));
+        _search.Setup(s => s.SearchRankedAsync(_clientId, It.IsAny<string>(), null, It.IsAny<CancellationToken>())).ThrowsAsync(new HttpRequestException("down"));
         await Sut().ExecuteRunAsync(run.Id);
         Assert.Equal(BenchmarkRunStatus.Failed, run.Status);
         Assert.Equal(2, run.ProcessedCases);
@@ -336,14 +336,14 @@ public class KnowledgeBenchmarkServiceTests
     public async Task An_unexpected_failure_marks_the_run_failed_and_cancellation_propagates()
     {
         var run = PendingRun();
-        _repo.Setup(r => r.ListCasesInScopeAsync(_clinicId, "all", null, It.IsAny<CancellationToken>())).ThrowsAsync(new InvalidOperationException("db exploded"));
+        _repo.Setup(r => r.ListCasesInScopeAsync(_clientId, "all", null, It.IsAny<CancellationToken>())).ThrowsAsync(new InvalidOperationException("db exploded"));
         await Sut().ExecuteRunAsync(run.Id);
         Assert.Equal(BenchmarkRunStatus.Failed, run.Status);
         Assert.Contains("db exploded", run.ErrorSummary);
         _uow.Verify(u => u.DiscardChanges(), Times.Once);
 
         var second = PendingRun();
-        _repo.Setup(r => r.ListCasesInScopeAsync(_clinicId, "all", null, It.IsAny<CancellationToken>())).ThrowsAsync(new OperationCanceledException());
+        _repo.Setup(r => r.ListCasesInScopeAsync(_clientId, "all", null, It.IsAny<CancellationToken>())).ThrowsAsync(new OperationCanceledException());
         await Assert.ThrowsAsync<OperationCanceledException>(() => Sut().ExecuteRunAsync(second.Id));
     }
 
@@ -364,14 +364,14 @@ public class KnowledgeBenchmarkServiceTests
     [Fact]
     public async Task Dashboard_combines_counts_runs_and_generation_state()
     {
-        _repo.Setup(r => r.GetCaseCountsAsync(_clinicId, It.IsAny<CancellationToken>())).ReturnsAsync(new BenchmarkCaseCounts(10, 7, 3, 4, 1));
+        _repo.Setup(r => r.GetCaseCountsAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(new BenchmarkCaseCounts(10, 7, 3, 4, 1));
         var completed = new KnowledgeRetrievalBenchmarkRun { Id = Guid.NewGuid(), Status = BenchmarkRunStatus.Completed };
         var failed = new KnowledgeRetrievalBenchmarkRun { Id = Guid.NewGuid(), Status = BenchmarkRunStatus.Failed };
-        _repo.Setup(r => r.GetLatestRunAsync(_clinicId, false, It.IsAny<CancellationToken>())).ReturnsAsync(failed);
-        _repo.Setup(r => r.GetLatestRunAsync(_clinicId, true, It.IsAny<CancellationToken>())).ReturnsAsync(completed);
+        _repo.Setup(r => r.GetLatestRunAsync(_clientId, false, It.IsAny<CancellationToken>())).ReturnsAsync(failed);
+        _repo.Setup(r => r.GetLatestRunAsync(_clientId, true, It.IsAny<CancellationToken>())).ReturnsAsync(completed);
         var pendingGen = Guid.NewGuid();
-        _repo.Setup(r => r.GetPendingGenerationIdAsync(_clinicId, It.IsAny<CancellationToken>())).ReturnsAsync(pendingGen);
-        var d = await Sut().GetDashboardAsync(_clinicId);
+        _repo.Setup(r => r.GetPendingGenerationIdAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(pendingGen);
+        var d = await Sut().GetDashboardAsync(_clientId);
         Assert.Equal((10, 7, 3, 4, 1), (d.TotalCases, d.GeneratedCases, d.ManualCases, d.ReviewedCases, d.StaleCases));
         Assert.Equal((failed.Id, completed.Id), (d.LatestRun!.Id, d.LatestCompletedRun!.Id));
         Assert.True(d.GenerationInProgress);
@@ -383,20 +383,20 @@ public class KnowledgeBenchmarkServiceTests
     public async Task Run_and_result_lookups()
     {
         var run = new KnowledgeRetrievalBenchmarkRun { Id = Guid.NewGuid(), Status = BenchmarkRunStatus.Completed };
-        _repo.Setup(r => r.ListRunsAsync(_clinicId, 100, It.IsAny<CancellationToken>())).ReturnsAsync(new List<KnowledgeRetrievalBenchmarkRun> { run });
-        Assert.Single(await Sut().ListRunsAsync(_clinicId, 5000));
-        _repo.Setup(r => r.GetRunReadOnlyAsync(_clinicId, run.Id, It.IsAny<CancellationToken>())).ReturnsAsync(run);
-        Assert.NotNull(await Sut().GetRunAsync(_clinicId, run.Id));
-        Assert.Null(await Sut().GetRunAsync(_clinicId, Guid.NewGuid()));
+        _repo.Setup(r => r.ListRunsAsync(_clientId, 100, It.IsAny<CancellationToken>())).ReturnsAsync(new List<KnowledgeRetrievalBenchmarkRun> { run });
+        Assert.Single(await Sut().ListRunsAsync(_clientId, 5000));
+        _repo.Setup(r => r.GetRunReadOnlyAsync(_clientId, run.Id, It.IsAny<CancellationToken>())).ReturnsAsync(run);
+        Assert.NotNull(await Sut().GetRunAsync(_clientId, run.Id));
+        Assert.Null(await Sut().GetRunAsync(_clientId, Guid.NewGuid()));
 
-        Assert.Null(await Sut().ListResultsAsync(_clinicId, Guid.NewGuid(), null, 0, 10));
-        _repo.Setup(r => r.RunExistsAsync(_clinicId, run.Id, It.IsAny<CancellationToken>())).ReturnsAsync(true);
-        _repo.Setup(r => r.ListRunResultsAsync(_clinicId, run.Id, "MISS", 0, 500, It.IsAny<CancellationToken>()))
+        Assert.Null(await Sut().ListResultsAsync(_clientId, Guid.NewGuid(), null, 0, 10));
+        _repo.Setup(r => r.RunExistsAsync(_clientId, run.Id, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        _repo.Setup(r => r.ListRunResultsAsync(_clientId, run.Id, "MISS", 0, 500, It.IsAny<CancellationToken>()))
             .ReturnsAsync((new List<KnowledgeRetrievalBenchmarkResult> { new() { Id = Guid.NewGuid(), BenchmarkRunId = run.Id, Question = "q" } } as IReadOnlyList<KnowledgeRetrievalBenchmarkResult>, 1));
-        var list = await Sut().ListResultsAsync(_clinicId, run.Id, " miss ", -3, 9999);
+        var list = await Sut().ListResultsAsync(_clientId, run.Id, " miss ", -3, 9999);
         Assert.Equal(1, list!.TotalCount);
 
-        Assert.Null(await Sut().GetResultAsync(_clinicId, run.Id, Guid.NewGuid()));
+        Assert.Null(await Sut().GetResultAsync(_clientId, run.Id, Guid.NewGuid()));
     }
 
     // ---------------------------------------------------------------- generation
@@ -405,17 +405,17 @@ public class KnowledgeBenchmarkServiceTests
     public async Task Generation_needs_a_configured_generator_and_no_pending_generation()
     {
         _generator.SetupGet(g => g.IsConfigured).Returns(false);
-        await Assert.ThrowsAsync<BenchmarkGeneratorNotConfiguredException>(() => Sut().StartGenerationAsync(_clinicId));
+        await Assert.ThrowsAsync<BenchmarkGeneratorNotConfiguredException>(() => Sut().StartGenerationAsync(_clientId));
         _generator.SetupGet(g => g.IsConfigured).Returns(true);
-        _repo.Setup(r => r.GetPendingGenerationIdAsync(_clinicId, It.IsAny<CancellationToken>())).ReturnsAsync(Guid.NewGuid());
-        await Assert.ThrowsAsync<BenchmarkGenerationInProgressException>(() => Sut().StartGenerationAsync(_clinicId));
+        _repo.Setup(r => r.GetPendingGenerationIdAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(Guid.NewGuid());
+        await Assert.ThrowsAsync<BenchmarkGenerationInProgressException>(() => Sut().StartGenerationAsync(_clientId));
     }
 
     [Fact]
     public async Task Generation_with_nothing_to_sample_reports_none()
     {
-        _repo.Setup(r => r.SampleUncoveredChunksAsync(_clinicId, 10, 20, It.IsAny<CancellationToken>())).ReturnsAsync(new List<BenchmarkChunkInfo>());
-        var r = await Sut().StartGenerationAsync(_clinicId);
+        _repo.Setup(r => r.SampleUncoveredChunksAsync(_clientId, 10, 20, It.IsAny<CancellationToken>())).ReturnsAsync(new List<BenchmarkChunkInfo>());
+        var r = await Sut().StartGenerationAsync(_clientId);
         Assert.Equal(("none", 0, null), (r.Status, r.ChunksSent, r.GenerationId));
     }
 
@@ -424,20 +424,20 @@ public class KnowledgeBenchmarkServiceTests
     {
         var pool = Enumerable.Range(0, 8).Select(i => new BenchmarkChunkInfo(Guid.NewGuid(), Guid.NewGuid(), $"unique content number {i}", "T")).ToList();
         pool.Add(pool[1] with { ChunkId = Guid.NewGuid() }); // same text, different chunk
-        _repo.Setup(r => r.SampleUncoveredChunksAsync(_clinicId, 10, 20, It.IsAny<CancellationToken>())).ReturnsAsync(pool);
-        _repo.Setup(r => r.ListCoveredSourceHashesAsync(_clinicId, It.IsAny<CancellationToken>())).ReturnsAsync(new List<string> { KnowledgeBenchmarkService.Sha256Hex(pool[0].Content) });
-        _generator.Setup(g => g.SendAsync(_clinicId, It.IsAny<Guid>(), It.IsAny<IReadOnlyList<BenchmarkSourceChunk>>(), It.IsAny<CancellationToken>())).ReturnsAsync(new GeneratorSendResult(null, null));
-        var r = await Sut().StartGenerationAsync(_clinicId);
+        _repo.Setup(r => r.SampleUncoveredChunksAsync(_clientId, 10, 20, It.IsAny<CancellationToken>())).ReturnsAsync(pool);
+        _repo.Setup(r => r.ListCoveredSourceHashesAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(new List<string> { KnowledgeBenchmarkService.Sha256Hex(pool[0].Content) });
+        _generator.Setup(g => g.SendAsync(_clientId, It.IsAny<Guid>(), It.IsAny<IReadOnlyList<BenchmarkSourceChunk>>(), It.IsAny<CancellationToken>())).ReturnsAsync(new GeneratorSendResult(null, null));
+        var r = await Sut().StartGenerationAsync(_clientId);
         Assert.Equal((BenchmarkGenerationStatus.Pending, 5), (r.Status, r.ChunksSent));
-        _generator.Verify(g => g.SendAsync(_clinicId, r.GenerationId!.Value, It.Is<IReadOnlyList<BenchmarkSourceChunk>>(c => c.Count == 5 && c.All(x => x.ChunkId != pool[0].ChunkId)), It.IsAny<CancellationToken>()), Times.Once);
+        _generator.Verify(g => g.SendAsync(_clientId, r.GenerationId!.Value, It.Is<IReadOnlyList<BenchmarkSourceChunk>>(c => c.Count == 5 && c.All(x => x.ChunkId != pool[0].ChunkId)), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
     public async Task A_generator_failure_marks_the_generation_failed_and_rethrows()
     {
-        _repo.Setup(r => r.SampleUncoveredChunksAsync(_clinicId, 10, 20, It.IsAny<CancellationToken>())).ReturnsAsync(new List<BenchmarkChunkInfo> { new(Guid.NewGuid(), Guid.NewGuid(), "some chunk content", "T") });
-        _generator.Setup(g => g.SendAsync(_clinicId, It.IsAny<Guid>(), It.IsAny<IReadOnlyList<BenchmarkSourceChunk>>(), It.IsAny<CancellationToken>())).ThrowsAsync(new BenchmarkGenerationException("n8n said no"));
-        await Assert.ThrowsAsync<BenchmarkGenerationException>(() => Sut().StartGenerationAsync(_clinicId));
+        _repo.Setup(r => r.SampleUncoveredChunksAsync(_clientId, 10, 20, It.IsAny<CancellationToken>())).ReturnsAsync(new List<BenchmarkChunkInfo> { new(Guid.NewGuid(), Guid.NewGuid(), "some chunk content", "T") });
+        _generator.Setup(g => g.SendAsync(_clientId, It.IsAny<Guid>(), It.IsAny<IReadOnlyList<BenchmarkSourceChunk>>(), It.IsAny<CancellationToken>())).ThrowsAsync(new BenchmarkGenerationException("n8n said no"));
+        await Assert.ThrowsAsync<BenchmarkGenerationException>(() => Sut().StartGenerationAsync(_clientId));
         _repo.Verify(r => r.FailPendingGenerationAsync(It.IsAny<Guid>(), "n8n said no", It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -446,7 +446,7 @@ public class KnowledgeBenchmarkServiceTests
         var rows = sent.Select(s => new { DocumentId = s.Doc, ChunkId = s.Chunk, DocumentTitle = "Pricing" });
         var g = new KnowledgeRetrievalBenchmarkGeneration
         {
-            Id = Guid.NewGuid(), ClinicId = _clinicId, Status = BenchmarkGenerationStatus.Pending, ChunksSent = sent.Count(),
+            Id = Guid.NewGuid(), ClientId = _clientId, Status = BenchmarkGenerationStatus.Pending, ChunksSent = sent.Count(),
             SentChunksJson = System.Text.Json.JsonSerializer.Serialize(rows, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web)),
             CreatedAt = createdAt ?? DateTimeOffset.UtcNow
         };
@@ -466,7 +466,7 @@ public class KnowledgeBenchmarkServiceTests
         var g = PendingGeneration([at, other]);
         List<KnowledgeRetrievalBenchmarkCase>? added = null;
         _repo.Setup(r => r.AddCases(It.IsAny<IEnumerable<KnowledgeRetrievalBenchmarkCase>>())).Callback<IEnumerable<KnowledgeRetrievalBenchmarkCase>>(c => added = c.ToList());
-        _repo.Setup(r => r.ListQuestionsForChunksAsync(_clinicId, It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<CancellationToken>())).ReturnsAsync(new List<(Guid, string)> { (other.Chunk, "already there?") });
+        _repo.Setup(r => r.ListQuestionsForChunksAsync(_clientId, It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<CancellationToken>())).ReturnsAsync(new List<(Guid, string)> { (other.Chunk, "already there?") });
 
         var reply = new GeneratorResponse(g.Id.ToString(), new List<RawGeneratedQuestion>
         {
@@ -522,7 +522,7 @@ public class KnowledgeBenchmarkServiceTests
         var old = PendingGeneration([], DateTimeOffset.UtcNow.AddHours(-2));
         var expired = await Sut().ReceiveGenerationResultAsync(old.Id, new GeneratorResponse(null, []), null, false);
         Assert.Equal(GenerationReceiveStatus.NotAccepting, expired.Status);
-        _repo.Verify(x => x.ExpirePendingGenerationsAsync(_clinicId, It.IsAny<DateTimeOffset>(), It.IsAny<string>(), It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()), Times.AtLeastOnce);
+        _repo.Verify(x => x.ExpirePendingGenerationsAsync(_clientId, It.IsAny<DateTimeOffset>(), It.IsAny<string>(), It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()), Times.AtLeastOnce);
     }
 
     [Fact]
@@ -552,7 +552,7 @@ public class KnowledgeBenchmarkServiceTests
     public async Task Immediate_replies_are_applied_during_start()
     {
         var at = LiveChunk();
-        _repo.Setup(r => r.SampleUncoveredChunksAsync(_clinicId, 10, 20, It.IsAny<CancellationToken>())).ReturnsAsync(new List<BenchmarkChunkInfo> { _liveChunks[0] });
+        _repo.Setup(r => r.SampleUncoveredChunksAsync(_clientId, 10, 20, It.IsAny<CancellationToken>())).ReturnsAsync(new List<BenchmarkChunkInfo> { _liveChunks[0] });
         KnowledgeRetrievalBenchmarkGeneration? stored = null;
         _repo.Setup(r => r.AddGeneration(It.IsAny<KnowledgeRetrievalBenchmarkGeneration>())).Callback<KnowledgeRetrievalBenchmarkGeneration>(g =>
         {
@@ -561,10 +561,10 @@ public class KnowledgeBenchmarkServiceTests
             _repo.Setup(x => x.GetGenerationAsync(g.Id, It.IsAny<CancellationToken>())).ReturnsAsync(g);
             _repo.Setup(x => x.ClaimPendingGenerationAsync(g.Id, It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>())).ReturnsAsync(1);
         });
-        _generator.Setup(g => g.SendAsync(_clinicId, It.IsAny<Guid>(), It.IsAny<IReadOnlyList<BenchmarkSourceChunk>>(), It.IsAny<CancellationToken>()))
+        _generator.Setup(g => g.SendAsync(_clientId, It.IsAny<Guid>(), It.IsAny<IReadOnlyList<BenchmarkSourceChunk>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Guid _, Guid gid, IReadOnlyList<BenchmarkSourceChunk> _, CancellationToken _) =>
                 new GeneratorSendResult(new GeneratorResponse(gid.ToString(), [Q(at.Doc, at.Chunk, "How much?")]), "{}"));
-        var r = await Sut().StartGenerationAsync(_clinicId);
+        var r = await Sut().StartGenerationAsync(_clientId);
         Assert.Equal((1, 1), (r.QuestionsReturned, r.CasesCreated));
         Assert.Equal(stored!.Id, r.GenerationId);
     }
@@ -573,13 +573,13 @@ public class KnowledgeBenchmarkServiceTests
     public async Task Cancelling_a_generation()
     {
         var gid = Guid.NewGuid();
-        Assert.Equal(GenerationCancelStatus.NotFound, (await Sut().CancelGenerationAsync(_clinicId, gid)).Status);
-        _repo.Setup(r => r.GenerationExistsAsync(_clinicId, gid, It.IsAny<CancellationToken>())).ReturnsAsync(true);
-        var g = new KnowledgeRetrievalBenchmarkGeneration { Id = gid, ClinicId = _clinicId, Status = BenchmarkGenerationStatus.Pending };
-        _repo.Setup(r => r.GetGenerationReadOnlyAsync(_clinicId, gid, It.IsAny<CancellationToken>())).ReturnsAsync(g);
-        Assert.Equal(GenerationCancelStatus.NotPending, (await Sut().CancelGenerationAsync(_clinicId, gid)).Status);
-        _repo.Setup(r => r.CancelPendingGenerationAsync(_clinicId, gid, It.IsAny<string>(), It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>())).ReturnsAsync(1);
-        Assert.Equal(GenerationCancelStatus.Cancelled, (await Sut().CancelGenerationAsync(_clinicId, gid)).Status);
+        Assert.Equal(GenerationCancelStatus.NotFound, (await Sut().CancelGenerationAsync(_clientId, gid)).Status);
+        _repo.Setup(r => r.GenerationExistsAsync(_clientId, gid, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        var g = new KnowledgeRetrievalBenchmarkGeneration { Id = gid, ClientId = _clientId, Status = BenchmarkGenerationStatus.Pending };
+        _repo.Setup(r => r.GetGenerationReadOnlyAsync(_clientId, gid, It.IsAny<CancellationToken>())).ReturnsAsync(g);
+        Assert.Equal(GenerationCancelStatus.NotPending, (await Sut().CancelGenerationAsync(_clientId, gid)).Status);
+        _repo.Setup(r => r.CancelPendingGenerationAsync(_clientId, gid, It.IsAny<string>(), It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>())).ReturnsAsync(1);
+        Assert.Equal(GenerationCancelStatus.Cancelled, (await Sut().CancelGenerationAsync(_clientId, gid)).Status);
     }
 
     [Fact]
@@ -588,32 +588,32 @@ public class KnowledgeBenchmarkServiceTests
         var gid = Guid.NewGuid();
         var g = new KnowledgeRetrievalBenchmarkGeneration
         {
-            Id = gid, ClinicId = _clinicId, Status = BenchmarkGenerationStatus.Completed, CreatedAt = DateTimeOffset.UtcNow,
+            Id = gid, ClientId = _clientId, Status = BenchmarkGenerationStatus.Completed, CreatedAt = DateTimeOffset.UtcNow,
             RejectedJson = "[{\"question\":\"q\",\"reason\":\"dup\"}]", SentChunksJson = "[{\"documentId\":\"" + Guid.NewGuid() + "\",\"chunkId\":\"" + Guid.NewGuid() + "\",\"documentTitle\":\"T\"}]", RawResponse = "{}"
         };
-        _repo.Setup(r => r.ListGenerationsAsync(_clinicId, 100, It.IsAny<CancellationToken>())).ReturnsAsync(new List<KnowledgeRetrievalBenchmarkGeneration> { g });
-        _repo.Setup(r => r.GetGenerationReadOnlyAsync(_clinicId, gid, It.IsAny<CancellationToken>())).ReturnsAsync(g);
-        _repo.Setup(r => r.CountCasesByGenerationAsync(_clinicId, It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<CancellationToken>())).ReturnsAsync(new Dictionary<Guid, int> { [gid] = 4 });
+        _repo.Setup(r => r.ListGenerationsAsync(_clientId, 100, It.IsAny<CancellationToken>())).ReturnsAsync(new List<KnowledgeRetrievalBenchmarkGeneration> { g });
+        _repo.Setup(r => r.GetGenerationReadOnlyAsync(_clientId, gid, It.IsAny<CancellationToken>())).ReturnsAsync(g);
+        _repo.Setup(r => r.CountCasesByGenerationAsync(_clientId, It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<CancellationToken>())).ReturnsAsync(new Dictionary<Guid, int> { [gid] = 4 });
         var runId = Guid.NewGuid();
         var runAt = DateTimeOffset.UtcNow;
-        _repo.Setup(r => r.ListCompletedResultRanksForGenerationsAsync(_clinicId, It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<CancellationToken>()))
+        _repo.Setup(r => r.ListCompletedResultRanksForGenerationsAsync(_clientId, It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<BenchmarkResultRank> { new(gid, runId, runAt, BenchmarkClassification.ExactChunkHit, 1, 1), new(gid, runId, runAt, BenchmarkClassification.Miss, null, null), new(gid, runId, runAt, BenchmarkClassification.StaleCase, null, null) });
 
-        var list = await Sut().ListGenerationsAsync(_clinicId, 1000);
+        var list = await Sut().ListGenerationsAsync(_clientId, 1000);
         var summary = Assert.Single(list);
         Assert.Equal((4, 2, 0.5), (summary.CasesRemaining, summary.LatestScores!.ScoredCases, summary.LatestScores.ChunkTop1));
 
-        var detail = await Sut().GetGenerationAsync(_clinicId, gid);
+        var detail = await Sut().GetGenerationAsync(_clientId, gid);
         Assert.Equal(("dup", 1, "{}"), (detail!.Rejected[0].Reason, detail.SentChunks.Count, detail.RawResponse));
-        Assert.Null(await Sut().GetGenerationAsync(_clinicId, Guid.NewGuid()));
+        Assert.Null(await Sut().GetGenerationAsync(_clientId, Guid.NewGuid()));
 
-        Assert.Null(await Sut().GetRunGenerationBreakdownAsync(_clinicId, Guid.NewGuid()));
+        Assert.Null(await Sut().GetRunGenerationBreakdownAsync(_clientId, Guid.NewGuid()));
         var run = new KnowledgeRetrievalBenchmarkRun { Id = runId, CreatedAt = runAt };
-        _repo.Setup(r => r.GetRunReadOnlyAsync(_clinicId, runId, It.IsAny<CancellationToken>())).ReturnsAsync(run);
-        _repo.Setup(r => r.ListRunResultRanksAsync(_clinicId, runId, It.IsAny<CancellationToken>()))
+        _repo.Setup(r => r.GetRunReadOnlyAsync(_clientId, runId, It.IsAny<CancellationToken>())).ReturnsAsync(run);
+        _repo.Setup(r => r.ListRunResultRanksAsync(_clientId, runId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<BenchmarkResultRank> { new(null, runId, runAt, BenchmarkClassification.Miss, null, null), new(gid, runId, runAt, BenchmarkClassification.ExactChunkHit, 1, 1) });
-        _repo.Setup(r => r.GetGenerationRequestTimesAsync(_clinicId, It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<CancellationToken>())).ReturnsAsync(new Dictionary<Guid, DateTimeOffset> { [gid] = runAt });
-        var breakdown = await Sut().GetRunGenerationBreakdownAsync(_clinicId, runId);
+        _repo.Setup(r => r.GetGenerationRequestTimesAsync(_clientId, It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<CancellationToken>())).ReturnsAsync(new Dictionary<Guid, DateTimeOffset> { [gid] = runAt });
+        var breakdown = await Sut().GetRunGenerationBreakdownAsync(_clientId, runId);
         Assert.Equal([gid, (Guid?)null], breakdown!.Select(b => b.GenerationId)); // generations first, manual last
     }
 }

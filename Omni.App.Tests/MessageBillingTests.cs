@@ -23,7 +23,7 @@ using Omni.App.Entities.Responses.Inbox;
 using Omni.App.Persistence.Contexts;
 using Omni.App.Persistence.Repositories;
 using Omni.App.Persistence.Repositories.Campaigns;
-using Omni.App.Persistence.Repositories.Clinics;
+using Omni.App.Persistence.Repositories.Clients;
 using Omni.App.Persistence.Repositories.Events;
 using Omni.App.Persistence.Repositories.Inbox;
 using Omni.App.Persistence.Repositories.Leads;
@@ -46,9 +46,9 @@ public class MessageBillingTests
         public bool Fail { get; set; }
         public int Sends { get; private set; }
 
-        public Task<string> SendTextMessageAsync(Guid clinicId, string toPhone, string text, CancellationToken ct = default) => Send();
+        public Task<string> SendTextMessageAsync(Guid clientId, string toPhone, string text, CancellationToken ct = default) => Send();
 
-        public Task<string> SendTemplateMessageAsync(Guid clinicId, string toPhone, string templateName, string languageCode,
+        public Task<string> SendTemplateMessageAsync(Guid clientId, string toPhone, string templateName, string languageCode,
             IReadOnlyList<string> bodyParameters, CancellationToken ct = default) => Send();
 
         private Task<string> Send()
@@ -62,7 +62,7 @@ public class MessageBillingTests
     private sealed class Setup
     {
         public required BillingHarness H { get; init; }
-        public required Guid Clinic { get; init; }
+        public required Guid Client { get; init; }
         public required Guid Lead { get; init; }
         public required Guid Conversation { get; init; }
         public required Guid MarketingTemplate { get; init; }
@@ -75,20 +75,20 @@ public class MessageBillingTests
             return new MessageService(new ConversationRepository(db), new MessageRepository(db), new LeadRepository(db),
                 new WhatsAppTemplateRepository(db), new CampaignRepository(db), new UnitOfWork(db), WhatsApp, new IChannelSender[] { new WhatsAppChannelSender(WhatsApp) },
                 NullProxy<IInboxNotifier>.Create(), new EventLogger(new EventLogRepository(db)), NullProxy<INotificationService>.Create(),
-                MessageBilling, H.Entitlements(db), new InboxSettingsService(new InboxSettingsRepository(db), new ClinicRepository(db), H.Entitlements(db), new UnitOfWork(db)), Mock.Of<IMessageTracer>());
+                MessageBilling, H.Entitlements(db), new InboxSettingsService(new InboxSettingsRepository(db), new ClientRepository(db), H.Entitlements(db), new UnitOfWork(db)), Mock.Of<IMessageTracer>());
         }
 
         public async Task<MessageResponse> SendTemplateAsync(Guid templateId)
         {
             await using var db = H.Db();
-            return (await NewMessageService(db).SendTemplateAsync(Clinic, Conversation, new SendTemplateMessageRequest(templateId, null)))!;
+            return (await NewMessageService(db).SendTemplateAsync(Client, Conversation, new SendTemplateMessageRequest(templateId, null)))!;
         }
 
         public async Task StatusAsync(Guid messageId, string status)
         {
             await using var db = H.Db();
             var external = await db.Messages.Where(m => m.Id == messageId).Select(m => m.ExternalMessageId).SingleAsync();
-            await NewMessageService(db).IngestAsync(new IngestMessageRequest(Clinic, Conversation, Lead, IngestEventType.StatusUpdate,
+            await NewMessageService(db).IngestAsync(new IngestMessageRequest(Client, Conversation, Lead, IngestEventType.StatusUpdate,
                 ConversationChannel.WhatsApp, null, external, status, null, null));
         }
 
@@ -103,28 +103,28 @@ public class MessageBillingTests
         string? providerBilling = null, bool? omniUsageBilling = null)
     {
         var h = new BillingHarness(_db.ConnectionString);
-        var clinic = await h.CreateClinicAsync();
-        var card = await h.CreateClientCardAsync(clinic);
+        var client = await h.CreateClientAsync();
+        var card = await h.CreateClientCardAsync(client);
         await h.AddRateAsync(card, BillableEventTypes.WhatsAppMarketingMessage, 0.0700m, 0.0550m, country: "LB");
         await h.AddRateAsync(card, BillableEventTypes.WhatsAppUtilityMessage, 0.0200m, 0.0150m);
         if (subscribe)
         {
             var plan = await h.CreatePlanAsync(0m, 0m, new Dictionary<string, string> { [EntitlementKeys.Campaigns] = "true" });
-            await h.Subscriptions.StartAsync(new StartSubscriptionRequest(clinic, plan, Guid.NewGuid().ToString("N"), true, BillingSource.Admin));
+            await h.Subscriptions.StartAsync(new StartSubscriptionRequest(client, plan, Guid.NewGuid().ToString("N"), true, BillingSource.Admin));
         }
-        if (wallet > 0) await h.TopUpAsync(clinic, wallet);
+        if (wallet > 0) await h.TopUpAsync(client, wallet);
 
         var now = DateTimeOffset.UtcNow;
-        var lead = new Lead { Id = Guid.NewGuid(), ClinicId = clinic, FullName = "Test patient", Phone = "9613123456", CreatedAt = now, UpdatedAt = now };
+        var lead = new Lead { Id = Guid.NewGuid(), ClientId = client, FullName = "Test patient", Phone = "9613123456", CreatedAt = now, UpdatedAt = now };
         var conversation = new Conversation
         {
-            Id = Guid.NewGuid(), ClinicId = clinic, LeadId = lead.Id, Channel = ConversationChannel.WhatsApp, Mode = ConversationMode.Human,
+            Id = Guid.NewGuid(), ClientId = client, LeadId = lead.Id, Channel = ConversationChannel.WhatsApp, Mode = ConversationMode.Human,
             ServiceWindowExpiresAt = serviceWindowOpen ? now.AddHours(10) : null, LastCustomerMessageAt = serviceWindowOpen ? now : null,
             CreatedAt = now, UpdatedAt = now
         };
         WhatsAppTemplate Template(string category) => new()
         {
-            Id = Guid.NewGuid(), ClinicId = clinic, Name = "t_" + category + Guid.NewGuid().ToString("N")[..6], Category = category,
+            Id = Guid.NewGuid(), ClientId = client, Name = "t_" + category + Guid.NewGuid().ToString("N")[..6], Category = category,
             Language = "en", Status = WhatsAppTemplateStatus.Approved, Body = "Hello",
             CreatedAt = now, UpdatedAt = now
         };
@@ -138,8 +138,8 @@ public class MessageBillingTests
             await db.SaveChangesAsync();
         }
 
-        // The clinic's WhatsApp account, optionally with an admin override of who pays.
-        var accountId = await h.ConnectChannelAsync(clinic, ChannelType.WhatsApp);
+        // The client's WhatsApp account, optionally with an admin override of who pays.
+        var accountId = await h.ConnectChannelAsync(client, ChannelType.WhatsApp);
         if (providerBilling is not null || omniUsageBilling is not null)
         {
             await h.ProviderBilling.SetAsync(accountId, new ChannelAccountBillingChange(providerBilling, omniUsageBilling, "test arrangement", "tests"));
@@ -151,7 +151,7 @@ public class MessageBillingTests
 
         return new Setup
         {
-            H = h, Clinic = clinic, Lead = lead.Id, Conversation = conversation.Id, MarketingTemplate = marketing.Id,
+            H = h, Client = client, Lead = lead.Id, Conversation = conversation.Id, MarketingTemplate = marketing.Id,
             UtilityTemplate = utility.Id, WhatsApp = new FakeWhatsApp(), MessageBilling = messageBilling
         };
     }
@@ -171,7 +171,7 @@ public class MessageBillingTests
         Assert.Equal(ChannelProvider.Meta, usage.Provider);
         Assert.Equal(0.07m, usage.Amount);
         Assert.Equal(MessageBillingKeys.For(ConversationChannel.WhatsApp, message.Id), usage.IdempotencyKey);
-        Assert.Equal(0.07m, (await s.H.AccountAsync(s.Clinic)).ReservedAmount);
+        Assert.Equal(0.07m, (await s.H.AccountAsync(s.Client)).ReservedAmount);
 
         await s.StatusAsync(message.Id, "sent");      // not billable yet
         Assert.Equal(ChargeStatus.Reserved, (await s.UsageForAsync(message.Id))!.ChargeStatus);
@@ -181,11 +181,11 @@ public class MessageBillingTests
 
         usage = await s.UsageForAsync(message.Id);
         Assert.Equal(ChargeStatus.Settled, usage!.ChargeStatus);
-        var account = await s.H.AccountAsync(s.Clinic);
+        var account = await s.H.AccountAsync(s.Client);
         Assert.Equal(0.93m, account.WalletBalance);
         Assert.Equal(0m, account.ReservedAmount);
-        Assert.Single((await s.H.LedgerAsync(s.Clinic)), l => l.EntryType == LedgerEntryType.UsageDebit);
-        await s.H.AssertReconciledAsync(s.Clinic);
+        Assert.Single((await s.H.LedgerAsync(s.Client)), l => l.EntryType == LedgerEntryType.UsageDebit);
+        await s.H.AssertReconciledAsync(s.Client);
     }
 
     [PostgresFact]
@@ -198,10 +198,10 @@ public class MessageBillingTests
         await s.StatusAsync(message.Id, "delivered"); // a late "delivered" after the release must not charge
 
         Assert.Equal(ChargeStatus.Released, (await s.UsageForAsync(message.Id))!.ChargeStatus);
-        var account = await s.H.AccountAsync(s.Clinic);
+        var account = await s.H.AccountAsync(s.Client);
         Assert.Equal(1m, account.WalletBalance);
         Assert.Equal(0m, account.ReservedAmount);
-        await s.H.AssertReconciledAsync(s.Clinic);
+        await s.H.AssertReconciledAsync(s.Client);
     }
 
     [PostgresFact]
@@ -213,12 +213,12 @@ public class MessageBillingTests
         await Assert.ThrowsAsync<WhatsAppSendException>(() => s.SendTemplateAsync(s.MarketingTemplate));
 
         await using var db = s.H.Db();
-        var usage = await db.BillingUsageRecords.AsNoTracking().SingleAsync(u => u.ClinicId == s.Clinic && u.ChargeStatus != ChargeStatus.Failed);
+        var usage = await db.BillingUsageRecords.AsNoTracking().SingleAsync(u => u.ClientId == s.Client && u.ChargeStatus != ChargeStatus.Failed);
         Assert.Equal(ChargeStatus.Released, usage.ChargeStatus);
         Assert.Equal("send_failed", usage.ReleaseReason);
-        Assert.False(await db.Messages.AnyAsync(m => m.ClinicId == s.Clinic));
-        Assert.Equal(0m, (await s.H.AccountAsync(s.Clinic)).ReservedAmount);
-        await s.H.AssertReconciledAsync(s.Clinic);
+        Assert.False(await db.Messages.AnyAsync(m => m.ClientId == s.Client));
+        Assert.Equal(0m, (await s.H.AccountAsync(s.Client)).ReservedAmount);
+        await s.H.AssertReconciledAsync(s.Client);
     }
 
     [PostgresFact]
@@ -230,7 +230,7 @@ public class MessageBillingTests
 
         Assert.Equal(UsageFailureReason.InsufficientFunds, denied.Reason);
         Assert.Equal(0, s.WhatsApp.Sends);
-        await s.H.AssertReconciledAsync(s.Clinic);
+        await s.H.AssertReconciledAsync(s.Client);
     }
 
     [PostgresFact]
@@ -251,13 +251,13 @@ public class MessageBillingTests
         MessageResponse text;
         await using (var db = s.H.Db())
         {
-            text = (await s.NewMessageService(db).SendAsync(s.Clinic, s.Conversation, new SendMessageRequest("Thanks, see you Monday")))!;
+            text = (await s.NewMessageService(db).SendAsync(s.Client, s.Conversation, new SendMessageRequest("Thanks, see you Monday")))!;
         }
 
         Assert.Null(await s.UsageForAsync(utilityInWindow.Id));
         Assert.Null(await s.UsageForAsync(text.Id));
         Assert.Equal(2, s.WhatsApp.Sends);
-        Assert.Equal(1m, (await s.H.AccountAsync(s.Clinic)).Spendable);
+        Assert.Equal(1m, (await s.H.AccountAsync(s.Client)).Spendable);
     }
 
     [PostgresFact]
@@ -283,10 +283,10 @@ public class MessageBillingTests
         var released = (await s.UsageForAsync(neverDelivered.Id))!;
         Assert.Equal(ChargeStatus.Released, released.ChargeStatus);
         Assert.Equal("reservation_timeout", released.ReleaseReason);
-        var account = await s.H.AccountAsync(s.Clinic);
+        var account = await s.H.AccountAsync(s.Client);
         Assert.Equal(0.93m, account.WalletBalance);
         Assert.Equal(0m, account.ReservedAmount);
-        await s.H.AssertReconciledAsync(s.Clinic);
+        await s.H.AssertReconciledAsync(s.Client);
     }
 
     [PostgresFact]
@@ -308,7 +308,7 @@ public class MessageBillingTests
     public async Task ACustomerDirectWaba_RecordsUsage_ButNeverTouchesTheWalletCreditOrLedger()
     {
         var s = await SetupAsync(wallet: 1m, providerBilling: ProviderBillingResponsibility.CustomerDirect);
-        await s.H.Billing.AdjustAsync(new WalletAdjustment(s.Clinic, 25m, LedgerBalanceType.IncludedCredit, "plan credit", Guid.NewGuid().ToString("N"), BillingSource.Admin, "tests"));
+        await s.H.Billing.AdjustAsync(new WalletAdjustment(s.Client, 25m, LedgerBalanceType.IncludedCredit, "plan credit", Guid.NewGuid().ToString("N"), BillingSource.Admin, "tests"));
 
         var message = await s.SendTemplateAsync(s.MarketingTemplate);
         var usage = (await s.UsageForAsync(message.Id))!;
@@ -316,9 +316,9 @@ public class MessageBillingTests
         Assert.Equal(ProviderBillingResponsibility.CustomerDirect, usage.ProviderBilling);
         Assert.Equal(ProviderOutcome.Pending, usage.ProviderOutcome);
         Assert.Equal(0m, usage.Amount);
-        Assert.Equal(0.055m, usage.ProviderCost); // the provider cost is still known, for reporting — the clinic pays it to Meta
+        Assert.Equal(0.055m, usage.ProviderCost); // the provider cost is still known, for reporting — the client pays it to Meta
         Assert.NotNull(usage.ChannelIntegrationId);
-        Assert.Equal(0m, (await s.H.AccountAsync(s.Clinic)).ReservedAmount);
+        Assert.Equal(0m, (await s.H.AccountAsync(s.Client)).ReservedAmount);
 
         await s.StatusAsync(message.Id, "delivered");
         await s.StatusAsync(message.Id, "delivered"); // duplicate callback
@@ -326,13 +326,13 @@ public class MessageBillingTests
         usage = (await s.UsageForAsync(message.Id))!;
         Assert.Equal(ChargeStatus.NotCharged, usage.ChargeStatus);
         Assert.Equal(ProviderOutcome.Billable, usage.ProviderOutcome);
-        var account = await s.H.AccountAsync(s.Clinic);
+        var account = await s.H.AccountAsync(s.Client);
         Assert.Equal(1m, account.WalletBalance);
         Assert.Equal(25m, account.IncludedCreditBalance); // included credit untouched
         Assert.Equal(0m, account.ReservedAmount);
-        Assert.DoesNotContain(await s.H.LedgerAsync(s.Clinic),
+        Assert.DoesNotContain(await s.H.LedgerAsync(s.Client),
             l => l.EntryType is LedgerEntryType.UsageDebit or LedgerEntryType.IncludedCreditConsumption);
-        await s.H.AssertReconciledAsync(s.Clinic);
+        await s.H.AssertReconciledAsync(s.Client);
     }
 
     [PostgresFact]
@@ -363,10 +363,10 @@ public class MessageBillingTests
         Assert.Equal(ChargeStatus.Settled, fundedUsage.ChargeStatus);
         Assert.Equal(ProviderBillingResponsibility.PlatformFunded, fundedUsage.ProviderBilling);
         Assert.Equal(0.07m, fundedUsage.Amount);
-        Assert.Equal(1m, (await direct.H.AccountAsync(direct.Clinic)).WalletBalance);
-        Assert.Equal(0.93m, (await funded.H.AccountAsync(funded.Clinic)).WalletBalance);
-        await direct.H.AssertReconciledAsync(direct.Clinic);
-        await funded.H.AssertReconciledAsync(funded.Clinic);
+        Assert.Equal(1m, (await direct.H.AccountAsync(direct.Client)).WalletBalance);
+        Assert.Equal(0.93m, (await funded.H.AccountAsync(funded.Client)).WalletBalance);
+        await direct.H.AssertReconciledAsync(direct.Client);
+        await funded.H.AssertReconciledAsync(funded.Client);
     }
 
     [PostgresFact]
@@ -380,8 +380,8 @@ public class MessageBillingTests
         var usage = (await s.UsageForAsync(message.Id))!;
         Assert.Equal(ChargeStatus.NotCharged, usage.ChargeStatus);
         Assert.Equal(ProviderOutcome.NotBillable, usage.ProviderOutcome);
-        Assert.Equal(1m, (await s.H.AccountAsync(s.Clinic)).Spendable);
-        await s.H.AssertReconciledAsync(s.Clinic);
+        Assert.Equal(1m, (await s.H.AccountAsync(s.Client)).Spendable);
+        await s.H.AssertReconciledAsync(s.Client);
     }
 
     [PostgresFact]
@@ -395,9 +395,9 @@ public class MessageBillingTests
 
         // With a fee rate for customer-direct accounts: Omni charges its fee, independent of Meta's cost.
         var withFee = await SetupAsync(wallet: 1m, providerBilling: ProviderBillingResponsibility.CustomerDirect, omniUsageBilling: true);
-        var card = (await withFee.H.ProviderBilling.ListAccountsAsync(withFee.Clinic)).Single();
+        var card = (await withFee.H.ProviderBilling.ListAccountsAsync(withFee.Client)).Single();
         Assert.True(card.OmniUsageBilling);
-        var feeCard = (await withFee.H.RateCards.ListAsync()).Single(c => c.ClinicId == withFee.Clinic).Code;
+        var feeCard = (await withFee.H.RateCards.ListAsync()).Single(c => c.ClientId == withFee.Client).Code;
         await withFee.H.AddRateAsync(feeCard, BillableEventTypes.WhatsAppMarketingMessage, clientRate: 0.01m, providerCost: 0.055m,
             providerBilling: ProviderBillingResponsibility.CustomerDirect);
 
@@ -408,8 +408,8 @@ public class MessageBillingTests
         Assert.Equal(ChargeStatus.Settled, usage.ChargeStatus);
         Assert.Equal(ProviderBillingResponsibility.CustomerDirect, usage.ProviderBilling);
         Assert.Equal(0.01m, usage.Amount);
-        Assert.Equal(0.99m, (await withFee.H.AccountAsync(withFee.Clinic)).WalletBalance);
-        await withFee.H.AssertReconciledAsync(withFee.Clinic);
+        Assert.Equal(0.99m, (await withFee.H.AccountAsync(withFee.Client)).WalletBalance);
+        await withFee.H.AssertReconciledAsync(withFee.Client);
     }
 
     [PostgresFact]
@@ -419,9 +419,9 @@ public class MessageBillingTests
         var before = await s.SendTemplateAsync(s.MarketingTemplate);
         await s.StatusAsync(before.Id, "delivered");
 
-        var accountId = (await s.H.ProviderBilling.ListAccountsAsync(s.Clinic)).Single().ChannelIntegrationId;
+        var accountId = (await s.H.ProviderBilling.ListAccountsAsync(s.Client)).Single().ChannelIntegrationId;
         await s.H.ProviderBilling.SetAsync(accountId, new ChannelAccountBillingChange(ProviderBillingResponsibility.CustomerDirect, null,
-            "clinic moved to its own WABA payment method", "tests"));
+            "client moved to its own WABA payment method", "tests"));
         var after = await s.SendTemplateAsync(s.MarketingTemplate);
 
         var old = (await s.UsageForAsync(before.Id))!;
@@ -431,19 +431,19 @@ public class MessageBillingTests
         Assert.Equal(ChargeStatus.NotCharged, (await s.UsageForAsync(after.Id))!.ChargeStatus);
         await using (var db = s.H.Db())
         {
-            Assert.True(await db.Events.AnyAsync(e => e.ClinicId == s.Clinic && e.EventType == BillingEventTypes.ProviderBillingChanged));
+            Assert.True(await db.Events.AnyAsync(e => e.ClientId == s.Client && e.EventType == BillingEventTypes.ProviderBillingChanged));
         }
-        await s.H.AssertReconciledAsync(s.Clinic);
+        await s.H.AssertReconciledAsync(s.Client);
     }
 
     [PostgresFact]
-    public async Task TheClinicBillingView_ShowsProviderDirectUsageApartFromPlatformCharges()
+    public async Task TheClientBillingView_ShowsProviderDirectUsageApartFromPlatformCharges()
     {
         var s = await SetupAsync(wallet: 1m, providerBilling: ProviderBillingResponsibility.CustomerDirect);
         var message = await s.SendTemplateAsync(s.MarketingTemplate);
         await s.StatusAsync(message.Id, "delivered");
 
-        var summary = await s.H.Queries.GetSummaryAsync(s.Clinic);
+        var summary = await s.H.Queries.GetSummaryAsync(s.Client);
 
         Assert.Empty(summary.Usage); // nothing charged by Omni
         var direct = Assert.Single(summary.ProviderDirectUsage);

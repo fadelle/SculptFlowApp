@@ -24,9 +24,9 @@ public class OverviewAdminRepository : IOverviewAdminRepository
         var day = now.AddDays(-1);
         var week = now.AddDays(-7);
         return new SystemTotals(
-            await _db.Clinics.CountAsync(ct),
-            await _db.Clinics.CountAsync(c => c.IsActive, ct),
-            await _db.ClinicUsers.CountAsync(u => u.IsActive, ct),
+            await _db.Clients.CountAsync(ct),
+            await _db.Clients.CountAsync(c => c.IsActive, ct),
+            await _db.ClientUsers.CountAsync(u => u.IsActive, ct),
             await _db.Leads.CountAsync(ct),
             await _db.Leads.CountAsync(l => l.CreatedAt >= week, ct),
             await _db.Conversations.CountAsync(ct),
@@ -77,72 +77,72 @@ public class OverviewAdminRepository : IOverviewAdminRepository
         problems.AddRange(await _db.ChannelIntegrations.AsNoTracking()
             .Where(c => c.Status == ChannelIntegrationStatus.Error || (c.Status == ChannelIntegrationStatus.Connected
                         && (!c.IsHealthy || c.LastError != null || c.WebhookStatus == WebhookStatus.Error)))
-            .Select(c => new ProblemRow("Channel", c.ClinicId, c.Clinic!.Name, c.Channel + " " + (c.HealthLevel ?? c.Status),
+            .Select(c => new ProblemRow("Channel", c.ClientId, c.Client!.Name, c.Channel + " " + (c.HealthLevel ?? c.Status),
                 c.LastProblemMessage ?? c.LastError, c.LastHealthEventAt ?? c.UpdatedAt, "/Channels/Details?id=" + c.Id))
             .ToListAsync(ct));
 
         problems.AddRange(await _db.CalendarIntegrations.AsNoTracking()
             .Where(c => c.Status == CalendarIntegrationStatus.Error || (c.Status == CalendarIntegrationStatus.Connected && !c.IsHealthy))
-            .Select(c => new ProblemRow("Calendar", c.ClinicId,
-                _db.Clinics.Where(x => x.Id == c.ClinicId).Select(x => x.Name).FirstOrDefault() ?? "",
+            .Select(c => new ProblemRow("Calendar", c.ClientId,
+                _db.Clients.Where(x => x.Id == c.ClientId).Select(x => x.Name).FirstOrDefault() ?? "",
                 c.Provider + " calendar " + c.Status, c.LastProblemMessage, c.UpdatedAt, "/Channels?tab=calendars"))
             .ToListAsync(ct));
 
         problems.AddRange(await _db.TikTokIntegrations.AsNoTracking()
             .Where(c => c.Status == TikTokIntegrationStatus.Error || (c.Status == TikTokIntegrationStatus.Connected && !c.IsHealthy))
-            .Select(c => new ProblemRow("TikTok", c.ClinicId,
-                _db.Clinics.Where(x => x.Id == c.ClinicId).Select(x => x.Name).FirstOrDefault() ?? "",
+            .Select(c => new ProblemRow("TikTok", c.ClientId,
+                _db.Clients.Where(x => x.Id == c.ClientId).Select(x => x.Name).FirstOrDefault() ?? "",
                 "TikTok " + c.Status, c.LastProblemMessage, c.UpdatedAt, "/Channels?tab=tiktok"))
             .ToListAsync(ct));
 
         var failing = await _db.Messages.AsNoTracking().Where(m => m.FailedAt != null && m.CreatedAt >= day)
-            .GroupBy(m => m.ClinicId)
-            .Select(g => new { ClinicId = g.Key, Count = g.Count(), Last = g.Max(m => m.CreatedAt),
+            .GroupBy(m => m.ClientId)
+            .Select(g => new { ClientId = g.Key, Count = g.Count(), Last = g.Max(m => m.CreatedAt),
                 Reason = g.OrderByDescending(m => m.CreatedAt).Select(m => m.FailureReason).FirstOrDefault() })
             .ToListAsync(ct);
-        var names = await _db.Clinics.AsNoTracking().Where(c => failing.Select(f => f.ClinicId).Contains(c.Id))
+        var names = await _db.Clients.AsNoTracking().Where(c => failing.Select(f => f.ClientId).Contains(c.Id))
             .ToDictionaryAsync(c => c.Id, c => c.Name, ct);
-        problems.AddRange(failing.Select(f => new ProblemRow("Messages", f.ClinicId, names.GetValueOrDefault(f.ClinicId, ""),
-            $"{f.Count} failed message(s) in the last 24h", f.Reason, f.Last, "/Messages?failed=true&clinicId=" + f.ClinicId)));
+        problems.AddRange(failing.Select(f => new ProblemRow("Messages", f.ClientId, names.GetValueOrDefault(f.ClientId, ""),
+            $"{f.Count} failed message(s) in the last 24h", f.Reason, f.Last, "/Messages?failed=true&clientId=" + f.ClientId)));
 
         problems.AddRange(await _db.Campaigns.AsNoTracking()
             .Where(c => c.Status == CampaignStatus.Failed
                         || (c.Status == CampaignStatus.Running && c.StartedAt < day))
-            .Select(c => new ProblemRow("Campaign", c.ClinicId, c.Clinic!.Name,
+            .Select(c => new ProblemRow("Campaign", c.ClientId, c.Client!.Name,
                 c.Status == CampaignStatus.Failed ? "Campaign failed: " + c.Name : "Campaign running for over a day: " + c.Name,
                 null, c.UpdatedAt, "/Campaigns/Details?id=" + c.Id))
             .ToListAsync(ct));
 
         problems.AddRange(await _db.KnowledgeWebsiteSources.AsNoTracking()
             .Where(w => w.IsActive && w.Status == WebsiteScrapeStatus.Failed)
-            .Select(w => new ProblemRow("Website", w.ClinicId,
-                _db.Clinics.Where(x => x.Id == w.ClinicId).Select(x => x.Name).FirstOrDefault() ?? "",
+            .Select(w => new ProblemRow("Website", w.ClientId,
+                _db.Clients.Where(x => x.Id == w.ClientId).Select(x => x.Name).FirstOrDefault() ?? "",
                 "Website scrape failed: " + w.Host, null, w.LastScrapedAt ?? w.UpdatedAt, "/Knowledge?tab=websites"))
             .ToListAsync(ct));
 
         return problems.OrderByDescending(p => p.At).ToList();
     }
 
-    public Task<List<ClinicRow>> RecentClinicsAsync(int take, CancellationToken ct = default) =>
-        _db.Clinics.AsNoTracking().OrderByDescending(c => c.CreatedAt).Take(take)
-            .Select(c => new ClinicRow(c.Id, c.Name, c.Slug, c.Email, c.Timezone, c.IsActive,
-                _db.ClinicUsers.Count(u => u.ClinicId == c.Id && u.IsActive),
-                _db.Leads.Count(l => l.ClinicId == c.Id),
-                _db.Conversations.Count(x => x.ClinicId == c.Id),
-                _db.Conversations.Where(x => x.ClinicId == c.Id).Max(x => x.LastMessageAt),
-                _db.ChannelIntegrations.Where(i => i.ClinicId == c.Id && i.Channel == ChannelType.WhatsApp)
+    public Task<List<ClientRow>> RecentClientsAsync(int take, CancellationToken ct = default) =>
+        _db.Clients.AsNoTracking().OrderByDescending(c => c.CreatedAt).Take(take)
+            .Select(c => new ClientRow(c.Id, c.Name, c.Slug, c.Email, c.Timezone, c.IsActive,
+                _db.ClientUsers.Count(u => u.ClientId == c.Id && u.IsActive),
+                _db.Leads.Count(l => l.ClientId == c.Id),
+                _db.Conversations.Count(x => x.ClientId == c.Id),
+                _db.Conversations.Where(x => x.ClientId == c.Id).Max(x => x.LastMessageAt),
+                _db.ChannelIntegrations.Where(i => i.ClientId == c.Id && i.Channel == ChannelType.WhatsApp)
                     .Select(i => i.Status).FirstOrDefault() ?? "not set up",
                 c.CreatedAt))
             .ToListAsync(ct);
 
-    public Task<PagedResponse<EventRow>> EventsAsync(Guid? clinicId, string? eventType, int page, CancellationToken ct = default)
+    public Task<PagedResponse<EventRow>> EventsAsync(Guid? clientId, string? eventType, int page, CancellationToken ct = default)
     {
         var q = _db.Events.AsNoTracking().AsQueryable();
-        if (clinicId.HasValue) q = q.Where(e => e.ClinicId == clinicId.Value);
+        if (clientId.HasValue) q = q.Where(e => e.ClientId == clientId.Value);
         if (!string.IsNullOrWhiteSpace(eventType)) q = q.Where(e => e.EventType == eventType);
         return q.OrderByDescending(e => e.CreatedAt)
-            .Select(e => new EventRow(e.Id, e.ClinicId,
-                _db.Clinics.Where(x => x.Id == e.ClinicId).Select(x => x.Name).FirstOrDefault() ?? "",
+            .Select(e => new EventRow(e.Id, e.ClientId,
+                _db.Clients.Where(x => x.Id == e.ClientId).Select(x => x.Name).FirstOrDefault() ?? "",
                 e.EventType, e.Source, e.LeadId, e.ConversationId, e.AppointmentId, e.Metadata, e.CreatedAt))
             .ToPagedAsync(page, ct: ct);
     }

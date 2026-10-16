@@ -2,7 +2,7 @@ using System.Text.RegularExpressions;
 
 namespace Omni.App.Common.Statics;
 
-/// <summary>Well-known billable event types and their clinic-facing labels. NOT an allow-list: any lowercase
+/// <summary>Well-known billable event types and their client-facing labels. NOT an allow-list: any lowercase
 /// snake_case type works as soon as a rate card prices it. Add a constant here only so code and labels share it.</summary>
 public static partial class BillableEventTypes
 {

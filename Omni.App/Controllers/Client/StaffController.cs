@@ -5,15 +5,15 @@ using Omni.App.Entities.Responses.Staff;
 
 namespace Omni.App.Controllers.Client;
 
-/// <summary>The users of the logged-in user's clinic. Login required; the clinic always comes from
-/// CurrentClinicContext, never from the request.</summary>
+/// <summary>The users of the logged-in user's client. Login required; the client always comes from
+/// CurrentClientContext, never from the request.</summary>
 [ApiController]
 [Route("api/staff")]
 public class StaffController : DashboardApiController
 {
     private readonly IStaffService _staff;
 
-    public StaffController(IStaffService staff, ICurrentClinicContext clinicContext) : base(clinicContext)
+    public StaffController(IStaffService staff, ICurrentClientContext clientContext) : base(clientContext)
     {
         _staff = staff;
     }
@@ -21,8 +21,8 @@ public class StaffController : DashboardApiController
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<StaffMemberResponse>>> List(CancellationToken ct)
     {
-        var clinicId = await GetClinicIdAsync(ct);
-        if (clinicId is null) return Forbid();
-        return Ok(await _staff.ListAsync(clinicId.Value, ct));
+        var clientId = await GetClientIdAsync(ct);
+        if (clientId is null) return Forbid();
+        return Ok(await _staff.ListAsync(clientId.Value, ct));
     }
 }

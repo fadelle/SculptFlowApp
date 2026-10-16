@@ -16,13 +16,13 @@ public class NotificationRepository : INotificationRepository
 
     public void Add(Notification notification) => _db.Notifications.Add(notification);
 
-    public Task<Notification?> GetAsync(Guid clinicId, Guid notificationId, CancellationToken ct = default) =>
-        _db.Notifications.FirstOrDefaultAsync(n => n.ClinicId == clinicId && n.Id == notificationId, ct);
+    public Task<Notification?> GetAsync(Guid clientId, Guid notificationId, CancellationToken ct = default) =>
+        _db.Notifications.FirstOrDefaultAsync(n => n.ClientId == clientId && n.Id == notificationId, ct);
 
-    public async Task<(IReadOnlyList<Notification> Items, int TotalCount, int UnreadCount)> ListAsync(Guid clinicId, int skip,
+    public async Task<(IReadOnlyList<Notification> Items, int TotalCount, int UnreadCount)> ListAsync(Guid clientId, int skip,
         int take, CancellationToken ct = default)
     {
-        var query = _db.Notifications.AsNoTracking().Where(n => n.ClinicId == clinicId);
+        var query = _db.Notifications.AsNoTracking().Where(n => n.ClientId == clientId);
 
         var totalCount = await query.CountAsync(ct);
         var unreadCount = await query.CountAsync(n => !n.IsRead, ct);
@@ -34,11 +34,11 @@ public class NotificationRepository : INotificationRepository
         return (items, totalCount, unreadCount);
     }
 
-    public Task<int> CountUnreadAsync(Guid clinicId, CancellationToken ct = default) =>
-        _db.Notifications.CountAsync(n => n.ClinicId == clinicId && !n.IsRead, ct);
+    public Task<int> CountUnreadAsync(Guid clientId, CancellationToken ct = default) =>
+        _db.Notifications.CountAsync(n => n.ClientId == clientId && !n.IsRead, ct);
 
-    public Task MarkAllReadAsync(Guid clinicId, DateTimeOffset readAt, CancellationToken ct = default) =>
+    public Task MarkAllReadAsync(Guid clientId, DateTimeOffset readAt, CancellationToken ct = default) =>
         _db.Notifications
-            .Where(n => n.ClinicId == clinicId && !n.IsRead)
+            .Where(n => n.ClientId == clientId && !n.IsRead)
             .ExecuteUpdateAsync(s => s.SetProperty(n => n.IsRead, true).SetProperty(n => n.ReadAt, readAt), ct);
 }

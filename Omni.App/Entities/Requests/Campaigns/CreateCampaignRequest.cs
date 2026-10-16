@@ -13,7 +13,7 @@ namespace Omni.App.Entities.Requests.Campaigns;
 /// lead without an entry gets no body substitutions (fine for templates with no variables).
 /// </summary>
 public record CreateCampaignRequest(
-    Guid ClinicId,
+    Guid ClientId,
     string Name,
     Guid WhatsAppTemplateId,
     IReadOnlyList<Guid> LeadIds,

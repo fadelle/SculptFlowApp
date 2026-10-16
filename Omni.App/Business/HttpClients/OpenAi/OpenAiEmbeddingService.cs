@@ -96,7 +96,7 @@ public class OpenAiEmbeddingService : IEmbeddingService
 
         if ((int)status is < 200 or >= 300)
         {
-            // The body can echo a masked copy of the API key and this message reaches clinic users, so only log it.
+            // The body can echo a masked copy of the API key and this message reaches client users, so only log it.
             _logger?.LogWarning("Embedding request failed ({Status}): {Body}", (int)status, Truncate(body));
             throw new InvalidOperationException($"The embedding service is unavailable (HTTP {(int)status}).");
         }

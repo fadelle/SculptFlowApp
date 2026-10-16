@@ -23,7 +23,7 @@ public class MessageTraceStep
     /// <summary>How long the step took, for steps that wait on something (provider call, n8n, a bot tool).</summary>
     public double? DurationMs { get; set; }
 
-    public Guid? ClinicId { get; set; }
+    public Guid? ClientId { get; set; }
     public Guid? ConversationId { get; set; }
     public Guid? MessageId { get; set; }
     public string? ExternalMessageId { get; set; }

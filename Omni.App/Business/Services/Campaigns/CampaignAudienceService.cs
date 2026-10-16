@@ -25,9 +25,9 @@ public class CampaignAudienceService : ICampaignAudienceService
         return null;
     }
 
-    public Task<List<Lead>> GetEligibleLeadsAsync(Guid clinicId, string audienceType, string? filtersJson, CancellationToken ct = default) =>
-        _audience.ListEligibleLeadsAsync(clinicId, audienceType, CampaignAudienceFilters.Parse(filtersJson), _config.CampaignsDefaultInactiveDays, ct);
+    public Task<List<Lead>> GetEligibleLeadsAsync(Guid clientId, string audienceType, string? filtersJson, CancellationToken ct = default) =>
+        _audience.ListEligibleLeadsAsync(clientId, audienceType, CampaignAudienceFilters.Parse(filtersJson), _config.CampaignsDefaultInactiveDays, ct);
 
-    public Task<int> GetMatchingCountAsync(Guid clinicId, string audienceType, string? filtersJson, CancellationToken ct = default) =>
-        _audience.CountEligibleLeadsAsync(clinicId, audienceType, CampaignAudienceFilters.Parse(filtersJson), _config.CampaignsDefaultInactiveDays, ct);
+    public Task<int> GetMatchingCountAsync(Guid clientId, string audienceType, string? filtersJson, CancellationToken ct = default) =>
+        _audience.CountEligibleLeadsAsync(clientId, audienceType, CampaignAudienceFilters.Parse(filtersJson), _config.CampaignsDefaultInactiveDays, ct);
 }

@@ -4,7 +4,7 @@ using Microsoft.Extensions.Options;
 namespace Omni.App.Common.Statics;
 
 /// <summary>Entitlement keys a plan can set (billing.plan_entitlements.entitlement_key). To add one: add a
-/// constant + a definition below, give it a ClinicEntitlements property if code asks it often, check it where the
+/// constant + a definition below, give it a ClientEntitlements property if code asks it often, check it where the
 /// feature lives, and set it on the plans (admin API). No schema change.</summary>
 public static class EntitlementKeys
 {

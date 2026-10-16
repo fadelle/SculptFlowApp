@@ -14,23 +14,23 @@ public class LeadRepository : ILeadRepository
         _db = db;
     }
 
-    public Task<Lead?> GetAsync(Guid clinicId, Guid leadId, CancellationToken ct = default) =>
-        _db.Leads.Include(l => l.Procedure).FirstOrDefaultAsync(l => l.ClinicId == clinicId && l.Id == leadId, ct);
+    public Task<Lead?> GetAsync(Guid clientId, Guid leadId, CancellationToken ct = default) =>
+        _db.Leads.Include(l => l.Procedure).FirstOrDefaultAsync(l => l.ClientId == clientId && l.Id == leadId, ct);
 
     public Task<Lead?> GetByIdAsync(Guid leadId, CancellationToken ct = default) =>
         _db.Leads.FirstOrDefaultAsync(l => l.Id == leadId, ct);
 
-    public Task<Lead?> FindByExternalIdAsync(Guid clinicId, string externalLeadId, CancellationToken ct = default) =>
+    public Task<Lead?> FindByExternalIdAsync(Guid clientId, string externalLeadId, CancellationToken ct = default) =>
         _db.Leads.Include(l => l.Procedure)
-            .FirstOrDefaultAsync(l => l.ClinicId == clinicId && l.ExternalLeadId == externalLeadId, ct);
+            .FirstOrDefaultAsync(l => l.ClientId == clientId && l.ExternalLeadId == externalLeadId, ct);
 
-    public Task<Lead?> FindByPhoneAsync(Guid clinicId, string phone, CancellationToken ct = default) =>
-        _db.Leads.Include(l => l.Procedure).FirstOrDefaultAsync(l => l.ClinicId == clinicId && l.Phone == phone, ct);
+    public Task<Lead?> FindByPhoneAsync(Guid clientId, string phone, CancellationToken ct = default) =>
+        _db.Leads.Include(l => l.Procedure).FirstOrDefaultAsync(l => l.ClientId == clientId && l.Phone == phone, ct);
 
-    public async Task<(IReadOnlyList<Lead> Items, int TotalCount)> ListAsync(Guid clinicId, string? status, Guid? procedureId,
+    public async Task<(IReadOnlyList<Lead> Items, int TotalCount)> ListAsync(Guid clientId, string? status, Guid? procedureId,
         string? search, int skip, int take, CancellationToken ct = default)
     {
-        var query = _db.Leads.Include(l => l.Procedure).Where(l => l.ClinicId == clinicId);
+        var query = _db.Leads.Include(l => l.Procedure).Where(l => l.ClientId == clientId);
 
         if (!string.IsNullOrWhiteSpace(status))
         {
@@ -61,9 +61,9 @@ public class LeadRepository : ILeadRepository
         return (items, totalCount);
     }
 
-    public async Task<IReadOnlyList<string>> ListDistinctSourcesAsync(Guid clinicId, CancellationToken ct = default) =>
+    public async Task<IReadOnlyList<string>> ListDistinctSourcesAsync(Guid clientId, CancellationToken ct = default) =>
         await _db.Leads
-            .Where(l => l.ClinicId == clinicId && l.Source != null && l.Source != "")
+            .Where(l => l.ClientId == clientId && l.Source != null && l.Source != "")
             .Select(l => l.Source!)
             .Distinct()
             .OrderBy(s => s)
@@ -74,12 +74,12 @@ public class LeadRepository : ILeadRepository
     public Task LoadProcedureAsync(Lead lead, CancellationToken ct = default) =>
         _db.Entry(lead).Reference(l => l.Procedure).LoadAsync(ct);
 
-    public Task<List<Lead>> ListByIdsAsync(Guid clinicId, IReadOnlyCollection<Guid> leadIds, CancellationToken ct = default) =>
-        _db.Leads.Where(l => l.ClinicId == clinicId && leadIds.Contains(l.Id)).ToListAsync(ct);
+    public Task<List<Lead>> ListByIdsAsync(Guid clientId, IReadOnlyCollection<Guid> leadIds, CancellationToken ct = default) =>
+        _db.Leads.Where(l => l.ClientId == clientId && leadIds.Contains(l.Id)).ToListAsync(ct);
 
     public Task<string?> GetFullNameAsync(Guid leadId, CancellationToken ct = default) =>
         _db.Leads.Where(l => l.Id == leadId).Select(l => l.FullName).FirstOrDefaultAsync(ct);
 
-    public Task<bool> ExistsAsync(Guid clinicId, Guid leadId, CancellationToken ct = default) =>
-        _db.Leads.AnyAsync(l => l.Id == leadId && l.ClinicId == clinicId, ct);
+    public Task<bool> ExistsAsync(Guid clientId, Guid leadId, CancellationToken ct = default) =>
+        _db.Leads.AnyAsync(l => l.Id == leadId && l.ClientId == clientId, ct);
 }

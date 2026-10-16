@@ -6,7 +6,7 @@ namespace Omni.App.Tests.Services;
 
 public class MessageServiceTests
 {
-    private readonly Guid _clinicId = Guid.NewGuid();
+    private readonly Guid _clientId = Guid.NewGuid();
     private readonly Guid _leadId = Guid.NewGuid();
     private readonly Mock<IConversationRepository> _conversations = new();
     private readonly Mock<IMessageRepository> _messages = new();
@@ -29,7 +29,7 @@ public class MessageServiceTests
     public MessageServiceTests()
     {
         InboxSettings(planIncludesBot: true, reopenedConversations: true);
-        _lead = new Lead { Id = _leadId, ClinicId = _clinicId, FullName = "Ann Lee", Phone = "96170123456" };
+        _lead = new Lead { Id = _leadId, ClientId = _clientId, FullName = "Ann Lee", Phone = "96170123456" };
         _sender.SetupGet(s => s.Channel).Returns(ConversationChannel.WhatsApp);
         _sender.Setup(s => s.SendTextAsync(It.IsAny<Conversation>(), It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync("wamid.sent");
         _billing.Setup(b => b.ReserveOutboundAsync(It.IsAny<OutboundMessageBillingContext>(), It.IsAny<CancellationToken>())).ReturnsAsync(_hold);
@@ -41,19 +41,19 @@ public class MessageServiceTests
         _whatsApp.Object, [_sender.Object], _notifier.Object, _events.Object, _notifications.Object, _billing.Object, _entitlements.Object, _inboxSettings.Object, _tracer.Object);
 
     private void InboxSettings(bool planIncludesBot, bool reopenedConversations) =>
-        _inboxSettings.Setup(a => a.GetAsync(_clinicId, It.IsAny<CancellationToken>()))
+        _inboxSettings.Setup(a => a.GetAsync(_clientId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new InboxSettingsDto(planIncludesBot, AiBotNewConversations: true, reopenedConversations));
 
     private Conversation Conv(string mode = ConversationMode.Ai, string channel = ConversationChannel.WhatsApp, bool windowOpen = true)
     {
         var c = new Conversation
         {
-            Id = Guid.NewGuid(), ClinicId = _clinicId, LeadId = _leadId, Lead = _lead, Channel = channel, Mode = mode, Status = ConversationStatus.Active,
+            Id = Guid.NewGuid(), ClientId = _clientId, LeadId = _leadId, Lead = _lead, Channel = channel, Mode = mode, Status = ConversationStatus.Active,
             AiEnabled = mode == ConversationMode.Ai, HumanTakeover = mode == ConversationMode.Human,
             ServiceWindowExpiresAt = windowOpen ? DateTimeOffset.UtcNow.AddHours(5) : null
         };
-        _conversations.Setup(r => r.GetWithLeadAsync(_clinicId, c.Id, It.IsAny<CancellationToken>())).ReturnsAsync(c);
-        _conversations.Setup(r => r.GetAsync(_clinicId, c.Id, It.IsAny<CancellationToken>())).ReturnsAsync(c);
+        _conversations.Setup(r => r.GetWithLeadAsync(_clientId, c.Id, It.IsAny<CancellationToken>())).ReturnsAsync(c);
+        _conversations.Setup(r => r.GetAsync(_clientId, c.Id, It.IsAny<CancellationToken>())).ReturnsAsync(c);
         return c;
     }
 
@@ -62,8 +62,8 @@ public class MessageServiceTests
     [Fact]
     public async Task Send_validates_content_and_conversation()
     {
-        await Assert.ThrowsAsync<ArgumentException>(() => Sut().SendAsync(_clinicId, Guid.NewGuid(), new SendMessageRequest("  ")));
-        Assert.Null(await Sut().SendAsync(_clinicId, Guid.NewGuid(), new SendMessageRequest("hi")));
+        await Assert.ThrowsAsync<ArgumentException>(() => Sut().SendAsync(_clientId, Guid.NewGuid(), new SendMessageRequest("  ")));
+        Assert.Null(await Sut().SendAsync(_clientId, Guid.NewGuid(), new SendMessageRequest("hi")));
     }
 
     [Fact]
@@ -73,16 +73,16 @@ public class MessageServiceTests
         Message? saved = null;
         _messages.Setup(m => m.Add(It.IsAny<Message>())).Callback<Message>(m => saved = m);
 
-        var r = await Sut().SendAsync(_clinicId, c.Id, new SendMessageRequest("hello"));
+        var r = await Sut().SendAsync(_clientId, c.Id, new SendMessageRequest("hello"));
 
         Assert.Equal(("wamid.sent", MessageSenderType.Staff, MessageOrigin.Dashboard, "text"), (saved!.ExternalMessageId, saved.SenderType, saved.Origin, saved.MessageType));
         Assert.Equal((ConversationMode.Human, true), (c.Mode, c.HumanTakeover));
         Assert.NotNull(_lead.LastContactAt);
-        _entitlements.Verify(e => e.EnsureCanSendMessagesAsync(_clinicId, It.IsAny<CancellationToken>()), Times.Once);
+        _entitlements.Verify(e => e.EnsureCanSendMessagesAsync(_clientId, It.IsAny<CancellationToken>()), Times.Once);
         _billing.Verify(b => b.ReserveOutboundAsync(It.Is<OutboundMessageBillingContext>(x => x.Kind == OutboundMessageKind.Text && x.ServiceWindowOpen && x.RecipientAddress == "96170123456" && x.MessageId == saved.Id), It.IsAny<CancellationToken>()), Times.Once);
         _billing.Verify(b => b.SentAsync(_hold, It.IsAny<CancellationToken>()), Times.Once);
-        _notifier.Verify(n => n.ConversationModeChangedAsync(_clinicId, c.Id, ConversationMode.Human, It.IsAny<CancellationToken>()), Times.Once);
-        _notifier.Verify(n => n.NewMessageAsync(_clinicId, c.Id, saved.Id, _leadId, MessageDirection.Outbound, MessageSenderType.Staff, MessageOrigin.Dashboard, It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()), Times.Once);
+        _notifier.Verify(n => n.ConversationModeChangedAsync(_clientId, c.Id, ConversationMode.Human, It.IsAny<CancellationToken>()), Times.Once);
+        _notifier.Verify(n => n.NewMessageAsync(_clientId, c.Id, saved.Id, _leadId, MessageDirection.Outbound, MessageSenderType.Staff, MessageOrigin.Dashboard, It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()), Times.Once);
         Assert.Equal(saved.Id, r!.Id);
     }
 
@@ -90,7 +90,7 @@ public class MessageServiceTests
     public async Task Send_in_human_mode_does_not_broadcast_a_mode_change()
     {
         var c = Conv(ConversationMode.Human);
-        await Sut().SendAsync(_clinicId, c.Id, new SendMessageRequest("again", "image"));
+        await Sut().SendAsync(_clientId, c.Id, new SendMessageRequest("again", "image"));
         _notifier.Verify(n => n.ConversationModeChangedAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -99,27 +99,27 @@ public class MessageServiceTests
     {
         var c = Conv();
         _sender.Setup(s => s.SendTextAsync(It.IsAny<Conversation>(), It.IsAny<string>(), It.IsAny<CancellationToken>())).ThrowsAsync(new ChannelSendException("blocked"));
-        await Assert.ThrowsAsync<ChannelSendException>(() => Sut().SendAsync(_clinicId, c.Id, new SendMessageRequest("hello")));
+        await Assert.ThrowsAsync<ChannelSendException>(() => Sut().SendAsync(_clientId, c.Id, new SendMessageRequest("hello")));
         _billing.Verify(b => b.SendFailedAsync(_hold, It.IsAny<CancellationToken>()), Times.Once);
         _billing.Verify(b => b.SentAsync(It.IsAny<MessageBillingHold?>(), It.IsAny<CancellationToken>()), Times.Never);
         _messages.Verify(m => m.Add(It.IsAny<Message>()), Times.Never);
-        _notifications.Verify(n => n.CreateAsync(_clinicId, NotificationType.OutboundMessageFailed, It.IsAny<string>(), "Message failed to send to Ann Lee.", _leadId, c.Id, null, null, It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
+        _notifications.Verify(n => n.CreateAsync(_clientId, NotificationType.OutboundMessageFailed, It.IsAny<string>(), "Message failed to send to Ann Lee.", _leadId, c.Id, null, null, It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
     public async Task Send_on_an_unsupported_channel_fails_after_reserving_and_releases()
     {
         var c = Conv(channel: ConversationChannel.Instagram);
-        await Assert.ThrowsAsync<InvalidOperationException>(() => Sut().SendAsync(_clinicId, c.Id, new SendMessageRequest("hello")));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => Sut().SendAsync(_clientId, c.Id, new SendMessageRequest("hello")));
         _billing.Verify(b => b.SendFailedAsync(_hold, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
-    public async Task Send_is_blocked_before_anything_happens_when_the_clinic_may_not_send()
+    public async Task Send_is_blocked_before_anything_happens_when_the_client_may_not_send()
     {
         var c = Conv();
-        _entitlements.Setup(e => e.EnsureCanSendMessagesAsync(_clinicId, It.IsAny<CancellationToken>())).ThrowsAsync(new EntitlementDeniedException("messages", "No active plan"));
-        await Assert.ThrowsAsync<EntitlementDeniedException>(() => Sut().SendAsync(_clinicId, c.Id, new SendMessageRequest("hello")));
+        _entitlements.Setup(e => e.EnsureCanSendMessagesAsync(_clientId, It.IsAny<CancellationToken>())).ThrowsAsync(new EntitlementDeniedException("messages", "No active plan"));
+        await Assert.ThrowsAsync<EntitlementDeniedException>(() => Sut().SendAsync(_clientId, c.Id, new SendMessageRequest("hello")));
         _sender.Verify(s => s.SendTextAsync(It.IsAny<Conversation>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -128,10 +128,10 @@ public class MessageServiceTests
     [Fact]
     public async Task AiReply_requires_ai_mode_and_content()
     {
-        await Assert.ThrowsAsync<ArgumentException>(() => Sut().SendAiReplyAsync(_clinicId, Guid.NewGuid(), ""));
-        Assert.Null(await Sut().SendAiReplyAsync(_clinicId, Guid.NewGuid(), "hi"));
+        await Assert.ThrowsAsync<ArgumentException>(() => Sut().SendAiReplyAsync(_clientId, Guid.NewGuid(), ""));
+        Assert.Null(await Sut().SendAiReplyAsync(_clientId, Guid.NewGuid(), "hi"));
         var human = Conv(ConversationMode.Human);
-        await Assert.ThrowsAsync<ConversationNotInAiModeException>(() => Sut().SendAiReplyAsync(_clinicId, human.Id, "hi"));
+        await Assert.ThrowsAsync<ConversationNotInAiModeException>(() => Sut().SendAiReplyAsync(_clientId, human.Id, "hi"));
     }
 
     [Fact]
@@ -140,10 +140,10 @@ public class MessageServiceTests
         var c = Conv();
         Message? saved = null;
         _messages.Setup(m => m.Add(It.IsAny<Message>())).Callback<Message>(m => saved = m);
-        await Sut().SendAiReplyAsync(_clinicId, c.Id, "Sure, we can help");
+        await Sut().SendAiReplyAsync(_clientId, c.Id, "Sure, we can help");
         Assert.Equal((MessageSenderType.Ai, MessageOrigin.Ai, true), (saved!.SenderType, saved.Origin, saved.IsAiGenerated));
         Assert.Equal(ConversationMode.Ai, c.Mode);
-        _events.Verify(e => e.Log(_clinicId, EventTypes.AiMessageSent, _leadId, c.Id, null, MessageOrigin.Ai, "{}"), Times.Once);
+        _events.Verify(e => e.Log(_clientId, EventTypes.AiMessageSent, _leadId, c.Id, null, MessageOrigin.Ai, "{}"), Times.Once);
         _billing.Verify(b => b.SentAsync(_hold, It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -152,7 +152,7 @@ public class MessageServiceTests
     {
         var c = Conv();
         _sender.Setup(s => s.SendTextAsync(It.IsAny<Conversation>(), It.IsAny<string>(), It.IsAny<CancellationToken>())).ThrowsAsync(new ChannelSendException("x"));
-        await Assert.ThrowsAsync<ChannelSendException>(() => Sut().SendAiReplyAsync(_clinicId, c.Id, "hi"));
+        await Assert.ThrowsAsync<ChannelSendException>(() => Sut().SendAiReplyAsync(_clientId, c.Id, "hi"));
         _billing.Verify(b => b.SendFailedAsync(_hold, It.IsAny<CancellationToken>()), Times.Once);
         _notifications.Verify(n => n.CreateAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
@@ -161,11 +161,11 @@ public class MessageServiceTests
 
     private WhatsAppTemplate Template(string status = WhatsAppTemplateStatus.Approved) => new()
     {
-        Id = Guid.NewGuid(), ClinicId = _clinicId, Name = "promo", Language = "en", Body = "Hi {{1}}, offer {{2}}!", Status = status,
+        Id = Guid.NewGuid(), ClientId = _clientId, Name = "promo", Language = "en", Body = "Hi {{1}}, offer {{2}}!", Status = status,
         Category = "MARKETING", CurrentCategory = "UTILITY"
     };
 
-    private Template_ Setup(WhatsAppTemplate t) { _templates.Setup(r => r.GetReadOnlyAsync(_clinicId, t.Id, It.IsAny<CancellationToken>())).ReturnsAsync(t); return new Template_(t); }
+    private Template_ Setup(WhatsAppTemplate t) { _templates.Setup(r => r.GetReadOnlyAsync(_clientId, t.Id, It.IsAny<CancellationToken>())).ReturnsAsync(t); return new Template_(t); }
 
     private sealed record Template_(WhatsAppTemplate T);
 
@@ -178,10 +178,10 @@ public class MessageServiceTests
         Message? saved = null;
         _messages.Setup(m => m.Add(It.IsAny<Message>())).Callback<Message>(m => saved = m);
 
-        var r = await Sut().SendTemplateAsync(_clinicId, c.Id, new SendTemplateMessageRequest(t.Id, ["Ann", "20%"]));
+        var r = await Sut().SendTemplateAsync(_clientId, c.Id, new SendTemplateMessageRequest(t.Id, ["Ann", "20%"]));
 
         Assert.Equal(("template", "Hi Ann, offer 20%!", t.Id, MessageOrigin.Dashboard), (saved!.MessageType, saved.Content, saved.WhatsAppTemplateId, saved.Origin));
-        _whatsApp.Verify(w => w.SendTemplateMessageAsync(_clinicId, "96170123456", "promo", "en", It.Is<IReadOnlyList<string>>(p => p.Count == 2), It.IsAny<CancellationToken>()), Times.Once);
+        _whatsApp.Verify(w => w.SendTemplateMessageAsync(_clientId, "96170123456", "promo", "en", It.Is<IReadOnlyList<string>>(p => p.Count == 2), It.IsAny<CancellationToken>()), Times.Once);
         _billing.Verify(b => b.ReserveOutboundAsync(It.Is<OutboundMessageBillingContext>(x => x.Kind == OutboundMessageKind.Template && x.TemplateCategory == "UTILITY"), It.IsAny<CancellationToken>()), Times.Once);
         Assert.Equal(ConversationMode.Human, c.Mode);
         Assert.NotNull(r);
@@ -199,33 +199,33 @@ public class MessageServiceTests
         Message? saved = null;
         _messages.Setup(m => m.Add(It.IsAny<Message>())).Callback<Message>(m => saved = m);
 
-        await Sut().SendCampaignTemplateAsync(_clinicId, c.Id, t.Id, ["a", "b"], campaignId, recipientId);
+        await Sut().SendCampaignTemplateAsync(_clientId, c.Id, t.Id, ["a", "b"], campaignId, recipientId);
 
         Assert.Equal((campaignId, recipientId, MessageOrigin.Campaign), (saved!.CampaignId, saved.CampaignRecipientId, saved.Origin));
-        _events.Verify(e => e.Log(_clinicId, EventTypes.CampaignMessageSent, _leadId, c.Id, null, MessageOrigin.Campaign, "{}"), Times.Once);
+        _events.Verify(e => e.Log(_clientId, EventTypes.CampaignMessageSent, _leadId, c.Id, null, MessageOrigin.Campaign, "{}"), Times.Once);
         _billing.Verify(b => b.ReserveOutboundAsync(It.Is<OutboundMessageBillingContext>(x => x.TemplateCategory == "MARKETING" && x.CampaignId == campaignId), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
     public async Task Template_send_guards()
     {
-        Assert.Null(await Sut().SendTemplateAsync(_clinicId, Guid.NewGuid(), new SendTemplateMessageRequest(Guid.NewGuid(), null)));
+        Assert.Null(await Sut().SendTemplateAsync(_clientId, Guid.NewGuid(), new SendTemplateMessageRequest(Guid.NewGuid(), null)));
 
         var tg = Conv(channel: ConversationChannel.Telegram);
-        await Assert.ThrowsAsync<InvalidOperationException>(() => Sut().SendTemplateAsync(_clinicId, tg.Id, new SendTemplateMessageRequest(Guid.NewGuid(), null)));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => Sut().SendTemplateAsync(_clientId, tg.Id, new SendTemplateMessageRequest(Guid.NewGuid(), null)));
 
         var c = Conv();
-        await Assert.ThrowsAsync<ArgumentException>(() => Sut().SendTemplateAsync(_clinicId, c.Id, new SendTemplateMessageRequest(Guid.NewGuid(), null)));
+        await Assert.ThrowsAsync<ArgumentException>(() => Sut().SendTemplateAsync(_clientId, c.Id, new SendTemplateMessageRequest(Guid.NewGuid(), null)));
 
         var pending = Template(WhatsAppTemplateStatus.Pending);
         Setup(pending);
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => Sut().SendTemplateAsync(_clinicId, c.Id, new SendTemplateMessageRequest(pending.Id, null)));
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => Sut().SendTemplateAsync(_clientId, c.Id, new SendTemplateMessageRequest(pending.Id, null)));
         Assert.Contains("isn't approved", ex.Message);
 
         _lead.Phone = null;
         var ok = Template();
         Setup(ok);
-        var ex3 = await Assert.ThrowsAsync<InvalidOperationException>(() => Sut().SendTemplateAsync(_clinicId, c.Id, new SendTemplateMessageRequest(ok.Id, null)));
+        var ex3 = await Assert.ThrowsAsync<InvalidOperationException>(() => Sut().SendTemplateAsync(_clientId, c.Id, new SendTemplateMessageRequest(ok.Id, null)));
         Assert.Contains("no phone number", ex3.Message);
         _billing.Verify(b => b.ReserveOutboundAsync(It.IsAny<OutboundMessageBillingContext>(), It.IsAny<CancellationToken>()), Times.Never);
     }
@@ -238,9 +238,9 @@ public class MessageServiceTests
         Setup(t);
         _whatsApp.Setup(w => w.SendTemplateMessageAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IReadOnlyList<string>>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new ChannelSendException("rejected"));
-        await Assert.ThrowsAsync<ChannelSendException>(() => Sut().SendTemplateAsync(_clinicId, c.Id, new SendTemplateMessageRequest(t.Id, null)));
+        await Assert.ThrowsAsync<ChannelSendException>(() => Sut().SendTemplateAsync(_clientId, c.Id, new SendTemplateMessageRequest(t.Id, null)));
         _billing.Verify(b => b.SendFailedAsync(_hold, It.IsAny<CancellationToken>()), Times.Once);
-        _notifications.Verify(n => n.CreateAsync(_clinicId, NotificationType.OutboundMessageFailed, It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
+        _notifications.Verify(n => n.CreateAsync(_clientId, NotificationType.OutboundMessageFailed, It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -253,7 +253,7 @@ public class MessageServiceTests
     // ---------------------------------------------------------------- ingest
 
     private IngestMessageRequest Ingest(Guid conversationId, string type, string? externalId = "ext1", string? messageType = null, bool newLead = false) =>
-        new(_clinicId, conversationId, _leadId, type, ConversationChannel.WhatsApp, "hello there", externalId, null, null, null, messageType, null, null, null)
+        new(_clientId, conversationId, _leadId, type, ConversationChannel.WhatsApp, "hello there", externalId, null, null, null, messageType, null, null, null)
         { LeadWasNewlyCreated = newLead };
 
     [Fact]
@@ -282,7 +282,7 @@ public class MessageServiceTests
         Assert.NotNull(saved.ReceivedAt);
         Assert.NotNull(c.LastCustomerMessageAt);
         Assert.InRange(c.ServiceWindowExpiresAt!.Value, DateTimeOffset.UtcNow.AddHours(23), DateTimeOffset.UtcNow.AddHours(25));
-        _events.Verify(e => e.Log(_clinicId, EventTypes.CustomerMessageReceived, _leadId, c.Id, null, MessageOrigin.WhatsAppCustomer, "{}"), Times.Once);
+        _events.Verify(e => e.Log(_clientId, EventTypes.CustomerMessageReceived, _leadId, c.Id, null, MessageOrigin.WhatsAppCustomer, "{}"), Times.Once);
     }
 
     [Theory]
@@ -321,15 +321,15 @@ public class MessageServiceTests
         await Sut().IngestAsync(Ingest(c.Id, eventType));
 
         Assert.Equal(reopens ? ConversationStatus.Active : ConversationStatus.Closed, c.Status);
-        _events.Verify(e => e.Log(_clinicId, EventTypes.ConversationReopened, _leadId, c.Id, null, MessageOrigin.WhatsAppCustomer, "{}"), reopens ? Times.Once() : Times.Never());
-        _notifier.Verify(n => n.ConversationUpdatedAsync(_clinicId, c.Id, It.IsAny<CancellationToken>()), reopens ? Times.Once() : Times.Never());
+        _events.Verify(e => e.Log(_clientId, EventTypes.ConversationReopened, _leadId, c.Id, null, MessageOrigin.WhatsAppCustomer, "{}"), reopens ? Times.Once() : Times.Never());
+        _notifier.Verify(n => n.ConversationUpdatedAsync(_clientId, c.Id, It.IsAny<CancellationToken>()), reopens ? Times.Once() : Times.Never());
     }
 
     [Theory]
     [InlineData(true, true, ConversationMode.Ai)]      // bot on for reopened: stays with the AI
-    [InlineData(true, false, ConversationMode.Human)]  // clinic sends reopened conversations to staff
+    [InlineData(true, false, ConversationMode.Human)]  // client sends reopened conversations to staff
     [InlineData(false, true, ConversationMode.Human)]  // plan without the AI agent: always staff
-    public async Task A_reopened_conversation_follows_the_clinics_ai_bot_setting(bool planIncludesBot, bool reopenedOn, string expectedMode)
+    public async Task A_reopened_conversation_follows_the_clients_ai_bot_setting(bool planIncludesBot, bool reopenedOn, string expectedMode)
     {
         InboxSettings(planIncludesBot, reopenedOn);
         var c = Conv();
@@ -340,8 +340,8 @@ public class MessageServiceTests
         Assert.Equal((ConversationStatus.Active, expectedMode, expectedMode == ConversationMode.Ai), (c.Status, c.Mode, r.AiEligible));
         Assert.Equal(expectedMode, r.ConversationMode);
         var handedOff = expectedMode == ConversationMode.Human;
-        _notifier.Verify(n => n.ConversationModeChangedAsync(_clinicId, c.Id, ConversationMode.Human, It.IsAny<CancellationToken>()), handedOff ? Times.Once() : Times.Never());
-        _events.Verify(e => e.Log(_clinicId, EventTypes.HumanHandoff, _leadId, c.Id, null, MessageOrigin.System, It.IsAny<string>()), handedOff ? Times.Once() : Times.Never());
+        _notifier.Verify(n => n.ConversationModeChangedAsync(_clientId, c.Id, ConversationMode.Human, It.IsAny<CancellationToken>()), handedOff ? Times.Once() : Times.Never());
+        _events.Verify(e => e.Log(_clientId, EventTypes.HumanHandoff, _leadId, c.Id, null, MessageOrigin.System, It.IsAny<string>()), handedOff ? Times.Once() : Times.Never());
     }
 
     [Fact]
@@ -353,7 +353,7 @@ public class MessageServiceTests
         var r = await Sut().IngestAsync(Ingest(c.Id, IngestEventType.CustomerMessage));
 
         Assert.Equal((ConversationMode.Human, false, true), (c.Mode, r.AiEligible, c.HumanTakeover));
-        _events.Verify(e => e.Log(_clinicId, EventTypes.HumanHandoff, _leadId, c.Id, null, MessageOrigin.System, "{\"reason\":\"plan_without_ai_agent\"}"), Times.Once);
+        _events.Verify(e => e.Log(_clientId, EventTypes.HumanHandoff, _leadId, c.Id, null, MessageOrigin.System, "{\"reason\":\"plan_without_ai_agent\"}"), Times.Once);
     }
 
     [Fact]
@@ -388,7 +388,7 @@ public class MessageServiceTests
     {
         var c = Conv();
         var existing = new Message { Id = Guid.NewGuid(), ConversationId = c.Id, Content = "first" };
-        _messages.Setup(m => m.FindByExternalIdAsync(_clinicId, "whatsapp", "ext1", It.IsAny<CancellationToken>())).ReturnsAsync(existing);
+        _messages.Setup(m => m.FindByExternalIdAsync(_clientId, "whatsapp", "ext1", It.IsAny<CancellationToken>())).ReturnsAsync(existing);
         var r = await Sut().IngestAsync(Ingest(c.Id, IngestEventType.CustomerMessage));
         Assert.True(r.Deduplicated);
         Assert.False(r.AiEligible);
@@ -406,7 +406,7 @@ public class MessageServiceTests
         Assert.Equal((MessageDirection.Outbound, MessageSenderType.Staff, MessageOrigin.WhatsAppBusinessApp), (saved!.Direction, saved.SenderType, saved.Origin));
         Assert.Equal(ConversationMode.Human, c.Mode);
         Assert.False(r.AiEligible);
-        _notifier.Verify(n => n.ConversationModeChangedAsync(_clinicId, c.Id, ConversationMode.Human, It.IsAny<CancellationToken>()), Times.Once);
+        _notifier.Verify(n => n.ConversationModeChangedAsync(_clientId, c.Id, ConversationMode.Human, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -426,29 +426,29 @@ public class MessageServiceTests
         var c = Conv();
         _leads.Setup(l => l.GetByIdAsync(_leadId, It.IsAny<CancellationToken>())).ReturnsAsync(_lead);
         var recipient = new CampaignRecipient { Id = Guid.NewGuid(), Campaign = new Campaign { Name = "Spring" } };
-        _campaigns.Setup(x => x.FindLatestAwaitingReplyAsync(_clinicId, _leadId, It.IsAny<CancellationToken>())).ReturnsAsync(recipient);
+        _campaigns.Setup(x => x.FindLatestAwaitingReplyAsync(_clientId, _leadId, It.IsAny<CancellationToken>())).ReturnsAsync(recipient);
 
         await Sut().IngestAsync(Ingest(c.Id, IngestEventType.CustomerMessage, newLead: true));
 
         Assert.NotNull(recipient.RepliedAt);
-        _notifications.Verify(n => n.CreateAsync(_clinicId, NotificationType.NewLead, "New lead", "Ann Lee sent their first message.", _leadId, c.Id, null, null, It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
-        _notifications.Verify(n => n.CreateAsync(_clinicId, NotificationType.CampaignReply, "Campaign reply", "Ann Lee replied to \"Spring\".", _leadId, c.Id, null, null, It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
+        _notifications.Verify(n => n.CreateAsync(_clientId, NotificationType.NewLead, "New lead", "Ann Lee sent their first message.", _leadId, c.Id, null, null, It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
+        _notifications.Verify(n => n.CreateAsync(_clientId, NotificationType.CampaignReply, "Campaign reply", "Ann Lee replied to \"Spring\".", _leadId, c.Id, null, null, It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // ---------------------------------------------------------------- status updates
 
     private Message Outbound(string? status = "sent", Guid? recipientId = null) => new()
     {
-        Id = Guid.NewGuid(), ClinicId = _clinicId, ConversationId = Guid.NewGuid(), LeadId = _leadId, Direction = MessageDirection.Outbound,
+        Id = Guid.NewGuid(), ClientId = _clientId, ConversationId = Guid.NewGuid(), LeadId = _leadId, Direction = MessageDirection.Outbound,
         Channel = "whatsapp", ExternalMessageId = "ext1", DeliveryStatus = status, CampaignRecipientId = recipientId
     };
 
     private IngestMessageRequest Status(string status, string? code = null, string? reason = null) =>
-        new(_clinicId, Guid.NewGuid(), _leadId, IngestEventType.StatusUpdate, "whatsapp", null, "ext1", status, null, null, null, null, code, reason);
+        new(_clientId, Guid.NewGuid(), _leadId, IngestEventType.StatusUpdate, "whatsapp", null, "ext1", status, null, null, null, null, code, reason);
 
     private Message FoundMessage(Message m)
     {
-        _messages.Setup(r => r.FindByExternalIdAsync(_clinicId, "whatsapp", "ext1", It.IsAny<CancellationToken>())).ReturnsAsync(m);
+        _messages.Setup(r => r.FindByExternalIdAsync(_clientId, "whatsapp", "ext1", It.IsAny<CancellationToken>())).ReturnsAsync(m);
         return m;
     }
 
@@ -470,7 +470,7 @@ public class MessageServiceTests
         Assert.Equal(status, m.DeliveryStatus);
         Assert.NotNull(status == "read" ? m.ReadAt : m.DeliveredAt);
         _billing.Verify(b => b.DeliveryStatusChangedAsync(m, status, It.IsAny<CancellationToken>()), Times.Once);
-        _notifier.Verify(n => n.MessageStatusUpdatedAsync(_clinicId, m.ConversationId, m.Id, status, It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()), Times.Once);
+        _notifier.Verify(n => n.MessageStatusUpdatedAsync(_clientId, m.ConversationId, m.Id, status, It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -501,12 +501,12 @@ public class MessageServiceTests
         await Sut().IngestAsync(Status("failed", "131026", "Undeliverable"));
         Assert.Equal(("failed", "131026", "Undeliverable"), (m.DeliveryStatus, m.FailureCode, m.FailureReason));
         Assert.NotNull(m.FailedAt);
-        _notifications.Verify(n => n.CreateAsync(_clinicId, NotificationType.OutboundMessageFailed, "Message failed to send", "Message failed to send to Ann Lee.", _leadId, m.ConversationId, null, null, It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
+        _notifications.Verify(n => n.CreateAsync(_clientId, NotificationType.OutboundMessageFailed, "Message failed to send", "Message failed to send to Ann Lee.", _leadId, m.ConversationId, null, null, It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
 
         await Sut().IngestAsync(Status("sent")); // not a repeat of failed; but a second failure must not notify again
         m.DeliveryStatus = "sent";
         await Sut().IngestAsync(Status("failed"));
-        _notifications.Verify(n => n.CreateAsync(_clinicId, NotificationType.OutboundMessageFailed, It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
+        _notifications.Verify(n => n.CreateAsync(_clientId, NotificationType.OutboundMessageFailed, It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -560,10 +560,10 @@ public class MessageServiceTests
         _messages.Setup(m => m.Add(It.IsAny<Message>())).Callback<Message>(m => saved = m);
         using var activity = new System.Diagnostics.Activity("test").Start();
 
-        await Sut().SendAsync(_clinicId, c.Id, new SendMessageRequest("hello"));
+        await Sut().SendAsync(_clientId, c.Id, new SendMessageRequest("hello"));
 
         Assert.Equal([TraceSteps.SendRequested, TraceSteps.SendProviderAccepted], steps.Select(s => s.Step));
-        Assert.Equal((_clinicId, c.Id, saved!.Id, ConversationChannel.WhatsApp), (steps[0].Ids.ClinicId!.Value, steps[0].Ids.ConversationId!.Value, steps[0].Ids.MessageId!.Value, steps[0].Ids.Channel));
+        Assert.Equal((_clientId, c.Id, saved!.Id, ConversationChannel.WhatsApp), (steps[0].Ids.ClientId!.Value, steps[0].Ids.ConversationId!.Value, steps[0].Ids.MessageId!.Value, steps[0].Ids.Channel));
         Assert.Contains("\"kind\":\"staff\"", steps[0].Detail);
         Assert.Equal("wamid.sent", steps[1].Ids.ExternalMessageId);
         Assert.Equal(activity.TraceId.ToHexString(), saved.TraceId);
@@ -575,19 +575,19 @@ public class MessageServiceTests
         var c = Conv();
         var steps = RecordSteps();
         _sender.Setup(s => s.SendTextAsync(It.IsAny<Conversation>(), It.IsAny<string>(), It.IsAny<CancellationToken>())).ThrowsAsync(new ChannelSendException("blocked by Meta"));
-        await Assert.ThrowsAsync<ChannelSendException>(() => Sut().SendAsync(_clinicId, c.Id, new SendMessageRequest("hello")));
+        await Assert.ThrowsAsync<ChannelSendException>(() => Sut().SendAsync(_clientId, c.Id, new SendMessageRequest("hello")));
         Assert.Equal((TraceSteps.SendProviderFailed, TraceOutcomes.Failed), (steps[^1].Step, steps[^1].Outcome));
         Assert.Contains("blocked by Meta", steps[^1].Detail);
 
         steps.Clear();
-        _entitlements.Setup(e => e.EnsureCanSendMessagesAsync(_clinicId, It.IsAny<CancellationToken>())).ThrowsAsync(new EntitlementDeniedException("messages", "No active plan"));
-        await Assert.ThrowsAsync<EntitlementDeniedException>(() => Sut().SendAiReplyAsync(_clinicId, c.Id, "hi"));
+        _entitlements.Setup(e => e.EnsureCanSendMessagesAsync(_clientId, It.IsAny<CancellationToken>())).ThrowsAsync(new EntitlementDeniedException("messages", "No active plan"));
+        await Assert.ThrowsAsync<EntitlementDeniedException>(() => Sut().SendAiReplyAsync(_clientId, c.Id, "hi"));
         Assert.Equal([TraceSteps.SendRequested, TraceSteps.SendBlocked], steps.Select(s => s.Step));
         Assert.Contains("ai", steps[0].Detail);
 
         steps.Clear();
         var human = Conv(ConversationMode.Human);
-        await Assert.ThrowsAsync<ConversationNotInAiModeException>(() => Sut().SendAiReplyAsync(_clinicId, human.Id, "hi"));
+        await Assert.ThrowsAsync<ConversationNotInAiModeException>(() => Sut().SendAiReplyAsync(_clientId, human.Id, "hi"));
         Assert.Equal((TraceSteps.SendRejectedMode, TraceOutcomes.Skipped), (steps.Single().Step, steps.Single().Outcome));
     }
 
@@ -595,10 +595,10 @@ public class MessageServiceTests
     public async Task A_template_send_records_the_template_and_campaign_kind()
     {
         var c = Conv();
-        var t = new WhatsAppTemplate { Id = Guid.NewGuid(), ClinicId = _clinicId, Name = "promo", Language = "en", Body = "Hi", Status = WhatsAppTemplateStatus.Approved, Category = "MARKETING" };
-        _templates.Setup(r => r.GetReadOnlyAsync(_clinicId, t.Id, It.IsAny<CancellationToken>())).ReturnsAsync(t);
+        var t = new WhatsAppTemplate { Id = Guid.NewGuid(), ClientId = _clientId, Name = "promo", Language = "en", Body = "Hi", Status = WhatsAppTemplateStatus.Approved, Category = "MARKETING" };
+        _templates.Setup(r => r.GetReadOnlyAsync(_clientId, t.Id, It.IsAny<CancellationToken>())).ReturnsAsync(t);
         var steps = RecordSteps();
-        await Sut().SendCampaignTemplateAsync(_clinicId, c.Id, t.Id, [], Guid.NewGuid(), Guid.NewGuid());
+        await Sut().SendCampaignTemplateAsync(_clientId, c.Id, t.Id, [], Guid.NewGuid(), Guid.NewGuid());
         Assert.Equal([TraceSteps.SendRequested, TraceSteps.SendProviderAccepted], steps.Select(s => s.Step));
         Assert.Contains("\"kind\":\"campaign\"", steps[0].Detail);
         Assert.Contains("promo", steps[0].Detail);
@@ -655,8 +655,8 @@ public class MessageServiceTests
     public async Task A_duplicate_delivery_records_a_skip()
     {
         var c = Conv();
-        var existing = new Message { Id = Guid.NewGuid(), ClinicId = _clinicId, ConversationId = c.Id, LeadId = _leadId, Direction = MessageDirection.Inbound, SenderType = MessageSenderType.Lead, Channel = ConversationChannel.WhatsApp };
-        _messages.Setup(m => m.FindByExternalIdAsync(_clinicId, ConversationChannel.WhatsApp, "ext1", It.IsAny<CancellationToken>())).ReturnsAsync(existing);
+        var existing = new Message { Id = Guid.NewGuid(), ClientId = _clientId, ConversationId = c.Id, LeadId = _leadId, Direction = MessageDirection.Inbound, SenderType = MessageSenderType.Lead, Channel = ConversationChannel.WhatsApp };
+        _messages.Setup(m => m.FindByExternalIdAsync(_clientId, ConversationChannel.WhatsApp, "ext1", It.IsAny<CancellationToken>())).ReturnsAsync(existing);
         var steps = RecordSteps();
         await Sut().IngestAsync(Ingest(c.Id, IngestEventType.CustomerMessage));
         var step = steps.Single();

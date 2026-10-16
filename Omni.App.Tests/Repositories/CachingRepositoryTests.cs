@@ -8,7 +8,7 @@ using Omni.App.Persistence.Repositories.Inbox;
 using Omni.App.Persistence.Contexts;
 using Omni.App.Persistence.Helpers;
 using Omni.App.Persistence.Repositories.Appointments;
-using Omni.App.Persistence.Repositories.Clinics;
+using Omni.App.Persistence.Repositories.Clients;
 using Omni.App.Persistence.Repositories.Procedures;
 
 namespace Omni.App.Tests.Repositories;
@@ -27,10 +27,10 @@ public class CachingRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixt
         new(new DbContextOptionsBuilder<ApplicationDbContext>().UseNpgsql(_fixture.ConnectionString)
             .AddInterceptors(new CacheInvalidationInterceptor(_cache)).Options);
 
-    private async Task RenameBehindTheCacheAsync(Guid clinicId, string name)
+    private async Task RenameBehindTheCacheAsync(Guid clientId, string name)
     {
         await using var db = NewContext();
-        await db.Database.ExecuteSqlInterpolatedAsync($"update core.clinics set name = {name} where id = {clinicId}");
+        await db.Database.ExecuteSqlInterpolatedAsync($"update core.clients set name = {name} where id = {clientId}");
     }
 
     [Fact]
@@ -41,54 +41,54 @@ public class CachingRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixt
         var configured = new CacheManager(new MemoryCacheAdapter(TimeProvider.System), NullLogger<CacheManager>.Instance, config.Object);
 
         Assert.Equal(TimeSpan.FromHours(4), configured.LifetimeOf(CacheArea.Channels));
-        Assert.Equal(TimeSpan.FromMinutes(60), _cache.LifetimeOf(CacheArea.Clinics));
+        Assert.Equal(TimeSpan.FromMinutes(60), _cache.LifetimeOf(CacheArea.Clients));
         Assert.Equal(TimeSpan.FromMinutes(10), _cache.LifetimeOf(CacheArea.StaffLookup));
     }
 
     [PostgresFact]
-    public async Task A_cached_clinic_is_served_until_a_save_changes_it()
+    public async Task A_cached_client_is_served_until_a_save_changes_it()
     {
-        var c = MakeClinic("Before");
+        var c = MakeClient("Before");
         await SeedAsync(c);
 
         await using (var db = CachedContext())
         {
-            Assert.Equal("Before", (await new ClinicRepository(db, _cache).GetReadOnlyAsync(c.Id))!.Name);
+            Assert.Equal("Before", (await new ClientRepository(db, _cache).GetReadOnlyAsync(c.Id))!.Name);
         }
         await RenameBehindTheCacheAsync(c.Id, "Behind");
         await using (var db = CachedContext())
         {
-            Assert.Equal("Before", (await new ClinicRepository(db, _cache).GetReadOnlyAsync(c.Id))!.Name);
+            Assert.Equal("Before", (await new ClientRepository(db, _cache).GetReadOnlyAsync(c.Id))!.Name);
         }
 
         await using (var db = CachedContext())
         {
-            var tracked = await new ClinicRepository(db, _cache).GetAsync(c.Id);
+            var tracked = await new ClientRepository(db, _cache).GetAsync(c.Id);
             tracked!.Name = "Saved";
             await db.SaveChangesAsync();
         }
 
         await using var read = CachedContext();
-        Assert.Equal("Saved", (await new ClinicRepository(read, _cache).GetReadOnlyAsync(c.Id))!.Name);
+        Assert.Equal("Saved", (await new ClientRepository(read, _cache).GetReadOnlyAsync(c.Id))!.Name);
     }
 
     [PostgresFact]
     public async Task Inbox_settings_default_to_the_bot_on_and_each_save_reaches_the_next_cached_read()
     {
-        var c = MakeClinic("Inbox");
+        var c = MakeClient("Inbox");
         await SeedAsync(c);
         var entitlements = new Mock<IEntitlementService>();
-        entitlements.Setup(e => e.GetAsync(c.Id, It.IsAny<CancellationToken>())).ReturnsAsync(ClinicEntitlements.Unrestricted);
-        InboxSettingsService Service(ApplicationDbContext db) => new(new InboxSettingsRepository(db, _cache), new ClinicRepository(db, _cache),
+        entitlements.Setup(e => e.GetAsync(c.Id, It.IsAny<CancellationToken>())).ReturnsAsync(ClientEntitlements.Unrestricted);
+        InboxSettingsService Service(ApplicationDbContext db) => new(new InboxSettingsRepository(db, _cache), new ClientRepository(db, _cache),
             entitlements.Object, new Omni.App.Persistence.Repositories.UnitOfWork(db));
 
-        // No row yet: the defaults (an existing clinic keeps the bot on), and "no row" is cached.
+        // No row yet: the defaults (an existing client keeps the bot on), and "no row" is cached.
         await using (var db = CachedContext())
         {
             Assert.Equal(new InboxSettingsDto(true, true, true), await Service(db).GetAsync(c.Id));
         }
 
-        // The first save creates the clinic-wide row and clears the cached "no row".
+        // The first save creates the client-wide row and clears the cached "no row".
         await using (var db = CachedContext())
         {
             await Service(db).UpdateAsync(c.Id, new UpdateInboxSettingsRequest(false, true));
@@ -108,13 +108,13 @@ public class CachingRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixt
         await using (var db = CachedContext())
         {
             Assert.Equal(new InboxSettingsDto(true, true, false), await Service(db).GetAsync(c.Id));
-            Assert.Equal(1, await db.InboxSettings.CountAsync(s => s.ClinicId == c.Id));
+            Assert.Equal(1, await db.InboxSettings.CountAsync(s => s.ClientId == c.Id));
         }
 
-        // Only one clinic-wide row per clinic.
+        // Only one client-wide row per client.
         await using (var db = NewContext())
         {
-            db.InboxSettings.Add(new InboxSettings { Id = Guid.NewGuid(), ClinicId = c.Id, CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow });
+            db.InboxSettings.Add(new InboxSettings { Id = Guid.NewGuid(), ClientId = c.Id, CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow });
             await Assert.ThrowsAsync<DuplicateRecordException>(() => new Omni.App.Persistence.Repositories.UnitOfWork(db).SaveChangesAsync());
         }
     }
@@ -122,12 +122,12 @@ public class CachingRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixt
     [PostgresFact]
     public async Task A_save_inside_a_transaction_clears_again_on_commit_and_on_rollback()
     {
-        var c = MakeClinic("Before");
+        var c = MakeClient("Before");
         await SeedAsync(c);
 
         await using (var db = CachedContext())
         {
-            var repo = new ClinicRepository(db, _cache);
+            var repo = new ClientRepository(db, _cache);
             await using var tx = await db.Database.BeginTransactionAsync();
             (await repo.GetAsync(c.Id))!.Name = "Rolled back";
             await db.SaveChangesAsync();
@@ -139,51 +139,51 @@ public class CachingRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixt
         // ...but the rollback clears it again, so nobody is served a row that never existed.
         await using (var db = CachedContext())
         {
-            Assert.Equal("Before", (await new ClinicRepository(db, _cache).GetReadOnlyAsync(c.Id))!.Name);
+            Assert.Equal("Before", (await new ClientRepository(db, _cache).GetReadOnlyAsync(c.Id))!.Name);
         }
 
         await using (var db = CachedContext())
         {
             await using var tx = await db.Database.BeginTransactionAsync();
-            (await new ClinicRepository(db, _cache).GetAsync(c.Id))!.Name = "Committed";
+            (await new ClientRepository(db, _cache).GetAsync(c.Id))!.Name = "Committed";
             await db.SaveChangesAsync();
             await tx.CommitAsync();
         }
         await using var read = CachedContext();
-        Assert.Equal("Committed", (await new ClinicRepository(read, _cache).GetReadOnlyAsync(c.Id))!.Name);
+        Assert.Equal("Committed", (await new ClientRepository(read, _cache).GetReadOnlyAsync(c.Id))!.Name);
     }
 
     [PostgresFact]
-    public async Task Deactivating_a_membership_clears_the_signed_in_clinic_lookup()
+    public async Task Deactivating_a_membership_clears_the_signed_in_client_lookup()
     {
-        var c = MakeClinic();
+        var c = MakeClient();
         await SeedAsync(c);
         var email = $"m-{Guid.NewGuid():N}@x.com";
         var user = new IdentityUser { Id = Guid.NewGuid().ToString(), UserName = email, NormalizedUserName = email.ToUpperInvariant(), Email = email, NormalizedEmail = email.ToUpperInvariant() };
         await SeedAsync(user);
-        var membership = new ClinicUser { Id = Guid.NewGuid(), ClinicId = c.Id, UserId = user.Id, IsActive = true, CreatedAt = Now, UpdatedAt = Now };
+        var membership = new ClientUser { Id = Guid.NewGuid(), ClientId = c.Id, UserId = user.Id, IsActive = true, CreatedAt = Now, UpdatedAt = Now };
         await SeedAsync(membership);
 
         await using (var db = CachedContext())
         {
-            Assert.Equal(c.Id, (await new ClinicRepository(db, _cache).GetClinicOfActiveMemberAsync(user.Id))!.Id);
+            Assert.Equal(c.Id, (await new ClientRepository(db, _cache).GetClientOfActiveMemberAsync(user.Id))!.Id);
         }
         Assert.NotNull(await _cache.GetRawAsync(CacheKeys.Membership(user.Id)));
 
         await using (var db = CachedContext())
         {
-            (await db.ClinicUsers.SingleAsync(m => m.Id == membership.Id)).IsActive = false;
+            (await db.ClientUsers.SingleAsync(m => m.Id == membership.Id)).IsActive = false;
             await db.SaveChangesAsync();
         }
 
         await using var read = CachedContext();
-        Assert.Null(await new ClinicRepository(read, _cache).GetClinicIdOfActiveMemberAsync(user.Id));
+        Assert.Null(await new ClientRepository(read, _cache).GetClientIdOfActiveMemberAsync(user.Id));
     }
 
     [PostgresFact]
     public async Task Procedures_and_availability_reread_after_their_rows_change()
     {
-        var c = MakeClinic();
+        var c = MakeClient();
         var botox = MakeProcedure(c.Id, "Botox");
         await SeedAsync(c, botox);
 
@@ -198,9 +198,9 @@ public class CachingRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixt
         {
             new ProcedureRepository(db, _cache).Add(MakeProcedure(c.Id, "Abdominoplasty"));
             (await new ProcedureRepository(db, _cache).GetAsync(c.Id, botox.Id))!.IsActive = false;
-            new AvailabilityRepository(db, _cache).AddBookingSettings(new ClinicBookingSettings
+            new AvailabilityRepository(db, _cache).AddBookingSettings(new BookingSettings
             {
-                Id = Guid.NewGuid(), ClinicId = c.Id, DefaultConsultationDurationMinutes = 45, BufferMinutes = 5,
+                Id = Guid.NewGuid(), ClientId = c.Id, DefaultConsultationDurationMinutes = 45, BufferMinutes = 5,
                 MinimumBookingNoticeMinutes = 60, MaximumAdvanceBookingDays = 30, CreatedAt = Now, UpdatedAt = Now,
             });
             await db.SaveChangesAsync();
@@ -214,19 +214,19 @@ public class CachingRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixt
     }
 
     [PostgresFact]
-    public async Task Deleting_a_clinic_clears_what_was_cached_about_it()
+    public async Task Deleting_a_client_clears_what_was_cached_about_it()
     {
-        var c = MakeClinic();
+        var c = MakeClient();
         await SeedAsync(c, MakeProcedure(c.Id));
         await using var db = CachedContext();
-        var clinics = new ClinicRepository(db, _cache);
-        Assert.NotNull(await clinics.GetReadOnlyAsync(c.Id));
+        var clients = new ClientRepository(db, _cache);
+        Assert.NotNull(await clients.GetReadOnlyAsync(c.Id));
         Assert.Single(await new ProcedureRepository(db, _cache).ListAsync(c.Id, false));
 
-        await clinics.DeleteAsync(c.Id);
+        await clients.DeleteAsync(c.Id);
 
-        Assert.Null(await _cache.GetRawAsync(CacheKeys.Clinic(c.Id)));
+        Assert.Null(await _cache.GetRawAsync(CacheKeys.Client(c.Id)));
         Assert.Null(await _cache.GetRawAsync(CacheKeys.Procedures(c.Id)));
-        Assert.Null(await clinics.GetReadOnlyAsync(c.Id));
+        Assert.Null(await clients.GetReadOnlyAsync(c.Id));
     }
 }

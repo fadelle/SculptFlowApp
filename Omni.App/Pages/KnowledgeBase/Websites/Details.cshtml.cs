@@ -7,15 +7,15 @@ using Omni.App.Entities.Responses.Knowledge;
 namespace Omni.App.Pages.KnowledgeBase.Websites;
 
 /// <summary>One website source: crawl status and counts (live while it runs), page list with failures, and the
-/// actions Re-scrape / Activate-Deactivate / Delete. The clinic always comes from the logged-in user.</summary>
+/// actions Re-scrape / Activate-Deactivate / Delete. The client always comes from the logged-in user.</summary>
 public class DetailsModel : PageModel
 {
-    private readonly ICurrentClinicContext _clinicContext;
+    private readonly ICurrentClientContext _clientContext;
     private readonly IWebsiteSourceService _websites;
 
-    public DetailsModel(ICurrentClinicContext clinicContext, IWebsiteSourceService websites)
+    public DetailsModel(ICurrentClientContext clientContext, IWebsiteSourceService websites)
     {
-        _clinicContext = clinicContext;
+        _clientContext = clientContext;
         _websites = websites;
     }
 
@@ -26,7 +26,7 @@ public class DetailsModel : PageModel
     [BindProperty(SupportsGet = true)]
     public string? Status { get; set; }
 
-    public bool ClinicConfigured { get; private set; }
+    public bool ClientConfigured { get; private set; }
     public WebsiteSourceDetailResponse? Detail { get; private set; }
     public IReadOnlyList<WebsitePageResponse> Pages { get; private set; } = Array.Empty<WebsitePageResponse>();
 
@@ -38,27 +38,27 @@ public class DetailsModel : PageModel
 
     public async Task<IActionResult> OnGetAsync(CancellationToken ct)
     {
-        var clinic = await _clinicContext.GetClinicAsync(ct);
-        if (clinic is null) return Page();
-        ClinicConfigured = true;
+        var client = await _clientContext.GetClientAsync(ct);
+        if (client is null) return Page();
+        ClientConfigured = true;
 
-        Detail = await _websites.GetAsync(clinic.Id, Id, ct);
+        Detail = await _websites.GetAsync(client.Id, Id, ct);
         if (Detail is null) return NotFound();
         // "In Knowledge Base" = indexed + unchanged pages (both are what the AI can use).
         Pages = Status == "in_kb"
-            ? (await _websites.ListPagesAsync(clinic.Id, Id, Omni.App.Common.Enums.WebsitePageStatus.Indexed, 0, 300, ct))
-                .Concat(await _websites.ListPagesAsync(clinic.Id, Id, Omni.App.Common.Enums.WebsitePageStatus.Unchanged, 0, 300, ct)).ToList()
-            : await _websites.ListPagesAsync(clinic.Id, Id, Status, 0, 300, ct);
+            ? (await _websites.ListPagesAsync(client.Id, Id, Omni.App.Common.Enums.WebsitePageStatus.Indexed, 0, 300, ct))
+                .Concat(await _websites.ListPagesAsync(client.Id, Id, Omni.App.Common.Enums.WebsitePageStatus.Unchanged, 0, 300, ct)).ToList()
+            : await _websites.ListPagesAsync(client.Id, Id, Status, 0, 300, ct);
         return Page();
     }
 
     public async Task<IActionResult> OnPostRescrapeAsync(CancellationToken ct)
     {
-        var clinic = await _clinicContext.GetClinicAsync(ct);
-        if (clinic is null) return RedirectToPage("/KnowledgeBase/Index");
+        var client = await _clientContext.GetClientAsync(ct);
+        if (client is null) return RedirectToPage("/KnowledgeBase/Index");
         try
         {
-            if (await _websites.RescrapeAsync(clinic.Id, Id, ct) is null) return NotFound();
+            if (await _websites.RescrapeAsync(client.Id, Id, ct) is null) return NotFound();
             StatusMessage = "Re-scrape started. This page updates as it runs.";
         }
         catch (ArgumentException ex)
@@ -70,9 +70,9 @@ public class DetailsModel : PageModel
 
     public async Task<IActionResult> OnPostToggleAsync(bool active, CancellationToken ct)
     {
-        var clinic = await _clinicContext.GetClinicAsync(ct);
-        if (clinic is null) return RedirectToPage("/KnowledgeBase/Index");
-        if (await _websites.SetActiveAsync(clinic.Id, Id, active, ct) is null) return NotFound();
+        var client = await _clientContext.GetClientAsync(ct);
+        if (client is null) return RedirectToPage("/KnowledgeBase/Index");
+        if (await _websites.SetActiveAsync(client.Id, Id, active, ct) is null) return NotFound();
         StatusMessage = active
             ? "Website activated — its pages can be used by the AI again."
             : "Website deactivated — its pages are hidden from the AI.";
@@ -81,11 +81,11 @@ public class DetailsModel : PageModel
 
     public async Task<IActionResult> OnPostDeleteAsync(CancellationToken ct)
     {
-        var clinic = await _clinicContext.GetClinicAsync(ct);
-        if (clinic is null) return RedirectToPage("/KnowledgeBase/Index");
+        var client = await _clientContext.GetClientAsync(ct);
+        if (client is null) return RedirectToPage("/KnowledgeBase/Index");
         try
         {
-            if (!await _websites.DeleteAsync(clinic.Id, Id, ct)) return NotFound();
+            if (!await _websites.DeleteAsync(client.Id, Id, ct)) return NotFound();
             TempData["StatusMessage"] = "Website and its imported pages deleted.";
             return Redirect("/KnowledgeBase");
         }

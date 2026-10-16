@@ -13,7 +13,7 @@ namespace Omni.App.Controllers.Client;
 /// Doesn't inherit DashboardApiController like the other dashboard controllers — SendMessage
 /// specifically has to serve two different callers with two different trust models on one route
 /// (see its own doc comment), so a blanket class-level [Authorize] would break the AI/n8n path.
-/// Every other action is individually [Authorize]d and resolves clinicId via ICurrentClinicContext,
+/// Every other action is individually [Authorize]d and resolves clientId via ICurrentClientContext,
 /// same as everywhere else.
 /// </summary>
 [ApiController]
@@ -24,25 +24,25 @@ public class ConversationsController : ControllerBase
     private readonly IConversationService _conversations;
     private readonly IMessageService _messages;
     private readonly IConfiguration _configuration;
-    private readonly ICurrentClinicContext _clinicContext;
+    private readonly ICurrentClientContext _clientContext;
 
     public ConversationsController(
-        IConversationService conversations, IMessageService messages, IConfiguration configuration, ICurrentClinicContext clinicContext)
+        IConversationService conversations, IMessageService messages, IConfiguration configuration, ICurrentClientContext clientContext)
     {
         _conversations = conversations;
         _messages = messages;
         _configuration = configuration;
-        _clinicContext = clinicContext;
+        _clientContext = clientContext;
     }
 
     [Authorize]
     [HttpPost]
     public async Task<ActionResult<ConversationResponse>> Create([FromBody] CreateConversationRequest request, CancellationToken ct)
     {
-        var clinicId = await _clinicContext.GetClinicIdAsync(ct);
-        if (clinicId is null) return Forbid();
+        var clientId = await _clientContext.GetClientIdAsync(ct);
+        if (clientId is null) return Forbid();
 
-        var conversation = await _conversations.CreateAsync(request with { ClinicId = clinicId.Value }, ct);
+        var conversation = await _conversations.CreateAsync(request with { ClientId = clientId.Value }, ct);
         return CreatedAtAction(nameof(GetById), new { id = conversation.Id }, conversation);
     }
 
@@ -51,10 +51,10 @@ public class ConversationsController : ControllerBase
     [HttpGet]
     public async Task<ActionResult<object>> List([FromQuery] int skip = 0, [FromQuery] int take = 50, CancellationToken ct = default)
     {
-        var clinicId = await _clinicContext.GetClinicIdAsync(ct);
-        if (clinicId is null) return Forbid();
+        var clientId = await _clientContext.GetClientIdAsync(ct);
+        if (clientId is null) return Forbid();
 
-        var (items, totalCount) = await _conversations.ListAsync(clinicId.Value, Math.Max(skip, 0), Math.Clamp(take, 1, 200), ct);
+        var (items, totalCount) = await _conversations.ListAsync(clientId.Value, Math.Max(skip, 0), Math.Clamp(take, 1, 200), ct);
         return Ok(new { items, totalCount });
     }
 
@@ -62,10 +62,10 @@ public class ConversationsController : ControllerBase
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<object>> GetById(Guid id, CancellationToken ct)
     {
-        var clinicId = await _clinicContext.GetClinicIdAsync(ct);
-        if (clinicId is null) return Forbid();
+        var clientId = await _clientContext.GetClientIdAsync(ct);
+        if (clientId is null) return Forbid();
 
-        var result = await _conversations.GetByIdWithMessagesAsync(clinicId.Value, id, ct);
+        var result = await _conversations.GetByIdWithMessagesAsync(clientId.Value, id, ct);
         if (result is null) return NotFound();
 
         var (conversation, messages) = result.Value;
@@ -76,10 +76,10 @@ public class ConversationsController : ControllerBase
     [HttpGet("{id:guid}/messages")]
     public async Task<ActionResult<IReadOnlyList<MessageResponse>>> GetMessages(Guid id, CancellationToken ct)
     {
-        var clinicId = await _clinicContext.GetClinicIdAsync(ct);
-        if (clinicId is null) return Forbid();
+        var clientId = await _clientContext.GetClientIdAsync(ct);
+        if (clientId is null) return Forbid();
 
-        var messages = await _conversations.GetMessagesAsync(clinicId.Value, id, ct);
+        var messages = await _conversations.GetMessagesAsync(clientId.Value, id, ct);
         return Ok(messages);
     }
 
@@ -87,21 +87,21 @@ public class ConversationsController : ControllerBase
     [HttpPost("{id:guid}/messages")]
     public async Task<ActionResult<MessageResponse>> AddMessage(Guid id, [FromBody] CreateMessageRequest request, CancellationToken ct)
     {
-        var clinicId = await _clinicContext.GetClinicIdAsync(ct);
-        if (clinicId is null) return Forbid();
+        var clientId = await _clientContext.GetClientIdAsync(ct);
+        if (clientId is null) return Forbid();
 
-        var message = await _conversations.AddMessageAsync(clinicId.Value, id, request, ct);
+        var message = await _conversations.AddMessageAsync(clientId.Value, id, request, ct);
         return message is null ? NotFound() : Ok(message);
     }
 
     /// <summary>Two callers share this one route (see SendMessageRequest's doc comment) — deliberately
     /// [AllowAnonymous] at the attribute level, with each branch enforcing its own trust model:
     ///   - Staff from the Inbox (Sender omitted): requires a logged-in session (checked manually
-    ///     below, since the action itself can't be blanket [Authorize]d) and resolves clinicId via
-    ///     ICurrentClinicContext. Goes through WhatsAppService and flips the conversation to human
+    ///     below, since the action itself can't be blanket [Authorize]d) and resolves clientId via
+    ///     ICurrentClientContext. Goes through WhatsAppService and flips the conversation to human
     ///     mode. See MessageService.SendAsync.
     ///   - The AI agent via n8n (Sender = "ai"): requires the trusted X-Ingest-Key header instead,
-    ///     takes clinicId explicitly from the query string (trusted via that header, same pattern as
+    ///     takes clientId explicitly from the query string (trusted via that header, same pattern as
     ///     AiController), then re-checks conversation.mode == ai immediately before sending (a human
     ///     may have taken over while the AI was generating its reply) and never flips mode. See
     ///     MessageService.SendAiReplyAsync. Returns 409 conversation_in_human_mode if the mode check
@@ -111,7 +111,7 @@ public class ConversationsController : ControllerBase
     [AllowAnonymous]
     [HttpPost("{id:guid}/messages/send")]
     public async Task<ActionResult<MessageResponse>> SendMessage(
-        Guid id, [FromQuery] Guid? clinicId, [FromBody] SendMessageRequest request, CancellationToken ct)
+        Guid id, [FromQuery] Guid? clientId, [FromBody] SendMessageRequest request, CancellationToken ct)
     {
         if (string.Equals(request.Sender, "ai", StringComparison.OrdinalIgnoreCase))
         {
@@ -121,14 +121,14 @@ public class ConversationsController : ControllerBase
             {
                 return Unauthorized(new { error = $"AI-origin sends require a valid {RequireIngestKeyAttribute.HeaderName} header." });
             }
-            if (clinicId is null)
+            if (clientId is null)
             {
-                return BadRequest(new { error = "clinicId is required for an AI-origin send." });
+                return BadRequest(new { error = "clientId is required for an AI-origin send." });
             }
 
             try
             {
-                var aiMessage = await _messages.SendAiReplyAsync(clinicId.Value, id, request.Content, ct);
+                var aiMessage = await _messages.SendAiReplyAsync(clientId.Value, id, request.Content, ct);
                 return aiMessage is null ? NotFound() : Ok(aiMessage);
             }
             catch (ConversationNotInAiModeException ex)
@@ -144,10 +144,10 @@ public class ConversationsController : ControllerBase
             return Challenge();
         }
 
-        var resolvedClinicId = await _clinicContext.GetClinicIdAsync(ct);
-        if (resolvedClinicId is null) return Forbid();
+        var resolvedClientId = await _clientContext.GetClientIdAsync(ct);
+        if (resolvedClientId is null) return Forbid();
 
-        var message = await _messages.SendAsync(resolvedClinicId.Value, id, request, ct);
+        var message = await _messages.SendAsync(resolvedClientId.Value, id, request, ct);
         return message is null ? NotFound() : Ok(message);
     }
 
@@ -157,10 +157,10 @@ public class ConversationsController : ControllerBase
     [HttpPost("{id:guid}/messages/send-template")]
     public async Task<ActionResult<MessageResponse>> SendTemplateMessage(Guid id, [FromBody] SendTemplateMessageRequest request, CancellationToken ct)
     {
-        var clinicId = await _clinicContext.GetClinicIdAsync(ct);
-        if (clinicId is null) return Forbid();
+        var clientId = await _clientContext.GetClientIdAsync(ct);
+        if (clientId is null) return Forbid();
 
-        var message = await _messages.SendTemplateAsync(clinicId.Value, id, request, ct);
+        var message = await _messages.SendTemplateAsync(clientId.Value, id, request, ct);
         return message is null ? NotFound() : Ok(message);
     }
 
@@ -169,20 +169,20 @@ public class ConversationsController : ControllerBase
     [HttpPost("{id:guid}/read")]
     public async Task<IActionResult> MarkRead(Guid id, CancellationToken ct)
     {
-        var clinicId = await _clinicContext.GetClinicIdAsync(ct);
-        if (clinicId is null) return Forbid();
+        var clientId = await _clientContext.GetClientIdAsync(ct);
+        if (clientId is null) return Forbid();
 
-        return await _conversations.MarkReadAsync(clinicId.Value, id, ct) ? NoContent() : NotFound();
+        return await _conversations.MarkReadAsync(clientId.Value, id, ct) ? NoContent() : NotFound();
     }
 
     [Authorize]
     [HttpPost("{id:guid}/take-over")]
     public async Task<ActionResult<ConversationResponse>> TakeOver(Guid id, CancellationToken ct)
     {
-        var clinicId = await _clinicContext.GetClinicIdAsync(ct);
-        if (clinicId is null) return Forbid();
+        var clientId = await _clientContext.GetClientIdAsync(ct);
+        if (clientId is null) return Forbid();
 
-        var conversation = await _conversations.TakeOverAsync(clinicId.Value, id, ct);
+        var conversation = await _conversations.TakeOverAsync(clientId.Value, id, ct);
         return conversation is null ? NotFound() : Ok(conversation);
     }
 
@@ -190,10 +190,10 @@ public class ConversationsController : ControllerBase
     [HttpPost("{id:guid}/return-to-ai")]
     public async Task<ActionResult<ConversationResponse>> ReturnToAi(Guid id, CancellationToken ct)
     {
-        var clinicId = await _clinicContext.GetClinicIdAsync(ct);
-        if (clinicId is null) return Forbid();
+        var clientId = await _clientContext.GetClientIdAsync(ct);
+        if (clientId is null) return Forbid();
 
-        var conversation = await _conversations.ReturnToAiAsync(clinicId.Value, id, ct);
+        var conversation = await _conversations.ReturnToAiAsync(clientId.Value, id, ct);
         return conversation is null ? NotFound() : Ok(conversation);
     }
 
@@ -201,10 +201,10 @@ public class ConversationsController : ControllerBase
     [HttpPost("{id:guid}/close")]
     public async Task<ActionResult<ConversationResponse>> Close(Guid id, CancellationToken ct)
     {
-        var clinicId = await _clinicContext.GetClinicIdAsync(ct);
-        if (clinicId is null) return Forbid();
+        var clientId = await _clientContext.GetClientIdAsync(ct);
+        if (clientId is null) return Forbid();
 
-        var conversation = await _conversations.CloseAsync(clinicId.Value, id, ct);
+        var conversation = await _conversations.CloseAsync(clientId.Value, id, ct);
         return conversation is null ? NotFound() : Ok(conversation);
     }
 
@@ -214,10 +214,10 @@ public class ConversationsController : ControllerBase
     [HttpPost("{id:guid}/reopen")]
     public async Task<ActionResult<ConversationResponse>> Reopen(Guid id, CancellationToken ct)
     {
-        var clinicId = await _clinicContext.GetClinicIdAsync(ct);
-        if (clinicId is null) return Forbid();
+        var clientId = await _clientContext.GetClientIdAsync(ct);
+        if (clientId is null) return Forbid();
 
-        var conversation = await _conversations.ReopenAsync(clinicId.Value, id, ct);
+        var conversation = await _conversations.ReopenAsync(clientId.Value, id, ct);
         return conversation is null ? NotFound() : Ok(conversation);
     }
 }

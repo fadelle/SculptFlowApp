@@ -24,9 +24,9 @@
     }
 }
 
-@if (!Model.ClinicConfigured)
+@if (!Model.ClientConfigured)
 {
-    <partial name="_NoClinic" />
+    <partial name="_NoClient" />
 }
 else
 {
@@ -160,7 +160,7 @@ else
                     <div class="au-form-field">
                         <label class="au-form-label" for="kb-website-url">Website address<span class="au-required">*</span></label>
                         <input type="text" name="WebsiteUrl" id="kb-website-url" value="@Model.WebsiteUrl" class="au-input" maxlength="2000" required
-                               placeholder="https://www.yourclinic.com" inputmode="url" autocomplete="off" />
+                               placeholder="https://www.yourbusiness.com" inputmode="url" autocomplete="off" />
                     </div>
 
                     <div class="au-form-field">

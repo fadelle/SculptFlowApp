@@ -40,7 +40,7 @@ public sealed class MessageTracer : IMessageTracer
                 Step = step,
                 Outcome = outcome,
                 DurationMs = durationMs is { } ms ? Math.Round(ms, 1) : null,
-                ClinicId = ids.ClinicId,
+                ClientId = ids.ClientId,
                 ConversationId = ids.ConversationId,
                 MessageId = ids.MessageId,
                 Channel = TraceText.Cap(ids.Channel, 50),

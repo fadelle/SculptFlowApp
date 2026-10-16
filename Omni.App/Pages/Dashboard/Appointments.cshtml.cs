@@ -10,22 +10,22 @@ namespace Omni.App.Pages.Dashboard;
 /// the existing /dashboard/appointments/{id} detail page (AppointmentDetailModel) — reused as-is, not duplicated.</summary>
 public class AppointmentsModel : PageModel
 {
-    private readonly ICurrentClinicContext _clinicContext;
+    private readonly ICurrentClientContext _clientContext;
 
-    public AppointmentsModel(ICurrentClinicContext clinicContext)
+    public AppointmentsModel(ICurrentClientContext clientContext)
     {
-        _clinicContext = clinicContext;
+        _clientContext = clientContext;
     }
 
-    public bool ClinicConfigured { get; private set; }
+    public bool ClientConfigured { get; private set; }
 
-    /// <summary>For the "Clinic time | My time" switch (_TimeViewSwitch).</summary>
-    public string ClinicTimezone { get; private set; } = "UTC";
+    /// <summary>For the "Client time | My time" switch (_TimeViewSwitch).</summary>
+    public string ClientTimezone { get; private set; } = "UTC";
 
     public async Task OnGetAsync(CancellationToken ct)
     {
-        var clinic = await _clinicContext.GetClinicAsync(ct);
-        ClinicConfigured = clinic is not null;
-        if (clinic is not null && !string.IsNullOrWhiteSpace(clinic.Timezone)) ClinicTimezone = clinic.Timezone;
+        var client = await _clientContext.GetClientAsync(ct);
+        ClientConfigured = client is not null;
+        if (client is not null && !string.IsNullOrWhiteSpace(client.Timezone)) ClientTimezone = client.Timezone;
     }
 }

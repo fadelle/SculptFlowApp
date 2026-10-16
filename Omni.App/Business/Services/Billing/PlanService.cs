@@ -70,7 +70,7 @@ public partial class PlanService : IPlanService
         await ApplyAsync(unit, plan, request, now, ct);
         if (request.Entitlements is not null) ReplaceEntitlements(unit, plan, request.Entitlements, now);
         await unit.SaveChangesAsync(ct);
-        await _cache.RemoveByPrefixAsync(CacheKeys.EntitlementsPrefix, ct); // any clinic may be on this plan
+        await _cache.RemoveByPrefixAsync(CacheKeys.EntitlementsPrefix, ct); // any client may be on this plan
 
         _logger.LogInformation("Billing: plan {Plan} updated ({Price} {Currency} per {Period}, credit {Credit}, active {Active}); applies from each subscriber's next renewal.",
             code, plan.Price, plan.Currency, plan.BillingPeriod, plan.IncludedUsageCredit, plan.IsActive);
@@ -85,7 +85,7 @@ public partial class PlanService : IPlanService
         if (plan is null) return null;
         ReplaceEntitlements(unit, plan, entitlements, _time.GetUtcNow());
         await unit.SaveChangesAsync(ct);
-        await _cache.RemoveByPrefixAsync(CacheKeys.EntitlementsPrefix, ct); // any clinic may be on this plan
+        await _cache.RemoveByPrefixAsync(CacheKeys.EntitlementsPrefix, ct); // any client may be on this plan
         _logger.LogInformation("Billing: entitlements of plan {Plan} replaced: {Entitlements}.", code,
             string.Join(", ", entitlements.Select(e => $"{e.Key}={e.Value}")));
         return await GetAsync(code, ct);
@@ -109,7 +109,7 @@ public partial class PlanService : IPlanService
             var cardCode = request.RateCardCode.Trim().ToLowerInvariant();
             var card = await unit.RateCards.GetAsync(cardCode, ct)
                 ?? throw new ArgumentException($"Rate card '{cardCode}' doesn't exist.");
-            if (card.ClinicId is not null) throw new ArgumentException("A clinic's own rate card can't be a plan's rate card.");
+            if (card.ClientId is not null) throw new ArgumentException("A client's own rate card can't be a plan's rate card.");
             rateCardId = card.Id;
         }
 

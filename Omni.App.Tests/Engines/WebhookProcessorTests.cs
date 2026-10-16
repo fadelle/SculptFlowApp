@@ -12,7 +12,7 @@ public static class ParsedEventExtensions { public static ParsedMetaEvent With(t
 
 public abstract class WebhookTestBase
 {
-    protected readonly Guid ClinicId = Guid.NewGuid();
+    protected readonly Guid ClientId = Guid.NewGuid();
     protected readonly Guid ConnectionId = Guid.NewGuid();
     protected readonly Guid LeadId = Guid.NewGuid();
     protected readonly Guid ConversationId = Guid.NewGuid();
@@ -26,22 +26,22 @@ public abstract class WebhookTestBase
     protected readonly Mock<IChannelIntegrationRepository> Integrations = new();
     protected readonly Mock<IAiTriggerNotifier> AiTrigger = new();
     protected readonly Mock<IMessageTracer> Tracer = new();
-    protected readonly ResolvedClinic Clinic;
+    protected readonly ResolvedClient Client;
 
     protected WebhookTestBase()
     {
-        Clinic = new ResolvedClinic(ClinicId, ConnectionId);
-        Leads.Setup(l => l.GetOrCreateByPhoneAsync(ClinicId, It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+        Client = new ResolvedClient(ClientId, ConnectionId);
+        Leads.Setup(l => l.GetOrCreateByPhoneAsync(ClientId, It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Lead(), true));
-        Conversations.Setup(c => c.GetOrCreateForLeadAsync(ClinicId, LeadId, It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(Conv());
-        Conversations.Setup(c => c.GetOrCreateForLeadAsync(ClinicId, LeadId, It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(Conv());
+        Conversations.Setup(c => c.GetOrCreateForLeadAsync(ClientId, LeadId, It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(Conv());
+        Conversations.Setup(c => c.GetOrCreateForLeadAsync(ClientId, LeadId, It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(Conv());
         Messages.Setup(m => m.IngestAsync(It.IsAny<IngestMessageRequest>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new IngestMessageResult(true, false, Msg(), ConversationMode.Ai, true));
     }
 
-    protected LeadResponse Lead() => new(LeadId, ClinicId, null, null, "Ann", null, null, "+961", null, "whatsapp", null, null, null, "new", "unknown", null, null, null, null, true, null, null, null, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow);
+    protected LeadResponse Lead() => new(LeadId, ClientId, null, null, "Ann", null, null, "+961", null, "whatsapp", null, null, null, "new", "unknown", null, null, null, null, true, null, null, null, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow);
 
-    protected ConversationResponse Conv() => new(ConversationId, ClinicId, LeadId, "whatsapp", "active", "ai", true, false, null, null, null, false, DateTimeOffset.UtcNow);
+    protected ConversationResponse Conv() => new(ConversationId, ClientId, LeadId, "whatsapp", "active", "ai", true, false, null, null, null, false, DateTimeOffset.UtcNow);
 
     protected MessageResponse Msg() => new(Guid.NewGuid(), ConversationId, LeadId, "inbound", "lead", "whatsapp_customer", "whatsapp", "text", "hello", null, false, null, null, null, null, DateTimeOffset.UtcNow, null, null, null, null, null, null, null);
 
@@ -59,9 +59,9 @@ public class WhatsAppHandlerTests : WebhookTestBase
     public async Task CustomerMessage_creates_lead_conversation_and_ingests_with_a_plus_prefixed_phone()
     {
         var handler = new CustomerMessageHandler(Leads.Object, Conversations.Object, Messages.Object);
-        var r = await handler.HandleAsync(Evt(ParsedMetaEventKind.CustomerMessage).With(("SelectedValue", "btn1")), Clinic, default);
+        var r = await handler.HandleAsync(Evt(ParsedMetaEventKind.CustomerMessage).With(("SelectedValue", "btn1")), Client, default);
 
-        Leads.Verify(l => l.GetOrCreateByPhoneAsync(ClinicId, "+96170123456", "Ann", It.IsAny<CancellationToken>()), Times.Once);
+        Leads.Verify(l => l.GetOrCreateByPhoneAsync(ClientId, "+96170123456", "Ann", It.IsAny<CancellationToken>()), Times.Once);
         Messages.Verify(m => m.IngestAsync(It.Is<IngestMessageRequest>(i => i.EventType == IngestEventType.CustomerMessage && i.LeadWasNewlyCreated && i.ExternalMessageId == "wamid.1" && i.Content == "hello"), It.IsAny<CancellationToken>()), Times.Once);
         Assert.Equal(("customer_message", true, ConversationId, "btn1", "hello"), (r.EventType, r.ShouldRunAi, r.ConversationId, r.SelectedValue, r.Content));
     }
@@ -70,7 +70,7 @@ public class WhatsAppHandlerTests : WebhookTestBase
     public async Task CustomerMessage_without_a_sender_is_acknowledged_without_side_effects()
     {
         var handler = new CustomerMessageHandler(Leads.Object, Conversations.Object, Messages.Object);
-        var r = await handler.HandleAsync(Evt(ParsedMetaEventKind.CustomerMessage, waId: " "), Clinic, default);
+        var r = await handler.HandleAsync(Evt(ParsedMetaEventKind.CustomerMessage, waId: " "), Client, default);
         Assert.True(r.Processed);
         Assert.False(r.ShouldRunAi);
         Messages.Verify(m => m.IngestAsync(It.IsAny<IngestMessageRequest>(), It.IsAny<CancellationToken>()), Times.Never);
@@ -80,18 +80,18 @@ public class WhatsAppHandlerTests : WebhookTestBase
     public async Task Existing_plus_in_the_sender_id_is_not_doubled()
     {
         var handler = new CustomerMessageHandler(Leads.Object, Conversations.Object, Messages.Object);
-        await handler.HandleAsync(Evt(ParsedMetaEventKind.CustomerMessage, waId: "+96170"), Clinic, default);
-        Leads.Verify(l => l.GetOrCreateByPhoneAsync(ClinicId, "+96170", It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
+        await handler.HandleAsync(Evt(ParsedMetaEventKind.CustomerMessage, waId: "+96170"), Client, default);
+        Leads.Verify(l => l.GetOrCreateByPhoneAsync(ClientId, "+96170", It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
     public async Task BusinessAppEcho_is_ingested_as_an_echo_and_never_triggers_ai()
     {
         var handler = new BusinessAppEchoHandler(Leads.Object, Conversations.Object, Messages.Object);
-        var r = await handler.HandleAsync(Evt(ParsedMetaEventKind.BusinessAppEcho), Clinic, default);
+        var r = await handler.HandleAsync(Evt(ParsedMetaEventKind.BusinessAppEcho), Client, default);
         Messages.Verify(m => m.IngestAsync(It.Is<IngestMessageRequest>(i => i.EventType == IngestEventType.BusinessAppEcho), It.IsAny<CancellationToken>()), Times.Once);
         Assert.Equal(("business_app_echo", false), (r.EventType, r.ShouldRunAi));
-        var none = await handler.HandleAsync(Evt(ParsedMetaEventKind.BusinessAppEcho, waId: null), Clinic, default);
+        var none = await handler.HandleAsync(Evt(ParsedMetaEventKind.BusinessAppEcho, waId: null), Client, default);
         Assert.Null(none.ConversationId);
     }
 
@@ -101,12 +101,12 @@ public class WhatsAppHandlerTests : WebhookTestBase
         var handler = new MessageStatusHandler(Messages.Object);
         Messages.Setup(m => m.IngestAsync(It.Is<IngestMessageRequest>(i => i.EventType == IngestEventType.StatusUpdate), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new IngestMessageResult(false, false, null));
-        var missing = await handler.HandleAsync(Evt(ParsedMetaEventKind.MessageStatus).With(("DeliveryStatus", "read")), Clinic, default);
+        var missing = await handler.HandleAsync(Evt(ParsedMetaEventKind.MessageStatus).With(("DeliveryStatus", "read")), Client, default);
         Assert.False(missing.Processed);
 
         Messages.Setup(m => m.IngestAsync(It.Is<IngestMessageRequest>(i => i.EventType == IngestEventType.StatusUpdate), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new IngestMessageResult(true, false, Msg()));
-        var found = await handler.HandleAsync(Evt(ParsedMetaEventKind.MessageStatus).With(("DeliveryStatus", "read"), ("FailureCode", "1")), Clinic, default);
+        var found = await handler.HandleAsync(Evt(ParsedMetaEventKind.MessageStatus).With(("DeliveryStatus", "read"), ("FailureCode", "1")), Client, default);
         Assert.Equal((true, "message_status", "read", ConversationId), (found.Processed, found.EventType, found.Status, found.ConversationId));
         Messages.Verify(m => m.IngestAsync(It.Is<IngestMessageRequest>(i => i.FailureCode == "1" && i.ExternalMessageId == "wamid.1"), It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -114,9 +114,9 @@ public class WhatsAppHandlerTests : WebhookTestBase
     [Fact]
     public async Task Template_event_is_forwarded_with_defaults()
     {
-        var tpl = new WhatsAppTemplateResponse(Guid.NewGuid(), ClinicId, "m1", "promo", "MARKETING", "en", "approved", null, null, "b", null, null, null, null, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow);
+        var tpl = new WhatsAppTemplateResponse(Guid.NewGuid(), ClientId, "m1", "promo", "MARKETING", "en", "approved", null, null, "b", null, null, null, null, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow);
         Templates.Setup(t => t.ApplyMetaEventAsync(It.IsAny<WhatsAppTemplateEventRequest>(), It.IsAny<CancellationToken>())).ReturnsAsync(tpl);
-        var r = await new TemplateEventHandler(Templates.Object).HandleAsync(Evt(ParsedMetaEventKind.TemplateStatus).With(("RawFieldName", null), ("TemplateName", null), ("TemplateStatus", "APPROVED")), Clinic, default);
+        var r = await new TemplateEventHandler(Templates.Object).HandleAsync(Evt(ParsedMetaEventKind.TemplateStatus).With(("RawFieldName", null), ("TemplateName", null), ("TemplateStatus", "APPROVED")), Client, default);
         Templates.Verify(t => t.ApplyMetaEventAsync(It.Is<WhatsAppTemplateEventRequest>(q => q.EventType == "template_status_update" && q.Name == "unknown" && q.Status == "APPROVED"), It.IsAny<CancellationToken>()), Times.Once);
         Assert.Equal(("template_status", tpl.Id, "approved"), (r.EventType, r.TemplateId, r.Status));
     }
@@ -125,8 +125,8 @@ public class WhatsAppHandlerTests : WebhookTestBase
     public async Task Health_event_is_applied_and_the_level_returned()
     {
         Health.Setup(h => h.ApplyHealthEventAsync(It.IsAny<WhatsAppHealthEventRequest>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new WhatsAppHealthResponse(ConnectionId, ClinicId, true, "warning", null, null, null, null, null, null, null, null, null, null, null, null, DateTimeOffset.UtcNow));
-        var r = await new HealthEventHandler(Health.Object).HandleAsync(Evt(ParsedMetaEventKind.WhatsAppHealth).With(("HealthEventType", null), ("HealthStatus", "FLAGGED")), Clinic, default);
+            .ReturnsAsync(new WhatsAppHealthResponse(ConnectionId, ClientId, true, "warning", null, null, null, null, null, null, null, null, null, null, null, null, DateTimeOffset.UtcNow));
+        var r = await new HealthEventHandler(Health.Object).HandleAsync(Evt(ParsedMetaEventKind.WhatsAppHealth).With(("HealthEventType", null), ("HealthStatus", "FLAGGED")), Client, default);
         Health.Verify(h => h.ApplyHealthEventAsync(It.Is<WhatsAppHealthEventRequest>(q => q.EventType == WhatsAppHealthEventType.UnknownMetaHealthEvent && q.Status == "FLAGGED"), It.IsAny<CancellationToken>()), Times.Once);
         Assert.Equal(("whatsapp_health", "warning"), (r.EventType, r.HealthLevel));
     }
@@ -134,17 +134,17 @@ public class WhatsAppHandlerTests : WebhookTestBase
     [Fact]
     public async Task History_app_state_and_unknown_events_are_only_logged()
     {
-        var history = await new HistoryHandler(Uow.Object, Events.Object).HandleAsync(Evt(ParsedMetaEventKind.HistorySync), Clinic, default);
-        var state = await new AppStateSyncHandler(Uow.Object, Events.Object).HandleAsync(Evt(ParsedMetaEventKind.AppStateSync), Clinic, default);
-        var unknown = await new UnknownEventHandler(Uow.Object, Events.Object).HandleAsync(Evt(ParsedMetaEventKind.Unknown), Clinic, default);
+        var history = await new HistoryHandler(Uow.Object, Events.Object).HandleAsync(Evt(ParsedMetaEventKind.HistorySync), Client, default);
+        var state = await new AppStateSyncHandler(Uow.Object, Events.Object).HandleAsync(Evt(ParsedMetaEventKind.AppStateSync), Client, default);
+        var unknown = await new UnknownEventHandler(Uow.Object, Events.Object).HandleAsync(Evt(ParsedMetaEventKind.Unknown), Client, default);
         Assert.Equal(["history", "app_state_sync", "unknown"], [history.EventType, state.EventType, unknown.EventType]);
         Assert.All(new[] { history, state, unknown }, r => Assert.False(r.ShouldRunAi));
-        Events.Verify(e => e.Log(ClinicId, EventTypes.WhatsAppHistorySyncReceived, null, null, null, "n8n", It.IsAny<string>()), Times.Once);
-        Events.Verify(e => e.Log(ClinicId, EventTypes.WhatsAppAppStateSyncReceived, null, null, null, "n8n", It.IsAny<string>()), Times.Once);
-        Events.Verify(e => e.Log(ClinicId, EventTypes.WhatsAppUnknownEventReceived, null, null, null, "n8n", It.IsAny<string>()), Times.Once);
+        Events.Verify(e => e.Log(ClientId, EventTypes.WhatsAppHistorySyncReceived, null, null, null, "n8n", It.IsAny<string>()), Times.Once);
+        Events.Verify(e => e.Log(ClientId, EventTypes.WhatsAppAppStateSyncReceived, null, null, null, "n8n", It.IsAny<string>()), Times.Once);
+        Events.Verify(e => e.Log(ClientId, EventTypes.WhatsAppUnknownEventReceived, null, null, null, "n8n", It.IsAny<string>()), Times.Once);
 
         var orphan = await new UnknownEventHandler(Uow.Object, Events.Object).HandleAsync(Evt(ParsedMetaEventKind.Unknown), null, default);
-        Assert.Null(orphan.ClinicId);
+        Assert.Null(orphan.ClientId);
         Events.Verify(e => e.Log(It.IsAny<Guid>(), EventTypes.WhatsAppUnknownEventReceived, It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<string?>(), It.IsAny<string>()), Times.Once);
     }
 }
@@ -155,10 +155,10 @@ public class MetaWebhookProcessorTests : WebhookTestBase
 
     public MetaWebhookProcessorTests()
     {
-        _cache.Setup(c => c.GetOrCreateAsync(It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<Func<CancellationToken, Task<ResolvedClinic?>>>(), It.IsAny<CancellationToken>()))
-            .Returns((string _, TimeSpan _, Func<CancellationToken, Task<ResolvedClinic?>> f, CancellationToken ct) => f(ct));
-        Integrations.Setup(i => i.FindWhatsAppByPhoneNumberIdAsync("P1", It.IsAny<CancellationToken>())).ReturnsAsync(new ChannelIntegration { Id = ConnectionId, ClinicId = ClinicId });
-        Integrations.Setup(i => i.FindWhatsAppByWabaIdAsync("W1", It.IsAny<CancellationToken>())).ReturnsAsync(new ChannelIntegration { Id = ConnectionId, ClinicId = ClinicId });
+        _cache.Setup(c => c.GetOrCreateAsync(It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<Func<CancellationToken, Task<ResolvedClient?>>>(), It.IsAny<CancellationToken>()))
+            .Returns((string _, TimeSpan _, Func<CancellationToken, Task<ResolvedClient?>> f, CancellationToken ct) => f(ct));
+        Integrations.Setup(i => i.FindWhatsAppByPhoneNumberIdAsync("P1", It.IsAny<CancellationToken>())).ReturnsAsync(new ChannelIntegration { Id = ConnectionId, ClientId = ClientId });
+        Integrations.Setup(i => i.FindWhatsAppByWabaIdAsync("W1", It.IsAny<CancellationToken>())).ReturnsAsync(new ChannelIntegration { Id = ConnectionId, ClientId = ClientId });
     }
 
     private MetaWebhookProcessor Sut() => new(Integrations.Object, _cache.Object,
@@ -187,7 +187,7 @@ public class MetaWebhookProcessorTests : WebhookTestBase
     public async Task Customer_message_is_routed_by_phone_number_id()
     {
         var r = await Sut().ProcessAsync(J(Body()));
-        Assert.Equal(("customer_message", true, ClinicId), (r.EventType, r.ShouldRunAi, r.ClinicId));
+        Assert.Equal(("customer_message", true, ClientId), (r.EventType, r.ShouldRunAi, r.ClientId));
     }
 
     [Fact]
@@ -198,7 +198,7 @@ public class MetaWebhookProcessorTests : WebhookTestBase
 
         Integrations.Setup(i => i.FindWhatsAppByWabaIdAsync("W1", It.IsAny<CancellationToken>())).ReturnsAsync((ChannelIntegration?)null);
         var unknown = await Sut().ProcessAsync(J(Body("P-unknown")));
-        Assert.Equal(("unknown", null), (unknown.EventType, unknown.ClinicId));
+        Assert.Equal(("unknown", null), (unknown.EventType, unknown.ClientId));
         Messages.Verify(m => m.IngestAsync(It.IsAny<IngestMessageRequest>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -206,9 +206,9 @@ public class MetaWebhookProcessorTests : WebhookTestBase
     public async Task Each_event_kind_goes_to_its_own_handler()
     {
         Templates.Setup(t => t.ApplyMetaEventAsync(It.IsAny<WhatsAppTemplateEventRequest>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new WhatsAppTemplateResponse(Guid.NewGuid(), ClinicId, "m", "n", "c", "en", "approved", null, null, "b", null, null, null, null, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow));
+            .ReturnsAsync(new WhatsAppTemplateResponse(Guid.NewGuid(), ClientId, "m", "n", "c", "en", "approved", null, null, "b", null, null, null, null, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow));
         Health.Setup(h => h.ApplyHealthEventAsync(It.IsAny<WhatsAppHealthEventRequest>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new WhatsAppHealthResponse(ConnectionId, ClinicId, true, "healthy", null, null, null, null, null, null, null, null, null, null, null, null, DateTimeOffset.UtcNow));
+            .ReturnsAsync(new WhatsAppHealthResponse(ConnectionId, ClientId, true, "healthy", null, null, null, null, null, null, null, null, null, null, null, null, DateTimeOffset.UtcNow));
         Messages.Setup(m => m.IngestAsync(It.Is<IngestMessageRequest>(i => i.EventType == IngestEventType.StatusUpdate), It.IsAny<CancellationToken>())).ReturnsAsync(new IngestMessageResult(true, false, Msg()));
 
         string Wrap(string field, string value) => "{\"entry\":[{\"id\":\"W1\",\"changes\":[{\"field\":\"" + field + "\",\"value\":" + value + "}]}]}";
@@ -231,7 +231,7 @@ public class MetaWebhookProcessorTests : WebhookTestBase
             + "{\"field\":\"messages\",\"value\":{\"metadata\":{\"phone_number_id\":\"P1\"},\"messages\":[{\"from\":\"961711\",\"id\":\"b\",\"type\":\"text\",\"text\":{\"body\":\"hello\"}}]}}]}]}";
         var other = Guid.NewGuid();
         var calls = 0;
-        Conversations.Setup(c => c.GetOrCreateForLeadAsync(ClinicId, LeadId, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        Conversations.Setup(c => c.GetOrCreateForLeadAsync(ClientId, LeadId, It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => ++calls == 1 ? Conv() : Conv() with { Id = other });
         var all = await Sut().ProcessAllAsync(J(second));
         Assert.Equal(2, all.Count(r => r.ShouldRunAi));
@@ -243,7 +243,7 @@ public class TelegramWebhookProcessorTests : WebhookTestBase
 {
     private ChannelIntegration Connection(string status = ChannelIntegrationStatus.Connected, string channel = ChannelType.Telegram, string secret = "s3cret") => new()
     {
-        Id = ConnectionId, ClinicId = ClinicId, Channel = channel, Status = status, WebhookVerifyToken = secret
+        Id = ConnectionId, ClientId = ClientId, Channel = channel, Status = status, WebhookVerifyToken = secret
     };
 
     private TelegramWebhookProcessor Sut() => new(Integrations.Object, AiTrigger.Object, Leads.Object, Conversations.Object, Messages.Object, NullLogger<TelegramWebhookProcessor>.Instance, Tracer.Object);
@@ -253,7 +253,7 @@ public class TelegramWebhookProcessorTests : WebhookTestBase
 
     public TelegramWebhookProcessorTests()
     {
-        Leads.Setup(l => l.GetOrCreateByExternalIdAsync(ClinicId, "telegram:42", "telegram", It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+        Leads.Setup(l => l.GetOrCreateByExternalIdAsync(ClientId, "telegram:42", "telegram", It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Lead(), true));
     }
 
@@ -262,8 +262,8 @@ public class TelegramWebhookProcessorTests : WebhookTestBase
     {
         var r = await Sut().ProcessAsync(Connection(), Update());
         Assert.Equal(("customer_message", true, ConversationId), (r.EventType, r.ShouldRunAi, r.ConversationId));
-        Leads.Verify(l => l.GetOrCreateByExternalIdAsync(ClinicId, "telegram:42", "telegram", "Ann", "Ann", null, "@ann", It.IsAny<CancellationToken>()), Times.Once);
-        Conversations.Verify(c => c.GetOrCreateForLeadAsync(ClinicId, LeadId, "telegram", "42", It.IsAny<CancellationToken>()), Times.Once);
+        Leads.Verify(l => l.GetOrCreateByExternalIdAsync(ClientId, "telegram:42", "telegram", "Ann", "Ann", null, "@ann", It.IsAny<CancellationToken>()), Times.Once);
+        Conversations.Verify(c => c.GetOrCreateForLeadAsync(ClientId, LeadId, "telegram", "42", It.IsAny<CancellationToken>()), Times.Once);
         Messages.Verify(m => m.IngestAsync(It.Is<IngestMessageRequest>(i => i.ExternalMessageId == "42:7" && i.LeadWasNewlyCreated && i.Channel == "telegram"), It.IsAny<CancellationToken>()), Times.Once);
         Integrations.Verify(i => i.TouchLastWebhookAsync(ConnectionId, It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -288,12 +288,12 @@ public class TelegramWebhookProcessorTests : WebhookTestBase
     [Fact]
     public async Task Names_fall_back_to_username_then_a_generated_label()
     {
-        Leads.Setup(l => l.GetOrCreateByExternalIdAsync(ClinicId, It.IsAny<string>(), "telegram", It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+        Leads.Setup(l => l.GetOrCreateByExternalIdAsync(ClientId, It.IsAny<string>(), "telegram", It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Lead(), false));
         await Sut().ProcessAsync(Connection(), J("{\"update_id\":1,\"message\":{\"message_id\":1,\"chat\":{\"id\":42,\"type\":\"private\",\"username\":\"bob\"},\"text\":\"x\"}}"));
-        Leads.Verify(l => l.GetOrCreateByExternalIdAsync(ClinicId, "telegram:42", "telegram", "@bob", null, null, "@bob", It.IsAny<CancellationToken>()), Times.Once);
+        Leads.Verify(l => l.GetOrCreateByExternalIdAsync(ClientId, "telegram:42", "telegram", "@bob", null, null, "@bob", It.IsAny<CancellationToken>()), Times.Once);
         await Sut().ProcessAsync(Connection(), J("{\"update_id\":1,\"message\":{\"message_id\":1,\"chat\":{\"id\":42,\"type\":\"private\"},\"text\":\"x\"}}"));
-        Leads.Verify(l => l.GetOrCreateByExternalIdAsync(ClinicId, "telegram:42", "telegram", "Telegram user 42", null, null, null, It.IsAny<CancellationToken>()), Times.Once);
+        Leads.Verify(l => l.GetOrCreateByExternalIdAsync(ClientId, "telegram:42", "telegram", "Telegram user 42", null, null, null, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

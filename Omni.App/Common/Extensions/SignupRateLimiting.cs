@@ -6,8 +6,8 @@ namespace Omni.App.Common.Extensions;
 
 /// <summary>
 /// Caps how many sign-up attempts one IP address can make per hour (setting Accounts:SignupsPerIpPerHour), so a script
-/// can't mass-create clinics. Only POSTs to the two pages that create a clinic count (Register and the Google
-/// clinic-name step); every other request is untouched. The client IP comes from X-Forwarded-For (Render's proxy),
+/// can't mass-create clients. Only POSTs to the two pages that create a client count (Register and the Google
+/// client-name step); every other request is untouched. The client IP comes from X-Forwarded-For (Render's proxy),
 /// which Program.cs trusts through UseForwardedHeaders. The limit is part of the partition key, so changing the
 /// setting applies straight away. A refused attempt gets 429 with a short plain-text explanation.
 /// </summary>

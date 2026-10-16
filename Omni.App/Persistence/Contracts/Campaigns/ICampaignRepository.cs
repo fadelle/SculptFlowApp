@@ -10,9 +10,9 @@ public interface ICampaignRepository
 
     void AddRecipient(CampaignRecipient recipient);
 
-    Task<Campaign?> GetAsync(Guid clinicId, Guid campaignId, CancellationToken ct = default);
+    Task<Campaign?> GetAsync(Guid clientId, Guid campaignId, CancellationToken ct = default);
 
-    Task<Campaign?> GetWithTemplateAsync(Guid clinicId, Guid campaignId, CancellationToken ct = default);
+    Task<Campaign?> GetWithTemplateAsync(Guid clientId, Guid campaignId, CancellationToken ct = default);
 
     Task<Campaign?> GetByIdAsync(Guid campaignId, CancellationToken ct = default);
 
@@ -22,15 +22,15 @@ public interface ICampaignRepository
 
     /// <summary>Set-based: moves the campaign to <paramref name="toStatus"/> only if it is still in one of
     /// <paramref name="fromStatuses"/>. Returns false (nothing changed) when it isn't, e.g. it finished meanwhile.</summary>
-    Task<bool> TryChangeStatusAsync(Guid clinicId, Guid campaignId, IReadOnlyCollection<string> fromStatuses, string toStatus,
+    Task<bool> TryChangeStatusAsync(Guid clientId, Guid campaignId, IReadOnlyCollection<string> fromStatuses, string toStatus,
         DateTimeOffset now, CancellationToken ct = default);
 
-    /// <summary>Across all active clinics: scheduled campaigns whose ScheduledAt has passed, then running ones, oldest
+    /// <summary>Across all active clients: scheduled campaigns whose ScheduledAt has passed, then running ones, oldest
     /// first. Read-only.</summary>
     Task<IReadOnlyList<DueCampaign>> ListDueForSendingReadOnlyAsync(DateTimeOffset now, CancellationToken ct = default);
 
     /// <summary>Newest first, with the template loaded.</summary>
-    Task<IReadOnlyList<Campaign>> ListWithTemplateAsync(Guid clinicId, CancellationToken ct = default);
+    Task<IReadOnlyList<Campaign>> ListWithTemplateAsync(Guid clientId, CancellationToken ct = default);
 
     Task<List<CampaignRecipient>> ListRecipientsAsync(IReadOnlyCollection<Guid> campaignIds, CancellationToken ct = default);
 
@@ -53,9 +53,9 @@ public interface ICampaignRepository
     Task<IAsyncDisposable?> TryLockForSendingAsync(Guid campaignId, CancellationToken ct = default);
 
     /// <summary>The lead's most recent campaign send still waiting for a reply (RepliedAt null), with its campaign.</summary>
-    Task<CampaignRecipient?> FindLatestAwaitingReplyAsync(Guid clinicId, Guid leadId, CancellationToken ct = default);
+    Task<CampaignRecipient?> FindLatestAwaitingReplyAsync(Guid clientId, Guid leadId, CancellationToken ct = default);
 
     /// <summary>The lead's most recent campaign send that was replied to at or after <paramref name="repliedSince"/> and has not
     /// been credited with a booking yet.</summary>
-    Task<CampaignRecipient?> FindLatestRepliedAwaitingBookingAsync(Guid clinicId, Guid leadId, DateTimeOffset repliedSince, CancellationToken ct = default);
+    Task<CampaignRecipient?> FindLatestRepliedAwaitingBookingAsync(Guid clientId, Guid leadId, DateTimeOffset repliedSince, CancellationToken ct = default);
 }

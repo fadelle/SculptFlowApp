@@ -3,13 +3,13 @@ using Omni.App.Entities.Models;
 namespace Omni.App.Entities.Responses.Appointments;
 
 /// <summary>GET /api/ai/appointments/available (the AI's get_available_slots tool) and GET /api/appointments/available.
-/// Slot Start/End carry the clinic's local UTC offset (e.g. 2026-09-24T09:00:00+03:00), so they are unambiguous and can be
+/// Slot Start/End carry the client's local UTC offset (e.g. 2026-09-24T09:00:00+03:00), so they are unambiguous and can be
 /// passed straight back to book_consultation.</summary>
 public record AvailabilityResponse(
-    /// <summary>False until the clinic has at least one open weekday configured — then Slots is always empty and Message says why.</summary>
+    /// <summary>False until the client has at least one open weekday configured — then Slots is always empty and Message says why.</summary>
     bool Configured,
     string Timezone,
-    /// <summary>Today's date in the clinic's timezone ("yyyy-MM-dd") — lets the AI resolve "tomorrow", "Friday" etc. from the
+    /// <summary>Today's date in the client's timezone ("yyyy-MM-dd") — lets the AI resolve "tomorrow", "Friday" etc. from the
     /// tool result itself instead of guessing the current date.</summary>
     string Today,
     int DurationMinutes,

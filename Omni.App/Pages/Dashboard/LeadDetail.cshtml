@@ -4,9 +4,9 @@
     ViewData["Title"] = "Lead";
 }
 
-@if (!Model.ClinicConfigured)
+@if (!Model.ClientConfigured)
 {
-    <partial name="_NoClinic" />
+    <partial name="_NoClient" />
 }
 else if (Model.Lead is null)
 {

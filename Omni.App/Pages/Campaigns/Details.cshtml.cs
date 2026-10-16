@@ -8,16 +8,16 @@ namespace Omni.App.Pages.Campaigns;
 
 public class DetailsModel : PageModel
 {
-    private readonly ICurrentClinicContext _clinicContext;
+    private readonly ICurrentClientContext _clientContext;
     private readonly ICampaignService _campaigns;
 
-    public DetailsModel(ICurrentClinicContext clinicContext, ICampaignService campaigns)
+    public DetailsModel(ICurrentClientContext clientContext, ICampaignService campaigns)
     {
-        _clinicContext = clinicContext;
+        _clientContext = clientContext;
         _campaigns = campaigns;
     }
 
-    public bool ClinicConfigured { get; private set; }
+    public bool ClientConfigured { get; private set; }
     public CampaignDetailsResponse? Details { get; private set; }
 
     [TempData]
@@ -28,26 +28,26 @@ public class DetailsModel : PageModel
 
     public async Task<IActionResult> OnGetAsync(Guid id, CancellationToken ct)
     {
-        var clinic = await _clinicContext.GetClinicAsync(ct);
-        if (clinic is null)
+        var client = await _clientContext.GetClientAsync(ct);
+        if (client is null)
         {
-            ClinicConfigured = false;
+            ClientConfigured = false;
             return Page();
         }
 
-        ClinicConfigured = true;
-        Details = await _campaigns.GetByIdAsync(clinic.Id, id, ct);
+        ClientConfigured = true;
+        Details = await _campaigns.GetByIdAsync(client.Id, id, ct);
         return Details is null ? NotFound() : Page();
     }
 
     public async Task<IActionResult> OnPostSendAsync(Guid id, CancellationToken ct)
     {
-        var clinic = await _clinicContext.GetClinicAsync(ct);
-        if (clinic is null) return RedirectToPage();
+        var client = await _clientContext.GetClientAsync(ct);
+        if (client is null) return RedirectToPage();
 
         try
         {
-            var result = await _campaigns.SendAsync(clinic.Id, id, batchSize: 20, ct);
+            var result = await _campaigns.SendAsync(client.Id, id, batchSize: 20, ct);
             StatusMessage = result is null
                 ? null
                 : result.CampaignCompleted
@@ -64,12 +64,12 @@ public class DetailsModel : PageModel
 
     public async Task<IActionResult> OnPostStopAsync(Guid id, CancellationToken ct)
     {
-        var clinic = await _clinicContext.GetClinicAsync(ct);
-        if (clinic is null) return RedirectToPage();
+        var client = await _clientContext.GetClientAsync(ct);
+        if (client is null) return RedirectToPage();
 
         try
         {
-            await _campaigns.StopAsync(clinic.Id, id, ct);
+            await _campaigns.StopAsync(client.Id, id, ct);
             StatusMessage = "Campaign stopped. Nobody else will be messaged until you resume it.";
         }
         catch (InvalidOperationException ex)
@@ -82,12 +82,12 @@ public class DetailsModel : PageModel
 
     public async Task<IActionResult> OnPostCancelAsync(Guid id, CancellationToken ct)
     {
-        var clinic = await _clinicContext.GetClinicAsync(ct);
-        if (clinic is null) return RedirectToPage();
+        var client = await _clientContext.GetClientAsync(ct);
+        if (client is null) return RedirectToPage();
 
         try
         {
-            await _campaigns.CancelAsync(clinic.Id, id, ct);
+            await _campaigns.CancelAsync(client.Id, id, ct);
             StatusMessage = "Campaign cancelled.";
         }
         catch (InvalidOperationException ex)

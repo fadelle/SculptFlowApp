@@ -3,12 +3,12 @@ using Omni.App.Common.Enums;
 namespace Omni.App.Entities.Models;
 
 /// <summary>One benchmark execution: which cases it covered, the strict-chunk and secondary document-level
-/// metrics it produced, and a snapshot of the retrieval settings it ran with (the clinic's Knowledge Search
+/// metrics it produced, and a snapshot of the retrieval settings it ran with (the client's Knowledge Search
 /// Settings remain the source of truth — this only records what was used).</summary>
 public class KnowledgeRetrievalBenchmarkRun
 {
     public Guid Id { get; set; }
-    public Guid ClinicId { get; set; }
+    public Guid ClientId { get; set; }
 
     public string CaseScope { get; set; } = BenchmarkCaseScope.All;
     /// <summary>Set only when CaseScope is "generation" — which generation's cases this run scored.</summary>

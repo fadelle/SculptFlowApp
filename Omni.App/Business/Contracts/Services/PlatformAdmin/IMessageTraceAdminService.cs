@@ -22,7 +22,7 @@ public interface IMessageTraceAdminService
     Task<TraceReference> ResolveAsync(string query, CancellationToken ct);
 
     /// <summary>Recent traces, latest activity first; page is 1-based.</summary>
-    Task<MessageTracePage> ListAsync(int hours, Guid? clinicId, Guid? conversationId, bool failedOnly, int page, int pageSize, CancellationToken ct);
+    Task<MessageTracePage> ListAsync(int hours, Guid? clientId, Guid? conversationId, bool failedOnly, int page, int pageSize, CancellationToken ct);
 
     Task<MessageTraceSummary> SummaryAsync(int hours, CancellationToken ct);
 }

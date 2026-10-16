@@ -66,7 +66,7 @@
     if (updatedEl) updatedEl.textContent = formatTime(payload.updatedAt);
 
     // Quality isn't in the SignalR payload (kept small) — re-fetch that one template for it. The
-    // API resolves clinicId server-side from the logged-in session now, not from the query string.
+    // API resolves clientId server-side from the logged-in session now, not from the query string.
     fetch('/api/whatsapp/templates/' + payload.templateId)
       .then(function (res) { return res.ok ? res.json() : null; })
       .then(function (t) {

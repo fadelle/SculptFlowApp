@@ -28,7 +28,7 @@ public class UserRepository : IUserRepository
     public async Task DeleteAsync(IReadOnlyCollection<string> userIds, CancellationToken ct = default)
     {
         await _db.Users.Where(u => userIds.Contains(u.Id)).ExecuteDeleteAsync(ct);
-        // The delete cascades to their clinic memberships.
+        // The delete cascades to their client memberships.
         await _cache.RemoveIfCachedAsync(userIds.Select(id => CacheEviction.Key(CacheKeys.Membership(id))), ct);
     }
 }

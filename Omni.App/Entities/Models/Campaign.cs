@@ -11,7 +11,7 @@ namespace Omni.App.Entities.Models;
 public class Campaign
 {
     public Guid Id { get; set; }
-    public Guid ClinicId { get; set; }
+    public Guid ClientId { get; set; }
     public string Name { get; set; } = string.Empty;
 
     /// <summary>What this campaign is for — see <see cref="CampaignType"/>. Deliberately a free
@@ -46,7 +46,7 @@ public class Campaign
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 
-    public Clinic? Clinic { get; set; }
+    public Client? Client { get; set; }
     public WhatsAppTemplate? WhatsAppTemplate { get; set; }
     public ICollection<CampaignRecipient> Recipients { get; set; } = new List<CampaignRecipient>();
 }

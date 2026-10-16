@@ -7,8 +7,8 @@ using Omni.App.Entities.Requests.PlatformAdmin;
 namespace Omni.App.Controllers.Admin;
 
 /// <summary>
-/// Platform-admin staff API (internal; called by the Omni.Admin portal): staff accounts and clinic memberships.
-/// Writes answer { clinicId }. Errors: 400 invalid input (e.g. a password the app's rules reject), 404 no such user,
+/// Platform-admin staff API (internal; called by the Omni.Admin portal): staff accounts and client memberships.
+/// Writes answer { clientId }. Errors: 400 invalid input (e.g. a password the app's rules reject), 404 no such user,
 /// 422 not allowed now.
 /// </summary>
 [ApiController]
@@ -26,8 +26,8 @@ public class StaffAdminController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<IActionResult> List([FromQuery] Guid? clinicId, [FromQuery] string? search, [FromQuery] int page, CancellationToken ct) =>
-        Ok(await _staff.ListAsync(clinicId, search, page, ct));
+    public async Task<IActionResult> List([FromQuery] Guid? clientId, [FromQuery] string? search, [FromQuery] int page, CancellationToken ct) =>
+        Ok(await _staff.ListAsync(clientId, search, page, ct));
 
     [HttpGet("{userId}")]
     public async Task<IActionResult> Get(string userId, CancellationToken ct) =>

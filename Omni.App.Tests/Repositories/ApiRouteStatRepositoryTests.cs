@@ -3,7 +3,7 @@ using Omni.App.Persistence.Repositories.Monitoring;
 
 namespace Omni.App.Tests.Repositories;
 
-/// <summary>activity.api_route_stats: rows are global (no clinic), so each test uses its own route names and dates.</summary>
+/// <summary>activity.api_route_stats: rows are global (no client), so each test uses its own route names and dates.</summary>
 public class ApiRouteStatRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixture)
 {
     private static ApiRouteStat Stat(DateTimeOffset bucket, string route, string method = "GET", int count = 10, int errors = 0, int clientErrors = 0,

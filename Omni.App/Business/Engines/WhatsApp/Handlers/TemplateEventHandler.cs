@@ -18,17 +18,17 @@ public class TemplateEventHandler
         _templates = templates;
     }
 
-    public async Task<WhatsAppWebhookResponse> HandleAsync(ParsedMetaEvent evt, ResolvedClinic clinic, CancellationToken ct)
+    public async Task<WhatsAppWebhookResponse> HandleAsync(ParsedMetaEvent evt, ResolvedClient client, CancellationToken ct)
     {
         var template = await _templates.ApplyMetaEventAsync(new WhatsAppTemplateEventRequest(
-            clinic.ClinicId, evt.RawFieldName ?? "template_status_update", evt.WabaId, evt.MetaTemplateId,
+            client.ClientId, evt.RawFieldName ?? "template_status_update", evt.WabaId, evt.MetaTemplateId,
             evt.TemplateName ?? "unknown", evt.TemplateLanguage, evt.TemplateCategory, evt.TemplateStatus, evt.TemplateReason,
             evt.TemplateQualityRating, evt.TemplatePreviousCategory, evt.TemplateCurrentCategory,
             evt.TemplateComponentsJson, evt.Timestamp), ct);
 
         return new WhatsAppWebhookResponse(
             Processed: true, EventType: "template_status", ShouldRunAi: false,
-            ClinicId: clinic.ClinicId, WhatsAppConnectionId: clinic.ChannelIntegrationId,
+            ClientId: client.ClientId, WhatsAppConnectionId: client.ChannelIntegrationId,
             TemplateId: template.Id, MetaTemplateId: template.MetaTemplateId, TemplateName: template.Name, Status: template.Status);
     }
 }

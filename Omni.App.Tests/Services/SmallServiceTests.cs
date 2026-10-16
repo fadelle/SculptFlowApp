@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Omni.App.Business.Services.Billing;
 using Omni.App.Business.Services.Caching;
-using Omni.App.Business.Services.Clinics;
+using Omni.App.Business.Services.Clients;
 using Omni.App.Business.Services.Configuration;
 using Omni.App.Business.Services.Dashboard;
 using Omni.App.Business.Services.Staff;
@@ -109,8 +109,8 @@ public class SettingsServiceTests
 
 public class EntitlementServiceTests
 {
-    private readonly Guid _clinicId = Guid.NewGuid();
-    private readonly Mock<IClinicSubscriptionRepository> _subscriptions = new();
+    private readonly Guid _clientId = Guid.NewGuid();
+    private readonly Mock<IClientSubscriptionRepository> _subscriptions = new();
     private readonly Mock<IChannelIntegrationRepository> _integrations = new();
     private readonly Mock<IConfigManager> _config = new();
     private readonly Mock<ICacheManager> _cache = new();
@@ -136,29 +136,29 @@ public class EntitlementServiceTests
     {
         var plan = new SubscriptionPlan { Code = "pro", Name = "Pro" };
         foreach (var (k, v) in entitlements) plan.Entitlements.Add(new SubscriptionPlanEntitlement { EntitlementKey = k, Value = v });
-        _subscriptions.Setup(s => s.GetWithEntitlementsReadOnlyAsync(_clinicId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new ClinicSubscription { ClinicId = _clinicId, Status = status, PastDueSince = pastDueSince, Plan = plan, CurrentPeriodEnd = _time.Now.AddDays(10) });
+        _subscriptions.Setup(s => s.GetWithEntitlementsReadOnlyAsync(_clientId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ClientSubscription { ClientId = _clientId, Status = status, PastDueSince = pastDueSince, Plan = plan, CurrentPeriodEnd = _time.Now.AddDays(10) });
     }
 
     [Fact]
     public async Task Billing_off_means_unrestricted_and_nothing_is_loaded()
     {
         _config.SetupGet(c => c.BillingEnabled).Returns(false);
-        var e = await Sut().GetAsync(_clinicId);
+        var e = await Sut().GetAsync(_clientId);
         Assert.False(e.BillingEnabled);
         Assert.True(e.CanSendMessages);
-        await Sut().EnsureFeatureAsync(_clinicId, EntitlementKeys.Campaigns);
-        await Sut().EnsureCanSendMessagesAsync(_clinicId);
+        await Sut().EnsureFeatureAsync(_clientId, EntitlementKeys.Campaigns);
+        await Sut().EnsureCanSendMessagesAsync(_clientId);
         _subscriptions.Verify(s => s.GetWithEntitlementsReadOnlyAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
-    public async Task Clinic_without_a_subscription_has_no_access()
+    public async Task Client_without_a_subscription_has_no_access()
     {
-        var e = await Sut().GetAsync(_clinicId);
+        var e = await Sut().GetAsync(_clientId);
         Assert.False(e.HasAccess);
-        await Assert.ThrowsAsync<EntitlementDeniedException>(() => Sut().EnsureCanSendMessagesAsync(_clinicId));
-        var ex = await Assert.ThrowsAsync<EntitlementDeniedException>(() => Sut().EnsureFeatureAsync(_clinicId, EntitlementKeys.Campaigns));
+        await Assert.ThrowsAsync<EntitlementDeniedException>(() => Sut().EnsureCanSendMessagesAsync(_clientId));
+        var ex = await Assert.ThrowsAsync<EntitlementDeniedException>(() => Sut().EnsureFeatureAsync(_clientId, EntitlementKeys.Campaigns));
         Assert.Contains("subscription isn't active", ex.Message);
     }
 
@@ -167,10 +167,10 @@ public class EntitlementServiceTests
     {
         Subscribe(SubscriptionStatus.Active, null, (EntitlementKeys.Campaigns, "true"), (EntitlementKeys.AiAgent, "false"));
         var sut = Sut();
-        await sut.EnsureFeatureAsync(_clinicId, EntitlementKeys.Campaigns);
-        var ex = await Assert.ThrowsAsync<EntitlementDeniedException>(() => sut.EnsureFeatureAsync(_clinicId, EntitlementKeys.AiAgent));
+        await sut.EnsureFeatureAsync(_clientId, EntitlementKeys.Campaigns);
+        var ex = await Assert.ThrowsAsync<EntitlementDeniedException>(() => sut.EnsureFeatureAsync(_clientId, EntitlementKeys.AiAgent));
         Assert.Contains("isn't included in your plan", ex.Message);
-        var e = await sut.GetAsync(_clinicId);
+        var e = await sut.GetAsync(_clientId);
         Assert.Equal(("pro", "Pro"), (e.PlanCode, e.PlanName));
         Assert.True(e.CanUseCampaigns);
     }
@@ -179,15 +179,15 @@ public class EntitlementServiceTests
     public async Task Past_due_keeps_access_only_during_the_grace_period()
     {
         Subscribe(SubscriptionStatus.PastDue, _time.Now.AddDays(-2));
-        Assert.True((await Sut().GetAsync(_clinicId)).HasAccess);
+        Assert.True((await Sut().GetAsync(_clientId)).HasAccess);
         Subscribe(SubscriptionStatus.PastDue, _time.Now.AddDays(-4));
-        Assert.False((await Sut().GetAsync(_clinicId)).HasAccess);
+        Assert.False((await Sut().GetAsync(_clientId)).HasAccess);
         Subscribe(SubscriptionStatus.PastDue, null);
-        Assert.True((await Sut().GetAsync(_clinicId)).HasAccess); // unknown start counts as "just now"
+        Assert.True((await Sut().GetAsync(_clientId)).HasAccess); // unknown start counts as "just now"
         Subscribe(SubscriptionStatus.Expired);
-        Assert.False((await Sut().GetAsync(_clinicId)).HasAccess);
+        Assert.False((await Sut().GetAsync(_clientId)).HasAccess);
         Subscribe(SubscriptionStatus.Cancelled);
-        Assert.False((await Sut().GetAsync(_clinicId)).HasAccess);
+        Assert.False((await Sut().GetAsync(_clientId)).HasAccess);
     }
 
     [Fact]
@@ -195,36 +195,36 @@ public class EntitlementServiceTests
     {
         Subscribe(SubscriptionStatus.Active, null, (EntitlementKeys.MaxAgents, "3"), (EntitlementKeys.MaxChannelConnections, EntitlementCatalog.Unlimited));
         var sut = Sut();
-        await sut.EnsureWithinLimitAsync(_clinicId, EntitlementKeys.MaxAgents, 3);
-        var ex = await Assert.ThrowsAsync<EntitlementDeniedException>(() => sut.EnsureWithinLimitAsync(_clinicId, EntitlementKeys.MaxAgents, 4));
+        await sut.EnsureWithinLimitAsync(_clientId, EntitlementKeys.MaxAgents, 3);
+        var ex = await Assert.ThrowsAsync<EntitlementDeniedException>(() => sut.EnsureWithinLimitAsync(_clientId, EntitlementKeys.MaxAgents, 4));
         Assert.Contains("allows 3 staff seats", ex.Message);
-        await sut.EnsureWithinLimitAsync(_clinicId, EntitlementKeys.MaxChannelConnections, 1000);
-        await Assert.ThrowsAsync<EntitlementDeniedException>(() => sut.EnsureWithinLimitAsync(_clinicId, EntitlementKeys.MaxWhatsAppNumbers, 1)); // missing key = 0
+        await sut.EnsureWithinLimitAsync(_clientId, EntitlementKeys.MaxChannelConnections, 1000);
+        await Assert.ThrowsAsync<EntitlementDeniedException>(() => sut.EnsureWithinLimitAsync(_clientId, EntitlementKeys.MaxWhatsAppNumbers, 1)); // missing key = 0
     }
 
     [Fact]
     public async Task Connecting_a_channel_counts_the_other_connected_channels()
     {
         Subscribe(SubscriptionStatus.Active, null, (EntitlementKeys.MaxChannelConnections, "2"), (EntitlementKeys.MaxWhatsAppNumbers, "1"));
-        _integrations.Setup(i => i.CountConnectedExceptAsync(_clinicId, ChannelType.WhatsApp, It.IsAny<CancellationToken>())).ReturnsAsync(1);
-        await Sut().EnsureCanConnectChannelAsync(_clinicId, ChannelType.WhatsApp);
-        _integrations.Setup(i => i.CountConnectedExceptAsync(_clinicId, ChannelType.WhatsApp, It.IsAny<CancellationToken>())).ReturnsAsync(2);
-        await Assert.ThrowsAsync<EntitlementDeniedException>(() => Sut().EnsureCanConnectChannelAsync(_clinicId, ChannelType.WhatsApp));
+        _integrations.Setup(i => i.CountConnectedExceptAsync(_clientId, ChannelType.WhatsApp, It.IsAny<CancellationToken>())).ReturnsAsync(1);
+        await Sut().EnsureCanConnectChannelAsync(_clientId, ChannelType.WhatsApp);
+        _integrations.Setup(i => i.CountConnectedExceptAsync(_clientId, ChannelType.WhatsApp, It.IsAny<CancellationToken>())).ReturnsAsync(2);
+        await Assert.ThrowsAsync<EntitlementDeniedException>(() => Sut().EnsureCanConnectChannelAsync(_clientId, ChannelType.WhatsApp));
     }
 
     [Fact]
     public async Task Whatsapp_needs_a_whatsapp_number_allowance_but_other_channels_do_not()
     {
         Subscribe(SubscriptionStatus.Active, null, (EntitlementKeys.MaxChannelConnections, "5"), (EntitlementKeys.MaxWhatsAppNumbers, "0"));
-        await Assert.ThrowsAsync<EntitlementDeniedException>(() => Sut().EnsureCanConnectChannelAsync(_clinicId, ChannelType.WhatsApp));
-        await Sut().EnsureCanConnectChannelAsync(_clinicId, ChannelType.Telegram);
+        await Assert.ThrowsAsync<EntitlementDeniedException>(() => Sut().EnsureCanConnectChannelAsync(_clientId, ChannelType.WhatsApp));
+        await Sut().EnsureCanConnectChannelAsync(_clientId, ChannelType.Telegram);
     }
 
     [Fact]
     public async Task Connecting_is_unrestricted_when_billing_is_off()
     {
         _config.SetupGet(c => c.BillingEnabled).Returns(false);
-        await Sut().EnsureCanConnectChannelAsync(_clinicId, ChannelType.WhatsApp);
+        await Sut().EnsureCanConnectChannelAsync(_clientId, ChannelType.WhatsApp);
         _integrations.Verify(i => i.CountConnectedExceptAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -233,28 +233,28 @@ public class EntitlementServiceTests
     {
         Subscribe(SubscriptionStatus.Active);
         var sut = Sut();
-        await sut.GetAsync(_clinicId);
-        await sut.GetAsync(_clinicId);
-        _cache.Verify(c => c.GetOrCreateAsync(CacheKeys.Entitlements(_clinicId), It.IsAny<TimeSpan>(), It.IsAny<Func<CancellationToken, Task<SubscriptionSnapshot?>>>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
+        await sut.GetAsync(_clientId);
+        await sut.GetAsync(_clientId);
+        _cache.Verify(c => c.GetOrCreateAsync(CacheKeys.Entitlements(_clientId), It.IsAny<TimeSpan>(), It.IsAny<Func<CancellationToken, Task<SubscriptionSnapshot?>>>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
     }
 }
 
-public class StaffDashboardClinicProfileTests
+public class StaffDashboardClientProfileTests
 {
-    private readonly Guid _clinicId = Guid.NewGuid();
+    private readonly Guid _clientId = Guid.NewGuid();
 
     [Fact]
     public async Task Staff_are_listed_active_first_then_by_name_or_email()
     {
-        var clinics = new Mock<IClinicRepository>();
-        clinics.Setup(c => c.ListStaffAsync(_clinicId, It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(new List<StaffMemberRow>
+        var clients = new Mock<IClientRepository>();
+        clients.Setup(c => c.ListStaffAsync(_clientId, It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(new List<StaffMemberRow>
         {
             new("1", "z@x.com", false, DateTimeOffset.UtcNow, "Alice"),
             new("2", "b@x.com", true, DateTimeOffset.UtcNow, null),
             new("3", "a@x.com", true, DateTimeOffset.UtcNow, "carol"),
             new("4", "d@x.com", true, DateTimeOffset.UtcNow, "Bob")
         });
-        var list = await new StaffService(clinics.Object).ListAsync(_clinicId);
+        var list = await new StaffService(clients.Object).ListAsync(_clientId);
         Assert.Equal(["2", "4", "3", "1"], list.Select(s => s.UserId));
     }
 
@@ -262,40 +262,40 @@ public class StaffDashboardClinicProfileTests
     public async Task Dashboard_summary_and_attention_map_repository_counts()
     {
         var repo = new Mock<IDashboardRepository>();
-        repo.Setup(r => r.GetSummaryCountsAsync(_clinicId, null, null, It.IsAny<CancellationToken>()))
+        repo.Setup(r => r.GetSummaryCountsAsync(_clientId, null, null, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new DashboardSummaryCounts(10, 5, 4, 2, 1500m));
-        repo.Setup(r => r.GetAttentionCountsAsync(_clinicId, It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()))
+        repo.Setup(r => r.GetAttentionCountsAsync(_clientId, It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new DashboardAttentionCounts(3, 2, 1));
         var sut = new DashboardService(repo.Object);
-        var s = await sut.GetSummaryAsync(_clinicId);
+        var s = await sut.GetSummaryAsync(_clientId);
         Assert.Equal((10, 5, 4, 2, 1500m, 0), (s.NewInterestedPeople, s.ConsultationsBooked, s.ConsultationsAttended, s.SurgeriesBooked, s.Revenue, s.OldLeadsRecovered));
-        var a = await sut.GetAttentionAsync(_clinicId);
+        var a = await sut.GetAttentionAsync(_clientId);
         Assert.Equal((3, 2, 1), (a.ConversationsNeedingStaff, a.OverdueFollowups, a.AppointmentsNeedingOutcome));
-        await sut.GetLeadsAsync(_clinicId, "new", "q", "src", 0, 10);
-        await sut.GetAppointmentsAsync(_clinicId, "booked", "q", 0, 10);
-        await sut.GetProcedureStatsAsync(_clinicId);
-        repo.Verify(r => r.ListLeadsAsync(_clinicId, "new", "q", "src", 0, 10, It.IsAny<CancellationToken>()), Times.Once);
-        repo.Verify(r => r.ListAppointmentsAsync(_clinicId, "booked", "q", 0, 10, It.IsAny<CancellationToken>()), Times.Once);
-        repo.Verify(r => r.GetProcedureStatsAsync(_clinicId, null, null, It.IsAny<CancellationToken>()), Times.Once);
+        await sut.GetLeadsAsync(_clientId, "new", "q", "src", 0, 10);
+        await sut.GetAppointmentsAsync(_clientId, "booked", "q", 0, 10);
+        await sut.GetProcedureStatsAsync(_clientId);
+        repo.Verify(r => r.ListLeadsAsync(_clientId, "new", "q", "src", 0, 10, It.IsAny<CancellationToken>()), Times.Once);
+        repo.Verify(r => r.ListAppointmentsAsync(_clientId, "booked", "q", 0, 10, It.IsAny<CancellationToken>()), Times.Once);
+        repo.Verify(r => r.GetProcedureStatsAsync(_clientId, null, null, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
-    public async Task Clinic_profile_update_validates_name_and_copies_details()
+    public async Task Client_profile_update_validates_name_and_copies_details()
     {
-        var clinics = new Mock<IClinicRepository>();
+        var clients = new Mock<IClientRepository>();
         var uow = new Mock<IUnitOfWork>();
-        var clinic = new Clinic { Id = _clinicId, Name = "Old" };
-        clinics.Setup(c => c.GetAsync(_clinicId, It.IsAny<CancellationToken>())).ReturnsAsync(clinic);
-        var sut = new ClinicProfileService(clinics.Object, uow.Object);
+        var client = new Client { Id = _clientId, Name = "Old" };
+        clients.Setup(c => c.GetAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(client);
+        var sut = new ClientProfileService(clients.Object, uow.Object);
 
-        await Assert.ThrowsAsync<ArgumentException>(() => sut.UpdateDetailsAsync(_clinicId, new UpdateClinicDetailsRequest(" ", null, null, null, null, null, null)));
-        await Assert.ThrowsAsync<ArgumentException>(() => sut.UpdateDetailsAsync(_clinicId, new UpdateClinicDetailsRequest(new string('n', 201), null, null, null, null, null, null)));
-        await sut.UpdateDetailsAsync(_clinicId, new UpdateClinicDetailsRequest(" New Name ", "123", "a@b.c", "https://x", "street", "9-5", "info"));
-        Assert.Equal(("New Name", "123", "a@b.c", "https://x", "street", "9-5", "info"), (clinic.Name, clinic.Phone, clinic.Email, clinic.Website, clinic.Address, clinic.OperatingHours, clinic.ConsultationInfo));
+        await Assert.ThrowsAsync<ArgumentException>(() => sut.UpdateDetailsAsync(_clientId, new UpdateClientDetailsRequest(" ", null, null, null, null, null, null)));
+        await Assert.ThrowsAsync<ArgumentException>(() => sut.UpdateDetailsAsync(_clientId, new UpdateClientDetailsRequest(new string('n', 201), null, null, null, null, null, null)));
+        await sut.UpdateDetailsAsync(_clientId, new UpdateClientDetailsRequest(" New Name ", "123", "a@b.c", "https://x", "street", "9-5", "info"));
+        Assert.Equal(("New Name", "123", "a@b.c", "https://x", "street", "9-5", "info"), (client.Name, client.Phone, client.Email, client.Website, client.Address, client.OperatingHours, client.ConsultationInfo));
         uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
 
-        clinics.Setup(c => c.GetAsync(_clinicId, It.IsAny<CancellationToken>())).ReturnsAsync((Clinic?)null);
-        await Assert.ThrowsAsync<ArgumentException>(() => sut.UpdateDetailsAsync(_clinicId, new UpdateClinicDetailsRequest("x", null, null, null, null, null, null)));
+        clients.Setup(c => c.GetAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync((Client?)null);
+        await Assert.ThrowsAsync<ArgumentException>(() => sut.UpdateDetailsAsync(_clientId, new UpdateClientDetailsRequest("x", null, null, null, null, null, null)));
     }
 }
 

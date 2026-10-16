@@ -191,9 +191,9 @@ public class TikTokProviderClientTests
     [Fact]
     public async Task Account_info_parses_the_user_and_surfaces_api_errors()
     {
-        _http.Enqueue(HttpStatusCode.OK, "{\"data\":{\"user\":{\"open_id\":\"o1\",\"union_id\":\"u1\",\"display_name\":\"Clinic\",\"avatar_url\":\"http://img\"}},\"error\":{\"code\":\"ok\"}}");
+        _http.Enqueue(HttpStatusCode.OK, "{\"data\":{\"user\":{\"open_id\":\"o1\",\"union_id\":\"u1\",\"display_name\":\"Client\",\"avatar_url\":\"http://img\"}},\"error\":{\"code\":\"ok\"}}");
         var info = await Sut().GetAccountInfoAsync("tok");
-        Assert.Equal(("o1", "u1", "Clinic", "http://img"), (info.OpenId, info.UnionId, info.DisplayName, info.AvatarUrl));
+        Assert.Equal(("o1", "u1", "Client", "http://img"), (info.OpenId, info.UnionId, info.DisplayName, info.AvatarUrl));
 
         _http.Enqueue(HttpStatusCode.OK, "{\"error\":{\"code\":\"access_token_invalid\",\"message\":\"expired\"}}");
         Assert.Contains("expired", (await Assert.ThrowsAsync<InvalidOperationException>(() => Sut().GetAccountInfoAsync("tok"))).Message);
@@ -226,7 +226,7 @@ public class N8nNotifierTests
 
     private void AiAllowed(bool allowed) =>
         _entitlements.Setup(e => e.GetAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(allowed ? ClinicEntitlements.Unrestricted : new ClinicEntitlements(true, true, "active", "basic", "Basic", null, new Dictionary<string, string>()));
+            .ReturnsAsync(allowed ? ClientEntitlements.Unrestricted : new ClientEntitlements(true, true, "active", "basic", "Basic", null, new Dictionary<string, string>()));
 
     [Fact]
     public async Task Ai_trigger_posts_camel_case_json_when_the_plan_allows_the_ai()

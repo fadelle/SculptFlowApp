@@ -5,9 +5,9 @@
     ViewData["SignalRFirst"] = true; // the layout loads the SignalR client before this page's scripts
 }
 
-@if (!Model.ClinicConfigured)
+@if (!Model.ClientConfigured)
 {
-    <partial name="_NoClinic" />
+    <partial name="_NoClient" />
 }
 else
 {
@@ -25,7 +25,7 @@ else
             <button type="button" class="au-btn au-btn--outlined au-btn--sm" id="cal-today">Today</button>
         </div>
         <div class="cal-header__actions">
-            <partial name="_TimeViewSwitch" model="Model.ClinicTimezone" />
+            <partial name="_TimeViewSwitch" model="Model.ClientTimezone" />
             <button type="button" class="au-btn au-btn--primary" id="cal-new"><span class="au-icon" aria-hidden="true">add</span>New appointment</button>
         </div>
     </div>

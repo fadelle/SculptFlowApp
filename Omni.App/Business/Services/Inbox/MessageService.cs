@@ -75,9 +75,9 @@ public class MessageService : IMessageService
     private async Task<MessageBillingHold?> PrepareBillingAsync(Conversation conversation, Guid messageId, OutboundMessageKind kind,
         string? templateCategory, Guid? campaignId, CancellationToken ct)
     {
-        await _entitlements.EnsureCanSendMessagesAsync(conversation.ClinicId, ct);
+        await _entitlements.EnsureCanSendMessagesAsync(conversation.ClientId, ct);
         return await _billing.ReserveOutboundAsync(new OutboundMessageBillingContext(
-            conversation.ClinicId, conversation.Channel, messageId, conversation.Id, campaignId, kind, templateCategory,
+            conversation.ClientId, conversation.Channel, messageId, conversation.Id, campaignId, kind, templateCategory,
             conversation.IsServiceWindowOpen(DateTimeOffset.UtcNow), conversation.Lead?.Phone), ct);
     }
 
@@ -116,7 +116,7 @@ public class MessageService : IMessageService
     }
 
     private static TraceIds Ids(Conversation conversation, Guid? messageId = null, string? externalMessageId = null) =>
-        new(conversation.ClinicId, conversation.Id, messageId, conversation.Channel, externalMessageId);
+        new(conversation.ClientId, conversation.Id, messageId, conversation.Channel, externalMessageId);
 
     /// <summary>Picks the outbound adapter for a conversation's channel (WhatsApp, Telegram, ...).</summary>
     private IChannelSender ResolveSender(string channel) =>
@@ -124,14 +124,14 @@ public class MessageService : IMessageService
         ?? throw new InvalidOperationException(
             $"Sending is only implemented for WhatsApp and Telegram conversations right now (this one is '{channel}').");
 
-    public async Task<MessageResponse?> SendAsync(Guid clinicId, Guid conversationId, SendMessageRequest request, CancellationToken ct = default)
+    public async Task<MessageResponse?> SendAsync(Guid clientId, Guid conversationId, SendMessageRequest request, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(request.Content))
         {
             throw new ArgumentException("Content is required.", nameof(request));
         }
 
-        var conversation = await _conversations.GetWithLeadAsync(clinicId, conversationId, ct);
+        var conversation = await _conversations.GetWithLeadAsync(clientId, conversationId, ct);
         if (conversation is null) return null;
 
         var messageId = Guid.NewGuid();
@@ -151,7 +151,7 @@ public class MessageService : IMessageService
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             await _billing.SendFailedAsync(billingHold, ct);
-            await NotifyOutboundFailureAsync(clinicId, conversation, ct);
+            await NotifyOutboundFailureAsync(clientId, conversation, ct);
             throw;
         }
 
@@ -159,7 +159,7 @@ public class MessageService : IMessageService
         var message = new Message
         {
             Id = messageId,
-            ClinicId = clinicId,
+            ClientId = clientId,
             ConversationId = conversationId,
             LeadId = conversation.LeadId,
             Direction = MessageDirection.Outbound,
@@ -191,30 +191,30 @@ public class MessageService : IMessageService
         }
 
         // Don't log message content into event metadata — just that a send happened and by whom.
-        _events.Log(clinicId, EventTypes.StaffMessageSentDashboard,
+        _events.Log(clientId, EventTypes.StaffMessageSentDashboard,
             leadId: conversation.LeadId, conversationId: conversationId, source: MessageOrigin.Dashboard);
 
         await _unitOfWork.SaveChangesAsync(ct);
         await _billing.SentAsync(billingHold, ct);
 
-        await _notifier.NewMessageAsync(clinicId, conversationId, message.Id, conversation.LeadId,
+        await _notifier.NewMessageAsync(clientId, conversationId, message.Id, conversation.LeadId,
             MessageDirection.Outbound, MessageSenderType.Staff, MessageOrigin.Dashboard, now, ct);
         if (modeChanged)
         {
-            await _notifier.ConversationModeChangedAsync(clinicId, conversationId, ConversationMode.Human, ct);
+            await _notifier.ConversationModeChangedAsync(clientId, conversationId, ConversationMode.Human, ct);
         }
 
         return InboxMapper.ToResponse(message);
     }
 
-    public async Task<MessageResponse?> SendAiReplyAsync(Guid clinicId, Guid conversationId, string content, CancellationToken ct = default)
+    public async Task<MessageResponse?> SendAiReplyAsync(Guid clientId, Guid conversationId, string content, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(content))
         {
             throw new ArgumentException("Content is required.", nameof(content));
         }
 
-        var conversation = await _conversations.GetWithLeadAsync(clinicId, conversationId, ct);
+        var conversation = await _conversations.GetWithLeadAsync(clientId, conversationId, ct);
         if (conversation is null) return null;
 
         // The mandatory re-check: a human may have taken over between the webhook that triggered
@@ -246,7 +246,7 @@ public class MessageService : IMessageService
         var message = new Message
         {
             Id = messageId,
-            ClinicId = clinicId,
+            ClientId = clientId,
             ConversationId = conversationId,
             LeadId = conversation.LeadId,
             Direction = MessageDirection.Outbound,
@@ -275,36 +275,36 @@ public class MessageService : IMessageService
             conversation.Lead.UpdatedAt = now;
         }
 
-        _events.Log(clinicId, EventTypes.AiMessageSent,
+        _events.Log(clientId, EventTypes.AiMessageSent,
             leadId: conversation.LeadId, conversationId: conversationId, source: MessageOrigin.Ai);
 
         await _unitOfWork.SaveChangesAsync(ct);
         await _billing.SentAsync(billingHold, ct);
 
-        await _notifier.NewMessageAsync(clinicId, conversationId, message.Id, conversation.LeadId,
+        await _notifier.NewMessageAsync(clientId, conversationId, message.Id, conversation.LeadId,
             MessageDirection.Outbound, MessageSenderType.Ai, MessageOrigin.Ai, now, ct);
 
         return InboxMapper.ToResponse(message);
     }
 
-    public Task<MessageResponse?> SendTemplateAsync(Guid clinicId, Guid conversationId, SendTemplateMessageRequest request, CancellationToken ct = default) =>
-        SendTemplateCoreAsync(clinicId, conversationId, request.WhatsAppTemplateId, request.BodyParameters ?? Array.Empty<string>(),
+    public Task<MessageResponse?> SendTemplateAsync(Guid clientId, Guid conversationId, SendTemplateMessageRequest request, CancellationToken ct = default) =>
+        SendTemplateCoreAsync(clientId, conversationId, request.WhatsAppTemplateId, request.BodyParameters ?? Array.Empty<string>(),
             MessageOrigin.Dashboard, campaignId: null, campaignRecipientId: null, ct);
 
     /// <summary>Campaign-origin variant of SendTemplateAsync — same WhatsApp send + Message-row logic,
     /// but stamps Origin.Campaign and links CampaignId/CampaignRecipientId instead of acting as a
     /// plain staff Inbox send. Used exclusively by CampaignService.ProcessRecipientAsync.</summary>
     public Task<MessageResponse?> SendCampaignTemplateAsync(
-        Guid clinicId, Guid conversationId, Guid whatsAppTemplateId, IReadOnlyList<string> bodyParameters,
+        Guid clientId, Guid conversationId, Guid whatsAppTemplateId, IReadOnlyList<string> bodyParameters,
         Guid campaignId, Guid campaignRecipientId, CancellationToken ct = default) =>
-        SendTemplateCoreAsync(clinicId, conversationId, whatsAppTemplateId, bodyParameters,
+        SendTemplateCoreAsync(clientId, conversationId, whatsAppTemplateId, bodyParameters,
             MessageOrigin.Campaign, campaignId, campaignRecipientId, ct);
 
     private async Task<MessageResponse?> SendTemplateCoreAsync(
-        Guid clinicId, Guid conversationId, Guid whatsAppTemplateId, IReadOnlyList<string> bodyParameters,
+        Guid clientId, Guid conversationId, Guid whatsAppTemplateId, IReadOnlyList<string> bodyParameters,
         string origin, Guid? campaignId, Guid? campaignRecipientId, CancellationToken ct)
     {
-        var conversation = await _conversations.GetWithLeadAsync(clinicId, conversationId, ct);
+        var conversation = await _conversations.GetWithLeadAsync(clientId, conversationId, ct);
         if (conversation is null) return null;
 
         if (conversation.Channel != ConversationChannel.WhatsApp)
@@ -313,10 +313,10 @@ public class MessageService : IMessageService
                 $"Templates are WhatsApp-only — this conversation is on '{conversation.Channel}'.");
         }
 
-        var template = await _templates.GetReadOnlyAsync(clinicId, whatsAppTemplateId, ct);
+        var template = await _templates.GetReadOnlyAsync(clientId, whatsAppTemplateId, ct);
         if (template is null)
         {
-            throw new ArgumentException("Template not found for this clinic.", nameof(whatsAppTemplateId));
+            throw new ArgumentException("Template not found for this client.", nameof(whatsAppTemplateId));
         }
         if (template.Status != WhatsAppTemplateStatus.Approved)
         {
@@ -338,12 +338,12 @@ public class MessageService : IMessageService
         try
         {
             externalMessageId = await SendTracedAsync(conversation, messageId, () => _whatsApp.SendTemplateMessageAsync(
-                clinicId, toPhone, template.Name, template.Language, bodyParameters, ct));
+                clientId, toPhone, template.Name, template.Language, bodyParameters, ct));
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             await _billing.SendFailedAsync(billingHold, ct);
-            await NotifyOutboundFailureAsync(clinicId, conversation, ct);
+            await NotifyOutboundFailureAsync(clientId, conversation, ct);
             throw;
         }
 
@@ -351,7 +351,7 @@ public class MessageService : IMessageService
         var message = new Message
         {
             Id = messageId,
-            ClinicId = clinicId,
+            ClientId = clientId,
             ConversationId = conversationId,
             LeadId = conversation.LeadId,
             Direction = MessageDirection.Outbound,
@@ -387,16 +387,16 @@ public class MessageService : IMessageService
         }
 
         var eventType = origin == MessageOrigin.Campaign ? EventTypes.CampaignMessageSent : EventTypes.StaffMessageSentDashboard;
-        _events.Log(clinicId, eventType, leadId: conversation.LeadId, conversationId: conversationId, source: origin);
+        _events.Log(clientId, eventType, leadId: conversation.LeadId, conversationId: conversationId, source: origin);
 
         await _unitOfWork.SaveChangesAsync(ct);
         await _billing.SentAsync(billingHold, ct);
 
-        await _notifier.NewMessageAsync(clinicId, conversationId, message.Id, conversation.LeadId,
+        await _notifier.NewMessageAsync(clientId, conversationId, message.Id, conversation.LeadId,
             MessageDirection.Outbound, MessageSenderType.Staff, origin, now, ct);
         if (modeChanged)
         {
-            await _notifier.ConversationModeChangedAsync(clinicId, conversationId, ConversationMode.Human, ct);
+            await _notifier.ConversationModeChangedAsync(clientId, conversationId, ConversationMode.Human, ct);
         }
 
         return InboxMapper.ToResponse(message);
@@ -426,21 +426,21 @@ public class MessageService : IMessageService
             return await HandleStatusUpdateAsync(request, ct);
         }
 
-        var conversation = await _conversations.GetAsync(request.ClinicId, request.ConversationId, ct);
+        var conversation = await _conversations.GetAsync(request.ClientId, request.ConversationId, ct);
         if (conversation is null)
         {
             return new IngestMessageResult(Found: false, Deduplicated: false, null);
         }
 
         // Idempotency: Meta/n8n webhook deliveries can retry. If we've already recorded this exact
-        // external message for this clinic+channel, hand back the existing row instead of a duplicate.
+        // external message for this client+channel, hand back the existing row instead of a duplicate.
         if (!string.IsNullOrWhiteSpace(request.ExternalMessageId))
         {
-            var existing = await _messages.FindByExternalIdAsync(request.ClinicId, request.Channel, request.ExternalMessageId, ct);
+            var existing = await _messages.FindByExternalIdAsync(request.ClientId, request.Channel, request.ExternalMessageId, ct);
             if (existing is not null)
             {
                 _tracer.Step(TraceSteps.MessageDeduplicated, TraceOutcomes.Skipped,
-                    new TraceIds(request.ClinicId, request.ConversationId, existing.Id, request.Channel, request.ExternalMessageId),
+                    new TraceIds(request.ClientId, request.ConversationId, existing.Id, request.Channel, request.ExternalMessageId),
                     detail: new { eventType = request.EventType });
                 return new IngestMessageResult(Found: true, Deduplicated: true, InboxMapper.ToResponse(existing),
                     conversation.Mode, AiEligible: false);
@@ -470,7 +470,7 @@ public class MessageService : IMessageService
         var message = new Message
         {
             Id = Guid.NewGuid(),
-            ClinicId = request.ClinicId,
+            ClientId = request.ClientId,
             ConversationId = request.ConversationId,
             LeadId = request.LeadId,
             Direction = direction,
@@ -522,16 +522,16 @@ public class MessageService : IMessageService
         }
         else if (request.EventType == IngestEventType.CustomerMessage && conversation.Mode == ConversationMode.Ai)
         {
-            // The bot can't answer when the plan no longer includes the AI agent, and the clinic may send conversations a
+            // The bot can't answer when the plan no longer includes the AI agent, and the client may send conversations a
             // patient reopens straight to staff. Either way the conversation goes to human mode (same state as a handoff),
             // so it lands in staff's needs-attention list and n8n is never called (see aiEligible below).
-            var inboxSettings = await _inboxSettings.GetAsync(request.ClinicId, ct);
+            var inboxSettings = await _inboxSettings.GetAsync(request.ClientId, ct);
             if (!inboxSettings.PlanIncludesAiBot || (reopened && !inboxSettings.AiBotAnswersReopened))
             {
                 ConversationModeSync.Apply(conversation, ConversationMode.Human, now);
                 modeChanged = true;
                 modeReason = inboxSettings.PlanIncludesAiBot ? "reopened_to_staff" : "plan_without_ai_agent";
-                _events.Log(request.ClinicId, EventTypes.HumanHandoff, leadId: request.LeadId,
+                _events.Log(request.ClientId, EventTypes.HumanHandoff, leadId: request.LeadId,
                     conversationId: request.ConversationId, source: MessageOrigin.System,
                     metadataJson: inboxSettings.PlanIncludesAiBot ? "{\"reason\":\"reopened_to_staff\"}" : "{\"reason\":\"plan_without_ai_agent\"}");
             }
@@ -551,7 +551,7 @@ public class MessageService : IMessageService
         CampaignRecipient? repliedCampaignRecipient = null;
         if (request.EventType == IngestEventType.CustomerMessage)
         {
-            repliedCampaignRecipient = await _campaigns.FindLatestAwaitingReplyAsync(request.ClinicId, request.LeadId, ct);
+            repliedCampaignRecipient = await _campaigns.FindLatestAwaitingReplyAsync(request.ClientId, request.LeadId, ct);
             if (repliedCampaignRecipient is not null)
             {
                 repliedCampaignRecipient.RepliedAt = now;
@@ -559,38 +559,38 @@ public class MessageService : IMessageService
             }
         }
 
-        _events.Log(request.ClinicId, eventType,
+        _events.Log(request.ClientId, eventType,
             leadId: request.LeadId, conversationId: request.ConversationId, source: origin);
         if (reopened)
         {
-            _events.Log(request.ClinicId, EventTypes.ConversationReopened,
+            _events.Log(request.ClientId, EventTypes.ConversationReopened,
                 leadId: request.LeadId, conversationId: request.ConversationId, source: origin);
         }
 
         await _unitOfWork.SaveChangesAsync(ct);
 
-        var ids = new TraceIds(request.ClinicId, request.ConversationId, message.Id, request.Channel, request.ExternalMessageId);
+        var ids = new TraceIds(request.ClientId, request.ConversationId, message.Id, request.Channel, request.ExternalMessageId);
         _tracer.Step(TraceSteps.MessageSaved, TraceOutcomes.Ok, ids,
             detail: new { eventType = request.EventType, direction, sender = senderType, type = message.MessageType });
         if (reopened) _tracer.Step(TraceSteps.ConversationReopened, TraceOutcomes.Ok, ids);
         if (modeChanged) _tracer.Step(TraceSteps.ConversationModeChanged, TraceOutcomes.Ok, ids, detail: new { mode = ConversationMode.Human, reason = modeReason });
 
-        await _notifier.NewMessageAsync(request.ClinicId, request.ConversationId, message.Id, request.LeadId,
+        await _notifier.NewMessageAsync(request.ClientId, request.ConversationId, message.Id, request.LeadId,
             direction, senderType, origin, now, ct);
         _tracer.Step(TraceSteps.InboxNotified, TraceOutcomes.Ok, ids);
         if (modeChanged)
         {
-            await _notifier.ConversationModeChangedAsync(request.ClinicId, request.ConversationId, ConversationMode.Human, ct);
+            await _notifier.ConversationModeChangedAsync(request.ClientId, request.ConversationId, ConversationMode.Human, ct);
         }
         if (reopened)
         {
             // Other open Inboxes move the conversation out of the Closed tab right away.
-            await _notifier.ConversationUpdatedAsync(request.ClinicId, request.ConversationId, ct);
+            await _notifier.ConversationUpdatedAsync(request.ClientId, request.ConversationId, ct);
         }
 
         if (request.LeadWasNewlyCreated)
         {
-            await _notifications.CreateAsync(request.ClinicId, NotificationType.NewLead,
+            await _notifications.CreateAsync(request.ClientId, NotificationType.NewLead,
                 "New lead",
                 (string.IsNullOrWhiteSpace(lead?.FullName) ? "A new patient" : lead!.FullName) + " sent their first message.",
                 leadId: request.LeadId, conversationId: request.ConversationId,
@@ -600,7 +600,7 @@ public class MessageService : IMessageService
         if (repliedCampaignRecipient is not null)
         {
             var campaignName = repliedCampaignRecipient.Campaign?.Name;
-            await _notifications.CreateAsync(request.ClinicId, NotificationType.CampaignReply,
+            await _notifications.CreateAsync(request.ClientId, NotificationType.CampaignReply,
                 "Campaign reply",
                 (string.IsNullOrWhiteSpace(lead?.FullName) ? "A patient" : lead!.FullName) +
                 " replied" + (string.IsNullOrWhiteSpace(campaignName) ? "." : $" to \"{campaignName}\"."),
@@ -639,7 +639,7 @@ public class MessageService : IMessageService
             throw new ArgumentException("ExternalMessageId is required for a status_update.", nameof(request));
         }
 
-        var message = await _messages.FindByExternalIdAsync(request.ClinicId, request.Channel, request.ExternalMessageId, ct);
+        var message = await _messages.FindByExternalIdAsync(request.ClientId, request.Channel, request.ExternalMessageId, ct);
         if (message is null)
         {
             return new IngestMessageResult(Found: false, Deduplicated: false, null);
@@ -709,13 +709,13 @@ public class MessageService : IMessageService
         if (!isLateStep)
         {
             await _notifier.MessageStatusUpdatedAsync(
-                request.ClinicId, message.ConversationId, message.Id, request.DeliveryStatus ?? "unknown", occurredAt, ct);
+                request.ClientId, message.ConversationId, message.Id, request.DeliveryStatus ?? "unknown", occurredAt, ct);
         }
 
         if (justFailed)
         {
             var leadName = await _leads.GetFullNameAsync(message.LeadId, ct);
-            await _notifications.CreateAsync(request.ClinicId, NotificationType.OutboundMessageFailed,
+            await _notifications.CreateAsync(request.ClientId, NotificationType.OutboundMessageFailed,
                 "Message failed to send",
                 string.IsNullOrWhiteSpace(leadName) ? "A message failed to send to a patient." : $"Message failed to send to {leadName}.",
                 leadId: message.LeadId, conversationId: message.ConversationId,
@@ -765,10 +765,10 @@ public class MessageService : IMessageService
     /// <summary>OUTBOUND_MESSAGE_FAILED for a send that failed synchronously (IChannelSender/IWhatsAppService threw
     /// before any Message row existed). The exception's own message is never surfaced here — staff see an
     /// operational sentence, not a raw technical error (Application logs still have the real exception).</summary>
-    private Task NotifyOutboundFailureAsync(Guid clinicId, Conversation conversation, CancellationToken ct)
+    private Task NotifyOutboundFailureAsync(Guid clientId, Conversation conversation, CancellationToken ct)
     {
         var who = conversation.Lead?.FullName;
-        return _notifications.CreateAsync(clinicId, NotificationType.OutboundMessageFailed,
+        return _notifications.CreateAsync(clientId, NotificationType.OutboundMessageFailed,
             "Message failed to send",
             string.IsNullOrWhiteSpace(who) ? "A message failed to send to a patient." : $"Message failed to send to {who}.",
             leadId: conversation.LeadId, conversationId: conversation.Id,

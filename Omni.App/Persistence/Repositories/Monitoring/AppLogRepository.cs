@@ -47,14 +47,14 @@ public class AppLogRepository : IAppLogRepository
         var latestIds = top.Select(g => g.LatestId).ToList();
         var latest = await _db.AppLogs.AsNoTracking()
             .Where(l => latestIds.Contains(l.Id))
-            .Select(l => new { l.Id, l.Level, l.Category, l.MessageTemplate, l.Message, l.ExceptionType, l.ClinicId })
+            .Select(l => new { l.Id, l.Level, l.Category, l.MessageTemplate, l.Message, l.ExceptionType, l.ClientId })
             .ToDictionaryAsync(l => l.Id, ct);
 
         var rows = top.Where(g => latest.ContainsKey(g.LatestId)).Select(g =>
         {
             var row = latest[g.LatestId];
             return new AppLogGroupRow(g.Fingerprint, row.Level, row.Category, row.MessageTemplate, row.Message, row.ExceptionType,
-                g.Occurrences, g.FirstSeenAt, g.LastSeenAt, g.LatestId, row.ClinicId);
+                g.Occurrences, g.FirstSeenAt, g.LastSeenAt, g.LatestId, row.ClientId);
         }).ToList();
         return (rows, groupCount, totalOccurrences);
     }
@@ -67,7 +67,7 @@ public class AppLogRepository : IAppLogRepository
             .OrderByDescending(l => l.OccurredAt).ThenByDescending(l => l.Id)
             .Skip(skip).Take(take)
             .Select(l => new AppLogRow(l.Id, l.OccurredAt, l.Level, l.Category, l.Message, l.ExceptionType, l.Fingerprint,
-                l.RepeatCount, l.TraceId, l.ClinicId, l.ConversationId, l.MessageId, l.Method, l.Route))
+                l.RepeatCount, l.TraceId, l.ClientId, l.ConversationId, l.MessageId, l.Method, l.Route))
             .ToListAsync(ct);
         return (rows, total);
     }
@@ -86,7 +86,7 @@ public class AppLogRepository : IAppLogRepository
     {
         var levels = filter.Levels.ToList();
         var query = _db.AppLogs.AsNoTracking().Where(l => l.OccurredAt >= filter.From && levels.Contains(l.Level));
-        if (filter.ClinicId is { } clinicId) query = query.Where(l => l.ClinicId == clinicId);
+        if (filter.ClientId is { } clientId) query = query.Where(l => l.ClientId == clientId);
         if (!string.IsNullOrWhiteSpace(filter.Fingerprint)) query = query.Where(l => l.Fingerprint == filter.Fingerprint);
         if (!string.IsNullOrWhiteSpace(filter.TraceId)) query = query.Where(l => l.TraceId == filter.TraceId);
         if (!string.IsNullOrWhiteSpace(filter.Search))

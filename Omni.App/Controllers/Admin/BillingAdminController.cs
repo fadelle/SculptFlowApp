@@ -11,8 +11,8 @@ using Omni.App.Entities.Requests.Billing;
 namespace Omni.App.Controllers.Admin;
 
 /// <summary>
-/// Platform-admin billing API (internal; Omni staff, never clinics): plans and entitlements, rate cards and
-/// rate versions, clinic subscriptions, wallet top-ups/adjustments, refunds, usage and ledger history,
+/// Platform-admin billing API (internal; Omni staff, never clients): plans and entitlements, rate cards and
+/// rate versions, client subscriptions, wallet top-ups/adjustments, refunds, usage and ledger history,
 /// reconciliation, price quotes, a revenue report, and per connected channel account who pays the provider. Protected by X-Platform-Admin-Key (RequirePlatformAdminKey); called by the Omni.Admin portal.
 /// Money-moving POSTs (top-up, adjustment, start/change plan) require an Idempotency-Key header, so a retried
 /// request never applies twice; X-Admin-Actor names the admin in the ledger.
@@ -81,7 +81,7 @@ public class BillingAdminController : ControllerBase
     [HttpGet("rate-cards")]
     public async Task<IActionResult> ListRateCards(CancellationToken ct) => Ok(await _rateCards.ListAsync(ct));
 
-    /// <summary>ClinicId set = that clinic's custom-pricing card (checked before its plan's card and the default).</summary>
+    /// <summary>ClientId set = that client's custom-pricing card (checked before its plan's card and the default).</summary>
     [HttpPost("rate-cards")]
     public async Task<IActionResult> CreateRateCard([FromBody] RateCardRequest request, CancellationToken ct) =>
         Ok(await _rateCards.CreateAsync(request, ct));
@@ -103,69 +103,69 @@ public class BillingAdminController : ControllerBase
     public async Task<IActionResult> CloseRate(Guid id, [FromBody] CloseRateRequest? request, CancellationToken ct) =>
         await _rateCards.CloseRateAsync(id, request?.EffectiveTo, ct) is { } rate ? Ok(rate) : NotFound();
 
-    // ---- clinics: subscription, wallet, history ---------------------------------------------------------------
+    // ---- clients: subscription, wallet, history ---------------------------------------------------------------
 
     [HttpGet("accounts")]
     public async Task<IActionResult> ListAccounts(CancellationToken ct) => Ok(await _queries.ListAccountsAsync(ct));
 
-    [HttpGet("clinics/{clinicId:guid}")]
-    public async Task<IActionResult> GetClinic(Guid clinicId, CancellationToken ct) =>
-        await _queries.GetAdminOverviewAsync(clinicId, ct) is { } overview ? Ok(overview) : NotFound();
+    [HttpGet("clients/{clientId:guid}")]
+    public async Task<IActionResult> GetClient(Guid clientId, CancellationToken ct) =>
+        await _queries.GetAdminOverviewAsync(clientId, ct) is { } overview ? Ok(overview) : NotFound();
 
     /// <summary>Starts a plan or switches to another one (new period from now). Requires Idempotency-Key.</summary>
-    [HttpPost("clinics/{clinicId:guid}/subscription")]
-    public async Task<IActionResult> StartSubscription(Guid clinicId, [FromBody] StartSubscriptionApiRequest request, CancellationToken ct)
+    [HttpPost("clients/{clientId:guid}/subscription")]
+    public async Task<IActionResult> StartSubscription(Guid clientId, [FromBody] StartSubscriptionApiRequest request, CancellationToken ct)
     {
         if (IdempotencyKey is not { } key) return MissingIdempotencyKey();
         var subscription = await _subscriptions.StartAsync(new StartSubscriptionRequest(
-            clinicId, request.PlanCode, key, request.ChargeFirstPeriod, BillingSource.Admin, Actor, request.Reason), ct);
+            clientId, request.PlanCode, key, request.ChargeFirstPeriod, BillingSource.Admin, Actor, request.Reason), ct);
         return Ok(BillingQueryService.ToSubscription(subscription));
     }
 
-    [HttpPost("clinics/{clinicId:guid}/subscription/cancel")]
-    public async Task<IActionResult> CancelSubscription(Guid clinicId, [FromBody] CancelSubscriptionRequest request, CancellationToken ct) =>
-        await _subscriptions.CancelAsync(clinicId, request.Immediately, BillingSource.Admin, Actor, request.Reason, ct) is { } s
+    [HttpPost("clients/{clientId:guid}/subscription/cancel")]
+    public async Task<IActionResult> CancelSubscription(Guid clientId, [FromBody] CancelSubscriptionRequest request, CancellationToken ct) =>
+        await _subscriptions.CancelAsync(clientId, request.Immediately, BillingSource.Admin, Actor, request.Reason, ct) is { } s
             ? Ok(BillingQueryService.ToSubscription(s)) : NotFound();
 
-    [HttpPost("clinics/{clinicId:guid}/subscription/resume")]
-    public async Task<IActionResult> ResumeSubscription(Guid clinicId, CancellationToken ct) =>
-        await _subscriptions.ResumeAsync(clinicId, BillingSource.Admin, Actor, ct) is { } s
+    [HttpPost("clients/{clientId:guid}/subscription/resume")]
+    public async Task<IActionResult> ResumeSubscription(Guid clientId, CancellationToken ct) =>
+        await _subscriptions.ResumeAsync(clientId, BillingSource.Admin, Actor, ct) is { } s
             ? Ok(BillingQueryService.ToSubscription(s)) : NotFound();
 
-    /// <summary>Runs the renewal check now (e.g. right after a top-up for a past-due clinic) instead of waiting for the worker.</summary>
-    [HttpPost("clinics/{clinicId:guid}/subscription/renew")]
-    public async Task<IActionResult> Renew(Guid clinicId, CancellationToken ct) =>
-        Ok(new { outcome = (await _subscriptions.RenewIfDueAsync(clinicId, ct)).ToString() });
+    /// <summary>Runs the renewal check now (e.g. right after a top-up for a past-due client) instead of waiting for the worker.</summary>
+    [HttpPost("clients/{clientId:guid}/subscription/renew")]
+    public async Task<IActionResult> Renew(Guid clientId, CancellationToken ct) =>
+        Ok(new { outcome = (await _subscriptions.RenewIfDueAsync(clientId, ct)).ToString() });
 
     /// <summary>Adds money to the wallet (a payment received outside the app). Requires Idempotency-Key.</summary>
-    [HttpPost("clinics/{clinicId:guid}/wallet/top-ups")]
-    public async Task<IActionResult> TopUp(Guid clinicId, [FromBody] TopUpRequest request, CancellationToken ct)
+    [HttpPost("clients/{clientId:guid}/wallet/top-ups")]
+    public async Task<IActionResult> TopUp(Guid clientId, [FromBody] TopUpRequest request, CancellationToken ct)
     {
         if (IdempotencyKey is not { } key) return MissingIdempotencyKey();
-        return Ok(await _billing.TopUpAsync(new WalletTopUp(clinicId, request.Amount, key, request.Reference, request.Reason,
+        return Ok(await _billing.TopUpAsync(new WalletTopUp(clientId, request.Amount, key, request.Reference, request.Reason,
             BillingSource.Admin, Actor), ct));
     }
 
     /// <summary>Manual correction of the wallet or included credit (signed amount, reason required). Requires Idempotency-Key.</summary>
-    [HttpPost("clinics/{clinicId:guid}/wallet/adjustments")]
-    public async Task<IActionResult> Adjust(Guid clinicId, [FromBody] AdjustmentRequest request, CancellationToken ct)
+    [HttpPost("clients/{clientId:guid}/wallet/adjustments")]
+    public async Task<IActionResult> Adjust(Guid clientId, [FromBody] AdjustmentRequest request, CancellationToken ct)
     {
         if (IdempotencyKey is not { } key) return MissingIdempotencyKey();
-        return Ok(await _billing.AdjustAsync(new WalletAdjustment(clinicId, request.Amount, (request.BalanceType ?? string.Empty).Trim().ToLowerInvariant(),
+        return Ok(await _billing.AdjustAsync(new WalletAdjustment(clientId, request.Amount, (request.BalanceType ?? string.Empty).Trim().ToLowerInvariant(),
             request.Reason, key, BillingSource.Admin, Actor), ct));
     }
 
-    [HttpGet("clinics/{clinicId:guid}/usage")]
-    public async Task<IActionResult> Usage(Guid clinicId, [FromQuery] string? status, [FromQuery] string? eventType,
+    [HttpGet("clients/{clientId:guid}/usage")]
+    public async Task<IActionResult> Usage(Guid clientId, [FromQuery] string? status, [FromQuery] string? eventType,
         [FromQuery] DateTimeOffset? from, [FromQuery] DateTimeOffset? to, [FromQuery] int page = 1, [FromQuery] int pageSize = 50,
         CancellationToken ct = default) =>
-        Ok(await _queries.ListAdminUsageAsync(clinicId, status, eventType, from, to, page, pageSize, ct));
+        Ok(await _queries.ListAdminUsageAsync(clientId, status, eventType, from, to, page, pageSize, ct));
 
     /// <summary>Refunds one settled usage in full, back to where it was paid from. Once only; reason required.</summary>
-    [HttpPost("clinics/{clinicId:guid}/usage/{usageId:guid}/refund")]
-    public async Task<IActionResult> Refund(Guid clinicId, Guid usageId, [FromBody] RefundRequest request, CancellationToken ct)
+    [HttpPost("clients/{clientId:guid}/usage/{usageId:guid}/refund")]
+    public async Task<IActionResult> Refund(Guid clientId, Guid usageId, [FromBody] RefundRequest request, CancellationToken ct)
     {
-        var result = await _billing.RefundAsync(clinicId, usageId, request.Reason, BillingSource.Admin, Actor, ct);
+        var result = await _billing.RefundAsync(clientId, usageId, request.Reason, BillingSource.Admin, Actor, ct);
         return result.Outcome switch
         {
             UsageOutcome.NotFound => NotFound(),
@@ -174,22 +174,22 @@ public class BillingAdminController : ControllerBase
         };
     }
 
-    [HttpGet("clinics/{clinicId:guid}/ledger")]
-    public async Task<IActionResult> Ledger(Guid clinicId, [FromQuery] int page = 1, [FromQuery] int pageSize = 50, CancellationToken ct = default) =>
-        Ok(await _queries.ListAdminLedgerAsync(clinicId, page, pageSize, ct));
+    [HttpGet("clients/{clientId:guid}/ledger")]
+    public async Task<IActionResult> Ledger(Guid clientId, [FromQuery] int page = 1, [FromQuery] int pageSize = 50, CancellationToken ct = default) =>
+        Ok(await _queries.ListAdminLedgerAsync(clientId, page, pageSize, ct));
 
     /// <summary>Do the cached balances equal the ledger sums, and the reserved amount the open reservations?</summary>
-    [HttpGet("clinics/{clinicId:guid}/reconciliation")]
-    public async Task<IActionResult> Reconcile(Guid clinicId, CancellationToken ct) => Ok(await _queries.ReconcileAsync(clinicId, ct));
+    [HttpGet("clients/{clientId:guid}/reconciliation")]
+    public async Task<IActionResult> Reconcile(Guid clientId, CancellationToken ct) => Ok(await _queries.ReconcileAsync(clientId, ct));
 
-    /// <summary>What Omni would charge this clinic for a billable event right now (which card and rate would price
+    /// <summary>What Omni would charge this client for a billable event right now (which card and rate would price
     /// it). providerBilling: the account arrangement to price for (default: Omni pays the provider).</summary>
-    [HttpGet("clinics/{clinicId:guid}/quote")]
-    public async Task<IActionResult> Quote(Guid clinicId, [FromQuery] string eventType, [FromQuery] string? country, [FromQuery] string? @operator,
+    [HttpGet("clients/{clientId:guid}/quote")]
+    public async Task<IActionResult> Quote(Guid clientId, [FromQuery] string eventType, [FromQuery] string? country, [FromQuery] string? @operator,
         [FromQuery] string? provider, [FromQuery] DateTimeOffset? at, [FromQuery] string? providerBilling, CancellationToken ct) =>
-        await _queries.QuoteAsync(clinicId, eventType, country, @operator, provider, at, providerBilling, ct) is { } quote
+        await _queries.QuoteAsync(clientId, eventType, country, @operator, provider, at, providerBilling, ct) is { } quote
             ? Ok(quote)
-            : NotFound(new { error = "No rate card prices this event for this clinic." });
+            : NotFound(new { error = "No rate card prices this event for this client." });
 
     // ---- provider billing (who pays the upstream provider, per connected channel account) ---------------------
 
@@ -208,10 +208,10 @@ public class BillingAdminController : ControllerBase
             .Select(p => new { channel = p[0], provider = p.Length > 1 ? p[1] : null, providerBilling = _providerBilling.DefaultFor(p[0], p.Length > 1 ? p[1] : null) })
     });
 
-    /// <summary>The clinic's connected channel accounts with who pays the provider and whether Omni charges usage.</summary>
-    [HttpGet("clinics/{clinicId:guid}/channel-accounts")]
-    public async Task<IActionResult> ChannelAccounts(Guid clinicId, CancellationToken ct) =>
-        Ok(await _providerBilling.ListAccountsAsync(clinicId, ct));
+    /// <summary>The client's connected channel accounts with who pays the provider and whether Omni charges usage.</summary>
+    [HttpGet("clients/{clientId:guid}/channel-accounts")]
+    public async Task<IActionResult> ChannelAccounts(Guid clientId, CancellationToken ct) =>
+        Ok(await _providerBilling.ListAccountsAsync(clientId, ct));
 
     /// <summary>Sets one account's arrangement (applies to future usage only). Body: providerBilling (customer_direct |
     /// platform_funded | external_provider_direct | no_provider_usage_fee, or null = default), omniUsageBilling
@@ -228,7 +228,7 @@ public class BillingAdminController : ControllerBase
         await _providerBilling.ResetAsync(channelIntegrationId, request.Reason, Actor, ct) is { } account
             ? Ok(account) : NotFound();
 
-    /// <summary>Usage revenue, provider cost and margin by clinic/channel/event type, plus subscription revenue and
+    /// <summary>Usage revenue, provider cost and margin by client/channel/event type, plus subscription revenue and
     /// top-ups, for [from, to). Defaults to the current calendar month (UTC).</summary>
     [HttpGet("report")]
     public async Task<IActionResult> Report([FromQuery] DateTimeOffset? from, [FromQuery] DateTimeOffset? to, CancellationToken ct)

@@ -34,7 +34,7 @@ public static class BillingLedger
         var entry = new BillingLedgerEntry
         {
             Id = Guid.NewGuid(),
-            ClinicId = account.ClinicId,
+            ClientId = account.ClientId,
             BillingAccountId = account.Id,
             EntryType = entryType,
             BalanceType = balanceType,
@@ -58,12 +58,12 @@ public static class BillingLedger
     }
 
     /// <summary>Queues a subscription/billing audit row in the events table, written with the operation's commit.</summary>
-    public static void LogEvent(IBillingUnitOfWork unit, Guid clinicId, string eventType, string source, object metadata, DateTimeOffset now)
+    public static void LogEvent(IBillingUnitOfWork unit, Guid clientId, string eventType, string source, object metadata, DateTimeOffset now)
     {
         unit.Events.Add(new EventLog
         {
             Id = Guid.NewGuid(),
-            ClinicId = clinicId,
+            ClientId = clientId,
             EventType = eventType,
             Source = source,
             Metadata = System.Text.Json.JsonSerializer.Serialize(metadata),

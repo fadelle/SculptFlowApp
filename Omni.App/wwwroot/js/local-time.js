@@ -1,10 +1,10 @@
 // Shows stored UTC moments in the VIEWER's own timezone (whatever the browser/OS is set to). Loaded on every page
 // by _Layout, before page scripts. Also saves that timezone in the omni-tz cookie so server-side day math (calendar
-// grid, date ranges, typed dates/times — Pages/Shared/ViewerTimeZone) uses the viewer's clock too. Only Clinic
-// Info → Availability is entered in the clinic's timezone.
+// grid, date ranges, typed dates/times — Pages/Shared/ViewerTimeZone) uses the viewer's clock too. Only Client
+// Info → Availability is entered in the client's timezone.
 //
-// Appointment pages default to CLINIC time: elements carrying data-clinic-tz show in that zone. When the viewer's
-// timezone differs from the clinic's, Pages/Shared/_TimeViewSwitch ("Clinic time | My time") appears; the choice is
+// Appointment pages default to CLIENT time: elements carrying data-client-tz show in that zone. When the viewer's
+// timezone differs from the client's, Pages/Shared/_TimeViewSwitch ("Client time | My time") appears; the choice is
 // remembered per browser and announced as a window "sf-time-view" event so page scripts can reload.
 //
 // Server side, Pages/Shared/LocalTimeHelper renders <time datetime="…Z" data-local="format">…UTC</time>
@@ -42,8 +42,8 @@
     root = root || document;
     root.querySelectorAll('[data-viewer-tz]').forEach(function (el) { if (viewerTimeZone) el.textContent = viewerTimeZone; });
     root.querySelectorAll('time[data-local]').forEach(function (el) {
-      var clinicTz = el.getAttribute('data-clinic-tz');
-      var text = format(el.getAttribute('datetime'), el.getAttribute('data-local'), clinicTz ? displayZone(clinicTz) : null);
+      var clientTz = el.getAttribute('data-client-tz');
+      var text = format(el.getAttribute('datetime'), el.getAttribute('data-local'), clientTz ? displayZone(clientTz) : null);
       if (text) el.textContent = text;
     });
     root.querySelectorAll('[data-local-title]').forEach(function (el) {
@@ -57,11 +57,11 @@
   try { viewerTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || null; } catch (e) { }
   if (viewerTimeZone) document.cookie = 'omni-tz=' + encodeURIComponent(viewerTimeZone) + '; path=/; max-age=31536000; samesite=lax';
 
-  // ---- Clinic time | My time ----
+  // ---- Client time | My time ----
   var VIEW_KEY = 'sf-time-view';
 
   function storedView() {
-    try { return localStorage.getItem(VIEW_KEY) === 'mine' ? 'mine' : 'clinic'; } catch (e) { return 'clinic'; }
+    try { return localStorage.getItem(VIEW_KEY) === 'mine' ? 'mine' : 'client'; } catch (e) { return 'client'; }
   }
 
   /* Minutes `timeZone` sits ahead of UTC at `date`. */
@@ -71,42 +71,42 @@
     return Math.round((zoned - utc) / 60000);
   }
 
-  /* True when the viewer's clock and the clinic's differ at any point across a full year. Samples every ~30
+  /* True when the viewer's clock and the client's differ at any point across a full year. Samples every ~30
      days (not just "now" and "+182 days") so two zones whose DST transition dates don't line up — different
      hemispheres, or a zone with unusual transition rules — can't slip through by having equal offsets at only
      two sampled instants while actually differing for weeks in between. */
-  function zonesDiffer(clinicTz) {
-    if (!viewerTimeZone || !clinicTz || viewerTimeZone === clinicTz) return false;
+  function zonesDiffer(clientTz) {
+    if (!viewerTimeZone || !clientTz || viewerTimeZone === clientTz) return false;
     try {
       var now = Date.now();
       for (var i = 0; i <= 12; i++) {
         var sample = new Date(now + i * 30 * 86400000);
-        if (offsetAt(viewerTimeZone, sample) !== offsetAt(clinicTz, sample)) return true;
+        if (offsetAt(viewerTimeZone, sample) !== offsetAt(clientTz, sample)) return true;
       }
       return false;
     } catch (e) { return false; }
   }
 
-  /* 'mine' only when the zones differ and the viewer picked "My time"; otherwise 'clinic'. */
-  function timeView(clinicTz) {
-    return zonesDiffer(clinicTz) && storedView() === 'mine' ? 'mine' : 'clinic';
+  /* 'mine' only when the zones differ and the viewer picked "My time"; otherwise 'client'. */
+  function timeView(clientTz) {
+    return zonesDiffer(clientTz) && storedView() === 'mine' ? 'mine' : 'client';
   }
 
-  function displayZone(clinicTz) {
-    return timeView(clinicTz) === 'mine' ? viewerTimeZone : clinicTz;
+  function displayZone(clientTz) {
+    return timeView(clientTz) === 'mine' ? viewerTimeZone : clientTz;
   }
 
   function initSwitches() {
     document.querySelectorAll('.time-view-switch').forEach(function (sw) {
-      var clinicTz = sw.getAttribute('data-clinic-tz');
-      sw.hidden = !zonesDiffer(clinicTz);
+      var clientTz = sw.getAttribute('data-client-tz');
+      sw.hidden = !zonesDiffer(clientTz);
       if (sw.hidden) return;
       var view = storedView();
       sw.querySelectorAll('input[name="time-view"]').forEach(function (radio) {
         var opt = radio.closest('.seg-opt');
         radio.checked = radio.value === view;
         opt.classList.toggle('on', radio.checked);
-        opt.title = radio.value === 'clinic' ? clinicTz : viewerTimeZone;
+        opt.title = radio.value === 'client' ? clientTz : viewerTimeZone;
         if (radio.dataset.bound) return;
         radio.dataset.bound = '1';
         radio.addEventListener('change', function () {

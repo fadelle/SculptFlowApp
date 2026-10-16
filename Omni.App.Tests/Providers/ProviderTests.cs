@@ -109,7 +109,7 @@ public class WhatsAppTemplateProviderTests
 
 public class WhatsAppServiceAndSenderTests
 {
-    private readonly Guid _clinicId = Guid.NewGuid();
+    private readonly Guid _clientId = Guid.NewGuid();
     private readonly Mock<IChannelIntegrationRepository> _integrations = new();
     private readonly Mock<IWhatsAppProvider> _meta = new();
 
@@ -123,41 +123,41 @@ public class WhatsAppServiceAndSenderTests
     private WhatsAppService Sut() => new(_integrations.Object, _meta.Object);
 
     private void Connected(string status = ChannelIntegrationStatus.Connected) =>
-        _integrations.Setup(i => i.GetReadOnlyAsync(_clinicId, ChannelType.WhatsApp, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new ChannelIntegration { ClinicId = _clinicId, Channel = ChannelType.WhatsApp, Status = status });
+        _integrations.Setup(i => i.GetReadOnlyAsync(_clientId, ChannelType.WhatsApp, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ChannelIntegration { ClientId = _clientId, Channel = ChannelType.WhatsApp, Status = status });
 
     [Fact]
     public async Task Messages_go_through_the_meta_provider()
     {
         Connected();
-        Assert.Equal("meta-id", await Sut().SendTextMessageAsync(_clinicId, "961", "hi"));
-        Assert.Equal("meta-tpl", await Sut().SendTemplateMessageAsync(_clinicId, "961", "promo", "en", ["a"]));
+        Assert.Equal("meta-id", await Sut().SendTextMessageAsync(_clientId, "961", "hi"));
+        Assert.Equal("meta-tpl", await Sut().SendTemplateMessageAsync(_clientId, "961", "promo", "en", ["a"]));
     }
 
     [Fact]
     public async Task Sending_is_refused_when_not_connected_or_not_ready()
     {
-        await Assert.ThrowsAsync<WhatsAppSendException>(() => Sut().SendTextMessageAsync(_clinicId, "961", "hi")); // no integration
+        await Assert.ThrowsAsync<WhatsAppSendException>(() => Sut().SendTextMessageAsync(_clientId, "961", "hi")); // no integration
         Connected(status: ChannelIntegrationStatus.Disconnected);
-        await Assert.ThrowsAsync<WhatsAppSendException>(() => Sut().SendTextMessageAsync(_clinicId, "961", "hi"));
+        await Assert.ThrowsAsync<WhatsAppSendException>(() => Sut().SendTextMessageAsync(_clientId, "961", "hi"));
         Connected();
         _meta.Setup(p => p.IsReady(It.IsAny<ChannelIntegration>())).Returns(false);
-        await Assert.ThrowsAsync<WhatsAppSendException>(() => Sut().SendTextMessageAsync(_clinicId, "961", "hi"));
+        await Assert.ThrowsAsync<WhatsAppSendException>(() => Sut().SendTextMessageAsync(_clientId, "961", "hi"));
     }
 
     [Fact]
     public async Task Whatsapp_sender_enforces_the_24_hour_window_and_a_phone_number()
     {
         var whatsApp = new Mock<IWhatsAppService>();
-        whatsApp.Setup(w => w.SendTextMessageAsync(_clinicId, "961", "hi", It.IsAny<CancellationToken>())).ReturnsAsync("sent");
+        whatsApp.Setup(w => w.SendTextMessageAsync(_clientId, "961", "hi", It.IsAny<CancellationToken>())).ReturnsAsync("sent");
         var sender = new WhatsAppChannelSender(whatsApp.Object);
         Assert.Equal(ConversationChannel.WhatsApp, sender.Channel);
 
-        var closed = new Conversation { ClinicId = _clinicId, Channel = "whatsapp", Lead = new Lead { Phone = "961" } };
+        var closed = new Conversation { ClientId = _clientId, Channel = "whatsapp", Lead = new Lead { Phone = "961" } };
         await Assert.ThrowsAsync<ServiceWindowClosedException>(() => sender.SendTextAsync(closed, "hi"));
-        var noPhone = new Conversation { ClinicId = _clinicId, Channel = "whatsapp", ServiceWindowExpiresAt = DateTimeOffset.UtcNow.AddHours(1), Lead = new Lead() };
+        var noPhone = new Conversation { ClientId = _clientId, Channel = "whatsapp", ServiceWindowExpiresAt = DateTimeOffset.UtcNow.AddHours(1), Lead = new Lead() };
         await Assert.ThrowsAsync<InvalidOperationException>(() => sender.SendTextAsync(noPhone, "hi"));
-        var open = new Conversation { ClinicId = _clinicId, Channel = "whatsapp", ServiceWindowExpiresAt = DateTimeOffset.UtcNow.AddHours(1), Lead = new Lead { Phone = "961" } };
+        var open = new Conversation { ClientId = _clientId, Channel = "whatsapp", ServiceWindowExpiresAt = DateTimeOffset.UtcNow.AddHours(1), Lead = new Lead { Phone = "961" } };
         Assert.Equal("sent", await sender.SendTextAsync(open, "hi"));
     }
 
@@ -169,13 +169,13 @@ public class WhatsAppServiceAndSenderTests
         var sender = new TelegramChannelSender(_integrations.Object, client.Object);
         Assert.Equal(ConversationChannel.Telegram, sender.Channel);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => sender.SendTextAsync(new Conversation { ClinicId = _clinicId }, "hi"));
-        var convo = new Conversation { ClinicId = _clinicId, ExternalThreadId = "42" };
+        await Assert.ThrowsAsync<InvalidOperationException>(() => sender.SendTextAsync(new Conversation { ClientId = _clientId }, "hi"));
+        var convo = new Conversation { ClientId = _clientId, ExternalThreadId = "42" };
         await Assert.ThrowsAsync<InvalidOperationException>(() => sender.SendTextAsync(convo, "hi")); // no integration
-        _integrations.Setup(i => i.GetReadOnlyAsync(_clinicId, ChannelType.Telegram, It.IsAny<CancellationToken>()))
+        _integrations.Setup(i => i.GetReadOnlyAsync(_clientId, ChannelType.Telegram, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ChannelIntegration { Status = ChannelIntegrationStatus.Disconnected, AccessToken = "bot-token" });
         await Assert.ThrowsAsync<InvalidOperationException>(() => sender.SendTextAsync(convo, "hi"));
-        _integrations.Setup(i => i.GetReadOnlyAsync(_clinicId, ChannelType.Telegram, It.IsAny<CancellationToken>()))
+        _integrations.Setup(i => i.GetReadOnlyAsync(_clientId, ChannelType.Telegram, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ChannelIntegration { Status = ChannelIntegrationStatus.Connected, AccessToken = "bot-token" });
         Assert.Equal("42:9", await sender.SendTextAsync(convo, "hi"));
     }

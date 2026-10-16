@@ -12,8 +12,8 @@ public class ParsedMetaEvent
 {
     public required ParsedMetaEventKind Kind { get; init; }
 
-    // Clinic resolution hints — MetaWebhookProcessor resolves the trusted ClinicId from these
-    // against the clinic's own stored WhatsApp connection; neither is ever trusted as a clinic
+    // Client resolution hints — MetaWebhookProcessor resolves the trusted ClientId from these
+    // against the client's own stored WhatsApp connection; neither is ever trusted as a client
     // identity by itself, and none of this ever comes from n8n.
     public string? PhoneNumberId { get; init; }
     public string? WabaId { get; init; }

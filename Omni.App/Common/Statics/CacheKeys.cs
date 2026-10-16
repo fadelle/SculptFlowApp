@@ -11,70 +11,70 @@ namespace Omni.App.Common.Statics;
 /// <para>The table caches below (core, identity, scheduling, channels, billing rates) are read by the "ReadOnly" methods of
 /// their repositories and cleared automatically: CacheInvalidationInterceptor removes the keys of every tracked row that a
 /// SaveChanges adds, changes or deletes (again when its transaction commits or rolls back), via <see cref="EvictionsFor"/>.
-/// Set-based deletes (clinic delete, user delete) remove their keys in the repository method. Their lifetimes are
+/// Set-based deletes (client delete, user delete) remove their keys in the repository method. Their lifetimes are
 /// settings, one per <see cref="Common.Enums.CacheArea"/> (Cache section, read through ICacheManager.LifetimeOf).</para>
 /// </summary>
 public static class CacheKeys
 {
     // ---- Billing: the subscription facts behind entitlement checks (EntitlementService). SubscriptionService removes a
-    // clinic's key on every subscription change; PlanService removes the whole prefix when a plan's entitlements change.
+    // client's key on every subscription change; PlanService removes the whole prefix when a plan's entitlements change.
     public const string EntitlementsPrefix = "billing:entitlements:";
-    public static string Entitlements(Guid clinicId) => EntitlementsPrefix + clinicId.ToString("N");
+    public static string Entitlements(Guid clientId) => EntitlementsPrefix + clientId.ToString("N");
     public static readonly TimeSpan EntitlementsTtl = TimeSpan.FromMinutes(10);
 
-    // ---- WhatsApp: which clinic/connection an incoming Meta webhook belongs to (MetaWebhookProcessor). The whole prefix
+    // ---- WhatsApp: which client/connection an incoming Meta webhook belongs to (MetaWebhookProcessor). The whole prefix
     // is removed whenever a channel connection is saved or disconnected.
     public const string WhatsAppRoutingPrefix = "channels:whatsapp:";
     public static string WhatsAppByPhoneNumberId(string phoneNumberId) => WhatsAppRoutingPrefix + "phone:" + phoneNumberId;
     public static string WhatsAppByWabaId(string wabaId) => WhatsAppRoutingPrefix + "waba:" + wabaId;
     public static readonly TimeSpan WhatsAppRoutingTtl = TimeSpan.FromMinutes(30);
 
-    // ---- Core: a clinic row (ClinicRepository.GetReadOnlyAsync, the signed-in clinic, the bot's clinic info).
-    public const string ClinicPrefix = "core:clinic:";
-    public static string Clinic(Guid clinicId) => ClinicPrefix + clinicId.ToString("N");
+    // ---- Core: a client row (ClientRepository.GetReadOnlyAsync, the signed-in client, the bot's client info).
+    public const string ClientPrefix = "core:client:";
+    public static string Client(Guid clientId) => ClientPrefix + clientId.ToString("N");
 
-    // ---- Core: a clinic's procedures, all of them by name (ProcedureRepository.ListAsync / GetReadOnlyAsync filter it).
+    // ---- Core: a client's procedures, all of them by name (ProcedureRepository.ListAsync / GetReadOnlyAsync filter it).
     public const string ProceduresPrefix = "core:procedures:";
-    public static string Procedures(Guid clinicId) => ProceduresPrefix + clinicId.ToString("N");
+    public static string Procedures(Guid clientId) => ProceduresPrefix + clientId.ToString("N");
 
-    // ---- Identity: which clinic a signed-in user is an active member of (read on every signed-in request). Short
+    // ---- Identity: which client a signed-in user is an active member of (read on every signed-in request). Short
     // lifetime (Cache:StaffLookupMinutes) because a removed staff member must lose access quickly even if a removal were
     // ever missed.
     public const string MembershipPrefix = "identity:membership:";
     public static string Membership(string userId) => MembershipPrefix + userId;
 
-    // ---- Crm: a clinic's clinic-wide Inbox settings row, or none (InboxSettingsRepository.GetForClinicReadOnlyAsync; read
+    // ---- Crm: a client's client-wide Inbox settings row, or none (InboxSettingsRepository.GetForClientReadOnlyAsync; read
     // on every incoming patient message to decide whether the AI bot answers).
     public const string InboxSettingsPrefix = "crm:inbox-settings:";
-    public static string InboxSettings(Guid clinicId) => InboxSettingsPrefix + clinicId.ToString("N");
+    public static string InboxSettings(Guid clientId) => InboxSettingsPrefix + clientId.ToString("N");
 
     // ---- Scheduling: weekly rules, booking settings and date exceptions (every free-slot search reads all three).
     public const string AvailabilityPrefix = "scheduling:availability:";
-    public static string AvailabilityRules(Guid clinicId) => AvailabilityPrefix + "rules:" + clinicId.ToString("N");
-    public static string BookingSettings(Guid clinicId) => AvailabilityPrefix + "booking:" + clinicId.ToString("N");
-    public static string AvailabilityExceptions(Guid clinicId) => AvailabilityPrefix + "exceptions:" + clinicId.ToString("N");
+    public static string AvailabilityRules(Guid clientId) => AvailabilityPrefix + "rules:" + clientId.ToString("N");
+    public static string BookingSettings(Guid clientId) => AvailabilityPrefix + "booking:" + clientId.ToString("N");
+    public static string AvailabilityExceptions(Guid clientId) => AvailabilityPrefix + "exceptions:" + clientId.ToString("N");
 
-    // ---- Scheduling: a clinic's calendar connections with their calendar lists (Settings page, and the "anything to
+    // ---- Scheduling: a client's calendar connections with their calendar lists (Settings page, and the "anything to
     // sync?" check on every appointment change).
     public const string CalendarsPrefix = "scheduling:calendars:";
-    public static string Calendars(Guid clinicId) => CalendarsPrefix + clinicId.ToString("N");
+    public static string Calendars(Guid clientId) => CalendarsPrefix + clientId.ToString("N");
 
-    // ---- Channels: a clinic's channel connections (senders, billing), one connection by id (Telegram webhooks), the
+    // ---- Channels: a client's channel connections (senders, billing), one connection by id (Telegram webhooks), the
     // TikTok connection and the WhatsApp templates. LastWebhookAt in a cached copy can be behind: TouchLastWebhookAsync
     // doesn't clear it (it runs on every webhook); the Integrations page reads the table directly.
     public const string ChannelsPrefix = "channels:integrations:";
-    public static string ChannelIntegrations(Guid clinicId) => ChannelsPrefix + clinicId.ToString("N");
+    public static string ChannelIntegrations(Guid clientId) => ChannelsPrefix + clientId.ToString("N");
     public const string ChannelByIdPrefix = "channels:integration:";
     public static string ChannelIntegration(Guid integrationId) => ChannelByIdPrefix + integrationId.ToString("N");
     public const string TikTokPrefix = "channels:tiktok:";
-    public static string TikTok(Guid clinicId) => TikTokPrefix + clinicId.ToString("N");
+    public static string TikTok(Guid clientId) => TikTokPrefix + clientId.ToString("N");
     public const string WhatsAppTemplatesPrefix = "channels:templates:";
-    public static string WhatsAppTemplates(Guid clinicId) => WhatsAppTemplatesPrefix + clinicId.ToString("N");
+    public static string WhatsAppTemplates(Guid clientId) => WhatsAppTemplatesPrefix + clientId.ToString("N");
 
-    // ---- Billing: the cards a clinic's events are rated against (depends on client cards, the clinic's plan and the
+    // ---- Billing: the cards a client's events are rated against (depends on client cards, the client's plan and the
     // default card), every rate of a card, and who pays the provider per channel account. Read on every charged event.
     public const string RatingCardsPrefix = "billing:rating-cards:";
-    public static string RatingCards(Guid clinicId) => RatingCardsPrefix + clinicId.ToString("N");
+    public static string RatingCards(Guid clientId) => RatingCardsPrefix + clientId.ToString("N");
     public const string RatesPrefix = "billing:rates:";
     public static string Rates(Guid rateCardId) => RatesPrefix + rateCardId.ToString("N");
     public const string ChannelAccountBillingPrefix = "billing:channel-account:";
@@ -82,51 +82,51 @@ public static class CacheKeys
 
     /// <summary>The keys (exact) and prefixes to remove when this row is added, changed or deleted; empty for rows that
     /// aren't cached. Called with the row's current values and again with its original ones, so a moved row (another
-    /// clinic, another card) clears both places.</summary>
+    /// client, another card) clears both places.</summary>
     public static IEnumerable<CacheEviction> EvictionsFor(object row)
     {
         switch (row)
         {
-            case Models.Clinic c:
-                yield return CacheEviction.Key(Clinic(c.Id));
+            case Models.Client c:
+                yield return CacheEviction.Key(Client(c.Id));
                 break;
-            case ClinicUser m:
+            case ClientUser m:
                 yield return CacheEviction.Key(Membership(m.UserId));
                 break;
             case Procedure p:
-                yield return CacheEviction.Key(Procedures(p.ClinicId));
+                yield return CacheEviction.Key(Procedures(p.ClientId));
                 break;
-            case ClinicAvailabilityRule r:
-                yield return CacheEviction.Key(AvailabilityRules(r.ClinicId));
+            case AvailabilityRule r:
+                yield return CacheEviction.Key(AvailabilityRules(r.ClientId));
                 break;
-            case ClinicBookingSettings b:
-                yield return CacheEviction.Key(BookingSettings(b.ClinicId));
+            case BookingSettings b:
+                yield return CacheEviction.Key(BookingSettings(b.ClientId));
                 break;
             case Models.InboxSettings i:
-                yield return CacheEviction.Key(InboxSettings(i.ClinicId));
+                yield return CacheEviction.Key(InboxSettings(i.ClientId));
                 break;
-            case ClinicAvailabilityException e:
-                yield return CacheEviction.Key(AvailabilityExceptions(e.ClinicId));
+            case AvailabilityException e:
+                yield return CacheEviction.Key(AvailabilityExceptions(e.ClientId));
                 break;
             case CalendarIntegration ci:
-                yield return CacheEviction.Key(Calendars(ci.ClinicId));
+                yield return CacheEviction.Key(Calendars(ci.ClientId));
                 break;
             case CalendarIntegrationCalendar:
-                // The row doesn't carry its clinic; the interceptor resolves it from the tracked connection when it can.
+                // The row doesn't carry its client; the interceptor resolves it from the tracked connection when it can.
                 yield return CacheEviction.Prefix(CalendarsPrefix);
                 break;
             case Models.ChannelIntegration ch:
-                yield return CacheEviction.Key(ChannelIntegrations(ch.ClinicId));
+                yield return CacheEviction.Key(ChannelIntegrations(ch.ClientId));
                 yield return CacheEviction.Key(ChannelIntegration(ch.Id));
                 break;
             case TikTokIntegration t:
-                yield return CacheEviction.Key(TikTok(t.ClinicId));
+                yield return CacheEviction.Key(TikTok(t.ClientId));
                 break;
             case WhatsAppTemplate w:
-                yield return CacheEviction.Key(WhatsAppTemplates(w.ClinicId));
+                yield return CacheEviction.Key(WhatsAppTemplates(w.ClientId));
                 break;
             case BillingRateCard card:
-                // Active/default/client flags decide which cards any clinic is rated against.
+                // Active/default/client flags decide which cards any client is rated against.
                 yield return CacheEviction.Prefix(RatingCardsPrefix);
                 yield return CacheEviction.Key(Rates(card.Id));
                 break;
@@ -134,11 +134,11 @@ public static class CacheKeys
                 yield return CacheEviction.Key(Rates(rate.RateCardId));
                 break;
             case SubscriptionPlan:
-                // A plan's rate card applies to every clinic on it.
+                // A plan's rate card applies to every client on it.
                 yield return CacheEviction.Prefix(RatingCardsPrefix);
                 break;
-            case ClinicSubscription s:
-                yield return CacheEviction.Key(RatingCards(s.ClinicId));
+            case ClientSubscription s:
+                yield return CacheEviction.Key(RatingCards(s.ClientId));
                 break;
             case ChannelAccountBillingSettings a:
                 yield return CacheEviction.Key(ChannelAccountBilling(a.ChannelIntegrationId));
@@ -146,22 +146,22 @@ public static class CacheKeys
         }
     }
 
-    /// <summary>Everything cached about one clinic, for a delete that cascades through all of its rows.</summary>
-    public static IEnumerable<CacheEviction> EvictionsForClinic(Guid clinicId) =>
+    /// <summary>Everything cached about one client, for a delete that cascades through all of its rows.</summary>
+    public static IEnumerable<CacheEviction> EvictionsForClient(Guid clientId) =>
     [
-        CacheEviction.Key(Clinic(clinicId)),
-        CacheEviction.Key(Procedures(clinicId)),
-        CacheEviction.Key(AvailabilityRules(clinicId)),
-        CacheEviction.Key(BookingSettings(clinicId)),
-        CacheEviction.Key(InboxSettings(clinicId)),
-        CacheEviction.Key(AvailabilityExceptions(clinicId)),
-        CacheEviction.Key(Calendars(clinicId)),
-        CacheEviction.Key(ChannelIntegrations(clinicId)),
-        CacheEviction.Key(TikTok(clinicId)),
-        CacheEviction.Key(WhatsAppTemplates(clinicId)),
-        CacheEviction.Key(RatingCards(clinicId)),
-        CacheEviction.Key(Entitlements(clinicId)),
-        // Keyed by user, connection or card id rather than clinic: drop the whole area (a clinic delete is rare).
+        CacheEviction.Key(Client(clientId)),
+        CacheEviction.Key(Procedures(clientId)),
+        CacheEviction.Key(AvailabilityRules(clientId)),
+        CacheEviction.Key(BookingSettings(clientId)),
+        CacheEviction.Key(InboxSettings(clientId)),
+        CacheEviction.Key(AvailabilityExceptions(clientId)),
+        CacheEviction.Key(Calendars(clientId)),
+        CacheEviction.Key(ChannelIntegrations(clientId)),
+        CacheEviction.Key(TikTok(clientId)),
+        CacheEviction.Key(WhatsAppTemplates(clientId)),
+        CacheEviction.Key(RatingCards(clientId)),
+        CacheEviction.Key(Entitlements(clientId)),
+        // Keyed by user, connection or card id rather than client: drop the whole area (a client delete is rare).
         CacheEviction.Prefix(MembershipPrefix),
         CacheEviction.Prefix(ChannelByIdPrefix),
         CacheEviction.Prefix(ChannelAccountBillingPrefix),

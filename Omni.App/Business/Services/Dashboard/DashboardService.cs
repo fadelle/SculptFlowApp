@@ -15,9 +15,9 @@ public class DashboardService : IDashboardService
     }
 
     public async Task<DashboardSummaryResponse> GetSummaryAsync(
-        Guid clinicId, DateTimeOffset? from = null, DateTimeOffset? to = null, CancellationToken ct = default)
+        Guid clientId, DateTimeOffset? from = null, DateTimeOffset? to = null, CancellationToken ct = default)
     {
-        var counts = await _dashboard.GetSummaryCountsAsync(clinicId, from, to, ct);
+        var counts = await _dashboard.GetSummaryCountsAsync(clientId, from, to, ct);
 
         // Old-lead reactivation isn't built yet (Project 8) — wire this up once that project
         // exists and reactivation attempts are tracked (e.g. via an events.event_type filter).
@@ -30,20 +30,20 @@ public class DashboardService : IDashboardService
     }
 
     public Task<(IReadOnlyList<DashboardLeadRow> Items, int TotalCount)> GetLeadsAsync(
-        Guid clinicId, string? status, string? search, string? source, int skip, int take, CancellationToken ct = default) =>
-        _dashboard.ListLeadsAsync(clinicId, status, search, source, skip, take, ct);
+        Guid clientId, string? status, string? search, string? source, int skip, int take, CancellationToken ct = default) =>
+        _dashboard.ListLeadsAsync(clientId, status, search, source, skip, take, ct);
 
     public Task<(IReadOnlyList<DashboardAppointmentRow> Items, int TotalCount)> GetAppointmentsAsync(
-        Guid clinicId, string? status, string? search, int skip, int take, CancellationToken ct = default) =>
-        _dashboard.ListAppointmentsAsync(clinicId, status, search, skip, take, ct);
+        Guid clientId, string? status, string? search, int skip, int take, CancellationToken ct = default) =>
+        _dashboard.ListAppointmentsAsync(clientId, status, search, skip, take, ct);
 
     public Task<IReadOnlyList<DashboardProcedureRow>> GetProcedureStatsAsync(
-        Guid clinicId, DateTimeOffset? from = null, DateTimeOffset? to = null, CancellationToken ct = default) =>
-        _dashboard.GetProcedureStatsAsync(clinicId, from, to, ct);
+        Guid clientId, DateTimeOffset? from = null, DateTimeOffset? to = null, CancellationToken ct = default) =>
+        _dashboard.GetProcedureStatsAsync(clientId, from, to, ct);
 
-    public async Task<DashboardAttentionResponse> GetAttentionAsync(Guid clinicId, CancellationToken ct = default)
+    public async Task<DashboardAttentionResponse> GetAttentionAsync(Guid clientId, CancellationToken ct = default)
     {
-        var counts = await _dashboard.GetAttentionCountsAsync(clinicId, DateTimeOffset.UtcNow, ct);
+        var counts = await _dashboard.GetAttentionCountsAsync(clientId, DateTimeOffset.UtcNow, ct);
         return new DashboardAttentionResponse(counts.ConversationsNeedingStaff, counts.OverdueFollowups, counts.AppointmentsNeedingOutcome);
     }
 }

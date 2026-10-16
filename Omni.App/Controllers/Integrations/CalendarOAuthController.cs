@@ -24,7 +24,7 @@ public class CalendarOAuthController : Controller
     private TimeSpan StateLifetime => TimeSpan.FromMinutes(_config.IntegrationsOAuthStateLifetimeMinutes);
     private const string SettingsPagePath = "/settings/calendar-integrations";
 
-    private readonly ICurrentClinicContext _clinicContext;
+    private readonly ICurrentClientContext _clientContext;
     private readonly ICalendarIntegrationService _calendar;
     private readonly IEnumerable<ICalendarProviderClient> _providerClients;
     private readonly IConfiguration _configuration;
@@ -33,12 +33,12 @@ public class CalendarOAuthController : Controller
     private readonly IConfigManager _config;
 
     public CalendarOAuthController(
-        ICalendarIntegrationService calendar, ICurrentClinicContext clinicContext,
+        ICalendarIntegrationService calendar, ICurrentClientContext clientContext,
         IEnumerable<ICalendarProviderClient> providerClients, IConfiguration configuration,
         IDataProtectionProvider dataProtection, ILogger<CalendarOAuthController> logger, IConfigManager config)
     {
         _config = config;
-        _clinicContext = clinicContext;
+        _clientContext = clientContext;
         _calendar = calendar;
         _providerClients = providerClients;
         _configuration = configuration;
@@ -46,7 +46,7 @@ public class CalendarOAuthController : Controller
         _logger = logger;
     }
 
-    private Task<Guid?> GetClinicIdAsync(CancellationToken ct) => _clinicContext.GetClinicIdAsync(ct);
+    private Task<Guid?> GetClientIdAsync(CancellationToken ct) => _clientContext.GetClientIdAsync(ct);
 
     /// <summary>Marks the row Pending and sends the browser to the provider's consent screen.</summary>
     [HttpGet("{provider}/connect")]
@@ -54,17 +54,17 @@ public class CalendarOAuthController : Controller
     {
         if (!CalendarProvider.All.Contains(provider)) return RedirectWithError("Unknown calendar provider.");
 
-        var clinicId = await GetClinicIdAsync(ct);
-        if (clinicId is null) return Forbid();
+        var clientId = await GetClientIdAsync(ct);
+        if (clientId is null) return Forbid();
 
         try
         {
             var client = ResolveProviderClient(provider);
             var redirectUri = BuildRedirectUri(provider);
-            var state = _stateProtector.Protect(JsonSerializer.Serialize(new OAuthState(clinicId.Value, provider)), StateLifetime);
+            var state = _stateProtector.Protect(JsonSerializer.Serialize(new OAuthState(clientId.Value, provider)), StateLifetime);
             var authorizationUrl = client.BuildAuthorizationUrl(redirectUri, state);
 
-            await _calendar.RequestConnectAsync(clinicId.Value, provider, ct);
+            await _calendar.RequestConnectAsync(clientId.Value, provider, ct);
             return Redirect(authorizationUrl);
         }
         catch (InvalidOperationException ex)
@@ -84,8 +84,8 @@ public class CalendarOAuthController : Controller
     {
         if (!CalendarProvider.All.Contains(provider)) return RedirectWithError("Unknown calendar provider.");
 
-        var clinicId = await GetClinicIdAsync(ct);
-        if (clinicId is null) return Forbid();
+        var clientId = await GetClientIdAsync(ct);
+        if (clientId is null) return Forbid();
 
         OAuthState? oauthState = null;
         try
@@ -100,22 +100,22 @@ public class CalendarOAuthController : Controller
             _logger.LogWarning(ex, "Calendar OAuth state for {Provider} failed to validate (expired or tampered).", provider);
         }
 
-        if (oauthState is null || oauthState.ClinicId != clinicId.Value || oauthState.Provider != provider)
+        if (oauthState is null || oauthState.ClientId != clientId.Value || oauthState.Provider != provider)
         {
-            await _calendar.FailConnectAsync(clinicId.Value, provider, "The connection attempt expired or was invalid — please try again.", ct);
+            await _calendar.FailConnectAsync(clientId.Value, provider, "The connection attempt expired or was invalid — please try again.", ct);
             return RedirectWithError("The connection attempt expired or was invalid — please try again.");
         }
 
         if (!string.IsNullOrEmpty(error))
         {
             var message = errorDescription ?? error;
-            await _calendar.FailConnectAsync(clinicId.Value, provider, message, ct);
+            await _calendar.FailConnectAsync(clientId.Value, provider, message, ct);
             return RedirectWithError(message);
         }
 
         if (string.IsNullOrEmpty(code))
         {
-            await _calendar.FailConnectAsync(clinicId.Value, provider, "The provider did not return an authorization code.", ct);
+            await _calendar.FailConnectAsync(clientId.Value, provider, "The provider did not return an authorization code.", ct);
             return RedirectWithError("The provider did not return an authorization code.");
         }
 
@@ -125,12 +125,12 @@ public class CalendarOAuthController : Controller
             var redirectUri = BuildRedirectUri(provider);
             var tokens = await client.ExchangeCodeAsync(code, redirectUri, ct);
             var email = await client.GetAccountEmailAsync(tokens.AccessToken, ct);
-            await _calendar.CompleteConnectAsync(clinicId.Value, provider, tokens, email, ct);
+            await _calendar.CompleteConnectAsync(clientId.Value, provider, tokens, email, ct);
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Calendar OAuth code exchange failed for {Provider}.", provider);
-            await _calendar.FailConnectAsync(clinicId.Value, provider, $"Couldn't finish connecting: {ex.Message}", ct);
+            await _calendar.FailConnectAsync(clientId.Value, provider, $"Couldn't finish connecting: {ex.Message}", ct);
             return RedirectWithError($"Couldn't finish connecting: {ex.Message}");
         }
 
@@ -176,5 +176,5 @@ public class CalendarOAuthController : Controller
             "Calendar OAuth needs a public HTTPS address for its redirect URI. Set App:PublicBaseUrl (e.g. https://your-app.onrender.com, or an https tunnel URL when testing locally).");
     }
 
-    private record OAuthState(Guid ClinicId, string Provider);
+    private record OAuthState(Guid ClientId, string Provider);
 }

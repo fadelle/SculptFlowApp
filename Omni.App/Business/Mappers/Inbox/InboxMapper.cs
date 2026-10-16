@@ -6,7 +6,7 @@ namespace Omni.App.Business.Mappers.Inbox;
 public static class InboxMapper
 {
     public static ConversationResponse ToResponse(Conversation c) => new(
-        c.Id, c.ClinicId, c.LeadId, c.Channel, c.Status, c.Mode, c.AiEnabled, c.HumanTakeover,
+        c.Id, c.ClientId, c.LeadId, c.Channel, c.Status, c.Mode, c.AiEnabled, c.HumanTakeover,
         c.LastMessageAt, c.LastMessageDirection, c.ServiceWindowExpiresAt,
         c.IsServiceWindowOpen(DateTimeOffset.UtcNow), c.CreatedAt
     );

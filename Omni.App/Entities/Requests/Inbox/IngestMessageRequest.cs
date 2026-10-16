@@ -8,7 +8,7 @@ namespace Omni.App.Entities.Requests.Inbox;
 /// MessageService.IngestAsync for how each one is mapped.
 /// </summary>
 public record IngestMessageRequest(
-    Guid ClinicId,
+    Guid ClientId,
     Guid ConversationId,
     Guid LeadId,
     string EventType,

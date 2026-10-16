@@ -33,9 +33,9 @@ public class ChannelIntegrationService : IChannelIntegrationService
         _cache = cache;
     }
 
-    public async Task<IReadOnlyList<ChannelIntegrationResponse>> ListAsync(Guid clinicId, CancellationToken ct = default)
+    public async Task<IReadOnlyList<ChannelIntegrationResponse>> ListAsync(Guid clientId, CancellationToken ct = default)
     {
-        var existing = (await _integrations.ListForClinicAsync(clinicId, ct)).ToDictionary(c => c.Channel);
+        var existing = (await _integrations.ListForClientAsync(clientId, ct)).ToDictionary(c => c.Channel);
 
         // Always return one card per known channel, even if it's never been saved — the Settings
         // page shouldn't have to special-case "no row yet" vs. "disconnected".
@@ -43,7 +43,7 @@ public class ChannelIntegrationService : IChannelIntegrationService
             .Select(channel => existing.TryGetValue(channel, out var row)
                 ? ToResponse(row)
                 : new ChannelIntegrationResponse(
-                    Guid.Empty, clinicId, channel, ChannelIntegrationStatus.Disconnected,
+                    Guid.Empty, clientId, channel, ChannelIntegrationStatus.Disconnected,
                     null, null, null, null, null, false, false, null, null, DateTimeOffset.MinValue))
             .ToList();
     }
@@ -63,12 +63,12 @@ public class ChannelIntegrationService : IChannelIntegrationService
             throw new ArgumentException("Telegram is connected with a bot token (Connect Telegram), not the manual form.", nameof(request));
         }
 
-        var row = await _integrations.GetAsync(request.ClinicId, request.Channel, ct);
+        var row = await _integrations.GetAsync(request.ClientId, request.Channel, ct);
 
         // Saving with a token makes the channel connected — the plan's channel limits apply.
         if (!string.IsNullOrWhiteSpace(request.AccessToken) || !string.IsNullOrWhiteSpace(row?.AccessToken))
         {
-            await _entitlements.EnsureCanConnectChannelAsync(request.ClinicId, request.Channel, ct);
+            await _entitlements.EnsureCanConnectChannelAsync(request.ClientId, request.Channel, ct);
         }
 
         var now = DateTimeOffset.UtcNow;
@@ -77,7 +77,7 @@ public class ChannelIntegrationService : IChannelIntegrationService
             row = new ChannelIntegration
             {
                 Id = Guid.NewGuid(),
-                ClinicId = request.ClinicId,
+                ClientId = request.ClientId,
                 Channel = request.Channel,
                 CreatedAt = now,
             };
@@ -119,7 +119,7 @@ public class ChannelIntegrationService : IChannelIntegrationService
         return ToResponse(row);
     }
 
-    public async Task DisconnectAsync(Guid clinicId, string channel, CancellationToken ct = default)
+    public async Task DisconnectAsync(Guid clientId, string channel, CancellationToken ct = default)
     {
         if (!ChannelType.All.Contains(channel))
         {
@@ -129,11 +129,11 @@ public class ChannelIntegrationService : IChannelIntegrationService
         if (channel == ChannelType.Telegram)
         {
             // Also removes the webhook at Telegram — see TelegramIntegrationService.DisconnectAsync.
-            await _telegram.DisconnectAsync(clinicId, ct);
+            await _telegram.DisconnectAsync(clientId, ct);
             return;
         }
 
-        var row = await _integrations.GetAsync(clinicId, channel, ct);
+        var row = await _integrations.GetAsync(clientId, channel, ct);
         if (row is null)
         {
             return;
@@ -153,7 +153,7 @@ public class ChannelIntegrationService : IChannelIntegrationService
 
     public async Task<ChannelIntegrationResponse> ConnectWhatsAppAsync(ConnectWhatsAppRequest request, CancellationToken ct = default)
     {
-        await _entitlements.EnsureCanConnectChannelAsync(request.ClinicId, ChannelType.WhatsApp, ct);
+        await _entitlements.EnsureCanConnectChannelAsync(request.ClientId, ChannelType.WhatsApp, ct);
         var token = !string.IsNullOrWhiteSpace(request.AccessToken)
             ? request.AccessToken
             : !string.IsNullOrWhiteSpace(request.Code)
@@ -191,7 +191,7 @@ public class ChannelIntegrationService : IChannelIntegrationService
         await _graph.RegisterPhoneNumberAsync(phoneNumberId, token, pin, ct);
 
         return await SaveAsync(new SaveChannelIntegrationRequest(
-            request.ClinicId,
+            request.ClientId,
             ChannelType.WhatsApp,
             DisplayName: phoneInfo?.DisplayPhoneNumber ?? phoneInfo?.VerifiedName,
             PhoneNumberId: phoneNumberId,
@@ -205,7 +205,7 @@ public class ChannelIntegrationService : IChannelIntegrationService
 
     public async Task<ChannelIntegrationResponse> ConnectFacebookAsync(ConnectFacebookRequest request, CancellationToken ct = default)
     {
-        await _entitlements.EnsureCanConnectChannelAsync(request.ClinicId, ChannelType.Facebook, ct);
+        await _entitlements.EnsureCanConnectChannelAsync(request.ClientId, ChannelType.Facebook, ct);
         var shortLivedToken = !string.IsNullOrWhiteSpace(request.Code)
             ? await _graph.ExchangeCodeForTokenAsync(request.Code, ct: ct)
             : !string.IsNullOrWhiteSpace(request.AccessToken)
@@ -219,7 +219,7 @@ public class ChannelIntegrationService : IChannelIntegrationService
                 "No Facebook Page found for this account — the logged-in user must be an admin on at least one Page.");
 
         return await SaveAsync(new SaveChannelIntegrationRequest(
-            request.ClinicId,
+            request.ClientId,
             ChannelType.Facebook,
             DisplayName: page.PageName,
             PhoneNumberId: null,
@@ -231,7 +231,7 @@ public class ChannelIntegrationService : IChannelIntegrationService
     }
 
     internal static ChannelIntegrationResponse ToResponse(ChannelIntegration c) => new(
-        c.Id, c.ClinicId, c.Channel, c.Status, c.DisplayName,
+        c.Id, c.ClientId, c.Channel, c.Status, c.DisplayName,
         c.PhoneNumberId, c.WhatsAppBusinessId, c.PageId, c.InstagramBusinessId,
         HasAccessToken: !string.IsNullOrEmpty(c.AccessToken),
         HasWebhookVerifyToken: !string.IsNullOrEmpty(c.WebhookVerifyToken),

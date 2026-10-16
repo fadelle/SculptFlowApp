@@ -1,9 +1,9 @@
-@inject ICurrentClinicContext CurrentClinic
+@inject ICurrentClientContext CurrentClient
 @inject IConfigManager Settings
-@* The dark sidebar (docs/UI_GUIDE.md §5, §0.4): brand + clinic name, then the four groups of links in their old order.
+@* The dark sidebar (docs/UI_GUIDE.md §5, §0.4): brand + client name, then the four groups of links in their old order.
    #sidebar-inbox-badge is filled by sidebar.js / inbox.js. *@
 @{
-    var clinicName = (await CurrentClinic.GetClinicAsync())?.Name;
+    var clientName = (await CurrentClient.GetClientAsync())?.Name;
     var path = Context.Request.Path.Value ?? "";
     bool IsActive(string prefix) => path.Equals(prefix, StringComparison.OrdinalIgnoreCase)
         || path.StartsWith(prefix + "/", StringComparison.OrdinalIgnoreCase);
@@ -25,7 +25,7 @@
         <span class="au-brand__mark"><img class="au-brand__logo" src="~/logo.svg" alt="" width="38" height="38" /></span>
         <span class="au-brand__text">
             <span class="au-brand__name">Omni</span>
-            <span class="au-brand__sub" title="@clinicName">@(string.IsNullOrWhiteSpace(clinicName) ? "Clinic Dashboard" : clinicName)</span>
+            <span class="au-brand__sub" title="@clientName">@(string.IsNullOrWhiteSpace(clientName) ? "Client Dashboard" : clientName)</span>
         </span>
     </a>
     <div class="au-side-rule"></div>
@@ -42,12 +42,12 @@
         @Row("/WhatsApp/Templates", "description", "WhatsApp Templates", IsActive("/WhatsApp/Templates")) @* icon:description *@
         @Row("/WhatsApp/Health", "monitor_heart", "WhatsApp Health", IsActive("/WhatsApp/Health")) @* icon:monitor_heart *@
 
-        <div class="au-side-section">Clinic setup</div>
+        <div class="au-side-section">Client setup</div>
         @Row("/Procedures", "medical_services", "Procedures", IsActive("/Procedures")) @* icon:medical_services *@
         @Row("/KnowledgeBase", "menu_book", "Knowledge Base", IsActive("/KnowledgeBase")) @* icon:menu_book *@
 
         <div class="au-side-section">Settings</div>
-        @Row("/settings/clinic-info", "apartment", "Clinic Info", IsActive("/settings/clinic-info")) @* icon:apartment *@
+        @Row("/settings/business-info", "apartment", "Business Info", IsActive("/settings/business-info")) @* icon:apartment *@
         @Row("/Staff", "badge", "Staff", IsActive("/Staff")) @* icon:badge *@
         @Row("/settings/integrations", "hub", "Messaging Integrations", IsActive("/settings/integrations")) @* icon:hub *@
         @Row("/settings/calendar-integrations", "event_available", "Calendar Integrations", IsActive("/settings/calendar-integrations")) @* icon:event_available *@

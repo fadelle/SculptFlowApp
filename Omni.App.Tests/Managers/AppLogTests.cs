@@ -246,7 +246,7 @@ public class DatabaseLoggerTests
     [Fact]
     public void Trace_id_route_method_and_scope_ids_are_attached()
     {
-        var clinicId = Guid.NewGuid();
+        var clientId = Guid.NewGuid();
         var context = new DefaultHttpContext();
         context.Request.Method = "POST";
         context.Request.Path = "/api/conversations/123/messages/send";
@@ -255,7 +255,7 @@ public class DatabaseLoggerTests
         _http.HttpContext = context;
 
         using var activity = new Activity("test").Start();
-        using (_scopes.Push(new Dictionary<string, object?> { ["ClinicId"] = clinicId.ToString(), ["RequestPath"] = "/raw/path?token=x", ["ActionName"] = "Send" }))
+        using (_scopes.Push(new Dictionary<string, object?> { ["ClientId"] = clientId.ToString(), ["RequestPath"] = "/raw/path?token=x", ["ActionName"] = "Send" }))
         {
             Logger().LogError("boom");
         }
@@ -263,7 +263,7 @@ public class DatabaseLoggerTests
         var row = Single();
         Assert.Equal(activity.TraceId.ToHexString(), row.TraceId);
         Assert.Equal(("POST", "/api/conversations/{id}/messages/send"), (row.Method, row.Route));
-        Assert.Equal(clinicId, row.ClinicId);
+        Assert.Equal(clientId, row.ClientId);
         var properties = JsonSerializer.Deserialize<Dictionary<string, string>>(row.Properties)!;
         Assert.Equal("Send", properties["ActionName"]);
         Assert.False(properties.ContainsKey("RequestPath"));
@@ -510,14 +510,14 @@ public class AppLogAdminTests
     [Fact]
     public async Task Groups_pass_a_minimum_level_filter_and_report_the_settings()
     {
-        var clinicId = Guid.NewGuid();
+        var clientId = Guid.NewGuid();
         var group = new AppLogGroupRow("fp", "Error", "C", "t", "m", null, 5, Now, Now, 9, null);
         _repo.Setup(r => r.ListGroupsReadOnlyAsync(
-                It.Is<AppLogFilter>(f => f.From == Now.AddHours(-24) && f.Levels.SequenceEqual(new[] { "Error", "Critical" }) && f.ClinicId == clinicId && f.Search == "meta"),
+                It.Is<AppLogFilter>(f => f.From == Now.AddHours(-24) && f.Levels.SequenceEqual(new[] { "Error", "Critical" }) && f.ClientId == clientId && f.Search == "meta"),
                 true, 10, It.IsAny<CancellationToken>()))
             .ReturnsAsync(([group], 3, 42L)).Verifiable();
 
-        var report = await Sut().GroupsAsync(24, " ERROR ", clinicId, " meta ", "Count", 10, default);
+        var report = await Sut().GroupsAsync(24, " ERROR ", clientId, " meta ", "Count", 10, default);
 
         _repo.Verify();
         Assert.Equal(("error", "count", 42L, 3), (report.Level, report.Sort, report.TotalOccurrences, report.GroupCount));

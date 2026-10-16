@@ -14,16 +14,16 @@ public class ProcedureBookingRepository : IProcedureBookingRepository
         _db = db;
     }
 
-    public Task<ProcedureBooking?> GetAsync(Guid clinicId, Guid bookingId, CancellationToken ct = default) =>
-        _db.ProcedureBookings.FirstOrDefaultAsync(b => b.ClinicId == clinicId && b.Id == bookingId, ct);
+    public Task<ProcedureBooking?> GetAsync(Guid clientId, Guid bookingId, CancellationToken ct = default) =>
+        _db.ProcedureBookings.FirstOrDefaultAsync(b => b.ClientId == clientId && b.Id == bookingId, ct);
 
-    public async Task<(IReadOnlyList<ProcedureBooking> Items, int TotalCount)> ListAsync(Guid clinicId, string? status,
+    public async Task<(IReadOnlyList<ProcedureBooking> Items, int TotalCount)> ListAsync(Guid clientId, string? status,
         int skip, int take, CancellationToken ct = default)
     {
         var query = _db.ProcedureBookings
             .Include(b => b.Lead)
             .Include(b => b.Procedure)
-            .Where(b => b.ClinicId == clinicId);
+            .Where(b => b.ClientId == clientId);
 
         if (!string.IsNullOrWhiteSpace(status)) query = query.Where(b => b.Status == status);
 

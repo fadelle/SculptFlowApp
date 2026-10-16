@@ -6,7 +6,7 @@ public enum GenerationCancelStatus
 {
     /// <summary>The pending generation was stopped.</summary>
     Cancelled,
-    /// <summary>No such generation for this clinic.</summary>
+    /// <summary>No such generation for this client.</summary>
     NotFound,
     /// <summary>It already finished (completed / failed / cancelled), so there is nothing to stop.</summary>
     NotPending

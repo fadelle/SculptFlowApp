@@ -2,11 +2,11 @@ using Omni.App.Common.Enums;
 
 namespace Omni.App.Entities.Models;
 
-/// <summary>One clinic's TikTok Login Kit connection — account authorization only (see
+/// <summary>One client's TikTok Login Kit connection — account authorization only (see
 /// Business/Contracts/HttpClients/TikTok/ITikTokProviderClient.cs), NOT a messaging channel: unlike WhatsApp/Instagram/Facebook/Telegram
 /// (ChannelIntegration), there is no Inbox/conversation traffic for TikTok in this phase, so this is its own
-/// small table rather than a row in channel_integrations. One row per clinic (TikTok is a single provider,
-/// unlike CalendarIntegration's one-row-per-clinic-per-provider). Omni owns the whole OAuth2
+/// small table rather than a row in channel_integrations. One row per client (TikTok is a single provider,
+/// unlike CalendarIntegration's one-row-per-client-per-provider). Omni owns the whole OAuth2
 /// relationship directly (connect, callback, token refresh, disconnect) — no n8n involvement, mirroring
 /// CalendarIntegration's v2 architecture. MVP NOTE: tokens are stored in plain text, same caveat as
 /// CalendarIntegration.AccessToken/ChannelIntegration.AccessToken — move to an encrypted column/secrets
@@ -14,7 +14,7 @@ namespace Omni.App.Entities.Models;
 public class TikTokIntegration
 {
     public Guid Id { get; set; }
-    public Guid ClinicId { get; set; }
+    public Guid ClientId { get; set; }
     public string Status { get; set; } = TikTokIntegrationStatus.Disconnected;
 
     /// <summary>TikTok's stable per-app user id — the closest thing TikTok has to a permanent account id.</summary>

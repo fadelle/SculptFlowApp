@@ -37,31 +37,31 @@ Generated from `Common/Statics/ConfigDefaults`; keep this table in step when you
 
 | Section | Key | Default | Type / range | Meaning |
 |---|---|---|---|---|
-| Accounts | SignupEnabled | true | bool | Whether anyone can create a new clinic from the Register page or "Continue with Google". Off = only existing accounts can sign in. |
-| Accounts | SignupsPerIpPerHour | 20 | int 1–1000 | Most sign-up attempts one IP address may make per hour (Register and the Google clinic-name step). |
-| Availability | DefaultDurationMinutes | 30 | int 5–480 | Consultation length (minutes) for clinics that haven't set their own booking settings. |
-| Availability | DefaultBufferMinutes | 0 | int 0–240 | Gap (minutes) between consultations for clinics that haven't set their own booking settings. |
-| Availability | DefaultNoticeMinutes | 240 | int 0–10080 | Minimum notice (minutes) before a bookable slot, for clinics that haven't set their own. |
-| Availability | DefaultHorizonDays | 60 | int 1–365 | How many days ahead patients can book, for clinics that haven't set their own. |
+| Accounts | SignupEnabled | true | bool | Whether anyone can create a new client from the Register page or "Continue with Google". Off = only existing accounts can sign in. |
+| Accounts | SignupsPerIpPerHour | 20 | int 1–1000 | Most sign-up attempts one IP address may make per hour (Register and the Google client-name step). |
+| Availability | DefaultDurationMinutes | 30 | int 5–480 | Consultation length (minutes) for clients that haven't set their own booking settings. |
+| Availability | DefaultBufferMinutes | 0 | int 0–240 | Gap (minutes) between consultations for clients that haven't set their own booking settings. |
+| Availability | DefaultNoticeMinutes | 240 | int 0–10080 | Minimum notice (minutes) before a bookable slot, for clients that haven't set their own. |
+| Availability | DefaultHorizonDays | 60 | int 1–365 | How many days ahead patients can book, for clients that haven't set their own. |
 | Availability | MaxRangeDays | 14 | int 1–60 | The most days one free-slots request may cover. |
-| Billing | Enabled | true | bool | Master switch for usage billing and plan entitlements. Off = nothing is rated or reserved and every clinic may use everything. |
+| Billing | Enabled | true | bool | Master switch for usage billing and plan entitlements. Off = nothing is rated or reserved and every client may use everything. |
 | Billing | GracePeriodDays | 7 | int 0–60 | How long a past-due subscription keeps working before it expires. |
 | Billing | ReservationTimeoutHours | 72 | int 1–720 | A message charge still waiting for its delivery outcome is settled or released after this long. |
 | Billing | MaintenanceIntervalMinutes | 5 | int 1–60 | How often the billing worker renews due subscriptions and resolves stale reservations. |
-| Billing | SignupPlanCode | (empty) | string | Plan code a newly registered clinic starts on (first period free). Empty = no plan until an admin assigns one. |
+| Billing | SignupPlanCode | (empty) | string | Plan code a newly registered client starts on (first period free). Empty = no plan until an admin assigns one. |
 | Billing | Currency | USD | string | The one account currency (ISO 4217, e.g. USD). Balances, plans and rates are stored in it: change it only before any money has moved. |
 | Billing | RateBackdateToleranceMinutes | 5 | int 0–1440 | How far in the past a new rate may start or an old one may end (clock skew allowance). |
-| Billing | RecentTransactions | 15 | int 1–100 | How many recent wallet transactions a clinic's billing page shows. |
-| Knowledge | MinScore | 0.30 | decimal 0–1 | Minimum similarity for a search result, for new clinics (each clinic can change its own). |
-| Knowledge | ChunkMaxChars | 1000 | int 200–4000 | Chunk size in characters for new clinics (stored per clinic in tokens). |
-| Knowledge | ChunkOverlapChars | 150 | int 0–1000 | Chunk overlap in characters for new clinics. |
+| Billing | RecentTransactions | 15 | int 1–100 | How many recent wallet transactions a client's billing page shows. |
+| Knowledge | MinScore | 0.30 | decimal 0–1 | Minimum similarity for a search result, for new clients (each client can change its own). |
+| Knowledge | ChunkMaxChars | 1000 | int 200–4000 | Chunk size in characters for new clients (stored per client in tokens). |
+| Knowledge | ChunkOverlapChars | 150 | int 0–1000 | Chunk overlap in characters for new clients. |
 | Knowledge | ChunkMinChars | 200 | int 1–2000 | A trailing piece shorter than this is merged into the previous chunk. |
-| Knowledge | MaxUploadBytes | 5242880 | int 1024–26214400 | Largest knowledge-base file a clinic can upload (bytes). |
+| Knowledge | MaxUploadBytes | 5242880 | int 1024–26214400 | Largest knowledge-base file a client can upload (bytes). |
 | Knowledge | MaxExtractedChars | 250000 | int 1000–2000000 | Most text kept from one uploaded document. |
-| Knowledge | MinChunkSizeTokens | 50 | int 10–1000 | Smallest chunk size a clinic may choose (tokens). |
-| Knowledge | MaxChunkSizeTokens | 1000 | int 50–4000 | Largest chunk size a clinic may choose (tokens). |
-| Knowledge | MinTopK | 1 | int 1–50 | Smallest number of search results a clinic may choose. |
-| Knowledge | MaxTopK | 10 | int 1–50 | Largest number of search results a clinic may choose. |
+| Knowledge | MinChunkSizeTokens | 50 | int 10–1000 | Smallest chunk size a client may choose (tokens). |
+| Knowledge | MaxChunkSizeTokens | 1000 | int 50–4000 | Largest chunk size a client may choose (tokens). |
+| Knowledge | MinTopK | 1 | int 1–50 | Smallest number of search results a client may choose. |
+| Knowledge | MaxTopK | 10 | int 1–50 | Largest number of search results a client may choose. |
 | WebScraping | MaxPages | 100 | int 1–500 | Most distinct pages one website crawl visits. |
 | WebScraping | MaxDepth | 3 | int 0–6 | Link depth from the start page. |
 | WebScraping | MaxConcurrency | 3 | int 1–6 | Simultaneous requests to one website. |
@@ -74,9 +74,9 @@ Generated from `Common/Statics/ConfigDefaults`; keep this table in step when you
 | WebScraping | MaxTextChars | 200000 | int 1000–1000000 | Most text kept from one page. |
 | WebScraping | MaxQueryVariantsPerPath | 5 | int 1–50 | Different query strings allowed for one path (stops calendar and filter traps). |
 | WebScraping | MaxLinksPerPage | 300 | int 10–2000 | Most links taken from one page. |
-| WebScraping | MaxSourcesPerClinic | 25 | int 1–200 | How many websites one clinic may add. |
+| WebScraping | MaxSourcesPerClient | 25 | int 1–200 | How many websites one client may add. |
 | WebScraping | DevAllowedHosts | (empty) | string | Development environment only: comma-separated host:port entries the crawler may reach despite the SSRF rules (e.g. a local test site). Ignored outside Development. |
-| WebScraping | UserAgent | OmniBot/1.0 (+https://sculptflowapp.onrender.com; clinic knowledge-base crawler) | string | The crawler's User-Agent header. |
+| WebScraping | UserAgent | OmniBot/1.0 (+https://sculptflowapp.onrender.com; client knowledge-base crawler) | string | The crawler's User-Agent header. |
 | Benchmark | GenerationSampleSize | 20 | int 1–200 | Chunks sent to n8n per question-generation request. |
 | Benchmark | SamplePoolSize | 60 | int 1–1000 | Chunks sampled to choose the generation chunks from. |
 | Benchmark | MinSourceChunkChars | 80 | int 1–5000 | Shortest chunk that may be used to generate a question. |
@@ -97,9 +97,9 @@ Generated from `Common/Statics/ConfigDefaults`; keep this table in step when you
 | Integrations | TokenRefreshMarginMinutes | 5 | int 0–60 | Calendar and TikTok access tokens are refreshed this long before they expire. |
 | Voice | MaxBytes | 10485760 | int 1024–20971520 | Largest voice note (bytes) the Inbox will download from the provider to play or forward. |
 | Dashboard | LeadsPageSize | 25 | int 5–200 | Leads per page on the dashboard. |
-| Cache | ClinicsMinutes | 60 | int 1–1440 | Clinic rows (signed-in clinic, the bot's clinic info). Saving a change clears the cached copy at once; this is only how long an untouched copy lives. |
-| Cache | StaffLookupMinutes | 10 | int 1–1440 | Which clinic a signed-in user belongs to. Keep it short: it is how long a removed staff member could keep access if a removal were ever missed. Saving a change clears the cached copy at once; this is only how long an untouched copy lives. |
-| Cache | ProceduresMinutes | 60 | int 1–1440 | A clinic's procedures. Saving a change clears the cached copy at once; this is only how long an untouched copy lives. |
+| Cache | ClientsMinutes | 60 | int 1–1440 | Client rows (signed-in client, the bot's client info). Saving a change clears the cached copy at once; this is only how long an untouched copy lives. |
+| Cache | StaffLookupMinutes | 10 | int 1–1440 | Which client a signed-in user belongs to. Keep it short: it is how long a removed staff member could keep access if a removal were ever missed. Saving a change clears the cached copy at once; this is only how long an untouched copy lives. |
+| Cache | ProceduresMinutes | 60 | int 1–1440 | A client's procedures. Saving a change clears the cached copy at once; this is only how long an untouched copy lives. |
 | Cache | SchedulingMinutes | 60 | int 1–1440 | Weekly hours, booking settings, closed dates and calendar connections. Saving a change clears the cached copy at once; this is only how long an untouched copy lives. |
 | Cache | ChannelsMinutes | 60 | int 1–1440 | Channel connections, TikTok connection and WhatsApp templates. Saving a change clears the cached copy at once; this is only how long an untouched copy lives. |
 | Cache | BillingRatesMinutes | 60 | int 1–1440 | Rating cards, rates and who pays the provider per channel account. Saving a change clears the cached copy at once; this is only how long an untouched copy lives. |
@@ -134,7 +134,7 @@ used, so a change applies at once.
   `TenantId`, `Logging`, `AllowedHosts`.
 - **Structured rules** in appsettings: `Billing:WhatsApp:*` and `Billing:ProviderBilling:Defaults:*` (lists and maps).
 - **Constants** that are data or protocol limits: column lengths, Telegram's 4096-character limit, characters per token,
-  the billing idempotency key length, clinic slug rules, preview lengths, API paging limits.
+  the billing idempotency key length, client slug rules, preview lengths, API paging limits.
 
 Three settings are tied to stored data, so change them with care: `Billing` / `Currency` (balances, plans and rates are
 stored in it), `Embeddings` / `Model` and `Embeddings` / `Dimensions` (stored vectors were built with them; `Dimensions` must

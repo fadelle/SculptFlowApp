@@ -1,5 +1,5 @@
 /* =====================================================================
-   Omni clinic app — the app layer on top of the Aurora kit (docs/UI_GUIDE.md §0.4).
+   Omni client app — the app layer on top of the Aurora kit (docs/UI_GUIDE.md §0.4).
    Load order: fonts.css → aurora.css → site.css. This file comes AFTER the kit because it holds:
      1. the older token names (--accent, --surface, --badge-*…) as aliases of the kit's tokens, so every older
         component class — including markup the page scripts build — follows the kit palette in light and dark;
@@ -519,7 +519,7 @@ textarea.text-input { min-height: 0; }
 .switch-input:focus-visible + .switch { box-shadow: var(--au-focus-ring); }
 .switch-input:disabled + .switch { opacity: 0.45; cursor: not-allowed; }
 
-/* Segmented control made of radios (Send now / Schedule, Clinic time / My time) or buttons (Closed / Custom hours) */
+/* Segmented control made of radios (Send now / Schedule, Client time / My time) or buttons (Closed / Custom hours) */
 .seg {
   display: inline-flex;
   align-items: center;
@@ -1381,14 +1381,14 @@ td .cell-sub { white-space: nowrap; }
   .cal-drawer { width: 100%; max-width: 100%; }
 }
 
-/* ---- Clinic Info: tabs, details form, opening hours (clinic-info.js) ---- */
-/* Tabs that are separate pages (Clinic Info) */
+/* ---- Business Info: tabs, details form, opening hours (business-info.js) ---- */
+/* Tabs that are separate pages (Business Info) */
 .page-tabs { margin-bottom: 16px; }
-.clinic-tabs { display: flex; gap: 0.25rem; margin-bottom: 1rem; border-bottom: 1px solid var(--border); }
-.clinic-tab { margin-bottom: -1px; padding: 0.55rem 0.9rem; border-bottom: 2px solid transparent; color: var(--text-muted); font-size: 0.875rem; font-weight: 650; text-decoration: none; }
-.clinic-tab:hover { color: var(--text); }
-.clinic-tab.active { border-bottom-color: var(--au-primary); color: var(--tone-accent); }
-.clinic-form { padding: 0; }
+.client-tabs { display: flex; gap: 0.25rem; margin-bottom: 1rem; border-bottom: 1px solid var(--border); }
+.client-tab { margin-bottom: -1px; padding: 0.55rem 0.9rem; border-bottom: 2px solid transparent; color: var(--text-muted); font-size: 0.875rem; font-weight: 650; text-decoration: none; }
+.client-tab:hover { color: var(--text); }
+.client-tab.active { border-bottom-color: var(--au-primary); color: var(--tone-accent); }
+.client-form { padding: 0; }
 .set-section { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 1.25rem; padding: 1.1rem 1.25rem; border-bottom: 1px solid var(--border); }
 .set-section-body { display: flex; flex-direction: column; gap: 0.8rem; min-width: 0; }
 .form-row-contact { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.8rem; }

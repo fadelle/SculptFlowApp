@@ -6,12 +6,12 @@ using Omni.App.Persistence.Contexts;
 using Omni.App.Persistence.Contracts;
 using Omni.App.Persistence.Contracts.Billing;
 using Omni.App.Persistence.Contracts.Channels;
-using Omni.App.Persistence.Contracts.Clinics;
+using Omni.App.Persistence.Contracts.Clients;
 using Omni.App.Persistence.Contracts.Events;
 using Omni.App.Persistence.Contracts.Inbox;
 using Omni.App.Persistence.Helpers;
 using Omni.App.Persistence.Repositories.Channels;
-using Omni.App.Persistence.Repositories.Clinics;
+using Omni.App.Persistence.Repositories.Clients;
 using Omni.App.Persistence.Repositories.Events;
 using Omni.App.Persistence.Repositories.Inbox;
 
@@ -31,10 +31,10 @@ public sealed class BillingUnitOfWork : IBillingUnitOfWork
         Ledger = new BillingLedgerRepository(db);
         Plans = new BillingPlanRepository(db);
         RateCards = new BillingRateCardRepository(db, cache);
-        Subscriptions = new ClinicSubscriptionRepository(db);
+        Subscriptions = new ClientSubscriptionRepository(db);
         ChannelBilling = new ChannelAccountBillingRepository(db, cache);
         Channels = new ChannelIntegrationRepository(db, cache);
-        Clinics = new ClinicRepository(db, cache);
+        Clients = new ClientRepository(db, cache);
         Messages = new MessageRepository(db);
         Events = new EventLogRepository(db);
     }
@@ -44,10 +44,10 @@ public sealed class BillingUnitOfWork : IBillingUnitOfWork
     public IBillingLedgerRepository Ledger { get; }
     public IBillingPlanRepository Plans { get; }
     public IBillingRateCardRepository RateCards { get; }
-    public IClinicSubscriptionRepository Subscriptions { get; }
+    public IClientSubscriptionRepository Subscriptions { get; }
     public IChannelAccountBillingRepository ChannelBilling { get; }
     public IChannelIntegrationRepository Channels { get; }
-    public IClinicRepository Clinics { get; }
+    public IClientRepository Clients { get; }
     public IMessageRepository Messages { get; }
     public IEventLogRepository Events { get; }
 

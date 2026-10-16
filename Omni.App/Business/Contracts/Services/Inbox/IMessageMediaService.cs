@@ -6,6 +6,6 @@ namespace Omni.App.Business.Contracts.Services.Inbox;
 public interface IMessageMediaService
 {
     /// <summary>The audio of a voice note, fetched from its channel on demand (nothing is stored). KeyNotFoundException when the
-    /// message isn't this clinic's or its audio is no longer available; ArgumentException when the message isn't audio.</summary>
-    Task<VoiceAudio> GetAudioAsync(Guid clinicId, Guid messageId, CancellationToken ct = default);
+    /// message isn't this client's or its audio is no longer available; ArgumentException when the message isn't audio.</summary>
+    Task<VoiceAudio> GetAudioAsync(Guid clientId, Guid messageId, CancellationToken ct = default);
 }

@@ -4,7 +4,7 @@ namespace Omni.App.Entities.Requests.Calendars;
 /// CalendarSyncTriggerPayload asked for. RequestId must match the one Omni sent, so a late/duplicate callback
 /// for a superseded request (e.g. the appointment was rescheduled again before this callback arrived) is ignored.</summary>
 public record CalendarSyncCallbackRequest(
-    Guid ClinicId,
+    Guid ClientId,
     Guid AppointmentId,
     Guid CalendarIntegrationId,
     Guid RequestId,

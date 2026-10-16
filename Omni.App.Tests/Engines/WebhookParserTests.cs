@@ -134,7 +134,7 @@ public class MetaWebhookParserTests
     [InlineData("""{"type":"interactive","interactive":{"type":"button_reply","button_reply":{"id":"b1","title":"Yes"}}}""", "interactive", "Yes", "b1")]
     [InlineData("""{"type":"interactive","interactive":{"type":"list_reply","list_reply":{"id":"l1","title":"Opt"}}}""", "interactive", "Opt", "l1")]
     [InlineData("""{"type":"button","button":{"text":"Book","payload":"BOOK"}}""", "button", "Book", "BOOK")]
-    [InlineData("""{"type":"location","location":{"name":"Clinic"}}""", "location", "Clinic", null)]
+    [InlineData("""{"type":"location","location":{"name":"Client"}}""", "location", "Client", null)]
     [InlineData("""{"type":"location","location":{}}""", "location", "[location]", null)]
     [InlineData("""{"type":"contacts","contacts":[{}]}""", "contacts", "[contact]", null)]
     [InlineData("{\"type\":\"reaction\",\"reaction\":{\"emoji\":\"\\ud83d\\udc4d\"}}", "reaction", "\ud83d\udc4d", null)]

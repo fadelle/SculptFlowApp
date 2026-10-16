@@ -15,6 +15,9 @@ path: PROJECT_HANDOFF.md
 # One-off data migrations read the old table and column names.
 path: Database/migrations/**
 
+# The demo seed is a populated clinic (names, messages, knowledge text); its data stays clinic-flavoured.
+path: Database/seed-demo.sql | clinic
+
 # Third-party browser libraries, if any are added.
 path: Omni.App/wwwroot/lib/**
 

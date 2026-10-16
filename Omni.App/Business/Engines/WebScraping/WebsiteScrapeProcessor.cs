@@ -95,7 +95,7 @@ public sealed class WebsiteScrapeProcessor : IWebsiteScrapeProcessor
         var run = await _websites.GetRunAsync(runId, ct);
         if (run is null || run.Status != WebsiteScrapeStatus.Pending) return;
 
-        var source = await _websites.GetSourceAsync(run.ClinicId, run.WebsiteSourceId, ct);
+        var source = await _websites.GetSourceAsync(run.ClientId, run.WebsiteSourceId, ct);
         if (source is null)
         {
             run.Status = WebsiteScrapeStatus.Failed;
@@ -147,7 +147,7 @@ public sealed class WebsiteScrapeProcessor : IWebsiteScrapeProcessor
         var robots = robotsResult.Robots ?? RobotsTxt.AllowAll;
         var delayMs = Math.Max(_config.WebScrapingPolitenessDelayMs, (int)Math.Min((robots.CrawlDelaySeconds ?? 0) * 1000, 5000));
 
-        var existing = await _websites.MapPagesByUrlAsync(source.ClinicId, source.Id, ct);
+        var existing = await _websites.MapPagesByUrlAsync(source.ClientId, source.Id, ct);
 
         // ------------------------------------------------------------------ 1. CRAWL
         var singlePage = source.CrawlMode == WebsiteCrawlMode.SinglePage;
@@ -252,7 +252,7 @@ public sealed class WebsiteScrapeProcessor : IWebsiteScrapeProcessor
                     row.Status = WebsitePageStatus.Removed;
                     row.RemovedAt = DateTimeOffset.UtcNow;
                     row.FailureReason = "No longer linked from the website.";
-                    if (row.KnowledgeDocumentId is { } docId) await _knowledge.SetActiveAsync(source.ClinicId, docId, false, ct);
+                    if (row.KnowledgeDocumentId is { } docId) await _knowledge.SetActiveAsync(source.ClientId, docId, false, ct);
                     counters.Removed++;
                 }
                 else
@@ -664,7 +664,7 @@ public sealed class WebsiteScrapeProcessor : IWebsiteScrapeProcessor
                 row = new KnowledgeWebsitePage
                 {
                     Id = Guid.NewGuid(),
-                    ClinicId = source.ClinicId,
+                    ClientId = source.ClientId,
                     WebsiteSourceId = source.Id,
                     NormalizedUrl = cp.NormalizedUrl,
                     Url = cp.NormalizedUrl,
@@ -719,7 +719,7 @@ public sealed class WebsiteScrapeProcessor : IWebsiteScrapeProcessor
                         // Confidently gone (410, or 404 on two crawls): stop it being searchable, keep the history.
                         row.Status = WebsitePageStatus.Removed;
                         row.RemovedAt = now;
-                        await _knowledge.SetActiveAsync(source.ClinicId, gone, false, ct);
+                        await _knowledge.SetActiveAsync(source.ClientId, gone, false, ct);
                         counters.Removed++;
                     }
                     else
@@ -747,7 +747,7 @@ public sealed class WebsiteScrapeProcessor : IWebsiteScrapeProcessor
                     }
                     else if (row.Status == WebsitePageStatus.Removed && source.IsActive)
                     {
-                        await _knowledge.SetActiveAsync(source.ClinicId, row.KnowledgeDocumentId.Value, true, ct);
+                        await _knowledge.SetActiveAsync(source.ClientId, row.KnowledgeDocumentId.Value, true, ct);
                     }
                     row.Status = WebsitePageStatus.Unchanged;
                     row.FailureReason = null;
@@ -801,11 +801,11 @@ public sealed class WebsiteScrapeProcessor : IWebsiteScrapeProcessor
             // UNCHANGED: same normalized URL + same content hash + the document still exists → touch nothing.
             // No document rewrite, no chunk delete/recreate, NO embedding request.
             if (row.ContentHash == cp.Hash && row.KnowledgeDocumentId is { } sameDoc
-                && await _documents.ExistsAsync(source.ClinicId, sameDoc, ct))
+                && await _documents.ExistsAsync(source.ClientId, sameDoc, ct))
             {
                 if (wasRemoved && source.IsActive)
                 {
-                    await _knowledge.SetActiveAsync(source.ClinicId, sameDoc, true, ct);
+                    await _knowledge.SetActiveAsync(source.ClientId, sameDoc, true, ct);
                 }
                 row.Status = WebsitePageStatus.Unchanged;
                 row.FailureReason = null;
@@ -819,10 +819,10 @@ public sealed class WebsiteScrapeProcessor : IWebsiteScrapeProcessor
             if (row.KnowledgeDocumentId is { } docId)
             {
                 // CHANGED: update the existing document and rebuild ONLY its chunks/embeddings.
-                doc = await _knowledge.ReplaceSourceContentAsync(source.ClinicId, docId, cp.Title, cp.Text!, ct);
+                doc = await _knowledge.ReplaceSourceContentAsync(source.ClientId, docId, cp.Title, cp.Text!, ct);
                 changed = doc is not null;
             }
-            doc ??= await _knowledge.CreateFromSourceAsync(source.ClinicId, new ExternalKnowledgeDocument(
+            doc ??= await _knowledge.CreateFromSourceAsync(source.ClientId, new ExternalKnowledgeDocument(
                 KnowledgeSourceType.Website, cp.Title, source.Category, cp.Text!, source.IsActive, cp.NormalizedUrl), ct);
 
             row.KnowledgeDocumentId = doc.Id;
@@ -835,7 +835,7 @@ public sealed class WebsiteScrapeProcessor : IWebsiteScrapeProcessor
 
             // A document deactivated because the page vanished comes back with the page — but a document staff
             // deactivated by hand stays as they left it.
-            if (wasRemoved && source.IsActive && !doc.IsActive) await _knowledge.SetActiveAsync(source.ClinicId, doc.Id, true, ct);
+            if (wasRemoved && source.IsActive && !doc.IsActive) await _knowledge.SetActiveAsync(source.ClientId, doc.Id, true, ct);
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
         {
@@ -853,7 +853,7 @@ public sealed class WebsiteScrapeProcessor : IWebsiteScrapeProcessor
     {
         if (row.KnowledgeDocumentId is { } docId)
         {
-            await _knowledge.DeleteAsync(source.ClinicId, docId, ct);
+            await _knowledge.DeleteAsync(source.ClientId, docId, ct);
             row.KnowledgeDocumentId = null;
         }
         row.ContentHash = null;

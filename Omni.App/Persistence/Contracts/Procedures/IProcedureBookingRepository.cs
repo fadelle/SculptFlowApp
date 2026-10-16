@@ -5,10 +5,10 @@ namespace Omni.App.Persistence.Contracts.Procedures;
 public interface IProcedureBookingRepository
 {
     /// <summary>Tracked.</summary>
-    Task<ProcedureBooking?> GetAsync(Guid clinicId, Guid bookingId, CancellationToken ct = default);
+    Task<ProcedureBooking?> GetAsync(Guid clientId, Guid bookingId, CancellationToken ct = default);
 
     /// <summary>Newest first, with Lead and Procedure loaded.</summary>
-    Task<(IReadOnlyList<ProcedureBooking> Items, int TotalCount)> ListAsync(Guid clinicId, string? status, int skip, int take,
+    Task<(IReadOnlyList<ProcedureBooking> Items, int TotalCount)> ListAsync(Guid clientId, string? status, int skip, int take,
         CancellationToken ct = default);
 
     void Add(ProcedureBooking booking);

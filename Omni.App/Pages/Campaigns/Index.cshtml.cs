@@ -7,28 +7,28 @@ namespace Omni.App.Pages.Campaigns;
 
 public class IndexModel : PageModel
 {
-    private readonly ICurrentClinicContext _clinicContext;
+    private readonly ICurrentClientContext _clientContext;
     private readonly ICampaignService _campaigns;
 
-    public IndexModel(ICurrentClinicContext clinicContext, ICampaignService campaigns)
+    public IndexModel(ICurrentClientContext clientContext, ICampaignService campaigns)
     {
-        _clinicContext = clinicContext;
+        _clientContext = clientContext;
         _campaigns = campaigns;
     }
 
-    public bool ClinicConfigured { get; private set; }
+    public bool ClientConfigured { get; private set; }
     public IReadOnlyList<CampaignListRow> Campaigns { get; private set; } = Array.Empty<CampaignListRow>();
 
     public async Task OnGetAsync(CancellationToken ct)
     {
-        var clinic = await _clinicContext.GetClinicAsync(ct);
-        if (clinic is null)
+        var client = await _clientContext.GetClientAsync(ct);
+        if (client is null)
         {
-            ClinicConfigured = false;
+            ClientConfigured = false;
             return;
         }
 
-        ClinicConfigured = true;
-        Campaigns = await _campaigns.ListAsync(clinic.Id, ct);
+        ClientConfigured = true;
+        Campaigns = await _campaigns.ListAsync(client.Id, ct);
     }
 }

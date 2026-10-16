@@ -14,9 +14,9 @@ public interface IOverviewAdminRepository
     /// <summary>Everything that probably needs an admin: broken channels and calendars, failing sends, stuck campaigns.</summary>
     Task<List<ProblemRow>> ProblemsAsync(CancellationToken ct = default);
 
-    Task<List<ClinicRow>> RecentClinicsAsync(int take, CancellationToken ct = default);
+    Task<List<ClientRow>> RecentClientsAsync(int take, CancellationToken ct = default);
 
-    Task<PagedResponse<EventRow>> EventsAsync(Guid? clinicId, string? eventType, int page, CancellationToken ct = default);
+    Task<PagedResponse<EventRow>> EventsAsync(Guid? clientId, string? eventType, int page, CancellationToken ct = default);
 
     Task<List<string>> EventTypesAsync(CancellationToken ct = default);
 

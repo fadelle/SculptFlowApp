@@ -5,7 +5,7 @@ namespace Omni.App.Tests.Engines;
 public class HtmlContentExtractorTests
 {
     private readonly HtmlContentExtractor _sut = new();
-    private static readonly Uri Page = new("https://clinic.example.com/services/rhinoplasty");
+    private static readonly Uri Page = new("https://client.example.com/services/rhinoplasty");
 
     private ExtractedPage Extract(string html, Uri? url = null) => _sut.Extract(html, url ?? Page);
 
@@ -47,7 +47,7 @@ public class HtmlContentExtractorTests
               <a href="  ">Blank</a>
             </body></html>
             """);
-        Assert.Equal(["https://clinic.example.com/about", "https://clinic.example.com/services/contact", "https://other.com/x"], page.Links);
+        Assert.Equal(["https://client.example.com/about", "https://client.example.com/services/contact", "https://other.com/x"], page.Links);
     }
 
     [Fact]
@@ -126,9 +126,9 @@ public class HtmlContentExtractorTests
               <div>Outside main text</div>
               <main><h1>Procedure</h1><p>{Long("Real content about the procedure.")}</p></main>
               <footer>
-                <p>© 2026 Clinic</p>
+                <p>© 2026 Client</p>
                 <p>Call us: +961 70 123 456</p>
-                <p>info@clinic.example.com</p>
+                <p>info@client.example.com</p>
                 <p>Mon-Fri 9-5</p>
               </footer>
             </body></html>
@@ -137,9 +137,9 @@ public class HtmlContentExtractorTests
         Assert.DoesNotContain("Outside main text", texts);
         Assert.Contains("Procedure", texts);
         Assert.Contains("Call us: +961 70 123 456", texts);
-        Assert.Contains("info@clinic.example.com", texts);
+        Assert.Contains("info@client.example.com", texts);
         Assert.Contains("Mon-Fri 9-5", texts);
-        Assert.DoesNotContain("© 2026 Clinic", texts);
+        Assert.DoesNotContain("© 2026 Client", texts);
     }
 
     [Fact]

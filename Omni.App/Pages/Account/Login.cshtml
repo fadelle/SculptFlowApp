@@ -1,6 +1,6 @@
 @page "/Account/Login"
 @model Omni.App.Pages.Account.LoginModel
-@inject Omni.App.Business.Contracts.Services.Clinics.IClinicRegistrationService Registration
+@inject Omni.App.Business.Contracts.Services.Clients.IClientRegistrationService Registration
 @{
     ViewData["Title"] = "Sign in";
     Layout = "_AuthLayout";
@@ -12,7 +12,7 @@
         <span class="au-brand__mark"><img class="auth-logo" src="~/logo.svg" alt="" width="56" height="56" /></span>
         <div>
             <h1 class="au-auth__title">Welcome back</h1>
-            <p class="au-auth__sub">Sign in to your clinic.</p>
+            <p class="au-auth__sub">Sign in to your client.</p>
         </div>
     </div>
 
@@ -29,7 +29,7 @@
     <form method="post" class="au-auth__form" data-auth-form data-au-no-busy>
         <div class="au-form-field">
             <label class="au-form-label" for="login-email">Email</label>
-            <input type="email" name="Email" id="login-email" value="@Model.Email" class="au-input" autocomplete="username" placeholder="you@yourclinic.com" required autofocus="@string.IsNullOrEmpty(Model.Email)" />
+            <input type="email" name="Email" id="login-email" value="@Model.Email" class="au-input" autocomplete="username" placeholder="you@yourbusiness.com" required autofocus="@string.IsNullOrEmpty(Model.Email)" />
         </div>
         <div class="au-form-field">
             <label class="au-form-label" for="login-password">Password</label>
@@ -46,7 +46,7 @@
     @if (Registration.IsSignupOpen)
     {
     <p class="au-auth__foot">
-        New to Omni? <a class="au-link" href="/Account/Register@(string.IsNullOrEmpty(Model.ReturnUrl) ? "" : "?ReturnUrl=" + Uri.EscapeDataString(Model.ReturnUrl))">Create a clinic account</a>
+        New to Omni? <a class="au-link" href="/Account/Register@(string.IsNullOrEmpty(Model.ReturnUrl) ? "" : "?ReturnUrl=" + Uri.EscapeDataString(Model.ReturnUrl))">Create a client account</a>
     </p>
     }
 </div>

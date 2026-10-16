@@ -13,7 +13,7 @@ public class WhatsAppTemplatesController : DashboardApiController
 {
     private readonly IWhatsAppTemplateService _templates;
 
-    public WhatsAppTemplatesController(IWhatsAppTemplateService templates, ICurrentClinicContext clinicContext) : base(clinicContext)
+    public WhatsAppTemplatesController(IWhatsAppTemplateService templates, ICurrentClientContext clientContext) : base(clientContext)
     {
         _templates = templates;
     }
@@ -21,30 +21,30 @@ public class WhatsAppTemplatesController : DashboardApiController
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<WhatsAppTemplateResponse>>> List(CancellationToken ct)
     {
-        var clinicId = await GetClinicIdAsync(ct);
-        if (clinicId is null) return Forbid();
+        var clientId = await GetClientIdAsync(ct);
+        if (clientId is null) return Forbid();
 
-        var templates = await _templates.ListAsync(clinicId.Value, ct);
+        var templates = await _templates.ListAsync(clientId.Value, ct);
         return Ok(templates);
     }
 
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<WhatsAppTemplateResponse>> GetById(Guid id, CancellationToken ct)
     {
-        var clinicId = await GetClinicIdAsync(ct);
-        if (clinicId is null) return Forbid();
+        var clientId = await GetClientIdAsync(ct);
+        if (clientId is null) return Forbid();
 
-        var template = await _templates.GetByIdAsync(clinicId.Value, id, ct);
+        var template = await _templates.GetByIdAsync(clientId.Value, id, ct);
         return template is null ? NotFound() : Ok(template);
     }
 
     [HttpPost]
     public async Task<ActionResult<WhatsAppTemplateResponse>> Create([FromBody] CreateWhatsAppTemplateRequest request, CancellationToken ct)
     {
-        var clinicId = await GetClinicIdAsync(ct);
-        if (clinicId is null) return Forbid();
+        var clientId = await GetClientIdAsync(ct);
+        if (clientId is null) return Forbid();
 
-        var template = await _templates.CreateAsync(request with { ClinicId = clinicId.Value }, ct);
+        var template = await _templates.CreateAsync(request with { ClientId = clientId.Value }, ct);
         return CreatedAtAction(nameof(GetById), new { id = template.Id }, template);
     }
 
@@ -52,10 +52,10 @@ public class WhatsAppTemplatesController : DashboardApiController
     [HttpPost("{id:guid}/sync")]
     public async Task<ActionResult<WhatsAppTemplateResponse>> Sync(Guid id, CancellationToken ct)
     {
-        var clinicId = await GetClinicIdAsync(ct);
-        if (clinicId is null) return Forbid();
+        var clientId = await GetClientIdAsync(ct);
+        if (clientId is null) return Forbid();
 
-        var template = await _templates.SyncStatusAsync(clinicId.Value, id, ct);
+        var template = await _templates.SyncStatusAsync(clientId.Value, id, ct);
         return template is null ? NotFound() : Ok(template);
     }
 }

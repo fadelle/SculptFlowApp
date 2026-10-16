@@ -148,15 +148,15 @@ public class WebhookControllerTests
     [Fact]
     public async Task Receive_triggers_the_ai_only_when_the_processor_says_so()
     {
-        var clinic = Guid.NewGuid(); var convo = Guid.NewGuid();
-        Processed(new WhatsAppWebhookResponse(true, "customer_message", true, clinic, ConversationId: convo, LeadId: Guid.NewGuid(), MessageId: Guid.NewGuid(), MessageType: "text", Content: "hi", SelectedValue: "b"));
+        var client = Guid.NewGuid(); var convo = Guid.NewGuid();
+        Processed(new WhatsAppWebhookResponse(true, "customer_message", true, client, ConversationId: convo, LeadId: Guid.NewGuid(), MessageId: Guid.NewGuid(), MessageType: "text", Content: "hi", SelectedValue: "b"));
         Assert.IsType<OkResult>(await Signed("{}").Receive(default));
-        _ai.Verify(a => a.NotifyAsync(It.Is<AiTriggerPayload>(p => p.ClinicId == clinic && p.ConversationId == convo && p.Channel == "whatsapp" && p.MessageText == "hi" && p.SelectedValue == "b"), It.IsAny<CancellationToken>()), Times.Once);
+        _ai.Verify(a => a.NotifyAsync(It.Is<AiTriggerPayload>(p => p.ClientId == client && p.ConversationId == convo && p.Channel == "whatsapp" && p.MessageText == "hi" && p.SelectedValue == "b"), It.IsAny<CancellationToken>()), Times.Once);
 
         _ai.Invocations.Clear();
-        Processed(new WhatsAppWebhookResponse(true, "message_status", false, clinic));
+        Processed(new WhatsAppWebhookResponse(true, "message_status", false, client));
         await Signed("{}").Receive(default);
-        Processed(new WhatsAppWebhookResponse(true, "customer_message", true, clinic)); // no conversation id
+        Processed(new WhatsAppWebhookResponse(true, "customer_message", true, client)); // no conversation id
         await Signed("{}").Receive(default);
         _ai.Verify(a => a.NotifyAsync(It.IsAny<AiTriggerPayload>(), It.IsAny<CancellationToken>()), Times.Never);
     }
@@ -164,8 +164,8 @@ public class WebhookControllerTests
     [Fact]
     public async Task A_batch_triggers_the_ai_once_per_conversation_using_the_last_message()
     {
-        var clinic = Guid.NewGuid(); var c1 = Guid.NewGuid(); var c2 = Guid.NewGuid();
-        WhatsAppWebhookResponse Msg(Guid convo, string text) => new(true, "customer_message", true, clinic, ConversationId: convo, MessageType: "text", Content: text);
+        var client = Guid.NewGuid(); var c1 = Guid.NewGuid(); var c2 = Guid.NewGuid();
+        WhatsAppWebhookResponse Msg(Guid convo, string text) => new(true, "customer_message", true, client, ConversationId: convo, MessageType: "text", Content: text);
         Processed(Msg(c1, "a"), Msg(c2, "b"), Msg(c1, "c"));
         await Signed("{}").Receive(default);
         _ai.Verify(a => a.NotifyAsync(It.Is<AiTriggerPayload>(p => p.ConversationId == c1 && p.MessageText == "c"), It.IsAny<CancellationToken>()), Times.Once);
@@ -240,9 +240,9 @@ public class WebhookControllerTests
 
 public class AiControllerTests
 {
-    private readonly Guid _clinicId = Guid.NewGuid();
+    private readonly Guid _clientId = Guid.NewGuid();
     private readonly Guid _leadId = Guid.NewGuid();
-    private readonly Mock<IClinicContext> _clinics = new();
+    private readonly Mock<IClientContext> _clients = new();
     private readonly Mock<IProcedureService> _procedures = new();
     private readonly Mock<ILeadService> _leads = new();
     private readonly Mock<IAppointmentService> _appointments = new();
@@ -250,7 +250,7 @@ public class AiControllerTests
     private readonly Mock<IConversationService> _conversations = new();
     private readonly Mock<IKnowledgeSearchService> _search = new();
 
-    private AiController Sut() => new AiController(_clinics.Object, _procedures.Object, _leads.Object, _appointments.Object, _availability.Object, _conversations.Object, _search.Object).With();
+    private AiController Sut() => new AiController(_clients.Object, _procedures.Object, _leads.Object, _appointments.Object, _availability.Object, _conversations.Object, _search.Object).With();
 
     private static UpcomingAppointmentResponse Upcoming(Guid? id = null) => new(id ?? Guid.NewGuid(), "booked", "consultation", null, null, DateTimeOffset.UtcNow, null, "2026-01-01", "10:00", "Thursday, Jan 1 at 10:00 AM");
 
@@ -258,43 +258,43 @@ public class AiControllerTests
     public async Task Knowledge_search_validates_input_and_reports_provider_outages_as_503()
     {
         Assert.IsType<BadRequestObjectResult>((await Sut().SearchKnowledge(new KnowledgeSearchRequest(Guid.Empty, "q"), default)).Result);
-        Assert.IsType<BadRequestObjectResult>((await Sut().SearchKnowledge(new KnowledgeSearchRequest(_clinicId, " "), default)).Result);
-        _search.Setup(s => s.SearchAsync(_clinicId, "price", 3, It.IsAny<CancellationToken>())).ReturnsAsync(new KnowledgeSearchResponse([]));
-        Assert.IsType<OkObjectResult>((await Sut().SearchKnowledge(new KnowledgeSearchRequest(_clinicId, "price", 3), default)).Result);
-        _search.Setup(s => s.SearchAsync(_clinicId, "down", null, It.IsAny<CancellationToken>())).ThrowsAsync(new InvalidOperationException("embeddings down"));
-        Assert.Equal(503, Assert.IsType<ObjectResult>((await Sut().SearchKnowledge(new KnowledgeSearchRequest(_clinicId, "down"), default)).Result).StatusCode);
+        Assert.IsType<BadRequestObjectResult>((await Sut().SearchKnowledge(new KnowledgeSearchRequest(_clientId, " "), default)).Result);
+        _search.Setup(s => s.SearchAsync(_clientId, "price", 3, It.IsAny<CancellationToken>())).ReturnsAsync(new KnowledgeSearchResponse([]));
+        Assert.IsType<OkObjectResult>((await Sut().SearchKnowledge(new KnowledgeSearchRequest(_clientId, "price", 3), default)).Result);
+        _search.Setup(s => s.SearchAsync(_clientId, "down", null, It.IsAny<CancellationToken>())).ThrowsAsync(new InvalidOperationException("embeddings down"));
+        Assert.Equal(503, Assert.IsType<ObjectResult>((await Sut().SearchKnowledge(new KnowledgeSearchRequest(_clientId, "down"), default)).Result).StatusCode);
     }
 
     [Fact]
-    public async Task Clinic_info_procedures_and_lead_lookups()
+    public async Task Client_info_procedures_and_lead_lookups()
     {
-        Assert.IsType<NotFoundResult>((await Sut().GetClinicInfo(_clinicId, default)).Result);
-        _clinics.Setup(c => c.GetByIdAsync(_clinicId, It.IsAny<CancellationToken>())).ReturnsAsync(new Clinic { Id = _clinicId, Name = "Glow", Timezone = "Asia/Beirut" });
-        var info = (ClinicInfoResponse)Assert.IsType<OkObjectResult>((await Sut().GetClinicInfo(_clinicId, default)).Result).Value!;
+        Assert.IsType<NotFoundResult>((await Sut().GetClientInfo(_clientId, default)).Result);
+        _clients.Setup(c => c.GetByIdAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(new Client { Id = _clientId, Name = "Glow", Timezone = "Asia/Beirut" });
+        var info = (ClientInfoResponse)Assert.IsType<OkObjectResult>((await Sut().GetClientInfo(_clientId, default)).Result).Value!;
         Assert.Equal(("Glow", "Asia/Beirut"), (info.Name, info.Timezone));
 
-        await Sut().GetProcedures(_clinicId, default);
-        _procedures.Verify(p => p.ListAsync(_clinicId, true, It.IsAny<CancellationToken>()), Times.Once);
+        await Sut().GetProcedures(_clientId, default);
+        _procedures.Verify(p => p.ListAsync(_clientId, true, It.IsAny<CancellationToken>()), Times.Once);
 
-        Assert.IsType<NotFoundResult>((await Sut().GetLeadContext(_leadId, _clinicId, default)).Result);
-        Assert.IsType<NotFoundResult>((await Sut().UpdateLead(_leadId, _clinicId, new UpdateLeadContextRequest(null, null, null, null, null, null, null), default)).Result);
+        Assert.IsType<NotFoundResult>((await Sut().GetLeadContext(_leadId, _clientId, default)).Result);
+        Assert.IsType<NotFoundResult>((await Sut().UpdateLead(_leadId, _clientId, new UpdateLeadContextRequest(null, null, null, null, null, null, null), default)).Result);
     }
 
     [Fact]
     public async Task Available_slots_defaults_the_range_and_merges_the_patients_booking_context()
     {
         var slots = new AvailabilityResponse(true, "UTC", "2026-01-01", 30, "2026-01-01", "2026-01-07", null, []);
-        _availability.Setup(a => a.GetSlotsAsync(_clinicId, null, null, 7, It.IsAny<CancellationToken>())).ReturnsAsync(slots);
-        Assert.Same(slots, Assert.IsType<OkObjectResult>((await Sut().GetAvailableSlots(_clinicId, null, null, null, null, default)).Result).Value);
+        _availability.Setup(a => a.GetSlotsAsync(_clientId, null, null, 7, It.IsAny<CancellationToken>())).ReturnsAsync(slots);
+        Assert.Same(slots, Assert.IsType<OkObjectResult>((await Sut().GetAvailableSlots(_clientId, null, null, null, null, default)).Result).Value);
 
         var date = new DateOnly(2026, 2, 3);
-        _availability.Setup(a => a.GetSlotsAsync(_clinicId, null, date, 1, It.IsAny<CancellationToken>())).ReturnsAsync(slots);
-        _appointments.Setup(a => a.GetBookingContextAsync(_clinicId, _leadId, It.IsAny<CancellationToken>())).ReturnsAsync(new PatientBookingContext(true, false, "existing_upcoming_appointment", [Upcoming()]));
-        var merged = (AvailabilityResponse)Assert.IsType<OkObjectResult>((await Sut().GetAvailableSlots(_clinicId, _leadId, null, date, null, default)).Result).Value!;
+        _availability.Setup(a => a.GetSlotsAsync(_clientId, null, date, 1, It.IsAny<CancellationToken>())).ReturnsAsync(slots);
+        _appointments.Setup(a => a.GetBookingContextAsync(_clientId, _leadId, It.IsAny<CancellationToken>())).ReturnsAsync(new PatientBookingContext(true, false, "existing_upcoming_appointment", [Upcoming()]));
+        var merged = (AvailabilityResponse)Assert.IsType<OkObjectResult>((await Sut().GetAvailableSlots(_clientId, _leadId, null, date, null, default)).Result).Value!;
         Assert.Equal(("2026-02-03", true, false, "existing_upcoming_appointment"), (merged.RequestedDate, merged.HasUpcomingAppointment, merged.CanCreateNewBooking, merged.BookingBlockReason));
 
-        _appointments.Setup(a => a.GetBookingContextAsync(_clinicId, _leadId, It.IsAny<CancellationToken>())).ReturnsAsync((PatientBookingContext?)null);
-        Assert.IsType<NotFoundObjectResult>((await Sut().GetAvailableSlots(_clinicId, _leadId, null, null, null, default)).Result);
+        _appointments.Setup(a => a.GetBookingContextAsync(_clientId, _leadId, It.IsAny<CancellationToken>())).ReturnsAsync((PatientBookingContext?)null);
+        Assert.IsType<NotFoundObjectResult>((await Sut().GetAvailableSlots(_clientId, _leadId, null, null, null, default)).Result);
     }
 
     [Theory]
@@ -305,9 +305,9 @@ public class AiControllerTests
     public async Task Schedule_reports_success_only_for_real_changes_and_hides_context_on_success(string code, bool success)
     {
         var existing = new[] { Upcoming() };
-        _appointments.Setup(a => a.ScheduleAsync(_clinicId, _leadId, It.IsAny<ScheduleConsultationRequest>(), It.IsAny<CancellationToken>()))
+        _appointments.Setup(a => a.ScheduleAsync(_clientId, _leadId, It.IsAny<ScheduleConsultationRequest>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ScheduleOutcome(success ? "created" : "none", code, "msg", Existing: existing, RequestedLabel: "Friday at 10"));
-        var r = (ScheduleConsultationResult)Assert.IsType<OkObjectResult>((await Sut().ScheduleConsultation(_clinicId, _leadId, new ScheduleConsultationRequest(DateTimeOffset.UtcNow), default)).Result).Value!;
+        var r = (ScheduleConsultationResult)Assert.IsType<OkObjectResult>((await Sut().ScheduleConsultation(_clientId, _leadId, new ScheduleConsultationRequest(DateTimeOffset.UtcNow), default)).Result).Value!;
         Assert.Equal(success, r.Success);
         Assert.Equal(success, r.ExistingUpcomingAppointments is null);
     }
@@ -318,54 +318,54 @@ public class AiControllerTests
         var request = new BookConsultationRequest(_leadId, null, null, DateTimeOffset.UtcNow.AddDays(2), null, null, null, null);
         BookConsultationResult Result(Task<ActionResult<BookConsultationResult>> t) => (BookConsultationResult)Assert.IsType<OkObjectResult>(t.Result.Result).Value!;
 
-        var appt = new AppointmentResponse(Guid.NewGuid(), _clinicId, _leadId, "Ann", null, null, "consultation", "booked", DateTimeOffset.UtcNow, null, null, null, null, DateTimeOffset.UtcNow);
+        var appt = new AppointmentResponse(Guid.NewGuid(), _clientId, _leadId, "Ann", null, null, "consultation", "booked", DateTimeOffset.UtcNow, null, null, null, null, DateTimeOffset.UtcNow);
         _appointments.Setup(a => a.BookAvailableSlotAsync(It.IsAny<CreateAppointmentRequest>(), It.IsAny<CancellationToken>())).ReturnsAsync(appt);
         var local = Upcoming(appt.Id);
-        _appointments.Setup(a => a.GetUpcomingForLeadAsync(_clinicId, _leadId, It.IsAny<CancellationToken>())).ReturnsAsync(new UpcomingAppointmentsResponse("UTC", [local]));
-        var ok = Result(Sut().BookConsultation(_clinicId, request, default));
+        _appointments.Setup(a => a.GetUpcomingForLeadAsync(_clientId, _leadId, It.IsAny<CancellationToken>())).ReturnsAsync(new UpcomingAppointmentsResponse("UTC", [local]));
+        var ok = Result(Sut().BookConsultation(_clientId, request, default));
         Assert.Equal((true, "BOOKED", local), (ok.Success, ok.Code, ok.Appointment));
 
         _appointments.Setup(a => a.BookAvailableSlotAsync(It.IsAny<CreateAppointmentRequest>(), It.IsAny<CancellationToken>())).ThrowsAsync(new LeadAlreadyBookedException(Upcoming()));
-        var dup = Result(Sut().BookConsultation(_clinicId, request, default));
+        var dup = Result(Sut().BookConsultation(_clientId, request, default));
         Assert.Equal(("EXISTING_UPCOMING_APPOINTMENT", false), (dup.Code, dup.Success));
         Assert.StartsWith("Nothing was booked", dup.Instruction);
 
         _appointments.Setup(a => a.BookAvailableSlotAsync(It.IsAny<CreateAppointmentRequest>(), It.IsAny<CancellationToken>())).ThrowsAsync(new SlotUnavailableException("taken"));
-        Assert.Equal("SLOT_UNAVAILABLE", Result(Sut().BookConsultation(_clinicId, request, default)).Code);
-        _appointments.Setup(a => a.BookAvailableSlotAsync(It.IsAny<CreateAppointmentRequest>(), It.IsAny<CancellationToken>())).ThrowsAsync(new ArgumentException("Lead not found for this clinic."));
-        Assert.Equal("LEAD_NOT_FOUND", Result(Sut().BookConsultation(_clinicId, request, default)).Code);
+        Assert.Equal("SLOT_UNAVAILABLE", Result(Sut().BookConsultation(_clientId, request, default)).Code);
+        _appointments.Setup(a => a.BookAvailableSlotAsync(It.IsAny<CreateAppointmentRequest>(), It.IsAny<CancellationToken>())).ThrowsAsync(new ArgumentException("Lead not found for this client."));
+        Assert.Equal("LEAD_NOT_FOUND", Result(Sut().BookConsultation(_clientId, request, default)).Code);
         _appointments.Setup(a => a.BookAvailableSlotAsync(It.IsAny<CreateAppointmentRequest>(), It.IsAny<CancellationToken>())).ThrowsAsync(new ArgumentException("Procedure inactive"));
-        Assert.Equal("INVALID_REQUEST", Result(Sut().BookConsultation(_clinicId, request, default)).Code);
+        Assert.Equal("INVALID_REQUEST", Result(Sut().BookConsultation(_clientId, request, default)).Code);
     }
 
     [Fact]
     public async Task Reschedule_returns_404_for_nothing_to_move_and_409_with_hints_for_conflicts()
     {
         var request = new RescheduleConsultationRequest(DateTimeOffset.UtcNow.AddDays(3), null, "r");
-        Assert.IsType<NotFoundObjectResult>((await Sut().RescheduleConsultation(_clinicId, _leadId, null, request, default)).Result);
+        Assert.IsType<NotFoundObjectResult>((await Sut().RescheduleConsultation(_clientId, _leadId, null, request, default)).Result);
 
-        _appointments.Setup(a => a.RescheduleAsync(_clinicId, _leadId, null, request.ScheduledStart, null, "r", It.IsAny<CancellationToken>())).ThrowsAsync(new MultipleUpcomingAppointmentsException([Upcoming(), Upcoming()]));
-        Assert.Equal(409, Assert.IsType<ConflictObjectResult>((await Sut().RescheduleConsultation(_clinicId, _leadId, null, request, default)).Result).StatusCode);
-        _appointments.Setup(a => a.RescheduleAsync(_clinicId, _leadId, null, request.ScheduledStart, null, "r", It.IsAny<CancellationToken>())).ThrowsAsync(new SlotUnavailableException("busy"));
-        Assert.IsType<ConflictObjectResult>((await Sut().RescheduleConsultation(_clinicId, _leadId, null, request, default)).Result);
+        _appointments.Setup(a => a.RescheduleAsync(_clientId, _leadId, null, request.ScheduledStart, null, "r", It.IsAny<CancellationToken>())).ThrowsAsync(new MultipleUpcomingAppointmentsException([Upcoming(), Upcoming()]));
+        Assert.Equal(409, Assert.IsType<ConflictObjectResult>((await Sut().RescheduleConsultation(_clientId, _leadId, null, request, default)).Result).StatusCode);
+        _appointments.Setup(a => a.RescheduleAsync(_clientId, _leadId, null, request.ScheduledStart, null, "r", It.IsAny<CancellationToken>())).ThrowsAsync(new SlotUnavailableException("busy"));
+        Assert.IsType<ConflictObjectResult>((await Sut().RescheduleConsultation(_clientId, _leadId, null, request, default)).Result);
 
-        var appt = new AppointmentResponse(Guid.NewGuid(), _clinicId, _leadId, null, null, null, "consultation", "booked", DateTimeOffset.UtcNow, null, null, null, null, DateTimeOffset.UtcNow);
-        _appointments.Setup(a => a.RescheduleAsync(_clinicId, _leadId, appt.Id, request.ScheduledStart, null, "r", It.IsAny<CancellationToken>())).ReturnsAsync(appt);
-        Assert.IsType<OkObjectResult>((await Sut().RescheduleConsultation(_clinicId, _leadId, appt.Id, request, default)).Result);
+        var appt = new AppointmentResponse(Guid.NewGuid(), _clientId, _leadId, null, null, null, "consultation", "booked", DateTimeOffset.UtcNow, null, null, null, null, DateTimeOffset.UtcNow);
+        _appointments.Setup(a => a.RescheduleAsync(_clientId, _leadId, appt.Id, request.ScheduledStart, null, "r", It.IsAny<CancellationToken>())).ReturnsAsync(appt);
+        Assert.IsType<OkObjectResult>((await Sut().RescheduleConsultation(_clientId, _leadId, appt.Id, request, default)).Result);
     }
 
     [Fact]
     public async Task Cancel_upcoming_and_handoff()
     {
-        _appointments.Setup(a => a.CancelConsultationAsync(_clinicId, _leadId, null, "r", It.IsAny<CancellationToken>())).ReturnsAsync(new CancelOutcome("canceled", "CANCELED", "ok", Upcoming()));
-        var r = (CancelConsultationResult)Assert.IsType<OkObjectResult>((await Sut().CancelConsultation(_clinicId, _leadId, null, new CancelConsultationRequest("r"), default)).Result).Value!;
+        _appointments.Setup(a => a.CancelConsultationAsync(_clientId, _leadId, null, "r", It.IsAny<CancellationToken>())).ReturnsAsync(new CancelOutcome("canceled", "CANCELED", "ok", Upcoming()));
+        var r = (CancelConsultationResult)Assert.IsType<OkObjectResult>((await Sut().CancelConsultation(_clientId, _leadId, null, new CancelConsultationRequest("r"), default)).Result).Value!;
         Assert.True(r.Success);
-        _appointments.Setup(a => a.GetUpcomingForLeadAsync(_clinicId, _leadId, It.IsAny<CancellationToken>())).ReturnsAsync(new UpcomingAppointmentsResponse("UTC", []));
-        Assert.IsType<OkObjectResult>((await Sut().GetMyAppointments(_clinicId, _leadId, default)).Result);
+        _appointments.Setup(a => a.GetUpcomingForLeadAsync(_clientId, _leadId, It.IsAny<CancellationToken>())).ReturnsAsync(new UpcomingAppointmentsResponse("UTC", []));
+        Assert.IsType<OkObjectResult>((await Sut().GetMyAppointments(_clientId, _leadId, default)).Result);
 
         var convo = Guid.NewGuid();
-        Assert.IsType<NotFoundResult>((await Sut().HandoffToHuman(convo, _clinicId, new HandoffToHumanRequest("why"), default)).Result);
-        _conversations.Setup(c => c.HandoffToHumanAsync(_clinicId, convo, "why", It.IsAny<CancellationToken>())).ReturnsAsync(new ConversationResponse(convo, _clinicId, _leadId, "whatsapp", "active", "human", false, true, null, null, null, false, DateTimeOffset.UtcNow));
-        Assert.IsType<OkObjectResult>((await Sut().HandoffToHuman(convo, _clinicId, new HandoffToHumanRequest("why"), default)).Result);
+        Assert.IsType<NotFoundResult>((await Sut().HandoffToHuman(convo, _clientId, new HandoffToHumanRequest("why"), default)).Result);
+        _conversations.Setup(c => c.HandoffToHumanAsync(_clientId, convo, "why", It.IsAny<CancellationToken>())).ReturnsAsync(new ConversationResponse(convo, _clientId, _leadId, "whatsapp", "active", "human", false, true, null, null, null, false, DateTimeOffset.UtcNow));
+        Assert.IsType<OkObjectResult>((await Sut().HandoffToHuman(convo, _clientId, new HandoffToHumanRequest("why"), default)).Result);
     }
 }

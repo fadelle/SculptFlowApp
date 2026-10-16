@@ -19,14 +19,14 @@ public interface ICalendarProviderClient
 
     Task<CalendarOAuthTokenResult> RefreshAccessTokenAsync(string refreshToken, CancellationToken ct = default);
 
-    /// <summary>Best-effort account label for display only (e.g. "jane@clinic.com") — null if the provider's
+    /// <summary>Best-effort account label for display only (e.g. "jane@client.com") — null if the provider's
     /// profile endpoint doesn't return one.</summary>
     Task<string?> GetAccountEmailAsync(string accessToken, CancellationToken ct = default);
 
     Task<IReadOnlyList<CalendarCalendarOption>> ListCalendarsAsync(string accessToken, CancellationToken ct = default);
 
-    /// <summary>Tells the provider the clinic is disconnecting, so it can invalidate the token(s) server-side.
+    /// <summary>Tells the provider the client is disconnecting, so it can invalidate the token(s) server-side.
     /// Never throws — a provider that can't be reached for revocation is not a reason to fail a disconnect the
-    /// clinic is doing from their own Omni settings page; the tokens are cleared locally regardless.</summary>
+    /// client is doing from their own Omni settings page; the tokens are cleared locally regardless.</summary>
     Task RevokeAsync(string? accessToken, string? refreshToken, CancellationToken ct = default);
 }

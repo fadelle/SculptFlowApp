@@ -13,10 +13,10 @@ namespace Omni.App.Tests.Pages;
 
 public class KnowledgeIndexPageTests
 {
-    private static readonly Clinic Glow = SomeClinic();
+    private static readonly Client Glow = SomeClient();
     private readonly Mock<IKnowledgeService> _knowledge = new();
     private readonly Mock<IWebsiteSourceService> _websites = new();
-    private KbIndex Sut(Clinic? clinic = null) => new KbIndex(ClinicContext(clinic ?? Glow).Object, _knowledge.Object, _websites.Object).Attach();
+    private KbIndex Sut(Client? client = null) => new KbIndex(ClientContext(client ?? Glow).Object, _knowledge.Object, _websites.Object).Attach();
 
     private static KnowledgeDocumentResponse Doc(string title, string sourceType, DateTimeOffset updated) =>
         Blank<KnowledgeDocumentResponse>() with { Title = title, SourceType = sourceType, UpdatedAt = updated };
@@ -47,12 +47,12 @@ public class KnowledgeIndexPageTests
     }
 
     [Fact]
-    public async Task Without_a_clinic_the_list_is_empty()
+    public async Task Without_a_client_the_list_is_empty()
     {
-        var model = Sut(clinic: null!);
-        var none = new KbIndex(ClinicContext(null).Object, _knowledge.Object, _websites.Object).Attach();
+        var model = Sut(client: null!);
+        var none = new KbIndex(ClientContext(null).Object, _knowledge.Object, _websites.Object).Attach();
         await none.OnGetAsync(default);
-        Assert.False(none.ClinicConfigured);
+        Assert.False(none.ClientConfigured);
         Assert.Empty(none.Rows);
         Assert.False(none.AnyWebsiteInProgress);
         Assert.NotNull(model);
@@ -108,9 +108,9 @@ public class KnowledgeIndexPageTests
     }
 
     [Fact]
-    public async Task Every_post_without_a_clinic_just_redirects()
+    public async Task Every_post_without_a_client_just_redirects()
     {
-        var model = new KbIndex(ClinicContext(null).Object, _knowledge.Object, _websites.Object).Attach();
+        var model = new KbIndex(ClientContext(null).Object, _knowledge.Object, _websites.Object).Attach();
         var id = Guid.NewGuid();
         Assert.IsType<RedirectToPageResult>(await model.OnPostToggleAsync(id, true, default));
         Assert.IsType<RedirectToPageResult>(await model.OnPostDeleteAsync(id, default));
@@ -122,11 +122,11 @@ public class KnowledgeIndexPageTests
 
 public class KnowledgeEditPageTests
 {
-    private static readonly Clinic Glow = SomeClinic();
+    private static readonly Client Glow = SomeClient();
     private readonly Mock<IKnowledgeService> _knowledge = new();
     private readonly Mock<IWebsiteSourceService> _websites = new();
-    private KbEdit Sut(Clinic? clinic = null, bool noClinic = false) =>
-        new KbEdit(ClinicContext(noClinic ? null : clinic ?? Glow).Object, _knowledge.Object, _websites.Object).Attach();
+    private KbEdit Sut(Client? client = null, bool noClient = false) =>
+        new KbEdit(ClientContext(noClient ? null : client ?? Glow).Object, _knowledge.Object, _websites.Object).Attach();
 
     private static KnowledgeDocumentResponse Existing(string sourceType = "manual") => Blank<KnowledgeDocumentResponse>() with
     {
@@ -136,16 +136,16 @@ public class KnowledgeEditPageTests
     // ---- get --------------------------------------------------------------------------------------------------
 
     [Fact]
-    public async Task A_new_entry_starts_active_and_without_a_clinic_the_page_is_empty()
+    public async Task A_new_entry_starts_active_and_without_a_client_the_page_is_empty()
     {
         var model = Sut();
         Assert.IsType<PageResult>(await model.OnGetAsync(default));
         Assert.True(model.IsNew);
         Assert.True(model.IsActive);
 
-        var none = Sut(noClinic: true);
+        var none = Sut(noClient: true);
         Assert.IsType<PageResult>(await none.OnGetAsync(default));
-        Assert.False(none.ClinicConfigured);
+        Assert.False(none.ClientConfigured);
     }
 
     [Theory]
@@ -237,7 +237,7 @@ public class KnowledgeEditPageTests
         Assert.IsType<PageResult>(await model.OnPostAsync(default));
         Assert.StartsWith("Couldn't index this entry for AI search:", model.ErrorMessage);
 
-        Assert.Equal("page:/KnowledgeBase/Index", RedirectTarget(await Sut(noClinic: true).OnPostAsync(default)));
+        Assert.Equal("page:/KnowledgeBase/Index", RedirectTarget(await Sut(noClient: true).OnPostAsync(default)));
     }
 
     // ---- website tab ----------------------------------------------------------------------------------------------
@@ -248,7 +248,7 @@ public class KnowledgeEditPageTests
         var created = Blank<WebsiteSourceResponse>() with { Id = Guid.NewGuid() };
         _websites.SetupSequence(w => w.CreateAsync(Glow.Id, It.IsAny<CreateWebsiteSourceRequest>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(created).ThrowsAsync(new ArgumentException("Invalid URL."));
-        var model = Sut(); model.WebsiteUrl = "https://clinic.example";
+        var model = Sut(); model.WebsiteUrl = "https://client.example";
 
         Assert.Equal($"/KnowledgeBase/Websites/{created.Id}", RedirectTarget(await model.OnPostWebsiteAsync(default)));
         Assert.Equal("website", model.Mode);
@@ -257,7 +257,7 @@ public class KnowledgeEditPageTests
 
         var editing = Sut(); editing.Id = Guid.NewGuid();
         Assert.IsType<BadRequestResult>(await editing.OnPostWebsiteAsync(default));
-        Assert.Equal("page:/KnowledgeBase/Index", RedirectTarget(await Sut(noClinic: true).OnPostWebsiteAsync(default)));
+        Assert.Equal("page:/KnowledgeBase/Index", RedirectTarget(await Sut(noClient: true).OnPostWebsiteAsync(default)));
     }
 
     // ---- upload tab -------------------------------------------------------------------------------------------------
@@ -278,7 +278,7 @@ public class KnowledgeEditPageTests
 
         var editing = Sut(); editing.Id = Guid.NewGuid(); editing.UploadFile = File();
         Assert.IsType<BadRequestResult>(await editing.OnPostUploadAsync(default));
-        Assert.Equal("page:/KnowledgeBase/Index", RedirectTarget(await Sut(noClinic: true).OnPostUploadAsync(default)));
+        Assert.Equal("page:/KnowledgeBase/Index", RedirectTarget(await Sut(noClient: true).OnPostUploadAsync(default)));
     }
 
     [Fact]
@@ -313,7 +313,7 @@ public class KnowledgeEditPageTests
 
 public class KnowledgeSettingsAndWebsitePageTests
 {
-    private static readonly Clinic Glow = SomeClinic();
+    private static readonly Client Glow = SomeClient();
 
     private static KnowledgeSettingsResponse Settings() => new("m", 1536, "cosine", "none", 500, 50, 5, 0.3, DateTimeOffset.UtcNow);
 
@@ -322,13 +322,13 @@ public class KnowledgeSettingsAndWebsitePageTests
     {
         var service = new Mock<IKnowledgeSettingsService>();
         service.Setup(s => s.GetAsync(Glow.Id, It.IsAny<CancellationToken>())).ReturnsAsync(Settings());
-        var model = new KbSettings(ClinicContext(Glow).Object, service.Object).Attach();
+        var model = new KbSettings(ClientContext(Glow).Object, service.Object).Attach();
         Assert.IsType<PageResult>(await model.OnGetAsync(default));
         Assert.Equal((500, 50, 5, "0.3"), (model.ChunkSizeTokens, model.ChunkOverlapTokens, model.TopK, model.MinimumSimilarity));
 
-        var none = new KbSettings(ClinicContext(null).Object, service.Object).Attach();
+        var none = new KbSettings(ClientContext(null).Object, service.Object).Attach();
         Assert.IsType<PageResult>(await none.OnGetAsync(default));
-        Assert.False(none.ClinicConfigured);
+        Assert.False(none.ClientConfigured);
     }
 
     [Theory]
@@ -338,7 +338,7 @@ public class KnowledgeSettingsAndWebsitePageTests
     {
         var service = new Mock<IKnowledgeSettingsService>();
         service.Setup(s => s.UpdateAsync(Glow.Id, It.IsAny<UpdateKnowledgeSettingsRequest>(), It.IsAny<CancellationToken>())).ReturnsAsync(Settings());
-        var model = new KbSettings(ClinicContext(Glow).Object, service.Object) { ChunkSizeTokens = 400, ChunkOverlapTokens = 40, TopK = 3, MinimumSimilarity = text }.Attach();
+        var model = new KbSettings(ClientContext(Glow).Object, service.Object) { ChunkSizeTokens = 400, ChunkOverlapTokens = 40, TopK = 3, MinimumSimilarity = text }.Attach();
         Assert.IsType<RedirectToPageResult>(await model.OnPostAsync(default));
         service.Verify(s => s.UpdateAsync(Glow.Id, new UpdateKnowledgeSettingsRequest(400, 40, 3, parsed), It.IsAny<CancellationToken>()), Times.Once);
         Assert.Equal("Settings saved.", model.StatusMessage);
@@ -349,7 +349,7 @@ public class KnowledgeSettingsAndWebsitePageTests
     {
         var service = new Mock<IKnowledgeSettingsService>();
         service.Setup(s => s.GetAsync(Glow.Id, It.IsAny<CancellationToken>())).ReturnsAsync(Settings());
-        var model = new KbSettings(ClinicContext(Glow).Object, service.Object) { MinimumSimilarity = "abc" }.Attach();
+        var model = new KbSettings(ClientContext(Glow).Object, service.Object) { MinimumSimilarity = "abc" }.Attach();
         Assert.IsType<PageResult>(await model.OnPostAsync(default));
         Assert.Contains("must be a number", model.ErrorMessage);
         service.Verify(s => s.UpdateAsync(It.IsAny<Guid>(), It.IsAny<UpdateKnowledgeSettingsRequest>(), It.IsAny<CancellationToken>()), Times.Never);
@@ -360,7 +360,7 @@ public class KnowledgeSettingsAndWebsitePageTests
         Assert.Equal("Overlap too big.", model.ErrorMessage);
         Assert.NotNull(model.Current);
 
-        var none = new KbSettings(ClinicContext(null).Object, service.Object).Attach();
+        var none = new KbSettings(ClientContext(null).Object, service.Object).Attach();
         Assert.IsType<RedirectToPageResult>(await none.OnPostAsync(default));
     }
 
@@ -376,17 +376,17 @@ public class KnowledgeSettingsAndWebsitePageTests
         sites.Setup(w => w.ListPagesAsync(Glow.Id, id, WebsitePageStatus.Indexed, 0, 300, It.IsAny<CancellationToken>())).ReturnsAsync(new List<WebsitePageResponse> { Blank<WebsitePageResponse>() });
         sites.Setup(w => w.ListPagesAsync(Glow.Id, id, WebsitePageStatus.Unchanged, 0, 300, It.IsAny<CancellationToken>())).ReturnsAsync(new List<WebsitePageResponse> { Blank<WebsitePageResponse>(), Blank<WebsitePageResponse>() });
 
-        var failed = new SiteDetails(ClinicContext(Glow).Object, sites.Object) { Id = id, Status = "failed" }.Attach();
+        var failed = new SiteDetails(ClientContext(Glow).Object, sites.Object) { Id = id, Status = "failed" }.Attach();
         Assert.IsType<PageResult>(await failed.OnGetAsync(default));
         Assert.Single(failed.Pages);
 
-        var inKb = new SiteDetails(ClinicContext(Glow).Object, sites.Object) { Id = id, Status = "in_kb" }.Attach();
+        var inKb = new SiteDetails(ClientContext(Glow).Object, sites.Object) { Id = id, Status = "in_kb" }.Attach();
         await inKb.OnGetAsync(default);
         Assert.Equal(3, inKb.Pages.Count);
 
-        var missing = new SiteDetails(ClinicContext(Glow).Object, sites.Object) { Id = Guid.NewGuid() }.Attach();
+        var missing = new SiteDetails(ClientContext(Glow).Object, sites.Object) { Id = Guid.NewGuid() }.Attach();
         Assert.IsType<NotFoundResult>(await missing.OnGetAsync(default));
-        var none = new SiteDetails(ClinicContext(null).Object, sites.Object).Attach();
+        var none = new SiteDetails(ClientContext(null).Object, sites.Object).Attach();
         Assert.IsType<PageResult>(await none.OnGetAsync(default));
     }
 
@@ -395,7 +395,7 @@ public class KnowledgeSettingsAndWebsitePageTests
     {
         var id = Guid.NewGuid();
         var sites = new Mock<IWebsiteSourceService>();
-        var model = new SiteDetails(ClinicContext(Glow).Object, sites.Object) { Id = id }.Attach();
+        var model = new SiteDetails(ClientContext(Glow).Object, sites.Object) { Id = id }.Attach();
 
         Assert.IsType<NotFoundResult>(await model.OnPostRescrapeAsync(default));
         Assert.IsType<NotFoundResult>(await model.OnPostToggleAsync(true, default));
@@ -421,14 +421,14 @@ public class KnowledgeSettingsAndWebsitePageTests
         var sites = new Mock<IWebsiteSourceService>();
         sites.Setup(w => w.RescrapeAsync(Glow.Id, id, It.IsAny<CancellationToken>())).ThrowsAsync(new ArgumentException("Already running."));
         sites.Setup(w => w.DeleteAsync(Glow.Id, id, It.IsAny<CancellationToken>())).ThrowsAsync(new ArgumentException("In use."));
-        var model = new SiteDetails(ClinicContext(Glow).Object, sites.Object) { Id = id }.Attach();
+        var model = new SiteDetails(ClientContext(Glow).Object, sites.Object) { Id = id }.Attach();
 
         Assert.IsType<RedirectToPageResult>(await model.OnPostRescrapeAsync(default));
         Assert.Equal("Already running.", model.ErrorMessage);
         Assert.IsType<RedirectToPageResult>(await model.OnPostDeleteAsync(default));
         Assert.Equal("In use.", model.ErrorMessage);
 
-        var none = new SiteDetails(ClinicContext(null).Object, sites.Object) { Id = id }.Attach();
+        var none = new SiteDetails(ClientContext(null).Object, sites.Object) { Id = id }.Attach();
         Assert.Equal("page:/KnowledgeBase/Index", RedirectTarget(await none.OnPostRescrapeAsync(default)));
         Assert.Equal("page:/KnowledgeBase/Index", RedirectTarget(await none.OnPostToggleAsync(true, default)));
         Assert.Equal("page:/KnowledgeBase/Index", RedirectTarget(await none.OnPostDeleteAsync(default)));
@@ -441,9 +441,9 @@ public class KnowledgeSettingsAndWebsitePageTests
     {
         var calendar = new Mock<ICalendarIntegrationService>();
         calendar.Setup(c => c.ListAsync(Glow.Id, It.IsAny<CancellationToken>())).ReturnsAsync(new List<CalendarIntegrationResponse>());
-        var model = new CalendarPage(ClinicContext(Glow).Object, calendar.Object).Attach();
+        var model = new CalendarPage(ClientContext(Glow).Object, calendar.Object).Attach();
         await model.OnGetAsync(default);
-        Assert.True(model.ClinicConfigured);
+        Assert.True(model.ClientConfigured);
 
         await model.OnPostRefreshCalendarsAsync("google", default);
         Assert.Equal("Calendar list refreshed.", model.StatusMessage);
@@ -472,12 +472,12 @@ public class KnowledgeSettingsAndWebsitePageTests
     }
 
     [Fact]
-    public async Task Calendar_page_without_a_clinic_does_nothing()
+    public async Task Calendar_page_without_a_client_does_nothing()
     {
         var calendar = new Mock<ICalendarIntegrationService>();
-        var model = new CalendarPage(ClinicContext(null).Object, calendar.Object).Attach();
+        var model = new CalendarPage(ClientContext(null).Object, calendar.Object).Attach();
         await model.OnGetAsync(default);
-        Assert.False(model.ClinicConfigured);
+        Assert.False(model.ClientConfigured);
         Assert.IsType<RedirectToPageResult>(await model.OnPostRefreshCalendarsAsync("google", default));
         Assert.IsType<RedirectToPageResult>(await model.OnPostSelectCalendarAsync("google", "x", default));
         Assert.IsType<RedirectToPageResult>(await model.OnPostSetSyncEnabledAsync("google", true, default));

@@ -40,8 +40,8 @@ public class ChannelAdminService : IChannelAdminService
         return new WhatsAppTokenDebugResult(scopes, wabas);
     }
 
-    public Task<List<ChannelRow>> ListChannelsAsync(Guid? clinicId, string? channel, bool problemsOnly, CancellationToken ct) =>
-        _repository.ListChannelsAsync(clinicId, channel, problemsOnly, ct);
+    public Task<List<ChannelRow>> ListChannelsAsync(Guid? clientId, string? channel, bool problemsOnly, CancellationToken ct) =>
+        _repository.ListChannelsAsync(clientId, channel, problemsOnly, ct);
 
     public async Task<ChannelDetail?> GetChannelAsync(Guid id, CancellationToken ct)
     {
@@ -52,35 +52,35 @@ public class ChannelAdminService : IChannelAdminService
     public async Task<List<HealthEventRow>> HealthEventsAsync(Guid channelIntegrationId, CancellationToken ct) =>
         (await _repository.HealthEventsAsync(channelIntegrationId, ct)).Select(PlatformAdminMapper.ToRow).ToList();
 
-    public Task<List<CalendarRow>> ListCalendarsAsync(Guid? clinicId, CancellationToken ct) => _repository.ListCalendarsAsync(clinicId, ct);
+    public Task<List<CalendarRow>> ListCalendarsAsync(Guid? clientId, CancellationToken ct) => _repository.ListCalendarsAsync(clientId, ct);
 
-    public Task<List<TikTokRow>> ListTikTokAsync(Guid? clinicId, CancellationToken ct) => _repository.ListTikTokAsync(clinicId, ct);
+    public Task<List<TikTokRow>> ListTikTokAsync(Guid? clientId, CancellationToken ct) => _repository.ListTikTokAsync(clientId, ct);
 
     public async Task<PlatformAdminChange> DisconnectAsync(Guid id, CancellationToken ct)
     {
         var row = await _repository.GetChannelAsync(id, ct) ?? throw new KeyNotFoundException("Channel connection not found.");
-        await _channels.DisconnectAsync(row.ClinicId, row.Channel, ct);
-        return new PlatformAdminChange(row.ClinicId);
+        await _channels.DisconnectAsync(row.ClientId, row.Channel, ct);
+        return new PlatformAdminChange(row.ClientId);
     }
 
     public async Task<PlatformAdminChange> DisconnectCalendarAsync(Guid id, CancellationToken ct)
     {
         var calendar = await _repository.GetCalendarAsync(id, ct) ?? throw new KeyNotFoundException("Calendar connection not found.");
-        await _calendars.DisconnectAsync(calendar.ClinicId, calendar.Provider, ct);
-        return new PlatformAdminChange(calendar.ClinicId);
+        await _calendars.DisconnectAsync(calendar.ClientId, calendar.Provider, ct);
+        return new PlatformAdminChange(calendar.ClientId);
     }
 
     public async Task<PlatformAdminChange> SetCalendarSyncAsync(Guid id, bool enabled, CancellationToken ct)
     {
         var calendar = await _repository.GetCalendarAsync(id, ct) ?? throw new KeyNotFoundException("Calendar connection not found.");
-        await _calendars.SetSyncEnabledAsync(calendar.ClinicId, calendar.Provider, enabled, ct);
-        return new PlatformAdminChange(calendar.ClinicId);
+        await _calendars.SetSyncEnabledAsync(calendar.ClientId, calendar.Provider, enabled, ct);
+        return new PlatformAdminChange(calendar.ClientId);
     }
 
     public async Task<PlatformAdminChange> DisconnectTikTokAsync(Guid id, CancellationToken ct)
     {
         var tikTok = await _repository.GetTikTokAsync(id, ct) ?? throw new KeyNotFoundException("TikTok connection not found.");
-        await _tikTok.DisconnectAsync(tikTok.ClinicId, ct);
-        return new PlatformAdminChange(tikTok.ClinicId);
+        await _tikTok.DisconnectAsync(tikTok.ClientId, ct);
+        return new PlatformAdminChange(tikTok.ClientId);
     }
 }

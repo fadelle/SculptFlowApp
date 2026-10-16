@@ -3,13 +3,13 @@ namespace Omni.App.Entities.Requests.WhatsApp;
 /// <summary>
 /// Normalized template webhook event n8n forwards after classifying a Meta template_status_update
 /// (or template category/quality change) — see POST /api/integrations/whatsapp/templates/events and
-/// WhatsAppTemplateService.ApplyMetaEventAsync. Upserted by (ClinicId, MetaTemplateId) when
-/// available, falling back to (ClinicId, Name, Language) for events that don't carry Meta's id.
-/// WabaId, when provided, is cross-checked against the clinic's stored WhatsApp connection rather
-/// than trusting ClinicId alone — see the service for details.
+/// WhatsAppTemplateService.ApplyMetaEventAsync. Upserted by (ClientId, MetaTemplateId) when
+/// available, falling back to (ClientId, Name, Language) for events that don't carry Meta's id.
+/// WabaId, when provided, is cross-checked against the client's stored WhatsApp connection rather
+/// than trusting ClientId alone — see the service for details.
 /// </summary>
 public record WhatsAppTemplateEventRequest(
-    Guid ClinicId,
+    Guid ClientId,
     string EventType,
     string? WabaId,
     string? MetaTemplateId,

@@ -2,7 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Omni.App.Persistence.Repositories.Appointments;
-using Omni.App.Persistence.Repositories.Clinics;
+using Omni.App.Persistence.Repositories.Clients;
 using Omni.App.Persistence.Repositories.Inbox;
 using Omni.App.Persistence.Repositories.Leads;
 
@@ -11,9 +11,9 @@ namespace Omni.App.Tests.Repositories;
 public class LeadRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixture)
 {
     [PostgresFact]
-    public async Task Lookups_are_scoped_to_the_clinic()
+    public async Task Lookups_are_scoped_to_the_client()
     {
-        var a = MakeClinic(); var b = MakeClinic();
+        var a = MakeClient(); var b = MakeClient();
         var proc = MakeProcedure(a.Id);
         var lead = MakeLead(a.Id, "Ann Smith", "+1555", proc.Id);
         lead.ExternalLeadId = "ext-1";
@@ -38,7 +38,7 @@ public class LeadRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixture
     [PostgresFact]
     public async Task List_filters_searches_orders_and_pages()
     {
-        var c = MakeClinic(); var other = MakeClinic();
+        var c = MakeClient(); var other = MakeClient();
         var proc = MakeProcedure(c.Id);
         var l1 = MakeLead(c.Id, "Alice Wong", "111", proc.Id, LeadStatus.New, Now.AddDays(-3));
         var l2 = MakeLead(c.Id, "bob alison", "222", null, LeadStatus.Contacted, Now.AddDays(-2));
@@ -69,7 +69,7 @@ public class LeadRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixture
     [PostgresFact]
     public async Task Sources_ids_and_adding()
     {
-        var c = MakeClinic(); var other = MakeClinic();
+        var c = MakeClient(); var other = MakeClient();
         var l1 = MakeLead(c.Id); l1.Source = "web";
         var l2 = MakeLead(c.Id); l2.Source = "ads";
         var l3 = MakeLead(c.Id); l3.Source = "web";
@@ -93,7 +93,7 @@ public class LeadRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixture
     [PostgresFact]
     public async Task LoadProcedure_fills_the_navigation()
     {
-        var c = MakeClinic();
+        var c = MakeClient();
         var proc = MakeProcedure(c.Id, "Facelift");
         var lead = MakeLead(c.Id, procedureId: proc.Id);
         await SeedAsync(c, proc, lead);
@@ -106,7 +106,7 @@ public class LeadRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixture
     }
 }
 
-public class ClinicRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixture)
+public class ClientRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixture)
 {
     private async Task<IdentityUser> SeedUserAsync(string email, string? fullName = null)
     {
@@ -119,18 +119,18 @@ public class ClinicRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixtu
     }
 
     [PostgresFact]
-    public async Task Clinics_can_be_read_added_and_deleted()
+    public async Task Clients_can_be_read_added_and_deleted()
     {
-        var c = MakeClinic("Alpha " + Guid.NewGuid().ToString("N")[..6]);
+        var c = MakeClient("Alpha " + Guid.NewGuid().ToString("N")[..6]);
         await using (var db = NewContext())
         {
-            var repo = new ClinicRepository(db);
+            var repo = new ClientRepository(db);
             repo.Add(c);
             await db.SaveChangesAsync();
         }
 
         await using var read = NewContext();
-        var r = new ClinicRepository(read);
+        var r = new ClientRepository(read);
         Assert.Equal(c.Name, (await r.GetAsync(c.Id))!.Name);
         Assert.Equal(c.Name, (await r.GetReadOnlyAsync(c.Id))!.Name);
         Assert.True(await r.SlugExistsAsync(c.Slug));
@@ -141,13 +141,13 @@ public class ClinicRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixtu
 
         await r.DeleteAsync(c.Id);
         await using var after = NewContext();
-        Assert.Null(await new ClinicRepository(after).GetAsync(c.Id));
+        Assert.Null(await new ClientRepository(after).GetAsync(c.Id));
     }
 
     [PostgresFact]
     public async Task Membership_lookups_only_see_active_memberships()
     {
-        var active = MakeClinic(); var inactive = MakeClinic();
+        var active = MakeClient(); var inactive = MakeClient();
         await SeedAsync(active, inactive);
         var u1 = await SeedUserAsync($"u1-{Guid.NewGuid():N}@x.com", "Una One");
         var u2 = await SeedUserAsync($"u2-{Guid.NewGuid():N}@x.com");
@@ -155,20 +155,20 @@ public class ClinicRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixtu
 
         await using (var db = NewContext())
         {
-            var repo = new ClinicRepository(db);
-            repo.AddMembership(new ClinicUser { Id = Guid.NewGuid(), ClinicId = active.Id, UserId = u1.Id, IsActive = true, CreatedAt = Now, UpdatedAt = Now });
-            repo.AddMembership(new ClinicUser { Id = Guid.NewGuid(), ClinicId = inactive.Id, UserId = u2.Id, IsActive = false, CreatedAt = Now, UpdatedAt = Now });
-            repo.AddMembership(new ClinicUser { Id = Guid.NewGuid(), ClinicId = active.Id, UserId = u3.Id, IsActive = true, CreatedAt = Now, UpdatedAt = Now });
+            var repo = new ClientRepository(db);
+            repo.AddMembership(new ClientUser { Id = Guid.NewGuid(), ClientId = active.Id, UserId = u1.Id, IsActive = true, CreatedAt = Now, UpdatedAt = Now });
+            repo.AddMembership(new ClientUser { Id = Guid.NewGuid(), ClientId = inactive.Id, UserId = u2.Id, IsActive = false, CreatedAt = Now, UpdatedAt = Now });
+            repo.AddMembership(new ClientUser { Id = Guid.NewGuid(), ClientId = active.Id, UserId = u3.Id, IsActive = true, CreatedAt = Now, UpdatedAt = Now });
             await db.SaveChangesAsync();
         }
 
         await using var read = NewContext();
-        var r = new ClinicRepository(read);
-        Assert.Equal(active.Id, (await r.GetClinicOfActiveMemberAsync(u1.Id))!.Id);
-        Assert.Null(await r.GetClinicOfActiveMemberAsync(u2.Id));
-        Assert.Equal(active.Id, await r.GetClinicIdOfActiveMemberAsync(u1.Id));
-        Assert.Null(await r.GetClinicIdOfActiveMemberAsync(u2.Id));
-        Assert.Null(await r.GetClinicIdOfActiveMemberAsync("nobody"));
+        var r = new ClientRepository(read);
+        Assert.Equal(active.Id, (await r.GetClientOfActiveMemberAsync(u1.Id))!.Id);
+        Assert.Null(await r.GetClientOfActiveMemberAsync(u2.Id));
+        Assert.Equal(active.Id, await r.GetClientIdOfActiveMemberAsync(u1.Id));
+        Assert.Null(await r.GetClientIdOfActiveMemberAsync(u2.Id));
+        Assert.Null(await r.GetClientIdOfActiveMemberAsync("nobody"));
 
         var staff = await r.ListStaffAsync(active.Id, "full_name");
         Assert.Equal(2, staff.Count);
@@ -183,7 +183,7 @@ public class ConversationAndMessageRepositoryTests(PostgresFixture fixture) : Re
     [PostgresFact]
     public async Task Conversation_lookups_are_scoped_and_typed()
     {
-        var c = MakeClinic(); var other = MakeClinic();
+        var c = MakeClient(); var other = MakeClient();
         var lead = MakeLead(c.Id);
         var convo = MakeConversation(c.Id, lead.Id, "whatsapp", "thread-1");
         convo.Mode = ConversationMode.Human;
@@ -208,7 +208,7 @@ public class ConversationAndMessageRepositoryTests(PostgresFixture fixture) : Re
     [PostgresFact]
     public async Task Inbox_lists_newest_first_with_last_message_and_unread_count()
     {
-        var c = MakeClinic();
+        var c = MakeClient();
         var proc = MakeProcedure(c.Id, "Rhinoplasty");
         var leadA = MakeLead(c.Id, "Ann", "1", proc.Id); var leadB = MakeLead(c.Id, "Bob", "2");
         var old = MakeConversation(c.Id, leadA.Id, lastMessageAt: Now.AddHours(-5));
@@ -237,9 +237,9 @@ public class ConversationAndMessageRepositoryTests(PostgresFixture fixture) : Re
     }
 
     [PostgresFact]
-    public async Task Mark_read_updates_only_the_clinics_conversation()
+    public async Task Mark_read_updates_only_the_clients_conversation()
     {
-        var c = MakeClinic(); var other = MakeClinic();
+        var c = MakeClient(); var other = MakeClient();
         var lead = MakeLead(c.Id);
         var convo = MakeConversation(c.Id, lead.Id);
         await SeedAsync(c, other, lead, convo);
@@ -255,7 +255,7 @@ public class ConversationAndMessageRepositoryTests(PostgresFixture fixture) : Re
     [PostgresFact]
     public async Task Messages_are_listed_in_order_and_found_by_external_id()
     {
-        var c = MakeClinic();
+        var c = MakeClient();
         var lead = MakeLead(c.Id);
         var convo = MakeConversation(c.Id, lead.Id);
         var first = MakeMessage(convo, content: "a", createdAt: Now.AddMinutes(-3), externalId: "ext-a");
@@ -270,8 +270,8 @@ public class ConversationAndMessageRepositoryTests(PostgresFixture fixture) : Re
         Assert.Null(await repo.FindByExternalIdAsync(c.Id, "telegram", "ext-a"));
         Assert.Equal("ext-a", await repo.GetExternalIdAsync(first.Id));
         Assert.Null(await repo.GetExternalIdAsync(second.Id));
-        Assert.Equal(first.Id, (await repo.GetForClinicReadOnlyAsync(c.Id, first.Id))!.Id);
-        Assert.Null(await repo.GetForClinicReadOnlyAsync(Guid.NewGuid(), first.Id));
+        Assert.Equal(first.Id, (await repo.GetForClientReadOnlyAsync(c.Id, first.Id))!.Id);
+        Assert.Null(await repo.GetForClientReadOnlyAsync(Guid.NewGuid(), first.Id));
         Assert.Equal(2, (await repo.ListByIdsReadOnlyAsync([first.Id, third.Id, Guid.NewGuid()])).Count);
 
         var added = MakeMessage(convo, content: "d");
@@ -281,9 +281,9 @@ public class ConversationAndMessageRepositoryTests(PostgresFixture fixture) : Re
     }
 
     [PostgresFact]
-    public async Task Inbound_customer_times_ignore_other_origins_and_other_clinics()
+    public async Task Inbound_customer_times_ignore_other_origins_and_other_clients()
     {
-        var c = MakeClinic(); var other = MakeClinic();
+        var c = MakeClient(); var other = MakeClient();
         var lead = MakeLead(c.Id);
         var convo = MakeConversation(c.Id, lead.Id);
         var inbound = MakeMessage(convo, createdAt: Now);
@@ -301,9 +301,9 @@ public class ConversationAndMessageRepositoryTests(PostgresFixture fixture) : Re
 
 public class AppointmentRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixture)
 {
-    private async Task<(Clinic Clinic, Lead Lead, Procedure Proc)> SeedBaseAsync(int? duration = 45)
+    private async Task<(Client Client, Lead Lead, Procedure Proc)> SeedBaseAsync(int? duration = 45)
     {
-        var c = MakeClinic(); var proc = MakeProcedure(c.Id, duration: duration); var lead = MakeLead(c.Id, procedureId: proc.Id);
+        var c = MakeClient(); var proc = MakeProcedure(c.Id, duration: duration); var lead = MakeLead(c.Id, procedureId: proc.Id);
         await SeedAsync(c, proc, lead);
         return (c, lead, proc);
     }
@@ -312,7 +312,7 @@ public class AppointmentRepositoryTests(PostgresFixture fixture) : RepoTestBase(
     public async Task Gets_are_scoped_and_include_what_they_promise()
     {
         var (c, lead, proc) = await SeedBaseAsync();
-        var other = MakeClinic();
+        var other = MakeClient();
         var appt = MakeAppointment(c.Id, lead.Id, Now.AddDays(1), procedureId: proc.Id);
         await SeedAsync(other, appt);
 
@@ -394,7 +394,7 @@ public class AppointmentRepositoryTests(PostgresFixture fixture) : RepoTestBase(
     public async Task Busy_rows_skip_canceled_rescheduled_and_the_excluded_appointment()
     {
         var (c, lead, _) = await SeedBaseAsync(duration: 45);
-        var busy = MakeAppointment(c.Id, lead.Id, Now.AddHours(1), procedureId: (await NewContext().Procedures.FirstAsync(p => p.ClinicId == c.Id)).Id);
+        var busy = MakeAppointment(c.Id, lead.Id, Now.AddHours(1), procedureId: (await NewContext().Procedures.FirstAsync(p => p.ClientId == c.Id)).Id);
         var excluded = MakeAppointment(c.Id, lead.Id, Now.AddHours(2));
         var canceled = MakeAppointment(c.Id, lead.Id, Now.AddHours(3), AppointmentStatus.Canceled);
         var moved = MakeAppointment(c.Id, lead.Id, Now.AddHours(4), AppointmentStatus.Rescheduled);
@@ -429,7 +429,7 @@ public class AppointmentRepositoryTests(PostgresFixture fixture) : RepoTestBase(
         Assert.Null(plain.Procedure);
 
         await using var tx = await db.Database.BeginTransactionAsync();
-        await repo.LockClinicForBookingAsync(c.Id);
+        await repo.LockClientForBookingAsync(c.Id);
         await tx.RollbackAsync();
     }
 
@@ -453,12 +453,12 @@ public class AvailabilityRepositoryTests(PostgresFixture fixture) : RepoTestBase
     [PostgresFact]
     public async Task Rules_settings_and_exceptions_round_trip()
     {
-        var c = MakeClinic(); var other = MakeClinic();
+        var c = MakeClient(); var other = MakeClient();
         await SeedAsync(c, other);
-        var rule = new ClinicAvailabilityRule { Id = Guid.NewGuid(), ClinicId = c.Id, DayOfWeek = 1, IsOpen = true, StartTime = new(9, 0), EndTime = new(17, 0), CreatedAt = Now, UpdatedAt = Now };
-        var settings = new ClinicBookingSettings { Id = Guid.NewGuid(), ClinicId = c.Id, BufferMinutes = 10, CreatedAt = Now, UpdatedAt = Now };
+        var rule = new AvailabilityRule { Id = Guid.NewGuid(), ClientId = c.Id, DayOfWeek = 1, IsOpen = true, StartTime = new(9, 0), EndTime = new(17, 0), CreatedAt = Now, UpdatedAt = Now };
+        var settings = new BookingSettings { Id = Guid.NewGuid(), ClientId = c.Id, BufferMinutes = 10, CreatedAt = Now, UpdatedAt = Now };
         var d1 = new DateOnly(2026, 7, 1); var d2 = new DateOnly(2026, 7, 10); var d3 = new DateOnly(2026, 8, 1);
-        ClinicAvailabilityException Ex(DateOnly d, Guid clinic) => new() { Id = Guid.NewGuid(), ClinicId = clinic, Date = d, IsClosed = true, Reason = "holiday", CreatedAt = Now, UpdatedAt = Now };
+        AvailabilityException Ex(DateOnly d, Guid client) => new() { Id = Guid.NewGuid(), ClientId = client, Date = d, IsClosed = true, Reason = "holiday", CreatedAt = Now, UpdatedAt = Now };
         var e1 = Ex(d1, c.Id); var e2 = Ex(d2, c.Id); var e3 = Ex(d3, c.Id); var foreign = Ex(d1, other.Id);
 
         await using (var db = NewContext())

@@ -22,7 +22,7 @@ public static class GoogleLoginSettings
         "failed" => "Google sign-in didn't work. Please try again.",
         "unverified" => "Google couldn't confirm that email address, so we can't sign you in with it.",
         "locked" => "Too many attempts. For your security, wait a few minutes and try again.",
-        "signup_closed" => "There's no Omni account for that Google address, and new clinic sign-ups are closed right now.",
+        "signup_closed" => "There's no Omni account for that Google address, and new client sign-ups are closed right now.",
         _ => null
     };
 }

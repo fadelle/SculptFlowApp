@@ -9,7 +9,7 @@ public class BillingLedgerEntry
     public Guid Id { get; set; }
     /// <summary>Posting order, assigned by the database (identity). Entries of one operation share CreatedAt.</summary>
     public long Seq { get; set; }
-    public Guid ClinicId { get; set; }
+    public Guid ClientId { get; set; }
     public Guid BillingAccountId { get; set; }
     /// <summary>One of <see cref="LedgerEntryType"/>.</summary>
     public string EntryType { get; set; } = string.Empty;
@@ -19,7 +19,7 @@ public class BillingLedgerEntry
     public decimal Amount { get; set; }
     public decimal BalanceAfter { get; set; }
     public string Currency { get; set; } = "USD";
-    /// <summary>Unique per clinic, so retrying the operation that posted it can never post it twice.</summary>
+    /// <summary>Unique per client, so retrying the operation that posted it can never post it twice.</summary>
     public string IdempotencyKey { get; set; } = string.Empty;
     public Guid? UsageRecordId { get; set; }
     public Guid? SubscriptionId { get; set; }

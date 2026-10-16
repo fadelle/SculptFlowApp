@@ -4,7 +4,7 @@ using Omni.App.Entities.Dtos.Billing;
 namespace Omni.App.Business.Contracts.Services.Billing;
 
 /// <summary>
-/// Provider billing responsibility — question 2 of the three billing questions (1. what the clinic pays Omni for
+/// Provider billing responsibility — question 2 of the three billing questions (1. what the client pays Omni for
 /// access = subscription; 2. who pays the upstream provider = this; 3. does Omni charge for the usage). Resolved
 /// per CONNECTED CHANNEL ACCOUNT (a channel_integrations row), never assumed per channel:
 ///   account override (billing.channel_account_settings)
@@ -14,14 +14,14 @@ namespace Omni.App.Business.Contracts.Services.Billing;
 /// </summary>
 public interface IProviderBillingService
 {
-    /// <summary>The arrangement for the clinic's account on this channel (provider = the one the usage goes through).</summary>
-    Task<ProviderBillingSetting> ResolveAsync(Guid clinicId, string channel, string? provider, CancellationToken ct = default);
+    /// <summary>The arrangement for the client's account on this channel (provider = the one the usage goes through).</summary>
+    Task<ProviderBillingSetting> ResolveAsync(Guid clientId, string channel, string? provider, CancellationToken ct = default);
 
     /// <summary>The default for a channel/provider pair (no account override).</summary>
     string DefaultFor(string channel, string? provider);
 
-    /// <summary>Every connected (or previously connected) channel account of the clinic with its arrangement.</summary>
-    Task<IReadOnlyList<ChannelAccountBilling>> ListAccountsAsync(Guid clinicId, CancellationToken ct = default);
+    /// <summary>Every connected (or previously connected) channel account of the client with its arrangement.</summary>
+    Task<IReadOnlyList<ChannelAccountBilling>> ListAccountsAsync(Guid clientId, CancellationToken ct = default);
 
     /// <summary>Sets an account's override (applies to future usage only; recorded usage keeps its snapshot).</summary>
     Task<ChannelAccountBilling?> SetAsync(Guid channelIntegrationId, ChannelAccountBillingChange change, CancellationToken ct = default);

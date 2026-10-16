@@ -84,10 +84,10 @@
     });
   }
 
-  // The API resolves clinicId server-side from the logged-in session (CurrentClinicContext) now —
-  // this used to append ?clinicId=... to every URL; kept as a no-op pass-through so every call site
+  // The API resolves clientId server-side from the logged-in session (CurrentClientContext) now —
+  // this used to append ?clientId=... to every URL; kept as a no-op pass-through so every call site
   // below doesn't need touching.
-  function withClinic(path) {
+  function withClient(path) {
     return path;
   }
 
@@ -286,7 +286,7 @@
   // Tells the server staff have seen this conversation (clears its unread count). The server then
   // notifies every open Inbox, which re-fetches the list — so this can't loop back into itself.
   function markRead(id) {
-    return apiPost(withClinic('/api/conversations/' + id + '/read')).catch(function () { /* non-critical */ });
+    return apiPost(withClient('/api/conversations/' + id + '/read')).catch(function () { /* non-critical */ });
   }
 
   // Mirrors Common/Helpers/ChannelIconHelper.cs — keep both in sync if a channel is added.
@@ -444,7 +444,7 @@
   // Data loading
   // ---------------------------------------------------------------------
   function loadConversationList() {
-    return apiGet(withClinic('/api/conversations')).then(function (result) {
+    return apiGet(withClient('/api/conversations')).then(function (result) {
       renderConversationList(result.items);
     });
   }
@@ -471,7 +471,7 @@
       el.classList.toggle('active', el.getAttribute('data-conversation-id') === id);
     });
 
-    return apiGet(withClinic('/api/conversations/' + id)).then(function (result) {
+    return apiGet(withClient('/api/conversations/' + id)).then(function (result) {
       currentLeadId = result.conversation.leadId;
       renderConversationHeader(result.conversation);
       renderMessages(result.messages);
@@ -511,7 +511,7 @@
       render(cached);
       return Promise.resolve();
     }
-    return apiGet(withClinic('/api/leads/' + leadId)).then(function (lead) {
+    return apiGet(withClient('/api/leads/' + leadId)).then(function (lead) {
       leadInfoCache[leadId] = lead;
       render(lead);
     });
@@ -588,7 +588,7 @@
     composerInputEl.value = '';
 
     composerSendEl.disabled = true; // basic guard against accidental double-submit
-    apiPost(withClinic('/api/conversations/' + currentConversationId + '/messages/send'), { content: content })
+    apiPost(withClient('/api/conversations/' + currentConversationId + '/messages/send'), { content: content })
       .then(function () {
         return Promise.all([refreshCurrentConversation(), loadConversationList()]);
       })
@@ -606,7 +606,7 @@
   // ---------------------------------------------------------------------
   function loadApprovedTemplates() {
     if (approvedTemplates) return Promise.resolve(approvedTemplates);
-    return apiGet(withClinic('/api/whatsapp/templates')).then(function (templates) {
+    return apiGet(withClient('/api/whatsapp/templates')).then(function (templates) {
       approvedTemplates = (templates || []).filter(function (t) { return t.status === 'approved'; });
       return approvedTemplates;
     });
@@ -687,7 +687,7 @@
 
     var sendBtn = document.getElementById('inbox-template-send');
     sendBtn.disabled = true;
-    apiPost(withClinic('/api/conversations/' + currentConversationId + '/messages/send-template'), {
+    apiPost(withClient('/api/conversations/' + currentConversationId + '/messages/send-template'), {
       whatsAppTemplateId: template.id,
       bodyParameters: currentTemplateBodyParameters()
     })
@@ -703,19 +703,19 @@
 
   btnTakeover.addEventListener('click', function () {
     if (!currentConversationId) return;
-    apiPost(withClinic('/api/conversations/' + currentConversationId + '/take-over'))
+    apiPost(withClient('/api/conversations/' + currentConversationId + '/take-over'))
       .then(function () { return Promise.all([refreshCurrentConversation(), loadConversationList()]); });
   });
 
   btnReturnAi.addEventListener('click', function () {
     if (!currentConversationId) return;
-    apiPost(withClinic('/api/conversations/' + currentConversationId + '/return-to-ai'))
+    apiPost(withClient('/api/conversations/' + currentConversationId + '/return-to-ai'))
       .then(function () { return Promise.all([refreshCurrentConversation(), loadConversationList()]); });
   });
 
   btnReopen.addEventListener('click', function () {
     if (!currentConversationId) return;
-    apiPost(withClinic('/api/conversations/' + currentConversationId + '/reopen'))
+    apiPost(withClient('/api/conversations/' + currentConversationId + '/reopen'))
       .then(function () { return Promise.all([refreshCurrentConversation(), loadConversationList()]); });
   });
 
@@ -741,7 +741,7 @@
     var id = currentConversationId;
     ask('Close conversation', 'Close this conversation?', 'Close conversation').then(function (ok) {
       if (!ok) return;
-      apiPost(withClinic('/api/conversations/' + id + '/close'))
+      apiPost(withClient('/api/conversations/' + id + '/close'))
         .then(function () { return Promise.all([refreshCurrentConversation(), loadConversationList()]); });
     });
   });

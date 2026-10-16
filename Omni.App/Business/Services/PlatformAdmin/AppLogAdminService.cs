@@ -24,7 +24,7 @@ public class AppLogAdminService : IAppLogAdminService
         _time = time;
     }
 
-    public async Task<AppLogGroupReport> GroupsAsync(int hours, string? level, Guid? clinicId, string? search, string? sort, int take, CancellationToken ct)
+    public async Task<AppLogGroupReport> GroupsAsync(int hours, string? level, Guid? clientId, string? search, string? sort, int take, CancellationToken ct)
     {
         var sortKey = string.IsNullOrWhiteSpace(sort) ? DefaultSort : sort.Trim().ToLowerInvariant();
         if (!SortKeys.Contains(sortKey))
@@ -32,7 +32,7 @@ public class AppLogAdminService : IAppLogAdminService
             throw new ArgumentException($"Unknown sort '{sort}'. Use one of: {string.Join(", ", SortKeys)}.");
         }
 
-        var (levelKey, filter, from, to, clampedHours) = Filter(hours, level, clinicId, search, null, null);
+        var (levelKey, filter, from, to, clampedHours) = Filter(hours, level, clientId, search, null, null);
         take = Math.Clamp(take, 1, AppLogLimits.MaxGroupTake);
         var (groups, groupCount, total) = await _logs.ListGroupsReadOnlyAsync(filter, sortKey == "count", take, ct);
 
@@ -40,10 +40,10 @@ public class AppLogAdminService : IAppLogAdminService
             _config.ErrorLogWarningRetentionDays, _config.ErrorLogErrorRetentionDays, total, groupCount, groups);
     }
 
-    public async Task<AppLogPage> ListAsync(int hours, string? level, Guid? clinicId, string? search, string? fingerprint, string? traceId,
+    public async Task<AppLogPage> ListAsync(int hours, string? level, Guid? clientId, string? search, string? fingerprint, string? traceId,
         int page, int pageSize, CancellationToken ct)
     {
-        var (_, filter, from, to, _) = Filter(hours, level, clinicId, search, fingerprint, traceId);
+        var (_, filter, from, to, _) = Filter(hours, level, clientId, search, fingerprint, traceId);
         page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize, 1, AppLogLimits.MaxPageSize);
         var (rows, total) = await _logs.ListReadOnlyAsync(filter, (page - 1) * pageSize, pageSize, ct);
@@ -69,7 +69,7 @@ public class AppLogAdminService : IAppLogAdminService
     }
 
     private (string Level, AppLogFilter Filter, DateTimeOffset From, DateTimeOffset To, int Hours) Filter(
-        int hours, string? level, Guid? clinicId, string? search, string? fingerprint, string? traceId)
+        int hours, string? level, Guid? clientId, string? search, string? fingerprint, string? traceId)
     {
         var levelKey = string.IsNullOrWhiteSpace(level) ? DefaultLevel : level.Trim().ToLowerInvariant();
         var minimum = AppLogLevels.Parse(levelKey)
@@ -78,7 +78,7 @@ public class AppLogAdminService : IAppLogAdminService
         hours = Math.Clamp(hours, 1, AppLogLimits.MaxReportHours);
         var to = _time.GetUtcNow();
         var from = to.AddHours(-hours);
-        var filter = new AppLogFilter(from, AppLogLevels.AtOrAbove(minimum), clinicId,
+        var filter = new AppLogFilter(from, AppLogLevels.AtOrAbove(minimum), clientId,
             string.IsNullOrWhiteSpace(search) ? null : search.Trim(),
             string.IsNullOrWhiteSpace(fingerprint) ? null : fingerprint.Trim().ToLowerInvariant(),
             string.IsNullOrWhiteSpace(traceId) ? null : traceId.Trim().ToLowerInvariant());

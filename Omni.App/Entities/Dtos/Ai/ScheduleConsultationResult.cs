@@ -13,12 +13,12 @@ public record ScheduleConsultationResult(
     string Code,
     string Message,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? Instruction = null,
-    /// <summary>The patient's appointment after a successful create/reschedule, in clinic-local time.</summary>
+    /// <summary>The patient's appointment after a successful create/reschedule, in client-local time.</summary>
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] UpcomingAppointmentResponse? Appointment = null,
     /// <summary>After a reschedule: the appointment as it was before the move.</summary>
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] UpcomingAppointmentResponse? PreviousAppointment = null,
     /// <summary>When no change was made because of an existing appointment: what the patient already has.</summary>
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<UpcomingAppointmentResponse>? ExistingUpcomingAppointments = null,
-    /// <summary>The time the patient asked for, in clinic-local wording (e.g. "Tuesday, Sep 29 at 4:00 PM").</summary>
+    /// <summary>The time the patient asked for, in client-local wording (e.g. "Tuesday, Sep 29 at 4:00 PM").</summary>
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? RequestedLabel = null
 );

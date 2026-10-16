@@ -29,24 +29,24 @@ namespace Omni.App.Controllers.Integrations;
 /// delegating to the same services the dashboard/API already use (no duplicated business logic).
 /// Protected the same way as /api/messages/ingest (RequireIngestKey): this is server-to-server
 /// traffic from n8n, not something the browser should be able to call directly. Every action still
-/// takes clinicId explicitly and scopes through it — same multi-clinic rule as the rest of the API.
+/// takes clientId explicitly and scopes through it — same multi-client rule as the rest of the API.
 ///
 /// Deliberately narrower than the dashboard's own endpoints where it matters: update_lead can't
 /// touch identity fields (name/phone/email), and reschedule/cancel/handoff each log a dedicated
 /// event with the AI as the source so staff can see what the AI did and why (see EventTypes).
 ///
-/// Knowledge search (search_clinic_knowledge) is POST /api/ai/knowledge/search — see
-/// IKnowledgeSearchService. It returns relevant chunks of the clinic's approved Knowledge Base only;
+/// Knowledge search (search_knowledge) is POST /api/ai/knowledge/search — see
+/// IKnowledgeSearchService. It returns relevant chunks of the client's approved Knowledge Base only;
 /// the AI agent composes the answer.
 ///
 /// WHICH TOOL FOR WHAT — rule of thumb: the Knowledge Base is for INFORMATION; the structured tools
 /// are for LIVE DATA and ACTIONS. The Knowledge Base is never the source of truth for lead data,
 /// appointment availability, bookings, conversation state or handoff.
 ///
-///   search_clinic_knowledge   → clinic-approved informational content: hours, address, parking,
+///   search_knowledge   → client-approved informational content: hours, address, parking,
 ///                               policies, consultation info, pricing, payment/financing, doctors,
 ///                               procedure explanations, preparation, recovery, FAQs.
-///                               ("Where is the clinic?", "What happens at a rhinoplasty consultation?")
+///                               ("Where is the client?", "What happens at a rhinoplasty consultation?")
 ///   get_lead_context          → what is currently known about THIS lead.
 ///   update_lead               → write real lead/business data (interest, language, qualification...).
 ///   get_available_slots       → LIVE appointment availability.
@@ -54,7 +54,7 @@ namespace Omni.App.Controllers.Integrations;
 ///   handoff_to_human          → switch the conversation to human handling.
 ///
 /// Overlap that is deliberate for now (nothing removed yet):
-///   get_clinic_info  — hours/address/consultation rules also belong in the Knowledge Base, so this
+///   get_client_info  — hours/address/consultation rules also belong in the Knowledge Base, so this
 ///                      may become redundant. Kept working until the Knowledge Base is proven; then
 ///                      decide whether it is still needed.
 ///   get_procedures   — stays. The Knowledge Base EXPLAINS procedures in prose; get_procedures returns
@@ -68,7 +68,7 @@ namespace Omni.App.Controllers.Integrations;
 [TraceBotTool]
 public class AiController : ControllerBase
 {
-    private readonly IClinicContext _clinicContext;
+    private readonly IClientContext _clientContext;
     private readonly IProcedureService _procedures;
     private readonly ILeadService _leads;
     private readonly IAppointmentService _appointments;
@@ -77,11 +77,11 @@ public class AiController : ControllerBase
     private readonly IKnowledgeSearchService _knowledgeSearch;
 
     public AiController(
-        IClinicContext clinicContext, IProcedureService procedures, ILeadService leads,
+        IClientContext clientContext, IProcedureService procedures, ILeadService leads,
         IAppointmentService appointments, IAvailabilityService availability, IConversationService conversations,
         IKnowledgeSearchService knowledgeSearch)
     {
-        _clinicContext = clinicContext;
+        _clientContext = clientContext;
         _procedures = procedures;
         _leads = leads;
         _appointments = appointments;
@@ -90,22 +90,22 @@ public class AiController : ControllerBase
         _knowledgeSearch = knowledgeSearch;
     }
 
-    /// <summary>search_clinic_knowledge — semantic search over the clinic's approved Knowledge Base.
+    /// <summary>search_knowledge — semantic search over the client's approved Knowledge Base.
     /// For INFORMATION questions only (hours, address, policies, pricing, doctors, procedure
-    /// explanations, recovery, FAQs) — not lead data, availability, bookings or handoff. clinicId is the
+    /// explanations, recovery, FAQs) — not lead data, availability, bookings or handoff. clientId is the
     /// one n8n already has in context; the AI supplies only the query text. Returns relevant chunks
     /// (possibly none) — never a composed answer.</summary>
     [HttpPost("knowledge/search")]
     public async Task<ActionResult<KnowledgeSearchResponse>> SearchKnowledge([FromBody] KnowledgeSearchRequest request, CancellationToken ct)
     {
-        if (request.ClinicId == Guid.Empty || string.IsNullOrWhiteSpace(request.Query))
+        if (request.ClientId == Guid.Empty || string.IsNullOrWhiteSpace(request.Query))
         {
-            return BadRequest(new { error = "clinicId and query are required." });
+            return BadRequest(new { error = "clientId and query are required." });
         }
 
         try
         {
-            return Ok(await _knowledgeSearch.SearchAsync(request.ClinicId, request.Query, request.Limit, ct));
+            return Ok(await _knowledgeSearch.SearchAsync(request.ClientId, request.Query, request.Limit, ct));
         }
         catch (InvalidOperationException ex)
         {
@@ -113,40 +113,40 @@ public class AiController : ControllerBase
         }
     }
 
-    /// <summary>get_clinic_info — hours, location, contact info, consultation rules. Partly overlaps the
-    /// Knowledge Base (search_clinic_knowledge), which is now the preferred place for this kind of
+    /// <summary>get_client_info — hours, location, contact info, consultation rules. Partly overlaps the
+    /// Knowledge Base (search_knowledge), which is now the preferred place for this kind of
     /// information; kept working for now and may be retired later.</summary>
-    [HttpGet("clinic-info")]
-    public async Task<ActionResult<ClinicInfoResponse>> GetClinicInfo([FromQuery] Guid clinicId, CancellationToken ct)
+    [HttpGet("client-info")]
+    public async Task<ActionResult<ClientInfoResponse>> GetClientInfo([FromQuery] Guid clientId, CancellationToken ct)
     {
-        var clinic = await _clinicContext.GetByIdAsync(clinicId, ct);
-        if (clinic is null) return NotFound();
+        var client = await _clientContext.GetByIdAsync(clientId, ct);
+        if (client is null) return NotFound();
 
-        return Ok(new ClinicInfoResponse(
-            clinic.Id, clinic.Name, clinic.Phone, clinic.Email, clinic.Website,
-            clinic.Address, clinic.OperatingHours, clinic.ConsultationInfo, clinic.Timezone));
+        return Ok(new ClientInfoResponse(
+            client.Id, client.Name, client.Phone, client.Email, client.Website,
+            client.Address, client.OperatingHours, client.ConsultationInfo, client.Timezone));
     }
 
     /// <summary>get_procedures — the structured, authoritative procedure records (id, name, active flag,
-    /// consultation duration) needed for booking. Use search_clinic_knowledge to EXPLAIN a procedure;
+    /// consultation duration) needed for booking. Use search_knowledge to EXPLAIN a procedure;
     /// use this when an actual procedure id/record is needed.</summary>
     [HttpGet("procedures")]
     public async Task<ActionResult<IReadOnlyList<ProcedureResponse>>> GetProcedures(
-        [FromQuery] Guid clinicId, CancellationToken ct = default)
+        [FromQuery] Guid clientId, CancellationToken ct = default)
     {
         // Always ACTIVE procedures only — the AI must never see (and so never suggest or book) an
         // inactive one. Historical use of inactive procedures (existing leads/appointments/bookings,
         // Campaign filtering) goes through the normal backend queries, not this tool. There is
         // deliberately no activeOnly switch here; a stray activeOnly=false query param is ignored.
-        var procedures = await _procedures.ListAsync(clinicId, activeOnly: true, ct);
+        var procedures = await _procedures.ListAsync(clientId, activeOnly: true, ct);
         return Ok(procedures);
     }
 
     /// <summary>get_lead_context — what's already known about the person the AI is talking to.</summary>
     [HttpGet("leads/{leadId:guid}")]
-    public async Task<ActionResult<LeadResponse>> GetLeadContext(Guid leadId, [FromQuery] Guid clinicId, CancellationToken ct)
+    public async Task<ActionResult<LeadResponse>> GetLeadContext(Guid leadId, [FromQuery] Guid clientId, CancellationToken ct)
     {
-        var lead = await _leads.GetByIdAsync(clinicId, leadId, ct);
+        var lead = await _leads.GetByIdAsync(clientId, leadId, ct);
         return lead is null ? NotFound() : Ok(lead);
     }
 
@@ -154,19 +154,19 @@ public class AiController : ControllerBase
     /// Cannot change identity fields (name/phone/email) — those come from the lead's actual source.</summary>
     [HttpPatch("leads/{leadId:guid}")]
     public async Task<ActionResult<LeadResponse>> UpdateLead(
-        Guid leadId, [FromQuery] Guid clinicId, [FromBody] UpdateLeadContextRequest request, CancellationToken ct)
+        Guid leadId, [FromQuery] Guid clientId, [FromBody] UpdateLeadContextRequest request, CancellationToken ct)
     {
-        var lead = await _leads.UpdateContextAsync(clinicId, leadId, request, ct);
+        var lead = await _leads.UpdateContextAsync(clientId, leadId, request, ct);
         return lead is null ? NotFound() : Ok(lead);
     }
 
-    /// <summary>get_available_slots — real open consultation slots from the clinic's structured availability (weekly schedule,
-    /// date exceptions, booking rules, procedure duration, existing appointments), in the clinic's timezone. `date` is a local
+    /// <summary>get_available_slots — real open consultation slots from the client's structured availability (weekly schedule,
+    /// date exceptions, booking rules, procedure duration, existing appointments), in the client's timezone. `date` is a local
     /// "yyyy-MM-dd" (default today); `days` (1-14, default 1 when a date is given, else 7) searches that many days from it.
-    /// Never computed by the AI. A clinic that hasn't configured availability returns configured=false and no slots.</summary>
+    /// Never computed by the AI. A client that hasn't configured availability returns configured=false and no slots.</summary>
     [HttpGet("appointments/available")]
     public async Task<ActionResult<AvailabilityResponse>> GetAvailableSlots(
-        [FromQuery] Guid clinicId, [FromQuery] Guid? leadId, [FromQuery] Guid? procedureId, [FromQuery] DateOnly? date,
+        [FromQuery] Guid clientId, [FromQuery] Guid? leadId, [FromQuery] Guid? procedureId, [FromQuery] DateOnly? date,
         [FromQuery] int? days, CancellationToken ct = default)
     {
         // With leadId (always passed by the n8n workflow, never chosen by the AI) the reply also carries the patient's own
@@ -175,11 +175,11 @@ public class AiController : ControllerBase
         PatientBookingContext? context = null;
         if (leadId is { } lead)
         {
-            context = await _appointments.GetBookingContextAsync(clinicId, lead, ct);
-            if (context is null) return NotFound(new { error = "Lead not found for this clinic." });
+            context = await _appointments.GetBookingContextAsync(clientId, lead, ct);
+            if (context is null) return NotFound(new { error = "Lead not found for this client." });
         }
 
-        var result = await _availability.GetSlotsAsync(clinicId, procedureId, date, days ?? (date is null ? 7 : 1), ct);
+        var result = await _availability.GetSlotsAsync(clientId, procedureId, date, days ?? (date is null ? 7 : 1), ct);
         if (context is null) return Ok(result);
 
         return Ok(result with
@@ -194,14 +194,14 @@ public class AiController : ControllerBase
 
     /// <summary>schedule_consultation — the ONE tool the AI uses to book or move a consultation. The BACKEND decides which from the real
     /// appointment state: none upcoming → book; one upcoming AND confirmReplaceExisting=true → reschedule it; upcoming without consent →
-    /// nothing changes and CONFIRMATION_REQUIRED comes back. clinicId/leadId are workflow values, never AI-chosen. Always HTTP 200 for
+    /// nothing changes and CONFIRMATION_REQUIRED comes back. clientId/leadId are workflow values, never AI-chosen. Always HTTP 200 for
     /// business outcomes; only Success=true with Operation created/rescheduled means the patient's appointment changed.
     /// (Replaces book_consultation + reschedule_consultation, which remain for now but are deprecated.)</summary>
     [HttpPost("appointments/schedule")]
     public async Task<ActionResult<ScheduleConsultationResult>> ScheduleConsultation(
-        [FromQuery] Guid clinicId, [FromQuery] Guid leadId, [FromBody] ScheduleConsultationRequest request, CancellationToken ct)
+        [FromQuery] Guid clientId, [FromQuery] Guid leadId, [FromBody] ScheduleConsultationRequest request, CancellationToken ct)
     {
-        var o = await _appointments.ScheduleAsync(clinicId, leadId, request, ct);
+        var o = await _appointments.ScheduleAsync(clientId, leadId, request, ct);
         var instruction = AiResultInstructions.ForSchedule(o.Code, o.Existing?.FirstOrDefault()?.Label, o.RequestedLabel);
 
         return Ok(new ScheduleConsultationResult(
@@ -214,19 +214,19 @@ public class AiController : ControllerBase
     /// <summary>book_consultation — DEPRECATED: use schedule_consultation (the backend decides book vs reschedule). Kept working for now.</summary>
     [HttpPost("appointments/book")]
     public async Task<ActionResult<BookConsultationResult>> BookConsultation(
-        [FromQuery] Guid clinicId, [FromBody] BookConsultationRequest request, CancellationToken ct)
+        [FromQuery] Guid clientId, [FromBody] BookConsultationRequest request, CancellationToken ct)
     {
         const string NotBooked = "Nothing was booked. Do NOT tell the patient an appointment is booked or confirmed. ";
 
         try
         {
             var appointment = await _appointments.BookAvailableSlotAsync(new CreateAppointmentRequest(
-                clinicId, request.LeadId, request.ProcedureId,
+                clientId, request.LeadId, request.ProcedureId,
                 string.IsNullOrWhiteSpace(request.AppointmentType) ? "consultation" : request.AppointmentType,
                 request.ScheduledStart, request.ScheduledEnd, request.LocationType, request.LocationName, request.Notes), ct);
-            // Report the booking in the CLINIC's local time (like get_available_slots), never the stored UTC value the AI
+            // Report the booking in the CLIENT's local time (like get_available_slots), never the stored UTC value the AI
             // could read out to the patient as the wrong hour.
-            var upcoming = await _appointments.GetUpcomingForLeadAsync(clinicId, request.LeadId, ct);
+            var upcoming = await _appointments.GetUpcomingForLeadAsync(clientId, request.LeadId, ct);
             var local = upcoming.Appointments.FirstOrDefault(a => a.Id == appointment.Id);
             return Ok(new BookConsultationResult(true, "BOOKED", "Appointment booked.", Appointment: local));
         }
@@ -251,14 +251,14 @@ public class AiController : ControllerBase
     }
 
 
-    /// <summary>get_my_appointments — this patient's upcoming booked/confirmed appointments (soonest first), in clinic-local
+    /// <summary>get_my_appointments — this patient's upcoming booked/confirmed appointments (soonest first), in client-local
     /// wording. Use it before rescheduling/cancelling (to get the appointment id) and to answer "what do I have booked?".
     /// leadId is the current conversation's lead, supplied by the workflow — not chosen by the AI.</summary>
     [HttpGet("appointments/upcoming")]
     public async Task<ActionResult<UpcomingAppointmentsResponse>> GetMyAppointments(
-        [FromQuery] Guid clinicId, [FromQuery] Guid leadId, CancellationToken ct)
+        [FromQuery] Guid clientId, [FromQuery] Guid leadId, CancellationToken ct)
     {
-        return Ok(await _appointments.GetUpcomingForLeadAsync(clinicId, leadId, ct));
+        return Ok(await _appointments.GetUpcomingForLeadAsync(clientId, leadId, ct));
     }
 
     /// <summary>reschedule_consultation — DEPRECATED: use schedule_consultation. Patient wants to move THEIR upcoming appointment. No appointment id is needed: the server
@@ -267,12 +267,12 @@ public class AiController : ControllerBase
     /// another time. Always scoped to leadId — the AI can only ever touch the patient it is talking to.</summary>
     [HttpPost("appointments/reschedule")]
     public async Task<ActionResult<AppointmentResponse>> RescheduleConsultation(
-        [FromQuery] Guid clinicId, [FromQuery] Guid leadId, [FromQuery] Guid? appointmentId,
+        [FromQuery] Guid clientId, [FromQuery] Guid leadId, [FromQuery] Guid? appointmentId,
         [FromBody] RescheduleConsultationRequest request, CancellationToken ct)
     {
         try
         {
-            var appointment = await _appointments.RescheduleAsync(clinicId, leadId, appointmentId, request.ScheduledStart, request.ScheduledEnd, request.Reason, ct);
+            var appointment = await _appointments.RescheduleAsync(clientId, leadId, appointmentId, request.ScheduledStart, request.ScheduledEnd, request.Reason, ct);
             return appointment is null
                 ? NotFound(new { error = "This patient has no upcoming appointment to reschedule. Book a new one instead." })
                 : Ok(appointment);
@@ -292,10 +292,10 @@ public class AiController : ControllerBase
     /// confirmation before calling it.</summary>
     [HttpPost("appointments/cancel")]
     public async Task<ActionResult<CancelConsultationResult>> CancelConsultation(
-        [FromQuery] Guid clinicId, [FromQuery] Guid leadId, [FromQuery] Guid? appointmentId,
+        [FromQuery] Guid clientId, [FromQuery] Guid leadId, [FromQuery] Guid? appointmentId,
         [FromBody] CancelConsultationRequest request, CancellationToken ct)
     {
-        var o = await _appointments.CancelConsultationAsync(clinicId, leadId, appointmentId, request.Reason, ct);
+        var o = await _appointments.CancelConsultationAsync(clientId, leadId, appointmentId, request.Reason, ct);
         var instruction = AiResultInstructions.ForCancel(o.Code);
 
         return Ok(new CancelConsultationResult(
@@ -307,9 +307,9 @@ public class AiController : ControllerBase
     /// attributed to the AI with the reason recorded on the event.</summary>
     [HttpPost("conversations/{id:guid}/handoff")]
     public async Task<ActionResult<ConversationResponse>> HandoffToHuman(
-        Guid id, [FromQuery] Guid clinicId, [FromBody] HandoffToHumanRequest request, CancellationToken ct)
+        Guid id, [FromQuery] Guid clientId, [FromBody] HandoffToHumanRequest request, CancellationToken ct)
     {
-        var conversation = await _conversations.HandoffToHumanAsync(clinicId, id, request.Reason, ct);
+        var conversation = await _conversations.HandoffToHumanAsync(clientId, id, request.Reason, ct);
         return conversation is null ? NotFound() : Ok(conversation);
     }
 }

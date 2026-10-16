@@ -29,8 +29,8 @@ public class LeadAdminService : ILeadAdminService
         _time = time;
     }
 
-    public Task<PagedResponse<LeadRow>> ListLeadsAsync(Guid? clinicId, string? status, string? search, int page, CancellationToken ct) =>
-        _repository.ListLeadsAsync(clinicId, status, search, page, ct);
+    public Task<PagedResponse<LeadRow>> ListLeadsAsync(Guid? clientId, string? status, string? search, int page, CancellationToken ct) =>
+        _repository.ListLeadsAsync(clientId, status, search, page, ct);
 
     public async Task<LeadDetail?> GetLeadAsync(Guid id, CancellationToken ct) =>
         await _repository.GetLeadAsync(id, ct) is { } lead ? PlatformAdminMapper.ToDetail(lead) : null;
@@ -38,9 +38,9 @@ public class LeadAdminService : ILeadAdminService
     public async Task<List<LeadEventRow>> LeadEventsAsync(Guid leadId, CancellationToken ct) =>
         (await _repository.LeadEventsAsync(leadId, ct)).Select(PlatformAdminMapper.ToRow).ToList();
 
-    public Task<PagedResponse<ConversationRow>> ListConversationsAsync(Guid? clinicId, Guid? leadId, string? channel, string? mode,
+    public Task<PagedResponse<ConversationRow>> ListConversationsAsync(Guid? clientId, Guid? leadId, string? channel, string? mode,
         string? status, int page, CancellationToken ct) =>
-        _repository.ListConversationsAsync(clinicId, leadId, channel, mode, status, page, ct);
+        _repository.ListConversationsAsync(clientId, leadId, channel, mode, status, page, ct);
 
     public async Task<ConversationDetail?> GetConversationAsync(Guid id, CancellationToken ct) =>
         await _repository.GetConversationAsync(id, ct) is { } c ? PlatformAdminMapper.ToDetail(c, _time.GetUtcNow()) : null;
@@ -48,13 +48,13 @@ public class LeadAdminService : ILeadAdminService
     public async Task<List<MessageDetail>> MessagesAsync(Guid conversationId, int take, CancellationToken ct) =>
         (await _repository.MessagesAsync(conversationId, Math.Clamp(take, 1, 1000), ct)).Select(PlatformAdminMapper.ToDetail).ToList();
 
-    public Task<PagedResponse<MessageRow>> ListMessagesAsync(Guid? clinicId, bool failedOnly, string? sender, string? search, int page,
+    public Task<PagedResponse<MessageRow>> ListMessagesAsync(Guid? clientId, bool failedOnly, string? sender, string? search, int page,
         CancellationToken ct) =>
-        _repository.ListMessagesAsync(clinicId, failedOnly, sender, search, page, ct);
+        _repository.ListMessagesAsync(clientId, failedOnly, sender, search, page, ct);
 
-    public Task<PagedResponse<AppointmentRow>> ListAppointmentsAsync(Guid? clinicId, Guid? leadId, string? status, bool upcomingOnly,
+    public Task<PagedResponse<AppointmentRow>> ListAppointmentsAsync(Guid? clientId, Guid? leadId, string? status, bool upcomingOnly,
         int page, CancellationToken ct) =>
-        _repository.ListAppointmentsAsync(clinicId, leadId, status, upcomingOnly, page, ct);
+        _repository.ListAppointmentsAsync(clientId, leadId, status, upcomingOnly, page, ct);
 
     public async Task<PlatformAdminChange> UpdateLeadAsync(Guid id, LeadUpdate update, CancellationToken ct)
     {
@@ -70,7 +70,7 @@ public class LeadAdminService : ILeadAdminService
         lead.Notes = string.IsNullOrWhiteSpace(update.Notes) ? null : update.Notes.Trim();
         lead.UpdatedAt = now;
         await _unitOfWork.SaveChangesAsync(ct);
-        return new PlatformAdminChange(lead.ClinicId);
+        return new PlatformAdminChange(lead.ClientId);
     }
 
     public async Task<PlatformAdminChange> SetModeAsync(Guid id, string mode, CancellationToken ct)
@@ -80,10 +80,10 @@ public class LeadAdminService : ILeadAdminService
         if (conversation.Mode != mode)
         {
             _ = mode == ConversationMode.Human
-                ? await _conversations.TakeOverAsync(conversation.ClinicId, id, ct)
-                : await _conversations.ReturnToAiAsync(conversation.ClinicId, id, ct);
+                ? await _conversations.TakeOverAsync(conversation.ClientId, id, ct)
+                : await _conversations.ReturnToAiAsync(conversation.ClientId, id, ct);
         }
-        return new PlatformAdminChange(conversation.ClinicId);
+        return new PlatformAdminChange(conversation.ClientId);
     }
 
     public async Task<PlatformAdminChange> SetStatusAsync(Guid id, string status, CancellationToken ct)
@@ -91,18 +91,18 @@ public class LeadAdminService : ILeadAdminService
         if (status is not (ConversationStatus.Active or ConversationStatus.Closed or ConversationStatus.Archived))
             throw new ArgumentException("Unknown conversation status.");
         var conversation = await _repository.GetConversationForUpdateAsync(id, ct) ?? throw new KeyNotFoundException("Conversation not found.");
-        if (conversation.Status == status) return new PlatformAdminChange(conversation.ClinicId);
+        if (conversation.Status == status) return new PlatformAdminChange(conversation.ClientId);
         conversation.Status = status;
         conversation.UpdatedAt = _time.GetUtcNow();
         await _unitOfWork.SaveChangesAsync(ct);
-        return new PlatformAdminChange(conversation.ClinicId);
+        return new PlatformAdminChange(conversation.ClientId);
     }
 
     public async Task<PlatformAdminChange> SetAppointmentStatusAsync(Guid id, string status, CancellationToken ct)
     {
         var appointment = await _repository.GetAppointmentForUpdateAsync(id, ct) ?? throw new KeyNotFoundException("Appointment not found.");
-        // The clinic's own path: validates the status and pushes the change to a connected calendar.
-        if (appointment.Status != status) await _appointments.UpdateStatusAsync(appointment.ClinicId, id, status, ct);
-        return new PlatformAdminChange(appointment.ClinicId);
+        // The client's own path: validates the status and pushes the change to a connected calendar.
+        if (appointment.Status != status) await _appointments.UpdateStatusAsync(appointment.ClientId, id, status, ct);
+        return new PlatformAdminChange(appointment.ClientId);
     }
 }

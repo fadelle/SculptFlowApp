@@ -13,11 +13,11 @@ public interface ICampaignAudienceService
     /// <summary>Resolves the actual lead list for one audience type. Called once, at campaign
     /// creation time, to snapshot CampaignRecipient rows — never re-run later to "refresh" an
     /// existing campaign's recipients.</summary>
-    Task<List<Lead>> GetEligibleLeadsAsync(Guid clinicId, string audienceType, string? filtersJson, CancellationToken ct = default);
+    Task<List<Lead>> GetEligibleLeadsAsync(Guid clientId, string audienceType, string? filtersJson, CancellationToken ct = default);
 
     /// <summary>Same resolution, count only — backs the "Matching Leads: N" preview so the dashboard
     /// doesn't have to materialize (or the caller discard) the full lead list just to show a number.</summary>
-    Task<int> GetMatchingCountAsync(Guid clinicId, string audienceType, string? filtersJson, CancellationToken ct = default);
+    Task<int> GetMatchingCountAsync(Guid clientId, string audienceType, string? filtersJson, CancellationToken ct = default);
 
     /// <summary>Mandatory exclusions that apply regardless of audience type or filters — do_not_contact
     /// equivalent (MarketingOptIn/OptedOutAt), missing/blank phone. Exposed so callers that build a

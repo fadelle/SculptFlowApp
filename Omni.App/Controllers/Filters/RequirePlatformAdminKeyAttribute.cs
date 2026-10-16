@@ -7,7 +7,7 @@ namespace Omni.App.Controllers.Filters;
 
 /// <summary>
 /// Service auth for the platform-admin API (/api/platform-admin/{domain}/…). The main app owns each domain's rules and
-/// writes; the Omni.Admin portal is the control panel that calls these endpoints server to server. Clinic staff
+/// writes; the Omni.Admin portal is the control panel that calls these endpoints server to server. Client staff
 /// accounts have no roles in this app, so this is a shared secret: PlatformAdmin:ApiKey, sent as X-Platform-Admin-Key.
 /// Compared in constant time. An empty key turns every platform-admin endpoint off (404), so a server that never
 /// configured it exposes nothing. X-Admin-Actor names the admin who acted (written to the ledger / audit trail).

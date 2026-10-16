@@ -2,7 +2,7 @@ namespace Omni.App.Entities.Responses.Inbox;
 
 public record ConversationResponse(
     Guid Id,
-    Guid ClinicId,
+    Guid ClientId,
     Guid LeadId,
     string Channel,
     string Status,

@@ -20,10 +20,10 @@ public class KnowledgeBenchmarkRepository : IKnowledgeBenchmarkRepository
 
     // ------------------------------------------------------------------ cases
 
-    public async Task<BenchmarkCaseCounts> GetCaseCountsAsync(Guid clinicId, CancellationToken ct = default)
+    public async Task<BenchmarkCaseCounts> GetCaseCountsAsync(Guid clientId, CancellationToken ct = default)
     {
         var counts = await _db.KnowledgeBenchmarkCases.AsNoTracking()
-            .Where(c => c.ClinicId == clinicId)
+            .Where(c => c.ClientId == clientId)
             .GroupBy(_ => 1)
             .Select(g => new
             {
@@ -39,10 +39,10 @@ public class KnowledgeBenchmarkRepository : IKnowledgeBenchmarkRepository
             : new BenchmarkCaseCounts(counts.Total, counts.Generated, counts.Manual, counts.Reviewed, counts.Stale);
     }
 
-    public async Task<(IReadOnlyList<KnowledgeRetrievalBenchmarkCase> Items, int Total)> ListCasesAsync(Guid clinicId, string view,
+    public async Task<(IReadOnlyList<KnowledgeRetrievalBenchmarkCase> Items, int Total)> ListCasesAsync(Guid clientId, string view,
         Guid? generationId, int skip, int take, CancellationToken ct = default)
     {
-        var query = _db.KnowledgeBenchmarkCases.AsNoTracking().Where(c => c.ClinicId == clinicId);
+        var query = _db.KnowledgeBenchmarkCases.AsNoTracking().Where(c => c.ClientId == clientId);
         query = view switch
         {
             "generated" => query.Where(c => c.CaseType == BenchmarkCaseType.Generated),
@@ -59,31 +59,31 @@ public class KnowledgeBenchmarkRepository : IKnowledgeBenchmarkRepository
         return (page, total);
     }
 
-    public Task<KnowledgeRetrievalBenchmarkCase?> GetCaseReadOnlyAsync(Guid clinicId, Guid caseId, CancellationToken ct = default) =>
-        _db.KnowledgeBenchmarkCases.AsNoTracking().FirstOrDefaultAsync(x => x.ClinicId == clinicId && x.Id == caseId, ct);
+    public Task<KnowledgeRetrievalBenchmarkCase?> GetCaseReadOnlyAsync(Guid clientId, Guid caseId, CancellationToken ct = default) =>
+        _db.KnowledgeBenchmarkCases.AsNoTracking().FirstOrDefaultAsync(x => x.ClientId == clientId && x.Id == caseId, ct);
 
-    public Task<KnowledgeRetrievalBenchmarkCase?> GetCaseAsync(Guid clinicId, Guid caseId, CancellationToken ct = default) =>
-        _db.KnowledgeBenchmarkCases.FirstOrDefaultAsync(x => x.ClinicId == clinicId && x.Id == caseId, ct);
+    public Task<KnowledgeRetrievalBenchmarkCase?> GetCaseAsync(Guid clientId, Guid caseId, CancellationToken ct = default) =>
+        _db.KnowledgeBenchmarkCases.FirstOrDefaultAsync(x => x.ClientId == clientId && x.Id == caseId, ct);
 
-    public async Task<IReadOnlyList<KnowledgeRetrievalBenchmarkCase>> ListAllCasesAsync(Guid clinicId, CancellationToken ct = default) =>
-        await _db.KnowledgeBenchmarkCases.Where(c => c.ClinicId == clinicId).ToListAsync(ct);
+    public async Task<IReadOnlyList<KnowledgeRetrievalBenchmarkCase>> ListAllCasesAsync(Guid clientId, CancellationToken ct = default) =>
+        await _db.KnowledgeBenchmarkCases.Where(c => c.ClientId == clientId).ToListAsync(ct);
 
-    public async Task<IReadOnlyList<KnowledgeRetrievalBenchmarkCase>> ListCasesInScopeAsync(Guid clinicId, string scope, Guid? generationId,
+    public async Task<IReadOnlyList<KnowledgeRetrievalBenchmarkCase>> ListCasesInScopeAsync(Guid clientId, string scope, Guid? generationId,
         CancellationToken ct = default) =>
-        await InScope(clinicId, scope, generationId).OrderBy(c => c.CreatedAt).ThenBy(c => c.Id).ToListAsync(ct);
+        await InScope(clientId, scope, generationId).OrderBy(c => c.CreatedAt).ThenBy(c => c.Id).ToListAsync(ct);
 
-    public async Task<(int Total, int Stale)> CountCasesInScopeAsync(Guid clinicId, string scope, Guid? generationId,
+    public async Task<(int Total, int Stale)> CountCasesInScopeAsync(Guid clientId, string scope, Guid? generationId,
         CancellationToken ct = default)
     {
-        var inScope = InScope(clinicId, scope, generationId);
+        var inScope = InScope(clientId, scope, generationId);
         var total = await inScope.CountAsync(ct);
         var stale = await inScope.CountAsync(c => c.IsStale, ct);
         return (total, stale);
     }
 
-    private IQueryable<KnowledgeRetrievalBenchmarkCase> InScope(Guid clinicId, string scope, Guid? generationId)
+    private IQueryable<KnowledgeRetrievalBenchmarkCase> InScope(Guid clientId, string scope, Guid? generationId)
     {
-        var query = _db.KnowledgeBenchmarkCases.AsNoTracking().Where(c => c.ClinicId == clinicId);
+        var query = _db.KnowledgeBenchmarkCases.AsNoTracking().Where(c => c.ClientId == clientId);
         return scope switch
         {
             BenchmarkCaseScope.Generated => query.Where(c => c.CaseType == BenchmarkCaseType.Generated),
@@ -108,29 +108,29 @@ public class KnowledgeBenchmarkRepository : IKnowledgeBenchmarkRepository
         }
     }
 
-    public Task<int> DeleteCaseAsync(Guid clinicId, Guid caseId, CancellationToken ct = default) =>
-        _db.KnowledgeBenchmarkCases.Where(c => c.ClinicId == clinicId && c.Id == caseId).ExecuteDeleteAsync(ct);
+    public Task<int> DeleteCaseAsync(Guid clientId, Guid caseId, CancellationToken ct = default) =>
+        _db.KnowledgeBenchmarkCases.Where(c => c.ClientId == clientId && c.Id == caseId).ExecuteDeleteAsync(ct);
 
-    public async Task<IReadOnlyList<string>> ListCoveredSourceHashesAsync(Guid clinicId, CancellationToken ct = default) =>
+    public async Task<IReadOnlyList<string>> ListCoveredSourceHashesAsync(Guid clientId, CancellationToken ct = default) =>
         await _db.KnowledgeBenchmarkCases.AsNoTracking()
-            .Where(c => c.ClinicId == clinicId && c.SourceChunkHash != null)
+            .Where(c => c.ClientId == clientId && c.SourceChunkHash != null)
             .Select(c => c.SourceChunkHash!).Distinct().ToListAsync(ct);
 
-    public async Task<IReadOnlyList<(Guid ChunkId, string Question)>> ListQuestionsForChunksAsync(Guid clinicId,
+    public async Task<IReadOnlyList<(Guid ChunkId, string Question)>> ListQuestionsForChunksAsync(Guid clientId,
         IReadOnlyCollection<Guid> chunkIds, CancellationToken ct = default)
     {
         var rows = await _db.KnowledgeBenchmarkCases.AsNoTracking()
-            .Where(c => c.ClinicId == clinicId && chunkIds.Contains(c.ExpectedChunkId))
+            .Where(c => c.ClientId == clientId && chunkIds.Contains(c.ExpectedChunkId))
             .Select(c => new { c.ExpectedChunkId, c.Question }).ToListAsync(ct);
         return rows.Select(r => (r.ExpectedChunkId, r.Question)).ToList();
     }
 
-    public async Task<IReadOnlyDictionary<Guid, int>> CountCasesByGenerationAsync(Guid clinicId, IReadOnlyCollection<Guid> generationIds,
+    public async Task<IReadOnlyDictionary<Guid, int>> CountCasesByGenerationAsync(Guid clientId, IReadOnlyCollection<Guid> generationIds,
         CancellationToken ct = default)
     {
         var nullableIds = generationIds.Select(i => (Guid?)i).ToList();
         var rows = await _db.KnowledgeBenchmarkCases.AsNoTracking()
-            .Where(c => c.ClinicId == clinicId && nullableIds.Contains(c.GenerationId))
+            .Where(c => c.ClientId == clientId && nullableIds.Contains(c.GenerationId))
             .GroupBy(c => c.GenerationId)
             .Select(g => new { g.Key, Count = g.Count() })
             .ToListAsync(ct);
@@ -139,61 +139,61 @@ public class KnowledgeBenchmarkRepository : IKnowledgeBenchmarkRepository
 
     // ------------------------------------------------------------------ Knowledge Base views
 
-    public Task<BenchmarkChunkInfo?> GetActiveChunkAsync(Guid clinicId, Guid documentId, Guid chunkId, CancellationToken ct = default) =>
+    public Task<BenchmarkChunkInfo?> GetActiveChunkAsync(Guid clientId, Guid documentId, Guid chunkId, CancellationToken ct = default) =>
         _db.KnowledgeChunks.AsNoTracking()
-            .Where(k => k.ClinicId == clinicId && k.Id == chunkId && k.KnowledgeDocumentId == documentId
-                        && k.Document!.ClinicId == clinicId && k.Document.IsActive)
+            .Where(k => k.ClientId == clientId && k.Id == chunkId && k.KnowledgeDocumentId == documentId
+                        && k.Document!.ClientId == clientId && k.Document.IsActive)
             .Select(k => new BenchmarkChunkInfo(k.Id, k.KnowledgeDocumentId, k.Content, k.Document!.Title))
             .FirstOrDefaultAsync(ct);
 
-    public async Task<IReadOnlyList<BenchmarkSourceDocumentResponse>> ListSourceDocumentsAsync(Guid clinicId, CancellationToken ct = default) =>
+    public async Task<IReadOnlyList<BenchmarkSourceDocumentResponse>> ListSourceDocumentsAsync(Guid clientId, CancellationToken ct = default) =>
         await _db.KnowledgeDocuments.AsNoTracking()
-            .Where(d => d.ClinicId == clinicId && d.IsActive && d.Chunks.Any())
+            .Where(d => d.ClientId == clientId && d.IsActive && d.Chunks.Any())
             .OrderBy(d => d.Title)
             .Select(d => new BenchmarkSourceDocumentResponse(d.Id, d.Title, d.Category, d.Chunks.Count))
             .ToListAsync(ct);
 
-    public async Task<IReadOnlyList<KnowledgeChunk>> ListDocumentChunksAsync(Guid clinicId, Guid documentId, CancellationToken ct = default) =>
+    public async Task<IReadOnlyList<KnowledgeChunk>> ListDocumentChunksAsync(Guid clientId, Guid documentId, CancellationToken ct = default) =>
         await _db.KnowledgeChunks.AsNoTracking()
-            .Where(k => k.ClinicId == clinicId && k.KnowledgeDocumentId == documentId)
+            .Where(k => k.ClientId == clientId && k.KnowledgeDocumentId == documentId)
             .OrderBy(k => k.ChunkIndex).ToListAsync(ct);
 
-    public async Task<IReadOnlyList<BenchmarkChunkInfo>> ListChunksAsync(Guid clinicId, IReadOnlyCollection<Guid> chunkIds,
+    public async Task<IReadOnlyList<BenchmarkChunkInfo>> ListChunksAsync(Guid clientId, IReadOnlyCollection<Guid> chunkIds,
         CancellationToken ct = default) =>
         await _db.KnowledgeChunks.AsNoTracking()
-            .Where(k => k.ClinicId == clinicId && chunkIds.Contains(k.Id))
+            .Where(k => k.ClientId == clientId && chunkIds.Contains(k.Id))
             .Select(k => new BenchmarkChunkInfo(k.Id, k.KnowledgeDocumentId, k.Content, null))
             .ToListAsync(ct);
 
-    public async Task<IReadOnlyList<BenchmarkChunkInfo>> ListActiveChunksAsync(Guid clinicId, IReadOnlyCollection<Guid>? chunkIds,
+    public async Task<IReadOnlyList<BenchmarkChunkInfo>> ListActiveChunksAsync(Guid clientId, IReadOnlyCollection<Guid>? chunkIds,
         CancellationToken ct = default)
     {
         var query = _db.KnowledgeChunks.AsNoTracking()
-            .Where(k => k.ClinicId == clinicId && k.Document!.ClinicId == clinicId && k.Document.IsActive);
+            .Where(k => k.ClientId == clientId && k.Document!.ClientId == clientId && k.Document.IsActive);
         if (chunkIds is not null) query = query.Where(k => chunkIds.Contains(k.Id));
         return await query.Select(k => new BenchmarkChunkInfo(k.Id, k.KnowledgeDocumentId, k.Content, null)).ToListAsync(ct);
     }
 
-    public async Task<IReadOnlyList<BenchmarkDocumentState>> ListDocumentStatesAsync(Guid clinicId, CancellationToken ct = default) =>
+    public async Task<IReadOnlyList<BenchmarkDocumentState>> ListDocumentStatesAsync(Guid clientId, CancellationToken ct = default) =>
         await _db.KnowledgeDocuments.AsNoTracking()
-            .Where(d => d.ClinicId == clinicId)
+            .Where(d => d.ClientId == clientId)
             .Select(d => new BenchmarkDocumentState(d.Id, d.Title, d.IsActive))
             .ToListAsync(ct);
 
-    public async Task<ActiveChunkStats> GetActiveChunkStatsAsync(Guid clinicId, CancellationToken ct = default)
+    public async Task<ActiveChunkStats> GetActiveChunkStatsAsync(Guid clientId, CancellationToken ct = default)
     {
-        var activeChunks = _db.KnowledgeChunks.AsNoTracking().Where(k => k.ClinicId == clinicId && k.Document!.IsActive);
+        var activeChunks = _db.KnowledgeChunks.AsNoTracking().Where(k => k.ClientId == clientId && k.Document!.IsActive);
         var count = await activeChunks.CountAsync(ct);
         var avg = count == 0 ? (double?)null : await activeChunks.AverageAsync(k => (double?)k.Content.Length, ct);
         return new ActiveChunkStats(count, avg);
     }
 
-    public Task<string?> GetChunkContentAsync(Guid clinicId, Guid chunkId, Guid documentId, CancellationToken ct = default) =>
+    public Task<string?> GetChunkContentAsync(Guid clientId, Guid chunkId, Guid documentId, CancellationToken ct = default) =>
         _db.KnowledgeChunks.AsNoTracking()
-            .Where(k => k.ClinicId == clinicId && k.Id == chunkId && k.KnowledgeDocumentId == documentId)
+            .Where(k => k.ClientId == clientId && k.Id == chunkId && k.KnowledgeDocumentId == documentId)
             .Select(k => k.Content).FirstOrDefaultAsync(ct);
 
-    public async Task<IReadOnlyList<BenchmarkChunkInfo>> SampleUncoveredChunksAsync(Guid clinicId, int minChars, int poolSize,
+    public async Task<IReadOnlyList<BenchmarkChunkInfo>> SampleUncoveredChunksAsync(Guid clientId, int minChars, int poolSize,
         CancellationToken ct = default)
     {
         var pool = await _db.Database.SqlQueryRaw<SampledChunkRow>(
@@ -202,10 +202,10 @@ public class KnowledgeBenchmarkRepository : IKnowledgeBenchmarkRepository
                        row_number() over (partition by d.id order by random()) as rn
                 from knowledge.knowledge_chunks c
                 join knowledge.knowledge_documents d on d.id = c.knowledge_document_id
-                where c.clinic_id = @clinic and d.clinic_id = @clinic and d.is_active = true
+                where c.client_id = @client and d.client_id = @client and d.is_active = true
                   and char_length(c.content) >= @minChars
                   and not exists (select 1 from knowledge.knowledge_retrieval_benchmark_cases b
-                                  where b.clinic_id = @clinic and b.expected_chunk_id = c.id)
+                                  where b.client_id = @client and b.expected_chunk_id = c.id)
                   -- Blog post-meta teasers ('482 Views 0 Comments', '... Read More') make poor benchmark questions:
                   -- they are byline/navigation noise, not the article's own answer to anything. This only narrows
                   -- which chunks are OFFERED as test-case sources — it never touches what search actually indexes.
@@ -214,7 +214,7 @@ public class KnowledgeBenchmarkRepository : IKnowledgeBenchmarkRepository
               ) x
               order by x.rn, random()
               limit @pool",
-            new NpgsqlParameter("clinic", clinicId),
+            new NpgsqlParameter("client", clientId),
             new NpgsqlParameter("minChars", minChars),
             new NpgsqlParameter("pool", poolSize))
             .ToListAsync(ct);
@@ -237,25 +237,25 @@ public class KnowledgeBenchmarkRepository : IKnowledgeBenchmarkRepository
     public Task<KnowledgeRetrievalBenchmarkRun?> GetRunAsync(Guid runId, CancellationToken ct = default) =>
         _db.KnowledgeBenchmarkRuns.FirstOrDefaultAsync(r => r.Id == runId, ct);
 
-    public Task<KnowledgeRetrievalBenchmarkRun?> GetRunReadOnlyAsync(Guid clinicId, Guid runId, CancellationToken ct = default) =>
-        _db.KnowledgeBenchmarkRuns.AsNoTracking().FirstOrDefaultAsync(r => r.ClinicId == clinicId && r.Id == runId, ct);
+    public Task<KnowledgeRetrievalBenchmarkRun?> GetRunReadOnlyAsync(Guid clientId, Guid runId, CancellationToken ct = default) =>
+        _db.KnowledgeBenchmarkRuns.AsNoTracking().FirstOrDefaultAsync(r => r.ClientId == clientId && r.Id == runId, ct);
 
-    public Task<bool> RunExistsAsync(Guid clinicId, Guid runId, CancellationToken ct = default) =>
-        _db.KnowledgeBenchmarkRuns.AsNoTracking().AnyAsync(r => r.ClinicId == clinicId && r.Id == runId, ct);
+    public Task<bool> RunExistsAsync(Guid clientId, Guid runId, CancellationToken ct = default) =>
+        _db.KnowledgeBenchmarkRuns.AsNoTracking().AnyAsync(r => r.ClientId == clientId && r.Id == runId, ct);
 
-    public Task<KnowledgeRetrievalBenchmarkRun?> GetLatestRunAsync(Guid clinicId, bool completedOnly, CancellationToken ct = default) =>
+    public Task<KnowledgeRetrievalBenchmarkRun?> GetLatestRunAsync(Guid clientId, bool completedOnly, CancellationToken ct = default) =>
         _db.KnowledgeBenchmarkRuns.AsNoTracking()
-            .Where(r => r.ClinicId == clinicId && (!completedOnly || r.Status == BenchmarkRunStatus.Completed))
+            .Where(r => r.ClientId == clientId && (!completedOnly || r.Status == BenchmarkRunStatus.Completed))
             .OrderByDescending(r => r.CreatedAt).FirstOrDefaultAsync(ct);
 
-    public async Task<IReadOnlyList<KnowledgeRetrievalBenchmarkRun>> ListRunsAsync(Guid clinicId, int take, CancellationToken ct = default) =>
+    public async Task<IReadOnlyList<KnowledgeRetrievalBenchmarkRun>> ListRunsAsync(Guid clientId, int take, CancellationToken ct = default) =>
         await _db.KnowledgeBenchmarkRuns.AsNoTracking()
-            .Where(r => r.ClinicId == clinicId)
+            .Where(r => r.ClientId == clientId)
             .OrderByDescending(r => r.CreatedAt).Take(take).ToListAsync(ct);
 
-    public Task<bool> HasRunInProgressAsync(Guid clinicId, DateTimeOffset createdAfter, CancellationToken ct = default) =>
+    public Task<bool> HasRunInProgressAsync(Guid clientId, DateTimeOffset createdAfter, CancellationToken ct = default) =>
         _db.KnowledgeBenchmarkRuns.AsNoTracking().AnyAsync(r =>
-            r.ClinicId == clinicId && r.CreatedAt > createdAfter
+            r.ClientId == clientId && r.CreatedAt > createdAfter
             && (r.Status == BenchmarkRunStatus.Pending || r.Status == BenchmarkRunStatus.Running), ct);
 
     public async Task<IReadOnlyList<KnowledgeRetrievalBenchmarkRun>> ListRunsInStatusAsync(string status, CancellationToken ct = default) =>
@@ -271,25 +271,25 @@ public class KnowledgeBenchmarkRepository : IKnowledgeBenchmarkRepository
 
     public void DetachResult(KnowledgeRetrievalBenchmarkResult result) => _db.Entry(result).State = EntityState.Detached;
 
-    public Task<KnowledgeRetrievalBenchmarkResult?> GetLatestResultForCaseAsync(Guid clinicId, Guid caseId, CancellationToken ct = default) =>
+    public Task<KnowledgeRetrievalBenchmarkResult?> GetLatestResultForCaseAsync(Guid clientId, Guid caseId, CancellationToken ct = default) =>
         _db.KnowledgeBenchmarkResults.AsNoTracking()
-            .Where(r => r.ClinicId == clinicId && r.BenchmarkCaseId == caseId)
+            .Where(r => r.ClientId == clientId && r.BenchmarkCaseId == caseId)
             .OrderByDescending(r => r.CreatedAt).FirstOrDefaultAsync(ct);
 
-    public async Task<IReadOnlyList<KnowledgeRetrievalBenchmarkResult>> ListResultsForCasesAsync(Guid clinicId,
+    public async Task<IReadOnlyList<KnowledgeRetrievalBenchmarkResult>> ListResultsForCasesAsync(Guid clientId,
         IReadOnlyCollection<Guid> caseIds, CancellationToken ct = default)
     {
         var nullableIds = caseIds.Select(i => (Guid?)i).ToList();
         return await _db.KnowledgeBenchmarkResults.AsNoTracking()
-            .Where(r => r.ClinicId == clinicId && nullableIds.Contains(r.BenchmarkCaseId))
+            .Where(r => r.ClientId == clientId && nullableIds.Contains(r.BenchmarkCaseId))
             .OrderByDescending(r => r.CreatedAt)
             .ToListAsync(ct);
     }
 
-    public async Task<(IReadOnlyList<KnowledgeRetrievalBenchmarkResult> Items, int Total)> ListRunResultsAsync(Guid clinicId, Guid runId,
+    public async Task<(IReadOnlyList<KnowledgeRetrievalBenchmarkResult> Items, int Total)> ListRunResultsAsync(Guid clientId, Guid runId,
         string? classification, int skip, int take, CancellationToken ct = default)
     {
-        var query = _db.KnowledgeBenchmarkResults.AsNoTracking().Where(r => r.ClinicId == clinicId && r.BenchmarkRunId == runId);
+        var query = _db.KnowledgeBenchmarkResults.AsNoTracking().Where(r => r.ClientId == clientId && r.BenchmarkRunId == runId);
         if (!string.IsNullOrWhiteSpace(classification)) query = query.Where(r => r.ResultClassification == classification);
 
         var total = await query.CountAsync(ct);
@@ -304,25 +304,25 @@ public class KnowledgeBenchmarkRepository : IKnowledgeBenchmarkRepository
         return (rows, total);
     }
 
-    public Task<KnowledgeRetrievalBenchmarkResult?> GetResultAsync(Guid clinicId, Guid runId, Guid resultId, CancellationToken ct = default) =>
+    public Task<KnowledgeRetrievalBenchmarkResult?> GetResultAsync(Guid clientId, Guid runId, Guid resultId, CancellationToken ct = default) =>
         _db.KnowledgeBenchmarkResults.AsNoTracking()
-            .FirstOrDefaultAsync(r => r.ClinicId == clinicId && r.BenchmarkRunId == runId && r.Id == resultId, ct);
+            .FirstOrDefaultAsync(r => r.ClientId == clientId && r.BenchmarkRunId == runId && r.Id == resultId, ct);
 
-    public async Task<IReadOnlyList<BenchmarkResultRank>> ListRunResultRanksAsync(Guid clinicId, Guid runId, CancellationToken ct = default) =>
+    public async Task<IReadOnlyList<BenchmarkResultRank>> ListRunResultRanksAsync(Guid clientId, Guid runId, CancellationToken ct = default) =>
         await _db.KnowledgeBenchmarkResults.AsNoTracking()
-            .Where(r => r.ClinicId == clinicId && r.BenchmarkRunId == runId)
+            .Where(r => r.ClientId == clientId && r.BenchmarkRunId == runId)
             .Select(r => new BenchmarkResultRank(r.GenerationId, r.BenchmarkRunId, null, r.ResultClassification, r.ExpectedChunkRank,
                 r.ExpectedDocumentBestRank))
             .ToListAsync(ct);
 
-    public async Task<IReadOnlyList<BenchmarkResultRank>> ListCompletedResultRanksForGenerationsAsync(Guid clinicId,
+    public async Task<IReadOnlyList<BenchmarkResultRank>> ListCompletedResultRanksForGenerationsAsync(Guid clientId,
         IReadOnlyCollection<Guid> generationIds, CancellationToken ct = default)
     {
         var nullableIds = generationIds.Select(i => (Guid?)i).ToList();
         return await (
             from r in _db.KnowledgeBenchmarkResults.AsNoTracking()
             join run in _db.KnowledgeBenchmarkRuns.AsNoTracking() on r.BenchmarkRunId equals run.Id
-            where r.ClinicId == clinicId && run.ClinicId == clinicId && run.Status == BenchmarkRunStatus.Completed
+            where r.ClientId == clientId && run.ClientId == clientId && run.Status == BenchmarkRunStatus.Completed
                   && nullableIds.Contains(r.GenerationId)
             select new BenchmarkResultRank(r.GenerationId, r.BenchmarkRunId, run.CreatedAt, r.ResultClassification,
                 r.ExpectedChunkRank, r.ExpectedDocumentBestRank))
@@ -341,28 +341,28 @@ public class KnowledgeBenchmarkRepository : IKnowledgeBenchmarkRepository
     public Task<KnowledgeRetrievalBenchmarkGeneration?> GetGenerationReadOnlyAsync(Guid generationId, CancellationToken ct = default) =>
         _db.KnowledgeBenchmarkGenerations.AsNoTracking().FirstOrDefaultAsync(g => g.Id == generationId, ct);
 
-    public Task<KnowledgeRetrievalBenchmarkGeneration?> GetGenerationReadOnlyAsync(Guid clinicId, Guid generationId,
+    public Task<KnowledgeRetrievalBenchmarkGeneration?> GetGenerationReadOnlyAsync(Guid clientId, Guid generationId,
         CancellationToken ct = default) =>
-        _db.KnowledgeBenchmarkGenerations.AsNoTracking().FirstOrDefaultAsync(g => g.ClinicId == clinicId && g.Id == generationId, ct);
+        _db.KnowledgeBenchmarkGenerations.AsNoTracking().FirstOrDefaultAsync(g => g.ClientId == clientId && g.Id == generationId, ct);
 
-    public Task<bool> GenerationExistsAsync(Guid clinicId, Guid generationId, CancellationToken ct = default) =>
-        _db.KnowledgeBenchmarkGenerations.AsNoTracking().AnyAsync(g => g.ClinicId == clinicId && g.Id == generationId, ct);
+    public Task<bool> GenerationExistsAsync(Guid clientId, Guid generationId, CancellationToken ct = default) =>
+        _db.KnowledgeBenchmarkGenerations.AsNoTracking().AnyAsync(g => g.ClientId == clientId && g.Id == generationId, ct);
 
-    public Task<Guid?> GetPendingGenerationIdAsync(Guid clinicId, CancellationToken ct = default) =>
+    public Task<Guid?> GetPendingGenerationIdAsync(Guid clientId, CancellationToken ct = default) =>
         _db.KnowledgeBenchmarkGenerations.AsNoTracking()
-            .Where(g => g.ClinicId == clinicId && g.Status == BenchmarkGenerationStatus.Pending)
+            .Where(g => g.ClientId == clientId && g.Status == BenchmarkGenerationStatus.Pending)
             .OrderByDescending(g => g.CreatedAt).Select(g => (Guid?)g.Id).FirstOrDefaultAsync(ct);
 
-    public async Task<IReadOnlyList<KnowledgeRetrievalBenchmarkGeneration>> ListGenerationsAsync(Guid clinicId, int take,
+    public async Task<IReadOnlyList<KnowledgeRetrievalBenchmarkGeneration>> ListGenerationsAsync(Guid clientId, int take,
         CancellationToken ct = default) =>
         await _db.KnowledgeBenchmarkGenerations.AsNoTracking()
-            .Where(g => g.ClinicId == clinicId)
+            .Where(g => g.ClientId == clientId)
             .OrderByDescending(g => g.CreatedAt).Take(take).ToListAsync(ct);
 
-    public async Task<IReadOnlyDictionary<Guid, DateTimeOffset>> GetGenerationRequestTimesAsync(Guid clinicId,
+    public async Task<IReadOnlyDictionary<Guid, DateTimeOffset>> GetGenerationRequestTimesAsync(Guid clientId,
         IReadOnlyCollection<Guid> generationIds, CancellationToken ct = default) =>
         await _db.KnowledgeBenchmarkGenerations.AsNoTracking()
-            .Where(g => g.ClinicId == clinicId && generationIds.Contains(g.Id))
+            .Where(g => g.ClientId == clientId && generationIds.Contains(g.Id))
             .ToDictionaryAsync(g => g.Id, g => g.CreatedAt, ct);
 
     public Task<int> ClaimPendingGenerationAsync(Guid generationId, DateTimeOffset now, CancellationToken ct = default) =>
@@ -370,10 +370,10 @@ public class KnowledgeBenchmarkRepository : IKnowledgeBenchmarkRepository
             .Where(g => g.Id == generationId && g.Status == BenchmarkGenerationStatus.Pending)
             .ExecuteUpdateAsync(s => s.SetProperty(g => g.Status, BenchmarkGenerationStatus.Completed).SetProperty(g => g.CompletedAt, now), ct);
 
-    public Task<int> CancelPendingGenerationAsync(Guid clinicId, Guid generationId, string message, DateTimeOffset now,
+    public Task<int> CancelPendingGenerationAsync(Guid clientId, Guid generationId, string message, DateTimeOffset now,
         CancellationToken ct = default) =>
         _db.KnowledgeBenchmarkGenerations
-            .Where(g => g.ClinicId == clinicId && g.Id == generationId && g.Status == BenchmarkGenerationStatus.Pending)
+            .Where(g => g.ClientId == clientId && g.Id == generationId && g.Status == BenchmarkGenerationStatus.Pending)
             .ExecuteUpdateAsync(s => s
                 .SetProperty(g => g.Status, BenchmarkGenerationStatus.Cancelled)
                 .SetProperty(g => g.ErrorMessage, message)
@@ -387,10 +387,10 @@ public class KnowledgeBenchmarkRepository : IKnowledgeBenchmarkRepository
                 .SetProperty(g => g.ErrorMessage, error)
                 .SetProperty(g => g.CompletedAt, now), ct);
 
-    public Task ExpirePendingGenerationsAsync(Guid clinicId, DateTimeOffset cutoff, string message, DateTimeOffset now,
+    public Task ExpirePendingGenerationsAsync(Guid clientId, DateTimeOffset cutoff, string message, DateTimeOffset now,
         CancellationToken ct = default) =>
         _db.KnowledgeBenchmarkGenerations
-            .Where(g => g.ClinicId == clinicId && g.Status == BenchmarkGenerationStatus.Pending && g.CreatedAt < cutoff)
+            .Where(g => g.ClientId == clientId && g.Status == BenchmarkGenerationStatus.Pending && g.CreatedAt < cutoff)
             .ExecuteUpdateAsync(s => s
                 .SetProperty(g => g.Status, BenchmarkGenerationStatus.Failed)
                 .SetProperty(g => g.ErrorMessage, message)

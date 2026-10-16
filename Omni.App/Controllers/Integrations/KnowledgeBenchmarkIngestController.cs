@@ -17,10 +17,10 @@ namespace Omni.App.Controllers.Integrations;
 /// server-to-server call from n8n. The benchmark itself is driven from the admin portal (KnowledgeBenchmarkAdminController,
 /// platform-admin key); this callback is the only part on the ingest key, because n8n has neither key nor session.
 ///
-/// Trust model: the request supplies NO clinic. The generationId in the URL names a generation this app created (and stored
-/// with the exact chunks it sent); the clinic and the allowed chunk set come from that stored row, and every returned id is
+/// Trust model: the request supplies NO client. The generationId in the URL names a generation this app created (and stored
+/// with the exact chunks it sent); the client and the allowed chunk set come from that stored row, and every returned id is
 /// validated against it and the live Knowledge Base. An unknown, already-completed or expired generationId is refused, so a
-/// callback can never write outside the clinic that requested the generation.
+/// callback can never write outside the client that requested the generation.
 /// </summary>
 [ApiController]
 [Route("api/knowledge/benchmark/generations")]

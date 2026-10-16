@@ -10,10 +10,10 @@ namespace Omni.App.Business.Contracts.Services.PlatformAdmin;
 public interface IAppLogAdminService
 {
     /// <summary>One row per problem (fingerprint); <paramref name="sort"/> "recent" (default) or "count".</summary>
-    Task<AppLogGroupReport> GroupsAsync(int hours, string? level, Guid? clinicId, string? search, string? sort, int take, CancellationToken ct);
+    Task<AppLogGroupReport> GroupsAsync(int hours, string? level, Guid? clientId, string? search, string? sort, int take, CancellationToken ct);
 
     /// <summary>Single rows newest first, optionally one fingerprint or one trace id; page is 1-based.</summary>
-    Task<AppLogPage> ListAsync(int hours, string? level, Guid? clinicId, string? search, string? fingerprint, string? traceId,
+    Task<AppLogPage> ListAsync(int hours, string? level, Guid? clientId, string? search, string? fingerprint, string? traceId,
         int page, int pageSize, CancellationToken ct);
 
     /// <summary>One row in full. KeyNotFoundException (404) when it doesn't exist (or was purged).</summary>

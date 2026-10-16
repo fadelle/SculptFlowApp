@@ -10,16 +10,16 @@ public interface IWebsiteSourceRepository
 
     void RemoveSource(KnowledgeWebsiteSource source);
 
-    Task<int> CountSourcesAsync(Guid clinicId, CancellationToken ct = default);
+    Task<int> CountSourcesAsync(Guid clientId, CancellationToken ct = default);
 
-    Task<bool> SourceUrlExistsAsync(Guid clinicId, string normalizedStartUrl, CancellationToken ct = default);
+    Task<bool> SourceUrlExistsAsync(Guid clientId, string normalizedStartUrl, CancellationToken ct = default);
 
     /// <summary>Newest first.</summary>
-    Task<IReadOnlyList<KnowledgeWebsiteSource>> ListSourcesReadOnlyAsync(Guid clinicId, CancellationToken ct = default);
+    Task<IReadOnlyList<KnowledgeWebsiteSource>> ListSourcesReadOnlyAsync(Guid clientId, CancellationToken ct = default);
 
-    Task<KnowledgeWebsiteSource?> GetSourceReadOnlyAsync(Guid clinicId, Guid sourceId, CancellationToken ct = default);
+    Task<KnowledgeWebsiteSource?> GetSourceReadOnlyAsync(Guid clientId, Guid sourceId, CancellationToken ct = default);
 
-    Task<KnowledgeWebsiteSource?> GetSourceAsync(Guid clinicId, Guid sourceId, CancellationToken ct = default);
+    Task<KnowledgeWebsiteSource?> GetSourceAsync(Guid clientId, Guid sourceId, CancellationToken ct = default);
 
     /// <summary>By id alone (background crawls, recovery).</summary>
     Task<KnowledgeWebsiteSource?> GetSourceByIdAsync(Guid sourceId, CancellationToken ct = default);
@@ -32,11 +32,11 @@ public interface IWebsiteSourceRepository
 
     Task<KnowledgeWebsiteScrapeRun?> GetRunAsync(Guid runId, CancellationToken ct = default);
 
-    Task<IReadOnlyList<KnowledgeWebsiteScrapeRun>> ListRunsReadOnlyAsync(Guid clinicId, IReadOnlyCollection<Guid> sourceIds,
+    Task<IReadOnlyList<KnowledgeWebsiteScrapeRun>> ListRunsReadOnlyAsync(Guid clientId, IReadOnlyCollection<Guid> sourceIds,
         CancellationToken ct = default);
 
     /// <summary>The source's most recent runs, newest first.</summary>
-    Task<IReadOnlyList<KnowledgeWebsiteScrapeRun>> ListRecentRunsReadOnlyAsync(Guid clinicId, Guid sourceId, int take,
+    Task<IReadOnlyList<KnowledgeWebsiteScrapeRun>> ListRecentRunsReadOnlyAsync(Guid clientId, Guid sourceId, int take,
         CancellationToken ct = default);
 
     Task<KnowledgeWebsiteScrapeRun?> GetLatestRunReadOnlyAsync(Guid sourceId, CancellationToken ct = default);
@@ -53,20 +53,20 @@ public interface IWebsiteSourceRepository
     void AddPage(KnowledgeWebsitePage page);
 
     /// <summary>Every page of the source, keyed by normalized URL (ordinal).</summary>
-    Task<Dictionary<string, KnowledgeWebsitePage>> MapPagesByUrlAsync(Guid clinicId, Guid sourceId, CancellationToken ct = default);
+    Task<Dictionary<string, KnowledgeWebsitePage>> MapPagesByUrlAsync(Guid clientId, Guid sourceId, CancellationToken ct = default);
 
     /// <summary>Read-only, by depth then URL.</summary>
-    Task<IReadOnlyList<KnowledgeWebsitePage>> ListPagesReadOnlyAsync(Guid clinicId, Guid sourceId, string? status, int skip, int take,
+    Task<IReadOnlyList<KnowledgeWebsitePage>> ListPagesReadOnlyAsync(Guid clientId, Guid sourceId, string? status, int skip, int take,
         CancellationToken ct = default);
 
-    Task<IReadOnlyDictionary<string, int>> CountPagesByStatusAsync(Guid clinicId, Guid sourceId, CancellationToken ct = default);
+    Task<IReadOnlyDictionary<string, int>> CountPagesByStatusAsync(Guid clientId, Guid sourceId, CancellationToken ct = default);
 
     /// <summary>Pages currently in the Knowledge Base (indexed or unchanged), per source.</summary>
-    Task<IReadOnlyDictionary<Guid, int>> CountIndexedPagesAsync(Guid clinicId, IReadOnlyCollection<Guid> sourceIds,
+    Task<IReadOnlyDictionary<Guid, int>> CountIndexedPagesAsync(Guid clientId, IReadOnlyCollection<Guid> sourceIds,
         CancellationToken ct = default);
 
     /// <summary>Knowledge documents created from the source's pages; with <paramref name="onlyInKnowledgeBase"/>, only
     /// pages currently indexed or unchanged.</summary>
-    Task<IReadOnlyList<Guid>> ListPageDocumentIdsAsync(Guid clinicId, Guid sourceId, bool onlyInKnowledgeBase,
+    Task<IReadOnlyList<Guid>> ListPageDocumentIdsAsync(Guid clientId, Guid sourceId, bool onlyInKnowledgeBase,
         CancellationToken ct = default);
 }

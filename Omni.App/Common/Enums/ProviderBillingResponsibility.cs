@@ -5,7 +5,7 @@ public static class ProviderBillingResponsibility
 {
     /// <summary>The customer pays the provider directly (e.g. their own WABA with their own Meta payment method).</summary>
     public const string CustomerDirect = "customer_direct";
-    /// <summary>Omni pays the provider (e.g. an SMS aggregator) and charges the clinic its rates.</summary>
+    /// <summary>Omni pays the provider (e.g. an SMS aggregator) and charges the client its rates.</summary>
     public const string PlatformFunded = "platform_funded";
     /// <summary>The customer has its own account with another provider, which bills the customer.</summary>
     public const string ExternalProviderDirect = "external_provider_direct";

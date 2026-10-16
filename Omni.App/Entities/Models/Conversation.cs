@@ -5,7 +5,7 @@ namespace Omni.App.Entities.Models;
 public class Conversation
 {
     public Guid Id { get; set; }
-    public Guid ClinicId { get; set; }
+    public Guid ClientId { get; set; }
     public Guid LeadId { get; set; }
 
     public string Channel { get; set; } = string.Empty;
@@ -32,7 +32,7 @@ public class Conversation
     /// interval math everywhere it's checked. Recomputed alongside LastCustomerMessageAt.</summary>
     public DateTimeOffset? ServiceWindowExpiresAt { get; set; }
 
-    /// <summary>When staff last opened this conversation (shared by all the clinic's staff). Inbound
+    /// <summary>When staff last opened this conversation (shared by all the client's staff). Inbound
     /// messages newer than this are "unread"; null = never opened, so every inbound message is unread.</summary>
     public DateTimeOffset? LastReadAt { get; set; }
 

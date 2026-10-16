@@ -16,14 +16,14 @@ public class ChannelAdminRepository : IChannelAdminRepository
         _db = db;
     }
 
-    public Task<List<ChannelRow>> ListChannelsAsync(Guid? clinicId, string? channel, bool problemsOnly, CancellationToken ct = default)
+    public Task<List<ChannelRow>> ListChannelsAsync(Guid? clientId, string? channel, bool problemsOnly, CancellationToken ct = default)
     {
         var q = _db.ChannelIntegrations.AsNoTracking().AsQueryable();
-        if (clinicId.HasValue) q = q.Where(c => c.ClinicId == clinicId.Value);
+        if (clientId.HasValue) q = q.Where(c => c.ClientId == clientId.Value);
         if (!string.IsNullOrWhiteSpace(channel)) q = q.Where(c => c.Channel == channel);
         if (problemsOnly) q = q.Where(c => c.Status == ChannelIntegrationStatus.Error || !c.IsHealthy || c.LastError != null);
-        return q.OrderBy(c => c.Clinic!.Name).ThenBy(c => c.Channel)
-            .Select(c => new ChannelRow(c.Id, c.ClinicId, c.Clinic!.Name, c.Channel,
+        return q.OrderBy(c => c.Client!.Name).ThenBy(c => c.Channel)
+            .Select(c => new ChannelRow(c.Id, c.ClientId, c.Client!.Name, c.Channel,
                 c.Status, c.DisplayName,
                 c.PhoneNumberId ?? c.TelegramBotUsername ?? c.PageId,
                 c.HealthLevel, c.IsHealthy, c.LastProblemMessage, c.LastError, c.WebhookStatus, c.LastWebhookAt,
@@ -32,32 +32,32 @@ public class ChannelAdminRepository : IChannelAdminRepository
     }
 
     public Task<ChannelIntegration?> GetChannelAsync(Guid id, CancellationToken ct = default) =>
-        _db.ChannelIntegrations.AsNoTracking().Include(c => c.Clinic).FirstOrDefaultAsync(c => c.Id == id, ct);
+        _db.ChannelIntegrations.AsNoTracking().Include(c => c.Client).FirstOrDefaultAsync(c => c.Id == id, ct);
 
     public Task<List<WhatsAppHealthEvent>> HealthEventsAsync(Guid channelIntegrationId, CancellationToken ct = default) =>
         _db.WhatsAppHealthEvents.AsNoTracking().Where(e => e.ChannelIntegrationId == channelIntegrationId)
             .OrderByDescending(e => e.OccurredAt).Take(100).ToListAsync(ct);
 
-    public Task<List<CalendarRow>> ListCalendarsAsync(Guid? clinicId, CancellationToken ct = default)
+    public Task<List<CalendarRow>> ListCalendarsAsync(Guid? clientId, CancellationToken ct = default)
     {
         var q = _db.CalendarIntegrations.AsNoTracking().AsQueryable();
-        if (clinicId.HasValue) q = q.Where(c => c.ClinicId == clinicId.Value);
+        if (clientId.HasValue) q = q.Where(c => c.ClientId == clientId.Value);
         return q.OrderByDescending(c => c.UpdatedAt)
-            .Select(c => new CalendarRow(c.Id, c.ClinicId,
-                _db.Clinics.Where(x => x.Id == c.ClinicId).Select(x => x.Name).FirstOrDefault() ?? "",
+            .Select(c => new CalendarRow(c.Id, c.ClientId,
+                _db.Clients.Where(x => x.Id == c.ClientId).Select(x => x.Name).FirstOrDefault() ?? "",
                 c.Provider, c.Status, c.AccountDisplayName, c.SelectedCalendarName, c.SyncEnabled, c.IsHealthy,
                 c.LastProblemMessage, c.LastSyncedAt,
                 _db.AppointmentCalendarSyncs.Count(s => s.CalendarIntegrationId == c.Id && s.Status == AppointmentCalendarSyncStatus.Failed)))
             .ToListAsync(ct);
     }
 
-    public Task<List<TikTokRow>> ListTikTokAsync(Guid? clinicId, CancellationToken ct = default)
+    public Task<List<TikTokRow>> ListTikTokAsync(Guid? clientId, CancellationToken ct = default)
     {
         var q = _db.TikTokIntegrations.AsNoTracking().AsQueryable();
-        if (clinicId.HasValue) q = q.Where(c => c.ClinicId == clinicId.Value);
+        if (clientId.HasValue) q = q.Where(c => c.ClientId == clientId.Value);
         return q.OrderByDescending(c => c.UpdatedAt)
-            .Select(c => new TikTokRow(c.Id, c.ClinicId,
-                _db.Clinics.Where(x => x.Id == c.ClinicId).Select(x => x.Name).FirstOrDefault() ?? "",
+            .Select(c => new TikTokRow(c.Id, c.ClientId,
+                _db.Clients.Where(x => x.Id == c.ClientId).Select(x => x.Name).FirstOrDefault() ?? "",
                 c.Status, c.DisplayName, c.IsHealthy, c.LastProblemMessage, c.TokenExpiresAt, c.UpdatedAt))
             .ToListAsync(ct);
     }

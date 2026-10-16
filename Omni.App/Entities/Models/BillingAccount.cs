@@ -1,13 +1,13 @@
 namespace Omni.App.Entities.Models;
 
-/// <summary>The clinic's one prepaid billing account. Balances are a cache of the ledger
+/// <summary>The client's one prepaid billing account. Balances are a cache of the ledger
 /// (<see cref="BillingLedgerEntry"/>): every change to them is posted there in the same transaction.
 /// Spendable = WalletBalance + IncludedCreditBalance - ReservedAmount. Only Billing/BillingService changes these
 /// columns, always under a row lock (select ... for update).</summary>
 public class BillingAccount
 {
     public Guid Id { get; set; }
-    public Guid ClinicId { get; set; }
+    public Guid ClientId { get; set; }
     public string Currency { get; set; } = "USD";
     /// <summary>Prepaid money. Only a settlement that costs more than was reserved can take it below zero.</summary>
     public decimal WalletBalance { get; set; }

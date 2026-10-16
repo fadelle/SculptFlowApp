@@ -35,7 +35,7 @@ public class AppLog
     /// <summary>The W3C trace id of the request or operation the entry was logged in (32 hex characters).</summary>
     public string? TraceId { get; set; }
 
-    public Guid? ClinicId { get; set; }
+    public Guid? ClientId { get; set; }
     public Guid? ConversationId { get; set; }
     public Guid? MessageId { get; set; }
 

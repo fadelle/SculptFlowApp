@@ -13,41 +13,41 @@ public class ChannelIntegrationsControllerTests : ClientControllerTestBase
     private readonly Mock<ITelegramIntegrationService> _telegram = new();
 
     private ChannelIntegrationsController Sut() =>
-        new ChannelIntegrationsController(_integrations.Object, _telegram.Object, Clinic.Object).With();
+        new ChannelIntegrationsController(_integrations.Object, _telegram.Object, Client.Object).With();
 
     private static T Blank<T>() where T : class => (T)RuntimeHelpers.GetUninitializedObject(typeof(T));
 
     [Fact]
-    public async Task List_and_refresh_telegram_use_the_signed_in_clinic()
+    public async Task List_and_refresh_telegram_use_the_signed_in_client()
     {
-        _integrations.Setup(i => i.ListAsync(ClinicId, It.IsAny<CancellationToken>())).ReturnsAsync(new List<ChannelIntegrationResponse>());
-        _telegram.Setup(t => t.RefreshStatusAsync(ClinicId, It.IsAny<CancellationToken>())).ReturnsAsync(Blank<ChannelIntegrationResponse>());
+        _integrations.Setup(i => i.ListAsync(ClientId, It.IsAny<CancellationToken>())).ReturnsAsync(new List<ChannelIntegrationResponse>());
+        _telegram.Setup(t => t.RefreshStatusAsync(ClientId, It.IsAny<CancellationToken>())).ReturnsAsync(Blank<ChannelIntegrationResponse>());
         Assert.IsType<OkObjectResult>((await Sut().List(default)).Result);
         Assert.IsType<OkObjectResult>((await Sut().RefreshTelegram(default)).Result);
     }
 
     [Fact]
-    public async Task Save_overrides_the_clinic_id_in_the_body()
+    public async Task Save_overrides_the_client_id_in_the_body()
     {
         SaveChannelIntegrationRequest? seen = null;
         _integrations.Setup(i => i.SaveAsync(It.IsAny<SaveChannelIntegrationRequest>(), It.IsAny<CancellationToken>()))
             .Callback<SaveChannelIntegrationRequest, CancellationToken>((r, _) => seen = r)
             .ReturnsAsync(Blank<ChannelIntegrationResponse>());
-        await Sut().Save(Blank<SaveChannelIntegrationRequest>() with { ClinicId = Guid.NewGuid() }, default);
-        Assert.Equal(ClinicId, seen!.ClinicId);
+        await Sut().Save(Blank<SaveChannelIntegrationRequest>() with { ClientId = Guid.NewGuid() }, default);
+        Assert.Equal(ClientId, seen!.ClientId);
     }
 
     [Fact]
-    public async Task Disconnect_is_scoped_to_the_clinic()
+    public async Task Disconnect_is_scoped_to_the_client()
     {
         Assert.IsType<NoContentResult>(await Sut().Disconnect("telegram", default));
-        _integrations.Verify(i => i.DisconnectAsync(ClinicId, "telegram", It.IsAny<CancellationToken>()), Times.Once);
+        _integrations.Verify(i => i.DisconnectAsync(ClientId, "telegram", It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
-    public async Task Telegram_connect_succeeds_with_the_clinic_and_token()
+    public async Task Telegram_connect_succeeds_with_the_client_and_token()
     {
-        _telegram.Setup(t => t.ConnectAsync(ClinicId, "123:abc", It.IsAny<CancellationToken>())).ReturnsAsync(Blank<ChannelIntegrationResponse>());
+        _telegram.Setup(t => t.ConnectAsync(ClientId, "123:abc", It.IsAny<CancellationToken>())).ReturnsAsync(Blank<ChannelIntegrationResponse>());
         Assert.IsType<OkObjectResult>((await Sut().ConnectTelegram(new ConnectTelegramRequest("123:abc"), default)).Result);
     }
 
@@ -63,21 +63,21 @@ public class ChannelIntegrationsControllerTests : ClientControllerTestBase
             "telegram" => new TelegramApiException("Unauthorized", 401),
             _ => new InvalidOperationException("already connected elsewhere"),
         };
-        _telegram.Setup(t => t.ConnectAsync(ClinicId, It.IsAny<string?>(), It.IsAny<CancellationToken>())).ThrowsAsync(ex);
+        _telegram.Setup(t => t.ConnectAsync(ClientId, It.IsAny<string?>(), It.IsAny<CancellationToken>())).ThrowsAsync(ex);
         var result = (await Sut().ConnectTelegram(new ConnectTelegramRequest("x"), default)).Result;
         Assert.Equal(status, ((ObjectResult)result!).StatusCode);
     }
 
     [Fact]
-    public async Task WhatsApp_connect_uses_the_signed_in_clinic_and_maps_provider_failures_to_502()
+    public async Task WhatsApp_connect_uses_the_signed_in_client_and_maps_provider_failures_to_502()
     {
         ConnectWhatsAppRequest? seen = null;
         _integrations.Setup(i => i.ConnectWhatsAppAsync(It.IsAny<ConnectWhatsAppRequest>(), It.IsAny<CancellationToken>()))
             .Callback<ConnectWhatsAppRequest, CancellationToken>((r, _) => seen = r)
             .ReturnsAsync(Blank<ChannelIntegrationResponse>());
-        var request = Blank<ConnectWhatsAppRequest>() with { ClinicId = Guid.NewGuid() };
+        var request = Blank<ConnectWhatsAppRequest>() with { ClientId = Guid.NewGuid() };
         Assert.IsType<OkObjectResult>((await Sut().ConnectWhatsApp(request, default)).Result);
-        Assert.Equal(ClinicId, seen!.ClinicId);
+        Assert.Equal(ClientId, seen!.ClientId);
 
         _integrations.Setup(i => i.ConnectWhatsAppAsync(It.IsAny<ConnectWhatsAppRequest>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new MetaGraphApiException("meta says no"));
@@ -87,7 +87,7 @@ public class ChannelIntegrationsControllerTests : ClientControllerTestBase
     }
 
     [Fact]
-    public async Task Facebook_connect_uses_the_signed_in_clinic_and_maps_failures_to_502()
+    public async Task Facebook_connect_uses_the_signed_in_client_and_maps_failures_to_502()
     {
         ConnectFacebookRequest? seen = null;
         _integrations.Setup(i => i.ConnectFacebookAsync(It.IsAny<ConnectFacebookRequest>(), It.IsAny<CancellationToken>()))
@@ -95,7 +95,7 @@ public class ChannelIntegrationsControllerTests : ClientControllerTestBase
             .ReturnsAsync(Blank<ChannelIntegrationResponse>());
         var request = new ConnectFacebookRequest(Guid.NewGuid(), "code", null);
         Assert.IsType<OkObjectResult>((await Sut().ConnectFacebook(request, default)).Result);
-        Assert.Equal(ClinicId, seen!.ClinicId);
+        Assert.Equal(ClientId, seen!.ClientId);
 
         _integrations.Setup(i => i.ConnectFacebookAsync(It.IsAny<ConnectFacebookRequest>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("no page"));
@@ -156,17 +156,17 @@ public class WhatsAppTokenDebugTests
 public class WebsiteSourcesControllerTests : ClientControllerTestBase
 {
     private readonly Mock<IWebsiteSourceService> _websites = new();
-    private WebsiteSourcesController Sut() => new WebsiteSourcesController(_websites.Object, Clinic.Object).With();
+    private WebsiteSourcesController Sut() => new WebsiteSourcesController(_websites.Object, Client.Object).With();
 
     private static T Blank<T>() where T : class => (T)RuntimeHelpers.GetUninitializedObject(typeof(T));
 
     [Fact]
-    public async Task List_create_and_set_active_are_scoped_to_the_clinic()
+    public async Task List_create_and_set_active_are_scoped_to_the_client()
     {
         var id = Guid.NewGuid();
-        _websites.Setup(w => w.ListAsync(ClinicId, It.IsAny<CancellationToken>())).ReturnsAsync(new List<WebsiteSourceResponse>());
-        _websites.Setup(w => w.CreateAsync(ClinicId, It.IsAny<CreateWebsiteSourceRequest>(), It.IsAny<CancellationToken>())).ReturnsAsync(Blank<WebsiteSourceResponse>());
-        _websites.Setup(w => w.SetActiveAsync(ClinicId, id, false, It.IsAny<CancellationToken>())).ReturnsAsync(Blank<WebsiteSourceResponse>());
+        _websites.Setup(w => w.ListAsync(ClientId, It.IsAny<CancellationToken>())).ReturnsAsync(new List<WebsiteSourceResponse>());
+        _websites.Setup(w => w.CreateAsync(ClientId, It.IsAny<CreateWebsiteSourceRequest>(), It.IsAny<CancellationToken>())).ReturnsAsync(Blank<WebsiteSourceResponse>());
+        _websites.Setup(w => w.SetActiveAsync(ClientId, id, false, It.IsAny<CancellationToken>())).ReturnsAsync(Blank<WebsiteSourceResponse>());
         var sut = Sut();
         Assert.IsType<OkObjectResult>((await sut.List(default)).Result);
         Assert.IsType<AcceptedAtActionResult>((await sut.Create(Blank<CreateWebsiteSourceRequest>(), default)).Result);
@@ -186,11 +186,11 @@ public class WebsiteSourcesControllerTests : ClientControllerTestBase
     }
 
     [Fact]
-    public async Task Pages_are_listed_only_after_the_source_is_confirmed_to_belong_to_the_clinic()
+    public async Task Pages_are_listed_only_after_the_source_is_confirmed_to_belong_to_the_client()
     {
         var id = Guid.NewGuid();
-        _websites.Setup(w => w.GetAsync(ClinicId, id, It.IsAny<CancellationToken>())).ReturnsAsync(Blank<WebsiteSourceDetailResponse>());
-        _websites.Setup(w => w.ListPagesAsync(ClinicId, id, "failed", 1, 2, It.IsAny<CancellationToken>())).ReturnsAsync(new List<WebsitePageResponse>());
+        _websites.Setup(w => w.GetAsync(ClientId, id, It.IsAny<CancellationToken>())).ReturnsAsync(Blank<WebsiteSourceDetailResponse>());
+        _websites.Setup(w => w.ListPagesAsync(ClientId, id, "failed", 1, 2, It.IsAny<CancellationToken>())).ReturnsAsync(new List<WebsitePageResponse>());
         var sut = Sut();
         Assert.IsType<OkObjectResult>((await sut.GetById(id, default)).Result);
         Assert.IsType<OkObjectResult>((await sut.Pages(id, "failed", 1, 2, default)).Result);
@@ -200,8 +200,8 @@ public class WebsiteSourcesControllerTests : ClientControllerTestBase
     public async Task Rescrape_is_202_and_delete_is_204_when_found()
     {
         var id = Guid.NewGuid();
-        _websites.Setup(w => w.RescrapeAsync(ClinicId, id, It.IsAny<CancellationToken>())).ReturnsAsync(Blank<WebsiteSourceResponse>());
-        _websites.Setup(w => w.DeleteAsync(ClinicId, id, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        _websites.Setup(w => w.RescrapeAsync(ClientId, id, It.IsAny<CancellationToken>())).ReturnsAsync(Blank<WebsiteSourceResponse>());
+        _websites.Setup(w => w.DeleteAsync(ClientId, id, It.IsAny<CancellationToken>())).ReturnsAsync(true);
         Assert.IsType<AcceptedResult>((await Sut().Rescrape(id, default)).Result);
         Assert.IsType<NoContentResult>(await Sut().Delete(id, default));
     }
@@ -210,8 +210,8 @@ public class WebsiteSourcesControllerTests : ClientControllerTestBase
     public async Task Rescrape_and_delete_turn_argument_errors_into_409()
     {
         var id = Guid.NewGuid();
-        _websites.Setup(w => w.RescrapeAsync(ClinicId, id, It.IsAny<CancellationToken>())).ThrowsAsync(new ArgumentException("already running"));
-        _websites.Setup(w => w.DeleteAsync(ClinicId, id, It.IsAny<CancellationToken>())).ThrowsAsync(new ArgumentException("in use"));
+        _websites.Setup(w => w.RescrapeAsync(ClientId, id, It.IsAny<CancellationToken>())).ThrowsAsync(new ArgumentException("already running"));
+        _websites.Setup(w => w.DeleteAsync(ClientId, id, It.IsAny<CancellationToken>())).ThrowsAsync(new ArgumentException("in use"));
         Assert.IsType<ConflictObjectResult>((await Sut().Rescrape(id, default)).Result);
         Assert.IsType<ConflictObjectResult>(await Sut().Delete(id, default));
     }

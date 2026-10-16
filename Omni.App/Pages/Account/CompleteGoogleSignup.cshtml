@@ -9,7 +9,7 @@
         <span class="au-brand__mark"><img class="auth-logo" src="~/logo.svg" alt="" width="56" height="56" /></span>
         <div>
             <h1 class="au-auth__title">One last step</h1>
-            <p class="au-auth__sub">Name your clinic and you're in. This creates your own clinic workspace.</p>
+            <p class="au-auth__sub">Name your client and you're in. This creates your own client workspace.</p>
         </div>
     </div>
 
@@ -31,11 +31,11 @@
     <form method="post" class="au-auth__form" data-auth-form data-au-no-busy>
         <input type="hidden" name="ReturnUrl" value="@Model.ReturnUrl" />
         <div class="au-form-field">
-            <label class="au-form-label" for="google-clinic">Clinic name</label>
-            <input type="text" name="ClinicName" id="google-clinic" value="@Model.ClinicName" class="au-input" autocomplete="organization" maxlength="200" required autofocus
-                   placeholder="e.g. Glow Aesthetic Clinic" />
+            <label class="au-form-label" for="google-client">Client name</label>
+            <input type="text" name="ClientName" id="google-client" value="@Model.ClientName" class="au-input" autocomplete="organization" maxlength="200" required autofocus
+                   placeholder="e.g. Glow Aesthetic Client" />
         </div>
-        <button type="submit" class="au-btn au-btn--primary au-btn--lg au-btn--block" data-busy-label="Creating your clinic…">Create my clinic</button>
+        <button type="submit" class="au-btn au-btn--primary au-btn--lg au-btn--block" data-busy-label="Creating your client…">Create my client</button>
     </form>
 
     <p class="au-auth__foot"><a class="au-link" href="/Account/Login">Use a different account</a></p>

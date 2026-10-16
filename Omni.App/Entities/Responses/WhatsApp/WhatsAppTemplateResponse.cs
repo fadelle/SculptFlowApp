@@ -2,7 +2,7 @@ namespace Omni.App.Entities.Responses.WhatsApp;
 
 public record WhatsAppTemplateResponse(
     Guid Id,
-    Guid ClinicId,
+    Guid ClientId,
     string? MetaTemplateId,
     string Name,
     string Category,

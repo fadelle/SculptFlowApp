@@ -5,7 +5,7 @@ using Omni.App.Entities.Dtos.Inbox;
 using Omni.App.Entities.Models;
 using Omni.App.Entities.Requests.Inbox;
 using Omni.App.Persistence.Contracts;
-using Omni.App.Persistence.Contracts.Clinics;
+using Omni.App.Persistence.Contracts.Clients;
 using Omni.App.Persistence.Contracts.Inbox;
 
 namespace Omni.App.Business.Services.Inbox;
@@ -13,41 +13,41 @@ namespace Omni.App.Business.Services.Inbox;
 public class InboxSettingsService : IInboxSettingsService
 {
     private readonly IInboxSettingsRepository _settings;
-    private readonly IClinicRepository _clinics;
+    private readonly IClientRepository _clients;
     private readonly IEntitlementService _entitlements;
     private readonly IUnitOfWork _unitOfWork;
 
-    public InboxSettingsService(IInboxSettingsRepository settings, IClinicRepository clinics, IEntitlementService entitlements,
+    public InboxSettingsService(IInboxSettingsRepository settings, IClientRepository clients, IEntitlementService entitlements,
         IUnitOfWork unitOfWork)
     {
         _settings = settings;
-        _clinics = clinics;
+        _clients = clients;
         _entitlements = entitlements;
         _unitOfWork = unitOfWork;
     }
 
-    public async Task<InboxSettingsDto> GetAsync(Guid clinicId, CancellationToken ct = default)
+    public async Task<InboxSettingsDto> GetAsync(Guid clientId, CancellationToken ct = default)
     {
-        // All three reads are cached (inbox settings and clinic table caches, entitlements), so this is cheap per message.
-        _ = await _clinics.GetReadOnlyAsync(clinicId, ct) ?? throw new KeyNotFoundException("Clinic not found.");
-        var row = await _settings.GetForClinicReadOnlyAsync(clinicId, ct) ?? new InboxSettings();
-        var entitlements = await _entitlements.GetAsync(clinicId, ct);
+        // All three reads are cached (inbox settings and client table caches, entitlements), so this is cheap per message.
+        _ = await _clients.GetReadOnlyAsync(clientId, ct) ?? throw new KeyNotFoundException("Client not found.");
+        var row = await _settings.GetForClientReadOnlyAsync(clientId, ct) ?? new InboxSettings();
+        var entitlements = await _entitlements.GetAsync(clientId, ct);
         return new InboxSettingsDto(entitlements.CanUseAiAgent, row.AiBotNewConversations, row.AiBotReopenedConversations);
     }
 
-    public async Task<string> InitialModeAsync(Guid clinicId, CancellationToken ct = default) =>
-        (await GetAsync(clinicId, ct)).AiBotAnswersNew ? ConversationMode.Ai : ConversationMode.Human;
+    public async Task<string> InitialModeAsync(Guid clientId, CancellationToken ct = default) =>
+        (await GetAsync(clientId, ct)).AiBotAnswersNew ? ConversationMode.Ai : ConversationMode.Human;
 
-    public async Task UpdateAsync(Guid clinicId, UpdateInboxSettingsRequest request, CancellationToken ct = default)
+    public async Task UpdateAsync(Guid clientId, UpdateInboxSettingsRequest request, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(request);
-        _ = await _clinics.GetReadOnlyAsync(clinicId, ct) ?? throw new KeyNotFoundException("Clinic not found.");
+        _ = await _clients.GetReadOnlyAsync(clientId, ct) ?? throw new KeyNotFoundException("Client not found.");
 
         var now = DateTimeOffset.UtcNow;
-        var row = await _settings.GetForClinicAsync(clinicId, ct);
+        var row = await _settings.GetForClientAsync(clientId, ct);
         if (row is null)
         {
-            row = new InboxSettings { Id = Guid.NewGuid(), ClinicId = clinicId, CreatedAt = now };
+            row = new InboxSettings { Id = Guid.NewGuid(), ClientId = clientId, CreatedAt = now };
             _settings.Add(row);
         }
         else if (row.AiBotNewConversations == request.AiBotNewConversations
@@ -59,8 +59,8 @@ public class InboxSettingsService : IInboxSettingsService
         row.AiBotNewConversations = request.AiBotNewConversations;
         row.AiBotReopenedConversations = request.AiBotReopenedConversations;
         row.UpdatedAt = now;
-        // Tracked save: CacheInvalidationInterceptor drops the clinic's cached settings. Two first saves racing for the
-        // same clinic hit the unique index; the second surfaces as DuplicateRecordException (409).
+        // Tracked save: CacheInvalidationInterceptor drops the client's cached settings. Two first saves racing for the
+        // same client hit the unique index; the second surfaces as DuplicateRecordException (409).
         await _unitOfWork.SaveChangesAsync(ct);
     }
 }

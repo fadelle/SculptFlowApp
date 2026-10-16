@@ -8,9 +8,9 @@ using Omni.App.Entities.Responses.Channels;
 namespace Omni.App.Controllers.Client;
 
 /// <summary>
-/// Manages per-clinic WhatsApp/Instagram/Facebook connection config. The dashboard's Settings →
+/// Manages per-client WhatsApp/Instagram/Facebook connection config. The dashboard's Settings →
 /// Channels &amp; Integrations page is the primary consumer today; n8n or a future onboarding flow
-/// can also read these to know which channels are live for a clinic.
+/// can also read these to know which channels are live for a client.
 /// </summary>
 [ApiController]
 [Route("api/channel-integrations")]
@@ -21,8 +21,8 @@ public class ChannelIntegrationsController : DashboardApiController
 
     public ChannelIntegrationsController(
         IChannelIntegrationService integrations, ITelegramIntegrationService telegram,
-        ICurrentClinicContext clinicContext)
-        : base(clinicContext)
+        ICurrentClientContext clientContext)
+        : base(clientContext)
     {
         _integrations = integrations;
         _telegram = telegram;
@@ -31,35 +31,35 @@ public class ChannelIntegrationsController : DashboardApiController
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<ChannelIntegrationResponse>>> List(CancellationToken ct)
     {
-        var clinicId = await GetClinicIdAsync(ct);
-        if (clinicId is null) return Forbid();
+        var clientId = await GetClientIdAsync(ct);
+        if (clientId is null) return Forbid();
 
-        var items = await _integrations.ListAsync(clinicId.Value, ct);
+        var items = await _integrations.ListAsync(clientId.Value, ct);
         return Ok(items);
     }
 
     [HttpPut]
     public async Task<ActionResult<ChannelIntegrationResponse>> Save([FromBody] SaveChannelIntegrationRequest request, CancellationToken ct)
     {
-        var clinicId = await GetClinicIdAsync(ct);
-        if (clinicId is null) return Forbid();
+        var clientId = await GetClientIdAsync(ct);
+        if (clientId is null) return Forbid();
 
-        var result = await _integrations.SaveAsync(request with { ClinicId = clinicId.Value }, ct);
+        var result = await _integrations.SaveAsync(request with { ClientId = clientId.Value }, ct);
         return Ok(result);
     }
 
-    /// <summary>Connects (or reconnects) the clinic's Telegram bot from a BotFather token: validates it
+    /// <summary>Connects (or reconnects) the client's Telegram bot from a BotFather token: validates it
     /// with getMe, registers the webhook (setWebhook + secret token) and stores the connection. The
-    /// token is write-only — never echoed back. clinicId always comes from the logged-in user.</summary>
+    /// token is write-only — never echoed back. clientId always comes from the logged-in user.</summary>
     [HttpPost("telegram/connect")]
     public async Task<ActionResult<ChannelIntegrationResponse>> ConnectTelegram([FromBody] ConnectTelegramRequest request, CancellationToken ct)
     {
-        var clinicId = await GetClinicIdAsync(ct);
-        if (clinicId is null) return Forbid();
+        var clientId = await GetClientIdAsync(ct);
+        if (clientId is null) return Forbid();
 
         try
         {
-            return Ok(await _telegram.ConnectAsync(clinicId.Value, request.BotToken, ct));
+            return Ok(await _telegram.ConnectAsync(clientId.Value, request.BotToken, ct));
         }
         catch (Exception ex) when (ex is ArgumentException or TelegramApiException)
         {
@@ -75,19 +75,19 @@ public class ChannelIntegrationsController : DashboardApiController
     [HttpPost("telegram/refresh")]
     public async Task<ActionResult<ChannelIntegrationResponse>> RefreshTelegram(CancellationToken ct)
     {
-        var clinicId = await GetClinicIdAsync(ct);
-        if (clinicId is null) return Forbid();
+        var clientId = await GetClientIdAsync(ct);
+        if (clientId is null) return Forbid();
 
-        return Ok(await _telegram.RefreshStatusAsync(clinicId.Value, ct));
+        return Ok(await _telegram.RefreshStatusAsync(clientId.Value, ct));
     }
 
     [HttpPost("{channel}/disconnect")]
     public async Task<IActionResult> Disconnect(string channel, CancellationToken ct)
     {
-        var clinicId = await GetClinicIdAsync(ct);
-        if (clinicId is null) return Forbid();
+        var clientId = await GetClientIdAsync(ct);
+        if (clientId is null) return Forbid();
 
-        await _integrations.DisconnectAsync(clinicId.Value, channel, ct);
+        await _integrations.DisconnectAsync(clientId.Value, channel, ct);
         return NoContent();
     }
 
@@ -95,12 +95,12 @@ public class ChannelIntegrationsController : DashboardApiController
     [HttpPost("whatsapp/connect")]
     public async Task<ActionResult<ChannelIntegrationResponse>> ConnectWhatsApp([FromBody] ConnectWhatsAppRequest request, CancellationToken ct)
     {
-        var clinicId = await GetClinicIdAsync(ct);
-        if (clinicId is null) return Forbid();
+        var clientId = await GetClientIdAsync(ct);
+        if (clientId is null) return Forbid();
 
         try
         {
-            var result = await _integrations.ConnectWhatsAppAsync(request with { ClinicId = clinicId.Value }, ct);
+            var result = await _integrations.ConnectWhatsAppAsync(request with { ClientId = clientId.Value }, ct);
             return Ok(result);
         }
         catch (Exception ex) when (ex is MetaGraphApiException or InvalidOperationException)
@@ -114,12 +114,12 @@ public class ChannelIntegrationsController : DashboardApiController
     [HttpPost("facebook/connect")]
     public async Task<ActionResult<ChannelIntegrationResponse>> ConnectFacebook([FromBody] ConnectFacebookRequest request, CancellationToken ct)
     {
-        var clinicId = await GetClinicIdAsync(ct);
-        if (clinicId is null) return Forbid();
+        var clientId = await GetClientIdAsync(ct);
+        if (clientId is null) return Forbid();
 
         try
         {
-            var result = await _integrations.ConnectFacebookAsync(request with { ClinicId = clinicId.Value }, ct);
+            var result = await _integrations.ConnectFacebookAsync(request with { ClientId = clientId.Value }, ct);
             return Ok(result);
         }
         catch (Exception ex) when (ex is MetaGraphApiException or InvalidOperationException)

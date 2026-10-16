@@ -3,28 +3,28 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
-using Omni.App.Business.Contracts.Services.Clinics;
+using Omni.App.Business.Contracts.Services.Clients;
 using Omni.App.Common.Configs;
-using Omni.App.Entities.Requests.Clinics;
+using Omni.App.Entities.Requests.Clients;
 
 namespace Omni.App.Pages.Account;
 
-/// <summary>The one extra step when someone signs up with Google: their clinic name. Google already told us who
-/// they are (held in the short-lived external cookie), so nothing else is collected; the clinic, membership and
-/// defaults are created by the same transaction as a normal registration (IClinicRegistrationService).</summary>
+/// <summary>The one extra step when someone signs up with Google: their client name. Google already told us who
+/// they are (held in the short-lived external cookie), so nothing else is collected; the client, membership and
+/// defaults are created by the same transaction as a normal registration (IClientRegistrationService).</summary>
 public class CompleteGoogleSignupModel : PageModel
 {
     private readonly SignInManager<IdentityUser> _signIn;
-    private readonly IClinicRegistrationService _registration;
+    private readonly IClientRegistrationService _registration;
 
-    public CompleteGoogleSignupModel(SignInManager<IdentityUser> signIn, IClinicRegistrationService registration)
+    public CompleteGoogleSignupModel(SignInManager<IdentityUser> signIn, IClientRegistrationService registration)
     {
         _signIn = signIn;
         _registration = registration;
     }
 
     [BindProperty]
-    public string ClinicName { get; set; } = string.Empty;
+    public string ClientName { get; set; } = string.Empty;
 
     [BindProperty(SupportsGet = true)]
     public string? ReturnUrl { get; set; }
@@ -39,7 +39,7 @@ public class CompleteGoogleSignupModel : PageModel
         if (info is null) return Redirect("/Account/Login?externalError=unverified");
         if (!_registration.IsSignupOpen)
         {
-            // Nobody has this Google address and no new clinic can be created: drop the held identity and say why.
+            // Nobody has this Google address and no new client can be created: drop the held identity and say why.
             await HttpContext.SignOutAsync(IdentityConstants.ExternalScheme);
             return Redirect("/Account/Login?externalError=signup_closed");
         }
@@ -51,8 +51,8 @@ public class CompleteGoogleSignupModel : PageModel
         var info = await LoadVerifiedAsync();
         if (info is null) return Redirect("/Account/Login?externalError=unverified");
 
-        var result = await _registration.RegisterExternalAsync(new RegisterExternalClinicRequest(
-            FullName, ClinicName, Email, info.LoginProvider, info.ProviderKey, info.ProviderDisplayName), ct);
+        var result = await _registration.RegisterExternalAsync(new RegisterExternalClientRequest(
+            FullName, ClientName, Email, info.LoginProvider, info.ProviderKey, info.ProviderDisplayName), ct);
         if (!result.Succeeded)
         {
             ErrorMessage = string.Join(" ", result.Errors);

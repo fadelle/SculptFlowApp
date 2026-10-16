@@ -5,7 +5,7 @@ namespace Omni.App.Entities.Models;
 public class Message
 {
     public Guid Id { get; set; }
-    public Guid ClinicId { get; set; }
+    public Guid ClientId { get; set; }
     public Guid ConversationId { get; set; }
     public Guid LeadId { get; set; }
 
@@ -38,7 +38,7 @@ public class Message
     /// <summary>Which system actually produced this message — see <see cref="MessageOrigin"/>.
     /// Distinct from SenderType/Direction: a "staff" sender could originate from the dashboard or
     /// from the WhatsApp Business phone app directly (coexistence echoes), and the Inbox UI needs
-    /// to tell those apart without exposing raw Meta terminology to clinic staff.</summary>
+    /// to tell those apart without exposing raw Meta terminology to client staff.</summary>
     public string Origin { get; set; } = MessageOrigin.System;
 
     /// <summary>Set when this message was a WhatsApp template send (Inbox "Send Template" or a

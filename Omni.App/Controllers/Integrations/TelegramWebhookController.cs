@@ -16,12 +16,12 @@ namespace Omni.App.Controllers.Integrations;
 ///   1. connectionId -> channel_integrations row; must be channel=telegram AND status=connected
 ///      (a disconnected/unknown connection is a plain 404)
 ///   2. X-Telegram-Bot-Api-Secret-Token must equal that row's stored secret (constant-time) else 403
-///   3. clinic_id comes from the STORED row — never from the payload
+///   3. client_id comes from the STORED row — never from the payload
 ///   4. TelegramWebhookProcessor does all parsing/persistence/SignalR (via the existing services)
 ///   5. only if the processor says the message is AI-eligible (customer text, mode = ai, not a
 ///      duplicate) is n8n notified — the same IAiTriggerNotifier WhatsApp uses
 /// Errors after auth surface as 500 on purpose: Telegram retries non-2xx deliveries, and a retry is
-/// safe because ingestion is idempotent on (clinic, channel, "chatId:messageId").
+/// safe because ingestion is idempotent on (client, channel, "chatId:messageId").
 /// </summary>
 [ApiController]
 [AllowAnonymous]

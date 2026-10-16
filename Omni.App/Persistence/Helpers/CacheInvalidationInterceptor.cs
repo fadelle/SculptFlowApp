@@ -105,12 +105,12 @@ public sealed class CacheInvalidationInterceptor : ISaveChangesInterceptor, IDbT
 
     private static IEnumerable<CacheEviction> EvictionsFor(EntityEntry entry, List<EntityEntry> tracked)
     {
-        // A calendar list row doesn't carry its clinic: take it from its tracked connection when that is loaded.
+        // A calendar list row doesn't carry its client: take it from its tracked connection when that is loaded.
         if (entry.Entity is CalendarIntegrationCalendar calendar)
         {
             var integration = tracked.Select(e => e.Entity).OfType<CalendarIntegration>()
                 .FirstOrDefault(i => i.Id == calendar.CalendarIntegrationId);
-            if (integration is not null) return [CacheEviction.Key(CacheKeys.Calendars(integration.ClinicId))];
+            if (integration is not null) return [CacheEviction.Key(CacheKeys.Calendars(integration.ClientId))];
         }
 
         var current = CacheKeys.EvictionsFor(entry.Entity);

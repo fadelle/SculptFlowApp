@@ -13,25 +13,25 @@ using HealthIndex = Omni.App.Pages.WhatsApp.Health.IndexModel;
 
 namespace Omni.App.Tests.Pages;
 
-/// <summary>"No clinic yet" must be a harmless empty page for every list page, never an exception.</summary>
+/// <summary>"No client yet" must be a harmless empty page for every list page, never an exception.</summary>
 public class SimpleListPageTests
 {
-    private static readonly Clinic Glow = SomeClinic();
+    private static readonly Client Glow = SomeClient();
 
     [Fact]
     public async Task Staff_page_lists_members_and_knows_the_current_user()
     {
         var staff = new Mock<IStaffService>();
         staff.Setup(s => s.ListAsync(Glow.Id, It.IsAny<CancellationToken>())).ReturnsAsync(new List<StaffMemberResponse> { Blank<StaffMemberResponse>() });
-        var model = new StaffIndex(ClinicContext(Glow).Object, staff.Object).Attach(UserWithId("user-1"));
+        var model = new StaffIndex(ClientContext(Glow).Object, staff.Object).Attach(UserWithId("user-1"));
         await model.OnGetAsync(default);
-        Assert.True(model.ClinicConfigured);
-        Assert.Equal(("Glow Clinic", "user-1"), (model.ClinicName, model.CurrentUserId));
+        Assert.True(model.ClientConfigured);
+        Assert.Equal(("Glow Client", "user-1"), (model.ClientName, model.CurrentUserId));
         Assert.Single(model.Members);
 
-        var empty = new StaffIndex(ClinicContext(null).Object, staff.Object).Attach();
+        var empty = new StaffIndex(ClientContext(null).Object, staff.Object).Attach();
         await empty.OnGetAsync(default);
-        Assert.False(empty.ClinicConfigured);
+        Assert.False(empty.ClientConfigured);
         Assert.Empty(empty.Members);
     }
 
@@ -43,38 +43,38 @@ public class SimpleListPageTests
             .ReturnsAsync((new List<ConversationListRow>() as IReadOnlyList<ConversationListRow>, 0)).Verifiable();
         var inboxSettings = new Mock<IInboxSettingsService>();
         inboxSettings.Setup(a => a.GetAsync(Glow.Id, It.IsAny<CancellationToken>())).ReturnsAsync(new InboxSettingsDto(false, true, true));
-        var model = new InboxIndex(ClinicContext(Glow).Object, conversations.Object, inboxSettings.Object).Attach();
+        var model = new InboxIndex(ClientContext(Glow).Object, conversations.Object, inboxSettings.Object).Attach();
         await model.OnGetAsync(default);
-        Assert.Equal((true, Glow.Id, false), (model.ClinicConfigured, model.ClinicId, model.AiAgentAvailable));
+        Assert.Equal((true, Glow.Id, false), (model.ClientConfigured, model.ClientId, model.AiAgentAvailable));
         conversations.Verify();
 
-        var none = new InboxIndex(ClinicContext(null).Object, conversations.Object, inboxSettings.Object).Attach();
+        var none = new InboxIndex(ClientContext(null).Object, conversations.Object, inboxSettings.Object).Attach();
         await none.OnGetAsync(default);
-        Assert.False(none.ClinicConfigured);
+        Assert.False(none.ClientConfigured);
     }
 
     [Fact]
-    public async Task Campaign_list_whatsapp_health_and_billing_pages_load_for_a_clinic_and_skip_without_one()
+    public async Task Campaign_list_whatsapp_health_and_billing_pages_load_for_a_client_and_skip_without_one()
     {
         var campaigns = new Mock<ICampaignService>();
         campaigns.Setup(c => c.ListAsync(Glow.Id, It.IsAny<CancellationToken>())).ReturnsAsync(new List<CampaignListRow>());
-        var campaignPage = new CampaignIndex(ClinicContext(Glow).Object, campaigns.Object).Attach();
+        var campaignPage = new CampaignIndex(ClientContext(Glow).Object, campaigns.Object).Attach();
         await campaignPage.OnGetAsync(default);
-        Assert.True(campaignPage.ClinicConfigured);
-        var noCampaigns = new CampaignIndex(ClinicContext(null).Object, campaigns.Object).Attach();
+        Assert.True(campaignPage.ClientConfigured);
+        var noCampaigns = new CampaignIndex(ClientContext(null).Object, campaigns.Object).Attach();
         await noCampaigns.OnGetAsync(default);
-        Assert.False(noCampaigns.ClinicConfigured);
+        Assert.False(noCampaigns.ClientConfigured);
 
         var health = new Mock<IWhatsAppHealthService>();
         health.Setup(h => h.GetHealthAsync(Glow.Id, It.IsAny<CancellationToken>())).ReturnsAsync(Blank<WhatsAppHealthResponse>());
         health.Setup(h => h.GetHealthEventsAsync(Glow.Id, 0, 25, It.IsAny<CancellationToken>())).ReturnsAsync(new List<WhatsAppHealthEventResponse>());
-        var healthPage = new HealthIndex(ClinicContext(Glow).Object, health.Object).Attach();
+        var healthPage = new HealthIndex(ClientContext(Glow).Object, health.Object).Attach();
         await healthPage.OnGetAsync(default);
-        Assert.Equal((true, Glow.Id), (healthPage.ClinicConfigured, healthPage.ClinicId));
+        Assert.Equal((true, Glow.Id), (healthPage.ClientConfigured, healthPage.ClientId));
         Assert.NotNull(healthPage.Health);
-        var noHealth = new HealthIndex(ClinicContext(null).Object, health.Object).Attach();
+        var noHealth = new HealthIndex(ClientContext(null).Object, health.Object).Attach();
         await noHealth.OnGetAsync(default);
-        Assert.False(noHealth.ClinicConfigured);
+        Assert.False(noHealth.ClientConfigured);
 
         static Omni.App.Business.Contracts.Managers.IConfigManager BillingOn()
         {
@@ -84,34 +84,34 @@ public class SimpleListPageTests
         }
 
         var billing = new Mock<IBillingQueryService>();
-        billing.Setup(b => b.GetSummaryAsync(Glow.Id, It.IsAny<CancellationToken>())).ReturnsAsync(Blank<ClinicBillingSummary>());
-        var billingPage = new Omni.App.Pages.Settings.BillingModel(ClinicContext(Glow).Object, billing.Object, BillingOn()).Attach();
+        billing.Setup(b => b.GetSummaryAsync(Glow.Id, It.IsAny<CancellationToken>())).ReturnsAsync(Blank<ClientBillingSummary>());
+        var billingPage = new Omni.App.Pages.Settings.BillingModel(ClientContext(Glow).Object, billing.Object, BillingOn()).Attach();
         await billingPage.OnGetAsync(default);
-        Assert.True(billingPage.ClinicConfigured);
+        Assert.True(billingPage.ClientConfigured);
         Assert.NotNull(billingPage.Summary);
-        var noBilling = new Omni.App.Pages.Settings.BillingModel(ClinicContext(null).Object, billing.Object, BillingOn()).Attach();
+        var noBilling = new Omni.App.Pages.Settings.BillingModel(ClientContext(null).Object, billing.Object, BillingOn()).Attach();
         await noBilling.OnGetAsync(default);
-        Assert.False(noBilling.ClinicConfigured);
+        Assert.False(noBilling.ClientConfigured);
     }
 
     [Fact]
-    public async Task Appointments_page_only_needs_the_clinic()
+    public async Task Appointments_page_only_needs_the_client()
     {
-        var appointments = new Omni.App.Pages.Dashboard.AppointmentsModel(ClinicContext(SomeClinic(timezone: "Asia/Beirut")).Object).Attach();
+        var appointments = new Omni.App.Pages.Dashboard.AppointmentsModel(ClientContext(SomeClient(timezone: "Asia/Beirut")).Object).Attach();
         await appointments.OnGetAsync(default);
-        Assert.Equal(("Asia/Beirut", true), (appointments.ClinicTimezone, appointments.ClinicConfigured));
-        var blankZone = new Omni.App.Pages.Dashboard.AppointmentsModel(ClinicContext(SomeClinic(timezone: " ")).Object).Attach();
+        Assert.Equal(("Asia/Beirut", true), (appointments.ClientTimezone, appointments.ClientConfigured));
+        var blankZone = new Omni.App.Pages.Dashboard.AppointmentsModel(ClientContext(SomeClient(timezone: " ")).Object).Attach();
         await blankZone.OnGetAsync(default);
-        Assert.Equal("UTC", blankZone.ClinicTimezone);
-        var none = new Omni.App.Pages.Dashboard.AppointmentsModel(ClinicContext(null).Object).Attach();
+        Assert.Equal("UTC", blankZone.ClientTimezone);
+        var none = new Omni.App.Pages.Dashboard.AppointmentsModel(ClientContext(null).Object).Attach();
         await none.OnGetAsync(default);
-        Assert.False(none.ClinicConfigured);
+        Assert.False(none.ClientConfigured);
     }
 }
 
 public class DashboardPageTests
 {
-    private static readonly Clinic Glow = SomeClinic();
+    private static readonly Client Glow = SomeClient();
 
     // ---- dashboard home: date ranges --------------------------------------------------------------------------
 
@@ -126,7 +126,7 @@ public class DashboardPageTests
             .ReturnsAsync(new List<DashboardProcedureRow>());
         dashboard.Setup(d => d.GetAttentionAsync(Glow.Id, It.IsAny<CancellationToken>())).ReturnsAsync(Blank<DashboardAttentionResponse>());
         var health = new Mock<IWhatsAppHealthService>();
-        var model = new DashboardIndex(ClinicContext(Glow).Object, dashboard.Object, health.Object) { Period = period, From = from, To = to }.Attach();
+        var model = new DashboardIndex(ClientContext(Glow).Object, dashboard.Object, health.Object) { Period = period, From = from, To = to }.Attach();
         await model.OnGetAsync(default);
         return (model, seenFrom, seenTo);
     }
@@ -204,7 +204,7 @@ public class DashboardPageTests
         dashboard.Setup(d => d.GetSummaryAsync(Glow.Id, It.IsAny<DateTimeOffset?>(), It.IsAny<DateTimeOffset?>(), It.IsAny<CancellationToken>()))
             .Callback<Guid, DateTimeOffset?, DateTimeOffset?, CancellationToken>((_, f, _, _) => seenFrom = f)
             .ReturnsAsync(Blank<DashboardSummaryResponse>());
-        var model = new DashboardIndex(ClinicContext(Glow).Object, dashboard.Object, Mock.Of<IWhatsAppHealthService>())
+        var model = new DashboardIndex(ClientContext(Glow).Object, dashboard.Object, Mock.Of<IWhatsAppHealthService>())
         {
             Period = "custom", From = new DateOnly(2026, 3, 1), To = new DateOnly(2026, 3, 2),
         }.Attach(configure: http => http.Request.Headers.Cookie = "omni-tz=Asia/Tokyo");
@@ -213,11 +213,11 @@ public class DashboardPageTests
     }
 
     [Fact]
-    public async Task Without_a_clinic_the_dashboard_stays_empty()
+    public async Task Without_a_client_the_dashboard_stays_empty()
     {
-        var model = new DashboardIndex(ClinicContext(null).Object, Mock.Of<IDashboardService>(), Mock.Of<IWhatsAppHealthService>()).Attach();
+        var model = new DashboardIndex(ClientContext(null).Object, Mock.Of<IDashboardService>(), Mock.Of<IWhatsAppHealthService>()).Attach();
         await model.OnGetAsync(default);
-        Assert.False(model.ClinicConfigured);
+        Assert.False(model.ClientConfigured);
         Assert.Null(model.Summary);
     }
 
@@ -234,7 +234,7 @@ public class DashboardPageTests
             .ReturnsAsync((new List<DashboardLeadRow>() as IReadOnlyList<DashboardLeadRow>, 60)).Verifiable();
         leads.Setup(l => l.GetDistinctSourcesAsync(Glow.Id, It.IsAny<CancellationToken>())).ReturnsAsync(new List<string> { "web" });
 
-        var model = new Omni.App.Pages.Dashboard.LeadsModel(ClinicContext(Glow).Object, dashboard.Object, leads.Object, config.Object)
+        var model = new Omni.App.Pages.Dashboard.LeadsModel(ClientContext(Glow).Object, dashboard.Object, leads.Object, config.Object)
         {
             Status = "new", Search = "ann", Source = "web", PageNumber = -3,
         }.Attach();
@@ -243,9 +243,9 @@ public class DashboardPageTests
         Assert.Equal(["web"], model.AllSources);
         dashboard.Verify();
 
-        var none = new Omni.App.Pages.Dashboard.LeadsModel(ClinicContext(null).Object, dashboard.Object, leads.Object, config.Object).Attach();
+        var none = new Omni.App.Pages.Dashboard.LeadsModel(ClientContext(null).Object, dashboard.Object, leads.Object, config.Object).Attach();
         await none.OnGetAsync(default);
-        Assert.False(none.ClinicConfigured);
+        Assert.False(none.ClientConfigured);
     }
 
     [Fact]
@@ -257,7 +257,7 @@ public class DashboardPageTests
         dashboard.Setup(d => d.GetLeadsAsync(Glow.Id, null, null, null, 10, 10, It.IsAny<CancellationToken>()))
             .ReturnsAsync((new List<DashboardLeadRow>() as IReadOnlyList<DashboardLeadRow>, 15)).Verifiable();
         var leads = Mock.Of<ILeadService>(l => l.GetDistinctSourcesAsync(Glow.Id, It.IsAny<CancellationToken>()) == Task.FromResult<IReadOnlyList<string>>(new List<string>()));
-        var model = new Omni.App.Pages.Dashboard.LeadsModel(ClinicContext(Glow).Object, dashboard.Object, leads, config.Object) { PageNumber = 2 }.Attach();
+        var model = new Omni.App.Pages.Dashboard.LeadsModel(ClientContext(Glow).Object, dashboard.Object, leads, config.Object) { PageNumber = 2 }.Attach();
         await model.OnGetAsync(default);
         dashboard.Verify();
     }
@@ -268,15 +268,15 @@ public class DashboardPageTests
         Blank<LeadResponse>() with { Status = status, QualificationStatus = "hot", Source = source };
 
     [Fact]
-    public async Task Lead_detail_404s_for_an_unknown_lead_and_is_empty_without_a_clinic()
+    public async Task Lead_detail_404s_for_an_unknown_lead_and_is_empty_without_a_client()
     {
         var leads = new Mock<ILeadService>();
-        var model = new Omni.App.Pages.Dashboard.LeadDetailModel(ClinicContext(Glow).Object, leads.Object) { Id = Guid.NewGuid() }.Attach();
+        var model = new Omni.App.Pages.Dashboard.LeadDetailModel(ClientContext(Glow).Object, leads.Object) { Id = Guid.NewGuid() }.Attach();
         Assert.IsType<NotFoundResult>(await model.OnGetAsync(default));
 
-        var none = new Omni.App.Pages.Dashboard.LeadDetailModel(ClinicContext(null).Object, leads.Object).Attach();
+        var none = new Omni.App.Pages.Dashboard.LeadDetailModel(ClientContext(null).Object, leads.Object).Attach();
         Assert.IsType<PageResult>(await none.OnGetAsync(default));
-        Assert.False(none.ClinicConfigured);
+        Assert.False(none.ClientConfigured);
     }
 
     [Theory]
@@ -289,7 +289,7 @@ public class DashboardPageTests
         var leads = new Mock<ILeadService>();
         leads.Setup(l => l.GetByIdAsync(Glow.Id, id, It.IsAny<CancellationToken>())).ReturnsAsync(Lead("contacted", source));
         leads.Setup(l => l.GetDistinctSourcesAsync(Glow.Id, It.IsAny<CancellationToken>())).ReturnsAsync(new List<string> { "WEB" });
-        var model = new Omni.App.Pages.Dashboard.LeadDetailModel(ClinicContext(Glow).Object, leads.Object) { Id = id }.Attach();
+        var model = new Omni.App.Pages.Dashboard.LeadDetailModel(ClientContext(Glow).Object, leads.Object) { Id = id }.Attach();
         Assert.IsType<PageResult>(await model.OnGetAsync(default));
         Assert.Equal(("contacted", "hot", choice), (model.Status, model.QualificationStatus, model.SourceChoice));
         Assert.Equal(custom, model.CustomSource);
@@ -304,7 +304,7 @@ public class DashboardPageTests
         var leads = new Mock<ILeadService>();
         leads.Setup(l => l.GetByIdAsync(Glow.Id, id, It.IsAny<CancellationToken>())).ReturnsAsync(Lead(source: "tiktok"));
         leads.Setup(l => l.GetDistinctSourcesAsync(Glow.Id, It.IsAny<CancellationToken>())).ReturnsAsync(new List<string>());
-        var model = new Omni.App.Pages.Dashboard.LeadDetailModel(ClinicContext(Glow).Object, leads.Object) { Id = id }.Attach();
+        var model = new Omni.App.Pages.Dashboard.LeadDetailModel(ClientContext(Glow).Object, leads.Object) { Id = id }.Attach();
         await model.OnGetAsync(default);
         Assert.Contains("tiktok", model.SourceOptions);
     }
@@ -318,7 +318,7 @@ public class DashboardPageTests
         leads.Setup(l => l.UpdateStatusAsync(Glow.Id, id, It.IsAny<UpdateLeadStatusRequest>(), It.IsAny<CancellationToken>()))
             .Callback<Guid, Guid, UpdateLeadStatusRequest, CancellationToken>((_, _, r, _) => seen = r)
             .ReturnsAsync(Lead());
-        var model = new Omni.App.Pages.Dashboard.LeadDetailModel(ClinicContext(Glow).Object, leads.Object)
+        var model = new Omni.App.Pages.Dashboard.LeadDetailModel(ClientContext(Glow).Object, leads.Object)
         {
             Id = id, Status = "qualified", QualificationStatus = "warm", SourceChoice = "other", CustomSource = "  podcast ",
         }.Attach();
@@ -331,13 +331,13 @@ public class DashboardPageTests
     }
 
     [Fact]
-    public async Task Saving_a_lead_handles_missing_leads_validation_errors_and_missing_clinics()
+    public async Task Saving_a_lead_handles_missing_leads_validation_errors_and_missing_clients()
     {
         var id = Guid.NewGuid();
         var leads = new Mock<ILeadService>();
         leads.Setup(l => l.GetByIdAsync(Glow.Id, id, It.IsAny<CancellationToken>())).ReturnsAsync(Lead());
         leads.Setup(l => l.GetDistinctSourcesAsync(Glow.Id, It.IsAny<CancellationToken>())).ReturnsAsync(new List<string>());
-        var model = new Omni.App.Pages.Dashboard.LeadDetailModel(ClinicContext(Glow).Object, leads.Object) { Id = id, SourceChoice = "web" }.Attach();
+        var model = new Omni.App.Pages.Dashboard.LeadDetailModel(ClientContext(Glow).Object, leads.Object) { Id = id, SourceChoice = "web" }.Attach();
 
         Assert.IsType<NotFoundResult>(await model.OnPostAsync(default));          // the service returns null
 
@@ -347,29 +347,29 @@ public class DashboardPageTests
         Assert.Equal("Invalid status.", model.ErrorMessage);
         Assert.NotNull(model.Lead);                                                // the page reloads its data to redisplay
 
-        var none = new Omni.App.Pages.Dashboard.LeadDetailModel(ClinicContext(null).Object, leads.Object).Attach();
+        var none = new Omni.App.Pages.Dashboard.LeadDetailModel(ClientContext(null).Object, leads.Object).Attach();
         Assert.IsType<RedirectToPageResult>(await none.OnPostAsync(default));
     }
 
     // ---- appointment detail ---------------------------------------------------------------------------------------
 
     [Fact]
-    public async Task Appointment_detail_shows_status_and_clinic_time_zone()
+    public async Task Appointment_detail_shows_status_and_client_time_zone()
     {
         var id = Guid.NewGuid();
         var appointments = new Mock<IAppointmentService>();
         appointments.Setup(a => a.GetByIdAsync(Glow.Id, id, It.IsAny<CancellationToken>())).ReturnsAsync(Blank<AppointmentResponse>() with { Status = AppointmentStatus.Confirmed });
-        var model = new Omni.App.Pages.Dashboard.AppointmentDetailModel(ClinicContext(SomeClinic(timezone: "Asia/Beirut")).Object, appointments.Object) { Id = id }.Attach();
-        // the mock is keyed to Glow; use a clinic context returning the same clinic instead
-        var clinic = SomeClinic(timezone: "Asia/Beirut");
-        appointments.Setup(a => a.GetByIdAsync(clinic.Id, id, It.IsAny<CancellationToken>())).ReturnsAsync(Blank<AppointmentResponse>() with { Status = AppointmentStatus.Confirmed });
-        model = new Omni.App.Pages.Dashboard.AppointmentDetailModel(ClinicContext(clinic).Object, appointments.Object) { Id = id }.Attach();
+        var model = new Omni.App.Pages.Dashboard.AppointmentDetailModel(ClientContext(SomeClient(timezone: "Asia/Beirut")).Object, appointments.Object) { Id = id }.Attach();
+        // the mock is keyed to Glow; use a client context returning the same client instead
+        var client = SomeClient(timezone: "Asia/Beirut");
+        appointments.Setup(a => a.GetByIdAsync(client.Id, id, It.IsAny<CancellationToken>())).ReturnsAsync(Blank<AppointmentResponse>() with { Status = AppointmentStatus.Confirmed });
+        model = new Omni.App.Pages.Dashboard.AppointmentDetailModel(ClientContext(client).Object, appointments.Object) { Id = id }.Attach();
         Assert.IsType<PageResult>(await model.OnGetAsync(default));
-        Assert.Equal((AppointmentStatus.Confirmed, "Asia/Beirut"), (model.Status, model.ClinicTimezone));
+        Assert.Equal((AppointmentStatus.Confirmed, "Asia/Beirut"), (model.Status, model.ClientTimezone));
 
-        var missing = new Omni.App.Pages.Dashboard.AppointmentDetailModel(ClinicContext(clinic).Object, appointments.Object) { Id = Guid.NewGuid() }.Attach();
+        var missing = new Omni.App.Pages.Dashboard.AppointmentDetailModel(ClientContext(client).Object, appointments.Object) { Id = Guid.NewGuid() }.Attach();
         Assert.IsType<NotFoundResult>(await missing.OnGetAsync(default));
-        var none = new Omni.App.Pages.Dashboard.AppointmentDetailModel(ClinicContext(null).Object, appointments.Object).Attach();
+        var none = new Omni.App.Pages.Dashboard.AppointmentDetailModel(ClientContext(null).Object, appointments.Object).Attach();
         Assert.IsType<PageResult>(await none.OnGetAsync(default));
     }
 
@@ -377,27 +377,27 @@ public class DashboardPageTests
     public async Task Saving_an_appointment_status_redirects_404s_or_shows_the_validation_error()
     {
         var id = Guid.NewGuid();
-        var clinic = SomeClinic();
+        var client = SomeClient();
         var appointments = new Mock<IAppointmentService>();
-        var model = new Omni.App.Pages.Dashboard.AppointmentDetailModel(ClinicContext(clinic).Object, appointments.Object) { Id = id, Status = "attended" }.Attach();
+        var model = new Omni.App.Pages.Dashboard.AppointmentDetailModel(ClientContext(client).Object, appointments.Object) { Id = id, Status = "attended" }.Attach();
 
         Assert.IsType<NotFoundResult>(await model.OnPostAsync(default));
-        appointments.Setup(a => a.UpdateStatusAsync(clinic.Id, id, "attended", It.IsAny<CancellationToken>())).ReturnsAsync(Blank<AppointmentResponse>());
+        appointments.Setup(a => a.UpdateStatusAsync(client.Id, id, "attended", It.IsAny<CancellationToken>())).ReturnsAsync(Blank<AppointmentResponse>());
         Assert.IsType<RedirectToPageResult>(await model.OnPostAsync(default));
 
-        appointments.Setup(a => a.UpdateStatusAsync(clinic.Id, id, "attended", It.IsAny<CancellationToken>())).ThrowsAsync(new ArgumentException("Bad status."));
-        appointments.Setup(a => a.GetByIdAsync(clinic.Id, id, It.IsAny<CancellationToken>())).ReturnsAsync(Blank<AppointmentResponse>());
+        appointments.Setup(a => a.UpdateStatusAsync(client.Id, id, "attended", It.IsAny<CancellationToken>())).ThrowsAsync(new ArgumentException("Bad status."));
+        appointments.Setup(a => a.GetByIdAsync(client.Id, id, It.IsAny<CancellationToken>())).ReturnsAsync(Blank<AppointmentResponse>());
         Assert.IsType<PageResult>(await model.OnPostAsync(default));
         Assert.Equal("Bad status.", model.ErrorMessage);
 
-        var none = new Omni.App.Pages.Dashboard.AppointmentDetailModel(ClinicContext(null).Object, appointments.Object).Attach();
+        var none = new Omni.App.Pages.Dashboard.AppointmentDetailModel(ClientContext(null).Object, appointments.Object).Attach();
         Assert.IsType<RedirectToPageResult>(await none.OnPostAsync(default));
     }
 }
 
 public class ProcedurePageTests
 {
-    private static readonly Clinic Glow = SomeClinic();
+    private static readonly Client Glow = SomeClient();
 
     [Fact]
     public async Task Procedure_list_loads_and_toggling_reports_the_result()
@@ -409,10 +409,10 @@ public class ProcedurePageTests
             .ReturnsAsync((ProcedureResponse?)null)
             .ReturnsAsync(Blank<ProcedureResponse>() with { Name = "Botox" })
             .ReturnsAsync(Blank<ProcedureResponse>() with { Name = "Botox" });
-        var model = new ProcedureIndex(ClinicContext(Glow).Object, procedures.Object).Attach();
+        var model = new ProcedureIndex(ClientContext(Glow).Object, procedures.Object).Attach();
 
         await model.OnGetAsync(default);
-        Assert.True(model.ClinicConfigured);
+        Assert.True(model.ClientConfigured);
 
         await model.OnPostToggleAsync(id, true, default);
         Assert.Equal("Procedure not found.", model.ErrorMessage);
@@ -421,9 +421,9 @@ public class ProcedurePageTests
         await model.OnPostToggleAsync(id, true, default);
         Assert.Equal("Botox is active again.", model.StatusMessage);
 
-        var none = new ProcedureIndex(ClinicContext(null).Object, procedures.Object).Attach();
+        var none = new ProcedureIndex(ClientContext(null).Object, procedures.Object).Attach();
         await none.OnGetAsync(default);
-        Assert.False(none.ClinicConfigured);
+        Assert.False(none.ClientConfigured);
         Assert.IsType<RedirectToPageResult>(await none.OnPostToggleAsync(id, true, default));
     }
 
@@ -434,19 +434,19 @@ public class ProcedurePageTests
         var procedures = new Mock<IProcedureService>();
         procedures.Setup(p => p.GetByIdAsync(Glow.Id, id, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Blank<ProcedureResponse>() with { Name = "Facelift", Code = "FL", ConsultationDuration = 45, Description = "d" });
-        var edit = new ProcedureEdit(ClinicContext(Glow).Object, procedures.Object) { Id = id }.Attach();
+        var edit = new ProcedureEdit(ClientContext(Glow).Object, procedures.Object) { Id = id }.Attach();
         Assert.IsType<PageResult>(await edit.OnGetAsync(default));
         Assert.Equal(("Facelift", "FL", 45, "d", false), (edit.Name, edit.Code, edit.DurationMinutes, edit.Description, edit.IsNew));
 
-        var fresh = new ProcedureEdit(ClinicContext(Glow).Object, procedures.Object).Attach();
+        var fresh = new ProcedureEdit(ClientContext(Glow).Object, procedures.Object).Attach();
         Assert.IsType<PageResult>(await fresh.OnGetAsync(default));
         Assert.True(fresh.IsNew);
 
-        var missing = new ProcedureEdit(ClinicContext(Glow).Object, procedures.Object) { Id = Guid.NewGuid() }.Attach();
+        var missing = new ProcedureEdit(ClientContext(Glow).Object, procedures.Object) { Id = Guid.NewGuid() }.Attach();
         Assert.IsType<NotFoundResult>(await missing.OnGetAsync(default));
-        var none = new ProcedureEdit(ClinicContext(null).Object, procedures.Object).Attach();
+        var none = new ProcedureEdit(ClientContext(null).Object, procedures.Object).Attach();
         Assert.IsType<PageResult>(await none.OnGetAsync(default));
-        Assert.False(none.ClinicConfigured);
+        Assert.False(none.ClientConfigured);
     }
 
     [Fact]
@@ -454,12 +454,12 @@ public class ProcedurePageTests
     {
         var id = Guid.NewGuid();
         var procedures = new Mock<IProcedureService>();
-        var create = new ProcedureEdit(ClinicContext(Glow).Object, procedures.Object) { Name = "Botox", Code = "B", Description = "d", DurationMinutes = 20 }.Attach();
+        var create = new ProcedureEdit(ClientContext(Glow).Object, procedures.Object) { Name = "Botox", Code = "B", Description = "d", DurationMinutes = 20 }.Attach();
         Assert.Equal("page:/Procedures/Index", RedirectTarget(await create.OnPostAsync(default)));
         procedures.Verify(p => p.CreateAsync(new CreateProcedureRequest(Glow.Id, "Botox", "B", "d", 20), It.IsAny<CancellationToken>()), Times.Once);
         Assert.Equal("Saved.", create.TempData["StatusMessage"]);
 
-        var update = new ProcedureEdit(ClinicContext(Glow).Object, procedures.Object) { Id = id, Name = "Botox" }.Attach();
+        var update = new ProcedureEdit(ClientContext(Glow).Object, procedures.Object) { Id = id, Name = "Botox" }.Attach();
         Assert.IsType<NotFoundResult>(await update.OnPostAsync(default));          // UpdateAsync returns null
 
         procedures.Setup(p => p.UpdateAsync(Glow.Id, id, It.IsAny<UpdateProcedureRequest>(), It.IsAny<CancellationToken>())).ReturnsAsync(Blank<ProcedureResponse>());
@@ -469,30 +469,30 @@ public class ProcedurePageTests
         Assert.IsType<PageResult>(await update.OnPostAsync(default));
         Assert.Equal("Name taken.", update.ErrorMessage);
 
-        var none = new ProcedureEdit(ClinicContext(null).Object, procedures.Object).Attach();
+        var none = new ProcedureEdit(ClientContext(null).Object, procedures.Object).Attach();
         Assert.Equal("page:/Procedures/Index", RedirectTarget(await none.OnPostAsync(default)));
     }
 }
 
 public class CampaignDetailsPageTests
 {
-    private static readonly Clinic Glow = SomeClinic();
+    private static readonly Client Glow = SomeClient();
 
     [Fact]
-    public async Task Campaign_details_load_404_or_show_empty_without_a_clinic()
+    public async Task Campaign_details_load_404_or_show_empty_without_a_client()
     {
         var id = Guid.NewGuid();
         var campaigns = new Mock<ICampaignService>();
-        var model = new CampaignDetails(ClinicContext(Glow).Object, campaigns.Object).Attach();
+        var model = new CampaignDetails(ClientContext(Glow).Object, campaigns.Object).Attach();
         Assert.IsType<NotFoundResult>(await model.OnGetAsync(id, default));
 
         campaigns.Setup(c => c.GetByIdAsync(Glow.Id, id, It.IsAny<CancellationToken>())).ReturnsAsync(Blank<CampaignDetailsResponse>());
         Assert.IsType<PageResult>(await model.OnGetAsync(id, default));
         Assert.NotNull(model.Details);
 
-        var none = new CampaignDetails(ClinicContext(null).Object, campaigns.Object).Attach();
+        var none = new CampaignDetails(ClientContext(null).Object, campaigns.Object).Attach();
         Assert.IsType<PageResult>(await none.OnGetAsync(id, default));
-        Assert.False(none.ClinicConfigured);
+        Assert.False(none.ClientConfigured);
     }
 
     [Fact]
@@ -505,7 +505,7 @@ public class CampaignDetailsPageTests
             .ReturnsAsync(Blank<ProcessCampaignBatchResult>() with { Processed = 5, Succeeded = 5, Failed = 0, RemainingQueued = 0, CampaignCompleted = true })
             .ReturnsAsync((ProcessCampaignBatchResult?)null)
             .ThrowsAsync(new InvalidOperationException("Not approved yet."));
-        var model = new CampaignDetails(ClinicContext(Glow).Object, campaigns.Object).Attach();
+        var model = new CampaignDetails(ClientContext(Glow).Object, campaigns.Object).Attach();
 
         Assert.IsType<RedirectToPageResult>(await model.OnPostSendAsync(id, default));
         Assert.Contains("18 sent so far, 2 failed; the other 5 go out automatically", model.StatusMessage);
@@ -516,7 +516,7 @@ public class CampaignDetailsPageTests
         await model.OnPostSendAsync(id, default);
         Assert.Equal("Not approved yet.", model.ErrorMessage);
 
-        var none = new CampaignDetails(ClinicContext(null).Object, campaigns.Object).Attach();
+        var none = new CampaignDetails(ClientContext(null).Object, campaigns.Object).Attach();
         Assert.IsType<RedirectToPageResult>(await none.OnPostSendAsync(id, default));
     }
 
@@ -525,7 +525,7 @@ public class CampaignDetailsPageTests
     {
         var id = Guid.NewGuid();
         var campaigns = new Mock<ICampaignService>();
-        var model = new CampaignDetails(ClinicContext(Glow).Object, campaigns.Object).Attach();
+        var model = new CampaignDetails(ClientContext(Glow).Object, campaigns.Object).Attach();
         await model.OnPostCancelAsync(id, default);
         Assert.Equal("Campaign cancelled.", model.StatusMessage);
 
@@ -533,7 +533,7 @@ public class CampaignDetailsPageTests
         await model.OnPostCancelAsync(id, default);
         Assert.Equal("Already sent.", model.ErrorMessage);
 
-        var none = new CampaignDetails(ClinicContext(null).Object, campaigns.Object).Attach();
+        var none = new CampaignDetails(ClientContext(null).Object, campaigns.Object).Attach();
         Assert.IsType<RedirectToPageResult>(await none.OnPostCancelAsync(id, default));
     }
 
@@ -542,7 +542,7 @@ public class CampaignDetailsPageTests
     {
         var id = Guid.NewGuid();
         var campaigns = new Mock<ICampaignService>();
-        var model = new CampaignDetails(ClinicContext(Glow).Object, campaigns.Object).Attach();
+        var model = new CampaignDetails(ClientContext(Glow).Object, campaigns.Object).Attach();
         Assert.IsType<RedirectToPageResult>(await model.OnPostStopAsync(id, default));
         Assert.Contains("Campaign stopped", model.StatusMessage);
         campaigns.Verify(c => c.StopAsync(Glow.Id, id, It.IsAny<CancellationToken>()), Times.Once);
@@ -551,7 +551,7 @@ public class CampaignDetailsPageTests
         await model.OnPostStopAsync(id, default);
         Assert.Equal("Only a scheduled or sending campaign can be stopped.", model.ErrorMessage);
 
-        var none = new CampaignDetails(ClinicContext(null).Object, campaigns.Object).Attach();
+        var none = new CampaignDetails(ClientContext(null).Object, campaigns.Object).Attach();
         Assert.IsType<RedirectToPageResult>(await none.OnPostStopAsync(id, default));
         campaigns.Verify(c => c.StopAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
     }

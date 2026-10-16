@@ -13,9 +13,9 @@ namespace Omni.App.Entities.Dtos.Billing;
 /// </summary>
 public sealed record BillableEvent
 {
-    public required Guid ClinicId { get; init; }
+    public required Guid ClientId { get; init; }
 
-    /// <summary>Stable identity of this one billable event, unique per clinic, max 150 chars (e.g.
+    /// <summary>Stable identity of this one billable event, unique per client, max 150 chars (e.g.
     /// "whatsapp:message:{messageId}"). Processing the same key twice never charges twice.</summary>
     public required string IdempotencyKey { get; init; }
 
@@ -39,7 +39,7 @@ public sealed record BillableEvent
     /// platform_funded (Omni pays and charges), the behaviour before responsibilities existed.</summary>
     public string ProviderBilling { get; init; } = ProviderBillingResponsibility.PlatformFunded;
 
-    /// <summary>Does Omni charge the clinic for this usage? Null = the default for <see cref="ProviderBilling"/>:
+    /// <summary>Does Omni charge the client for this usage? Null = the default for <see cref="ProviderBilling"/>:
     /// only platform_funded usage is charged. True on a customer-paid account = an Omni usage fee (needs a rate
     /// set up for that responsibility); false on platform_funded = Omni absorbs the cost.</summary>
     public bool? ChargeUsage { get; init; }

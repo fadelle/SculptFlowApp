@@ -11,8 +11,8 @@ public interface IEmbeddingService
     /// knowledge_chunks.embedding column (vector(1536) in Database/schema.sql).</summary>
     int Dimensions { get; }
 
-    /// <summary>model/dimensions default to the system configuration; the Knowledge Base passes the clinic's
-    /// persisted settings so a clinic's vectors always use the model/dimension recorded for it.</summary>
+    /// <summary>model/dimensions default to the system configuration; the Knowledge Base passes the client's
+    /// persisted settings so a client's vectors always use the model/dimension recorded for it.</summary>
     Task<float[]> EmbedAsync(string text, string? model = null, int? dimensions = null, CancellationToken ct = default);
 
     /// <summary>Embeds several texts (batched into as few provider calls as possible); the result

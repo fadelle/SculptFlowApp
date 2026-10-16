@@ -6,23 +6,23 @@ namespace Omni.App.Persistence.Contracts.PlatformAdmin;
 
 public interface ILeadAdminRepository
 {
-    Task<PagedResponse<LeadRow>> ListLeadsAsync(Guid? clinicId, string? status, string? search, int page, CancellationToken ct = default);
+    Task<PagedResponse<LeadRow>> ListLeadsAsync(Guid? clientId, string? status, string? search, int page, CancellationToken ct = default);
 
     Task<Lead?> GetLeadAsync(Guid id, CancellationToken ct = default);
 
     Task<List<EventLog>> LeadEventsAsync(Guid leadId, CancellationToken ct = default);
 
-    Task<PagedResponse<ConversationRow>> ListConversationsAsync(Guid? clinicId, Guid? leadId, string? channel, string? mode,
+    Task<PagedResponse<ConversationRow>> ListConversationsAsync(Guid? clientId, Guid? leadId, string? channel, string? mode,
         string? status, int page, CancellationToken ct = default);
 
     Task<Conversation?> GetConversationAsync(Guid id, CancellationToken ct = default);
 
     Task<List<Message>> MessagesAsync(Guid conversationId, int take = 500, CancellationToken ct = default);
 
-    Task<PagedResponse<MessageRow>> ListMessagesAsync(Guid? clinicId, bool failedOnly, string? sender, string? search,
+    Task<PagedResponse<MessageRow>> ListMessagesAsync(Guid? clientId, bool failedOnly, string? sender, string? search,
         int page, CancellationToken ct = default);
 
-    Task<PagedResponse<AppointmentRow>> ListAppointmentsAsync(Guid? clinicId, Guid? leadId, string? status, bool upcomingOnly,
+    Task<PagedResponse<AppointmentRow>> ListAppointmentsAsync(Guid? clientId, Guid? leadId, string? status, bool upcomingOnly,
         int page, CancellationToken ct = default);
 
     /// <summary>Tracked.</summary>

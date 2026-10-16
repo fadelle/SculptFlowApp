@@ -6,7 +6,7 @@ public class ChannelAccountBillingSettings
 {
     /// <summary>The connected account: channel_integrations.id (one row per account).</summary>
     public Guid ChannelIntegrationId { get; set; }
-    public Guid ClinicId { get; set; }
+    public Guid ClientId { get; set; }
     /// <summary>One of <see cref="ProviderBillingResponsibility"/>, or null for the default.</summary>
     public string? ProviderBilling { get; set; }
     /// <summary>Does Omni charge usage on this account? Null = the default (yes only when Omni pays the provider).</summary>

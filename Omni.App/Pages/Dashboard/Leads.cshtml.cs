@@ -11,15 +11,15 @@ namespace Omni.App.Pages.Dashboard;
 /// <summary>Page 2 — Interested People.</summary>
 public class LeadsModel : PageModel
 {
-    private readonly ICurrentClinicContext _clinicContext;
+    private readonly ICurrentClientContext _clientContext;
     private readonly IDashboardService _dashboard;
     private readonly ILeadService _leads;
     private readonly IConfigManager _config;
 
-    public LeadsModel(ICurrentClinicContext clinicContext, IDashboardService dashboard, ILeadService leads, IConfigManager config)
+    public LeadsModel(ICurrentClientContext clientContext, IDashboardService dashboard, ILeadService leads, IConfigManager config)
     {
         _config = config;
-        _clinicContext = clinicContext;
+        _clientContext = clientContext;
         _dashboard = dashboard;
         _leads = leads;
     }
@@ -40,30 +40,30 @@ public class LeadsModel : PageModel
 
     public int PageSize => _config.DashboardLeadsPageSize;
 
-    public bool ClinicConfigured { get; private set; }
+    public bool ClientConfigured { get; private set; }
     public IReadOnlyList<DashboardLeadRow> Leads { get; private set; } = Array.Empty<DashboardLeadRow>();
     public int TotalCount { get; private set; }
     public IReadOnlyList<string> AllStatuses { get; } = LeadStatus.All.OrderBy(s => s).ToList();
-    /// <summary>Every source value this clinic's leads actually have, for the source filter.</summary>
+    /// <summary>Every source value this client's leads actually have, for the source filter.</summary>
     public IReadOnlyList<string> AllSources { get; private set; } = Array.Empty<string>();
 
     public async Task OnGetAsync(CancellationToken ct)
     {
-        var clinic = await _clinicContext.GetClinicAsync(ct);
-        if (clinic is null)
+        var client = await _clientContext.GetClientAsync(ct);
+        if (client is null)
         {
-            ClinicConfigured = false;
+            ClientConfigured = false;
             return;
         }
 
-        ClinicConfigured = true;
+        ClientConfigured = true;
         PageNumber = Math.Max(PageNumber, 1);
         var skip = (PageNumber - 1) * PageSize;
 
-        var (items, totalCount) = await _dashboard.GetLeadsAsync(clinic.Id, Status, Search, Source, skip, PageSize, ct);
+        var (items, totalCount) = await _dashboard.GetLeadsAsync(client.Id, Status, Search, Source, skip, PageSize, ct);
         Leads = items;
         TotalCount = totalCount;
-        AllSources = await _leads.GetDistinctSourcesAsync(clinic.Id, ct);
+        AllSources = await _leads.GetDistinctSourcesAsync(client.Id, ct);
     }
 
     public int TotalPages => (int)Math.Ceiling(TotalCount / (double)PageSize);

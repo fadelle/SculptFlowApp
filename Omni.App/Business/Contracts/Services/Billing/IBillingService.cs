@@ -15,7 +15,7 @@ namespace Omni.App.Business.Contracts.Services.Billing;
 ///                           ──> Settle / Release only update the provider outcome
 ///
 /// Prepaid: a reservation needs included credit + wallet - already reserved >= its amount. Every operation is one
-/// transaction holding the clinic's billing account row lock, and is idempotent by key (see IBillingUnitOfWork).
+/// transaction holding the client's billing account row lock, and is idempotent by key (see IBillingUnitOfWork).
 /// </summary>
 public interface IBillingService
 {
@@ -29,18 +29,18 @@ public interface IBillingService
     /// unit price, for finalQuantity units when given, else the reserved quantity) and returns any unused hold. If it
     /// isn't charged: only records the outcome (and final quantity). Settling twice is a no-op; settling a released
     /// record does nothing (Conflict).</summary>
-    Task<UsageResult> SettleAsync(Guid clinicId, string idempotencyKey, decimal? finalQuantity = null, CancellationToken ct = default);
+    Task<UsageResult> SettleAsync(Guid clientId, string idempotencyKey, decimal? finalQuantity = null, CancellationToken ct = default);
 
     /// <summary>The usage turned out not billable at the provider: returns the hold (or, for uncharged usage, just
     /// records the outcome). Idempotent; never undoes a settlement.</summary>
-    Task<UsageResult> ReleaseAsync(Guid clinicId, string idempotencyKey, string reason, CancellationToken ct = default);
+    Task<UsageResult> ReleaseAsync(Guid clientId, string idempotencyKey, string reason, CancellationToken ct = default);
 
     /// <summary>Records and settles in one step, for usage that is billable the moment it is known (no hold first).
     /// Charged usage is still prepaid: fails when the balance can't cover it.</summary>
     Task<UsageResult> ChargeAsync(BillableEvent billableEvent, CancellationToken ct = default);
 
     /// <summary>Gives a settled usage's full amount back to where it was paid from (credit and/or wallet). Once only.</summary>
-    Task<UsageResult> RefundAsync(Guid clinicId, Guid usageRecordId, string reason, string source, string? actor, CancellationToken ct = default);
+    Task<UsageResult> RefundAsync(Guid clientId, Guid usageRecordId, string reason, string source, string? actor, CancellationToken ct = default);
 
     Task<LedgerResult> TopUpAsync(WalletTopUp request, CancellationToken ct = default);
 

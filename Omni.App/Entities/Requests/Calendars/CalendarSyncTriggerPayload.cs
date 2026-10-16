@@ -7,7 +7,7 @@ namespace Omni.App.Entities.Requests.Calendars;
 /// patient-facing text here is exactly what should appear on the external event — n8n must not add anything else
 /// from elsewhere.</summary>
 public record CalendarSyncTriggerPayload(
-    Guid ClinicId,
+    Guid ClientId,
     Guid AppointmentId,
     Guid CalendarIntegrationId,
     string Provider,
@@ -19,7 +19,7 @@ public record CalendarSyncTriggerPayload(
     string? ExternalEventId,
     DateTimeOffset ScheduledStart,
     DateTimeOffset? ScheduledEnd,
-    /// <summary>The clinic's IANA timezone id — ScheduledStart/End already carry the correct offset; this is for
+    /// <summary>The client's IANA timezone id — ScheduledStart/End already carry the correct offset; this is for
     /// display only. n8n must never recompute or reinterpret the time.</summary>
     string Timezone,
     string EventTitle,

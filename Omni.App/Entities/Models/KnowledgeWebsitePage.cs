@@ -7,7 +7,7 @@ namespace Omni.App.Entities.Models;
 public class KnowledgeWebsitePage
 {
     public Guid Id { get; set; }
-    public Guid ClinicId { get; set; }
+    public Guid ClientId { get; set; }
     public Guid WebsiteSourceId { get; set; }
 
     public string Url { get; set; } = string.Empty;

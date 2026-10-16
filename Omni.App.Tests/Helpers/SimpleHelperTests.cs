@@ -103,7 +103,7 @@ public class ViewerTimeZoneTests
 
 public class ConversationModeSyncTests
 {
-    private static Conversation Make(string mode) => new() { Id = Guid.NewGuid(), ClinicId = Guid.NewGuid(), LeadId = Guid.NewGuid(), Mode = mode, Channel = "whatsapp" };
+    private static Conversation Make(string mode) => new() { Id = Guid.NewGuid(), ClientId = Guid.NewGuid(), LeadId = Guid.NewGuid(), Mode = mode, Channel = "whatsapp" };
 
     [Fact]
     public void Ai_to_human_sets_flags_and_adds_marker_dated_just_before_the_message()
@@ -295,9 +295,9 @@ public class LocalTimeHelperTests
     public void Time_renders_utc_fallback_and_escapes()
     {
         Assert.Equal("&lt;none&gt;", LocalTimeHelper.Time(null, empty: "<none>").ToString());
-        var html = LocalTimeHelper.Time(T, "datetime", clinicTimeZone: "Asia/Beirut").ToString()!;
+        var html = LocalTimeHelper.Time(T, "datetime", clientTimeZone: "Asia/Beirut").ToString()!;
         Assert.Contains("datetime=\"2026-03-05T12:07:00Z\"", html);
-        Assert.Contains("data-clinic-tz=\"Asia/Beirut\"", html);
+        Assert.Contains("data-client-tz=\"Asia/Beirut\"", html);
         Assert.Contains(">Mar 5, 12:07 UTC</time>", html);
         Assert.Contains(">Mar 5, 2026</time>", LocalTimeHelper.Time(T, "date").ToString());
         Assert.Contains(">Mar 5, 12:07 UTC<", LocalTimeHelper.Time(T, "unknown-format").ToString());

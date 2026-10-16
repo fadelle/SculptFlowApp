@@ -18,35 +18,35 @@ public class ConversationRepository : IConversationRepository
 
     public void Add(Conversation conversation) => _db.Conversations.Add(conversation);
 
-    public Task<Conversation?> GetAsync(Guid clinicId, Guid conversationId, CancellationToken ct = default) =>
-        _db.Conversations.FirstOrDefaultAsync(c => c.ClinicId == clinicId && c.Id == conversationId, ct);
+    public Task<Conversation?> GetAsync(Guid clientId, Guid conversationId, CancellationToken ct = default) =>
+        _db.Conversations.FirstOrDefaultAsync(c => c.ClientId == clientId && c.Id == conversationId, ct);
 
-    public Task<Conversation?> GetWithLeadAsync(Guid clinicId, Guid conversationId, CancellationToken ct = default) =>
-        _db.Conversations.Include(c => c.Lead).FirstOrDefaultAsync(c => c.ClinicId == clinicId && c.Id == conversationId, ct);
+    public Task<Conversation?> GetWithLeadAsync(Guid clientId, Guid conversationId, CancellationToken ct = default) =>
+        _db.Conversations.Include(c => c.Lead).FirstOrDefaultAsync(c => c.ClientId == clientId && c.Id == conversationId, ct);
 
-    public Task<Conversation?> FindForLeadAsync(Guid clinicId, Guid leadId, string channel, CancellationToken ct = default) =>
-        _db.Conversations.FirstOrDefaultAsync(c => c.ClinicId == clinicId && c.LeadId == leadId && c.Channel == channel, ct);
+    public Task<Conversation?> FindForLeadAsync(Guid clientId, Guid leadId, string channel, CancellationToken ct = default) =>
+        _db.Conversations.FirstOrDefaultAsync(c => c.ClientId == clientId && c.LeadId == leadId && c.Channel == channel, ct);
 
-    public Task<Conversation?> FindByExternalThreadAsync(Guid clinicId, string channel, string externalThreadId,
+    public Task<Conversation?> FindByExternalThreadAsync(Guid clientId, string channel, string externalThreadId,
         CancellationToken ct = default) =>
         _db.Conversations.FirstOrDefaultAsync(
-            c => c.ClinicId == clinicId && c.Channel == channel && c.ExternalThreadId == externalThreadId, ct);
+            c => c.ClientId == clientId && c.Channel == channel && c.ExternalThreadId == externalThreadId, ct);
 
-    public Task<bool> ExistsAsync(Guid clinicId, Guid conversationId, CancellationToken ct = default) =>
-        _db.Conversations.AnyAsync(c => c.ClinicId == clinicId && c.Id == conversationId, ct);
+    public Task<bool> ExistsAsync(Guid clientId, Guid conversationId, CancellationToken ct = default) =>
+        _db.Conversations.AnyAsync(c => c.ClientId == clientId && c.Id == conversationId, ct);
 
-    public Task<bool> IsInHumanModeAsync(Guid clinicId, Guid conversationId, CancellationToken ct = default) =>
+    public Task<bool> IsInHumanModeAsync(Guid clientId, Guid conversationId, CancellationToken ct = default) =>
         _db.Conversations
-            .Where(c => c.ClinicId == clinicId && c.Id == conversationId)
+            .Where(c => c.ClientId == clientId && c.Id == conversationId)
             .Select(c => c.Mode == ConversationMode.Human)
             .FirstOrDefaultAsync(ct);
 
-    public async Task<(IReadOnlyList<ConversationListRow> Items, int TotalCount)> ListInboxAsync(Guid clinicId, int skip, int take,
+    public async Task<(IReadOnlyList<ConversationListRow> Items, int TotalCount)> ListInboxAsync(Guid clientId, int skip, int take,
         CancellationToken ct = default)
     {
         var query = _db.Conversations
             .Include(c => c.Lead).ThenInclude(l => l!.Procedure)
-            .Where(c => c.ClinicId == clinicId);
+            .Where(c => c.ClientId == clientId);
 
         var totalCount = await query.CountAsync(ct);
 
@@ -66,8 +66,8 @@ public class ConversationRepository : IConversationRepository
         return (items, totalCount);
     }
 
-    public Task<int> MarkReadAsync(Guid clinicId, Guid conversationId, DateTimeOffset readAt, CancellationToken ct = default) =>
+    public Task<int> MarkReadAsync(Guid clientId, Guid conversationId, DateTimeOffset readAt, CancellationToken ct = default) =>
         _db.Conversations
-            .Where(c => c.ClinicId == clinicId && c.Id == conversationId)
+            .Where(c => c.ClientId == clientId && c.Id == conversationId)
             .ExecuteUpdateAsync(s => s.SetProperty(c => c.LastReadAt, readAt), ct);
 }

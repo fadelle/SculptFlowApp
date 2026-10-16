@@ -18,9 +18,9 @@
         : e.Value == "unlimited" ? "Unlimited" : e.Value;
 }
 
-@if (!Model.ClinicConfigured || s is null)
+@if (!Model.ClientConfigured || s is null)
 {
-    <partial name="_NoClinic" />
+    <partial name="_NoClient" />
 }
 else
 {

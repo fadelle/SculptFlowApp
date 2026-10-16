@@ -22,7 +22,7 @@ public class TikTokOAuthController : Controller
     private TimeSpan StateLifetime => TimeSpan.FromMinutes(_config.IntegrationsOAuthStateLifetimeMinutes);
     private const string SettingsPagePath = "/settings/integrations";
 
-    private readonly ICurrentClinicContext _clinicContext;
+    private readonly ICurrentClientContext _clientContext;
     private readonly ITikTokIntegrationService _tiktok;
     private readonly ITikTokProviderClient _provider;
     private readonly IConfiguration _configuration;
@@ -31,11 +31,11 @@ public class TikTokOAuthController : Controller
     private readonly IConfigManager _config;
 
     public TikTokOAuthController(
-        ICurrentClinicContext clinicContext, ITikTokIntegrationService tiktok, ITikTokProviderClient provider,
+        ICurrentClientContext clientContext, ITikTokIntegrationService tiktok, ITikTokProviderClient provider,
         IConfiguration configuration, IDataProtectionProvider dataProtection, ILogger<TikTokOAuthController> logger, IConfigManager config)
     {
         _config = config;
-        _clinicContext = clinicContext;
+        _clientContext = clientContext;
         _tiktok = tiktok;
         _provider = provider;
         _configuration = configuration;
@@ -43,22 +43,22 @@ public class TikTokOAuthController : Controller
         _logger = logger;
     }
 
-    private Task<Guid?> GetClinicIdAsync(CancellationToken ct) => _clinicContext.GetClinicIdAsync(ct);
+    private Task<Guid?> GetClientIdAsync(CancellationToken ct) => _clientContext.GetClientIdAsync(ct);
 
     /// <summary>Marks the row Pending and sends the browser to TikTok's consent screen.</summary>
     [HttpGet("connect")]
     public async Task<IActionResult> Connect(CancellationToken ct)
     {
-        var clinicId = await GetClinicIdAsync(ct);
-        if (clinicId is null) return Forbid();
+        var clientId = await GetClientIdAsync(ct);
+        if (clientId is null) return Forbid();
 
         try
         {
             var redirectUri = BuildRedirectUri();
-            var state = _stateProtector.Protect(JsonSerializer.Serialize(new OAuthState(clinicId.Value)), StateLifetime);
+            var state = _stateProtector.Protect(JsonSerializer.Serialize(new OAuthState(clientId.Value)), StateLifetime);
             var authorizationUrl = _provider.BuildAuthorizationUrl(redirectUri, state);
 
-            await _tiktok.RequestConnectAsync(clinicId.Value, ct);
+            await _tiktok.RequestConnectAsync(clientId.Value, ct);
             return Redirect(authorizationUrl);
         }
         catch (InvalidOperationException ex)
@@ -76,8 +76,8 @@ public class TikTokOAuthController : Controller
         [FromQuery] string? code, [FromQuery] string? state,
         [FromQuery] string? error, [FromQuery(Name = "error_description")] string? errorDescription, CancellationToken ct)
     {
-        var clinicId = await GetClinicIdAsync(ct);
-        if (clinicId is null) return Forbid();
+        var clientId = await GetClientIdAsync(ct);
+        if (clientId is null) return Forbid();
 
         OAuthState? oauthState = null;
         try
@@ -92,22 +92,22 @@ public class TikTokOAuthController : Controller
             _logger.LogWarning(ex, "TikTok OAuth state failed to validate (expired or tampered).");
         }
 
-        if (oauthState is null || oauthState.ClinicId != clinicId.Value)
+        if (oauthState is null || oauthState.ClientId != clientId.Value)
         {
-            await _tiktok.FailConnectAsync(clinicId.Value, "The connection attempt expired or was invalid — please try again.", ct);
+            await _tiktok.FailConnectAsync(clientId.Value, "The connection attempt expired or was invalid — please try again.", ct);
             return RedirectWithError("The connection attempt expired or was invalid — please try again.");
         }
 
         if (!string.IsNullOrEmpty(error))
         {
             var message = errorDescription ?? error;
-            await _tiktok.FailConnectAsync(clinicId.Value, message, ct);
+            await _tiktok.FailConnectAsync(clientId.Value, message, ct);
             return RedirectWithError(message);
         }
 
         if (string.IsNullOrEmpty(code))
         {
-            await _tiktok.FailConnectAsync(clinicId.Value, "TikTok did not return an authorization code.", ct);
+            await _tiktok.FailConnectAsync(clientId.Value, "TikTok did not return an authorization code.", ct);
             return RedirectWithError("TikTok did not return an authorization code.");
         }
 
@@ -116,12 +116,12 @@ public class TikTokOAuthController : Controller
             var redirectUri = BuildRedirectUri();
             var tokens = await _provider.ExchangeCodeAsync(code, redirectUri, ct);
             var account = await _provider.GetAccountInfoAsync(tokens.AccessToken, ct);
-            await _tiktok.CompleteConnectAsync(clinicId.Value, tokens, account, ct);
+            await _tiktok.CompleteConnectAsync(clientId.Value, tokens, account, ct);
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "TikTok OAuth code exchange failed.");
-            await _tiktok.FailConnectAsync(clinicId.Value, $"Couldn't finish connecting: {ex.Message}", ct);
+            await _tiktok.FailConnectAsync(clientId.Value, $"Couldn't finish connecting: {ex.Message}", ct);
             return RedirectWithError($"Couldn't finish connecting: {ex.Message}");
         }
 
@@ -162,5 +162,5 @@ public class TikTokOAuthController : Controller
             "TikTok OAuth needs a public HTTPS address for its redirect URI. Set App:PublicBaseUrl (e.g. https://your-app.onrender.com, or an https tunnel URL when testing locally).");
     }
 
-    private record OAuthState(Guid ClinicId);
+    private record OAuthState(Guid ClientId);
 }

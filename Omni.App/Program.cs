@@ -32,7 +32,7 @@ using Omni.App.Business.Contracts.Services.Automation;
 using Omni.App.Business.Contracts.Services.Calendars;
 using Omni.App.Business.Contracts.Services.Campaigns;
 using Omni.App.Business.Contracts.Services.Channels;
-using Omni.App.Business.Contracts.Services.Clinics;
+using Omni.App.Business.Contracts.Services.Clients;
 using Omni.App.Business.Contracts.Services.Configuration;
 using Omni.App.Business.Contracts.Services.Dashboard;
 using Omni.App.Business.Contracts.Services.Inbox;
@@ -65,7 +65,7 @@ using Omni.App.Business.Services.Automation;
 using Omni.App.Business.Services.Calendars;
 using Omni.App.Business.Services.Campaigns;
 using Omni.App.Business.Services.Channels;
-using Omni.App.Business.Services.Clinics;
+using Omni.App.Business.Services.Clients;
 using Omni.App.Business.Services.Configuration;
 using Omni.App.Business.Services.Dashboard;
 using Omni.App.Business.Services.Inbox;
@@ -107,11 +107,11 @@ builder.Services.AddPersistence();
 
 // ---------------------------------------------------------------------
 // Authentication — ASP.NET Core Identity, authentication only. No roles, no permissions matrix:
-// this MVP deliberately ignores owner/manager/receptionist/surgeon distinctions (see ClinicUser's
-// doc comment) — every logged-in user linked to a clinic has full access to that clinic's data.
+// this MVP deliberately ignores owner/manager/receptionist/surgeon distinctions (see ClientUser's
+// doc comment) — every logged-in user linked to a client has full access to that client's data.
 // AddIdentityCore (not the full AddIdentity<TUser,TRole>) keeps roles out entirely; cookie auth is
 // wired up explicitly below rather than via AddIdentity's built-in scheme registration, for the
-// same reason. See Business/Contracts/Managers/ICurrentClinicContext.cs for how a logged-in user resolves to a clinic.
+// same reason. See Business/Contracts/Managers/ICurrentClientContext.cs for how a logged-in user resolves to a client.
 // ---------------------------------------------------------------------
 builder.Services.AddHttpContextAccessor();
 
@@ -132,7 +132,7 @@ var authentication = builder.Services.AddAuthentication(IdentityConstants.Applic
         options.AccessDeniedPath = "/Account/Login";
     })
     // Holds the Google identity for the few minutes between "Google said who this is" and "we signed them in
-    // (or collected their clinic name first)" — AddIdentityCore doesn't register this scheme itself.
+    // (or collected their client name first)" — AddIdentityCore doesn't register this scheme itself.
     .AddCookie(IdentityConstants.ExternalScheme, options => options.ExpireTimeSpan = TimeSpan.FromMinutes(10));
 
 // "Continue with Google" (sign in / sign up) — only registered when both values are configured, so a server
@@ -176,14 +176,14 @@ builder.Services.AddSignupRateLimiting();
 
 // ---------------------------------------------------------------------
 // Application services — shared by both the API controllers and the
-// Razor Pages dashboard, so business logic and clinic-scoping live in
+// Razor Pages dashboard, so business logic and client-scoping live in
 // exactly one place.
 // ---------------------------------------------------------------------
 builder.Services.AddScoped<IEventLogger, EventLogger>();
-builder.Services.AddScoped<IClinicContext, ClinicContext>();
-builder.Services.AddScoped<ICurrentClinicContext, CurrentClinicContext>();
-builder.Services.AddScoped<IClinicRegistrationService, ClinicRegistrationService>();
-builder.Services.AddScoped<IClinicProfileService, ClinicProfileService>();
+builder.Services.AddScoped<IClientContext, ClientContext>();
+builder.Services.AddScoped<ICurrentClientContext, CurrentClientContext>();
+builder.Services.AddScoped<IClientRegistrationService, ClientRegistrationService>();
+builder.Services.AddScoped<IClientProfileService, ClientProfileService>();
 builder.Services.AddScoped<IInboxSettingsService, InboxSettingsService>();
 builder.Services.AddScoped<IStaffService, StaffService>();
 builder.Services.AddScoped<IAutomationCleanupService, AutomationCleanupService>();
@@ -196,8 +196,8 @@ builder.Services.AddHostedService<ConfigRefreshJob>();
 builder.Services.AddSingleton<ICacheAdapter, MemoryCacheAdapter>();
 builder.Services.AddSingleton<ICacheManager, CacheManager>();
 builder.Services.AddScoped<ICacheAdminService, CacheAdminService>();
-// Platform admin: the cross-clinic APIs the admin portal calls (/api/platform-admin/{clinics,channels,staff,leads,content,overview}).
-builder.Services.AddScoped<IClinicAdminService, ClinicAdminService>();
+// Platform admin: the cross-client APIs the admin portal calls (/api/platform-admin/{clients,channels,staff,leads,content,overview}).
+builder.Services.AddScoped<IClientAdminService, ClientAdminService>();
 builder.Services.AddScoped<IChannelAdminService, ChannelAdminService>();
 builder.Services.AddScoped<IStaffAdminService, StaffAdminService>();
 builder.Services.AddScoped<ILeadAdminService, LeadAdminService>();
@@ -270,7 +270,7 @@ builder.Services.AddScoped<ICampaignService, CampaignService>();
 builder.Services.AddHostedService<CampaignSenderWorker>();
 builder.Services.AddScoped<IWhatsAppHealthService, WhatsAppHealthService>();
 
-// Clinic Knowledge Base — dashboard CRUD, chunking, embeddings (Embeddings:* config) and the semantic
+// Client Knowledge Base — dashboard CRUD, chunking, embeddings (Embeddings:* config) and the semantic
 // search behind POST /api/ai/knowledge/search. See Business/Contracts/Services/Knowledge/IKnowledgeService.cs.
 builder.Services.AddScoped<IKnowledgeSettingsService, KnowledgeSettingsService>();
 builder.Services.AddScoped<IKnowledgeChunkingService, KnowledgeChunkingService>();
@@ -379,9 +379,9 @@ builder.Services.AddSwaggerGen(options =>
     {
         Title = "Omni API",
         Version = "v1",
-        Description = "Lead intake, qualification, booking and dashboard API for clinics on the platform. " +
-                      "Dashboard endpoints require a logged-in session and resolve clinicId server-side " +
-                      "via CurrentClinicContext; the n8n-facing endpoints (ingest, AI tools, WhatsApp " +
+        Description = "Lead intake, qualification, booking and dashboard API for clients on the platform. " +
+                      "Dashboard endpoints require a logged-in session and resolve clientId server-side " +
+                      "via CurrentClientContext; the n8n-facing endpoints (ingest, AI tools, WhatsApp " +
                       "webhook) use a separate shared-secret header instead — see RequireIngestKeyAttribute."
     });
 });

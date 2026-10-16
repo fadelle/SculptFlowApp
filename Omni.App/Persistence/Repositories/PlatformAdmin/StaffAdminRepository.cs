@@ -19,14 +19,14 @@ public class StaffAdminRepository : IStaffAdminRepository
         _db = db;
     }
 
-    public async Task<PagedResponse<StaffRow>> ListAsync(Guid? clinicId, string? search, int page, CancellationToken ct = default)
+    public async Task<PagedResponse<StaffRow>> ListAsync(Guid? clientId, string? search, int page, CancellationToken ct = default)
     {
         var now = DateTimeOffset.UtcNow;
         var q = from u in _db.Users.AsNoTracking()
-                join m in _db.ClinicUsers.AsNoTracking() on u.Id equals m.UserId into ms
+                join m in _db.ClientUsers.AsNoTracking() on u.Id equals m.UserId into ms
                 from m in ms.DefaultIfEmpty()
                 select new { u, m };
-        if (clinicId.HasValue) q = q.Where(x => x.m != null && x.m.ClinicId == clinicId.Value);
+        if (clientId.HasValue) q = q.Where(x => x.m != null && x.m.ClientId == clientId.Value);
         if (!string.IsNullOrWhiteSpace(search))
         {
             var like = QueryPaging.Like(search);
@@ -40,8 +40,8 @@ public class StaffAdminRepository : IStaffAdminRepository
                 x.u.Id, x.u.Email,
                 _db.UserClaims.Where(c => c.UserId == x.u.Id && c.ClaimType == StaffClaims.FullName).Select(c => c.ClaimValue).FirstOrDefault(),
                 x.m != null ? x.m.Id : null,
-                x.m != null ? x.m.ClinicId : null,
-                x.m != null ? _db.Clinics.Where(c => c.Id == x.m.ClinicId).Select(c => c.Name).FirstOrDefault() : null,
+                x.m != null ? x.m.ClientId : null,
+                x.m != null ? _db.Clients.Where(c => c.Id == x.m.ClientId).Select(c => c.Name).FirstOrDefault() : null,
                 x.m != null && x.m.IsActive,
                 x.u.LockoutEnd != null && x.u.LockoutEnd > now,
                 x.u.EmailConfirmed,
@@ -57,23 +57,23 @@ public class StaffAdminRepository : IStaffAdminRepository
         var now = DateTimeOffset.UtcNow;
         var u = await _db.Users.AsNoTracking().FirstOrDefaultAsync(x => x.Id == userId, ct);
         if (u is null) return null;
-        var m = await _db.ClinicUsers.AsNoTracking().Include(x => x.Clinic)
+        var m = await _db.ClientUsers.AsNoTracking().Include(x => x.Client)
             .OrderByDescending(x => x.IsActive).FirstOrDefaultAsync(x => x.UserId == userId, ct);
         var name = await _db.UserClaims.Where(c => c.UserId == userId && c.ClaimType == StaffClaims.FullName)
             .Select(c => c.ClaimValue).FirstOrDefaultAsync(ct);
         var google = await _db.UserLogins.AnyAsync(l => l.UserId == userId, ct);
-        return new StaffRow(u.Id, u.Email, name, m?.Id, m?.ClinicId, m?.Clinic?.Name, m?.IsActive == true,
+        return new StaffRow(u.Id, u.Email, name, m?.Id, m?.ClientId, m?.Client?.Name, m?.IsActive == true,
             u.LockoutEnd > now, u.EmailConfirmed, u.AccessFailedCount, u.PasswordHash != null, google, m?.CreatedAt);
     }
 
-    public Task<Guid?> ClinicOfAsync(string userId, CancellationToken ct = default) =>
-        _db.ClinicUsers.Where(x => x.UserId == userId).OrderByDescending(x => x.IsActive)
-            .Select(x => (Guid?)x.ClinicId).FirstOrDefaultAsync(ct);
+    public Task<Guid?> ClientOfAsync(string userId, CancellationToken ct = default) =>
+        _db.ClientUsers.Where(x => x.UserId == userId).OrderByDescending(x => x.IsActive)
+            .Select(x => (Guid?)x.ClientId).FirstOrDefaultAsync(ct);
 
     /// <summary>Tracked: the user's most recently updated membership.</summary>
-    public Task<ClinicUser?> GetLatestMembershipAsync(string userId, CancellationToken ct = default) =>
-        _db.ClinicUsers.Where(x => x.UserId == userId).OrderByDescending(x => x.UpdatedAt).FirstOrDefaultAsync(ct);
+    public Task<ClientUser?> GetLatestMembershipAsync(string userId, CancellationToken ct = default) =>
+        _db.ClientUsers.Where(x => x.UserId == userId).OrderByDescending(x => x.UpdatedAt).FirstOrDefaultAsync(ct);
 
     public Task<bool> HasOtherActiveMembershipAsync(string userId, Guid exceptMembershipId, CancellationToken ct = default) =>
-        _db.ClinicUsers.AnyAsync(x => x.UserId == userId && x.IsActive && x.Id != exceptMembershipId, ct);
+        _db.ClientUsers.AnyAsync(x => x.UserId == userId && x.IsActive && x.Id != exceptMembershipId, ct);
 }

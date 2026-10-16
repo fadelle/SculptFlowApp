@@ -47,11 +47,11 @@ public class MessageBillingService : IMessageBillingService
         if (decision is null) return null; // nothing worth recording (e.g. a WhatsApp reply inside the service window)
 
         // Who pays the provider, and does Omni charge, is the connected account's arrangement — not the channel's.
-        var arrangement = await _providerBilling.ResolveAsync(message.ClinicId, message.Channel, decision.Provider, ct);
+        var arrangement = await _providerBilling.ResolveAsync(message.ClientId, message.Channel, decision.Provider, ct);
         var key = MessageBillingKeys.For(message.Channel, message.MessageId);
         var billableEvent = new BillableEvent
         {
-            ClinicId = message.ClinicId,
+            ClientId = message.ClientId,
             IdempotencyKey = key,
             EventType = decision.EventType,
             Channel = message.Channel,
@@ -68,7 +68,7 @@ public class MessageBillingService : IMessageBillingService
             CampaignId = message.CampaignId,
             Source = BillingSource.Channel
         };
-        var hold = new MessageBillingHold(message.ClinicId, key, decision.SettleWhen);
+        var hold = new MessageBillingHold(message.ClientId, key, decision.SettleWhen);
 
         if (!arrangement.ChargesUsage)
         {
@@ -79,8 +79,8 @@ public class MessageBillingService : IMessageBillingService
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                _logger.LogError(ex, "Billing: couldn't record uncharged usage {IdempotencyKey} for clinic {ClinicId}; the message is sent anyway.",
-                    key, message.ClinicId);
+                _logger.LogError(ex, "Billing: couldn't record uncharged usage {IdempotencyKey} for client {ClientId}; the message is sent anyway.",
+                    key, message.ClientId);
             }
             return hold;
         }
@@ -98,14 +98,14 @@ public class MessageBillingService : IMessageBillingService
         if (hold is null) return;
         try
         {
-            await _billing.ReleaseAsync(hold.ClinicId, hold.IdempotencyKey, "send_failed", ct);
+            await _billing.ReleaseAsync(hold.ClientId, hold.IdempotencyKey, "send_failed", ct);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             // The send already failed and that error is what the caller reports. The hold isn't lost: the worker
             // resolves reservations past the timeout (and releases this one, since no message row exists).
-            _logger.LogError(ex, "Billing: couldn't release usage {IdempotencyKey} for clinic {ClinicId} after a failed send; the maintenance worker will resolve it.",
-                hold.IdempotencyKey, hold.ClinicId);
+            _logger.LogError(ex, "Billing: couldn't release usage {IdempotencyKey} for client {ClientId} after a failed send; the maintenance worker will resolve it.",
+                hold.IdempotencyKey, hold.ClientId);
         }
     }
 
@@ -114,12 +114,12 @@ public class MessageBillingService : IMessageBillingService
         if (hold is null || hold.SettleWhen != BillingSettlementTrigger.OnProviderAccepted) return;
         try
         {
-            await _billing.SettleAsync(hold.ClinicId, hold.IdempotencyKey, null, ct);
+            await _billing.SettleAsync(hold.ClientId, hold.IdempotencyKey, null, ct);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogError(ex, "Billing: couldn't settle usage {IdempotencyKey} for clinic {ClinicId} after the send; the maintenance worker will resolve it.",
-                hold.IdempotencyKey, hold.ClinicId);
+            _logger.LogError(ex, "Billing: couldn't settle usage {IdempotencyKey} for client {ClientId} after the send; the maintenance worker will resolve it.",
+                hold.IdempotencyKey, hold.ClientId);
         }
     }
 
@@ -136,8 +136,8 @@ public class MessageBillingService : IMessageBillingService
         try
         {
             var result = action == DeliveryBillingAction.Settle
-                ? await _billing.SettleAsync(message.ClinicId, key, null, ct)
-                : await _billing.ReleaseAsync(message.ClinicId, key, "delivery_" + status.Trim().ToLowerInvariant(), ct);
+                ? await _billing.SettleAsync(message.ClientId, key, null, ct)
+                : await _billing.ReleaseAsync(message.ClientId, key, "delivery_" + status.Trim().ToLowerInvariant(), ct);
             if (result.Outcome == UsageOutcome.NotFound)
             {
                 _logger.LogDebug("Billing: no reservation for message {MessageId} (not billable when sent).", message.Id);
@@ -147,8 +147,8 @@ public class MessageBillingService : IMessageBillingService
         {
             // Status callbacks are acknowledged to the provider regardless, so throwing wouldn't get a retry. The
             // reservation stays open and the maintenance worker settles/releases it from the message's state.
-            _logger.LogError(ex, "Billing: couldn't apply status {Status} to usage {IdempotencyKey} for clinic {ClinicId}; the maintenance worker will resolve it.",
-                status, key, message.ClinicId);
+            _logger.LogError(ex, "Billing: couldn't apply status {Status} to usage {IdempotencyKey} for client {ClientId}; the maintenance worker will resolve it.",
+                status, key, message.ClientId);
         }
     }
 
@@ -171,25 +171,25 @@ public class MessageBillingService : IMessageBillingService
         foreach (var usage in stale)
         {
             Message? message = null;
-            if (usage.MessageId is Guid id && messages.TryGetValue(id, out var m) && m.ClinicId == usage.ClinicId) message = m;
+            if (usage.MessageId is Guid id && messages.TryGetValue(id, out var m) && m.ClientId == usage.ClientId) message = m;
 
             var action = PolicyFor(usage.Channel)?.ResolveStale(message) ?? DeliveryBillingAction.Release;
             try
             {
                 var result = action == DeliveryBillingAction.Settle
-                    ? await _billing.SettleAsync(usage.ClinicId, usage.IdempotencyKey, null, ct)
-                    : await _billing.ReleaseAsync(usage.ClinicId, usage.IdempotencyKey, "reservation_timeout", ct);
+                    ? await _billing.SettleAsync(usage.ClientId, usage.IdempotencyKey, null, ct)
+                    : await _billing.ReleaseAsync(usage.ClientId, usage.IdempotencyKey, "reservation_timeout", ct);
                 if (!result.Duplicate && result.Outcome is UsageOutcome.Settled or UsageOutcome.Released or UsageOutcome.Recorded) resolved++;
                 if (usage.ChargeStatus == ChargeStatus.Reserved)
                 {
-                    _logger.LogWarning("Billing: usage {IdempotencyKey} for clinic {ClinicId} had no outcome after {Hours}h; {Action}.",
-                        usage.IdempotencyKey, usage.ClinicId, _config.BillingReservationTimeoutHours, action == DeliveryBillingAction.Settle ? "settled (message was delivered)" : "released");
+                    _logger.LogWarning("Billing: usage {IdempotencyKey} for client {ClientId} had no outcome after {Hours}h; {Action}.",
+                        usage.IdempotencyKey, usage.ClientId, _config.BillingReservationTimeoutHours, action == DeliveryBillingAction.Settle ? "settled (message was delivered)" : "released");
                 }
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                _logger.LogError(ex, "Billing: couldn't resolve stale usage {IdempotencyKey} for clinic {ClinicId}; retrying next run.",
-                    usage.IdempotencyKey, usage.ClinicId);
+                _logger.LogError(ex, "Billing: couldn't resolve stale usage {IdempotencyKey} for client {ClientId}; retrying next run.",
+                    usage.IdempotencyKey, usage.ClientId);
             }
         }
         return resolved;

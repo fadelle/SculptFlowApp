@@ -5,12 +5,12 @@ namespace Omni.App.Entities.Models;
 /// deliberately NOT mapped on this entity: chunk rows are written and searched with raw SQL
 /// (see KnowledgeService / KnowledgeSearchService), which keeps the project free of an EF-vector
 /// package dependency. Never insert these through DbContext.Add — the embedding column is NOT NULL.
-/// ClinicId is denormalized from the parent document so every search filters by clinic directly.
+/// ClientId is denormalized from the parent document so every search filters by client directly.
 /// </summary>
 public class KnowledgeChunk
 {
     public Guid Id { get; set; }
-    public Guid ClinicId { get; set; }
+    public Guid ClientId { get; set; }
     public Guid KnowledgeDocumentId { get; set; }
     public int ChunkIndex { get; set; }
     public string Content { get; set; } = string.Empty;

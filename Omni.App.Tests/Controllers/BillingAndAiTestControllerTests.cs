@@ -18,7 +18,7 @@ public class BillingAdminControllerTests
     private readonly Mock<IBillingService> _billing = new();
     private readonly Mock<IBillingQueryService> _queries = new();
     private readonly Mock<IProviderBillingService> _providerBilling = new();
-    private static readonly Guid Clinic = Guid.NewGuid();
+    private static readonly Guid Client = Guid.NewGuid();
 
     private BillingAdminController Sut(string? idempotencyKey = null, string? actor = null) =>
         new BillingAdminController(_plans.Object, _rateCards.Object, _subscriptions.Object, _billing.Object, _queries.Object, _providerBilling.Object)
@@ -98,25 +98,25 @@ public class BillingAdminControllerTests
     }
 
     [Fact]
-    public async Task Accounts_clinic_overview_and_missing_clinic()
+    public async Task Accounts_client_overview_and_missing_client()
     {
         _queries.Setup(q => q.ListAccountsAsync(It.IsAny<CancellationToken>())).ReturnsAsync(new List<BillingAccountRow>());
-        _queries.Setup(q => q.GetAdminOverviewAsync(Clinic, It.IsAny<CancellationToken>())).ReturnsAsync((AdminBillingOverview?)null);
+        _queries.Setup(q => q.GetAdminOverviewAsync(Client, It.IsAny<CancellationToken>())).ReturnsAsync((AdminBillingOverview?)null);
         var sut = Sut();
         Assert.IsType<OkObjectResult>(await sut.ListAccounts(default));
-        Assert.IsType<NotFoundResult>(await sut.GetClinic(Clinic, default));
+        Assert.IsType<NotFoundResult>(await sut.GetClient(Client, default));
 
-        _queries.Setup(q => q.GetAdminOverviewAsync(Clinic, It.IsAny<CancellationToken>())).ReturnsAsync(Blank<AdminBillingOverview>());
-        Assert.IsType<OkObjectResult>(await sut.GetClinic(Clinic, default));
+        _queries.Setup(q => q.GetAdminOverviewAsync(Client, It.IsAny<CancellationToken>())).ReturnsAsync(Blank<AdminBillingOverview>());
+        Assert.IsType<OkObjectResult>(await sut.GetClient(Client, default));
     }
 
     [Fact]
     public async Task Money_operations_require_an_idempotency_key()
     {
         var sut = Sut();
-        Assert.IsType<BadRequestObjectResult>(await sut.StartSubscription(Clinic, new StartSubscriptionApiRequest("gold"), default));
-        Assert.IsType<BadRequestObjectResult>(await sut.TopUp(Clinic, new TopUpRequest(10, null, null), default));
-        Assert.IsType<BadRequestObjectResult>(await sut.Adjust(Clinic, new AdjustmentRequest(5, "wallet", "why"), default));
+        Assert.IsType<BadRequestObjectResult>(await sut.StartSubscription(Client, new StartSubscriptionApiRequest("gold"), default));
+        Assert.IsType<BadRequestObjectResult>(await sut.TopUp(Client, new TopUpRequest(10, null, null), default));
+        Assert.IsType<BadRequestObjectResult>(await sut.Adjust(Client, new AdjustmentRequest(5, "wallet", "why"), default));
         _subscriptions.VerifyNoOtherCalls();
         _billing.VerifyNoOtherCalls();
     }
@@ -124,7 +124,7 @@ public class BillingAdminControllerTests
     [Fact]
     public async Task A_blank_idempotency_key_is_treated_as_missing()
     {
-        Assert.IsType<BadRequestObjectResult>(await Sut("").TopUp(Clinic, new TopUpRequest(10, null, null), default));
+        Assert.IsType<BadRequestObjectResult>(await Sut("").TopUp(Client, new TopUpRequest(10, null, null), default));
     }
 
     [Fact]
@@ -134,9 +134,9 @@ public class BillingAdminControllerTests
         _billing.Setup(b => b.TopUpAsync(It.IsAny<WalletTopUp>(), It.IsAny<CancellationToken>()))
             .Callback<WalletTopUp, CancellationToken>((r, _) => seen = r)
             .ReturnsAsync(new LedgerResult(Guid.NewGuid(), 110, false));
-        var result = await Sut("  key-1  ", "alice").TopUp(Clinic, new TopUpRequest(10, "ref", "reason"), default);
+        var result = await Sut("  key-1  ", "alice").TopUp(Client, new TopUpRequest(10, "ref", "reason"), default);
         Assert.IsType<OkObjectResult>(result);
-        Assert.Equal(new WalletTopUp(Clinic, 10, "key-1", "ref", "reason", BillingSource.Admin, "alice"), seen);
+        Assert.Equal(new WalletTopUp(Client, 10, "key-1", "ref", "reason", BillingSource.Admin, "alice"), seen);
     }
 
     [Fact]
@@ -146,7 +146,7 @@ public class BillingAdminControllerTests
         _billing.Setup(b => b.AdjustAsync(It.IsAny<WalletAdjustment>(), It.IsAny<CancellationToken>()))
             .Callback<WalletAdjustment, CancellationToken>((r, _) => seen = r)
             .ReturnsAsync(new LedgerResult(Guid.NewGuid(), 5, false));
-        await Sut("k").Adjust(Clinic, new AdjustmentRequest(-5, "  WALLET ", "fix"), default);
+        await Sut("k").Adjust(Client, new AdjustmentRequest(-5, "  WALLET ", "fix"), default);
         Assert.Equal("wallet", seen!.BalanceType);
         Assert.Equal(-5, seen.Amount);
         Assert.Equal(BillingSource.Admin, seen.Source);
@@ -158,39 +158,39 @@ public class BillingAdminControllerTests
         StartSubscriptionRequest? seen = null;
         _subscriptions.Setup(s => s.StartAsync(It.IsAny<StartSubscriptionRequest>(), It.IsAny<CancellationToken>()))
             .Callback<StartSubscriptionRequest, CancellationToken>((r, _) => seen = r)
-            .ReturnsAsync(new ClinicSubscription { ClinicId = Clinic });
-        var result = await Sut("k1", "bob").StartSubscription(Clinic, new StartSubscriptionApiRequest("gold", false, "promo"), default);
+            .ReturnsAsync(new ClientSubscription { ClientId = Client });
+        var result = await Sut("k1", "bob").StartSubscription(Client, new StartSubscriptionApiRequest("gold", false, "promo"), default);
         Assert.IsType<OkObjectResult>(result);
-        Assert.Equal(new StartSubscriptionRequest(Clinic, "gold", "k1", false, BillingSource.Admin, "bob", "promo"), seen);
+        Assert.Equal(new StartSubscriptionRequest(Client, "gold", "k1", false, BillingSource.Admin, "bob", "promo"), seen);
     }
 
     [Fact]
     public async Task Cancel_and_resume_return_404_without_a_subscription()
     {
-        _subscriptions.Setup(s => s.CancelAsync(Clinic, true, BillingSource.Admin, It.IsAny<string?>(), "r", It.IsAny<CancellationToken>())).ReturnsAsync((ClinicSubscription?)null);
-        _subscriptions.Setup(s => s.ResumeAsync(Clinic, BillingSource.Admin, It.IsAny<string?>(), It.IsAny<CancellationToken>())).ReturnsAsync((ClinicSubscription?)null);
+        _subscriptions.Setup(s => s.CancelAsync(Client, true, BillingSource.Admin, It.IsAny<string?>(), "r", It.IsAny<CancellationToken>())).ReturnsAsync((ClientSubscription?)null);
+        _subscriptions.Setup(s => s.ResumeAsync(Client, BillingSource.Admin, It.IsAny<string?>(), It.IsAny<CancellationToken>())).ReturnsAsync((ClientSubscription?)null);
         var sut = Sut();
-        Assert.IsType<NotFoundResult>(await sut.CancelSubscription(Clinic, new CancelSubscriptionRequest(true, "r"), default));
-        Assert.IsType<NotFoundResult>(await sut.ResumeSubscription(Clinic, default));
+        Assert.IsType<NotFoundResult>(await sut.CancelSubscription(Client, new CancelSubscriptionRequest(true, "r"), default));
+        Assert.IsType<NotFoundResult>(await sut.ResumeSubscription(Client, default));
     }
 
     [Fact]
     public async Task Cancel_and_resume_return_the_subscription()
     {
-        var sub = new ClinicSubscription { ClinicId = Clinic };
-        _subscriptions.Setup(s => s.CancelAsync(Clinic, false, BillingSource.Admin, It.IsAny<string?>(), null, It.IsAny<CancellationToken>())).ReturnsAsync(sub);
-        _subscriptions.Setup(s => s.ResumeAsync(Clinic, BillingSource.Admin, It.IsAny<string?>(), It.IsAny<CancellationToken>())).ReturnsAsync(sub);
+        var sub = new ClientSubscription { ClientId = Client };
+        _subscriptions.Setup(s => s.CancelAsync(Client, false, BillingSource.Admin, It.IsAny<string?>(), null, It.IsAny<CancellationToken>())).ReturnsAsync(sub);
+        _subscriptions.Setup(s => s.ResumeAsync(Client, BillingSource.Admin, It.IsAny<string?>(), It.IsAny<CancellationToken>())).ReturnsAsync(sub);
         var sut = Sut();
-        Assert.IsType<OkObjectResult>(await sut.CancelSubscription(Clinic, new CancelSubscriptionRequest(), default));
-        Assert.IsType<OkObjectResult>(await sut.ResumeSubscription(Clinic, default));
+        Assert.IsType<OkObjectResult>(await sut.CancelSubscription(Client, new CancelSubscriptionRequest(), default));
+        Assert.IsType<OkObjectResult>(await sut.ResumeSubscription(Client, default));
     }
 
     [Fact]
     public async Task Renew_reports_the_outcome_name()
     {
         var outcome = Enum.GetValues<RenewalOutcome>().First();
-        _subscriptions.Setup(s => s.RenewIfDueAsync(Clinic, It.IsAny<CancellationToken>())).ReturnsAsync(outcome);
-        var ok = Assert.IsType<OkObjectResult>(await Sut().Renew(Clinic, default));
+        _subscriptions.Setup(s => s.RenewIfDueAsync(Client, It.IsAny<CancellationToken>())).ReturnsAsync(outcome);
+        var ok = Assert.IsType<OkObjectResult>(await Sut().Renew(Client, default));
         Assert.Contains(outcome.ToString(), ok.Value!.ToString());
     }
 
@@ -199,15 +199,15 @@ public class BillingAdminControllerTests
     {
         UsageResult Result(UsageOutcome o) => new(o, Guid.NewGuid(), 1, null, false);
         var usage = Guid.NewGuid();
-        _billing.SetupSequence(b => b.RefundAsync(Clinic, usage, "r", BillingSource.Admin, It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+        _billing.SetupSequence(b => b.RefundAsync(Client, usage, "r", BillingSource.Admin, It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result(UsageOutcome.NotFound))
             .ReturnsAsync(Result(UsageOutcome.Conflict))
             .ReturnsAsync(Result(UsageOutcome.Settled));
         var sut = Sut();
         var request = new RefundRequest("r");
-        Assert.IsType<NotFoundResult>(await sut.Refund(Clinic, usage, request, default));
-        Assert.IsType<UnprocessableEntityObjectResult>(await sut.Refund(Clinic, usage, request, default));
-        Assert.IsType<OkObjectResult>(await sut.Refund(Clinic, usage, request, default));
+        Assert.IsType<NotFoundResult>(await sut.Refund(Client, usage, request, default));
+        Assert.IsType<UnprocessableEntityObjectResult>(await sut.Refund(Client, usage, request, default));
+        Assert.IsType<OkObjectResult>(await sut.Refund(Client, usage, request, default));
     }
 
     [Fact]
@@ -215,23 +215,23 @@ public class BillingAdminControllerTests
     {
         var from = DateTimeOffset.UtcNow.AddDays(-1);
         var to = DateTimeOffset.UtcNow;
-        _queries.Setup(q => q.ListAdminUsageAsync(Clinic, "settled", "sms", from, to, 2, 10, It.IsAny<CancellationToken>()))
+        _queries.Setup(q => q.ListAdminUsageAsync(Client, "settled", "sms", from, to, 2, 10, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Blank<PagedResponse<AdminUsageRow>>()).Verifiable();
-        _queries.Setup(q => q.ListAdminLedgerAsync(Clinic, 3, 20, It.IsAny<CancellationToken>()))
+        _queries.Setup(q => q.ListAdminLedgerAsync(Client, 3, 20, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Blank<PagedResponse<AdminLedgerRow>>()).Verifiable();
-        _queries.Setup(q => q.ReconcileAsync(Clinic, It.IsAny<CancellationToken>())).ReturnsAsync(Blank<ReconciliationResponse>()).Verifiable();
+        _queries.Setup(q => q.ReconcileAsync(Client, It.IsAny<CancellationToken>())).ReturnsAsync(Blank<ReconciliationResponse>()).Verifiable();
         var sut = Sut();
-        await sut.Usage(Clinic, "settled", "sms", from, to, 2, 10, default);
-        await sut.Ledger(Clinic, 3, 20, default);
-        await sut.Reconcile(Clinic, default);
+        await sut.Usage(Client, "settled", "sms", from, to, 2, 10, default);
+        await sut.Ledger(Client, 3, 20, default);
+        await sut.Reconcile(Client, default);
         _queries.Verify();
     }
 
     [Fact]
     public async Task Quote_is_404_when_no_rate_card_prices_the_event()
     {
-        _queries.Setup(q => q.QuoteAsync(Clinic, "sms", null, null, null, null, null, It.IsAny<CancellationToken>())).ReturnsAsync((QuoteResponse?)null);
-        var result = await Sut().Quote(Clinic, "sms", null, null, null, null, null, default);
+        _queries.Setup(q => q.QuoteAsync(Client, "sms", null, null, null, null, null, It.IsAny<CancellationToken>())).ReturnsAsync((QuoteResponse?)null);
+        var result = await Sut().Quote(Client, "sms", null, null, null, null, null, default);
         var nf = Assert.IsType<NotFoundObjectResult>(result);
         Assert.Contains("No rate card", nf.Value!.ToString());
     }
@@ -239,8 +239,8 @@ public class BillingAdminControllerTests
     [Fact]
     public async Task Quote_returns_the_quote()
     {
-        _queries.Setup(q => q.QuoteAsync(Clinic, "sms", "TR", "op", "meta", null, "platform_funded", It.IsAny<CancellationToken>())).ReturnsAsync(Blank<QuoteResponse>());
-        Assert.IsType<OkObjectResult>(await Sut().Quote(Clinic, "sms", "TR", "op", "meta", null, "platform_funded", default));
+        _queries.Setup(q => q.QuoteAsync(Client, "sms", "TR", "op", "meta", null, "platform_funded", It.IsAny<CancellationToken>())).ReturnsAsync(Blank<QuoteResponse>());
+        Assert.IsType<OkObjectResult>(await Sut().Quote(Client, "sms", "TR", "op", "meta", null, "platform_funded", default));
     }
 
     [Fact]
@@ -259,12 +259,12 @@ public class BillingAdminControllerTests
     public async Task Channel_account_billing_overrides_404_when_the_account_is_missing()
     {
         var id = Guid.NewGuid();
-        _providerBilling.Setup(p => p.ListAccountsAsync(Clinic, It.IsAny<CancellationToken>())).ReturnsAsync(new List<ChannelAccountBilling>());
+        _providerBilling.Setup(p => p.ListAccountsAsync(Client, It.IsAny<CancellationToken>())).ReturnsAsync(new List<ChannelAccountBilling>());
         _providerBilling.Setup(p => p.SetAsync(id, It.IsAny<ChannelAccountBillingChange>(), It.IsAny<CancellationToken>())).ReturnsAsync((ChannelAccountBilling?)null);
         _providerBilling.Setup(p => p.ResetAsync(id, "r", It.IsAny<string?>(), It.IsAny<CancellationToken>())).ReturnsAsync((ChannelAccountBilling?)null);
         var sut = Sut();
-        Assert.IsType<OkObjectResult>(await sut.ChannelAccounts(Clinic, default));
-        Assert.IsType<NotFoundResult>(await sut.SetProviderBilling(id, new ProviderBillingRequest("clinic_paid", null, "r"), default));
+        Assert.IsType<OkObjectResult>(await sut.ChannelAccounts(Client, default));
+        Assert.IsType<NotFoundResult>(await sut.SetProviderBilling(id, new ProviderBillingRequest("client_paid", null, "r"), default));
         Assert.IsType<NotFoundResult>(await sut.ResetProviderBilling(id, new ResetProviderBillingRequest("r"), default));
     }
 
@@ -278,9 +278,9 @@ public class BillingAdminControllerTests
             .ReturnsAsync(Blank<ChannelAccountBilling>());
         _providerBilling.Setup(p => p.ResetAsync(id, "r", "alice", It.IsAny<CancellationToken>())).ReturnsAsync(Blank<ChannelAccountBilling>());
         var sut = Sut(actor: "alice");
-        Assert.IsType<OkObjectResult>(await sut.SetProviderBilling(id, new ProviderBillingRequest("clinic_paid", true, "r"), default));
+        Assert.IsType<OkObjectResult>(await sut.SetProviderBilling(id, new ProviderBillingRequest("client_paid", true, "r"), default));
         Assert.IsType<OkObjectResult>(await sut.ResetProviderBilling(id, new ResetProviderBillingRequest("r"), default));
-        Assert.Equal(new ChannelAccountBillingChange("clinic_paid", true, "r", "alice"), seen);
+        Assert.Equal(new ChannelAccountBillingChange("client_paid", true, "r", "alice"), seen);
     }
 
     [Fact]

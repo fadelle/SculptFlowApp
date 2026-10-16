@@ -3,7 +3,7 @@ using Omni.App.Common.Converters;
 namespace Omni.App.Entities.Requests.Ai;
 
 /// <summary>Body for POST /api/ai/appointments/schedule — the ONE mutation the AI uses for booking and moving a consultation.
-/// clinicId and leadId are query parameters set by the workflow, never by the AI. The backend decides create vs. reschedule from the
+/// clientId and leadId are query parameters set by the workflow, never by the AI. The backend decides create vs. reschedule from the
 /// real appointment state; the AI only supplies the target time and whether the patient clearly agreed to replace an existing appointment.</summary>
 public record ScheduleConsultationRequest(
     /// <summary>The exact "start" of the chosen slot from get_available_slots.</summary>

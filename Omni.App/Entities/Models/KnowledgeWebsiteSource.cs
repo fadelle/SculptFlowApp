@@ -3,18 +3,18 @@ using Omni.App.Common.Enums;
 namespace Omni.App.Entities.Models;
 
 /// <summary>
-/// One website configured as a Knowledge Base source for a clinic. Owned by the standalone website-scraping
+/// One website configured as a Knowledge Base source for a client. Owned by the standalone website-scraping
 /// subsystem (Integrations/Knowledge/WebScraping); the pages it discovers become ordinary
 /// knowledge_documents (source_type = "website") via <see cref="KnowledgeWebsitePage.KnowledgeDocumentId"/>.
 /// </summary>
 public class KnowledgeWebsiteSource
 {
     public Guid Id { get; set; }
-    public Guid ClinicId { get; set; }
+    public Guid ClientId { get; set; }
 
     /// <summary>What staff typed.</summary>
     public string StartUrl { get; set; } = string.Empty;
-    /// <summary>Identity of the source (unique per clinic) — see UrlNormalizer.</summary>
+    /// <summary>Identity of the source (unique per client) — see UrlNormalizer.</summary>
     public string NormalizedStartUrl { get; set; } = string.Empty;
     public string Host { get; set; } = string.Empty;
 

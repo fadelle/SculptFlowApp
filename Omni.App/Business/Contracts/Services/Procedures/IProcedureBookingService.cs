@@ -7,8 +7,8 @@ public interface IProcedureBookingService
 {
     Task<ProcedureBookingResponse> CreateAsync(CreateProcedureBookingRequest request, CancellationToken ct = default);
 
-    Task<ProcedureBookingResponse?> UpdateAsync(Guid clinicId, Guid id, UpdateProcedureBookingRequest request, CancellationToken ct = default);
+    Task<ProcedureBookingResponse?> UpdateAsync(Guid clientId, Guid id, UpdateProcedureBookingRequest request, CancellationToken ct = default);
 
     Task<(IReadOnlyList<ProcedureBookingResponse> Items, int TotalCount)> ListAsync(
-        Guid clinicId, string? status, int skip, int take, CancellationToken ct = default);
+        Guid clientId, string? status, int skip, int take, CancellationToken ct = default);
 }

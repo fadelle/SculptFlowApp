@@ -35,24 +35,24 @@ public class WhatsAppTemplateService : IWhatsAppTemplateService
         _events = events;
     }
 
-    /// <summary>The clinic's WhatsApp row, but only when it's connected and has what template management needs.</summary>
-    private async Task<ChannelIntegration?> ReadyIntegrationAsync(Guid clinicId, CancellationToken ct)
+    /// <summary>The client's WhatsApp row, but only when it's connected and has what template management needs.</summary>
+    private async Task<ChannelIntegration?> ReadyIntegrationAsync(Guid clientId, CancellationToken ct)
     {
-        var integration = await _integrations.GetAsync(clinicId, ChannelType.WhatsApp, ct);
+        var integration = await _integrations.GetAsync(clientId, ChannelType.WhatsApp, ct);
         return integration is not null && integration.Status == ChannelIntegrationStatus.Connected && _provider.IsReady(integration)
             ? integration
             : null;
     }
 
-    public async Task<IReadOnlyList<WhatsAppTemplateResponse>> ListAsync(Guid clinicId, CancellationToken ct = default)
+    public async Task<IReadOnlyList<WhatsAppTemplateResponse>> ListAsync(Guid clientId, CancellationToken ct = default)
     {
-        var templates = await _templates.ListForClinicReadOnlyAsync(clinicId, ct);
+        var templates = await _templates.ListForClientReadOnlyAsync(clientId, ct);
         return templates.Select(ToResponse).ToList();
     }
 
-    public async Task<WhatsAppTemplateResponse?> GetByIdAsync(Guid clinicId, Guid id, CancellationToken ct = default)
+    public async Task<WhatsAppTemplateResponse?> GetByIdAsync(Guid clientId, Guid id, CancellationToken ct = default)
     {
-        var template = await _templates.GetReadOnlyAsync(clinicId, id, ct);
+        var template = await _templates.GetReadOnlyAsync(clientId, id, ct);
         return template is null ? null : ToResponse(template);
     }
 
@@ -76,7 +76,7 @@ public class WhatsAppTemplateService : IWhatsAppTemplateService
         var template = new WhatsAppTemplate
         {
             Id = Guid.NewGuid(),
-            ClinicId = request.ClinicId,
+            ClientId = request.ClientId,
             Name = request.Name,
             Category = request.Category,
             Language = string.IsNullOrWhiteSpace(request.Language) ? "en_US" : request.Language,
@@ -98,9 +98,9 @@ public class WhatsAppTemplateService : IWhatsAppTemplateService
         return ToResponse(template);
     }
 
-    public async Task<WhatsAppTemplateResponse?> RetrySubmitAsync(Guid clinicId, Guid id, CancellationToken ct = default)
+    public async Task<WhatsAppTemplateResponse?> RetrySubmitAsync(Guid clientId, Guid id, CancellationToken ct = default)
     {
-        var template = await _templates.GetAsync(clinicId, id, ct);
+        var template = await _templates.GetAsync(clientId, id, ct);
         if (template is null) return null;
         if (!string.IsNullOrEmpty(template.MetaTemplateId))
         {
@@ -116,11 +116,11 @@ public class WhatsAppTemplateService : IWhatsAppTemplateService
     }
 
     /// <summary>Sends a template that has no MetaTemplateId yet to Meta for review. Returns false (and leaves it a
-    /// draft) when the clinic has no connected WhatsApp number. A Meta refusal is kept on the row as Rejected + RejectionReason so the user doesn't lose their work and
+    /// draft) when the client has no connected WhatsApp number. A Meta refusal is kept on the row as Rejected + RejectionReason so the user doesn't lose their work and
     /// can retry.</summary>
     private async Task<bool> SubmitForReviewAsync(WhatsAppTemplate template, CancellationToken ct)
     {
-        var integration = await ReadyIntegrationAsync(template.ClinicId, ct);
+        var integration = await ReadyIntegrationAsync(template.ClientId, ct);
         if (integration is null)
         {
             return false;
@@ -146,9 +146,9 @@ public class WhatsAppTemplateService : IWhatsAppTemplateService
         return true;
     }
 
-    public async Task<WhatsAppTemplateResponse?> SyncStatusAsync(Guid clinicId, Guid id, CancellationToken ct = default)
+    public async Task<WhatsAppTemplateResponse?> SyncStatusAsync(Guid clientId, Guid id, CancellationToken ct = default)
     {
-        var template = await _templates.GetAsync(clinicId, id, ct);
+        var template = await _templates.GetAsync(clientId, id, ct);
         if (template is null) return null;
         if (string.IsNullOrEmpty(template.MetaTemplateId))
         {
@@ -156,8 +156,8 @@ public class WhatsAppTemplateService : IWhatsAppTemplateService
             return ToResponse(template);
         }
 
-        var integration = await ReadyIntegrationAsync(clinicId, ct)
-            ?? throw new InvalidOperationException("This clinic doesn't have a connected WhatsApp number to sync against.");
+        var integration = await ReadyIntegrationAsync(clientId, ct)
+            ?? throw new InvalidOperationException("This client doesn't have a connected WhatsApp number to sync against.");
 
         var result = await _provider.GetStatusAsync(integration, template, ct);
         template.Status = MapMetaStatus(result.Status);
@@ -176,26 +176,26 @@ public class WhatsAppTemplateService : IWhatsAppTemplateService
             throw new ArgumentException("Name is required (used as the upsert fallback key when MetaTemplateId is absent).", nameof(request));
         }
 
-        // Don't trust ClinicId blindly — if the event carries a WabaId, it must match this
-        // clinic's own stored WhatsApp connection, or a misrouted/misconfigured n8n workflow could
-        // write another clinic's template data under this clinic's id.
+        // Don't trust ClientId blindly — if the event carries a WabaId, it must match this
+        // client's own stored WhatsApp connection, or a misrouted/misconfigured n8n workflow could
+        // write another client's template data under this client's id.
         ChannelIntegration? integration = null;
         if (!string.IsNullOrWhiteSpace(request.WabaId))
         {
-            integration = await _integrations.GetAsync(request.ClinicId, ChannelType.WhatsApp, ct);
+            integration = await _integrations.GetAsync(request.ClientId, ChannelType.WhatsApp, ct);
             if (integration is not null && !string.Equals(integration.WhatsAppBusinessId, request.WabaId, StringComparison.OrdinalIgnoreCase))
             {
                 throw new InvalidOperationException(
-                    $"WabaId '{request.WabaId}' does not match clinic {request.ClinicId}'s stored WhatsApp connection.");
+                    $"WabaId '{request.WabaId}' does not match client {request.ClientId}'s stored WhatsApp connection.");
             }
         }
-        integration ??= await _integrations.GetAsync(request.ClinicId, ChannelType.WhatsApp, ct);
+        integration ??= await _integrations.GetAsync(request.ClientId, ChannelType.WhatsApp, ct);
 
         var template = !string.IsNullOrWhiteSpace(request.MetaTemplateId)
-            ? await _templates.FindByProviderTemplateIdAsync(request.ClinicId, request.MetaTemplateId, ct)
+            ? await _templates.FindByProviderTemplateIdAsync(request.ClientId, request.MetaTemplateId, ct)
             : null;
 
-        template ??= await _templates.FindByNameAsync(request.ClinicId, request.Name, request.Language ?? "en_US", ct);
+        template ??= await _templates.FindByNameAsync(request.ClientId, request.Name, request.Language ?? "en_US", ct);
 
         var now = DateTimeOffset.UtcNow;
         var previousStatus = template?.Status;
@@ -208,7 +208,7 @@ public class WhatsAppTemplateService : IWhatsAppTemplateService
             template = new WhatsAppTemplate
             {
                 Id = Guid.NewGuid(),
-                ClinicId = request.ClinicId,
+                ClientId = request.ClientId,
                 Name = request.Name,
                 Language = request.Language ?? "en_US",
                 Category = (request.Category ?? WhatsAppTemplateCategory.Utility).ToLowerInvariant(),
@@ -230,7 +230,7 @@ public class WhatsAppTemplateService : IWhatsAppTemplateService
         template.LastMetaEventAt = request.OccurredAt ?? now;
         template.UpdatedAt = now;
 
-        _events.Log(request.ClinicId, EventTypes.WhatsAppTemplateStatusChanged, source: "n8n",
+        _events.Log(request.ClientId, EventTypes.WhatsAppTemplateStatusChanged, source: "n8n",
             metadataJson: System.Text.Json.JsonSerializer.Serialize(new
             {
                 templateId = template.Id, eventType = request.EventType,
@@ -240,7 +240,7 @@ public class WhatsAppTemplateService : IWhatsAppTemplateService
         await _unitOfWork.SaveChangesAsync(ct);
 
         await _notifier.WhatsAppTemplateUpdatedAsync(
-            request.ClinicId, template.Id, template.Name, template.Status, template.RejectionReason, now, ct);
+            request.ClientId, template.Id, template.Name, template.Status, template.RejectionReason, now, ct);
 
         return ToResponse(template);
     }
@@ -261,7 +261,7 @@ public class WhatsAppTemplateService : IWhatsAppTemplateService
     };
 
     private static WhatsAppTemplateResponse ToResponse(WhatsAppTemplate t) => new(
-        t.Id, t.ClinicId, t.MetaTemplateId, t.Name, t.Category, t.Language, t.Status,
+        t.Id, t.ClientId, t.MetaTemplateId, t.Name, t.Category, t.Language, t.Status,
         t.HeaderType, t.HeaderContent, t.Body, t.Footer, t.ButtonsJson, t.VariablesJson,
         t.RejectionReason, t.CreatedAt, t.UpdatedAt,
         t.ChannelIntegrationId, t.QualityRating, t.PreviousCategory, t.CurrentCategory,

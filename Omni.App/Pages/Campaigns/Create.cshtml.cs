@@ -45,22 +45,22 @@ public class CreateModel : PageModel
     private static readonly Regex PlaceholderPattern = new(@"\{\{(\d+)\}\}", RegexOptions.Compiled);
     private static readonly JsonSerializerOptions AudienceFiltersJsonOptions = new(JsonSerializerDefaults.Web);
 
-    private readonly ICurrentClinicContext _clinicContext;
+    private readonly ICurrentClientContext _clientContext;
     private readonly IWhatsAppTemplateService _templates;
     private readonly ILeadService _leads;
     private readonly IProcedureService _procedures;
     private readonly ICampaignService _campaigns;
 
-    public CreateModel(ICurrentClinicContext clinicContext, IWhatsAppTemplateService templates, ILeadService leads, IProcedureService procedures, ICampaignService campaigns)
+    public CreateModel(ICurrentClientContext clientContext, IWhatsAppTemplateService templates, ILeadService leads, IProcedureService procedures, ICampaignService campaigns)
     {
-        _clinicContext = clinicContext;
+        _clientContext = clientContext;
         _templates = templates;
         _leads = leads;
         _procedures = procedures;
         _campaigns = campaigns;
     }
 
-    public bool ClinicConfigured { get; private set; }
+    public bool ClientConfigured { get; private set; }
     public IReadOnlyList<WhatsAppTemplateResponse> ApprovedTemplates { get; private set; } = Array.Empty<WhatsAppTemplateResponse>();
     public IReadOnlyList<LeadResponse> Leads { get; private set; } = Array.Empty<LeadResponse>();
     public IReadOnlyList<ProcedureResponse> Procedures { get; private set; } = Array.Empty<ProcedureResponse>();
@@ -83,7 +83,7 @@ public class CreateModel : PageModel
     public string? Search { get; set; }
 
     /// <summary>all_eligible | reactivation_no_consultation | custom — see CampaignAudienceType.
-    /// Defaults to reactivation: it's the flagship option, so a clinic opening this page for the
+    /// Defaults to reactivation: it's the flagship option, so a client opening this page for the
     /// first time sees it pre-selected rather than having to notice and pick it.</summary>
     [BindProperty]
     public string AudienceType { get; set; } = CampaignAudienceType.ReactivationNoConsultation;
@@ -132,7 +132,7 @@ public class CreateModel : PageModel
     [BindProperty]
     public bool ManualSelection { get; set; }
 
-    /// <summary>Which of the FOUR clinic-facing cards is selected — purely a UI concept (see
+    /// <summary>Which of the FOUR client-facing cards is selected — purely a UI concept (see
     /// Create.cshtml/campaign-audience.js) computed from the two fields actually posted/persisted,
     /// AudienceType and ManualSelection. Used to decide which radio is checked on first render and
     /// on redisplay after a validation error.</summary>
@@ -172,8 +172,8 @@ public class CreateModel : PageModel
 
     public async Task<IActionResult> OnPostAsync(CancellationToken ct)
     {
-        var clinic = await _clinicContext.GetClinicAsync(ct);
-        if (clinic is null) return RedirectToPage();
+        var client = await _clientContext.GetClientAsync(ct);
+        if (client is null) return RedirectToPage();
 
         // "Pick leads yourself" only makes sense (and is only reachable in the UI) under "Build a
         // custom audience" — treat it as manual selection regardless in case AudienceType and this
@@ -211,7 +211,7 @@ public class CreateModel : PageModel
             {
                 // Resolve each recipient's own {{n}} values: a {LeadFullName}/{LeadFirstName}/{LeadPhone}
                 // token becomes that lead's own data, anything else is sent as literal text to everyone.
-                var selectedLeads = await _leads.ListAsync(clinic.Id, status: null, procedureId: null, search: null, skip: 0, take: 5000, ct);
+                var selectedLeads = await _leads.ListAsync(client.Id, status: null, procedureId: null, search: null, skip: 0, take: 5000, ct);
                 var leadsById = selectedLeads.Items.Where(l => LeadIds.Contains(l.Id)).ToDictionary(l => l.Id);
 
                 variablesByLeadId = new Dictionary<Guid, IReadOnlyList<string>>();
@@ -233,7 +233,7 @@ public class CreateModel : PageModel
                 ? CampaignType.Reactivation
                 : (string?)null;
 
-            string? audienceFilters = isManualSelection ? null : BuildAudienceFiltersJson(ViewerTimeZone.Resolve(Request, clinic.Timezone));
+            string? audienceFilters = isManualSelection ? null : BuildAudienceFiltersJson(ViewerTimeZone.Resolve(Request, client.Timezone));
 
             // The schedule is typed as a wall-clock date + time in the viewer's own timezone; convert to UTC
             // (Npgsql timestamptz columns only accept offset 0).
@@ -246,7 +246,7 @@ public class CreateModel : PageModel
                     await LoadAsync(ct);
                     return Page();
                 }
-                scheduledAt = ViewerTimeZone.ToUtc(ScheduleDate.Value.ToDateTime(ScheduleTime.Value), ViewerTimeZone.Resolve(Request, clinic.Timezone));
+                scheduledAt = ViewerTimeZone.ToUtc(ScheduleDate.Value.ToDateTime(ScheduleTime.Value), ViewerTimeZone.Resolve(Request, client.Timezone));
                 if (scheduledAt <= DateTimeOffset.UtcNow)
                 {
                     ErrorMessage = "That date and time has already passed. Pick a time in the future, or choose \"Send now\".";
@@ -256,16 +256,16 @@ public class CreateModel : PageModel
             }
 
             var campaign = await _campaigns.CreateAsync(new CreateCampaignRequest(
-                clinic.Id, Name, WhatsAppTemplateId.Value, leadIdsForRequest, variablesByLeadId, scheduledAt,
+                client.Id, Name, WhatsAppTemplateId.Value, leadIdsForRequest, variablesByLeadId, scheduledAt,
                 campaignType, AudienceType, audienceFilters), ct);
 
             if (SendOption == "later" && scheduledAt.HasValue)
             {
-                await _campaigns.ScheduleAsync(clinic.Id, campaign.Id, scheduledAt.Value, ct);
+                await _campaigns.ScheduleAsync(client.Id, campaign.Id, scheduledAt.Value, ct);
             }
             else if (SendOption == "now")
             {
-                await _campaigns.SendAsync(clinic.Id, campaign.Id, batchSize: 20, ct);
+                await _campaigns.SendAsync(client.Id, campaign.Id, batchSize: 20, ct);
             }
 
             return RedirectToPage("/Campaigns/Details", new { id = campaign.Id });
@@ -332,17 +332,17 @@ public class CreateModel : PageModel
 
     private async Task LoadAsync(CancellationToken ct)
     {
-        var clinic = await _clinicContext.GetClinicAsync(ct);
-        if (clinic is null)
+        var client = await _clientContext.GetClientAsync(ct);
+        if (client is null)
         {
-            ClinicConfigured = false;
+            ClientConfigured = false;
             return;
         }
 
-        ClinicConfigured = true;
-        ViewerTimezone = ViewerTimeZone.Resolve(Request, clinic.Timezone).Id;
+        ClientConfigured = true;
+        ViewerTimezone = ViewerTimeZone.Resolve(Request, client.Timezone).Id;
 
-        var allTemplates = await _templates.ListAsync(clinic.Id, ct);
+        var allTemplates = await _templates.ListAsync(client.Id, ct);
         ApprovedTemplates = allTemplates.Where(t => t.Status == WhatsAppTemplateStatus.Approved).ToList();
 
         if (WhatsAppTemplateId.HasValue)
@@ -358,10 +358,10 @@ public class CreateModel : PageModel
             }
         }
 
-        var (items, _) = await _leads.ListAsync(clinic.Id, status: null, procedureId: null, Search, skip: 0, take: 200, ct);
+        var (items, _) = await _leads.ListAsync(client.Id, status: null, procedureId: null, Search, skip: 0, take: 200, ct);
         Leads = items;
 
-        Procedures = await _procedures.ListAsync(clinic.Id, activeOnly: true, ct);
-        LeadSources = await _leads.GetDistinctSourcesAsync(clinic.Id, ct);
+        Procedures = await _procedures.ListAsync(client.Id, activeOnly: true, ct);
+        LeadSources = await _leads.GetDistinctSourcesAsync(client.Id, ct);
     }
 }

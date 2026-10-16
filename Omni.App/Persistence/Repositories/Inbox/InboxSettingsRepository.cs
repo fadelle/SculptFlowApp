@@ -20,14 +20,14 @@ public class InboxSettingsRepository : IInboxSettingsRepository
         _cache = cache;
     }
 
-    public Task<InboxSettings?> GetForClinicAsync(Guid clinicId, CancellationToken ct = default) =>
-        _db.InboxSettings.FirstOrDefaultAsync(s => s.ClinicId == clinicId && s.ChannelIntegrationId == null, ct);
+    public Task<InboxSettings?> GetForClientAsync(Guid clientId, CancellationToken ct = default) =>
+        _db.InboxSettings.FirstOrDefaultAsync(s => s.ClientId == clientId && s.ChannelIntegrationId == null, ct);
 
-    // Read on every incoming patient message, so the clinic-wide row (or its absence) is cached.
-    public Task<InboxSettings?> GetForClinicReadOnlyAsync(Guid clinicId, CancellationToken ct = default) =>
-        _cache.ReadThroughValueAsync(CacheKeys.InboxSettings(clinicId), CacheArea.Clinics,
+    // Read on every incoming patient message, so the client-wide row (or its absence) is cached.
+    public Task<InboxSettings?> GetForClientReadOnlyAsync(Guid clientId, CancellationToken ct = default) =>
+        _cache.ReadThroughValueAsync(CacheKeys.InboxSettings(clientId), CacheArea.Clients,
             token => _db.InboxSettings.AsNoTracking()
-                .FirstOrDefaultAsync(s => s.ClinicId == clinicId && s.ChannelIntegrationId == null, token), ct);
+                .FirstOrDefaultAsync(s => s.ClientId == clientId && s.ChannelIntegrationId == null, token), ct);
 
     public void Add(InboxSettings settings) => _db.InboxSettings.Add(settings);
 }

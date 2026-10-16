@@ -33,11 +33,11 @@ public sealed class WebsiteSourceService : IWebsiteSourceService
         _config = config;
     }
 
-    public async Task<WebsiteSourceResponse> CreateAsync(Guid clinicId, CreateWebsiteSourceRequest request, CancellationToken ct = default)
+    public async Task<WebsiteSourceResponse> CreateAsync(Guid clientId, CreateWebsiteSourceRequest request, CancellationToken ct = default)
     {
         var raw = (request.Url ?? string.Empty).Trim();
         if (raw.Length == 0) throw new ArgumentException("Enter the website address to import.");
-        // Be forgiving: "clinic.com" → https://clinic.com
+        // Be forgiving: "client.com" → https://client.com
         if (!raw.Contains("://", StringComparison.Ordinal)) raw = "https://" + raw;
 
         if (!UrlNormalizer.TryNormalize(raw, null, out var normalized))
@@ -65,11 +65,11 @@ public sealed class WebsiteSourceService : IWebsiteSourceService
         var category = string.IsNullOrWhiteSpace(request.Category) ? KnowledgeCategory.General : request.Category.Trim().ToLowerInvariant();
         if (category.Length > 50) throw new ArgumentException("Category must be 50 characters or fewer.");
 
-        if (await _websites.CountSourcesAsync(clinicId, ct) >= _config.WebScrapingMaxSourcesPerClinic)
+        if (await _websites.CountSourcesAsync(clientId, ct) >= _config.WebScrapingMaxSourcesPerClient)
         {
-            throw new ArgumentException($"You can add up to {_config.WebScrapingMaxSourcesPerClinic} websites. Delete one you no longer need first.");
+            throw new ArgumentException($"You can add up to {_config.WebScrapingMaxSourcesPerClient} websites. Delete one you no longer need first.");
         }
-        if (await _websites.SourceUrlExistsAsync(clinicId, normalized, ct))
+        if (await _websites.SourceUrlExistsAsync(clientId, normalized, ct))
         {
             throw new ArgumentException("This website address has already been added. Open it and use \"Re-scrape\" to refresh it.");
         }
@@ -78,7 +78,7 @@ public sealed class WebsiteSourceService : IWebsiteSourceService
         var source = new KnowledgeWebsiteSource
         {
             Id = Guid.NewGuid(),
-            ClinicId = clinicId,
+            ClientId = clientId,
             StartUrl = raw.Length > 2000 ? raw[..2000] : raw,
             NormalizedStartUrl = normalized,
             Host = uri.IdnHost,
@@ -105,44 +105,44 @@ public sealed class WebsiteSourceService : IWebsiteSourceService
         return ToResponse(source, run, 0);
     }
 
-    public async Task<IReadOnlyList<WebsiteSourceResponse>> ListAsync(Guid clinicId, CancellationToken ct = default)
+    public async Task<IReadOnlyList<WebsiteSourceResponse>> ListAsync(Guid clientId, CancellationToken ct = default)
     {
-        var sources = await _websites.ListSourcesReadOnlyAsync(clinicId, ct);
+        var sources = await _websites.ListSourcesReadOnlyAsync(clientId, ct);
         var ids = sources.Select(s => s.Id).ToList();
 
-        var runs = await _websites.ListRunsReadOnlyAsync(clinicId, ids, ct);
+        var runs = await _websites.ListRunsReadOnlyAsync(clientId, ids, ct);
         var latest = runs.GroupBy(r => r.WebsiteSourceId).ToDictionary(g => g.Key, g => g.OrderByDescending(r => r.CreatedAt).First());
 
-        var indexed = await IndexedCountsAsync(clinicId, ids, ct);
+        var indexed = await IndexedCountsAsync(clientId, ids, ct);
         return sources.Select(s => ToResponse(s, latest.GetValueOrDefault(s.Id), indexed.GetValueOrDefault(s.Id))).ToList();
     }
 
-    public async Task<WebsiteSourceDetailResponse?> GetAsync(Guid clinicId, Guid sourceId, CancellationToken ct = default)
+    public async Task<WebsiteSourceDetailResponse?> GetAsync(Guid clientId, Guid sourceId, CancellationToken ct = default)
     {
-        var source = await _websites.GetSourceReadOnlyAsync(clinicId, sourceId, ct);
+        var source = await _websites.GetSourceReadOnlyAsync(clientId, sourceId, ct);
         if (source is null) return null;
 
-        var runs = await _websites.ListRecentRunsReadOnlyAsync(clinicId, sourceId, 8, ct);
+        var runs = await _websites.ListRecentRunsReadOnlyAsync(clientId, sourceId, 8, ct);
 
-        var counts = (await _websites.CountPagesByStatusAsync(clinicId, sourceId, ct)).ToDictionary(x => x.Key, x => x.Value);
+        var counts = (await _websites.CountPagesByStatusAsync(clientId, sourceId, ct)).ToDictionary(x => x.Key, x => x.Value);
 
-        var indexed = (await IndexedCountsAsync(clinicId, new List<Guid> { sourceId }, ct)).GetValueOrDefault(sourceId);
+        var indexed = (await IndexedCountsAsync(clientId, new List<Guid> { sourceId }, ct)).GetValueOrDefault(sourceId);
         return new WebsiteSourceDetailResponse(
             ToResponse(source, runs.FirstOrDefault(), indexed), runs.Select(ToRunResponse).ToList(), counts);
     }
 
     public async Task<IReadOnlyList<WebsitePageResponse>> ListPagesAsync(
-        Guid clinicId, Guid sourceId, string? status, int skip, int take, CancellationToken ct = default)
+        Guid clientId, Guid sourceId, string? status, int skip, int take, CancellationToken ct = default)
     {
-        return (await _websites.ListPagesReadOnlyAsync(clinicId, sourceId, status, Math.Max(0, skip), Math.Clamp(take, 1, 500), ct))
+        return (await _websites.ListPagesReadOnlyAsync(clientId, sourceId, status, Math.Max(0, skip), Math.Clamp(take, 1, 500), ct))
             .Select(p => new WebsitePageResponse(p.Id, p.NormalizedUrl, p.Title, p.Status, p.HttpStatus, p.FailureReason,
                 p.CanonicalUrl, p.KnowledgeDocumentId, p.Depth, p.LastScrapedAt))
             .ToList();
     }
 
-    public async Task<WebsiteSourceResponse?> RescrapeAsync(Guid clinicId, Guid sourceId, CancellationToken ct = default)
+    public async Task<WebsiteSourceResponse?> RescrapeAsync(Guid clientId, Guid sourceId, CancellationToken ct = default)
     {
-        var source = await _websites.GetSourceAsync(clinicId, sourceId, ct);
+        var source = await _websites.GetSourceAsync(clientId, sourceId, ct);
         if (source is null) return null;
 
         if (WebsiteScrapeStatus.IsInProgress(source.Status)
@@ -159,12 +159,12 @@ public sealed class WebsiteSourceService : IWebsiteSourceService
         await _unitOfWork.SaveChangesAsync(ct);
 
         _queue.Enqueue(run.Id);
-        return ToResponse(source, run, (await IndexedCountsAsync(clinicId, new List<Guid> { sourceId }, ct)).GetValueOrDefault(sourceId));
+        return ToResponse(source, run, (await IndexedCountsAsync(clientId, new List<Guid> { sourceId }, ct)).GetValueOrDefault(sourceId));
     }
 
-    public async Task<WebsiteSourceResponse?> SetActiveAsync(Guid clinicId, Guid sourceId, bool isActive, CancellationToken ct = default)
+    public async Task<WebsiteSourceResponse?> SetActiveAsync(Guid clientId, Guid sourceId, bool isActive, CancellationToken ct = default)
     {
-        var source = await _websites.GetSourceAsync(clinicId, sourceId, ct);
+        var source = await _websites.GetSourceAsync(clientId, sourceId, ct);
         if (source is null) return null;
 
         source.IsActive = isActive;
@@ -173,16 +173,16 @@ public sealed class WebsiteSourceService : IWebsiteSourceService
 
         // Documents currently in the KB for this website follow the source. (Deactivating hides all of them;
         // activating restores those of pages that are in the KB — never pages that were removed/failed.)
-        var docIds = await _websites.ListPageDocumentIdsAsync(clinicId, sourceId, onlyInKnowledgeBase: isActive, ct);
-        foreach (var id in docIds) await _knowledge.SetActiveAsync(clinicId, id, isActive, ct);
+        var docIds = await _websites.ListPageDocumentIdsAsync(clientId, sourceId, onlyInKnowledgeBase: isActive, ct);
+        foreach (var id in docIds) await _knowledge.SetActiveAsync(clientId, id, isActive, ct);
 
         var latest = await _websites.GetLatestRunReadOnlyAsync(sourceId, ct);
-        return ToResponse(source, latest, (await IndexedCountsAsync(clinicId, new List<Guid> { sourceId }, ct)).GetValueOrDefault(sourceId));
+        return ToResponse(source, latest, (await IndexedCountsAsync(clientId, new List<Guid> { sourceId }, ct)).GetValueOrDefault(sourceId));
     }
 
-    public async Task<bool> DeleteAsync(Guid clinicId, Guid sourceId, CancellationToken ct = default)
+    public async Task<bool> DeleteAsync(Guid clientId, Guid sourceId, CancellationToken ct = default)
     {
-        var source = await _websites.GetSourceAsync(clinicId, sourceId, ct);
+        var source = await _websites.GetSourceAsync(clientId, sourceId, ct);
         if (source is null) return false;
 
         if (await _websites.HasRunInProgressAsync(sourceId, ct))
@@ -190,9 +190,9 @@ public sealed class WebsiteSourceService : IWebsiteSourceService
             throw new ArgumentException("A crawl of this website is still running. Wait for it to finish, then delete it.");
         }
 
-        // The knowledge documents this crawl created (and their chunks) go with it — only those, only this clinic.
-        var docIds = await _websites.ListPageDocumentIdsAsync(clinicId, sourceId, onlyInKnowledgeBase: false, ct);
-        foreach (var id in docIds) await _knowledge.DeleteAsync(clinicId, id, ct);
+        // The knowledge documents this crawl created (and their chunks) go with it — only those, only this client.
+        var docIds = await _websites.ListPageDocumentIdsAsync(clientId, sourceId, onlyInKnowledgeBase: false, ct);
+        foreach (var id in docIds) await _knowledge.DeleteAsync(clientId, id, ct);
 
         _websites.RemoveSource(source); // pages + runs cascade
         await _unitOfWork.SaveChangesAsync(ct);
@@ -203,14 +203,14 @@ public sealed class WebsiteSourceService : IWebsiteSourceService
     private static KnowledgeWebsiteScrapeRun NewRun(KnowledgeWebsiteSource source) => new()
     {
         Id = Guid.NewGuid(),
-        ClinicId = source.ClinicId,
+        ClientId = source.ClientId,
         WebsiteSourceId = source.Id,
         Status = WebsiteScrapeStatus.Pending,
         CreatedAt = DateTimeOffset.UtcNow
     };
 
-    private Task<IReadOnlyDictionary<Guid, int>> IndexedCountsAsync(Guid clinicId, List<Guid> sourceIds, CancellationToken ct) =>
-        _websites.CountIndexedPagesAsync(clinicId, sourceIds, ct);
+    private Task<IReadOnlyDictionary<Guid, int>> IndexedCountsAsync(Guid clientId, List<Guid> sourceIds, CancellationToken ct) =>
+        _websites.CountIndexedPagesAsync(clientId, sourceIds, ct);
 
     private static WebsiteSourceResponse ToResponse(KnowledgeWebsiteSource s, KnowledgeWebsiteScrapeRun? latest, int indexedPages) => new(
         s.Id, s.StartUrl, s.Host, s.CrawlMode, s.Category, s.IsActive, s.Status, WebsiteScrapeStatus.IsInProgress(s.Status),

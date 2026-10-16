@@ -1,7 +1,7 @@
 namespace Omni.App.Entities.Requests.Procedures;
 
 public record CreateProcedureRequest(
-    Guid ClinicId,
+    Guid ClientId,
     string Name,
     string? Code,
     string? Description,

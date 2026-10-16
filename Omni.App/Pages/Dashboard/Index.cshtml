@@ -8,14 +8,14 @@
     static string Rate(int part, int whole) => whole > 0 ? $"{Math.Round(part * 100.0 / whole)}%" : "—";
 }
 
-@if (!Model.ClinicConfigured)
+@if (!Model.ClientConfigured)
 {
     <div class="au-alert au-alert--warning" role="status">
         <span class="au-icon au-alert__icon" aria-hidden="true">warning</span>
         <div class="au-alert__body">
-            <div class="au-alert__title">Your account isn't linked to a clinic yet</div>
-            New accounts get their own clinic when they register. If you signed up before that, ask Omni support to
-            link your account to your clinic.
+            <div class="au-alert__title">Your account isn't linked to a client yet</div>
+            New accounts get their own client when they register. If you signed up before that, ask Omni support to
+            link your account to your client.
         </div>
     </div>
 }
@@ -38,7 +38,7 @@ else
         : whatsAppLevel == "healthy" ? "Healthy" : "Attention Required";
 
     <div class="au-page-head">
-        <p class="au-page-head__sub">@Model.ClinicName: what needs you, and how this period is going.</p>
+        <p class="au-page-head__sub">@Model.ClientName: what needs you, and how this period is going.</p>
         <div class="au-page-head__actions">
             <form method="get" class="period-form" id="period-form">
                 <select name="Period" class="select" id="period-select" aria-label="Period">
@@ -141,7 +141,7 @@ else
         @if (Model.Procedures.Count == 0)
         {
             var empty = new EmptyStateModel(Icon: "medical_services", Title: "No procedures yet",
-                Text: "Add the procedures your clinic offers to see interest and bookings for each one.",
+                Text: "Add the procedures your client offers to see interest and bookings for each one.",
                 ActionLabel: "Add a procedure", ActionHref: "/Procedures/Edit");
             <partial name="_EmptyState" model="empty" />
         }
@@ -207,7 +207,7 @@ else
 
     <script>
         window.PS_DASHBOARD_CONFIG = {
-            clinicId: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.ClinicId.ToString())),
+            clientId: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.ClientId.ToString())),
             hubUrl: '/hubs/inbox'
         };
     </script>

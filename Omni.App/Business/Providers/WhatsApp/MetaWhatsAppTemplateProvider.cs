@@ -8,7 +8,7 @@ using Omni.App.Entities.Models;
 
 namespace Omni.App.Business.Providers.WhatsApp;
 
-/// <summary>Template review directly with Meta (Graph /{waba-id}/message_templates) using the clinic's own
+/// <summary>Template review directly with Meta (Graph /{waba-id}/message_templates) using the client's own
 /// Embedded Signup token.</summary>
 public class MetaWhatsAppTemplateProvider : IWhatsAppTemplateProvider
 {

@@ -13,7 +13,7 @@ namespace Omni.App.Entities.Models;
 public class KnowledgeRetrievalBenchmarkCase
 {
     public Guid Id { get; set; }
-    public Guid ClinicId { get; set; }
+    public Guid ClientId { get; set; }
 
     public string Question { get; set; } = string.Empty;
 

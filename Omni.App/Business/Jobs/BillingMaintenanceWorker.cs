@@ -9,7 +9,7 @@ namespace Omni.App.Business.Jobs;
 ///   1. subscriptions whose period ended: renew / past_due / expire / end a scheduled cancellation
 ///   2. reservations older than Billing:ReservationTimeoutHours: settle if the message was delivered after all,
 ///      otherwise release
-/// Each clinic is its own transaction under its billing-account lock, and every step is idempotent, so a crash,
+/// Each client is its own transaction under its billing-account lock, and every step is idempotent, so a crash,
 /// a restart or two app instances running it at once can't charge twice. Idle while Billing:Enabled is false.
 /// </summary>
 public class BillingMaintenanceWorker : BackgroundService

@@ -1,7 +1,7 @@
 -- =====================================================================
--- DEMO CLINIC SEED — a fully populated clinic for demos and screenshots.
+-- DEMO CLIENT SEED — a fully populated client for demos and screenshots.
 --
---   Clinic     "Aurora Aesthetic Clinic" (slug demo-omni, Miami, America/New_York)
+--   Client     "Aurora Aesthetic Client" (slug demo-omni, Miami, America/New_York)
 --   Sign in    demo@aurora-demo.test   /   Demo-ChangeMe-2026      <-- PLACEHOLDER PASSWORD: CHANGE IT
 --              (two more staff: nurse@ / reception@aurora-demo.test, same placeholder password)
 --
@@ -14,23 +14,23 @@
 -- Instagram, Facebook conversations: AI / human / approval modes, unread, service window), leads,
 -- procedure bookings, appointments (+ calendar sync), staff, procedures, knowledge base (manual,
 -- upload and website entries), WhatsApp templates, campaigns with recipients, notifications,
--- activity events, clinic info, availability + booking rules + date exceptions, channel
+-- activity events, client info, availability + booking rules + date exceptions, channel
 -- connections (+ health history), TikTok, billing (plan, subscription, wallet, usage, ledger).
 --
 -- Run after Database/schema.sql (and optionally seed-config.sql):
 --   psql "<connection string of a NON-PRODUCTION database>" -f Database/seed-demo.sql
 --
--- Re-runnable: it first removes the demo clinic (slug demo-omni, which cascades to everything
--- of the clinic) and its three staff users, then recreates it all with fixed GUIDs, so it never
+-- Re-runnable: it first removes the demo client (slug demo-omni, which cascades to everything
+-- of the client) and its three staff users, then recreates it all with fixed GUIDs, so it never
 -- duplicates and the relative dates (days/hours before or after "now") are refreshed to look live.
 -- It touches nothing else except the shared billing plan 'demo-growth' (upserted).
--- Does not touch the other seed (Database/seed.sql, slug demo-clinic).
+-- Does not touch the other seed (Database/seed.sql, slug demo-client).
 --
 -- Knowledge chunks carry a PLACEHOLDER embedding (constant vector), so the entries show as indexed
 -- but semantic search over them is meaningless: use "re-index" in the Knowledge page (with a real
 -- embeddings key) if you want real retrieval.
 -- Billing note: this writes billing rows directly (balances equal the ledger sums); that is fine
--- for a demo clinic but is not how real money moves (BillingLedger.PostAsync).
+-- for a demo client but is not how real money moves (BillingLedger.PostAsync).
 -- =====================================================================
 
 -- ---- helpers (session-local, vanish at disconnect) -------------------
@@ -38,7 +38,7 @@
 create or replace function pg_temp.did(n integer) returns uuid language sql immutable as
 $$ select ('de000000-0000-4000-8000-' || lpad(n::text, 12, '0'))::uuid $$;
 
--- Clinic-local wall-clock moment: day offset from today (clinic time) at hh:mm, as timestamptz.
+-- Client-local wall-clock moment: day offset from today (client time) at hh:mm, as timestamptz.
 create or replace function pg_temp.at(day_offset integer, t time) returns timestamptz language sql stable as
 $$ select ((date_trunc('day', now() at time zone 'America/New_York') + make_interval(days => day_offset) + t)
           at time zone 'America/New_York') $$;
@@ -51,22 +51,22 @@ begin;
 
 do $$
 declare
-  c uuid := pg_temp.did(1);                       -- the clinic
+  c uuid := pg_temp.did(1);                       -- the client
   -- placeholder password hash (ASP.NET Identity v3, PBKDF2) for 'Demo-ChangeMe-2026'
   pwd_hash constant text := 'AQAAAAEAAYagAAAAEIQ2jaZC5yJN9fYBnHdWfnpVgfoGC5Nt7tJvhk3HWJQZypOiEoLHKESvr0QdACNZkg==';
   v_plan uuid;
 begin
   -- ---------------------------------------------------------------
-  -- 0. Clean previous run (clinic cascades to all its data)
+  -- 0. Clean previous run (client cascades to all its data)
   -- ---------------------------------------------------------------
-  delete from core.clinics where slug = 'demo-omni';
+  delete from core.clients where slug = 'demo-omni';
   delete from identity.identity_users where id in ('de000000-0000-4000-8000-0000000000a1',
     'de000000-0000-4000-8000-0000000000a2', 'de000000-0000-4000-8000-0000000000a3');
 
   -- ---------------------------------------------------------------
-  -- 1. Clinic + info the AI quotes
+  -- 1. Client + info the AI quotes
   -- ---------------------------------------------------------------
-  insert into core.clinics (id, name, slug, phone, email, website, country_code, timezone,
+  insert into core.clients (id, name, slug, phone, email, website, country_code, timezone,
                             address, operating_hours, consultation_info, is_active, created_at)
   values (c, 'Aurora Aesthetic Clinic', 'demo-omni', '+1 305 555 0100', 'hello@aurora-demo.test',
           'https://aurora-demo.test', 'US', 'America/New_York',
@@ -76,7 +76,7 @@ begin
           true, now() - interval '120 days');
 
   -- ---------------------------------------------------------------
-  -- 2. Staff (identity users + clinic memberships)
+  -- 2. Staff (identity users + client memberships)
   -- ---------------------------------------------------------------
   insert into identity.identity_users (id, user_name, normalized_user_name, email, normalized_email, email_confirmed,
                                        password_hash, security_stamp, concurrency_stamp, lockout_enabled)
@@ -90,7 +90,7 @@ begin
     ('de000000-0000-4000-8000-0000000000a2', 'full_name', 'Jordan Blake, RN'),
     ('de000000-0000-4000-8000-0000000000a3', 'full_name', 'Priya Shah');
 
-  insert into identity.clinic_users (id, clinic_id, user_id, is_active, created_at) values
+  insert into identity.client_users (id, client_id, user_id, is_active, created_at) values
     (pg_temp.did(2), c, 'de000000-0000-4000-8000-0000000000a1', true, now() - interval '120 days'),
     (pg_temp.did(3), c, 'de000000-0000-4000-8000-0000000000a2', true, now() - interval '90 days'),
     (pg_temp.did(4), c, 'de000000-0000-4000-8000-0000000000a3', true, now() - interval '60 days');
@@ -98,7 +98,7 @@ begin
   -- ---------------------------------------------------------------
   -- 3. Procedures
   -- ---------------------------------------------------------------
-  insert into core.procedures (id, clinic_id, name, code, description, consultation_duration, is_active) values
+  insert into core.procedures (id, client_id, name, code, description, consultation_duration, is_active) values
     (pg_temp.did(10), c, 'Rhinoplasty',          'RHINO',      'Reshaping of the nose for function or appearance.', 45, true),
     (pg_temp.did(11), c, 'Liposuction',          'LIPO',       'Targeted removal of stubborn fat deposits.', 30, true),
     (pg_temp.did(12), c, 'Facelift',             'FACELIFT',   'Lifts and tightens the face and neck.', 45, true),
@@ -110,7 +110,7 @@ begin
   -- ---------------------------------------------------------------
   -- 4. Leads (spread across the whole pipeline)
   -- ---------------------------------------------------------------
-  insert into crm.leads (id, clinic_id, procedure_id, full_name, first_name, last_name, phone, email, source, source_detail,
+  insert into crm.leads (id, client_id, procedure_id, full_name, first_name, last_name, phone, email, source, source_detail,
                          campaign_name, external_lead_id, status, qualification_status, preferred_language, country_code,
                          city, desired_timeline, notes, marketing_opt_in, opted_out_at, last_contact_at, next_followup_at, created_at) values
     (pg_temp.did(100), c, pg_temp.did(10), 'Sarah Mitchell',  'Sarah',  'Mitchell', '+1 305 555 0111', 'sarah.mitchell@example.test', 'instagram', 'Reel: nose reshaping FAQ', 'Spring Consultation Offer', 'demo-ig-001', 'surgery_booked', 'hot',  'en', 'US', 'Miami',       'Within 2 months', 'Wants a natural result. Deposit paid.', true, null, now() - interval '2 days', null, now() - interval '25 days'),
@@ -131,7 +131,7 @@ begin
   -- ---------------------------------------------------------------
   -- 5. Channel connections (all dummy values)
   -- ---------------------------------------------------------------
-  insert into channels.channel_integrations (id, clinic_id, channel, status, display_name, phone_number_id, whatsapp_business_id,
+  insert into channels.channel_integrations (id, client_id, channel, status, display_name, phone_number_id, whatsapp_business_id,
         page_id, instagram_business_id, access_token, webhook_verify_token, pin, last_verified_at, last_error,
         meta_business_id, verified_name, account_status, account_review_status, phone_quality_rating, phone_status, name_status,
         is_healthy, health_level, last_problem_code, last_problem_message, last_webhook_at, last_health_event_at,
@@ -155,12 +155,12 @@ begin
         null, null, null, null, null, null, null, true, 'healthy', null, null, now() - interval '20 minutes', null,
         '9000000001', 'aurora_demo_bot', 'active', now() - interval '80 days', now() - interval '80 days');
 
-  insert into channels.whatsapp_health_events (id, clinic_id, channel_integration_id, event_type, severity, status, code, message, raw_metadata, occurred_at) values
+  insert into channels.whatsapp_health_events (id, client_id, channel_integration_id, event_type, severity, status, code, message, raw_metadata, occurred_at) values
     (pg_temp.did(30), c, pg_temp.did(20), 'phone_number_quality_update', 'warning', 'YELLOW', 'QUALITY_MEDIUM', 'Quality rating dropped to medium.', '{"demo": true}', now() - interval '12 days'),
     (pg_temp.did(31), c, pg_temp.did(20), 'phone_number_quality_update', 'info',    'GREEN',  'QUALITY_HIGH',   'Quality rating recovered to high.', '{"demo": true}', now() - interval '3 days'),
     (pg_temp.did(32), c, pg_temp.did(20), 'account_review_update',        'info',    'APPROVED', 'ACCOUNT_APPROVED', 'WhatsApp Business account review approved.', '{"demo": true}', now() - interval '98 days');
 
-  insert into channels.tiktok_integrations (id, clinic_id, status, open_id, display_name, avatar_url, access_token, refresh_token,
+  insert into channels.tiktok_integrations (id, client_id, status, open_id, display_name, avatar_url, access_token, refresh_token,
                                             token_expires_at, refresh_token_expires_at, is_healthy)
   values (pg_temp.did(24), c, 'connected', 'demo-tiktok-open-id', '@aurora.aesthetic.demo', null, 'DEMO-NOT-A-REAL-TOKEN', 'DEMO-NOT-A-REAL-TOKEN',
           now() + interval '20 hours', now() + interval '300 days', true);
@@ -168,7 +168,7 @@ begin
   -- ---------------------------------------------------------------
   -- 6. WhatsApp templates
   -- ---------------------------------------------------------------
-  insert into channels.whatsapp_templates (id, clinic_id, channel_integration_id, meta_template_id, name, category, language, status,
+  insert into channels.whatsapp_templates (id, client_id, channel_integration_id, meta_template_id, name, category, language, status,
         header_type, header_content, body, footer, buttons_json, variables_json, quality_rating, rejection_reason, last_meta_event_at, created_at) values
     (pg_temp.did(40), c, pg_temp.did(20), 'demo-tpl-0001', 'appointment_reminder', 'utility', 'en_US', 'approved', 'none', null,
         'Hi {{1}}, this is a reminder of your consultation at Aurora Aesthetic Clinic on {{2}} at {{3}}. Reply 1 to confirm or 2 to reschedule.',
@@ -193,7 +193,7 @@ begin
   -- 7. Conversations
   --    (id, lead, channel, thread id, status, mode, minutes since last message, last direction, minutes since last customer message, unread?)
   -- ---------------------------------------------------------------
-  insert into crm.conversations (id, clinic_id, lead_id, channel, external_thread_id, status, mode, ai_enabled, human_takeover,
+  insert into crm.conversations (id, client_id, lead_id, channel, external_thread_id, status, mode, ai_enabled, human_takeover,
         last_message_at, last_message_direction, last_customer_message_at, service_window_expires_at, last_read_at, created_at) values
     (pg_temp.did(200), c, pg_temp.did(100), 'whatsapp',  null,          'active',   'ai',       true,  false, now() - interval '2 days',    'inbound',  now() - interval '2 days',    now() - interval '1 day',  now() - interval '2 days', now() - interval '25 days'),
     (pg_temp.did(201), c, pg_temp.did(101), 'whatsapp',  null,          'active',   'ai',       true,  false, now() - interval '3 hours',   'outbound', now() - interval '4 hours',   now() + interval '20 hours', now() - interval '3 hours', now() - interval '8 days'),
@@ -265,7 +265,7 @@ begin
    (95, pg_temp.did(211), pg_temp.did(113), 'inbound',  'lead', 'facebook', 'whatsapp_customer', 14400, null, 'I take blood thinners. Is Botox safe for me? Also please stop sending promotions.', false),
    (96, pg_temp.did(211), pg_temp.did(113), 'outbound', 'staff','facebook', 'dashboard',         14390, 'read', 'Hi Grace, Dr. Hart will review your medication before any treatment, and we have removed you from promotions.', false);
 
-  insert into crm.messages (id, clinic_id, conversation_id, lead_id, direction, sender_type, channel, origin, message_type, content,
+  insert into crm.messages (id, client_id, conversation_id, lead_id, direction, sender_type, channel, origin, message_type, content,
                             delivery_status, is_ai_generated, sent_at, received_at, delivered_at, read_at, failed_at,
                             failure_code, failure_reason, created_at)
   select pg_temp.did(1000 + n), c, conv, lead, dir, sender, channel, origin, 'text', body, status, ai,
@@ -282,7 +282,7 @@ begin
   -- ---------------------------------------------------------------
   -- 9. Appointments + procedure bookings
   -- ---------------------------------------------------------------
-  insert into scheduling.appointments (id, clinic_id, lead_id, procedure_id, appointment_type, status, scheduled_start, scheduled_end,
+  insert into scheduling.appointments (id, client_id, lead_id, procedure_id, appointment_type, status, scheduled_start, scheduled_end,
                                        location_type, location_name, notes, created_at) values
     (pg_temp.did(300), c, pg_temp.did(100), pg_temp.did(10), 'consultation', 'attended',  pg_temp.at(-18, '10:00'), pg_temp.at(-18, '10:45'), 'in_person', 'Aurora Aesthetic Clinic, Suite 12', 'Discussed goals; quote prepared.', now() - interval '25 days'),
     (pg_temp.did(301), c, pg_temp.did(100), pg_temp.did(10), 'surgery',      'booked',    pg_temp.at(21, '08:00'),  pg_temp.at(21, '11:00'),  'in_person', 'Aurora Surgical Suite', 'Pre-op bloodwork required.', now() - interval '10 days'),
@@ -298,7 +298,7 @@ begin
     (pg_temp.did(311), c, pg_temp.did(108), pg_temp.did(12), 'consultation', 'canceled',  pg_temp.at(-100, '10:00'),pg_temp.at(-100, '10:45'), 'in_person', 'Aurora Aesthetic Clinic, Suite 12', 'Patient canceled, found another clinic.', now() - interval '130 days'),
     (pg_temp.did(312), c, pg_temp.did(104), pg_temp.did(13), 'consultation', 'booked',    pg_temp.at(3, '13:00'),   pg_temp.at(3, '13:30'),   'in_person', 'Aurora Aesthetic Clinic, Suite 12', 'Wants to discuss financing.', now() - interval '20 minutes');
 
-  insert into scheduling.procedure_bookings (id, clinic_id, lead_id, procedure_id, appointment_id, status, quoted_amount, deposit_amount,
+  insert into scheduling.procedure_bookings (id, client_id, lead_id, procedure_id, appointment_id, status, quoted_amount, deposit_amount,
                                              final_amount, currency_code, procedure_date, notes, created_at) values
     (pg_temp.did(320), c, pg_temp.did(100), pg_temp.did(10), pg_temp.did(301), 'booked',       6500, 1500, null, 'USD', pg_temp.at(21, '08:00'), 'Deposit received.', now() - interval '10 days'),
     (pg_temp.did(321), c, pg_temp.did(109), pg_temp.did(13), pg_temp.did(304), 'quoted',       7800, null, null, 'USD', null, 'Awaiting decision.', now() - interval '4 days'),
@@ -312,7 +312,7 @@ begin
   -- ---------------------------------------------------------------
   -- 10. Availability, booking rules, exceptions
   -- ---------------------------------------------------------------
-  insert into scheduling.clinic_availability_rules (id, clinic_id, day_of_week, is_open, start_time, end_time) values
+  insert into scheduling.availability_rules (id, client_id, day_of_week, is_open, start_time, end_time) values
     (pg_temp.did(400), c, 0, false, '09:00', '17:00'),
     (pg_temp.did(401), c, 1, true,  '09:00', '17:00'),
     (pg_temp.did(402), c, 2, true,  '09:00', '17:00'),
@@ -321,11 +321,11 @@ begin
     (pg_temp.did(405), c, 5, true,  '09:00', '17:00'),
     (pg_temp.did(406), c, 6, true,  '10:00', '14:00');
 
-  insert into scheduling.clinic_booking_settings (id, clinic_id, default_consultation_duration_minutes, buffer_minutes,
+  insert into scheduling.booking_settings (id, client_id, default_consultation_duration_minutes, buffer_minutes,
                                                   minimum_booking_notice_minutes, maximum_advance_booking_days)
   values (pg_temp.did(410), c, 30, 10, 240, 60);
 
-  insert into scheduling.clinic_availability_exceptions (id, clinic_id, date, is_closed, start_time, end_time, reason) values
+  insert into scheduling.availability_exceptions (id, client_id, date, is_closed, start_time, end_time, reason) values
     (pg_temp.did(420), c, (pg_temp.at(12, '12:00') at time zone 'America/New_York')::date, true,  null,    null,    'Staff training day'),
     (pg_temp.did(421), c, (pg_temp.at(19, '12:00') at time zone 'America/New_York')::date, false, '12:00', '16:00', 'Short day: surgeon at a conference'),
     (pg_temp.did(422), c, (pg_temp.at(26, '12:00') at time zone 'America/New_York')::date, true,  null,    null,    'Public holiday');
@@ -333,7 +333,7 @@ begin
   -- ---------------------------------------------------------------
   -- 11. Calendar integrations (dummy references; no real tokens)
   -- ---------------------------------------------------------------
-  insert into scheduling.calendar_integrations (id, clinic_id, provider, status, external_connection_ref, account_display_name,
+  insert into scheduling.calendar_integrations (id, client_id, provider, status, external_connection_ref, account_display_name,
         selected_calendar_id, selected_calendar_name, sync_enabled, is_healthy, last_problem_message, last_synced_at,
         access_token, refresh_token, token_expires_at) values
     (pg_temp.did(430), c, 'google',  'connected',    'demo-connection-ref-google', 'frontdesk@aurora-demo.test',
@@ -356,7 +356,7 @@ begin
   -- ---------------------------------------------------------------
   -- 12. Knowledge base
   -- ---------------------------------------------------------------
-  insert into knowledge.knowledge_documents (id, clinic_id, title, category, content, is_active, source_type,
+  insert into knowledge.knowledge_documents (id, client_id, title, category, content, is_active, source_type,
                                              original_file_name, mime_type, file_size_bytes, source_url, created_at) values
     (pg_temp.did(500), c, 'About Aurora Aesthetic Clinic', 'general',
       'Aurora Aesthetic Clinic is a boutique plastic surgery practice led by Dr. Amelia Hart, board-certified, with over 15 years of experience. We offer surgical and non-surgical aesthetic treatments in a private, comfortable setting.', true, 'manual', null, null, null, null, now() - interval '100 days'),
@@ -380,21 +380,21 @@ begin
       'Winter promotion: 10% off facelifts booked before January. This offer has ended.', false, 'manual', null, null, null, null, now() - interval '200 days');
 
   -- placeholder embeddings (see header note)
-  insert into knowledge.knowledge_chunks (id, clinic_id, knowledge_document_id, chunk_index, content, embedding)
+  insert into knowledge.knowledge_chunks (id, client_id, knowledge_document_id, chunk_index, content, embedding)
   select pg_temp.did(600 + (id_n - 500)), c, pg_temp.did(id_n), 0, content, pg_temp.dummy_embedding()::vector
   from (select (right(id::text, 12)::int) as id_n, content from knowledge.knowledge_documents
-        where clinic_id = c and is_active) d;
+        where client_id = c and is_active) d;
 
-  insert into knowledge.knowledge_search_settings (id, clinic_id, embedding_model, vector_dimension, similarity_method, vector_index_type,
+  insert into knowledge.knowledge_search_settings (id, client_id, embedding_model, vector_dimension, similarity_method, vector_index_type,
                                                    chunk_size_tokens, chunk_overlap_tokens, top_k, minimum_similarity)
   values (pg_temp.did(520), c, 'text-embedding-3-small', 1536, 'cosine', 'none', 400, 50, 5, 0.30);
 
-  insert into knowledge.knowledge_website_sources (id, clinic_id, start_url, normalized_start_url, host, crawl_mode, category,
+  insert into knowledge.knowledge_website_sources (id, client_id, start_url, normalized_start_url, host, crawl_mode, category,
                                                    is_active, status, last_scraped_at) values
     (pg_temp.did(530), c, 'https://aurora-demo.test/', 'https://aurora-demo.test/', 'aurora-demo.test', 'crawl_site', 'procedure',
      true, 'completed', now() - interval '30 days');
 
-  insert into knowledge.knowledge_website_pages (id, clinic_id, website_source_id, url, normalized_url, title, http_status, content_type,
+  insert into knowledge.knowledge_website_pages (id, client_id, website_source_id, url, normalized_url, title, http_status, content_type,
                                                  content_hash, status, depth, knowledge_document_id, first_discovered_at, last_seen_at, last_scraped_at) values
     (pg_temp.did(531), c, pg_temp.did(530), 'https://aurora-demo.test/procedures/rhinoplasty', 'https://aurora-demo.test/procedures/rhinoplasty',
         'Rhinoplasty | Aurora Aesthetic Clinic', 200, 'text/html', repeat('a', 64), 'indexed', 1, pg_temp.did(507), now() - interval '30 days', now() - interval '30 days', now() - interval '30 days'),
@@ -403,7 +403,7 @@ begin
     (pg_temp.did(533), c, pg_temp.did(530), 'https://aurora-demo.test/gallery', 'https://aurora-demo.test/gallery',
         'Gallery', 200, 'text/html', null, 'skipped', 1, null, now() - interval '30 days', now() - interval '30 days', now() - interval '30 days');
 
-  insert into knowledge.knowledge_website_scrape_runs (id, clinic_id, website_source_id, status, started_at, completed_at,
+  insert into knowledge.knowledge_website_scrape_runs (id, client_id, website_source_id, status, started_at, completed_at,
         pages_discovered, pages_processed, pages_indexed, pages_new, pages_changed, pages_unchanged, pages_skipped, created_at) values
     (pg_temp.did(534), c, pg_temp.did(530), 'completed', now() - interval '30 days', now() - interval '30 days' + interval '45 seconds',
         3, 3, 2, 2, 0, 0, 1, now() - interval '30 days');
@@ -411,7 +411,7 @@ begin
   -- ---------------------------------------------------------------
   -- 13. Campaigns + recipients
   -- ---------------------------------------------------------------
-  insert into marketing.campaigns (id, clinic_id, name, whatsapp_template_id, status, campaign_type, channel, audience_type, audience_filters,
+  insert into marketing.campaigns (id, client_id, name, whatsapp_template_id, status, campaign_type, channel, audience_type, audience_filters,
         scheduled_at, started_at, completed_at, created_by_user_id, created_at) values
     (pg_temp.did(700), c, 'Spring Consultation Offer', pg_temp.did(41), 'completed', 'promotion', 'whatsapp', 'all_eligible', null,
         now() - interval '20 days', now() - interval '20 days', now() - interval '20 days' + interval '15 minutes', null, now() - interval '22 days'),
@@ -422,7 +422,7 @@ begin
     (pg_temp.did(703), c, 'Summer Skin Refresh', pg_temp.did(41), 'scheduled', 'promotion', 'whatsapp', 'all_eligible', null,
         now() + interval '5 days', null, null, null, now() - interval '1 day');
 
-  insert into marketing.campaign_recipients (id, clinic_id, campaign_id, lead_id, conversation_id, phone_number, variables_json, status,
+  insert into marketing.campaign_recipients (id, client_id, campaign_id, lead_id, conversation_id, phone_number, variables_json, status,
         skip_reason, failure_code, failure_reason, queued_at, sent_at, delivered_at, read_at, replied_at, booked_at, failed_at) values
     -- completed spring offer
     (pg_temp.did(710), c, pg_temp.did(700), pg_temp.did(100), pg_temp.did(200), '+1 305 555 0111', '{"first_name":"Sarah"}', 'booked',  null, null, null, now() - interval '20 days', now() - interval '20 days', now() - interval '20 days', now() - interval '20 days', now() - interval '19 days 20 hours', now() - interval '19 days', null),
@@ -439,7 +439,7 @@ begin
     (pg_temp.did(723), c, pg_temp.did(701), pg_temp.did(103), pg_temp.did(203), '+1 305 555 0114', '{"first_name":"Karim","procedure":"your enquiry"}','pending', null, null, null, null, null, null, null, null, null, null);
 
   -- a few campaign messages in the matching conversations, linked back to template + campaign + recipient
-  insert into crm.messages (id, clinic_id, conversation_id, lead_id, direction, sender_type, channel, origin, message_type, content,
+  insert into crm.messages (id, client_id, conversation_id, lead_id, direction, sender_type, channel, origin, message_type, content,
         delivery_status, sent_at, delivered_at, read_at, whatsapp_template_id, campaign_id, campaign_recipient_id, created_at) values
     (pg_temp.did(1100), c, pg_temp.did(200), pg_temp.did(100), 'outbound', 'system', 'whatsapp', 'campaign', 'text',
         'Hi Sarah, book a consultation this month and the $75 fee is credited toward any procedure. Reply BOOK and we will find you a time.',
@@ -454,7 +454,7 @@ begin
   -- ---------------------------------------------------------------
   -- 14. Notifications (bell)
   -- ---------------------------------------------------------------
-  insert into activity.notifications (id, clinic_id, type, title, message, lead_id, conversation_id, appointment_id, channel_integration_id,
+  insert into activity.notifications (id, client_id, type, title, message, lead_id, conversation_id, appointment_id, channel_integration_id,
         link, is_read, read_at, created_at) values
     (pg_temp.did(800), c, 'NEW_LEAD',               'New lead: Karim Nasser', 'Karim wrote in on Telegram about a consultation in Arabic.', pg_temp.did(103), pg_temp.did(203), null, null, '/inbox?conversationId=' || pg_temp.did(203), false, null, now() - interval '2 hours'),
     (pg_temp.did(801), c, 'HANDOFF',                'Olivia Reed needs a human', 'Asked about financing and medical history on Instagram.', pg_temp.did(104), pg_temp.did(204), null, null, '/inbox?conversationId=' || pg_temp.did(204), false, null, now() - interval '38 minutes'),
@@ -469,7 +469,7 @@ begin
   -- ---------------------------------------------------------------
   -- 15. Activity events (feed + analytics)
   -- ---------------------------------------------------------------
-  insert into activity.events (id, clinic_id, lead_id, conversation_id, appointment_id, event_type, source, metadata, created_at) values
+  insert into activity.events (id, client_id, lead_id, conversation_id, appointment_id, event_type, source, metadata, created_at) values
     (pg_temp.did(900), c, pg_temp.did(100), pg_temp.did(200), null,             'lead_created',           'instagram', '{}', now() - interval '25 days'),
     (pg_temp.did(901), c, pg_temp.did(100), pg_temp.did(200), pg_temp.did(300), 'consultation_booked',    'ai',        '{}', now() - interval '25 days' + interval '10 minutes'),
     (pg_temp.did(902), c, pg_temp.did(100), null,             pg_temp.did(300), 'consultation_attended',  'staff',     '{}', now() - interval '18 days'),
@@ -502,7 +502,7 @@ begin
     (v_plan, 'max_channel_connections', '6')
   on conflict (plan_id, entitlement_key) do update set value = excluded.value;
 
-  insert into billing.rate_cards (id, code, name, description, clinic_id, is_default, is_active)
+  insert into billing.rate_cards (id, code, name, description, client_id, is_default, is_active)
   values (pg_temp.did(1200), 'demo-omni-card', 'Aurora custom pricing (demo)', 'Demo clinic price list.', c, false, true);
 
   insert into billing.rates (id, rate_card_id, event_type, provider, provider_billing, unit, provider_cost, client_rate, currency, effective_from, notes, created_by) values
@@ -510,41 +510,41 @@ begin
     (pg_temp.did(1202), pg_temp.did(1200), 'whatsapp_utility_message',   null, null, 'message', 0.0100, 0.0200, 'USD', now() - interval '200 days', 'Demo rate', 'seed-demo'),
     (pg_temp.did(1203), pg_temp.did(1200), 'whatsapp_service_message',   null, null, 'message', 0.0000, 0.0000, 'USD', now() - interval '200 days', 'Demo rate', 'seed-demo');
 
-  insert into billing.accounts (id, clinic_id, currency, wallet_balance, included_credit_balance, reserved_amount)
+  insert into billing.accounts (id, client_id, currency, wallet_balance, included_credit_balance, reserved_amount)
   values (pg_temp.did(1210), c, 'USD', 151.000000, 19.500000, 0.500000)
-  on conflict (clinic_id) do update set wallet_balance = excluded.wallet_balance,
+  on conflict (client_id) do update set wallet_balance = excluded.wallet_balance,
         included_credit_balance = excluded.included_credit_balance, reserved_amount = excluded.reserved_amount;
 
-  insert into billing.subscriptions (id, clinic_id, plan_id, status, current_period_start, current_period_end, cancel_at_period_end)
+  insert into billing.subscriptions (id, client_id, plan_id, status, current_period_start, current_period_end, cancel_at_period_end)
   values (pg_temp.did(1211), c, v_plan, 'active', now() - interval '12 days', now() + interval '18 days', false);
 
-  insert into billing.channel_account_settings (channel_integration_id, clinic_id, provider_billing, omni_usage_billing, reason, updated_by)
+  insert into billing.channel_account_settings (channel_integration_id, client_id, provider_billing, omni_usage_billing, reason, updated_by)
   values (pg_temp.did(20), c, 'platform_funded', true, 'Demo default', 'seed-demo');
 
-  insert into billing.usage_records (id, clinic_id, billing_account_id, idempotency_key, event_type, channel, channel_integration_id,
+  insert into billing.usage_records (id, client_id, billing_account_id, idempotency_key, event_type, channel, channel_integration_id,
         quantity, unit, country_code, provider_billing, rate_id, rate_card_id, rate_source, unit_provider_cost, unit_price, provider_cost,
         amount, reserved_amount, credit_amount, wallet_amount, currency, charge_status, provider_outcome, failure_reason, campaign_id,
         source, actor, occurred_at, reserved_at, settled_at) values
     (pg_temp.did(1220), c, pg_temp.did(1210), 'demo-usage-1', 'whatsapp_marketing_message', 'whatsapp', pg_temp.did(20), 40, 'message', 'US', 'platform_funded',
-        pg_temp.did(1201), pg_temp.did(1200), 'clinic', 0.0250, 0.0500, 1.00, 2.00, 0, 2.00, 0, 'USD', 'settled', 'billable', null, pg_temp.did(700),
+        pg_temp.did(1201), pg_temp.did(1200), 'client', 0.0250, 0.0500, 1.00, 2.00, 0, 2.00, 0, 'USD', 'settled', 'billable', null, pg_temp.did(700),
         'campaign', 'seed-demo', now() - interval '12 days', now() - interval '12 days', now() - interval '12 days'),
     (pg_temp.did(1221), c, pg_temp.did(1210), 'demo-usage-2', 'whatsapp_utility_message', 'whatsapp', pg_temp.did(20), 25, 'message', 'US', 'platform_funded',
-        pg_temp.did(1202), pg_temp.did(1200), 'clinic', 0.0100, 0.0200, 0.25, 0.50, 0, 0.50, 0, 'USD', 'settled', 'billable', null, null,
+        pg_temp.did(1202), pg_temp.did(1200), 'client', 0.0100, 0.0200, 0.25, 0.50, 0, 0.50, 0, 'USD', 'settled', 'billable', null, null,
         'channel', 'seed-demo', now() - interval '8 days', now() - interval '8 days', now() - interval '8 days'),
     (pg_temp.did(1222), c, pg_temp.did(1210), 'demo-usage-3', 'whatsapp_marketing_message', 'whatsapp', pg_temp.did(20), 60, 'message', 'US', 'platform_funded',
-        pg_temp.did(1201), pg_temp.did(1200), 'clinic', 0.0250, 0.0500, 1.50, 3.00, 0, 3.00, 0, 'USD', 'settled', 'billable', null, null,
+        pg_temp.did(1201), pg_temp.did(1200), 'client', 0.0250, 0.0500, 1.50, 3.00, 0, 3.00, 0, 'USD', 'settled', 'billable', null, null,
         'campaign', 'seed-demo', now() - interval '4 days', now() - interval '4 days', now() - interval '4 days'),
     (pg_temp.did(1223), c, pg_temp.did(1210), 'demo-usage-4', 'telegram_message', 'telegram', pg_temp.did(23), 30, 'message', null, 'no_provider_usage_fee',
         null, null, null, null, null, null, 0, 0, 0, 0, 'USD', 'not_charged', 'billable', null, null,
         'channel', 'seed-demo', now() - interval '3 days', null, null),
     (pg_temp.did(1224), c, pg_temp.did(1210), 'demo-usage-5', 'whatsapp_marketing_message', 'whatsapp', pg_temp.did(20), 10, 'message', 'US', 'platform_funded',
-        pg_temp.did(1201), pg_temp.did(1200), 'clinic', 0.0250, 0.0500, 0.25, null, 0.50, 0, 0, 'USD', 'reserved', 'pending', null, pg_temp.did(701),
+        pg_temp.did(1201), pg_temp.did(1200), 'client', 0.0250, 0.0500, 0.25, null, 0.50, 0, 0, 'USD', 'reserved', 'pending', null, pg_temp.did(701),
         'campaign', 'seed-demo', now() - interval '2 hours', now() - interval '2 hours', null),
     (pg_temp.did(1225), c, pg_temp.did(1210), 'demo-usage-6', 'whatsapp_utility_message', 'whatsapp', pg_temp.did(20), 1, 'message', 'US', 'platform_funded',
         null, null, null, null, null, null, null, 0, 0, 0, 'USD', 'failed', 'not_billable', 'no_rate', null,
         'channel', 'seed-demo', now() - interval '1 day', null, null);
 
-  insert into billing.ledger_entries (clinic_id, billing_account_id, entry_type, balance_type, amount, balance_after, currency, idempotency_key,
+  insert into billing.ledger_entries (client_id, billing_account_id, entry_type, balance_type, amount, balance_after, currency, idempotency_key,
         usage_record_id, subscription_id, plan_id, source, actor, reason, created_at) values
     (c, pg_temp.did(1210), 'wallet_top_up',                'wallet',          200.00, 200.00, 'USD', 'demo-ledger-1', null, null, null, 'admin', 'seed-demo', 'Initial wallet top-up (demo)', now() - interval '30 days'),
     (c, pg_temp.did(1210), 'subscription_charge',          'wallet',          -99.00, 101.00, 'USD', 'demo-ledger-2', null, pg_temp.did(1211), v_plan, 'subscription', 'seed-demo', 'Growth (demo) monthly charge', now() - interval '12 days'),

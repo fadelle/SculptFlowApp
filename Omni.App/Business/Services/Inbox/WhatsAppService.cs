@@ -8,7 +8,7 @@ using Omni.App.Persistence.Contracts.Channels;
 
 namespace Omni.App.Business.Services.Inbox;
 
-/// <summary>Front door for WhatsApp sends: finds the clinic's connected WhatsApp number, checks it's ready, then
+/// <summary>Front door for WhatsApp sends: finds the client's connected WhatsApp number, checks it's ready, then
 /// hands the actual API call to IWhatsAppProvider (Meta Cloud API). No HTTP details live here.</summary>
 public class WhatsAppService : IWhatsAppService
 {
@@ -21,28 +21,28 @@ public class WhatsAppService : IWhatsAppService
         _provider = provider;
     }
 
-    public async Task<string> SendTextMessageAsync(Guid clinicId, string toPhone, string text, CancellationToken ct = default)
+    public async Task<string> SendTextMessageAsync(Guid clientId, string toPhone, string text, CancellationToken ct = default)
     {
-        var integration = await ResolveAsync(clinicId, ct);
+        var integration = await ResolveAsync(clientId, ct);
         return await _provider.SendTextAsync(integration, toPhone, text, ct);
     }
 
     public async Task<string> SendTemplateMessageAsync(
-        Guid clinicId, string toPhone, string templateName, string languageCode,
+        Guid clientId, string toPhone, string templateName, string languageCode,
         IReadOnlyList<string> bodyParameters, CancellationToken ct = default)
     {
-        var integration = await ResolveAsync(clinicId, ct);
+        var integration = await ResolveAsync(clientId, ct);
         return await _provider.SendTemplateAsync(integration, toPhone,
             new WhatsAppTemplateSend(templateName, languageCode, bodyParameters), ct);
     }
 
-    private async Task<ChannelIntegration> ResolveAsync(Guid clinicId, CancellationToken ct)
+    private async Task<ChannelIntegration> ResolveAsync(Guid clientId, CancellationToken ct)
     {
-        var integration = await _integrations.GetReadOnlyAsync(clinicId, ChannelType.WhatsApp, ct);
+        var integration = await _integrations.GetReadOnlyAsync(clientId, ChannelType.WhatsApp, ct);
         if (integration is null || integration.Status != ChannelIntegrationStatus.Connected || !_provider.IsReady(integration))
         {
             throw new WhatsAppSendException(
-                "This clinic doesn't have a connected WhatsApp number yet — see Settings → Messaging Integrations.");
+                "This client doesn't have a connected WhatsApp number yet — see Settings → Messaging Integrations.");
         }
         return integration;
     }

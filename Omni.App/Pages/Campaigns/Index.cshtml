@@ -21,9 +21,9 @@
     static string Width(int part, int whole) => whole > 0 ? (part * 100.0 / whole).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture) : "0";
 }
 
-@if (!Model.ClinicConfigured)
+@if (!Model.ClientConfigured)
 {
-    <partial name="_NoClinic" />
+    <partial name="_NoClient" />
 }
 else
 {

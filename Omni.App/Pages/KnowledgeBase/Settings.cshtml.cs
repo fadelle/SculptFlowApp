@@ -9,20 +9,20 @@ using Omni.App.Entities.Responses.Knowledge;
 namespace Omni.App.Pages.KnowledgeBase;
 
 /// <summary>Knowledge Base → Settings. Shows every persisted retrieval/embedding setting for the logged-in
-/// clinic; only chunk size, chunk overlap, top K and minimum similarity are editable (the rest are shown
+/// client; only chunk size, chunk overlap, top K and minimum similarity are editable (the rest are shown
 /// read-only — see IKnowledgeSettingsService).</summary>
 public class SettingsModel : PageModel
 {
-    private readonly ICurrentClinicContext _clinicContext;
+    private readonly ICurrentClientContext _clientContext;
     private readonly IKnowledgeSettingsService _settings;
 
-    public SettingsModel(ICurrentClinicContext clinicContext, IKnowledgeSettingsService settings)
+    public SettingsModel(ICurrentClientContext clientContext, IKnowledgeSettingsService settings)
     {
-        _clinicContext = clinicContext;
+        _clientContext = clientContext;
         _settings = settings;
     }
 
-    public bool ClinicConfigured { get; private set; }
+    public bool ClientConfigured { get; private set; }
     public KnowledgeSettingsResponse Current { get; private set; } = null!;
 
     [BindProperty]
@@ -45,11 +45,11 @@ public class SettingsModel : PageModel
 
     public async Task<IActionResult> OnGetAsync(CancellationToken ct)
     {
-        var clinic = await _clinicContext.GetClinicAsync(ct);
-        if (clinic is null) return Page();
-        ClinicConfigured = true;
+        var client = await _clientContext.GetClientAsync(ct);
+        if (client is null) return Page();
+        ClientConfigured = true;
 
-        Current = await _settings.GetAsync(clinic.Id, ct);
+        Current = await _settings.GetAsync(client.Id, ct);
         ChunkSizeTokens = Current.ChunkSizeTokens;
         ChunkOverlapTokens = Current.ChunkOverlapTokens;
         TopK = Current.TopK;
@@ -59,9 +59,9 @@ public class SettingsModel : PageModel
 
     public async Task<IActionResult> OnPostAsync(CancellationToken ct)
     {
-        var clinic = await _clinicContext.GetClinicAsync(ct);
-        if (clinic is null) return RedirectToPage("/KnowledgeBase/Index");
-        ClinicConfigured = true;
+        var client = await _clientContext.GetClientAsync(ct);
+        if (client is null) return RedirectToPage("/KnowledgeBase/Index");
+        ClientConfigured = true;
 
         try
         {
@@ -70,7 +70,7 @@ public class SettingsModel : PageModel
                 throw new ArgumentException("Minimum similarity must be a number between 0 and 1.");
             }
 
-            await _settings.UpdateAsync(clinic.Id,
+            await _settings.UpdateAsync(client.Id,
                 new UpdateKnowledgeSettingsRequest(ChunkSizeTokens, ChunkOverlapTokens, TopK, minSimilarity), ct);
             StatusMessage = "Settings saved.";
             return RedirectToPage();
@@ -81,7 +81,7 @@ public class SettingsModel : PageModel
         }
 
         // Redisplay with the read-only values from the database and the user's attempted edits.
-        Current = await _settings.GetAsync(clinic.Id, ct);
+        Current = await _settings.GetAsync(client.Id, ct);
         return Page();
     }
 }

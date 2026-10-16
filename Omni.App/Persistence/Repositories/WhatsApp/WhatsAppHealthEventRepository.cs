@@ -16,9 +16,9 @@ public class WhatsAppHealthEventRepository : IWhatsAppHealthEventRepository
 
     public void Add(WhatsAppHealthEvent healthEvent) => _db.WhatsAppHealthEvents.Add(healthEvent);
 
-    public async Task<IReadOnlyList<WhatsAppHealthEvent>> ListForClinicAsync(Guid clinicId, int skip, int take, CancellationToken ct = default) =>
+    public async Task<IReadOnlyList<WhatsAppHealthEvent>> ListForClientAsync(Guid clientId, int skip, int take, CancellationToken ct = default) =>
         await _db.WhatsAppHealthEvents
-            .Where(h => h.ClinicId == clinicId)
+            .Where(h => h.ClientId == clientId)
             .OrderByDescending(h => h.OccurredAt)
             .Skip(skip).Take(take)
             .ToListAsync(ct);

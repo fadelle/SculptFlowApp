@@ -3,16 +3,16 @@ using Omni.App.Persistence.Repositories.Monitoring;
 
 namespace Omni.App.Tests.Repositories;
 
-/// <summary>activity.app_logs: rows are global (no clinic FK), so each test uses its own fingerprints, categories and dates.</summary>
+/// <summary>activity.app_logs: rows are global (no client FK), so each test uses its own fingerprints, categories and dates.</summary>
 public class AppLogRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixture)
 {
     private static string Tag() => Guid.NewGuid().ToString("N")[..12];
 
     private static AppLog Log(DateTimeOffset at, string fingerprint, string category, string level = "Error", string message = "m",
-        int repeat = 1, Guid? clinicId = null, string? traceId = null, string? exceptionType = null) => new()
+        int repeat = 1, Guid? clientId = null, string? traceId = null, string? exceptionType = null) => new()
     {
         OccurredAt = at, Level = level, Category = category, Message = message, MessageTemplate = "t", Fingerprint = fingerprint,
-        RepeatCount = repeat, ClinicId = clinicId, TraceId = traceId, ExceptionType = exceptionType, Properties = "{\"A\":\"1\"}"
+        RepeatCount = repeat, ClientId = clientId, TraceId = traceId, ExceptionType = exceptionType, Properties = "{\"A\":\"1\"}"
     };
 
     [PostgresFact]
@@ -48,16 +48,16 @@ public class AppLogRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixtu
     }
 
     [PostgresFact]
-    public async Task List_filters_by_clinic_trace_fingerprint_and_search_and_pages_newest_first()
+    public async Task List_filters_by_client_trace_fingerprint_and_search_and_pages_newest_first()
     {
         var tag = Tag();
-        var clinicId = Guid.NewGuid();
+        var clientId = Guid.NewGuid();
         var trace = Guid.NewGuid().ToString("N");
         var t = new DateTimeOffset(2099, 3, 1, 10, 0, 0, TimeSpan.Zero);
         var fp = tag[..9];
         await SeedAsync(
-            Log(t, fp, tag, clinicId: clinicId, message: "one 100%_done"),
-            Log(t.AddMinutes(1), fp, tag, clinicId: clinicId, traceId: trace, message: "two"),
+            Log(t, fp, tag, clientId: clientId, message: "one 100%_done"),
+            Log(t.AddMinutes(1), fp, tag, clientId: clientId, traceId: trace, message: "two"),
             Log(t.AddMinutes(2), fp, tag, message: "three", exceptionType: "System.TimeoutException"),
             Log(t.AddMinutes(3), tag[..8] + "zz", tag, message: "four"));
 
@@ -71,7 +71,7 @@ public class AppLogRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixtu
         var (page2, _) = await repo.ListReadOnlyAsync(all, 2, 2);
         Assert.Equal(["two", "one 100%_done"], page2.Select(r => r.Message));
 
-        Assert.Equal(2, (await repo.ListReadOnlyAsync(all with { ClinicId = clinicId }, 0, 10)).Total);
+        Assert.Equal(2, (await repo.ListReadOnlyAsync(all with { ClientId = clientId }, 0, 10)).Total);
         Assert.Equal("two", Assert.Single((await repo.ListReadOnlyAsync(all with { TraceId = trace }, 0, 10)).Rows).Message);
         Assert.Equal(3, (await repo.ListReadOnlyAsync(all with { Fingerprint = fp }, 0, 10)).Total);
         // Search covers the exception type and treats % and _ literally.

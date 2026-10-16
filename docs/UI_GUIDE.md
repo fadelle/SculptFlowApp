@@ -57,16 +57,16 @@ fix bugs in both copies; keep screen-specific styles out of them.
 3. **Screens one at a time** with the recipes in §6, re-testing each form after it changes.
 4. **Auth screens** last (they often come from Identity UI; restyle without changing the flow).
 
-### 0.4 Omni clinic app — how this project applies the guide
+### 0.4 Omni client app — how this project applies the guide
 This app had its own hand-rolled CSS and 21 page scripts before Aurora. Where the rest of this guide is generic, **this
-section wins**. Copy says *patient* where the guide says *customer*: the people using the app are **clinic staff**.
+section wins**. Copy says *patient* where the guide says *customer*: the people using the app are **client staff**.
 
 - **Keep it simple** (decided 2026-10-09). Staff get the sidebar, the page title, the notification bell, the theme
   toggle and the user menu, nothing more: no palette, scope, favourites, nav filter, section tabs or breadcrumbs (A13).
 - **No Bootstrap, jQuery or unobtrusive validation.** Appendix B is not installed. Forms post plain `name=` fields with
   HTML5 attributes; server-side rule errors come back as the page's `ErrorMessage`.
 - **Brand and look:** dark sidebar; teal brand (`data-brand="teal"` on `<html>` in both layouts); name *Omni*
-  with the clinic's name as the sidebar subtitle; `wwwroot/logo.svg` is the brand mark (no `_BrandMark`). The look is
+  with the client's name as the sidebar subtitle; `wwwroot/logo.svg` is the brand mark (no `_BrandMark`). The look is
   **calm**: `site.css` section 2 switches off the ambient backdrop, the glow under buttons and the panel sheen, and sets
   `--au-r-panel` to 18px. It also makes the teal ramp AA: primary `#0f766e` (5.5:1 on white), gradient
   `#0f766e → #0e7490` in light and `#2dd4bf → #22d3ee` (dark text) in dark. These are the only kit tokens overridden.
@@ -82,9 +82,9 @@ section wins**. Copy says *patient* where the guide says *customer*: the people 
   | `_Layout` / `_AuthLayout` + pre-paint script | `Pages/Shared/_Layout`, `_AuthLayout`, `_ThemeScript` (keys `client.themeMode`, `client.sidebarCollapsed`; reads the old `sf-theme` / `sf-sidebar` once) |
   | Sidebar, header, user menu | `_Sidebar` (four captioned groups; `#sidebar-inbox-badge` is filled by `sidebar.js` / `inbox.js`), `_Header` (menu button = drawer on phones, icon rail on desktop; bell ids read by `notifications.js`; theme toggle; `<details>` user menu with the existing sign-out form; Swagger link only in Development) |
   | `fonts.css` (self-hosted) | `wwwroot/css/fonts.css` + `wwwroot/fonts`: Inter (variable, latin) and a **Material Symbols subset** holding only the icons in use (`icons.txt`). After adding an icon run `node docs/tools/icon-font.js` from the repo root: it scans the views and scripts for `class="… au-icon …">name<`, `Icon: "name"` and `@* icon:name *@`. JetBrains Mono isn't shipped; `.au-mono` falls back to the system monospace. |
-  | Feedback, empty states | `_Messages` (`Entities/Dtos/Ui/PageMessagesModel(Status, Error)`), `_EmptyState` (`EmptyStateModel`; pass `Icon:` by name), `_NoClinic` |
+  | Feedback, empty states | `_Messages` (`Entities/Dtos/Ui/PageMessagesModel(Status, Error)`), `_EmptyState` (`EmptyStateModel`; pass `Icon:` by name), `_NoClient` |
   | `Ui` helpers | `Common/Helpers/UiTextHelper` (`Initials`, `Amount`, `ShortReference`, `SplitError`) |
-  | Error / 404 pages | `Pages/Status` (404/400 via `UseStatusCodePagesWithReExecute`, not for `/api`, `/hubs` or static files; shell when signed in, `_AuthLayout` otherwise) and `Pages/Error` (always `_AuthLayout`: the shell reads the clinic from the database, which may be what failed) |
+  | Error / 404 pages | `Pages/Status` (404/400 via `UseStatusCodePagesWithReExecute`, not for `/api`, `/hubs` or static files; shell when signed in, `_AuthLayout` otherwise) and `Pages/Error` (always `_AuthLayout`: the shell reads the client from the database, which may be what failed) |
 
 - **Kit behaviours:** the theme toggle and the sidebar drawer/rail are the kit's (the old `theme.js` and inline drawer
   script are gone). Confirms are `data-au-confirm` + `-title` + `-label` (+ `-tone="danger"` for deletes and disconnects;
@@ -113,7 +113,7 @@ section wins**. Copy says *patient* where the guide says *customer*: the people 
 - **Recipes as built** (copy a page of the same kind): *list* `Procedures/Index` (page head → toolbar → `.au-table-card`
   with `.au-table--stack` and `data-label`s, or `_EmptyState`); *detail* `Dashboard/LeadDetail` (`.au-back-header` →
   `.detail-chips` → panels with `.au-detail-rows`); *form* `Procedures/Edit` (stacked `.au-form-field`s in a panel,
-  `.au-form-actions`); *settings with sections* `Settings/ClinicInfo`; *popup* `WhatsApp/Templates` (`.bm-overlay >
+  `.au-form-actions`); *settings with sections* `Settings/BusinessInfo`; *popup* `WhatsApp/Templates` (`.bm-overlay >
   .card`); *sign-in* `Account/Login` (`.au-auth__card`). Multi-part table cells wrap their content in one `<div>` so the
   stacked phone layout keeps label and value side by side.
 - **Money:** Billing shows its currency; Dashboard revenue uses `UiTextHelper.Amount` (no symbol: the production
@@ -311,7 +311,7 @@ action cards, toolbars** · 40 hero. Type: body 14px, inputs 16px (no iOS zoom),
 1.3rem/800, panel title 14px/700, eyebrow 12px uppercase. Spacing: 8px grid; page padding 24px (16px mobile).
 
 **Brand options.** Default is the shared indigo→violet. `<html data-brand="teal">` switches only
-the brand ramp to teal→cyan. A per-clinic brand colour, if ever needed, is the same mechanism:
+the brand ramp to teal→cyan. A per-client brand colour, if ever needed, is the same mechanism:
 override only `--au-primary*`, `--au-secondary*`, `--au-gradient*`, `--au-brand-glow*`,
 `--au-focus-ring` and the sidebar active tokens — and re-check AA contrast for white text on the
 gradient in both modes.
@@ -3601,7 +3601,7 @@ span.au-crumb:hover {
   background: color-mix(in srgb, var(--au-error) 10%, var(--au-paper));
   color: var(--au-error);
 }
-/* the global scope selector (one entity: e.g. Clinic) */
+/* the global scope selector (one entity: e.g. Client) */
 .au-scope {
   display: flex;
   align-items: center;
@@ -5780,7 +5780,7 @@ hr {
     });
   }
 
-  // --- global scope selector (one entity, e.g. Clinic) ----------------------
+  // --- global scope selector (one entity, e.g. Client) ----------------------
   // Server contract: GET {endpoint}&q=&skip=&take= → { items:[{id,name,isActive,sub}], hasMore }
   // Picking sets ?{param}=<id> (or ?{param}= for "All") and reloads; the server
   // persists the choice (cookie) and every scope-aware page reads it.

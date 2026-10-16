@@ -67,14 +67,14 @@ public sealed class BillingHarness
         Config.Apply(_settings.Select(s => new ConfigSetting { Section = s.Key.Item1, Key = s.Key.Item2, Value = s.Value }));
     }
 
-    /// <summary>A connected channel account (channel_integrations row) for the clinic.</summary>
-    public async Task<Guid> ConnectChannelAsync(Guid clinicId, string channel)
+    /// <summary>A connected channel account (channel_integrations row) for the client.</summary>
+    public async Task<Guid> ConnectChannelAsync(Guid clientId, string channel)
     {
         await using var db = Db();
         var id = Guid.NewGuid();
         db.ChannelIntegrations.Add(new ChannelIntegration
         {
-            Id = id, ClinicId = clinicId, Channel = channel, Status = ChannelIntegrationStatus.Connected,
+            Id = id, ClientId = clientId, Channel = channel, Status = ChannelIntegrationStatus.Connected,
             DisplayName = channel + " test", CreatedAt = Time.Now, UpdatedAt = Time.Now
         });
         await db.SaveChangesAsync();
@@ -96,24 +96,24 @@ public sealed class BillingHarness
         Entitlements(Db());
 
     public EntitlementService Entitlements(ApplicationDbContext db) =>
-        new(new ClinicSubscriptionRepository(db), new ChannelIntegrationRepository(db), Time, NullLogger<EntitlementService>.Instance, Config, Cache);
+        new(new ClientSubscriptionRepository(db), new ChannelIntegrationRepository(db), Time, NullLogger<EntitlementService>.Instance, Config, Cache);
 
     public static string Unique(string prefix) => $"{prefix}_{Guid.NewGuid():N}"[..Math.Min(prefix.Length + 13, 50)];
 
-    public async Task<Guid> CreateClinicAsync()
+    public async Task<Guid> CreateClientAsync()
     {
         await using var db = Db();
         var id = Guid.NewGuid();
-        db.Clinics.Add(new Clinic { Id = id, Name = "Test clinic " + id.ToString("N")[..6], Slug = "test-" + id.ToString("N"), CreatedAt = Time.Now, UpdatedAt = Time.Now });
+        db.Clients.Add(new Client { Id = id, Name = "Test client " + id.ToString("N")[..6], Slug = "test-" + id.ToString("N"), CreatedAt = Time.Now, UpdatedAt = Time.Now });
         await db.SaveChangesAsync();
         return id;
     }
 
-    /// <summary>A clinic-specific rate card (isolates tests from each other and from the global default card).</summary>
-    public async Task<string> CreateClientCardAsync(Guid clinicId)
+    /// <summary>A client-specific rate card (isolates tests from each other and from the global default card).</summary>
+    public async Task<string> CreateClientCardAsync(Guid clientId)
     {
         var code = Unique("client").Replace('_', '-');
-        await RateCards.CreateAsync(new RateCardRequest(code, "Client card", null, clinicId));
+        await RateCards.CreateAsync(new RateCardRequest(code, "Client card", null, clientId));
         return code;
     }
 
@@ -122,8 +122,8 @@ public sealed class BillingHarness
         RateCards.AddRateAsync(cardCode, new AddRateRequest(eventType, country, op, provider, "message", providerCost, clientRate, from,
             ProviderBilling: providerBilling), "tests");
 
-    public Task<LedgerResult> TopUpAsync(Guid clinicId, decimal amount) =>
-        Billing.TopUpAsync(new WalletTopUp(clinicId, amount, Guid.NewGuid().ToString("N"), "test", "test top-up", BillingSource.Admin, "tests"));
+    public Task<LedgerResult> TopUpAsync(Guid clientId, decimal amount) =>
+        Billing.TopUpAsync(new WalletTopUp(clientId, amount, Guid.NewGuid().ToString("N"), "test", "test top-up", BillingSource.Admin, "tests"));
 
     /// <summary>A plan with the given credit and entitlements, unique code.</summary>
     public async Task<string> CreatePlanAsync(decimal price, decimal credit, Dictionary<string, string>? entitlements = null, string period = "month",
@@ -134,10 +134,10 @@ public sealed class BillingHarness
         return code;
     }
 
-    public BillableEvent Event(Guid clinicId, string eventType, decimal quantity = 1, string? key = null, string? country = null,
+    public BillableEvent Event(Guid clientId, string eventType, decimal quantity = 1, string? key = null, string? country = null,
         string? provider = null, DateTimeOffset? occurredAt = null) => new()
     {
-        ClinicId = clinicId,
+        ClientId = clientId,
         IdempotencyKey = key ?? "test:" + Guid.NewGuid().ToString("N"),
         EventType = eventType,
         Channel = "test",
@@ -147,16 +147,16 @@ public sealed class BillingHarness
         OccurredAt = occurredAt
     };
 
-    public async Task<BillingAccount> AccountAsync(Guid clinicId)
+    public async Task<BillingAccount> AccountAsync(Guid clientId)
     {
         await using var db = Db();
-        return await db.BillingAccounts.AsNoTracking().SingleAsync(a => a.ClinicId == clinicId);
+        return await db.BillingAccounts.AsNoTracking().SingleAsync(a => a.ClientId == clientId);
     }
 
-    public async Task<List<BillingLedgerEntry>> LedgerAsync(Guid clinicId)
+    public async Task<List<BillingLedgerEntry>> LedgerAsync(Guid clientId)
     {
         await using var db = Db();
-        return await db.BillingLedgerEntries.AsNoTracking().Where(l => l.ClinicId == clinicId).OrderBy(l => l.Seq).ToListAsync();
+        return await db.BillingLedgerEntries.AsNoTracking().Where(l => l.ClientId == clientId).OrderBy(l => l.Seq).ToListAsync();
     }
 
     public async Task<BillingUsageRecord> UsageAsync(Guid usageId)
@@ -166,15 +166,15 @@ public sealed class BillingHarness
     }
 
     /// <summary>The invariant every test ends with: cached balances = ledger sums, reserved = open reservations.</summary>
-    public async Task AssertReconciledAsync(Guid clinicId)
+    public async Task AssertReconciledAsync(Guid clientId)
     {
-        var r = await Queries.ReconcileAsync(clinicId);
+        var r = await Queries.ReconcileAsync(clientId);
         Assert.True(r.IsBalanced,
             $"Not reconciled: wallet {r.WalletBalance} vs ledger {r.WalletLedgerTotal}, credit {r.IncludedCreditBalance} vs {r.IncludedCreditLedgerTotal}, reserved {r.ReservedAmount} vs open {r.OpenReservationsTotal}");
 
         // The ledger is a chain: in posting order, each entry's balance_after = the previous one + its amount.
         var running = new Dictionary<string, decimal> { [LedgerBalanceType.Wallet] = 0m, [LedgerBalanceType.IncludedCredit] = 0m };
-        foreach (var entry in await LedgerAsync(clinicId))
+        foreach (var entry in await LedgerAsync(clientId))
         {
             running[entry.BalanceType] += entry.Amount;
             Assert.Equal(running[entry.BalanceType], entry.BalanceAfter);

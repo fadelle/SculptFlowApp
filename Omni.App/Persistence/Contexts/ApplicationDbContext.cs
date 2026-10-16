@@ -14,7 +14,7 @@ namespace Omni.App.Persistence.Contexts;
 ///
 /// Inherits IdentityUserContext&lt;IdentityUser&gt; (not the full IdentityDbContext, which also adds
 /// AspNetRoles/AspNetUserRoles/AspNetRoleClaims) — this MVP ignores roles completely (see
-/// ClinicUser's doc comment), so there's no reason to carry role tables that will never be used.
+/// ClientUser's doc comment), so there's no reason to carry role tables that will never be used.
 /// Identity's own tables are remapped to snake_case below to match this schema's convention rather
 /// than keeping EF's default PascalCase "AspNetUsers" etc.
 /// </summary>
@@ -24,7 +24,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
     {
     }
 
-    public DbSet<Clinic> Clinics => Set<Clinic>();
+    public DbSet<Client> Clients => Set<Client>();
     public DbSet<Procedure> Procedures => Set<Procedure>();
     public DbSet<Lead> Leads => Set<Lead>();
     public DbSet<Conversation> Conversations => Set<Conversation>();
@@ -47,11 +47,11 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
     public DbSet<KnowledgeRetrievalBenchmarkRun> KnowledgeBenchmarkRuns => Set<KnowledgeRetrievalBenchmarkRun>();
     public DbSet<KnowledgeRetrievalBenchmarkResult> KnowledgeBenchmarkResults => Set<KnowledgeRetrievalBenchmarkResult>();
     public DbSet<KnowledgeRetrievalBenchmarkGeneration> KnowledgeBenchmarkGenerations => Set<KnowledgeRetrievalBenchmarkGeneration>();
-    public DbSet<ClinicUser> ClinicUsers => Set<ClinicUser>();
-    public DbSet<ClinicAvailabilityRule> ClinicAvailabilityRules => Set<ClinicAvailabilityRule>();
-    public DbSet<ClinicBookingSettings> ClinicBookingSettings => Set<ClinicBookingSettings>();
+    public DbSet<ClientUser> ClientUsers => Set<ClientUser>();
+    public DbSet<AvailabilityRule> AvailabilityRules => Set<AvailabilityRule>();
+    public DbSet<BookingSettings> BookingSettings => Set<BookingSettings>();
     public DbSet<InboxSettings> InboxSettings => Set<InboxSettings>();
-    public DbSet<ClinicAvailabilityException> ClinicAvailabilityExceptions => Set<ClinicAvailabilityException>();
+    public DbSet<AvailabilityException> AvailabilityExceptions => Set<AvailabilityException>();
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<CalendarIntegration> CalendarIntegrations => Set<CalendarIntegration>();
     public DbSet<CalendarIntegrationCalendar> CalendarIntegrationCalendars => Set<CalendarIntegrationCalendar>();
@@ -59,7 +59,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
     public DbSet<TikTokIntegration> TikTokIntegrations => Set<TikTokIntegration>();
     public DbSet<SubscriptionPlan> SubscriptionPlans => Set<SubscriptionPlan>();
     public DbSet<SubscriptionPlanEntitlement> SubscriptionPlanEntitlements => Set<SubscriptionPlanEntitlement>();
-    public DbSet<ClinicSubscription> ClinicSubscriptions => Set<ClinicSubscription>();
+    public DbSet<ClientSubscription> ClientSubscriptions => Set<ClientSubscription>();
     public DbSet<BillingAccount> BillingAccounts => Set<BillingAccount>();
     public DbSet<BillingRateCard> BillingRateCards => Set<BillingRateCard>();
     public DbSet<BillingRate> BillingRates => Set<BillingRate>();
@@ -129,11 +129,11 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
         });
 
         // ---------------------------------------------------------------
-        // clinics
+        // clients
         // ---------------------------------------------------------------
-        modelBuilder.Entity<Clinic>(e =>
+        modelBuilder.Entity<Client>(e =>
         {
-            e.ToTable("clinics", "core");
+            e.ToTable("clients", "core");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
             e.Property(x => x.Name).HasColumnName("name").HasMaxLength(200).IsRequired();
@@ -160,7 +160,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.ToTable("procedures", "core");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
-            e.Property(x => x.ClinicId).HasColumnName("clinic_id");
+            e.Property(x => x.ClientId).HasColumnName("client_id");
             e.Property(x => x.Name).HasColumnName("name").HasMaxLength(200).IsRequired();
             e.Property(x => x.Code).HasColumnName("code").HasMaxLength(100);
             e.Property(x => x.Description).HasColumnName("description");
@@ -169,10 +169,10 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.Property(x => x.CreatedAt).HasColumnName("created_at");
             e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
 
-            e.HasOne(x => x.Clinic).WithMany(c => c.Procedures)
-                .HasForeignKey(x => x.ClinicId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.Client).WithMany(c => c.Procedures)
+                .HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Cascade);
 
-            e.HasIndex(x => x.ClinicId);
+            e.HasIndex(x => x.ClientId);
         });
 
         // ---------------------------------------------------------------
@@ -183,7 +183,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.ToTable("leads", "crm");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
-            e.Property(x => x.ClinicId).HasColumnName("clinic_id");
+            e.Property(x => x.ClientId).HasColumnName("client_id");
             e.Property(x => x.ProcedureId).HasColumnName("procedure_id");
             e.Property(x => x.FullName).HasColumnName("full_name").HasMaxLength(200);
             e.Property(x => x.FirstName).HasColumnName("first_name").HasMaxLength(100);
@@ -209,21 +209,21 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.Property(x => x.CreatedAt).HasColumnName("created_at");
             e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
 
-            e.HasOne(x => x.Clinic).WithMany(c => c.Leads)
-                .HasForeignKey(x => x.ClinicId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.Client).WithMany(c => c.Leads)
+                .HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne(x => x.Procedure).WithMany()
                 .HasForeignKey(x => x.ProcedureId).OnDelete(DeleteBehavior.SetNull);
 
-            e.HasIndex(x => x.ClinicId);
-            e.HasIndex(x => new { x.ClinicId, x.Phone });
-            e.HasIndex(x => new { x.ClinicId, x.Email });
+            e.HasIndex(x => x.ClientId);
+            e.HasIndex(x => new { x.ClientId, x.Phone });
+            e.HasIndex(x => new { x.ClientId, x.Email });
             e.HasIndex(x => x.Status);
             e.HasIndex(x => x.ProcedureId);
             e.HasIndex(x => x.CreatedAt);
-            e.HasIndex(x => new { x.ClinicId, x.ExternalLeadId })
+            e.HasIndex(x => new { x.ClientId, x.ExternalLeadId })
                 .IsUnique()
                 .HasFilter("external_lead_id IS NOT NULL")
-                .HasDatabaseName("ux_leads_clinic_external_lead_id");
+                .HasDatabaseName("ux_leads_client_external_lead_id");
         });
 
         // ---------------------------------------------------------------
@@ -234,7 +234,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.ToTable("conversations", "crm");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
-            e.Property(x => x.ClinicId).HasColumnName("clinic_id");
+            e.Property(x => x.ClientId).HasColumnName("client_id");
             e.Property(x => x.LeadId).HasColumnName("lead_id");
             e.Property(x => x.Channel).HasColumnName("channel").HasMaxLength(50).IsRequired();
             e.Property(x => x.ExternalThreadId).HasColumnName("external_thread_id").HasMaxLength(200);
@@ -253,7 +253,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.HasOne(x => x.Lead).WithMany(l => l.Conversations)
                 .HasForeignKey(x => x.LeadId).OnDelete(DeleteBehavior.Cascade);
 
-            e.HasIndex(x => x.ClinicId);
+            e.HasIndex(x => x.ClientId);
             e.HasIndex(x => x.LeadId);
             e.HasIndex(x => x.ServiceWindowExpiresAt);
         });
@@ -266,7 +266,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.ToTable("messages", "crm");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
-            e.Property(x => x.ClinicId).HasColumnName("clinic_id");
+            e.Property(x => x.ClientId).HasColumnName("client_id");
             e.Property(x => x.ConversationId).HasColumnName("conversation_id");
             e.Property(x => x.LeadId).HasColumnName("lead_id");
             e.Property(x => x.Direction).HasColumnName("direction").HasMaxLength(20).IsRequired();
@@ -298,17 +298,17 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.HasOne(x => x.Lead).WithMany()
                 .HasForeignKey(x => x.LeadId).OnDelete(DeleteBehavior.Cascade);
 
-            e.HasIndex(x => x.ClinicId);
+            e.HasIndex(x => x.ClientId);
             e.HasIndex(x => x.ConversationId);
             e.HasIndex(x => x.LeadId);
             e.HasIndex(x => x.CreatedAt);
             e.HasIndex(x => x.CampaignId);
             e.HasIndex(x => x.WhatsAppTemplateId);
             // Idempotency for webhook/n8n retries — see MessageService.IngestAsync.
-            e.HasIndex(x => new { x.ClinicId, x.Channel, x.ExternalMessageId })
+            e.HasIndex(x => new { x.ClientId, x.Channel, x.ExternalMessageId })
                 .IsUnique()
                 .HasFilter("external_message_id IS NOT NULL")
-                .HasDatabaseName("ux_messages_clinic_channel_external_message_id");
+                .HasDatabaseName("ux_messages_client_channel_external_message_id");
         });
 
         // ---------------------------------------------------------------
@@ -319,7 +319,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.ToTable("appointments", "scheduling");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
-            e.Property(x => x.ClinicId).HasColumnName("clinic_id");
+            e.Property(x => x.ClientId).HasColumnName("client_id");
             e.Property(x => x.LeadId).HasColumnName("lead_id");
             e.Property(x => x.ProcedureId).HasColumnName("procedure_id");
             e.Property(x => x.AppointmentType).HasColumnName("appointment_type").HasMaxLength(50).IsRequired();
@@ -340,7 +340,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.HasOne(x => x.Procedure).WithMany()
                 .HasForeignKey(x => x.ProcedureId).OnDelete(DeleteBehavior.SetNull);
 
-            e.HasIndex(x => x.ClinicId);
+            e.HasIndex(x => x.ClientId);
             e.HasIndex(x => x.LeadId);
             e.HasIndex(x => x.ScheduledStart);
             e.HasIndex(x => x.Status);
@@ -354,7 +354,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.ToTable("procedure_bookings", "scheduling");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
-            e.Property(x => x.ClinicId).HasColumnName("clinic_id");
+            e.Property(x => x.ClientId).HasColumnName("client_id");
             e.Property(x => x.LeadId).HasColumnName("lead_id");
             e.Property(x => x.ProcedureId).HasColumnName("procedure_id");
             e.Property(x => x.AppointmentId).HasColumnName("appointment_id");
@@ -375,7 +375,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.HasOne(x => x.Appointment).WithMany(a => a.ProcedureBookings)
                 .HasForeignKey(x => x.AppointmentId).OnDelete(DeleteBehavior.SetNull);
 
-            e.HasIndex(x => x.ClinicId);
+            e.HasIndex(x => x.ClientId);
             e.HasIndex(x => x.LeadId);
             e.HasIndex(x => x.Status);
         });
@@ -388,7 +388,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.ToTable("events", "activity");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
-            e.Property(x => x.ClinicId).HasColumnName("clinic_id");
+            e.Property(x => x.ClientId).HasColumnName("client_id");
             e.Property(x => x.LeadId).HasColumnName("lead_id");
             e.Property(x => x.ConversationId).HasColumnName("conversation_id");
             e.Property(x => x.AppointmentId).HasColumnName("appointment_id");
@@ -404,8 +404,8 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             // this EF has no dependency info to guarantee that ordering (see LeadService.CreateOrGetAsync
             // / GetOrCreateByPhoneAsync, both of which add a new Lead and log its creation event in
             // one call).
-            e.HasOne<Clinic>().WithMany()
-                .HasForeignKey(x => x.ClinicId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<Client>().WithMany()
+                .HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne<Lead>().WithMany()
                 .HasForeignKey(x => x.LeadId).OnDelete(DeleteBehavior.SetNull);
             e.HasOne<Conversation>().WithMany()
@@ -413,7 +413,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.HasOne<Appointment>().WithMany()
                 .HasForeignKey(x => x.AppointmentId).OnDelete(DeleteBehavior.SetNull);
 
-            e.HasIndex(x => x.ClinicId);
+            e.HasIndex(x => x.ClientId);
             e.HasIndex(x => x.EventType);
             e.HasIndex(x => x.CreatedAt);
         });
@@ -426,7 +426,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.ToTable("channel_integrations", "channels");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
-            e.Property(x => x.ClinicId).HasColumnName("clinic_id");
+            e.Property(x => x.ClientId).HasColumnName("client_id");
             e.Property(x => x.Channel).HasColumnName("channel").HasMaxLength(30).IsRequired();
             e.Property(x => x.Status).HasColumnName("status").HasMaxLength(20).IsRequired();
             e.Property(x => x.DisplayName).HasColumnName("display_name").HasMaxLength(200);
@@ -459,14 +459,14 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.Property(x => x.CreatedAt).HasColumnName("created_at");
             e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
 
-            e.HasOne(x => x.Clinic).WithMany()
-                .HasForeignKey(x => x.ClinicId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.Client).WithMany()
+                .HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Cascade);
 
-            e.HasIndex(x => new { x.ClinicId, x.Channel })
+            e.HasIndex(x => new { x.ClientId, x.Channel })
                 .IsUnique()
-                .HasDatabaseName("ux_channel_integrations_clinic_channel");
-            // A Meta phone_number_id must never map to more than one clinic — webhook routing
-            // (phone_number_id -> channel_integration -> clinic_id) depends on this being
+                .HasDatabaseName("ux_channel_integrations_client_channel");
+            // A Meta phone_number_id must never map to more than one client — webhook routing
+            // (phone_number_id -> channel_integration -> client_id) depends on this being
             // unambiguous. Filtered (not null only): most rows here are non-WhatsApp channels
             // (Instagram/Facebook) or WhatsApp rows not yet connected, neither of which sets this.
             e.HasIndex(x => x.PhoneNumberId)
@@ -474,7 +474,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
                 .HasFilter("phone_number_id IS NOT NULL")
                 .HasDatabaseName("ux_channel_integrations_phone_number_id");
             // WABA id is deliberately NOT unique — one WABA can contain multiple phone numbers, so
-            // multiple channel_integrations rows (even across different clinics, in principle) can
+            // multiple channel_integrations rows (even across different clients, in principle) can
             // legitimately share a whatsapp_business_id. Indexed for lookup speed only.
             e.HasIndex(x => x.WhatsAppBusinessId);
         });
@@ -487,7 +487,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.ToTable("whatsapp_templates", "channels");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
-            e.Property(x => x.ClinicId).HasColumnName("clinic_id");
+            e.Property(x => x.ClientId).HasColumnName("client_id");
             e.Property(x => x.MetaTemplateId).HasColumnName("meta_template_id").HasMaxLength(200);
             e.Property(x => x.Name).HasColumnName("name").HasMaxLength(200).IsRequired();
             e.Property(x => x.Category).HasColumnName("category").HasMaxLength(30).IsRequired();
@@ -509,16 +509,16 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.Property(x => x.CreatedAt).HasColumnName("created_at");
             e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
 
-            e.HasOne(x => x.Clinic).WithMany()
-                .HasForeignKey(x => x.ClinicId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.Client).WithMany()
+                .HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Cascade);
 
-            e.HasIndex(x => x.ClinicId);
+            e.HasIndex(x => x.ClientId);
             e.HasIndex(x => x.ChannelIntegrationId);
-            e.HasIndex(x => new { x.ClinicId, x.MetaTemplateId })
-                .HasDatabaseName("ix_whatsapp_templates_clinic_meta_template_id");
-            e.HasIndex(x => new { x.ClinicId, x.Name, x.Language })
+            e.HasIndex(x => new { x.ClientId, x.MetaTemplateId })
+                .HasDatabaseName("ix_whatsapp_templates_client_meta_template_id");
+            e.HasIndex(x => new { x.ClientId, x.Name, x.Language })
                 .IsUnique()
-                .HasDatabaseName("ux_whatsapp_templates_clinic_name_language");
+                .HasDatabaseName("ux_whatsapp_templates_client_name_language");
         });
 
         // ---------------------------------------------------------------
@@ -529,7 +529,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.ToTable("campaigns", "marketing");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
-            e.Property(x => x.ClinicId).HasColumnName("clinic_id");
+            e.Property(x => x.ClientId).HasColumnName("client_id");
             e.Property(x => x.Name).HasColumnName("name").HasMaxLength(200).IsRequired();
             e.Property(x => x.CampaignType).HasColumnName("campaign_type").HasMaxLength(30).IsRequired();
             e.Property(x => x.Channel).HasColumnName("channel").HasMaxLength(30).IsRequired();
@@ -544,12 +544,12 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.Property(x => x.CreatedAt).HasColumnName("created_at");
             e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
 
-            e.HasOne(x => x.Clinic).WithMany()
-                .HasForeignKey(x => x.ClinicId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.Client).WithMany()
+                .HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne(x => x.WhatsAppTemplate).WithMany()
                 .HasForeignKey(x => x.WhatsAppTemplateId).OnDelete(DeleteBehavior.Restrict);
 
-            e.HasIndex(x => x.ClinicId);
+            e.HasIndex(x => x.ClientId);
             e.HasIndex(x => x.Status);
             e.HasIndex(x => x.CampaignType);
             e.HasIndex(x => x.ScheduledAt);
@@ -564,7 +564,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.ToTable("campaign_recipients", "marketing");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
-            e.Property(x => x.ClinicId).HasColumnName("clinic_id");
+            e.Property(x => x.ClientId).HasColumnName("client_id");
             e.Property(x => x.CampaignId).HasColumnName("campaign_id");
             e.Property(x => x.LeadId).HasColumnName("lead_id");
             e.Property(x => x.ConversationId).HasColumnName("conversation_id");
@@ -594,7 +594,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.HasOne(x => x.Appointment).WithMany()
                 .HasForeignKey(x => x.AppointmentId).OnDelete(DeleteBehavior.SetNull);
 
-            e.HasIndex(x => x.ClinicId);
+            e.HasIndex(x => x.ClientId);
             e.HasIndex(x => x.CampaignId);
             e.HasIndex(x => x.LeadId);
             e.HasIndex(x => x.Status);
@@ -613,7 +613,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.ToTable("whatsapp_health_events", "channels");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
-            e.Property(x => x.ClinicId).HasColumnName("clinic_id");
+            e.Property(x => x.ClientId).HasColumnName("client_id");
             e.Property(x => x.ChannelIntegrationId).HasColumnName("channel_integration_id");
             e.Property(x => x.EventType).HasColumnName("event_type").HasMaxLength(100).IsRequired();
             e.Property(x => x.Severity).HasColumnName("severity").HasMaxLength(20);
@@ -627,7 +627,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.HasOne(x => x.ChannelIntegration).WithMany()
                 .HasForeignKey(x => x.ChannelIntegrationId).OnDelete(DeleteBehavior.Cascade);
 
-            e.HasIndex(x => x.ClinicId);
+            e.HasIndex(x => x.ClientId);
             e.HasIndex(x => x.ChannelIntegrationId);
             e.HasIndex(x => x.OccurredAt);
             // Practical idempotency for webhook retries — see WhatsAppHealthService.ApplyHealthEventAsync's
@@ -638,37 +638,37 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
         });
 
         // ---------------------------------------------------------------
-        // Structured availability (clinic_availability_rules / clinic_booking_settings / clinic_availability_exceptions)
+        // Structured availability (availability_rules / booking_settings / availability_exceptions)
         // — see Business/Services/Appointments/AvailabilityService.cs.
         // ---------------------------------------------------------------
-        modelBuilder.Entity<ClinicAvailabilityRule>(e =>
+        modelBuilder.Entity<AvailabilityRule>(e =>
         {
-            e.ToTable("clinic_availability_rules", "scheduling");
+            e.ToTable("availability_rules", "scheduling");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
-            e.Property(x => x.ClinicId).HasColumnName("clinic_id");
+            e.Property(x => x.ClientId).HasColumnName("client_id");
             e.Property(x => x.DayOfWeek).HasColumnName("day_of_week");
             e.Property(x => x.IsOpen).HasColumnName("is_open");
             e.Property(x => x.StartTime).HasColumnName("start_time");
             e.Property(x => x.EndTime).HasColumnName("end_time");
             e.Property(x => x.CreatedAt).HasColumnName("created_at");
             e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
-            e.HasOne<Clinic>().WithMany().HasForeignKey(x => x.ClinicId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<Client>().WithMany().HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Cascade);
         });
 
-        modelBuilder.Entity<ClinicBookingSettings>(e =>
+        modelBuilder.Entity<BookingSettings>(e =>
         {
-            e.ToTable("clinic_booking_settings", "scheduling");
+            e.ToTable("booking_settings", "scheduling");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
-            e.Property(x => x.ClinicId).HasColumnName("clinic_id");
+            e.Property(x => x.ClientId).HasColumnName("client_id");
             e.Property(x => x.DefaultConsultationDurationMinutes).HasColumnName("default_consultation_duration_minutes");
             e.Property(x => x.BufferMinutes).HasColumnName("buffer_minutes");
             e.Property(x => x.MinimumBookingNoticeMinutes).HasColumnName("minimum_booking_notice_minutes");
             e.Property(x => x.MaximumAdvanceBookingDays).HasColumnName("maximum_advance_booking_days");
             e.Property(x => x.CreatedAt).HasColumnName("created_at");
             e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
-            e.HasOne<Clinic>().WithMany().HasForeignKey(x => x.ClinicId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<Client>().WithMany().HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<InboxSettings>(e =>
@@ -676,24 +676,24 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.ToTable("inbox_settings", "crm");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
-            e.Property(x => x.ClinicId).HasColumnName("clinic_id");
+            e.Property(x => x.ClientId).HasColumnName("client_id");
             e.Property(x => x.ChannelIntegrationId).HasColumnName("channel_integration_id");
             e.Property(x => x.AiBotNewConversations).HasColumnName("ai_bot_new_conversations");
             e.Property(x => x.AiBotReopenedConversations).HasColumnName("ai_bot_reopened_conversations");
             e.Property(x => x.CreatedAt).HasColumnName("created_at");
             e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
-            e.HasOne<Clinic>().WithMany().HasForeignKey(x => x.ClinicId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<Client>().WithMany().HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne<ChannelIntegration>().WithMany().HasForeignKey(x => x.ChannelIntegrationId).OnDelete(DeleteBehavior.Cascade);
-            e.HasIndex(x => x.ClinicId).IsUnique().HasFilter("channel_integration_id is null");
+            e.HasIndex(x => x.ClientId).IsUnique().HasFilter("channel_integration_id is null");
             e.HasIndex(x => x.ChannelIntegrationId).IsUnique().HasFilter("channel_integration_id is not null");
         });
 
-        modelBuilder.Entity<ClinicAvailabilityException>(e =>
+        modelBuilder.Entity<AvailabilityException>(e =>
         {
-            e.ToTable("clinic_availability_exceptions", "scheduling");
+            e.ToTable("availability_exceptions", "scheduling");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
-            e.Property(x => x.ClinicId).HasColumnName("clinic_id");
+            e.Property(x => x.ClientId).HasColumnName("client_id");
             e.Property(x => x.Date).HasColumnName("date");
             e.Property(x => x.IsClosed).HasColumnName("is_closed");
             e.Property(x => x.StartTime).HasColumnName("start_time");
@@ -701,53 +701,53 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.Property(x => x.Reason).HasColumnName("reason").HasMaxLength(200);
             e.Property(x => x.CreatedAt).HasColumnName("created_at");
             e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
-            e.HasOne<Clinic>().WithMany().HasForeignKey(x => x.ClinicId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<Client>().WithMany().HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Cascade);
         });
 
         // ---------------------------------------------------------------
-        // clinic_users — links a logged-in Identity user to their clinic. See ClinicUser's doc
-        // comment and Business/Contracts/Managers/ICurrentClinicContext.cs, the one place that reads this table.
+        // client_users — links a logged-in Identity user to their client. See ClientUser's doc
+        // comment and Business/Contracts/Managers/ICurrentClientContext.cs, the one place that reads this table.
         // ---------------------------------------------------------------
-        modelBuilder.Entity<ClinicUser>(e =>
+        modelBuilder.Entity<ClientUser>(e =>
         {
-            e.ToTable("clinic_users", "identity");
+            e.ToTable("client_users", "identity");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
-            e.Property(x => x.ClinicId).HasColumnName("clinic_id");
+            e.Property(x => x.ClientId).HasColumnName("client_id");
             e.Property(x => x.UserId).HasColumnName("user_id").IsRequired();
             e.Property(x => x.IsActive).HasColumnName("is_active");
             e.Property(x => x.CreatedAt).HasColumnName("created_at");
             e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
 
-            e.HasOne(x => x.Clinic).WithMany()
-                .HasForeignKey(x => x.ClinicId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.Client).WithMany()
+                .HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Cascade);
             // No CLR nav property to IdentityUser (matches this schema's minimalist pattern for
             // scalar FK columns elsewhere, e.g. Lead.AssignedStaffId) — still a real FK constraint.
             e.HasOne<IdentityUser>().WithMany()
                 .HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
 
-            e.HasIndex(x => new { x.ClinicId, x.UserId })
+            e.HasIndex(x => new { x.ClientId, x.UserId })
                 .IsUnique()
-                .HasDatabaseName("ux_clinic_users_clinic_user");
-            // Enforces the MVP assumption CurrentClinicContext relies on (first active row wins) —
+                .HasDatabaseName("ux_client_users_client_user");
+            // Enforces the MVP assumption CurrentClientContext relies on (first active row wins) —
             // a user can have historical/inactive membership rows, but only one active one at a
             // time, so that lookup can never actually be ambiguous. Filtered so multiple inactive
             // rows for the same user don't collide.
             e.HasIndex(x => x.UserId)
                 .IsUnique()
                 .HasFilter("is_active = true")
-                .HasDatabaseName("ux_clinic_users_user_active");
+                .HasDatabaseName("ux_client_users_user_active");
         });
 
         // ---------------------------------------------------------------
-        // notifications — the clinic's notification bell. See Business/Contracts/Services/Notifications/INotificationService.cs.
+        // notifications — the client's notification bell. See Business/Contracts/Services/Notifications/INotificationService.cs.
         // ---------------------------------------------------------------
         modelBuilder.Entity<Notification>(e =>
         {
             e.ToTable("notifications", "activity");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
-            e.Property(x => x.ClinicId).HasColumnName("clinic_id");
+            e.Property(x => x.ClientId).HasColumnName("client_id");
             e.Property(x => x.Type).HasColumnName("type").HasMaxLength(40).IsRequired();
             e.Property(x => x.Title).HasColumnName("title").HasMaxLength(200).IsRequired();
             e.Property(x => x.Message).HasColumnName("message");
@@ -760,13 +760,13 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.Property(x => x.ReadAt).HasColumnName("read_at");
             e.Property(x => x.CreatedAt).HasColumnName("created_at");
 
-            e.HasOne<Clinic>().WithMany().HasForeignKey(x => x.ClinicId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<Client>().WithMany().HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Cascade);
             // Lead/Conversation/Appointment/ChannelIntegration are all "set null" on delete in the DB — no CLR
             // navigation to any of them (matches Lead.AssignedStaffId's scalar-FK-only pattern); a notification
             // outliving the row it points at just shows a dead link, never blocks the delete.
 
-            e.HasIndex(x => new { x.ClinicId, x.CreatedAt }).HasDatabaseName("ix_notifications_clinic_created");
-            e.HasIndex(x => x.ClinicId).HasFilter("is_read = false").HasDatabaseName("ix_notifications_clinic_unread");
+            e.HasIndex(x => new { x.ClientId, x.CreatedAt }).HasDatabaseName("ix_notifications_client_created");
+            e.HasIndex(x => x.ClientId).HasFilter("is_read = false").HasDatabaseName("ix_notifications_client_unread");
         });
 
         // ---------------------------------------------------------------
@@ -777,7 +777,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.ToTable("calendar_integrations", "scheduling");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
-            e.Property(x => x.ClinicId).HasColumnName("clinic_id");
+            e.Property(x => x.ClientId).HasColumnName("client_id");
             e.Property(x => x.Provider).HasColumnName("provider").HasMaxLength(20).IsRequired();
             e.Property(x => x.Status).HasColumnName("status").HasMaxLength(20).IsRequired();
             e.Property(x => x.ExternalConnectionRef).HasColumnName("external_connection_ref").HasMaxLength(200);
@@ -794,10 +794,10 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.Property(x => x.CreatedAt).HasColumnName("created_at");
             e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
 
-            e.HasOne<Clinic>().WithMany().HasForeignKey(x => x.ClinicId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<Client>().WithMany().HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Cascade);
             e.HasMany(x => x.Calendars).WithOne().HasForeignKey(x => x.CalendarIntegrationId).OnDelete(DeleteBehavior.Cascade);
 
-            e.HasIndex(x => new { x.ClinicId, x.Provider }).IsUnique().HasDatabaseName("ux_calendar_integrations_clinic_provider");
+            e.HasIndex(x => new { x.ClientId, x.Provider }).IsUnique().HasDatabaseName("ux_calendar_integrations_client_provider");
         });
 
         modelBuilder.Entity<CalendarIntegrationCalendar>(e =>
@@ -845,7 +845,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.ToTable("tiktok_integrations", "channels");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
-            e.Property(x => x.ClinicId).HasColumnName("clinic_id");
+            e.Property(x => x.ClientId).HasColumnName("client_id");
             e.Property(x => x.Status).HasColumnName("status").HasMaxLength(20).IsRequired();
             e.Property(x => x.OpenId).HasColumnName("open_id").HasMaxLength(200);
             e.Property(x => x.UnionId).HasColumnName("union_id").HasMaxLength(200);
@@ -860,12 +860,12 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.Property(x => x.CreatedAt).HasColumnName("created_at");
             e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
 
-            e.HasOne<Clinic>().WithMany().HasForeignKey(x => x.ClinicId).OnDelete(DeleteBehavior.Cascade);
-            e.HasIndex(x => x.ClinicId).IsUnique().HasDatabaseName("ux_tiktok_integrations_clinic");
+            e.HasOne<Client>().WithMany().HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(x => x.ClientId).IsUnique().HasDatabaseName("ux_tiktok_integrations_client");
         });
 
         // ---------------------------------------------------------------
-        // knowledge_documents / knowledge_chunks — the clinic Knowledge Base. The chunks table also
+        // knowledge_documents / knowledge_chunks — the client Knowledge Base. The chunks table also
         // has a pgvector `embedding` column that is intentionally NOT mapped here (see
         // KnowledgeChunk's doc comment): chunks are written/searched with raw SQL.
         // ---------------------------------------------------------------
@@ -874,7 +874,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.ToTable("knowledge_documents", "knowledge");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
-            e.Property(x => x.ClinicId).HasColumnName("clinic_id");
+            e.Property(x => x.ClientId).HasColumnName("client_id");
             e.Property(x => x.Title).HasColumnName("title").HasMaxLength(200).IsRequired();
             e.Property(x => x.Category).HasColumnName("category").HasMaxLength(50).IsRequired();
             e.Property(x => x.Content).HasColumnName("content").IsRequired();
@@ -887,10 +887,10 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.Property(x => x.CreatedAt).HasColumnName("created_at");
             e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
 
-            e.HasOne(x => x.Clinic).WithMany()
-                .HasForeignKey(x => x.ClinicId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.Client).WithMany()
+                .HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Cascade);
 
-            e.HasIndex(x => x.ClinicId);
+            e.HasIndex(x => x.ClientId);
             e.HasIndex(x => x.Category);
             e.HasIndex(x => x.IsActive);
         });
@@ -901,7 +901,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.ToTable("knowledge_website_sources", "knowledge");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
-            e.Property(x => x.ClinicId).HasColumnName("clinic_id");
+            e.Property(x => x.ClientId).HasColumnName("client_id");
             e.Property(x => x.StartUrl).HasColumnName("start_url").HasMaxLength(2000).IsRequired();
             e.Property(x => x.NormalizedStartUrl).HasColumnName("normalized_start_url").HasMaxLength(2000).IsRequired();
             e.Property(x => x.Host).HasColumnName("host").HasMaxLength(255).IsRequired();
@@ -914,9 +914,9 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.Property(x => x.CreatedAt).HasColumnName("created_at");
             e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
 
-            e.HasOne<Clinic>().WithMany().HasForeignKey(x => x.ClinicId).OnDelete(DeleteBehavior.Cascade);
-            e.HasIndex(x => new { x.ClinicId, x.NormalizedStartUrl }).IsUnique().HasDatabaseName("ux_kws_clinic_start_url");
-            e.HasIndex(x => x.ClinicId).HasDatabaseName("ix_kws_clinic_id");
+            e.HasOne<Client>().WithMany().HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(x => new { x.ClientId, x.NormalizedStartUrl }).IsUnique().HasDatabaseName("ux_kws_client_start_url");
+            e.HasIndex(x => x.ClientId).HasDatabaseName("ix_kws_client_id");
         });
 
         modelBuilder.Entity<KnowledgeWebsitePage>(e =>
@@ -924,7 +924,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.ToTable("knowledge_website_pages", "knowledge");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
-            e.Property(x => x.ClinicId).HasColumnName("clinic_id");
+            e.Property(x => x.ClientId).HasColumnName("client_id");
             e.Property(x => x.WebsiteSourceId).HasColumnName("website_source_id");
             e.Property(x => x.Url).HasColumnName("url").HasMaxLength(2000).IsRequired();
             e.Property(x => x.NormalizedUrl).HasColumnName("normalized_url").HasMaxLength(2000).IsRequired();
@@ -952,7 +952,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.HasOne<KnowledgeWebsiteSource>().WithMany().HasForeignKey(x => x.WebsiteSourceId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne<KnowledgeDocument>().WithMany().HasForeignKey(x => x.KnowledgeDocumentId).OnDelete(DeleteBehavior.SetNull);
             e.HasIndex(x => new { x.WebsiteSourceId, x.NormalizedUrl }).IsUnique().HasDatabaseName("ux_kwp_source_normalized_url");
-            e.HasIndex(x => x.ClinicId).HasDatabaseName("ix_kwp_clinic_id");
+            e.HasIndex(x => x.ClientId).HasDatabaseName("ix_kwp_client_id");
             e.HasIndex(x => new { x.WebsiteSourceId, x.Status }).HasDatabaseName("ix_kwp_source_status");
         });
 
@@ -961,7 +961,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.ToTable("knowledge_website_scrape_runs", "knowledge");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
-            e.Property(x => x.ClinicId).HasColumnName("clinic_id");
+            e.Property(x => x.ClientId).HasColumnName("client_id");
             e.Property(x => x.WebsiteSourceId).HasColumnName("website_source_id");
             e.Property(x => x.Status).HasColumnName("status").HasMaxLength(30).IsRequired();
             e.Property(x => x.StartedAt).HasColumnName("started_at");
@@ -980,7 +980,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.Property(x => x.CreatedAt).HasColumnName("created_at");
 
             e.HasOne<KnowledgeWebsiteSource>().WithMany().HasForeignKey(x => x.WebsiteSourceId).OnDelete(DeleteBehavior.Cascade);
-            e.HasIndex(x => x.ClinicId).HasDatabaseName("ix_kwr_clinic_id");
+            e.HasIndex(x => x.ClientId).HasDatabaseName("ix_kwr_client_id");
         });
 
         modelBuilder.Entity<KnowledgeChunk>(e =>
@@ -988,19 +988,19 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.ToTable("knowledge_chunks", "knowledge");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
-            e.Property(x => x.ClinicId).HasColumnName("clinic_id");
+            e.Property(x => x.ClientId).HasColumnName("client_id");
             e.Property(x => x.KnowledgeDocumentId).HasColumnName("knowledge_document_id");
             e.Property(x => x.ChunkIndex).HasColumnName("chunk_index");
             e.Property(x => x.Content).HasColumnName("content").IsRequired();
             e.Property(x => x.CreatedAt).HasColumnName("created_at");
             e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
 
-            e.HasOne<Clinic>().WithMany()
-                .HasForeignKey(x => x.ClinicId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<Client>().WithMany()
+                .HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne(x => x.Document).WithMany(d => d.Chunks)
                 .HasForeignKey(x => x.KnowledgeDocumentId).OnDelete(DeleteBehavior.Cascade);
 
-            e.HasIndex(x => x.ClinicId);
+            e.HasIndex(x => x.ClientId);
             e.HasIndex(x => x.KnowledgeDocumentId);
         });
 
@@ -1012,7 +1012,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.ToTable("knowledge_retrieval_benchmark_cases", "knowledge");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
-            e.Property(x => x.ClinicId).HasColumnName("clinic_id");
+            e.Property(x => x.ClientId).HasColumnName("client_id");
             e.Property(x => x.Question).HasColumnName("question").IsRequired();
             e.Property(x => x.ExpectedDocumentId).HasColumnName("expected_document_id");
             e.Property(x => x.ExpectedChunkId).HasColumnName("expected_chunk_id");
@@ -1028,8 +1028,8 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.Property(x => x.CreatedAt).HasColumnName("created_at");
             e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
 
-            e.HasOne<Clinic>().WithMany().HasForeignKey(x => x.ClinicId).OnDelete(DeleteBehavior.Cascade);
-            e.HasIndex(x => x.ClinicId).HasDatabaseName("ix_kbc_clinic_id");
+            e.HasOne<Client>().WithMany().HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(x => x.ClientId).HasDatabaseName("ix_kbc_client_id");
         });
 
         modelBuilder.Entity<KnowledgeRetrievalBenchmarkGeneration>(e =>
@@ -1037,7 +1037,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.ToTable("knowledge_retrieval_benchmark_generations", "knowledge");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id").ValueGeneratedNever(); // the app supplies it (it is the generationId)
-            e.Property(x => x.ClinicId).HasColumnName("clinic_id");
+            e.Property(x => x.ClientId).HasColumnName("client_id");
             e.Property(x => x.Status).HasColumnName("status").HasMaxLength(20).IsRequired();
             e.Property(x => x.ChunksSent).HasColumnName("chunks_sent");
             e.Property(x => x.SentChunksJson).HasColumnName("sent_chunks").HasColumnType("jsonb");
@@ -1050,8 +1050,8 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.Property(x => x.CompletedAt).HasColumnName("completed_at");
             e.Property(x => x.CreatedAt).HasColumnName("created_at");
 
-            e.HasOne<Clinic>().WithMany().HasForeignKey(x => x.ClinicId).OnDelete(DeleteBehavior.Cascade);
-            e.HasIndex(x => new { x.ClinicId, x.CreatedAt }).HasDatabaseName("ix_kbg_clinic_created");
+            e.HasOne<Client>().WithMany().HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(x => new { x.ClientId, x.CreatedAt }).HasDatabaseName("ix_kbg_client_created");
         });
 
         modelBuilder.Entity<KnowledgeRetrievalBenchmarkRun>(e =>
@@ -1059,7 +1059,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.ToTable("knowledge_retrieval_benchmark_runs", "knowledge");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
-            e.Property(x => x.ClinicId).HasColumnName("clinic_id");
+            e.Property(x => x.ClientId).HasColumnName("client_id");
             e.Property(x => x.CaseScope).HasColumnName("case_scope").HasMaxLength(20).IsRequired();
             e.Property(x => x.GenerationId).HasColumnName("generation_id");
             e.Property(x => x.Status).HasColumnName("status").HasMaxLength(20).IsRequired();
@@ -1091,8 +1091,8 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.Property(x => x.ErrorSummary).HasColumnName("error_summary");
             e.Property(x => x.CreatedAt).HasColumnName("created_at");
 
-            e.HasOne<Clinic>().WithMany().HasForeignKey(x => x.ClinicId).OnDelete(DeleteBehavior.Cascade);
-            e.HasIndex(x => new { x.ClinicId, x.CreatedAt }).HasDatabaseName("ix_kbr_clinic_created");
+            e.HasOne<Client>().WithMany().HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(x => new { x.ClientId, x.CreatedAt }).HasDatabaseName("ix_kbr_client_created");
         });
 
         modelBuilder.Entity<KnowledgeRetrievalBenchmarkResult>(e =>
@@ -1100,7 +1100,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.ToTable("knowledge_retrieval_benchmark_results", "knowledge");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
-            e.Property(x => x.ClinicId).HasColumnName("clinic_id");
+            e.Property(x => x.ClientId).HasColumnName("client_id");
             e.Property(x => x.BenchmarkRunId).HasColumnName("benchmark_run_id");
             e.Property(x => x.BenchmarkCaseId).HasColumnName("benchmark_case_id");
             e.Property(x => x.Question).HasColumnName("question").IsRequired();
@@ -1127,21 +1127,21 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.Property(x => x.LatencyMs).HasColumnName("latency_ms");
             e.Property(x => x.CreatedAt).HasColumnName("created_at");
 
-            e.HasOne<Clinic>().WithMany().HasForeignKey(x => x.ClinicId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<Client>().WithMany().HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne<KnowledgeRetrievalBenchmarkRun>().WithMany().HasForeignKey(x => x.BenchmarkRunId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne<KnowledgeRetrievalBenchmarkCase>().WithMany().HasForeignKey(x => x.BenchmarkCaseId).OnDelete(DeleteBehavior.SetNull);
             e.HasIndex(x => x.BenchmarkRunId).HasDatabaseName("ix_kbres_run");
-            e.HasIndex(x => x.ClinicId).HasDatabaseName("ix_kbres_clinic_id");
+            e.HasIndex(x => x.ClientId).HasDatabaseName("ix_kbres_client_id");
             e.HasIndex(x => new { x.BenchmarkCaseId, x.CreatedAt }).HasDatabaseName("ix_kbres_case_created");
         });
 
-        // One settings row per clinic (unique clinic_id) — see KnowledgeSearchSettings.
+        // One settings row per client (unique client_id) — see KnowledgeSearchSettings.
         modelBuilder.Entity<KnowledgeSearchSettings>(e =>
         {
             e.ToTable("knowledge_search_settings", "knowledge");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
-            e.Property(x => x.ClinicId).HasColumnName("clinic_id");
+            e.Property(x => x.ClientId).HasColumnName("client_id");
             e.Property(x => x.EmbeddingModel).HasColumnName("embedding_model").HasMaxLength(100).IsRequired();
             e.Property(x => x.VectorDimension).HasColumnName("vector_dimension");
             e.Property(x => x.ChunkSizeTokens).HasColumnName("chunk_size_tokens");
@@ -1153,12 +1153,12 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.Property(x => x.CreatedAt).HasColumnName("created_at");
             e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
 
-            e.HasOne(x => x.Clinic).WithMany()
-                .HasForeignKey(x => x.ClinicId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.Client).WithMany()
+                .HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Cascade);
 
-            e.HasIndex(x => x.ClinicId)
+            e.HasIndex(x => x.ClientId)
                 .IsUnique()
-                .HasDatabaseName("ux_knowledge_search_settings_clinic_id");
+                .HasDatabaseName("ux_knowledge_search_settings_client_id");
         });
 
         // Stored settings (config.settings), read through IConfigManager — see ConfigSetting and ConfigDefaults.
@@ -1212,7 +1212,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.Property(x => x.Fingerprint).HasColumnName("fingerprint").HasMaxLength(16).IsRequired();
             e.Property(x => x.RepeatCount).HasColumnName("repeat_count");
             e.Property(x => x.TraceId).HasColumnName("trace_id").HasMaxLength(32);
-            e.Property(x => x.ClinicId).HasColumnName("clinic_id");
+            e.Property(x => x.ClientId).HasColumnName("client_id");
             e.Property(x => x.ConversationId).HasColumnName("conversation_id");
             e.Property(x => x.MessageId).HasColumnName("message_id");
             e.Property(x => x.Method).HasColumnName("method").HasMaxLength(10);
@@ -1234,7 +1234,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.Property(x => x.Step).HasColumnName("step").HasMaxLength(60).IsRequired();
             e.Property(x => x.Outcome).HasColumnName("outcome").HasMaxLength(12).IsRequired();
             e.Property(x => x.DurationMs).HasColumnName("duration_ms");
-            e.Property(x => x.ClinicId).HasColumnName("clinic_id");
+            e.Property(x => x.ClientId).HasColumnName("client_id");
             e.Property(x => x.ConversationId).HasColumnName("conversation_id");
             e.Property(x => x.MessageId).HasColumnName("message_id");
             e.Property(x => x.ExternalMessageId).HasColumnName("external_message_id").HasMaxLength(200);
@@ -1256,7 +1256,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.ToTable("channel_account_settings", "billing");
             e.HasKey(x => x.ChannelIntegrationId);
             e.Property(x => x.ChannelIntegrationId).HasColumnName("channel_integration_id").ValueGeneratedNever();
-            e.Property(x => x.ClinicId).HasColumnName("clinic_id");
+            e.Property(x => x.ClientId).HasColumnName("client_id");
             e.Property(x => x.ProviderBilling).HasColumnName("provider_billing").HasMaxLength(30);
             e.Property(x => x.OmniUsageBilling).HasColumnName("omni_usage_billing");
             e.Property(x => x.Reason).HasColumnName("reason");
@@ -1266,7 +1266,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
 
             e.HasOne<ChannelIntegration>().WithOne().HasForeignKey<ChannelAccountBillingSettings>(x => x.ChannelIntegrationId)
                 .OnDelete(DeleteBehavior.Cascade);
-            e.HasOne<Clinic>().WithMany().HasForeignKey(x => x.ClinicId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<Client>().WithMany().HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<SubscriptionPlan>(e =>
@@ -1307,12 +1307,12 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
                 .HasDatabaseName("ux_plan_entitlements_key");
         });
 
-        modelBuilder.Entity<ClinicSubscription>(e =>
+        modelBuilder.Entity<ClientSubscription>(e =>
         {
             e.ToTable("subscriptions", "billing");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
-            e.Property(x => x.ClinicId).HasColumnName("clinic_id");
+            e.Property(x => x.ClientId).HasColumnName("client_id");
             e.Property(x => x.PlanId).HasColumnName("plan_id");
             e.Property(x => x.Status).HasColumnName("status").HasMaxLength(20).IsRequired();
             e.Property(x => x.CurrentPeriodStart).HasColumnName("current_period_start");
@@ -1323,9 +1323,9 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.Property(x => x.CreatedAt).HasColumnName("created_at");
             e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
 
-            e.HasOne<Clinic>().WithMany().HasForeignKey(x => x.ClinicId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<Client>().WithMany().HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne(x => x.Plan).WithMany().HasForeignKey(x => x.PlanId).OnDelete(DeleteBehavior.Restrict);
-            e.HasIndex(x => x.ClinicId).IsUnique();
+            e.HasIndex(x => x.ClientId).IsUnique();
         });
 
         modelBuilder.Entity<BillingAccount>(e =>
@@ -1333,7 +1333,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.ToTable("accounts", "billing");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
-            e.Property(x => x.ClinicId).HasColumnName("clinic_id");
+            e.Property(x => x.ClientId).HasColumnName("client_id");
             e.Property(x => x.Currency).HasColumnName("currency").HasMaxLength(3).IsFixedLength().IsRequired();
             e.Property(x => x.WalletBalance).HasColumnName("wallet_balance").HasPrecision(18, 6);
             e.Property(x => x.IncludedCreditBalance).HasColumnName("included_credit_balance").HasPrecision(18, 6);
@@ -1342,8 +1342,8 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
             e.Ignore(x => x.Spendable);
 
-            e.HasOne<Clinic>().WithMany().HasForeignKey(x => x.ClinicId).OnDelete(DeleteBehavior.Cascade);
-            e.HasIndex(x => x.ClinicId).IsUnique();
+            e.HasOne<Client>().WithMany().HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(x => x.ClientId).IsUnique();
         });
 
         modelBuilder.Entity<BillingRateCard>(e =>
@@ -1354,13 +1354,13 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.Property(x => x.Code).HasColumnName("code").HasMaxLength(50).IsRequired();
             e.Property(x => x.Name).HasColumnName("name").HasMaxLength(100).IsRequired();
             e.Property(x => x.Description).HasColumnName("description");
-            e.Property(x => x.ClinicId).HasColumnName("clinic_id");
+            e.Property(x => x.ClientId).HasColumnName("client_id");
             e.Property(x => x.IsDefault).HasColumnName("is_default");
             e.Property(x => x.IsActive).HasColumnName("is_active");
             e.Property(x => x.CreatedAt).HasColumnName("created_at");
             e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
 
-            e.HasOne<Clinic>().WithMany().HasForeignKey(x => x.ClinicId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<Client>().WithMany().HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Cascade);
             e.HasIndex(x => x.Code).IsUnique();
         });
 
@@ -1394,7 +1394,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.ToTable("usage_records", "billing");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
-            e.Property(x => x.ClinicId).HasColumnName("clinic_id");
+            e.Property(x => x.ClientId).HasColumnName("client_id");
             e.Property(x => x.BillingAccountId).HasColumnName("billing_account_id");
             e.Property(x => x.IdempotencyKey).HasColumnName("idempotency_key").HasMaxLength(200).IsRequired();
             e.Property(x => x.EventType).HasColumnName("event_type").HasMaxLength(60).IsRequired();
@@ -1435,13 +1435,13 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.Property(x => x.CreatedAt).HasColumnName("created_at");
             e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
 
-            e.HasOne<Clinic>().WithMany().HasForeignKey(x => x.ClinicId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<Client>().WithMany().HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne<BillingAccount>().WithMany().HasForeignKey(x => x.BillingAccountId).OnDelete(DeleteBehavior.Cascade);
             // A used rate can't be deleted (no action in the DB).
             e.HasOne<BillingRate>().WithMany().HasForeignKey(x => x.RateId).OnDelete(DeleteBehavior.NoAction);
             e.HasOne<BillingRateCard>().WithMany().HasForeignKey(x => x.RateCardId).OnDelete(DeleteBehavior.NoAction);
-            e.HasIndex(x => new { x.ClinicId, x.IdempotencyKey }).IsUnique().HasDatabaseName("ux_usage_records_key");
-            e.HasIndex(x => new { x.ClinicId, x.OccurredAt }).HasDatabaseName("ix_usage_records_clinic_occurred");
+            e.HasIndex(x => new { x.ClientId, x.IdempotencyKey }).IsUnique().HasDatabaseName("ux_usage_records_key");
+            e.HasIndex(x => new { x.ClientId, x.OccurredAt }).HasDatabaseName("ix_usage_records_client_occurred");
         });
 
         modelBuilder.Entity<BillingLedgerEntry>(e =>
@@ -1450,7 +1450,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
             e.Property(x => x.Seq).HasColumnName("seq").ValueGeneratedOnAdd();
-            e.Property(x => x.ClinicId).HasColumnName("clinic_id");
+            e.Property(x => x.ClientId).HasColumnName("client_id");
             e.Property(x => x.BillingAccountId).HasColumnName("billing_account_id");
             e.Property(x => x.EntryType).HasColumnName("entry_type").HasMaxLength(40).IsRequired();
             e.Property(x => x.BalanceType).HasColumnName("balance_type").HasMaxLength(20).IsRequired();
@@ -1468,13 +1468,13 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.Property(x => x.CorrelationId).HasColumnName("correlation_id").HasMaxLength(200);
             e.Property(x => x.CreatedAt).HasColumnName("created_at");
 
-            e.HasOne<Clinic>().WithMany().HasForeignKey(x => x.ClinicId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<Client>().WithMany().HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne<BillingAccount>().WithMany().HasForeignKey(x => x.BillingAccountId).OnDelete(DeleteBehavior.Cascade);
             // Declared so EF inserts a new usage record / subscription before the ledger rows that point at it.
             e.HasOne<BillingUsageRecord>().WithMany().HasForeignKey(x => x.UsageRecordId).OnDelete(DeleteBehavior.NoAction);
-            e.HasOne<ClinicSubscription>().WithMany().HasForeignKey(x => x.SubscriptionId).OnDelete(DeleteBehavior.NoAction);
-            e.HasIndex(x => new { x.ClinicId, x.IdempotencyKey }).IsUnique().HasDatabaseName("ux_ledger_entries_key");
-            e.HasIndex(x => new { x.ClinicId, x.Seq }).HasDatabaseName("ix_ledger_entries_clinic_seq");
+            e.HasOne<ClientSubscription>().WithMany().HasForeignKey(x => x.SubscriptionId).OnDelete(DeleteBehavior.NoAction);
+            e.HasIndex(x => new { x.ClientId, x.IdempotencyKey }).IsUnique().HasDatabaseName("ux_ledger_entries_key");
+            e.HasIndex(x => new { x.ClientId, x.Seq }).HasDatabaseName("ix_ledger_entries_client_seq");
         });
     }
 }

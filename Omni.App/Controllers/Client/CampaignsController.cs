@@ -15,7 +15,7 @@ public class CampaignsController : DashboardApiController
     private readonly ICampaignService _campaigns;
     private readonly ICampaignAudienceService _audience;
 
-    public CampaignsController(ICampaignService campaigns, ICampaignAudienceService audience, ICurrentClinicContext clinicContext) : base(clinicContext)
+    public CampaignsController(ICampaignService campaigns, ICampaignAudienceService audience, ICurrentClientContext clientContext) : base(clientContext)
     {
         _campaigns = campaigns;
         _audience = audience;
@@ -27,15 +27,15 @@ public class CampaignsController : DashboardApiController
     public async Task<ActionResult<AudiencePreviewResponse>> AudiencePreview(
         [FromQuery] string audienceType, [FromQuery] string? filters, CancellationToken ct)
     {
-        var clinicId = await GetClinicIdAsync(ct);
-        if (clinicId is null) return Forbid();
+        var clientId = await GetClientIdAsync(ct);
+        if (clientId is null) return Forbid();
 
         if (!CampaignAudienceType.All.Contains(audienceType))
         {
             return BadRequest(new { error = $"Unknown audience type '{audienceType}'." });
         }
 
-        var count = await _audience.GetMatchingCountAsync(clinicId.Value, audienceType, filters, ct);
+        var count = await _audience.GetMatchingCountAsync(clientId.Value, audienceType, filters, ct);
         return Ok(new AudiencePreviewResponse(count));
     }
 
@@ -46,8 +46,8 @@ public class CampaignsController : DashboardApiController
     public async Task<ActionResult<AudiencePreviewLeadsResponse>> AudiencePreviewLeads(
         [FromQuery] string audienceType, [FromQuery] string? filters, [FromQuery] int limit, CancellationToken ct)
     {
-        var clinicId = await GetClinicIdAsync(ct);
-        if (clinicId is null) return Forbid();
+        var clientId = await GetClientIdAsync(ct);
+        if (clientId is null) return Forbid();
 
         if (!CampaignAudienceType.All.Contains(audienceType))
         {
@@ -55,7 +55,7 @@ public class CampaignsController : DashboardApiController
         }
 
         var cappedLimit = limit is > 0 and <= 50 ? limit : 10;
-        var leads = await _audience.GetEligibleLeadsAsync(clinicId.Value, audienceType, filters, ct);
+        var leads = await _audience.GetEligibleLeadsAsync(clientId.Value, audienceType, filters, ct);
         var preview = leads.Take(cappedLimit).Select(l => new AudiencePreviewLeadRow(l.Id, l.FullName, l.Phone)).ToList();
         return Ok(new AudiencePreviewLeadsResponse(leads.Count, preview));
     }
@@ -63,40 +63,40 @@ public class CampaignsController : DashboardApiController
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<CampaignListRow>>> List(CancellationToken ct)
     {
-        var clinicId = await GetClinicIdAsync(ct);
-        if (clinicId is null) return Forbid();
+        var clientId = await GetClientIdAsync(ct);
+        if (clientId is null) return Forbid();
 
-        var campaigns = await _campaigns.ListAsync(clinicId.Value, ct);
+        var campaigns = await _campaigns.ListAsync(clientId.Value, ct);
         return Ok(campaigns);
     }
 
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<CampaignDetailsResponse>> GetById(Guid id, CancellationToken ct)
     {
-        var clinicId = await GetClinicIdAsync(ct);
-        if (clinicId is null) return Forbid();
+        var clientId = await GetClientIdAsync(ct);
+        if (clientId is null) return Forbid();
 
-        var details = await _campaigns.GetByIdAsync(clinicId.Value, id, ct);
+        var details = await _campaigns.GetByIdAsync(clientId.Value, id, ct);
         return details is null ? NotFound() : Ok(details);
     }
 
     [HttpPost]
     public async Task<ActionResult<CampaignResponse>> Create([FromBody] CreateCampaignRequest request, CancellationToken ct)
     {
-        var clinicId = await GetClinicIdAsync(ct);
-        if (clinicId is null) return Forbid();
+        var clientId = await GetClientIdAsync(ct);
+        if (clientId is null) return Forbid();
 
-        var campaign = await _campaigns.CreateAsync(request with { ClinicId = clinicId.Value }, ct);
+        var campaign = await _campaigns.CreateAsync(request with { ClientId = clientId.Value }, ct);
         return CreatedAtAction(nameof(GetById), new { id = campaign.Id }, campaign);
     }
 
     [HttpPost("{id:guid}/schedule")]
     public async Task<ActionResult<CampaignResponse>> Schedule(Guid id, [FromBody] ScheduleCampaignRequest request, CancellationToken ct)
     {
-        var clinicId = await GetClinicIdAsync(ct);
-        if (clinicId is null) return Forbid();
+        var clientId = await GetClientIdAsync(ct);
+        if (clientId is null) return Forbid();
 
-        var campaign = await _campaigns.ScheduleAsync(clinicId.Value, id, request.ScheduledAt, ct);
+        var campaign = await _campaigns.ScheduleAsync(clientId.Value, id, request.ScheduledAt, ct);
         return campaign is null ? NotFound() : Ok(campaign);
     }
 
@@ -106,10 +106,10 @@ public class CampaignsController : DashboardApiController
     [HttpPost("{id:guid}/send")]
     public async Task<ActionResult<ProcessCampaignBatchResult>> Send(Guid id, [FromQuery] int batchSize = 20, CancellationToken ct = default)
     {
-        var clinicId = await GetClinicIdAsync(ct);
-        if (clinicId is null) return Forbid();
+        var clientId = await GetClientIdAsync(ct);
+        if (clientId is null) return Forbid();
 
-        var result = await _campaigns.SendAsync(clinicId.Value, id, batchSize, ct);
+        var result = await _campaigns.SendAsync(clientId.Value, id, batchSize, ct);
         return result is null ? NotFound() : Ok(result);
     }
 
@@ -118,10 +118,10 @@ public class CampaignsController : DashboardApiController
     [HttpPost("{id:guid}/process-batch")]
     public async Task<ActionResult<ProcessCampaignBatchResult>> ProcessBatch(Guid id, [FromQuery] int batchSize = 20, CancellationToken ct = default)
     {
-        var clinicId = await GetClinicIdAsync(ct);
-        if (clinicId is null) return Forbid();
+        var clientId = await GetClientIdAsync(ct);
+        if (clientId is null) return Forbid();
 
-        var result = await _campaigns.ProcessBatchAsync(clinicId.Value, id, batchSize, ct);
+        var result = await _campaigns.ProcessBatchAsync(clientId.Value, id, batchSize, ct);
         return result is null ? NotFound() : Ok(result);
     }
 
@@ -130,20 +130,20 @@ public class CampaignsController : DashboardApiController
     [HttpPost("{id:guid}/stop")]
     public async Task<ActionResult<CampaignResponse>> Stop(Guid id, CancellationToken ct)
     {
-        var clinicId = await GetClinicIdAsync(ct);
-        if (clinicId is null) return Forbid();
+        var clientId = await GetClientIdAsync(ct);
+        if (clientId is null) return Forbid();
 
-        var campaign = await _campaigns.StopAsync(clinicId.Value, id, ct);
+        var campaign = await _campaigns.StopAsync(clientId.Value, id, ct);
         return campaign is null ? NotFound() : Ok(campaign);
     }
 
     [HttpPost("{id:guid}/cancel")]
     public async Task<ActionResult<CampaignResponse>> Cancel(Guid id, CancellationToken ct)
     {
-        var clinicId = await GetClinicIdAsync(ct);
-        if (clinicId is null) return Forbid();
+        var clientId = await GetClientIdAsync(ct);
+        if (clientId is null) return Forbid();
 
-        var campaign = await _campaigns.CancelAsync(clinicId.Value, id, ct);
+        var campaign = await _campaigns.CancelAsync(clientId.Value, id, ct);
         return campaign is null ? NotFound() : Ok(campaign);
     }
 }

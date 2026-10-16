@@ -26,68 +26,68 @@ public class BillingQueryService : IBillingQueryService
         _providerBilling = providerBilling;
     }
 
-    public async Task<ClinicBillingSummary> GetSummaryAsync(Guid clinicId, CancellationToken ct = default)
+    public async Task<ClientBillingSummary> GetSummaryAsync(Guid clientId, CancellationToken ct = default)
     {
         await using var unit = _units.Create();
-        return await BuildSummaryAsync(unit, clinicId, ct);
+        return await BuildSummaryAsync(unit, clientId, ct);
     }
 
-    public async Task<PagedResponse<ClinicUsageRow>> ListClinicUsageAsync(Guid clinicId, int page, int pageSize, CancellationToken ct = default)
+    public async Task<PagedResponse<ClientUsageRow>> ListClientUsageAsync(Guid clientId, int page, int pageSize, CancellationToken ct = default)
     {
         (page, pageSize) = Clamp(page, pageSize);
         await using var unit = _units.Create();
-        // Failed attempts (refused for balance/price) are kept for support but aren't usage the clinic paid for.
-        var (rows, total) = await unit.Usage.ListClinicUsageAsync(clinicId, (page - 1) * pageSize, pageSize, ct);
-        return new PagedResponse<ClinicUsageRow>(rows.Select(u =>
+        // Failed attempts (refused for balance/price) are kept for support but aren't usage the client paid for.
+        var (rows, total) = await unit.Usage.ListClientUsageAsync(clientId, (page - 1) * pageSize, pageSize, ct);
+        return new PagedResponse<ClientUsageRow>(rows.Select(u =>
         {
             var charged = u.ChargeStatus != ChargeStatus.NotCharged;
-            return new ClinicUsageRow(
+            return new ClientUsageRow(
                 u.Id, u.OccurredAt, u.EventType, BillableEventTypes.Label(u.EventType), u.Channel, u.Quantity, u.Unit, u.CountryCode,
                 u.UnitPrice, u.Amount, u.CreditAmount, u.WalletAmount, u.RefundedAmount, u.ChargeStatus, u.FailureReason,
-                charged, ClinicPaidByLabel(u.ProviderBilling, u.Channel, charged));
+                charged, ClientPaidByLabel(u.ProviderBilling, u.Channel, charged));
         }).ToList(), total, page, pageSize);
     }
 
-    public async Task<PagedResponse<BillingTransactionRow>> ListTransactionsAsync(Guid clinicId, int page, int pageSize, CancellationToken ct = default)
+    public async Task<PagedResponse<BillingTransactionRow>> ListTransactionsAsync(Guid clientId, int page, int pageSize, CancellationToken ct = default)
     {
         (page, pageSize) = Clamp(page, pageSize);
         await using var unit = _units.Create();
-        var (rows, total) = await unit.Ledger.ListAsync(clinicId, (page - 1) * pageSize, pageSize, ct);
+        var (rows, total) = await unit.Ledger.ListAsync(clientId, (page - 1) * pageSize, pageSize, ct);
         return new PagedResponse<BillingTransactionRow>(rows.Select(ToTransaction).ToList(), total, page, pageSize);
     }
 
-    public async Task<AdminBillingOverview?> GetAdminOverviewAsync(Guid clinicId, CancellationToken ct = default)
+    public async Task<AdminBillingOverview?> GetAdminOverviewAsync(Guid clientId, CancellationToken ct = default)
     {
         await using var unit = _units.Create();
-        var clinic = await unit.Clinics.GetReadOnlyAsync(clinicId, ct);
-        if (clinic is null) return null;
+        var client = await unit.Clients.GetReadOnlyAsync(clientId, ct);
+        if (client is null) return null;
 
-        var summary = await BuildSummaryAsync(unit, clinicId, ct);
-        var subscription = await unit.Subscriptions.GetWithPlanReadOnlyAsync(clinicId, ct);
-        var customCard = await unit.RateCards.GetClinicCardCodeAsync(clinicId, ct);
+        var summary = await BuildSummaryAsync(unit, clientId, ct);
+        var subscription = await unit.Subscriptions.GetWithPlanReadOnlyAsync(clientId, ct);
+        var customCard = await unit.RateCards.GetClientCardCodeAsync(clientId, ct);
 
         // Everything that counted at the provider this period, charged by Omni or not.
-        var usage = await unit.Usage.GroupBillableAsync(clinicId, summary.UsageSince, ct);
-        var openReservations = await unit.Usage.CountReservedAsync(clinicId, ct);
+        var usage = await unit.Usage.GroupBillableAsync(clientId, summary.UsageSince, ct);
+        var openReservations = await unit.Usage.CountReservedAsync(clientId, ct);
 
         return new AdminBillingOverview(
-            clinicId, clinic.Name, summary,
+            clientId, client.Name, summary,
             subscription is null ? null : ToSubscription(subscription),
             customCard,
             usage.OrderByDescending(x => x.Amount).ThenByDescending(x => x.Count)
                 .Select(x => new AdminUsageBreakdownRow(x.EventType, x.Channel, x.ProviderBilling, x.Count, x.Quantity, x.Amount, x.Cost,
                     x.Amount - (x.ProviderBilling == ProviderBillingResponsibility.PlatformFunded ? x.Cost : 0))).ToList(),
             openReservations,
-            await ReconcileCoreAsync(unit, clinicId, ct),
-            await _providerBilling.ListAccountsAsync(clinicId, ct));
+            await ReconcileCoreAsync(unit, clientId, ct),
+            await _providerBilling.ListAccountsAsync(clientId, ct));
     }
 
-    public async Task<PagedResponse<AdminUsageRow>> ListAdminUsageAsync(Guid clinicId, string? status, string? eventType, DateTimeOffset? from,
+    public async Task<PagedResponse<AdminUsageRow>> ListAdminUsageAsync(Guid clientId, string? status, string? eventType, DateTimeOffset? from,
         DateTimeOffset? to, int page, int pageSize, CancellationToken ct = default)
     {
         (page, pageSize) = Clamp(page, pageSize);
         await using var unit = _units.Create();
-        var (rows, total) = await unit.Usage.ListAdminUsageAsync(clinicId, status, eventType, from, to, (page - 1) * pageSize, pageSize, ct);
+        var (rows, total) = await unit.Usage.ListAdminUsageAsync(clientId, status, eventType, from, to, (page - 1) * pageSize, pageSize, ct);
         return new PagedResponse<AdminUsageRow>(rows.Select(u => new AdminUsageRow(
             u.Id, u.IdempotencyKey, u.OccurredAt, u.EventType, u.Channel, u.ChannelIntegrationId, u.ProviderBilling, u.Quantity, u.Unit,
             u.CountryCode, u.Operator, u.Provider,
@@ -97,11 +97,11 @@ public class BillingQueryService : IBillingQueryService
             total, page, pageSize);
     }
 
-    public async Task<PagedResponse<AdminLedgerRow>> ListAdminLedgerAsync(Guid clinicId, int page, int pageSize, CancellationToken ct = default)
+    public async Task<PagedResponse<AdminLedgerRow>> ListAdminLedgerAsync(Guid clientId, int page, int pageSize, CancellationToken ct = default)
     {
         (page, pageSize) = Clamp(page, pageSize);
         await using var unit = _units.Create();
-        var (rows, total) = await unit.Ledger.ListAsync(clinicId, (page - 1) * pageSize, pageSize, ct);
+        var (rows, total) = await unit.Ledger.ListAsync(clientId, (page - 1) * pageSize, pageSize, ct);
         return new PagedResponse<AdminLedgerRow>(rows.Select(l => new AdminLedgerRow(
             l.Id, l.CreatedAt, l.EntryType, l.BalanceType, l.Amount, l.BalanceAfter, l.Currency.Trim(), l.IdempotencyKey,
             l.UsageRecordId, l.SubscriptionId, l.PlanId, l.Source, l.Actor, l.Reason, l.Reference, l.CorrelationId)).ToList(),
@@ -111,10 +111,10 @@ public class BillingQueryService : IBillingQueryService
     public async Task<IReadOnlyList<BillingAccountRow>> ListAccountsAsync(CancellationToken ct = default)
     {
         await using var unit = _units.Create();
-        var clinics = await unit.Clinics.ListNamesAsync(ct);
+        var clients = await unit.Clients.ListNamesAsync(ct);
         var accounts = await unit.Accounts.MapAllReadOnlyAsync(ct);
         var subscriptions = await unit.Subscriptions.MapAllWithPlanReadOnlyAsync(ct);
-        return clinics.Select(c =>
+        return clients.Select(c =>
         {
             accounts.TryGetValue(c.Id, out var a);
             subscriptions.TryGetValue(c.Id, out var s);
@@ -123,17 +123,17 @@ public class BillingQueryService : IBillingQueryService
         }).ToList();
     }
 
-    public async Task<ReconciliationResponse> ReconcileAsync(Guid clinicId, CancellationToken ct = default)
+    public async Task<ReconciliationResponse> ReconcileAsync(Guid clientId, CancellationToken ct = default)
     {
         await using var unit = _units.Create();
-        return await ReconcileCoreAsync(unit, clinicId, ct);
+        return await ReconcileCoreAsync(unit, clientId, ct);
     }
 
-    public async Task<QuoteResponse?> QuoteAsync(Guid clinicId, string eventType, string? countryCode, string? @operator, string? provider,
+    public async Task<QuoteResponse?> QuoteAsync(Guid clientId, string eventType, string? countryCode, string? @operator, string? provider,
         DateTimeOffset? at, string? providerBilling = null, CancellationToken ct = default)
     {
         await using var unit = _units.Create();
-        var request = new RatingRequest(clinicId, (eventType ?? string.Empty).Trim().ToLowerInvariant(),
+        var request = new RatingRequest(clientId, (eventType ?? string.Empty).Trim().ToLowerInvariant(),
             RateResolver.NormalizeCountry(countryCode), RateResolver.NormalizeDimension(@operator), RateResolver.NormalizeDimension(provider),
             at ?? _time.GetUtcNow(),
             string.IsNullOrWhiteSpace(providerBilling) ? ProviderBillingResponsibility.PlatformFunded : providerBilling.Trim().ToLowerInvariant());
@@ -149,7 +149,7 @@ public class BillingQueryService : IBillingQueryService
         await using var unit = _units.Create();
         // All usage that counted at the provider, whoever paid the provider and whether or not Omni charged it.
         var usage = await unit.Usage.GroupBillableForReportAsync(from, to, ct);
-        var clinicNames = (await unit.Clinics.ListNamesAsync(ct)).ToDictionary(c => c.Id, c => c.Name);
+        var clientNames = (await unit.Clients.ListNamesAsync(ct)).ToDictionary(c => c.Id, c => c.Name);
 
         // Ledger sign convention: charges are negative, so revenue is the negated sum.
         var subscriptionRevenue = -await unit.Ledger.SumOfTypeAsync(LedgerEntryType.SubscriptionCharge, from, to, ct);
@@ -159,10 +159,10 @@ public class BillingQueryService : IBillingQueryService
             .Select(x =>
             {
                 var paidByPlatform = x.ProviderBilling == ProviderBillingResponsibility.PlatformFunded;
-                return new BillingReportRow(x.ClinicId, clinicNames.TryGetValue(x.ClinicId, out var n) ? n : "?", x.Channel, x.EventType,
+                return new BillingReportRow(x.ClientId, clientNames.TryGetValue(x.ClientId, out var n) ? n : "?", x.Channel, x.EventType,
                     x.ProviderBilling, x.Count, x.Quantity, x.Revenue, x.Cost, x.Revenue - (paidByPlatform ? x.Cost : 0));
             })
-            .OrderBy(r => r.ClinicName).ThenByDescending(r => r.Revenue).ToList();
+            .OrderBy(r => r.ClientName).ThenByDescending(r => r.Revenue).ToList();
         var revenue = rows.Sum(r => r.Revenue);
         var paidByPlatformCost = rows.Where(r => r.ProviderBilling == ProviderBillingResponsibility.PlatformFunded).Sum(r => r.ProviderCost);
         var paidExternallyCost = rows.Where(r => r.ProviderBilling != ProviderBillingResponsibility.PlatformFunded).Sum(r => r.ProviderCost);
@@ -172,10 +172,10 @@ public class BillingQueryService : IBillingQueryService
 
     // ------------------------------------------------------------------------------------------------------------
 
-    private async Task<ClinicBillingSummary> BuildSummaryAsync(IBillingUnitOfWork unit, Guid clinicId, CancellationToken ct)
+    private async Task<ClientBillingSummary> BuildSummaryAsync(IBillingUnitOfWork unit, Guid clientId, CancellationToken ct)
     {
-        var account = await unit.Accounts.GetReadOnlyAsync(clinicId, ct);
-        var subscription = await unit.Subscriptions.GetWithEntitlementsReadOnlyAsync(clinicId, ct);
+        var account = await unit.Accounts.GetReadOnlyAsync(clientId, ct);
+        var subscription = await unit.Subscriptions.GetWithEntitlementsReadOnlyAsync(clientId, ct);
         var now = _time.GetUtcNow();
         var plan = subscription?.Plan;
 
@@ -191,30 +191,30 @@ public class BillingQueryService : IBillingQueryService
 
         // Usage of the current period (or the last 30 days without a subscription).
         var since = subscription?.CurrentPeriodStart ?? now.AddDays(-30);
-        var usage = await unit.Usage.GroupSettledAsync(clinicId, since, ct);
+        var usage = await unit.Usage.GroupSettledAsync(clientId, since, ct);
         var usageRows = usage.OrderByDescending(u => u.Amount)
             .Select(u => new BillingUsageBreakdownRow(u.EventType, BillableEventTypes.Label(u.EventType), u.Count, u.Quantity, u.Amount))
             .ToList();
 
         // Usage Omni didn't charge (paid to the provider directly, or no per-message fee) — shown apart.
-        var uncharged = await unit.Usage.GroupUnchargedAsync(clinicId, since, ct);
+        var uncharged = await unit.Usage.GroupUnchargedAsync(clientId, since, ct);
         var providerDirect = uncharged.OrderByDescending(u => u.Count)
             .Select(u => new ProviderDirectUsageRow(u.EventType, BillableEventTypes.Label(u.EventType),
-                ClinicPaidByLabel(u.ProviderBilling, u.Channel, charged: false), u.Count, u.Quantity))
+                ClientPaidByLabel(u.ProviderBilling, u.Channel, charged: false), u.Count, u.Quantity))
             .ToList();
 
-        var channelAccounts = (await _providerBilling.ListAccountsAsync(clinicId, ct))
+        var channelAccounts = (await _providerBilling.ListAccountsAsync(clientId, ct))
             .Where(a => a.Status == ChannelIntegrationStatus.Connected)
-            .Select(a => new ClinicChannelBillingRow(a.Channel, ChannelLabel(a.Channel), a.DisplayName,
-                ClinicPaidByLabel(a.ProviderBilling, a.Channel, a.OmniUsageBilling), a.OmniUsageBilling))
+            .Select(a => new ClientChannelBillingRow(a.Channel, ChannelLabel(a.Channel), a.DisplayName,
+                ClientPaidByLabel(a.ProviderBilling, a.Channel, a.OmniUsageBilling), a.OmniUsageBilling))
             .ToList();
 
-        var (recent, _) = await unit.Ledger.ListAsync(clinicId, 0, _config.BillingRecentTransactions, ct);
+        var (recent, _) = await unit.Ledger.ListAsync(clientId, 0, _config.BillingRecentTransactions, ct);
 
         var wallet = account?.WalletBalance ?? 0;
         var credit = account?.IncludedCreditBalance ?? 0;
         var reserved = account?.ReservedAmount ?? 0;
-        return new ClinicBillingSummary(
+        return new ClientBillingSummary(
             _config.BillingEnabled,
             account?.Currency.Trim() ?? _config.BillingCurrency,
             plan?.Code, plan?.Name, plan?.Price, plan?.BillingPeriod,
@@ -227,9 +227,9 @@ public class BillingQueryService : IBillingQueryService
             channelAccounts, providerDirect);
     }
 
-    /// <summary>Who pays for usage, in clinic-facing words. Never names Omni's own provider (white-label); the
-    /// clinic's own Meta account may be named because it's theirs.</summary>
-    public static string ClinicPaidByLabel(string providerBilling, string channel, bool charged)
+    /// <summary>Who pays for usage, in client-facing words. Never names Omni's own provider (white-label); the
+    /// client's own Meta account may be named because it's theirs.</summary>
+    public static string ClientPaidByLabel(string providerBilling, string channel, bool charged)
     {
         var label = providerBilling switch
         {
@@ -252,12 +252,12 @@ public class BillingQueryService : IBillingQueryService
         _ => channel.Length == 0 ? channel : char.ToUpperInvariant(channel[0]) + channel[1..]
     };
 
-    private static async Task<ReconciliationResponse> ReconcileCoreAsync(IBillingUnitOfWork unit, Guid clinicId, CancellationToken ct)
+    private static async Task<ReconciliationResponse> ReconcileCoreAsync(IBillingUnitOfWork unit, Guid clientId, CancellationToken ct)
     {
-        var account = await unit.Accounts.GetReadOnlyAsync(clinicId, ct);
-        var walletLedger = await unit.Ledger.SumAsync(clinicId, LedgerBalanceType.Wallet, ct);
-        var creditLedger = await unit.Ledger.SumAsync(clinicId, LedgerBalanceType.IncludedCredit, ct);
-        var openReservations = await unit.Usage.SumReservedAsync(clinicId, ct);
+        var account = await unit.Accounts.GetReadOnlyAsync(clientId, ct);
+        var walletLedger = await unit.Ledger.SumAsync(clientId, LedgerBalanceType.Wallet, ct);
+        var creditLedger = await unit.Ledger.SumAsync(clientId, LedgerBalanceType.IncludedCredit, ct);
+        var openReservations = await unit.Usage.SumReservedAsync(clientId, ct);
 
         var wallet = account?.WalletBalance ?? 0;
         var credit = account?.IncludedCreditBalance ?? 0;
@@ -282,8 +282,8 @@ public class BillingQueryService : IBillingQueryService
         _ => entryType
     };
 
-    internal static SubscriptionResponse ToSubscription(ClinicSubscription s) =>
-        new(s.Id, s.ClinicId, s.Plan?.Code ?? "?", s.Plan?.Name ?? "?", s.Status, s.CurrentPeriodStart, s.CurrentPeriodEnd,
+    internal static SubscriptionResponse ToSubscription(ClientSubscription s) =>
+        new(s.Id, s.ClientId, s.Plan?.Code ?? "?", s.Plan?.Name ?? "?", s.Status, s.CurrentPeriodStart, s.CurrentPeriodEnd,
             s.CancelAtPeriodEnd, s.PastDueSince, s.EndedAt);
 
     private static (int Page, int PageSize) Clamp(int page, int pageSize) => (Math.Max(1, page), Math.Clamp(pageSize, 1, 200));

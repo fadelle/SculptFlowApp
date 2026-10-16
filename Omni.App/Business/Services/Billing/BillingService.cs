@@ -44,20 +44,20 @@ public class BillingService : IBillingService
 
         await using var unit = _units.Create();
         await using var tx = await unit.BeginTransactionAsync(ct);
-        var account = await unit.Accounts.LockAsync(e.ClinicId, _config.BillingCurrency, ct);
+        var account = await unit.Accounts.LockAsync(e.ClientId, _config.BillingCurrency, ct);
 
-        var existing = await unit.Usage.FindByKeyReadOnlyAsync(e.ClinicId, e.IdempotencyKey, ct);
+        var existing = await unit.Usage.FindByKeyReadOnlyAsync(e.ClientId, e.IdempotencyKey, ct);
         if (existing is not null)
         {
-            _logger.LogInformation("Billing: duplicate usage {IdempotencyKey} for clinic {ClinicId} ignored (already {Status}).",
-                e.IdempotencyKey, e.ClinicId, existing.ChargeStatus);
+            _logger.LogInformation("Billing: duplicate usage {IdempotencyKey} for client {ClientId} ignored (already {Status}).",
+                e.IdempotencyKey, e.ClientId, existing.ChargeStatus);
             return ToResult(existing, duplicate: true);
         }
 
         var usage = new BillingUsageRecord
         {
             Id = Guid.NewGuid(),
-            ClinicId = e.ClinicId,
+            ClientId = e.ClientId,
             BillingAccountId = account.Id,
             IdempotencyKey = e.IdempotencyKey,
             EventType = e.EventType,
@@ -87,17 +87,17 @@ public class BillingService : IBillingService
         }
 
         var quote = await RateResolver.ResolveAsync(unit.RateCards,
-            new RatingRequest(e.ClinicId, e.EventType, usage.CountryCode, usage.Operator, usage.Provider, occurredAt, e.ProviderBilling), ct);
+            new RatingRequest(e.ClientId, e.EventType, usage.CountryCode, usage.Operator, usage.Provider, occurredAt, e.ProviderBilling), ct);
         if (quote is null)
         {
-            _logger.LogWarning("Billing: no rate for {EventType} (country {Country}, provider {Provider}, paid by {ProviderBilling}) for clinic {ClinicId}; usage {IdempotencyKey} refused.",
-                e.EventType, usage.CountryCode ?? "-", usage.Provider ?? "-", e.ProviderBilling, e.ClinicId, e.IdempotencyKey);
+            _logger.LogWarning("Billing: no rate for {EventType} (country {Country}, provider {Provider}, paid by {ProviderBilling}) for client {ClientId}; usage {IdempotencyKey} refused.",
+                e.EventType, usage.CountryCode ?? "-", usage.Provider ?? "-", e.ProviderBilling, e.ClientId, e.IdempotencyKey);
             return await SaveFailedAsync(unit, tx, usage, UsageFailureReason.RateNotFound, ct);
         }
         if (!string.Equals(quote.Currency, account.Currency, StringComparison.Ordinal))
         {
-            _logger.LogError("Billing: rate {RateId} is in {RateCurrency} but clinic {ClinicId}'s account is in {AccountCurrency}; usage {IdempotencyKey} refused.",
-                quote.RateId, quote.Currency, e.ClinicId, account.Currency, e.IdempotencyKey);
+            _logger.LogError("Billing: rate {RateId} is in {RateCurrency} but client {ClientId}'s account is in {AccountCurrency}; usage {IdempotencyKey} refused.",
+                quote.RateId, quote.Currency, e.ClientId, account.Currency, e.IdempotencyKey);
             return await SaveFailedAsync(unit, tx, usage, UsageFailureReason.CurrencyMismatch, ct);
         }
 
@@ -106,8 +106,8 @@ public class BillingService : IBillingService
 
         if (amount > account.Spendable)
         {
-            _logger.LogWarning("Billing: insufficient balance for clinic {ClinicId}: {EventType} costs {Amount} {Currency}, spendable {Spendable}; usage {IdempotencyKey} refused.",
-                e.ClinicId, e.EventType, amount, account.Currency, account.Spendable, e.IdempotencyKey);
+            _logger.LogWarning("Billing: insufficient balance for client {ClientId}: {EventType} costs {Amount} {Currency}, spendable {Spendable}; usage {IdempotencyKey} refused.",
+                e.ClientId, e.EventType, amount, account.Currency, account.Spendable, e.IdempotencyKey);
             return await SaveFailedAsync(unit, tx, usage, UsageFailureReason.InsufficientFunds, ct);
         }
 
@@ -128,21 +128,21 @@ public class BillingService : IBillingService
         await unit.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
 
-        _logger.LogInformation("Billing: {Action} {Amount} {Currency} for {EventType} x{Quantity} (rate {RateId}, {RateSource}) for clinic {ClinicId}, usage {IdempotencyKey}.",
-            settleImmediately ? "charged" : "reserved", amount, account.Currency, e.EventType, e.Quantity, quote.RateId, quote.RateSource, e.ClinicId, e.IdempotencyKey);
+        _logger.LogInformation("Billing: {Action} {Amount} {Currency} for {EventType} x{Quantity} (rate {RateId}, {RateSource}) for client {ClientId}, usage {IdempotencyKey}.",
+            settleImmediately ? "charged" : "reserved", amount, account.Currency, e.EventType, e.Quantity, quote.RateId, quote.RateSource, e.ClientId, e.IdempotencyKey);
         return ToResult(usage, duplicate: false);
     }
 
-    public async Task<UsageResult> SettleAsync(Guid clinicId, string idempotencyKey, decimal? finalQuantity = null, CancellationToken ct = default)
+    public async Task<UsageResult> SettleAsync(Guid clientId, string idempotencyKey, decimal? finalQuantity = null, CancellationToken ct = default)
     {
         if (finalQuantity is < 0) throw new ArgumentOutOfRangeException(nameof(finalQuantity), "Quantity can't be negative.");
         var now = _time.GetUtcNow();
 
         await using var unit = _units.Create();
         await using var tx = await unit.BeginTransactionAsync(ct);
-        var account = await unit.Accounts.LockAsync(clinicId, _config.BillingCurrency, ct);
+        var account = await unit.Accounts.LockAsync(clientId, _config.BillingCurrency, ct);
 
-        var usage = await unit.Usage.FindByKeyAsync(clinicId, idempotencyKey, ct);
+        var usage = await unit.Usage.FindByKeyAsync(clientId, idempotencyKey, ct);
         if (usage is null)
         {
             return new UsageResult(UsageOutcome.NotFound, null, null, null, false);
@@ -168,11 +168,11 @@ public class BillingService : IBillingService
                 await tx.CommitAsync(ct);
                 return ToResult(usage, duplicate: false);
             case ChargeStatus.Settled:
-                _logger.LogInformation("Billing: duplicate settlement of usage {IdempotencyKey} for clinic {ClinicId} ignored.", idempotencyKey, clinicId);
+                _logger.LogInformation("Billing: duplicate settlement of usage {IdempotencyKey} for client {ClientId} ignored.", idempotencyKey, clientId);
                 return ToResult(usage, duplicate: true);
             case ChargeStatus.Released:
-                _logger.LogWarning("Billing: usage {IdempotencyKey} for clinic {ClinicId} became billable after it was released ({Reason}); not charged.",
-                    idempotencyKey, clinicId, usage.ReleaseReason);
+                _logger.LogWarning("Billing: usage {IdempotencyKey} for client {ClientId} became billable after it was released ({Reason}); not charged.",
+                    idempotencyKey, clientId, usage.ReleaseReason);
                 return new UsageResult(UsageOutcome.Conflict, usage.Id, usage.Amount, null, false);
             case ChargeStatus.Failed:
                 return new UsageResult(UsageOutcome.Conflict, usage.Id, usage.Amount, usage.FailureReason, false);
@@ -188,28 +188,28 @@ public class BillingService : IBillingService
 
         if (finalAmount > usage.ReservedAmount)
         {
-            _logger.LogInformation("Billing: usage {IdempotencyKey} for clinic {ClinicId} settled at {Final}, above its {Reserved} reservation.",
-                idempotencyKey, clinicId, finalAmount, usage.ReservedAmount);
+            _logger.LogInformation("Billing: usage {IdempotencyKey} for client {ClientId} settled at {Final}, above its {Reserved} reservation.",
+                idempotencyKey, clientId, finalAmount, usage.ReservedAmount);
         }
         if (account.WalletBalance < 0)
         {
-            _logger.LogWarning("Billing: clinic {ClinicId}'s wallet is overdrawn ({Wallet} {Currency}) after settling usage {IdempotencyKey}.",
-                clinicId, account.WalletBalance, account.Currency, idempotencyKey);
+            _logger.LogWarning("Billing: client {ClientId}'s wallet is overdrawn ({Wallet} {Currency}) after settling usage {IdempotencyKey}.",
+                clientId, account.WalletBalance, account.Currency, idempotencyKey);
         }
-        _logger.LogInformation("Billing: settled usage {IdempotencyKey} for clinic {ClinicId}: {Amount} {Currency} ({Credit} from included credit, {Wallet} from wallet).",
-            idempotencyKey, clinicId, finalAmount, account.Currency, usage.CreditAmount, usage.WalletAmount);
+        _logger.LogInformation("Billing: settled usage {IdempotencyKey} for client {ClientId}: {Amount} {Currency} ({Credit} from included credit, {Wallet} from wallet).",
+            idempotencyKey, clientId, finalAmount, account.Currency, usage.CreditAmount, usage.WalletAmount);
         return ToResult(usage, duplicate: false);
     }
 
-    public async Task<UsageResult> ReleaseAsync(Guid clinicId, string idempotencyKey, string reason, CancellationToken ct = default)
+    public async Task<UsageResult> ReleaseAsync(Guid clientId, string idempotencyKey, string reason, CancellationToken ct = default)
     {
         var now = _time.GetUtcNow();
 
         await using var unit = _units.Create();
         await using var tx = await unit.BeginTransactionAsync(ct);
-        var account = await unit.Accounts.LockAsync(clinicId, _config.BillingCurrency, ct);
+        var account = await unit.Accounts.LockAsync(clientId, _config.BillingCurrency, ct);
 
-        var usage = await unit.Usage.FindByKeyAsync(clinicId, idempotencyKey, ct);
+        var usage = await unit.Usage.FindByKeyAsync(clientId, idempotencyKey, ct);
         if (usage is null)
         {
             return new UsageResult(UsageOutcome.NotFound, null, null, null, false);
@@ -230,11 +230,11 @@ public class BillingService : IBillingService
                 await tx.CommitAsync(ct);
                 return ToResult(usage, duplicate: false);
             case ChargeStatus.Released:
-                _logger.LogInformation("Billing: duplicate release of usage {IdempotencyKey} for clinic {ClinicId} ignored.", idempotencyKey, clinicId);
+                _logger.LogInformation("Billing: duplicate release of usage {IdempotencyKey} for client {ClientId} ignored.", idempotencyKey, clientId);
                 return ToResult(usage, duplicate: true);
             case ChargeStatus.Settled:
-                _logger.LogWarning("Billing: release of usage {IdempotencyKey} for clinic {ClinicId} ignored — it was already settled ({Reason}).",
-                    idempotencyKey, clinicId, reason);
+                _logger.LogWarning("Billing: release of usage {IdempotencyKey} for client {ClientId} ignored — it was already settled ({Reason}).",
+                    idempotencyKey, clientId, reason);
                 return new UsageResult(UsageOutcome.Conflict, usage.Id, usage.Amount, null, false);
             case ChargeStatus.Failed:
                 return new UsageResult(UsageOutcome.Conflict, usage.Id, usage.Amount, usage.FailureReason, false);
@@ -250,21 +250,21 @@ public class BillingService : IBillingService
         await unit.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
 
-        _logger.LogInformation("Billing: released {Amount} {Currency} held for usage {IdempotencyKey} of clinic {ClinicId} ({Reason}).",
-            usage.ReservedAmount, account.Currency, idempotencyKey, clinicId, reason);
+        _logger.LogInformation("Billing: released {Amount} {Currency} held for usage {IdempotencyKey} of client {ClientId} ({Reason}).",
+            usage.ReservedAmount, account.Currency, idempotencyKey, clientId, reason);
         return ToResult(usage, duplicate: false);
     }
 
-    public async Task<UsageResult> RefundAsync(Guid clinicId, Guid usageRecordId, string reason, string source, string? actor, CancellationToken ct = default)
+    public async Task<UsageResult> RefundAsync(Guid clientId, Guid usageRecordId, string reason, string source, string? actor, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(reason)) throw new ArgumentException("A reason is required for a refund.", nameof(reason));
         var now = _time.GetUtcNow();
 
         await using var unit = _units.Create();
         await using var tx = await unit.BeginTransactionAsync(ct);
-        var account = await unit.Accounts.LockAsync(clinicId, _config.BillingCurrency, ct);
+        var account = await unit.Accounts.LockAsync(clientId, _config.BillingCurrency, ct);
 
-        var usage = await unit.Usage.GetAsync(clinicId, usageRecordId, ct);
+        var usage = await unit.Usage.GetAsync(clientId, usageRecordId, ct);
         if (usage is null) return new UsageResult(UsageOutcome.NotFound, null, null, null, false);
         if (usage.ChargeStatus != ChargeStatus.Settled)
         {
@@ -272,7 +272,7 @@ public class BillingService : IBillingService
         }
         if (usage.RefundedAt is not null)
         {
-            _logger.LogInformation("Billing: duplicate refund of usage {UsageId} for clinic {ClinicId} ignored.", usageRecordId, clinicId);
+            _logger.LogInformation("Billing: duplicate refund of usage {UsageId} for client {ClientId} ignored.", usageRecordId, clientId);
             return ToResult(usage, duplicate: true);
         }
 
@@ -294,8 +294,8 @@ public class BillingService : IBillingService
         await unit.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
 
-        _logger.LogInformation("Billing: refunded usage {UsageId} ({Amount} {Currency}) for clinic {ClinicId} by {Actor}: {Reason}.",
-            usageRecordId, usage.RefundedAmount, account.Currency, clinicId, actor ?? source, reason);
+        _logger.LogInformation("Billing: refunded usage {UsageId} ({Amount} {Currency}) for client {ClientId} by {Actor}: {Reason}.",
+            usageRecordId, usage.RefundedAmount, account.Currency, clientId, actor ?? source, reason);
         return ToResult(usage, duplicate: false);
     }
 
@@ -308,16 +308,16 @@ public class BillingService : IBillingService
 
         await using var unit = _units.Create();
         await using var tx = await unit.BeginTransactionAsync(ct);
-        var account = await unit.Accounts.LockAsync(request.ClinicId, _config.BillingCurrency, ct);
+        var account = await unit.Accounts.LockAsync(request.ClientId, _config.BillingCurrency, ct);
 
-        var existing = await unit.Ledger.FindByKeyReadOnlyAsync(request.ClinicId, key, ct);
+        var existing = await unit.Ledger.FindByKeyReadOnlyAsync(request.ClientId, key, ct);
         if (existing is not null)
         {
             if (existing.Amount != BillingMath.RoundMoney(request.Amount))
             {
                 throw new InvalidOperationException("This idempotency key was already used for a different top-up amount.");
             }
-            _logger.LogInformation("Billing: duplicate top-up {Key} for clinic {ClinicId} ignored.", request.IdempotencyKey, request.ClinicId);
+            _logger.LogInformation("Billing: duplicate top-up {Key} for client {ClientId} ignored.", request.IdempotencyKey, request.ClientId);
             return new LedgerResult(existing.Id, existing.BalanceAfter, Duplicate: true);
         }
 
@@ -327,8 +327,8 @@ public class BillingService : IBillingService
         await unit.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
 
-        _logger.LogInformation("Billing: wallet top-up of {Amount} {Currency} for clinic {ClinicId} by {Actor} (reference {Reference}); wallet now {Wallet}.",
-            entry.Amount, account.Currency, request.ClinicId, request.Actor ?? request.Source, request.Reference ?? "-", account.WalletBalance);
+        _logger.LogInformation("Billing: wallet top-up of {Amount} {Currency} for client {ClientId} by {Actor} (reference {Reference}); wallet now {Wallet}.",
+            entry.Amount, account.Currency, request.ClientId, request.Actor ?? request.Source, request.Reference ?? "-", account.WalletBalance);
         return new LedgerResult(entry.Id, entry.BalanceAfter, Duplicate: false);
     }
 
@@ -347,9 +347,9 @@ public class BillingService : IBillingService
 
         await using var unit = _units.Create();
         await using var tx = await unit.BeginTransactionAsync(ct);
-        var account = await unit.Accounts.LockAsync(request.ClinicId, _config.BillingCurrency, ct);
+        var account = await unit.Accounts.LockAsync(request.ClientId, _config.BillingCurrency, ct);
 
-        var existing = await unit.Ledger.FindByKeyReadOnlyAsync(request.ClinicId, key, ct);
+        var existing = await unit.Ledger.FindByKeyReadOnlyAsync(request.ClientId, key, ct);
         if (existing is not null)
         {
             if (existing.Amount != amount || existing.BalanceType != request.BalanceType)
@@ -375,8 +375,8 @@ public class BillingService : IBillingService
         await unit.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
 
-        _logger.LogInformation("Billing: manual {BalanceType} adjustment of {Amount} {Currency} for clinic {ClinicId} by {Actor}: {Reason}.",
-            request.BalanceType, amount, account.Currency, request.ClinicId, request.Actor ?? request.Source, request.Reason);
+        _logger.LogInformation("Billing: manual {BalanceType} adjustment of {Amount} {Currency} for client {ClientId} by {Actor}: {Reason}.",
+            request.BalanceType, amount, account.Currency, request.ClientId, request.Actor ?? request.Source, request.Reason);
         return new LedgerResult(entry.Id, entry.BalanceAfter, Duplicate: false);
     }
 
@@ -450,7 +450,7 @@ public class BillingService : IBillingService
     private async Task<UsageResult> SaveNotChargedAsync(IBillingUnitOfWork unit, IUnitOfWorkTransaction tx,
         BillingUsageRecord usage, DateTimeOffset occurredAt, CancellationToken ct)
     {
-        var costQuote = await RateResolver.ResolveAsync(unit.RateCards, new RatingRequest(usage.ClinicId, usage.EventType, usage.CountryCode,
+        var costQuote = await RateResolver.ResolveAsync(unit.RateCards, new RatingRequest(usage.ClientId, usage.EventType, usage.CountryCode,
             usage.Operator, usage.Provider, occurredAt, usage.ProviderBilling, ForCharging: false), ct);
         if (costQuote is not null && string.Equals(costQuote.Currency, usage.Currency.Trim(), StringComparison.Ordinal))
         {
@@ -467,8 +467,8 @@ public class BillingService : IBillingService
         await unit.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
 
-        _logger.LogDebug("Billing: recorded uncharged usage {IdempotencyKey} ({EventType}, paid by {ProviderBilling}) for clinic {ClinicId}.",
-            usage.IdempotencyKey, usage.EventType, usage.ProviderBilling, usage.ClinicId);
+        _logger.LogDebug("Billing: recorded uncharged usage {IdempotencyKey} ({EventType}, paid by {ProviderBilling}) for client {ClientId}.",
+            usage.IdempotencyKey, usage.EventType, usage.ProviderBilling, usage.ClientId);
         return ToResult(usage, duplicate: false);
     }
 
@@ -498,7 +498,7 @@ public class BillingService : IBillingService
 
     private static void Validate(BillableEvent e)
     {
-        if (e.ClinicId == Guid.Empty) throw new ArgumentException("ClinicId is required.", nameof(e));
+        if (e.ClientId == Guid.Empty) throw new ArgumentException("ClientId is required.", nameof(e));
         ValidateKey(e.IdempotencyKey);
         if (!BillableEventTypes.IsValid(e.EventType))
         {

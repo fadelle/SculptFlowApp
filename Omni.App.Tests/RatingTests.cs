@@ -25,12 +25,12 @@ public class RatingTests
     public async Task ARateExists_TheUsageIsPricedWithIt()
     {
         var h = new BillingHarness(_db.ConnectionString);
-        var clinic = await h.CreateClinicAsync();
+        var client = await h.CreateClientAsync();
         var evt = BillingHarness.Unique("evt");
         await h.AddRateAsync(await DefaultCardAsync(h), evt, 0.0123m, 0.01m);
-        await h.TopUpAsync(clinic, 1m);
+        await h.TopUpAsync(client, 1m);
 
-        var result = await h.Billing.ReserveAsync(h.Event(clinic, evt));
+        var result = await h.Billing.ReserveAsync(h.Event(client, evt));
 
         Assert.Equal(UsageOutcome.Reserved, result.Outcome);
         Assert.Equal(0.0123m, result.Amount);
@@ -41,18 +41,18 @@ public class RatingTests
     public async Task AMissingRate_IsRefused_NeverGuessed()
     {
         var h = new BillingHarness(_db.ConnectionString);
-        var clinic = await h.CreateClinicAsync();
-        await h.TopUpAsync(clinic, 100m);
+        var client = await h.CreateClientAsync();
+        await h.TopUpAsync(client, 100m);
 
-        var result = await h.Billing.ReserveAsync(h.Event(clinic, BillingHarness.Unique("unpriced")));
+        var result = await h.Billing.ReserveAsync(h.Event(client, BillingHarness.Unique("unpriced")));
 
         Assert.Equal(UsageOutcome.Failed, result.Outcome);
         Assert.Equal(UsageFailureReason.RateNotFound, result.FailureReason);
         var usage = await h.UsageAsync(result.UsageRecordId!.Value);
         Assert.Null(usage.Amount);
         Assert.Null(usage.RateId);
-        Assert.Equal(0m, (await h.AccountAsync(clinic)).ReservedAmount);
-        await h.AssertReconciledAsync(clinic);
+        Assert.Equal(0m, (await h.AccountAsync(client)).ReservedAmount);
+        await h.AssertReconciledAsync(client);
     }
 
     [PostgresFact]
@@ -66,9 +66,9 @@ public class RatingTests
         await h.AddRateAsync(planCard, evt, 0.80m);
         var plan = await h.CreatePlanAsync(0m, 0m, rateCardCode: planCard);
 
-        var onDefault = await h.CreateClinicAsync();
-        var onPlan = await h.CreateClinicAsync();
-        var custom = await h.CreateClinicAsync();
+        var onDefault = await h.CreateClientAsync();
+        var onPlan = await h.CreateClientAsync();
+        var custom = await h.CreateClientAsync();
         foreach (var c in new[] { onDefault, onPlan, custom }) await h.TopUpAsync(c, 10m);
         await h.Subscriptions.StartAsync(new StartSubscriptionRequest(onPlan, plan, Guid.NewGuid().ToString("N"), true, BillingSource.Admin));
         await h.Subscriptions.StartAsync(new StartSubscriptionRequest(custom, plan, Guid.NewGuid().ToString("N"), true, BillingSource.Admin));
@@ -87,35 +87,35 @@ public class RatingTests
     public async Task DestinationAndProvider_SelectTheMostSpecificRate()
     {
         var h = new BillingHarness(_db.ConnectionString);
-        var clinic = await h.CreateClinicAsync();
-        var card = await h.CreateClientCardAsync(clinic);
+        var client = await h.CreateClientAsync();
+        var card = await h.CreateClientCardAsync(client);
         var evt = BillingHarness.Unique("wa_marketing");
         await h.AddRateAsync(card, evt, 0.10m);                                   // anywhere
         await h.AddRateAsync(card, evt, 0.07m, country: "LB");                    // Lebanon
         await h.AddRateAsync(card, evt, 0.06m, country: "LB", provider: "meta");    // Lebanon through Meta
-        await h.TopUpAsync(clinic, 10m);
+        await h.TopUpAsync(client, 10m);
 
-        Assert.Equal(0.10m, (await h.Billing.ReserveAsync(h.Event(clinic, evt, country: "FR"))).Amount);
-        Assert.Equal(0.07m, (await h.Billing.ReserveAsync(h.Event(clinic, evt, country: "LB", provider: "other"))).Amount);
-        Assert.Equal(0.06m, (await h.Billing.ReserveAsync(h.Event(clinic, evt, country: "lb", provider: "META"))).Amount);
+        Assert.Equal(0.10m, (await h.Billing.ReserveAsync(h.Event(client, evt, country: "FR"))).Amount);
+        Assert.Equal(0.07m, (await h.Billing.ReserveAsync(h.Event(client, evt, country: "LB", provider: "other"))).Amount);
+        Assert.Equal(0.06m, (await h.Billing.ReserveAsync(h.Event(client, evt, country: "lb", provider: "META"))).Amount);
     }
 
     [PostgresFact]
     public async Task APriceChange_NeverChangesHistoricalUsage_AndUsageIsPricedAtItsOwnTime()
     {
         var h = new BillingHarness(_db.ConnectionString);
-        var clinic = await h.CreateClinicAsync();
-        var card = await h.CreateClientCardAsync(clinic);
+        var client = await h.CreateClientAsync();
+        var card = await h.CreateClientCardAsync(client);
         var evt = BillingHarness.Unique("evt");
-        await h.TopUpAsync(clinic, 10m);
+        await h.TopUpAsync(client, 10m);
         var v1Start = h.Time.Now;
         await h.AddRateAsync(card, evt, 0.05m);
-        var before = await h.Billing.ChargeAsync(h.Event(clinic, evt));
+        var before = await h.Billing.ChargeAsync(h.Event(client, evt));
 
         h.Time.Advance(TimeSpan.FromDays(10));
         var v2 = await h.AddRateAsync(card, evt, 0.09m); // new version from "now", closes v1
-        var after = await h.Billing.ChargeAsync(h.Event(clinic, evt));
-        var lateCallbackForOldUsage = await h.Billing.ChargeAsync(h.Event(clinic, evt, occurredAt: v1Start.AddDays(1)));
+        var after = await h.Billing.ChargeAsync(h.Event(client, evt));
+        var lateCallbackForOldUsage = await h.Billing.ChargeAsync(h.Event(client, evt, occurredAt: v1Start.AddDays(1)));
 
         Assert.Equal(0.05m, (await h.UsageAsync(before.UsageRecordId!.Value)).Amount);
         Assert.Equal(0.09m, (await h.UsageAsync(after.UsageRecordId!.Value)).Amount);
@@ -125,15 +125,15 @@ public class RatingTests
         Assert.Equal(2, versions!.Count);
         Assert.Equal(v2!.EffectiveFrom, versions.Single(v => v.ClientRate == 0.05m).EffectiveTo);
         Assert.Single((await h.RateCards.ListRatesAsync(card, includeHistory: false))!);
-        await h.AssertReconciledAsync(clinic);
+        await h.AssertReconciledAsync(client);
     }
 
     [PostgresFact]
     public async Task Rates_CantStartInThePast_OrOverlap_OrBeEdited()
     {
         var h = new BillingHarness(_db.ConnectionString);
-        var clinic = await h.CreateClinicAsync();
-        var card = await h.CreateClientCardAsync(clinic);
+        var client = await h.CreateClientAsync();
+        var card = await h.CreateClientCardAsync(client);
         var evt = BillingHarness.Unique("evt");
 
         await Assert.ThrowsAsync<ArgumentException>(() => h.AddRateAsync(card, evt, 1m, from: h.Time.Now.AddDays(-1)));

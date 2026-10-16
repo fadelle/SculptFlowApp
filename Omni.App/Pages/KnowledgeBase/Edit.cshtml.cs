@@ -12,16 +12,16 @@ namespace Omni.App.Pages.KnowledgeBase;
 /// <summary>Add / edit one Knowledge Base entry. Adding offers two ways in — type it (Manual Entry) or
 /// upload ONE PDF/DOCX/TXT (Upload Document) — both ending in the same IKnowledgeService pipeline. For an
 /// uploaded document, editing changes only title/category/active (the extracted text is shown read-only).
-/// Saving re-chunks and re-embeds the text; the clinic always comes from the logged-in user.</summary>
+/// Saving re-chunks and re-embeds the text; the client always comes from the logged-in user.</summary>
 public class EditModel : PageModel
 {
-    private readonly ICurrentClinicContext _clinicContext;
+    private readonly ICurrentClientContext _clientContext;
     private readonly IKnowledgeService _knowledge;
     private readonly IWebsiteSourceService _websites;
 
-    public EditModel(ICurrentClinicContext clinicContext, IKnowledgeService knowledge, IWebsiteSourceService websites)
+    public EditModel(ICurrentClientContext clientContext, IKnowledgeService knowledge, IWebsiteSourceService websites)
     {
-        _clinicContext = clinicContext;
+        _clientContext = clientContext;
         _knowledge = knowledge;
         _websites = websites;
     }
@@ -30,7 +30,7 @@ public class EditModel : PageModel
     [BindProperty(SupportsGet = true)]
     public Guid? Id { get; set; }
 
-    public bool ClinicConfigured { get; private set; }
+    public bool ClientConfigured { get; private set; }
     public bool IsNew => Id is null;
 
     [BindProperty]
@@ -96,9 +96,9 @@ public class EditModel : PageModel
 
     public async Task<IActionResult> OnGetAsync(CancellationToken ct)
     {
-        var clinic = await _clinicContext.GetClinicAsync(ct);
-        if (clinic is null) return Page();
-        ClinicConfigured = true;
+        var client = await _clientContext.GetClientAsync(ct);
+        if (client is null) return Page();
+        ClientConfigured = true;
 
         if (Id is null)
         {
@@ -106,7 +106,7 @@ public class EditModel : PageModel
             return Page();
         }
 
-        var doc = await _knowledge.GetByIdAsync(clinic.Id, Id.Value, ct);
+        var doc = await _knowledge.GetByIdAsync(client.Id, Id.Value, ct);
         if (doc is null) return NotFound();
 
         Title = doc.Title;
@@ -125,16 +125,16 @@ public class EditModel : PageModel
     /// background and its progress is shown on the website's page.</summary>
     public async Task<IActionResult> OnPostWebsiteAsync(CancellationToken ct)
     {
-        var clinic = await _clinicContext.GetClinicAsync(ct);
-        if (clinic is null) return RedirectToPage("/KnowledgeBase/Index");
-        ClinicConfigured = true;
+        var client = await _clientContext.GetClientAsync(ct);
+        if (client is null) return RedirectToPage("/KnowledgeBase/Index");
+        ClientConfigured = true;
         Mode = "website"; // re-show the website tab if we redisplay the page with an error
 
         if (Id is not null) return BadRequest();
 
         try
         {
-            var source = await _websites.CreateAsync(clinic.Id, new CreateWebsiteSourceRequest(WebsiteUrl, WebsiteMode, Category, IsActive), ct);
+            var source = await _websites.CreateAsync(client.Id, new CreateWebsiteSourceRequest(WebsiteUrl, WebsiteMode, Category, IsActive), ct);
             TempData["StatusMessage"] = "Website added — the crawl has started. This page updates as it runs.";
             return Redirect($"/KnowledgeBase/Websites/{source.Id}");
         }
@@ -148,9 +148,9 @@ public class EditModel : PageModel
     /// <summary>Upload Document tab: one file → extract text → same pipeline as a manual entry.</summary>
     public async Task<IActionResult> OnPostUploadAsync(CancellationToken ct)
     {
-        var clinic = await _clinicContext.GetClinicAsync(ct);
-        if (clinic is null) return RedirectToPage("/KnowledgeBase/Index");
-        ClinicConfigured = true;
+        var client = await _clientContext.GetClientAsync(ct);
+        if (client is null) return RedirectToPage("/KnowledgeBase/Index");
+        ClientConfigured = true;
         Mode = "upload"; // re-show the upload tab if we redisplay the page with an error
 
         // Uploads are only for creating a new document (to change one's text, upload it again).
@@ -165,7 +165,7 @@ public class EditModel : PageModel
 
             await using var stream = UploadFile.OpenReadStream();
             var doc = await _knowledge.CreateFromUploadAsync(
-                clinic.Id, new UploadKnowledgeRequest(Title, Category, IsActive),
+                client.Id, new UploadKnowledgeRequest(Title, Category, IsActive),
                 UploadFile.FileName, stream, UploadFile.Length, ct);
 
             TempData["StatusMessage"] = $"Uploaded \"{doc.Title}\" — {doc.ChunkCount} searchable piece{(doc.ChunkCount == 1 ? "" : "s")} created.";
@@ -184,14 +184,14 @@ public class EditModel : PageModel
 
     public async Task<IActionResult> OnPostAsync(CancellationToken ct)
     {
-        var clinic = await _clinicContext.GetClinicAsync(ct);
-        if (clinic is null) return RedirectToPage("/KnowledgeBase/Index");
-        ClinicConfigured = true;
+        var client = await _clientContext.GetClientAsync(ct);
+        if (client is null) return RedirectToPage("/KnowledgeBase/Index");
+        ClientConfigured = true;
 
         if (Id is not null)
         {
             // Know whether this is an uploaded document so a redisplay after an error renders it correctly.
-            var existing = await _knowledge.GetByIdAsync(clinic.Id, Id.Value, ct);
+            var existing = await _knowledge.GetByIdAsync(client.Id, Id.Value, ct);
             if (existing is null) return NotFound();
             IsUpload = existing.SourceType == KnowledgeSourceType.Upload;
             IsWebsite = existing.SourceType == KnowledgeSourceType.Website;
@@ -206,9 +206,9 @@ public class EditModel : PageModel
             var request = new SaveKnowledgeRequest(Title, Category, Body, IsActive);
             if (Id is null)
             {
-                await _knowledge.CreateAsync(clinic.Id, request, ct);
+                await _knowledge.CreateAsync(client.Id, request, ct);
             }
-            else if (await _knowledge.UpdateAsync(clinic.Id, Id.Value, request, ct) is null)
+            else if (await _knowledge.UpdateAsync(client.Id, Id.Value, request, ct) is null)
             {
                 return NotFound();
             }

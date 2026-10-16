@@ -9,7 +9,7 @@ public static class TraceSteps
     // Webhooks (Meta, Telegram)
     public const string WebhookReceived = "webhook.received";
     public const string WebhookRejected = "webhook.rejected";
-    public const string WebhookClinicUnresolved = "webhook.clinic_unresolved";
+    public const string WebhookClientUnresolved = "webhook.client_unresolved";
     public const string WebhookIgnored = "webhook.ignored";
 
     // Inbox

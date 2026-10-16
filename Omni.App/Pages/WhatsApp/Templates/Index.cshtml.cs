@@ -14,17 +14,17 @@ namespace Omni.App.Pages.WhatsApp.Templates;
 /// the form and reports back whatever the service (and, through it, Meta) returned.</summary>
 public class IndexModel : PageModel
 {
-    private readonly ICurrentClinicContext _clinicContext;
+    private readonly ICurrentClientContext _clientContext;
     private readonly IWhatsAppTemplateService _templates;
 
-    public IndexModel(ICurrentClinicContext clinicContext, IWhatsAppTemplateService templates)
+    public IndexModel(ICurrentClientContext clientContext, IWhatsAppTemplateService templates)
     {
-        _clinicContext = clinicContext;
+        _clientContext = clientContext;
         _templates = templates;
     }
 
-    public bool ClinicConfigured { get; private set; }
-    public Guid ClinicId { get; private set; }
+    public bool ClientConfigured { get; private set; }
+    public Guid ClientId { get; private set; }
     public IReadOnlyList<WhatsAppTemplateResponse> Templates { get; private set; } = Array.Empty<WhatsAppTemplateResponse>();
     public IReadOnlyList<string> Categories { get; } = WhatsAppTemplateCategory.All.OrderBy(c => c).ToList();
     public IReadOnlyList<string> HeaderTypes { get; } = WhatsAppTemplateHeaderType.All.OrderBy(h => h).ToList();
@@ -67,13 +67,13 @@ public class IndexModel : PageModel
 
     public async Task<IActionResult> OnPostCreateAsync(CancellationToken ct)
     {
-        var clinic = await _clinicContext.GetClinicAsync(ct);
-        if (clinic is null) return RedirectToPage();
+        var client = await _clientContext.GetClientAsync(ct);
+        if (client is null) return RedirectToPage();
 
         try
         {
             var template = await _templates.CreateAsync(new CreateWhatsAppTemplateRequest(
-                clinic.Id, Name, Category, Language, Body,
+                client.Id, Name, Category, Language, Body,
                 HeaderType == WhatsAppTemplateHeaderType.None ? null : HeaderType,
                 HeaderContent, Footer, ButtonsJson: null, VariablesJson: null), ct);
 
@@ -87,7 +87,7 @@ public class IndexModel : PageModel
         catch (Exception ex) when (ex is ArgumentException or DuplicateRecordException)
         {
             // Nothing was saved: show the form again with what was typed, instead of redirecting it away. A duplicate is the
-            // unique (clinic, name, language) index: the clinic already has a template with this name.
+            // unique (client, name, language) index: the client already has a template with this name.
             ErrorMessage = ex is DuplicateRecordException
                 ? $"You already have a template called '{Name}' in this language. Choose another name."
                 : ex.Message;
@@ -101,12 +101,12 @@ public class IndexModel : PageModel
 
     public async Task<IActionResult> OnPostSyncAsync(Guid id, CancellationToken ct)
     {
-        var clinic = await _clinicContext.GetClinicAsync(ct);
-        if (clinic is null) return RedirectToPage();
+        var client = await _clientContext.GetClientAsync(ct);
+        if (client is null) return RedirectToPage();
 
         try
         {
-            var template = await _templates.SyncStatusAsync(clinic.Id, id, ct);
+            var template = await _templates.SyncStatusAsync(client.Id, id, ct);
             StatusMessage = template is null ? null : $"'{template.Name}' status refreshed: {template.Status}.";
         }
         catch (InvalidOperationException ex)
@@ -123,12 +123,12 @@ public class IndexModel : PageModel
 
     public async Task<IActionResult> OnPostRetryAsync(Guid id, CancellationToken ct)
     {
-        var clinic = await _clinicContext.GetClinicAsync(ct);
-        if (clinic is null) return RedirectToPage();
+        var client = await _clientContext.GetClientAsync(ct);
+        if (client is null) return RedirectToPage();
 
         try
         {
-            var template = await _templates.RetrySubmitAsync(clinic.Id, id, ct);
+            var template = await _templates.RetrySubmitAsync(client.Id, id, ct);
             if (template is not null)
             {
                 if (template.Status == WhatsAppTemplateStatus.Rejected)
@@ -147,15 +147,15 @@ public class IndexModel : PageModel
 
     private async Task LoadAsync(CancellationToken ct)
     {
-        var clinic = await _clinicContext.GetClinicAsync(ct);
-        if (clinic is null)
+        var client = await _clientContext.GetClientAsync(ct);
+        if (client is null)
         {
-            ClinicConfigured = false;
+            ClientConfigured = false;
             return;
         }
 
-        ClinicConfigured = true;
-        ClinicId = clinic.Id;
-        Templates = await _templates.ListAsync(clinic.Id, ct);
+        ClientConfigured = true;
+        ClientId = client.Id;
+        Templates = await _templates.ListAsync(client.Id, ct);
     }
 }

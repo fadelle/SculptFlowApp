@@ -24,27 +24,27 @@ public class ProcedureService : IProcedureService
         _unitOfWork = unitOfWork;
     }
 
-    public async Task<IReadOnlyList<ProcedureResponse>> ListAsync(Guid clinicId, bool activeOnly, CancellationToken ct = default)
+    public async Task<IReadOnlyList<ProcedureResponse>> ListAsync(Guid clientId, bool activeOnly, CancellationToken ct = default)
     {
-        var items = await _procedures.ListAsync(clinicId, activeOnly, ct);
+        var items = await _procedures.ListAsync(clientId, activeOnly, ct);
         return items.Select(ProcedureMapper.ToResponse).ToList();
     }
 
-    public async Task<ProcedureResponse?> GetByIdAsync(Guid clinicId, Guid id, CancellationToken ct = default)
+    public async Task<ProcedureResponse?> GetByIdAsync(Guid clientId, Guid id, CancellationToken ct = default)
     {
-        var procedure = await _procedures.GetAsync(clinicId, id, ct);
+        var procedure = await _procedures.GetAsync(clientId, id, ct);
         return procedure is null ? null : ProcedureMapper.ToResponse(procedure);
     }
 
     public async Task<ProcedureResponse> CreateAsync(CreateProcedureRequest request, CancellationToken ct = default)
     {
         var (name, code, description) = Validate(request.Name, request.Code, request.Description, request.ConsultationDuration);
-        await EnsureNameAvailableAsync(request.ClinicId, name, exceptId: null, ct);
+        await EnsureNameAvailableAsync(request.ClientId, name, exceptId: null, ct);
 
         var procedure = new Procedure
         {
             Id = Guid.NewGuid(),
-            ClinicId = request.ClinicId,
+            ClientId = request.ClientId,
             Name = name,
             Code = code,
             Description = description,
@@ -59,13 +59,13 @@ public class ProcedureService : IProcedureService
         return ProcedureMapper.ToResponse(procedure);
     }
 
-    public async Task<ProcedureResponse?> UpdateAsync(Guid clinicId, Guid id, UpdateProcedureRequest request, CancellationToken ct = default)
+    public async Task<ProcedureResponse?> UpdateAsync(Guid clientId, Guid id, UpdateProcedureRequest request, CancellationToken ct = default)
     {
-        var procedure = await _procedures.GetAsync(clinicId, id, ct);
+        var procedure = await _procedures.GetAsync(clientId, id, ct);
         if (procedure is null) return null;
 
         var (name, code, description) = Validate(request.Name, request.Code, request.Description, request.ConsultationDuration);
-        await EnsureNameAvailableAsync(clinicId, name, exceptId: id, ct);
+        await EnsureNameAvailableAsync(clientId, name, exceptId: id, ct);
 
         procedure.Name = name;
         procedure.Code = code;
@@ -77,9 +77,9 @@ public class ProcedureService : IProcedureService
         return ProcedureMapper.ToResponse(procedure);
     }
 
-    public async Task<ProcedureResponse?> SetActiveAsync(Guid clinicId, Guid id, bool isActive, CancellationToken ct = default)
+    public async Task<ProcedureResponse?> SetActiveAsync(Guid clientId, Guid id, bool isActive, CancellationToken ct = default)
     {
-        var procedure = await _procedures.GetAsync(clinicId, id, ct);
+        var procedure = await _procedures.GetAsync(clientId, id, ct);
         if (procedure is null) return null;
 
         procedure.IsActive = isActive;
@@ -88,13 +88,13 @@ public class ProcedureService : IProcedureService
         return ProcedureMapper.ToResponse(procedure);
     }
 
-    public async Task EnsureUsableAsync(Guid clinicId, Guid procedureId, CancellationToken ct = default)
+    public async Task EnsureUsableAsync(Guid clientId, Guid procedureId, CancellationToken ct = default)
     {
-        var procedure = await _procedures.GetReadOnlyAsync(clinicId, procedureId, ct);
+        var procedure = await _procedures.GetReadOnlyAsync(clientId, procedureId, ct);
 
         if (procedure is null)
         {
-            throw new ArgumentException("Procedure not found for this clinic.");
+            throw new ArgumentException("Procedure not found for this client.");
         }
         if (!procedure.IsActive)
         {
@@ -102,9 +102,9 @@ public class ProcedureService : IProcedureService
         }
     }
 
-    private async Task EnsureNameAvailableAsync(Guid clinicId, string name, Guid? exceptId, CancellationToken ct)
+    private async Task EnsureNameAvailableAsync(Guid clientId, string name, Guid? exceptId, CancellationToken ct)
     {
-        if (await _procedures.NameExistsAsync(clinicId, name, exceptId, ct))
+        if (await _procedures.NameExistsAsync(clientId, name, exceptId, ct))
         {
             throw new ArgumentException($"A procedure named '{name}' already exists.");
         }

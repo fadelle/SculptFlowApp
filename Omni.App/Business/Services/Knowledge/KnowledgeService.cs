@@ -44,25 +44,25 @@ public class KnowledgeService : IKnowledgeService
 
     public long MaxUploadBytes => _config.KnowledgeMaxUploadBytes;
 
-    public async Task<IReadOnlyList<KnowledgeDocumentResponse>> ListAsync(Guid clinicId, CancellationToken ct = default)
+    public async Task<IReadOnlyList<KnowledgeDocumentResponse>> ListAsync(Guid clientId, CancellationToken ct = default)
     {
-        var docs = await _documents.ListForClinicAsync(clinicId, ct);
-        var counts = await _documents.CountChunksByDocumentAsync(clinicId, ct);
+        var docs = await _documents.ListForClientAsync(clientId, ct);
+        var counts = await _documents.CountChunksByDocumentAsync(clientId, ct);
 
         return docs.Select(d => ToResponse(d, counts.GetValueOrDefault(d.Id))).ToList();
     }
 
-    public async Task<KnowledgeDocumentResponse?> GetByIdAsync(Guid clinicId, Guid id, CancellationToken ct = default)
+    public async Task<KnowledgeDocumentResponse?> GetByIdAsync(Guid clientId, Guid id, CancellationToken ct = default)
     {
-        var doc = await _documents.GetAsync(clinicId, id, ct);
+        var doc = await _documents.GetAsync(clientId, id, ct);
         return doc is null ? null : await ToResponseAsync(doc, ct);
     }
 
-    public Task<KnowledgeDocumentResponse> CreateAsync(Guid clinicId, SaveKnowledgeRequest request, CancellationToken ct = default) =>
-        CreateCoreAsync(clinicId, request, source: null, ct);
+    public Task<KnowledgeDocumentResponse> CreateAsync(Guid clientId, SaveKnowledgeRequest request, CancellationToken ct = default) =>
+        CreateCoreAsync(clientId, request, source: null, ct);
 
     public async Task<KnowledgeDocumentResponse> CreateFromUploadAsync(
-        Guid clinicId, UploadKnowledgeRequest request, string fileName, Stream content, long length, CancellationToken ct = default)
+        Guid clientId, UploadKnowledgeRequest request, string fileName, Stream content, long length, CancellationToken ct = default)
     {
         fileName = Path.GetFileName(fileName ?? string.Empty).Trim();
         if (fileName.Length == 0 || length <= 0)
@@ -86,26 +86,26 @@ public class KnowledgeService : IKnowledgeService
         // From here it's exactly the manual-entry pipeline: same chunker, same settings, same embeddings,
         // same transactional chunk write — so the document is immediately searchable.
         return await CreateCoreAsync(
-            clinicId, new SaveKnowledgeRequest(title, request.Category, text, request.IsActive),
+            clientId, new SaveKnowledgeRequest(title, request.Category, text, request.IsActive),
             new SourceInfo(KnowledgeSourceType.Upload, fileName.Length > 255 ? fileName[^255..] : fileName, DocumentTextExtractor.MimeTypeFor(fileName), length), ct);
     }
 
-    public Task<KnowledgeDocumentResponse> CreateFromSourceAsync(Guid clinicId, ExternalKnowledgeDocument document, CancellationToken ct = default) =>
-        // Exactly the manual-entry pipeline (same chunker, clinic settings, embeddings, transactional chunk write);
+    public Task<KnowledgeDocumentResponse> CreateFromSourceAsync(Guid clientId, ExternalKnowledgeDocument document, CancellationToken ct = default) =>
+        // Exactly the manual-entry pipeline (same chunker, client settings, embeddings, transactional chunk write);
         // only the provenance columns differ. The caller (an ingestion subsystem) has already produced clean text.
         CreateCoreAsync(
-            clinicId, new SaveKnowledgeRequest(document.Title, document.Category, document.Content, document.IsActive),
+            clientId, new SaveKnowledgeRequest(document.Title, document.Category, document.Content, document.IsActive),
             new SourceInfo(document.SourceType, SourceUrl: document.SourceUrl), ct);
 
     public async Task<KnowledgeDocumentResponse?> ReplaceSourceContentAsync(
-        Guid clinicId, Guid id, string title, string content, CancellationToken ct = default)
+        Guid clientId, Guid id, string title, string content, CancellationToken ct = default)
     {
-        var doc = await _documents.GetAsync(clinicId, id, ct);
+        var doc = await _documents.GetAsync(clientId, id, ct);
         if (doc is null) return null;
 
         var (cleanTitle, _, cleanContent) = Validate(new SaveKnowledgeRequest(title, doc.Category, content, doc.IsActive));
         // Embeddings are computed BEFORE the transaction, so a provider failure leaves the old chunks intact.
-        var (pieces, vectors) = await ChunkAndEmbedAsync(clinicId, cleanTitle, cleanContent, ct);
+        var (pieces, vectors) = await ChunkAndEmbedAsync(clientId, cleanTitle, cleanContent, ct);
 
         await using var tx = await _unitOfWork.BeginTransactionAsync(ct);
         doc.Title = cleanTitle;
@@ -114,7 +114,7 @@ public class KnowledgeService : IKnowledgeService
         await _unitOfWork.SaveChangesAsync(ct);
 
         await _documents.DeleteChunksAsync(doc.Id, ct);
-        await InsertChunksAsync(clinicId, doc.Id, pieces, vectors, ct);
+        await InsertChunksAsync(clientId, doc.Id, pieces, vectors, ct);
         await tx.CommitAsync(ct);
 
         return ToResponse(doc, pieces.Count);
@@ -123,16 +123,16 @@ public class KnowledgeService : IKnowledgeService
     private sealed record SourceInfo(string SourceType, string? FileName = null, string? MimeType = null, long? SizeBytes = null, string? SourceUrl = null);
 
     private async Task<KnowledgeDocumentResponse> CreateCoreAsync(
-        Guid clinicId, SaveKnowledgeRequest request, SourceInfo? source, CancellationToken ct)
+        Guid clientId, SaveKnowledgeRequest request, SourceInfo? source, CancellationToken ct)
     {
         var (title, category, content) = Validate(request);
-        var (pieces, vectors) = await ChunkAndEmbedAsync(clinicId, title, content, ct);
+        var (pieces, vectors) = await ChunkAndEmbedAsync(clientId, title, content, ct);
 
         var now = DateTimeOffset.UtcNow;
         var doc = new KnowledgeDocument
         {
             Id = Guid.NewGuid(),
-            ClinicId = clinicId,
+            ClientId = clientId,
             Title = title,
             Category = category,
             Content = content,
@@ -149,15 +149,15 @@ public class KnowledgeService : IKnowledgeService
         await using var tx = await _unitOfWork.BeginTransactionAsync(ct);
         _documents.Add(doc);
         await _unitOfWork.SaveChangesAsync(ct);
-        await InsertChunksAsync(clinicId, doc.Id, pieces, vectors, ct);
+        await InsertChunksAsync(clientId, doc.Id, pieces, vectors, ct);
         await tx.CommitAsync(ct);
 
         return ToResponse(doc, pieces.Count);
     }
 
-    public async Task<KnowledgeDocumentResponse?> UpdateAsync(Guid clinicId, Guid id, SaveKnowledgeRequest request, CancellationToken ct = default)
+    public async Task<KnowledgeDocumentResponse?> UpdateAsync(Guid clientId, Guid id, SaveKnowledgeRequest request, CancellationToken ct = default)
     {
-        var doc = await _documents.GetAsync(clinicId, id, ct);
+        var doc = await _documents.GetAsync(clientId, id, ct);
         if (doc is null) return null;
 
         // An uploaded document's text is what was extracted from the file — it isn't editable here
@@ -166,9 +166,9 @@ public class KnowledgeService : IKnowledgeService
         if (doc.SourceType != KnowledgeSourceType.Manual) request = request with { Content = doc.Content };
 
         var (title, category, content) = Validate(request);
-        // Saving always re-chunks and re-embeds with the clinic's CURRENT settings — that's how a
+        // Saving always re-chunks and re-embeds with the client's CURRENT settings — that's how a
         // changed chunk size/overlap is applied to an existing entry (just re-save it).
-        var (pieces, vectors) = await ChunkAndEmbedAsync(clinicId, title, content, ct);
+        var (pieces, vectors) = await ChunkAndEmbedAsync(clientId, title, content, ct);
 
         await using var tx = await _unitOfWork.BeginTransactionAsync(ct);
         doc.Title = title;
@@ -179,15 +179,15 @@ public class KnowledgeService : IKnowledgeService
         await _unitOfWork.SaveChangesAsync(ct);
 
         await _documents.DeleteChunksAsync(doc.Id, ct);
-        await InsertChunksAsync(clinicId, doc.Id, pieces, vectors, ct);
+        await InsertChunksAsync(clientId, doc.Id, pieces, vectors, ct);
         await tx.CommitAsync(ct);
 
         return await ToResponseAsync(doc, ct);
     }
 
-    public async Task<KnowledgeDocumentResponse?> SetActiveAsync(Guid clinicId, Guid id, bool isActive, CancellationToken ct = default)
+    public async Task<KnowledgeDocumentResponse?> SetActiveAsync(Guid clientId, Guid id, bool isActive, CancellationToken ct = default)
     {
-        var doc = await _documents.GetAsync(clinicId, id, ct);
+        var doc = await _documents.GetAsync(clientId, id, ct);
         if (doc is null) return null;
 
         doc.IsActive = isActive;
@@ -196,9 +196,9 @@ public class KnowledgeService : IKnowledgeService
         return await ToResponseAsync(doc, ct);
     }
 
-    public async Task<bool> DeleteAsync(Guid clinicId, Guid id, CancellationToken ct = default)
+    public async Task<bool> DeleteAsync(Guid clientId, Guid id, CancellationToken ct = default)
     {
-        var doc = await _documents.GetAsync(clinicId, id, ct);
+        var doc = await _documents.GetAsync(clientId, id, ct);
         if (doc is null) return false;
 
         await using var tx = await _unitOfWork.BeginTransactionAsync(ct);
@@ -210,10 +210,10 @@ public class KnowledgeService : IKnowledgeService
     }
 
     private async Task<(IReadOnlyList<string> Pieces, IReadOnlyList<float[]> Vectors)> ChunkAndEmbedAsync(
-        Guid clinicId, string title, string content, CancellationToken ct)
+        Guid clientId, string title, string content, CancellationToken ct)
     {
-        // Chunk sizes and the embedding model/dimension come from the clinic's persisted settings.
-        var settings = await _settings.GetAsync(clinicId, ct);
+        // Chunk sizes and the embedding model/dimension come from the client's persisted settings.
+        var settings = await _settings.GetAsync(clientId, ct);
 
         var pieces = _chunking.Chunk(content, settings.ChunkSizeTokens, settings.ChunkOverlapTokens);
         if (pieces.Count == 0) throw new ArgumentException("Content is required.");
@@ -226,8 +226,8 @@ public class KnowledgeService : IKnowledgeService
     }
 
     private Task InsertChunksAsync(
-        Guid clinicId, Guid documentId, IReadOnlyList<string> pieces, IReadOnlyList<float[]> vectors, CancellationToken ct) =>
-        _documents.InsertChunksAsync(clinicId, documentId, pieces, vectors, DateTimeOffset.UtcNow, ct);
+        Guid clientId, Guid documentId, IReadOnlyList<string> pieces, IReadOnlyList<float[]> vectors, CancellationToken ct) =>
+        _documents.InsertChunksAsync(clientId, documentId, pieces, vectors, DateTimeOffset.UtcNow, ct);
 
     private static (string Title, string Category, string Content) Validate(SaveKnowledgeRequest request)
     {
@@ -246,6 +246,6 @@ public class KnowledgeService : IKnowledgeService
         ToResponse(doc, await _documents.CountChunksAsync(doc.Id, ct));
 
     private static KnowledgeDocumentResponse ToResponse(KnowledgeDocument d, int chunkCount) => new(
-        d.Id, d.ClinicId, d.Title, d.Category, d.Content, d.IsActive, chunkCount, d.CreatedAt, d.UpdatedAt,
+        d.Id, d.ClientId, d.Title, d.Category, d.Content, d.IsActive, chunkCount, d.CreatedAt, d.UpdatedAt,
         d.SourceType, d.OriginalFileName, d.MimeType, d.FileSizeBytes, d.SourceUrl);
 }

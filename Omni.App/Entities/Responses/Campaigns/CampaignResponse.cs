@@ -4,7 +4,7 @@ namespace Omni.App.Entities.Responses.Campaigns;
 
 public record CampaignResponse(
     Guid Id,
-    Guid ClinicId,
+    Guid ClientId,
     string Name,
     string CampaignType,
     string Channel,

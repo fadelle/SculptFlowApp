@@ -13,7 +13,7 @@ public record CancelConsultationResult(
     string Code,
     string Message,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? Instruction = null,
-    /// <summary>The canceled appointment, in clinic-local time.</summary>
+    /// <summary>The canceled appointment, in client-local time.</summary>
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] UpcomingAppointmentResponse? Appointment = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<UpcomingAppointmentResponse>? ExistingUpcomingAppointments = null
 );

@@ -8,7 +8,7 @@ using Omni.App.Entities.Models;
 using Omni.App.Entities.Requests.Leads;
 using Omni.App.Entities.Responses.Leads;
 using Omni.App.Persistence.Contracts;
-using Omni.App.Persistence.Contracts.Clinics;
+using Omni.App.Persistence.Contracts.Clients;
 using Omni.App.Persistence.Contracts.Leads;
 
 namespace Omni.App.Business.Services.Leads;
@@ -19,29 +19,29 @@ public class LeadService : ILeadService
     private readonly IUnitOfWork _unitOfWork;
     private readonly IEventLogger _events;
     private readonly IProcedureService _procedures;
-    private readonly IClinicRepository _clinics;
+    private readonly IClientRepository _clients;
 
-    public LeadService(ILeadRepository leads, IUnitOfWork unitOfWork, IEventLogger events, IProcedureService procedures, IClinicRepository clinics)
+    public LeadService(ILeadRepository leads, IUnitOfWork unitOfWork, IEventLogger events, IProcedureService procedures, IClientRepository clients)
     {
         _leads = leads;
         _unitOfWork = unitOfWork;
         _events = events;
         _procedures = procedures;
-        _clinics = clinics;
+        _clients = clients;
     }
 
-    /// <summary>Public intake (n8n / lead forms). The clinic must exist (404 otherwise, never a foreign-key 500) and the lead
+    /// <summary>Public intake (n8n / lead forms). The client must exist (404 otherwise, never a foreign-key 500) and the lead
     /// needs at least one way to identify or reach the person: a name, phone or email.</summary>
     public async Task<(LeadResponse Lead, bool WasCreated)> CreateOrGetAsync(CreateLeadRequest request, CancellationToken ct = default)
     {
-        if (await _clinics.GetReadOnlyAsync(request.ClinicId, ct) is null)
+        if (await _clients.GetReadOnlyAsync(request.ClientId, ct) is null)
         {
-            throw new KeyNotFoundException("Clinic not found.");
+            throw new KeyNotFoundException("Client not found.");
         }
 
         if (!string.IsNullOrWhiteSpace(request.ExternalLeadId))
         {
-            var existing = await _leads.FindByExternalIdAsync(request.ClinicId, request.ExternalLeadId, ct);
+            var existing = await _leads.FindByExternalIdAsync(request.ClientId, request.ExternalLeadId, ct);
 
             if (existing is not null)
             {
@@ -57,7 +57,7 @@ public class LeadService : ILeadService
         var lead = new Lead
         {
             Id = Guid.NewGuid(),
-            ClinicId = request.ClinicId,
+            ClientId = request.ClientId,
             ProcedureId = request.ProcedureId,
             FullName = request.FullName,
             FirstName = request.FirstName,
@@ -80,7 +80,7 @@ public class LeadService : ILeadService
         };
 
         _leads.Add(lead);
-        _events.Log(lead.ClinicId, EventTypes.LeadCreated, leadId: lead.Id, source: lead.Source);
+        _events.Log(lead.ClientId, EventTypes.LeadCreated, leadId: lead.Id, source: lead.Source);
 
         await _unitOfWork.SaveChangesAsync(ct);
 
@@ -92,23 +92,23 @@ public class LeadService : ILeadService
         return (LeadMapper.ToResponse(lead), true);
     }
 
-    public async Task<LeadResponse?> GetByIdAsync(Guid clinicId, Guid id, CancellationToken ct = default)
+    public async Task<LeadResponse?> GetByIdAsync(Guid clientId, Guid id, CancellationToken ct = default)
     {
-        var lead = await _leads.GetAsync(clinicId, id, ct);
+        var lead = await _leads.GetAsync(clientId, id, ct);
 
         return lead is null ? null : LeadMapper.ToResponse(lead);
     }
 
     public async Task<(IReadOnlyList<LeadResponse> Items, int TotalCount)> ListAsync(
-        Guid clinicId, string? status, Guid? procedureId, string? search, int skip, int take, CancellationToken ct = default)
+        Guid clientId, string? status, Guid? procedureId, string? search, int skip, int take, CancellationToken ct = default)
     {
-        var (items, totalCount) = await _leads.ListAsync(clinicId, status, procedureId, search, skip, take, ct);
+        var (items, totalCount) = await _leads.ListAsync(clientId, status, procedureId, search, skip, take, ct);
         return (items.Select(LeadMapper.ToResponse).ToList(), totalCount);
     }
 
-    public async Task<LeadResponse?> UpdateAsync(Guid clinicId, Guid id, UpdateLeadRequest request, CancellationToken ct = default)
+    public async Task<LeadResponse?> UpdateAsync(Guid clientId, Guid id, UpdateLeadRequest request, CancellationToken ct = default)
     {
-        var lead = await _leads.GetAsync(clinicId, id, ct);
+        var lead = await _leads.GetAsync(clientId, id, ct);
 
         if (lead is null) return null;
 
@@ -116,7 +116,7 @@ public class LeadService : ILeadService
         // (possibly now-inactive) procedure must keep working.
         if (request.ProcedureId is { } newProcedureId && newProcedureId != lead.ProcedureId)
         {
-            await _procedures.EnsureUsableAsync(clinicId, newProcedureId, ct);
+            await _procedures.EnsureUsableAsync(clientId, newProcedureId, ct);
         }
 
         if (request.ProcedureId is not null) lead.ProcedureId = request.ProcedureId;
@@ -142,7 +142,7 @@ public class LeadService : ILeadService
         return LeadMapper.ToResponse(lead);
     }
 
-    public async Task<LeadResponse?> UpdateStatusAsync(Guid clinicId, Guid id, UpdateLeadStatusRequest request, CancellationToken ct = default)
+    public async Task<LeadResponse?> UpdateStatusAsync(Guid clientId, Guid id, UpdateLeadStatusRequest request, CancellationToken ct = default)
     {
         if (!LeadStatus.All.Contains(request.Status))
         {
@@ -154,7 +154,7 @@ public class LeadService : ILeadService
             throw new ArgumentException($"Invalid qualification status '{request.QualificationStatus}'.", nameof(request));
         }
 
-        var lead = await _leads.GetAsync(clinicId, id, ct);
+        var lead = await _leads.GetAsync(clientId, id, ct);
 
         if (lead is null) return null;
 
@@ -188,26 +188,26 @@ public class LeadService : ILeadService
                 LeadStatus.NeedsHuman => EventTypes.HumanHandoff,
                 _ => EventTypes.LeadContacted
             };
-            _events.Log(lead.ClinicId, eventType, leadId: lead.Id);
+            _events.Log(lead.ClientId, eventType, leadId: lead.Id);
         }
 
         await _unitOfWork.SaveChangesAsync(ct);
         return LeadMapper.ToResponse(lead);
     }
 
-    public async Task<LeadResponse?> UpdateContextAsync(Guid clinicId, Guid id, UpdateLeadContextRequest request, CancellationToken ct = default)
+    public async Task<LeadResponse?> UpdateContextAsync(Guid clientId, Guid id, UpdateLeadContextRequest request, CancellationToken ct = default)
     {
         if (request.QualificationStatus is not null && !LeadQualificationStatus.All.Contains(request.QualificationStatus))
         {
             throw new ArgumentException($"Invalid qualification status '{request.QualificationStatus}'.", nameof(request));
         }
 
-        var lead = await _leads.GetAsync(clinicId, id, ct);
+        var lead = await _leads.GetAsync(clientId, id, ct);
         if (lead is null) return null;
 
         if (request.ProcedureId is { } newProcedureId && newProcedureId != lead.ProcedureId)
         {
-            await _procedures.EnsureUsableAsync(clinicId, newProcedureId, ct);
+            await _procedures.EnsureUsableAsync(clientId, newProcedureId, ct);
         }
 
         if (request.ProcedureId is not null) lead.ProcedureId = request.ProcedureId;
@@ -229,16 +229,16 @@ public class LeadService : ILeadService
         return LeadMapper.ToResponse(lead);
     }
 
-    public async Task<(LeadResponse Lead, bool WasCreated)> GetOrCreateByPhoneAsync(Guid clinicId, string phone, string? fullName, CancellationToken ct = default)
+    public async Task<(LeadResponse Lead, bool WasCreated)> GetOrCreateByPhoneAsync(Guid clientId, string phone, string? fullName, CancellationToken ct = default)
     {
-        var existing = await _leads.FindByPhoneAsync(clinicId, phone, ct);
+        var existing = await _leads.FindByPhoneAsync(clientId, phone, ct);
         if (existing is not null) return (LeadMapper.ToResponse(existing), false);
 
         var now = DateTimeOffset.UtcNow;
         var lead = new Lead
         {
             Id = Guid.NewGuid(),
-            ClinicId = clinicId,
+            ClientId = clientId,
             FullName = fullName,
             Phone = phone,
             Source = "whatsapp",
@@ -250,24 +250,24 @@ public class LeadService : ILeadService
             UpdatedAt = now
         };
         _leads.Add(lead);
-        _events.Log(clinicId, EventTypes.LeadCreated, leadId: lead.Id, source: "whatsapp");
+        _events.Log(clientId, EventTypes.LeadCreated, leadId: lead.Id, source: "whatsapp");
         await _unitOfWork.SaveChangesAsync(ct);
 
         return (LeadMapper.ToResponse(lead), true);
     }
 
     public async Task<(LeadResponse Lead, bool WasCreated)> GetOrCreateByExternalIdAsync(
-        Guid clinicId, string externalLeadId, string source, string? fullName, string? firstName, string? lastName,
+        Guid clientId, string externalLeadId, string source, string? fullName, string? firstName, string? lastName,
         string? sourceDetail, CancellationToken ct = default)
     {
-        var existing = await _leads.FindByExternalIdAsync(clinicId, externalLeadId, ct);
+        var existing = await _leads.FindByExternalIdAsync(clientId, externalLeadId, ct);
         if (existing is not null) return (LeadMapper.ToResponse(existing), false);
 
         var now = DateTimeOffset.UtcNow;
         var lead = new Lead
         {
             Id = Guid.NewGuid(),
-            ClinicId = clinicId,
+            ClientId = clientId,
             FullName = fullName,
             FirstName = firstName,
             LastName = lastName,
@@ -282,12 +282,12 @@ public class LeadService : ILeadService
             UpdatedAt = now
         };
         _leads.Add(lead);
-        _events.Log(clinicId, EventTypes.LeadCreated, leadId: lead.Id, source: source);
+        _events.Log(clientId, EventTypes.LeadCreated, leadId: lead.Id, source: source);
 
         if (!await _unitOfWork.TrySaveChangesAsync(ct))
         {
             // A concurrent delivery created the same lead first — our pending lead/event were dropped; use theirs.
-            var winner = await _leads.FindByExternalIdAsync(clinicId, externalLeadId, ct)
+            var winner = await _leads.FindByExternalIdAsync(clientId, externalLeadId, ct)
                 ?? throw new InvalidOperationException("Lead conflict reported but the existing lead was not found.");
             return (LeadMapper.ToResponse(winner), false); // a concurrent delivery created it first — not "our" new lead
         }
@@ -295,6 +295,6 @@ public class LeadService : ILeadService
         return (LeadMapper.ToResponse(lead), true);
     }
 
-    public Task<IReadOnlyList<string>> GetDistinctSourcesAsync(Guid clinicId, CancellationToken ct = default) =>
-        _leads.ListDistinctSourcesAsync(clinicId, ct);
+    public Task<IReadOnlyList<string>> GetDistinctSourcesAsync(Guid clientId, CancellationToken ct = default) =>
+        _leads.ListDistinctSourcesAsync(clientId, ct);
 }

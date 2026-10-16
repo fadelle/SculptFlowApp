@@ -20,7 +20,7 @@ namespace Omni.App.Controllers.Filters;
 /// (an n8n tool contract, a redirect, a different status for that one action).
 /// A 502/503 is also logged as an error (it is a provider or setup failure, not the caller's mistake), so it reaches the
 /// error log; 4xx answers are not logged.
-/// Applied to the clinic dashboard APIs (DashboardApiController and ConversationsController), the platform-admin APIs
+/// Applied to the client dashboard APIs (DashboardApiController and ConversationsController), the platform-admin APIs
 /// and the n8n/AI integration APIs. Not to provider webhooks, which must keep answering 500 so the provider retries.
 /// </summary>
 [AttributeUsage(AttributeTargets.Class)]

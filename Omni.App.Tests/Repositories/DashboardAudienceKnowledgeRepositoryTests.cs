@@ -8,17 +8,17 @@ namespace Omni.App.Tests.Repositories;
 
 public class DashboardRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixture)
 {
-    private static ProcedureBooking Booking(Guid clinicId, Guid leadId, Guid procedureId, string status, decimal? finalAmount = null,
+    private static ProcedureBooking Booking(Guid clientId, Guid leadId, Guid procedureId, string status, decimal? finalAmount = null,
         DateTimeOffset? created = null, DateTimeOffset? procedureDate = null) => new()
     {
-        Id = Guid.NewGuid(), ClinicId = clinicId, LeadId = leadId, ProcedureId = procedureId, Status = status, FinalAmount = finalAmount,
+        Id = Guid.NewGuid(), ClientId = clientId, LeadId = leadId, ProcedureId = procedureId, Status = status, FinalAmount = finalAmount,
         ProcedureDate = procedureDate, CreatedAt = created ?? Now, UpdatedAt = created ?? Now,
     };
 
     [PostgresFact]
-    public async Task Summary_counts_respect_the_clinic_and_the_date_range()
+    public async Task Summary_counts_respect_the_client_and_the_date_range()
     {
-        var c = MakeClinic(); var other = MakeClinic();
+        var c = MakeClient(); var other = MakeClient();
         var proc = MakeProcedure(c.Id);
         var inRange = MakeLead(c.Id, createdAt: Now);
         var tooOld = MakeLead(c.Id, createdAt: Now.AddDays(-30));
@@ -49,7 +49,7 @@ public class DashboardRepositoryTests(PostgresFixture fixture) : RepoTestBase(fi
     [PostgresFact]
     public async Task Lead_and_appointment_lists_filter_search_and_page()
     {
-        var c = MakeClinic(); var other = MakeClinic();
+        var c = MakeClient(); var other = MakeClient();
         var proc = MakeProcedure(c.Id, "Rhinoplasty");
         var l1 = MakeLead(c.Id, "Alice Wong", "111", proc.Id, LeadStatus.New, Now.AddDays(-2)); l1.Source = "Web";
         var l2 = MakeLead(c.Id, "Bob", "222", null, LeadStatus.Contacted, Now.AddDays(-1)); l2.Source = "ads";
@@ -83,7 +83,7 @@ public class DashboardRepositoryTests(PostgresFixture fixture) : RepoTestBase(fi
     [PostgresFact]
     public async Task Procedure_stats_count_leads_bookings_and_completed_revenue_per_procedure()
     {
-        var c = MakeClinic();
+        var c = MakeClient();
         var rhino = MakeProcedure(c.Id, "Rhinoplasty"); var botox = MakeProcedure(c.Id, "Botox");
         var l1 = MakeLead(c.Id, procedureId: rhino.Id); var l2 = MakeLead(c.Id, procedureId: rhino.Id); var l3 = MakeLead(c.Id, procedureId: botox.Id);
         var b1 = Booking(c.Id, l1.Id, rhino.Id, ProcedureBookingStatus.Completed, 2000m, Now, Now);
@@ -106,7 +106,7 @@ public class DashboardRepositoryTests(PostgresFixture fixture) : RepoTestBase(fi
     [PostgresFact]
     public async Task Attention_counts_human_conversations_overdue_followups_and_missing_outcomes()
     {
-        var c = MakeClinic(); var other = MakeClinic();
+        var c = MakeClient(); var other = MakeClient();
         var open = MakeLead(c.Id);
         var overdue = MakeLead(c.Id); overdue.NextFollowupAt = Now.AddDays(-1);
         var overdueLost = MakeLead(c.Id, status: LeadStatus.Lost); overdueLost.NextFollowupAt = Now.AddDays(-1);
@@ -127,27 +127,27 @@ public class DashboardRepositoryTests(PostgresFixture fixture) : RepoTestBase(fi
 
 public class CampaignAudienceRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixture)
 {
-    private Lead Contactable(Guid clinicId, string name, Action<Lead>? tweak = null)
+    private Lead Contactable(Guid clientId, string name, Action<Lead>? tweak = null)
     {
-        var l = MakeLead(clinicId, name, "+" + Guid.NewGuid().ToString("N")[..9]);
+        var l = MakeLead(clientId, name, "+" + Guid.NewGuid().ToString("N")[..9]);
         tweak?.Invoke(l);
         return l;
     }
 
-    private async Task<(int Count, List<Guid> Ids)> AudienceAsync(Guid clinicId, string type, CampaignAudienceFilters? filters = null, int days = 30)
+    private async Task<(int Count, List<Guid> Ids)> AudienceAsync(Guid clientId, string type, CampaignAudienceFilters? filters = null, int days = 30)
     {
         await using var db = NewContext();
         var repo = new CampaignAudienceRepository(db);
         var f = filters ?? new CampaignAudienceFilters();
-        var ids = (await repo.ListEligibleLeadsAsync(clinicId, type, f, days)).Select(l => l.Id).ToList();
-        Assert.Equal(ids.Count, await repo.CountEligibleLeadsAsync(clinicId, type, f, days));
+        var ids = (await repo.ListEligibleLeadsAsync(clientId, type, f, days)).Select(l => l.Id).ToList();
+        Assert.Equal(ids.Count, await repo.CountEligibleLeadsAsync(clientId, type, f, days));
         return (ids.Count, ids);
     }
 
     [PostgresFact]
-    public async Task Contactable_means_phone_opt_in_and_not_opted_out_in_this_clinic()
+    public async Task Contactable_means_phone_opt_in_and_not_opted_out_in_this_client()
     {
-        var c = MakeClinic(); var other = MakeClinic();
+        var c = MakeClient(); var other = MakeClient();
         var ok = Contactable(c.Id, "ok");
         var noPhone = Contactable(c.Id, "nophone", l => l.Phone = null);
         var blankPhone = Contactable(c.Id, "blank", l => l.Phone = "");
@@ -164,7 +164,7 @@ public class CampaignAudienceRepositoryTests(PostgresFixture fixture) : RepoTest
     [PostgresFact]
     public async Task Reactivation_wants_prior_interest_inactivity_and_no_booked_consultation()
     {
-        var c = MakeClinic();
+        var c = MakeClient();
         var cold = Contactable(c.Id, "cold", l => { l.Status = LeadStatus.Contacted; l.LastContactAt = DateTimeOffset.UtcNow.AddDays(-90); });
         var untouchedNew = Contactable(c.Id, "new");                                                       // never interested
         var recent = Contactable(c.Id, "recent", l => { l.Status = LeadStatus.Contacted; l.LastContactAt = DateTimeOffset.UtcNow.AddDays(-2); });
@@ -189,7 +189,7 @@ public class CampaignAudienceRepositoryTests(PostgresFixture fixture) : RepoTest
     [PostgresFact]
     public async Task Custom_filters_combine()
     {
-        var c = MakeClinic();
+        var c = MakeClient();
         var proc = MakeProcedure(c.Id);
         var target = Contactable(c.Id, "target", l =>
         {
@@ -224,9 +224,9 @@ public class CampaignAudienceRepositoryTests(PostgresFixture fixture) : RepoTest
 
 public class KnowledgeRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixture)
 {
-    private static KnowledgeDocument Doc(Guid clinicId, string title, int minutesAgo = 0, bool active = true) => new()
+    private static KnowledgeDocument Doc(Guid clientId, string title, int minutesAgo = 0, bool active = true) => new()
     {
-        Id = Guid.NewGuid(), ClinicId = clinicId, Title = title, Content = "content", IsActive = active,
+        Id = Guid.NewGuid(), ClientId = clientId, Title = title, Content = "content", IsActive = active,
         CreatedAt = Now.AddMinutes(-minutesAgo), UpdatedAt = Now.AddMinutes(-minutesAgo),
     };
 
@@ -239,13 +239,13 @@ public class KnowledgeRepositoryTests(PostgresFixture fixture) : RepoTestBase(fi
     [PostgresFact]
     public async Task Documents_are_listed_newest_first_scoped_and_removable()
     {
-        var c = MakeClinic(); var other = MakeClinic();
+        var c = MakeClient(); var other = MakeClient();
         var older = Doc(c.Id, "older", 10); var newer = Doc(c.Id, "newer", 1); var foreign = Doc(other.Id, "foreign");
         await SeedAsync(c, other, older, newer, foreign);
 
         await using var db = NewContext();
         var repo = new KnowledgeDocumentRepository(db);
-        Assert.Equal(["newer", "older"], (await repo.ListForClinicAsync(c.Id)).Select(d => d.Title));
+        Assert.Equal(["newer", "older"], (await repo.ListForClientAsync(c.Id)).Select(d => d.Title));
         Assert.NotNull(await repo.GetAsync(c.Id, older.Id));
         Assert.Null(await repo.GetAsync(other.Id, older.Id));
         Assert.True(await repo.ExistsAsync(c.Id, older.Id));
@@ -255,13 +255,13 @@ public class KnowledgeRepositoryTests(PostgresFixture fixture) : RepoTestBase(fi
         repo.Add(added);
         repo.Remove((await repo.GetAsync(c.Id, older.Id))!);
         await db.SaveChangesAsync();
-        Assert.Equal(["added", "newer"], (await new KnowledgeDocumentRepository(NewContext()).ListForClinicAsync(c.Id)).Select(d => d.Title).Order());
+        Assert.Equal(["added", "newer"], (await new KnowledgeDocumentRepository(NewContext()).ListForClientAsync(c.Id)).Select(d => d.Title).Order());
     }
 
     [PostgresFact]
     public async Task Chunks_are_counted_per_document_and_deleted_with_the_document_text()
     {
-        var c = MakeClinic();
+        var c = MakeClient();
         var d1 = Doc(c.Id, "d1"); var d2 = Doc(c.Id, "d2");
         await SeedAsync(c, d1, d2);
         // The embedding column is NOT NULL: seed through raw SQL with a value of whichever type this server's schema uses
@@ -272,7 +272,7 @@ public class KnowledgeRepositoryTests(PostgresFixture fixture) : RepoTestBase(fi
             await using var seed = NewContext();
             var embedding = vector ? $"('[' || array_to_string(array_fill(0.1::real, ARRAY[1536]), ',') || ']')::vector" : "array_fill(0.1::real, ARRAY[3])";
             await seed.Database.ExecuteSqlRawAsync(
-                $"insert into knowledge.knowledge_chunks (id, clinic_id, knowledge_document_id, chunk_index, content, embedding, created_at, updated_at) values ('{Guid.NewGuid()}', '{c.Id}', '{d.Id}', {index}, 'chunk {index}', {embedding}, now(), now())");
+                $"insert into knowledge.knowledge_chunks (id, client_id, knowledge_document_id, chunk_index, content, embedding, created_at, updated_at) values ('{Guid.NewGuid()}', '{c.Id}', '{d.Id}', {index}, 'chunk {index}', {embedding}, now(), now())");
         }
         await InsertChunkAsync(d1, 0); await InsertChunkAsync(d1, 1); await InsertChunkAsync(d2, 0);
 
@@ -289,7 +289,7 @@ public class KnowledgeRepositoryTests(PostgresFixture fixture) : RepoTestBase(fi
     [PostgresFact]
     public async Task Inserting_chunks_validates_input_and_stores_batches_when_pgvector_is_available()
     {
-        var c = MakeClinic();
+        var c = MakeClient();
         var d = Doc(c.Id, "d");
         await SeedAsync(c, d);
 
@@ -313,27 +313,27 @@ public class KnowledgeRepositoryTests(PostgresFixture fixture) : RepoTestBase(fi
 
 public class WebsiteSourceRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixture)
 {
-    private static KnowledgeWebsiteSource Source(Guid clinicId, string url, int daysAgo = 0) => new()
+    private static KnowledgeWebsiteSource Source(Guid clientId, string url, int daysAgo = 0) => new()
     {
-        Id = Guid.NewGuid(), ClinicId = clinicId, StartUrl = url, NormalizedStartUrl = url, Host = "example.com",
+        Id = Guid.NewGuid(), ClientId = clientId, StartUrl = url, NormalizedStartUrl = url, Host = "example.com",
         CreatedAt = Now.AddDays(-daysAgo), UpdatedAt = Now,
     };
 
     private static KnowledgeWebsiteScrapeRun Run(KnowledgeWebsiteSource s, string status, int minutesAgo = 0) => new()
     {
-        Id = Guid.NewGuid(), ClinicId = s.ClinicId, WebsiteSourceId = s.Id, Status = status, CreatedAt = Now.AddMinutes(-minutesAgo),
+        Id = Guid.NewGuid(), ClientId = s.ClientId, WebsiteSourceId = s.Id, Status = status, CreatedAt = Now.AddMinutes(-minutesAgo),
     };
 
     private static KnowledgeWebsitePage Page(KnowledgeWebsiteSource s, string url, string status, int depth = 0, Guid? documentId = null) => new()
     {
-        Id = Guid.NewGuid(), ClinicId = s.ClinicId, WebsiteSourceId = s.Id, Url = url, NormalizedUrl = url, Status = status, Depth = depth,
+        Id = Guid.NewGuid(), ClientId = s.ClientId, WebsiteSourceId = s.Id, Url = url, NormalizedUrl = url, Status = status, Depth = depth,
         KnowledgeDocumentId = documentId, FirstDiscoveredAt = Now, CreatedAt = Now, UpdatedAt = Now,
     };
 
     [PostgresFact]
     public async Task Sources_are_counted_listed_and_found_by_url()
     {
-        var c = MakeClinic(); var other = MakeClinic();
+        var c = MakeClient(); var other = MakeClient();
         var older = Source(c.Id, "https://a.example/", 2); var newer = Source(c.Id, "https://b.example/", 1); var foreign = Source(other.Id, "https://a.example/");
         await SeedAsync(c, other, older, newer, foreign);
 
@@ -360,7 +360,7 @@ public class WebsiteSourceRepositoryTests(PostgresFixture fixture) : RepoTestBas
     [PostgresFact]
     public async Task Reload_discards_unsaved_changes()
     {
-        var c = MakeClinic();
+        var c = MakeClient();
         var s = Source(c.Id, "https://reload.example/");
         await SeedAsync(c, s);
         await using var db = NewContext();
@@ -374,7 +374,7 @@ public class WebsiteSourceRepositoryTests(PostgresFixture fixture) : RepoTestBas
     [PostgresFact]
     public async Task Runs_are_listed_by_source_and_status()
     {
-        var c = MakeClinic(); var other = MakeClinic();
+        var c = MakeClient(); var other = MakeClient();
         var s1 = Source(c.Id, "https://s1.example/"); var s2 = Source(c.Id, "https://s2.example/");
         var done = Run(s1, WebsiteScrapeStatus.Completed, 30);
         var pending = Run(s1, WebsiteScrapeStatus.Pending, 20);
@@ -403,7 +403,7 @@ public class WebsiteSourceRepositoryTests(PostgresFixture fixture) : RepoTestBas
     [PostgresFact]
     public async Task A_source_with_only_finished_runs_has_nothing_in_progress()
     {
-        var c = MakeClinic();
+        var c = MakeClient();
         var s = Source(c.Id, "https://idle.example/");
         await SeedAsync(c, s, Run(s, WebsiteScrapeStatus.Completed));
         await using var db = NewContext();
@@ -413,10 +413,10 @@ public class WebsiteSourceRepositoryTests(PostgresFixture fixture) : RepoTestBas
     [PostgresFact]
     public async Task Pages_are_mapped_listed_counted_and_resolved_to_documents()
     {
-        var c = MakeClinic();
+        var c = MakeClient();
         var s = Source(c.Id, "https://pages.example/");
-        var d1 = new KnowledgeDocument { Id = Guid.NewGuid(), ClinicId = c.Id, Title = "d1", Content = "x", CreatedAt = Now, UpdatedAt = Now };
-        var d2 = new KnowledgeDocument { Id = Guid.NewGuid(), ClinicId = c.Id, Title = "d2", Content = "x", CreatedAt = Now, UpdatedAt = Now };
+        var d1 = new KnowledgeDocument { Id = Guid.NewGuid(), ClientId = c.Id, Title = "d1", Content = "x", CreatedAt = Now, UpdatedAt = Now };
+        var d2 = new KnowledgeDocument { Id = Guid.NewGuid(), ClientId = c.Id, Title = "d2", Content = "x", CreatedAt = Now, UpdatedAt = Now };
         await SeedAsync(c, s, d1, d2);
         var p1 = Page(s, "https://pages.example/", WebsitePageStatus.Indexed, 0, d1.Id);
         var p2 = Page(s, "https://pages.example/a", WebsitePageStatus.Unchanged, 1, d2.Id);

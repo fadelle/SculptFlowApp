@@ -7,16 +7,16 @@ using Omni.App.Entities.Requests.Procedures;
 namespace Omni.App.Pages.Procedures;
 
 /// <summary>Add / edit one procedure (name, code, consultation duration, short description). New
-/// procedures start active; activating/deactivating happens from the list. The clinic always comes from
+/// procedures start active; activating/deactivating happens from the list. The client always comes from
 /// the logged-in user.</summary>
 public class EditModel : PageModel
 {
-    private readonly ICurrentClinicContext _clinicContext;
+    private readonly ICurrentClientContext _clientContext;
     private readonly IProcedureService _procedures;
 
-    public EditModel(ICurrentClinicContext clinicContext, IProcedureService procedures)
+    public EditModel(ICurrentClientContext clientContext, IProcedureService procedures)
     {
-        _clinicContext = clinicContext;
+        _clientContext = clientContext;
         _procedures = procedures;
     }
 
@@ -24,7 +24,7 @@ public class EditModel : PageModel
     [BindProperty(SupportsGet = true)]
     public Guid? Id { get; set; }
 
-    public bool ClinicConfigured { get; private set; }
+    public bool ClientConfigured { get; private set; }
     public bool IsNew => Id is null;
 
     [BindProperty]
@@ -43,13 +43,13 @@ public class EditModel : PageModel
 
     public async Task<IActionResult> OnGetAsync(CancellationToken ct)
     {
-        var clinic = await _clinicContext.GetClinicAsync(ct);
-        if (clinic is null) return Page();
-        ClinicConfigured = true;
+        var client = await _clientContext.GetClientAsync(ct);
+        if (client is null) return Page();
+        ClientConfigured = true;
 
         if (Id is null) return Page();
 
-        var procedure = await _procedures.GetByIdAsync(clinic.Id, Id.Value, ct);
+        var procedure = await _procedures.GetByIdAsync(client.Id, Id.Value, ct);
         if (procedure is null) return NotFound();
 
         Name = procedure.Name;
@@ -61,17 +61,17 @@ public class EditModel : PageModel
 
     public async Task<IActionResult> OnPostAsync(CancellationToken ct)
     {
-        var clinic = await _clinicContext.GetClinicAsync(ct);
-        if (clinic is null) return RedirectToPage("/Procedures/Index");
-        ClinicConfigured = true;
+        var client = await _clientContext.GetClientAsync(ct);
+        if (client is null) return RedirectToPage("/Procedures/Index");
+        ClientConfigured = true;
 
         try
         {
             if (Id is null)
             {
-                await _procedures.CreateAsync(new CreateProcedureRequest(clinic.Id, Name, Code, Description, DurationMinutes), ct);
+                await _procedures.CreateAsync(new CreateProcedureRequest(client.Id, Name, Code, Description, DurationMinutes), ct);
             }
-            else if (await _procedures.UpdateAsync(clinic.Id, Id.Value, new UpdateProcedureRequest(Name, Code, Description, DurationMinutes), ct) is null)
+            else if (await _procedures.UpdateAsync(client.Id, Id.Value, new UpdateProcedureRequest(Name, Code, Description, DurationMinutes), ct) is null)
             {
                 return NotFound();
             }

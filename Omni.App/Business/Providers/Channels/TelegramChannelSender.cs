@@ -9,8 +9,8 @@ namespace Omni.App.Business.Providers.Channels;
 
 /// <summary>
 /// Telegram's implementation of the shared outbound seam (see IChannelSender). MessageService has
-/// already checked the conversation belongs to the clinic and (for AI sends) re-checked mode == ai;
-/// this only does the Telegram-specific part: find THIS clinic's connected bot, send to the
+/// already checked the conversation belongs to the client and (for AI sends) re-checked mode == ai;
+/// this only does the Telegram-specific part: find THIS client's connected bot, send to the
 /// conversation's chat id, and return the external message id in the same "chatId:messageId" form the
 /// inbound side stores.
 ///
@@ -37,13 +37,13 @@ public class TelegramChannelSender : IChannelSender
             throw new InvalidOperationException("This Telegram conversation has no chat id on file — can't send.");
         }
 
-        // Clinic-scoped lookup: the token used is always the one belonging to the conversation's own clinic.
-        var integration = await _integrations.GetReadOnlyAsync(conversation.ClinicId, ChannelType.Telegram, ct);
+        // Client-scoped lookup: the token used is always the one belonging to the conversation's own client.
+        var integration = await _integrations.GetReadOnlyAsync(conversation.ClientId, ChannelType.Telegram, ct);
 
         if (integration is null || integration.Status != ChannelIntegrationStatus.Connected || string.IsNullOrEmpty(integration.AccessToken))
         {
             throw new InvalidOperationException(
-                "This clinic doesn't have a connected Telegram bot — reconnect it in Settings → Messaging Integrations.");
+                "This client doesn't have a connected Telegram bot — reconnect it in Settings → Messaging Integrations.");
         }
 
         var messageId = await _client.SendMessageAsync(integration.AccessToken, conversation.ExternalThreadId, text, ct);

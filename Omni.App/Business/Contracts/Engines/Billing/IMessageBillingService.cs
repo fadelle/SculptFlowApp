@@ -6,7 +6,7 @@ namespace Omni.App.Business.Contracts.Engines.Billing;
 
 /// <summary>
 /// The bridge between messaging and billing, used by MessageService. The channel policy says WHAT the usage is;
-/// IProviderBillingService says, for the clinic's connected account, WHO pays the provider and WHETHER Omni
+/// IProviderBillingService says, for the client's connected account, WHO pays the provider and WHETHER Omni
 /// charges. Only charged usage reserves money; everything else is just recorded.
 ///   ReserveOutboundAsync  before the provider call (throws BillingDeniedException when charged usage can't be paid)
 ///   SendFailedAsync       the provider call threw -> release

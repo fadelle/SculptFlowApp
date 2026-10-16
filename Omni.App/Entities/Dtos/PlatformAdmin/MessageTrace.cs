@@ -6,7 +6,7 @@ public record MessageTrace(
     string TraceId,
     DateTimeOffset? StartedAt,
     DateTimeOffset? EndedAt,
-    Guid? ClinicId,
+    Guid? ClientId,
     List<Guid> ConversationIds,
     List<Guid> MessageIds,
     bool HasFailure,

@@ -18,7 +18,7 @@ public partial class KnowledgeBenchmarkService
 
     private sealed record SentChunkRow(Guid DocumentId, Guid ChunkId, string DocumentTitle);
 
-    public async Task<StartBenchmarkGenerationResponse> StartGenerationAsync(Guid clinicId, CancellationToken ct = default)
+    public async Task<StartBenchmarkGenerationResponse> StartGenerationAsync(Guid clientId, CancellationToken ct = default)
     {
         if (!_generator.IsConfigured)
         {
@@ -26,14 +26,14 @@ public partial class KnowledgeBenchmarkService
                 "The benchmark question generator isn't configured — set N8n:KnowledgeBenchmarkWebhookUrl (env var N8n__KnowledgeBenchmarkWebhookUrl).");
         }
 
-        await ExpireOldGenerationsAsync(clinicId, ct);
-        if (await _benchmark.GetPendingGenerationIdAsync(clinicId, ct) is not null)
+        await ExpireOldGenerationsAsync(clientId, ct);
+        if (await _benchmark.GetPendingGenerationIdAsync(clientId, ct) is not null)
         {
             throw new BenchmarkGenerationInProgressException();
         }
 
-        await RefreshStaleAsync(clinicId, ct);
-        var sample = await SampleSourceChunksAsync(clinicId, ct);
+        await RefreshStaleAsync(clientId, ct);
+        var sample = await SampleSourceChunksAsync(clientId, ct);
         if (sample.Count == 0)
         {
             return new StartBenchmarkGenerationResponse(null, "none", 0, 0, 0, Array.Empty<RejectedGeneratedQuestion>(),
@@ -45,7 +45,7 @@ public partial class KnowledgeBenchmarkService
         var generation = new KnowledgeRetrievalBenchmarkGeneration
         {
             Id = Guid.NewGuid(),
-            ClinicId = clinicId,
+            ClientId = clientId,
             Status = BenchmarkGenerationStatus.Pending,
             ChunksSent = sample.Count,
             SentChunksJson = JsonSerializer.Serialize(
@@ -59,7 +59,7 @@ public partial class KnowledgeBenchmarkService
         GeneratorSendResult sent;
         try
         {
-            sent = await _generator.SendAsync(clinicId, generation.Id,
+            sent = await _generator.SendAsync(clientId, generation.Id,
                 sample.Select(s => new BenchmarkSourceChunk(s.DocumentId, s.ChunkId, s.Title, s.Content)).ToList(), ct);
         }
         catch (BenchmarkGenerationException ex)
@@ -102,7 +102,7 @@ public partial class KnowledgeBenchmarkService
         }
         if (generation.CreatedAt < DateTimeOffset.UtcNow - GenerationTimeout)
         {
-            await ExpireOldGenerationsAsync(generation.ClinicId, ct);
+            await ExpireOldGenerationsAsync(generation.ClientId, ct);
             var expired = await _benchmark.GetGenerationReadOnlyAsync(generationId, ct) ?? generation;
             return new GenerationReceiveResult(GenerationReceiveStatus.NotAccepting, await SummaryOfAsync(expired, ct), expired.ErrorMessage);
         }
@@ -131,7 +131,7 @@ public partial class KnowledgeBenchmarkService
         return await ApplyGenerationResultAsync(generationId, reply.Questions, rawBody, ct);
     }
 
-    /// <summary>Validates the questions against the generation's STORED sent-chunk set and the live clinic Knowledge Base, then
+    /// <summary>Validates the questions against the generation's STORED sent-chunk set and the live client Knowledge Base, then
     /// stores the valid ones as cases and completes the generation — all in one transaction. The generation is claimed first
     /// (pending → completed) so two simultaneous deliveries can never both create cases.</summary>
     private async Task<GenerationReceiveResult> ApplyGenerationResultAsync(
@@ -153,7 +153,7 @@ public partial class KnowledgeBenchmarkService
 
         var generation = await _benchmark.GetGenerationAsync(generationId, ct)
                          ?? throw new InvalidOperationException("Benchmark generation not found.");
-        var clinicId = generation.ClinicId; // from the stored row, never from the caller
+        var clientId = generation.ClientId; // from the stored row, never from the caller
 
         var sentRows = JsonSerializer.Deserialize<List<SentChunkRow>>(generation.SentChunksJson ?? "[]", JsonOptions) ?? new();
         var sent = sentRows.GroupBy(s => s.ChunkId).ToDictionary(g => g.Key, g => g.First());
@@ -214,11 +214,11 @@ public partial class KnowledgeBenchmarkService
             candidates.Add((source, question));
         }
 
-        // Re-validate against the database (clinic-scoped) — the chunk may have been rebuilt or deleted while n8n was generating.
+        // Re-validate against the database (client-scoped) — the chunk may have been rebuilt or deleted while n8n was generating.
         var candidateChunkIds = candidates.Select(c => c.Source.ChunkId).Distinct().ToList();
-        var live = (await _benchmark.ListActiveChunksAsync(clinicId, candidateChunkIds, ct)).ToDictionary(k => k.ChunkId);
+        var live = (await _benchmark.ListActiveChunksAsync(clientId, candidateChunkIds, ct)).ToDictionary(k => k.ChunkId);
 
-        var existing = (await _benchmark.ListQuestionsForChunksAsync(clinicId, candidateChunkIds, ct))
+        var existing = (await _benchmark.ListQuestionsForChunksAsync(clientId, candidateChunkIds, ct))
             .Select(c => (c.ChunkId, c.Question.ToLowerInvariant())).ToHashSet();
 
         var toAdd = new List<KnowledgeRetrievalBenchmarkCase>();
@@ -226,7 +226,7 @@ public partial class KnowledgeBenchmarkService
         {
             if (!live.TryGetValue(source.ChunkId, out var chunk) || chunk.DocumentId != source.DocumentId)
             {
-                rejected.Add(new RejectedGeneratedQuestion(question, "chunk no longer exists for this clinic"));
+                rejected.Add(new RejectedGeneratedQuestion(question, "chunk no longer exists for this client"));
                 continue;
             }
             if (existing.Contains((source.ChunkId, question.ToLowerInvariant())))
@@ -238,7 +238,7 @@ public partial class KnowledgeBenchmarkService
             toAdd.Add(new KnowledgeRetrievalBenchmarkCase
             {
                 Id = Guid.NewGuid(),
-                ClinicId = clinicId,
+                ClientId = clientId,
                 Question = question,
                 ExpectedDocumentId = source.DocumentId,
                 ExpectedChunkId = source.ChunkId,
@@ -266,18 +266,18 @@ public partial class KnowledgeBenchmarkService
         return new GenerationReceiveResult(GenerationReceiveStatus.Completed, await SummaryOfAsync(generation, ct), null, rejected);
     }
 
-    public async Task<GenerationCancelResult> CancelGenerationAsync(Guid clinicId, Guid generationId, CancellationToken ct = default)
+    public async Task<GenerationCancelResult> CancelGenerationAsync(Guid clientId, Guid generationId, CancellationToken ct = default)
     {
-        var exists = await _benchmark.GenerationExistsAsync(clinicId, generationId, ct);
+        var exists = await _benchmark.GenerationExistsAsync(clientId, generationId, ct);
         if (!exists) return new GenerationCancelResult(GenerationCancelStatus.NotFound, null);
 
         // Only a still-pending generation can be stopped. The status flip is a single conditional UPDATE, so it races safely with
         // n8n's callback: whichever claims the row first wins (a callback that already completed it makes this a no-op).
         var now = DateTimeOffset.UtcNow;
         var message = "Stopped by staff before n8n sent the questions. Any reply n8n sends later is ignored.";
-        var stopped = await _benchmark.CancelPendingGenerationAsync(clinicId, generationId, message, now, ct);
+        var stopped = await _benchmark.CancelPendingGenerationAsync(clientId, generationId, message, now, ct);
 
-        var current = await _benchmark.GetGenerationReadOnlyAsync(clinicId, generationId, ct)
+        var current = await _benchmark.GetGenerationReadOnlyAsync(clientId, generationId, ct)
                       ?? throw new InvalidOperationException("Benchmark generation not found.");
         return new GenerationCancelResult(
             stopped > 0 ? GenerationCancelStatus.Cancelled : GenerationCancelStatus.NotPending, await SummaryOfAsync(current, ct));
@@ -298,51 +298,51 @@ public partial class KnowledgeBenchmarkService
         }
     }
 
-    /// <summary>Marks this clinic's generations that have waited longer than <see cref="GenerationTimeout"/> as failed, so a
+    /// <summary>Marks this client's generations that have waited longer than <see cref="GenerationTimeout"/> as failed, so a
     /// workflow that never calls back can't block "Generate Test Cases" forever.</summary>
-    private async Task ExpireOldGenerationsAsync(Guid clinicId, CancellationToken ct)
+    private async Task ExpireOldGenerationsAsync(Guid clientId, CancellationToken ct)
     {
         var now = DateTimeOffset.UtcNow;
         var cutoff = now - GenerationTimeout;
         var timeoutMessage = $"n8n did not send the questions within {(int)GenerationTimeout.TotalMinutes} minutes. Check the workflow's execution log, then generate again.";
-        await _benchmark.ExpirePendingGenerationsAsync(clinicId, cutoff, timeoutMessage, now, ct);
+        await _benchmark.ExpirePendingGenerationsAsync(clientId, cutoff, timeoutMessage, now, ct);
     }
 
     // ---------------------------------------------------------------------------------------------
     // Reading generations (+ scores per generation)
     // ---------------------------------------------------------------------------------------------
 
-    public async Task<IReadOnlyList<BenchmarkGenerationSummary>> ListGenerationsAsync(Guid clinicId, int take, CancellationToken ct = default)
+    public async Task<IReadOnlyList<BenchmarkGenerationSummary>> ListGenerationsAsync(Guid clientId, int take, CancellationToken ct = default)
     {
-        await ExpireOldGenerationsAsync(clinicId, ct);
-        var rows = await _benchmark.ListGenerationsAsync(clinicId, Math.Clamp(take, 1, 100), ct);
-        return await SummariesOfAsync(clinicId, rows, ct);
+        await ExpireOldGenerationsAsync(clientId, ct);
+        var rows = await _benchmark.ListGenerationsAsync(clientId, Math.Clamp(take, 1, 100), ct);
+        return await SummariesOfAsync(clientId, rows, ct);
     }
 
-    public async Task<BenchmarkGenerationDetail?> GetGenerationAsync(Guid clinicId, Guid id, CancellationToken ct = default)
+    public async Task<BenchmarkGenerationDetail?> GetGenerationAsync(Guid clientId, Guid id, CancellationToken ct = default)
     {
-        await ExpireOldGenerationsAsync(clinicId, ct);
-        var g = await _benchmark.GetGenerationReadOnlyAsync(clinicId, id, ct);
+        await ExpireOldGenerationsAsync(clientId, ct);
+        var g = await _benchmark.GetGenerationReadOnlyAsync(clientId, id, ct);
         if (g is null) return null;
 
-        var summary = (await SummariesOfAsync(clinicId, new[] { g }, ct))[0];
+        var summary = (await SummariesOfAsync(clientId, new[] { g }, ct))[0];
         var rejected = string.IsNullOrEmpty(g.RejectedJson) ? new() : JsonSerializer.Deserialize<List<RejectedGeneratedQuestion>>(g.RejectedJson, JsonOptions) ?? new();
         var sentChunks = (string.IsNullOrEmpty(g.SentChunksJson) ? new() : JsonSerializer.Deserialize<List<SentChunkRow>>(g.SentChunksJson, JsonOptions) ?? new())
             .Select(s => new BenchmarkGenerationChunk(s.DocumentId, s.ChunkId, s.DocumentTitle)).ToList();
         return new BenchmarkGenerationDetail(summary, rejected, sentChunks, g.RawResponse);
     }
 
-    public async Task<IReadOnlyList<BenchmarkRunGenerationBreakdown>?> GetRunGenerationBreakdownAsync(Guid clinicId, Guid runId, CancellationToken ct = default)
+    public async Task<IReadOnlyList<BenchmarkRunGenerationBreakdown>?> GetRunGenerationBreakdownAsync(Guid clientId, Guid runId, CancellationToken ct = default)
     {
-        var run = await _benchmark.GetRunReadOnlyAsync(clinicId, runId, ct);
+        var run = await _benchmark.GetRunReadOnlyAsync(clientId, runId, ct);
         if (run is null) return null;
 
-        var rows = await _benchmark.ListRunResultRanksAsync(clinicId, runId, ct);
+        var rows = await _benchmark.ListRunResultRanksAsync(clientId, runId, ct);
 
         var generationIds = rows.Where(r => r.GenerationId != null).Select(r => r.GenerationId!.Value).Distinct().ToList();
         var requestedAt = generationIds.Count == 0
             ? new Dictionary<Guid, DateTimeOffset>()
-            : await _benchmark.GetGenerationRequestTimesAsync(clinicId, generationIds, ct);
+            : await _benchmark.GetGenerationRequestTimesAsync(clientId, generationIds, ct);
 
         return rows.GroupBy(r => r.GenerationId)
             .Select(g => new BenchmarkRunGenerationBreakdown(
@@ -367,17 +367,17 @@ public partial class KnowledgeBenchmarkService
     }
 
     private async Task<BenchmarkGenerationSummary> SummaryOfAsync(KnowledgeRetrievalBenchmarkGeneration g, CancellationToken ct) =>
-        (await SummariesOfAsync(g.ClinicId, new[] { g }, ct))[0];
+        (await SummariesOfAsync(g.ClientId, new[] { g }, ct))[0];
 
     private async Task<List<BenchmarkGenerationSummary>> SummariesOfAsync(
-        Guid clinicId, IReadOnlyCollection<KnowledgeRetrievalBenchmarkGeneration> generations, CancellationToken ct)
+        Guid clientId, IReadOnlyCollection<KnowledgeRetrievalBenchmarkGeneration> generations, CancellationToken ct)
     {
         if (generations.Count == 0) return new();
         var ids = generations.Select(g => g.Id).ToList();
-        var remainingById = await _benchmark.CountCasesByGenerationAsync(clinicId, ids, ct);
+        var remainingById = await _benchmark.CountCasesByGenerationAsync(clientId, ids, ct);
 
         // "Latest scores" = this generation's cases in the most recent COMPLETED run that included any of them.
-        var resultRows = await _benchmark.ListCompletedResultRanksForGenerationsAsync(clinicId, ids, ct);
+        var resultRows = await _benchmark.ListCompletedResultRanksForGenerationsAsync(clientId, ids, ct);
 
         var latestScores = new Dictionary<Guid, BenchmarkGenerationScores>();
         foreach (var byGeneration in resultRows.Where(r => r.GenerationId != null).GroupBy(r => r.GenerationId!.Value))

@@ -8,7 +8,7 @@ namespace Omni.App.Controllers.Admin;
 
 /// <summary>
 /// Platform-admin content API (internal; called by the Omni.Admin portal): campaigns, WhatsApp templates,
-/// procedures and the knowledge base across clinics. Writes answer { clinicId }. Errors: 400 invalid input, 404 not
+/// procedures and the knowledge base across clients. Writes answer { clientId }. Errors: 400 invalid input, 404 not
 /// found, 422 not allowed now (e.g. cancelling a finished campaign).
 /// </summary>
 [ApiController]
@@ -26,8 +26,8 @@ public class ContentAdminController : ControllerBase
     }
 
     [HttpGet("campaigns")]
-    public async Task<IActionResult> Campaigns([FromQuery] Guid? clinicId, [FromQuery] string? status, [FromQuery] int page, CancellationToken ct) =>
-        Ok(await _content.ListCampaignsAsync(clinicId, status, page, ct));
+    public async Task<IActionResult> Campaigns([FromQuery] Guid? clientId, [FromQuery] string? status, [FromQuery] int page, CancellationToken ct) =>
+        Ok(await _content.ListCampaignsAsync(clientId, status, page, ct));
 
     [HttpGet("campaigns/{id:guid}")]
     public async Task<IActionResult> Campaign(Guid id, CancellationToken ct) =>
@@ -41,20 +41,20 @@ public class ContentAdminController : ControllerBase
     public async Task<IActionResult> CancelCampaign(Guid id, CancellationToken ct) => Ok(await _content.CancelCampaignAsync(id, ct));
 
     [HttpGet("templates")]
-    public async Task<IActionResult> Templates([FromQuery] Guid? clinicId, [FromQuery] string? status, CancellationToken ct) =>
-        Ok(await _content.ListTemplatesAsync(clinicId, status, ct));
+    public async Task<IActionResult> Templates([FromQuery] Guid? clientId, [FromQuery] string? status, CancellationToken ct) =>
+        Ok(await _content.ListTemplatesAsync(clientId, status, ct));
 
     [HttpGet("procedures")]
-    public async Task<IActionResult> Procedures([FromQuery] Guid? clinicId, CancellationToken ct) => Ok(await _content.ListProceduresAsync(clinicId, ct));
+    public async Task<IActionResult> Procedures([FromQuery] Guid? clientId, CancellationToken ct) => Ok(await _content.ListProceduresAsync(clientId, ct));
 
     [HttpPut("procedures/{id:guid}/active")]
     public async Task<IActionResult> SetProcedureActive(Guid id, [FromBody] ActiveBody request, CancellationToken ct) =>
         Ok(await _content.SetProcedureActiveAsync(id, request.Active, ct));
 
     [HttpGet("knowledge")]
-    public async Task<IActionResult> Documents([FromQuery] Guid? clinicId, [FromQuery] string? search, [FromQuery] bool? active,
+    public async Task<IActionResult> Documents([FromQuery] Guid? clientId, [FromQuery] string? search, [FromQuery] bool? active,
         [FromQuery] int page, CancellationToken ct) =>
-        Ok(await _content.ListDocumentsAsync(clinicId, search, active, page, ct));
+        Ok(await _content.ListDocumentsAsync(clientId, search, active, page, ct));
 
     [HttpGet("knowledge/{id:guid}")]
     public async Task<IActionResult> Document(Guid id, CancellationToken ct) =>
@@ -65,13 +65,13 @@ public class ContentAdminController : ControllerBase
         Ok(await _content.SetDocumentActiveAsync(id, request.Active, ct));
 
     [HttpGet("knowledge/websites")]
-    public async Task<IActionResult> Websites([FromQuery] Guid? clinicId, CancellationToken ct) => Ok(await _content.ListWebsitesAsync(clinicId, ct));
+    public async Task<IActionResult> Websites([FromQuery] Guid? clientId, CancellationToken ct) => Ok(await _content.ListWebsitesAsync(clientId, ct));
 
-    [HttpGet("knowledge/settings/{clinicId:guid}")]
-    public async Task<IActionResult> SearchSettings(Guid clinicId, CancellationToken ct) =>
-        await _content.SearchSettingsAsync(clinicId, ct) is { } settings ? Ok(settings) : NotFound();
+    [HttpGet("knowledge/settings/{clientId:guid}")]
+    public async Task<IActionResult> SearchSettings(Guid clientId, CancellationToken ct) =>
+        await _content.SearchSettingsAsync(clientId, ct) is { } settings ? Ok(settings) : NotFound();
 
-    [HttpPut("knowledge/settings/{clinicId:guid}")]
-    public async Task<IActionResult> UpdateSearchSettings(Guid clinicId, [FromBody] SearchSettingsBody request, CancellationToken ct) =>
-        Ok(await _content.UpdateSearchSettingsAsync(clinicId, request.TopK, request.MinimumSimilarity, ct));
+    [HttpPut("knowledge/settings/{clientId:guid}")]
+    public async Task<IActionResult> UpdateSearchSettings(Guid clientId, [FromBody] SearchSettingsBody request, CancellationToken ct) =>
+        Ok(await _content.UpdateSearchSettingsAsync(clientId, request.TopK, request.MinimumSimilarity, ct));
 }

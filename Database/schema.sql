@@ -11,8 +11,8 @@
 -- Idempotent: safe to re-run (uses IF NOT EXISTS / OR REPLACE).
 --
 -- Tables live in one Postgres schema per area (never in public):
---   core        clinics, procedures
---   identity    ASP.NET Identity users/claims/logins/tokens, clinic_users
+--   core        clients, procedures
+--   identity    ASP.NET Identity users/claims/logins/tokens, client_users
 --   crm         leads, conversations, messages, inbox settings
 --   scheduling  appointments, procedure bookings, availability, calendar sync
 --   channels    channel integrations, WhatsApp templates/health, TikTok
@@ -23,7 +23,7 @@
 --   config      settings (configuration overrides)
 -- public keeps only the shared set_updated_at() function and extensions.
 -- The admin portal's own tables live in admin.* (Omni.Admin repo).
--- Always schema-qualify table names (core.clinics, crm.leads, ...).
+-- Always schema-qualify table names (core.clients, crm.leads, ...).
 -- =====================================================================
 
 -- ---------------------------------------------------------------------
@@ -58,21 +58,21 @@ do $$
 declare t record;
 begin
   for t in select * from (values
-    ('clinics', 'core'),
+    ('clients', 'core'),
     ('procedures', 'core'),
     ('identity_users', 'identity'),
     ('identity_user_claims', 'identity'),
     ('identity_user_logins', 'identity'),
     ('identity_user_tokens', 'identity'),
-    ('clinic_users', 'identity'),
+    ('client_users', 'identity'),
     ('leads', 'crm'),
     ('conversations', 'crm'),
     ('messages', 'crm'),
     ('appointments', 'scheduling'),
     ('procedure_bookings', 'scheduling'),
-    ('clinic_availability_rules', 'scheduling'),
-    ('clinic_availability_exceptions', 'scheduling'),
-    ('clinic_booking_settings', 'scheduling'),
+    ('availability_rules', 'scheduling'),
+    ('availability_exceptions', 'scheduling'),
+    ('booking_settings', 'scheduling'),
     ('calendar_integrations', 'scheduling'),
     ('calendar_integration_calendars', 'scheduling'),
     ('appointment_calendar_syncs', 'scheduling'),
@@ -104,9 +104,9 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------
--- 1. clinics
+-- 1. clients
 -- ---------------------------------------------------------------------
-create table if not exists core.clinics (
+create table if not exists core.clients (
   id            uuid primary key default gen_random_uuid(),
   name          varchar(200) not null,
   slug          varchar(100) not null unique,
@@ -123,17 +123,17 @@ create table if not exists core.clinics (
   updated_at    timestamptz not null default now()
 );
 
-drop trigger if exists trg_clinics_updated_at on core.clinics;
-create trigger trg_clinics_updated_at
-  before update on core.clinics
+drop trigger if exists trg_clients_updated_at on core.clients;
+create trigger trg_clients_updated_at
+  before update on core.clients
   for each row execute function set_updated_at();
 
 -- ---------------------------------------------------------------------
--- 2. procedures  (catalog of services a clinic offers)
+-- 2. procedures  (catalog of services a client offers)
 -- ---------------------------------------------------------------------
 create table if not exists core.procedures (
   id                     uuid primary key default gen_random_uuid(),
-  clinic_id              uuid not null references core.clinics(id) on delete cascade,
+  client_id              uuid not null references core.clients(id) on delete cascade,
   name                   varchar(200) not null,
   code                   varchar(100),
   description            text,
@@ -143,7 +143,7 @@ create table if not exists core.procedures (
   updated_at             timestamptz not null default now()
 );
 
-create index if not exists ix_procedures_clinic_id on core.procedures(clinic_id);
+create index if not exists ix_procedures_client_id on core.procedures(client_id);
 
 drop trigger if exists trg_procedures_updated_at on core.procedures;
 create trigger trg_procedures_updated_at
@@ -155,7 +155,7 @@ create trigger trg_procedures_updated_at
 -- ---------------------------------------------------------------------
 create table if not exists crm.leads (
   id                    uuid primary key default gen_random_uuid(),
-  clinic_id             uuid not null references core.clinics(id) on delete cascade,
+  client_id             uuid not null references core.clients(id) on delete cascade,
   procedure_id          uuid references core.procedures(id) on delete set null,
 
   full_name             varchar(200),
@@ -199,14 +199,14 @@ create table if not exists crm.leads (
   ))
 );
 
--- Dedup: the same external lead (e.g. same Meta lead_id) should not be inserted twice per clinic.
-create unique index if not exists ux_leads_clinic_external_lead_id
-  on crm.leads(clinic_id, external_lead_id)
+-- Dedup: the same external lead (e.g. same Meta lead_id) should not be inserted twice per client.
+create unique index if not exists ux_leads_client_external_lead_id
+  on crm.leads(client_id, external_lead_id)
   where external_lead_id is not null;
 
-create index if not exists ix_leads_clinic_id on crm.leads(clinic_id);
-create index if not exists ix_leads_clinic_phone on crm.leads(clinic_id, phone);
-create index if not exists ix_leads_clinic_email on crm.leads(clinic_id, email);
+create index if not exists ix_leads_client_id on crm.leads(client_id);
+create index if not exists ix_leads_client_phone on crm.leads(client_id, phone);
+create index if not exists ix_leads_client_email on crm.leads(client_id, email);
 create index if not exists ix_leads_status on crm.leads(status);
 create index if not exists ix_leads_procedure_id on crm.leads(procedure_id);
 create index if not exists ix_leads_created_at on crm.leads(created_at);
@@ -222,7 +222,7 @@ create trigger trg_leads_updated_at
 -- ---------------------------------------------------------------------
 create table if not exists crm.conversations (
   id                      uuid primary key default gen_random_uuid(),
-  clinic_id               uuid not null references core.clinics(id) on delete cascade,
+  client_id               uuid not null references core.clients(id) on delete cascade,
   lead_id                 uuid not null references crm.leads(id) on delete cascade,
   channel                 varchar(50) not null,
   external_thread_id      varchar(200),
@@ -240,7 +240,7 @@ create table if not exists crm.conversations (
   constraint ck_conversations_status check (status in ('active','closed','archived'))
 );
 
-create index if not exists ix_conversations_clinic_id on crm.conversations(clinic_id);
+create index if not exists ix_conversations_client_id on crm.conversations(client_id);
 create index if not exists ix_conversations_lead_id on crm.conversations(lead_id);
 
 drop trigger if exists trg_conversations_updated_at on crm.conversations;
@@ -253,7 +253,7 @@ create trigger trg_conversations_updated_at
 -- ---------------------------------------------------------------------
 create table if not exists crm.messages (
   id                   uuid primary key default gen_random_uuid(),
-  clinic_id            uuid not null references core.clinics(id) on delete cascade,
+  client_id            uuid not null references core.clients(id) on delete cascade,
   conversation_id      uuid not null references crm.conversations(id) on delete cascade,
   lead_id              uuid not null references crm.leads(id) on delete cascade,
 
@@ -275,7 +275,7 @@ create table if not exists crm.messages (
   constraint ck_messages_sender_type check (sender_type in ('lead','ai','staff','system'))
 );
 
-create index if not exists ix_messages_clinic_id on crm.messages(clinic_id);
+create index if not exists ix_messages_client_id on crm.messages(client_id);
 create index if not exists ix_messages_conversation_id on crm.messages(conversation_id);
 create index if not exists ix_messages_lead_id on crm.messages(lead_id);
 create index if not exists ix_messages_created_at on crm.messages(created_at);
@@ -285,7 +285,7 @@ create index if not exists ix_messages_created_at on crm.messages(created_at);
 -- ---------------------------------------------------------------------
 create table if not exists scheduling.appointments (
   id                    uuid primary key default gen_random_uuid(),
-  clinic_id             uuid not null references core.clinics(id) on delete cascade,
+  client_id             uuid not null references core.clients(id) on delete cascade,
   lead_id               uuid not null references crm.leads(id) on delete cascade,
   procedure_id          uuid references core.procedures(id) on delete set null,
 
@@ -308,7 +308,7 @@ create table if not exists scheduling.appointments (
   ))
 );
 
-create index if not exists ix_appointments_clinic_id on scheduling.appointments(clinic_id);
+create index if not exists ix_appointments_client_id on scheduling.appointments(client_id);
 create index if not exists ix_appointments_lead_id on scheduling.appointments(lead_id);
 create index if not exists ix_appointments_scheduled_start on scheduling.appointments(scheduled_start);
 create index if not exists ix_appointments_status on scheduling.appointments(status);
@@ -323,7 +323,7 @@ create trigger trg_appointments_updated_at
 -- ---------------------------------------------------------------------
 create table if not exists scheduling.procedure_bookings (
   id                uuid primary key default gen_random_uuid(),
-  clinic_id         uuid not null references core.clinics(id) on delete cascade,
+  client_id         uuid not null references core.clients(id) on delete cascade,
   lead_id           uuid not null references crm.leads(id) on delete cascade,
   procedure_id      uuid not null references core.procedures(id) on delete restrict,
   appointment_id    uuid references scheduling.appointments(id) on delete set null,
@@ -344,7 +344,7 @@ create table if not exists scheduling.procedure_bookings (
   ))
 );
 
-create index if not exists ix_procedure_bookings_clinic_id on scheduling.procedure_bookings(clinic_id);
+create index if not exists ix_procedure_bookings_client_id on scheduling.procedure_bookings(client_id);
 create index if not exists ix_procedure_bookings_lead_id on scheduling.procedure_bookings(lead_id);
 create index if not exists ix_procedure_bookings_status on scheduling.procedure_bookings(status);
 
@@ -358,7 +358,7 @@ create trigger trg_procedure_bookings_updated_at
 -- ---------------------------------------------------------------------
 create table if not exists activity.events (
   id               uuid primary key default gen_random_uuid(),
-  clinic_id        uuid not null references core.clinics(id) on delete cascade,
+  client_id        uuid not null references core.clients(id) on delete cascade,
   lead_id          uuid references crm.leads(id) on delete set null,
   conversation_id  uuid references crm.conversations(id) on delete set null,
   appointment_id   uuid references scheduling.appointments(id) on delete set null,
@@ -368,17 +368,17 @@ create table if not exists activity.events (
   created_at       timestamptz not null default now()
 );
 
-create index if not exists ix_events_clinic_id on activity.events(clinic_id);
+create index if not exists ix_events_client_id on activity.events(client_id);
 create index if not exists ix_events_event_type on activity.events(event_type);
 create index if not exists ix_events_created_at on activity.events(created_at);
 
 -- ---------------------------------------------------------------------
--- 9. channel_integrations  (per-clinic WhatsApp / Instagram / Facebook connection config —
+-- 9. channel_integrations  (per-client WhatsApp / Instagram / Facebook connection config —
 --    Settings → Channels & Integrations in the dashboard)
 -- ---------------------------------------------------------------------
 create table if not exists channels.channel_integrations (
   id                     uuid primary key default gen_random_uuid(),
-  clinic_id              uuid not null references core.clinics(id) on delete cascade,
+  client_id              uuid not null references core.clients(id) on delete cascade,
 
   channel                varchar(30) not null,
   status                 varchar(20) not null default 'disconnected',
@@ -412,8 +412,8 @@ create table if not exists channels.channel_integrations (
   constraint ck_channel_integrations_status check (status in ('disconnected','connected','error'))
 );
 
-create unique index if not exists ux_channel_integrations_clinic_channel
-  on channels.channel_integrations(clinic_id, channel);
+create unique index if not exists ux_channel_integrations_client_channel
+  on channels.channel_integrations(client_id, channel);
 
 drop trigger if exists trg_channel_integrations_updated_at on channels.channel_integrations;
 create trigger trg_channel_integrations_updated_at
@@ -422,7 +422,7 @@ create trigger trg_channel_integrations_updated_at
 
 -- =====================================================================
 -- End of MVP schema (9 tables). LATER tables (staff, campaigns,
--- followups, payments, clinic_settings, knowledge_documents,
+-- followups, payments, client_settings, knowledge_documents,
 -- automation_runs, audit_logs) are intentionally not created yet —
 -- see the plan's "LATER TABLES" section.
 -- =====================================================================
@@ -459,9 +459,9 @@ create index if not exists ix_messages_origin on crm.messages(origin);
 create index if not exists ix_conversations_mode on crm.conversations(mode);
 
 -- Idempotency for WhatsApp webhook/n8n retries: the same external_message_id must never produce
--- two rows. Scoped by clinic + channel since external IDs are only unique within one provider.
-create unique index if not exists ux_messages_clinic_channel_external_message_id
-  on crm.messages(clinic_id, channel, external_message_id)
+-- two rows. Scoped by client + channel since external IDs are only unique within one provider.
+create unique index if not exists ux_messages_client_channel_external_message_id
+  on crm.messages(client_id, channel, external_message_id)
   where external_message_id is not null;
 
 -- Backfill mode from the pre-existing human_takeover flag for any rows that predate this column
@@ -484,9 +484,10 @@ create index if not exists ix_conversations_service_window on crm.conversations(
 
 -- messages: allow the new 'campaign' origin, and link a message back to whichever
 -- template/campaign produced it (all nullable — most messages have none of these).
+-- Lists every origin added later too ('telegram_customer'), so a re-run over existing rows passes.
 alter table crm.messages drop constraint if exists ck_messages_origin;
 alter table crm.messages add constraint ck_messages_origin check (origin in (
-  'whatsapp_customer','whatsapp_business_app','dashboard','ai','system','campaign'
+  'whatsapp_customer','whatsapp_business_app','dashboard','ai','system','campaign','telegram_customer'
 ));
 
 alter table crm.messages add column if not exists whatsapp_template_id uuid;
@@ -501,7 +502,7 @@ create index if not exists ix_messages_whatsapp_template_id on crm.messages(what
 -- ---------------------------------------------------------------------
 create table if not exists channels.whatsapp_templates (
   id                 uuid primary key default gen_random_uuid(),
-  clinic_id          uuid not null references core.clinics(id) on delete cascade,
+  client_id          uuid not null references core.clients(id) on delete cascade,
 
   meta_template_id   varchar(200),
   name               varchar(200) not null,
@@ -527,10 +528,10 @@ create table if not exists channels.whatsapp_templates (
   constraint ck_whatsapp_templates_header_type check (header_type is null or header_type in ('none','text','image','video','document'))
 );
 
-create index if not exists ix_whatsapp_templates_clinic_id on channels.whatsapp_templates(clinic_id);
--- Meta's own uniqueness model: one template name is one thing per language per WABA (clinic, here).
-create unique index if not exists ux_whatsapp_templates_clinic_name_language
-  on channels.whatsapp_templates(clinic_id, name, language);
+create index if not exists ix_whatsapp_templates_client_id on channels.whatsapp_templates(client_id);
+-- Meta's own uniqueness model: one template name is one thing per language per WABA (client, here).
+create unique index if not exists ux_whatsapp_templates_client_name_language
+  on channels.whatsapp_templates(client_id, name, language);
 
 drop trigger if exists trg_whatsapp_templates_updated_at on channels.whatsapp_templates;
 create trigger trg_whatsapp_templates_updated_at
@@ -542,7 +543,7 @@ create trigger trg_whatsapp_templates_updated_at
 -- ---------------------------------------------------------------------
 create table if not exists marketing.campaigns (
   id                    uuid primary key default gen_random_uuid(),
-  clinic_id             uuid not null references core.clinics(id) on delete cascade,
+  client_id             uuid not null references core.clients(id) on delete cascade,
   name                  varchar(200) not null,
   whatsapp_template_id  uuid not null references channels.whatsapp_templates(id) on delete restrict,
   status                varchar(20) not null default 'draft',
@@ -556,7 +557,7 @@ create table if not exists marketing.campaigns (
   constraint ck_campaigns_status check (status in ('draft','scheduled','running','completed','cancelled','failed'))
 );
 
-create index if not exists ix_campaigns_clinic_id on marketing.campaigns(clinic_id);
+create index if not exists ix_campaigns_client_id on marketing.campaigns(client_id);
 create index if not exists ix_campaigns_status on marketing.campaigns(status);
 create index if not exists ix_campaigns_scheduled_at on marketing.campaigns(scheduled_at) where scheduled_at is not null;
 create index if not exists ix_campaigns_whatsapp_template_id on marketing.campaigns(whatsapp_template_id);
@@ -573,7 +574,7 @@ create trigger trg_campaigns_updated_at
 -- ---------------------------------------------------------------------
 create table if not exists marketing.campaign_recipients (
   id                uuid primary key default gen_random_uuid(),
-  clinic_id         uuid not null references core.clinics(id) on delete cascade,
+  client_id         uuid not null references core.clients(id) on delete cascade,
   campaign_id       uuid not null references marketing.campaigns(id) on delete cascade,
   lead_id           uuid not null references crm.leads(id) on delete cascade,
   conversation_id   uuid references crm.conversations(id) on delete set null,
@@ -596,7 +597,7 @@ create table if not exists marketing.campaign_recipients (
   constraint ck_campaign_recipients_status check (status in ('pending','queued','sent','delivered','read','failed'))
 );
 
-create index if not exists ix_campaign_recipients_clinic_id on marketing.campaign_recipients(clinic_id);
+create index if not exists ix_campaign_recipients_client_id on marketing.campaign_recipients(client_id);
 create index if not exists ix_campaign_recipients_campaign_id on marketing.campaign_recipients(campaign_id);
 create index if not exists ix_campaign_recipients_lead_id on marketing.campaign_recipients(lead_id);
 create index if not exists ix_campaign_recipients_status on marketing.campaign_recipients(status);
@@ -632,13 +633,13 @@ do $$ begin
 end $$;
 
 -- ---------------------------------------------------------------------
--- AI agent tool surface (Controllers/AiController.cs) — clinics gains the free-text fields
--- get_clinic_info reads. No new tables: appointment reschedule reuses scheduled_start/end,
+-- AI agent tool surface (Controllers/AiController.cs) — clients gains the free-text fields
+-- get_client_info reads. No new tables: appointment reschedule reuses scheduled_start/end,
 -- and cancel/handoff reuse existing status/mode columns.
 -- ---------------------------------------------------------------------
-alter table core.clinics add column if not exists address text;
-alter table core.clinics add column if not exists operating_hours text;
-alter table core.clinics add column if not exists consultation_info text;
+alter table core.clients add column if not exists address text;
+alter table core.clients add column if not exists operating_hours text;
+alter table core.clients add column if not exists consultation_info text;
 
 -- WhatsApp phone number registration (Cloud API requires this after Embedded Signup — see
 -- ChannelIntegrationService.ConnectWhatsAppAsync / MetaGraphClient.RegisterPhoneNumberAsync).
@@ -649,7 +650,7 @@ alter table channels.channel_integrations add column if not exists pin varchar(1
 -- (n8n forwards normalized Meta webhook events here — see Controllers/AiController.cs's sibling
 -- Controllers/WhatsAppIntegrationEventsController.cs). PostgreSQL stays authoritative; SignalR only
 -- notifies. channel_integrations plays the role of "whatsapp_connections" (already one row per
--- clinic per channel) rather than a separate table duplicating the same WABA/phone_number_id.
+-- client per channel) rather than a separate table duplicating the same WABA/phone_number_id.
 -- =====================================================================
 
 -- ---------------------------------------------------------------------
@@ -685,7 +686,7 @@ alter table channels.channel_integrations add column if not exists last_webhook_
 alter table channels.channel_integrations add column if not exists last_health_event_at timestamptz;
 
 -- Superseded by the unique filtered index below — a Meta phone_number_id must never map to more
--- than one clinic (webhook routing: phone_number_id -> channel_integration -> clinic_id depends on
+-- than one client (webhook routing: phone_number_id -> channel_integration -> client_id depends on
 -- this being unambiguous).
 drop index if exists ix_channel_integrations_phone_number_id;
 create unique index if not exists ux_channel_integrations_phone_number_id
@@ -716,11 +717,11 @@ alter table channels.whatsapp_templates drop constraint if exists ck_whatsapp_te
 alter table channels.whatsapp_templates drop constraint if exists ck_whatsapp_templates_category;
 
 create index if not exists ix_whatsapp_templates_channel_integration_id on channels.whatsapp_templates(channel_integration_id);
--- Meta template ids aren't globally unique across clinics by themselves, but scoped by clinic they
+-- Meta template ids aren't globally unique across clients by themselves, but scoped by client they
 -- are — this is the upsert key ApplyMetaEventAsync uses (not unique, since Meta sends null template
 -- ids for pure category-limit updates that still need to land somewhere findable by name+language).
-create index if not exists ix_whatsapp_templates_clinic_meta_template_id
-  on channels.whatsapp_templates(clinic_id, meta_template_id) where meta_template_id is not null;
+create index if not exists ix_whatsapp_templates_client_meta_template_id
+  on channels.whatsapp_templates(client_id, meta_template_id) where meta_template_id is not null;
 
 do $$ begin
   if not exists (select 1 from pg_constraint where conname = 'fk_whatsapp_templates_channel_integration_id') then
@@ -737,7 +738,7 @@ end $$;
 -- ---------------------------------------------------------------------
 create table if not exists channels.whatsapp_health_events (
   id                       uuid primary key default gen_random_uuid(),
-  clinic_id                uuid not null references core.clinics(id) on delete cascade,
+  client_id                uuid not null references core.clients(id) on delete cascade,
   channel_integration_id   uuid not null references channels.channel_integrations(id) on delete cascade,
 
   event_type               varchar(100) not null,
@@ -753,7 +754,7 @@ create table if not exists channels.whatsapp_health_events (
   created_at               timestamptz not null default now()
 );
 
-create index if not exists ix_whatsapp_health_events_clinic_id on channels.whatsapp_health_events(clinic_id);
+create index if not exists ix_whatsapp_health_events_client_id on channels.whatsapp_health_events(client_id);
 create index if not exists ix_whatsapp_health_events_channel_integration_id on channels.whatsapp_health_events(channel_integration_id);
 create index if not exists ix_whatsapp_health_events_occurred_at on channels.whatsapp_health_events(occurred_at);
 -- Practical idempotency for webhook retries: Meta doesn't hand these a stable event id, so dedupe
@@ -762,19 +763,19 @@ create unique index if not exists ux_whatsapp_health_events_connection_type_occu
   on channels.whatsapp_health_events(channel_integration_id, event_type, occurred_at);
 
 -- =====================================================================
--- ASP.NET Core Identity (authentication only) + clinic_users
+-- ASP.NET Core Identity (authentication only) + client_users
 --
 -- MVP scope decision: ignore roles/permissions completely — no owner/manager/receptionist/surgeon,
--- no permissions matrix. Identity is used ONLY to authenticate a user; clinic_users is the ONLY
--- thing that ties an authenticated user to a clinic (assumed one active membership per user — see
--- Services/ICurrentClinicContext.cs, the sole reader of this table for every dashboard page/API).
+-- no permissions matrix. Identity is used ONLY to authenticate a user; client_users is the ONLY
+-- thing that ties an authenticated user to a client (assumed one active membership per user — see
+-- Services/ICurrentClientContext.cs, the sole reader of this table for every dashboard page/API).
 --
 -- These tables mirror ASP.NET Core Identity's standard IdentityUserContext<IdentityUser> shape
 -- (deliberately the role-free variant — no AspNetRoles/AspNetUserRoles/AspNetRoleClaims), renamed
 -- to this schema's snake_case convention via Fluent API in ApplicationDbContext.OnModelCreating
 -- rather than keeping EF's default "AspNetUsers" etc. IdentityUser.Id is a string (Identity's
 -- default key type — populated as a GUID string by the app, not DB-generated), which is why
--- clinic_users.user_id is text, not uuid.
+-- client_users.user_id is text, not uuid.
 -- =====================================================================
 
 create table if not exists identity.identity_users (
@@ -828,28 +829,28 @@ create table if not exists identity.identity_user_tokens (
 );
 
 -- ---------------------------------------------------------------------
--- clinic_users
+-- client_users
 -- ---------------------------------------------------------------------
-create table if not exists identity.clinic_users (
+create table if not exists identity.client_users (
   id            uuid primary key default gen_random_uuid(),
-  clinic_id     uuid not null references core.clinics(id) on delete cascade,
+  client_id     uuid not null references core.clients(id) on delete cascade,
   user_id       text not null references identity.identity_users(id) on delete cascade,
   is_active     boolean not null default true,
   created_at    timestamptz not null default now(),
   updated_at    timestamptz not null default now()
 );
 
-create unique index if not exists ux_clinic_users_clinic_user on identity.clinic_users(clinic_id, user_id);
--- Superseded by the unique filtered index below — enforces "one active clinic membership per
--- user", the MVP assumption CurrentClinicContext's first-active-row lookup relies on.
+create unique index if not exists ux_client_users_client_user on identity.client_users(client_id, user_id);
+-- Superseded by the unique filtered index below — enforces "one active client membership per
+-- user", the MVP assumption CurrentClientContext's first-active-row lookup relies on.
 -- Historical/inactive rows for the same user are unrestricted; only one active row per user can
 -- ever exist.
-drop index if exists ix_clinic_users_user_id;
-create unique index if not exists ux_clinic_users_user_active on identity.clinic_users(user_id) where is_active = true;
+drop index if exists ix_client_users_user_id;
+create unique index if not exists ux_client_users_user_active on identity.client_users(user_id) where is_active = true;
 
-drop trigger if exists trg_clinic_users_updated_at on identity.clinic_users;
-create trigger trg_clinic_users_updated_at
-  before update on identity.clinic_users
+drop trigger if exists trg_client_users_updated_at on identity.client_users;
+create trigger trg_client_users_updated_at
+  before update on identity.client_users
   for each row execute function set_updated_at();
 
 -- =====================================================================
@@ -935,15 +936,15 @@ create index if not exists ix_campaign_recipients_appointment_id
 
 
 -- =====================================================================
--- Clinic Knowledge Base — knowledge_documents (what staff type in) + knowledge_chunks (the
--- embedded slices the AI agent searches semantically). Everything is scoped by clinic_id; every
+-- Client Knowledge Base — knowledge_documents (what staff type in) + knowledge_chunks (the
+-- embedded slices the AI agent searches semantically). Everything is scoped by client_id; every
 -- search filters on it. See Services/IKnowledgeService.cs and IKnowledgeSearchService.cs.
 -- =====================================================================
 create extension if not exists vector;
 
 create table if not exists knowledge.knowledge_documents (
   id          uuid primary key default gen_random_uuid(),
-  clinic_id   uuid not null references core.clinics(id) on delete cascade,
+  client_id   uuid not null references core.clients(id) on delete cascade,
   title       varchar(200) not null,
   -- Extensible string (general, faq, policy, doctor, procedure, pricing, payment, consultation,
   -- preparation, recovery, ...) — deliberately no CHECK, like campaigns.campaign_type.
@@ -954,7 +955,7 @@ create table if not exists knowledge.knowledge_documents (
   updated_at  timestamptz not null default now()
 );
 
-create index if not exists ix_knowledge_documents_clinic_id on knowledge.knowledge_documents(clinic_id);
+create index if not exists ix_knowledge_documents_client_id on knowledge.knowledge_documents(client_id);
 create index if not exists ix_knowledge_documents_category on knowledge.knowledge_documents(category);
 create index if not exists ix_knowledge_documents_is_active on knowledge.knowledge_documents(is_active);
 
@@ -967,7 +968,7 @@ create trigger trg_knowledge_documents_updated_at
 -- If you switch to a model with a different dimension, this column must be changed to match.
 create table if not exists knowledge.knowledge_chunks (
   id                     uuid primary key default gen_random_uuid(),
-  clinic_id              uuid not null references core.clinics(id) on delete cascade,
+  client_id              uuid not null references core.clients(id) on delete cascade,
   knowledge_document_id  uuid not null references knowledge.knowledge_documents(id) on delete cascade,
   chunk_index            integer not null,
   content                text not null,
@@ -976,14 +977,14 @@ create table if not exists knowledge.knowledge_chunks (
   updated_at             timestamptz not null default now()
 );
 
-create index if not exists ix_knowledge_chunks_clinic_id on knowledge.knowledge_chunks(clinic_id);
+create index if not exists ix_knowledge_chunks_client_id on knowledge.knowledge_chunks(client_id);
 create index if not exists ix_knowledge_chunks_knowledge_document_id on knowledge.knowledge_chunks(knowledge_document_id);
--- Deliberately no ANN (hnsw/ivfflat) index yet: every search is already narrowed to one clinic by
--- ix_knowledge_chunks_clinic_id first, and a clinic's Knowledge Base is hundreds of chunks, not
+-- Deliberately no ANN (hnsw/ivfflat) index yet: every search is already narrowed to one client by
+-- ix_knowledge_chunks_client_id first, and a client's Knowledge Base is hundreds of chunks, not
 -- millions — an exact scan of that slice is fast and has perfect recall (an ANN index would apply the
--- clinic filter *after* its approximate scan and can drop results). Add
+-- client filter *after* its approximate scan and can drop results). Add
 --   create index ... using hnsw (embedding vector_cosine_ops);
--- only if a single clinic's chunk count grows into the tens of thousands.
+-- only if a single client's chunk count grows into the tens of thousands.
 
 drop trigger if exists trg_knowledge_chunks_updated_at on knowledge.knowledge_chunks;
 create trigger trg_knowledge_chunks_updated_at
@@ -992,7 +993,7 @@ create trigger trg_knowledge_chunks_updated_at
 
 
 -- =====================================================================
--- Knowledge Base search settings — one row per clinic (unique clinic_id), created lazily by
+-- Knowledge Base search settings — one row per client (unique client_id), created lazily by
 -- IKnowledgeSettingsService with the system defaults. Staff edit only chunk size/overlap, top_k and
 -- minimum_similarity; embedding_model, vector_dimension, similarity_method and vector_index_type are
 -- persisted for transparency but read-only in the UI (changing them means re-embedding and/or a
@@ -1001,7 +1002,7 @@ create trigger trg_knowledge_chunks_updated_at
 -- =====================================================================
 create table if not exists knowledge.knowledge_search_settings (
   id                    uuid primary key default gen_random_uuid(),
-  clinic_id             uuid not null references core.clinics(id) on delete cascade,
+  client_id             uuid not null references core.clients(id) on delete cascade,
 
   -- read-only in the UI
   embedding_model       varchar(100) not null,
@@ -1024,7 +1025,7 @@ create table if not exists knowledge.knowledge_search_settings (
   constraint ck_knowledge_search_settings_min_similarity check (minimum_similarity between 0 and 1)
 );
 
-create unique index if not exists ux_knowledge_search_settings_clinic_id on knowledge.knowledge_search_settings(clinic_id);
+create unique index if not exists ux_knowledge_search_settings_client_id on knowledge.knowledge_search_settings(client_id);
 
 drop trigger if exists trg_knowledge_search_settings_updated_at on knowledge.knowledge_search_settings;
 create trigger trg_knowledge_search_settings_updated_at
@@ -1034,7 +1035,7 @@ create trigger trg_knowledge_search_settings_updated_at
 -- ---------------------------------------------------------------------
 -- Telegram (direct Bot API channel)
 --
--- Reuses channel_integrations (one row per clinic+channel, unchanged):
+-- Reuses channel_integrations (one row per client+channel, unchanged):
 --   access_token         = the BotFather token (never returned to the browser, never logged)
 --   webhook_verify_token = the random secret_token registered with setWebhook; Telegram echoes it back
 --                          in the X-Telegram-Bot-Api-Secret-Token header on every delivery
@@ -1053,8 +1054,8 @@ alter table channels.channel_integrations drop constraint if exists ck_channel_i
 alter table channels.channel_integrations add constraint ck_channel_integrations_channel
   check (channel in ('whatsapp','instagram','facebook','telegram'));
 
--- One bot can have only one webhook, so one bot may be connected to only one clinic at a time
--- (a disconnected row keeps its bot id for display but no longer blocks another clinic).
+-- One bot can have only one webhook, so one bot may be connected to only one client at a time
+-- (a disconnected row keeps its bot id for display but no longer blocks another client).
 create unique index if not exists ux_channel_integrations_telegram_bot_id
   on channels.channel_integrations(telegram_bot_id)
   where telegram_bot_id is not null and status = 'connected';
@@ -1068,10 +1069,10 @@ alter table crm.messages add constraint ck_messages_origin check (origin in (
   'whatsapp_customer','whatsapp_business_app','dashboard','ai','system','campaign','telegram_customer'
 ));
 
--- A Telegram chat maps to exactly one conversation per clinic+channel (external_thread_id = chat.id).
+-- A Telegram chat maps to exactly one conversation per client+channel (external_thread_id = chat.id).
 -- Partial: WhatsApp/other conversations leave external_thread_id null.
-create unique index if not exists ux_conversations_clinic_channel_thread
-  on crm.conversations(clinic_id, channel, external_thread_id)
+create unique index if not exists ux_conversations_client_channel_thread
+  on crm.conversations(client_id, channel, external_thread_id)
   where external_thread_id is not null;
 
 -- ---------------------------------------------------------------------
@@ -1097,7 +1098,7 @@ end $$;
 -- ---------------------------------------------------------------------
 -- Inbox: unread tracking
 --
--- last_read_at = when staff last opened the conversation (shared across the clinic's staff). Unread =
+-- last_read_at = when staff last opened the conversation (shared across the client's staff). Unread =
 -- inbound messages newer than it. Existing conversations are backfilled as "read" exactly once (when
 -- the column is first added); conversations created later start NULL = everything unread.
 -- ---------------------------------------------------------------------
@@ -1111,7 +1112,7 @@ end $$;
 -- =====================================================================
 -- Knowledge Base: WEBSITE SCRAPING (standalone ingestion subsystem)
 --
---   knowledge_website_sources      one website configured as a KB source (per clinic)
+--   knowledge_website_sources      one website configured as a KB source (per client)
 --   knowledge_website_pages        every URL the crawler knows about, with its crawl state
 --   knowledge_website_scrape_runs  one row per crawl (history / progress / debugging)
 --
@@ -1120,7 +1121,7 @@ end $$;
 -- extracted page becomes (or updates) a knowledge_documents row (source_type = 'website') and flows through
 -- the SAME chunk -> embed -> knowledge_chunks pipeline as manual entries and uploads. NO vectors and no
 -- extracted text live in the scraping tables (the text is knowledge_documents.content).
--- Everything is scoped by clinic_id; nothing is ever deduplicated across clinics.
+-- Everything is scoped by client_id; nothing is ever deduplicated across clients.
 -- =====================================================================
 
 -- knowledge_documents: 'website' as a source type + the page URL it came from.
@@ -1131,7 +1132,7 @@ alter table knowledge.knowledge_documents add constraint ck_knowledge_documents_
 
 create table if not exists knowledge.knowledge_website_sources (
   id                    uuid primary key default gen_random_uuid(),
-  clinic_id             uuid not null references core.clinics(id) on delete cascade,
+  client_id             uuid not null references core.clients(id) on delete cascade,
 
   start_url             varchar(2000) not null,
   normalized_start_url  varchar(2000) not null,
@@ -1150,9 +1151,9 @@ create table if not exists knowledge.knowledge_website_sources (
   constraint ck_kws_crawl_mode check (crawl_mode in ('single_page','crawl_site')),
   constraint ck_kws_status check (status in ('pending','crawling','completed','completed_with_errors','failed'))
 );
--- The same website cannot be added twice for one clinic; two clinics may each add it.
-create unique index if not exists ux_kws_clinic_start_url on knowledge.knowledge_website_sources(clinic_id, normalized_start_url);
-create index if not exists ix_kws_clinic_id on knowledge.knowledge_website_sources(clinic_id);
+-- The same website cannot be added twice for one client; two clients may each add it.
+create unique index if not exists ux_kws_client_start_url on knowledge.knowledge_website_sources(client_id, normalized_start_url);
+create index if not exists ix_kws_client_id on knowledge.knowledge_website_sources(client_id);
 
 drop trigger if exists trg_kws_updated_at on knowledge.knowledge_website_sources;
 create trigger trg_kws_updated_at before update on knowledge.knowledge_website_sources
@@ -1160,7 +1161,7 @@ create trigger trg_kws_updated_at before update on knowledge.knowledge_website_s
 
 create table if not exists knowledge.knowledge_website_pages (
   id                    uuid primary key default gen_random_uuid(),
-  clinic_id             uuid not null references core.clinics(id) on delete cascade,
+  client_id             uuid not null references core.clients(id) on delete cascade,
   website_source_id     uuid not null references knowledge.knowledge_website_sources(id) on delete cascade,
 
   url                   varchar(2000) not null,
@@ -1202,10 +1203,10 @@ create table if not exists knowledge.knowledge_website_pages (
 );
 -- One row per (source, normalized URL): the same page is never stored twice for a source.
 create unique index if not exists ux_kwp_source_normalized_url on knowledge.knowledge_website_pages(website_source_id, normalized_url);
-create index if not exists ix_kwp_clinic_id on knowledge.knowledge_website_pages(clinic_id);
+create index if not exists ix_kwp_client_id on knowledge.knowledge_website_pages(client_id);
 create index if not exists ix_kwp_source_status on knowledge.knowledge_website_pages(website_source_id, status);
 create index if not exists ix_kwp_document_id on knowledge.knowledge_website_pages(knowledge_document_id) where knowledge_document_id is not null;
--- Deliberately NOT unique: identical text may legitimately exist on several pages / clinics.
+-- Deliberately NOT unique: identical text may legitimately exist on several pages / clients.
 create index if not exists ix_kwp_source_content_hash on knowledge.knowledge_website_pages(website_source_id, content_hash) where content_hash is not null;
 
 drop trigger if exists trg_kwp_updated_at on knowledge.knowledge_website_pages;
@@ -1214,7 +1215,7 @@ create trigger trg_kwp_updated_at before update on knowledge.knowledge_website_p
 
 create table if not exists knowledge.knowledge_website_scrape_runs (
   id                    uuid primary key default gen_random_uuid(),
-  clinic_id             uuid not null references core.clinics(id) on delete cascade,
+  client_id             uuid not null references core.clients(id) on delete cascade,
   website_source_id     uuid not null references knowledge.knowledge_website_sources(id) on delete cascade,
 
   status                varchar(30) not null default 'pending',
@@ -1238,7 +1239,7 @@ create table if not exists knowledge.knowledge_website_scrape_runs (
   constraint ck_kwr_status check (status in ('pending','crawling','completed','completed_with_errors','failed'))
 );
 create index if not exists ix_kwr_source_created on knowledge.knowledge_website_scrape_runs(website_source_id, created_at desc);
-create index if not exists ix_kwr_clinic_id on knowledge.knowledge_website_scrape_runs(clinic_id);
+create index if not exists ix_kwr_client_id on knowledge.knowledge_website_scrape_runs(client_id);
 
 -- =====================================================================
 -- Knowledge Base: RETRIEVAL BENCHMARK (standalone diagnostic feature)
@@ -1254,11 +1255,11 @@ create index if not exists ix_kwr_clinic_id on knowledge.knowledge_website_scrap
 -- chunks are rebuilt (new ids) whenever a document is re-saved, and a benchmark table must never block or
 -- slow production ingestion. A case whose chunk disappeared or changed is detected in code and marked stale
 -- (is_stale / stale_reason), and excluded from scoring instead of being counted as a retrieval failure.
--- Everything is scoped by clinic_id.
+-- Everything is scoped by client_id.
 -- =====================================================================
 create table if not exists knowledge.knowledge_retrieval_benchmark_cases (
   id                    uuid primary key default gen_random_uuid(),
-  clinic_id             uuid not null references core.clinics(id) on delete cascade,
+  client_id             uuid not null references core.clients(id) on delete cascade,
 
   question              text not null,
 
@@ -1284,11 +1285,11 @@ create table if not exists knowledge.knowledge_retrieval_benchmark_cases (
   constraint ck_kbc_case_type check (case_type in ('generated','manual')),
   constraint ck_kbc_question_length check (char_length(question) between 1 and 1000)
 );
-create index if not exists ix_kbc_clinic_id on knowledge.knowledge_retrieval_benchmark_cases(clinic_id);
-create index if not exists ix_kbc_clinic_chunk on knowledge.knowledge_retrieval_benchmark_cases(clinic_id, expected_chunk_id);
+create index if not exists ix_kbc_client_id on knowledge.knowledge_retrieval_benchmark_cases(client_id);
+create index if not exists ix_kbc_client_chunk on knowledge.knowledge_retrieval_benchmark_cases(client_id, expected_chunk_id);
 -- The same question for the same chunk is never stored twice.
-create unique index if not exists ux_kbc_clinic_chunk_question
-  on knowledge.knowledge_retrieval_benchmark_cases(clinic_id, expected_chunk_id, lower(question));
+create unique index if not exists ux_kbc_client_chunk_question
+  on knowledge.knowledge_retrieval_benchmark_cases(client_id, expected_chunk_id, lower(question));
 
 drop trigger if exists trg_kbc_updated_at on knowledge.knowledge_retrieval_benchmark_cases;
 create trigger trg_kbc_updated_at before update on knowledge.knowledge_retrieval_benchmark_cases
@@ -1296,7 +1297,7 @@ create trigger trg_kbc_updated_at before update on knowledge.knowledge_retrieval
 
 create table if not exists knowledge.knowledge_retrieval_benchmark_runs (
   id                       uuid primary key default gen_random_uuid(),
-  clinic_id                uuid not null references core.clinics(id) on delete cascade,
+  client_id                uuid not null references core.clients(id) on delete cascade,
 
   case_scope               varchar(20) not null default 'all',
   status                   varchar(20) not null default 'pending',
@@ -1339,11 +1340,11 @@ create table if not exists knowledge.knowledge_retrieval_benchmark_runs (
   constraint ck_kbr_case_scope check (case_scope in ('all','generated','reviewed')),
   constraint ck_kbr_status check (status in ('pending','running','completed','failed'))
 );
-create index if not exists ix_kbr_clinic_created on knowledge.knowledge_retrieval_benchmark_runs(clinic_id, created_at desc);
+create index if not exists ix_kbr_client_created on knowledge.knowledge_retrieval_benchmark_runs(client_id, created_at desc);
 
 create table if not exists knowledge.knowledge_retrieval_benchmark_results (
   id                          uuid primary key default gen_random_uuid(),
-  clinic_id                   uuid not null references core.clinics(id) on delete cascade,
+  client_id                   uuid not null references core.clients(id) on delete cascade,
   benchmark_run_id            uuid not null references knowledge.knowledge_retrieval_benchmark_runs(id) on delete cascade,
   -- set null (not cascade): deleting a case keeps the run's history intact via the snapshots below.
   benchmark_case_id           uuid references knowledge.knowledge_retrieval_benchmark_cases(id) on delete set null,
@@ -1357,7 +1358,7 @@ create table if not exists knowledge.knowledge_retrieval_benchmark_results (
   expected_chunk_rank         integer,
   expected_document_best_rank integer,
   expected_chunk_score        double precision,
-  -- The expected chunk was in the top-K by similarity but scored under the clinic's minimum similarity, so
+  -- The expected chunk was in the top-K by similarity but scored under the client's minimum similarity, so
   -- production search would not have returned it (a strict miss).
   expected_below_threshold    boolean not null default false,
 
@@ -1383,22 +1384,22 @@ create table if not exists knowledge.knowledge_retrieval_benchmark_results (
     ('EXACT_CHUNK_HIT','DOCUMENT_ONLY_HIT','MISS','STALE_CASE','ERROR'))
 );
 create index if not exists ix_kbres_run on knowledge.knowledge_retrieval_benchmark_results(benchmark_run_id);
-create index if not exists ix_kbres_clinic_id on knowledge.knowledge_retrieval_benchmark_results(clinic_id);
+create index if not exists ix_kbres_client_id on knowledge.knowledge_retrieval_benchmark_results(client_id);
 create index if not exists ix_kbres_case_created on knowledge.knowledge_retrieval_benchmark_results(benchmark_case_id, created_at desc);
 
 -- Retrieval Benchmark: which generation request created a generated case. The app generates a generation_id per
 -- "Generate Test Cases" request, sends it to the n8n generator, requires it echoed back, and stores it on every case
 -- that response produced (null for manual cases and for cases created before this column existed).
 alter table knowledge.knowledge_retrieval_benchmark_cases add column if not exists generation_id uuid;
-create index if not exists ix_kbc_clinic_generation on knowledge.knowledge_retrieval_benchmark_cases(clinic_id, generation_id) where generation_id is not null;
+create index if not exists ix_kbc_client_generation on knowledge.knowledge_retrieval_benchmark_cases(client_id, generation_id) where generation_id is not null;
 
 -- Retrieval Benchmark: ASYNC question generation. One row per "Generate Test Cases" request. `id` IS the generationId that is
 -- sent to the n8n generator and that n8n's callback must carry (POST .../generations/{id}/questions). The row is created
 -- (pending) BEFORE anything is sent, so even an instant callback finds it, and it remembers exactly which chunks were sent so
--- the reply can be validated against that set (and the clinic is taken from THIS row, never from the caller).
+-- the reply can be validated against that set (and the client is taken from THIS row, never from the caller).
 create table if not exists knowledge.knowledge_retrieval_benchmark_generations (
   id                    uuid primary key,
-  clinic_id             uuid not null references core.clinics(id) on delete cascade,
+  client_id             uuid not null references core.clients(id) on delete cascade,
 
   status                varchar(20) not null default 'pending',   -- pending | completed | failed
 
@@ -1417,20 +1418,20 @@ create table if not exists knowledge.knowledge_retrieval_benchmark_generations (
 
   constraint ck_kbg_status check (status in ('pending','completed','failed'))
 );
-create index if not exists ix_kbg_clinic_created on knowledge.knowledge_retrieval_benchmark_generations(clinic_id, created_at desc);
+create index if not exists ix_kbg_client_created on knowledge.knowledge_retrieval_benchmark_generations(client_id, created_at desc);
 
 -- Results remember which generation their case came from, so scores can be reported per generation even after the case is
 -- deleted (the case FK is ON DELETE SET NULL).
 alter table knowledge.knowledge_retrieval_benchmark_results add column if not exists generation_id uuid;
-create index if not exists ix_kbres_generation on knowledge.knowledge_retrieval_benchmark_results(clinic_id, generation_id) where generation_id is not null;
+create index if not exists ix_kbres_generation on knowledge.knowledge_retrieval_benchmark_results(client_id, generation_id) where generation_id is not null;
 
 -- Backfill: generations created by the earlier synchronous version left only a tag on their cases.
 insert into knowledge.knowledge_retrieval_benchmark_generations
-  (id, clinic_id, status, chunks_sent, questions_returned, cases_created, completed_at, created_at)
-select generation_id, clinic_id, 'completed', count(*), count(*), count(*), min(created_at), min(created_at)
+  (id, client_id, status, chunks_sent, questions_returned, cases_created, completed_at, created_at)
+select generation_id, client_id, 'completed', count(*), count(*), count(*), min(created_at), min(created_at)
 from knowledge.knowledge_retrieval_benchmark_cases
 where generation_id is not null
-group by generation_id, clinic_id
+group by generation_id, client_id
 on conflict (id) do nothing;
 
 update knowledge.knowledge_retrieval_benchmark_results r
@@ -1450,34 +1451,34 @@ alter table knowledge.knowledge_retrieval_benchmark_runs add column if not exist
 alter table knowledge.knowledge_retrieval_benchmark_runs drop constraint if exists ck_kbr_case_scope;
 alter table knowledge.knowledge_retrieval_benchmark_runs add constraint ck_kbr_case_scope
   check (case_scope in ('all','generated','reviewed','generation'));
-create index if not exists ix_kbr_generation on knowledge.knowledge_retrieval_benchmark_runs(clinic_id, generation_id) where generation_id is not null;
+create index if not exists ix_kbr_generation on knowledge.knowledge_retrieval_benchmark_runs(client_id, generation_id) where generation_id is not null;
 
 -- =====================================================================
--- Structured clinic availability (the booking source of truth; clinics.operating_hours stays free text for the AI to quote)
+-- Structured client availability (the booking source of truth; clients.operating_hours stays free text for the AI to quote)
 -- ---------------------------------------------------------------------
--- Weekly schedule: one row per (clinic, weekday). day_of_week follows .NET DayOfWeek: 0 = Sunday ... 6 = Saturday.
--- Times are the clinic's LOCAL wall-clock (clinics.timezone). To allow several windows per day later, drop
--- ux_clinic_availability_rules_day - the slot service already iterates every rule row for a day.
-create table if not exists scheduling.clinic_availability_rules (
+-- Weekly schedule: one row per (client, weekday). day_of_week follows .NET DayOfWeek: 0 = Sunday ... 6 = Saturday.
+-- Times are the client's LOCAL wall-clock (clients.timezone). To allow several windows per day later, drop
+-- ux_availability_rules_day - the slot service already iterates every rule row for a day.
+create table if not exists scheduling.availability_rules (
   id           uuid primary key default gen_random_uuid(),
-  clinic_id    uuid not null references core.clinics(id) on delete cascade,
+  client_id    uuid not null references core.clients(id) on delete cascade,
   day_of_week  smallint not null check (day_of_week between 0 and 6),
   is_open      boolean not null default true,
   start_time   time not null,
   end_time     time not null,
   created_at   timestamptz not null default now(),
   updated_at   timestamptz not null default now(),
-  constraint ck_clinic_availability_rules_range check (end_time > start_time)
+  constraint ck_availability_rules_range check (end_time > start_time)
 );
-create unique index if not exists ux_clinic_availability_rules_day on scheduling.clinic_availability_rules(clinic_id, day_of_week);
-drop trigger if exists trg_clinic_availability_rules_updated_at on scheduling.clinic_availability_rules;
-create trigger trg_clinic_availability_rules_updated_at before update on scheduling.clinic_availability_rules
+create unique index if not exists ux_availability_rules_day on scheduling.availability_rules(client_id, day_of_week);
+drop trigger if exists trg_availability_rules_updated_at on scheduling.availability_rules;
+create trigger trg_availability_rules_updated_at before update on scheduling.availability_rules
   for each row execute function set_updated_at();
 
--- Booking rules: one row per clinic. No row yet = defaults are shown in the UI (nothing is offered until a weekly rule is open).
-create table if not exists scheduling.clinic_booking_settings (
+-- Booking rules: one row per client. No row yet = defaults are shown in the UI (nothing is offered until a weekly rule is open).
+create table if not exists scheduling.booking_settings (
   id                                    uuid primary key default gen_random_uuid(),
-  clinic_id                             uuid not null unique references core.clinics(id) on delete cascade,
+  client_id                             uuid not null unique references core.clients(id) on delete cascade,
   default_consultation_duration_minutes integer not null default 30 check (default_consultation_duration_minutes > 0),
   buffer_minutes                        integer not null default 0 check (buffer_minutes >= 0),
   minimum_booking_notice_minutes        integer not null default 240 check (minimum_booking_notice_minutes >= 0),
@@ -1485,15 +1486,15 @@ create table if not exists scheduling.clinic_booking_settings (
   created_at                            timestamptz not null default now(),
   updated_at                            timestamptz not null default now()
 );
-drop trigger if exists trg_clinic_booking_settings_updated_at on scheduling.clinic_booking_settings;
-create trigger trg_clinic_booking_settings_updated_at before update on scheduling.clinic_booking_settings
+drop trigger if exists trg_booking_settings_updated_at on scheduling.booking_settings;
+create trigger trg_booking_settings_updated_at before update on scheduling.booking_settings
   for each row execute function set_updated_at();
 
 -- Date exceptions override the weekly schedule for that local date: closed all day, or a custom window (which may also
 -- open a normally-closed day).
-create table if not exists scheduling.clinic_availability_exceptions (
+create table if not exists scheduling.availability_exceptions (
   id          uuid primary key default gen_random_uuid(),
-  clinic_id   uuid not null references core.clinics(id) on delete cascade,
+  client_id   uuid not null references core.clients(id) on delete cascade,
   date        date not null,
   is_closed   boolean not null default true,
   start_time  time,
@@ -1501,21 +1502,21 @@ create table if not exists scheduling.clinic_availability_exceptions (
   reason      varchar(200),
   created_at  timestamptz not null default now(),
   updated_at  timestamptz not null default now(),
-  constraint ck_clinic_availability_exceptions_window
+  constraint ck_availability_exceptions_window
     check (is_closed or (start_time is not null and end_time is not null and end_time > start_time))
 );
-create unique index if not exists ux_clinic_availability_exceptions_date on scheduling.clinic_availability_exceptions(clinic_id, date);
-drop trigger if exists trg_clinic_availability_exceptions_updated_at on scheduling.clinic_availability_exceptions;
-create trigger trg_clinic_availability_exceptions_updated_at before update on scheduling.clinic_availability_exceptions
+create unique index if not exists ux_availability_exceptions_date on scheduling.availability_exceptions(client_id, date);
+drop trigger if exists trg_availability_exceptions_updated_at on scheduling.availability_exceptions;
+create trigger trg_availability_exceptions_updated_at before update on scheduling.availability_exceptions
   for each row execute function set_updated_at();
 
 -- =====================================================================
--- Notifications — a simple per-clinic notification center for staff (bell/list). Created ONLY from confirmed
+-- Notifications — a simple per-client notification center for staff (bell/list). Created ONLY from confirmed
 -- backend events (a message actually sent, an appointment actually booked...), never from an AI intention alone.
 -- ---------------------------------------------------------------------
 create table if not exists activity.notifications (
   id                      uuid primary key default gen_random_uuid(),
-  clinic_id               uuid not null references core.clinics(id) on delete cascade,
+  client_id               uuid not null references core.clients(id) on delete cascade,
   type                    varchar(40) not null
     check (type in ('NEW_LEAD','HANDOFF','APPOINTMENT_BOOKED','APPOINTMENT_RESCHEDULED','APPOINTMENT_CANCELLED',
                      'CAMPAIGN_REPLY','OUTBOUND_MESSAGE_FAILED','INTEGRATION_UNHEALTHY')),
@@ -1532,8 +1533,8 @@ create table if not exists activity.notifications (
   read_at                 timestamptz,
   created_at              timestamptz not null default now()
 );
-create index if not exists ix_notifications_clinic_created on activity.notifications(clinic_id, created_at desc);
-create index if not exists ix_notifications_clinic_unread on activity.notifications(clinic_id) where is_read = false;
+create index if not exists ix_notifications_client_created on activity.notifications(client_id, created_at desc);
+create index if not exists ix_notifications_client_unread on activity.notifications(client_id) where is_read = false;
 
 -- =====================================================================
 -- Calendar Integrations — one-way (Omni -> external) appointment sync via a dedicated n8n workflow.
@@ -1543,13 +1544,13 @@ create index if not exists ix_notifications_clinic_unread on activity.notificati
 -- ---------------------------------------------------------------------
 create table if not exists scheduling.calendar_integrations (
   id                       uuid primary key default gen_random_uuid(),
-  clinic_id                uuid not null references core.clinics(id) on delete cascade,
+  client_id                uuid not null references core.clients(id) on delete cascade,
   provider                 varchar(20) not null check (provider in ('google','outlook')),
   status                   varchar(20) not null default 'disconnected'
     check (status in ('disconnected','pending','connected','error')),
 
   -- Opaque handle n8n returns on a successful connect — n8n looks THIS up to find the stored OAuth
-  -- tokens for this clinic+provider. Never a raw access/refresh token; Omni cannot use it itself.
+  -- tokens for this client+provider. Never a raw access/refresh token; Omni cannot use it itself.
   external_connection_ref  varchar(200),
   account_display_name     varchar(200),  -- e.g. the connected Google/Outlook account's email, for display only
 
@@ -1567,7 +1568,7 @@ create table if not exists scheduling.calendar_integrations (
   created_at               timestamptz not null default now(),
   updated_at               timestamptz not null default now()
 );
-create unique index if not exists ux_calendar_integrations_clinic_provider on scheduling.calendar_integrations(clinic_id, provider);
+create unique index if not exists ux_calendar_integrations_client_provider on scheduling.calendar_integrations(client_id, provider);
 drop trigger if exists trg_calendar_integrations_updated_at on scheduling.calendar_integrations;
 create trigger trg_calendar_integrations_updated_at before update on scheduling.calendar_integrations
   for each row execute function set_updated_at();
@@ -1614,7 +1615,7 @@ create trigger trg_appointment_calendar_syncs_updated_at before update on schedu
 alter table scheduling.appointment_calendar_syncs add column if not exists last_operation varchar(10);
 
 -- calendar_integrations: connect/list-calendars/disconnect now happen directly against Google/Outlook from
--- Omni (no longer via n8n) — the clinic's own OAuth tokens are stored here so Omni can refresh them
+-- Omni (no longer via n8n) — the client's own OAuth tokens are stored here so Omni can refresh them
 -- and hand a fresh access token to n8n's sync webhook for the one thing n8n still does (the actual create/update/
 -- cancel API call). MVP NOTE (same as channel_integrations.access_token): plain text — move to an encrypted
 -- column/secrets manager before this handles real patient data at scale.
@@ -1629,7 +1630,7 @@ alter table scheduling.calendar_integrations add column if not exists token_expi
 -- ---------------------------------------------------------------------
 create table if not exists channels.tiktok_integrations (
   id                        uuid primary key default gen_random_uuid(),
-  clinic_id                 uuid not null references core.clinics(id) on delete cascade,
+  client_id                 uuid not null references core.clients(id) on delete cascade,
   status                    varchar(20) not null default 'disconnected'
     check (status in ('disconnected','pending','connected','error')),
 
@@ -1651,7 +1652,7 @@ create table if not exists channels.tiktok_integrations (
   created_at                  timestamptz not null default now(),
   updated_at                   timestamptz not null default now()
 );
-create unique index if not exists ux_tiktok_integrations_clinic on channels.tiktok_integrations(clinic_id);
+create unique index if not exists ux_tiktok_integrations_client on channels.tiktok_integrations(client_id);
 drop trigger if exists trg_tiktok_integrations_updated_at on channels.tiktok_integrations;
 create trigger trg_tiktok_integrations_updated_at before update on channels.tiktok_integrations
   for each row execute function set_updated_at();
@@ -1659,7 +1660,7 @@ create trigger trg_tiktok_integrations_updated_at before update on channels.tikt
 -- ---------------------------------------------------------------
 -- Infobip removed (2026-10-12): WhatsApp is Meta Cloud API only, one provider per channel. Drops what the
 -- Infobip period added. Before dropping, Infobip-connected WhatsApp rows are disconnected (they have no Meta
--- credentials; the clinic reconnects with Facebook sign-in) and templates approved through Infobip go back to
+-- credentials; the client reconnects with Facebook sign-in) and templates approved through Infobip go back to
 -- draft so staff can resubmit them to Meta (Retry submit). Re-runnable: does nothing once the columns are gone.
 -- ---------------------------------------------------------------
 do $$
@@ -1687,25 +1688,25 @@ alter table channels.whatsapp_templates drop column if exists provider;
 -- ---------------------------------------------------------------------
 -- Every billing table lives in its own Postgres schema, billing.*, like the product tables live in core.*, crm.* and so on.
 -- Three separate questions, never collapsed into one:
---   1. Subscription: what the clinic pays Omni for access (a plan: price, period, entitlements, and an
+--   1. Subscription: what the client pays Omni for access (a plan: price, period, entitlements, and an
 --      optional monetary included credit per period).
 --   2. Provider billing responsibility: who pays the upstream provider (Meta, an SMS operator...) for a connected
 --      channel account: customer_direct | platform_funded | external_provider_direct | no_provider_usage_fee.
---   3. Omni usage billing: whether Omni itself charges the clinic for that usage (by default only when
+--   3. Omni usage billing: whether Omni itself charges the client for that usage (by default only when
 --      Omni pays the provider).
 -- Usage is a BILLABLE EVENT. Every event can be recorded (usage analytics, provider cost where known), but only
 -- events Omni charges are rated, reserved, settled and paid (included credit first, then the prepaid wallet).
 -- Money is numeric(18,6) in the account currency (one currency for now: Billing:Currency, default USD).
 -- Every balance change is one append-only row in billing.ledger_entries; billing.accounts caches the balances
 -- and must always equal the ledger sums (BillingQueryService.ReconcileAsync checks it).
--- Concurrency: every money operation locks the clinic's billing.accounts row (select ... for update) inside one
--- transaction. Idempotency: usage records and ledger entries carry an idempotency key unique per clinic.
+-- Concurrency: every money operation locks the client's billing.accounts row (select ... for update) inside one
+-- transaction. Idempotency: usage records and ledger entries carry an idempotency key unique per client.
 -- Nothing here is enforced until Billing:Enabled = true.
 -- =====================================================================
 create schema if not exists billing;
 create extension if not exists btree_gist;   -- for the "no overlapping rate versions" exclusion constraint
 
--- Plans: what a clinic subscribes to. Price changes apply from the next renewal (history is in the ledger).
+-- Plans: what a client subscribes to. Price changes apply from the next renewal (history is in the ledger).
 create table if not exists billing.plans (
   id                     uuid primary key default gen_random_uuid(),
   code                   varchar(50) not null unique check (code ~ '^[a-z0-9_-]+$'),
@@ -1741,22 +1742,22 @@ drop trigger if exists trg_plan_entitlements_updated_at on billing.plan_entitlem
 create trigger trg_plan_entitlements_updated_at before update on billing.plan_entitlements
   for each row execute function public.set_updated_at();
 
--- Rate cards: named price lists. Lookup order for a billable event: the clinic's own card (clinic_id set,
+-- Rate cards: named price lists. Lookup order for a billable event: the client's own card (client_id set,
 -- custom pricing) -> the plan's card -> the default card. The first card with a matching rate wins.
 create table if not exists billing.rate_cards (
   id           uuid primary key default gen_random_uuid(),
   code         varchar(50) not null unique check (code ~ '^[a-z0-9_-]+$'),
   name         varchar(100) not null,
   description  text,
-  clinic_id    uuid references core.clinics(id) on delete cascade,   -- set = this clinic's custom-pricing card
+  client_id    uuid references core.clients(id) on delete cascade,   -- set = this client's custom-pricing card
   is_default   boolean not null default false,
   is_active    boolean not null default true,
   created_at   timestamptz not null default now(),
   updated_at   timestamptz not null default now(),
-  constraint ck_rate_cards_default_not_client check (not (is_default and clinic_id is not null))
+  constraint ck_rate_cards_default_not_client check (not (is_default and client_id is not null))
 );
 create unique index if not exists ux_rate_cards_default on billing.rate_cards(is_default) where is_default;
-create unique index if not exists ux_rate_cards_clinic on billing.rate_cards(clinic_id) where clinic_id is not null;
+create unique index if not exists ux_rate_cards_client on billing.rate_cards(client_id) where client_id is not null;
 drop trigger if exists trg_rate_cards_updated_at on billing.rate_cards;
 create trigger trg_rate_cards_updated_at before update on billing.rate_cards
   for each row execute function public.set_updated_at();
@@ -1772,7 +1773,7 @@ end $$;
 -- Rates: one price version for one billable event type, optionally narrowed by destination country, operator,
 -- provider and provider billing responsibility (null = any). The most specific match wins inside a card.
 -- provider_cost = what the upstream provider charges per unit (paid by whoever the usage's responsibility says);
--- client_rate = what Omni charges the clinic per unit. They're independent: a customer-direct "service fee"
+-- client_rate = what Omni charges the client per unit. They're independent: a customer-direct "service fee"
 -- rate can have client_rate 0.01 and the provider cost only for reporting. Rates with provider_billing = null apply
 -- only to platform_funded charging (and to cost reporting for any usage): Omni never charges a customer-paid
 -- account a platform rate by fallback.
@@ -1829,13 +1830,13 @@ drop trigger if exists trg_rates_guard on billing.rates;
 create trigger trg_rates_guard before update on billing.rates
   for each row execute function billing.rates_guard();
 
--- One billing account (wallet) per clinic. spendable = wallet_balance + included_credit_balance - reserved_amount.
--- The wallet only finances what the clinic owes Omni. wallet_balance can only go below zero when a settlement
+-- One billing account (wallet) per client. spendable = wallet_balance + included_credit_balance - reserved_amount.
+-- The wallet only finances what the client owes Omni. wallet_balance can only go below zero when a settlement
 -- costs more than was reserved (usage that already happened); reservations, subscription charges and manual
 -- debits never take it below zero.
 create table if not exists billing.accounts (
   id                       uuid primary key default gen_random_uuid(),
-  clinic_id                uuid not null unique references core.clinics(id) on delete cascade,
+  client_id                uuid not null unique references core.clients(id) on delete cascade,
   currency                 char(3) not null default 'USD' check (currency ~ '^[A-Z]{3}$'),
   wallet_balance           numeric(18,6) not null default 0,
   included_credit_balance  numeric(18,6) not null default 0 check (included_credit_balance >= 0),
@@ -1847,13 +1848,13 @@ drop trigger if exists trg_accounts_updated_at on billing.accounts;
 create trigger trg_accounts_updated_at before update on billing.accounts
   for each row execute function public.set_updated_at();
 
--- One subscription per clinic (changing plan updates this row; history is in events + the ledger).
+-- One subscription per client (changing plan updates this row; history is in events + the ledger).
 -- active: normal. past_due: renewal couldn't be paid, still usable during the grace period (Billing:GracePeriodDays).
--- expired: grace ran out. cancelled: ended on request. Expired/cancelled clinics can still sign in and see their
+-- expired: grace ran out. cancelled: ended on request. Expired/cancelled clients can still sign in and see their
 -- data, but can't send messages, run campaigns or use the AI until a plan is started again.
 create table if not exists billing.subscriptions (
   id                    uuid primary key default gen_random_uuid(),
-  clinic_id             uuid not null unique references core.clinics(id) on delete cascade,
+  client_id             uuid not null unique references core.clients(id) on delete cascade,
   plan_id               uuid not null references billing.plans(id),
   status                varchar(20) not null check (status in ('active','past_due','expired','cancelled')),
   current_period_start  timestamptz not null,
@@ -1876,7 +1877,7 @@ create trigger trg_subscriptions_updated_at before update on billing.subscriptio
 -- defaults in code + Billing:ProviderBilling:Defaults).
 create table if not exists billing.channel_account_settings (
   channel_integration_id  uuid primary key references channels.channel_integrations(id) on delete cascade,
-  clinic_id               uuid not null references core.clinics(id) on delete cascade,
+  client_id               uuid not null references core.clients(id) on delete cascade,
   provider_billing        varchar(30) check (provider_billing in
                             ('customer_direct','platform_funded','external_provider_direct','no_provider_usage_fee')),
   omni_usage_billing      boolean,
@@ -1885,7 +1886,7 @@ create table if not exists billing.channel_account_settings (
   created_at              timestamptz not null default now(),
   updated_at              timestamptz not null default now()
 );
-create index if not exists ix_channel_account_settings_clinic on billing.channel_account_settings(clinic_id);
+create index if not exists ix_channel_account_settings_client on billing.channel_account_settings(client_id);
 -- applies_to_provider (override held only while on the same WhatsApp provider) went with Infobip (2026-10-12).
 alter table billing.channel_account_settings drop column if exists applies_to_provider;
 drop trigger if exists trg_channel_account_settings_updated_at on billing.channel_account_settings;
@@ -1903,7 +1904,7 @@ create trigger trg_channel_account_settings_updated_at before update on billing.
 -- must outlive deleted rows.
 create table if not exists billing.usage_records (
   id                      uuid primary key default gen_random_uuid(),
-  clinic_id               uuid not null references core.clinics(id) on delete cascade,
+  client_id               uuid not null references core.clients(id) on delete cascade,
   billing_account_id      uuid not null references billing.accounts(id) on delete cascade,
   idempotency_key         varchar(200) not null,
   event_type              varchar(60) not null,
@@ -1950,8 +1951,8 @@ create table if not exists billing.usage_records (
     check (charge_status <> 'not_charged' or (reserved_amount = 0 and credit_amount = 0 and wallet_amount = 0)),
   constraint ck_usage_records_refund check (refunded_amount <= coalesce(amount, 0))
 );
-create unique index if not exists ux_usage_records_key on billing.usage_records(clinic_id, idempotency_key);
-create index if not exists ix_usage_records_clinic_occurred on billing.usage_records(clinic_id, occurred_at desc);
+create unique index if not exists ux_usage_records_key on billing.usage_records(client_id, idempotency_key);
+create index if not exists ix_usage_records_client_occurred on billing.usage_records(client_id, occurred_at desc);
 create index if not exists ix_usage_records_open on billing.usage_records(created_at)
   where charge_status = 'reserved' or (charge_status = 'not_charged' and provider_outcome = 'pending');
 create index if not exists ix_usage_records_message on billing.usage_records(message_id) where message_id is not null;
@@ -1988,7 +1989,7 @@ create trigger trg_usage_records_guard before update on billing.usage_records
 create table if not exists billing.ledger_entries (
   id                  uuid primary key default gen_random_uuid(),
   seq                 bigint generated by default as identity,   -- posting order (one operation's rows share created_at)
-  clinic_id           uuid not null references core.clinics(id) on delete cascade,
+  client_id           uuid not null references core.clients(id) on delete cascade,
   billing_account_id  uuid not null references billing.accounts(id) on delete cascade,
   entry_type          varchar(40) not null check (entry_type in ('wallet_top_up','usage_debit',
                         'included_credit_consumption','usage_refund','subscription_charge','included_credit_grant',
@@ -2018,8 +2019,8 @@ create table if not exists billing.ledger_entries (
         and balance_type = 'included_credit')
     or entry_type in ('usage_refund','manual_adjustment'))
 );
-create unique index if not exists ux_ledger_entries_key on billing.ledger_entries(clinic_id, idempotency_key);
-create index if not exists ix_ledger_entries_clinic_seq on billing.ledger_entries(clinic_id, seq desc);
+create unique index if not exists ux_ledger_entries_key on billing.ledger_entries(client_id, idempotency_key);
+create index if not exists ix_ledger_entries_client_seq on billing.ledger_entries(client_id, seq desc);
 create index if not exists ix_ledger_entries_usage on billing.ledger_entries(usage_record_id)
   where usage_record_id is not null;
 create or replace function billing.ledger_entries_immutable() returns trigger as $$
@@ -2031,10 +2032,10 @@ drop trigger if exists trg_ledger_entries_immutable on billing.ledger_entries;
 create trigger trg_ledger_entries_immutable before update on billing.ledger_entries
   for each row execute function billing.ledger_entries_immutable();
 
--- Every existing clinic gets an (empty) billing account; new clinics get one at registration (and lazily anyway).
-insert into billing.accounts (clinic_id, currency)
-select id, 'USD' from core.clinics
-on conflict (clinic_id) do nothing;
+-- Every existing client gets an (empty) billing account; new clients get one at registration (and lazily anyway).
+insert into billing.accounts (client_id, currency)
+select id, 'USD' from core.clients
+on conflict (client_id) do nothing;
 
 -- =====================================================================
 -- Configuration: config.settings
@@ -2098,7 +2099,7 @@ create index if not exists ix_api_route_stats_bucket_start on activity.api_route
 -- exception type + top stack frame) groups one problem across its values. At most ErrorLog:MaxPerFingerprintPerMinute
 -- rows per fingerprint per minute are written; the rest of that minute becomes one extra row whose repeat_count says how
 -- many occurrences it stands for. trace_id is the request's W3C trace id. No foreign keys: a log row must outlive the
--- clinic, conversation or message it mentions, and inserts stay cheap. Read by GET /api/platform-admin/logs.
+-- client, conversation or message it mentions, and inserts stay cheap. Read by GET /api/platform-admin/logs.
 -- =====================================================================
 create table if not exists activity.app_logs (
   id                 bigint generated always as identity primary key,
@@ -2113,7 +2114,7 @@ create table if not exists activity.app_logs (
   fingerprint        varchar(16) not null,
   repeat_count       int not null default 1,
   trace_id           varchar(32),
-  clinic_id          uuid,
+  client_id          uuid,
   conversation_id    uuid,
   message_id         uuid,
   method             varchar(10),
@@ -2126,12 +2127,12 @@ create table if not exists activity.app_logs (
 create index if not exists ix_app_logs_occurred_at on activity.app_logs(occurred_at);
 create index if not exists ix_app_logs_fingerprint on activity.app_logs(fingerprint, occurred_at desc);
 create index if not exists ix_app_logs_trace_id on activity.app_logs(trace_id) where trace_id is not null;
-create index if not exists ix_app_logs_clinic on activity.app_logs(clinic_id, occurred_at desc) where clinic_id is not null;
+create index if not exists ix_app_logs_client on activity.app_logs(client_id, occurred_at desc) where client_id is not null;
 
 -- =====================================================================
 -- Message trace: activity.message_trace_steps (+ crm.messages.trace_id)
 --
--- One row per step a message takes through the app that nothing else records: webhook received/rejected, clinic not
+-- One row per step a message takes through the app that nothing else records: webhook received/rejected, client not
 -- found, duplicate delivery, saved, inbox notified, conversation reopened / moved to staff, bot skipped (and why),
 -- bot triggered or failed (n8n), the bot's tool calls, send requested / blocked / rejected, provider accepted or failed.
 -- trace_id is the W3C trace id of the request (n8n sends it back as traceparent, so the bot's callbacks join the same
@@ -2149,7 +2150,7 @@ create table if not exists activity.message_trace_steps (
   step                 varchar(60) not null,
   outcome              varchar(12) not null,
   duration_ms          double precision,
-  clinic_id            uuid,
+  client_id            uuid,
   conversation_id      uuid,
   message_id           uuid,
   external_message_id  varchar(200),
@@ -2172,16 +2173,16 @@ create index if not exists ix_messages_trace_id on crm.messages(trace_id) where 
 -- =====================================================================
 -- Inbox settings: crm.inbox_settings
 --
--- How a clinic's Inbox handles conversations (Business/Services/Inbox/InboxSettingsService). One column per setting, so
+-- How a client's Inbox handles conversations (Business/Services/Inbox/InboxSettingsService). One column per setting, so
 -- a new setting is a new column here. Today: whether the AI bot answers new conversations and conversations a patient
 -- reopens (off = they start with / move to staff, human mode); they only take effect while the plan includes the
--- ai_agent entitlement. A clinic without a row uses the column defaults, so existing clinics keep the bot on.
--- channel_integration_id null = the clinic-wide row (the only kind used today); a row per channel connection can be
--- added later to override the clinic-wide one for that channel.
+-- ai_agent entitlement. A client without a row uses the column defaults, so existing clients keep the bot on.
+-- channel_integration_id null = the client-wide row (the only kind used today); a row per channel connection can be
+-- added later to override the client-wide one for that channel.
 -- =====================================================================
 create table if not exists crm.inbox_settings (
   id                             uuid primary key default gen_random_uuid(),
-  clinic_id                      uuid not null references core.clinics(id) on delete cascade,
+  client_id                      uuid not null references core.clients(id) on delete cascade,
   channel_integration_id         uuid references channels.channel_integrations(id) on delete cascade,
   ai_bot_new_conversations       boolean not null default true,
   ai_bot_reopened_conversations  boolean not null default true,
@@ -2189,7 +2190,7 @@ create table if not exists crm.inbox_settings (
   updated_at                     timestamptz not null default now()
 );
 
-create unique index if not exists ux_inbox_settings_clinic_wide on crm.inbox_settings(clinic_id)
+create unique index if not exists ux_inbox_settings_client_wide on crm.inbox_settings(client_id)
   where channel_integration_id is null;
 create unique index if not exists ux_inbox_settings_channel on crm.inbox_settings(channel_integration_id)
   where channel_integration_id is not null;
@@ -2199,8 +2200,8 @@ create trigger trg_inbox_settings_updated_at
   before update on crm.inbox_settings
   for each row execute function public.set_updated_at();
 
--- UTC guard: every moment in time is stored as timestamptz (UTC); only the clinic-local availability columns
--- (clinic_availability_rules/exceptions start_time/end_time/date, read together with clinics.timezone) are
+-- UTC guard: every moment in time is stored as timestamptz (UTC); only the client-local availability columns
+-- (availability_rules/exceptions start_time/end_time/date, read together with clients.timezone) are
 -- zone-less on purpose. If any other column ever drifts to `timestamp without time zone`, convert it here,
 -- reading its existing values as UTC (what the app always wrote). Checked 2026-09-29: none exist, so this is a no-op.
 do $$

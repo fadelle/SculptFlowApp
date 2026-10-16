@@ -4,7 +4,7 @@ using Omni.App.Persistence.Contracts.Billing;
 using Omni.App.Persistence.Contracts.Calendars;
 using Omni.App.Persistence.Contracts.Campaigns;
 using Omni.App.Persistence.Contracts.Channels;
-using Omni.App.Persistence.Contracts.Clinics;
+using Omni.App.Persistence.Contracts.Clients;
 using Omni.App.Persistence.Contracts.Configuration;
 using Omni.App.Persistence.Contracts.Dashboard;
 using Omni.App.Persistence.Contracts.Events;
@@ -22,7 +22,7 @@ using Omni.App.Persistence.Repositories.Billing;
 using Omni.App.Persistence.Repositories.Calendars;
 using Omni.App.Persistence.Repositories.Campaigns;
 using Omni.App.Persistence.Repositories.Channels;
-using Omni.App.Persistence.Repositories.Clinics;
+using Omni.App.Persistence.Repositories.Clients;
 using Omni.App.Persistence.Repositories.Configuration;
 using Omni.App.Persistence.Repositories.Dashboard;
 using Omni.App.Persistence.Repositories.Events;
@@ -51,7 +51,7 @@ public static class PersistenceModule
     {
         services.AddScoped<IUnitOfWork, UnitOfWork>();
 
-        services.AddScoped<IClinicRepository, ClinicRepository>();
+        services.AddScoped<IClientRepository, ClientRepository>();
         services.AddScoped<ISettingRepository, SettingRepository>();
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IEventLogRepository, EventLogRepository>();
@@ -83,10 +83,10 @@ public static class PersistenceModule
         // Billing tables used inside an ordinary request (sign-up, entitlement checks). Money operations use their own
         // IBillingUnitOfWork instead (see BillingModule).
         services.AddScoped<IBillingAccountRepository, BillingAccountRepository>();
-        services.AddScoped<IClinicSubscriptionRepository, ClinicSubscriptionRepository>();
+        services.AddScoped<IClientSubscriptionRepository, ClientSubscriptionRepository>();
 
-        // Platform admin (cross-clinic reads for the admin portal)
-        services.AddScoped<IClinicAdminRepository, ClinicAdminRepository>();
+        // Platform admin (cross-client reads for the admin portal)
+        services.AddScoped<IClientAdminRepository, ClientAdminRepository>();
         services.AddScoped<IChannelAdminRepository, ChannelAdminRepository>();
         services.AddScoped<IStaffAdminRepository, StaffAdminRepository>();
         services.AddScoped<ILeadAdminRepository, LeadAdminRepository>();

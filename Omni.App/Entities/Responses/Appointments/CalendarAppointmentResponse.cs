@@ -2,7 +2,7 @@ namespace Omni.App.Entities.Responses.Appointments;
 
 /// <summary>One appointment as shown on the month calendar — the same appointments table as everywhere else,
 /// with LocalDate/LocalTime PRE-COMPUTED server-side in the display timezone (CalendarMonthResponse.Timezone — the
-/// clinic's, or the viewer's on "My time"), so the browser can't mis-group an appointment into the wrong day.</summary>
+/// client's, or the viewer's on "My time"), so the browser can't mis-group an appointment into the wrong day.</summary>
 public record CalendarAppointmentResponse(
     Guid Id,
     Guid LeadId,

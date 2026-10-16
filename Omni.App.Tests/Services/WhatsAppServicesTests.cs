@@ -4,7 +4,7 @@ namespace Omni.App.Tests.Services;
 
 public class WhatsAppTemplateServiceTests
 {
-    private readonly Guid _clinicId = Guid.NewGuid();
+    private readonly Guid _clientId = Guid.NewGuid();
     private readonly Mock<IWhatsAppTemplateRepository> _templates = new();
     private readonly Mock<IChannelIntegrationRepository> _integrations = new();
     private readonly Mock<IUnitOfWork> _uow = new();
@@ -16,19 +16,19 @@ public class WhatsAppTemplateServiceTests
     public WhatsAppTemplateServiceTests()
     {
         _provider.Setup(p => p.IsReady(It.IsAny<ChannelIntegration>())).Returns(true);
-        _integrations.Setup(i => i.GetAsync(_clinicId, ChannelType.WhatsApp, It.IsAny<CancellationToken>())).ReturnsAsync(() => _integration);
+        _integrations.Setup(i => i.GetAsync(_clientId, ChannelType.WhatsApp, It.IsAny<CancellationToken>())).ReturnsAsync(() => _integration);
         Connect();
     }
 
     private void Connect() => _integration = new ChannelIntegration
     {
-        Id = Guid.NewGuid(), ClinicId = _clinicId, Channel = ChannelType.WhatsApp, Status = ChannelIntegrationStatus.Connected, WhatsAppBusinessId = "W1"
+        Id = Guid.NewGuid(), ClientId = _clientId, Channel = ChannelType.WhatsApp, Status = ChannelIntegrationStatus.Connected, WhatsAppBusinessId = "W1"
     };
 
     private WhatsAppTemplateService Sut() => new(_templates.Object, _integrations.Object, _uow.Object, _provider.Object, _notifier.Object, _events.Object);
 
     private CreateWhatsAppTemplateRequest Create(string category = "marketing", string name = "promo", string body = "Hi", string language = "") =>
-        new(_clinicId, name, category, language, body, null, null, null, null, null);
+        new(_clientId, name, category, language, body, null, null, null, null, null);
 
     [Theory]
     [InlineData("bogus", "n", "b")]
@@ -70,44 +70,44 @@ public class WhatsAppTemplateServiceTests
 
     private WhatsAppTemplate Existing(string? metaId = null, string status = WhatsAppTemplateStatus.Draft)
     {
-        var t = new WhatsAppTemplate { Id = Guid.NewGuid(), ClinicId = _clinicId, Name = "promo", Body = "b", MetaTemplateId = metaId, Status = status };
-        _templates.Setup(r => r.GetAsync(_clinicId, t.Id, It.IsAny<CancellationToken>())).ReturnsAsync(t);
-        _templates.Setup(r => r.GetReadOnlyAsync(_clinicId, t.Id, It.IsAny<CancellationToken>())).ReturnsAsync(t);
+        var t = new WhatsAppTemplate { Id = Guid.NewGuid(), ClientId = _clientId, Name = "promo", Body = "b", MetaTemplateId = metaId, Status = status };
+        _templates.Setup(r => r.GetAsync(_clientId, t.Id, It.IsAny<CancellationToken>())).ReturnsAsync(t);
+        _templates.Setup(r => r.GetReadOnlyAsync(_clientId, t.Id, It.IsAny<CancellationToken>())).ReturnsAsync(t);
         return t;
     }
 
     [Fact]
     public async Task Retry_submit_rules()
     {
-        Assert.Null(await Sut().RetrySubmitAsync(_clinicId, Guid.NewGuid()));
+        Assert.Null(await Sut().RetrySubmitAsync(_clientId, Guid.NewGuid()));
         var sent = Existing("meta-1");
-        await Assert.ThrowsAsync<InvalidOperationException>(() => Sut().RetrySubmitAsync(_clinicId, sent.Id));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => Sut().RetrySubmitAsync(_clientId, sent.Id));
 
         var draft = Existing();
         _integration = null;
-        await Assert.ThrowsAsync<InvalidOperationException>(() => Sut().RetrySubmitAsync(_clinicId, draft.Id));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => Sut().RetrySubmitAsync(_clientId, draft.Id));
 
         Connect();
         _provider.Setup(p => p.SubmitAsync(It.IsAny<ChannelIntegration>(), draft, It.IsAny<CancellationToken>())).ReturnsAsync(new WhatsAppTemplateSubmitResult("m2", "APPROVED"));
-        var r = await Sut().RetrySubmitAsync(_clinicId, draft.Id);
+        var r = await Sut().RetrySubmitAsync(_clientId, draft.Id);
         Assert.Equal(WhatsAppTemplateStatus.Approved, r!.Status);
     }
 
     [Fact]
     public async Task Sync_refreshes_the_status_and_keeps_or_clears_the_reason()
     {
-        Assert.Null(await Sut().SyncStatusAsync(_clinicId, Guid.NewGuid()));
+        Assert.Null(await Sut().SyncStatusAsync(_clientId, Guid.NewGuid()));
         var unsent = Existing();
-        Assert.Equal(WhatsAppTemplateStatus.Draft, (await Sut().SyncStatusAsync(_clinicId, unsent.Id))!.Status);
+        Assert.Equal(WhatsAppTemplateStatus.Draft, (await Sut().SyncStatusAsync(_clientId, unsent.Id))!.Status);
         _provider.Verify(p => p.GetStatusAsync(It.IsAny<ChannelIntegration>(), It.IsAny<WhatsAppTemplate>(), It.IsAny<CancellationToken>()), Times.Never);
 
         var t = Existing("meta-1", status: WhatsAppTemplateStatus.Pending);
         _provider.Setup(p => p.GetStatusAsync(It.IsAny<ChannelIntegration>(), t, It.IsAny<CancellationToken>())).ReturnsAsync(new WhatsAppTemplateStatusResult("REJECTED", "ABUSIVE"));
-        var rejected = await Sut().SyncStatusAsync(_clinicId, t.Id);
+        var rejected = await Sut().SyncStatusAsync(_clientId, t.Id);
         Assert.Equal((WhatsAppTemplateStatus.Rejected, "ABUSIVE"), (rejected!.Status, rejected.RejectionReason));
 
         _provider.Setup(p => p.GetStatusAsync(It.IsAny<ChannelIntegration>(), t, It.IsAny<CancellationToken>())).ReturnsAsync(new WhatsAppTemplateStatusResult("APPROVED", null));
-        var approved = await Sut().SyncStatusAsync(_clinicId, t.Id);
+        var approved = await Sut().SyncStatusAsync(_clientId, t.Id);
         Assert.Null(approved!.RejectionReason);
     }
 
@@ -116,32 +116,32 @@ public class WhatsAppTemplateServiceTests
     {
         var mine = Existing("meta-2");
         _integration = null;
-        await Assert.ThrowsAsync<InvalidOperationException>(() => Sut().SyncStatusAsync(_clinicId, mine.Id));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => Sut().SyncStatusAsync(_clientId, mine.Id));
     }
 
     [Fact]
     public async Task List_and_GetById_map_templates()
     {
         var t = Existing();
-        _templates.Setup(r => r.ListForClinicReadOnlyAsync(_clinicId, It.IsAny<CancellationToken>())).ReturnsAsync(new List<WhatsAppTemplate> { t });
-        Assert.Single(await Sut().ListAsync(_clinicId));
-        Assert.Equal(t.Id, (await Sut().GetByIdAsync(_clinicId, t.Id))!.Id);
-        Assert.Null(await Sut().GetByIdAsync(_clinicId, Guid.NewGuid()));
+        _templates.Setup(r => r.ListForClientReadOnlyAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(new List<WhatsAppTemplate> { t });
+        Assert.Single(await Sut().ListAsync(_clientId));
+        Assert.Equal(t.Id, (await Sut().GetByIdAsync(_clientId, t.Id))!.Id);
+        Assert.Null(await Sut().GetByIdAsync(_clientId, Guid.NewGuid()));
     }
 
     private WhatsAppTemplateEventRequest Event(string? waba = "W1", string? metaId = "meta-1", string? status = "APPROVED", string? category = null) =>
-        new(_clinicId, "template_status_update", waba, metaId, "promo", null, category, status, null, null, null, null, null, null);
+        new(_clientId, "template_status_update", waba, metaId, "promo", null, category, status, null, null, null, null, null, null);
 
     [Fact]
     public async Task Meta_event_updates_an_existing_template_by_provider_id_and_notifies()
     {
         var t = Existing("meta-1", status: WhatsAppTemplateStatus.Pending);
-        _templates.Setup(r => r.FindByProviderTemplateIdAsync(_clinicId, "meta-1", It.IsAny<CancellationToken>())).ReturnsAsync(t);
+        _templates.Setup(r => r.FindByProviderTemplateIdAsync(_clientId, "meta-1", It.IsAny<CancellationToken>())).ReturnsAsync(t);
         var r = await Sut().ApplyMetaEventAsync(Event() with { Reason = "NONE", QualityRating = "GREEN", CurrentCategory = "utility", Category = "UTILITY" });
         Assert.Equal((WhatsAppTemplateStatus.Approved, "NONE", "GREEN", "utility", "utility"), (t.Status, t.RejectionReason, t.QualityRating, t.CurrentCategory, t.Category));
         Assert.Equal(_integration!.Id, t.ChannelIntegrationId);
-        _notifier.Verify(n => n.WhatsAppTemplateUpdatedAsync(_clinicId, t.Id, "promo", WhatsAppTemplateStatus.Approved, "NONE", It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()), Times.Once);
-        _events.Verify(e => e.Log(_clinicId, EventTypes.WhatsAppTemplateStatusChanged, null, null, null, "n8n", It.Is<string>(s => s.Contains("\"previousStatus\":\"pending\""))), Times.Once);
+        _notifier.Verify(n => n.WhatsAppTemplateUpdatedAsync(_clientId, t.Id, "promo", WhatsAppTemplateStatus.Approved, "NONE", It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()), Times.Once);
+        _events.Verify(e => e.Log(_clientId, EventTypes.WhatsAppTemplateStatusChanged, null, null, null, "n8n", It.Is<string>(s => s.Contains("\"previousStatus\":\"pending\""))), Times.Once);
         Assert.Equal(t.Id, r.Id);
     }
 
@@ -149,13 +149,13 @@ public class WhatsAppTemplateServiceTests
     public async Task Meta_event_falls_back_to_name_and_language_then_creates_an_unknown_template()
     {
         var byName = Existing();
-        _templates.Setup(r => r.FindByNameAsync(_clinicId, "promo", "en_US", It.IsAny<CancellationToken>())).ReturnsAsync(byName);
+        _templates.Setup(r => r.FindByNameAsync(_clientId, "promo", "en_US", It.IsAny<CancellationToken>())).ReturnsAsync(byName);
         await Sut().ApplyMetaEventAsync(Event(metaId: null, status: "PAUSED"));
         Assert.Equal(WhatsAppTemplateStatus.Paused, byName.Status);
 
         WhatsAppTemplate? added = null;
         _templates.Setup(r => r.Add(It.IsAny<WhatsAppTemplate>())).Callback<WhatsAppTemplate>(t => added = t);
-        _templates.Setup(r => r.FindByNameAsync(_clinicId, "promo", "en_US", It.IsAny<CancellationToken>())).ReturnsAsync((WhatsAppTemplate?)null);
+        _templates.Setup(r => r.FindByNameAsync(_clientId, "promo", "en_US", It.IsAny<CancellationToken>())).ReturnsAsync((WhatsAppTemplate?)null);
         await Sut().ApplyMetaEventAsync(Event(status: "WEIRD", category: "MARKETING"));
         Assert.Equal(("meta-1", "weird", "marketing", ""), (added!.MetaTemplateId, added.Status, added.Category, added.Body));
     }
@@ -183,7 +183,7 @@ public class WhatsAppTemplateServiceTests
 
 public class WhatsAppHealthServiceTests
 {
-    private readonly Guid _clinicId = Guid.NewGuid();
+    private readonly Guid _clientId = Guid.NewGuid();
     private readonly Mock<IChannelIntegrationRepository> _integrations = new();
     private readonly Mock<IWhatsAppHealthEventRepository> _healthEvents = new();
     private readonly Mock<IUnitOfWork> _uow = new();
@@ -196,30 +196,30 @@ public class WhatsAppHealthServiceTests
     {
         _integration = new ChannelIntegration
         {
-            Id = Guid.NewGuid(), ClinicId = _clinicId, Channel = ChannelType.WhatsApp, Status = ChannelIntegrationStatus.Connected,
+            Id = Guid.NewGuid(), ClientId = _clientId, Channel = ChannelType.WhatsApp, Status = ChannelIntegrationStatus.Connected,
             WhatsAppBusinessId = "W1", PhoneNumberId = "P1", HealthLevel = WhatsAppHealthLevel.Healthy
         };
-        _integrations.Setup(i => i.GetAsync(_clinicId, ChannelType.WhatsApp, It.IsAny<CancellationToken>())).ReturnsAsync(_integration);
+        _integrations.Setup(i => i.GetAsync(_clientId, ChannelType.WhatsApp, It.IsAny<CancellationToken>())).ReturnsAsync(_integration);
     }
 
     private WhatsAppHealthService Sut() => new(_integrations.Object, _healthEvents.Object, _uow.Object, _notifier.Object, _events.Object, _notifications.Object);
 
     private WhatsAppHealthEventRequest Req(string type, string? status = null, string? quality = null, string? waba = "W1", string? phone = "P1", string? code = null, string? message = null, DateTimeOffset? at = null) =>
-        new(_clinicId, type, waba, phone, status, quality, code, message, at, "{}");
+        new(_clientId, type, waba, phone, status, quality, code, message, at, "{}");
 
     [Fact]
     public async Task Health_is_null_without_a_connection_and_unknown_until_an_event_arrives()
     {
-        Assert.Null(await new WhatsAppHealthService(Mock.Of<IChannelIntegrationRepository>(), _healthEvents.Object, _uow.Object, _notifier.Object, _events.Object, _notifications.Object).GetHealthAsync(_clinicId));
+        Assert.Null(await new WhatsAppHealthService(Mock.Of<IChannelIntegrationRepository>(), _healthEvents.Object, _uow.Object, _notifier.Object, _events.Object, _notifications.Object).GetHealthAsync(_clientId));
         _integration.HealthLevel = null;
-        Assert.Equal(WhatsAppHealthLevel.Unknown, (await Sut().GetHealthAsync(_clinicId))!.HealthLevel);
+        Assert.Equal(WhatsAppHealthLevel.Unknown, (await Sut().GetHealthAsync(_clientId))!.HealthLevel);
     }
 
     [Fact]
     public async Task Event_list_is_mapped()
     {
-        _healthEvents.Setup(h => h.ListForClinicAsync(_clinicId, 0, 10, It.IsAny<CancellationToken>())).ReturnsAsync(new List<WhatsAppHealthEvent> { new() { Id = Guid.NewGuid(), EventType = "x", Severity = "info" } });
-        Assert.Single(await Sut().GetHealthEventsAsync(_clinicId, 0, 10));
+        _healthEvents.Setup(h => h.ListForClientAsync(_clientId, 0, 10, It.IsAny<CancellationToken>())).ReturnsAsync(new List<WhatsAppHealthEvent> { new() { Id = Guid.NewGuid(), EventType = "x", Severity = "info" } });
+        Assert.Single(await Sut().GetHealthEventsAsync(_clientId, 0, 10));
     }
 
     [Fact]
@@ -255,8 +255,8 @@ public class WhatsAppHealthServiceTests
     {
         var r = await Sut().ApplyHealthEventAsync(Req(type, status, quality, message: "m", code: "c"));
         Assert.Equal(expectedLevel, r.HealthLevel);
-        _healthEvents.Verify(h => h.Add(It.Is<WhatsAppHealthEvent>(e => e.EventType == type && e.ClinicId == _clinicId)), Times.Once);
-        _notifier.Verify(n => n.WhatsAppHealthUpdatedAsync(_clinicId, _integration.Id, expectedLevel, It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()), Times.Once);
+        _healthEvents.Verify(h => h.Add(It.Is<WhatsAppHealthEvent>(e => e.EventType == type && e.ClientId == _clientId)), Times.Once);
+        _notifier.Verify(n => n.WhatsAppHealthUpdatedAsync(_clientId, _integration.Id, expectedLevel, It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -283,7 +283,7 @@ public class WhatsAppHealthServiceTests
     public async Task Staff_are_notified_only_when_the_connection_turns_unhealthy()
     {
         await Sut().ApplyHealthEventAsync(Req(WhatsAppHealthEventType.AccountUpdate, "DISABLED", message: "Account disabled by Meta"));
-        _notifications.Verify(n => n.CreateAsync(_clinicId, NotificationType.IntegrationUnhealthy, "WhatsApp connection needs attention", It.IsAny<string?>(), null, null, null, _integration.Id, "/WhatsApp/Health", It.IsAny<CancellationToken>()), Times.Once);
+        _notifications.Verify(n => n.CreateAsync(_clientId, NotificationType.IntegrationUnhealthy, "WhatsApp connection needs attention", It.IsAny<string?>(), null, null, null, _integration.Id, "/WhatsApp/Health", It.IsAny<CancellationToken>()), Times.Once);
 
         await Sut().ApplyHealthEventAsync(Req(WhatsAppHealthEventType.AccountUpdate, "DISABLED")); // already unhealthy
         _notifications.Verify(n => n.CreateAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);

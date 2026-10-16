@@ -19,7 +19,7 @@ public class ProcedureRepositoryTests(PostgresFixture fixture) : RepoTestBase(fi
     [PostgresFact]
     public async Task Procedures_are_listed_by_name_and_filtered_to_active()
     {
-        var c = MakeClinic(); var other = MakeClinic();
+        var c = MakeClient(); var other = MakeClient();
         var b = MakeProcedure(c.Id, "Botox"); var a = MakeProcedure(c.Id, "Abdominoplasty"); var off = MakeProcedure(c.Id, "Chin", active: false);
         var foreign = MakeProcedure(other.Id, "Foreign");
         await SeedAsync(c, other, b, a, off, foreign);
@@ -33,7 +33,7 @@ public class ProcedureRepositoryTests(PostgresFixture fixture) : RepoTestBase(fi
     [PostgresFact]
     public async Task Lookups_activity_and_name_clashes()
     {
-        var c = MakeClinic(); var other = MakeClinic();
+        var c = MakeClient(); var other = MakeClient();
         var p = MakeProcedure(c.Id, "Rhinoplasty"); var off = MakeProcedure(c.Id, "Retired", active: false);
         await SeedAsync(c, other, p, off);
 
@@ -64,11 +64,11 @@ public class ProcedureBookingRepositoryTests(PostgresFixture fixture) : RepoTest
     [PostgresFact]
     public async Task Bookings_are_scoped_filtered_ordered_and_loadable()
     {
-        var c = MakeClinic(); var other = MakeClinic();
+        var c = MakeClient(); var other = MakeClient();
         var proc = MakeProcedure(c.Id); var lead = MakeLead(c.Id);
         ProcedureBooking Booking(string status, int daysAgo) => new()
         {
-            Id = Guid.NewGuid(), ClinicId = c.Id, LeadId = lead.Id, ProcedureId = proc.Id, Status = status,
+            Id = Guid.NewGuid(), ClientId = c.Id, LeadId = lead.Id, ProcedureId = proc.Id, Status = status,
             CreatedAt = Now.AddDays(-daysAgo), UpdatedAt = Now.AddDays(-daysAgo),
         };
         var older = Booking(ProcedureBookingStatus.Considering, 2);
@@ -88,7 +88,7 @@ public class ProcedureBookingRepositoryTests(PostgresFixture fixture) : RepoTest
         Assert.Equal([newer.Id], (await repo.ListAsync(c.Id, ProcedureBookingStatus.Booked, 0, 10)).Items.Select(b => b.Id));
         Assert.Equal([older.Id], (await repo.ListAsync(c.Id, null, 1, 10)).Items.Select(b => b.Id));
 
-        var fresh = new ProcedureBooking { Id = Guid.NewGuid(), ClinicId = c.Id, LeadId = lead.Id, ProcedureId = proc.Id, CreatedAt = Now, UpdatedAt = Now };
+        var fresh = new ProcedureBooking { Id = Guid.NewGuid(), ClientId = c.Id, LeadId = lead.Id, ProcedureId = proc.Id, CreatedAt = Now, UpdatedAt = Now };
         repo.Add(fresh);
         await db.SaveChangesAsync();
         await repo.LoadDetailsAsync(fresh);
@@ -99,16 +99,16 @@ public class ProcedureBookingRepositoryTests(PostgresFixture fixture) : RepoTest
 
 public class NotificationRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixture)
 {
-    private static Notification Note(Guid clinicId, bool read, int minutesAgo) => new()
+    private static Notification Note(Guid clientId, bool read, int minutesAgo) => new()
     {
-        Id = Guid.NewGuid(), ClinicId = clinicId, Type = NotificationType.AppointmentBooked, Title = "t" + minutesAgo, IsRead = read,
+        Id = Guid.NewGuid(), ClientId = clientId, Type = NotificationType.AppointmentBooked, Title = "t" + minutesAgo, IsRead = read,
         CreatedAt = Now.AddMinutes(-minutesAgo),
     };
 
     [PostgresFact]
     public async Task List_counts_unread_and_pages_newest_first()
     {
-        var c = MakeClinic(); var other = MakeClinic();
+        var c = MakeClient(); var other = MakeClient();
         var n1 = Note(c.Id, false, 3); var n2 = Note(c.Id, true, 2); var n3 = Note(c.Id, false, 1); var foreign = Note(other.Id, false, 1);
         await SeedAsync(c, other, n1, n2, n3, foreign);
 
@@ -124,9 +124,9 @@ public class NotificationRepositoryTests(PostgresFixture fixture) : RepoTestBase
     }
 
     [PostgresFact]
-    public async Task Mark_all_read_only_touches_this_clinics_unread_rows()
+    public async Task Mark_all_read_only_touches_this_clients_unread_rows()
     {
-        var c = MakeClinic(); var other = MakeClinic();
+        var c = MakeClient(); var other = MakeClient();
         await SeedAsync(c, other, Note(c.Id, false, 1), Note(c.Id, false, 2), Note(other.Id, false, 1));
 
         await using var db = NewContext();
@@ -144,15 +144,15 @@ public class NotificationRepositoryTests(PostgresFixture fixture) : RepoTestBase
 
 public class ChannelIntegrationRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixture)
 {
-    private static ChannelIntegration Integration(Guid clinicId, string channel, string status = ChannelIntegrationStatus.Connected) => new()
+    private static ChannelIntegration Integration(Guid clientId, string channel, string status = ChannelIntegrationStatus.Connected) => new()
     {
-        Id = Guid.NewGuid(), ClinicId = clinicId, Channel = channel, Status = status, CreatedAt = Now, UpdatedAt = Now,
+        Id = Guid.NewGuid(), ClientId = clientId, Channel = channel, Status = status, CreatedAt = Now, UpdatedAt = Now,
     };
 
     [PostgresFact]
-    public async Task Lookups_by_clinic_channel_and_provider_identifiers()
+    public async Task Lookups_by_client_channel_and_provider_identifiers()
     {
-        var c = MakeClinic(); var other = MakeClinic();
+        var c = MakeClient(); var other = MakeClient();
         var phone = "P-" + Guid.NewGuid().ToString("N")[..8]; var waba = "W-" + Guid.NewGuid().ToString("N")[..8];
         var wa = Integration(c.Id, ChannelType.WhatsApp); wa.PhoneNumberId = phone; wa.WhatsAppBusinessId = waba;
         var tg = Integration(c.Id, ChannelType.Telegram);
@@ -169,14 +169,14 @@ public class ChannelIntegrationRepositoryTests(PostgresFixture fixture) : RepoTe
         Assert.Equal(wa.Id, (await repo.FindWhatsAppByPhoneNumberIdAsync(phone))!.Id);
         Assert.Null(await repo.FindWhatsAppByPhoneNumberIdAsync("nope"));
         Assert.Equal(wa.Id, (await repo.FindWhatsAppByWabaIdAsync(waba))!.Id);
-        Assert.Equal(2, (await repo.ListForClinicReadOnlyAsync(c.Id)).Count);
-        Assert.Equal([ChannelType.Telegram, ChannelType.WhatsApp], (await repo.ListForClinicReadOnlyAsync(c.Id)).Select(i => i.Channel).Order());
+        Assert.Equal(2, (await repo.ListForClientReadOnlyAsync(c.Id)).Count);
+        Assert.Equal([ChannelType.Telegram, ChannelType.WhatsApp], (await repo.ListForClientReadOnlyAsync(c.Id)).Select(i => i.Channel).Order());
     }
 
     [PostgresFact]
     public async Task Connected_elsewhere_checks_and_connection_counts()
     {
-        var c = MakeClinic(); var other = MakeClinic();
+        var c = MakeClient(); var other = MakeClient();
         var bot = "bot-" + Guid.NewGuid().ToString("N")[..8];
         var tg = Integration(other.Id, ChannelType.Telegram); tg.TelegramBotId = bot;
         var wa = Integration(other.Id, ChannelType.WhatsApp);
@@ -195,7 +195,7 @@ public class ChannelIntegrationRepositoryTests(PostgresFixture fixture) : RepoTe
     [PostgresFact]
     public async Task Touching_the_webhook_time_and_adding()
     {
-        var c = MakeClinic();
+        var c = MakeClient();
         var wa = Integration(c.Id, ChannelType.WhatsApp);
         await SeedAsync(c, wa);
         await using var db = NewContext();
@@ -205,21 +205,21 @@ public class ChannelIntegrationRepositoryTests(PostgresFixture fixture) : RepoTe
 
         repo.Add(Integration(c.Id, ChannelType.Telegram));
         await db.SaveChangesAsync();
-        Assert.Equal(2, (await new ChannelIntegrationRepository(NewContext()).ListForClinicAsync(c.Id)).Count);
+        Assert.Equal(2, (await new ChannelIntegrationRepository(NewContext()).ListForClientAsync(c.Id)).Count);
     }
 }
 
 public class WhatsAppRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixture)
 {
-    private static WhatsAppTemplate Template(Guid clinicId, string name, string language = "en_US", int daysAgo = 0) => new()
+    private static WhatsAppTemplate Template(Guid clientId, string name, string language = "en_US", int daysAgo = 0) => new()
     {
-        Id = Guid.NewGuid(), ClinicId = clinicId, Name = name, Language = language, Body = "hello", CreatedAt = Now.AddDays(-daysAgo), UpdatedAt = Now,
+        Id = Guid.NewGuid(), ClientId = clientId, Name = name, Language = language, Body = "hello", CreatedAt = Now.AddDays(-daysAgo), UpdatedAt = Now,
     };
 
     [PostgresFact]
     public async Task Templates_are_found_by_id_name_and_meta_id()
     {
-        var c = MakeClinic(); var other = MakeClinic();
+        var c = MakeClient(); var other = MakeClient();
         var t1 = Template(c.Id, "welcome", daysAgo: 2); t1.MetaTemplateId = "meta-1";
         var t2 = Template(c.Id, "welcome", "ar", daysAgo: 1);
         await SeedAsync(c, other, t1, t2);
@@ -228,7 +228,7 @@ public class WhatsAppRepositoryTests(PostgresFixture fixture) : RepoTestBase(fix
         var repo = new WhatsAppTemplateRepository(db);
         Assert.NotNull(await repo.GetAsync(c.Id, t1.Id));
         Assert.Null(await repo.GetAsync(other.Id, t1.Id));
-        Assert.Equal([t2.Id, t1.Id], (await repo.ListForClinicReadOnlyAsync(c.Id)).Select(t => t.Id));
+        Assert.Equal([t2.Id, t1.Id], (await repo.ListForClientReadOnlyAsync(c.Id)).Select(t => t.Id));
         Assert.Equal(t1.Id, (await repo.FindByProviderTemplateIdAsync(c.Id, "meta-1"))!.Id);
         Assert.Null(await repo.FindByProviderTemplateIdAsync(other.Id, "meta-1"));
         Assert.Equal(t2.Id, (await repo.FindByNameAsync(c.Id, "welcome", "ar"))!.Id);
@@ -237,31 +237,31 @@ public class WhatsAppRepositoryTests(PostgresFixture fixture) : RepoTestBase(fix
         var added = Template(c.Id, "new");
         repo.Add(added);
         await db.SaveChangesAsync();
-        Assert.Equal(3, (await new WhatsAppTemplateRepository(NewContext()).ListForClinicReadOnlyAsync(c.Id)).Count);
+        Assert.Equal(3, (await new WhatsAppTemplateRepository(NewContext()).ListForClientReadOnlyAsync(c.Id)).Count);
     }
 
     [PostgresFact]
     public async Task Health_events_are_listed_newest_first_and_deduplicated_by_key()
     {
-        var c = MakeClinic();
-        var integration = new ChannelIntegration { Id = Guid.NewGuid(), ClinicId = c.Id, Channel = ChannelType.WhatsApp, CreatedAt = Now, UpdatedAt = Now };
+        var c = MakeClient();
+        var integration = new ChannelIntegration { Id = Guid.NewGuid(), ClientId = c.Id, Channel = ChannelType.WhatsApp, CreatedAt = Now, UpdatedAt = Now };
         WhatsAppHealthEvent Event(string type, int minutesAgo) => new()
         {
-            Id = Guid.NewGuid(), ClinicId = c.Id, ChannelIntegrationId = integration.Id, EventType = type, OccurredAt = Now.AddMinutes(-minutesAgo), CreatedAt = Now,
+            Id = Guid.NewGuid(), ClientId = c.Id, ChannelIntegrationId = integration.Id, EventType = type, OccurredAt = Now.AddMinutes(-minutesAgo), CreatedAt = Now,
         };
         var e1 = Event("FLAGGED", 10); var e2 = Event("UNFLAGGED", 5);
         await SeedAsync(c, integration, e1, e2);
 
         await using var db = NewContext();
         var repo = new WhatsAppHealthEventRepository(db);
-        Assert.Equal([e2.Id, e1.Id], (await repo.ListForClinicAsync(c.Id, 0, 10)).Select(e => e.Id));
-        Assert.Equal([e1.Id], (await repo.ListForClinicAsync(c.Id, 1, 10)).Select(e => e.Id));
+        Assert.Equal([e2.Id, e1.Id], (await repo.ListForClientAsync(c.Id, 0, 10)).Select(e => e.Id));
+        Assert.Equal([e1.Id], (await repo.ListForClientAsync(c.Id, 1, 10)).Select(e => e.Id));
         Assert.True(await repo.ExistsAsync(integration.Id, "FLAGGED", e1.OccurredAt));
         Assert.False(await repo.ExistsAsync(integration.Id, "FLAGGED", e2.OccurredAt));
 
         repo.Add(Event("DOWNGRADE", 1));
         await db.SaveChangesAsync();
-        Assert.Equal(3, (await new WhatsAppHealthEventRepository(NewContext()).ListForClinicAsync(c.Id, 0, 10)).Count);
+        Assert.Equal(3, (await new WhatsAppHealthEventRepository(NewContext()).ListForClientAsync(c.Id, 0, 10)).Count);
     }
 }
 
@@ -285,11 +285,11 @@ public class UserSettingsAndEventRepositoryTests(PostgresFixture fixture) : Repo
     [PostgresFact]
     public async Task Knowledge_search_settings_round_trip_and_detach()
     {
-        var c = MakeClinic(); var other = MakeClinic();
+        var c = MakeClient(); var other = MakeClient();
         await SeedAsync(c, other);
         var settings = new KnowledgeSearchSettings
         {
-            Id = Guid.NewGuid(), ClinicId = c.Id, EmbeddingModel = "text-embedding-3-small", VectorDimension = 1536, ChunkSizeTokens = 500,
+            Id = Guid.NewGuid(), ClientId = c.Id, EmbeddingModel = "text-embedding-3-small", VectorDimension = 1536, ChunkSizeTokens = 500,
             ChunkOverlapTokens = 50, TopK = 5, MinimumSimilarity = 0.3, CreatedAt = Now, UpdatedAt = Now,
         };
         await using (var db = NewContext())
@@ -310,13 +310,13 @@ public class UserSettingsAndEventRepositoryTests(PostgresFixture fixture) : Repo
     }
 
     [PostgresFact]
-    public async Task TikTok_integration_per_clinic()
+    public async Task TikTok_integration_per_client()
     {
-        var c = MakeClinic(); var other = MakeClinic();
+        var c = MakeClient(); var other = MakeClient();
         await SeedAsync(c, other);
         await using (var db = NewContext())
         {
-            new TikTokIntegrationRepository(db).Add(new TikTokIntegration { Id = Guid.NewGuid(), ClinicId = c.Id, CreatedAt = Now, UpdatedAt = Now });
+            new TikTokIntegrationRepository(db).Add(new TikTokIntegration { Id = Guid.NewGuid(), ClientId = c.Id, CreatedAt = Now, UpdatedAt = Now });
             await db.SaveChangesAsync();
         }
         await using var read = NewContext();
@@ -350,9 +350,9 @@ public class UserSettingsAndEventRepositoryTests(PostgresFixture fixture) : Repo
     [PostgresFact]
     public async Task Events_are_added()
     {
-        var c = MakeClinic();
+        var c = MakeClient();
         await SeedAsync(c);
-        var entry = new EventLog { Id = Guid.NewGuid(), ClinicId = c.Id, EventType = EventTypes.ProcedureBooked, CreatedAt = Now };
+        var entry = new EventLog { Id = Guid.NewGuid(), ClientId = c.Id, EventType = EventTypes.ProcedureBooked, CreatedAt = Now };
         await using (var db = NewContext())
         {
             new EventLogRepository(db).Add(entry);
@@ -365,15 +365,15 @@ public class UserSettingsAndEventRepositoryTests(PostgresFixture fixture) : Repo
 
 public class CalendarRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixture)
 {
-    private static CalendarIntegration Integration(Guid clinicId, string provider, string status = CalendarIntegrationStatus.Connected) => new()
+    private static CalendarIntegration Integration(Guid clientId, string provider, string status = CalendarIntegrationStatus.Connected) => new()
     {
-        Id = Guid.NewGuid(), ClinicId = clinicId, Provider = provider, Status = status, CreatedAt = Now, UpdatedAt = Now,
+        Id = Guid.NewGuid(), ClientId = clientId, Provider = provider, Status = status, CreatedAt = Now, UpdatedAt = Now,
     };
 
     [PostgresFact]
-    public async Task Integrations_are_found_with_their_calendars_and_scoped_to_the_clinic()
+    public async Task Integrations_are_found_with_their_calendars_and_scoped_to_the_client()
     {
-        var c = MakeClinic(); var other = MakeClinic();
+        var c = MakeClient(); var other = MakeClient();
         var google = Integration(c.Id, "google");
         var outlook = Integration(c.Id, "outlook");
         var cal = new CalendarIntegrationCalendar { Id = Guid.NewGuid(), CalendarIntegrationId = google.Id, ExternalCalendarId = "ext", Name = "Main", CreatedAt = Now };
@@ -391,10 +391,10 @@ public class CalendarRepositoryTests(PostgresFixture fixture) : RepoTestBase(fix
     [PostgresFact]
     public async Task Sync_targets_need_connected_enabled_selected_and_a_token()
     {
-        // Provider is unique per clinic and limited to google/outlook, so every variant gets its own clinic.
+        // Provider is unique per client and limited to google/outlook, so every variant gets its own client.
         async Task<bool> IsTargetAsync(Action<CalendarIntegration> tweak)
         {
-            var c = MakeClinic();
+            var c = MakeClient();
             var i = Integration(c.Id, "google");
             i.SyncEnabled = true; i.SelectedCalendarId = "cal"; i.AccessToken = "tok";
             tweak(i);
@@ -412,7 +412,7 @@ public class CalendarRepositoryTests(PostgresFixture fixture) : RepoTestBase(fix
     [PostgresFact]
     public async Task Calendars_can_be_replaced_and_removed_and_syncs_tracked_per_appointment()
     {
-        var c = MakeClinic();
+        var c = MakeClient();
         var lead = MakeLead(c.Id);
         var appt = MakeAppointment(c.Id, lead.Id, Now.AddDays(1));
         var integration = Integration(c.Id, "google");
@@ -446,47 +446,47 @@ public class CalendarRepositoryTests(PostgresFixture fixture) : RepoTestBase(fix
 
 public class CampaignRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixture)
 {
-    private static Campaign Campaign(Guid clinicId, string name = "Spring", int daysAgo = 0) => new()
+    private static Campaign Campaign(Guid clientId, string name = "Spring", int daysAgo = 0) => new()
     {
-        Id = Guid.NewGuid(), ClinicId = clinicId, Name = name, CreatedAt = Now.AddDays(-daysAgo), UpdatedAt = Now,
+        Id = Guid.NewGuid(), ClientId = clientId, Name = name, CreatedAt = Now.AddDays(-daysAgo), UpdatedAt = Now,
     };
 
     private static CampaignRecipient Recipient(Campaign c, Lead lead, string status = CampaignRecipientStatus.Queued, int minutesAgo = 0) => new()
     {
-        Id = Guid.NewGuid(), ClinicId = c.ClinicId, CampaignId = c.Id, LeadId = lead.Id, PhoneNumber = "+1" + Guid.NewGuid().ToString("N")[..8],
+        Id = Guid.NewGuid(), ClientId = c.ClientId, CampaignId = c.Id, LeadId = lead.Id, PhoneNumber = "+1" + Guid.NewGuid().ToString("N")[..8],
         Status = status, CreatedAt = Now.AddMinutes(-minutesAgo), UpdatedAt = Now,
     };
 
     [PostgresFact]
     public async Task Campaigns_are_read_scoped_and_listed_newest_first()
     {
-        var clinic = MakeClinic(); var other = MakeClinic();
-        var template = new WhatsAppTemplate { Id = Guid.NewGuid(), ClinicId = clinic.Id, Name = "tpl", Body = "b", CreatedAt = Now, UpdatedAt = Now };
-        var old = Campaign(clinic.Id, "Old", 3); var recent = Campaign(clinic.Id, "Recent", 1); recent.WhatsAppTemplateId = template.Id;
-        await SeedAsync(clinic, other, template, old, recent);
+        var client = MakeClient(); var other = MakeClient();
+        var template = new WhatsAppTemplate { Id = Guid.NewGuid(), ClientId = client.Id, Name = "tpl", Body = "b", CreatedAt = Now, UpdatedAt = Now };
+        var old = Campaign(client.Id, "Old", 3); var recent = Campaign(client.Id, "Recent", 1); recent.WhatsAppTemplateId = template.Id;
+        await SeedAsync(client, other, template, old, recent);
 
         await using var db = NewContext();
         var repo = new CampaignRepository(db);
-        Assert.NotNull(await repo.GetAsync(clinic.Id, old.Id));
+        Assert.NotNull(await repo.GetAsync(client.Id, old.Id));
         Assert.Null(await repo.GetAsync(other.Id, old.Id));
         Assert.NotNull(await repo.GetByIdAsync(old.Id));
-        Assert.Equal("tpl", (await repo.GetWithTemplateAsync(clinic.Id, recent.Id))!.WhatsAppTemplate!.Name);
+        Assert.Equal("tpl", (await repo.GetWithTemplateAsync(client.Id, recent.Id))!.WhatsAppTemplate!.Name);
         Assert.Null(await repo.GetWithTemplateAsync(other.Id, recent.Id));
-        Assert.Equal([recent.Id, old.Id], (await repo.ListWithTemplateAsync(clinic.Id)).Select(c => c.Id));
+        Assert.Equal([recent.Id, old.Id], (await repo.ListWithTemplateAsync(client.Id)).Select(c => c.Id));
 
-        var added = Campaign(clinic.Id, "Added");
+        var added = Campaign(client.Id, "Added");
         repo.Add(added);
         await db.SaveChangesAsync();
-        Assert.Equal(3, (await new CampaignRepository(NewContext()).ListWithTemplateAsync(clinic.Id)).Count);
+        Assert.Equal(3, (await new CampaignRepository(NewContext()).ListWithTemplateAsync(client.Id)).Count);
     }
 
     [PostgresFact]
     public async Task Recipients_are_listed_batched_and_counted()
     {
-        var clinic = MakeClinic();
-        var camp = Campaign(clinic.Id); var otherCamp = Campaign(clinic.Id, "Other");
-        var l1 = MakeLead(clinic.Id, "A", "1"); var l2 = MakeLead(clinic.Id, "B", "2"); var l3 = MakeLead(clinic.Id, "C", "3"); var l4 = MakeLead(clinic.Id, "D", "4");
-        await SeedAsync(clinic, camp, otherCamp, l1, l2, l3, l4);
+        var client = MakeClient();
+        var camp = Campaign(client.Id); var otherCamp = Campaign(client.Id, "Other");
+        var l1 = MakeLead(client.Id, "A", "1"); var l2 = MakeLead(client.Id, "B", "2"); var l3 = MakeLead(client.Id, "C", "3"); var l4 = MakeLead(client.Id, "D", "4");
+        await SeedAsync(client, camp, otherCamp, l1, l2, l3, l4);
         var r1 = Recipient(camp, l1, CampaignRecipientStatus.Queued, 3);
         var r2 = Recipient(camp, l2, CampaignRecipientStatus.Queued, 2);
         var r3 = Recipient(camp, l3, CampaignRecipientStatus.Sent, 1);
@@ -509,9 +509,9 @@ public class CampaignRepositoryTests(PostgresFixture fixture) : RepoTestBase(fix
     [PostgresFact]
     public async Task The_latest_replied_send_without_a_booking_is_found_within_the_window()
     {
-        var clinic = MakeClinic(); var lead = MakeLead(clinic.Id);
-        var c1 = Campaign(clinic.Id, "A"); var c2 = Campaign(clinic.Id, "B"); var c3 = Campaign(clinic.Id, "C"); var c4 = Campaign(clinic.Id, "D");
-        await SeedAsync(clinic, lead, c1, c2, c3, c4);
+        var client = MakeClient(); var lead = MakeLead(client.Id);
+        var c1 = Campaign(client.Id, "A"); var c2 = Campaign(client.Id, "B"); var c3 = Campaign(client.Id, "C"); var c4 = Campaign(client.Id, "D");
+        await SeedAsync(client, lead, c1, c2, c3, c4);
         var replied = DateTimeOffset.UtcNow;
         var old = Recipient(c1, lead, CampaignRecipientStatus.Replied); old.SentAt = replied.AddDays(-40); old.RepliedAt = replied.AddDays(-30);
         var recent = Recipient(c2, lead, CampaignRecipientStatus.Replied); recent.SentAt = replied.AddDays(-5); recent.RepliedAt = replied.AddDays(-3);
@@ -521,21 +521,21 @@ public class CampaignRepositoryTests(PostgresFixture fixture) : RepoTestBase(fix
 
         await using var db = NewContext();
         var repo = new CampaignRepository(db);
-        Assert.Equal(newest.Id, (await repo.FindLatestRepliedAwaitingBookingAsync(clinic.Id, lead.Id, replied.AddDays(-14)))!.Id);
-        Assert.Equal(old.Id, (await repo.FindLatestRepliedAwaitingBookingAsync(clinic.Id, lead.Id, replied.AddDays(-60)))!.Id == newest.Id ? old.Id : newest.Id);
-        Assert.Null(await repo.FindLatestRepliedAwaitingBookingAsync(clinic.Id, lead.Id, replied.AddDays(1)));
+        Assert.Equal(newest.Id, (await repo.FindLatestRepliedAwaitingBookingAsync(client.Id, lead.Id, replied.AddDays(-14)))!.Id);
+        Assert.Equal(old.Id, (await repo.FindLatestRepliedAwaitingBookingAsync(client.Id, lead.Id, replied.AddDays(-60)))!.Id == newest.Id ? old.Id : newest.Id);
+        Assert.Null(await repo.FindLatestRepliedAwaitingBookingAsync(client.Id, lead.Id, replied.AddDays(1)));
         Assert.Null(await repo.FindLatestRepliedAwaitingBookingAsync(Guid.NewGuid(), lead.Id, replied.AddDays(-60)));
     }
 
     [PostgresFact]
     public async Task The_latest_unreplied_send_is_found_for_a_lead()
     {
-        var clinic = MakeClinic(); var other = MakeClinic();
-        var camp = Campaign(clinic.Id); var lead = MakeLead(clinic.Id);
-        await SeedAsync(clinic, other, camp, lead);
-        var leads = Enumerable.Range(0, 4).Select(_ => MakeLead(clinic.Id)).ToList(); await SeedAsync(leads.Cast<object>().ToArray());
+        var client = MakeClient(); var other = MakeClient();
+        var camp = Campaign(client.Id); var lead = MakeLead(client.Id);
+        await SeedAsync(client, other, camp, lead);
+        var leads = Enumerable.Range(0, 4).Select(_ => MakeLead(client.Id)).ToList(); await SeedAsync(leads.Cast<object>().ToArray());
         var oldSend = Recipient(camp, lead, CampaignRecipientStatus.Sent); oldSend.SentAt = Now.AddDays(-5);
-        var camp2 = Campaign(clinic.Id, "C2"); var camp3 = Campaign(clinic.Id, "C3"); var camp4 = Campaign(clinic.Id, "C4"); await SeedAsync(camp2, camp3, camp4);
+        var camp2 = Campaign(client.Id, "C2"); var camp3 = Campaign(client.Id, "C3"); var camp4 = Campaign(client.Id, "C4"); await SeedAsync(camp2, camp3, camp4);
         var newSend = Recipient(camp2, lead, CampaignRecipientStatus.Sent); newSend.SentAt = Now.AddDays(-1);
         var replied = Recipient(camp3, lead, CampaignRecipientStatus.Sent); replied.SentAt = Now; replied.RepliedAt = Now;
         var unsent = Recipient(camp4, lead);
@@ -543,38 +543,38 @@ public class CampaignRepositoryTests(PostgresFixture fixture) : RepoTestBase(fix
 
         await using var db = NewContext();
         var repo = new CampaignRepository(db);
-        var found = (await repo.FindLatestAwaitingReplyAsync(clinic.Id, lead.Id))!;
+        var found = (await repo.FindLatestAwaitingReplyAsync(client.Id, lead.Id))!;
         Assert.Equal(newSend.Id, found.Id);
         Assert.NotNull(found.Campaign);
         Assert.Null(await repo.FindLatestAwaitingReplyAsync(other.Id, lead.Id));
 
-        var added = Recipient(camp, MakeLead(clinic.Id));
+        var added = Recipient(camp, MakeLead(client.Id));
         await using var write = NewContext();
         new CampaignRepository(write).AddRecipient(added);
         await Assert.ThrowsAsync<DbUpdateException>(() => write.SaveChangesAsync());   // the lead was never saved: FK holds
     }
 
     [PostgresFact]
-    public async Task Due_campaigns_are_scheduled_ones_whose_time_has_come_and_running_ones_of_active_clinics()
+    public async Task Due_campaigns_are_scheduled_ones_whose_time_has_come_and_running_ones_of_active_clients()
     {
-        var clinic = MakeClinic(); var inactive = MakeClinic(); inactive.IsActive = false;
+        var client = MakeClient(); var inactive = MakeClient(); inactive.IsActive = false;
         var now = DateTimeOffset.UtcNow;
-        Campaign With(Guid clinicId, string status, DateTimeOffset? scheduledAt = null)
+        Campaign With(Guid clientId, string status, DateTimeOffset? scheduledAt = null)
         {
-            var c = Campaign(clinicId, status); c.Status = status; c.ScheduledAt = scheduledAt; return c;
+            var c = Campaign(clientId, status); c.Status = status; c.ScheduledAt = scheduledAt; return c;
         }
-        var due = With(clinic.Id, CampaignStatus.Scheduled, now.AddMinutes(-5));
-        var later = With(clinic.Id, CampaignStatus.Scheduled, now.AddMinutes(5));
-        var running = With(clinic.Id, CampaignStatus.Running);
-        var stopped = With(clinic.Id, CampaignStatus.Paused, now.AddMinutes(-5));
-        var draft = With(clinic.Id, CampaignStatus.Draft, now.AddMinutes(-5));
-        var finished = With(clinic.Id, CampaignStatus.Completed);
-        var offClinic = With(inactive.Id, CampaignStatus.Running);
-        await SeedAsync(clinic, inactive, due, later, running, stopped, draft, finished, offClinic);
+        var due = With(client.Id, CampaignStatus.Scheduled, now.AddMinutes(-5));
+        var later = With(client.Id, CampaignStatus.Scheduled, now.AddMinutes(5));
+        var running = With(client.Id, CampaignStatus.Running);
+        var stopped = With(client.Id, CampaignStatus.Paused, now.AddMinutes(-5));
+        var draft = With(client.Id, CampaignStatus.Draft, now.AddMinutes(-5));
+        var finished = With(client.Id, CampaignStatus.Completed);
+        var offClient = With(inactive.Id, CampaignStatus.Running);
+        await SeedAsync(client, inactive, due, later, running, stopped, draft, finished, offClient);
 
         var found = await new CampaignRepository(NewContext()).ListDueForSendingReadOnlyAsync(now);
 
-        var mine = found.Where(d => d.ClinicId == clinic.Id || d.ClinicId == inactive.Id).ToList();
+        var mine = found.Where(d => d.ClientId == client.Id || d.ClientId == inactive.Id).ToList();
         Assert.Equal([due.Id, running.Id], mine.Select(d => d.Id));                 // scheduled first, then running
         Assert.Equal([CampaignStatus.Scheduled, CampaignStatus.Running], mine.Select(d => d.Status));
     }
@@ -582,25 +582,25 @@ public class CampaignRepositoryTests(PostgresFixture fixture) : RepoTestBase(fix
     [PostgresFact]
     public async Task Status_reads_are_fresh_and_status_changes_are_conditional()
     {
-        var clinic = MakeClinic(); var other = MakeClinic();
-        var c = Campaign(clinic.Id); c.Status = CampaignStatus.Running;
-        await SeedAsync(clinic, other, c);
+        var client = MakeClient(); var other = MakeClient();
+        var c = Campaign(client.Id); c.Status = CampaignStatus.Running;
+        await SeedAsync(client, other, c);
 
         await using var db = NewContext();
         var repo = new CampaignRepository(db);
-        var tracked = (await repo.GetAsync(clinic.Id, c.Id))!;
+        var tracked = (await repo.GetAsync(client.Id, c.Id))!;
         Assert.Equal(CampaignStatus.Running, await repo.GetStatusReadOnlyAsync(c.Id));
         Assert.Null(await repo.GetStatusReadOnlyAsync(Guid.NewGuid()));
 
         // Another request stops it; this context still holds the old tracked copy but the fresh read sees the stop.
         var when = DateTimeOffset.UtcNow;
         Assert.False(await new CampaignRepository(NewContext()).TryChangeStatusAsync(other.Id, c.Id, [CampaignStatus.Running], CampaignStatus.Paused, when));
-        Assert.True(await new CampaignRepository(NewContext()).TryChangeStatusAsync(clinic.Id, c.Id, [CampaignStatus.Scheduled, CampaignStatus.Running], CampaignStatus.Paused, when));
+        Assert.True(await new CampaignRepository(NewContext()).TryChangeStatusAsync(client.Id, c.Id, [CampaignStatus.Scheduled, CampaignStatus.Running], CampaignStatus.Paused, when));
         Assert.Equal(CampaignStatus.Running, tracked.Status);
         Assert.Equal(CampaignStatus.Paused, await repo.GetStatusReadOnlyAsync(c.Id));
 
         // Not in a "from" status any more: nothing changes.
-        Assert.False(await new CampaignRepository(NewContext()).TryChangeStatusAsync(clinic.Id, c.Id, [CampaignStatus.Running], CampaignStatus.Completed, when));
+        Assert.False(await new CampaignRepository(NewContext()).TryChangeStatusAsync(client.Id, c.Id, [CampaignStatus.Running], CampaignStatus.Completed, when));
         Assert.Equal(CampaignStatus.Paused, await repo.GetStatusReadOnlyAsync(c.Id));
     }
 

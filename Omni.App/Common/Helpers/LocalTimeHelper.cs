@@ -21,14 +21,14 @@ public static class LocalTimeHelper
     };
 
     /// <summary><c>&lt;time&gt;</c> element showing <paramref name="value"/> in viewer-local time; <paramref name="empty"/> when null.
-    /// With <paramref name="clinicTimeZone"/> (appointment pages) it shows clinic time instead, unless the viewer picked
+    /// With <paramref name="clientTimeZone"/> (appointment pages) it shows client time instead, unless the viewer picked
     /// "My time" on the page's _TimeViewSwitch.</summary>
-    public static IHtmlContent Time(DateTimeOffset? value, string format = "datetime", string empty = "—", string? clinicTimeZone = null)
+    public static IHtmlContent Time(DateTimeOffset? value, string format = "datetime", string empty = "—", string? clientTimeZone = null)
     {
         if (value is null) return new HtmlString(System.Net.WebUtility.HtmlEncode(empty));
         var utc = value.Value.ToUniversalTime();
         var fallback = Fallback(utc, format);
-        var zone = clinicTimeZone is null ? "" : $" data-clinic-tz=\"{System.Net.WebUtility.HtmlEncode(clinicTimeZone)}\"";
+        var zone = clientTimeZone is null ? "" : $" data-client-tz=\"{System.Net.WebUtility.HtmlEncode(clientTimeZone)}\"";
         return new HtmlString($"<time datetime=\"{Iso(utc)}\" data-local=\"{format}\"{zone}>{System.Net.WebUtility.HtmlEncode(fallback)}</time>");
     }
 

@@ -17,7 +17,7 @@ public class ProviderBillingService : IProviderBillingService
     public const string SourceDefault = "default";
 
     /// <summary>Built-in defaults. WhatsApp stays Omni-funded, which is what billing did before responsibilities
-    /// existed (a clinic's own Meta WABA is usually paid by the clinic — set that per account, or
+    /// existed (a client's own Meta WABA is usually paid by the client — set that per account, or
     /// Defaults:whatsapp_meta = customer_direct).
     /// Channels without a normal per-message provider fee are no_provider_usage_fee.</summary>
     private static readonly Dictionary<string, string> BuiltInDefaults = new(StringComparer.OrdinalIgnoreCase)
@@ -65,10 +65,10 @@ public class ProviderBillingService : IProviderBillingService
         return BuiltInDefaults.TryGetValue(channel, out var builtIn) ? builtIn : ProviderBillingResponsibility.PlatformFunded;
     }
 
-    public async Task<ProviderBillingSetting> ResolveAsync(Guid clinicId, string channel, string? provider, CancellationToken ct = default)
+    public async Task<ProviderBillingSetting> ResolveAsync(Guid clientId, string channel, string? provider, CancellationToken ct = default)
     {
         await using var unit = _units.Create();
-        var account = await unit.Channels.GetReadOnlyAsync(clinicId, channel, ct);
+        var account = await unit.Channels.GetReadOnlyAsync(clientId, channel, ct);
         var currentProvider = NormalizeProvider(provider) ?? AccountProvider(channel);
 
         ChannelAccountBillingSettings? settings = null;
@@ -79,10 +79,10 @@ public class ProviderBillingService : IProviderBillingService
         return Resolve(channel, currentProvider, account?.Id, settings);
     }
 
-    public async Task<IReadOnlyList<ChannelAccountBilling>> ListAccountsAsync(Guid clinicId, CancellationToken ct = default)
+    public async Task<IReadOnlyList<ChannelAccountBilling>> ListAccountsAsync(Guid clientId, CancellationToken ct = default)
     {
         await using var unit = _units.Create();
-        var accounts = await unit.Channels.ListForClinicReadOnlyAsync(clinicId, ct);
+        var accounts = await unit.Channels.ListForClientReadOnlyAsync(clientId, ct);
         var ids = accounts.Select(a => a.Id).ToList();
         var settings = await unit.ChannelBilling.MapReadOnlyAsync(ids, ct);
         return accounts.Select(a => ToView(a, settings.GetValueOrDefault(a.Id))).ToList();
@@ -110,7 +110,7 @@ public class ProviderBillingService : IProviderBillingService
         var before = ToView(account, settings);
         if (settings is null)
         {
-            settings = new ChannelAccountBillingSettings { ChannelIntegrationId = account.Id, ClinicId = account.ClinicId, CreatedAt = now };
+            settings = new ChannelAccountBillingSettings { ChannelIntegrationId = account.Id, ClientId = account.ClientId, CreatedAt = now };
             unit.ChannelBilling.Add(settings);
         }
         settings.ProviderBilling = responsibility;
@@ -120,7 +120,7 @@ public class ProviderBillingService : IProviderBillingService
         settings.UpdatedAt = now;
 
         var after = ToView(account, settings);
-        BillingLedger.LogEvent(unit, account.ClinicId, BillingEventTypes.ProviderBillingChanged, BillingSource.Admin, new
+        BillingLedger.LogEvent(unit, account.ClientId, BillingEventTypes.ProviderBillingChanged, BillingSource.Admin, new
         {
             channelIntegrationId = account.Id, channel = account.Channel, provider = after.Provider,
             from = new { before.ProviderBilling, before.OmniUsageBilling, before.Source },
@@ -129,8 +129,8 @@ public class ProviderBillingService : IProviderBillingService
         }, now);
         await unit.SaveChangesAsync(ct);
 
-        _logger.LogInformation("Billing: provider billing of {Channel} account {AccountId} (clinic {ClinicId}) set to {ProviderBilling}, Omni usage billing {UsageBilling}, by {Actor}: {Reason}.",
-            account.Channel, account.Id, account.ClinicId, after.ProviderBilling, after.OmniUsageBilling, change.Actor ?? "admin", change.Reason);
+        _logger.LogInformation("Billing: provider billing of {Channel} account {AccountId} (client {ClientId}) set to {ProviderBilling}, Omni usage billing {UsageBilling}, by {Actor}: {Reason}.",
+            account.Channel, account.Id, account.ClientId, after.ProviderBilling, after.OmniUsageBilling, change.Actor ?? "admin", change.Reason);
         return after;
     }
 
@@ -147,7 +147,7 @@ public class ProviderBillingService : IProviderBillingService
         {
             unit.ChannelBilling.Remove(settings);
             var after = ToView(account, null);
-            BillingLedger.LogEvent(unit, account.ClinicId, BillingEventTypes.ProviderBillingChanged, BillingSource.Admin, new
+            BillingLedger.LogEvent(unit, account.ClientId, BillingEventTypes.ProviderBillingChanged, BillingSource.Admin, new
             {
                 channelIntegrationId = account.Id, channel = account.Channel, provider = after.Provider,
                 from = new { before.ProviderBilling, before.OmniUsageBilling, before.Source },

@@ -22,12 +22,12 @@ public static class MessageTraceMapper
         {
             var detail = AppLogMapper.Properties(s.Detail);
             entries.Add(new MessageTraceEntry(s.OccurredAt, "step", s.Step, s.Outcome, Describe(s.Step, s.Channel, detail), s.DurationMs,
-                s.ClinicId, s.ConversationId, s.MessageId, s.N8nExecutionId, null, detail));
+                s.ClientId, s.ConversationId, s.MessageId, s.N8nExecutionId, null, detail));
         }
 
         foreach (var m in messages)
         {
-            var ids = (m.ClinicId, m.ConversationId, m.Id);
+            var ids = (m.ClientId, m.ConversationId, m.Id);
             entries.Add(Entry(m.CreatedAt, "message", "message." + m.Direction, TraceOutcomes.Ok,
                 $"{Who(m)} {m.MessageType} message on {m.Channel}" + (m.ExternalMessageId is null ? "" : " (provider id saved)"), ids));
             // Delivery statuses come from the message row (outbound only: an inbound message has no delivery).
@@ -67,7 +67,7 @@ public static class MessageTraceMapper
         {
             var isWarning = l.Level == AppLogLevels.Warning;
             entries.Add(new MessageTraceEntry(l.OccurredAt, isWarning ? "warning" : "error", l.Category, isWarning ? TraceOutcomes.Ok : TraceOutcomes.Failed,
-                l.Message, null, l.ClinicId, l.ConversationId, l.MessageId, null, l.Id, NoDetail));
+                l.Message, null, l.ClientId, l.ConversationId, l.MessageId, null, l.Id, NoDetail));
         }
 
         return entries.OrderBy(e => e.At).ThenBy(e => KindOrder(e.Kind)).ToList();
@@ -82,7 +82,7 @@ public static class MessageTraceMapper
         {
             TraceSteps.WebhookReceived => $"Webhook received{on}" + (D("kinds") is { } kinds ? $": {kinds}" : D("type") is { } type ? $": {type}" : ""),
             TraceSteps.WebhookRejected => $"Webhook rejected{on}: {D("reason")}",
-            TraceSteps.WebhookClinicUnresolved => $"No clinic owns this number{on}; event {D("kind")} ignored",
+            TraceSteps.WebhookClientUnresolved => $"No client owns this number{on}; event {D("kind")} ignored",
             TraceSteps.WebhookIgnored => $"Webhook ignored{on}: {D("reason")}",
             TraceSteps.MessageSaved => $"Saved to the inbox: {D("sender")} {D("type")} ({D("direction")})",
             TraceSteps.MessageDeduplicated => "Duplicate delivery; the message was already saved",
@@ -103,8 +103,8 @@ public static class MessageTraceMapper
     }
 
     private static MessageTraceEntry Entry(DateTimeOffset at, string kind, string name, string outcome, string summary,
-        (Guid? ClinicId, Guid? ConversationId, Guid? MessageId) ids) =>
-        new(at, kind, name, outcome, summary, null, ids.ClinicId, ids.ConversationId, ids.MessageId, null, null, NoDetail);
+        (Guid? ClientId, Guid? ConversationId, Guid? MessageId) ids) =>
+        new(at, kind, name, outcome, summary, null, ids.ClientId, ids.ConversationId, ids.MessageId, null, null, NoDetail);
 
     private static string Who(TraceMessageRow m) => m.SenderType switch
     {

@@ -7,7 +7,7 @@ namespace Omni.App.Entities.Requests.Channels;
 /// field), and send a non-empty value only to set/replace it.
 /// </summary>
 public record SaveChannelIntegrationRequest(
-    Guid ClinicId,
+    Guid ClientId,
     string Channel,
     string? DisplayName,
     string? PhoneNumberId,

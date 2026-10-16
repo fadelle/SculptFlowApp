@@ -3,7 +3,7 @@ namespace Omni.App.Common.Helpers;
 /// <summary>Small text helpers for the views (docs/UI_GUIDE.md §0.4). Presentational only.</summary>
 public static class UiTextHelper
 {
-    /// <summary>One or two letters for an avatar: "Sara Ali" → "SA", "sara@clinic.com" → "S", empty → "?".</summary>
+    /// <summary>One or two letters for an avatar: "Sara Ali" → "SA", "sara@client.com" → "S", empty → "?".</summary>
     public static string Initials(string? name)
     {
         if (string.IsNullOrWhiteSpace(name)) return "?";

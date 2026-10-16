@@ -7,7 +7,7 @@ public record TelegramWebhookResult(
     bool Processed,
     string EventType,
     bool ShouldRunAi,
-    Guid? ClinicId = null,
+    Guid? ClientId = null,
     Guid? ConversationId = null,
     Guid? LeadId = null,
     Guid? MessageId = null,

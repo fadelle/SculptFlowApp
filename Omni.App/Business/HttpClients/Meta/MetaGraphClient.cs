@@ -74,7 +74,7 @@ public class MetaGraphClient : IMetaGraphClient
             return null;
         }
 
-        // MVP: take the first Page the user manages. If a clinic's Facebook user admins multiple
+        // MVP: take the first Page the user manages. If a client's Facebook user admins multiple
         // Pages, this picks arbitrarily — a Page-picker UI is the natural next step here.
         var first = data[0];
         return new FacebookPageInfo(

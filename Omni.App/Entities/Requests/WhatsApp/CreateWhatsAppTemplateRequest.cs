@@ -6,7 +6,7 @@ namespace Omni.App.Entities.Requests.WhatsApp;
 /// underscores, no spaces); the service doesn't reformat Name for you.
 /// </summary>
 public record CreateWhatsAppTemplateRequest(
-    Guid ClinicId,
+    Guid ClientId,
     string Name,
     string Category,
     string Language,

@@ -42,9 +42,9 @@
     var backToThisPage = "/KnowledgeBase/Websites/" + Model.Id + (string.IsNullOrEmpty(Model.Status) ? "" : "?status=" + Uri.EscapeDataString(Model.Status));
 }
 
-@if (!Model.ClinicConfigured || d is null)
+@if (!Model.ClientConfigured || d is null)
 {
-    <partial name="_NoClinic" />
+    <partial name="_NoClient" />
 }
 else
 {

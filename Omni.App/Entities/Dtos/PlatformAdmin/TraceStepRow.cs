@@ -8,7 +8,7 @@ public record TraceStepRow(
     string Step,
     string Outcome,
     double? DurationMs,
-    Guid? ClinicId,
+    Guid? ClientId,
     Guid? ConversationId,
     Guid? MessageId,
     string? ExternalMessageId,

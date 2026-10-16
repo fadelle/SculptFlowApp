@@ -2,7 +2,7 @@
 @model ErrorModel
 @{
     ViewData["Title"] = "Something went wrong";
-    // Always the plain layout: the shell reads the clinic from the database, which may be what just failed.
+    // Always the plain layout: the shell reads the client from the database, which may be what just failed.
     Layout = "_AuthLayout";
     var signedIn = User.Identity?.IsAuthenticated == true;
 }

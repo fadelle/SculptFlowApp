@@ -3,7 +3,7 @@ using Omni.App.Common.Enums;
 namespace Omni.App.Entities.Models;
 
 /// <summary>
-/// A clinic's connection config for one messaging channel (WhatsApp Business API, Instagram,
+/// A client's connection config for one messaging channel (WhatsApp Business API, Instagram,
 /// or Facebook Messenger via the Meta Graph API). Lives under Settings → Channels &amp;
 /// Integrations in the dashboard — see Pages/Settings/Integrations.cshtml.
 ///
@@ -15,7 +15,7 @@ namespace Omni.App.Entities.Models;
 public class ChannelIntegration
 {
     public Guid Id { get; set; }
-    public Guid ClinicId { get; set; }
+    public Guid ClientId { get; set; }
 
     public string Channel { get; set; } = string.Empty;
     public string Status { get; set; } = ChannelIntegrationStatus.Disconnected;
@@ -91,5 +91,5 @@ public class ChannelIntegration
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 
-    public Clinic? Clinic { get; set; }
+    public Client? Client { get; set; }
 }

@@ -2,7 +2,7 @@ namespace Omni.App.Entities.Responses.Procedures;
 
 public record ProcedureBookingResponse(
     Guid Id,
-    Guid ClinicId,
+    Guid ClientId,
     Guid LeadId,
     string? LeadFullName,
     Guid ProcedureId,

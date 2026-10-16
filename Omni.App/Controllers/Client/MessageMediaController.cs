@@ -4,14 +4,14 @@ using Omni.App.Business.Contracts.Services.Inbox;
 
 namespace Omni.App.Controllers.Client;
 
-/// <summary>Streams a message's media to the Inbox player. The clinic always comes from the signed-in user.</summary>
+/// <summary>Streams a message's media to the Inbox player. The client always comes from the signed-in user.</summary>
 [ApiController]
 [Route("api/messages/{messageId:guid}/media")]
 public class MessageMediaController : DashboardApiController
 {
     private readonly IMessageMediaService _media;
 
-    public MessageMediaController(ICurrentClinicContext clinicContext, IMessageMediaService media) : base(clinicContext)
+    public MessageMediaController(ICurrentClientContext clientContext, IMessageMediaService media) : base(clientContext)
     {
         _media = media;
     }
@@ -21,10 +21,10 @@ public class MessageMediaController : DashboardApiController
     [HttpGet]
     public async Task<IActionResult> Get(Guid messageId, CancellationToken ct)
     {
-        var clinicId = await GetClinicIdAsync(ct);
-        if (clinicId is null) return Forbid();
+        var clientId = await GetClientIdAsync(ct);
+        if (clientId is null) return Forbid();
 
-        var audio = await _media.GetAudioAsync(clinicId.Value, messageId, ct);
+        var audio = await _media.GetAudioAsync(clientId.Value, messageId, ct);
         Response.Headers.CacheControl = "private, max-age=3600";
         return File(audio.Bytes, audio.ContentType, enableRangeProcessing: true);
     }

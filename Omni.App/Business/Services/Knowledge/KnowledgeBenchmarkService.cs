@@ -72,28 +72,28 @@ public partial class KnowledgeBenchmarkService : IKnowledgeBenchmarkService
     // Dashboard
     // ---------------------------------------------------------------------------------------------
 
-    public async Task<BenchmarkDashboardResponse> GetDashboardAsync(Guid clinicId, CancellationToken ct = default)
+    public async Task<BenchmarkDashboardResponse> GetDashboardAsync(Guid clientId, CancellationToken ct = default)
     {
-        await RefreshStaleAsync(clinicId, ct);
+        await RefreshStaleAsync(clientId, ct);
 
-        var counts = await _benchmark.GetCaseCountsAsync(clinicId, ct);
+        var counts = await _benchmark.GetCaseCountsAsync(clientId, ct);
 
-        var latest = await _benchmark.GetLatestRunAsync(clinicId, completedOnly: false, ct);
+        var latest = await _benchmark.GetLatestRunAsync(clientId, completedOnly: false, ct);
         var latestCompleted = latest?.Status == BenchmarkRunStatus.Completed
             ? latest
-            : await _benchmark.GetLatestRunAsync(clinicId, completedOnly: true, ct);
+            : await _benchmark.GetLatestRunAsync(clientId, completedOnly: true, ct);
 
-        await ExpireOldGenerationsAsync(clinicId, ct);
-        var pendingGenerationId = await _benchmark.GetPendingGenerationIdAsync(clinicId, ct);
+        await ExpireOldGenerationsAsync(clientId, ct);
+        var pendingGenerationId = await _benchmark.GetPendingGenerationIdAsync(clientId, ct);
         var generationInProgress = pendingGenerationId is not null;
 
         var cutoff = DateTimeOffset.UtcNow - StaleRunAge;
-        var inProgress = await _benchmark.HasRunInProgressAsync(clinicId, cutoff, ct);
+        var inProgress = await _benchmark.HasRunInProgressAsync(clientId, cutoff, ct);
 
         return new BenchmarkDashboardResponse(
             counts.Total, counts.Generated, counts.Manual, counts.Reviewed, counts.Stale,
             _generator.IsConfigured, inProgress, generationInProgress, pendingGenerationId,
-            await CurrentSettingsSnapshotAsync(clinicId, ct),
+            await CurrentSettingsSnapshotAsync(clientId, ct),
             latest is null ? null : ToSummary(latest),
             latestCompleted is null ? null : ToSummary(latestCompleted));
     }
@@ -102,48 +102,48 @@ public partial class KnowledgeBenchmarkService : IKnowledgeBenchmarkService
     // Cases
     // ---------------------------------------------------------------------------------------------
 
-    public async Task<BenchmarkCaseListResponse> ListCasesAsync(Guid clinicId, BenchmarkCaseFilter filter, int skip, int take, CancellationToken ct = default)
+    public async Task<BenchmarkCaseListResponse> ListCasesAsync(Guid clientId, BenchmarkCaseFilter filter, int skip, int take, CancellationToken ct = default)
     {
-        await RefreshStaleAsync(clinicId, ct);
+        await RefreshStaleAsync(clientId, ct);
 
-        var (page, total) = await _benchmark.ListCasesAsync(clinicId, (filter.View ?? "all").Trim().ToLowerInvariant(),
+        var (page, total) = await _benchmark.ListCasesAsync(clientId, (filter.View ?? "all").Trim().ToLowerInvariant(),
             filter.GenerationId, Math.Max(skip, 0), Math.Clamp(take, 1, 200), ct);
 
-        var lastByCase = await LastResultsAsync(clinicId, page.Select(c => c.Id).ToList(), ct);
+        var lastByCase = await LastResultsAsync(clientId, page.Select(c => c.Id).ToList(), ct);
         return new BenchmarkCaseListResponse(
             page.Select(c => ToCaseResponse(c, lastByCase.GetValueOrDefault(c.Id))).ToList(), total);
     }
 
-    public async Task<BenchmarkCaseDetailResponse?> GetCaseAsync(Guid clinicId, Guid id, CancellationToken ct = default)
+    public async Task<BenchmarkCaseDetailResponse?> GetCaseAsync(Guid clientId, Guid id, CancellationToken ct = default)
     {
-        await RefreshStaleAsync(clinicId, ct);
+        await RefreshStaleAsync(clientId, ct);
 
-        var c = await _benchmark.GetCaseReadOnlyAsync(clinicId, id, ct);
+        var c = await _benchmark.GetCaseReadOnlyAsync(clientId, id, ct);
         if (c is null) return null;
 
-        var content = await LiveChunkContentAsync(clinicId, c.ExpectedChunkId, c.ExpectedDocumentId, ct);
+        var content = await LiveChunkContentAsync(clientId, c.ExpectedChunkId, c.ExpectedDocumentId, ct);
 
-        var latestResult = await _benchmark.GetLatestResultForCaseAsync(clinicId, id, ct);
+        var latestResult = await _benchmark.GetLatestResultForCaseAsync(clientId, id, ct);
 
-        BenchmarkResultDetailResponse? detail = latestResult is null ? null : await BuildResultDetailAsync(clinicId, latestResult, ct);
+        BenchmarkResultDetailResponse? detail = latestResult is null ? null : await BuildResultDetailAsync(clientId, latestResult, ct);
         var last = latestResult is null ? null : ToLastResult(latestResult);
         return new BenchmarkCaseDetailResponse(ToCaseResponse(c, last), content, detail);
     }
 
-    public async Task<BenchmarkCaseResponse> CreateManualCaseAsync(Guid clinicId, CreateManualBenchmarkCaseRequest request, CancellationToken ct = default)
+    public async Task<BenchmarkCaseResponse> CreateManualCaseAsync(Guid clientId, CreateManualBenchmarkCaseRequest request, CancellationToken ct = default)
     {
         var question = NormalizeQuestion(request.Question);
         if (string.IsNullOrEmpty(question)) throw new ArgumentException("Enter the patient question.");
         if (question.Length > MaxQuestionChars) throw new ArgumentException($"The question must be {MaxQuestionChars} characters or fewer.");
 
-        var chunk = await _benchmark.GetActiveChunkAsync(clinicId, request.DocumentId, request.ChunkId, ct);
-        if (chunk is null) throw new ArgumentException("Choose one of this clinic's active Knowledge Base chunks as the expected answer.");
+        var chunk = await _benchmark.GetActiveChunkAsync(clientId, request.DocumentId, request.ChunkId, ct);
+        if (chunk is null) throw new ArgumentException("Choose one of this client's active Knowledge Base chunks as the expected answer.");
 
         var now = DateTimeOffset.UtcNow;
         var entity = new KnowledgeRetrievalBenchmarkCase
         {
             Id = Guid.NewGuid(),
-            ClinicId = clinicId,
+            ClientId = clientId,
             Question = question,
             ExpectedDocumentId = chunk.DocumentId,
             ExpectedChunkId = chunk.ChunkId,
@@ -170,13 +170,13 @@ public partial class KnowledgeBenchmarkService : IKnowledgeBenchmarkService
         return ToCaseResponse(entity, null);
     }
 
-    public async Task<BenchmarkCaseResponse?> UpdateCaseQuestionAsync(Guid clinicId, Guid id, string? question, CancellationToken ct = default)
+    public async Task<BenchmarkCaseResponse?> UpdateCaseQuestionAsync(Guid clientId, Guid id, string? question, CancellationToken ct = default)
     {
         var text = NormalizeQuestion(question);
         if (string.IsNullOrEmpty(text)) throw new ArgumentException("The question can't be empty.");
         if (text.Length > MaxQuestionChars) throw new ArgumentException($"The question must be {MaxQuestionChars} characters or fewer.");
 
-        var c = await _benchmark.GetCaseAsync(clinicId, id, ct);
+        var c = await _benchmark.GetCaseAsync(clientId, id, ct);
         if (c is null) return null;
 
         c.Question = text;
@@ -191,13 +191,13 @@ public partial class KnowledgeBenchmarkService : IKnowledgeBenchmarkService
             throw new ArgumentException("Another case for this chunk already has that question.");
         }
 
-        var last = (await LastResultsAsync(clinicId, new List<Guid> { id }, ct)).GetValueOrDefault(id);
+        var last = (await LastResultsAsync(clientId, new List<Guid> { id }, ct)).GetValueOrDefault(id);
         return ToCaseResponse(c, last);
     }
 
-    public async Task<BenchmarkCaseResponse?> SetReviewedAsync(Guid clinicId, Guid id, bool reviewed, CancellationToken ct = default)
+    public async Task<BenchmarkCaseResponse?> SetReviewedAsync(Guid clientId, Guid id, bool reviewed, CancellationToken ct = default)
     {
-        var c = await _benchmark.GetCaseAsync(clinicId, id, ct);
+        var c = await _benchmark.GetCaseAsync(clientId, id, ct);
         if (c is null) return null;
 
         c.IsReviewed = reviewed;
@@ -205,26 +205,26 @@ public partial class KnowledgeBenchmarkService : IKnowledgeBenchmarkService
         c.UpdatedAt = DateTimeOffset.UtcNow;
         await _unitOfWork.SaveChangesAsync(ct);
 
-        var last = (await LastResultsAsync(clinicId, new List<Guid> { id }, ct)).GetValueOrDefault(id);
+        var last = (await LastResultsAsync(clientId, new List<Guid> { id }, ct)).GetValueOrDefault(id);
         return ToCaseResponse(c, last);
     }
 
-    public async Task<bool> DeleteCaseAsync(Guid clinicId, Guid id, CancellationToken ct = default)
+    public async Task<bool> DeleteCaseAsync(Guid clientId, Guid id, CancellationToken ct = default)
     {
         // Results keep their own snapshot of the question; the FK is ON DELETE SET NULL, so run history survives.
-        var deleted = await _benchmark.DeleteCaseAsync(clinicId, id, ct);
+        var deleted = await _benchmark.DeleteCaseAsync(clientId, id, ct);
         return deleted > 0;
     }
 
-    public Task<IReadOnlyList<BenchmarkSourceDocumentResponse>> ListSourceDocumentsAsync(Guid clinicId, CancellationToken ct = default) =>
-        _benchmark.ListSourceDocumentsAsync(clinicId, ct);
+    public Task<IReadOnlyList<BenchmarkSourceDocumentResponse>> ListSourceDocumentsAsync(Guid clientId, CancellationToken ct = default) =>
+        _benchmark.ListSourceDocumentsAsync(clientId, ct);
 
-    public async Task<IReadOnlyList<BenchmarkSourceChunkResponse>?> ListSourceChunksAsync(Guid clinicId, Guid documentId, CancellationToken ct = default)
+    public async Task<IReadOnlyList<BenchmarkSourceChunkResponse>?> ListSourceChunksAsync(Guid clientId, Guid documentId, CancellationToken ct = default)
     {
-        var docExists = await _documents.ExistsAsync(clinicId, documentId, ct);
+        var docExists = await _documents.ExistsAsync(clientId, documentId, ct);
         if (!docExists) return null;
 
-        var chunks = await _benchmark.ListDocumentChunksAsync(clinicId, documentId, ct);
+        var chunks = await _benchmark.ListDocumentChunksAsync(clientId, documentId, ct);
         return chunks.Select(k => new BenchmarkSourceChunkResponse(k.Id, k.ChunkIndex, Preview(k.Content, 160), k.Content)).ToList();
     }
 
@@ -232,7 +232,7 @@ public partial class KnowledgeBenchmarkService : IKnowledgeBenchmarkService
     // Runs
     // ---------------------------------------------------------------------------------------------
 
-    public async Task<BenchmarkRunSummary> StartRunAsync(Guid clinicId, string? scope, Guid? generationId = null, CancellationToken ct = default)
+    public async Task<BenchmarkRunSummary> StartRunAsync(Guid clientId, string? scope, Guid? generationId = null, CancellationToken ct = default)
     {
         var normalizedScope = string.IsNullOrWhiteSpace(scope) ? BenchmarkCaseScope.All : scope.Trim().ToLowerInvariant();
         if (!BenchmarkCaseScope.IsValid(normalizedScope)) throw new ArgumentException("Scope must be all, generated, reviewed or generation.");
@@ -244,20 +244,20 @@ public partial class KnowledgeBenchmarkService : IKnowledgeBenchmarkService
         {
             throw new ArgumentException("generationId is only valid with scope \"generation\".");
         }
-        if (generationId is { } gid && !await _benchmark.GenerationExistsAsync(clinicId, gid, ct))
+        if (generationId is { } gid && !await _benchmark.GenerationExistsAsync(clientId, gid, ct))
         {
-            throw new ArgumentException("No such generation for this clinic.");
+            throw new ArgumentException("No such generation for this client.");
         }
 
-        await RefreshStaleAsync(clinicId, ct);
+        await RefreshStaleAsync(clientId, ct);
 
         var cutoff = DateTimeOffset.UtcNow - StaleRunAge;
-        if (await _benchmark.HasRunInProgressAsync(clinicId, cutoff, ct))
+        if (await _benchmark.HasRunInProgressAsync(clientId, cutoff, ct))
         {
             throw new BenchmarkRunInProgressException();
         }
 
-        var (total, stale) = await _benchmark.CountCasesInScopeAsync(clinicId, normalizedScope, generationId, ct);
+        var (total, stale) = await _benchmark.CountCasesInScopeAsync(clientId, normalizedScope, generationId, ct);
         if (total == 0)
         {
             throw new ArgumentException(normalizedScope switch
@@ -269,11 +269,11 @@ public partial class KnowledgeBenchmarkService : IKnowledgeBenchmarkService
         }
         if (total - stale == 0) throw new ArgumentException("Every case in this scope is stale (its Knowledge Base chunk changed). Generate new cases first.");
 
-        var snapshot = await CurrentSettingsSnapshotAsync(clinicId, ct);
+        var snapshot = await CurrentSettingsSnapshotAsync(clientId, ct);
         var run = new KnowledgeRetrievalBenchmarkRun
         {
             Id = Guid.NewGuid(),
-            ClinicId = clinicId,
+            ClientId = clientId,
             CaseScope = normalizedScope,
             GenerationId = generationId,
             Status = BenchmarkRunStatus.Pending,
@@ -301,7 +301,7 @@ public partial class KnowledgeBenchmarkService : IKnowledgeBenchmarkService
     {
         var run = await _benchmark.GetRunAsync(runId, ct);
         if (run is null || run.Status != BenchmarkRunStatus.Pending) return;
-        var clinicId = run.ClinicId;
+        var clientId = run.ClientId;
 
         try
         {
@@ -310,8 +310,8 @@ public partial class KnowledgeBenchmarkService : IKnowledgeBenchmarkService
             await _unitOfWork.SaveChangesAsync(ct);
 
             // Cases may have gone stale between queueing and starting.
-            await RefreshStaleAsync(clinicId, ct);
-            var cases = await _benchmark.ListCasesInScopeAsync(clinicId, run.CaseScope, run.GenerationId, ct);
+            await RefreshStaleAsync(clientId, ct);
+            var cases = await _benchmark.ListCasesInScopeAsync(clientId, run.CaseScope, run.GenerationId, ct);
 
             run.TotalCases = cases.Count;
             run.StaleCases = cases.Count(c => c.IsStale);
@@ -431,8 +431,8 @@ public partial class KnowledgeBenchmarkService : IKnowledgeBenchmarkService
         var sw = Stopwatch.StartNew();
         try
         {
-            // Same service, same clinic settings (Top K, minimum similarity, model) as search_clinic_knowledge.
-            candidates = await _search.SearchRankedAsync(run.ClinicId, c.Question, null, ct);
+            // Same service, same client settings (Top K, minimum similarity, model) as search_knowledge.
+            candidates = await _search.SearchRankedAsync(run.ClientId, c.Question, null, ct);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -472,7 +472,7 @@ public partial class KnowledgeBenchmarkService : IKnowledgeBenchmarkService
     private static KnowledgeRetrievalBenchmarkResult NewResult(KnowledgeRetrievalBenchmarkRun run, KnowledgeRetrievalBenchmarkCase c, string classification) => new()
     {
         Id = Guid.NewGuid(),
-        ClinicId = run.ClinicId,
+        ClientId = run.ClientId,
         BenchmarkRunId = run.Id,
         BenchmarkCaseId = c.Id,
         Question = c.Question,
@@ -485,30 +485,30 @@ public partial class KnowledgeBenchmarkService : IKnowledgeBenchmarkService
         CreatedAt = DateTimeOffset.UtcNow
     };
 
-    public async Task<IReadOnlyList<BenchmarkRunSummary>> ListRunsAsync(Guid clinicId, int take, CancellationToken ct = default) =>
-        (await _benchmark.ListRunsAsync(clinicId, Math.Clamp(take, 1, 100), ct))
+    public async Task<IReadOnlyList<BenchmarkRunSummary>> ListRunsAsync(Guid clientId, int take, CancellationToken ct = default) =>
+        (await _benchmark.ListRunsAsync(clientId, Math.Clamp(take, 1, 100), ct))
         .Select(ToSummary).ToList();
 
-    public async Task<BenchmarkRunSummary?> GetRunAsync(Guid clinicId, Guid id, CancellationToken ct = default)
+    public async Task<BenchmarkRunSummary?> GetRunAsync(Guid clientId, Guid id, CancellationToken ct = default)
     {
-        var run = await _benchmark.GetRunReadOnlyAsync(clinicId, id, ct);
+        var run = await _benchmark.GetRunReadOnlyAsync(clientId, id, ct);
         return run is null ? null : ToSummary(run);
     }
 
-    public async Task<BenchmarkResultListResponse?> ListResultsAsync(Guid clinicId, Guid runId, string? classification, int skip, int take, CancellationToken ct = default)
+    public async Task<BenchmarkResultListResponse?> ListResultsAsync(Guid clientId, Guid runId, string? classification, int skip, int take, CancellationToken ct = default)
     {
-        if (!await _benchmark.RunExistsAsync(clinicId, runId, ct)) return null;
+        if (!await _benchmark.RunExistsAsync(clientId, runId, ct)) return null;
 
         var wanted = string.IsNullOrWhiteSpace(classification) ? null : classification.Trim().ToUpperInvariant();
-        var (rows, total) = await _benchmark.ListRunResultsAsync(clinicId, runId, wanted, Math.Max(skip, 0), Math.Clamp(take, 1, 500), ct);
+        var (rows, total) = await _benchmark.ListRunResultsAsync(clientId, runId, wanted, Math.Max(skip, 0), Math.Clamp(take, 1, 500), ct);
 
         return new BenchmarkResultListResponse(rows.Select(ToResultResponse).ToList(), total);
     }
 
-    public async Task<BenchmarkResultDetailResponse?> GetResultAsync(Guid clinicId, Guid runId, Guid resultId, CancellationToken ct = default)
+    public async Task<BenchmarkResultDetailResponse?> GetResultAsync(Guid clientId, Guid runId, Guid resultId, CancellationToken ct = default)
     {
-        var result = await _benchmark.GetResultAsync(clinicId, runId, resultId, ct);
-        return result is null ? null : await BuildResultDetailAsync(clinicId, result, ct);
+        var result = await _benchmark.GetResultAsync(clientId, runId, resultId, ct);
+        return result is null ? null : await BuildResultDetailAsync(clientId, result, ct);
     }
 
     public async Task<IReadOnlyList<Guid>> RecoverInterruptedRunsAsync(CancellationToken ct = default)
@@ -530,33 +530,33 @@ public partial class KnowledgeBenchmarkService : IKnowledgeBenchmarkService
     // ---------------------------------------------------------------------------------------------
 
     /// <summary>
-    /// Re-checks every case of the clinic against the live Knowledge Base and flags the ones whose expected chunk can no
+    /// Re-checks every case of the client against the live Knowledge Base and flags the ones whose expected chunk can no
     /// longer be relied on. A case is stale when: the expected chunk id no longer exists (or now belongs to a different
     /// document) → chunk_missing; its text no longer hashes to source_chunk_hash → chunk_changed; or its document is
     /// inactive (search never returns it) → document_inactive. Stale cases are excluded from scoring — never counted as
     /// retrieval failures.
     /// Self-healing: chunks get new ids when a document is re-saved, so for a missing/changed chunk we look for an ACTIVE
-    /// chunk in the same clinic whose text hashes to the case's source hash. If exactly one exists, the identical text
+    /// chunk in the same client whose text hashes to the case's source hash. If exactly one exists, the identical text
     /// was simply rebuilt under a new id and the case is re-linked to it (still verified by hash) instead of going stale.
     /// Best-effort: a failure here is logged and never blocks the caller.
     /// </summary>
-    internal async Task RefreshStaleAsync(Guid clinicId, CancellationToken ct)
+    internal async Task RefreshStaleAsync(Guid clientId, CancellationToken ct)
     {
         try
         {
-            var cases = await _benchmark.ListAllCasesAsync(clinicId, ct);
+            var cases = await _benchmark.ListAllCasesAsync(clientId, ct);
             if (cases.Count == 0) return;
 
             var chunkIds = cases.Select(c => c.ExpectedChunkId).Distinct().ToList();
-            var liveChunks = (await _benchmark.ListChunksAsync(clinicId, chunkIds, ct)).ToDictionary(k => k.ChunkId);
-            var docs = (await _benchmark.ListDocumentStatesAsync(clinicId, ct)).ToDictionary(d => d.DocumentId);
+            var liveChunks = (await _benchmark.ListChunksAsync(clientId, chunkIds, ct)).ToDictionary(k => k.ChunkId);
+            var docs = (await _benchmark.ListDocumentStatesAsync(clientId, ct)).ToDictionary(d => d.DocumentId);
 
             Dictionary<string, List<(Guid ChunkId, Guid DocumentId)>>? hashIndex = null;
             async Task<Dictionary<string, List<(Guid ChunkId, Guid DocumentId)>>> HashIndexAsync()
             {
                 if (hashIndex is not null) return hashIndex;
                 hashIndex = new();
-                var active = await _benchmark.ListActiveChunksAsync(clinicId, null, ct);
+                var active = await _benchmark.ListActiveChunksAsync(clientId, null, ct);
                 foreach (var k in active)
                 {
                     var h = Sha256Hex(k.Content);
@@ -607,7 +607,7 @@ public partial class KnowledgeBenchmarkService : IKnowledgeBenchmarkService
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogWarning(ex, "Benchmark stale-case refresh failed for clinic {ClinicId}; continuing with stored flags.", clinicId);
+            _logger.LogWarning(ex, "Benchmark stale-case refresh failed for client {ClientId}; continuing with stored flags.", clientId);
             // Drop only the unsaved case edits — the caller (e.g. a running benchmark) may be tracking other entities.
             _benchmark.DetachAllCases();
         }
@@ -619,15 +619,15 @@ public partial class KnowledgeBenchmarkService : IKnowledgeBenchmarkService
 
     private sealed record SampledChunk(Guid ChunkId, Guid DocumentId, string Title, string Content);
 
-    /// <summary>Picks up to <see cref="GenerationSampleSize"/> ACTIVE chunks of this clinic that have no case yet. Spread
+    /// <summary>Picks up to <see cref="GenerationSampleSize"/> ACTIVE chunks of this client that have no case yet. Spread
     /// across documents (one random chunk per document first, then a second, …) so one large scraped document can't
     /// dominate, and random, so repeated generations don't keep choosing the same chunks. Chunks whose text already has a
     /// case (e.g. rebuilt under a new id) are skipped too.</summary>
-    private async Task<List<SampledChunk>> SampleSourceChunksAsync(Guid clinicId, CancellationToken ct)
+    private async Task<List<SampledChunk>> SampleSourceChunksAsync(Guid clientId, CancellationToken ct)
     {
-        var pool = await _benchmark.SampleUncoveredChunksAsync(clinicId, MinSourceChunkChars, SamplePoolSize, ct);
+        var pool = await _benchmark.SampleUncoveredChunksAsync(clientId, MinSourceChunkChars, SamplePoolSize, ct);
 
-        var coveredHashes = (await _benchmark.ListCoveredSourceHashesAsync(clinicId, ct)).ToHashSet();
+        var coveredHashes = (await _benchmark.ListCoveredSourceHashesAsync(clientId, ct)).ToHashSet();
 
         var picked = new List<SampledChunk>();
         var pickedHashes = new HashSet<string>();
@@ -641,10 +641,10 @@ public partial class KnowledgeBenchmarkService : IKnowledgeBenchmarkService
         return picked;
     }
 
-    private async Task<BenchmarkSettingsSnapshot> CurrentSettingsSnapshotAsync(Guid clinicId, CancellationToken ct)
+    private async Task<BenchmarkSettingsSnapshot> CurrentSettingsSnapshotAsync(Guid clientId, CancellationToken ct)
     {
-        var s = await _settings.GetAsync(clinicId, ct);
-        var stats = await _benchmark.GetActiveChunkStatsAsync(clinicId, ct);
+        var s = await _settings.GetAsync(clientId, ct);
+        var stats = await _benchmark.GetActiveChunkStatsAsync(clientId, ct);
         var count = stats.Count;
         var avg = stats.AverageChars;
         return new BenchmarkSettingsSnapshot(
@@ -652,22 +652,22 @@ public partial class KnowledgeBenchmarkService : IKnowledgeBenchmarkService
             s.TopK, s.MinimumSimilarity, count, avg is null ? null : Math.Round(avg.Value, 0));
     }
 
-    private async Task<Dictionary<Guid, BenchmarkCaseLastResult>> LastResultsAsync(Guid clinicId, List<Guid> caseIds, CancellationToken ct)
+    private async Task<Dictionary<Guid, BenchmarkCaseLastResult>> LastResultsAsync(Guid clientId, List<Guid> caseIds, CancellationToken ct)
     {
         if (caseIds.Count == 0) return new();
-        var rows = await _benchmark.ListResultsForCasesAsync(clinicId, caseIds, ct);
+        var rows = await _benchmark.ListResultsForCasesAsync(clientId, caseIds, ct);
 
         return rows.GroupBy(r => r.BenchmarkCaseId!.Value).ToDictionary(
             g => g.Key,
             g => { var r = g.First(); return new BenchmarkCaseLastResult(r.Id, r.BenchmarkRunId, r.ResultClassification, r.ExpectedChunkRank, r.ExpectedDocumentBestRank, r.CreatedAt); });
     }
 
-    private Task<string?> LiveChunkContentAsync(Guid clinicId, Guid chunkId, Guid documentId, CancellationToken ct) =>
-        _benchmark.GetChunkContentAsync(clinicId, chunkId, documentId, ct);
+    private Task<string?> LiveChunkContentAsync(Guid clientId, Guid chunkId, Guid documentId, CancellationToken ct) =>
+        _benchmark.GetChunkContentAsync(clientId, chunkId, documentId, ct);
 
-    private async Task<BenchmarkResultDetailResponse> BuildResultDetailAsync(Guid clinicId, KnowledgeRetrievalBenchmarkResult result, CancellationToken ct)
+    private async Task<BenchmarkResultDetailResponse> BuildResultDetailAsync(Guid clientId, KnowledgeRetrievalBenchmarkResult result, CancellationToken ct)
     {
-        var run = await _benchmark.GetRunReadOnlyAsync(clinicId, result.BenchmarkRunId, ct)
+        var run = await _benchmark.GetRunReadOnlyAsync(clientId, result.BenchmarkRunId, ct)
                   ?? throw new InvalidOperationException("Benchmark run not found.");
 
         var retrieved = new List<BenchmarkRetrievedChunk>();
@@ -681,7 +681,7 @@ public partial class KnowledgeBenchmarkService : IKnowledgeBenchmarkService
                 r.Preview)).ToList();
         }
 
-        var content = await LiveChunkContentAsync(clinicId, result.ExpectedChunkId, result.ExpectedDocumentId, ct);
+        var content = await LiveChunkContentAsync(clientId, result.ExpectedChunkId, result.ExpectedDocumentId, ct);
         return new BenchmarkResultDetailResponse(ToResultResponse(result), retrieved, content, ToSummary(run).Settings);
     }
 

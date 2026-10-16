@@ -22,22 +22,22 @@ public class StaffAdminService : IStaffAdminService
         _time = time;
     }
 
-    public Task<PagedResponse<StaffRow>> ListAsync(Guid? clinicId, string? search, int page, CancellationToken ct) =>
-        _repository.ListAsync(clinicId, search, page, ct);
+    public Task<PagedResponse<StaffRow>> ListAsync(Guid? clientId, string? search, int page, CancellationToken ct) =>
+        _repository.ListAsync(clientId, search, page, ct);
 
     public Task<StaffRow?> GetAsync(string userId, CancellationToken ct) => _repository.GetAsync(userId, ct);
 
     public async Task<PlatformAdminChange> SetMembershipActiveAsync(string userId, bool active, CancellationToken ct)
     {
         var membership = await _repository.GetLatestMembershipAsync(userId, ct)
-                         ?? throw new InvalidOperationException("This user has no clinic membership.");
-        if (membership.IsActive == active) return new PlatformAdminChange(membership.ClinicId);
+                         ?? throw new InvalidOperationException("This user has no client membership.");
+        if (membership.IsActive == active) return new PlatformAdminChange(membership.ClientId);
         if (active && await _repository.HasOtherActiveMembershipAsync(userId, membership.Id, ct))
-            throw new InvalidOperationException("This user already has another active clinic membership.");
+            throw new InvalidOperationException("This user already has another active client membership.");
         membership.IsActive = active;
         membership.UpdatedAt = _time.GetUtcNow();
         await _unitOfWork.SaveChangesAsync(ct);
-        return new PlatformAdminChange(membership.ClinicId);
+        return new PlatformAdminChange(membership.ClientId);
     }
 
     public async Task<PlatformAdminChange> SetLoginLockedAsync(string userId, bool locked, CancellationToken ct)
@@ -47,7 +47,7 @@ public class StaffAdminService : IStaffAdminService
         Check(await _users.SetLockoutEndDateAsync(user, locked ? DateTimeOffset.MaxValue : null));
         Check(await _users.ResetAccessFailedCountAsync(user));
         if (locked) Check(await _users.UpdateSecurityStampAsync(user));
-        return new PlatformAdminChange(await _repository.ClinicOfAsync(userId, ct));
+        return new PlatformAdminChange(await _repository.ClientOfAsync(userId, ct));
     }
 
     public async Task<PlatformAdminChange> SetPasswordAsync(string userId, string password, CancellationToken ct)
@@ -59,7 +59,7 @@ public class StaffAdminService : IStaffAdminService
         if (await _users.HasPasswordAsync(user)) Check(await _users.RemovePasswordAsync(user));
         Check(await _users.AddPasswordAsync(user, password)); // also renews the security stamp
         Check(await _users.ResetAccessFailedCountAsync(user));
-        return new PlatformAdminChange(await _repository.ClinicOfAsync(userId, ct));
+        return new PlatformAdminChange(await _repository.ClientOfAsync(userId, ct));
     }
 
     public async Task<PlatformAdminChange> SetEmailConfirmedAsync(string userId, bool confirmed, CancellationToken ct)
@@ -67,7 +67,7 @@ public class StaffAdminService : IStaffAdminService
         var user = await FindAsync(userId);
         user.EmailConfirmed = confirmed;
         Check(await _users.UpdateAsync(user));
-        return new PlatformAdminChange(await _repository.ClinicOfAsync(userId, ct));
+        return new PlatformAdminChange(await _repository.ClientOfAsync(userId, ct));
     }
 
     private async Task<IdentityUser> FindAsync(string userId) =>

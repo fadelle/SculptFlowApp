@@ -13,21 +13,21 @@ namespace Omni.App.Common.Statics;
 public static class ConfigDefaults
 {
     public static readonly ConfigDefinition AccountsSignupEnabled = new("Accounts", "SignupEnabled", "true", ConfigValueType.Bool,
-        "Whether anyone can create a new clinic from the Register page or \"Continue with Google\". Off = only existing accounts can sign in.");
+        "Whether anyone can create a new client from the Register page or \"Continue with Google\". Off = only existing accounts can sign in.");
     public static readonly ConfigDefinition AccountsSignupsPerIpPerHour = new("Accounts", "SignupsPerIpPerHour", "20", ConfigValueType.Int,
-        "Most sign-up attempts one IP address may make per hour (Register and the Google clinic-name step).", 1, 1000);
+        "Most sign-up attempts one IP address may make per hour (Register and the Google client-name step).", 1, 1000);
     public static readonly ConfigDefinition AvailabilityDefaultDurationMinutes = new("Availability", "DefaultDurationMinutes", "30", ConfigValueType.Int,
-        "Consultation length (minutes) for clinics that haven't set their own booking settings.", 5, 480);
+        "Consultation length (minutes) for clients that haven't set their own booking settings.", 5, 480);
     public static readonly ConfigDefinition AvailabilityDefaultBufferMinutes = new("Availability", "DefaultBufferMinutes", "0", ConfigValueType.Int,
-        "Gap (minutes) between consultations for clinics that haven't set their own booking settings.", 0, 240);
+        "Gap (minutes) between consultations for clients that haven't set their own booking settings.", 0, 240);
     public static readonly ConfigDefinition AvailabilityDefaultNoticeMinutes = new("Availability", "DefaultNoticeMinutes", "240", ConfigValueType.Int,
-        "Minimum notice (minutes) before a bookable slot, for clinics that haven't set their own.", 0, 10080);
+        "Minimum notice (minutes) before a bookable slot, for clients that haven't set their own.", 0, 10080);
     public static readonly ConfigDefinition AvailabilityDefaultHorizonDays = new("Availability", "DefaultHorizonDays", "60", ConfigValueType.Int,
-        "How many days ahead patients can book, for clinics that haven't set their own.", 1, 365);
+        "How many days ahead patients can book, for clients that haven't set their own.", 1, 365);
     public static readonly ConfigDefinition AvailabilityMaxRangeDays = new("Availability", "MaxRangeDays", "14", ConfigValueType.Int,
         "The most days one free-slots request may cover.", 1, 60);
     public static readonly ConfigDefinition BillingEnabled = new("Billing", "Enabled", "true", ConfigValueType.Bool,
-        "Master switch for usage billing and plan entitlements. Off = nothing is rated or reserved and every clinic may use everything.");
+        "Master switch for usage billing and plan entitlements. Off = nothing is rated or reserved and every client may use everything.");
     public static readonly ConfigDefinition BillingGracePeriodDays = new("Billing", "GracePeriodDays", "7", ConfigValueType.Int,
         "How long a past-due subscription keeps working before it expires.", 0, 60);
     public static readonly ConfigDefinition BillingReservationTimeoutHours = new("Billing", "ReservationTimeoutHours", "72", ConfigValueType.Int,
@@ -35,33 +35,33 @@ public static class ConfigDefaults
     public static readonly ConfigDefinition BillingMaintenanceIntervalMinutes = new("Billing", "MaintenanceIntervalMinutes", "5", ConfigValueType.Int,
         "How often the billing worker renews due subscriptions and resolves stale reservations.", 1, 60);
     public static readonly ConfigDefinition BillingSignupPlanCode = new("Billing", "SignupPlanCode", "", ConfigValueType.String,
-        "Plan code a newly registered clinic starts on (first period free). Empty = no plan until an admin assigns one.");
+        "Plan code a newly registered client starts on (first period free). Empty = no plan until an admin assigns one.");
     public static readonly ConfigDefinition BillingCurrency = new("Billing", "Currency", "USD", ConfigValueType.String,
         "The one account currency (ISO 4217, e.g. USD). Balances, plans and rates are stored in it: change it only before any money has moved.", Pattern: @"^[A-Za-z]{3}$");
     public static readonly ConfigDefinition BillingRateBackdateToleranceMinutes = new("Billing", "RateBackdateToleranceMinutes", "5", ConfigValueType.Int,
         "How far in the past a new rate may start or an old one may end (clock skew allowance).", 0, 1440);
     public static readonly ConfigDefinition BillingRecentTransactions = new("Billing", "RecentTransactions", "15", ConfigValueType.Int,
-        "How many recent wallet transactions a clinic's billing page shows.", 1, 100);
+        "How many recent wallet transactions a client's billing page shows.", 1, 100);
     public static readonly ConfigDefinition KnowledgeMinScore = new("Knowledge", "MinScore", "0.30", ConfigValueType.Decimal,
-        "Minimum similarity for a search result, for new clinics (each clinic can change its own).", 0, 1);
+        "Minimum similarity for a search result, for new clients (each client can change its own).", 0, 1);
     public static readonly ConfigDefinition KnowledgeChunkMaxChars = new("Knowledge", "ChunkMaxChars", "1000", ConfigValueType.Int,
-        "Chunk size in characters for new clinics (stored per clinic in tokens).", 200, 4000);
+        "Chunk size in characters for new clients (stored per client in tokens).", 200, 4000);
     public static readonly ConfigDefinition KnowledgeChunkOverlapChars = new("Knowledge", "ChunkOverlapChars", "150", ConfigValueType.Int,
-        "Chunk overlap in characters for new clinics.", 0, 1000);
+        "Chunk overlap in characters for new clients.", 0, 1000);
     public static readonly ConfigDefinition KnowledgeChunkMinChars = new("Knowledge", "ChunkMinChars", "200", ConfigValueType.Int,
         "A trailing piece shorter than this is merged into the previous chunk.", 1, 2000);
     public static readonly ConfigDefinition KnowledgeMaxUploadBytes = new("Knowledge", "MaxUploadBytes", "5242880", ConfigValueType.Int,
-        "Largest knowledge-base file a clinic can upload (bytes).", 1024, 26214400);
+        "Largest knowledge-base file a client can upload (bytes).", 1024, 26214400);
     public static readonly ConfigDefinition KnowledgeMaxExtractedChars = new("Knowledge", "MaxExtractedChars", "250000", ConfigValueType.Int,
         "Most text kept from one uploaded document.", 1000, 2000000);
     public static readonly ConfigDefinition KnowledgeMinChunkSizeTokens = new("Knowledge", "MinChunkSizeTokens", "50", ConfigValueType.Int,
-        "Smallest chunk size a clinic may choose (tokens).", 10, 1000);
+        "Smallest chunk size a client may choose (tokens).", 10, 1000);
     public static readonly ConfigDefinition KnowledgeMaxChunkSizeTokens = new("Knowledge", "MaxChunkSizeTokens", "1000", ConfigValueType.Int,
-        "Largest chunk size a clinic may choose (tokens).", 50, 4000);
+        "Largest chunk size a client may choose (tokens).", 50, 4000);
     public static readonly ConfigDefinition KnowledgeMinTopK = new("Knowledge", "MinTopK", "1", ConfigValueType.Int,
-        "Smallest number of search results a clinic may choose.", 1, 50);
+        "Smallest number of search results a client may choose.", 1, 50);
     public static readonly ConfigDefinition KnowledgeMaxTopK = new("Knowledge", "MaxTopK", "10", ConfigValueType.Int,
-        "Largest number of search results a clinic may choose.", 1, 50);
+        "Largest number of search results a client may choose.", 1, 50);
     public static readonly ConfigDefinition WebScrapingMaxPages = new("WebScraping", "MaxPages", "100", ConfigValueType.Int,
         "Most distinct pages one website crawl visits.", 1, 500);
     public static readonly ConfigDefinition WebScrapingMaxDepth = new("WebScraping", "MaxDepth", "3", ConfigValueType.Int,
@@ -86,11 +86,11 @@ public static class ConfigDefaults
         "Different query strings allowed for one path (stops calendar and filter traps).", 1, 50);
     public static readonly ConfigDefinition WebScrapingMaxLinksPerPage = new("WebScraping", "MaxLinksPerPage", "300", ConfigValueType.Int,
         "Most links taken from one page.", 10, 2000);
-    public static readonly ConfigDefinition WebScrapingMaxSourcesPerClinic = new("WebScraping", "MaxSourcesPerClinic", "25", ConfigValueType.Int,
-        "How many websites one clinic may add.", 1, 200);
+    public static readonly ConfigDefinition WebScrapingMaxSourcesPerClient = new("WebScraping", "MaxSourcesPerClient", "25", ConfigValueType.Int,
+        "How many websites one client may add.", 1, 200);
     public static readonly ConfigDefinition WebScrapingDevAllowedHosts = new("WebScraping", "DevAllowedHosts", "", ConfigValueType.String,
         "Development environment only: comma-separated host:port entries the crawler may reach despite the SSRF rules (e.g. a local test site). Ignored outside Development.");
-    public static readonly ConfigDefinition WebScrapingUserAgent = new("WebScraping", "UserAgent", "OmniBot/1.0 (+https://sculptflowapp.onrender.com; clinic knowledge-base crawler)", ConfigValueType.String,
+    public static readonly ConfigDefinition WebScrapingUserAgent = new("WebScraping", "UserAgent", "OmniBot/1.0 (+https://sculptflowapp.onrender.com; client knowledge-base crawler)", ConfigValueType.String,
         "The crawler's User-Agent header.", Pattern: @"^\S.*$");
     public static readonly ConfigDefinition BenchmarkGenerationSampleSize = new("Benchmark", "GenerationSampleSize", "20", ConfigValueType.Int,
         "Chunks sent to n8n per question-generation request.", 1, 200);
@@ -132,12 +132,12 @@ public static class ConfigDefaults
         "Largest voice note (bytes) the Inbox will download from the provider to play or forward.", 1024, 20971520);
     public static readonly ConfigDefinition DashboardLeadsPageSize = new("Dashboard", "LeadsPageSize", "25", ConfigValueType.Int,
         "Leads per page on the dashboard.", 5, 200);
-    public static readonly ConfigDefinition CacheClinicsMinutes = new("Cache", "ClinicsMinutes", "60", ConfigValueType.Int,
-        "Minutes a cached copy is kept: Clinic rows (signed-in clinic, the bot's clinic info). Changes clear it at once; this is only how long an untouched copy lives.", 1, 1440);
+    public static readonly ConfigDefinition CacheClientsMinutes = new("Cache", "ClientsMinutes", "60", ConfigValueType.Int,
+        "Minutes a cached copy is kept: Client rows (signed-in client, the bot's client info). Changes clear it at once; this is only how long an untouched copy lives.", 1, 1440);
     public static readonly ConfigDefinition CacheStaffLookupMinutes = new("Cache", "StaffLookupMinutes", "10", ConfigValueType.Int,
-        "Minutes a cached copy is kept: Which clinic a signed-in user belongs to. Keep it short: it is how long a removed staff member could keep access if a removal were ever missed. Changes clear it at once; this is only how long an untouched copy lives.", 1, 1440);
+        "Minutes a cached copy is kept: Which client a signed-in user belongs to. Keep it short: it is how long a removed staff member could keep access if a removal were ever missed. Changes clear it at once; this is only how long an untouched copy lives.", 1, 1440);
     public static readonly ConfigDefinition CacheProceduresMinutes = new("Cache", "ProceduresMinutes", "60", ConfigValueType.Int,
-        "Minutes a cached copy is kept: A clinic's procedures. Changes clear it at once; this is only how long an untouched copy lives.", 1, 1440);
+        "Minutes a cached copy is kept: A client's procedures. Changes clear it at once; this is only how long an untouched copy lives.", 1, 1440);
     public static readonly ConfigDefinition CacheSchedulingMinutes = new("Cache", "SchedulingMinutes", "60", ConfigValueType.Int,
         "Minutes a cached copy is kept: Weekly hours, booking settings, closed dates and calendar connections. Changes clear it at once; this is only how long an untouched copy lives.", 1, 1440);
     public static readonly ConfigDefinition CacheChannelsMinutes = new("Cache", "ChannelsMinutes", "60", ConfigValueType.Int,
@@ -216,7 +216,7 @@ public static class ConfigDefaults
         WebScrapingMaxTextChars,
         WebScrapingMaxQueryVariantsPerPath,
         WebScrapingMaxLinksPerPage,
-        WebScrapingMaxSourcesPerClinic,
+        WebScrapingMaxSourcesPerClient,
         WebScrapingDevAllowedHosts,
         WebScrapingUserAgent,
 
@@ -246,7 +246,7 @@ public static class ConfigDefaults
 
         DashboardLeadsPageSize,
 
-        CacheClinicsMinutes,
+        CacheClientsMinutes,
         CacheStaffLookupMinutes,
         CacheProceduresMinutes,
         CacheSchedulingMinutes,

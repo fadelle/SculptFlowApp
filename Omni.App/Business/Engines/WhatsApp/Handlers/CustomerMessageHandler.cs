@@ -27,27 +27,27 @@ public class CustomerMessageHandler
         _messages = messages;
     }
 
-    public async Task<WhatsAppWebhookResponse> HandleAsync(ParsedMetaEvent evt, ResolvedClinic clinic, CancellationToken ct)
+    public async Task<WhatsAppWebhookResponse> HandleAsync(ParsedMetaEvent evt, ResolvedClient client, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(evt.CustomerWaId))
         {
-            return new WhatsAppWebhookResponse(true, "customer_message", false, clinic.ClinicId, clinic.ChannelIntegrationId);
+            return new WhatsAppWebhookResponse(true, "customer_message", false, client.ClientId, client.ChannelIntegrationId);
         }
 
         // Meta's wa_id is digits only (no leading "+") — normalize to this app's E.164-ish
         // convention ("+<digits>") used elsewhere in Lead.Phone.
         var phone = "+" + evt.CustomerWaId.TrimStart('+');
-        var (lead, leadWasCreated) = await _leads.GetOrCreateByPhoneAsync(clinic.ClinicId, phone, evt.CustomerName, ct);
-        var conversation = await _conversations.GetOrCreateForLeadAsync(clinic.ClinicId, lead.Id, ConversationChannel.WhatsApp, ct);
+        var (lead, leadWasCreated) = await _leads.GetOrCreateByPhoneAsync(client.ClientId, phone, evt.CustomerName, ct);
+        var conversation = await _conversations.GetOrCreateForLeadAsync(client.ClientId, lead.Id, ConversationChannel.WhatsApp, ct);
 
         var result = await _messages.IngestAsync(new IngestMessageRequest(
-            clinic.ClinicId, conversation.Id, lead.Id, IngestEventType.CustomerMessage, ConversationChannel.WhatsApp,
+            client.ClientId, conversation.Id, lead.Id, IngestEventType.CustomerMessage, ConversationChannel.WhatsApp,
             evt.Content, evt.ExternalMessageId, DeliveryStatus: null, SentAt: null, ReceivedAt: evt.Timestamp,
             MessageType: evt.MessageType, MetadataJson: evt.MetadataJson, LeadWasNewlyCreated: leadWasCreated), ct);
 
         return new WhatsAppWebhookResponse(
             Processed: true, EventType: "customer_message", ShouldRunAi: result.AiEligible,
-            ClinicId: clinic.ClinicId, WhatsAppConnectionId: clinic.ChannelIntegrationId,
+            ClientId: client.ClientId, WhatsAppConnectionId: client.ChannelIntegrationId,
             ConversationId: conversation.Id, LeadId: lead.Id, MessageId: result.Message?.Id,
             ExternalMessageId: evt.ExternalMessageId, Mode: result.ConversationMode,
             MessageType: result.Message?.MessageType, Content: result.Message?.Content,

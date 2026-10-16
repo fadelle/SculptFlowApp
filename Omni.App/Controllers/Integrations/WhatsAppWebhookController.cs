@@ -17,7 +17,7 @@ namespace Omni.App.Controllers.Integrations;
 /// GET is Meta's webhook subscription verification handshake (hub.mode/hub.verify_token/hub.challenge).
 /// POST is every subsequent webhook delivery — raw Meta JSON in.
 ///
-/// Both actions are thin: all Meta-specific parsing, clinic resolution, persistence, and SignalR
+/// Both actions are thin: all Meta-specific parsing, client resolution, persistence, and SignalR
 /// broadcasting already lives in Business/Engines/WhatsApp/MetaWebhookProcessor.cs (and the Handlers
 /// beneath it) — this controller does not duplicate any of that, it only decides, from the flat
 /// WhatsAppWebhookResponse the processor already returns, whether to make the one new outbound
@@ -108,13 +108,13 @@ public class WhatsAppWebhookController : ControllerBase
 
         var results = await _webhookProcessor.ProcessAllAsync(rawBody, ct);
         var aiTriggers = results
-            .Where(r => r.ShouldRunAi && r.ClinicId.HasValue && r.ConversationId.HasValue)
+            .Where(r => r.ShouldRunAi && r.ClientId.HasValue && r.ConversationId.HasValue)
             .GroupBy(r => r.ConversationId!.Value)
             .Select(g => g.Last());
         foreach (var result in aiTriggers)
         {
             await _aiTrigger.NotifyAsync(new AiTriggerPayload(
-                result.ClinicId!.Value, result.ConversationId!.Value, result.LeadId, result.MessageId,
+                result.ClientId!.Value, result.ConversationId!.Value, result.LeadId, result.MessageId,
                 Channel: Channel, MessageType: result.MessageType, MessageText: result.Content,
                 SelectedValue: result.SelectedValue), ct);
         }

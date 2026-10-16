@@ -6,21 +6,21 @@ using Omni.App.Entities.Responses.Procedures;
 
 namespace Omni.App.Pages.Procedures;
 
-/// <summary>Procedures management — the clinic's structured procedure catalog (see IProcedureService).
-/// The clinic always comes from the logged-in user (ICurrentClinicContext); procedures are activated /
+/// <summary>Procedures management — the client's structured procedure catalog (see IProcedureService).
+/// The client always comes from the logged-in user (ICurrentClientContext); procedures are activated /
 /// deactivated, never deleted.</summary>
 public class IndexModel : PageModel
 {
-    private readonly ICurrentClinicContext _clinicContext;
+    private readonly ICurrentClientContext _clientContext;
     private readonly IProcedureService _procedures;
 
-    public IndexModel(ICurrentClinicContext clinicContext, IProcedureService procedures)
+    public IndexModel(ICurrentClientContext clientContext, IProcedureService procedures)
     {
-        _clinicContext = clinicContext;
+        _clientContext = clientContext;
         _procedures = procedures;
     }
 
-    public bool ClinicConfigured { get; private set; }
+    public bool ClientConfigured { get; private set; }
     public IReadOnlyList<ProcedureResponse> Procedures { get; private set; } = Array.Empty<ProcedureResponse>();
 
     [TempData]
@@ -31,19 +31,19 @@ public class IndexModel : PageModel
 
     public async Task OnGetAsync(CancellationToken ct)
     {
-        var clinic = await _clinicContext.GetClinicAsync(ct);
-        if (clinic is null) return;
+        var client = await _clientContext.GetClientAsync(ct);
+        if (client is null) return;
 
-        ClinicConfigured = true;
-        Procedures = await _procedures.ListAsync(clinic.Id, activeOnly: false, ct);
+        ClientConfigured = true;
+        Procedures = await _procedures.ListAsync(client.Id, activeOnly: false, ct);
     }
 
     public async Task<IActionResult> OnPostToggleAsync(Guid id, bool active, CancellationToken ct)
     {
-        var clinic = await _clinicContext.GetClinicAsync(ct);
-        if (clinic is null) return RedirectToPage();
+        var client = await _clientContext.GetClientAsync(ct);
+        if (client is null) return RedirectToPage();
 
-        var procedure = await _procedures.SetActiveAsync(clinic.Id, id, active, ct);
+        var procedure = await _procedures.SetActiveAsync(client.Id, id, active, ct);
         if (procedure is null) ErrorMessage = "Procedure not found.";
         else StatusMessage = active
             ? $"{procedure.Name} is active again."

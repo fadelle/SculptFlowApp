@@ -6,9 +6,9 @@
         LocalTimeHelper.Ago(when, dayCutoff: 30, fallbackFormat: when.Year == DateTimeOffset.UtcNow.Year ? "month-day" : "date");
 }
 
-@if (!Model.ClinicConfigured)
+@if (!Model.ClientConfigured)
 {
-    <partial name="_NoClinic" />
+    <partial name="_NoClient" />
 }
 else
 {
@@ -22,7 +22,7 @@ else
             </p>
             <p class="au-help mt-1 mb-0" id="kb-how" hidden>
                 Add FAQs, policies, doctors, pricing, preparation and recovery information. The AI looks things up here when
-                patients ask about your clinic. A website you import shows as one entry; open it to see every page that was read.
+                patients ask about your client. A website you import shows as one entry; open it to see every page that was read.
             </p>
         </div>
         <div class="au-page-head__actions">
@@ -36,7 +36,7 @@ else
         <div class="au-panel au-panel--round">
             <div class="au-empty">
                 <span class="au-empty__icon"><span class="au-icon" aria-hidden="true">menu_book</span></span>
-                <div class="empty-title">Teach your AI assistant about your clinic</div>
+                <div class="empty-title">Teach your AI assistant about your client</div>
                 <p class="empty-text">Start with one of these. You can add more any time.</p>
                 <div class="kb-choices kb-choices-center">
                     <a href="/KnowledgeBase/Edit" class="kb-choice"><span class="kb-choice-icon au-icon" aria-hidden="true">edit_note</span><strong>Write it</strong><small>FAQs, policies, anything.</small></a>

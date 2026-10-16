@@ -18,8 +18,8 @@ public interface ITikTokProviderClient
 
     Task<TikTokAccountInfo> GetAccountInfoAsync(string accessToken, CancellationToken ct = default);
 
-    /// <summary>Tells TikTok the clinic is disconnecting, so it can invalidate the token server-side. Never
-    /// throws — a disconnect from the clinic's own settings page must succeed locally even if TikTok can't be
+    /// <summary>Tells TikTok the client is disconnecting, so it can invalidate the token server-side. Never
+    /// throws — a disconnect from the client's own settings page must succeed locally even if TikTok can't be
     /// reached; tokens are cleared locally regardless.</summary>
     Task RevokeAsync(string? accessToken, CancellationToken ct = default);
 }

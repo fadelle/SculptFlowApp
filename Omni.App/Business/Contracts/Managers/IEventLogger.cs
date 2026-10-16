@@ -5,6 +5,6 @@ namespace Omni.App.Business.Contracts.Managers;
 /// the business change, so an event is never logged for a write that didn't actually commit.</summary>
 public interface IEventLogger
 {
-    void Log(Guid clinicId, string eventType, Guid? leadId = null, Guid? conversationId = null,
+    void Log(Guid clientId, string eventType, Guid? leadId = null, Guid? conversationId = null,
         Guid? appointmentId = null, string? source = null, string metadataJson = "{}");
 }

@@ -13,7 +13,7 @@ namespace Omni.App.Business.Services.Knowledge;
 
 public class KnowledgeSettingsService : IKnowledgeSettingsService
 {
-    // Bounds for what a clinic may choose, read through IConfigManager (Knowledge section of ConfigDefaults).
+    // Bounds for what a client may choose, read through IConfigManager (Knowledge section of ConfigDefaults).
     private int MinChunkSizeTokens => _config.KnowledgeMinChunkSizeTokens;
     private int MaxChunkSizeTokens => _config.KnowledgeMaxChunkSizeTokens;
     private int MinTopK => _config.KnowledgeMinTopK;
@@ -32,16 +32,16 @@ public class KnowledgeSettingsService : IKnowledgeSettingsService
         _config = config;
     }
 
-    public async Task<KnowledgeSettingsResponse> GetAsync(Guid clinicId, CancellationToken ct = default)
+    public async Task<KnowledgeSettingsResponse> GetAsync(Guid clientId, CancellationToken ct = default)
     {
-        var row = await _settings.GetReadOnlyAsync(clinicId, ct);
+        var row = await _settings.GetReadOnlyAsync(clientId, ct);
         if (row is not null) return ToResponse(row);
 
         var now = DateTimeOffset.UtcNow;
         var created = new KnowledgeSearchSettings
         {
             Id = Guid.NewGuid(),
-            ClinicId = clinicId,
+            ClientId = clientId,
             EmbeddingModel = _config.EmbeddingsModel,
             VectorDimension = _config.EmbeddingsDimensions,
             SimilarityMethod = KnowledgeSimilarityMethod.Cosine,
@@ -63,19 +63,19 @@ public class KnowledgeSettingsService : IKnowledgeSettingsService
         }
         catch (DuplicateRecordException)
         {
-            // Another request created this clinic's row first (unique clinic_id) — use theirs.
+            // Another request created this client's row first (unique client_id) — use theirs.
             _settings.Detach(created);
-            var existing = await _settings.GetReadOnlyAsync(clinicId, ct);
+            var existing = await _settings.GetReadOnlyAsync(clientId, ct);
             return existing is null ? throw new InvalidOperationException("Couldn't create Knowledge Base settings.") : ToResponse(existing);
         }
     }
 
-    public async Task<KnowledgeSettingsResponse> UpdateAsync(Guid clinicId, UpdateKnowledgeSettingsRequest request, CancellationToken ct = default)
+    public async Task<KnowledgeSettingsResponse> UpdateAsync(Guid clientId, UpdateKnowledgeSettingsRequest request, CancellationToken ct = default)
     {
         Validate(request);
-        await GetAsync(clinicId, ct); // make sure the row exists
+        await GetAsync(clientId, ct); // make sure the row exists
 
-        var row = await _settings.GetAsync(clinicId, ct)
+        var row = await _settings.GetAsync(clientId, ct)
                   ?? throw new InvalidOperationException("Couldn't load Knowledge Base settings.");
         row.ChunkSizeTokens = request.ChunkSizeTokens;
         row.ChunkOverlapTokens = request.ChunkOverlapTokens;

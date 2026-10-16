@@ -23,12 +23,12 @@ public class HistoryHandler
         _events = events;
     }
 
-    public async Task<WhatsAppWebhookResponse> HandleAsync(ParsedMetaEvent evt, ResolvedClinic clinic, CancellationToken ct)
+    public async Task<WhatsAppWebhookResponse> HandleAsync(ParsedMetaEvent evt, ResolvedClient client, CancellationToken ct)
     {
-        _events.Log(clinic.ClinicId, EventTypes.WhatsAppHistorySyncReceived, source: "n8n",
+        _events.Log(client.ClientId, EventTypes.WhatsAppHistorySyncReceived, source: "n8n",
             metadataJson: JsonSerializer.Serialize(new { raw = evt.RawJson }));
         await _unitOfWork.SaveChangesAsync(ct);
 
-        return new WhatsAppWebhookResponse(true, "history", false, clinic.ClinicId, clinic.ChannelIntegrationId);
+        return new WhatsAppWebhookResponse(true, "history", false, client.ClientId, client.ChannelIntegrationId);
     }
 }

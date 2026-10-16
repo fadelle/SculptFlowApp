@@ -1,6 +1,6 @@
 // Wires the "Continue with Facebook" buttons on Settings → Channels & Integrations. Expects
 // window.PS_META_CONFIG to be set (inline in Integrations.cshtml) with
-// { appId, version, clinicId, whatsappConfigId, facebookConfigId }.
+// { appId, version, clientId, whatsappConfigId, facebookConfigId }.
 (function () {
   var cfg = window.PS_META_CONFIG || {};
 

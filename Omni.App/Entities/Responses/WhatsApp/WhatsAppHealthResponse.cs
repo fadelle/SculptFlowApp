@@ -1,11 +1,11 @@
 namespace Omni.App.Entities.Responses.WhatsApp;
 
-/// <summary>Current WhatsApp connection/account health for a clinic — what /WhatsApp/Health and the
+/// <summary>Current WhatsApp connection/account health for a client — what /WhatsApp/Health and the
 /// dashboard's health indicator render. Deliberately simplified (HealthLevel) rather than exposing
 /// Meta's raw status vocabulary — see ChannelIntegration.HealthLevel / WhatsAppHealthService.</summary>
 public record WhatsAppHealthResponse(
     Guid ConnectionId,
-    Guid ClinicId,
+    Guid ClientId,
     bool Connected,
     string HealthLevel,
     string? DisplayPhoneNumber,

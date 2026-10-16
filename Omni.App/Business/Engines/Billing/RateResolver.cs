@@ -7,8 +7,8 @@ namespace Omni.App.Business.Engines.Billing;
 
 /// <summary>
 /// Rating: finds the rate for a billable event. Hierarchy (first card with a match wins):
-///   1. the clinic's own card (billing.rate_cards.clinic_id = clinic) — custom/enterprise pricing
-///   2. the card of the clinic's subscription plan (billing.plans.rate_card_id)
+///   1. the client's own card (billing.rate_cards.client_id = client) — custom/enterprise pricing
+///   2. the card of the client's subscription plan (billing.plans.rate_card_id)
 ///   3. the default card (is_default)
 /// Inside a card the rate must be for the event type and effective at the event's time; a rate's country, operator,
 /// provider and provider billing responsibility are either null (any) or must equal the event's — except that
@@ -21,7 +21,7 @@ public static class RateResolver
     /// caller's transaction.</summary>
     public static async Task<RateQuote?> ResolveAsync(IBillingRateCardRepository rateCards, RatingRequest request, CancellationToken ct)
     {
-        var cards = await rateCards.ListRatingCardsAsync(request.ClinicId, ct);
+        var cards = await rateCards.ListRatingCardsAsync(request.ClientId, ct);
         if (cards.Count == 0) return null;
 
         var cardIds = cards.Select(c => c.CardId).ToList();

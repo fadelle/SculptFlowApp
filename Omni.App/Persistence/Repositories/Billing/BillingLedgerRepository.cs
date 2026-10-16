@@ -16,23 +16,23 @@ public class BillingLedgerRepository : IBillingLedgerRepository
 
     public void Add(BillingLedgerEntry entry) => _db.BillingLedgerEntries.Add(entry);
 
-    public Task<BillingLedgerEntry?> FindByKeyReadOnlyAsync(Guid clinicId, string idempotencyKey, CancellationToken ct = default) =>
-        _db.BillingLedgerEntries.AsNoTracking().FirstOrDefaultAsync(l => l.ClinicId == clinicId && l.IdempotencyKey == idempotencyKey, ct);
+    public Task<BillingLedgerEntry?> FindByKeyReadOnlyAsync(Guid clientId, string idempotencyKey, CancellationToken ct = default) =>
+        _db.BillingLedgerEntries.AsNoTracking().FirstOrDefaultAsync(l => l.ClientId == clientId && l.IdempotencyKey == idempotencyKey, ct);
 
-    public Task<bool> KeyExistsAsync(Guid clinicId, string idempotencyKey, CancellationToken ct = default) =>
-        _db.BillingLedgerEntries.AnyAsync(e => e.ClinicId == clinicId && e.IdempotencyKey == idempotencyKey, ct);
+    public Task<bool> KeyExistsAsync(Guid clientId, string idempotencyKey, CancellationToken ct = default) =>
+        _db.BillingLedgerEntries.AnyAsync(e => e.ClientId == clientId && e.IdempotencyKey == idempotencyKey, ct);
 
-    public async Task<(IReadOnlyList<BillingLedgerEntry> Items, int Total)> ListAsync(Guid clinicId, int skip, int take,
+    public async Task<(IReadOnlyList<BillingLedgerEntry> Items, int Total)> ListAsync(Guid clientId, int skip, int take,
         CancellationToken ct = default)
     {
-        var query = _db.BillingLedgerEntries.AsNoTracking().Where(l => l.ClinicId == clinicId);
+        var query = _db.BillingLedgerEntries.AsNoTracking().Where(l => l.ClientId == clientId);
         var total = await query.CountAsync(ct);
         var rows = await query.OrderByDescending(l => l.Seq).Skip(skip).Take(take).ToListAsync(ct);
         return (rows, total);
     }
 
-    public Task<decimal> SumAsync(Guid clinicId, string balanceType, CancellationToken ct = default) =>
-        _db.BillingLedgerEntries.Where(l => l.ClinicId == clinicId && l.BalanceType == balanceType).SumAsync(l => l.Amount, ct);
+    public Task<decimal> SumAsync(Guid clientId, string balanceType, CancellationToken ct = default) =>
+        _db.BillingLedgerEntries.Where(l => l.ClientId == clientId && l.BalanceType == balanceType).SumAsync(l => l.Amount, ct);
 
     public Task<decimal> SumOfTypeAsync(string entryType, DateTimeOffset from, DateTimeOffset to, CancellationToken ct = default) =>
         _db.BillingLedgerEntries.AsNoTracking()

@@ -2,6 +2,6 @@ using Microsoft.AspNetCore.Identity;
 
 namespace Omni.App.Entities.Dtos.PlatformAdmin;
 
-public record StaffRow(string UserId, string? Email, string? FullName, Guid? MembershipId, Guid? ClinicId, string? ClinicName,
+public record StaffRow(string UserId, string? Email, string? FullName, Guid? MembershipId, Guid? ClientId, string? ClientName,
     bool MembershipActive, bool LoginLocked, bool EmailConfirmed, int AccessFailedCount, bool HasPassword, bool HasGoogleLogin,
     DateTimeOffset? JoinedAt);

@@ -12,9 +12,9 @@ namespace Omni.App.Business.Contracts.Services.WhatsApp;
 /// </summary>
 public interface IWhatsAppTemplateService
 {
-    Task<IReadOnlyList<WhatsAppTemplateResponse>> ListAsync(Guid clinicId, CancellationToken ct = default);
+    Task<IReadOnlyList<WhatsAppTemplateResponse>> ListAsync(Guid clientId, CancellationToken ct = default);
 
-    Task<WhatsAppTemplateResponse?> GetByIdAsync(Guid clinicId, Guid id, CancellationToken ct = default);
+    Task<WhatsAppTemplateResponse?> GetByIdAsync(Guid clientId, Guid id, CancellationToken ct = default);
 
     /// <summary>Persists a draft, then immediately submits it to Meta for review. The saved row's
     /// Status reflects whatever Meta returned (usually "pending") even if submission fails partway —
@@ -22,16 +22,16 @@ public interface IWhatsAppTemplateService
     Task<WhatsAppTemplateResponse> CreateAsync(CreateWhatsAppTemplateRequest request, CancellationToken ct = default);
 
     /// <summary>Refreshes Status/RejectionReason from Meta for a template that's already been submitted.</summary>
-    Task<WhatsAppTemplateResponse?> SyncStatusAsync(Guid clinicId, Guid id, CancellationToken ct = default);
+    Task<WhatsAppTemplateResponse?> SyncStatusAsync(Guid clientId, Guid id, CancellationToken ct = default);
 
     /// <summary>Re-sends a template that never reached Meta (no MetaTemplateId: saved while WhatsApp wasn't
     /// connected, or Meta refused the submission). Throws InvalidOperationException if it already reached Meta
-    /// or the clinic has no connected WhatsApp number. Returns null if it doesn't exist for this clinic.</summary>
-    Task<WhatsAppTemplateResponse?> RetrySubmitAsync(Guid clinicId, Guid id, CancellationToken ct = default);
+    /// or the client has no connected WhatsApp number. Returns null if it doesn't exist for this client.</summary>
+    Task<WhatsAppTemplateResponse?> RetrySubmitAsync(Guid clientId, Guid id, CancellationToken ct = default);
 
     /// <summary>Applies a normalized template webhook event n8n forwarded (status change, category
-    /// change, quality update) — upserts by (ClinicId, MetaTemplateId), falling back to
-    /// (ClinicId, Name, Language) for events that don't carry Meta's id yet. Idempotent by
+    /// change, quality update) — upserts by (ClientId, MetaTemplateId), falling back to
+    /// (ClientId, Name, Language) for events that don't carry Meta's id yet. Idempotent by
     /// construction: re-applying the same state twice just re-sets the same fields, no duplicate
     /// rows possible. Broadcasts WhatsAppTemplateUpdated on success.</summary>
     Task<WhatsAppTemplateResponse> ApplyMetaEventAsync(WhatsAppTemplateEventRequest request, CancellationToken ct = default);

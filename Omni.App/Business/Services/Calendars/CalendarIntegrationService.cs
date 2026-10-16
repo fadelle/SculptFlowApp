@@ -11,7 +11,7 @@ using Omni.App.Entities.Responses.Appointments;
 using Omni.App.Entities.Responses.Calendars;
 using Omni.App.Persistence.Contracts;
 using Omni.App.Persistence.Contracts.Calendars;
-using Omni.App.Persistence.Contracts.Clinics;
+using Omni.App.Persistence.Contracts.Clients;
 
 namespace Omni.App.Business.Services.Calendars;
 
@@ -22,7 +22,7 @@ public class CalendarIntegrationService : ICalendarIntegrationService
     private TimeSpan TokenRefreshMargin => TimeSpan.FromMinutes(_config.IntegrationsTokenRefreshMarginMinutes);
 
     private readonly ICalendarIntegrationRepository _calendars;
-    private readonly IClinicRepository _clinics;
+    private readonly IClientRepository _clients;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ICalendarSyncNotifier _notifier;
     private readonly INotificationService _notifications;
@@ -30,35 +30,35 @@ public class CalendarIntegrationService : ICalendarIntegrationService
     private readonly IConfigManager _config;
 
     public CalendarIntegrationService(
-        ICalendarIntegrationRepository calendars, IClinicRepository clinics, IUnitOfWork unitOfWork, ICalendarSyncNotifier notifier, INotificationService notifications,
+        ICalendarIntegrationRepository calendars, IClientRepository clients, IUnitOfWork unitOfWork, ICalendarSyncNotifier notifier, INotificationService notifications,
         IEnumerable<ICalendarProviderClient> providerClients, IConfigManager config)
     {
         _config = config;
         _calendars = calendars;
-        _clinics = clinics;
+        _clients = clients;
         _unitOfWork = unitOfWork;
         _notifier = notifier;
         _notifications = notifications;
         _providerClients = providerClients;
     }
 
-    public async Task<IReadOnlyList<CalendarIntegrationResponse>> ListAsync(Guid clinicId, CancellationToken ct = default)
+    public async Task<IReadOnlyList<CalendarIntegrationResponse>> ListAsync(Guid clientId, CancellationToken ct = default)
     {
-        var existing = (await _calendars.ListWithCalendarsReadOnlyAsync(clinicId, ct)).ToDictionary(c => c.Provider);
+        var existing = (await _calendars.ListWithCalendarsReadOnlyAsync(clientId, ct)).ToDictionary(c => c.Provider);
 
         return CalendarProvider.All
             .Select(provider => existing.TryGetValue(provider, out var row)
                 ? ToResponse(row)
                 : new CalendarIntegrationResponse(
-                    Guid.Empty, clinicId, provider, CalendarIntegrationStatus.Disconnected,
+                    Guid.Empty, clientId, provider, CalendarIntegrationStatus.Disconnected,
                     null, null, null, false, true, null, null, Array.Empty<CalendarCalendarOption>()))
             .ToList();
     }
 
-    public async Task<CalendarIntegrationResponse> RequestConnectAsync(Guid clinicId, string provider, CancellationToken ct = default)
+    public async Task<CalendarIntegrationResponse> RequestConnectAsync(Guid clientId, string provider, CancellationToken ct = default)
     {
         EnsureKnownProvider(provider);
-        var row = await GetOrCreateAsync(clinicId, provider, ct);
+        var row = await GetOrCreateAsync(clientId, provider, ct);
 
         row.Status = CalendarIntegrationStatus.Pending;
         row.LastProblemMessage = null;
@@ -69,10 +69,10 @@ public class CalendarIntegrationService : ICalendarIntegrationService
     }
 
     public async Task<CalendarIntegrationResponse> CompleteConnectAsync(
-        Guid clinicId, string provider, CalendarOAuthTokenResult tokens, string? accountEmail, CancellationToken ct = default)
+        Guid clientId, string provider, CalendarOAuthTokenResult tokens, string? accountEmail, CancellationToken ct = default)
     {
         EnsureKnownProvider(provider);
-        var row = await GetOrCreateAsync(clinicId, provider, ct);
+        var row = await GetOrCreateAsync(clientId, provider, ct);
         var client = ResolveProviderClient(provider);
 
         var calendars = await client.ListCalendarsAsync(tokens.AccessToken, ct);
@@ -105,10 +105,10 @@ public class CalendarIntegrationService : ICalendarIntegrationService
         return ToResponse(row);
     }
 
-    public async Task<CalendarIntegrationResponse> FailConnectAsync(Guid clinicId, string provider, string errorMessage, CancellationToken ct = default)
+    public async Task<CalendarIntegrationResponse> FailConnectAsync(Guid clientId, string provider, string errorMessage, CancellationToken ct = default)
     {
         EnsureKnownProvider(provider);
-        var row = await GetOrCreateAsync(clinicId, provider, ct);
+        var row = await GetOrCreateAsync(clientId, provider, ct);
         row.Status = CalendarIntegrationStatus.Error;
         row.LastProblemMessage = errorMessage;
         row.UpdatedAt = DateTimeOffset.UtcNow;
@@ -116,13 +116,13 @@ public class CalendarIntegrationService : ICalendarIntegrationService
         return ToResponse(row);
     }
 
-    public async Task RequestRefreshCalendarsAsync(Guid clinicId, string provider, CancellationToken ct = default)
+    public async Task RequestRefreshCalendarsAsync(Guid clientId, string provider, CancellationToken ct = default)
     {
         EnsureKnownProvider(provider);
-        var row = await _calendars.GetWithCalendarsAsync(clinicId, provider, ct);
+        var row = await _calendars.GetWithCalendarsAsync(clientId, provider, ct);
         if (row is null || row.Status != CalendarIntegrationStatus.Connected)
         {
-            throw new ArgumentException($"{provider} is not connected for this clinic yet.");
+            throw new ArgumentException($"{provider} is not connected for this client yet.");
         }
 
         var client = ResolveProviderClient(provider);
@@ -159,11 +159,11 @@ public class CalendarIntegrationService : ICalendarIntegrationService
     }
 
     public async Task<CalendarIntegrationResponse> SelectCalendarAsync(
-        Guid clinicId, string provider, string externalCalendarId, CancellationToken ct = default)
+        Guid clientId, string provider, string externalCalendarId, CancellationToken ct = default)
     {
         EnsureKnownProvider(provider);
-        var row = await _calendars.GetWithCalendarsAsync(clinicId, provider, ct);
-        if (row is null) throw new ArgumentException($"{provider} is not connected for this clinic.");
+        var row = await _calendars.GetWithCalendarsAsync(clientId, provider, ct);
+        if (row is null) throw new ArgumentException($"{provider} is not connected for this client.");
 
         var calendar = row.Calendars.FirstOrDefault(c => c.ExternalCalendarId == externalCalendarId);
         if (calendar is null)
@@ -179,11 +179,11 @@ public class CalendarIntegrationService : ICalendarIntegrationService
         return ToResponse(row);
     }
 
-    public async Task<CalendarIntegrationResponse> SetSyncEnabledAsync(Guid clinicId, string provider, bool enabled, CancellationToken ct = default)
+    public async Task<CalendarIntegrationResponse> SetSyncEnabledAsync(Guid clientId, string provider, bool enabled, CancellationToken ct = default)
     {
         EnsureKnownProvider(provider);
-        var row = await _calendars.GetWithCalendarsAsync(clinicId, provider, ct);
-        if (row is null) throw new ArgumentException($"{provider} is not connected for this clinic.");
+        var row = await _calendars.GetWithCalendarsAsync(clientId, provider, ct);
+        if (row is null) throw new ArgumentException($"{provider} is not connected for this client.");
         if (enabled && string.IsNullOrWhiteSpace(row.SelectedCalendarId))
         {
             throw new ArgumentException("Choose a calendar before turning sync on.");
@@ -196,10 +196,10 @@ public class CalendarIntegrationService : ICalendarIntegrationService
         return ToResponse(row);
     }
 
-    public async Task DisconnectAsync(Guid clinicId, string provider, CancellationToken ct = default)
+    public async Task DisconnectAsync(Guid clientId, string provider, CancellationToken ct = default)
     {
         EnsureKnownProvider(provider);
-        var row = await _calendars.GetWithCalendarsAsync(clinicId, provider, ct);
+        var row = await _calendars.GetWithCalendarsAsync(clientId, provider, ct);
         if (row is null) return; // already disconnected — nothing to do
 
         if (!string.IsNullOrWhiteSpace(row.AccessToken) || !string.IsNullOrWhiteSpace(row.RefreshToken))
@@ -228,7 +228,7 @@ public class CalendarIntegrationService : ICalendarIntegrationService
         var sync = await _calendars.GetSyncAsync(request.AppointmentId, request.CalendarIntegrationId, ct);
         if (sync is null || sync.LastRequestId != request.RequestId) return; // unknown or superseded by a later request
 
-        var integration = await _calendars.GetByIdAsync(request.ClinicId, request.CalendarIntegrationId, ct);
+        var integration = await _calendars.GetByIdAsync(request.ClientId, request.CalendarIntegrationId, ct);
         if (integration is null) return;
 
         var wasHealthy = integration.IsHealthy;
@@ -258,14 +258,14 @@ public class CalendarIntegrationService : ICalendarIntegrationService
         // succeeds, must not spam a notification on every appointment change.
         if (!request.Success && wasHealthy)
         {
-            await _notifications.CreateAsync(integration.ClinicId, NotificationType.IntegrationUnhealthy,
+            await _notifications.CreateAsync(integration.ClientId, NotificationType.IntegrationUnhealthy,
                 $"{ProviderLabel(integration.Provider)} calendar sync needs attention",
                 integration.LastProblemMessage ?? "A calendar sync failed.",
                 link: "/settings/calendar-integrations", ct: ct);
         }
     }
 
-    public async Task TriggerAppointmentSyncAsync(Guid clinicId, AppointmentResponse appointment, string operation, CancellationToken ct = default)
+    public async Task TriggerAppointmentSyncAsync(Guid clientId, AppointmentResponse appointment, string operation, CancellationToken ct = default)
     {
         try
         {
@@ -278,11 +278,11 @@ public class CalendarIntegrationService : ICalendarIntegrationService
             };
             if (syncOp is null) return;
 
-            var integrations = await _calendars.ListSyncTargetsAsync(clinicId, ct);
+            var integrations = await _calendars.ListSyncTargetsAsync(clientId, ct);
             if (integrations.Count == 0) return;
 
-            var clinic = await _clinics.GetReadOnlyAsync(clinicId, ct);
-            var timezone = clinic?.Timezone ?? "UTC";
+            var client = await _clients.GetReadOnlyAsync(clientId, ct);
+            var timezone = client?.Timezone ?? "UTC";
             var title = $"{appointment.LeadFullName ?? "Patient"} — {appointment.ProcedureName ?? appointment.AppointmentType}";
             var description = BuildDescription(appointment);
             var link = $"/dashboard/appointments/{appointment.Id}";
@@ -333,7 +333,7 @@ public class CalendarIntegrationService : ICalendarIntegrationService
                 await _unitOfWork.SaveChangesAsync(ct);
 
                 await _notifier.NotifySyncAsync(new CalendarSyncTriggerPayload(
-                    clinicId, appointment.Id, integration.Id, integration.Provider, accessToken,
+                    clientId, appointment.Id, integration.Id, integration.Provider, accessToken,
                     integration.SelectedCalendarId!, effectiveOp, requestId,
                     effectiveOp == "create" ? null : sync.ExternalEventId,
                     appointment.ScheduledStart, appointment.ScheduledEnd, timezone,
@@ -398,15 +398,15 @@ public class CalendarIntegrationService : ICalendarIntegrationService
         }
     }
 
-    private async Task<CalendarIntegration> GetOrCreateAsync(Guid clinicId, string provider, CancellationToken ct)
+    private async Task<CalendarIntegration> GetOrCreateAsync(Guid clientId, string provider, CancellationToken ct)
     {
-        var row = await _calendars.GetWithCalendarsAsync(clinicId, provider, ct);
+        var row = await _calendars.GetWithCalendarsAsync(clientId, provider, ct);
         if (row is not null) return row;
 
         var now = DateTimeOffset.UtcNow;
         row = new CalendarIntegration
         {
-            Id = Guid.NewGuid(), ClinicId = clinicId, Provider = provider,
+            Id = Guid.NewGuid(), ClientId = clientId, Provider = provider,
             Status = CalendarIntegrationStatus.Disconnected, CreatedAt = now, UpdatedAt = now
         };
         _calendars.Add(row);
@@ -415,7 +415,7 @@ public class CalendarIntegrationService : ICalendarIntegrationService
 
     private static string BuildDescription(AppointmentResponse a)
     {
-        // Deliberately conservative: no notes, no conversation history, no clinical detail — only what's already
+        // Deliberately conservative: no notes, no conversation history, no medical detail — only what's already
         // shown on the Omni calendar day-cell/drawer (see appointments-calendar.js).
         var parts = new List<string> { $"Status: {a.Status}" };
         if (!string.IsNullOrWhiteSpace(a.LocationName)) parts.Add($"Location: {a.LocationName}");
@@ -425,7 +425,7 @@ public class CalendarIntegrationService : ICalendarIntegrationService
     private static string ProviderLabel(string provider) => provider == CalendarProvider.Google ? "Google Calendar" : "Outlook Calendar";
 
     private static CalendarIntegrationResponse ToResponse(CalendarIntegration c) => new(
-        c.Id, c.ClinicId, c.Provider, c.Status, c.AccountDisplayName, c.SelectedCalendarId, c.SelectedCalendarName,
+        c.Id, c.ClientId, c.Provider, c.Status, c.AccountDisplayName, c.SelectedCalendarId, c.SelectedCalendarName,
         c.SyncEnabled, c.IsHealthy, c.LastProblemMessage, c.LastSyncedAt,
         c.Calendars.Select(x => new CalendarCalendarOption(x.ExternalCalendarId, x.Name, x.IsPrimary)).ToList());
 }

@@ -7,10 +7,10 @@ using Omni.App.Controllers.Filters;
 namespace Omni.App.Controllers.Admin;
 
 /// <summary>
-/// Platform-admin API for the Omni.Automation tester (internal; never clinics). Each automation run registers a
-/// throwaway clinic through the normal sign-up page, exercises the system as that clinic, then calls DELETE here so
+/// Platform-admin API for the Omni.Automation tester (internal; never clients). Each automation run registers a
+/// throwaway client through the normal sign-up page, exercises the system as that client, then calls DELETE here so
 /// nothing it created is left behind. Protected by X-Platform-Admin-Key (RequirePlatformAdminKey).
-/// Only an automation clinic can ever be deleted (see <see cref="Common.Statics.AutomationClinics"/>); anything else gets 409 and
+/// Only an automation client can ever be deleted (see <see cref="Common.Statics.AutomationClients"/>); anything else gets 409 and
 /// nothing is touched.
 /// </summary>
 [ApiController]
@@ -29,21 +29,21 @@ public class AutomationAdminController : ControllerBase
         _logger = logger;
     }
 
-    /// <summary>Automation clinics that still exist (e.g. a run that crashed before cleaning up), oldest first.</summary>
-    [HttpGet("clinics")]
-    public async Task<IActionResult> ListClinics(CancellationToken ct) => Ok(await _cleanup.ListClinicsAsync(ct));
+    /// <summary>Automation clients that still exist (e.g. a run that crashed before cleaning up), oldest first.</summary>
+    [HttpGet("clients")]
+    public async Task<IActionResult> ListClients(CancellationToken ct) => Ok(await _cleanup.ListClientsAsync(ct));
 
-    [HttpDelete("clinics/{clinicId:guid}")]
-    public async Task<IActionResult> DeleteClinic(Guid clinicId, CancellationToken ct)
+    [HttpDelete("clients/{clientId:guid}")]
+    public async Task<IActionResult> DeleteClient(Guid clientId, CancellationToken ct)
     {
-        switch (await _cleanup.DeleteClinicAsync(clinicId, ct))
+        switch (await _cleanup.DeleteClientAsync(clientId, ct))
         {
             case AutomationDeleteOutcome.NotFound:
                 return NotFound();
-            case AutomationDeleteOutcome.NotAutomationClinic:
-                return Conflict(new { error = "Not an automation test clinic; nothing was deleted." });
+            case AutomationDeleteOutcome.NotAutomationClient:
+                return Conflict(new { error = "Not an automation test client; nothing was deleted." });
             default:
-                _logger.LogInformation("Automation clinic {ClinicId} deleted by {Actor}.", clinicId, RequirePlatformAdminKeyAttribute.Actor(Request));
+                _logger.LogInformation("Automation client {ClientId} deleted by {Actor}.", clientId, RequirePlatformAdminKeyAttribute.Actor(Request));
                 return NoContent();
         }
     }

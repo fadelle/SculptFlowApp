@@ -25,21 +25,21 @@ public class CampaignAudienceRepository : ICampaignAudienceRepository
         _db = db;
     }
 
-    public Task<List<Lead>> ListEligibleLeadsAsync(Guid clinicId, string audienceType, CampaignAudienceFilters filters,
+    public Task<List<Lead>> ListEligibleLeadsAsync(Guid clientId, string audienceType, CampaignAudienceFilters filters,
         int defaultInactiveDays, CancellationToken ct = default) =>
-        BuildQuery(clinicId, audienceType, filters, defaultInactiveDays).ToListAsync(ct);
+        BuildQuery(clientId, audienceType, filters, defaultInactiveDays).ToListAsync(ct);
 
-    public Task<int> CountEligibleLeadsAsync(Guid clinicId, string audienceType, CampaignAudienceFilters filters,
+    public Task<int> CountEligibleLeadsAsync(Guid clientId, string audienceType, CampaignAudienceFilters filters,
         int defaultInactiveDays, CancellationToken ct = default) =>
-        BuildQuery(clinicId, audienceType, filters, defaultInactiveDays).CountAsync(ct);
+        BuildQuery(clientId, audienceType, filters, defaultInactiveDays).CountAsync(ct);
 
     /// <summary>Mandatory exclusions (always) + audience-type-specific rules. This is the ONLY place
     /// eligibility is computed — "all_eligible" is deliberately not "every lead row", it's this same
     /// mandatory-exclusion base with no further narrowing.</summary>
-    private IQueryable<Lead> BuildQuery(Guid clinicId, string audienceType, CampaignAudienceFilters filters, int defaultInactiveDays)
+    private IQueryable<Lead> BuildQuery(Guid clientId, string audienceType, CampaignAudienceFilters filters, int defaultInactiveDays)
     {
         var contactable = _db.Leads.Where(l =>
-            l.ClinicId == clinicId &&
+            l.ClientId == clientId &&
             l.Phone != null && l.Phone != "" &&
             l.MarketingOptIn &&
             l.OptedOutAt == null);
@@ -74,8 +74,8 @@ public class CampaignAudienceRepository : ICampaignAudienceRepository
         return ApplyOptionalScopingFilters(query, filters);
     }
 
-    /// <summary>Clinic-defined filters — no "never booked" requirement, just whichever optional
-    /// fields the clinic set. Common ones (leadStatuses, sources, procedureId, inactiveDays) are
+    /// <summary>Client-defined filters — no "never booked" requirement, just whichever optional
+    /// fields the client set. Common ones (leadStatuses, sources, procedureId, inactiveDays) are
     /// shared with reactivation; everything past that (qualification, dates, appointment status,
     /// country/city/language) only ever applies here — the custom-audience "Advanced filters"
     /// section in the Campaign creation UI.</summary>

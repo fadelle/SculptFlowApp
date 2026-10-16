@@ -2,9 +2,9 @@ using Omni.App.Common.Enums;
 
 namespace Omni.App.Common.Exceptions;
 
-/// <summary>The clinic can't be charged for what it asked to do (not enough balance, no price configured...), so it
+/// <summary>The client can't be charged for what it asked to do (not enough balance, no price configured...), so it
 /// wasn't done. Derives from InvalidOperationException on purpose: every existing controller already maps that to
-/// 422 with the message, and campaign recipients record it as their failure reason. Messages are clinic-facing and
+/// 422 with the message, and campaign recipients record it as their failure reason. Messages are client-facing and
 /// provider-neutral.</summary>
 public class BillingDeniedException : InvalidOperationException
 {

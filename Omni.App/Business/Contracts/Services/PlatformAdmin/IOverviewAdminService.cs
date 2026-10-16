@@ -12,9 +12,9 @@ public interface IOverviewAdminService
 
     Task<List<ProblemRow>> ProblemsAsync(CancellationToken ct);
 
-    Task<List<ClinicRow>> RecentClinicsAsync(int take, CancellationToken ct);
+    Task<List<ClientRow>> RecentClientsAsync(int take, CancellationToken ct);
 
-    Task<PagedResponse<EventRow>> EventsAsync(Guid? clinicId, string? eventType, int page, CancellationToken ct);
+    Task<PagedResponse<EventRow>> EventsAsync(Guid? clientId, string? eventType, int page, CancellationToken ct);
 
     Task<List<string>> EventTypesAsync(CancellationToken ct);
 }

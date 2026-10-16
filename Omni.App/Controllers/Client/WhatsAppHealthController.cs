@@ -13,7 +13,7 @@ public class WhatsAppHealthController : DashboardApiController
 {
     private readonly IWhatsAppHealthService _health;
 
-    public WhatsAppHealthController(IWhatsAppHealthService health, ICurrentClinicContext clinicContext) : base(clinicContext)
+    public WhatsAppHealthController(IWhatsAppHealthService health, ICurrentClientContext clientContext) : base(clientContext)
     {
         _health = health;
     }
@@ -21,10 +21,10 @@ public class WhatsAppHealthController : DashboardApiController
     [HttpGet]
     public async Task<ActionResult<WhatsAppHealthResponse>> GetHealth(CancellationToken ct)
     {
-        var clinicId = await GetClinicIdAsync(ct);
-        if (clinicId is null) return Forbid();
+        var clientId = await GetClientIdAsync(ct);
+        if (clientId is null) return Forbid();
 
-        var health = await _health.GetHealthAsync(clinicId.Value, ct);
+        var health = await _health.GetHealthAsync(clientId.Value, ct);
         return health is null ? NotFound() : Ok(health);
     }
 
@@ -32,10 +32,10 @@ public class WhatsAppHealthController : DashboardApiController
     public async Task<ActionResult<IReadOnlyList<WhatsAppHealthEventResponse>>> GetHealthEvents(
         [FromQuery] int skip = 0, [FromQuery] int take = 50, CancellationToken ct = default)
     {
-        var clinicId = await GetClinicIdAsync(ct);
-        if (clinicId is null) return Forbid();
+        var clientId = await GetClientIdAsync(ct);
+        if (clientId is null) return Forbid();
 
-        var events = await _health.GetHealthEventsAsync(clinicId.Value, Math.Max(skip, 0), Math.Clamp(take, 1, 200), ct);
+        var events = await _health.GetHealthEventsAsync(clientId.Value, Math.Max(skip, 0), Math.Clamp(take, 1, 200), ct);
         return Ok(events);
     }
 }

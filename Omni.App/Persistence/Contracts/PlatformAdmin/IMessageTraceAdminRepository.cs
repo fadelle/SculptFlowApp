@@ -3,7 +3,7 @@ using Omni.App.Entities.Dtos.PlatformAdmin;
 namespace Omni.App.Persistence.Contracts.PlatformAdmin;
 
 /// <summary>
-/// Cross-clinic, read-only reads for the message trace view: a trace's steps plus what other tables already know about
+/// Cross-client, read-only reads for the message trace view: a trace's steps plus what other tables already know about
 /// the same messages (crm.messages statuses, billing.usage_records, activity.events, activity.app_logs).
 /// </summary>
 public interface IMessageTraceAdminRepository

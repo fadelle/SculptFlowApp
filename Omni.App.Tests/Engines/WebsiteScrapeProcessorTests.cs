@@ -7,7 +7,7 @@ namespace Omni.App.Tests.Engines;
 public class WebsiteScrapeProcessorTests
 {
     private const string Root = "https://8.8.8.8";
-    private readonly Guid _clinicId = Guid.NewGuid();
+    private readonly Guid _clientId = Guid.NewGuid();
     private readonly Mock<IWebsiteSourceRepository> _websites = new();
     private readonly Mock<IKnowledgeDocumentRepository> _documents = new();
     private readonly Mock<IUnitOfWork> _uow = new();
@@ -41,38 +41,38 @@ public class WebsiteScrapeProcessorTests
         _source = NewSource(Root + "/", WebsiteCrawlMode.CrawlSite);
         _run = NewRun();
         _websites.Setup(w => w.GetRunAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync(() => _run);
-        _websites.Setup(w => w.GetSourceAsync(_clinicId, It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync(() => _source);
+        _websites.Setup(w => w.GetSourceAsync(_clientId, It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync(() => _source);
         _websites.Setup(w => w.GetSourceByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync(() => _source);
-        _websites.Setup(w => w.MapPagesByUrlAsync(_clinicId, It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync(() => _existing);
+        _websites.Setup(w => w.MapPagesByUrlAsync(_clientId, It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync(() => _existing);
         _websites.Setup(w => w.AddPage(It.IsAny<KnowledgeWebsitePage>())).Callback<KnowledgeWebsitePage>(_addedPages.Add);
         _fetch.Setup(f => f.FetchRobotsAsync(It.IsAny<Uri>(), It.IsAny<CancellationToken>())).ReturnsAsync(() => _robots);
         _fetch.Setup(f => f.FetchPageAsync(It.IsAny<Uri>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<Func<Uri, bool>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Uri u, string? _, string? _, Func<Uri, bool> _, CancellationToken _) =>
                 _site.TryGetValue(u.ToString(), out var r) ? r : new FetchResult { RequestedUrl = u.ToString(), FinalUrl = u.ToString(), StatusCode = 404, ErrorKind = FetchErrorKind.HttpError, Error = "HTTP 404" });
-        _documents.Setup(d => d.ExistsAsync(_clinicId, It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        _documents.Setup(d => d.ExistsAsync(_clientId, It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync(true);
 
-        _knowledge.Setup(k => k.CreateFromSourceAsync(_clinicId, It.IsAny<ExternalKnowledgeDocument>(), It.IsAny<CancellationToken>()))
+        _knowledge.Setup(k => k.CreateFromSourceAsync(_clientId, It.IsAny<ExternalKnowledgeDocument>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Guid _, ExternalKnowledgeDocument d, CancellationToken _) =>
             {
                 _created.Add((d.Title, d.Content, d.SourceUrl));
                 return Doc(Guid.NewGuid(), d.IsActive);
             });
-        _knowledge.Setup(k => k.ReplaceSourceContentAsync(_clinicId, It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        _knowledge.Setup(k => k.ReplaceSourceContentAsync(_clientId, It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Guid _, Guid id, string _, string content, CancellationToken _) => { _replaced.Add((id, content)); return Doc(id, true); });
-        _knowledge.Setup(k => k.DeleteAsync(_clinicId, It.IsAny<Guid>(), It.IsAny<CancellationToken>())).Callback<Guid, Guid, CancellationToken>((_, id, _) => _deleted.Add(id)).ReturnsAsync(true);
-        _knowledge.Setup(k => k.SetActiveAsync(_clinicId, It.IsAny<Guid>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+        _knowledge.Setup(k => k.DeleteAsync(_clientId, It.IsAny<Guid>(), It.IsAny<CancellationToken>())).Callback<Guid, Guid, CancellationToken>((_, id, _) => _deleted.Add(id)).ReturnsAsync(true);
+        _knowledge.Setup(k => k.SetActiveAsync(_clientId, It.IsAny<Guid>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .Callback<Guid, Guid, bool, CancellationToken>((_, id, a, _) => _toggled.Add((id, a)));
     }
 
     private KnowledgeDocumentResponse Doc(Guid id, bool active) =>
-        new(id, _clinicId, "t", "general", "c", active, 1, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, "website", null, null, null, null);
+        new(id, _clientId, "t", "general", "c", active, 1, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, "website", null, null, null, null);
 
     private KnowledgeWebsiteSource NewSource(string url, string mode) => new()
     {
-        Id = Guid.NewGuid(), ClinicId = _clinicId, StartUrl = url, NormalizedStartUrl = url, Host = "8.8.8.8", CrawlMode = mode, Category = "general", IsActive = true, Status = WebsiteScrapeStatus.Pending
+        Id = Guid.NewGuid(), ClientId = _clientId, StartUrl = url, NormalizedStartUrl = url, Host = "8.8.8.8", CrawlMode = mode, Category = "general", IsActive = true, Status = WebsiteScrapeStatus.Pending
     };
 
-    private KnowledgeWebsiteScrapeRun NewRun() => new() { Id = Guid.NewGuid(), ClinicId = _clinicId, WebsiteSourceId = _source.Id, Status = WebsiteScrapeStatus.Pending };
+    private KnowledgeWebsiteScrapeRun NewRun() => new() { Id = Guid.NewGuid(), ClientId = _clientId, WebsiteSourceId = _source.Id, Status = WebsiteScrapeStatus.Pending };
 
     private WebsiteScrapeProcessor Sut()
     {
@@ -112,7 +112,7 @@ public class WebsiteScrapeProcessorTests
     [Fact]
     public async Task A_run_whose_source_was_deleted_fails_cleanly()
     {
-        _websites.Setup(w => w.GetSourceAsync(_clinicId, It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync((KnowledgeWebsiteSource?)null);
+        _websites.Setup(w => w.GetSourceAsync(_clientId, It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync((KnowledgeWebsiteSource?)null);
         await Run();
         Assert.Equal(WebsiteScrapeStatus.Failed, _run.Status);
         Assert.Contains("no longer exists", _run.ErrorSummary);
@@ -400,7 +400,7 @@ public class WebsiteScrapeProcessorTests
     {
         Page("/", Html("Home", Text("Home"), links: "/a"));
         Page("/a", Html("A", Text("A")));
-        _knowledge.Setup(k => k.CreateFromSourceAsync(_clinicId, It.Is<ExternalKnowledgeDocument>(d => d.Title == "A"), It.IsAny<CancellationToken>())).ThrowsAsync(new ArgumentException("bad content"));
+        _knowledge.Setup(k => k.CreateFromSourceAsync(_clientId, It.Is<ExternalKnowledgeDocument>(d => d.Title == "A"), It.IsAny<CancellationToken>())).ThrowsAsync(new ArgumentException("bad content"));
         await Run();
         Assert.Equal(WebsitePageStatus.Failed, PageRow("/a").Status);
         Assert.Contains("bad content", PageRow("/a").FailureReason);

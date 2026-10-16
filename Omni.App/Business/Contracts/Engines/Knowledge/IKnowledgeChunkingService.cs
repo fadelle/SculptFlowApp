@@ -9,7 +9,7 @@ namespace Omni.App.Business.Contracts.Engines.Knowledge;
 /// </summary>
 public interface IKnowledgeChunkingService
 {
-    /// <summary>Chunk size and overlap are the clinic's persisted settings (see IKnowledgeSettingsService),
+    /// <summary>Chunk size and overlap are the client's persisted settings (see IKnowledgeSettingsService),
     /// in approximate tokens.</summary>
     IReadOnlyList<string> Chunk(string content, int chunkSizeTokens, int chunkOverlapTokens);
 }

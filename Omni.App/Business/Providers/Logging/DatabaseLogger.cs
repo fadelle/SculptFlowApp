@@ -11,7 +11,7 @@ namespace Omni.App.Business.Providers.Logging;
 /// <summary>
 /// One logger category of <see cref="DatabaseLoggerProvider"/>. Turns a captured log call into an AppLog row: rendered
 /// message and template, exception, fingerprint, trace id (Activity.Current), the request's method and route template
-/// (never the raw path), clinic/conversation/message ids found in the values or scopes, and every other value as
+/// (never the raw path), client/conversation/message ids found in the values or scopes, and every other value as
 /// properties with secrets masked. Never throws: a logging failure must not break the code that logged.
 /// </summary>
 public sealed class DatabaseLogger : ILogger
@@ -21,7 +21,7 @@ public sealed class DatabaseLogger : ILogger
     // Values already stored in their own columns, or noise from the hosting scope (the raw path can carry ids or tokens).
     private static readonly HashSet<string> SkippedKeys = new(StringComparer.OrdinalIgnoreCase)
     {
-        TemplateKey, "ClinicId", "ConversationId", "MessageId", "TraceId", "SpanId", "ParentId", "RequestPath", "RequestId", "ConnectionId"
+        TemplateKey, "ClientId", "ConversationId", "MessageId", "TraceId", "SpanId", "ParentId", "RequestPath", "RequestId", "ConnectionId"
     };
 
     // A value whose name contains one of these is stored as "***".
@@ -97,7 +97,7 @@ public sealed class DatabaseLogger : ILogger
             // Without a template (a plain string message) the message itself names the problem.
             Fingerprint = AppLogFingerprint.Compute(category, template ?? Cap(message, 200), exceptionType, AppLogFingerprint.TopFrame(exception)),
             TraceId = TraceIdOf(values),
-            ClinicId = GuidOf(values, "ClinicId"),
+            ClientId = GuidOf(values, "ClientId"),
             ConversationId = GuidOf(values, "ConversationId"),
             MessageId = GuidOf(values, "MessageId"),
             Instance = AppLogLimits.InstanceName,

@@ -3,19 +3,19 @@ using Omni.App.Persistence.Repositories.Billing;
 
 namespace Omni.App.Tests.Repositories;
 
-/// <summary>The usage queries behind the clinic's billing page, the admin portal and the monthly report.</summary>
+/// <summary>The usage queries behind the client's billing page, the admin portal and the monthly report.</summary>
 public class BillingUsageRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixture)
 {
     // Real time on purpose: the billing sweeper treats old reserved/pending rows as stale, and those queries are global, so
     // rows seeded in the past would leak into the other billing tests that share this database.
     private new static readonly DateTimeOffset Now = DateTimeOffset.UtcNow;
 
-    private sealed record Seeded(Clinic Clinic, BillingAccount Account);
+    private sealed record Seeded(Client Client, BillingAccount Account);
 
     private async Task<Seeded> SeedAccountAsync()
     {
-        var c = MakeClinic();
-        var account = new BillingAccount { Id = Guid.NewGuid(), ClinicId = c.Id, CreatedAt = Now, UpdatedAt = Now };
+        var c = MakeClient();
+        var account = new BillingAccount { Id = Guid.NewGuid(), ClientId = c.Id, CreatedAt = Now, UpdatedAt = Now };
         await SeedAsync(c, account);
         return new Seeded(c, account);
     }
@@ -24,13 +24,13 @@ public class BillingUsageRepositoryTests(PostgresFixture fixture) : RepoTestBase
         DateTimeOffset? at = null, string channel = "whatsapp", decimal? providerCost = null, decimal refunded = 0, decimal reserved = 0,
         string providerBilling = ProviderBillingResponsibility.PlatformFunded) => new()
     {
-        Id = Guid.NewGuid(), ClinicId = s.Clinic.Id, BillingAccountId = s.Account.Id, IdempotencyKey = Guid.NewGuid().ToString("N"), EventType = eventType,
+        Id = Guid.NewGuid(), ClientId = s.Client.Id, BillingAccountId = s.Account.Id, IdempotencyKey = Guid.NewGuid().ToString("N"), EventType = eventType,
         Channel = channel, Quantity = quantity, ChargeStatus = chargeStatus, ProviderOutcome = outcome, Amount = amount, ProviderCost = providerCost,
         RefundedAmount = refunded, ReservedAmount = reserved, WalletAmount = chargeStatus == ChargeStatus.Settled ? amount ?? 0 : 0, ProviderBilling = providerBilling, OccurredAt = at ?? Now, CreatedAt = at ?? Now, UpdatedAt = Now,
     };
 
     [PostgresFact]
-    public async Task Usage_is_found_by_key_and_id_within_the_clinic()
+    public async Task Usage_is_found_by_key_and_id_within_the_client()
     {
         var s = await SeedAccountAsync();
         var u = Usage(s, "sms", ChargeStatus.Settled, ProviderOutcome.Billable, 1m);
@@ -38,16 +38,16 @@ public class BillingUsageRepositoryTests(PostgresFixture fixture) : RepoTestBase
 
         await using var db = NewContext();
         var repo = new BillingUsageRepository(db);
-        Assert.Equal(u.Id, (await repo.FindByKeyAsync(s.Clinic.Id, u.IdempotencyKey))!.Id);
-        Assert.Equal(u.Id, (await repo.FindByKeyReadOnlyAsync(s.Clinic.Id, u.IdempotencyKey))!.Id);
+        Assert.Equal(u.Id, (await repo.FindByKeyAsync(s.Client.Id, u.IdempotencyKey))!.Id);
+        Assert.Equal(u.Id, (await repo.FindByKeyReadOnlyAsync(s.Client.Id, u.IdempotencyKey))!.Id);
         Assert.Null(await repo.FindByKeyAsync(Guid.NewGuid(), u.IdempotencyKey));
-        Assert.NotNull(await repo.GetAsync(s.Clinic.Id, u.Id));
+        Assert.NotNull(await repo.GetAsync(s.Client.Id, u.Id));
         Assert.Null(await repo.GetAsync(Guid.NewGuid(), u.Id));
 
         var added = Usage(s, "sms", ChargeStatus.Reserved, ProviderOutcome.Pending);
         repo.Add(added);
         await db.SaveChangesAsync();
-        Assert.NotNull(await new BillingUsageRepository(NewContext()).GetAsync(s.Clinic.Id, added.Id));
+        Assert.NotNull(await new BillingUsageRepository(NewContext()).GetAsync(s.Client.Id, added.Id));
     }
 
     [PostgresFact]
@@ -75,12 +75,12 @@ public class BillingUsageRepositoryTests(PostgresFixture fixture) : RepoTestBase
         {
             // leave nothing stale behind for the other billing tests
             await using var cleanup = NewContext();
-            await cleanup.BillingUsageRecords.Where(u => u.ClinicId == s.Clinic.Id).ExecuteDeleteAsync();
+            await cleanup.BillingUsageRecords.Where(u => u.ClientId == s.Client.Id).ExecuteDeleteAsync();
         }
     }
 
     [PostgresFact]
-    public async Task Clinic_and_admin_lists_filter_and_page()
+    public async Task Client_and_admin_lists_filter_and_page()
     {
         var s = await SeedAccountAsync();
         var sms = Usage(s, "sms", ChargeStatus.Settled, ProviderOutcome.Billable, 1m, at: Now.AddDays(-3));
@@ -91,17 +91,17 @@ public class BillingUsageRepositoryTests(PostgresFixture fixture) : RepoTestBase
         await using var db = NewContext();
         var repo = new BillingUsageRepository(db);
 
-        var (clinicRows, clinicTotal) = await repo.ListClinicUsageAsync(s.Clinic.Id, 0, 10);
-        Assert.Equal(2, clinicTotal);                                  // failed rows are hidden from the clinic
-        Assert.Equal([template.Id, sms.Id], clinicRows.Select(r => r.Id));
-        Assert.Single((await repo.ListClinicUsageAsync(s.Clinic.Id, 1, 10)).Items);
+        var (clientRows, clientTotal) = await repo.ListClientUsageAsync(s.Client.Id, 0, 10);
+        Assert.Equal(2, clientTotal);                                  // failed rows are hidden from the client
+        Assert.Equal([template.Id, sms.Id], clientRows.Select(r => r.Id));
+        Assert.Single((await repo.ListClientUsageAsync(s.Client.Id, 1, 10)).Items);
 
-        var all = await repo.ListAdminUsageAsync(s.Clinic.Id, null, null, null, null, 0, 10);
+        var all = await repo.ListAdminUsageAsync(s.Client.Id, null, null, null, null, 0, 10);
         Assert.Equal(3, all.Total);
-        Assert.Equal([failed.Id], (await repo.ListAdminUsageAsync(s.Clinic.Id, ChargeStatus.Failed, null, null, null, 0, 10)).Items.Select(r => r.Id));
-        Assert.Equal(2, (await repo.ListAdminUsageAsync(s.Clinic.Id, null, "sms", null, null, 0, 10)).Total);
-        Assert.Equal([template.Id], (await repo.ListAdminUsageAsync(s.Clinic.Id, null, null, Now.AddDays(-2), Now.AddDays(-1), 0, 10)).Items.Select(r => r.Id));
-        Assert.Single((await repo.ListAdminUsageAsync(s.Clinic.Id, null, null, null, null, 2, 10)).Items);
+        Assert.Equal([failed.Id], (await repo.ListAdminUsageAsync(s.Client.Id, ChargeStatus.Failed, null, null, null, 0, 10)).Items.Select(r => r.Id));
+        Assert.Equal(2, (await repo.ListAdminUsageAsync(s.Client.Id, null, "sms", null, null, 0, 10)).Total);
+        Assert.Equal([template.Id], (await repo.ListAdminUsageAsync(s.Client.Id, null, null, Now.AddDays(-2), Now.AddDays(-1), 0, 10)).Items.Select(r => r.Id));
+        Assert.Single((await repo.ListAdminUsageAsync(s.Client.Id, null, null, null, null, 2, 10)).Items);
     }
 
     [PostgresFact]
@@ -121,24 +121,24 @@ public class BillingUsageRepositoryTests(PostgresFixture fixture) : RepoTestBase
         await using var db = NewContext();
         var repo = new BillingUsageRepository(db);
 
-        Assert.Equal(2, await repo.CountReservedAsync(s.Clinic.Id));
-        Assert.Equal(0.75m, await repo.SumReservedAsync(s.Clinic.Id));
+        Assert.Equal(2, await repo.CountReservedAsync(s.Client.Id));
+        Assert.Equal(0.75m, await repo.SumReservedAsync(s.Client.Id));
 
-        var settled = Assert.Single(await repo.GroupSettledAsync(s.Clinic.Id, since));
+        var settled = Assert.Single(await repo.GroupSettledAsync(s.Client.Id, since));
         Assert.Equal(("sms", 2, 3m, 4.5m), (settled.EventType, settled.Count, settled.Quantity, settled.Amount));   // (2-0.5)+3
 
-        var uncharged = await repo.GroupUnchargedAsync(s.Clinic.Id, since);
+        var uncharged = await repo.GroupUnchargedAsync(s.Client.Id, since);
         var group = Assert.Single(uncharged);
         Assert.Equal(("template", "telegram", 2), (group.EventType, group.Channel, group.Count));
 
-        var billable = await repo.GroupBillableAsync(s.Clinic.Id, since);
+        var billable = await repo.GroupBillableAsync(s.Client.Id, since);
         var sms = billable.Single(b => b.EventType == "sms");
         Assert.Equal((2, 4.5m, 2m), (sms.Count, sms.Amount, sms.Cost));
         Assert.Contains(billable, b => b.EventType == "template" && b.Amount == 0m);
 
         var report = await repo.GroupBillableForReportAsync(since, Now.AddDays(1));
-        var row = report.Single(r => r.ClinicId == s.Clinic.Id && r.EventType == "sms");
+        var row = report.Single(r => r.ClientId == s.Client.Id && r.EventType == "sms");
         Assert.Equal((2, 4.5m, 2m), (row.Count, row.Revenue, row.Cost));
-        Assert.DoesNotContain(report, r => r.ClinicId == s.Clinic.Id && r.EventType == "old");
+        Assert.DoesNotContain(report, r => r.ClientId == s.Client.Id && r.EventType == "old");
     }
 }

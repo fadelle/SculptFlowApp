@@ -11,7 +11,7 @@ namespace Omni.App.Business.Providers.Media;
 
 /// <summary>
 /// Telegram's implementation of the voice-media seam (see IVoiceMediaSource). The inbound parser keeps Telegram's raw
-/// "voice"/"audio" object in Message.MetadataJson; its file_id is exchanged for the file here, with THIS clinic's own bot token.
+/// "voice"/"audio" object in Message.MetadataJson; its file_id is exchanged for the file here, with THIS client's own bot token.
 /// </summary>
 public class TelegramVoiceMediaSource : IVoiceMediaSource
 {
@@ -35,12 +35,12 @@ public class TelegramVoiceMediaSource : IVoiceMediaSource
         var (fileId, contentType, duration) = ReadMetadata(message.MetadataJson);
         if (fileId is null) return null;
 
-        // Clinic-scoped lookup: the token used is always the one belonging to the message's own clinic.
-        var integration = await _integrations.GetReadOnlyAsync(message.ClinicId, ChannelType.Telegram, ct);
+        // Client-scoped lookup: the token used is always the one belonging to the message's own client.
+        var integration = await _integrations.GetReadOnlyAsync(message.ClientId, ChannelType.Telegram, ct);
         if (integration is null || integration.Status != ChannelIntegrationStatus.Connected || string.IsNullOrEmpty(integration.AccessToken))
         {
             throw new InvalidOperationException(
-                "This clinic doesn't have a connected Telegram bot — reconnect it in Settings → Messaging Integrations.");
+                "This client doesn't have a connected Telegram bot — reconnect it in Settings → Messaging Integrations.");
         }
 
         var maxBytes = _config.VoiceMaxBytes;

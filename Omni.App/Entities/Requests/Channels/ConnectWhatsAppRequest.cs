@@ -10,7 +10,7 @@ namespace Omni.App.Entities.Requests.Channels;
 /// (see ChannelIntegrationService.ConnectWhatsAppAsync).
 /// </summary>
 public record ConnectWhatsAppRequest(
-    Guid ClinicId,
+    Guid ClientId,
     string? Code = null,
     string? AccessToken = null,
     string? RedirectUri = null,

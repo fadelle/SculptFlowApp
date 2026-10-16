@@ -16,7 +16,7 @@ using Omni.App.Entities.Responses.Appointments;
 using Omni.App.Persistence.Contracts;
 using Omni.App.Persistence.Contracts.Appointments;
 using Omni.App.Persistence.Contracts.Campaigns;
-using Omni.App.Persistence.Contracts.Clinics;
+using Omni.App.Persistence.Contracts.Clients;
 using Omni.App.Persistence.Contracts.Leads;
 using Omni.App.Persistence.Contracts.Procedures;
 
@@ -26,7 +26,7 @@ public class AppointmentService : IAppointmentService
 {
     private readonly IAppointmentRepository _appointments;
     private readonly ILeadRepository _leads;
-    private readonly IClinicRepository _clinics;
+    private readonly IClientRepository _clients;
     private readonly IProcedureRepository _procedureRows;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IEventLogger _events;
@@ -40,7 +40,7 @@ public class AppointmentService : IAppointmentService
     private readonly IConfigManager _config;
 
     public AppointmentService(
-        IAppointmentRepository appointments, ILeadRepository leads, IClinicRepository clinics, IProcedureRepository procedureRows, IUnitOfWork unitOfWork, IEventLogger events, IProcedureService procedures, IAvailabilityService availability,
+        IAppointmentRepository appointments, ILeadRepository leads, IClientRepository clients, IProcedureRepository procedureRows, IUnitOfWork unitOfWork, IEventLogger events, IProcedureService procedures, IAvailabilityService availability,
         IInboxNotifier notifier, INotificationService notifications, ICalendarIntegrationService calendarSync,
         ICampaignRepository campaigns, IConfigManager config)
     {
@@ -48,7 +48,7 @@ public class AppointmentService : IAppointmentService
         _config = config;
         _appointments = appointments;
         _leads = leads;
-        _clinics = clinics;
+        _clients = clients;
         _procedureRows = procedureRows;
         _unitOfWork = unitOfWork;
         _events = events;
@@ -59,14 +59,14 @@ public class AppointmentService : IAppointmentService
         _calendarSync = calendarSync;
     }
 
-    /// <summary>The clinic's configured timezone (Clinic.Timezone), falling back to UTC for an unrecognized
-    /// value — the one place "what timezone is this clinic in" is resolved, shared by slot generation and the
+    /// <summary>The client's configured timezone (Client.Timezone), falling back to UTC for an unrecognized
+    /// value — the one place "what timezone is this client in" is resolved, shared by slot generation and the
     /// calendar's day grouping so both agree on what day/time an appointment falls on.</summary>
-    private static TimeZoneInfo ResolveTimeZone(Clinic clinic)
+    private static TimeZoneInfo ResolveTimeZone(Client client)
     {
         try
         {
-            return TimeZoneInfo.FindSystemTimeZoneById(clinic.Timezone);
+            return TimeZoneInfo.FindSystemTimeZoneById(client.Timezone);
         }
         catch
         {
@@ -78,42 +78,42 @@ public class AppointmentService : IAppointmentService
     {
         await using var tx = await _unitOfWork.BeginTransactionAsync(ct);
 
-        // Serialize bookings per clinic until commit: the second of two concurrent attempts waits here, then its check
+        // Serialize bookings per client until commit: the second of two concurrent attempts waits here, then its check
         // below sees the first one's appointment and rejects it.
-        await LockClinicAsync(request.ClinicId, ct);
+        await LockClientAsync(request.ClientId, ct);
 
-        // The lead must be one of THIS clinic's (a wrong or foreign id must not create an appointment).
-        if (!await _leads.ExistsAsync(request.ClinicId, request.LeadId, ct))
+        // The lead must be one of THIS client's (a wrong or foreign id must not create an appointment).
+        if (!await _leads.ExistsAsync(request.ClientId, request.LeadId, ct))
         {
-            throw new ArgumentException("Lead not found for this clinic.");
+            throw new ArgumentException("Lead not found for this client.");
         }
 
         // One upcoming appointment per lead: a second booking is refused, and the reply describes the existing one so the AI can
         // offer to move it. Under the lock, so two simultaneous bookings for the same lead can't both pass.
-        var (tz, upcoming) = await LoadUpcomingAsync(request.ClinicId, request.LeadId, ct);
+        var (tz, upcoming) = await LoadUpcomingAsync(request.ClientId, request.LeadId, ct);
         if (upcoming.Count > 0) throw new LeadAlreadyBookedException(ToUpcoming(upcoming[0], tz));
 
-        var check = await _availability.CheckSlotAsync(request.ClinicId, request.ProcedureId, request.ScheduledStart, request.ScheduledEnd, ct: ct);
+        var check = await _availability.CheckSlotAsync(request.ClientId, request.ProcedureId, request.ScheduledStart, request.ScheduledEnd, ct: ct);
         if (check.Error is not null) throw new SlotUnavailableException(check.Error);
 
         var appointment = await CreateCoreAsync(request with { ScheduledEnd = check.End }, ct);
         await tx.CommitAsync(ct);
-        await NotifyChangedAsync(request.ClinicId, appointment, "created", ct); // only once the row is committed and visible
+        await NotifyChangedAsync(request.ClientId, appointment, "created", ct); // only once the row is committed and visible
         return appointment;
     }
 
-    /// <summary>Tells the clinic's open calendars to re-fetch (best-effort SignalR) AND — for created/rescheduled/canceled — creates
+    /// <summary>Tells the client's open calendars to re-fetch (best-effort SignalR) AND — for created/rescheduled/canceled — creates
     /// the matching APPOINTMENT_* notification (see INotificationService; "status_changed" covers attended/no_show/confirmed, which
     /// aren't in the notification list). Called only once the appointment row is actually committed — never on a mere request.</summary>
-    private async Task NotifyChangedAsync(Guid clinicId, AppointmentResponse appointment, string change, CancellationToken ct)
+    private async Task NotifyChangedAsync(Guid clientId, AppointmentResponse appointment, string change, CancellationToken ct)
     {
-        try { await _notifier.AppointmentChangedAsync(clinicId, appointment.Id, change, ct); }
+        try { await _notifier.AppointmentChangedAsync(clientId, appointment.Id, change, ct); }
         catch { /* best effort */ }
 
         // Only AFTER the appointment change is already committed — TriggerAppointmentSyncAsync itself decides
         // whether "change" maps to a real external-calendar operation (created/rescheduled/canceled only) and
         // never throws, so a calendar problem can never affect the appointment operation that already succeeded.
-        await _calendarSync.TriggerAppointmentSyncAsync(clinicId, appointment, change, ct);
+        await _calendarSync.TriggerAppointmentSyncAsync(clientId, appointment, change, ct);
 
         var (type, title) = change switch
         {
@@ -130,7 +130,7 @@ public class AppointmentService : IAppointmentService
         var what = string.IsNullOrWhiteSpace(appointment.ProcedureName) ? "a consultation" : appointment.ProcedureName!;
         var verb = change switch { "created" => "booked", "rescheduled" => "moved to", _ => "canceled for" };
 
-        await _notifications.CreateAsync(clinicId, type, title!,
+        await _notifications.CreateAsync(clientId, type, title!,
             $"{who} — {what} {verb} {whenLabel}.",
             leadId: appointment.LeadId, appointmentId: appointment.Id,
             link: $"/dashboard/appointments/{appointment.Id}", ct: ct);
@@ -138,32 +138,32 @@ public class AppointmentService : IAppointmentService
 
     public async Task<AppointmentResponse> CreateAsync(CreateAppointmentRequest request, CancellationToken ct = default)
     {
-        if (!await _leads.ExistsAsync(request.ClinicId, request.LeadId, ct))
+        if (!await _leads.ExistsAsync(request.ClientId, request.LeadId, ct))
         {
-            throw new ArgumentException("Lead not found for this clinic.");
+            throw new ArgumentException("Lead not found for this client.");
         }
         var appointment = await CreateCoreAsync(request, ct);
-        await NotifyChangedAsync(request.ClinicId, appointment, "created", ct);
+        await NotifyChangedAsync(request.ClientId, appointment, "created", ct);
         return appointment;
     }
 
     private async Task<AppointmentResponse> CreateCoreAsync(CreateAppointmentRequest request, CancellationToken ct)
     {
-        // A new booking may only reference one of this clinic's ACTIVE procedures.
+        // A new booking may only reference one of this client's ACTIVE procedures.
         if (request.ProcedureId is { } procedureId)
         {
-            await _procedures.EnsureUsableAsync(request.ClinicId, procedureId, ct);
+            await _procedures.EnsureUsableAsync(request.ClientId, procedureId, ct);
         }
 
         var appointment = new Appointment
         {
             Id = Guid.NewGuid(),
-            ClinicId = request.ClinicId,
+            ClientId = request.ClientId,
             LeadId = request.LeadId,
             ProcedureId = request.ProcedureId,
             AppointmentType = string.IsNullOrWhiteSpace(request.AppointmentType) ? "consultation" : request.AppointmentType,
             Status = AppointmentStatus.Booked,
-            // Npgsql only stores UTC-offset values; callers (n8n) send the clinic-local offset returned by get_available_slots.
+            // Npgsql only stores UTC-offset values; callers (n8n) send the client-local offset returned by get_available_slots.
             ScheduledStart = request.ScheduledStart.ToUniversalTime(),
             ScheduledEnd = request.ScheduledEnd?.ToUniversalTime(),
             LocationType = request.LocationType,
@@ -175,19 +175,19 @@ public class AppointmentService : IAppointmentService
 
         _appointments.Add(appointment);
 
-        var lead = await _leads.GetAsync(request.ClinicId, request.LeadId, ct);
+        var lead = await _leads.GetAsync(request.ClientId, request.LeadId, ct);
         if (lead is not null)
         {
             lead.Status = LeadStatus.ConsultationBooked;
             lead.UpdatedAt = DateTimeOffset.UtcNow;
         }
 
-        _events.Log(request.ClinicId, EventTypes.ConsultationBooked, leadId: request.LeadId, appointmentId: appointment.Id);
+        _events.Log(request.ClientId, EventTypes.ConsultationBooked, leadId: request.LeadId, appointmentId: appointment.Id);
 
         // Credit the campaign the patient replied to: the booking shows up in that campaign's "Booked" figure.
         var now = DateTimeOffset.UtcNow;
         var campaignSend = await _campaigns.FindLatestRepliedAwaitingBookingAsync(
-            request.ClinicId, request.LeadId, now.AddDays(-_config.CampaignsBookingAttributionDays), ct);
+            request.ClientId, request.LeadId, now.AddDays(-_config.CampaignsBookingAttributionDays), ct);
         if (campaignSend is not null)
         {
             campaignSend.Status = CampaignRecipientStatus.Booked;
@@ -200,20 +200,20 @@ public class AppointmentService : IAppointmentService
         return await ToResponseAsync(appointment, ct);
     }
 
-    public async Task<AppointmentResponse?> GetByIdAsync(Guid clinicId, Guid id, CancellationToken ct = default)
+    public async Task<AppointmentResponse?> GetByIdAsync(Guid clientId, Guid id, CancellationToken ct = default)
     {
-        var appointment = await _appointments.GetWithDetailsAsync(clinicId, id, ct);
+        var appointment = await _appointments.GetWithDetailsAsync(clientId, id, ct);
         return appointment is null ? null : AppointmentMapper.ToResponse(appointment);
     }
 
-    public async Task<AppointmentResponse?> UpdateStatusAsync(Guid clinicId, Guid id, string status, CancellationToken ct = default)
+    public async Task<AppointmentResponse?> UpdateStatusAsync(Guid clientId, Guid id, string status, CancellationToken ct = default)
     {
         if (!AppointmentStatus.All.Contains(status))
         {
             throw new ArgumentException($"Invalid appointment status '{status}'.", nameof(status));
         }
 
-        var appointment = await _appointments.GetAsync(clinicId, id, ct);
+        var appointment = await _appointments.GetAsync(clientId, id, ct);
         if (appointment is null) return null;
 
         appointment.Status = status;
@@ -225,32 +225,32 @@ public class AppointmentService : IAppointmentService
             if (status == AppointmentStatus.Attended)
             {
                 lead.Status = LeadStatus.ConsultationAttended;
-                _events.Log(clinicId, EventTypes.ConsultationAttended, leadId: lead.Id, appointmentId: appointment.Id);
+                _events.Log(clientId, EventTypes.ConsultationAttended, leadId: lead.Id, appointmentId: appointment.Id);
             }
             else if (status == AppointmentStatus.NoShow)
             {
                 lead.Status = LeadStatus.NoShow;
-                _events.Log(clinicId, EventTypes.ConsultationNoShow, leadId: lead.Id, appointmentId: appointment.Id);
+                _events.Log(clientId, EventTypes.ConsultationNoShow, leadId: lead.Id, appointmentId: appointment.Id);
             }
             lead.UpdatedAt = DateTimeOffset.UtcNow;
         }
 
         await _unitOfWork.SaveChangesAsync(ct);
         var updateResponse = await ToResponseAsync(appointment, ct);
-        await NotifyChangedAsync(clinicId, updateResponse, status == AppointmentStatus.Canceled ? "canceled" : "status_changed", ct);
+        await NotifyChangedAsync(clientId, updateResponse, status == AppointmentStatus.Canceled ? "canceled" : "status_changed", ct);
         return updateResponse;
     }
 
     public async Task<AppointmentResponse?> RescheduleAsync(
-        Guid clinicId, Guid leadId, Guid? id, DateTimeOffset newStart, DateTimeOffset? newEnd, string? reason, CancellationToken ct = default)
+        Guid clientId, Guid leadId, Guid? id, DateTimeOffset newStart, DateTimeOffset? newEnd, string? reason, CancellationToken ct = default)
     {
         await using var tx = await _unitOfWork.BeginTransactionAsync(ct);
-        await LockClinicAsync(clinicId, ct);
+        await LockClientAsync(clientId, ct);
 
-        // The appointment must belong to this clinic AND this lead: the AI only ever acts on the patient it is talking to.
-        var targetId = await ResolveTargetAsync(clinicId, leadId, id, ct);
+        // The appointment must belong to this client AND this lead: the AI only ever acts on the patient it is talking to.
+        var targetId = await ResolveTargetAsync(clientId, leadId, id, ct);
         if (targetId is null) return null;
-        var appointment = await _appointments.GetForLeadAsync(clinicId, leadId, targetId.Value, ct);
+        var appointment = await _appointments.GetForLeadAsync(clientId, leadId, targetId.Value, ct);
         if (appointment is null) return null;
 
         if (appointment.Status != AppointmentStatus.Booked && appointment.Status != AppointmentStatus.Confirmed)
@@ -263,34 +263,34 @@ public class AppointmentService : IAppointmentService
         }
 
         // A procedure that was deactivated since booking can't be newly booked, but must not trap the patient in an old time:
-        // fall back to the clinic's default duration for it.
+        // fall back to the client's default duration for it.
         var procedureId = await ActiveProcedureOrNullAsync(appointment.ProcedureId, ct);
 
-        var check = await _availability.CheckSlotAsync(clinicId, procedureId, newStart, newEnd, excludeAppointmentId: appointment.Id, ct: ct);
+        var check = await _availability.CheckSlotAsync(clientId, procedureId, newStart, newEnd, excludeAppointmentId: appointment.Id, ct: ct);
         if (check.Error is not null) throw new SlotUnavailableException(check.Error);
 
         appointment.ScheduledStart = newStart.ToUniversalTime();
         appointment.ScheduledEnd = check.End.ToUniversalTime();
-        // A rescheduled time isn't "confirmed" again until the clinic/staff confirms it — same
+        // A rescheduled time isn't "confirmed" again until the client/staff confirms it — same
         // status a brand-new booking starts at.
         appointment.Status = AppointmentStatus.Booked;
         appointment.UpdatedAt = DateTimeOffset.UtcNow;
 
-        _events.Log(clinicId, EventTypes.ConsultationRescheduled, leadId: appointment.LeadId, appointmentId: appointment.Id,
+        _events.Log(clientId, EventTypes.ConsultationRescheduled, leadId: appointment.LeadId, appointmentId: appointment.Id,
             metadataJson: JsonSerializer.Serialize(new { reason }));
 
         await _unitOfWork.SaveChangesAsync(ct);
         var response = await ToResponseAsync(appointment, ct);
         await tx.CommitAsync(ct);
-        await NotifyChangedAsync(clinicId, response, "rescheduled", ct); // after the transaction commits
+        await NotifyChangedAsync(clientId, response, "rescheduled", ct); // after the transaction commits
         return response;
     }
 
-    public async Task<AppointmentResponse?> CancelAsync(Guid clinicId, Guid leadId, Guid? id, string? reason, CancellationToken ct = default)
+    public async Task<AppointmentResponse?> CancelAsync(Guid clientId, Guid leadId, Guid? id, string? reason, CancellationToken ct = default)
     {
-        var targetId = await ResolveTargetAsync(clinicId, leadId, id, ct);
+        var targetId = await ResolveTargetAsync(clientId, leadId, id, ct);
         if (targetId is null) return null;
-        var appointment = await _appointments.GetForLeadAsync(clinicId, leadId, targetId.Value, ct);
+        var appointment = await _appointments.GetForLeadAsync(clientId, leadId, targetId.Value, ct);
         if (appointment is null) return null;
 
         if (appointment.Status == AppointmentStatus.Canceled) return await ToResponseAsync(appointment, ct); // already done
@@ -303,33 +303,33 @@ public class AppointmentService : IAppointmentService
         appointment.Status = AppointmentStatus.Canceled;
         appointment.UpdatedAt = DateTimeOffset.UtcNow;
 
-        _events.Log(clinicId, EventTypes.ConsultationCancelled, leadId: appointment.LeadId, appointmentId: appointment.Id,
+        _events.Log(clientId, EventTypes.ConsultationCancelled, leadId: appointment.LeadId, appointmentId: appointment.Id,
             metadataJson: JsonSerializer.Serialize(new { reason }));
 
         await _unitOfWork.SaveChangesAsync(ct);
         var cancelResponse = await ToResponseAsync(appointment, ct);
-        await NotifyChangedAsync(clinicId, cancelResponse, "canceled", ct);
+        await NotifyChangedAsync(clientId, cancelResponse, "canceled", ct);
         return cancelResponse;
     }
 
-    public async Task<PatientBookingContext?> GetBookingContextAsync(Guid clinicId, Guid leadId, CancellationToken ct = default)
+    public async Task<PatientBookingContext?> GetBookingContextAsync(Guid clientId, Guid leadId, CancellationToken ct = default)
     {
-        // A leadId from another clinic (or a made-up one) must look exactly like "not found" — never return its appointments.
-        if (!await _leads.ExistsAsync(clinicId, leadId, ct)) return null;
+        // A leadId from another client (or a made-up one) must look exactly like "not found" — never return its appointments.
+        if (!await _leads.ExistsAsync(clientId, leadId, ct)) return null;
 
-        var (tz, upcoming) = await LoadUpcomingAsync(clinicId, leadId, ct);
+        var (tz, upcoming) = await LoadUpcomingAsync(clientId, leadId, ct);
         var existing = upcoming.Select(a => ToUpcoming(a, tz)).ToList();
         var blocked = existing.Count > 0;
         return new PatientBookingContext(blocked, !blocked, blocked ? "existing_upcoming_appointment" : null, existing);
     }
 
-    public async Task<ScheduleOutcome> ScheduleAsync(Guid clinicId, Guid leadId, ScheduleConsultationRequest request, CancellationToken ct = default)
+    public async Task<ScheduleOutcome> ScheduleAsync(Guid clientId, Guid leadId, ScheduleConsultationRequest request, CancellationToken ct = default)
     {
-        // The current state always comes from the database (never from what the AI remembers). Null = the lead isn't in this clinic.
-        var context = await GetBookingContextAsync(clinicId, leadId, ct);
-        if (context is null) return new ScheduleOutcome("none", "LEAD_NOT_FOUND", "Lead not found for this clinic.");
+        // The current state always comes from the database (never from what the AI remembers). Null = the lead isn't in this client.
+        var context = await GetBookingContextAsync(clientId, leadId, ct);
+        if (context is null) return new ScheduleOutcome("none", "LEAD_NOT_FOUND", "Lead not found for this client.");
 
-        var tz = await GetTimeZoneAsync(clinicId, ct);
+        var tz = await GetTimeZoneAsync(clientId, ct);
         var requestedLabel = LabelFor(TimeZoneInfo.ConvertTime(request.ScheduledStart, tz));
         var existing = context.ExistingUpcomingAppointments;
 
@@ -340,11 +340,11 @@ public class AppointmentService : IAppointmentService
             if (!context.HasUpcomingAppointment)
             {
                 var created = await BookAvailableSlotAsync(new CreateAppointmentRequest(
-                    clinicId, leadId, request.ProcedureId,
+                    clientId, leadId, request.ProcedureId,
                     string.IsNullOrWhiteSpace(request.AppointmentType) ? "consultation" : request.AppointmentType,
                     request.ScheduledStart, null, null, null, request.Notes), ct);
                 return new ScheduleOutcome("created", "BOOKED", "Appointment booked.",
-                    Appointment: await ToLocalAsync(clinicId, leadId, created.Id, ct), RequestedLabel: requestedLabel);
+                    Appointment: await ToLocalAsync(clientId, leadId, created.Id, ct), RequestedLabel: requestedLabel);
             }
 
             // 2) The patient already has an upcoming appointment. Which one would be replaced?
@@ -367,7 +367,7 @@ public class AppointmentService : IAppointmentService
             }
 
             // Read-only pre-check, so the patient is never asked to confirm a move to a time that cannot work.
-            var check = await _availability.CheckSlotAsync(clinicId, await ActiveProcedureOrNullAsync(target?.ProcedureId ?? request.ProcedureId, ct),
+            var check = await _availability.CheckSlotAsync(clientId, await ActiveProcedureOrNullAsync(target?.ProcedureId ?? request.ProcedureId, ct),
                 request.ScheduledStart, null, excludeAppointmentId: target?.Id, ct: ct);
             if (check.Error is not null)
             {
@@ -388,13 +388,13 @@ public class AppointmentService : IAppointmentService
                     "Patient has more than one upcoming appointment; it is unclear which to move.", Existing: existing, RequestedLabel: requestedLabel);
             }
 
-            var moved = await RescheduleAsync(clinicId, leadId, target.Id, request.ScheduledStart, null, request.Reason, ct);
+            var moved = await RescheduleAsync(clientId, leadId, target.Id, request.ScheduledStart, null, request.Reason, ct);
             if (moved is null)
             {
                 return new ScheduleOutcome("none", "INVALID_REQUEST", "The appointment could not be found for this patient.", RequestedLabel: requestedLabel);
             }
             return new ScheduleOutcome("rescheduled", "RESCHEDULED", "Appointment rescheduled.",
-                Appointment: await ToLocalAsync(clinicId, leadId, moved.Id, ct), PreviousAppointment: target, RequestedLabel: requestedLabel);
+                Appointment: await ToLocalAsync(clientId, leadId, moved.Id, ct), PreviousAppointment: target, RequestedLabel: requestedLabel);
         }
         catch (LeadAlreadyBookedException ex)
         {
@@ -412,22 +412,22 @@ public class AppointmentService : IAppointmentService
         }
     }
 
-    private async Task<TimeZoneInfo> GetTimeZoneAsync(Guid clinicId, CancellationToken ct)
+    private async Task<TimeZoneInfo> GetTimeZoneAsync(Guid clientId, CancellationToken ct)
     {
-        var clinic = await _clinics.GetReadOnlyAsync(clinicId, ct);
-        return clinic is null ? TimeZoneInfo.Utc : ResolveTimeZone(clinic);
+        var client = await _clients.GetReadOnlyAsync(clientId, ct);
+        return client is null ? TimeZoneInfo.Utc : ResolveTimeZone(client);
     }
 
-    /// <summary>A procedure id only when that procedure is still active — a deactivated one falls back to the clinic's default duration.</summary>
+    /// <summary>A procedure id only when that procedure is still active — a deactivated one falls back to the client's default duration.</summary>
     private async Task<Guid?> ActiveProcedureOrNullAsync(Guid? procedureId, CancellationToken ct)
     {
         if (procedureId is not { } id) return null;
         return await _procedureRows.IsActiveAsync(id, ct) ? id : null;
     }
 
-    private async Task<UpcomingAppointmentResponse?> ToLocalAsync(Guid clinicId, Guid leadId, Guid appointmentId, CancellationToken ct)
+    private async Task<UpcomingAppointmentResponse?> ToLocalAsync(Guid clientId, Guid leadId, Guid appointmentId, CancellationToken ct)
     {
-        var (tz, items) = await LoadUpcomingAsync(clinicId, leadId, ct);
+        var (tz, items) = await LoadUpcomingAsync(clientId, leadId, ct);
         var a = items.FirstOrDefault(x => x.Id == appointmentId);
         return a is null ? null : ToUpcoming(a, tz);
     }
@@ -438,13 +438,13 @@ public class AppointmentService : IAppointmentService
         return $"{local.DayOfWeek}, {local.ToString("MMM d", inv)} at {local.ToString("h:mm tt", inv)}";
     }
 
-    public async Task<CancelOutcome> CancelConsultationAsync(Guid clinicId, Guid leadId, Guid? id, string? reason, CancellationToken ct = default)
+    public async Task<CancelOutcome> CancelConsultationAsync(Guid clientId, Guid leadId, Guid? id, string? reason, CancellationToken ct = default)
     {
         try
         {
             // Same rule as schedule_consultation: no upcoming → nothing to cancel; exactly ONE → the backend selects it and any appointmentId
             // is ignored (the AI's ids go stale); two or more → the id is required and must be a CURRENT upcoming appointment.
-            var context = await GetBookingContextAsync(clinicId, leadId, ct);
+            var context = await GetBookingContextAsync(clientId, leadId, ct);
             var existing = context?.ExistingUpcomingAppointments;
             if (existing is null || existing.Count == 0)
             {
@@ -456,14 +456,14 @@ public class AppointmentService : IAppointmentService
                     "That appointment is not one of this patient's current upcoming appointments.", Existing: existing);
             }
 
-            var canceled = await CancelAsync(clinicId, leadId, existing.Count == 1 ? null : id, reason, ct);
+            var canceled = await CancelAsync(clientId, leadId, existing.Count == 1 ? null : id, reason, ct);
             if (canceled is null)
             {
                 return new CancelOutcome("none", "NO_UPCOMING_APPOINTMENT", "This patient has no upcoming appointment to cancel (it may already be canceled).");
             }
 
-            // CancelAsync returns the stored (UTC) appointment; report it the way the patient should hear it — clinic-local.
-            var tz = await GetTimeZoneAsync(clinicId, ct);
+            // CancelAsync returns the stored (UTC) appointment; report it the way the patient should hear it — client-local.
+            var tz = await GetTimeZoneAsync(clientId, ct);
             var entity = await _appointments.GetWithProcedureReadOnlyAsync(canceled.Id, ct)
                 ?? throw new InvalidOperationException("Canceled appointment not found.");
             return new CancelOutcome("canceled", "CANCELED", "Appointment canceled.", Appointment: ToUpcoming(entity, tz));
@@ -478,33 +478,33 @@ public class AppointmentService : IAppointmentService
         }
     }
 
-    public async Task<UpcomingAppointmentsResponse> GetUpcomingForLeadAsync(Guid clinicId, Guid leadId, CancellationToken ct = default)
+    public async Task<UpcomingAppointmentsResponse> GetUpcomingForLeadAsync(Guid clientId, Guid leadId, CancellationToken ct = default)
     {
-        var (tz, items) = await LoadUpcomingAsync(clinicId, leadId, ct);
+        var (tz, items) = await LoadUpcomingAsync(clientId, leadId, ct);
         return new UpcomingAppointmentsResponse(tz.Id, items.Select(a => ToUpcoming(a, tz)).ToList());
     }
 
     /// <summary>The appointment a reschedule/cancel acts on: the given id, or — when the AI sends none — the lead's single upcoming
     /// appointment. Null when the lead has none; several upcoming ones (only staff can create them) need an explicit id.</summary>
-    private async Task<Guid?> ResolveTargetAsync(Guid clinicId, Guid leadId, Guid? id, CancellationToken ct)
+    private async Task<Guid?> ResolveTargetAsync(Guid clientId, Guid leadId, Guid? id, CancellationToken ct)
     {
         if (id is not null) return id;
 
-        var (tz, upcoming) = await LoadUpcomingAsync(clinicId, leadId, ct);
+        var (tz, upcoming) = await LoadUpcomingAsync(clientId, leadId, ct);
         if (upcoming.Count == 0) return null;
         if (upcoming.Count > 1) throw new MultipleUpcomingAppointmentsException(upcoming.Select(a => ToUpcoming(a, tz)).ToList());
         return upcoming[0].Id;
     }
 
     /// <summary>The lead's future booked/confirmed appointments, soonest first (canceled, rescheduled, attended and no-show never
-    /// count as "upcoming"), plus the clinic's timezone for wording them.</summary>
-    private async Task<(TimeZoneInfo Tz, List<Appointment> Items)> LoadUpcomingAsync(Guid clinicId, Guid leadId, CancellationToken ct)
+    /// count as "upcoming"), plus the client's timezone for wording them.</summary>
+    private async Task<(TimeZoneInfo Tz, List<Appointment> Items)> LoadUpcomingAsync(Guid clientId, Guid leadId, CancellationToken ct)
     {
-        var clinic = await _clinics.GetReadOnlyAsync(clinicId, ct);
-        var tz = clinic is null ? TimeZoneInfo.Utc : ResolveTimeZone(clinic);
+        var client = await _clients.GetReadOnlyAsync(clientId, ct);
+        var tz = client is null ? TimeZoneInfo.Utc : ResolveTimeZone(client);
         var now = DateTimeOffset.UtcNow;
 
-        var items = (await _appointments.ListUpcomingForLeadAsync(clinicId, leadId, now, ct)).ToList();
+        var items = (await _appointments.ListUpcomingForLeadAsync(clientId, leadId, now, ct)).ToList();
         return (tz, items);
     }
 
@@ -518,22 +518,22 @@ public class AppointmentService : IAppointmentService
             LabelFor(start));
     }
 
-    /// <summary>Serializes bookings per clinic until the surrounding transaction ends.</summary>
-    private Task LockClinicAsync(Guid clinicId, CancellationToken ct) => _appointments.LockClinicForBookingAsync(clinicId, ct);
+    /// <summary>Serializes bookings per client until the surrounding transaction ends.</summary>
+    private Task LockClientAsync(Guid clientId, CancellationToken ct) => _appointments.LockClientForBookingAsync(clientId, ct);
 
     public async Task<(IReadOnlyList<AppointmentResponse> Items, int TotalCount)> ListAsync(
-        Guid clinicId, string? status, DateTimeOffset? from, DateTimeOffset? to, int skip, int take, CancellationToken ct = default)
+        Guid clientId, string? status, DateTimeOffset? from, DateTimeOffset? to, int skip, int take, CancellationToken ct = default)
     {
-        var (items, totalCount) = await _appointments.ListAsync(clinicId, status, from, to, skip, take, ct);
+        var (items, totalCount) = await _appointments.ListAsync(clientId, status, from, to, skip, take, ct);
 
         return (items.Select(AppointmentMapper.ToResponse).ToList(), totalCount);
     }
 
-    public async Task<CalendarMonthResponse> GetCalendarMonthAsync(Guid clinicId, int year, int month, TimeZoneInfo? displayTimeZone = null, CancellationToken ct = default)
+    public async Task<CalendarMonthResponse> GetCalendarMonthAsync(Guid clientId, int year, int month, TimeZoneInfo? displayTimeZone = null, CancellationToken ct = default)
     {
-        var clinic = await _clinics.GetReadOnlyAsync(clinicId, ct);
-        var clinicTz = clinic is null ? TimeZoneInfo.Utc : ResolveTimeZone(clinic);
-        var tz = displayTimeZone ?? clinicTz;
+        var client = await _clients.GetReadOnlyAsync(clientId, ct);
+        var clientTz = client is null ? TimeZoneInfo.Utc : ResolveTimeZone(client);
+        var tz = displayTimeZone ?? clientTz;
 
         var firstOfMonth = new DateOnly(year, month, 1);
         // Sunday-start weeks (no existing calendar convention in this project to match yet). Pad the grid with
@@ -547,7 +547,7 @@ public class AppointmentService : IAppointmentService
         var startUtc = LocalMidnightToUtc(gridStart, tz);
         var endUtc = LocalMidnightToUtc(gridEnd.AddDays(1), tz); // exclusive upper bound
 
-        var appointments = await _appointments.ListStartingBetweenAsync(clinicId, startUtc, endUtc, ct);
+        var appointments = await _appointments.ListStartingBetweenAsync(clientId, startUtc, endUtc, ct);
 
         var items = appointments.Select(a =>
         {
@@ -558,9 +558,9 @@ public class AppointmentService : IAppointmentService
                 local.ToString("yyyy-MM-dd"), local.ToString("HH:mm"));
         }).ToList();
 
-        var needsOutcome = await _appointments.CountNeedingOutcomeAsync(clinicId, DateTimeOffset.UtcNow, ct);
+        var needsOutcome = await _appointments.CountNeedingOutcomeAsync(clientId, DateTimeOffset.UtcNow, ct);
 
-        return new CalendarMonthResponse(year, month, tz.Id, clinicTz.Id, gridStart.ToString("yyyy-MM-dd"), gridEnd.ToString("yyyy-MM-dd"), items, needsOutcome);
+        return new CalendarMonthResponse(year, month, tz.Id, clientTz.Id, gridStart.ToString("yyyy-MM-dd"), gridEnd.ToString("yyyy-MM-dd"), items, needsOutcome);
     }
 
     /// <summary>Local midnight on <paramref name="date"/>, in <paramref name="tz"/>, as UTC.</summary>

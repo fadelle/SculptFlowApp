@@ -1,13 +1,13 @@
 namespace Omni.App.Entities.Models;
 
-/// <summary>One row in a clinic's notification center (the bell). Created ONLY from a confirmed backend event —
+/// <summary>One row in a client's notification center (the bell). Created ONLY from a confirmed backend event —
 /// see NotificationType and Business/Contracts/Services/Notifications/INotificationService.cs for the full "when" list. Never created from an
 /// AI intention alone (e.g. the AI wanting to hand off, or wanting to book, isn't enough — the mode change or
 /// the appointment row has to actually exist first).</summary>
 public class Notification
 {
     public Guid Id { get; set; }
-    public Guid ClinicId { get; set; }
+    public Guid ClientId { get; set; }
     public string Type { get; set; } = string.Empty;
     public string Title { get; set; } = string.Empty;
     public string? Message { get; set; }

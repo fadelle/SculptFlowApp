@@ -17,13 +17,13 @@ namespace Omni.App.Pages.Dashboard;
 /// </summary>
 public class IndexModel : PageModel
 {
-    private readonly ICurrentClinicContext _clinicContext;
+    private readonly ICurrentClientContext _clientContext;
     private readonly IDashboardService _dashboard;
     private readonly IWhatsAppHealthService _whatsAppHealth;
 
-    public IndexModel(ICurrentClinicContext clinicContext, IDashboardService dashboard, IWhatsAppHealthService whatsAppHealth)
+    public IndexModel(ICurrentClientContext clientContext, IDashboardService dashboard, IWhatsAppHealthService whatsAppHealth)
     {
-        _clinicContext = clinicContext;
+        _clientContext = clientContext;
         _dashboard = dashboard;
         _whatsAppHealth = whatsAppHealth;
     }
@@ -51,32 +51,32 @@ public class IndexModel : PageModel
     [BindProperty(SupportsGet = true)]
     public DateOnly? To { get; set; }
 
-    public string? ClinicName { get; private set; }
-    public bool ClinicConfigured { get; private set; }
-    public Guid ClinicId { get; private set; }
+    public string? ClientName { get; private set; }
+    public bool ClientConfigured { get; private set; }
+    public Guid ClientId { get; private set; }
     public DashboardSummaryResponse? Summary { get; private set; }
     public DashboardAttentionResponse? Attention { get; private set; }
     public IReadOnlyList<DashboardProcedureRow> Procedures { get; private set; } = Array.Empty<DashboardProcedureRow>();
     /// <summary>Human-readable description of the selected range, e.g. "Sep 1 – Sep 30, 2026".</summary>
     public string RangeLabel { get; private set; } = "All time";
     /// <summary>Null means "no WhatsApp connection yet" — the indicator shows a neutral state, not
-    /// a warning, since an unconnected number isn't itself a problem for a brand-new clinic.</summary>
+    /// a warning, since an unconnected number isn't itself a problem for a brand-new client.</summary>
     public WhatsAppHealthResponse? WhatsAppHealth { get; private set; }
 
     public async Task OnGetAsync(CancellationToken ct)
     {
-        var clinic = await _clinicContext.GetClinicAsync(ct);
-        if (clinic is null)
+        var client = await _clientContext.GetClientAsync(ct);
+        if (client is null)
         {
-            ClinicConfigured = false;
+            ClientConfigured = false;
             return;
         }
 
-        ClinicConfigured = true;
-        ClinicId = clinic.Id;
-        ClinicName = clinic.Name;
+        ClientConfigured = true;
+        ClientId = client.Id;
+        ClientName = client.Name;
 
-        var tz = ViewerTimeZone.Resolve(Request, clinic.Timezone);
+        var tz = ViewerTimeZone.Resolve(Request, client.Timezone);
         var (fromDate, toDate) = ResolveRange(TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, tz).Date);
         RangeLabel = fromDate is null || toDate is null
             ? "All time"
@@ -88,10 +88,10 @@ public class IndexModel : PageModel
         DateTimeOffset? from = fromDate is null ? null : LocalMidnightUtc(fromDate.Value, tz);
         DateTimeOffset? to = toDate is null ? null : LocalMidnightUtc(toDate.Value.AddDays(1), tz);
 
-        Summary = await _dashboard.GetSummaryAsync(clinic.Id, from, to, ct);
-        Procedures = await _dashboard.GetProcedureStatsAsync(clinic.Id, from, to, ct);
-        Attention = await _dashboard.GetAttentionAsync(clinic.Id, ct);
-        WhatsAppHealth = await _whatsAppHealth.GetHealthAsync(clinic.Id, ct);
+        Summary = await _dashboard.GetSummaryAsync(client.Id, from, to, ct);
+        Procedures = await _dashboard.GetProcedureStatsAsync(client.Id, from, to, ct);
+        Attention = await _dashboard.GetAttentionAsync(client.Id, ct);
+        WhatsAppHealth = await _whatsAppHealth.GetHealthAsync(client.Id, ct);
     }
 
     /// <summary>Inclusive viewer-local start/end dates for the selected period (nulls = all time). Weeks start on Monday.</summary>

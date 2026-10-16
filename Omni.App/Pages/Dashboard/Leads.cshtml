@@ -24,14 +24,14 @@
         $"/dashboard/leads?PageNumber={p}&Status={Uri.EscapeDataString(Model.Status ?? "")}&Source={Uri.EscapeDataString(Model.Source ?? "")}&Search={Uri.EscapeDataString(Model.Search ?? "")}";
 }
 
-@if (!Model.ClinicConfigured)
+@if (!Model.ClientConfigured)
 {
-    <partial name="_NoClinic" />
+    <partial name="_NoClient" />
 }
 else
 {
     <div class="au-page-head">
-        <p class="au-page-head__sub">Everyone who has shown interest in your clinic. Open a person to update their status.</p>
+        <p class="au-page-head__sub">Everyone who has shown interest in your client. Open a person to update their status.</p>
     </div>
 
     @* #leads-filters and #leads-results are read by wwwroot/js/leads.js (live search swaps the results in place). *@
@@ -70,7 +70,7 @@ else
                     ? new EmptyStateModel(Icon: "search_off", Title: "No one matches these filters",
                         Text: "Try a different name, phone, status or source.", ActionLabel: "Clear filters", ActionHref: "/dashboard/leads", ActionIcon: "filter_alt_off")
                     : new EmptyStateModel(Icon: "group", Title: "No interested people yet",
-                        Text: "People who message your clinic or fill in one of your forms show up here.",
+                        Text: "People who message your client or fill in one of your forms show up here.",
                         ActionLabel: "Connect a messaging channel", ActionHref: "/settings/integrations", ActionIcon: "hub");
                 <partial name="_EmptyState" model="empty" />
             }

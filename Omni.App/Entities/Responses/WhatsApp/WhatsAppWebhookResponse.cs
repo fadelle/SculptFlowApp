@@ -15,7 +15,7 @@ public record WhatsAppWebhookResponse(
     bool Processed,
     string EventType,
     bool ShouldRunAi,
-    Guid? ClinicId,
+    Guid? ClientId,
     Guid? WhatsAppConnectionId = null,
     Guid? ConversationId = null,
     Guid? LeadId = null,

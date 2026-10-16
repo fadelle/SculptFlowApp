@@ -8,7 +8,7 @@ namespace Omni.App.Entities.Models;
 public class CampaignRecipient
 {
     public Guid Id { get; set; }
-    public Guid ClinicId { get; set; }
+    public Guid ClientId { get; set; }
     public Guid CampaignId { get; set; }
     public Guid LeadId { get; set; }
     public Guid? ConversationId { get; set; }

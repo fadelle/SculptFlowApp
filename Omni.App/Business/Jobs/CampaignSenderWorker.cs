@@ -69,7 +69,7 @@ public class CampaignSenderWorker : BackgroundService
             {
                 using var scope = _scopes.CreateScope();
                 var result = await scope.ServiceProvider.GetRequiredService<ICampaignService>()
-                    .SendDueAsync(campaign.ClinicId, campaign.Id, _config.CampaignsSendBatchSize, ct);
+                    .SendDueAsync(campaign.ClientId, campaign.Id, _config.CampaignsSendBatchSize, ct);
                 if (result is null) continue;
 
                 processed += result.Processed;
@@ -82,7 +82,7 @@ public class CampaignSenderWorker : BackgroundService
             }
             catch (Exception ex) when (ex is BillingDeniedException or EntitlementDeniedException)
             {
-                // Recipients stay queued; the next run tries again (e.g. after the clinic tops up or changes plan).
+                // Recipients stay queued; the next run tries again (e.g. after the client tops up or changes plan).
                 _logger.LogWarning("Campaign {CampaignId} is waiting: {Reason}", campaign.Id, ex.Message);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)

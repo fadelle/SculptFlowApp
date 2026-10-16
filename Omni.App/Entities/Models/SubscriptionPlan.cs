@@ -2,7 +2,7 @@ using Omni.App.Common.Enums;
 
 namespace Omni.App.Entities.Models;
 
-/// <summary>A plan a clinic can subscribe to (Starter, Growth, Business...). It decides the recurring price, the
+/// <summary>A plan a client can subscribe to (Starter, Growth, Business...). It decides the recurring price, the
 /// entitlements (features and limits, see <see cref="SubscriptionPlanEntitlement"/>) and an optional monetary usage
 /// credit granted each period. Usage itself is never a quota here: it is charged per billable event (see
 /// BillingUsageRecord). Price changes apply from the next renewal. See Billing/ISubscriptionService.cs.</summary>

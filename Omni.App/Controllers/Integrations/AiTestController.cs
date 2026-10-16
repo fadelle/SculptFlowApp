@@ -12,7 +12,7 @@ namespace Omni.App.Controllers.Integrations;
 /// be pointed at these instead of the real tools and the AI agent's reaction to each code can be watched without having to set up
 /// the exact appointment state (existing bookings, closed days, race conditions...) that would otherwise be needed to trigger it.
 ///
-/// NEVER touches the database and NEVER takes clinicId/leadId — it can't, since nothing here is real. The response shapes and
+/// NEVER touches the database and NEVER takes clientId/leadId — it can't, since nothing here is real. The response shapes and
 /// instruction wording are byte-for-byte what the real endpoints (Controllers/Integrations/AiController.cs) return for the same code, via the
 /// shared AiResultInstructions helper, so a test here reflects what the AI would really see.
 ///
@@ -35,7 +35,7 @@ public class AiTestController : ControllerBase
         schedule = new[] { "BOOKED", "RESCHEDULED", "CONFIRMATION_REQUIRED", "MULTIPLE_UPCOMING_APPOINTMENTS", "SLOT_UNAVAILABLE", "LEAD_NOT_FOUND", "INVALID_REQUEST" },
         cancel = new[] { "CANCELED", "NO_UPCOMING_APPOINTMENT", "MULTIPLE_UPCOMING_APPOINTMENTS", "INVALID_REQUEST" },
         usage = "POST /api/ai/test/schedule?code=<one of the schedule codes> or /api/ai/test/cancel?code=<one of the cancel codes>. " +
-                "Same request body/headers as the real tool; clinicId/leadId in the URL are ignored. The response is exactly what " +
+                "Same request body/headers as the real tool; clientId/leadId in the URL are ignored. The response is exactly what " +
                 "schedule_consultation/cancel_consultation would return for that code — point the n8n tool at this URL temporarily to test the AI's reaction."
     });
 
@@ -65,7 +65,7 @@ public class AiTestController : ControllerBase
 
         "SLOT_UNAVAILABLE" => Fail("SLOT_UNAVAILABLE", "That time is no longer available - it overlaps another appointment.", null, requestedLabel),
 
-        "LEAD_NOT_FOUND" => Fail("LEAD_NOT_FOUND", "Lead not found for this clinic.", null, null),
+        "LEAD_NOT_FOUND" => Fail("LEAD_NOT_FOUND", "Lead not found for this client.", null, null),
 
         "INVALID_REQUEST" => Fail("INVALID_REQUEST", "That appointment is not one of this patient's current upcoming appointments.", new[] { target }, requestedLabel),
 

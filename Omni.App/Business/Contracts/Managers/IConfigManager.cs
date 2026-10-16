@@ -12,30 +12,30 @@ namespace Omni.App.Business.Contracts.Managers;
 public interface IConfigManager
 {
     // ---- Accounts
-    /// <summary>Whether anyone can create a new clinic (Register page and "Continue with Google"). Default true.</summary>
+    /// <summary>Whether anyone can create a new client (Register page and "Continue with Google"). Default true.</summary>
     bool AccountsSignupEnabled { get; }
 
     /// <summary>Most sign-up attempts one IP address may make per hour. Default 20.</summary>
     int AccountsSignupsPerIpPerHour { get; }
 
     // ---- Availability
-    /// <summary>Consultation length (minutes) for clinics that haven't set their own booking settings. Default 30.</summary>
+    /// <summary>Consultation length (minutes) for clients that haven't set their own booking settings. Default 30.</summary>
     int AvailabilityDefaultDurationMinutes { get; }
 
-    /// <summary>Gap (minutes) between consultations for clinics that haven't set their own booking settings. Default 0.</summary>
+    /// <summary>Gap (minutes) between consultations for clients that haven't set their own booking settings. Default 0.</summary>
     int AvailabilityDefaultBufferMinutes { get; }
 
-    /// <summary>Minimum notice (minutes) before a bookable slot, for clinics that haven't set their own. Default 240.</summary>
+    /// <summary>Minimum notice (minutes) before a bookable slot, for clients that haven't set their own. Default 240.</summary>
     int AvailabilityDefaultNoticeMinutes { get; }
 
-    /// <summary>How many days ahead patients can book, for clinics that haven't set their own. Default 60.</summary>
+    /// <summary>How many days ahead patients can book, for clients that haven't set their own. Default 60.</summary>
     int AvailabilityDefaultHorizonDays { get; }
 
     /// <summary>The most days one free-slots request may cover. Default 14.</summary>
     int AvailabilityMaxRangeDays { get; }
 
     // ---- Billing
-    /// <summary>Master switch for usage billing and plan entitlements. Off = nothing is rated or reserved and every clinic may use everything. Default true.</summary>
+    /// <summary>Master switch for usage billing and plan entitlements. Off = nothing is rated or reserved and every client may use everything. Default true.</summary>
     bool BillingEnabled { get; }
 
     /// <summary>How long a past-due subscription keeps working before it expires. Default 7.</summary>
@@ -47,7 +47,7 @@ public interface IConfigManager
     /// <summary>How often the billing worker renews due subscriptions and resolves stale reservations. Default 5.</summary>
     int BillingMaintenanceIntervalMinutes { get; }
 
-    /// <summary>Plan code a newly registered clinic starts on (first period free). Empty = no plan until an admin assigns one. Default (empty).</summary>
+    /// <summary>Plan code a newly registered client starts on (first period free). Empty = no plan until an admin assigns one. Default (empty).</summary>
     string BillingSignupPlanCode { get; }
 
     /// <summary>The one account currency (ISO 4217, e.g. USD). Balances, plans and rates are stored in it: change it only before any money has moved. Default USD.</summary>
@@ -56,38 +56,38 @@ public interface IConfigManager
     /// <summary>How far in the past a new rate may start or an old one may end (clock skew allowance). Default 5.</summary>
     int BillingRateBackdateToleranceMinutes { get; }
 
-    /// <summary>How many recent wallet transactions a clinic's billing page shows. Default 15.</summary>
+    /// <summary>How many recent wallet transactions a client's billing page shows. Default 15.</summary>
     int BillingRecentTransactions { get; }
 
     // ---- Knowledge
-    /// <summary>Minimum similarity for a search result, for new clinics (each clinic can change its own). Default 0.30.</summary>
+    /// <summary>Minimum similarity for a search result, for new clients (each client can change its own). Default 0.30.</summary>
     decimal KnowledgeMinScore { get; }
 
-    /// <summary>Chunk size in characters for new clinics (stored per clinic in tokens). Default 1000.</summary>
+    /// <summary>Chunk size in characters for new clients (stored per client in tokens). Default 1000.</summary>
     int KnowledgeChunkMaxChars { get; }
 
-    /// <summary>Chunk overlap in characters for new clinics. Default 150.</summary>
+    /// <summary>Chunk overlap in characters for new clients. Default 150.</summary>
     int KnowledgeChunkOverlapChars { get; }
 
     /// <summary>A trailing piece shorter than this is merged into the previous chunk. Default 200.</summary>
     int KnowledgeChunkMinChars { get; }
 
-    /// <summary>Largest knowledge-base file a clinic can upload (bytes). Default 5242880.</summary>
+    /// <summary>Largest knowledge-base file a client can upload (bytes). Default 5242880.</summary>
     int KnowledgeMaxUploadBytes { get; }
 
     /// <summary>Most text kept from one uploaded document. Default 250000.</summary>
     int KnowledgeMaxExtractedChars { get; }
 
-    /// <summary>Smallest chunk size a clinic may choose (tokens). Default 50.</summary>
+    /// <summary>Smallest chunk size a client may choose (tokens). Default 50.</summary>
     int KnowledgeMinChunkSizeTokens { get; }
 
-    /// <summary>Largest chunk size a clinic may choose (tokens). Default 1000.</summary>
+    /// <summary>Largest chunk size a client may choose (tokens). Default 1000.</summary>
     int KnowledgeMaxChunkSizeTokens { get; }
 
-    /// <summary>Smallest number of search results a clinic may choose. Default 1.</summary>
+    /// <summary>Smallest number of search results a client may choose. Default 1.</summary>
     int KnowledgeMinTopK { get; }
 
-    /// <summary>Largest number of search results a clinic may choose. Default 10.</summary>
+    /// <summary>Largest number of search results a client may choose. Default 10.</summary>
     int KnowledgeMaxTopK { get; }
 
     // ---- WebScraping
@@ -127,13 +127,13 @@ public interface IConfigManager
     /// <summary>Most links taken from one page. Default 300.</summary>
     int WebScrapingMaxLinksPerPage { get; }
 
-    /// <summary>How many websites one clinic may add. Default 25.</summary>
-    int WebScrapingMaxSourcesPerClinic { get; }
+    /// <summary>How many websites one client may add. Default 25.</summary>
+    int WebScrapingMaxSourcesPerClient { get; }
 
     /// <summary>Development environment only: comma-separated host:port entries the crawler may reach despite the SSRF rules (e.g. a local test site). Ignored outside Development. Default (empty).</summary>
     string WebScrapingDevAllowedHosts { get; }
 
-    /// <summary>The crawler's User-Agent header. Default OmniBot/1.0 (+https://sculptflowapp.onrender.com; clinic knowledge-base crawler).</summary>
+    /// <summary>The crawler's User-Agent header. Default OmniBot/1.0 (+https://sculptflowapp.onrender.com; client knowledge-base crawler).</summary>
     string WebScrapingUserAgent { get; }
 
     // ---- Benchmark
@@ -203,11 +203,11 @@ public interface IConfigManager
     int DashboardLeadsPageSize { get; }
 
     // ---- Cache (lifetimes of the table caches, read by CacheManager.LifetimeOf)
-    /// <summary>Clinic rows (signed-in clinic, the bot's clinic info). Lifetime in minutes. Default 60.</summary>
-    int CacheClinicsMinutes { get; }
-    /// <summary>Which clinic a signed-in user belongs to. Keep it short: it is how long a removed staff member could keep access if a removal were ever missed. Lifetime in minutes. Default 10.</summary>
+    /// <summary>Client rows (signed-in client, the bot's client info). Lifetime in minutes. Default 60.</summary>
+    int CacheClientsMinutes { get; }
+    /// <summary>Which client a signed-in user belongs to. Keep it short: it is how long a removed staff member could keep access if a removal were ever missed. Lifetime in minutes. Default 10.</summary>
     int CacheStaffLookupMinutes { get; }
-    /// <summary>A clinic's procedures. Lifetime in minutes. Default 60.</summary>
+    /// <summary>A client's procedures. Lifetime in minutes. Default 60.</summary>
     int CacheProceduresMinutes { get; }
     /// <summary>Weekly hours, booking settings, closed dates and calendar connections. Lifetime in minutes. Default 60.</summary>
     int CacheSchedulingMinutes { get; }

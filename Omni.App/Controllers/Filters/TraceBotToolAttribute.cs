@@ -10,7 +10,7 @@ namespace Omni.App.Controllers.Filters;
 
 /// <summary>
 /// Records every call the AI agent (n8n) makes to a tool endpoint as a bot.tool_called step in the message trace: which
-/// tool (the action's route template), the answer's status, how long it took, and the clinic/conversation/lead ids
+/// tool (the action's route template), the answer's status, how long it took, and the client/conversation/lead ids
 /// found in the arguments. n8n sends the message's traceparent back on these calls, so they land in that message's trace.
 /// A 4xx/5xx answer is a failed step (the bot asked for something it couldn't get). Never changes the response.
 /// </summary>
@@ -34,7 +34,7 @@ public sealed class TraceBotToolAttribute : Attribute, IAsyncActionFilter
             };
         var tool = context.ActionDescriptor.AttributeRouteInfo?.Template ?? context.ActionDescriptor.DisplayName ?? "unknown";
         var ids = new TraceIds(
-            ClinicId: GuidArgument(context, "clinicId", "ClinicId"),
+            ClientId: GuidArgument(context, "clientId", "ClientId"),
             ConversationId: GuidArgument(context, "conversationId", "ConversationId") ?? (tool.Contains("conversations/", StringComparison.Ordinal) ? GuidArgument(context, "id") : null));
         tracer.Step(TraceSteps.BotToolCalled, status >= 400 ? TraceOutcomes.Failed : TraceOutcomes.Ok, ids,
             Stopwatch.GetElapsedTime(started).TotalMilliseconds, new { tool, status, leadId = GuidArgument(context, "leadId", "LeadId") });

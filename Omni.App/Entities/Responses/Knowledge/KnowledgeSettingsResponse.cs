@@ -1,6 +1,6 @@
 namespace Omni.App.Entities.Responses.Knowledge;
 
-/// <summary>All of a clinic's Knowledge Base retrieval/embedding settings, as persisted. The first four
+/// <summary>All of a client's Knowledge Base retrieval/embedding settings, as persisted. The first four
 /// are read-only (see KnowledgeSearchSettings); the rest are the tunable ones.</summary>
 public record KnowledgeSettingsResponse(
     string EmbeddingModel,

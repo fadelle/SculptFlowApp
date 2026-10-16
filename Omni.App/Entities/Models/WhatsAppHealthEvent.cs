@@ -10,7 +10,7 @@ namespace Omni.App.Entities.Models;
 public class WhatsAppHealthEvent
 {
     public Guid Id { get; set; }
-    public Guid ClinicId { get; set; }
+    public Guid ClientId { get; set; }
     public Guid ChannelIntegrationId { get; set; }
 
     public string EventType { get; set; } = string.Empty;

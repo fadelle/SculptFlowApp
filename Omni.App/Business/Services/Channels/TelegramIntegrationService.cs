@@ -41,14 +41,14 @@ public class TelegramIntegrationService : ITelegramIntegrationService
         _entitlements = entitlements;
     }
 
-    public async Task<ChannelIntegrationResponse> ConnectAsync(Guid clinicId, string? botToken, CancellationToken ct = default)
+    public async Task<ChannelIntegrationResponse> ConnectAsync(Guid clientId, string? botToken, CancellationToken ct = default)
     {
         var token = (botToken ?? string.Empty).Trim();
         if (!TokenPattern.IsMatch(token))
         {
             throw new ArgumentException("That doesn't look like a Telegram bot token. Copy it exactly from @BotFather — it looks like 123456789:AA… (no spaces or quotes).");
         }
-        await _entitlements.EnsureCanConnectChannelAsync(clinicId, ChannelType.Telegram, ct);
+        await _entitlements.EnsureCanConnectChannelAsync(clientId, ChannelType.Telegram, ct);
 
         var publicBaseUrl = ResolvePublicBaseUrl();
 
@@ -56,14 +56,14 @@ public class TelegramIntegrationService : ITelegramIntegrationService
         var bot = await _client.GetMeAsync(token, ct);
         var botId = bot.Id.ToString();
 
-        // One bot has exactly one webhook, so it can serve only one clinic at a time.
-        var usedElsewhere = await _integrations.IsTelegramBotConnectedElsewhereAsync(botId, clinicId, ct);
+        // One bot has exactly one webhook, so it can serve only one client at a time.
+        var usedElsewhere = await _integrations.IsTelegramBotConnectedElsewhereAsync(botId, clientId, ct);
         if (usedElsewhere)
         {
-            throw new InvalidOperationException("This bot is already connected to another clinic. Create a separate bot for each clinic with @BotFather.");
+            throw new InvalidOperationException("This bot is already connected to another client. Create a separate bot for each client with @BotFather.");
         }
 
-        var row = await _integrations.GetAsync(clinicId, ChannelType.Telegram, ct);
+        var row = await _integrations.GetAsync(clientId, ChannelType.Telegram, ct);
 
         // Replacing a different bot: unhook the old one first so it stops posting to us (best effort).
         if (row is { Status: ChannelIntegrationStatus.Connected } && !string.IsNullOrEmpty(row.AccessToken)
@@ -85,7 +85,7 @@ public class TelegramIntegrationService : ITelegramIntegrationService
             row = new ChannelIntegration
             {
                 Id = connectionId,
-                ClinicId = clinicId,
+                ClientId = clientId,
                 Channel = ChannelType.Telegram,
                 CreatedAt = now
             };
@@ -105,19 +105,19 @@ public class TelegramIntegrationService : ITelegramIntegrationService
         row.UpdatedAt = now;
         await _unitOfWork.SaveChangesAsync(ct);
 
-        _logger.LogInformation("Telegram bot {BotId} connected for clinic {ClinicId} (connection {ConnectionId}).", botId, clinicId, connectionId);
+        _logger.LogInformation("Telegram bot {BotId} connected for client {ClientId} (connection {ConnectionId}).", botId, clientId, connectionId);
 
         // 3. Confirm with Telegram itself (non-fatal: the webhook is registered either way).
-        return await RefreshStatusAsync(clinicId, ct);
+        return await RefreshStatusAsync(clientId, ct);
     }
 
-    public async Task<ChannelIntegrationResponse> RefreshStatusAsync(Guid clinicId, CancellationToken ct = default)
+    public async Task<ChannelIntegrationResponse> RefreshStatusAsync(Guid clientId, CancellationToken ct = default)
     {
-        var row = await _integrations.GetAsync(clinicId, ChannelType.Telegram, ct);
+        var row = await _integrations.GetAsync(clientId, ChannelType.Telegram, ct);
         if (row is null)
         {
             return new ChannelIntegrationResponse(
-                Guid.Empty, clinicId, ChannelType.Telegram, ChannelIntegrationStatus.Disconnected,
+                Guid.Empty, clientId, ChannelType.Telegram, ChannelIntegrationStatus.Disconnected,
                 null, null, null, null, null, false, false, null, null, DateTimeOffset.MinValue);
         }
 
@@ -149,9 +149,9 @@ public class TelegramIntegrationService : ITelegramIntegrationService
         return ToResponse(row);
     }
 
-    public async Task DisconnectAsync(Guid clinicId, CancellationToken ct = default)
+    public async Task DisconnectAsync(Guid clientId, CancellationToken ct = default)
     {
-        var row = await _integrations.GetAsync(clinicId, ChannelType.Telegram, ct);
+        var row = await _integrations.GetAsync(clientId, ChannelType.Telegram, ct);
         if (row is null) return;
 
         string? note = null;
@@ -177,7 +177,7 @@ public class TelegramIntegrationService : ITelegramIntegrationService
         row.UpdatedAt = DateTimeOffset.UtcNow;
         await _unitOfWork.SaveChangesAsync(ct);
 
-        _logger.LogInformation("Telegram disconnected for clinic {ClinicId} (connection {ConnectionId}).", clinicId, row.Id);
+        _logger.LogInformation("Telegram disconnected for client {ClientId} (connection {ConnectionId}).", clientId, row.Id);
     }
 
     private async Task<bool> TryDeleteWebhookAsync(string token, CancellationToken ct)

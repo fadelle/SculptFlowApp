@@ -13,32 +13,32 @@ namespace Omni.App.Business.Contracts.Managers;
 /// </summary>
 public interface IInboxNotifier
 {
-    Task NewMessageAsync(Guid clinicId, Guid conversationId, Guid messageId, Guid leadId,
+    Task NewMessageAsync(Guid clientId, Guid conversationId, Guid messageId, Guid leadId,
         string direction, string senderType, string origin, DateTimeOffset createdAt, CancellationToken ct = default);
 
-    Task MessageStatusUpdatedAsync(Guid clinicId, Guid conversationId, Guid messageId, string deliveryStatus, DateTimeOffset updatedAt, CancellationToken ct = default);
+    Task MessageStatusUpdatedAsync(Guid clientId, Guid conversationId, Guid messageId, string deliveryStatus, DateTimeOffset updatedAt, CancellationToken ct = default);
 
-    Task ConversationUpdatedAsync(Guid clinicId, Guid conversationId, CancellationToken ct = default);
+    Task ConversationUpdatedAsync(Guid clientId, Guid conversationId, CancellationToken ct = default);
 
-    /// <summary>Tells the clinic's open Appointments calendars that an appointment was created, rescheduled, canceled or had its status changed, so
+    /// <summary>Tells the client's open Appointments calendars that an appointment was created, rescheduled, canceled or had its status changed, so
     /// they re-fetch the visible month. Sent only AFTER the change is committed. change: created | rescheduled | canceled | status_changed.</summary>
-    Task AppointmentChangedAsync(Guid clinicId, Guid appointmentId, string change, CancellationToken ct = default);
+    Task AppointmentChangedAsync(Guid clientId, Guid appointmentId, string change, CancellationToken ct = default);
 
-    Task ConversationModeChangedAsync(Guid clinicId, Guid conversationId, string mode, CancellationToken ct = default);
+    Task ConversationModeChangedAsync(Guid clientId, Guid conversationId, string mode, CancellationToken ct = default);
 
-    /// <summary>Tells the clinic's open dashboard(s) a new Notification was created (see INotificationService) —
+    /// <summary>Tells the client's open dashboard(s) a new Notification was created (see INotificationService) —
     /// the bell badge/list re-fetch instead of trusting the payload as authoritative, same principle as every
     /// other event here.</summary>
-    Task NotificationCreatedAsync(Guid clinicId, NotificationResponse notification, CancellationToken ct = default);
+    Task NotificationCreatedAsync(Guid clientId, NotificationResponse notification, CancellationToken ct = default);
 
     /// <summary>Notifies the Templates UI (/WhatsApp/Templates) that a template's Meta-reported
     /// state changed — status, rejection reason, quality, category. See WhatsAppTemplateService.</summary>
-    Task WhatsAppTemplateUpdatedAsync(Guid clinicId, Guid templateId, string name, string status,
+    Task WhatsAppTemplateUpdatedAsync(Guid clientId, Guid templateId, string name, string status,
         string? rejectionReason, DateTimeOffset updatedAt, CancellationToken ct = default);
 
     /// <summary>Notifies the Health UI (/WhatsApp/Health) and the dashboard's health indicator that
-    /// a clinic's WhatsApp connection health changed. See WhatsAppHealthService.</summary>
-    Task WhatsAppHealthUpdatedAsync(Guid clinicId, Guid connectionId, string healthLevel, string? accountStatus,
+    /// a client's WhatsApp connection health changed. See WhatsAppHealthService.</summary>
+    Task WhatsAppHealthUpdatedAsync(Guid clientId, Guid connectionId, string healthLevel, string? accountStatus,
         string? accountReviewStatus, string? phoneQualityRating, string? phoneStatus, string? problemMessage,
         DateTimeOffset updatedAt, CancellationToken ct = default);
 }

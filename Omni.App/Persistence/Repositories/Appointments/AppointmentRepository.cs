@@ -18,37 +18,37 @@ public class AppointmentRepository : IAppointmentRepository
 
     public void Add(Appointment appointment) => _db.Appointments.Add(appointment);
 
-    public Task<Appointment?> GetAsync(Guid clinicId, Guid appointmentId, CancellationToken ct = default) =>
-        _db.Appointments.FirstOrDefaultAsync(a => a.ClinicId == clinicId && a.Id == appointmentId, ct);
+    public Task<Appointment?> GetAsync(Guid clientId, Guid appointmentId, CancellationToken ct = default) =>
+        _db.Appointments.FirstOrDefaultAsync(a => a.ClientId == clientId && a.Id == appointmentId, ct);
 
-    public Task<Appointment?> GetWithDetailsAsync(Guid clinicId, Guid appointmentId, CancellationToken ct = default) =>
+    public Task<Appointment?> GetWithDetailsAsync(Guid clientId, Guid appointmentId, CancellationToken ct = default) =>
         _db.Appointments
             .Include(a => a.Lead)
             .Include(a => a.Procedure)
-            .FirstOrDefaultAsync(a => a.ClinicId == clinicId && a.Id == appointmentId, ct);
+            .FirstOrDefaultAsync(a => a.ClientId == clientId && a.Id == appointmentId, ct);
 
-    public Task<Appointment?> GetForLeadAsync(Guid clinicId, Guid leadId, Guid appointmentId, CancellationToken ct = default) =>
-        _db.Appointments.FirstOrDefaultAsync(a => a.ClinicId == clinicId && a.LeadId == leadId && a.Id == appointmentId, ct);
+    public Task<Appointment?> GetForLeadAsync(Guid clientId, Guid leadId, Guid appointmentId, CancellationToken ct = default) =>
+        _db.Appointments.FirstOrDefaultAsync(a => a.ClientId == clientId && a.LeadId == leadId && a.Id == appointmentId, ct);
 
     public Task<Appointment?> GetWithProcedureReadOnlyAsync(Guid appointmentId, CancellationToken ct = default) =>
         _db.Appointments.AsNoTracking().Include(a => a.Procedure).FirstOrDefaultAsync(a => a.Id == appointmentId, ct);
 
-    public async Task<IReadOnlyList<Appointment>> ListUpcomingForLeadAsync(Guid clinicId, Guid leadId, DateTimeOffset now,
+    public async Task<IReadOnlyList<Appointment>> ListUpcomingForLeadAsync(Guid clientId, Guid leadId, DateTimeOffset now,
         CancellationToken ct = default) =>
         await _db.Appointments.AsNoTracking()
             .Include(a => a.Procedure)
-            .Where(a => a.ClinicId == clinicId && a.LeadId == leadId && a.ScheduledStart > now
+            .Where(a => a.ClientId == clientId && a.LeadId == leadId && a.ScheduledStart > now
                         && (a.Status == AppointmentStatus.Booked || a.Status == AppointmentStatus.Confirmed))
             .OrderBy(a => a.ScheduledStart)
             .ToListAsync(ct);
 
-    public async Task<(IReadOnlyList<Appointment> Items, int TotalCount)> ListAsync(Guid clinicId, string? status,
+    public async Task<(IReadOnlyList<Appointment> Items, int TotalCount)> ListAsync(Guid clientId, string? status,
         DateTimeOffset? from, DateTimeOffset? to, int skip, int take, CancellationToken ct = default)
     {
         var query = _db.Appointments
             .Include(a => a.Lead)
             .Include(a => a.Procedure)
-            .Where(a => a.ClinicId == clinicId);
+            .Where(a => a.ClientId == clientId);
 
         if (!string.IsNullOrWhiteSpace(status)) query = query.Where(a => a.Status == status);
         if (from.HasValue) query = query.Where(a => a.ScheduledStart >= from);
@@ -59,23 +59,23 @@ public class AppointmentRepository : IAppointmentRepository
         return (items, totalCount);
     }
 
-    public async Task<IReadOnlyList<Appointment>> ListStartingBetweenAsync(Guid clinicId, DateTimeOffset fromUtc,
+    public async Task<IReadOnlyList<Appointment>> ListStartingBetweenAsync(Guid clientId, DateTimeOffset fromUtc,
         DateTimeOffset toUtc, CancellationToken ct = default) =>
         await _db.Appointments
             .Include(a => a.Lead)
             .Include(a => a.Procedure)
-            .Where(a => a.ClinicId == clinicId && a.ScheduledStart >= fromUtc && a.ScheduledStart < toUtc)
+            .Where(a => a.ClientId == clientId && a.ScheduledStart >= fromUtc && a.ScheduledStart < toUtc)
             .OrderBy(a => a.ScheduledStart)
             .ToListAsync(ct);
 
-    public Task<int> CountNeedingOutcomeAsync(Guid clinicId, DateTimeOffset now, CancellationToken ct = default) =>
-        _db.Appointments.CountAsync(a => a.ClinicId == clinicId && a.ScheduledStart < now
+    public Task<int> CountNeedingOutcomeAsync(Guid clientId, DateTimeOffset now, CancellationToken ct = default) =>
+        _db.Appointments.CountAsync(a => a.ClientId == clientId && a.ScheduledStart < now
             && (a.Status == AppointmentStatus.Booked || a.Status == AppointmentStatus.Confirmed), ct);
 
-    public async Task<IReadOnlyList<BusyAppointmentRow>> ListBusyAsync(Guid clinicId, DateTimeOffset lowUtc, DateTimeOffset highUtc,
+    public async Task<IReadOnlyList<BusyAppointmentRow>> ListBusyAsync(Guid clientId, DateTimeOffset lowUtc, DateTimeOffset highUtc,
         Guid? excludeAppointmentId, CancellationToken ct = default) =>
         await _db.Appointments.AsNoTracking()
-            .Where(a => a.ClinicId == clinicId && (excludeAppointmentId == null || a.Id != excludeAppointmentId)
+            .Where(a => a.ClientId == clientId && (excludeAppointmentId == null || a.Id != excludeAppointmentId)
                         && a.Status != AppointmentStatus.Canceled && a.Status != AppointmentStatus.Rescheduled
                         && a.ScheduledStart >= lowUtc && a.ScheduledStart < highUtc)
             .Select(a => new BusyAppointmentRow(a.ScheduledStart, a.ScheduledEnd,
@@ -91,6 +91,6 @@ public class AppointmentRepository : IAppointmentRepository
         }
     }
 
-    public Task LockClinicForBookingAsync(Guid clinicId, CancellationToken ct = default) =>
-        _db.Database.ExecuteSqlInterpolatedAsync($"select pg_advisory_xact_lock(hashtext({clinicId.ToString()}))", ct);
+    public Task LockClientForBookingAsync(Guid clientId, CancellationToken ct = default) =>
+        _db.Database.ExecuteSqlInterpolatedAsync($"select pg_advisory_xact_lock(hashtext({clientId.ToString()}))", ct);
 }

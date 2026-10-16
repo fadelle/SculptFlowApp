@@ -14,11 +14,11 @@ public class KnowledgeSettingsRepository : IKnowledgeSettingsRepository
         _db = db;
     }
 
-    public Task<KnowledgeSearchSettings?> GetReadOnlyAsync(Guid clinicId, CancellationToken ct = default) =>
-        _db.KnowledgeSearchSettings.AsNoTracking().FirstOrDefaultAsync(s => s.ClinicId == clinicId, ct);
+    public Task<KnowledgeSearchSettings?> GetReadOnlyAsync(Guid clientId, CancellationToken ct = default) =>
+        _db.KnowledgeSearchSettings.AsNoTracking().FirstOrDefaultAsync(s => s.ClientId == clientId, ct);
 
-    public Task<KnowledgeSearchSettings?> GetAsync(Guid clinicId, CancellationToken ct = default) =>
-        _db.KnowledgeSearchSettings.FirstOrDefaultAsync(s => s.ClinicId == clinicId, ct);
+    public Task<KnowledgeSearchSettings?> GetAsync(Guid clientId, CancellationToken ct = default) =>
+        _db.KnowledgeSearchSettings.FirstOrDefaultAsync(s => s.ClientId == clientId, ct);
 
     public void Add(KnowledgeSearchSettings settings) => _db.KnowledgeSearchSettings.Add(settings);
 

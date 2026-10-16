@@ -2,13 +2,13 @@ using Omni.App.Entities.Models;
 
 namespace Omni.App.Persistence.Contracts.Knowledge;
 
-/// <summary>Each clinic's Knowledge Base search settings (one row per clinic).</summary>
+/// <summary>Each client's Knowledge Base search settings (one row per client).</summary>
 public interface IKnowledgeSettingsRepository
 {
-    Task<KnowledgeSearchSettings?> GetReadOnlyAsync(Guid clinicId, CancellationToken ct = default);
+    Task<KnowledgeSearchSettings?> GetReadOnlyAsync(Guid clientId, CancellationToken ct = default);
 
     /// <summary>Tracked.</summary>
-    Task<KnowledgeSearchSettings?> GetAsync(Guid clinicId, CancellationToken ct = default);
+    Task<KnowledgeSearchSettings?> GetAsync(Guid clientId, CancellationToken ct = default);
 
     void Add(KnowledgeSearchSettings settings);
 

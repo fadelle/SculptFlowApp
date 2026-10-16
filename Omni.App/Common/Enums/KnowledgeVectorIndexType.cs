@@ -2,7 +2,7 @@ namespace Omni.App.Common.Enums;
 
 public static class KnowledgeVectorIndexType
 {
-    /// <summary>No ANN index: each search is already narrowed to one clinic by clinic_id, so an exact
+    /// <summary>No ANN index: each search is already narrowed to one client by client_id, so an exact
     /// scan is fast and has perfect recall (see Database/schema.sql).</summary>
     public const string None = "none";
     public const string Hnsw = "hnsw";

@@ -30,11 +30,11 @@ public class BillingRateCardRepository : IBillingRateCardRepository
     public Task<bool> CodeExistsAsync(string code, CancellationToken ct = default) =>
         _db.BillingRateCards.AnyAsync(c => c.Code == code, ct);
 
-    public Task<bool> ClinicHasCardAsync(Guid clinicId, CancellationToken ct = default) =>
-        _db.BillingRateCards.AnyAsync(c => c.ClinicId == clinicId, ct);
+    public Task<bool> ClientHasCardAsync(Guid clientId, CancellationToken ct = default) =>
+        _db.BillingRateCards.AnyAsync(c => c.ClientId == clientId, ct);
 
-    public Task<string?> GetClinicCardCodeAsync(Guid clinicId, CancellationToken ct = default) =>
-        _db.BillingRateCards.AsNoTracking().Where(c => c.ClinicId == clinicId).Select(c => c.Code).FirstOrDefaultAsync(ct);
+    public Task<string?> GetClientCardCodeAsync(Guid clientId, CancellationToken ct = default) =>
+        _db.BillingRateCards.AsNoTracking().Where(c => c.ClientId == clientId).Select(c => c.Code).FirstOrDefaultAsync(ct);
 
     public Task<BillingRateCard?> GetAsync(string code, CancellationToken ct = default) =>
         _db.BillingRateCards.FirstOrDefaultAsync(c => c.Code == code, ct);
@@ -80,20 +80,20 @@ public class BillingRateCardRepository : IBillingRateCardRepository
 
     public void AddRate(BillingRate rate) => _db.BillingRates.Add(rate);
 
-    public async Task<IReadOnlyList<RatingCard>> ListRatingCardsAsync(Guid clinicId, CancellationToken ct = default) =>
-        (await _cache.ReadThroughAsync(CacheKeys.RatingCards(clinicId), CacheArea.BillingRates,
-            token => LoadRatingCardsAsync(clinicId, token), ct))!;
+    public async Task<IReadOnlyList<RatingCard>> ListRatingCardsAsync(Guid clientId, CancellationToken ct = default) =>
+        (await _cache.ReadThroughAsync(CacheKeys.RatingCards(clientId), CacheArea.BillingRates,
+            token => LoadRatingCardsAsync(clientId, token), ct))!;
 
-    private async Task<List<RatingCard>?> LoadRatingCardsAsync(Guid clinicId, CancellationToken ct)
+    private async Task<List<RatingCard>?> LoadRatingCardsAsync(Guid clientId, CancellationToken ct)
     {
         var result = new List<RatingCard>();
 
         var clientCard = await _db.BillingRateCards.AsNoTracking()
-            .Where(c => c.ClinicId == clinicId && c.IsActive).Select(c => (Guid?)c.Id).FirstOrDefaultAsync(ct);
+            .Where(c => c.ClientId == clientId && c.IsActive).Select(c => (Guid?)c.Id).FirstOrDefaultAsync(ct);
         if (clientCard.HasValue) result.Add(new RatingCard(clientCard.Value, RateSource.Client));
 
-        var planCard = await _db.ClinicSubscriptions.AsNoTracking()
-            .Where(s => s.ClinicId == clinicId).Select(s => s.Plan!.RateCardId).FirstOrDefaultAsync(ct);
+        var planCard = await _db.ClientSubscriptions.AsNoTracking()
+            .Where(s => s.ClientId == clientId).Select(s => s.Plan!.RateCardId).FirstOrDefaultAsync(ct);
         if (planCard.HasValue && result.All(r => r.CardId != planCard.Value)
             && await _db.BillingRateCards.AnyAsync(c => c.Id == planCard.Value && c.IsActive, ct))
         {

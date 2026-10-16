@@ -71,9 +71,9 @@ public class MetaGraphClientTests
     [Fact]
     public async Task Phone_number_details()
     {
-        _http.Enqueue(HttpStatusCode.OK, "{\"display_phone_number\":\"+961 70\",\"verified_name\":\"Clinic\"}");
+        _http.Enqueue(HttpStatusCode.OK, "{\"display_phone_number\":\"+961 70\",\"verified_name\":\"Client\"}");
         var info = await Sut().GetWhatsAppPhoneNumberAsync("P1", "tok");
-        Assert.Equal(("+961 70", "Clinic"), (info!.DisplayPhoneNumber, info.VerifiedName));
+        Assert.Equal(("+961 70", "Client"), (info!.DisplayPhoneNumber, info.VerifiedName));
         _http.Enqueue(HttpStatusCode.OK, "{\"id\":\"P1\"}");
         Assert.Null(await Sut().GetWhatsAppPhoneNumberAsync("P1", "tok"));
     }
@@ -160,10 +160,10 @@ public class TelegramBotClientTests
     [Fact]
     public async Task GetMe_calls_the_bot_endpoint_with_the_token_in_the_path()
     {
-        _http.Enqueue(HttpStatusCode.OK, Ok("{\"id\":555,\"username\":\"clinic_bot\",\"first_name\":\"Clinic\"}"));
+        _http.Enqueue(HttpStatusCode.OK, Ok("{\"id\":555,\"username\":\"client_bot\",\"first_name\":\"Client\"}"));
         var me = await Sut().GetMeAsync("123:AAA");
         Assert.Equal("https://api.telegram.org/bot123:AAA/getMe", _http.Requests[0].Uri.ToString());
-        Assert.Equal((555L, "clinic_bot", "Clinic"), (me.Id, me.Username, me.FirstName));
+        Assert.Equal((555L, "client_bot", "Client"), (me.Id, me.Username, me.FirstName));
     }
 
     [Fact]

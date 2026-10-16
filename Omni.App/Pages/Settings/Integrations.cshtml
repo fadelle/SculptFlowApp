@@ -24,9 +24,9 @@
     var attentionCount = cards.Count(c => c.Attention);
 }
 
-@if (!Model.ClinicConfigured)
+@if (!Model.ClientConfigured)
 {
-    <partial name="_NoClinic" />
+    <partial name="_NoClient" />
 }
 else
 {
@@ -55,7 +55,7 @@ else
     window.PS_META_CONFIG = {
         appId: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.MetaAppId)),
         version: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.MetaGraphApiVersion)),
-        clinicId: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.ClinicId.ToString())),
+        clientId: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.ClientId.ToString())),
         whatsappConfigId: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.MetaWhatsAppLoginConfigId)),
         facebookConfigId: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.MetaFacebookLoginConfigId))
     };
@@ -263,7 +263,7 @@ else
         await RenderModalEnd();
     }
 
-    // Telegram: the clinic pastes a BotFather token and Omni does the rest (getMe, then setWebhook with a
+    // Telegram: the client pastes a BotFather token and Omni does the rest (getMe, then setWebhook with a
     // generated secret). The token is write-only — nothing here can render a saved one.
     private async Task RenderTelegramCard()
     {
@@ -395,7 +395,7 @@ else
                 <span class="channel-mark int-notch ch-tiktok" title="TikTok">@Html.Raw(Omni.App.Common.Helpers.ChannelIconHelper.BrandSvg("tiktok"))</span>
                 <div class="flex-1 min-w-0">
                     <div class="integration-title">TikTok</div>
-                    <div class="cell-sub">@(connected && !string.IsNullOrEmpty(info!.DisplayName) ? info.DisplayName : "Connect your clinic's TikTok account.")</div>
+                    <div class="cell-sub">@(connected && !string.IsNullOrEmpty(info!.DisplayName) ? info.DisplayName : "Connect your client's TikTok account.")</div>
                 </div>
                 <span class="status-pill"><span class="dot @dot"></span>@label</span>
             </div>
@@ -431,7 +431,7 @@ else
             else
             {
                 <div class="int-strip int-strip-note">
-                    <div><span class="cell-sub">When connected</span><span class="int-val">See which TikTok account is linked to your clinic.</span></div>
+                    <div><span class="cell-sub">When connected</span><span class="int-val">See which TikTok account is linked to your client.</span></div>
                 </div>
             }
 
@@ -454,7 +454,7 @@ else
                         <a href="/tiktok-oauth/connect" class="au-btn au-btn--primary au-btn--sm">Reconnect</a>
                     }
                     <form method="post" asp-page-handler="DisconnectTikTok" class="inline-form int-foot-end"
-                          data-au-confirm="Disconnect TikTok? Your clinic won't show a connected TikTok account until you connect it again." data-au-confirm-title="Disconnect TikTok" data-au-confirm-label="Disconnect" data-au-confirm-tone="danger">
+                          data-au-confirm="Disconnect TikTok? Your client won't show a connected TikTok account until you connect it again." data-au-confirm-title="Disconnect TikTok" data-au-confirm-label="Disconnect" data-au-confirm-tone="danger">
                         <button type="submit" class="au-btn au-btn--text au-btn--sm btn-danger-text">Disconnect</button>
                     </form>
                 }
@@ -472,7 +472,7 @@ else
             <div class="form-row-even">
                 <label class="field">
                     <span>Display name</span>
-                    <input type="text" name="DisplayName" value="@(info?.DisplayName)" placeholder="e.g. Clinic front desk" class="text-input" />
+                    <input type="text" name="DisplayName" value="@(info?.DisplayName)" placeholder="e.g. Client front desk" class="text-input" />
                 </label>
 
                 @if (channel == ChannelType.WhatsApp)

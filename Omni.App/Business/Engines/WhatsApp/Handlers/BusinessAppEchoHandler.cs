@@ -27,27 +27,27 @@ public class BusinessAppEchoHandler
         _messages = messages;
     }
 
-    public async Task<WhatsAppWebhookResponse> HandleAsync(ParsedMetaEvent evt, ResolvedClinic clinic, CancellationToken ct)
+    public async Task<WhatsAppWebhookResponse> HandleAsync(ParsedMetaEvent evt, ResolvedClient client, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(evt.CustomerWaId))
         {
-            return new WhatsAppWebhookResponse(true, "business_app_echo", false, clinic.ClinicId, clinic.ChannelIntegrationId);
+            return new WhatsAppWebhookResponse(true, "business_app_echo", false, client.ClientId, client.ChannelIntegrationId);
         }
 
         var phone = "+" + evt.CustomerWaId.TrimStart('+');
         // Not a NEW_LEAD candidate even if this creates the lead row — it's staff replying, not the
         // lead's own first inbound message, so WasCreated is deliberately not passed through.
-        var (lead, _) = await _leads.GetOrCreateByPhoneAsync(clinic.ClinicId, phone, evt.CustomerName, ct);
-        var conversation = await _conversations.GetOrCreateForLeadAsync(clinic.ClinicId, lead.Id, ConversationChannel.WhatsApp, ct);
+        var (lead, _) = await _leads.GetOrCreateByPhoneAsync(client.ClientId, phone, evt.CustomerName, ct);
+        var conversation = await _conversations.GetOrCreateForLeadAsync(client.ClientId, lead.Id, ConversationChannel.WhatsApp, ct);
 
         var result = await _messages.IngestAsync(new IngestMessageRequest(
-            clinic.ClinicId, conversation.Id, lead.Id, IngestEventType.BusinessAppEcho, ConversationChannel.WhatsApp,
+            client.ClientId, conversation.Id, lead.Id, IngestEventType.BusinessAppEcho, ConversationChannel.WhatsApp,
             evt.Content, evt.ExternalMessageId, DeliveryStatus: null, SentAt: evt.Timestamp, ReceivedAt: null,
             MessageType: evt.MessageType, MetadataJson: evt.MetadataJson), ct);
 
         return new WhatsAppWebhookResponse(
             Processed: true, EventType: "business_app_echo", ShouldRunAi: false,
-            ClinicId: clinic.ClinicId, WhatsAppConnectionId: clinic.ChannelIntegrationId,
+            ClientId: client.ClientId, WhatsAppConnectionId: client.ChannelIntegrationId,
             ConversationId: conversation.Id, LeadId: lead.Id, MessageId: result.Message?.Id,
             ExternalMessageId: evt.ExternalMessageId, Mode: result.ConversationMode);
     }

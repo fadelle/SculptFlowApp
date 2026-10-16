@@ -28,13 +28,13 @@ public class SubscriptionService : ISubscriptionService
         _logger = logger;
     }
 
-    public async Task<ClinicSubscription?> GetAsync(Guid clinicId, CancellationToken ct = default)
+    public async Task<ClientSubscription?> GetAsync(Guid clientId, CancellationToken ct = default)
     {
         await using var unit = _units.Create();
-        return await unit.Subscriptions.GetWithPlanReadOnlyAsync(clinicId, ct);
+        return await unit.Subscriptions.GetWithPlanReadOnlyAsync(clientId, ct);
     }
 
-    public async Task<ClinicSubscription> StartAsync(StartSubscriptionRequest request, CancellationToken ct = default)
+    public async Task<ClientSubscription> StartAsync(StartSubscriptionRequest request, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(request.IdempotencyKey) || request.IdempotencyKey.Length > BillingService.MaxKeyLength)
         {
@@ -46,12 +46,12 @@ public class SubscriptionService : ISubscriptionService
 
         await using var unit = _units.Create();
         await using var tx = await unit.BeginTransactionAsync(ct);
-        var account = await unit.Accounts.LockAsync(request.ClinicId, _config.BillingCurrency, ct);
+        var account = await unit.Accounts.LockAsync(request.ClientId, _config.BillingCurrency, ct);
 
-        var subscription = await unit.Subscriptions.GetWithPlanAsync(request.ClinicId, ct);
-        if (await unit.Ledger.KeyExistsAsync(request.ClinicId, chargeKey, ct))
+        var subscription = await unit.Subscriptions.GetWithPlanAsync(request.ClientId, ct);
+        if (await unit.Ledger.KeyExistsAsync(request.ClientId, chargeKey, ct))
         {
-            _logger.LogInformation("Billing: duplicate subscription start {Key} for clinic {ClinicId} ignored.", request.IdempotencyKey, request.ClinicId);
+            _logger.LogInformation("Billing: duplicate subscription start {Key} for client {ClientId} ignored.", request.IdempotencyKey, request.ClientId);
             return subscription!;
         }
 
@@ -62,14 +62,14 @@ public class SubscriptionService : ISubscriptionService
         }
         if (!string.Equals(plan.Currency.Trim(), account.Currency.Trim(), StringComparison.Ordinal))
         {
-            throw new ArgumentException($"Plan '{planCode}' is priced in {plan.Currency}, but the clinic's account is in {account.Currency}.", nameof(request));
+            throw new ArgumentException($"Plan '{planCode}' is priced in {plan.Currency}, but the client's account is in {account.Currency}.", nameof(request));
         }
 
         var price = request.ChargeFirstPeriod ? plan.Price : 0m;
         if (!CanPay(account, price, plan.IncludedUsageCredit))
         {
-            _logger.LogWarning("Billing: can't start plan {Plan} for clinic {ClinicId}: price {Price} {Currency}, wallet {Wallet}, spendable {Spendable}.",
-                plan.Code, request.ClinicId, price, account.Currency, account.WalletBalance, account.Spendable);
+            _logger.LogWarning("Billing: can't start plan {Plan} for client {ClientId}: price {Price} {Currency}, wallet {Wallet}, spendable {Spendable}.",
+                plan.Code, request.ClientId, price, account.Currency, account.WalletBalance, account.Spendable);
             throw new BillingDeniedException(UsageFailureReason.InsufficientFunds,
                 $"The wallet doesn't cover the {plan.Name} plan price ({price:0.00} {account.Currency}). Top up first.");
         }
@@ -78,7 +78,7 @@ public class SubscriptionService : ISubscriptionService
         var isNew = subscription is null;
         if (subscription is null)
         {
-            subscription = new ClinicSubscription { Id = Guid.NewGuid(), ClinicId = request.ClinicId, CreatedAt = now };
+            subscription = new ClientSubscription { Id = Guid.NewGuid(), ClientId = request.ClientId, CreatedAt = now };
             unit.Subscriptions.Add(subscription);
         }
         subscription.PlanId = plan.Id;
@@ -94,7 +94,7 @@ public class SubscriptionService : ISubscriptionService
             SubscriptionId: subscription.Id, PlanId: plan.Id, CorrelationId: request.IdempotencyKey);
         await StartPeriodAsync(unit, account, plan, price, $"subscription-start:{request.IdempotencyKey}", context, now, ct);
 
-        BillingLedger.LogEvent(unit, request.ClinicId, isNew ? BillingEventTypes.SubscriptionStarted : BillingEventTypes.SubscriptionPlanChanged,
+        BillingLedger.LogEvent(unit, request.ClientId, isNew ? BillingEventTypes.SubscriptionStarted : BillingEventTypes.SubscriptionPlanChanged,
             request.Source, new
             {
                 plan = plan.Code,
@@ -109,24 +109,24 @@ public class SubscriptionService : ISubscriptionService
 
         await unit.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
-        await _cache.RemoveAsync(CacheKeys.Entitlements(request.ClinicId), ct);
+        await _cache.RemoveAsync(CacheKeys.Entitlements(request.ClientId), ct);
 
-        _logger.LogInformation("Billing: clinic {ClinicId} {Action} plan {Plan} until {PeriodEnd} (charged {Price} {Currency}, credit {Credit}) by {Actor}.",
-            request.ClinicId, isNew ? "started" : "changed to", plan.Code, subscription.CurrentPeriodEnd, price, account.Currency,
+        _logger.LogInformation("Billing: client {ClientId} {Action} plan {Plan} until {PeriodEnd} (charged {Price} {Currency}, credit {Credit}) by {Actor}.",
+            request.ClientId, isNew ? "started" : "changed to", plan.Code, subscription.CurrentPeriodEnd, price, account.Currency,
             plan.IncludedUsageCredit, request.Actor ?? request.Source);
         subscription.Plan = plan;
         return subscription;
     }
 
-    public async Task<RenewalOutcome> RenewIfDueAsync(Guid clinicId, CancellationToken ct = default)
+    public async Task<RenewalOutcome> RenewIfDueAsync(Guid clientId, CancellationToken ct = default)
     {
         var now = _time.GetUtcNow();
 
         await using var unit = _units.Create();
         await using var tx = await unit.BeginTransactionAsync(ct);
-        var account = await unit.Accounts.LockAsync(clinicId, _config.BillingCurrency, ct);
+        var account = await unit.Accounts.LockAsync(clientId, _config.BillingCurrency, ct);
 
-        var subscription = await unit.Subscriptions.GetWithPlanAsync(clinicId, ct);
+        var subscription = await unit.Subscriptions.GetWithPlanAsync(clientId, ct);
         if (subscription is null || subscription.Status is SubscriptionStatus.Expired or SubscriptionStatus.Cancelled)
         {
             return RenewalOutcome.NotDue;
@@ -146,7 +146,7 @@ public class SubscriptionService : ISubscriptionService
                 new LedgerContext(BillingSource.Worker, Reason: "Subscription cancelled at period end", SubscriptionId: subscription.Id, PlanId: plan.Id), now, ct);
             subscription.Status = SubscriptionStatus.Cancelled;
             subscription.EndedAt = periodEnd;
-            BillingLedger.LogEvent(unit, clinicId, BillingEventTypes.SubscriptionCancelled, BillingSource.Worker,
+            BillingLedger.LogEvent(unit, clientId, BillingEventTypes.SubscriptionCancelled, BillingSource.Worker,
                 new { plan = plan.Code, endedAt = periodEnd, scheduled = true }, now);
             outcome = RenewalOutcome.Cancelled;
         }
@@ -162,7 +162,7 @@ public class SubscriptionService : ISubscriptionService
                 subscription.CurrentPeriodEnd = BillingPeriod.Advance(newStart, plan.BillingPeriod);
                 subscription.Status = SubscriptionStatus.Active;
                 subscription.PastDueSince = null;
-                BillingLedger.LogEvent(unit, clinicId, BillingEventTypes.SubscriptionRenewed, BillingSource.Worker,
+                BillingLedger.LogEvent(unit, clientId, BillingEventTypes.SubscriptionRenewed, BillingSource.Worker,
                     new { plan = plan.Code, charged = plan.Price, currency = account.Currency, periodEnd = subscription.CurrentPeriodEnd }, now);
                 outcome = RenewalOutcome.Renewed;
             }
@@ -173,7 +173,7 @@ public class SubscriptionService : ISubscriptionService
                     new LedgerContext(BillingSource.Worker, Reason: "Period ended unpaid", SubscriptionId: subscription.Id, PlanId: plan.Id), now, ct);
                 subscription.Status = SubscriptionStatus.PastDue;
                 subscription.PastDueSince = now;
-                BillingLedger.LogEvent(unit, clinicId, BillingEventTypes.SubscriptionPastDue, BillingSource.Worker,
+                BillingLedger.LogEvent(unit, clientId, BillingEventTypes.SubscriptionPastDue, BillingSource.Worker,
                     new { plan = plan.Code, due = plan.Price, currency = account.Currency, wallet = account.WalletBalance, graceDays = _config.BillingGracePeriodDays }, now);
                 outcome = RenewalOutcome.PastDue;
             }
@@ -181,7 +181,7 @@ public class SubscriptionService : ISubscriptionService
             {
                 subscription.Status = SubscriptionStatus.Expired;
                 subscription.EndedAt = now;
-                BillingLedger.LogEvent(unit, clinicId, BillingEventTypes.SubscriptionExpired, BillingSource.Worker,
+                BillingLedger.LogEvent(unit, clientId, BillingEventTypes.SubscriptionExpired, BillingSource.Worker,
                     new { plan = plan.Code, pastDueSince = subscription.PastDueSince }, now);
                 outcome = RenewalOutcome.Expired;
             }
@@ -194,29 +194,29 @@ public class SubscriptionService : ISubscriptionService
         subscription.UpdatedAt = now;
         await unit.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
-        await _cache.RemoveAsync(CacheKeys.Entitlements(clinicId), ct);
+        await _cache.RemoveAsync(CacheKeys.Entitlements(clientId), ct);
 
         if (outcome == RenewalOutcome.Renewed)
         {
-            _logger.LogInformation("Billing: renewed plan {Plan} for clinic {ClinicId} until {PeriodEnd} ({Price} {Currency}).",
-                plan.Code, clinicId, subscription.CurrentPeriodEnd, plan.Price, account.Currency);
+            _logger.LogInformation("Billing: renewed plan {Plan} for client {ClientId} until {PeriodEnd} ({Price} {Currency}).",
+                plan.Code, clientId, subscription.CurrentPeriodEnd, plan.Price, account.Currency);
         }
         else
         {
-            _logger.LogWarning("Billing: subscription of clinic {ClinicId} (plan {Plan}) is now {Status}.", clinicId, plan.Code, subscription.Status);
+            _logger.LogWarning("Billing: subscription of client {ClientId} (plan {Plan}) is now {Status}.", clientId, plan.Code, subscription.Status);
         }
         return outcome;
     }
 
-    public async Task<ClinicSubscription?> CancelAsync(Guid clinicId, bool immediately, string source, string? actor, string? reason, CancellationToken ct = default)
+    public async Task<ClientSubscription?> CancelAsync(Guid clientId, bool immediately, string source, string? actor, string? reason, CancellationToken ct = default)
     {
         var now = _time.GetUtcNow();
 
         await using var unit = _units.Create();
         await using var tx = await unit.BeginTransactionAsync(ct);
-        var account = await unit.Accounts.LockAsync(clinicId, _config.BillingCurrency, ct);
+        var account = await unit.Accounts.LockAsync(clientId, _config.BillingCurrency, ct);
 
-        var subscription = await unit.Subscriptions.GetWithPlanAsync(clinicId, ct);
+        var subscription = await unit.Subscriptions.GetWithPlanAsync(clientId, ct);
         if (subscription is null) return null;
         if (subscription.Status is SubscriptionStatus.Cancelled or SubscriptionStatus.Expired) return subscription;
 
@@ -226,33 +226,33 @@ public class SubscriptionService : ISubscriptionService
                 new LedgerContext(source, actor, reason ?? "Subscription cancelled", SubscriptionId: subscription.Id, PlanId: subscription.PlanId), now, ct);
             subscription.Status = SubscriptionStatus.Cancelled;
             subscription.EndedAt = now;
-            BillingLedger.LogEvent(unit, clinicId, BillingEventTypes.SubscriptionCancelled, source,
+            BillingLedger.LogEvent(unit, clientId, BillingEventTypes.SubscriptionCancelled, source,
                 new { plan = subscription.Plan?.Code, immediately = true, actor, reason }, now);
         }
         else if (!subscription.CancelAtPeriodEnd)
         {
             subscription.CancelAtPeriodEnd = true;
-            BillingLedger.LogEvent(unit, clinicId, BillingEventTypes.SubscriptionCancelScheduled, source,
+            BillingLedger.LogEvent(unit, clientId, BillingEventTypes.SubscriptionCancelScheduled, source,
                 new { plan = subscription.Plan?.Code, endsAt = subscription.CurrentPeriodEnd, actor, reason }, now);
         }
         subscription.UpdatedAt = now;
 
         await unit.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
-        await _cache.RemoveAsync(CacheKeys.Entitlements(clinicId), ct);
-        _logger.LogInformation("Billing: subscription of clinic {ClinicId} cancelled ({When}) by {Actor}.",
-            clinicId, immediately ? "now" : "at period end", actor ?? source);
+        await _cache.RemoveAsync(CacheKeys.Entitlements(clientId), ct);
+        _logger.LogInformation("Billing: subscription of client {ClientId} cancelled ({When}) by {Actor}.",
+            clientId, immediately ? "now" : "at period end", actor ?? source);
         return subscription;
     }
 
-    public async Task<ClinicSubscription?> ResumeAsync(Guid clinicId, string source, string? actor, CancellationToken ct = default)
+    public async Task<ClientSubscription?> ResumeAsync(Guid clientId, string source, string? actor, CancellationToken ct = default)
     {
         var now = _time.GetUtcNow();
         await using var unit = _units.Create();
         await using var tx = await unit.BeginTransactionAsync(ct);
-        await unit.Accounts.LockAsync(clinicId, _config.BillingCurrency, ct);
+        await unit.Accounts.LockAsync(clientId, _config.BillingCurrency, ct);
 
-        var subscription = await unit.Subscriptions.GetWithPlanAsync(clinicId, ct);
+        var subscription = await unit.Subscriptions.GetWithPlanAsync(clientId, ct);
         if (subscription is null || !subscription.CancelAtPeriodEnd
             || subscription.Status is SubscriptionStatus.Cancelled or SubscriptionStatus.Expired)
         {
@@ -260,34 +260,34 @@ public class SubscriptionService : ISubscriptionService
         }
         subscription.CancelAtPeriodEnd = false;
         subscription.UpdatedAt = now;
-        BillingLedger.LogEvent(unit, clinicId, BillingEventTypes.SubscriptionResumed, source, new { plan = subscription.Plan?.Code, actor }, now);
+        BillingLedger.LogEvent(unit, clientId, BillingEventTypes.SubscriptionResumed, source, new { plan = subscription.Plan?.Code, actor }, now);
         await unit.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
-        await _cache.RemoveAsync(CacheKeys.Entitlements(clinicId), ct);
+        await _cache.RemoveAsync(CacheKeys.Entitlements(clientId), ct);
         return subscription;
     }
 
     public async Task<int> ProcessDueAsync(CancellationToken ct = default)
     {
         var now = _time.GetUtcNow();
-        List<Guid> clinicIds;
+        List<Guid> clientIds;
         await using (var unit = _units.Create())
         {
-            clinicIds = (await unit.Subscriptions.ListDueClinicIdsAsync(now, ct)).ToList();
+            clientIds = (await unit.Subscriptions.ListDueClientIdsAsync(now, ct)).ToList();
         }
 
         var changed = 0;
-        foreach (var clinicId in clinicIds)
+        foreach (var clientId in clientIds)
         {
-            // One transaction per clinic: a failure for one clinic never blocks or rolls back another.
+            // One transaction per client: a failure for one client never blocks or rolls back another.
             try
             {
-                var outcome = await RenewIfDueAsync(clinicId, ct);
+                var outcome = await RenewIfDueAsync(clientId, ct);
                 if (outcome is not (RenewalOutcome.NotDue or RenewalOutcome.PastDue)) changed++;
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                _logger.LogError(ex, "Billing: renewal processing failed for clinic {ClinicId}; it will be retried on the next run.", clinicId);
+                _logger.LogError(ex, "Billing: renewal processing failed for client {ClientId}; it will be retried on the next run.", clientId);
             }
         }
         return changed;

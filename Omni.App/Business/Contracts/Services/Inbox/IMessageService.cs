@@ -18,20 +18,20 @@ namespace Omni.App.Business.Contracts.Services.Inbox;
 /// </summary>
 public interface IMessageService
 {
-    Task<MessageResponse?> SendAsync(Guid clinicId, Guid conversationId, SendMessageRequest request, CancellationToken ct = default);
+    Task<MessageResponse?> SendAsync(Guid clientId, Guid conversationId, SendMessageRequest request, CancellationToken ct = default);
 
     /// <summary>Sends an approved WhatsApp template — usable any time (proactive outreach), and the
     /// only option once the service window is closed. Reused by both the Inbox's "Send Template"
     /// action and CampaignService.ProcessRecipientAsync — see that method for the campaign-origin
     /// variant, which sets Origin.Campaign instead of Origin.Dashboard.</summary>
-    Task<MessageResponse?> SendTemplateAsync(Guid clinicId, Guid conversationId, SendTemplateMessageRequest request, CancellationToken ct = default);
+    Task<MessageResponse?> SendTemplateAsync(Guid clientId, Guid conversationId, SendTemplateMessageRequest request, CancellationToken ct = default);
 
     /// <summary>Campaign-origin variant of SendTemplateAsync — sets Origin.Campaign and links
     /// CampaignId/CampaignRecipientId on the resulting Message instead of Origin.Dashboard. The only
     /// other difference from a normal Inbox template send; everything else (WhatsApp API call,
     /// window rules, SignalR notification) is shared. Used exclusively by CampaignService.</summary>
     Task<MessageResponse?> SendCampaignTemplateAsync(
-        Guid clinicId, Guid conversationId, Guid whatsAppTemplateId, IReadOnlyList<string> bodyParameters,
+        Guid clientId, Guid conversationId, Guid whatsAppTemplateId, IReadOnlyList<string> bodyParameters,
         Guid campaignId, Guid campaignRecipientId, CancellationToken ct = default);
 
     Task<IngestMessageResult> IngestAsync(IngestMessageRequest request, CancellationToken ct = default);
@@ -41,5 +41,5 @@ public interface IMessageService
     /// sending (a human may have taken over while the AI was "thinking"), throwing
     /// ConversationNotInAiModeException if not. Unlike SendAsync (staff), this never flips the
     /// conversation to human mode — origin=ai, sender_type=ai throughout.</summary>
-    Task<MessageResponse?> SendAiReplyAsync(Guid clinicId, Guid conversationId, string content, CancellationToken ct = default);
+    Task<MessageResponse?> SendAiReplyAsync(Guid clientId, Guid conversationId, string content, CancellationToken ct = default);
 }

@@ -567,7 +567,7 @@
     });
   }
 
-  // --- global scope selector (one entity, e.g. Clinic) ----------------------
+  // --- global scope selector (one entity, e.g. Client) ----------------------
   // Server contract: GET {endpoint}&q=&skip=&take= → { items:[{id,name,isActive,sub}], hasMore }
   // Picking sets ?{param}=<id> (or ?{param}= for "All") and reloads; the server
   // persists the choice (cookie) and every scope-aware page reads it.

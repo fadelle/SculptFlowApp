@@ -6,9 +6,9 @@
     var hasBlanks = Model.PlaceholderNumbers.Count > 0;
 }
 
-@if (!Model.ClinicConfigured)
+@if (!Model.ClientConfigured)
 {
-    <partial name="_NoClinic" />
+    <partial name="_NoClient" />
 }
 else
 {
@@ -317,7 +317,7 @@ else
 }
 
 @functions {
-    /// <summary>Renders one filter dropdown — checkboxes with clinic-friendly labels
+    /// <summary>Renders one filter dropdown — checkboxes with client-friendly labels
     /// (FilterLabelHelper) wrapped in the .ms markup wwwroot/js/multi-select.js turns into a
     /// searchable chips dropdown. The checkboxes are the real, only form data; the JS is purely
     /// presentational on top.</summary>

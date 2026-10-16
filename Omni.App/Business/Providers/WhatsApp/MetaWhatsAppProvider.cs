@@ -8,7 +8,7 @@ using Omni.App.Entities.Models;
 
 namespace Omni.App.Business.Providers.WhatsApp;
 
-/// <summary>Meta Cloud API directly (graph.facebook.com/{v}/{PhoneNumberId}/messages) with the clinic's own
+/// <summary>Meta Cloud API directly (graph.facebook.com/{v}/{PhoneNumberId}/messages) with the client's own
 /// access token from Embedded Signup.
 /// See Business/Contracts/Providers/WhatsApp/IWhatsAppProvider.cs.</summary>
 public class MetaWhatsAppProvider : IWhatsAppProvider

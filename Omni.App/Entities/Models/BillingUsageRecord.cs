@@ -12,9 +12,9 @@ namespace Omni.App.Entities.Models;
 public class BillingUsageRecord
 {
     public Guid Id { get; set; }
-    public Guid ClinicId { get; set; }
+    public Guid ClientId { get; set; }
     public Guid BillingAccountId { get; set; }
-    /// <summary>Stable identity of this one billable event (unique per clinic), e.g. "whatsapp:message:{messageId}".
+    /// <summary>Stable identity of this one billable event (unique per client), e.g. "whatsapp:message:{messageId}".
     /// A retry or a duplicate callback with the same key finds this row instead of charging again.</summary>
     public string IdempotencyKey { get; set; } = string.Empty;
     public string EventType { get; set; } = string.Empty;
@@ -38,7 +38,7 @@ public class BillingUsageRecord
     /// <summary>Total upstream provider cost (UnitProviderCost x Quantity) when known, whoever paid it. On
     /// Omni-funded usage, Amount - this = margin.</summary>
     public decimal? ProviderCost { get; set; }
-    /// <summary>Total Omni charges the clinic (UnitPrice x Quantity): the estimate while reserved, final once
+    /// <summary>Total Omni charges the client (UnitPrice x Quantity): the estimate while reserved, final once
     /// settled, 0 when not charged.</summary>
     public decimal? Amount { get; set; }
     public decimal ReservedAmount { get; set; }

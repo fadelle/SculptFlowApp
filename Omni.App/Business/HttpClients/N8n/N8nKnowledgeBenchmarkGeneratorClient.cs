@@ -9,7 +9,7 @@ namespace Omni.App.Business.HttpClients.N8n;
 /// <summary>
 /// POSTs to N8n:KnowledgeBenchmarkWebhookUrl (env var N8n__KnowledgeBenchmarkWebhookUrl):
 /// <code>
-/// { "generationId": "...", "clinicId": "...", "chunks": [ { "documentId": "...", "chunkId": "...", "documentTitle": "...", "content": "..." } ] }
+/// { "generationId": "...", "clientId": "...", "chunks": [ { "documentId": "...", "chunkId": "...", "documentTitle": "...", "content": "..." } ] }
 /// </code>
 /// The n8n Webhook node should be set to "Respond → Immediately": any 2xx is an acknowledgement. When the questions are ready
 /// n8n POSTs them to <c>/api/knowledge/benchmark/generations/{generationId}/questions</c> with the X-Ingest-Key header.
@@ -35,7 +35,7 @@ public class N8nKnowledgeBenchmarkGeneratorClient : IKnowledgeBenchmarkGenerator
 
     public bool IsConfigured => !string.IsNullOrWhiteSpace(Url);
 
-    public async Task<GeneratorSendResult> SendAsync(Guid clinicId, Guid generationId, IReadOnlyList<BenchmarkSourceChunk> chunks, CancellationToken ct = default)
+    public async Task<GeneratorSendResult> SendAsync(Guid clientId, Guid generationId, IReadOnlyList<BenchmarkSourceChunk> chunks, CancellationToken ct = default)
     {
         var url = Url;
         if (string.IsNullOrWhiteSpace(url))
@@ -47,7 +47,7 @@ public class N8nKnowledgeBenchmarkGeneratorClient : IKnowledgeBenchmarkGenerator
         var payload = new
         {
             generationId,
-            clinicId,
+            clientId,
             chunks = chunks.Select(c => new { documentId = c.DocumentId, chunkId = c.ChunkId, documentTitle = c.DocumentTitle, content = c.Content })
         };
 

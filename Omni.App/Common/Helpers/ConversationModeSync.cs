@@ -26,7 +26,7 @@ public static class ConversationModeSync
         // (`at`) so it sorts above it.
         conversation.Messages.Add(new Message
         {
-            ClinicId = conversation.ClinicId,
+            ClientId = conversation.ClientId,
             ConversationId = conversation.Id,
             LeadId = conversation.LeadId,
             Direction = MessageDirection.Outbound,

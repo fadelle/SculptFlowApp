@@ -14,9 +14,9 @@
     static string ModeLabel(string mode) => mode switch { "ai" => "AI", "human" => "Staff", "approval" => "Approval", _ => mode };
 }
 
-@if (!Model.ClinicConfigured)
+@if (!Model.ClientConfigured)
 {
-    <partial name="_NoClinic" />
+    <partial name="_NoClient" />
 }
 else
 {
@@ -78,7 +78,7 @@ else
             <div class="inbox-empty" id="inbox-empty">
                 <span class="au-empty__icon"><span class="au-icon" aria-hidden="true">forum</span></span>
                 <p class="empty-title">Pick a conversation</p>
-                <p class="empty-text">When a patient writes to your clinic, the conversation shows up on the left.</p>
+                <p class="empty-text">When a patient writes to your client, the conversation shows up on the left.</p>
             </div>
 
             <div class="inbox-thread-inner" id="inbox-thread-inner" hidden>
@@ -183,7 +183,7 @@ else
 
 <script>
     window.PS_INBOX_CONFIG = {
-        clinicId: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.ClinicId.ToString())),
+        clientId: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.ClientId.ToString())),
         aiAgentAvailable: @(Model.AiAgentAvailable ? "true" : "false"),
         hubUrl: '/hubs/inbox'
     };

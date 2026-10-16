@@ -5,7 +5,7 @@ namespace Omni.App.Entities.Models;
 public class ProcedureBooking
 {
     public Guid Id { get; set; }
-    public Guid ClinicId { get; set; }
+    public Guid ClientId { get; set; }
     public Guid LeadId { get; set; }
     public Guid ProcedureId { get; set; }
     public Guid? AppointmentId { get; set; }

@@ -2,9 +2,9 @@ namespace Omni.App.Common.Helpers;
 
 /// <summary>
 /// Maps free-text status values (lead status, qualification status, appointment status) to a
-/// clinic-friendly display label for the Campaign audience filter UI. Purely presentational — the
+/// client-friendly display label for the Campaign audience filter UI. Purely presentational — the
 /// underlying stored/backend values (Database/schema.sql's check constraints, the *Status static
-/// classes in Data/Entities) are unchanged; this only controls what clinic staff read on screen.
+/// classes in Data/Entities) are unchanged; this only controls what client staff read on screen.
 /// </summary>
 public static class FilterLabelHelper
 {

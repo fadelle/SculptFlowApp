@@ -10,9 +10,9 @@ public class MessageTraceRepositoryTests(PostgresFixture fixture) : RepoTestBase
     private static string NewTrace() => Guid.NewGuid().ToString("N");
 
     private static MessageTraceStep Step(string traceId, DateTimeOffset at, string step = TraceSteps.MessageSaved, string outcome = TraceOutcomes.Ok,
-        Guid? clinicId = null, Guid? conversationId = null, Guid? messageId = null, string? externalId = null, string detail = "{}") => new()
+        Guid? clientId = null, Guid? conversationId = null, Guid? messageId = null, string? externalId = null, string detail = "{}") => new()
     {
-        TraceId = traceId, OccurredAt = at, Step = step, Outcome = outcome, ClinicId = clinicId, ConversationId = conversationId,
+        TraceId = traceId, OccurredAt = at, Step = step, Outcome = outcome, ClientId = clientId, ConversationId = conversationId,
         MessageId = messageId, ExternalMessageId = externalId, Channel = "whatsapp", Detail = detail
     };
 
@@ -45,20 +45,20 @@ public class MessageTraceRepositoryTests(PostgresFixture fixture) : RepoTestBase
     [PostgresFact]
     public async Task A_trace_reads_its_steps_messages_events_and_logs_and_messages_resolve_to_it()
     {
-        var clinic = MakeClinic();
-        var lead = MakeLead(clinic.Id);
-        var conversation = MakeConversation(clinic.Id, lead.Id);
+        var client = MakeClient();
+        var lead = MakeLead(client.Id);
+        var conversation = MakeConversation(client.Id, lead.Id);
         var trace = NewTrace();
         var t = new DateTimeOffset(2098, 5, 1, 9, 0, 0, TimeSpan.Zero);
         var inbound = MakeMessage(conversation, createdAt: t, externalId: "wamid." + trace);
         inbound.TraceId = trace;
         var named = MakeMessage(conversation, MessageDirection.Outbound, MessageOrigin.Ai, createdAt: t.AddSeconds(5)); // no trace id, named by a step
         var other = MakeMessage(conversation, createdAt: t.AddSeconds(1));
-        await SeedAsync(clinic, lead, conversation, inbound, named, other,
-            Step(trace, t.AddSeconds(1), TraceSteps.SendProviderAccepted, clinicId: clinic.Id, conversationId: conversation.Id, messageId: named.Id, externalId: "out." + trace),
-            Step(trace, t, TraceSteps.MessageSaved, clinicId: clinic.Id, conversationId: conversation.Id, messageId: inbound.Id),
-            new EventLog { Id = Guid.NewGuid(), ClinicId = clinic.Id, ConversationId = conversation.Id, EventType = "customer_message_received", Source = "whatsapp_customer", Metadata = "{}", CreatedAt = t },
-            new EventLog { Id = Guid.NewGuid(), ClinicId = clinic.Id, ConversationId = conversation.Id, EventType = "too_late", Metadata = "{}", CreatedAt = t.AddHours(2) },
+        await SeedAsync(client, lead, conversation, inbound, named, other,
+            Step(trace, t.AddSeconds(1), TraceSteps.SendProviderAccepted, clientId: client.Id, conversationId: conversation.Id, messageId: named.Id, externalId: "out." + trace),
+            Step(trace, t, TraceSteps.MessageSaved, clientId: client.Id, conversationId: conversation.Id, messageId: inbound.Id),
+            new EventLog { Id = Guid.NewGuid(), ClientId = client.Id, ConversationId = conversation.Id, EventType = "customer_message_received", Source = "whatsapp_customer", Metadata = "{}", CreatedAt = t },
+            new EventLog { Id = Guid.NewGuid(), ClientId = client.Id, ConversationId = conversation.Id, EventType = "too_late", Metadata = "{}", CreatedAt = t.AddHours(2) },
             new AppLog { OccurredAt = t.AddSeconds(2), Level = "Error", Category = "X", Message = "boom", Fingerprint = "f", TraceId = trace, Properties = "{}" });
 
         await using var db = NewContext();
@@ -85,43 +85,43 @@ public class MessageTraceRepositoryTests(PostgresFixture fixture) : RepoTestBase
     }
 
     [PostgresFact]
-    public async Task The_list_summarises_traces_and_filters_by_clinic_conversation_and_failure()
+    public async Task The_list_summarises_traces_and_filters_by_client_conversation_and_failure()
     {
-        var clinicId = Guid.NewGuid();
+        var clientId = Guid.NewGuid();
         var conversationId = Guid.NewGuid();
         var t = new DateTimeOffset(2099, 7, 1, 9, 0, 0, TimeSpan.Zero);
-        var (good, failed, errored, otherClinic) = (NewTrace(), NewTrace(), NewTrace(), NewTrace());
+        var (good, failed, errored, otherClient) = (NewTrace(), NewTrace(), NewTrace(), NewTrace());
         await SeedAsync(
             Step(good, t, TraceSteps.WebhookReceived),
-            Step(good, t.AddSeconds(1), clinicId: clinicId, conversationId: conversationId),
-            Step(failed, t.AddMinutes(1), TraceSteps.SendRequested, clinicId: clinicId, conversationId: Guid.NewGuid()),
-            Step(failed, t.AddMinutes(1).AddSeconds(1), TraceSteps.SendProviderFailed, TraceOutcomes.Failed, clinicId, detail: "{\"error\":\"x\"}"),
-            Step(errored, t.AddMinutes(2), clinicId: clinicId),
+            Step(good, t.AddSeconds(1), clientId: clientId, conversationId: conversationId),
+            Step(failed, t.AddMinutes(1), TraceSteps.SendRequested, clientId: clientId, conversationId: Guid.NewGuid()),
+            Step(failed, t.AddMinutes(1).AddSeconds(1), TraceSteps.SendProviderFailed, TraceOutcomes.Failed, clientId, detail: "{\"error\":\"x\"}"),
+            Step(errored, t.AddMinutes(2), clientId: clientId),
             new AppLog { OccurredAt = t.AddMinutes(2), Level = "Critical", Category = "X", Message = "boom", Fingerprint = "f", TraceId = errored, Properties = "{}" },
             new AppLog { OccurredAt = t.AddMinutes(2), Level = "Warning", Category = "X", Message = "meh", Fingerprint = "f", TraceId = good, Properties = "{}" },
-            Step(otherClinic, t.AddMinutes(3), clinicId: Guid.NewGuid()));
+            Step(otherClient, t.AddMinutes(3), clientId: Guid.NewGuid()));
 
         await using var db = NewContext();
         var repo = new MessageTraceAdminRepository(db);
         var from = t.AddSeconds(-1);
 
-        var (rows, total) = await repo.ListReadOnlyAsync(new MessageTraceFilter(from, clinicId), 0, 10);
+        var (rows, total) = await repo.ListReadOnlyAsync(new MessageTraceFilter(from, clientId), 0, 10);
         Assert.Equal(3, total);
         Assert.Equal([errored, failed, good], rows.Select(r => r.TraceId)); // latest activity first
         var g = rows.Single(r => r.TraceId == good);
-        Assert.Equal((2, 0, 0, TraceSteps.WebhookReceived, clinicId, conversationId, "whatsapp"), (g.Steps, g.FailedSteps, g.Errors, g.FirstStep, g.ClinicId!.Value, g.ConversationId!.Value, g.Channel));
+        Assert.Equal((2, 0, 0, TraceSteps.WebhookReceived, clientId, conversationId, "whatsapp"), (g.Steps, g.FailedSteps, g.Errors, g.FirstStep, g.ClientId!.Value, g.ConversationId!.Value, g.Channel));
         var f = rows.Single(r => r.TraceId == failed);
         Assert.Equal((1, TraceSteps.SendProviderFailed, "{\"error\": \"x\"}"), (f.FailedSteps, f.FailedStep, f.FailedDetail));
         Assert.Equal(1, rows.Single(r => r.TraceId == errored).Errors);
 
-        var (failedOnly, failedTotal) = await repo.ListReadOnlyAsync(new MessageTraceFilter(from, clinicId, FailedOnly: true), 0, 10);
+        var (failedOnly, failedTotal) = await repo.ListReadOnlyAsync(new MessageTraceFilter(from, clientId, FailedOnly: true), 0, 10);
         Assert.Equal(2, failedTotal);
         Assert.Equal([errored, failed], failedOnly.Select(r => r.TraceId));
 
         var (byConversation, _) = await repo.ListReadOnlyAsync(new MessageTraceFilter(from, ConversationId: conversationId), 0, 10);
         Assert.Equal(good, Assert.Single(byConversation).TraceId);
 
-        var (paged, pagedTotal) = await repo.ListReadOnlyAsync(new MessageTraceFilter(from, clinicId), 1, 1);
+        var (paged, pagedTotal) = await repo.ListReadOnlyAsync(new MessageTraceFilter(from, clientId), 1, 1);
         Assert.Equal((3, failed), (pagedTotal, Assert.Single(paged).TraceId));
 
         var (none, noneTotal) = await repo.ListReadOnlyAsync(new MessageTraceFilter(t.AddYears(5)), 0, 10);

@@ -4,7 +4,7 @@ namespace Omni.App.Entities.Responses.Channels;
 
 public record ChannelIntegrationResponse(
     Guid Id,
-    Guid ClinicId,
+    Guid ClientId,
     string Channel,
     string Status,
     string? DisplayName,

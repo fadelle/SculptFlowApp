@@ -28,7 +28,7 @@ public class CacheManager : ICacheManager
 
     public TimeSpan LifetimeOf(CacheArea area) => TimeSpan.FromMinutes(area switch
     {
-        CacheArea.Clinics => _config?.CacheClinicsMinutes ?? Default(ConfigDefaults.CacheClinicsMinutes),
+        CacheArea.Clients => _config?.CacheClientsMinutes ?? Default(ConfigDefaults.CacheClientsMinutes),
         CacheArea.StaffLookup => _config?.CacheStaffLookupMinutes ?? Default(ConfigDefaults.CacheStaffLookupMinutes),
         CacheArea.Procedures => _config?.CacheProceduresMinutes ?? Default(ConfigDefaults.CacheProceduresMinutes),
         CacheArea.Scheduling => _config?.CacheSchedulingMinutes ?? Default(ConfigDefaults.CacheSchedulingMinutes),

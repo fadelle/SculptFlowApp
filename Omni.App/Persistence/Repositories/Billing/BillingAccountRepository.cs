@@ -14,22 +14,22 @@ public class BillingAccountRepository : IBillingAccountRepository
         _db = db;
     }
 
-    public async Task<BillingAccount> LockAsync(Guid clinicId, string currency, CancellationToken ct = default)
+    public async Task<BillingAccount> LockAsync(Guid clientId, string currency, CancellationToken ct = default)
     {
         await _db.Database.ExecuteSqlInterpolatedAsync(
-            $"insert into billing.accounts (id, clinic_id, currency) values ({Guid.NewGuid()}, {clinicId}, {currency}) on conflict (clinic_id) do nothing",
+            $"insert into billing.accounts (id, client_id, currency) values ({Guid.NewGuid()}, {clientId}, {currency}) on conflict (client_id) do nothing",
             ct);
         var rows = await _db.BillingAccounts
-            .FromSqlInterpolated($"select * from billing.accounts where clinic_id = {clinicId} for update")
+            .FromSqlInterpolated($"select * from billing.accounts where client_id = {clientId} for update")
             .ToListAsync(ct);
         return rows.Single();
     }
 
-    public Task<BillingAccount?> GetReadOnlyAsync(Guid clinicId, CancellationToken ct = default) =>
-        _db.BillingAccounts.AsNoTracking().FirstOrDefaultAsync(a => a.ClinicId == clinicId, ct);
+    public Task<BillingAccount?> GetReadOnlyAsync(Guid clientId, CancellationToken ct = default) =>
+        _db.BillingAccounts.AsNoTracking().FirstOrDefaultAsync(a => a.ClientId == clientId, ct);
 
     public async Task<IReadOnlyDictionary<Guid, BillingAccount>> MapAllReadOnlyAsync(CancellationToken ct = default) =>
-        await _db.BillingAccounts.AsNoTracking().ToDictionaryAsync(a => a.ClinicId, ct);
+        await _db.BillingAccounts.AsNoTracking().ToDictionaryAsync(a => a.ClientId, ct);
 
     public void Add(BillingAccount account) => _db.BillingAccounts.Add(account);
 }

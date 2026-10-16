@@ -10,8 +10,8 @@ namespace Omni.App.Controllers.Client;
 
 /// <summary>
 /// Lead intake and management. Dashboard actions (List/GetById/Update/UpdateStatus) require login
-/// and resolve clinicId server-side via DashboardApiController — never from the browser. Create is
-/// the n8n intake path (see its own doc comment): no logged-in user, so it takes ClinicId in the body
+/// and resolve clientId server-side via DashboardApiController — never from the browser. Create is
+/// the n8n intake path (see its own doc comment): no logged-in user, so it takes ClientId in the body
 /// and is trusted only through the X-Ingest-Key header.
 /// </summary>
 [ApiController]
@@ -20,15 +20,15 @@ public class LeadsController : DashboardApiController
 {
     private readonly ILeadService _leads;
 
-    public LeadsController(ILeadService leads, ICurrentClinicContext clinicContext) : base(clinicContext)
+    public LeadsController(ILeadService leads, ICurrentClientContext clientContext) : base(clientContext)
     {
         _leads = leads;
     }
 
     /// <summary>Creates a lead, or returns the existing one if ExternalLeadId was already seen for
-    /// this clinic — safe for n8n to retry without creating duplicates. Intake-only: no logged-in user
-    /// is calling this, so ClinicId comes from the request body, which is why the caller must hold the
-    /// ingest key (without it anyone could add leads to any clinic). No key = 401.</summary>
+    /// this client — safe for n8n to retry without creating duplicates. Intake-only: no logged-in user
+    /// is calling this, so ClientId comes from the request body, which is why the caller must hold the
+    /// ingest key (without it anyone could add leads to any client). No key = 401.</summary>
     [AllowAnonymous]
     [RequireIngestKey]
     [HttpPost]
@@ -49,42 +49,42 @@ public class LeadsController : DashboardApiController
         [FromQuery] int take = 50,
         CancellationToken ct = default)
     {
-        var clinicId = await GetClinicIdAsync(ct);
-        if (clinicId is null) return Forbid();
+        var clientId = await GetClientIdAsync(ct);
+        if (clientId is null) return Forbid();
 
         skip = Math.Max(skip, 0);
         take = Math.Clamp(take, 1, 200);
-        var (items, totalCount) = await _leads.ListAsync(clinicId.Value, status, procedureId, search, skip, take, ct);
+        var (items, totalCount) = await _leads.ListAsync(clientId.Value, status, procedureId, search, skip, take, ct);
         return Ok(new { items, totalCount, skip, take });
     }
 
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<LeadResponse>> GetById(Guid id, CancellationToken ct)
     {
-        var clinicId = await GetClinicIdAsync(ct);
-        if (clinicId is null) return Forbid();
+        var clientId = await GetClientIdAsync(ct);
+        if (clientId is null) return Forbid();
 
-        var lead = await _leads.GetByIdAsync(clinicId.Value, id, ct);
+        var lead = await _leads.GetByIdAsync(clientId.Value, id, ct);
         return lead is null ? NotFound() : Ok(lead);
     }
 
     [HttpPatch("{id:guid}")]
     public async Task<ActionResult<LeadResponse>> Update(Guid id, [FromBody] UpdateLeadRequest request, CancellationToken ct)
     {
-        var clinicId = await GetClinicIdAsync(ct);
-        if (clinicId is null) return Forbid();
+        var clientId = await GetClientIdAsync(ct);
+        if (clientId is null) return Forbid();
 
-        var lead = await _leads.UpdateAsync(clinicId.Value, id, request, ct);
+        var lead = await _leads.UpdateAsync(clientId.Value, id, request, ct);
         return lead is null ? NotFound() : Ok(lead);
     }
 
     [HttpPost("{id:guid}/status")]
     public async Task<ActionResult<LeadResponse>> UpdateStatus(Guid id, [FromBody] UpdateLeadStatusRequest request, CancellationToken ct)
     {
-        var clinicId = await GetClinicIdAsync(ct);
-        if (clinicId is null) return Forbid();
+        var clientId = await GetClientIdAsync(ct);
+        if (clientId is null) return Forbid();
 
-        var lead = await _leads.UpdateStatusAsync(clinicId.Value, id, request, ct);
+        var lead = await _leads.UpdateStatusAsync(clientId.Value, id, request, ct);
         return lead is null ? NotFound() : Ok(lead);
     }
 }

@@ -12,7 +12,7 @@ public record MessageTraceEntry(
     string Outcome,
     string Summary,
     double? DurationMs,
-    Guid? ClinicId,
+    Guid? ClientId,
     Guid? ConversationId,
     Guid? MessageId,
     string? N8nExecutionId,

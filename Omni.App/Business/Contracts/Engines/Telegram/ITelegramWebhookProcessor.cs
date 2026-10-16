@@ -11,7 +11,7 @@ namespace Omni.App.Business.Contracts.Engines.Telegram;
 /// existing IMessageService.IngestAsync — which already persists, updates the conversation, broadcasts
 /// SignalR and decides AI eligibility. No persistence or SignalR logic is duplicated here.
 ///
-/// The clinic comes from the already-authenticated <see cref="ChannelIntegration"/> (resolved by the
+/// The client comes from the already-authenticated <see cref="ChannelIntegration"/> (resolved by the
 /// controller from the connectionId in the URL and verified against the webhook secret) — never from
 /// anything in the Telegram payload.
 /// </summary>

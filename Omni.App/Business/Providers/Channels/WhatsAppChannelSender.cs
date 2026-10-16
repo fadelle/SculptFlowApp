@@ -34,6 +34,6 @@ public class WhatsAppChannelSender : IChannelSender
         var toPhone = conversation.Lead?.Phone
             ?? throw new InvalidOperationException("This lead has no phone number on file — can't send a WhatsApp message.");
 
-        return await _whatsApp.SendTextMessageAsync(conversation.ClinicId, toPhone, text, ct);
+        return await _whatsApp.SendTextMessageAsync(conversation.ClientId, toPhone, text, ct);
     }
 }

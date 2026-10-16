@@ -8,11 +8,11 @@ namespace Omni.App.Tests.Services;
 
 public class AppointmentServiceTests
 {
-    private readonly Guid _clinicId = Guid.NewGuid();
+    private readonly Guid _clientId = Guid.NewGuid();
     private readonly Guid _leadId = Guid.NewGuid();
     private readonly Mock<IAppointmentRepository> _appointments = new();
     private readonly Mock<ILeadRepository> _leads = new();
-    private readonly Mock<IClinicRepository> _clinics = new();
+    private readonly Mock<IClientRepository> _clients = new();
     private readonly Mock<IProcedureRepository> _procedureRows = new();
     private readonly Mock<IUnitOfWork> _uow = new();
     private readonly Mock<IUnitOfWorkTransaction> _tx = new();
@@ -22,31 +22,31 @@ public class AppointmentServiceTests
     private readonly Mock<IInboxNotifier> _notifier = new();
     private readonly Mock<INotificationService> _notifications = new();
     private readonly Mock<ICalendarIntegrationService> _calendar = new();
-    private readonly Clinic _clinic;
+    private readonly Client _client;
     private readonly Lead _lead;
     private readonly List<Appointment> _upcoming = new();
 
     public AppointmentServiceTests()
     {
-        _clinic = new Clinic { Id = _clinicId, Timezone = "UTC" };
-        _lead = new Lead { Id = _leadId, ClinicId = _clinicId, FullName = "Ann Lee", Status = LeadStatus.New };
+        _client = new Client { Id = _clientId, Timezone = "UTC" };
+        _lead = new Lead { Id = _leadId, ClientId = _clientId, FullName = "Ann Lee", Status = LeadStatus.New };
         _uow.Setup(u => u.BeginTransactionAsync(It.IsAny<CancellationToken>())).ReturnsAsync(_tx.Object);
-        _clinics.Setup(c => c.GetReadOnlyAsync(_clinicId, It.IsAny<CancellationToken>())).ReturnsAsync(_clinic);
-        _leads.Setup(l => l.ExistsAsync(_clinicId, _leadId, It.IsAny<CancellationToken>())).ReturnsAsync(true);
-        _leads.Setup(l => l.GetAsync(_clinicId, _leadId, It.IsAny<CancellationToken>())).ReturnsAsync(_lead);
+        _clients.Setup(c => c.GetReadOnlyAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(_client);
+        _leads.Setup(l => l.ExistsAsync(_clientId, _leadId, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        _leads.Setup(l => l.GetAsync(_clientId, _leadId, It.IsAny<CancellationToken>())).ReturnsAsync(_lead);
         _leads.Setup(l => l.GetByIdAsync(_leadId, It.IsAny<CancellationToken>())).ReturnsAsync(_lead);
-        _appointments.Setup(a => a.ListUpcomingForLeadAsync(_clinicId, _leadId, It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()))
+        _appointments.Setup(a => a.ListUpcomingForLeadAsync(_clientId, _leadId, It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => _upcoming.ToList());
         _appointments.Setup(a => a.LoadDetailsAsync(It.IsAny<Appointment>(), It.IsAny<CancellationToken>()))
             .Callback<Appointment, CancellationToken>((a, _) => a.Lead ??= _lead).Returns(Task.CompletedTask);
-        _availability.Setup(a => a.CheckSlotAsync(_clinicId, It.IsAny<Guid?>(), It.IsAny<DateTimeOffset>(), It.IsAny<DateTimeOffset?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+        _availability.Setup(a => a.CheckSlotAsync(_clientId, It.IsAny<Guid?>(), It.IsAny<DateTimeOffset>(), It.IsAny<DateTimeOffset?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Guid _, Guid? _, DateTimeOffset s, DateTimeOffset? e, Guid? _, CancellationToken _) => new SlotCheck(null, e ?? s.AddMinutes(30)));
     }
 
     private readonly Mock<ICampaignRepository> _campaignRepo = new();
     private readonly Mock<IConfigManager> _config = new();
 
-    private AppointmentService Sut() => new(_appointments.Object, _leads.Object, _clinics.Object, _procedureRows.Object, _uow.Object,
+    private AppointmentService Sut() => new(_appointments.Object, _leads.Object, _clients.Object, _procedureRows.Object, _uow.Object,
         _events.Object, _procedures.Object, _availability.Object, _notifier.Object, _notifications.Object, _calendar.Object,
         _campaignRepo.Object, _config.Object);
 
@@ -54,9 +54,9 @@ public class AppointmentServiceTests
     public async Task A_booking_is_credited_to_the_campaign_the_patient_replied_to()
     {
         _config.SetupGet(c => c.CampaignsBookingAttributionDays).Returns(14);
-        _leads.Setup(l => l.ExistsAsync(_clinicId, _leadId, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        _leads.Setup(l => l.ExistsAsync(_clientId, _leadId, It.IsAny<CancellationToken>())).ReturnsAsync(true);
         var send = new CampaignRecipient { Id = Guid.NewGuid(), Status = CampaignRecipientStatus.Replied, RepliedAt = DateTimeOffset.UtcNow.AddDays(-2) };
-        _campaignRepo.Setup(r => r.FindLatestRepliedAwaitingBookingAsync(_clinicId, _leadId, It.Is<DateTimeOffset>(d => d < DateTimeOffset.UtcNow.AddDays(-13) && d > DateTimeOffset.UtcNow.AddDays(-15)), It.IsAny<CancellationToken>()))
+        _campaignRepo.Setup(r => r.FindLatestRepliedAwaitingBookingAsync(_clientId, _leadId, It.Is<DateTimeOffset>(d => d < DateTimeOffset.UtcNow.AddDays(-13) && d > DateTimeOffset.UtcNow.AddDays(-15)), It.IsAny<CancellationToken>()))
             .ReturnsAsync(send);
 
         await Sut().CreateAsync(Req());
@@ -68,10 +68,10 @@ public class AppointmentServiceTests
     [Fact]
     public async Task A_booking_without_a_recent_campaign_reply_credits_nothing()
     {
-        _leads.Setup(l => l.ExistsAsync(_clinicId, _leadId, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        _leads.Setup(l => l.ExistsAsync(_clientId, _leadId, It.IsAny<CancellationToken>())).ReturnsAsync(true);
         _config.SetupGet(c => c.CampaignsBookingAttributionDays).Returns(14);
         await Sut().CreateAsync(Req());
-        _campaignRepo.Verify(r => r.FindLatestRepliedAwaitingBookingAsync(_clinicId, _leadId, It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()), Times.Once);
+        _campaignRepo.Verify(r => r.FindLatestRepliedAwaitingBookingAsync(_clientId, _leadId, It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()), Times.Once);
         _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.AtLeastOnce);
     }
 
@@ -79,7 +79,7 @@ public class AppointmentServiceTests
     {
         var a = new Appointment
         {
-            Id = Guid.NewGuid(), ClinicId = _clinicId, LeadId = _leadId, ProcedureId = procedureId, Status = status, AppointmentType = "consultation",
+            Id = Guid.NewGuid(), ClientId = _clientId, LeadId = _leadId, ProcedureId = procedureId, Status = status, AppointmentType = "consultation",
             ScheduledStart = DateTimeOffset.UtcNow.AddDays(daysAhead).Date.AddHours(10), Lead = _lead
         };
         a.ScheduledStart = new DateTimeOffset(a.ScheduledStart.DateTime, TimeSpan.Zero);
@@ -90,14 +90,14 @@ public class AppointmentServiceTests
     private void Setup(Appointment a)
     {
         _upcoming.Add(a);
-        _appointments.Setup(r => r.GetForLeadAsync(_clinicId, _leadId, a.Id, It.IsAny<CancellationToken>())).ReturnsAsync(a);
-        _appointments.Setup(r => r.GetAsync(_clinicId, a.Id, It.IsAny<CancellationToken>())).ReturnsAsync(a);
+        _appointments.Setup(r => r.GetForLeadAsync(_clientId, _leadId, a.Id, It.IsAny<CancellationToken>())).ReturnsAsync(a);
+        _appointments.Setup(r => r.GetAsync(_clientId, a.Id, It.IsAny<CancellationToken>())).ReturnsAsync(a);
         _appointments.Setup(r => r.GetWithProcedureReadOnlyAsync(a.Id, It.IsAny<CancellationToken>())).ReturnsAsync(a);
-        _appointments.Setup(r => r.GetWithDetailsAsync(_clinicId, a.Id, It.IsAny<CancellationToken>())).ReturnsAsync(a);
+        _appointments.Setup(r => r.GetWithDetailsAsync(_clientId, a.Id, It.IsAny<CancellationToken>())).ReturnsAsync(a);
     }
 
     private CreateAppointmentRequest Req(DateTimeOffset? start = null, Guid? procedureId = null) =>
-        new(_clinicId, _leadId, procedureId, "", start ?? DateTimeOffset.UtcNow.AddDays(2), null, null, null, "note");
+        new(_clientId, _leadId, procedureId, "", start ?? DateTimeOffset.UtcNow.AddDays(2), null, null, null, "note");
 
     // ---------------------------------------------------------------- booking
 
@@ -114,30 +114,30 @@ public class AppointmentServiceTests
         Assert.Equal(("consultation", AppointmentStatus.Booked), (saved.AppointmentType, saved.Status));
         Assert.Equal(saved.ScheduledStart.AddMinutes(30), saved.ScheduledEnd);
         Assert.Equal(LeadStatus.ConsultationBooked, _lead.Status);
-        _appointments.Verify(a => a.LockClinicForBookingAsync(_clinicId, It.IsAny<CancellationToken>()), Times.Once);
-        _procedures.Verify(p => p.EnsureUsableAsync(_clinicId, procId, It.IsAny<CancellationToken>()), Times.Once);
-        _events.Verify(e => e.Log(_clinicId, EventTypes.ConsultationBooked, _leadId, null, saved.Id, null, "{}"), Times.Once);
+        _appointments.Verify(a => a.LockClientForBookingAsync(_clientId, It.IsAny<CancellationToken>()), Times.Once);
+        _procedures.Verify(p => p.EnsureUsableAsync(_clientId, procId, It.IsAny<CancellationToken>()), Times.Once);
+        _events.Verify(e => e.Log(_clientId, EventTypes.ConsultationBooked, _leadId, null, saved.Id, null, "{}"), Times.Once);
         _tx.Verify(t => t.CommitAsync(It.IsAny<CancellationToken>()), Times.Once);
-        _notifier.Verify(n => n.AppointmentChangedAsync(_clinicId, saved.Id, "created", It.IsAny<CancellationToken>()), Times.Once);
-        _calendar.Verify(c => c.TriggerAppointmentSyncAsync(_clinicId, It.IsAny<AppointmentResponse>(), "created", It.IsAny<CancellationToken>()), Times.Once);
-        _notifications.Verify(n => n.CreateAsync(_clinicId, NotificationType.AppointmentBooked, "Appointment booked",
+        _notifier.Verify(n => n.AppointmentChangedAsync(_clientId, saved.Id, "created", It.IsAny<CancellationToken>()), Times.Once);
+        _calendar.Verify(c => c.TriggerAppointmentSyncAsync(_clientId, It.IsAny<AppointmentResponse>(), "created", It.IsAny<CancellationToken>()), Times.Once);
+        _notifications.Verify(n => n.CreateAsync(_clientId, NotificationType.AppointmentBooked, "Appointment booked",
             It.Is<string?>(m => m!.StartsWith("Ann Lee — a consultation booked [[time:")), _leadId, null, saved.Id, null, It.Is<string?>(l => l!.EndsWith(saved.Id.ToString())), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
     public async Task BookAvailableSlot_rejects_unknown_lead_existing_booking_and_unavailable_slot()
     {
-        _leads.Setup(l => l.ExistsAsync(_clinicId, _leadId, It.IsAny<CancellationToken>())).ReturnsAsync(false);
+        _leads.Setup(l => l.ExistsAsync(_clientId, _leadId, It.IsAny<CancellationToken>())).ReturnsAsync(false);
         await Assert.ThrowsAsync<ArgumentException>(() => Sut().BookAvailableSlotAsync(Req()));
 
-        _leads.Setup(l => l.ExistsAsync(_clinicId, _leadId, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        _leads.Setup(l => l.ExistsAsync(_clientId, _leadId, It.IsAny<CancellationToken>())).ReturnsAsync(true);
         var existing = MakeAppointment();
         _upcoming.Add(existing);
         var ex = await Assert.ThrowsAsync<LeadAlreadyBookedException>(() => Sut().BookAvailableSlotAsync(Req()));
         Assert.Equal(existing.Id, ex.Existing.Id);
 
         _upcoming.Clear();
-        _availability.Setup(a => a.CheckSlotAsync(_clinicId, It.IsAny<Guid?>(), It.IsAny<DateTimeOffset>(), It.IsAny<DateTimeOffset?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+        _availability.Setup(a => a.CheckSlotAsync(_clientId, It.IsAny<Guid?>(), It.IsAny<DateTimeOffset>(), It.IsAny<DateTimeOffset?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new SlotCheck("taken", DateTimeOffset.UtcNow));
         await Assert.ThrowsAsync<SlotUnavailableException>(() => Sut().BookAvailableSlotAsync(Req()));
         _appointments.Verify(a => a.Add(It.IsAny<Appointment>()), Times.Never);
@@ -151,14 +151,14 @@ public class AppointmentServiceTests
         var r = await Sut().CreateAsync(Req());
         Assert.Equal(AppointmentStatus.Booked, r.Status);
         _availability.Verify(a => a.CheckSlotAsync(It.IsAny<Guid>(), It.IsAny<Guid?>(), It.IsAny<DateTimeOffset>(), It.IsAny<DateTimeOffset?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()), Times.Never);
-        _notifications.Verify(n => n.CreateAsync(_clinicId, NotificationType.AppointmentBooked, It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
+        _notifications.Verify(n => n.CreateAsync(_clientId, NotificationType.AppointmentBooked, It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
-    public async Task Create_rejects_a_lead_from_another_clinic()
+    public async Task Create_rejects_a_lead_from_another_client()
     {
-        _leads.Setup(l => l.ExistsAsync(_clinicId, _leadId, It.IsAny<CancellationToken>())).ReturnsAsync(false);
-        _leads.Setup(l => l.GetAsync(_clinicId, _leadId, It.IsAny<CancellationToken>())).ReturnsAsync((Lead?)null);
+        _leads.Setup(l => l.ExistsAsync(_clientId, _leadId, It.IsAny<CancellationToken>())).ReturnsAsync(false);
+        _leads.Setup(l => l.GetAsync(_clientId, _leadId, It.IsAny<CancellationToken>())).ReturnsAsync((Lead?)null);
         await Assert.ThrowsAsync<ArgumentException>(() => Sut().CreateAsync(Req()));
         _appointments.Verify(a => a.Add(It.IsAny<Appointment>()), Times.Never);
     }
@@ -168,8 +168,8 @@ public class AppointmentServiceTests
     [Fact]
     public async Task UpdateStatus_validates_and_returns_null_when_missing()
     {
-        await Assert.ThrowsAsync<ArgumentException>(() => Sut().UpdateStatusAsync(_clinicId, Guid.NewGuid(), "bogus"));
-        Assert.Null(await Sut().UpdateStatusAsync(_clinicId, Guid.NewGuid(), AppointmentStatus.Attended));
+        await Assert.ThrowsAsync<ArgumentException>(() => Sut().UpdateStatusAsync(_clientId, Guid.NewGuid(), "bogus"));
+        Assert.Null(await Sut().UpdateStatusAsync(_clientId, Guid.NewGuid(), AppointmentStatus.Attended));
     }
 
     [Theory]
@@ -181,11 +181,11 @@ public class AppointmentServiceTests
     {
         var a = MakeAppointment();
         Setup(a);
-        var r = await Sut().UpdateStatusAsync(_clinicId, a.Id, status);
+        var r = await Sut().UpdateStatusAsync(_clientId, a.Id, status);
         Assert.Equal(status, r!.Status);
         Assert.Equal(expectedLead, _lead.Status);
-        _events.Verify(e => e.Log(_clinicId, It.IsAny<string>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<string?>(), It.IsAny<string>()), eventType is null ? Times.Never : Times.Once);
-        _notifier.Verify(n => n.AppointmentChangedAsync(_clinicId, a.Id, change, It.IsAny<CancellationToken>()), Times.Once);
+        _events.Verify(e => e.Log(_clientId, It.IsAny<string>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<string?>(), It.IsAny<string>()), eventType is null ? Times.Never : Times.Once);
+        _notifier.Verify(n => n.AppointmentChangedAsync(_clientId, a.Id, change, It.IsAny<CancellationToken>()), Times.Once);
         _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -194,7 +194,7 @@ public class AppointmentServiceTests
     {
         var a = MakeAppointment();
         Setup(a);
-        await Sut().UpdateStatusAsync(_clinicId, a.Id, AppointmentStatus.Attended);
+        await Sut().UpdateStatusAsync(_clientId, a.Id, AppointmentStatus.Attended);
         _notifications.Verify(n => n.CreateAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -206,14 +206,14 @@ public class AppointmentServiceTests
         var a = MakeAppointment(AppointmentStatus.Confirmed);
         Setup(a);
         var newStart = DateTimeOffset.UtcNow.AddDays(5);
-        var r = await Sut().RescheduleAsync(_clinicId, _leadId, null, newStart, null, "patient asked");
+        var r = await Sut().RescheduleAsync(_clientId, _leadId, null, newStart, null, "patient asked");
         Assert.Equal(AppointmentStatus.Booked, r!.Status);
         Assert.Equal(newStart.ToUniversalTime(), a.ScheduledStart);
         Assert.Equal(newStart.AddMinutes(30).ToUniversalTime(), a.ScheduledEnd);
-        _availability.Verify(x => x.CheckSlotAsync(_clinicId, null, newStart, null, a.Id, It.IsAny<CancellationToken>()), Times.Once);
-        _events.Verify(e => e.Log(_clinicId, EventTypes.ConsultationRescheduled, _leadId, null, a.Id, null, "{\"reason\":\"patient asked\"}"), Times.Once);
+        _availability.Verify(x => x.CheckSlotAsync(_clientId, null, newStart, null, a.Id, It.IsAny<CancellationToken>()), Times.Once);
+        _events.Verify(e => e.Log(_clientId, EventTypes.ConsultationRescheduled, _leadId, null, a.Id, null, "{\"reason\":\"patient asked\"}"), Times.Once);
         _tx.Verify(t => t.CommitAsync(It.IsAny<CancellationToken>()), Times.Once);
-        _notifier.Verify(n => n.AppointmentChangedAsync(_clinicId, a.Id, "rescheduled", It.IsAny<CancellationToken>()), Times.Once);
+        _notifier.Verify(n => n.AppointmentChangedAsync(_clientId, a.Id, "rescheduled", It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -223,34 +223,34 @@ public class AppointmentServiceTests
         var a = MakeAppointment(procedureId: procId);
         Setup(a);
         _procedureRows.Setup(p => p.IsActiveAsync(procId, It.IsAny<CancellationToken>())).ReturnsAsync(true);
-        await Sut().RescheduleAsync(_clinicId, _leadId, a.Id, DateTimeOffset.UtcNow.AddDays(5), null, null);
-        _availability.Verify(x => x.CheckSlotAsync(_clinicId, procId, It.IsAny<DateTimeOffset>(), It.IsAny<DateTimeOffset?>(), a.Id, It.IsAny<CancellationToken>()), Times.Once);
+        await Sut().RescheduleAsync(_clientId, _leadId, a.Id, DateTimeOffset.UtcNow.AddDays(5), null, null);
+        _availability.Verify(x => x.CheckSlotAsync(_clientId, procId, It.IsAny<DateTimeOffset>(), It.IsAny<DateTimeOffset?>(), a.Id, It.IsAny<CancellationToken>()), Times.Once);
 
         _procedureRows.Setup(p => p.IsActiveAsync(procId, It.IsAny<CancellationToken>())).ReturnsAsync(false);
-        await Sut().RescheduleAsync(_clinicId, _leadId, a.Id, DateTimeOffset.UtcNow.AddDays(6), null, null);
-        _availability.Verify(x => x.CheckSlotAsync(_clinicId, null, It.IsAny<DateTimeOffset>(), It.IsAny<DateTimeOffset?>(), a.Id, It.IsAny<CancellationToken>()), Times.Once);
+        await Sut().RescheduleAsync(_clientId, _leadId, a.Id, DateTimeOffset.UtcNow.AddDays(6), null, null);
+        _availability.Verify(x => x.CheckSlotAsync(_clientId, null, It.IsAny<DateTimeOffset>(), It.IsAny<DateTimeOffset?>(), a.Id, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
     public async Task Reschedule_guards()
     {
-        Assert.Null(await Sut().RescheduleAsync(_clinicId, _leadId, null, DateTimeOffset.UtcNow.AddDays(5), null, null)); // nothing upcoming
-        Assert.Null(await Sut().RescheduleAsync(_clinicId, _leadId, Guid.NewGuid(), DateTimeOffset.UtcNow.AddDays(5), null, null)); // unknown id
+        Assert.Null(await Sut().RescheduleAsync(_clientId, _leadId, null, DateTimeOffset.UtcNow.AddDays(5), null, null)); // nothing upcoming
+        Assert.Null(await Sut().RescheduleAsync(_clientId, _leadId, Guid.NewGuid(), DateTimeOffset.UtcNow.AddDays(5), null, null)); // unknown id
 
         var done = MakeAppointment(AppointmentStatus.Attended);
         Setup(done);
-        await Assert.ThrowsAsync<ArgumentException>(() => Sut().RescheduleAsync(_clinicId, _leadId, done.Id, DateTimeOffset.UtcNow.AddDays(5), null, null));
+        await Assert.ThrowsAsync<ArgumentException>(() => Sut().RescheduleAsync(_clientId, _leadId, done.Id, DateTimeOffset.UtcNow.AddDays(5), null, null));
 
         var past = MakeAppointment(daysAhead: -2);
         Setup(past);
-        var ex = await Assert.ThrowsAsync<ArgumentException>(() => Sut().RescheduleAsync(_clinicId, _leadId, past.Id, DateTimeOffset.UtcNow.AddDays(5), null, null));
+        var ex = await Assert.ThrowsAsync<ArgumentException>(() => Sut().RescheduleAsync(_clientId, _leadId, past.Id, DateTimeOffset.UtcNow.AddDays(5), null, null));
         Assert.Contains("in the past", ex.Message);
 
         var ok = MakeAppointment();
         Setup(ok);
-        _availability.Setup(a => a.CheckSlotAsync(_clinicId, It.IsAny<Guid?>(), It.IsAny<DateTimeOffset>(), It.IsAny<DateTimeOffset?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+        _availability.Setup(a => a.CheckSlotAsync(_clientId, It.IsAny<Guid?>(), It.IsAny<DateTimeOffset>(), It.IsAny<DateTimeOffset?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new SlotCheck("busy", DateTimeOffset.UtcNow));
-        await Assert.ThrowsAsync<SlotUnavailableException>(() => Sut().RescheduleAsync(_clinicId, _leadId, ok.Id, DateTimeOffset.UtcNow.AddDays(5), null, null));
+        await Assert.ThrowsAsync<SlotUnavailableException>(() => Sut().RescheduleAsync(_clientId, _leadId, ok.Id, DateTimeOffset.UtcNow.AddDays(5), null, null));
     }
 
     [Fact]
@@ -258,7 +258,7 @@ public class AppointmentServiceTests
     {
         Setup(MakeAppointment());
         Setup(MakeAppointment(daysAhead: 4));
-        var ex = await Assert.ThrowsAsync<MultipleUpcomingAppointmentsException>(() => Sut().RescheduleAsync(_clinicId, _leadId, null, DateTimeOffset.UtcNow.AddDays(9), null, null));
+        var ex = await Assert.ThrowsAsync<MultipleUpcomingAppointmentsException>(() => Sut().RescheduleAsync(_clientId, _leadId, null, DateTimeOffset.UtcNow.AddDays(9), null, null));
         Assert.Equal(2, ex.Appointments.Count);
     }
 
@@ -267,25 +267,25 @@ public class AppointmentServiceTests
     {
         var a = MakeAppointment();
         Setup(a);
-        var r = await Sut().CancelAsync(_clinicId, _leadId, null, "changed mind");
+        var r = await Sut().CancelAsync(_clientId, _leadId, null, "changed mind");
         Assert.Equal(AppointmentStatus.Canceled, r!.Status);
-        _events.Verify(e => e.Log(_clinicId, EventTypes.ConsultationCancelled, _leadId, null, a.Id, null, "{\"reason\":\"changed mind\"}"), Times.Once);
-        _notifier.Verify(n => n.AppointmentChangedAsync(_clinicId, a.Id, "canceled", It.IsAny<CancellationToken>()), Times.Once);
+        _events.Verify(e => e.Log(_clientId, EventTypes.ConsultationCancelled, _leadId, null, a.Id, null, "{\"reason\":\"changed mind\"}"), Times.Once);
+        _notifier.Verify(n => n.AppointmentChangedAsync(_clientId, a.Id, "canceled", It.IsAny<CancellationToken>()), Times.Once);
 
         // second call: already canceled â†’ returned as-is, no new event or notification
-        var again = await Sut().CancelAsync(_clinicId, _leadId, a.Id, null);
+        var again = await Sut().CancelAsync(_clientId, _leadId, a.Id, null);
         Assert.Equal(AppointmentStatus.Canceled, again!.Status);
-        _events.Verify(e => e.Log(_clinicId, EventTypes.ConsultationCancelled, It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<string?>(), It.IsAny<string>()), Times.Once);
+        _events.Verify(e => e.Log(_clientId, EventTypes.ConsultationCancelled, It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<string?>(), It.IsAny<string>()), Times.Once);
     }
 
     [Fact]
     public async Task Cancel_rejects_finished_appointments_and_returns_null_when_nothing_matches()
     {
-        Assert.Null(await Sut().CancelAsync(_clinicId, _leadId, null, null));
-        Assert.Null(await Sut().CancelAsync(_clinicId, _leadId, Guid.NewGuid(), null));
+        Assert.Null(await Sut().CancelAsync(_clientId, _leadId, null, null));
+        Assert.Null(await Sut().CancelAsync(_clientId, _leadId, Guid.NewGuid(), null));
         var attended = MakeAppointment(AppointmentStatus.Attended);
         Setup(attended);
-        await Assert.ThrowsAsync<ArgumentException>(() => Sut().CancelAsync(_clinicId, _leadId, attended.Id, null));
+        await Assert.ThrowsAsync<ArgumentException>(() => Sut().CancelAsync(_clientId, _leadId, attended.Id, null));
     }
 
     // ---------------------------------------------------------------- booking context / schedule (AI tool)
@@ -293,14 +293,14 @@ public class AppointmentServiceTests
     [Fact]
     public async Task BookingContext_reports_blocked_when_an_upcoming_appointment_exists()
     {
-        Assert.Null(await Sut().GetBookingContextAsync(_clinicId, Guid.NewGuid()));
-        var free = await Sut().GetBookingContextAsync(_clinicId, _leadId);
+        Assert.Null(await Sut().GetBookingContextAsync(_clientId, Guid.NewGuid()));
+        var free = await Sut().GetBookingContextAsync(_clientId, _leadId);
         Assert.False(free!.HasUpcomingAppointment);
         Assert.True(free.CanCreateNewBooking);
         Assert.Null(free.BookingBlockReason);
 
         Setup(MakeAppointment());
-        var blocked = await Sut().GetBookingContextAsync(_clinicId, _leadId);
+        var blocked = await Sut().GetBookingContextAsync(_clientId, _leadId);
         Assert.True(blocked!.HasUpcomingAppointment);
         Assert.False(blocked.CanCreateNewBooking);
         Assert.Equal("existing_upcoming_appointment", blocked.BookingBlockReason);
@@ -311,7 +311,7 @@ public class AppointmentServiceTests
     {
         Appointment? saved = null;
         _appointments.Setup(a => a.Add(It.IsAny<Appointment>())).Callback<Appointment>(a => { saved = a; _upcoming.Add(a); });
-        var o = await Sut().ScheduleAsync(_clinicId, _leadId, new ScheduleConsultationRequest(DateTimeOffset.UtcNow.AddDays(3), Notes: "n"));
+        var o = await Sut().ScheduleAsync(_clientId, _leadId, new ScheduleConsultationRequest(DateTimeOffset.UtcNow.AddDays(3), Notes: "n"));
         Assert.Equal(("created", "BOOKED"), (o.Operation, o.Code));
         Assert.Equal(saved!.Id, o.Appointment!.Id);
         Assert.NotNull(o.RequestedLabel);
@@ -320,7 +320,7 @@ public class AppointmentServiceTests
     [Fact]
     public async Task Schedule_reports_lead_not_found()
     {
-        var o = await Sut().ScheduleAsync(_clinicId, Guid.NewGuid(), new ScheduleConsultationRequest(DateTimeOffset.UtcNow.AddDays(3)));
+        var o = await Sut().ScheduleAsync(_clientId, Guid.NewGuid(), new ScheduleConsultationRequest(DateTimeOffset.UtcNow.AddDays(3)));
         Assert.Equal("LEAD_NOT_FOUND", o.Code);
     }
 
@@ -331,11 +331,11 @@ public class AppointmentServiceTests
         Setup(a);
         var when = DateTimeOffset.UtcNow.AddDays(6);
 
-        var ask = await Sut().ScheduleAsync(_clinicId, _leadId, new ScheduleConsultationRequest(when));
+        var ask = await Sut().ScheduleAsync(_clientId, _leadId, new ScheduleConsultationRequest(when));
         Assert.Equal("CONFIRMATION_REQUIRED", ask.Code);
         Assert.Equal(a.Id, Assert.Single(ask.Existing!).Id);
 
-        var moved = await Sut().ScheduleAsync(_clinicId, _leadId, new ScheduleConsultationRequest(when, ConfirmReplaceExisting: true, Reason: "r"));
+        var moved = await Sut().ScheduleAsync(_clientId, _leadId, new ScheduleConsultationRequest(when, ConfirmReplaceExisting: true, Reason: "r"));
         Assert.Equal(("rescheduled", "RESCHEDULED"), (moved.Operation, moved.Code));
         Assert.Equal(a.Id, moved.PreviousAppointment!.Id);
         Assert.Equal(when.ToUniversalTime(), a.ScheduledStart);
@@ -350,13 +350,13 @@ public class AppointmentServiceTests
         Setup(a2);
         var when = DateTimeOffset.UtcNow.AddDays(8);
 
-        var bad = await Sut().ScheduleAsync(_clinicId, _leadId, new ScheduleConsultationRequest(when, ConfirmReplaceExisting: true, AppointmentId: Guid.NewGuid()));
+        var bad = await Sut().ScheduleAsync(_clientId, _leadId, new ScheduleConsultationRequest(when, ConfirmReplaceExisting: true, AppointmentId: Guid.NewGuid()));
         Assert.Equal("INVALID_REQUEST", bad.Code);
 
-        var unclear = await Sut().ScheduleAsync(_clinicId, _leadId, new ScheduleConsultationRequest(when, ConfirmReplaceExisting: true));
+        var unclear = await Sut().ScheduleAsync(_clientId, _leadId, new ScheduleConsultationRequest(when, ConfirmReplaceExisting: true));
         Assert.Equal("MULTIPLE_UPCOMING_APPOINTMENTS", unclear.Code);
 
-        var ok = await Sut().ScheduleAsync(_clinicId, _leadId, new ScheduleConsultationRequest(when, ConfirmReplaceExisting: true, AppointmentId: a2.Id));
+        var ok = await Sut().ScheduleAsync(_clientId, _leadId, new ScheduleConsultationRequest(when, ConfirmReplaceExisting: true, AppointmentId: a2.Id));
         Assert.Equal("RESCHEDULED", ok.Code);
     }
 
@@ -365,25 +365,25 @@ public class AppointmentServiceTests
     {
         var a = MakeAppointment();
         Setup(a);
-        _availability.Setup(x => x.CheckSlotAsync(_clinicId, It.IsAny<Guid?>(), It.IsAny<DateTimeOffset>(), It.IsAny<DateTimeOffset?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+        _availability.Setup(x => x.CheckSlotAsync(_clientId, It.IsAny<Guid?>(), It.IsAny<DateTimeOffset>(), It.IsAny<DateTimeOffset?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new SlotCheck("Closed that day", DateTimeOffset.UtcNow));
-        var o = await Sut().ScheduleAsync(_clinicId, _leadId, new ScheduleConsultationRequest(DateTimeOffset.UtcNow.AddDays(6), ConfirmReplaceExisting: true));
+        var o = await Sut().ScheduleAsync(_clientId, _leadId, new ScheduleConsultationRequest(DateTimeOffset.UtcNow.AddDays(6), ConfirmReplaceExisting: true));
         Assert.Equal(("SLOT_UNAVAILABLE", "Closed that day"), (o.Code, o.Message));
 
         _upcoming.Clear();
-        var fresh = await Sut().ScheduleAsync(_clinicId, _leadId, new ScheduleConsultationRequest(DateTimeOffset.UtcNow.AddDays(6)));
+        var fresh = await Sut().ScheduleAsync(_clientId, _leadId, new ScheduleConsultationRequest(DateTimeOffset.UtcNow.AddDays(6)));
         Assert.Equal("SLOT_UNAVAILABLE", fresh.Code);
     }
 
     [Fact]
     public async Task Schedule_turns_a_race_with_another_booking_into_a_confirmation_request()
     {
-        // The context said "free", but by the time the transaction locked the clinic someone had booked.
+        // The context said "free", but by the time the transaction locked the client someone had booked.
         var raced = MakeAppointment();
         var calls = 0;
-        _appointments.Setup(a => a.ListUpcomingForLeadAsync(_clinicId, _leadId, It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()))
+        _appointments.Setup(a => a.ListUpcomingForLeadAsync(_clientId, _leadId, It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => ++calls == 1 ? new List<Appointment>() : new List<Appointment> { raced });
-        var o = await Sut().ScheduleAsync(_clinicId, _leadId, new ScheduleConsultationRequest(DateTimeOffset.UtcNow.AddDays(3)));
+        var o = await Sut().ScheduleAsync(_clientId, _leadId, new ScheduleConsultationRequest(DateTimeOffset.UtcNow.AddDays(3)));
         Assert.Equal("CONFIRMATION_REQUIRED", o.Code);
         Assert.Equal(raced.Id, Assert.Single(o.Existing!).Id);
     }
@@ -391,20 +391,20 @@ public class AppointmentServiceTests
     [Fact]
     public async Task Schedule_turns_argument_errors_into_invalid_request()
     {
-        _procedures.Setup(p => p.EnsureUsableAsync(_clinicId, It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ThrowsAsync(new ArgumentException("Procedure is inactive"));
-        var o = await Sut().ScheduleAsync(_clinicId, _leadId, new ScheduleConsultationRequest(DateTimeOffset.UtcNow.AddDays(3), ProcedureId: Guid.NewGuid()));
+        _procedures.Setup(p => p.EnsureUsableAsync(_clientId, It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ThrowsAsync(new ArgumentException("Procedure is inactive"));
+        var o = await Sut().ScheduleAsync(_clientId, _leadId, new ScheduleConsultationRequest(DateTimeOffset.UtcNow.AddDays(3), ProcedureId: Guid.NewGuid()));
         Assert.Equal(("INVALID_REQUEST", "Procedure is inactive"), (o.Code, o.Message));
     }
 
     [Fact]
     public async Task CancelConsultation_outcomes()
     {
-        var none = await Sut().CancelConsultationAsync(_clinicId, _leadId, null, null);
+        var none = await Sut().CancelConsultationAsync(_clientId, _leadId, null, null);
         Assert.Equal("NO_UPCOMING_APPOINTMENT", none.Code);
 
         var a1 = MakeAppointment();
         Setup(a1);
-        var one = await Sut().CancelConsultationAsync(_clinicId, _leadId, null, "r");
+        var one = await Sut().CancelConsultationAsync(_clientId, _leadId, null, "r");
         Assert.Equal(("canceled", "CANCELED"), (one.Operation, one.Code));
         Assert.Equal(a1.Id, one.Appointment!.Id);
 
@@ -413,14 +413,14 @@ public class AppointmentServiceTests
         _upcoming.Clear();
         Setup(a2);
         Setup(a3);
-        var multiple = await Sut().CancelConsultationAsync(_clinicId, _leadId, null, null);
+        var multiple = await Sut().CancelConsultationAsync(_clientId, _leadId, null, null);
         Assert.Equal("MULTIPLE_UPCOMING_APPOINTMENTS", multiple.Code);
         Assert.Equal(2, multiple.Existing!.Count);
 
-        var invalid = await Sut().CancelConsultationAsync(_clinicId, _leadId, Guid.NewGuid(), null);
+        var invalid = await Sut().CancelConsultationAsync(_clientId, _leadId, Guid.NewGuid(), null);
         Assert.Equal("INVALID_REQUEST", invalid.Code);
 
-        var specific = await Sut().CancelConsultationAsync(_clinicId, _leadId, a3.Id, null);
+        var specific = await Sut().CancelConsultationAsync(_clientId, _leadId, a3.Id, null);
         Assert.Equal("CANCELED", specific.Code);
         Assert.Equal(AppointmentStatus.Canceled, a3.Status);
         Assert.Equal(AppointmentStatus.Booked, a2.Status);
@@ -433,7 +433,7 @@ public class AppointmentServiceTests
         // appointment the backend selects it itself. This was reported as BUG-03 and withdrawn.
         var a = MakeAppointment();
         Setup(a);
-        var o = await Sut().CancelConsultationAsync(_clinicId, _leadId, Guid.NewGuid(), null);
+        var o = await Sut().CancelConsultationAsync(_clientId, _leadId, Guid.NewGuid(), null);
         Assert.Equal("CANCELED", o.Code);
         Assert.Equal(AppointmentStatus.Canceled, a.Status);
     }
@@ -441,12 +441,12 @@ public class AppointmentServiceTests
     // ---------------------------------------------------------------- queries
 
     [Fact]
-    public async Task GetUpcomingForLead_converts_times_to_clinic_zone()
+    public async Task GetUpcomingForLead_converts_times_to_client_zone()
     {
-        _clinic.Timezone = "Asia/Beirut";
+        _client.Timezone = "Asia/Beirut";
         var a = MakeAppointment();
         Setup(a);
-        var r = await Sut().GetUpcomingForLeadAsync(_clinicId, _leadId);
+        var r = await Sut().GetUpcomingForLeadAsync(_clientId, _leadId);
         Assert.Equal("Asia/Beirut", r.Timezone);
         var item = Assert.Single(r.Appointments);
         var local = TimeZoneInfo.ConvertTime(a.ScheduledStart, TimeZoneInfo.FindSystemTimeZoneById("Asia/Beirut"));
@@ -455,24 +455,24 @@ public class AppointmentServiceTests
     }
 
     [Fact]
-    public async Task Unknown_clinic_or_bad_timezone_falls_back_to_utc()
+    public async Task Unknown_client_or_bad_timezone_falls_back_to_utc()
     {
-        _clinic.Timezone = "Nope/Zone";
-        Assert.Equal("UTC", (await Sut().GetUpcomingForLeadAsync(_clinicId, _leadId)).Timezone);
-        _clinics.Setup(c => c.GetReadOnlyAsync(_clinicId, It.IsAny<CancellationToken>())).ReturnsAsync((Clinic?)null);
-        Assert.Equal("UTC", (await Sut().GetUpcomingForLeadAsync(_clinicId, _leadId)).Timezone);
+        _client.Timezone = "Nope/Zone";
+        Assert.Equal("UTC", (await Sut().GetUpcomingForLeadAsync(_clientId, _leadId)).Timezone);
+        _clients.Setup(c => c.GetReadOnlyAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync((Client?)null);
+        Assert.Equal("UTC", (await Sut().GetUpcomingForLeadAsync(_clientId, _leadId)).Timezone);
     }
 
     [Fact]
     public async Task GetById_and_List_map_through_the_mapper()
     {
-        Assert.Null(await Sut().GetByIdAsync(_clinicId, Guid.NewGuid()));
+        Assert.Null(await Sut().GetByIdAsync(_clientId, Guid.NewGuid()));
         var a = MakeAppointment();
         Setup(a);
-        Assert.Equal(a.Id, (await Sut().GetByIdAsync(_clinicId, a.Id))!.Id);
-        _appointments.Setup(r => r.ListAsync(_clinicId, "booked", null, null, 0, 10, It.IsAny<CancellationToken>()))
+        Assert.Equal(a.Id, (await Sut().GetByIdAsync(_clientId, a.Id))!.Id);
+        _appointments.Setup(r => r.ListAsync(_clientId, "booked", null, null, 0, 10, It.IsAny<CancellationToken>()))
             .ReturnsAsync((new List<Appointment> { a } as IReadOnlyList<Appointment>, 7));
-        var (items, total) = await Sut().ListAsync(_clinicId, "booked", null, null, 0, 10);
+        var (items, total) = await Sut().ListAsync(_clientId, "booked", null, null, 0, 10);
         Assert.Equal((1, 7), (items.Count, total));
     }
 
@@ -480,17 +480,17 @@ public class AppointmentServiceTests
     public async Task CalendarMonth_builds_a_sunday_aligned_grid()
     {
         var a = MakeAppointment();
-        _appointments.Setup(r => r.ListStartingBetweenAsync(_clinicId, It.IsAny<DateTimeOffset>(), It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()))
+        _appointments.Setup(r => r.ListStartingBetweenAsync(_clientId, It.IsAny<DateTimeOffset>(), It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<Appointment> { a });
-        _appointments.Setup(r => r.CountNeedingOutcomeAsync(_clinicId, It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>())).ReturnsAsync(4);
+        _appointments.Setup(r => r.CountNeedingOutcomeAsync(_clientId, It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>())).ReturnsAsync(4);
 
-        var m = await Sut().GetCalendarMonthAsync(_clinicId, 2026, 10);
+        var m = await Sut().GetCalendarMonthAsync(_clientId, 2026, 10);
 
         Assert.Equal("2026-09-27", m.GridStart); // 1 Oct 2026 is a Thursday
         Assert.Equal("2026-10-31", m.GridEnd);   // 31 Oct 2026 is a Saturday
         Assert.Equal(4, m.NeedsOutcomeCount);
         Assert.Equal("Ann Lee", Assert.Single(m.Items).LeadFullName);
-        _appointments.Verify(r => r.ListStartingBetweenAsync(_clinicId,
+        _appointments.Verify(r => r.ListStartingBetweenAsync(_clientId,
             new DateTimeOffset(2026, 9, 27, 0, 0, 0, TimeSpan.Zero), new DateTimeOffset(2026, 11, 1, 0, 0, 0, TimeSpan.Zero), It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -498,12 +498,12 @@ public class AppointmentServiceTests
     public async Task CalendarMonth_display_zone_shifts_bounds_and_times()
     {
         var beirut = TimeZoneInfo.FindSystemTimeZoneById("Asia/Beirut");
-        _clinic.Timezone = "UTC";
-        _appointments.Setup(r => r.ListStartingBetweenAsync(_clinicId, It.IsAny<DateTimeOffset>(), It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()))
+        _client.Timezone = "UTC";
+        _appointments.Setup(r => r.ListStartingBetweenAsync(_clientId, It.IsAny<DateTimeOffset>(), It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<Appointment>());
-        var m = await Sut().GetCalendarMonthAsync(_clinicId, 2026, 1, beirut);
-        Assert.Equal(("Asia/Beirut", "UTC"), (m.Timezone, m.ClinicTimezone));
-        _appointments.Verify(r => r.ListStartingBetweenAsync(_clinicId, new DateTimeOffset(2025, 12, 28, 0, 0, 0, TimeSpan.FromHours(2)).ToUniversalTime(), It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()), Times.Once);
+        var m = await Sut().GetCalendarMonthAsync(_clientId, 2026, 1, beirut);
+        Assert.Equal(("Asia/Beirut", "UTC"), (m.Timezone, m.ClientTimezone));
+        _appointments.Verify(r => r.ListStartingBetweenAsync(_clientId, new DateTimeOffset(2025, 12, 28, 0, 0, 0, TimeSpan.FromHours(2)).ToUniversalTime(), It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 }
 

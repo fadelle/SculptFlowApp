@@ -11,7 +11,7 @@ namespace Omni.App.Entities.Dtos.Ai;
 /// Traceparent is the message's W3C trace ("00-{traceId}-{spanId}-01"): n8n sends it back as the traceparent header
 /// on its callbacks (AI tools, the reply send, handoff), so the bot's steps join this message's trace.</summary>
 public record AiTriggerPayload(
-    Guid ClinicId,
+    Guid ClientId,
     Guid ConversationId,
     Guid? LeadId,
     Guid? MessageId,

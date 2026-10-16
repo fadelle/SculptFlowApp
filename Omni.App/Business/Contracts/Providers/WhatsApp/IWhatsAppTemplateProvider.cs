@@ -10,7 +10,7 @@ namespace Omni.App.Business.Contracts.Providers.WhatsApp;
 /// </summary>
 public interface IWhatsAppTemplateProvider
 {
-    /// <summary>True when the clinic's row has what template management needs (WABA id + access token).</summary>
+    /// <summary>True when the client's row has what template management needs (WABA id + access token).</summary>
     bool IsReady(ChannelIntegration integration);
 
     /// <summary>Submits a new template for WhatsApp review. Throws WhatsAppTemplateProviderException when Meta

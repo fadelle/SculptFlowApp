@@ -2,7 +2,7 @@ using Omni.App.Common.Enums;
 
 namespace Omni.App.Entities.Models;
 
-/// <summary>One clinic's connection to an external calendar provider (Google or Outlook). Omni owns the OAuth
+/// <summary>One client's connection to an external calendar provider (Google or Outlook). Omni owns the OAuth
 /// relationship directly (connect/disconnect/list-calendars) and stores the resulting tokens here; n8n is only handed
 /// a fresh AccessToken (via ICalendarSyncNotifier.NotifySyncAsync) to execute the actual appointment sync call.
 /// MVP NOTE: tokens are stored in plain text, same caveat as ChannelIntegration.AccessToken — move to an encrypted
@@ -10,7 +10,7 @@ namespace Omni.App.Entities.Models;
 public class CalendarIntegration
 {
     public Guid Id { get; set; }
-    public Guid ClinicId { get; set; }
+    public Guid ClientId { get; set; }
     public string Provider { get; set; } = string.Empty;
     public string Status { get; set; } = CalendarIntegrationStatus.Disconnected;
 

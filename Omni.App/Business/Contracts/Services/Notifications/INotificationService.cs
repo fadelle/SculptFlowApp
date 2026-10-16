@@ -3,7 +3,7 @@ using Omni.App.Entities.Responses.Notifications;
 namespace Omni.App.Business.Contracts.Services.Notifications;
 
 /// <summary>
-/// The clinic's notification center (the bell). A Notification row is created ONLY from a confirmed backend
+/// The client's notification center (the bell). A Notification row is created ONLY from a confirmed backend
 /// event, never from an AI intention alone — see each hook site for the exact "already succeeded" point:
 ///   NEW_LEAD               — MessageService.IngestAsync, a genuinely new lead's first inbound customer message
 ///                             (LeadService.GetOrCreateByPhoneAsync/GetOrCreateByExternalIdAsync's WasCreated).
@@ -19,7 +19,7 @@ namespace Omni.App.Business.Contracts.Services.Notifications;
 ///                             Problem/Disconnected (not repeated while it stays unhealthy).
 ///
 /// CreateAsync never throws — a notification failing to save must never fail the real operation it's attached
-/// to (see its doc comment). Broadcasting the new notification over SignalR reuses the existing clinic-scoped
+/// to (see its doc comment). Broadcasting the new notification over SignalR reuses the existing client-scoped
 /// hub (IInboxNotifier.NotificationCreatedAsync) — no second realtime channel.
 /// </summary>
 public interface INotificationService
@@ -28,16 +28,16 @@ public interface INotificationService
     /// without throwing — the caller's own operation has already succeeded by the time this is called and must
     /// not be undone or interrupted by a notification-only problem.</summary>
     Task CreateAsync(
-        Guid clinicId, string type, string title, string? message,
+        Guid clientId, string type, string title, string? message,
         Guid? leadId = null, Guid? conversationId = null, Guid? appointmentId = null, Guid? channelIntegrationId = null,
         string? link = null, CancellationToken ct = default);
 
-    Task<NotificationListResponse> ListAsync(Guid clinicId, int skip, int take, CancellationToken ct = default);
+    Task<NotificationListResponse> ListAsync(Guid clientId, int skip, int take, CancellationToken ct = default);
 
-    Task<int> GetUnreadCountAsync(Guid clinicId, CancellationToken ct = default);
+    Task<int> GetUnreadCountAsync(Guid clientId, CancellationToken ct = default);
 
-    /// <summary>Marks one notification read. No-op (not an error) if it's already read or doesn't belong to this clinic.</summary>
-    Task MarkReadAsync(Guid clinicId, Guid id, CancellationToken ct = default);
+    /// <summary>Marks one notification read. No-op (not an error) if it's already read or doesn't belong to this client.</summary>
+    Task MarkReadAsync(Guid clientId, Guid id, CancellationToken ct = default);
 
-    Task MarkAllReadAsync(Guid clinicId, CancellationToken ct = default);
+    Task MarkAllReadAsync(Guid clientId, CancellationToken ct = default);
 }

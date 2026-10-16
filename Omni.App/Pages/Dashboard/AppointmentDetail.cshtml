@@ -4,9 +4,9 @@
     ViewData["Title"] = "Appointment";
 }
 
-@if (!Model.ClinicConfigured)
+@if (!Model.ClientConfigured)
 {
-    <partial name="_NoClinic" />
+    <partial name="_NoClient" />
 }
 else if (Model.Appointment is null)
 {
@@ -25,13 +25,13 @@ else
         <span class="avatar-md" aria-hidden="true">@(string.IsNullOrWhiteSpace(appt.LeadFullName) ? "?" : appt.LeadFullName.Trim()[..1])</span>
         <div class="min-w-0">
             <h2 class="au-back-header__title">@(appt.LeadFullName ?? "—")</h2>
-            <span class="au-back-header__sub">@(appt.ProcedureName ?? "No procedure on file") · @LocalTimeHelper.Time(appt.ScheduledStart, "datetime-year", clinicTimeZone: Model.ClinicTimezone)</span>
+            <span class="au-back-header__sub">@(appt.ProcedureName ?? "No procedure on file") · @LocalTimeHelper.Time(appt.ScheduledStart, "datetime-year", clientTimeZone: Model.ClientTimezone)</span>
         </div>
     </div>
     <div class="detail-chips">
         <span class="badge @StatusBadgeHelper.CssClass(appt.Status)">@FilterLabelHelper.Label(appt.Status)</span>
         <a class="au-btn au-btn--outlined au-btn--sm" href="/dashboard/leads/@appt.LeadId"><span class="au-icon" aria-hidden="true">person</span>Open patient</a>
-        <partial name="_TimeViewSwitch" model="Model.ClinicTimezone" />
+        <partial name="_TimeViewSwitch" model="Model.ClientTimezone" />
     </div>
 
     <partial name="_Messages" model="new PageMessagesModel(Model.StatusMessage, Model.ErrorMessage)" />

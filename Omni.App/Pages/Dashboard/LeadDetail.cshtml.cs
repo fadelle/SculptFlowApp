@@ -19,26 +19,26 @@ namespace Omni.App.Pages.Dashboard;
 /// </summary>
 public class LeadDetailModel : PageModel
 {
-    private readonly ICurrentClinicContext _clinicContext;
+    private readonly ICurrentClientContext _clientContext;
     private readonly ILeadService _leads;
 
-    public LeadDetailModel(ICurrentClinicContext clinicContext, ILeadService leads)
+    public LeadDetailModel(ICurrentClientContext clientContext, ILeadService leads)
     {
-        _clinicContext = clinicContext;
+        _clientContext = clientContext;
         _leads = leads;
     }
 
     [BindProperty(SupportsGet = true)]
     public Guid Id { get; set; }
 
-    public bool ClinicConfigured { get; private set; }
+    public bool ClientConfigured { get; private set; }
     public LeadResponse? Lead { get; private set; }
 
     public IReadOnlyList<string> StatusOptions { get; } = LeadStatus.All.OrderBy(s => s).ToList();
     public IReadOnlyList<string> QualificationOptions { get; } = LeadQualificationStatus.All.OrderBy(s => s).ToList();
 
-    /// <summary>Distinct sources already on file for this clinic, unioned with a small starter set
-    /// (the examples the product spec gave) so a brand-new clinic with no lead data yet still has
+    /// <summary>Distinct sources already on file for this client, unioned with a small starter set
+    /// (the examples the product spec gave) so a brand-new client with no lead data yet still has
     /// sensible options — not a fixed enum, since Lead.Source has none (see UpdateLeadStatusRequest).</summary>
     public IReadOnlyList<string> SourceOptions { get; private set; } = Array.Empty<string>();
 
@@ -67,7 +67,7 @@ public class LeadDetailModel : PageModel
     public async Task<IActionResult> OnGetAsync(CancellationToken ct)
     {
         await LoadAsync(ct);
-        if (ClinicConfigured && Lead is null) return NotFound();
+        if (ClientConfigured && Lead is null) return NotFound();
         if (Lead is not null)
         {
             Status = Lead.Status;
@@ -81,14 +81,14 @@ public class LeadDetailModel : PageModel
 
     public async Task<IActionResult> OnPostAsync(CancellationToken ct)
     {
-        var clinic = await _clinicContext.GetClinicAsync(ct);
-        if (clinic is null) return RedirectToPage();
+        var client = await _clientContext.GetClientAsync(ct);
+        if (client is null) return RedirectToPage();
 
         var resolvedSource = SourceChoice == "other" ? CustomSource?.Trim() : SourceChoice;
 
         try
         {
-            var lead = await _leads.UpdateStatusAsync(clinic.Id, Id,
+            var lead = await _leads.UpdateStatusAsync(client.Id, Id,
                 new UpdateLeadStatusRequest(Status, QualificationStatus, resolvedSource), ct);
             if (lead is null) return NotFound();
 
@@ -105,19 +105,19 @@ public class LeadDetailModel : PageModel
 
     private async Task LoadAsync(CancellationToken ct)
     {
-        var clinic = await _clinicContext.GetClinicAsync(ct);
-        if (clinic is null)
+        var client = await _clientContext.GetClientAsync(ct);
+        if (client is null)
         {
-            ClinicConfigured = false;
+            ClientConfigured = false;
             return;
         }
 
-        ClinicConfigured = true;
+        ClientConfigured = true;
 
-        Lead = await _leads.GetByIdAsync(clinic.Id, Id, ct);
+        Lead = await _leads.GetByIdAsync(client.Id, Id, ct);
         if (Lead is null) return;
 
-        var distinctSources = await _leads.GetDistinctSourcesAsync(clinic.Id, ct);
+        var distinctSources = await _leads.GetDistinctSourcesAsync(client.Id, ct);
         var options = new List<string>(distinctSources);
         foreach (var s in SuggestedSources)
         {

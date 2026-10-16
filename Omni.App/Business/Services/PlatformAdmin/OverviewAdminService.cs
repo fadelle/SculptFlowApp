@@ -20,10 +20,10 @@ public class OverviewAdminService : IOverviewAdminService
 
     public Task<List<ProblemRow>> ProblemsAsync(CancellationToken ct) => _repository.ProblemsAsync(ct);
 
-    public Task<List<ClinicRow>> RecentClinicsAsync(int take, CancellationToken ct) => _repository.RecentClinicsAsync(Math.Clamp(take, 1, 100), ct);
+    public Task<List<ClientRow>> RecentClientsAsync(int take, CancellationToken ct) => _repository.RecentClientsAsync(Math.Clamp(take, 1, 100), ct);
 
-    public Task<PagedResponse<EventRow>> EventsAsync(Guid? clinicId, string? eventType, int page, CancellationToken ct) =>
-        _repository.EventsAsync(clinicId, eventType, page, ct);
+    public Task<PagedResponse<EventRow>> EventsAsync(Guid? clientId, string? eventType, int page, CancellationToken ct) =>
+        _repository.EventsAsync(clientId, eventType, page, ct);
 
     public Task<List<string>> EventTypesAsync(CancellationToken ct) => _repository.EventTypesAsync(ct);
 }

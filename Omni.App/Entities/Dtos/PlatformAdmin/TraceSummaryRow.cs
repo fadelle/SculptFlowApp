@@ -8,7 +8,7 @@ public record TraceSummaryRow(
     int Steps,
     int FailedSteps,
     int Errors,
-    Guid? ClinicId,
+    Guid? ClientId,
     Guid? ConversationId,
     string? Channel,
     string FirstStep,

@@ -3,15 +3,15 @@ using Omni.App.Common.Enums;
 namespace Omni.App.Entities.Models;
 
 /// <summary>
-/// One piece of clinic-approved knowledge staff typed into the Knowledge Base (an FAQ, a policy,
+/// One piece of client-approved knowledge staff typed into the Knowledge Base (an FAQ, a policy,
 /// doctor info, pricing, ...). The AI agent never reads this table directly — content is split into
 /// KnowledgeChunk rows (with embeddings) and searched semantically via IKnowledgeSearchService.
-/// Everything here is scoped by ClinicId; knowledge from one clinic is never visible to another.
+/// Everything here is scoped by ClientId; knowledge from one client is never visible to another.
 /// </summary>
 public class KnowledgeDocument
 {
     public Guid Id { get; set; }
-    public Guid ClinicId { get; set; }
+    public Guid ClientId { get; set; }
     public string Title { get; set; } = string.Empty;
 
     /// <summary>Free string (see <see cref="KnowledgeCategory"/> for the values the UI offers) —
@@ -40,6 +40,6 @@ public class KnowledgeDocument
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 
-    public Clinic? Clinic { get; set; }
+    public Client? Client { get; set; }
     public ICollection<KnowledgeChunk> Chunks { get; set; } = new List<KnowledgeChunk>();
 }

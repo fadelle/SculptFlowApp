@@ -46,15 +46,15 @@ public partial class RateCardService : IRateCardService
         if (!CodePattern().IsMatch(code)) throw new ArgumentException("Rate card code: 1-50 lowercase letters, digits, '-' or '_'.");
         var name = (request.Name ?? string.Empty).Trim();
         if (name.Length is 0 or > 100) throw new ArgumentException("Rate card name is required (max 100 characters).");
-        if (request.IsDefault && request.ClinicId is not null) throw new ArgumentException("A clinic's own card can't be the default card.");
+        if (request.IsDefault && request.ClientId is not null) throw new ArgumentException("A client's own card can't be the default card.");
 
         await using var unit = _units.Create();
         await using var tx = await unit.BeginTransactionAsync(ct);
         if (await unit.RateCards.CodeExistsAsync(code, ct)) throw new ArgumentException($"Rate card '{code}' already exists.");
-        if (request.ClinicId is Guid clinicId)
+        if (request.ClientId is Guid clientId)
         {
-            if (await unit.Clinics.GetReadOnlyAsync(clinicId, ct) is null) throw new ArgumentException("Clinic not found.");
-            if (await unit.RateCards.ClinicHasCardAsync(clinicId, ct)) throw new ArgumentException("This clinic already has its own rate card.");
+            if (await unit.Clients.GetReadOnlyAsync(clientId, ct) is null) throw new ArgumentException("Client not found.");
+            if (await unit.RateCards.ClientHasCardAsync(clientId, ct)) throw new ArgumentException("This client already has its own rate card.");
         }
 
         var now = _time.GetUtcNow();
@@ -63,13 +63,13 @@ public partial class RateCardService : IRateCardService
         {
             Id = Guid.NewGuid(), Code = code, Name = name,
             Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim(),
-            ClinicId = request.ClinicId, IsDefault = request.IsDefault, IsActive = true, CreatedAt = now, UpdatedAt = now
+            ClientId = request.ClientId, IsDefault = request.IsDefault, IsActive = true, CreatedAt = now, UpdatedAt = now
         };
         unit.RateCards.Add(card);
         await unit.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
 
-        _logger.LogInformation("Billing: rate card {Card} created (default {Default}, clinic {ClinicId}).", code, card.IsDefault, card.ClinicId);
+        _logger.LogInformation("Billing: rate card {Card} created (default {Default}, client {ClientId}).", code, card.IsDefault, card.ClientId);
         return ToResponse(card, 0);
     }
 
@@ -83,7 +83,7 @@ public partial class RateCardService : IRateCardService
         await using var tx = await unit.BeginTransactionAsync(ct);
         var card = await unit.RateCards.GetAsync(code, ct);
         if (card is null) return null;
-        if (request.IsDefault && card.ClinicId is not null) throw new ArgumentException("A clinic's own card can't be the default card.");
+        if (request.IsDefault && card.ClientId is not null) throw new ArgumentException("A client's own card can't be the default card.");
 
         var now = _time.GetUtcNow();
         if (request.IsDefault && !card.IsDefault)
@@ -222,7 +222,7 @@ public partial class RateCardService : IRateCardService
     }
 
     private static RateCardResponse ToResponse(BillingRateCard c, int currentRates) =>
-        new(c.Id, c.Code, c.Name, c.Description, c.ClinicId, c.IsDefault, c.IsActive, currentRates);
+        new(c.Id, c.Code, c.Name, c.Description, c.ClientId, c.IsDefault, c.IsActive, currentRates);
 
     internal static RateResponse ToResponse(BillingRate r, string cardCode) =>
         new(r.Id, cardCode, r.EventType, r.CountryCode, r.Operator, r.Provider, r.ProviderBilling, r.Unit, r.ProviderCost, r.ClientRate,

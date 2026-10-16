@@ -3,10 +3,10 @@ using Omni.App.Entities.Responses.Billing;
 
 namespace Omni.App.Business.Contracts.Services.PlatformAdmin;
 
-/// <summary>Staff accounts (Identity users and their clinic memberships) across clinics, for the admin portal.</summary>
+/// <summary>Staff accounts (Identity users and their client memberships) across clients, for the admin portal.</summary>
 public interface IStaffAdminService
 {
-    Task<PagedResponse<StaffRow>> ListAsync(Guid? clinicId, string? search, int page, CancellationToken ct);
+    Task<PagedResponse<StaffRow>> ListAsync(Guid? clientId, string? search, int page, CancellationToken ct);
 
     Task<StaffRow?> GetAsync(string userId, CancellationToken ct);
 

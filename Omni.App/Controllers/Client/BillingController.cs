@@ -6,40 +6,40 @@ using Omni.App.Entities.Responses.Billing;
 
 namespace Omni.App.Controllers.Client;
 
-/// <summary>The clinic's own billing view (read-only): plan, renewal date, included credit, wallet, reserved,
-/// usage and transactions. Clinic from the logged-in user; never shows providers, costs or margins.</summary>
+/// <summary>The client's own billing view (read-only): plan, renewal date, included credit, wallet, reserved,
+/// usage and transactions. Client from the logged-in user; never shows providers, costs or margins.</summary>
 [ApiController]
 [Route("api/billing")]
 public class BillingController : DashboardApiController
 {
     private readonly IBillingQueryService _billing;
 
-    public BillingController(ICurrentClinicContext clinicContext, IBillingQueryService billing) : base(clinicContext)
+    public BillingController(ICurrentClientContext clientContext, IBillingQueryService billing) : base(clientContext)
     {
         _billing = billing;
     }
 
     [HttpGet("summary")]
-    public async Task<ActionResult<ClinicBillingSummary>> Summary(CancellationToken ct)
+    public async Task<ActionResult<ClientBillingSummary>> Summary(CancellationToken ct)
     {
-        var clinicId = await GetClinicIdAsync(ct);
-        if (clinicId is null) return Forbid();
-        return Ok(await _billing.GetSummaryAsync(clinicId.Value, ct));
+        var clientId = await GetClientIdAsync(ct);
+        if (clientId is null) return Forbid();
+        return Ok(await _billing.GetSummaryAsync(clientId.Value, ct));
     }
 
     [HttpGet("usage")]
-    public async Task<ActionResult<PagedResponse<ClinicUsageRow>>> Usage([FromQuery] int page = 1, [FromQuery] int pageSize = 50, CancellationToken ct = default)
+    public async Task<ActionResult<PagedResponse<ClientUsageRow>>> Usage([FromQuery] int page = 1, [FromQuery] int pageSize = 50, CancellationToken ct = default)
     {
-        var clinicId = await GetClinicIdAsync(ct);
-        if (clinicId is null) return Forbid();
-        return Ok(await _billing.ListClinicUsageAsync(clinicId.Value, page, pageSize, ct));
+        var clientId = await GetClientIdAsync(ct);
+        if (clientId is null) return Forbid();
+        return Ok(await _billing.ListClientUsageAsync(clientId.Value, page, pageSize, ct));
     }
 
     [HttpGet("transactions")]
     public async Task<ActionResult<PagedResponse<BillingTransactionRow>>> Transactions([FromQuery] int page = 1, [FromQuery] int pageSize = 50, CancellationToken ct = default)
     {
-        var clinicId = await GetClinicIdAsync(ct);
-        if (clinicId is null) return Forbid();
-        return Ok(await _billing.ListTransactionsAsync(clinicId.Value, page, pageSize, ct));
+        var clientId = await GetClientIdAsync(ct);
+        if (clientId is null) return Forbid();
+        return Ok(await _billing.ListTransactionsAsync(clientId.Value, page, pageSize, ct));
     }
 }

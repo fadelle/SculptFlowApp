@@ -9,7 +9,7 @@ public static class AppLogMapper
 {
     public static AppLogDetail ToDetail(AppLog row) => new(
         row.Id, row.OccurredAt, row.Level, row.Category, row.Message, row.MessageTemplate, row.ExceptionType,
-        row.ExceptionMessage, row.StackTrace, row.Fingerprint, row.RepeatCount, row.TraceId, row.ClinicId,
+        row.ExceptionMessage, row.StackTrace, row.Fingerprint, row.RepeatCount, row.TraceId, row.ClientId,
         row.ConversationId, row.MessageId, row.Method, row.Route, row.Instance, Properties(row.Properties));
 
     /// <summary>The stored properties object as name → text (values are always stored as strings); empty if unreadable.</summary>

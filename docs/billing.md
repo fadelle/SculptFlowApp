@@ -8,28 +8,28 @@ version.
 
 | | 1. Platform subscription | 2. Provider billing responsibility | 3. Omni usage billing |
 |---|---|---|---|
-| Question | What does the clinic pay Omni for access? | Who pays the upstream provider (Meta, SMS operator…)? | Does Omni charge the clinic for this usage? |
-| Decided by | the clinic's **plan** | the **connected channel account** | the account's arrangement (+ rate cards for the price) |
+| Question | What does the client pay Omni for access? | Who pays the upstream provider (Meta, SMS operator…)? | Does Omni charge the client for this usage? |
+| Decided by | the client's **plan** | the **connected channel account** | the account's arrangement (+ rate cards for the price) |
 | Code | `SubscriptionService`, `EntitlementService` | `ProviderBillingService` | `BillingService`, `MessageBillingService` |
 | Money | wallet pays the plan price each period | never Omni's wallet unless Omni pays the provider | included credit first, then wallet |
 
 There are no per-channel quotas. A plan may include a **monetary** credit (e.g. Growth: $99/month with $25 of credit) spent
 on whatever Omni charges, at its own selling price. Unused credit expires at renewal.
 
-Everything is off until `Billing:Enabled = true`: nothing is recorded or charged, every clinic may use every feature, the
+Everything is off until `Billing:Enabled = true`: nothing is recorded or charged, every client may use every feature, the
 worker idles. Plans, rate cards, wallets and account arrangements can be prepared through the admin API while it's off.
 
 ## 1. Subscription model
 
-- `billing.plans` (+ `billing.plan_entitlements`), one `billing.subscriptions` row per clinic.
+- `billing.plans` (+ `billing.plan_entitlements`), one `billing.subscriptions` row per client.
 - Status: `active` → (renewal not paid) `past_due` → (grace over, `Billing:GracePeriodDays`) `expired`; or `cancelled`
   (now, or at period end). `past_due` keeps the plan working during grace.
-- Start / change plan (`POST /api/platform-admin/billing/clinics/{id}/subscription`, or `Billing:SignupPlanCode` at signup):
+- Start / change plan (`POST /api/platform-admin/billing/clients/{id}/subscription`, or `Billing:SignupPlanCode` at signup):
   new period from now; wallet pays the price (unless `chargeFirstPeriod=false`); old credit expires; plan credit granted.
   No proration.
 - Renewal (`BillingMaintenanceWorker`, every few minutes): next contiguous period, same charges. Can't pay → `past_due`;
   every run retries, so a top-up renews it.
-- Expired / cancelled / no plan: the clinic signs in and sees all its data, but can't send messages, run campaigns,
+- Expired / cancelled / no plan: the client signs in and sees all its data, but can't send messages, run campaigns,
   use the AI agent or connect channels.
 
 ### Entitlements
@@ -37,11 +37,11 @@ worker idles. Plans, rate cards, wallets and account arrangements can be prepare
 Ask `IEntitlementService`, never compare plan names:
 
 ```csharp
-var e = await _entitlements.GetAsync(clinicId, ct);
+var e = await _entitlements.GetAsync(clientId, ct);
 if (e.CanUseCampaigns) ...            // also CanUseAiAgent, CanUseApi, CanUseAdvancedReporting, CanSendMessages
 var max = e.MaximumAgents;            // null = unlimited; also MaximumWhatsAppNumbers, MaximumChannelConnections
-await _entitlements.EnsureFeatureAsync(clinicId, EntitlementKeys.Campaigns, ct);      // throws EntitlementDeniedException (422)
-await _entitlements.EnsureWithinLimitAsync(clinicId, EntitlementKeys.MaxAgents, newCount, ct);
+await _entitlements.EnsureFeatureAsync(clientId, EntitlementKeys.Campaigns, ct);      // throws EntitlementDeniedException (422)
+await _entitlements.EnsureWithinLimitAsync(clientId, EntitlementKeys.MaxAgents, newCount, ct);
 ```
 
 Keys live in `Common/Statics/EntitlementKeys.cs`: features take `true`/`false`, limits a number or `unlimited`. A key a plan doesn't
@@ -57,16 +57,16 @@ accounts can differ.
 
 | Value | Admin label | Meaning | Omni usage billing by default |
 |---|---|---|---|
-| `customer_direct` | Customer pays provider directly | e.g. the clinic's own WABA with its own Meta payment method | off |
+| `customer_direct` | Customer pays provider directly | e.g. the client's own WABA with its own Meta payment method | off |
 | `platform_funded` | Omni pays provider | an SMS aggregator Omni owns | **on** |
-| `external_provider_direct` | Customer pays external provider | the clinic's own Viber/SMS/… provider account that Omni only integrates | off |
+| `external_provider_direct` | Customer pays external provider | the client's own Viber/SMS/… provider account that Omni only integrates | off |
 | `no_provider_usage_fee` | No provider usage fee | Telegram, Messenger, TikTok conversations | off |
 
 Resolution (`ProviderBillingService.ResolveAsync`): the account's override in `billing.channel_account_settings` → `Billing:ProviderBilling:Defaults`
 `"{channel}_{provider}"` → `"{channel}"` → built-in defaults. Built-ins: WhatsApp, SMS, Viber, RCS, email, voice =
 `platform_funded`; Telegram, Facebook/Messenger, Instagram, TikTok, website = `no_provider_usage_fee`.
 
-WhatsApp defaults to `platform_funded` because that's how billing behaved before this concept existed. A clinic
+WhatsApp defaults to `platform_funded` because that's how billing behaved before this concept existed. A client
 connected through Meta's Embedded Signup usually pays Meta itself: set that account to `customer_direct`, or
 set `Billing:ProviderBilling:Defaults:whatsapp_meta = customer_direct` once that's the norm.
 
@@ -84,7 +84,7 @@ Usage ─► channel policy ─► Billable event ──────────
 
 ### Billable events
 
-`BillableEvent` = clinic, **idempotency key**, event type (`whatsapp_marketing_message`, `sms_segment`, `telegram_message`,
+`BillableEvent` = client, **idempotency key**, event type (`whatsapp_marketing_message`, `sms_segment`, `telegram_message`,
 `voice_minute`, `ai_token`, …), channel, quantity, unit, country/operator/provider, **`ProviderBilling`**, **`ChargeUsage`**
 (null = only when `platform_funded`), connected account, occurred-at, related message/conversation/campaign. Event types are
 free text (`[a-z0-9_]+`); a new one needs only rates — and only if Omni charges it.
@@ -99,14 +99,14 @@ free text (`[a-z0-9_]+`); a new one needs only rates — and only if Omni charge
 
 ### Wallet and ledger
 
-One `billing.accounts` row per clinic: `wallet_balance`, `included_credit_balance`, `reserved_amount`.
-**Spendable = wallet + included credit − reserved.** The wallet and included credit only finance what the clinic owes
+One `billing.accounts` row per client: `wallet_balance`, `included_credit_balance`, `reserved_amount`.
+**Spendable = wallet + included credit − reserved.** The wallet and included credit only finance what the client owes
 Omni. Every change is a `billing.ledger_entries` row in the same transaction (append-only), and
 `GET …/reconciliation` checks they agree. Uncharged usage never creates a ledger row.
 
 ### Rate cards
 
-- Cards: the **default** card, optional **plan** cards, at most one **clinic** card (custom pricing). Lookup: clinic card →
+- Cards: the **default** card, optional **plan** cards, at most one **client** card (custom pricing). Lookup: client card →
   plan card → default card; first card with a match wins; inside a card the most specific rate wins (country 8, operator 4,
   provider 2, provider billing 1 — null = any).
 - A rate version has provider cost and client rate as **independent** numbers, a currency and an effective period.
@@ -123,17 +123,17 @@ Omni. Every change is a `billing.ledger_entries` row in the same transaction (ap
 | Call | Charged usage | Uncharged usage |
 |---|---|---|
 | `ReserveAsync(event)` | rate it, require spendable ≥ amount, hold it (`reserved`) | record it (`not_charged`, provider cost if known) |
-| `SettleAsync(clinic, key, finalQuantity?)` | return the hold, charge final amount: included credit, then wallet; ledger rows | outcome → `billable` (+ final quantity) |
-| `ReleaseAsync(clinic, key, reason)` | return the hold (`released`) | outcome → `not_billable` |
+| `SettleAsync(client, key, finalQuantity?)` | return the hold, charge final amount: included credit, then wallet; ledger rows | outcome → `billable` (+ final quantity) |
+| `ReleaseAsync(client, key, reason)` | return the hold (`released`) | outcome → `not_billable` |
 | `ChargeAsync(event)` | reserve + settle in one step (still prepaid) | record as already `billable` |
-| `RefundAsync(clinic, usageId, reason)` | full amount back to where it came from, once | n/a |
+| `RefundAsync(client, usageId, reason)` | full amount back to where it came from, once | n/a |
 
 **Idempotency.** Same key twice → the first result (`Duplicate = true`). Settle twice → one charge. Settle after release
 (or release after settle) → `Conflict`, nothing changes. Admin top-ups, adjustments and plan starts take an
 `Idempotency-Key` header; renewals derive their keys from the period.
 
 **Concurrency / transactions.** Each operation uses its own unit of work (`IBillingUnitOfWorkFactory.Create()`, its own
-`DbContext`), locks the clinic's `billing.accounts` row (`unit.Accounts.LockAsync`, `select … for update`), checks
+`DbContext`), locks the client's `billing.accounts` row (`unit.Accounts.LockAsync`, `select … for update`), checks
 idempotency after the lock, changes balances only through `BillingLedger.PostAsync`, writes, commits once.
 
 ## Channel integration
@@ -152,10 +152,10 @@ settle or release. A failure to record *uncharged* usage is logged and never blo
 
 | Situation | Provider billing | Usage record | Wallet / credit / ledger |
 |---|---|---|---|
-| Customer-funded WABA (clinic's own Meta card) | `customer_direct` | yes, Meta's cost recorded as paid by the clinic | untouched |
+| Customer-funded WABA (client's own Meta card) | `customer_direct` | yes, Meta's cost recorded as paid by the client | untouched |
 | Omni-funded WhatsApp (today's default) | `platform_funded` | yes, cost + Omni price | reserved, then credit/wallet + ledger |
 | SMS through Omni's aggregator (future) | `platform_funded` | yes, `sms_segment` × segments, destination pricing | reserved, then credit/wallet + ledger |
-| Viber on the clinic's own provider account (future) | `external_provider_direct` | yes | untouched (unless an Omni fee is turned on) |
+| Viber on the client's own provider account (future) | `external_provider_direct` | yes | untouched (unless an Omni fee is turned on) |
 | Messenger / TikTok / Telegram conversations | `no_provider_usage_fee` | yes (or nothing, if the policy doesn't describe it) | untouched — monetized through the subscription |
 | Customer-funded WABA **with an Omni usage fee** | `customer_direct` + usage billing on | yes | the fee only (rate with `provider_billing = customer_direct`) |
 
@@ -182,7 +182,7 @@ X-Platform-Admin-Key: …
 ```
 
 Change it with `PUT /plans/{code}` (applies from each subscriber's next renewal) or `PUT /plans/{code}/entitlements`.
-Deactivate instead of deleting. Assign: `POST /clinics/{id}/subscription` with `{ "planCode": "growth" }` and an
+Deactivate instead of deleting. Assign: `POST /clients/{id}/subscription` with `{ "planCode": "growth" }` and an
 `Idempotency-Key` header.
 
 ## How to add a new rate
@@ -194,14 +194,14 @@ POST /api/platform-admin/billing/rate-cards/default/rates
 ```
 
 Starts now (or later), closes the current version of the same rate. An Omni usage fee for customer-paid WABAs:
-`"providerBilling": "customer_direct", "clientRate": 0.01`. Custom pricing for one clinic: `POST /rate-cards` with
-`{ "code": "clinic-acme", "name": "Acme pricing", "clinicId": "…" }`, then add only what differs. Check with
-`GET /clinics/{id}/quote?eventType=…&country=…&provider=…&providerBilling=…`.
+`"providerBilling": "customer_direct", "clientRate": 0.01`. Custom pricing for one client: `POST /rate-cards` with
+`{ "code": "client-acme", "name": "Acme pricing", "clientId": "…" }`, then add only what differs. Check with
+`GET /clients/{id}/quote?eventType=…&country=…&provider=…&providerBilling=…`.
 
 ## How to set who pays the provider for an account
 
 ```
-GET  /api/platform-admin/billing/clinics/{clinicId}/channel-accounts
+GET  /api/platform-admin/billing/clients/{clientId}/channel-accounts
 PUT  /api/platform-admin/billing/channel-accounts/{channelIntegrationId}/provider-billing
      { "providerBilling": "customer_direct", "omniUsageBilling": null, "reason": "Own WABA, own Meta card" }
 POST /api/platform-admin/billing/channel-accounts/{channelIntegrationId}/provider-billing/reset   { "reason": "…" }
@@ -216,20 +216,20 @@ Changes apply to future usage only; recorded usage keeps its snapshot. Each chan
 1. Apply the billing block of `Database/schema.sql` to Supabase (creates schema `billing`; needs `btree_gist`).
 2. Set `PlatformAdmin__ApiKey` on Render (a long random secret) and the same value as `MainApp__PlatformAdminApiKey` on the admin portal.
 3. Create the default rate card and its rates, and the plans.
-4. Give every existing clinic a plan (and top up wallets as payments arrive); set each WhatsApp account's arrangement.
+4. Give every existing client a plan (and top up wallets as payments arrive); set each WhatsApp account's arrangement.
 5. Optionally `Billing__SignupPlanCode`. Then `Billing__Enabled=true` and redeploy.
 
 ## Admin API (all under `/api/platform-admin/billing`, header `X-Platform-Admin-Key`, actor in `X-Admin-Actor`; normally used through the Omni.Admin portal's Billing pages)
 
 Plans: `GET/POST plans`, `GET/PUT plans/{code}`, `PUT plans/{code}/entitlements`, `GET entitlements` ·
 Rate cards: `GET/POST rate-cards`, `PUT rate-cards/{code}`, `GET/POST rate-cards/{code}/rates`, `POST rates/{id}/close` ·
-Provider billing: `GET provider-billing`, `GET clinics/{id}/channel-accounts`, `PUT channel-accounts/{id}/provider-billing`,
+Provider billing: `GET provider-billing`, `GET clients/{id}/channel-accounts`, `PUT channel-accounts/{id}/provider-billing`,
 `POST channel-accounts/{id}/provider-billing/reset` ·
-Clinics: `GET accounts`, `GET clinics/{id}`, `POST clinics/{id}/subscription` (+ `/cancel`, `/resume`, `/renew`),
-`POST clinics/{id}/wallet/top-ups`, `POST clinics/{id}/wallet/adjustments`, `GET clinics/{id}/usage`,
-`POST clinics/{id}/usage/{usageId}/refund`, `GET clinics/{id}/ledger`, `GET clinics/{id}/reconciliation`,
-`GET clinics/{id}/quote` · Reporting: `GET report?from=&to=` (usage revenue, provider cost paid by Omni vs paid
-externally, margin, subscription revenue, top-ups). The clinic's own read-only view: Settings → Billing (Omni charges
+Clients: `GET accounts`, `GET clients/{id}`, `POST clients/{id}/subscription` (+ `/cancel`, `/resume`, `/renew`),
+`POST clients/{id}/wallet/top-ups`, `POST clients/{id}/wallet/adjustments`, `GET clients/{id}/usage`,
+`POST clients/{id}/usage/{usageId}/refund`, `GET clients/{id}/ledger`, `GET clients/{id}/reconciliation`,
+`GET clients/{id}/quote` · Reporting: `GET report?from=&to=` (usage revenue, provider cost paid by Omni vs paid
+externally, margin, subscription revenue, top-ups). The client's own read-only view: Settings → Billing (Omni charges
 apart from provider-direct usage) and `GET /api/billing/summary|usage|transactions`.
 
 ## Postponed on purpose

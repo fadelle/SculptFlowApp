@@ -19,15 +19,15 @@ public class HealthEventHandler
         _health = health;
     }
 
-    public async Task<WhatsAppWebhookResponse> HandleAsync(ParsedMetaEvent evt, ResolvedClinic clinic, CancellationToken ct)
+    public async Task<WhatsAppWebhookResponse> HandleAsync(ParsedMetaEvent evt, ResolvedClient client, CancellationToken ct)
     {
         var health = await _health.ApplyHealthEventAsync(new WhatsAppHealthEventRequest(
-            clinic.ClinicId, evt.HealthEventType ?? WhatsAppHealthEventType.UnknownMetaHealthEvent, evt.WabaId, evt.PhoneNumberId,
+            client.ClientId, evt.HealthEventType ?? WhatsAppHealthEventType.UnknownMetaHealthEvent, evt.WabaId, evt.PhoneNumberId,
             evt.HealthStatus, evt.HealthQualityRating, evt.HealthCode, evt.HealthMessage, evt.Timestamp, evt.RawJson), ct);
 
         return new WhatsAppWebhookResponse(
             Processed: true, EventType: "whatsapp_health", ShouldRunAi: false,
-            ClinicId: clinic.ClinicId, WhatsAppConnectionId: clinic.ChannelIntegrationId,
+            ClientId: client.ClientId, WhatsAppConnectionId: client.ChannelIntegrationId,
             HealthLevel: health.HealthLevel, HealthEventType: evt.HealthEventType, Status: evt.HealthStatus, Message: evt.HealthMessage);
     }
 }

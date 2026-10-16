@@ -75,9 +75,9 @@ public class AccountPageTests
     [Fact]
     public async Task Register_failure_shows_all_errors_and_signs_nobody_in()
     {
-        var registration = new Mock<IClinicRegistrationService>();
-        registration.Setup(r => r.RegisterAsync(It.IsAny<RegisterClinicRequest>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(ClinicRegistrationResult.Fail("Email taken.", "Password too short."));
+        var registration = new Mock<IClientRegistrationService>();
+        registration.Setup(r => r.RegisterAsync(It.IsAny<RegisterClientRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(ClientRegistrationResult.Fail("Email taken.", "Password too short."));
         var signIn = SignIn();
         var model = new RegisterModel(registration.Object, signIn.Object) { Email = "a@x.com", Password = "x" }.Attach();
 
@@ -90,19 +90,19 @@ public class AccountPageTests
     public async Task Register_success_signs_the_new_user_in_and_forwards_the_form()
     {
         var user = new IdentityUser { Email = "a@x.com" };
-        RegisterClinicRequest? seen = null;
-        var registration = new Mock<IClinicRegistrationService>();
-        registration.Setup(r => r.RegisterAsync(It.IsAny<RegisterClinicRequest>(), It.IsAny<CancellationToken>()))
-            .Callback<RegisterClinicRequest, CancellationToken>((r, _) => seen = r)
-            .ReturnsAsync(new ClinicRegistrationResult(true, user, null, []));
+        RegisterClientRequest? seen = null;
+        var registration = new Mock<IClientRegistrationService>();
+        registration.Setup(r => r.RegisterAsync(It.IsAny<RegisterClientRequest>(), It.IsAny<CancellationToken>()))
+            .Callback<RegisterClientRequest, CancellationToken>((r, _) => seen = r)
+            .ReturnsAsync(new ClientRegistrationResult(true, user, null, []));
         var signIn = SignIn();
         var model = new RegisterModel(registration.Object, signIn.Object)
         {
-            FullName = "Ann", ClinicName = "Glow", Email = "a@x.com", Password = "pw", ConfirmPassword = "pw", ReturnUrl = "/knowledge",
+            FullName = "Ann", ClientName = "Glow", Email = "a@x.com", Password = "pw", ConfirmPassword = "pw", ReturnUrl = "/knowledge",
         }.Attach();
 
         Assert.Equal("/knowledge", RedirectTarget(await model.OnPostAsync(default)));
-        Assert.Equal(new RegisterClinicRequest("Ann", "Glow", "a@x.com", "pw", "pw"), seen);
+        Assert.Equal(new RegisterClientRequest("Ann", "Glow", "a@x.com", "pw", "pw"), seen);
         signIn.Verify(s => s.SignInAsync(user, true, null), Times.Once);
         new RegisterModel(registration.Object, signIn.Object).Attach().OnGet();
     }
@@ -126,7 +126,7 @@ public class AccountPageTests
     {
         var signIn = SignIn();
         signIn.Setup(s => s.GetExternalLoginInfoAsync(null)).ReturnsAsync(email is null ? null : Info(email, verified));
-        var model = new CompleteGoogleSignupModel(signIn.Object, Mock.Of<IClinicRegistrationService>()).Attach();
+        var model = new CompleteGoogleSignupModel(signIn.Object, Mock.Of<IClientRegistrationService>()).Attach();
 
         Assert.Equal("/Account/Login?externalError=unverified", RedirectTarget(await model.OnGetAsync()));
         Assert.Equal("/Account/Login?externalError=unverified", RedirectTarget(await model.OnPostAsync(default)));
@@ -137,7 +137,7 @@ public class AccountPageTests
     {
         var signIn = SignIn();
         signIn.Setup(s => s.GetExternalLoginInfoAsync(null)).ReturnsAsync(Info("g@x.com", true));
-        var model = new CompleteGoogleSignupModel(signIn.Object, Mock.Of<IClinicRegistrationService>(r => r.IsSignupOpen)).Attach();
+        var model = new CompleteGoogleSignupModel(signIn.Object, Mock.Of<IClientRegistrationService>(r => r.IsSignupOpen)).Attach();
         Assert.IsType<PageResult>(await model.OnGetAsync());
         Assert.Equal(("g@x.com", "Gina Google"), (model.Email, model.FullName));
     }
@@ -148,7 +148,7 @@ public class AccountPageTests
         var signIn = SignIn();
         signIn.Setup(s => s.GetExternalLoginInfoAsync(null)).ReturnsAsync(Info("g@x.com", true));
         var auth = new Mock<IAuthenticationService>();
-        var model = new CompleteGoogleSignupModel(signIn.Object, Mock.Of<IClinicRegistrationService>(r => !r.IsSignupOpen))
+        var model = new CompleteGoogleSignupModel(signIn.Object, Mock.Of<IClientRegistrationService>(r => !r.IsSignupOpen))
             .Attach(configure: http => http.RequestServices = new ServiceCollection().AddSingleton(auth.Object).BuildServiceProvider());
 
         Assert.Equal("/Account/Login?externalError=signup_closed", RedirectTarget(await model.OnGetAsync()));
@@ -159,27 +159,27 @@ public class AccountPageTests
     [Fact]
     public void Register_page_reports_whether_signups_are_open()
     {
-        Assert.True(new RegisterModel(Mock.Of<IClinicRegistrationService>(r => r.IsSignupOpen), SignIn().Object).SignupOpen);
-        Assert.False(new RegisterModel(Mock.Of<IClinicRegistrationService>(r => !r.IsSignupOpen), SignIn().Object).SignupOpen);
+        Assert.True(new RegisterModel(Mock.Of<IClientRegistrationService>(r => r.IsSignupOpen), SignIn().Object).SignupOpen);
+        Assert.False(new RegisterModel(Mock.Of<IClientRegistrationService>(r => !r.IsSignupOpen), SignIn().Object).SignupOpen);
     }
 
     [Fact]
     public async Task Complete_signup_creates_the_account_signs_in_and_clears_the_external_cookie()
     {
         var user = new IdentityUser { Email = "g@x.com" };
-        RegisterExternalClinicRequest? seen = null;
-        var registration = new Mock<IClinicRegistrationService>();
-        registration.Setup(r => r.RegisterExternalAsync(It.IsAny<RegisterExternalClinicRequest>(), It.IsAny<CancellationToken>()))
-            .Callback<RegisterExternalClinicRequest, CancellationToken>((r, _) => seen = r)
-            .ReturnsAsync(new ClinicRegistrationResult(true, user, null, []));
+        RegisterExternalClientRequest? seen = null;
+        var registration = new Mock<IClientRegistrationService>();
+        registration.Setup(r => r.RegisterExternalAsync(It.IsAny<RegisterExternalClientRequest>(), It.IsAny<CancellationToken>()))
+            .Callback<RegisterExternalClientRequest, CancellationToken>((r, _) => seen = r)
+            .ReturnsAsync(new ClientRegistrationResult(true, user, null, []));
         var signIn = SignIn();
         signIn.Setup(s => s.GetExternalLoginInfoAsync(null)).ReturnsAsync(Info("g@x.com", true));
         var auth = new Mock<IAuthenticationService>();
-        var model = new CompleteGoogleSignupModel(signIn.Object, registration.Object) { ClinicName = "Glow", ReturnUrl = "https://evil.example/" }
+        var model = new CompleteGoogleSignupModel(signIn.Object, registration.Object) { ClientName = "Glow", ReturnUrl = "https://evil.example/" }
             .Attach(configure: http => http.RequestServices = new ServiceCollection().AddSingleton(auth.Object).BuildServiceProvider());
 
         Assert.Equal("/dashboard", RedirectTarget(await model.OnPostAsync(default)));       // an external return url is ignored
-        Assert.Equal("Glow", seen!.ClinicName);
+        Assert.Equal("Glow", seen!.ClientName);
         Assert.Equal("g@x.com", seen.Email);
         signIn.Verify(s => s.SignInAsync(user, true, "Google"), Times.Once);
         auth.Verify(a => a.SignOutAsync(It.IsAny<Microsoft.AspNetCore.Http.HttpContext>(), IdentityConstants.ExternalScheme, It.IsAny<AuthenticationProperties?>()), Times.Once);
@@ -188,14 +188,14 @@ public class AccountPageTests
     [Fact]
     public async Task Complete_signup_failure_stays_on_the_page_with_the_errors()
     {
-        var registration = new Mock<IClinicRegistrationService>();
-        registration.Setup(r => r.RegisterExternalAsync(It.IsAny<RegisterExternalClinicRequest>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(ClinicRegistrationResult.Fail("Clinic name is required."));
+        var registration = new Mock<IClientRegistrationService>();
+        registration.Setup(r => r.RegisterExternalAsync(It.IsAny<RegisterExternalClientRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(ClientRegistrationResult.Fail("Client name is required."));
         var signIn = SignIn();
         signIn.Setup(s => s.GetExternalLoginInfoAsync(null)).ReturnsAsync(Info("g@x.com", true));
         var model = new CompleteGoogleSignupModel(signIn.Object, registration.Object).Attach();
         Assert.IsType<PageResult>(await model.OnPostAsync(default));
-        Assert.Equal("Clinic name is required.", model.ErrorMessage);
+        Assert.Equal("Client name is required.", model.ErrorMessage);
         signIn.Verify(s => s.SignInAsync(It.IsAny<IdentityUser>(), It.IsAny<bool>(), It.IsAny<string?>()), Times.Never);
     }
 

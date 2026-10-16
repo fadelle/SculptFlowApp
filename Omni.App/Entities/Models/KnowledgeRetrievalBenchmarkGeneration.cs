@@ -4,11 +4,11 @@ namespace Omni.App.Entities.Models;
 
 /// <summary>One "Generate Test Cases" request. <see cref="Id"/> IS the generationId sent to the n8n generator and required on its
 /// callback. Created (pending) before anything is sent; it remembers the chunks that were sent so the reply can be validated
-/// against exactly that set, and the clinic is always taken from this row — never from the caller.</summary>
+/// against exactly that set, and the client is always taken from this row — never from the caller.</summary>
 public class KnowledgeRetrievalBenchmarkGeneration
 {
     public Guid Id { get; set; }
-    public Guid ClinicId { get; set; }
+    public Guid ClientId { get; set; }
 
     /// <summary>pending | completed | failed | cancelled</summary>
     public string Status { get; set; } = BenchmarkGenerationStatus.Pending;

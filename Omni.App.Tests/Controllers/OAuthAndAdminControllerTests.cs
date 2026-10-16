@@ -12,8 +12,8 @@ namespace Omni.App.Tests.Controllers;
 
 public class CalendarOAuthControllerTests
 {
-    private readonly Guid _clinicId = Guid.NewGuid();
-    private readonly Mock<ICurrentClinicContext> _clinic = new();
+    private readonly Guid _clientId = Guid.NewGuid();
+    private readonly Mock<ICurrentClientContext> _client = new();
     private readonly Mock<ICalendarIntegrationService> _calendar = new();
     private readonly Mock<ICalendarProviderClient> _google = new();
     private readonly Mock<IConfigManager> _config = new();
@@ -22,7 +22,7 @@ public class CalendarOAuthControllerTests
 
     public CalendarOAuthControllerTests()
     {
-        _clinic.Setup(c => c.GetClinicIdAsync(It.IsAny<CancellationToken>())).ReturnsAsync(_clinicId);
+        _client.Setup(c => c.GetClientIdAsync(It.IsAny<CancellationToken>())).ReturnsAsync(_clientId);
         _config.SetupGet(c => c.IntegrationsOAuthStateLifetimeMinutes).Returns(10);
         _google.SetupGet(g => g.Provider).Returns(CalendarProvider.Google);
         _google.Setup(g => g.BuildAuthorizationUrl(It.IsAny<string>(), It.IsAny<string>())).Returns((string r, string s) => $"https://accounts.google.com/auth?redirect={r}&state={Uri.EscapeDataString(s)}");
@@ -30,7 +30,7 @@ public class CalendarOAuthControllerTests
 
     private CalendarOAuthController Sut(Action<HttpContext>? configure = null)
     {
-        var c = new CalendarOAuthController(_calendar.Object, _clinic.Object, [_google.Object], ControllerTestKit.Config(("App:PublicBaseUrl", _baseUrl)), _dp, NullLogger<CalendarOAuthController>.Instance, _config.Object);
+        var c = new CalendarOAuthController(_calendar.Object, _client.Object, [_google.Object], ControllerTestKit.Config(("App:PublicBaseUrl", _baseUrl)), _dp, NullLogger<CalendarOAuthController>.Instance, _config.Object);
         c.ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() };
         c.TempData = new TempDataDictionary(c.HttpContext, Mock.Of<ITempDataProvider>());
         configure?.Invoke(c.HttpContext);
@@ -49,16 +49,16 @@ public class CalendarOAuthControllerTests
         var result = Assert.IsType<RedirectResult>(await Sut().Connect(CalendarProvider.Google, default));
         Assert.StartsWith("https://accounts.google.com/auth", result.Url);
         Assert.Contains("redirect=https://app.example.com/calendar-oauth/google/callback", result.Url);
-        _calendar.Verify(c => c.RequestConnectAsync(_clinicId, CalendarProvider.Google, It.IsAny<CancellationToken>()), Times.Once);
+        _calendar.Verify(c => c.RequestConnectAsync(_clientId, CalendarProvider.Google, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
-    public async Task Connect_rejects_unknown_providers_missing_clinics_and_unsafe_base_urls()
+    public async Task Connect_rejects_unknown_providers_missing_clients_and_unsafe_base_urls()
     {
         Assert.Equal("/settings/calendar-integrations", Assert.IsType<RedirectResult>(await Sut().Connect("yahoo", default)).Url);
-        _clinic.Setup(c => c.GetClinicIdAsync(It.IsAny<CancellationToken>())).ReturnsAsync((Guid?)null);
+        _client.Setup(c => c.GetClientIdAsync(It.IsAny<CancellationToken>())).ReturnsAsync((Guid?)null);
         Assert.IsType<ForbidResult>(await Sut().Connect(CalendarProvider.Google, default));
-        _clinic.Setup(c => c.GetClinicIdAsync(It.IsAny<CancellationToken>())).ReturnsAsync(_clinicId);
+        _client.Setup(c => c.GetClientIdAsync(It.IsAny<CancellationToken>())).ReturnsAsync(_clientId);
 
         _baseUrl = "http://insecure.example.com";
         var c = Sut();
@@ -68,8 +68,8 @@ public class CalendarOAuthControllerTests
         var local = Sut(h => h.Request.Host = new HostString("localhost", 5000));
         await local.Connect(CalendarProvider.Google, default);
         Assert.Contains("public HTTPS address", local.TempData["ErrorMessage"]!.ToString());
-        var publicHost = Sut(h => h.Request.Host = new HostString("clinic.onrender.com"));
-        Assert.Contains("https://clinic.onrender.com/calendar-oauth/google/callback", Assert.IsType<RedirectResult>(await publicHost.Connect(CalendarProvider.Google, default)).Url);
+        var publicHost = Sut(h => h.Request.Host = new HostString("client.onrender.com"));
+        Assert.Contains("https://client.onrender.com/calendar-oauth/google/callback", Assert.IsType<RedirectResult>(await publicHost.Connect(CalendarProvider.Google, default)).Url);
     }
 
     [Fact]
@@ -82,7 +82,7 @@ public class CalendarOAuthControllerTests
         var controller = Sut();
         var result = Assert.IsType<RedirectResult>(await controller.Callback(CalendarProvider.Google, "code", state, null, null, default));
         Assert.Equal("/settings/calendar-integrations", result.Url);
-        _calendar.Verify(c => c.CompleteConnectAsync(_clinicId, CalendarProvider.Google, tokens, "me@x.com", It.IsAny<CancellationToken>()), Times.Once);
+        _calendar.Verify(c => c.CompleteConnectAsync(_clientId, CalendarProvider.Google, tokens, "me@x.com", It.IsAny<CancellationToken>()), Times.Once);
         Assert.Equal("Google Calendar connected.", controller.TempData["StatusMessage"]);
     }
 
@@ -93,19 +93,19 @@ public class CalendarOAuthControllerTests
     public async Task Missing_or_tampered_state_fails_the_attempt_without_exchanging_the_code(string? state)
     {
         await Sut().Callback(CalendarProvider.Google, "code", state, null, null, default);
-        _calendar.Verify(c => c.FailConnectAsync(_clinicId, CalendarProvider.Google, It.Is<string>(m => m.Contains("expired or was invalid")), It.IsAny<CancellationToken>()), Times.Once);
+        _calendar.Verify(c => c.FailConnectAsync(_clientId, CalendarProvider.Google, It.Is<string>(m => m.Contains("expired or was invalid")), It.IsAny<CancellationToken>()), Times.Once);
         _google.Verify(g => g.ExchangeCodeAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
-    public async Task State_issued_to_another_clinic_or_provider_is_rejected()
+    public async Task State_issued_to_another_client_or_provider_is_rejected()
     {
         var state = await IssueStateAsync();
-        _clinic.Setup(c => c.GetClinicIdAsync(It.IsAny<CancellationToken>())).ReturnsAsync(Guid.NewGuid());
+        _client.Setup(c => c.GetClientIdAsync(It.IsAny<CancellationToken>())).ReturnsAsync(Guid.NewGuid());
         await Sut().Callback(CalendarProvider.Google, "code", state, null, null, default);
         _google.Verify(g => g.ExchangeCodeAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
 
-        _clinic.Setup(c => c.GetClinicIdAsync(It.IsAny<CancellationToken>())).ReturnsAsync(_clinicId);
+        _client.Setup(c => c.GetClientIdAsync(It.IsAny<CancellationToken>())).ReturnsAsync(_clientId);
         await Sut().Callback(CalendarProvider.Outlook, "code", state, null, null, default);
         _google.Verify(g => g.ExchangeCodeAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
@@ -117,7 +117,7 @@ public class CalendarOAuthControllerTests
         var denied = Sut();
         await denied.Callback(CalendarProvider.Google, null, state, "access_denied", "User said no", default);
         Assert.Equal("User said no", denied.TempData["ErrorMessage"]);
-        _calendar.Verify(c => c.FailConnectAsync(_clinicId, CalendarProvider.Google, "User said no", It.IsAny<CancellationToken>()), Times.Once);
+        _calendar.Verify(c => c.FailConnectAsync(_clientId, CalendarProvider.Google, "User said no", It.IsAny<CancellationToken>()), Times.Once);
 
         var nocode = Sut();
         await nocode.Callback(CalendarProvider.Google, null, state, null, null, default);
@@ -131,18 +131,18 @@ public class CalendarOAuthControllerTests
     }
 
     [Fact]
-    public async Task Callback_for_unknown_providers_or_without_a_clinic()
+    public async Task Callback_for_unknown_providers_or_without_a_client()
     {
         Assert.IsType<RedirectResult>(await Sut().Callback("yahoo", "c", "s", null, null, default));
-        _clinic.Setup(c => c.GetClinicIdAsync(It.IsAny<CancellationToken>())).ReturnsAsync((Guid?)null);
+        _client.Setup(c => c.GetClientIdAsync(It.IsAny<CancellationToken>())).ReturnsAsync((Guid?)null);
         Assert.IsType<ForbidResult>(await Sut().Callback(CalendarProvider.Google, "c", "s", null, null, default));
     }
 }
 
 public class TikTokOAuthControllerTests
 {
-    private readonly Guid _clinicId = Guid.NewGuid();
-    private readonly Mock<ICurrentClinicContext> _clinic = new();
+    private readonly Guid _clientId = Guid.NewGuid();
+    private readonly Mock<ICurrentClientContext> _client = new();
     private readonly Mock<ITikTokIntegrationService> _tiktok = new();
     private readonly Mock<ITikTokProviderClient> _provider = new();
     private readonly Mock<IConfigManager> _config = new();
@@ -150,14 +150,14 @@ public class TikTokOAuthControllerTests
 
     public TikTokOAuthControllerTests()
     {
-        _clinic.Setup(c => c.GetClinicIdAsync(It.IsAny<CancellationToken>())).ReturnsAsync(_clinicId);
+        _client.Setup(c => c.GetClientIdAsync(It.IsAny<CancellationToken>())).ReturnsAsync(_clientId);
         _config.SetupGet(c => c.IntegrationsOAuthStateLifetimeMinutes).Returns(10);
         _provider.Setup(p => p.BuildAuthorizationUrl(It.IsAny<string>(), It.IsAny<string>())).Returns((string r, string s) => $"https://tiktok.example/auth?state={Uri.EscapeDataString(s)}");
     }
 
     private TikTokOAuthController Sut()
     {
-        var c = new TikTokOAuthController(_clinic.Object, _tiktok.Object, _provider.Object, ControllerTestKit.Config(("App:PublicBaseUrl", "https://app.example.com")), _dp, NullLogger<TikTokOAuthController>.Instance, _config.Object);
+        var c = new TikTokOAuthController(_client.Object, _tiktok.Object, _provider.Object, ControllerTestKit.Config(("App:PublicBaseUrl", "https://app.example.com")), _dp, NullLogger<TikTokOAuthController>.Instance, _config.Object);
         c.ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() };
         c.TempData = new TempDataDictionary(c.HttpContext, Mock.Of<ITempDataProvider>());
         return c;
@@ -170,27 +170,27 @@ public class TikTokOAuthControllerTests
         var state = Uri.UnescapeDataString(redirect.Url.Split("state=")[1]);
 
         var tokens = new TikTokOAuthTokenResult("a", "r", DateTimeOffset.UtcNow.AddHours(1), null);
-        var account = new TikTokAccountInfo("o", null, "Clinic", null);
+        var account = new TikTokAccountInfo("o", null, "Client", null);
         _provider.Setup(p => p.ExchangeCodeAsync("code", "https://app.example.com/tiktok-oauth/callback", It.IsAny<CancellationToken>())).ReturnsAsync(tokens);
         _provider.Setup(p => p.GetAccountInfoAsync("a", It.IsAny<CancellationToken>())).ReturnsAsync(account);
         var ok = Sut();
         Assert.Equal("/settings/integrations", Assert.IsType<RedirectResult>(await ok.Callback("code", state, null, null, default)).Url);
-        _tiktok.Verify(t => t.CompleteConnectAsync(_clinicId, tokens, account, It.IsAny<CancellationToken>()), Times.Once);
+        _tiktok.Verify(t => t.CompleteConnectAsync(_clientId, tokens, account, It.IsAny<CancellationToken>()), Times.Once);
 
         await Sut().Callback("code", "garbage", null, null, default);
         await Sut().Callback("code", null, null, null, default);
-        _clinic.Setup(c => c.GetClinicIdAsync(It.IsAny<CancellationToken>())).ReturnsAsync(Guid.NewGuid());
+        _client.Setup(c => c.GetClientIdAsync(It.IsAny<CancellationToken>())).ReturnsAsync(Guid.NewGuid());
         await Sut().Callback("code", state, null, null, default);
         _provider.Verify(p => p.ExchangeCodeAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
 
-        _clinic.Setup(c => c.GetClinicIdAsync(It.IsAny<CancellationToken>())).ReturnsAsync(_clinicId);
+        _client.Setup(c => c.GetClientIdAsync(It.IsAny<CancellationToken>())).ReturnsAsync(_clientId);
         await Sut().Callback(null, state, "access_denied", "nope", default);
         await Sut().Callback(null, state, null, null, default);
         _provider.Setup(p => p.ExchangeCodeAsync("boom", It.IsAny<string>(), It.IsAny<CancellationToken>())).ThrowsAsync(new InvalidOperationException("x"));
         await Sut().Callback("boom", state, null, null, default);
-        _tiktok.Verify(t => t.FailConnectAsync(_clinicId, It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.AtLeast(4));
+        _tiktok.Verify(t => t.FailConnectAsync(_clientId, It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.AtLeast(4));
 
-        _clinic.Setup(c => c.GetClinicIdAsync(It.IsAny<CancellationToken>())).ReturnsAsync((Guid?)null);
+        _client.Setup(c => c.GetClientIdAsync(It.IsAny<CancellationToken>())).ReturnsAsync((Guid?)null);
         Assert.IsType<ForbidResult>(await Sut().Connect(default));
         Assert.IsType<ForbidResult>(await Sut().Callback("c", "s", null, null, default));
     }
@@ -225,18 +225,18 @@ public class IngestAndAdminControllerTests
     public async Task Platform_admin_controllers_pass_requests_through_and_map_missing_rows_to_404()
     {
         var id = Guid.NewGuid();
-        var clinics = new Mock<IClinicAdminService>();
-        var c = new ClinicsAdminController(clinics.Object).With();
+        var clients = new Mock<IClientAdminService>();
+        var c = new ClientsAdminController(clients.Object).With();
         Assert.IsType<NotFoundResult>(await c.Get(id, default));
-        clinics.Setup(s => s.GetAsync(id, It.IsAny<CancellationToken>())).ReturnsAsync(new ClinicDetail(id, "n", "s", null, null, null, null, "UTC", null, null, null, true, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow));
+        clients.Setup(s => s.GetAsync(id, It.IsAny<CancellationToken>())).ReturnsAsync(new ClientDetail(id, "n", "s", null, null, null, null, "UTC", null, null, null, true, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow));
         Assert.IsType<OkObjectResult>(await c.Get(id, default));
         await c.List("q", true, 1, default); await c.Options(default); await c.Counts(id, default);
         await c.SetActive(id, new ActiveBody(false), default);
-        clinics.Verify(s => s.SetActiveAsync(id, false, It.IsAny<CancellationToken>()), Times.Once);
-        clinics.Setup(s => s.GetInboxSettingsAsync(id, It.IsAny<CancellationToken>())).ReturnsAsync(new InboxSettingsDto(true, false, true));
+        clients.Verify(s => s.SetActiveAsync(id, false, It.IsAny<CancellationToken>()), Times.Once);
+        clients.Setup(s => s.GetInboxSettingsAsync(id, It.IsAny<CancellationToken>())).ReturnsAsync(new InboxSettingsDto(true, false, true));
         Assert.Equal(new InboxSettingsDto(true, false, true), Assert.IsType<OkObjectResult>(await c.GetInboxSettings(id, default)).Value);
         await c.UpdateInboxSettings(id, new UpdateInboxSettingsRequest(false, false), default);
-        clinics.Verify(s => s.UpdateInboxSettingsAsync(id, new UpdateInboxSettingsRequest(false, false), It.IsAny<CancellationToken>()), Times.Once);
+        clients.Verify(s => s.UpdateInboxSettingsAsync(id, new UpdateInboxSettingsRequest(false, false), It.IsAny<CancellationToken>()), Times.Once);
 
         var settings = new Mock<ISettingsService>();
         var sc = new SettingsAdminController(settings.Object).With(h => h.Request.Headers[RequirePlatformAdminKeyAttribute.ActorHeaderName] = "ops");
@@ -254,13 +254,13 @@ public class IngestAndAdminControllerTests
 
         var automation = new Mock<IAutomationCleanupService>();
         var ac = new AutomationAdminController(automation.Object, NullLogger<AutomationAdminController>.Instance).With();
-        automation.Setup(a => a.DeleteClinicAsync(id, It.IsAny<CancellationToken>())).ReturnsAsync(AutomationDeleteOutcome.NotFound);
-        Assert.IsType<NotFoundResult>(await ac.DeleteClinic(id, default));
-        automation.Setup(a => a.DeleteClinicAsync(id, It.IsAny<CancellationToken>())).ReturnsAsync(AutomationDeleteOutcome.NotAutomationClinic);
-        Assert.IsType<ConflictObjectResult>(await ac.DeleteClinic(id, default));
-        automation.Setup(a => a.DeleteClinicAsync(id, It.IsAny<CancellationToken>())).ReturnsAsync(AutomationDeleteOutcome.Deleted);
-        Assert.IsType<NoContentResult>(await ac.DeleteClinic(id, default));
-        await ac.ListClinics(default);
+        automation.Setup(a => a.DeleteClientAsync(id, It.IsAny<CancellationToken>())).ReturnsAsync(AutomationDeleteOutcome.NotFound);
+        Assert.IsType<NotFoundResult>(await ac.DeleteClient(id, default));
+        automation.Setup(a => a.DeleteClientAsync(id, It.IsAny<CancellationToken>())).ReturnsAsync(AutomationDeleteOutcome.NotAutomationClient);
+        Assert.IsType<ConflictObjectResult>(await ac.DeleteClient(id, default));
+        automation.Setup(a => a.DeleteClientAsync(id, It.IsAny<CancellationToken>())).ReturnsAsync(AutomationDeleteOutcome.Deleted);
+        Assert.IsType<NoContentResult>(await ac.DeleteClient(id, default));
+        await ac.ListClients(default);
 
         var staff = new Mock<IStaffAdminService>();
         var st = new StaffAdminController(staff.Object).With();
@@ -306,8 +306,8 @@ public class IngestAndAdminControllerTests
         var overview = new Mock<IOverviewAdminService>();
         var ov = new OverviewAdminController(overview.Object).With();
         await ov.Totals(default); await ov.DailyMessages(0, default); await ov.DailyMessages(30, default); await ov.Problems(default);
-        await ov.RecentClinics(0, default); await ov.RecentClinics(5, default); await ov.Events(null, null, 1, default); await ov.EventTypes(default);
+        await ov.RecentClients(0, default); await ov.RecentClients(5, default); await ov.Events(null, null, 1, default); await ov.EventTypes(default);
         overview.Verify(s => s.DailyMessagesAsync(14, It.IsAny<CancellationToken>()), Times.Once);
-        overview.Verify(s => s.RecentClinicsAsync(10, It.IsAny<CancellationToken>()), Times.Once);
+        overview.Verify(s => s.RecentClientsAsync(10, It.IsAny<CancellationToken>()), Times.Once);
     }
 }

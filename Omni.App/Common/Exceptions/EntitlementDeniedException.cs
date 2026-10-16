@@ -1,6 +1,6 @@
 namespace Omni.App.Common.Exceptions;
 
-/// <summary>The clinic's subscription doesn't allow this (no active plan, feature not in the plan, limit reached).
+/// <summary>The client's subscription doesn't allow this (no active plan, feature not in the plan, limit reached).
 /// Also an InvalidOperationException, for the same 422 mapping.</summary>
 public class EntitlementDeniedException : InvalidOperationException
 {

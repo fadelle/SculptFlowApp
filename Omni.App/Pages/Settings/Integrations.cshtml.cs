@@ -11,28 +11,28 @@ using Omni.App.Entities.Responses.TikTok;
 
 namespace Omni.App.Pages.Settings;
 
-/// <summary>Settings → Channels &amp; Integrations: connect WhatsApp / Instagram / Facebook per clinic.</summary>
+/// <summary>Settings → Channels &amp; Integrations: connect WhatsApp / Instagram / Facebook per client.</summary>
 public class IntegrationsModel : PageModel
 {
-    private readonly ICurrentClinicContext _clinicContext;
+    private readonly ICurrentClientContext _clientContext;
     private readonly IChannelIntegrationService _integrations;
     private readonly IConfiguration _configuration;
     private readonly ITelegramIntegrationService _telegram;
     private readonly ITikTokIntegrationService _tiktok;
 
     public IntegrationsModel(
-        ICurrentClinicContext clinicContext, IChannelIntegrationService integrations, IConfiguration configuration,
+        ICurrentClientContext clientContext, IChannelIntegrationService integrations, IConfiguration configuration,
         ITelegramIntegrationService telegram, ITikTokIntegrationService tiktok)
     {
-        _clinicContext = clinicContext;
+        _clientContext = clientContext;
         _integrations = integrations;
         _configuration = configuration;
         _telegram = telegram;
         _tiktok = tiktok;
     }
 
-    public bool ClinicConfigured { get; private set; }
-    public Guid ClinicId { get; private set; }
+    public bool ClientConfigured { get; private set; }
+    public Guid ClientId { get; private set; }
     public IReadOnlyDictionary<string, ChannelIntegrationResponse> Channels { get; private set; } =
         new Dictionary<string, ChannelIntegrationResponse>();
     public TikTokIntegrationResponse? TikTok { get; private set; }
@@ -88,8 +88,8 @@ public class IntegrationsModel : PageModel
 
     public async Task<IActionResult> OnPostSaveAsync(CancellationToken ct)
     {
-        var clinic = await _clinicContext.GetClinicAsync(ct);
-        if (clinic is null)
+        var client = await _clientContext.GetClientAsync(ct);
+        if (client is null)
         {
             return RedirectToPage();
         }
@@ -103,7 +103,7 @@ public class IntegrationsModel : PageModel
         try
         {
             await _integrations.SaveAsync(new SaveChannelIntegrationRequest(
-                clinic.Id, Channel, DisplayName, PhoneNumberId, WhatsAppBusinessId,
+                client.Id, Channel, DisplayName, PhoneNumberId, WhatsAppBusinessId,
                 PageId, InstagramBusinessId, AccessToken, WebhookVerifyToken), ct);
             StatusMessage = $"{Label(Channel)} connection saved.";
         }
@@ -114,18 +114,18 @@ public class IntegrationsModel : PageModel
         return RedirectToPage();
     }
 
-    /// <summary>Connect / reconnect Telegram: clinic comes from the logged-in user, the token from the form.</summary>
+    /// <summary>Connect / reconnect Telegram: client comes from the logged-in user, the token from the form.</summary>
     public async Task<IActionResult> OnPostConnectTelegramAsync(CancellationToken ct)
     {
-        var clinic = await _clinicContext.GetClinicAsync(ct);
-        if (clinic is null)
+        var client = await _clientContext.GetClientAsync(ct);
+        if (client is null)
         {
             return RedirectToPage();
         }
 
         try
         {
-            var result = await _telegram.ConnectAsync(clinic.Id, BotToken, ct);
+            var result = await _telegram.ConnectAsync(client.Id, BotToken, ct);
             StatusMessage = $"Telegram connected — bot {result.DisplayName ?? "(unnamed)"}. The webhook was registered automatically.";
         }
         catch (Exception ex) when (ex is ArgumentException or TelegramApiException or InvalidOperationException)
@@ -138,13 +138,13 @@ public class IntegrationsModel : PageModel
 
     public async Task<IActionResult> OnPostRefreshTelegramAsync(CancellationToken ct)
     {
-        var clinic = await _clinicContext.GetClinicAsync(ct);
-        if (clinic is null)
+        var client = await _clientContext.GetClientAsync(ct);
+        if (client is null)
         {
             return RedirectToPage();
         }
 
-        var result = await _telegram.RefreshStatusAsync(clinic.Id, ct);
+        var result = await _telegram.RefreshStatusAsync(client.Id, ct);
         StatusMessage = result.WebhookStatus == WebhookStatus.Active
             ? "Telegram webhook is active."
             : "Telegram webhook check finished — see the status below.";
@@ -153,44 +153,44 @@ public class IntegrationsModel : PageModel
 
     public async Task<IActionResult> OnPostDisconnectAsync(CancellationToken ct)
     {
-        var clinic = await _clinicContext.GetClinicAsync(ct);
-        if (clinic is null)
+        var client = await _clientContext.GetClientAsync(ct);
+        if (client is null)
         {
             return RedirectToPage();
         }
 
-        await _integrations.DisconnectAsync(clinic.Id, Channel, ct);
+        await _integrations.DisconnectAsync(client.Id, Channel, ct);
         StatusMessage = $"{Label(Channel)} disconnected.";
         return RedirectToPage();
     }
 
     public async Task<IActionResult> OnPostDisconnectTikTokAsync(CancellationToken ct)
     {
-        var clinic = await _clinicContext.GetClinicAsync(ct);
-        if (clinic is null)
+        var client = await _clientContext.GetClientAsync(ct);
+        if (client is null)
         {
             return RedirectToPage();
         }
 
-        await _tiktok.DisconnectAsync(clinic.Id, ct);
+        await _tiktok.DisconnectAsync(client.Id, ct);
         StatusMessage = "TikTok disconnected.";
         return RedirectToPage();
     }
 
     private async Task LoadAsync(CancellationToken ct)
     {
-        var clinic = await _clinicContext.GetClinicAsync(ct);
-        if (clinic is null)
+        var client = await _clientContext.GetClientAsync(ct);
+        if (client is null)
         {
-            ClinicConfigured = false;
+            ClientConfigured = false;
             return;
         }
 
-        ClinicConfigured = true;
-        ClinicId = clinic.Id;
-        var items = await _integrations.ListAsync(clinic.Id, ct);
+        ClientConfigured = true;
+        ClientId = client.Id;
+        var items = await _integrations.ListAsync(client.Id, ct);
         Channels = items.ToDictionary(i => i.Channel);
-        TikTok = await _tiktok.GetAsync(clinic.Id, ct);
+        TikTok = await _tiktok.GetAsync(client.Id, ct);
     }
 
     private static string Label(string channel) => channel switch

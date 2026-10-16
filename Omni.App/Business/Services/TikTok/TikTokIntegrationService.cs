@@ -32,27 +32,27 @@ public class TikTokIntegrationService : ITikTokIntegrationService
         _notifications = notifications;
     }
 
-    public async Task<TikTokIntegrationResponse> GetAsync(Guid clinicId, CancellationToken ct = default)
+    public async Task<TikTokIntegrationResponse> GetAsync(Guid clientId, CancellationToken ct = default)
     {
-        var row = await _tikTok.GetReadOnlyAsync(clinicId, ct);
+        var row = await _tikTok.GetReadOnlyAsync(clientId, ct);
         if (row is null)
         {
-            return new TikTokIntegrationResponse(Guid.Empty, clinicId, TikTokIntegrationStatus.Disconnected, null, null, true, null);
+            return new TikTokIntegrationResponse(Guid.Empty, clientId, TikTokIntegrationStatus.Disconnected, null, null, true, null);
         }
 
         if (row.Status == TikTokIntegrationStatus.Connected && !HasFreshAccessToken(row))
         {
             // The token refresh saves, so it works on the tracked row (the cached copy is read-only).
-            row = await _tikTok.GetAsync(clinicId, ct) ?? row;
+            row = await _tikTok.GetAsync(clientId, ct) ?? row;
             await EnsureFreshAccessTokenAsync(row, ct);
         }
 
         return ToResponse(row);
     }
 
-    public async Task RequestConnectAsync(Guid clinicId, CancellationToken ct = default)
+    public async Task RequestConnectAsync(Guid clientId, CancellationToken ct = default)
     {
-        var row = await GetOrCreateAsync(clinicId, ct);
+        var row = await GetOrCreateAsync(clientId, ct);
         row.Status = TikTokIntegrationStatus.Pending;
         row.LastProblemMessage = null;
         row.UpdatedAt = DateTimeOffset.UtcNow;
@@ -60,9 +60,9 @@ public class TikTokIntegrationService : ITikTokIntegrationService
     }
 
     public async Task<TikTokIntegrationResponse> CompleteConnectAsync(
-        Guid clinicId, TikTokOAuthTokenResult tokens, TikTokAccountInfo account, CancellationToken ct = default)
+        Guid clientId, TikTokOAuthTokenResult tokens, TikTokAccountInfo account, CancellationToken ct = default)
     {
-        var row = await GetOrCreateAsync(clinicId, ct);
+        var row = await GetOrCreateAsync(clientId, ct);
         row.AccessToken = tokens.AccessToken;
         row.RefreshToken = tokens.RefreshToken ?? row.RefreshToken;
         row.TokenExpiresAt = tokens.ExpiresAt;
@@ -79,18 +79,18 @@ public class TikTokIntegrationService : ITikTokIntegrationService
         return ToResponse(row);
     }
 
-    public async Task FailConnectAsync(Guid clinicId, string errorMessage, CancellationToken ct = default)
+    public async Task FailConnectAsync(Guid clientId, string errorMessage, CancellationToken ct = default)
     {
-        var row = await GetOrCreateAsync(clinicId, ct);
+        var row = await GetOrCreateAsync(clientId, ct);
         row.Status = TikTokIntegrationStatus.Error;
         row.LastProblemMessage = errorMessage;
         row.UpdatedAt = DateTimeOffset.UtcNow;
         await _unitOfWork.SaveChangesAsync(ct);
     }
 
-    public async Task DisconnectAsync(Guid clinicId, CancellationToken ct = default)
+    public async Task DisconnectAsync(Guid clientId, CancellationToken ct = default)
     {
-        var row = await _tikTok.GetAsync(clinicId, ct);
+        var row = await _tikTok.GetAsync(clientId, ct);
         if (row is null) return; // already disconnected — nothing to do
 
         if (!string.IsNullOrWhiteSpace(row.AccessToken))
@@ -115,13 +115,13 @@ public class TikTokIntegrationService : ITikTokIntegrationService
 
     // ------------------------------------------------------------------ helpers
 
-    private async Task<TikTokIntegration> GetOrCreateAsync(Guid clinicId, CancellationToken ct)
+    private async Task<TikTokIntegration> GetOrCreateAsync(Guid clientId, CancellationToken ct)
     {
-        var row = await _tikTok.GetAsync(clinicId, ct);
+        var row = await _tikTok.GetAsync(clientId, ct);
         if (row is not null) return row;
 
         var now = DateTimeOffset.UtcNow;
-        row = new TikTokIntegration { Id = Guid.NewGuid(), ClinicId = clinicId, Status = TikTokIntegrationStatus.Disconnected, CreatedAt = now, UpdatedAt = now };
+        row = new TikTokIntegration { Id = Guid.NewGuid(), ClientId = clientId, Status = TikTokIntegrationStatus.Disconnected, CreatedAt = now, UpdatedAt = now };
         _tikTok.Add(row);
         return row;
     }
@@ -182,11 +182,11 @@ public class TikTokIntegrationService : ITikTokIntegrationService
         // the same rule: a connection that's already flagged must not spam a repeat notification.
         if (problem is not null && wasHealthy)
         {
-            await _notifications.CreateAsync(row.ClinicId, NotificationType.IntegrationUnhealthy,
+            await _notifications.CreateAsync(row.ClientId, NotificationType.IntegrationUnhealthy,
                 "TikTok connection needs attention", problem, link: "/settings/integrations", ct: ct);
         }
     }
 
     private static TikTokIntegrationResponse ToResponse(TikTokIntegration t) =>
-        new(t.Id, t.ClinicId, t.Status, t.DisplayName, t.AvatarUrl, t.IsHealthy, t.LastProblemMessage);
+        new(t.Id, t.ClientId, t.Status, t.DisplayName, t.AvatarUrl, t.IsHealthy, t.LastProblemMessage);
 }

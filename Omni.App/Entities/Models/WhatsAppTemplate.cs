@@ -10,7 +10,7 @@ namespace Omni.App.Entities.Models;
 public class WhatsAppTemplate
 {
     public Guid Id { get; set; }
-    public Guid ClinicId { get; set; }
+    public Guid ClientId { get; set; }
 
     /// <summary>Meta's own template id, once submitted — null while still a local draft.</summary>
     public string? MetaTemplateId { get; set; }
@@ -34,7 +34,7 @@ public class WhatsAppTemplate
 
     public string? RejectionReason { get; set; }
 
-    /// <summary>Which clinic's WhatsApp connection this template belongs to — nullable because a
+    /// <summary>Which client's WhatsApp connection this template belongs to — nullable because a
     /// template can exist as a local draft before any connection/WABA is involved.</summary>
     public Guid? ChannelIntegrationId { get; set; }
 
@@ -54,5 +54,5 @@ public class WhatsAppTemplate
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 
-    public Clinic? Clinic { get; set; }
+    public Client? Client { get; set; }
 }

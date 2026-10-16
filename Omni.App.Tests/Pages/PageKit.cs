@@ -44,13 +44,13 @@ internal static class PageKit
         _ => throw new Xunit.Sdk.XunitException("Unexpected " + result.GetType().Name),
     };
 
-    public static Mock<ICurrentClinicContext> ClinicContext(Clinic? clinic)
+    public static Mock<ICurrentClientContext> ClientContext(Client? client)
     {
-        var mock = new Mock<ICurrentClinicContext>();
-        mock.Setup(c => c.GetClinicAsync(It.IsAny<CancellationToken>())).ReturnsAsync(clinic);
-        mock.Setup(c => c.GetClinicIdAsync(It.IsAny<CancellationToken>())).ReturnsAsync(clinic?.Id);
+        var mock = new Mock<ICurrentClientContext>();
+        mock.Setup(c => c.GetClientAsync(It.IsAny<CancellationToken>())).ReturnsAsync(client);
+        mock.Setup(c => c.GetClientIdAsync(It.IsAny<CancellationToken>())).ReturnsAsync(client?.Id);
         return mock;
     }
 
-    public static Clinic SomeClinic(string name = "Glow Clinic", string timezone = "UTC") => new() { Id = Guid.NewGuid(), Name = name, Timezone = timezone, Slug = "glow" };
+    public static Client SomeClient(string name = "Glow Client", string timezone = "UTC") => new() { Id = Guid.NewGuid(), Name = name, Timezone = timezone, Slug = "glow" };
 }

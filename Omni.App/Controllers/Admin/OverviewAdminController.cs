@@ -30,13 +30,13 @@ public class OverviewAdminController : ControllerBase
     [HttpGet("problems")]
     public async Task<IActionResult> Problems(CancellationToken ct) => Ok(await _overview.ProblemsAsync(ct));
 
-    [HttpGet("recent-clinics")]
-    public async Task<IActionResult> RecentClinics([FromQuery] int take, CancellationToken ct) =>
-        Ok(await _overview.RecentClinicsAsync(take <= 0 ? 10 : take, ct));
+    [HttpGet("recent-clients")]
+    public async Task<IActionResult> RecentClients([FromQuery] int take, CancellationToken ct) =>
+        Ok(await _overview.RecentClientsAsync(take <= 0 ? 10 : take, ct));
 
     [HttpGet("events")]
-    public async Task<IActionResult> Events([FromQuery] Guid? clinicId, [FromQuery] string? eventType, [FromQuery] int page, CancellationToken ct) =>
-        Ok(await _overview.EventsAsync(clinicId, eventType, page, ct));
+    public async Task<IActionResult> Events([FromQuery] Guid? clientId, [FromQuery] string? eventType, [FromQuery] int page, CancellationToken ct) =>
+        Ok(await _overview.EventsAsync(clientId, eventType, page, ct));
 
     [HttpGet("event-types")]
     public async Task<IActionResult> EventTypes(CancellationToken ct) => Ok(await _overview.EventTypesAsync(ct));

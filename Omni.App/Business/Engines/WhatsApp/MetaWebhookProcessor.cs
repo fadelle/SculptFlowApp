@@ -79,13 +79,13 @@ public class MetaWebhookProcessor : IMetaWebhookProcessor
         var results = new List<WhatsAppWebhookResponse>(parsedEvents.Count);
         foreach (var evt in parsedEvents)
         {
-            var clinic = await ResolveClinicAsync(evt, ct);
-            if (clinic is null)
+            var client = await ResolveClientAsync(evt, ct);
+            if (client is null)
             {
-                _tracer.Step(TraceSteps.WebhookClinicUnresolved, TraceOutcomes.Skipped,
+                _tracer.Step(TraceSteps.WebhookClientUnresolved, TraceOutcomes.Skipped,
                     new TraceIds(Channel: ConversationChannel.WhatsApp, ExternalMessageId: evt.ExternalMessageId), detail: new { kind = evt.Kind.ToString() });
-                // Can't attribute this event to a clinic we know about — acknowledge without
-                // guessing. Common right after a webhook is first configured, before any clinic has
+                // Can't attribute this event to a client we know about — acknowledge without
+                // guessing. Common right after a webhook is first configured, before any client has
                 // connected the matching phone number/WABA yet.
                 results.Add(await _unknownEventHandler.HandleAsync(evt, null, ct));
                 continue;
@@ -93,14 +93,14 @@ public class MetaWebhookProcessor : IMetaWebhookProcessor
 
             var response = evt.Kind switch
             {
-                ParsedMetaEventKind.CustomerMessage => await _customerMessageHandler.HandleAsync(evt, clinic, ct),
-                ParsedMetaEventKind.BusinessAppEcho => await _businessAppEchoHandler.HandleAsync(evt, clinic, ct),
-                ParsedMetaEventKind.MessageStatus => await _messageStatusHandler.HandleAsync(evt, clinic, ct),
-                ParsedMetaEventKind.TemplateStatus => await _templateEventHandler.HandleAsync(evt, clinic, ct),
-                ParsedMetaEventKind.WhatsAppHealth => await _healthEventHandler.HandleAsync(evt, clinic, ct),
-                ParsedMetaEventKind.HistorySync => await _historyHandler.HandleAsync(evt, clinic, ct),
-                ParsedMetaEventKind.AppStateSync => await _appStateSyncHandler.HandleAsync(evt, clinic, ct),
-                _ => await _unknownEventHandler.HandleAsync(evt, clinic, ct)
+                ParsedMetaEventKind.CustomerMessage => await _customerMessageHandler.HandleAsync(evt, client, ct),
+                ParsedMetaEventKind.BusinessAppEcho => await _businessAppEchoHandler.HandleAsync(evt, client, ct),
+                ParsedMetaEventKind.MessageStatus => await _messageStatusHandler.HandleAsync(evt, client, ct),
+                ParsedMetaEventKind.TemplateStatus => await _templateEventHandler.HandleAsync(evt, client, ct),
+                ParsedMetaEventKind.WhatsAppHealth => await _healthEventHandler.HandleAsync(evt, client, ct),
+                ParsedMetaEventKind.HistorySync => await _historyHandler.HandleAsync(evt, client, ct),
+                ParsedMetaEventKind.AppStateSync => await _appStateSyncHandler.HandleAsync(evt, client, ct),
+                _ => await _unknownEventHandler.HandleAsync(evt, client, ct)
             };
             results.Add(response);
         }
@@ -109,15 +109,15 @@ public class MetaWebhookProcessor : IMetaWebhookProcessor
         return results;
     }
 
-    /// <summary>Resolves the trusted clinic for a parsed event from its own stored WhatsApp
+    /// <summary>Resolves the trusted client for a parsed event from its own stored WhatsApp
     /// connection — PhoneNumberId first (the more specific match, and present on most event
     /// kinds), falling back to WabaId. This is the only place in the whole feature that decides
-    /// "which clinic does this belong to"; nothing downstream re-derives it from the payload.</summary>
-    private async Task<ResolvedClinic?> ResolveClinicAsync(ParsedMetaEvent evt, CancellationToken ct)
+    /// "which client does this belong to"; nothing downstream re-derives it from the payload.</summary>
+    private async Task<ResolvedClient?> ResolveClientAsync(ParsedMetaEvent evt, CancellationToken ct)
     {
         // Cached (every incoming message asks this); ChannelIntegrationService drops
         // CacheKeys.WhatsAppRoutingPrefix whenever a connection changes.
-        ResolvedClinic? resolved = null;
+        ResolvedClient? resolved = null;
         if (!string.IsNullOrWhiteSpace(evt.PhoneNumberId))
         {
             resolved = await _cache.GetOrCreateAsync(CacheKeys.WhatsAppByPhoneNumberId(evt.PhoneNumberId), CacheKeys.WhatsAppRoutingTtl,
@@ -131,6 +131,6 @@ public class MetaWebhookProcessor : IMetaWebhookProcessor
         return resolved;
     }
 
-    private static ResolvedClinic? ToResolved(ChannelIntegration? integration) =>
-        integration is null ? null : new ResolvedClinic(integration.ClinicId, integration.Id);
+    private static ResolvedClient? ToResolved(ChannelIntegration? integration) =>
+        integration is null ? null : new ResolvedClient(integration.ClientId, integration.Id);
 }

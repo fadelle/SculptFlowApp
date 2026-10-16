@@ -27,14 +27,14 @@
     };
 }
 
-@if (!Model.ClinicConfigured)
+@if (!Model.ClientConfigured)
 {
-    <partial name="_NoClinic" />
+    <partial name="_NoClient" />
 }
 else if (Model.Health is null)
 {
     var notConnected = new EmptyStateModel(Icon: "phone_iphone", Title: "WhatsApp isn't connected yet",
-        Text: "Connect your clinic's WhatsApp number to chat with patients, send reminders and run campaigns.",
+        Text: "Connect your client's WhatsApp number to chat with patients, send reminders and run campaigns.",
         ActionLabel: "Connect WhatsApp", ActionHref: "/settings/integrations", ActionIcon: "link");
     <div class="au-panel au-panel--round"><partial name="_EmptyState" model="notConnected" /></div>
 }
@@ -45,7 +45,7 @@ else
     var accountBad = h.AccountStatus is not null && new[] { "disabled", "banned", "restricted" }.Contains(h.AccountStatus.ToLowerInvariant());
     var reviewRejected = string.Equals(h.AccountReviewStatus, "rejected", StringComparison.OrdinalIgnoreCase);
 
-    // Banner: what the health level means for the clinic, and what to do about it (from the same fields the
+    // Banner: what the health level means for the client, and what to do about it (from the same fields the
     // server used to compute HealthLevel — see WhatsAppHealthService.RecomputeHealth).
     var (heroCss, heroIcon, heroTitle, heroText, heroTodo) = h.HealthLevel switch
     {
@@ -209,7 +209,7 @@ else
 
     <script>
         window.PS_WHATSAPP_HEALTH_CONFIG = {
-            clinicId: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.ClinicId.ToString())),
+            clientId: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.ClientId.ToString())),
             hubUrl: '/hubs/inbox'
         };
     </script>

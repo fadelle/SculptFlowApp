@@ -6,8 +6,8 @@ using Omni.App.Entities.Responses.Knowledge;
 
 namespace Omni.App.Controllers.Client;
 
-/// <summary>Dashboard CRUD for the clinic Knowledge Base. Login required; the clinic always comes from
-/// the logged-in user (CurrentClinicContext via DashboardApiController), never from the request.</summary>
+/// <summary>Dashboard CRUD for the client Knowledge Base. Login required; the client always comes from
+/// the logged-in user (CurrentClientContext via DashboardApiController), never from the request.</summary>
 [ApiController]
 [Route("api/knowledge")]
 public class KnowledgeController : DashboardApiController
@@ -15,7 +15,7 @@ public class KnowledgeController : DashboardApiController
     private readonly IKnowledgeService _knowledge;
     private readonly IKnowledgeSettingsService _settings;
 
-    public KnowledgeController(IKnowledgeService knowledge, IKnowledgeSettingsService settings, ICurrentClinicContext clinicContext) : base(clinicContext)
+    public KnowledgeController(IKnowledgeService knowledge, IKnowledgeSettingsService settings, ICurrentClientContext clientContext) : base(clientContext)
     {
         _knowledge = knowledge;
         _settings = settings;
@@ -24,19 +24,19 @@ public class KnowledgeController : DashboardApiController
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<KnowledgeDocumentResponse>>> List(CancellationToken ct)
     {
-        var clinicId = await GetClinicIdAsync(ct);
-        if (clinicId is null) return Forbid();
-        return Ok(await _knowledge.ListAsync(clinicId.Value, ct));
+        var clientId = await GetClientIdAsync(ct);
+        if (clientId is null) return Forbid();
+        return Ok(await _knowledge.ListAsync(clientId.Value, ct));
     }
 
-    /// <summary>All of the clinic's Knowledge Base retrieval/embedding settings (created with the system
+    /// <summary>All of the client's Knowledge Base retrieval/embedding settings (created with the system
     /// defaults on first use).</summary>
     [HttpGet("settings")]
     public async Task<ActionResult<KnowledgeSettingsResponse>> GetSettings(CancellationToken ct)
     {
-        var clinicId = await GetClinicIdAsync(ct);
-        if (clinicId is null) return Forbid();
-        return Ok(await _settings.GetAsync(clinicId.Value, ct));
+        var clientId = await GetClientIdAsync(ct);
+        if (clientId is null) return Forbid();
+        return Ok(await _settings.GetAsync(clientId.Value, ct));
     }
 
     /// <summary>Updates only chunk size, chunk overlap, top K and minimum similarity — the request type
@@ -44,30 +44,30 @@ public class KnowledgeController : DashboardApiController
     [HttpPut("settings")]
     public async Task<ActionResult<KnowledgeSettingsResponse>> UpdateSettings([FromBody] UpdateKnowledgeSettingsRequest request, CancellationToken ct)
     {
-        var clinicId = await GetClinicIdAsync(ct);
-        if (clinicId is null) return Forbid();
+        var clientId = await GetClientIdAsync(ct);
+        if (clientId is null) return Forbid();
 
-        return Ok(await _settings.UpdateAsync(clinicId.Value, request, ct));
+        return Ok(await _settings.UpdateAsync(clientId.Value, request, ct));
     }
 
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<KnowledgeDocumentResponse>> GetById(Guid id, CancellationToken ct)
     {
-        var clinicId = await GetClinicIdAsync(ct);
-        if (clinicId is null) return Forbid();
-        var doc = await _knowledge.GetByIdAsync(clinicId.Value, id, ct);
+        var clientId = await GetClientIdAsync(ct);
+        if (clientId is null) return Forbid();
+        var doc = await _knowledge.GetByIdAsync(clientId.Value, id, ct);
         return doc is null ? NotFound() : Ok(doc);
     }
 
     [HttpPost]
     public async Task<ActionResult<KnowledgeDocumentResponse>> Create([FromBody] SaveKnowledgeRequest request, CancellationToken ct)
     {
-        var clinicId = await GetClinicIdAsync(ct);
-        if (clinicId is null) return Forbid();
+        var clientId = await GetClientIdAsync(ct);
+        if (clientId is null) return Forbid();
 
         try
         {
-            var doc = await _knowledge.CreateAsync(clinicId.Value, request, ct);
+            var doc = await _knowledge.CreateAsync(clientId.Value, request, ct);
             return CreatedAtAction(nameof(GetById), new { id = doc.Id }, doc);
         }
         catch (InvalidOperationException ex)
@@ -82,8 +82,8 @@ public class KnowledgeController : DashboardApiController
     [HttpPost("upload")]
     public async Task<ActionResult<KnowledgeDocumentResponse>> Upload([FromForm] KnowledgeUploadForm form, CancellationToken ct)
     {
-        var clinicId = await GetClinicIdAsync(ct);
-        if (clinicId is null) return Forbid();
+        var clientId = await GetClientIdAsync(ct);
+        if (clientId is null) return Forbid();
 
         if (form.File is null) return BadRequest(new { error = "Choose a file to upload." });
 
@@ -91,7 +91,7 @@ public class KnowledgeController : DashboardApiController
         {
             await using var stream = form.File.OpenReadStream();
             var doc = await _knowledge.CreateFromUploadAsync(
-                clinicId.Value,
+                clientId.Value,
                 new UploadKnowledgeRequest(form.Title, string.IsNullOrWhiteSpace(form.Category) ? "general" : form.Category, form.IsActive),
                 form.File.FileName, stream, form.File.Length, ct);
             return CreatedAtAction(nameof(GetById), new { id = doc.Id }, doc);
@@ -105,12 +105,12 @@ public class KnowledgeController : DashboardApiController
     [HttpPut("{id:guid}")]
     public async Task<ActionResult<KnowledgeDocumentResponse>> Update(Guid id, [FromBody] SaveKnowledgeRequest request, CancellationToken ct)
     {
-        var clinicId = await GetClinicIdAsync(ct);
-        if (clinicId is null) return Forbid();
+        var clientId = await GetClientIdAsync(ct);
+        if (clientId is null) return Forbid();
 
         try
         {
-            var doc = await _knowledge.UpdateAsync(clinicId.Value, id, request, ct);
+            var doc = await _knowledge.UpdateAsync(clientId.Value, id, request, ct);
             return doc is null ? NotFound() : Ok(doc);
         }
         catch (InvalidOperationException ex)
@@ -122,17 +122,17 @@ public class KnowledgeController : DashboardApiController
     [HttpPost("{id:guid}/active")]
     public async Task<ActionResult<KnowledgeDocumentResponse>> SetActive(Guid id, [FromBody] SetKnowledgeActiveRequest request, CancellationToken ct)
     {
-        var clinicId = await GetClinicIdAsync(ct);
-        if (clinicId is null) return Forbid();
-        var doc = await _knowledge.SetActiveAsync(clinicId.Value, id, request.IsActive, ct);
+        var clientId = await GetClientIdAsync(ct);
+        if (clientId is null) return Forbid();
+        var doc = await _knowledge.SetActiveAsync(clientId.Value, id, request.IsActive, ct);
         return doc is null ? NotFound() : Ok(doc);
     }
 
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
     {
-        var clinicId = await GetClinicIdAsync(ct);
-        if (clinicId is null) return Forbid();
-        return await _knowledge.DeleteAsync(clinicId.Value, id, ct) ? NoContent() : NotFound();
+        var clientId = await GetClientIdAsync(ct);
+        if (clientId is null) return Forbid();
+        return await _knowledge.DeleteAsync(clientId.Value, id, ct) ? NoContent() : NotFound();
     }
 }

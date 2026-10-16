@@ -5,13 +5,13 @@ namespace Omni.App.Common.Helpers;
 /// <summary>
 /// The timezone of the person looking at the page. wwwroot/js/local-time.js stores the browser's IANA zone in the
 /// <c>omni-tz</c> cookie on every page load, so server-side day math (calendar grid, date ranges, typed dates/times)
-/// matches what that viewer's own clock says. Only Clinic Info → Availability works in the clinic's timezone.
+/// matches what that viewer's own clock says. Only Business Info → Availability works in the client's timezone.
 /// </summary>
 public static class ViewerTimeZone
 {
     public const string CookieName = "omni-tz";
 
-    /// <summary>The viewer's timezone from the cookie; <paramref name="fallbackId"/> (normally the clinic's) until the
+    /// <summary>The viewer's timezone from the cookie; <paramref name="fallbackId"/> (normally the client's) until the
     /// browser has set it, then UTC if neither is a known zone.</summary>
     public static TimeZoneInfo Resolve(HttpRequest? request, string? fallbackId = null) =>
         Find(request?.Cookies[CookieName]) ?? Find(fallbackId) ?? TimeZoneInfo.Utc;

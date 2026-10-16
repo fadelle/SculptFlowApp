@@ -72,7 +72,7 @@ public class ConfigManager : IConfigManager
     public int WebScrapingMaxTextChars => GetInt(ConfigDefaults.WebScrapingMaxTextChars);
     public int WebScrapingMaxQueryVariantsPerPath => GetInt(ConfigDefaults.WebScrapingMaxQueryVariantsPerPath);
     public int WebScrapingMaxLinksPerPage => GetInt(ConfigDefaults.WebScrapingMaxLinksPerPage);
-    public int WebScrapingMaxSourcesPerClinic => GetInt(ConfigDefaults.WebScrapingMaxSourcesPerClinic);
+    public int WebScrapingMaxSourcesPerClient => GetInt(ConfigDefaults.WebScrapingMaxSourcesPerClient);
     public string WebScrapingDevAllowedHosts => GetString(ConfigDefaults.WebScrapingDevAllowedHosts);
     public string WebScrapingUserAgent => GetString(ConfigDefaults.WebScrapingUserAgent);
 
@@ -109,7 +109,7 @@ public class ConfigManager : IConfigManager
     public int DashboardLeadsPageSize => GetInt(ConfigDefaults.DashboardLeadsPageSize);
 
     // ---- Cache
-    public int CacheClinicsMinutes => GetInt(ConfigDefaults.CacheClinicsMinutes);
+    public int CacheClientsMinutes => GetInt(ConfigDefaults.CacheClientsMinutes);
     public int CacheStaffLookupMinutes => GetInt(ConfigDefaults.CacheStaffLookupMinutes);
     public int CacheProceduresMinutes => GetInt(ConfigDefaults.CacheProceduresMinutes);
     public int CacheSchedulingMinutes => GetInt(ConfigDefaults.CacheSchedulingMinutes);

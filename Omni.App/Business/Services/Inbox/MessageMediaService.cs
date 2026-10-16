@@ -6,7 +6,7 @@ using Omni.App.Persistence.Contracts.Inbox;
 namespace Omni.App.Business.Services.Inbox;
 
 /// <summary>
-/// Plays a voice note in the Inbox: finds the message in the caller's clinic, then asks the channel's own
+/// Plays a voice note in the Inbox: finds the message in the caller's client, then asks the channel's own
 /// <see cref="IVoiceMediaSource"/> for the audio. Nothing is stored — the file is fetched from the provider each time (the
 /// browser caches the response), so there is no copy of a patient's recording to protect or expire.
 /// </summary>
@@ -23,9 +23,9 @@ public class MessageMediaService : IMessageMediaService
         _sources = sources;
     }
 
-    public async Task<VoiceAudio> GetAudioAsync(Guid clinicId, Guid messageId, CancellationToken ct = default)
+    public async Task<VoiceAudio> GetAudioAsync(Guid clientId, Guid messageId, CancellationToken ct = default)
     {
-        var message = await _messages.GetForClinicReadOnlyAsync(clinicId, messageId, ct)
+        var message = await _messages.GetForClientReadOnlyAsync(clientId, messageId, ct)
             ?? throw new KeyNotFoundException("Message not found.");
 
         if (!string.Equals(message.MessageType, AudioMessageType, StringComparison.OrdinalIgnoreCase))

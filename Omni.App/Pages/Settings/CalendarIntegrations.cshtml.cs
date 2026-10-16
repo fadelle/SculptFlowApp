@@ -8,22 +8,22 @@ using Omni.App.Entities.Responses.Calendars;
 namespace Omni.App.Pages.Settings;
 
 /// <summary>Settings → Calendar Integrations: connect Google/Outlook calendars for one-way Omni → external
-/// appointment sync. Plain server-rendered forms, no JS — same idiom as Clinic Info's Availability tab — except
+/// appointment sync. Plain server-rendered forms, no JS — same idiom as Business Info's Availability tab — except
 /// "Connect", which is a plain link to CalendarOAuthController (a full-page redirect to the provider's own consent
 /// screen can't happen from a form POST handler). That controller sets StatusMessage/ErrorMessage TempData directly
 /// before redirecting back here, the same TempData keys OnPost* below use.</summary>
 public class CalendarIntegrationsModel : PageModel
 {
-    private readonly ICurrentClinicContext _clinicContext;
+    private readonly ICurrentClientContext _clientContext;
     private readonly ICalendarIntegrationService _calendar;
 
-    public CalendarIntegrationsModel(ICurrentClinicContext clinicContext, ICalendarIntegrationService calendar)
+    public CalendarIntegrationsModel(ICurrentClientContext clientContext, ICalendarIntegrationService calendar)
     {
-        _clinicContext = clinicContext;
+        _clientContext = clientContext;
         _calendar = calendar;
     }
 
-    public bool ClinicConfigured { get; private set; }
+    public bool ClientConfigured { get; private set; }
     public IReadOnlyList<CalendarIntegrationResponse> Integrations { get; private set; } = Array.Empty<CalendarIntegrationResponse>();
 
     [TempData]
@@ -34,21 +34,21 @@ public class CalendarIntegrationsModel : PageModel
 
     public async Task OnGetAsync(CancellationToken ct)
     {
-        var clinic = await _clinicContext.GetClinicAsync(ct);
-        if (clinic is null) { ClinicConfigured = false; return; }
+        var client = await _clientContext.GetClientAsync(ct);
+        if (client is null) { ClientConfigured = false; return; }
 
-        ClinicConfigured = true;
-        Integrations = await _calendar.ListAsync(clinic.Id, ct);
+        ClientConfigured = true;
+        Integrations = await _calendar.ListAsync(client.Id, ct);
     }
 
     public async Task<IActionResult> OnPostRefreshCalendarsAsync(string provider, CancellationToken ct)
     {
-        var clinic = await _clinicContext.GetClinicAsync(ct);
-        if (clinic is null) return RedirectToPage();
+        var client = await _clientContext.GetClientAsync(ct);
+        if (client is null) return RedirectToPage();
 
         try
         {
-            await _calendar.RequestRefreshCalendarsAsync(clinic.Id, provider, ct);
+            await _calendar.RequestRefreshCalendarsAsync(client.Id, provider, ct);
             StatusMessage = "Calendar list refreshed.";
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException) { ErrorMessage = ex.Message; }
@@ -57,12 +57,12 @@ public class CalendarIntegrationsModel : PageModel
 
     public async Task<IActionResult> OnPostSelectCalendarAsync(string provider, string externalCalendarId, CancellationToken ct)
     {
-        var clinic = await _clinicContext.GetClinicAsync(ct);
-        if (clinic is null) return RedirectToPage();
+        var client = await _clientContext.GetClientAsync(ct);
+        if (client is null) return RedirectToPage();
 
         try
         {
-            await _calendar.SelectCalendarAsync(clinic.Id, provider, externalCalendarId, ct);
+            await _calendar.SelectCalendarAsync(client.Id, provider, externalCalendarId, ct);
             StatusMessage = "Calendar selected.";
         }
         catch (ArgumentException ex) { ErrorMessage = ex.Message; }
@@ -71,12 +71,12 @@ public class CalendarIntegrationsModel : PageModel
 
     public async Task<IActionResult> OnPostSetSyncEnabledAsync(string provider, bool enabled, CancellationToken ct)
     {
-        var clinic = await _clinicContext.GetClinicAsync(ct);
-        if (clinic is null) return RedirectToPage();
+        var client = await _clientContext.GetClientAsync(ct);
+        if (client is null) return RedirectToPage();
 
         try
         {
-            await _calendar.SetSyncEnabledAsync(clinic.Id, provider, enabled, ct);
+            await _calendar.SetSyncEnabledAsync(client.Id, provider, enabled, ct);
             StatusMessage = enabled ? "Sync turned on." : "Sync turned off.";
         }
         catch (ArgumentException ex) { ErrorMessage = ex.Message; }
@@ -85,10 +85,10 @@ public class CalendarIntegrationsModel : PageModel
 
     public async Task<IActionResult> OnPostDisconnectAsync(string provider, CancellationToken ct)
     {
-        var clinic = await _clinicContext.GetClinicAsync(ct);
-        if (clinic is null) return RedirectToPage();
+        var client = await _clientContext.GetClientAsync(ct);
+        if (client is null) return RedirectToPage();
 
-        await _calendar.DisconnectAsync(clinic.Id, provider, ct);
+        await _calendar.DisconnectAsync(client.Id, provider, ct);
         StatusMessage = $"{ProviderLabel(provider)} disconnected.";
         return RedirectToPage();
     }

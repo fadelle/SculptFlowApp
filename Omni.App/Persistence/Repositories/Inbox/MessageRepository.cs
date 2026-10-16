@@ -23,21 +23,21 @@ public class MessageRepository : IMessageRepository
             .OrderBy(m => m.CreatedAt)
             .ToListAsync(ct);
 
-    public Task<Message?> FindByExternalIdAsync(Guid clinicId, string channel, string externalMessageId, CancellationToken ct = default) =>
+    public Task<Message?> FindByExternalIdAsync(Guid clientId, string channel, string externalMessageId, CancellationToken ct = default) =>
         _db.Messages.FirstOrDefaultAsync(m =>
-            m.ClinicId == clinicId && m.Channel == channel && m.ExternalMessageId == externalMessageId, ct);
+            m.ClientId == clientId && m.Channel == channel && m.ExternalMessageId == externalMessageId, ct);
 
-    public Task<Message?> GetForClinicReadOnlyAsync(Guid clinicId, Guid messageId, CancellationToken ct = default) =>
-        _db.Messages.AsNoTracking().FirstOrDefaultAsync(m => m.ClinicId == clinicId && m.Id == messageId, ct);
+    public Task<Message?> GetForClientReadOnlyAsync(Guid clientId, Guid messageId, CancellationToken ct = default) =>
+        _db.Messages.AsNoTracking().FirstOrDefaultAsync(m => m.ClientId == clientId && m.Id == messageId, ct);
 
     public Task<string?> GetExternalIdAsync(Guid messageId, CancellationToken ct = default) =>
         _db.Messages.Where(m => m.Id == messageId).Select(m => m.ExternalMessageId).FirstOrDefaultAsync(ct);
 
     public async Task<IReadOnlyList<(Guid ConversationId, DateTimeOffset CreatedAt)>> ListInboundCustomerMessageTimesAsync(
-        Guid clinicId, IReadOnlyCollection<Guid> conversationIds, CancellationToken ct = default)
+        Guid clientId, IReadOnlyCollection<Guid> conversationIds, CancellationToken ct = default)
     {
         var rows = await _db.Messages
-            .Where(m => m.ClinicId == clinicId && conversationIds.Contains(m.ConversationId)
+            .Where(m => m.ClientId == clientId && conversationIds.Contains(m.ConversationId)
                 && m.Direction == MessageDirection.Inbound && m.Origin == MessageOrigin.WhatsAppCustomer)
             .Select(m => new { m.ConversationId, m.CreatedAt })
             .ToListAsync(ct);

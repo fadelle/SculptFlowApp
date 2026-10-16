@@ -8,7 +8,7 @@ namespace Omni.App.Controllers.Admin;
 
 /// <summary>
 /// Platform-admin leads API (internal; called by the Omni.Admin portal): leads, conversations, messages and
-/// appointments across clinics. Writes answer { clinicId }. Errors: 400 invalid input, 404 not found.
+/// appointments across clients. Writes answer { clientId }. Errors: 400 invalid input, 404 not found.
 /// </summary>
 [ApiController]
 [AllowAnonymous]
@@ -25,9 +25,9 @@ public class LeadsAdminController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<IActionResult> List([FromQuery] Guid? clinicId, [FromQuery] string? status, [FromQuery] string? search,
+    public async Task<IActionResult> List([FromQuery] Guid? clientId, [FromQuery] string? status, [FromQuery] string? search,
         [FromQuery] int page, CancellationToken ct) =>
-        Ok(await _leads.ListLeadsAsync(clinicId, status, search, page, ct));
+        Ok(await _leads.ListLeadsAsync(clientId, status, search, page, ct));
 
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> Get(Guid id, CancellationToken ct) =>
@@ -41,9 +41,9 @@ public class LeadsAdminController : ControllerBase
         Ok(await _leads.UpdateLeadAsync(id, request, ct));
 
     [HttpGet("conversations")]
-    public async Task<IActionResult> Conversations([FromQuery] Guid? clinicId, [FromQuery] Guid? leadId, [FromQuery] string? channel,
+    public async Task<IActionResult> Conversations([FromQuery] Guid? clientId, [FromQuery] Guid? leadId, [FromQuery] string? channel,
         [FromQuery] string? mode, [FromQuery] string? status, [FromQuery] int page, CancellationToken ct) =>
-        Ok(await _leads.ListConversationsAsync(clinicId, leadId, channel, mode, status, page, ct));
+        Ok(await _leads.ListConversationsAsync(clientId, leadId, channel, mode, status, page, ct));
 
     [HttpGet("conversations/{id:guid}")]
     public async Task<IActionResult> Conversation(Guid id, CancellationToken ct) =>
@@ -62,14 +62,14 @@ public class LeadsAdminController : ControllerBase
         Ok(await _leads.SetStatusAsync(id, request.Status, ct));
 
     [HttpGet("messages")]
-    public async Task<IActionResult> Messages([FromQuery] Guid? clinicId, [FromQuery] bool failedOnly, [FromQuery] string? sender,
+    public async Task<IActionResult> Messages([FromQuery] Guid? clientId, [FromQuery] bool failedOnly, [FromQuery] string? sender,
         [FromQuery] string? search, [FromQuery] int page, CancellationToken ct) =>
-        Ok(await _leads.ListMessagesAsync(clinicId, failedOnly, sender, search, page, ct));
+        Ok(await _leads.ListMessagesAsync(clientId, failedOnly, sender, search, page, ct));
 
     [HttpGet("appointments")]
-    public async Task<IActionResult> Appointments([FromQuery] Guid? clinicId, [FromQuery] Guid? leadId, [FromQuery] string? status,
+    public async Task<IActionResult> Appointments([FromQuery] Guid? clientId, [FromQuery] Guid? leadId, [FromQuery] string? status,
         [FromQuery] bool upcomingOnly, [FromQuery] int page, CancellationToken ct) =>
-        Ok(await _leads.ListAppointmentsAsync(clinicId, leadId, status, upcomingOnly, page, ct));
+        Ok(await _leads.ListAppointmentsAsync(clientId, leadId, status, upcomingOnly, page, ct));
 
     [HttpPut("appointments/{id:guid}/status")]
     public async Task<IActionResult> SetAppointmentStatus(Guid id, [FromBody] StatusBody request, CancellationToken ct) =>

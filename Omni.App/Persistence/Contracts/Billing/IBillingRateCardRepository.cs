@@ -14,9 +14,9 @@ public interface IBillingRateCardRepository
 
     Task<bool> CodeExistsAsync(string code, CancellationToken ct = default);
 
-    Task<bool> ClinicHasCardAsync(Guid clinicId, CancellationToken ct = default);
+    Task<bool> ClientHasCardAsync(Guid clientId, CancellationToken ct = default);
 
-    Task<string?> GetClinicCardCodeAsync(Guid clinicId, CancellationToken ct = default);
+    Task<string?> GetClientCardCodeAsync(Guid clientId, CancellationToken ct = default);
 
     Task<BillingRateCard?> GetAsync(string code, CancellationToken ct = default);
 
@@ -47,8 +47,8 @@ public interface IBillingRateCardRepository
     void AddRate(BillingRate rate);
 
     // ---- rating
-    /// <summary>The clinic's cards, most specific first (client, plan, default); inactive cards are skipped.</summary>
-    Task<IReadOnlyList<RatingCard>> ListRatingCardsAsync(Guid clinicId, CancellationToken ct = default);
+    /// <summary>The client's cards, most specific first (client, plan, default); inactive cards are skipped.</summary>
+    Task<IReadOnlyList<RatingCard>> ListRatingCardsAsync(Guid clientId, CancellationToken ct = default);
 
     /// <summary>Read-only candidate rates for an event on these cards: effective at <paramref name="at"/>, and each of
     /// country/operator/provider either unset (any) or equal. With <paramref name="exactResponsibility"/> only rates for

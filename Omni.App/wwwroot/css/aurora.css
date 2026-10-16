@@ -3077,7 +3077,7 @@ span.au-crumb:hover {
   background: color-mix(in srgb, var(--au-error) 10%, var(--au-paper));
   color: var(--au-error);
 }
-/* the global scope selector (one entity: e.g. Clinic) */
+/* the global scope selector (one entity: e.g. Client) */
 .au-scope {
   display: flex;
   align-items: center;

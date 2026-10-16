@@ -17,13 +17,13 @@ public class EventLogger : IEventLogger
         _events = events;
     }
 
-    public void Log(Guid clinicId, string eventType, Guid? leadId = null, Guid? conversationId = null,
+    public void Log(Guid clientId, string eventType, Guid? leadId = null, Guid? conversationId = null,
         Guid? appointmentId = null, string? source = null, string metadataJson = "{}")
     {
         _events.Add(new EventLog
         {
             Id = Guid.NewGuid(),
-            ClinicId = clinicId,
+            ClientId = clientId,
             LeadId = leadId,
             ConversationId = conversationId,
             AppointmentId = appointmentId,

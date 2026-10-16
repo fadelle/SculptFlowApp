@@ -21,7 +21,7 @@ The admin portal (`..\SculptFlowAdmin`) uses the same layout. Namespace = folder
 | Folder | What goes there |
 |---|---|
 | `Controllers/Admin` | Platform-admin APIs (`/api/platform-admin/{domain}`, `[RequirePlatformAdminKey]`), called by the admin portal |
-| `Controllers/Client` | Clinic dashboard APIs (signed-in staff); base `DashboardApiController` |
+| `Controllers/Client` | Client dashboard APIs (signed-in staff); base `DashboardApiController` |
 | `Controllers/Integrations` | Webhooks, n8n ingest and AI tool endpoints, OAuth callbacks |
 | `Controllers/Filters` | Auth/filter attributes (`RequireIngestKey`, `RequirePlatformAdminKey`, `ApiErrors`) |
 | `Pages/` | Razor Pages (PageModels follow the controller rules) |
@@ -29,7 +29,7 @@ The admin portal (`..\SculptFlowAdmin`) uses the same layout. Namespace = folder
 | `Middleware/` | ASP.NET Core middleware (`RequestTimingMiddleware`: per-route API timings) |
 | `Business/Services/<Feature>` | What controllers and PageModels call |
 | `Business/Engines/<Feature>` | Backend/background logic: webhook processing, parsers, billing rules, chunking, scoring, scraping |
-| `Business/Managers` | Cross-cutting helpers with state/dependencies: current clinic, event log, live notifications |
+| `Business/Managers` | Cross-cutting helpers with state/dependencies: current client, event log, live notifications |
 | `Business/Providers/<Area>` | One adapter per external provider behind a shared interface |
 | `Business/HttpClients/<Provider>` | Typed clients for external APIs |
 | `Business/Jobs` | Hosted background workers and queues |
@@ -73,10 +73,10 @@ Every table lives in its area's Postgres schema, never `public` (only `set_updat
 
 | Schema | Tables |
 |---|---|
-| `core` | clinics, procedures |
-| `identity` | identity_users/_claims/_logins/_tokens, clinic_users |
+| `core` | clients, procedures |
+| `identity` | identity_users/_claims/_logins/_tokens, client_users |
 | `crm` | leads, conversations, messages, inbox_settings |
-| `scheduling` | appointments, procedure_bookings, availability rules/exceptions, clinic_booking_settings, calendar integrations and syncs |
+| `scheduling` | appointments, procedure_bookings, availability rules/exceptions, booking_settings, calendar integrations and syncs |
 | `channels` | channel_integrations, whatsapp_templates, whatsapp_health_events, tiktok_integrations |
 | `marketing` | campaigns, campaign_recipients |
 | `knowledge` | every knowledge_* table |
@@ -117,7 +117,7 @@ Full detail and the declared-settings table: `docs/configuration.md`.
 - Every key and lifetime lives in `Common/Statics/CacheKeys` as `area:thing:id`, so an area can be dropped by prefix.
 - Cache plain DTOs/records or read-only entity copies (stored as JSON copies), never tracked EF entities, and nothing
   whose staleness costs money (balances, ledger) or that changes every request (messages, conversations, appointments).
-- Table caches (agreed 2026-10-14) live in the repository's `...ReadOnlyAsync` reads: clinics, inbox settings, clinic memberships,
+- Table caches (agreed 2026-10-14) live in the repository's `...ReadOnlyAsync` reads: clients, inbox settings, client memberships,
   procedures, availability rules/settings/exceptions, calendar connections, channel connections, TikTok, WhatsApp
   templates, rating cards, rates, channel account billing. Code that will change a row loads it tracked (uncached).
   Their lifetimes are settings, one per `CacheArea` (`Cache:*Minutes`), passed as an area to `CacheReads`, never as a
@@ -133,16 +133,16 @@ Full detail and the declared-settings table: `docs/configuration.md`.
 
 ## Platform-admin APIs (standing rule, agreed 2026-10-07)
 
-The Omni.Admin portal reads and writes everything about clinics through `/api/platform-admin/{domain}`; it has no
-access to the main tables. Cross-clinic reads live in `Persistence/Repositories/PlatformAdmin` (+ `Entities/Dtos/PlatformAdmin`,
-`Business/Mappers/PlatformAdmin`); `Business/Services/PlatformAdmin` delegates every write to the service a clinic uses
-(so rules, provider calls and cache clearing happen once) and answers `PlatformAdminChange { clinicId }` for the portal's
+The Omni.Admin portal reads and writes everything about clients through `/api/platform-admin/{domain}`; it has no
+access to the main tables. Cross-client reads live in `Persistence/Repositories/PlatformAdmin` (+ `Entities/Dtos/PlatformAdmin`,
+`Business/Mappers/PlatformAdmin`); `Business/Services/PlatformAdmin` delegates every write to the service a client uses
+(so rules, provider calls and cache clearing happen once) and answers `PlatformAdminChange { clientId }` for the portal's
 audit. Details never carry secrets. A new portal feature = endpoint here + client/service/page in the portal, with the
 portal's copy of the request/response shapes kept in step.
 
 ## Old names guard (Milestone A)
 
-`Omni.App.Tests/Guards/LeftoverNamesTests` fails when an old word (clinic, lead, procedure, appointment, staff, patient,
+`Omni.App.Tests/Guards/LeftoverNamesTests` fails when an old word (clinic, lead, procedure, appointment, staff, patient, <!-- leftover-ok: lists the old words -->
 consultation, ai_agent, max_agents, the old product names…) appears in a tracked file outside
 `Guards/leftover-names-allowlist.txt`, a `leftover-ok: <reason>` line marker, or its `PendingScopes`. New code uses the
 new names; a rename session removes its words from `PendingScopes`.

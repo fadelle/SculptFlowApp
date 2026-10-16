@@ -91,13 +91,13 @@
         }).catch(function (e) { showMessage(e.message, 'error'); });
     }
 
-    /** 'clinic' (default) or 'mine' — the page's "Clinic time | My time" switch (_TimeViewSwitch, local-time.js). */
+    /** 'client' (default) or 'mine' — the page's "Client time | My time" switch (_TimeViewSwitch, local-time.js). */
     function currentView() {
         var sw = document.querySelector('.time-view-switch');
-        return OmniTime.timeView(sw ? sw.getAttribute('data-clinic-tz') : null);
+        return OmniTime.timeView(sw ? sw.getAttribute('data-client-tz') : null);
     }
 
-    /** The timezone the server grouped the grid in (LocalDate/LocalTime) — the clinic's, or the viewer's on "My time".
+    /** The timezone the server grouped the grid in (LocalDate/LocalTime) — the client's, or the viewer's on "My time".
         "Today", "now" and typed new-appointment times use the same zone. Falls back to the browser's clock until the
         first month has loaded. */
     function gridTimeZone() {
@@ -357,7 +357,7 @@
         $('cal-new-date').value = prefillDateIso || state.drawerDate || todayIso();
         $('cal-new-time').value = '09:00';
         var tz = gridTimeZone();
-        $('cal-new-tz-hint').textContent = tz ? (currentView() === 'mine' ? 'your time' : 'clinic time') + ' (' + tz + ')' : '';
+        $('cal-new-tz-hint').textContent = tz ? (currentView() === 'mine' ? 'your time' : 'client time') + ' (' + tz + ')' : '';
         $('cal-new-duration').value = '30';
         $('cal-new-location').value = '';
         $('cal-new-notes').value = '';
@@ -447,7 +447,7 @@
         var endIso = durationMin > 0 ? new Date(new Date(startIso).getTime() + durationMin * 60000).toISOString() : null;
 
         var body = {
-            clinicId: '00000000-0000-0000-0000-000000000000', // ignored server-side — the clinic always comes from the logged-in user
+            clientId: '00000000-0000-0000-0000-000000000000', // ignored server-side — the client always comes from the logged-in user
             leadId: leadId,
             procedureId: $('cal-new-procedure').value || null,
             appointmentType: 'consultation',
@@ -473,7 +473,7 @@
 
     // ---------------------------------------------------------------- wiring
 
-    /** Live updates: the server sends "AppointmentChanged" (over the same clinic-scoped SignalR hub the Inbox uses) after an appointment is
+    /** Live updates: the server sends "AppointmentChanged" (over the same client-scoped SignalR hub the Inbox uses) after an appointment is
         created, rescheduled, canceled or has its status changed — by staff, the AI, or another tab. We just re-fetch the visible month from the
         API (the database stays the source of truth); the open drawer and New Appointment form are left alone. */
     function connectLive() {

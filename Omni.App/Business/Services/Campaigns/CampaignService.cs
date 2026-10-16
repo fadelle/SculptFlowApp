@@ -45,9 +45,9 @@ public class CampaignService : ICampaignService
         _entitlements = entitlements;
     }
 
-    public async Task<IReadOnlyList<CampaignListRow>> ListAsync(Guid clinicId, CancellationToken ct = default)
+    public async Task<IReadOnlyList<CampaignListRow>> ListAsync(Guid clientId, CancellationToken ct = default)
     {
-        var campaigns = await _campaigns.ListWithTemplateAsync(clinicId, ct);
+        var campaigns = await _campaigns.ListWithTemplateAsync(clientId, ct);
         if (campaigns.Count == 0) return Array.Empty<CampaignListRow>();
 
         // Batched across every campaign (one CampaignRecipients query, one inbound-reply lookup) instead
@@ -55,7 +55,7 @@ public class CampaignService : ICampaignService
         var campaignIds = campaigns.Select(c => c.Id).ToList();
         var allRecipients = await _campaigns.ListRecipientsAsync(campaignIds, ct);
         var recipientsByCampaign = allRecipients.GroupBy(r => r.CampaignId).ToDictionary(g => g.Key, g => g.ToList());
-        var inboundByConversation = await FetchInboundReplyLookupAsync(clinicId, allRecipients, ct);
+        var inboundByConversation = await FetchInboundReplyLookupAsync(clientId, allRecipients, ct);
 
         var rows = new List<CampaignListRow>(campaigns.Count);
         foreach (var c in campaigns)
@@ -73,14 +73,14 @@ public class CampaignService : ICampaignService
         return rows;
     }
 
-    public async Task<CampaignDetailsResponse?> GetByIdAsync(Guid clinicId, Guid id, CancellationToken ct = default)
+    public async Task<CampaignDetailsResponse?> GetByIdAsync(Guid clientId, Guid id, CancellationToken ct = default)
     {
-        var campaign = await _campaigns.GetWithTemplateAsync(clinicId, id, ct);
+        var campaign = await _campaigns.GetWithTemplateAsync(clientId, id, ct);
         if (campaign is null) return null;
 
         var recipients = await _campaigns.ListRecipientsWithLeadAsync(id, ct);
 
-        var stats = await ComputeStats(clinicId, recipients, ct);
+        var stats = await ComputeStats(clientId, recipients, ct);
         var recipientRows = recipients.Select(r => new CampaignRecipientRow(
             r.Id, r.LeadId, r.Lead?.FullName, r.PhoneNumber, r.Status,
             r.SkipReason, r.FailureCode, r.FailureReason,
@@ -95,12 +95,12 @@ public class CampaignService : ICampaignService
         {
             throw new ArgumentException("Name is required.", nameof(request));
         }
-        await _entitlements.EnsureFeatureAsync(request.ClinicId, EntitlementKeys.Campaigns, ct);
+        await _entitlements.EnsureFeatureAsync(request.ClientId, EntitlementKeys.Campaigns, ct);
 
-        var template = await _templates.GetReadOnlyAsync(request.ClinicId, request.WhatsAppTemplateId, ct);
+        var template = await _templates.GetReadOnlyAsync(request.ClientId, request.WhatsAppTemplateId, ct);
         if (template is null)
         {
-            throw new ArgumentException("Template not found for this clinic.", nameof(request));
+            throw new ArgumentException("Template not found for this client.", nameof(request));
         }
 
         var audienceType = string.IsNullOrWhiteSpace(request.AudienceType) ? CampaignAudienceType.Custom : request.AudienceType;
@@ -117,7 +117,7 @@ public class CampaignService : ICampaignService
         {
             // Manual selection — the caller already picked exactly who to include (the Campaign
             // page's "pick leads yourself" escape hatch, still audience_type = custom).
-            leads = await _leads.ListByIdsAsync(request.ClinicId, explicitLeadIds, ct);
+            leads = await _leads.ListByIdsAsync(request.ClientId, explicitLeadIds, ct);
         }
         else
         {
@@ -126,7 +126,7 @@ public class CampaignService : ICampaignService
             // snapshot it now. For "custom" with no filters either, this correctly resolves to
             // "every contactable lead" (the mandatory-exclusion base with no further narrowing) —
             // the UI always requires picking a filter or a lead first, so that's not user-reachable.
-            leads = await _audience.GetEligibleLeadsAsync(request.ClinicId, audienceType, request.AudienceFilters, ct);
+            leads = await _audience.GetEligibleLeadsAsync(request.ClientId, audienceType, request.AudienceFilters, ct);
         }
 
         if (leads.Count == 0)
@@ -138,7 +138,7 @@ public class CampaignService : ICampaignService
         var campaign = new Campaign
         {
             Id = Guid.NewGuid(),
-            ClinicId = request.ClinicId,
+            ClientId = request.ClientId,
             Name = request.Name,
             CampaignType = string.IsNullOrWhiteSpace(request.CampaignType) ? CampaignType.Custom : request.CampaignType,
             Channel = CampaignChannel.WhatsApp,
@@ -167,7 +167,7 @@ public class CampaignService : ICampaignService
             _campaigns.AddRecipient(new CampaignRecipient
             {
                 Id = Guid.NewGuid(),
-                ClinicId = request.ClinicId,
+                ClientId = request.ClientId,
                 CampaignId = campaign.Id,
                 LeadId = lead.Id,
                 PhoneNumber = lead.Phone ?? string.Empty,
@@ -183,15 +183,15 @@ public class CampaignService : ICampaignService
         return ToResponse(campaign, template.Name);
     }
 
-    public async Task<CampaignResponse?> ScheduleAsync(Guid clinicId, Guid id, DateTimeOffset scheduledAt, CancellationToken ct = default)
+    public async Task<CampaignResponse?> ScheduleAsync(Guid clientId, Guid id, DateTimeOffset scheduledAt, CancellationToken ct = default)
     {
-        var campaign = await _campaigns.GetAsync(clinicId, id, ct);
+        var campaign = await _campaigns.GetAsync(clientId, id, ct);
         if (campaign is null) return null;
         if (campaign.Status != CampaignStatus.Draft)
         {
             throw new InvalidOperationException($"Only a draft campaign can be scheduled (this one is '{campaign.Status}').");
         }
-        await _entitlements.EnsureFeatureAsync(clinicId, EntitlementKeys.Campaigns, ct);
+        await _entitlements.EnsureFeatureAsync(clientId, EntitlementKeys.Campaigns, ct);
 
         campaign.Status = CampaignStatus.Scheduled;
         campaign.ScheduledAt = scheduledAt;
@@ -201,11 +201,11 @@ public class CampaignService : ICampaignService
         return ToResponse(campaign);
     }
 
-    public async Task<ProcessCampaignBatchResult?> SendAsync(Guid clinicId, Guid id, int batchSize = 20, CancellationToken ct = default)
+    public async Task<ProcessCampaignBatchResult?> SendAsync(Guid clientId, Guid id, int batchSize = 20, CancellationToken ct = default)
     {
-        var campaign = await _campaigns.GetAsync(clinicId, id, ct);
+        var campaign = await _campaigns.GetAsync(clientId, id, ct);
         if (campaign is null) return null;
-        await _entitlements.EnsureFeatureAsync(clinicId, EntitlementKeys.Campaigns, ct);
+        await _entitlements.EnsureFeatureAsync(clientId, EntitlementKeys.Campaigns, ct);
 
         if (campaign.Status is CampaignStatus.Draft or CampaignStatus.Scheduled or CampaignStatus.Paused)
         {
@@ -216,7 +216,7 @@ public class CampaignService : ICampaignService
             throw new InvalidOperationException($"Campaign can't be sent from status '{campaign.Status}'.");
         }
 
-        return await ProcessBatchAsync(clinicId, id, batchSize, ct);
+        return await ProcessBatchAsync(clientId, id, batchSize, ct);
     }
 
     /// <summary>Draft/Scheduled/Paused -> Running: queues every recipient still Pending (a stopped campaign that never
@@ -239,9 +239,9 @@ public class CampaignService : ICampaignService
         await _unitOfWork.SaveChangesAsync(ct);
     }
 
-    public async Task<ProcessCampaignBatchResult?> ProcessBatchAsync(Guid clinicId, Guid id, int batchSize = 20, CancellationToken ct = default)
+    public async Task<ProcessCampaignBatchResult?> ProcessBatchAsync(Guid clientId, Guid id, int batchSize = 20, CancellationToken ct = default)
     {
-        var campaign = await _campaigns.GetAsync(clinicId, id, ct);
+        var campaign = await _campaigns.GetAsync(clientId, id, ct);
         if (campaign is null) return null;
 
         if (campaign.Status != CampaignStatus.Running)
@@ -249,7 +249,7 @@ public class CampaignService : ICampaignService
             var remaining = await _campaigns.CountRecipientsInStatusAsync(id, CampaignRecipientStatus.Queued, ct);
             return new ProcessCampaignBatchResult(0, 0, 0, remaining, campaign.Status == CampaignStatus.Completed);
         }
-        await _entitlements.EnsureFeatureAsync(clinicId, EntitlementKeys.Campaigns, ct);
+        await _entitlements.EnsureFeatureAsync(clientId, EntitlementKeys.Campaigns, ct);
 
         // One sender per campaign at a time (the Send button and the background sender, or two app instances), so
         // nobody is messaged twice. If another sender has it, it is already sending: report progress and step aside.
@@ -275,7 +275,7 @@ public class CampaignService : ICampaignService
                 break;
             }
 
-            var ok = await ProcessRecipientAsync(clinicId, recipient, ct);
+            var ok = await ProcessRecipientAsync(clientId, recipient, ct);
             processed++;
             if (ok) succeeded++; else failed++;
         }
@@ -299,16 +299,16 @@ public class CampaignService : ICampaignService
     public Task<IReadOnlyList<DueCampaign>> ListDueAsync(CancellationToken ct = default) =>
         _campaigns.ListDueForSendingReadOnlyAsync(DateTimeOffset.UtcNow, ct);
 
-    public async Task<ProcessCampaignBatchResult?> SendDueAsync(Guid clinicId, Guid id, int batchSize, CancellationToken ct = default)
+    public async Task<ProcessCampaignBatchResult?> SendDueAsync(Guid clientId, Guid id, int batchSize, CancellationToken ct = default)
     {
-        var campaign = await _campaigns.GetAsync(clinicId, id, ct);
+        var campaign = await _campaigns.GetAsync(clientId, id, ct);
         if (campaign is null) return null;
 
         if (campaign.Status == CampaignStatus.Scheduled)
         {
             // Re-checked here (the list can be a minute old): never start one before its time, or one staff stopped.
             if (campaign.ScheduledAt is null || campaign.ScheduledAt > DateTimeOffset.UtcNow) return null;
-            await _entitlements.EnsureFeatureAsync(clinicId, EntitlementKeys.Campaigns, ct);
+            await _entitlements.EnsureFeatureAsync(clientId, EntitlementKeys.Campaigns, ct);
             await StartAsync(campaign, ct);
         }
         else if (campaign.Status != CampaignStatus.Running)
@@ -316,12 +316,12 @@ public class CampaignService : ICampaignService
             return null; // stopped, cancelled or finished since it was listed
         }
 
-        return await ProcessBatchAsync(clinicId, id, batchSize, ct);
+        return await ProcessBatchAsync(clientId, id, batchSize, ct);
     }
 
-    public async Task<CampaignResponse?> StopAsync(Guid clinicId, Guid id, CancellationToken ct = default)
+    public async Task<CampaignResponse?> StopAsync(Guid clientId, Guid id, CancellationToken ct = default)
     {
-        var campaign = await _campaigns.GetAsync(clinicId, id, ct);
+        var campaign = await _campaigns.GetAsync(clientId, id, ct);
         if (campaign is null) return null;
         if (campaign.Status is not (CampaignStatus.Scheduled or CampaignStatus.Running))
         {
@@ -330,7 +330,7 @@ public class CampaignService : ICampaignService
 
         // Set-based and conditional: the sender may be finishing it right now, and a finished campaign must stay finished.
         var now = DateTimeOffset.UtcNow;
-        var stopped = await _campaigns.TryChangeStatusAsync(clinicId, id,
+        var stopped = await _campaigns.TryChangeStatusAsync(clientId, id,
             new[] { CampaignStatus.Scheduled, CampaignStatus.Running }, CampaignStatus.Paused, now, ct);
         if (!stopped)
         {
@@ -346,7 +346,7 @@ public class CampaignService : ICampaignService
     /// number, WhatsApp API error, etc.) must not abort the batch — EXCEPT running out of prepaid balance or losing
     /// the subscription: then the recipient stays queued and the exception stops the batch, so the campaign
     /// continues where it left off after a top-up instead of burning the rest of the audience as failed.</summary>
-    private async Task<bool> ProcessRecipientAsync(Guid clinicId, CampaignRecipient recipient, CancellationToken ct)
+    private async Task<bool> ProcessRecipientAsync(Guid clientId, CampaignRecipient recipient, CancellationToken ct)
     {
         // Each recipient's send is its own story in the message trace (not one trace for the whole batch).
         using var trace = TraceContext.StartNew("campaign.send");
@@ -358,14 +358,14 @@ public class CampaignService : ICampaignService
             {
                 throw new InvalidOperationException("Campaign has no WhatsApp template to send.");
             }
-            var conversation = await _conversations.GetOrCreateForLeadAsync(clinicId, recipient.LeadId, ConversationChannel.WhatsApp, ct);
+            var conversation = await _conversations.GetOrCreateForLeadAsync(clientId, recipient.LeadId, ConversationChannel.WhatsApp, ct);
 
             var variables = string.IsNullOrEmpty(recipient.VariablesJson)
                 ? Array.Empty<string>()
                 : JsonSerializer.Deserialize<string[]>(recipient.VariablesJson) ?? Array.Empty<string>();
 
             var message = await _messages.SendCampaignTemplateAsync(
-                clinicId, conversation.Id, campaign.WhatsAppTemplateId.Value, variables,
+                clientId, conversation.Id, campaign.WhatsAppTemplateId.Value, variables,
                 campaign.Id, recipient.Id, ct);
 
             var now = DateTimeOffset.UtcNow;
@@ -395,9 +395,9 @@ public class CampaignService : ICampaignService
         }
     }
 
-    public async Task<CampaignResponse?> CancelAsync(Guid clinicId, Guid id, CancellationToken ct = default)
+    public async Task<CampaignResponse?> CancelAsync(Guid clientId, Guid id, CancellationToken ct = default)
     {
-        var campaign = await _campaigns.GetAsync(clinicId, id, ct);
+        var campaign = await _campaigns.GetAsync(clientId, id, ct);
         if (campaign is null) return null;
         if (campaign.Status is CampaignStatus.Completed or CampaignStatus.Cancelled)
         {
@@ -426,9 +426,9 @@ public class CampaignService : ICampaignService
     private static bool IsManualSelection(Campaign c) =>
         c.AudienceType == CampaignAudienceType.Custom && string.IsNullOrWhiteSpace(c.AudienceFilters);
 
-    private async Task<CampaignStatsResponse> ComputeStats(Guid clinicId, List<CampaignRecipient> recipients, CancellationToken ct)
+    private async Task<CampaignStatsResponse> ComputeStats(Guid clientId, List<CampaignRecipient> recipients, CancellationToken ct)
     {
-        var inboundByConversation = await FetchInboundReplyLookupAsync(clinicId, recipients, ct);
+        var inboundByConversation = await FetchInboundReplyLookupAsync(clientId, recipients, ct);
         return ComputeStatsCore(recipients, inboundByConversation);
     }
 
@@ -438,13 +438,13 @@ public class CampaignService : ICampaignService
     /// SentAt is the threshold a reply has to beat, and different recipients in the same batch (e.g. the same
     /// lead contacted by two different campaigns) can have different SentAt values for the same conversation.</summary>
     private async Task<Dictionary<Guid, List<DateTimeOffset>>> FetchInboundReplyLookupAsync(
-        Guid clinicId, List<CampaignRecipient> recipients, CancellationToken ct)
+        Guid clientId, List<CampaignRecipient> recipients, CancellationToken ct)
     {
         var conversationIds = recipients.Where(r => r.ConversationId.HasValue && r.SentAt.HasValue)
             .Select(r => r.ConversationId!.Value).Distinct().ToList();
         if (conversationIds.Count == 0) return new Dictionary<Guid, List<DateTimeOffset>>();
 
-        var inboundMessages = await _messageRows.ListInboundCustomerMessageTimesAsync(clinicId, conversationIds, ct);
+        var inboundMessages = await _messageRows.ListInboundCustomerMessageTimesAsync(clientId, conversationIds, ct);
 
         return inboundMessages.GroupBy(m => m.ConversationId).ToDictionary(g => g.Key, g => g.Select(x => x.CreatedAt).ToList());
     }
@@ -464,7 +464,7 @@ public class CampaignService : ICampaignService
         // Best-effort "replied" signal: a customer inbound message landed in the recipient's conversation
         // any time after THIS recipient's own campaign message was sent — not just the conversation's
         // earliest-ever inbound message, which could predate this campaign entirely (a lead who'd messaged
-        // the clinic before would otherwise never count as "replied" to a later campaign).
+        // the client before would otherwise never count as "replied" to a later campaign).
         var replied = 0;
         foreach (var r in recipients.Where(r => r.ConversationId.HasValue && r.SentAt.HasValue))
         {
@@ -479,7 +479,7 @@ public class CampaignService : ICampaignService
     }
 
     private static CampaignResponse ToResponse(Campaign c, string? templateName = null) => new(
-        c.Id, c.ClinicId, c.Name, c.CampaignType, c.Channel, c.WhatsAppTemplateId, templateName ?? c.WhatsAppTemplate?.Name,
+        c.Id, c.ClientId, c.Name, c.CampaignType, c.Channel, c.WhatsAppTemplateId, templateName ?? c.WhatsAppTemplate?.Name,
         c.AudienceType, c.AudienceFilters, c.Status,
         c.ScheduledAt, c.StartedAt, c.CompletedAt, c.CreatedAt, c.UpdatedAt
     );

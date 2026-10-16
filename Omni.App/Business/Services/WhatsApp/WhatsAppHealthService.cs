@@ -36,16 +36,16 @@ public class WhatsAppHealthService : IWhatsAppHealthService
     /// one of these, never while it stays here (see ApplyHealthEventAsync).</summary>
     private static bool IsUnhealthy(string level) => level is WhatsAppHealthLevel.Problem or WhatsAppHealthLevel.Disconnected;
 
-    public async Task<WhatsAppHealthResponse?> GetHealthAsync(Guid clinicId, CancellationToken ct = default)
+    public async Task<WhatsAppHealthResponse?> GetHealthAsync(Guid clientId, CancellationToken ct = default)
     {
-        var integration = await _integrations.GetAsync(clinicId, ChannelType.WhatsApp, ct);
+        var integration = await _integrations.GetAsync(clientId, ChannelType.WhatsApp, ct);
         return integration is null ? null : ToHealthResponse(integration);
     }
 
     public async Task<IReadOnlyList<WhatsAppHealthEventResponse>> GetHealthEventsAsync(
-        Guid clinicId, int skip, int take, CancellationToken ct = default)
+        Guid clientId, int skip, int take, CancellationToken ct = default)
     {
-        var events = await _healthEvents.ListForClinicAsync(clinicId, skip, take, ct);
+        var events = await _healthEvents.ListForClientAsync(clientId, skip, take, ct);
 
         return events.Select(h => new WhatsAppHealthEventResponse(
             h.Id, h.EventType, h.Severity, h.Status, h.Code, h.Message, h.OccurredAt)).ToList();
@@ -53,26 +53,26 @@ public class WhatsAppHealthService : IWhatsAppHealthService
 
     public async Task<WhatsAppHealthResponse> ApplyHealthEventAsync(WhatsAppHealthEventRequest request, CancellationToken ct = default)
     {
-        var integration = await _integrations.GetAsync(request.ClinicId, ChannelType.WhatsApp, ct);
+        var integration = await _integrations.GetAsync(request.ClientId, ChannelType.WhatsApp, ct);
         if (integration is null)
         {
             throw new InvalidOperationException(
-                $"Clinic {request.ClinicId} has no WhatsApp connection on file — connect one under Settings → Messaging Integrations first.");
+                $"Client {request.ClientId} has no WhatsApp connection on file — connect one under Settings → Messaging Integrations first.");
         }
 
-        // Don't trust ClinicId blindly — cross-check whichever identifier the event carries
-        // against this clinic's own stored connection.
+        // Don't trust ClientId blindly — cross-check whichever identifier the event carries
+        // against this client's own stored connection.
         if (!string.IsNullOrWhiteSpace(request.WabaId)
             && !string.Equals(integration.WhatsAppBusinessId, request.WabaId, StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidOperationException(
-                $"WabaId '{request.WabaId}' does not match clinic {request.ClinicId}'s stored WhatsApp connection.");
+                $"WabaId '{request.WabaId}' does not match client {request.ClientId}'s stored WhatsApp connection.");
         }
         if (!string.IsNullOrWhiteSpace(request.PhoneNumberId)
             && !string.Equals(integration.PhoneNumberId, request.PhoneNumberId, StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidOperationException(
-                $"PhoneNumberId '{request.PhoneNumberId}' does not match clinic {request.ClinicId}'s stored WhatsApp connection.");
+                $"PhoneNumberId '{request.PhoneNumberId}' does not match client {request.ClientId}'s stored WhatsApp connection.");
         }
 
         var occurredAt = request.OccurredAt ?? DateTimeOffset.UtcNow;
@@ -131,7 +131,7 @@ public class WhatsAppHealthService : IWhatsAppHealthService
         _healthEvents.Add(new WhatsAppHealthEvent
         {
             Id = Guid.NewGuid(),
-            ClinicId = request.ClinicId,
+            ClientId = request.ClientId,
             ChannelIntegrationId = integration.Id,
             EventType = request.EventType,
             Severity = severity,
@@ -143,13 +143,13 @@ public class WhatsAppHealthService : IWhatsAppHealthService
             CreatedAt = DateTimeOffset.UtcNow
         });
 
-        _events.Log(request.ClinicId, EventTypes.WhatsAppHealthEventReceived, source: "n8n",
+        _events.Log(request.ClientId, EventTypes.WhatsAppHealthEventReceived, source: "n8n",
             metadataJson: JsonSerializer.Serialize(new { request.EventType, healthLevel }));
 
         await _unitOfWork.SaveChangesAsync(ct);
 
         await _notifier.WhatsAppHealthUpdatedAsync(
-            request.ClinicId, integration.Id, healthLevel, integration.AccountStatus, integration.AccountReviewStatus,
+            request.ClientId, integration.Id, healthLevel, integration.AccountStatus, integration.AccountReviewStatus,
             integration.PhoneQualityRating, integration.PhoneStatus, integration.LastProblemMessage,
             integration.UpdatedAt, ct);
 
@@ -157,9 +157,9 @@ public class WhatsAppHealthService : IWhatsAppHealthService
         // re-notify every time (see IsUnhealthy's doc comment).
         if (IsUnhealthy(healthLevel) && !IsUnhealthy(previousLevel))
         {
-            await _notifications.CreateAsync(request.ClinicId, NotificationType.IntegrationUnhealthy,
+            await _notifications.CreateAsync(request.ClientId, NotificationType.IntegrationUnhealthy,
                 "WhatsApp connection needs attention",
-                integration.LastProblemMessage ?? "The clinic's WhatsApp connection is no longer working normally.",
+                integration.LastProblemMessage ?? "The client's WhatsApp connection is no longer working normally.",
                 channelIntegrationId: integration.Id, link: "/WhatsApp/Health", ct: ct);
         }
 
@@ -216,7 +216,7 @@ public class WhatsAppHealthService : IWhatsAppHealthService
     private static readonly HashSet<string> BadPhoneStatuses = new() { "flagged", "downgrade", "restricted", "banned" };
 
     private static WhatsAppHealthResponse ToHealthResponse(ChannelIntegration c) => new(
-        c.Id, c.ClinicId, c.Status == ChannelIntegrationStatus.Connected,
+        c.Id, c.ClientId, c.Status == ChannelIntegrationStatus.Connected,
         c.HealthLevel ?? WhatsAppHealthLevel.Unknown,
         c.DisplayName, c.VerifiedName, c.WhatsAppBusinessId,
         c.AccountStatus, c.AccountReviewStatus, c.PhoneQualityRating, c.PhoneStatus, c.NameStatus,

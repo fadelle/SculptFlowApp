@@ -20,17 +20,17 @@ public class MessageStatusHandler
         _messages = messages;
     }
 
-    public async Task<WhatsAppWebhookResponse> HandleAsync(ParsedMetaEvent evt, ResolvedClinic clinic, CancellationToken ct)
+    public async Task<WhatsAppWebhookResponse> HandleAsync(ParsedMetaEvent evt, ResolvedClient client, CancellationToken ct)
     {
         var result = await _messages.IngestAsync(new IngestMessageRequest(
-            clinic.ClinicId, Guid.Empty, Guid.Empty, IngestEventType.StatusUpdate, ConversationChannel.WhatsApp,
+            client.ClientId, Guid.Empty, Guid.Empty, IngestEventType.StatusUpdate, ConversationChannel.WhatsApp,
             Content: null, evt.ExternalMessageId, evt.DeliveryStatus, SentAt: null, ReceivedAt: null,
             MessageType: null, MetadataJson: null, FailureCode: evt.FailureCode, FailureReason: evt.FailureReason,
             OccurredAt: evt.Timestamp), ct);
 
         return new WhatsAppWebhookResponse(
             Processed: result.Found, EventType: "message_status", ShouldRunAi: false,
-            ClinicId: clinic.ClinicId, WhatsAppConnectionId: clinic.ChannelIntegrationId,
+            ClientId: client.ClientId, WhatsAppConnectionId: client.ChannelIntegrationId,
             ConversationId: result.Message?.ConversationId, LeadId: result.Message?.LeadId, MessageId: result.Message?.Id,
             ExternalMessageId: evt.ExternalMessageId, Status: evt.DeliveryStatus);
     }

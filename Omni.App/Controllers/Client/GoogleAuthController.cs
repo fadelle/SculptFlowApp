@@ -12,7 +12,7 @@ namespace Omni.App.Controllers.Client;
 /// held in the short-lived external cookie. Outcomes:
 ///  - a Google login already linked to a user -> sign in;
 ///  - an existing account with the same email -> link it, then sign in;
-///  - nobody yet -> CompleteGoogleSignup asks for the clinic name (a signup always creates a NEW clinic).
+///  - nobody yet -> CompleteGoogleSignup asks for the client name (a signup always creates a NEW client).
 /// An email is only ever trusted when Google reports it as verified.</summary>
 [Route("auth/google")]
 [AllowAnonymous]
@@ -70,7 +70,7 @@ public class GoogleAuthController : Controller
         var existing = await _users.FindByEmailAsync(email);
         if (existing is null)
         {
-            // 3) Nobody with this email: collect the clinic name, then create the account (see CompleteGoogleSignup).
+            // 3) Nobody with this email: collect the client name, then create the account (see CompleteGoogleSignup).
             return Redirect($"/Account/CompleteGoogleSignup?returnUrl={Uri.EscapeDataString(destination)}");
         }
 

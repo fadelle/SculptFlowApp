@@ -1,6 +1,6 @@
 // Drives the "Who do you want to reach?" picker on /Campaigns/Create.
 //
-// Four clinic-facing radios (data-audience-choice) map onto the real posted fields — two hidden
+// Four client-facing radios (data-audience-choice) map onto the real posted fields — two hidden
 // inputs, #audience-type-field (AudienceType) and #manual-selection-field (ManualSelection) — so
 // the backend still only ever sees the three real audience types it already understands (see
 // CampaignAudienceType); "Select leads manually" is audience_type=custom + ManualSelection=true

@@ -9,7 +9,7 @@ namespace Omni.App.Entities.Dtos.Billing;
 /// <param name="RecipientAddress">Phone number (or other address) — used only to derive the destination country,
 /// never stored.</param>
 public sealed record OutboundMessageBillingContext(
-    Guid ClinicId,
+    Guid ClientId,
     string Channel,
     Guid MessageId,
     Guid ConversationId,

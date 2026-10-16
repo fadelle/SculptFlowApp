@@ -1,6 +1,6 @@
 namespace Omni.App.Common.Enums;
 
-/// <summary>Allowed values for ClinicSubscription.Status — must match schema.sql's CHECK constraint.</summary>
+/// <summary>Allowed values for ClientSubscription.Status — must match schema.sql's CHECK constraint.</summary>
 public static class SubscriptionStatus
 {
     /// <summary>Paid for the current period.</summary>

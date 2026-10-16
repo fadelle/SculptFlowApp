@@ -21,12 +21,12 @@ public class AppStateSyncHandler
         _events = events;
     }
 
-    public async Task<WhatsAppWebhookResponse> HandleAsync(ParsedMetaEvent evt, ResolvedClinic clinic, CancellationToken ct)
+    public async Task<WhatsAppWebhookResponse> HandleAsync(ParsedMetaEvent evt, ResolvedClient client, CancellationToken ct)
     {
-        _events.Log(clinic.ClinicId, EventTypes.WhatsAppAppStateSyncReceived, source: "n8n",
+        _events.Log(client.ClientId, EventTypes.WhatsAppAppStateSyncReceived, source: "n8n",
             metadataJson: JsonSerializer.Serialize(new { raw = evt.RawJson }));
         await _unitOfWork.SaveChangesAsync(ct);
 
-        return new WhatsAppWebhookResponse(true, "app_state_sync", false, clinic.ClinicId, clinic.ChannelIntegrationId);
+        return new WhatsAppWebhookResponse(true, "app_state_sync", false, client.ClientId, client.ChannelIntegrationId);
     }
 }

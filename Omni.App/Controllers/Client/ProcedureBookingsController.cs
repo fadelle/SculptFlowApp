@@ -12,7 +12,7 @@ public class ProcedureBookingsController : DashboardApiController
 {
     private readonly IProcedureBookingService _bookings;
 
-    public ProcedureBookingsController(IProcedureBookingService bookings, ICurrentClinicContext clinicContext) : base(clinicContext)
+    public ProcedureBookingsController(IProcedureBookingService bookings, ICurrentClientContext clientContext) : base(clientContext)
     {
         _bookings = bookings;
     }
@@ -20,20 +20,20 @@ public class ProcedureBookingsController : DashboardApiController
     [HttpPost]
     public async Task<ActionResult<ProcedureBookingResponse>> Create([FromBody] CreateProcedureBookingRequest request, CancellationToken ct)
     {
-        var clinicId = await GetClinicIdAsync(ct);
-        if (clinicId is null) return Forbid();
+        var clientId = await GetClientIdAsync(ct);
+        if (clientId is null) return Forbid();
 
-        var booking = await _bookings.CreateAsync(request with { ClinicId = clinicId.Value }, ct);
+        var booking = await _bookings.CreateAsync(request with { ClientId = clientId.Value }, ct);
         return CreatedAtAction(nameof(List), null, booking);
     }
 
     [HttpPatch("{id:guid}")]
     public async Task<ActionResult<ProcedureBookingResponse>> Update(Guid id, [FromBody] UpdateProcedureBookingRequest request, CancellationToken ct)
     {
-        var clinicId = await GetClinicIdAsync(ct);
-        if (clinicId is null) return Forbid();
+        var clientId = await GetClientIdAsync(ct);
+        if (clientId is null) return Forbid();
 
-        var booking = await _bookings.UpdateAsync(clinicId.Value, id, request, ct);
+        var booking = await _bookings.UpdateAsync(clientId.Value, id, request, ct);
         return booking is null ? NotFound() : Ok(booking);
     }
 
@@ -41,12 +41,12 @@ public class ProcedureBookingsController : DashboardApiController
     public async Task<ActionResult<object>> List(
         [FromQuery] string? status, [FromQuery] int skip = 0, [FromQuery] int take = 50, CancellationToken ct = default)
     {
-        var clinicId = await GetClinicIdAsync(ct);
-        if (clinicId is null) return Forbid();
+        var clientId = await GetClientIdAsync(ct);
+        if (clientId is null) return Forbid();
 
         skip = Math.Max(skip, 0);
         take = Math.Clamp(take, 1, 200);
-        var (items, totalCount) = await _bookings.ListAsync(clinicId.Value, status, skip, take, ct);
+        var (items, totalCount) = await _bookings.ListAsync(clientId.Value, status, skip, take, ct);
         return Ok(new { items, totalCount, skip, take });
     }
 }

@@ -3,25 +3,25 @@ using Omni.App.Business.Services.PlatformAdmin;
 
 namespace Omni.App.Tests.Services;
 
-/// <summary>The admin portal's benchmark entry point: checks the clinic, delegates with that clinic id, and turns
-/// "not this clinic's" answers into KeyNotFoundException (404).</summary>
+/// <summary>The admin portal's benchmark entry point: checks the client, delegates with that client id, and turns
+/// "not this client's" answers into KeyNotFoundException (404).</summary>
 public class KnowledgeBenchmarkAdminServiceTests
 {
     private readonly Mock<IKnowledgeBenchmarkService> _benchmark = new();
-    private readonly Mock<IClinicRepository> _clinics = new();
-    private readonly Guid _clinicId = Guid.NewGuid();
+    private readonly Mock<IClientRepository> _clients = new();
+    private readonly Guid _clientId = Guid.NewGuid();
 
     public KnowledgeBenchmarkAdminServiceTests()
     {
-        _clinics.Setup(c => c.GetReadOnlyAsync(_clinicId, It.IsAny<CancellationToken>())).ReturnsAsync(new Clinic { Id = _clinicId });
+        _clients.Setup(c => c.GetReadOnlyAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(new Client { Id = _clientId });
     }
 
-    private KnowledgeBenchmarkAdminService Sut() => new(_benchmark.Object, _clinics.Object);
+    private KnowledgeBenchmarkAdminService Sut() => new(_benchmark.Object, _clients.Object);
 
     private static T Blank<T>() where T : class => (T)RuntimeHelpers.GetUninitializedObject(typeof(T));
 
     [Fact]
-    public async Task An_unknown_clinic_is_404_and_the_benchmark_is_never_called()
+    public async Task An_unknown_client_is_404_and_the_benchmark_is_never_called()
     {
         var other = Guid.NewGuid();
         await Assert.ThrowsAsync<KeyNotFoundException>(() => Sut().GetDashboardAsync(other, default));
@@ -32,41 +32,41 @@ public class KnowledgeBenchmarkAdminServiceTests
     }
 
     [Fact]
-    public async Task Reads_and_writes_go_to_the_benchmark_with_the_picked_clinic()
+    public async Task Reads_and_writes_go_to_the_benchmark_with_the_picked_client()
     {
         var generation = Guid.NewGuid();
         var dashboard = Blank<BenchmarkDashboardResponse>();
         var run = Blank<BenchmarkRunSummary>();
         var created = Blank<BenchmarkCaseResponse>();
         var request = new CreateManualBenchmarkCaseRequest("q?", Guid.NewGuid(), Guid.NewGuid());
-        _benchmark.Setup(b => b.GetDashboardAsync(_clinicId, It.IsAny<CancellationToken>())).ReturnsAsync(dashboard);
-        _benchmark.Setup(b => b.StartRunAsync(_clinicId, "generation", generation, It.IsAny<CancellationToken>())).ReturnsAsync(run);
-        _benchmark.Setup(b => b.CreateManualCaseAsync(_clinicId, request, It.IsAny<CancellationToken>())).ReturnsAsync(created);
-        _benchmark.Setup(b => b.ListCasesAsync(_clinicId, new BenchmarkCaseFilter("manual", null), 25, 50, It.IsAny<CancellationToken>()))
+        _benchmark.Setup(b => b.GetDashboardAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(dashboard);
+        _benchmark.Setup(b => b.StartRunAsync(_clientId, "generation", generation, It.IsAny<CancellationToken>())).ReturnsAsync(run);
+        _benchmark.Setup(b => b.CreateManualCaseAsync(_clientId, request, It.IsAny<CancellationToken>())).ReturnsAsync(created);
+        _benchmark.Setup(b => b.ListCasesAsync(_clientId, new BenchmarkCaseFilter("manual", null), 25, 50, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Blank<BenchmarkCaseListResponse>());
 
-        Assert.Same(dashboard, await Sut().GetDashboardAsync(_clinicId, default));
-        Assert.Same(run, await Sut().StartRunAsync(_clinicId, new StartBenchmarkRunRequest("generation", generation), default));
-        Assert.Same(created, await Sut().CreateManualCaseAsync(_clinicId, request, default));
-        await Sut().ListCasesAsync(_clinicId, new BenchmarkCaseFilter("manual", null), 25, 50, default);
-        _benchmark.Verify(b => b.ListCasesAsync(_clinicId, new BenchmarkCaseFilter("manual", null), 25, 50, It.IsAny<CancellationToken>()), Times.Once);
+        Assert.Same(dashboard, await Sut().GetDashboardAsync(_clientId, default));
+        Assert.Same(run, await Sut().StartRunAsync(_clientId, new StartBenchmarkRunRequest("generation", generation), default));
+        Assert.Same(created, await Sut().CreateManualCaseAsync(_clientId, request, default));
+        await Sut().ListCasesAsync(_clientId, new BenchmarkCaseFilter("manual", null), 25, 50, default);
+        _benchmark.Verify(b => b.ListCasesAsync(_clientId, new BenchmarkCaseFilter("manual", null), 25, 50, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
-    public async Task Records_that_are_not_the_clinics_are_404()
+    public async Task Records_that_are_not_the_clients_are_404()
     {
         var id = Guid.NewGuid();
         var sut = Sut();
-        await Assert.ThrowsAsync<KeyNotFoundException>(() => sut.GetCaseAsync(_clinicId, id, default));
-        await Assert.ThrowsAsync<KeyNotFoundException>(() => sut.UpdateCaseQuestionAsync(_clinicId, id, "q", default));
-        await Assert.ThrowsAsync<KeyNotFoundException>(() => sut.SetReviewedAsync(_clinicId, id, true, default));
-        await Assert.ThrowsAsync<KeyNotFoundException>(() => sut.DeleteCaseAsync(_clinicId, id, default));
-        await Assert.ThrowsAsync<KeyNotFoundException>(() => sut.ListSourceChunksAsync(_clinicId, id, default));
-        await Assert.ThrowsAsync<KeyNotFoundException>(() => sut.GetGenerationAsync(_clinicId, id, default));
-        await Assert.ThrowsAsync<KeyNotFoundException>(() => sut.GetRunAsync(_clinicId, id, default));
-        await Assert.ThrowsAsync<KeyNotFoundException>(() => sut.ListResultsAsync(_clinicId, id, null, 0, 100, default));
-        await Assert.ThrowsAsync<KeyNotFoundException>(() => sut.GetRunGenerationBreakdownAsync(_clinicId, id, default));
-        await Assert.ThrowsAsync<KeyNotFoundException>(() => sut.GetResultAsync(_clinicId, id, Guid.NewGuid(), default));
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => sut.GetCaseAsync(_clientId, id, default));
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => sut.UpdateCaseQuestionAsync(_clientId, id, "q", default));
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => sut.SetReviewedAsync(_clientId, id, true, default));
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => sut.DeleteCaseAsync(_clientId, id, default));
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => sut.ListSourceChunksAsync(_clientId, id, default));
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => sut.GetGenerationAsync(_clientId, id, default));
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => sut.GetRunAsync(_clientId, id, default));
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => sut.ListResultsAsync(_clientId, id, null, 0, 100, default));
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => sut.GetRunGenerationBreakdownAsync(_clientId, id, default));
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => sut.GetResultAsync(_clientId, id, Guid.NewGuid(), default));
     }
 
     [Fact]
@@ -74,11 +74,11 @@ public class KnowledgeBenchmarkAdminServiceTests
     {
         var id = Guid.NewGuid();
         var detail = Blank<BenchmarkCaseDetailResponse>();
-        _benchmark.Setup(b => b.GetCaseAsync(_clinicId, id, It.IsAny<CancellationToken>())).ReturnsAsync(detail);
-        _benchmark.Setup(b => b.DeleteCaseAsync(_clinicId, id, It.IsAny<CancellationToken>())).ReturnsAsync(true);
-        Assert.Same(detail, await Sut().GetCaseAsync(_clinicId, id, default));
-        await Sut().DeleteCaseAsync(_clinicId, id, default);
-        _benchmark.Verify(b => b.DeleteCaseAsync(_clinicId, id, It.IsAny<CancellationToken>()), Times.Once);
+        _benchmark.Setup(b => b.GetCaseAsync(_clientId, id, It.IsAny<CancellationToken>())).ReturnsAsync(detail);
+        _benchmark.Setup(b => b.DeleteCaseAsync(_clientId, id, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        Assert.Same(detail, await Sut().GetCaseAsync(_clientId, id, default));
+        await Sut().DeleteCaseAsync(_clientId, id, default);
+        _benchmark.Verify(b => b.DeleteCaseAsync(_clientId, id, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -86,13 +86,13 @@ public class KnowledgeBenchmarkAdminServiceTests
     {
         var id = Guid.NewGuid();
         var summary = Blank<BenchmarkGenerationSummary>();
-        _benchmark.SetupSequence(b => b.CancelGenerationAsync(_clinicId, id, It.IsAny<CancellationToken>()))
+        _benchmark.SetupSequence(b => b.CancelGenerationAsync(_clientId, id, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new GenerationCancelResult(GenerationCancelStatus.NotFound, null))
             .ReturnsAsync(new GenerationCancelResult(GenerationCancelStatus.NotPending, summary))
             .ReturnsAsync(new GenerationCancelResult(GenerationCancelStatus.Cancelled, summary));
         var sut = Sut();
-        await Assert.ThrowsAsync<KeyNotFoundException>(() => sut.CancelGenerationAsync(_clinicId, id, default));
-        await Assert.ThrowsAsync<InvalidOperationException>(() => sut.CancelGenerationAsync(_clinicId, id, default));
-        Assert.Same(summary, await sut.CancelGenerationAsync(_clinicId, id, default));
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => sut.CancelGenerationAsync(_clientId, id, default));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => sut.CancelGenerationAsync(_clientId, id, default));
+        Assert.Same(summary, await sut.CancelGenerationAsync(_clientId, id, default));
     }
 }

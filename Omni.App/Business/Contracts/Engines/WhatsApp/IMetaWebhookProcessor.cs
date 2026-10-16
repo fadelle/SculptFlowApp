@@ -6,8 +6,8 @@ namespace Omni.App.Business.Contracts.Engines.WhatsApp;
 /// <summary>
 /// The single orchestration point for POST /api/integrations/whatsapp/webhook — the only thing
 /// Controllers/Integrations/WhatsAppIntegrationEventsController.cs's Webhook action calls. Parses the raw Meta
-/// payload (MetaWebhookParser), resolves the trusted clinic for each contained event from the
-/// clinic's own stored WhatsApp connection (never from n8n or the Meta body), dispatches to the
+/// payload (MetaWebhookParser), resolves the trusted client for each contained event from the
+/// client's own stored WhatsApp connection (never from n8n or the Meta body), dispatches to the
 /// matching Handler — each of which reuses the same IMessageService/IWhatsAppTemplateService/
 /// IWhatsAppHealthService methods the earlier normalized per-domain endpoints called, so
 /// persistence/SignalR logic exists in exactly one place regardless of how the event arrived — and

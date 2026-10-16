@@ -1,5 +1,5 @@
 // Notification bell — loaded on every authenticated dashboard page (Pages/Shared/_Layout.cshtml).
-// PostgreSQL (via /api/notifications) stays the source of truth; SignalR (the same clinic-scoped
+// PostgreSQL (via /api/notifications) stays the source of truth; SignalR (the same client-scoped
 // /hubs/inbox hub the Inbox uses) just tells an already-open page a new one arrived, so the badge
 // re-fetches instead of trusting the pushed payload as authoritative — same principle as inbox.js.
 (function () {

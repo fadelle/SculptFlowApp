@@ -14,7 +14,7 @@ public record AppLogDetail(
     string Fingerprint,
     int RepeatCount,
     string? TraceId,
-    Guid? ClinicId,
+    Guid? ClientId,
     Guid? ConversationId,
     Guid? MessageId,
     string? Method,

@@ -6,7 +6,7 @@ namespace Omni.App.Entities.Models;
 public class KnowledgeWebsiteScrapeRun
 {
     public Guid Id { get; set; }
-    public Guid ClinicId { get; set; }
+    public Guid ClientId { get; set; }
     public Guid WebsiteSourceId { get; set; }
 
     public string Status { get; set; } = WebsiteScrapeStatus.Pending;

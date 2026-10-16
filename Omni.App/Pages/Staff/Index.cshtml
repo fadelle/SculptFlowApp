@@ -13,14 +13,14 @@
         .ToList();
 }
 
-@if (!Model.ClinicConfigured)
+@if (!Model.ClientConfigured)
 {
-    <partial name="_NoClinic" />
+    <partial name="_NoClient" />
 }
 else
 {
     <div class="au-page-head">
-        <p class="au-page-head__sub mw-640">Everyone who can sign in to <strong>@Model.ClinicName</strong> and see its leads, conversations and settings.</p>
+        <p class="au-page-head__sub mw-640">Everyone who can sign in to <strong>@Model.ClientName</strong> and see its leads, conversations and settings.</p>
         <div class="au-page-head__actions">
             <span title="Coming soon"><button type="button" class="au-btn au-btn--outlined" disabled><span class="au-icon" aria-hidden="true">person_add</span>Invite staff</button></span>
         </div>
@@ -29,7 +29,7 @@ else
     if (members.Count == 0)
     {
         var empty = new EmptyStateModel(Icon: "badge", Title: "No staff yet",
-            Text: "People you add will be able to sign in and work on this clinic. To add someone for now, contact support.");
+            Text: "People you add will be able to sign in and work on this client. To add someone for now, contact support.");
         <div class="au-panel au-panel--round"><partial name="_EmptyState" model="empty" /></div>
     }
     else

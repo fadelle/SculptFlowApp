@@ -2,7 +2,7 @@ namespace Omni.App.Entities.Responses.Knowledge;
 
 public record KnowledgeDocumentResponse(
     Guid Id,
-    Guid ClinicId,
+    Guid ClientId,
     string Title,
     string Category,
     string Content,

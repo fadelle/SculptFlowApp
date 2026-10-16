@@ -6,7 +6,7 @@ using Omni.App.Entities.Responses.Billing;
 namespace Omni.App.Business.Contracts.Services.Billing;
 
 /// <summary>Plan catalog management (admin API). Plans are never deleted — deactivate one to stop offering it;
-/// clinics already on it keep it and renew at its current price.</summary>
+/// clients already on it keep it and renew at its current price.</summary>
 public interface IPlanService
 {
     Task<IReadOnlyList<PlanResponse>> ListAsync(CancellationToken ct = default);

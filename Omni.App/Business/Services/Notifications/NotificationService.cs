@@ -22,7 +22,7 @@ public class NotificationService : INotificationService
     }
 
     public async Task CreateAsync(
-        Guid clinicId, string type, string title, string? message,
+        Guid clientId, string type, string title, string? message,
         Guid? leadId = null, Guid? conversationId = null, Guid? appointmentId = null, Guid? channelIntegrationId = null,
         string? link = null, CancellationToken ct = default)
     {
@@ -31,7 +31,7 @@ public class NotificationService : INotificationService
             var notification = new Notification
             {
                 Id = Guid.NewGuid(),
-                ClinicId = clinicId,
+                ClientId = clientId,
                 Type = type,
                 Title = title,
                 Message = message,
@@ -46,7 +46,7 @@ public class NotificationService : INotificationService
             _notifications.Add(notification);
             await _unitOfWork.SaveChangesAsync(ct);
 
-            await _notifier.NotificationCreatedAsync(clinicId, NotificationMapper.ToResponse(notification), ct);
+            await _notifier.NotificationCreatedAsync(clientId, NotificationMapper.ToResponse(notification), ct);
         }
         catch
         {
@@ -55,18 +55,18 @@ public class NotificationService : INotificationService
         }
     }
 
-    public async Task<NotificationListResponse> ListAsync(Guid clinicId, int skip, int take, CancellationToken ct = default)
+    public async Task<NotificationListResponse> ListAsync(Guid clientId, int skip, int take, CancellationToken ct = default)
     {
-        var (items, totalCount, unreadCount) = await _notifications.ListAsync(clinicId, skip, take, ct);
+        var (items, totalCount, unreadCount) = await _notifications.ListAsync(clientId, skip, take, ct);
         return new NotificationListResponse(items.Select(NotificationMapper.ToResponse).ToList(), unreadCount, totalCount);
     }
 
-    public Task<int> GetUnreadCountAsync(Guid clinicId, CancellationToken ct = default) =>
-        _notifications.CountUnreadAsync(clinicId, ct);
+    public Task<int> GetUnreadCountAsync(Guid clientId, CancellationToken ct = default) =>
+        _notifications.CountUnreadAsync(clientId, ct);
 
-    public async Task MarkReadAsync(Guid clinicId, Guid id, CancellationToken ct = default)
+    public async Task MarkReadAsync(Guid clientId, Guid id, CancellationToken ct = default)
     {
-        var notification = await _notifications.GetAsync(clinicId, id, ct);
+        var notification = await _notifications.GetAsync(clientId, id, ct);
         if (notification is null || notification.IsRead) return;
 
         notification.IsRead = true;
@@ -74,6 +74,6 @@ public class NotificationService : INotificationService
         await _unitOfWork.SaveChangesAsync(ct);
     }
 
-    public Task MarkAllReadAsync(Guid clinicId, CancellationToken ct = default) =>
-        _notifications.MarkAllReadAsync(clinicId, DateTimeOffset.UtcNow, ct);
+    public Task MarkAllReadAsync(Guid clientId, CancellationToken ct = default) =>
+        _notifications.MarkAllReadAsync(clientId, DateTimeOffset.UtcNow, ct);
 }

@@ -9,7 +9,7 @@ namespace Omni.App.Controllers.Admin;
 
 /// <summary>
 /// Platform-admin channels API (internal; called by the Omni.Admin portal): messaging connections, calendar and
-/// TikTok connections. Writes answer { clinicId }. Errors: 400 invalid input, 404 not found, 422 not allowed now,
+/// TikTok connections. Writes answer { clientId }. Errors: 400 invalid input, 404 not found, 422 not allowed now,
 /// 502/503 provider unavailable.
 /// </summary>
 [ApiController]
@@ -27,9 +27,9 @@ public class ChannelsAdminController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<IActionResult> List([FromQuery] Guid? clinicId, [FromQuery] string? channel, [FromQuery] bool problemsOnly,
+    public async Task<IActionResult> List([FromQuery] Guid? clientId, [FromQuery] string? channel, [FromQuery] bool problemsOnly,
         CancellationToken ct) =>
-        Ok(await _channels.ListChannelsAsync(clinicId, channel, problemsOnly, ct));
+        Ok(await _channels.ListChannelsAsync(clientId, channel, problemsOnly, ct));
 
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> Get(Guid id, CancellationToken ct) =>
@@ -47,7 +47,7 @@ public class ChannelsAdminController : ControllerBase
         Ok(await _channels.DebugWhatsAppTokenAsync(request, ct));
 
     [HttpGet("calendars")]
-    public async Task<IActionResult> Calendars([FromQuery] Guid? clinicId, CancellationToken ct) => Ok(await _channels.ListCalendarsAsync(clinicId, ct));
+    public async Task<IActionResult> Calendars([FromQuery] Guid? clientId, CancellationToken ct) => Ok(await _channels.ListCalendarsAsync(clientId, ct));
 
     [HttpPost("calendars/{id:guid}/disconnect")]
     public async Task<IActionResult> DisconnectCalendar(Guid id, CancellationToken ct) => Ok(await _channels.DisconnectCalendarAsync(id, ct));
@@ -57,7 +57,7 @@ public class ChannelsAdminController : ControllerBase
         Ok(await _channels.SetCalendarSyncAsync(id, request.Value, ct));
 
     [HttpGet("tiktok")]
-    public async Task<IActionResult> TikTok([FromQuery] Guid? clinicId, CancellationToken ct) => Ok(await _channels.ListTikTokAsync(clinicId, ct));
+    public async Task<IActionResult> TikTok([FromQuery] Guid? clientId, CancellationToken ct) => Ok(await _channels.ListTikTokAsync(clientId, ct));
 
     [HttpPost("tiktok/{id:guid}/disconnect")]
     public async Task<IActionResult> DisconnectTikTok(Guid id, CancellationToken ct) => Ok(await _channels.DisconnectTikTokAsync(id, ct));

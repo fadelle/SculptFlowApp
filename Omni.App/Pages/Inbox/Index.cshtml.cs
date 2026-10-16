@@ -13,19 +13,19 @@ namespace Omni.App.Pages.Inbox;
 /// </summary>
 public class IndexModel : PageModel
 {
-    private readonly ICurrentClinicContext _clinicContext;
+    private readonly ICurrentClientContext _clientContext;
     private readonly IConversationService _conversations;
     private readonly IInboxSettingsService _inboxSettings;
 
-    public IndexModel(ICurrentClinicContext clinicContext, IConversationService conversations, IInboxSettingsService inboxSettings)
+    public IndexModel(ICurrentClientContext clientContext, IConversationService conversations, IInboxSettingsService inboxSettings)
     {
         _inboxSettings = inboxSettings;
-        _clinicContext = clinicContext;
+        _clientContext = clientContext;
         _conversations = conversations;
     }
 
-    public bool ClinicConfigured { get; private set; }
-    public Guid ClinicId { get; private set; }
+    public bool ClientConfigured { get; private set; }
+    public Guid ClientId { get; private set; }
     public IReadOnlyList<ConversationListRow> Conversations { get; private set; } = Array.Empty<ConversationListRow>();
 
     /// <summary>The plan includes the AI agent; without it inbox.js hides Return to AI (the API refuses it too).</summary>
@@ -33,18 +33,18 @@ public class IndexModel : PageModel
 
     public async Task OnGetAsync(CancellationToken ct)
     {
-        var clinic = await _clinicContext.GetClinicAsync(ct);
-        if (clinic is null)
+        var client = await _clientContext.GetClientAsync(ct);
+        if (client is null)
         {
-            ClinicConfigured = false;
+            ClientConfigured = false;
             return;
         }
 
-        ClinicConfigured = true;
-        ClinicId = clinic.Id;
-        AiAgentAvailable = (await _inboxSettings.GetAsync(clinic.Id, ct)).PlanIncludesAiBot;
+        ClientConfigured = true;
+        ClientId = client.Id;
+        AiAgentAvailable = (await _inboxSettings.GetAsync(client.Id, ct)).PlanIncludesAiBot;
 
-        var (items, _) = await _conversations.ListAsync(clinic.Id, skip: 0, take: 50, ct);
+        var (items, _) = await _conversations.ListAsync(client.Id, skip: 0, take: 50, ct);
         Conversations = items;
     }
 }

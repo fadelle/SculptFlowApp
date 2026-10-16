@@ -20,46 +20,46 @@ public class AvailabilityRepository : IAvailabilityRepository
         _cache = cache;
     }
 
-    public Task<List<ClinicAvailabilityRule>> ListRulesAsync(Guid clinicId, CancellationToken ct = default) =>
-        _db.ClinicAvailabilityRules.Where(r => r.ClinicId == clinicId).ToListAsync(ct);
+    public Task<List<AvailabilityRule>> ListRulesAsync(Guid clientId, CancellationToken ct = default) =>
+        _db.AvailabilityRules.Where(r => r.ClientId == clientId).ToListAsync(ct);
 
-    public async Task<List<ClinicAvailabilityRule>> ListRulesReadOnlyAsync(Guid clinicId, CancellationToken ct = default) =>
-        (await _cache.ReadThroughAsync(CacheKeys.AvailabilityRules(clinicId), CacheArea.Scheduling,
-            async token => await _db.ClinicAvailabilityRules.AsNoTracking().Where(r => r.ClinicId == clinicId).ToListAsync(token),
+    public async Task<List<AvailabilityRule>> ListRulesReadOnlyAsync(Guid clientId, CancellationToken ct = default) =>
+        (await _cache.ReadThroughAsync(CacheKeys.AvailabilityRules(clientId), CacheArea.Scheduling,
+            async token => await _db.AvailabilityRules.AsNoTracking().Where(r => r.ClientId == clientId).ToListAsync(token),
             ct))!;
 
-    public void AddRule(ClinicAvailabilityRule rule) => _db.ClinicAvailabilityRules.Add(rule);
+    public void AddRule(AvailabilityRule rule) => _db.AvailabilityRules.Add(rule);
 
-    public Task<ClinicBookingSettings?> GetBookingSettingsAsync(Guid clinicId, CancellationToken ct = default) =>
-        _db.ClinicBookingSettings.FirstOrDefaultAsync(s => s.ClinicId == clinicId, ct);
+    public Task<BookingSettings?> GetBookingSettingsAsync(Guid clientId, CancellationToken ct = default) =>
+        _db.BookingSettings.FirstOrDefaultAsync(s => s.ClientId == clientId, ct);
 
-    public Task<ClinicBookingSettings?> GetBookingSettingsReadOnlyAsync(Guid clinicId, CancellationToken ct = default) =>
-        _cache.ReadThroughValueAsync(CacheKeys.BookingSettings(clinicId), CacheArea.Scheduling,
-            token => _db.ClinicBookingSettings.AsNoTracking().FirstOrDefaultAsync(s => s.ClinicId == clinicId, token), ct);
+    public Task<BookingSettings?> GetBookingSettingsReadOnlyAsync(Guid clientId, CancellationToken ct = default) =>
+        _cache.ReadThroughValueAsync(CacheKeys.BookingSettings(clientId), CacheArea.Scheduling,
+            token => _db.BookingSettings.AsNoTracking().FirstOrDefaultAsync(s => s.ClientId == clientId, token), ct);
 
-    public void AddBookingSettings(ClinicBookingSettings settings) => _db.ClinicBookingSettings.Add(settings);
+    public void AddBookingSettings(BookingSettings settings) => _db.BookingSettings.Add(settings);
 
-    public async Task<IReadOnlyList<ClinicAvailabilityException>> ListExceptionsAsync(Guid clinicId, DateOnly from, DateOnly to,
+    public async Task<IReadOnlyList<AvailabilityException>> ListExceptionsAsync(Guid clientId, DateOnly from, DateOnly to,
         CancellationToken ct = default) =>
-        (await ListExceptionsReadOnlyAsync(clinicId, ct)).Where(e => e.Date >= from && e.Date <= to).ToList();
+        (await ListExceptionsReadOnlyAsync(clientId, ct)).Where(e => e.Date >= from && e.Date <= to).ToList();
 
-    public async Task<IReadOnlyList<ClinicAvailabilityException>> ListExceptionsFromAsync(Guid clinicId, DateOnly fromDate,
+    public async Task<IReadOnlyList<AvailabilityException>> ListExceptionsFromAsync(Guid clientId, DateOnly fromDate,
         CancellationToken ct = default) =>
-        (await ListExceptionsReadOnlyAsync(clinicId, ct)).Where(e => e.Date >= fromDate).ToList();
+        (await ListExceptionsReadOnlyAsync(clientId, ct)).Where(e => e.Date >= fromDate).ToList();
 
-    public Task<ClinicAvailabilityException?> GetExceptionByDateAsync(Guid clinicId, DateOnly date, CancellationToken ct = default) =>
-        _db.ClinicAvailabilityExceptions.FirstOrDefaultAsync(x => x.ClinicId == clinicId && x.Date == date, ct);
+    public Task<AvailabilityException?> GetExceptionByDateAsync(Guid clientId, DateOnly date, CancellationToken ct = default) =>
+        _db.AvailabilityExceptions.FirstOrDefaultAsync(x => x.ClientId == clientId && x.Date == date, ct);
 
-    public Task<ClinicAvailabilityException?> GetExceptionAsync(Guid clinicId, Guid exceptionId, CancellationToken ct = default) =>
-        _db.ClinicAvailabilityExceptions.FirstOrDefaultAsync(x => x.ClinicId == clinicId && x.Id == exceptionId, ct);
+    public Task<AvailabilityException?> GetExceptionAsync(Guid clientId, Guid exceptionId, CancellationToken ct = default) =>
+        _db.AvailabilityExceptions.FirstOrDefaultAsync(x => x.ClientId == clientId && x.Id == exceptionId, ct);
 
-    public void AddException(ClinicAvailabilityException exception) => _db.ClinicAvailabilityExceptions.Add(exception);
+    public void AddException(AvailabilityException exception) => _db.AvailabilityExceptions.Add(exception);
 
-    public void RemoveException(ClinicAvailabilityException exception) => _db.ClinicAvailabilityExceptions.Remove(exception);
+    public void RemoveException(AvailabilityException exception) => _db.AvailabilityExceptions.Remove(exception);
 
-    /// <summary>Every date exception of the clinic by date, read-only (cached; a clinic has a handful a year).</summary>
-    private async Task<List<ClinicAvailabilityException>> ListExceptionsReadOnlyAsync(Guid clinicId, CancellationToken ct) =>
-        (await _cache.ReadThroughAsync(CacheKeys.AvailabilityExceptions(clinicId), CacheArea.Scheduling,
-            async token => await _db.ClinicAvailabilityExceptions.AsNoTracking().Where(e => e.ClinicId == clinicId)
+    /// <summary>Every date exception of the client by date, read-only (cached; a client has a handful a year).</summary>
+    private async Task<List<AvailabilityException>> ListExceptionsReadOnlyAsync(Guid clientId, CancellationToken ct) =>
+        (await _cache.ReadThroughAsync(CacheKeys.AvailabilityExceptions(clientId), CacheArea.Scheduling,
+            async token => await _db.AvailabilityExceptions.AsNoTracking().Where(e => e.ClientId == clientId)
                 .OrderBy(e => e.Date).ToListAsync(token), ct))!;
 }

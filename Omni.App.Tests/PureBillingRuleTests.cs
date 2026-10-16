@@ -67,7 +67,7 @@ public class PureBillingRuleTests
     [Fact]
     public void BillableEvents_AreChargedByDefault_OnlyWhenPlatformPaysTheProvider()
     {
-        var e = new BillableEvent { ClinicId = Guid.NewGuid(), IdempotencyKey = "k", EventType = "x", Channel = "c" };
+        var e = new BillableEvent { ClientId = Guid.NewGuid(), IdempotencyKey = "k", EventType = "x", Channel = "c" };
         Assert.True(e.ChargesUsage);
         Assert.False((e with { ProviderBilling = ProviderBillingResponsibility.CustomerDirect }).ChargesUsage);
         Assert.False((e with { ProviderBilling = ProviderBillingResponsibility.ExternalProviderDirect }).ChargesUsage);
@@ -80,7 +80,7 @@ public class PureBillingRuleTests
     public void RateSelector_NoCandidates_MeansNoPrice()
     {
         Assert.Null(RateSelector.Select(Array.Empty<BillingRate>(), new[] { DefaultCard }));
-        Assert.Null(RateSelector.Select(new[] { Rate(Guid.NewGuid(), 1m) }, new[] { DefaultCard })); // a card not in the clinic's hierarchy
+        Assert.Null(RateSelector.Select(new[] { Rate(Guid.NewGuid(), 1m) }, new[] { DefaultCard })); // a card not in the client's hierarchy
     }
 
     [Theory]
@@ -184,14 +184,14 @@ public class PureBillingRuleTests
         Assert.Throws<ArgumentException>(() => EntitlementCatalog.NormalizeValue(key, value));
 
     [Fact]
-    public void ClinicEntitlements_AnswerFromThePlan_NotFromThePlanName()
+    public void ClientEntitlements_AnswerFromThePlan_NotFromThePlanName()
     {
         var values = new Dictionary<string, string>
         {
             [EntitlementKeys.Campaigns] = "true", [EntitlementKeys.AiAgent] = "false",
             [EntitlementKeys.MaxAgents] = "3", [EntitlementKeys.MaxChannelConnections] = "unlimited"
         };
-        var active = new ClinicEntitlements(true, true, SubscriptionStatus.Active, "growth", "Growth", null, values);
+        var active = new ClientEntitlements(true, true, SubscriptionStatus.Active, "growth", "Growth", null, values);
         Assert.True(active.CanSendMessages);
         Assert.True(active.CanUseCampaigns);
         Assert.False(active.CanUseAiAgent);
@@ -200,12 +200,12 @@ public class PureBillingRuleTests
         Assert.Null(active.MaximumChannelConnections); // unlimited
         Assert.Equal(0, active.MaximumWhatsAppNumbers); // not listed = 0
 
-        var expired = new ClinicEntitlements(true, false, SubscriptionStatus.Expired, "growth", "Growth", null, values);
+        var expired = new ClientEntitlements(true, false, SubscriptionStatus.Expired, "growth", "Growth", null, values);
         Assert.False(expired.CanSendMessages);
         Assert.False(expired.CanUseCampaigns);
         Assert.Equal(0, expired.MaximumAgents);
 
-        Assert.True(ClinicEntitlements.Unrestricted.CanUseCampaigns);
-        Assert.Null(ClinicEntitlements.Unrestricted.MaximumAgents);
+        Assert.True(ClientEntitlements.Unrestricted.CanUseCampaigns);
+        Assert.Null(ClientEntitlements.Unrestricted.MaximumAgents);
     }
 }

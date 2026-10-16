@@ -44,9 +44,9 @@ public partial class MessageTraceAdminService : IMessageTraceAdminService
             started.AddMinutes(-1), ended.AddMinutes(MessageTraceLimits.EventWindowMinutes), ct);
 
         var entries = MessageTraceMapper.Timeline(steps, messages, billing, events, logs);
-        var clinicId = steps.Select(s => s.ClinicId).Concat(messages.Select(m => (Guid?)m.ClinicId)).FirstOrDefault(c => c != null);
+        var clientId = steps.Select(s => s.ClientId).Concat(messages.Select(m => (Guid?)m.ClientId)).FirstOrDefault(c => c != null);
         var hasFailure = entries.Any(e => e.Outcome == TraceOutcomes.Failed);
-        return new MessageTrace(id, started, entries.Count == 0 ? ended : entries.Max(e => e.At), clinicId, conversationIds, messageIds,
+        return new MessageTrace(id, started, entries.Count == 0 ? ended : entries.Max(e => e.At), clientId, conversationIds, messageIds,
             hasFailure, entries);
     }
 
@@ -70,14 +70,14 @@ public partial class MessageTraceAdminService : IMessageTraceAdminService
             : new TraceReference(found);
     }
 
-    public async Task<MessageTracePage> ListAsync(int hours, Guid? clinicId, Guid? conversationId, bool failedOnly, int page, int pageSize, CancellationToken ct)
+    public async Task<MessageTracePage> ListAsync(int hours, Guid? clientId, Guid? conversationId, bool failedOnly, int page, int pageSize, CancellationToken ct)
     {
         hours = Math.Clamp(hours, 1, MessageTraceLimits.MaxReportHours);
         page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize, 1, MessageTraceLimits.MaxPageSize);
         var to = _time.GetUtcNow();
         var from = to.AddHours(-hours);
-        var (rows, total) = await _traces.ListReadOnlyAsync(new MessageTraceFilter(from, clinicId, conversationId, failedOnly),
+        var (rows, total) = await _traces.ListReadOnlyAsync(new MessageTraceFilter(from, clientId, conversationId, failedOnly),
             (page - 1) * pageSize, pageSize, ct);
         return new MessageTracePage(from, to, page, pageSize, total, _config.MessageTraceEnabled, _config.MessageTraceRetentionDays,
             _config.MessageTraceFailedRetentionDays, rows);

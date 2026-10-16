@@ -10,7 +10,7 @@ using Omni.App.Persistence.Contracts.PlatformAdmin;
 
 namespace Omni.App.Business.Services.PlatformAdmin;
 
-/// <summary>Reads come from the admin repository; every write goes through the clinic's own service and its rules.</summary>
+/// <summary>Reads come from the admin repository; every write goes through the client's own service and its rules.</summary>
 public class ContentAdminService : IContentAdminService
 {
     private readonly IContentAdminRepository _repository;
@@ -29,57 +29,57 @@ public class ContentAdminService : IContentAdminService
         _knowledgeSettings = knowledgeSettings;
     }
 
-    public Task<PagedResponse<CampaignRow>> ListCampaignsAsync(Guid? clinicId, string? status, int page, CancellationToken ct) =>
-        _repository.ListCampaignsAsync(clinicId, status, page, ct);
+    public Task<PagedResponse<CampaignRow>> ListCampaignsAsync(Guid? clientId, string? status, int page, CancellationToken ct) =>
+        _repository.ListCampaignsAsync(clientId, status, page, ct);
 
     public Task<CampaignRow?> GetCampaignAsync(Guid id, CancellationToken ct) => _repository.GetCampaignAsync(id, ct);
 
     public Task<PagedResponse<RecipientRow>> RecipientsAsync(Guid campaignId, string? status, int page, CancellationToken ct) =>
         _repository.RecipientsAsync(campaignId, status, page, ct);
 
-    public Task<List<TemplateRow>> ListTemplatesAsync(Guid? clinicId, string? status, CancellationToken ct) =>
-        _repository.ListTemplatesAsync(clinicId, status, ct);
+    public Task<List<TemplateRow>> ListTemplatesAsync(Guid? clientId, string? status, CancellationToken ct) =>
+        _repository.ListTemplatesAsync(clientId, status, ct);
 
-    public Task<List<ProcedureRow>> ListProceduresAsync(Guid? clinicId, CancellationToken ct) => _repository.ListProceduresAsync(clinicId, ct);
+    public Task<List<ProcedureRow>> ListProceduresAsync(Guid? clientId, CancellationToken ct) => _repository.ListProceduresAsync(clientId, ct);
 
-    public Task<PagedResponse<KnowledgeDocRow>> ListDocumentsAsync(Guid? clinicId, string? search, bool? active, int page, CancellationToken ct) =>
-        _repository.ListDocumentsAsync(clinicId, search, active, page, ct);
+    public Task<PagedResponse<KnowledgeDocRow>> ListDocumentsAsync(Guid? clientId, string? search, bool? active, int page, CancellationToken ct) =>
+        _repository.ListDocumentsAsync(clientId, search, active, page, ct);
 
     public async Task<KnowledgeDocDetail?> GetDocumentAsync(Guid id, CancellationToken ct) =>
         await _repository.GetDocumentAsync(id, ct) is { } doc ? PlatformAdminMapper.ToDetail(doc) : null;
 
-    public async Task<SearchSettingsDetail?> SearchSettingsAsync(Guid clinicId, CancellationToken ct) =>
-        await _repository.SearchSettingsAsync(clinicId, ct) is { } s ? PlatformAdminMapper.ToDetail(s) : null;
+    public async Task<SearchSettingsDetail?> SearchSettingsAsync(Guid clientId, CancellationToken ct) =>
+        await _repository.SearchSettingsAsync(clientId, ct) is { } s ? PlatformAdminMapper.ToDetail(s) : null;
 
-    public Task<List<WebsiteSourceRow>> ListWebsitesAsync(Guid? clinicId, CancellationToken ct) => _repository.ListWebsitesAsync(clinicId, ct);
+    public Task<List<WebsiteSourceRow>> ListWebsitesAsync(Guid? clientId, CancellationToken ct) => _repository.ListWebsitesAsync(clientId, ct);
 
     public async Task<PlatformAdminChange> CancelCampaignAsync(Guid id, CancellationToken ct)
     {
         var campaign = await _repository.GetCampaignAsync(id, ct) ?? throw new KeyNotFoundException("Campaign not found.");
-        _ = await _campaigns.CancelAsync(campaign.ClinicId, id, ct) ?? throw new KeyNotFoundException("Campaign not found.");
-        return new PlatformAdminChange(campaign.ClinicId);
+        _ = await _campaigns.CancelAsync(campaign.ClientId, id, ct) ?? throw new KeyNotFoundException("Campaign not found.");
+        return new PlatformAdminChange(campaign.ClientId);
     }
 
     public async Task<PlatformAdminChange> SetProcedureActiveAsync(Guid id, bool active, CancellationToken ct)
     {
         var procedure = await _repository.GetProcedureAsync(id, ct) ?? throw new KeyNotFoundException("Procedure not found.");
-        await _procedures.SetActiveAsync(procedure.ClinicId, id, active, ct);
-        return new PlatformAdminChange(procedure.ClinicId);
+        await _procedures.SetActiveAsync(procedure.ClientId, id, active, ct);
+        return new PlatformAdminChange(procedure.ClientId);
     }
 
     public async Task<PlatformAdminChange> SetDocumentActiveAsync(Guid id, bool active, CancellationToken ct)
     {
         var doc = await _repository.GetDocumentAsync(id, ct) ?? throw new KeyNotFoundException("Document not found.");
-        await _knowledge.SetActiveAsync(doc.ClinicId, id, active, ct);
-        return new PlatformAdminChange(doc.ClinicId);
+        await _knowledge.SetActiveAsync(doc.ClientId, id, active, ct);
+        return new PlatformAdminChange(doc.ClientId);
     }
 
-    public async Task<PlatformAdminChange> UpdateSearchSettingsAsync(Guid clinicId, int topK, double minimumSimilarity, CancellationToken ct)
+    public async Task<PlatformAdminChange> UpdateSearchSettingsAsync(Guid clientId, int topK, double minimumSimilarity, CancellationToken ct)
     {
-        var current = await _repository.SearchSettingsAsync(clinicId, ct)
-                      ?? throw new InvalidOperationException("This clinic has no knowledge search settings row yet.");
-        await _knowledgeSettings.UpdateAsync(clinicId,
+        var current = await _repository.SearchSettingsAsync(clientId, ct)
+                      ?? throw new InvalidOperationException("This client has no knowledge search settings row yet.");
+        await _knowledgeSettings.UpdateAsync(clientId,
             new UpdateKnowledgeSettingsRequest(current.ChunkSizeTokens, current.ChunkOverlapTokens, topK, minimumSimilarity), ct);
-        return new PlatformAdminChange(clinicId);
+        return new PlatformAdminChange(clientId);
     }
 }

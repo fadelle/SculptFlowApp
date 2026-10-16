@@ -11,7 +11,7 @@ namespace Omni.App.Common.Extensions;
 
 /// <summary>
 /// DI registration for the Subscriptions &amp; Billing module. Everything it owns lives in Billing/ (plus its tables and
-/// entities); the rest of the app talks to it only through IEntitlementService (may the clinic do X?) and
+/// entities); the rest of the app talks to it only through IEntitlementService (may the client do X?) and
 /// IMessageBillingService (reserve/settle/release for a message), and channels plug in with IChannelBillingPolicy.
 /// That boundary is what would make it extractable later. See docs/billing.md.
 /// </summary>

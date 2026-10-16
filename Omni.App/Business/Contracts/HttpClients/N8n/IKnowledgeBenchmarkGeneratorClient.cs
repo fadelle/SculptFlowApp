@@ -14,5 +14,5 @@ public interface IKnowledgeBenchmarkGeneratorClient
 
     /// <exception cref="BenchmarkGeneratorNotConfiguredException">N8n:KnowledgeBenchmarkWebhookUrl is empty.</exception>
     /// <exception cref="BenchmarkGenerationException">The webhook is unreachable or returned a non-2xx status.</exception>
-    Task<GeneratorSendResult> SendAsync(Guid clinicId, Guid generationId, IReadOnlyList<BenchmarkSourceChunk> chunks, CancellationToken ct = default);
+    Task<GeneratorSendResult> SendAsync(Guid clientId, Guid generationId, IReadOnlyList<BenchmarkSourceChunk> chunks, CancellationToken ct = default);
 }

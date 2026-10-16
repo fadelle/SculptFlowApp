@@ -1,22 +1,22 @@
 using Omni.App.Business.Contracts.Services.Staff;
-using Omni.App.Business.Services.Clinics;
+using Omni.App.Business.Services.Clients;
 using Omni.App.Entities.Responses.Staff;
-using Omni.App.Persistence.Contracts.Clinics;
+using Omni.App.Persistence.Contracts.Clients;
 
 namespace Omni.App.Business.Services.Staff;
 
 public class StaffService : IStaffService
 {
-    private readonly IClinicRepository _clinics;
+    private readonly IClientRepository _clients;
 
-    public StaffService(IClinicRepository clinics)
+    public StaffService(IClientRepository clients)
     {
-        _clinics = clinics;
+        _clients = clients;
     }
 
-    public async Task<IReadOnlyList<StaffMemberResponse>> ListAsync(Guid clinicId, CancellationToken ct = default)
+    public async Task<IReadOnlyList<StaffMemberResponse>> ListAsync(Guid clientId, CancellationToken ct = default)
     {
-        var rows = await _clinics.ListStaffAsync(clinicId, ClinicRegistrationService.FullNameClaimType, ct);
+        var rows = await _clients.ListStaffAsync(clientId, ClientRegistrationService.FullNameClaimType, ct);
 
         return rows
             .OrderByDescending(r => r.IsActive)

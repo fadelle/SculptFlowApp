@@ -17,57 +17,57 @@ public class EventLoggerTests
         var repo = new Mock<IEventLogRepository>();
         EventLog? added = null;
         repo.Setup(r => r.Add(It.IsAny<EventLog>())).Callback<EventLog>(e => added = e);
-        var clinic = Guid.NewGuid(); var lead = Guid.NewGuid(); var convo = Guid.NewGuid(); var appt = Guid.NewGuid();
-        new EventLogger(repo.Object).Log(clinic, "lead_created", lead, convo, appt, "n8n", "{\"a\":1}");
-        Assert.Equal((clinic, lead, convo, appt, "lead_created", "n8n", "{\"a\":1}"), (added!.ClinicId, added.LeadId, added.ConversationId, added.AppointmentId, added.EventType, added.Source, added.Metadata));
+        var client = Guid.NewGuid(); var lead = Guid.NewGuid(); var convo = Guid.NewGuid(); var appt = Guid.NewGuid();
+        new EventLogger(repo.Object).Log(client, "lead_created", lead, convo, appt, "n8n", "{\"a\":1}");
+        Assert.Equal((client, lead, convo, appt, "lead_created", "n8n", "{\"a\":1}"), (added!.ClientId, added.LeadId, added.ConversationId, added.AppointmentId, added.EventType, added.Source, added.Metadata));
         Assert.NotEqual(Guid.Empty, added.Id);
 
-        new EventLogger(repo.Object).Log(clinic, "x", metadataJson: "  ");
+        new EventLogger(repo.Object).Log(client, "x", metadataJson: "  ");
         Assert.Equal("{}", added.Metadata);
     }
 }
 
-public class ClinicContextTests
+public class ClientContextTests
 {
-    private readonly Mock<IClinicRepository> _clinics = new();
+    private readonly Mock<IClientRepository> _clients = new();
 
     private static IHttpContextAccessor Accessor(ClaimsPrincipal? user) => new HttpContextAccessor { HttpContext = user is null ? null : new DefaultHttpContext { User = user } };
 
     private static ClaimsPrincipal SignedIn(string id) => new(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, id)], "test"));
 
     [Fact]
-    public async Task Anonymous_or_missing_contexts_have_no_clinic()
+    public async Task Anonymous_or_missing_contexts_have_no_client()
     {
-        Assert.Null(await new CurrentClinicContext(_clinics.Object, Accessor(null)).GetClinicIdAsync());
-        Assert.Null(await new CurrentClinicContext(_clinics.Object, Accessor(new ClaimsPrincipal(new ClaimsIdentity()))).GetClinicAsync());
-        Assert.Null(await new CurrentClinicContext(_clinics.Object, Accessor(new ClaimsPrincipal(new ClaimsIdentity([], "test")))).GetClinicIdAsync()); // authenticated, no id claim
-        _clinics.Verify(c => c.GetClinicIdOfActiveMemberAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        Assert.Null(await new CurrentClientContext(_clients.Object, Accessor(null)).GetClientIdAsync());
+        Assert.Null(await new CurrentClientContext(_clients.Object, Accessor(new ClaimsPrincipal(new ClaimsIdentity()))).GetClientAsync());
+        Assert.Null(await new CurrentClientContext(_clients.Object, Accessor(new ClaimsPrincipal(new ClaimsIdentity([], "test")))).GetClientIdAsync()); // authenticated, no id claim
+        _clients.Verify(c => c.GetClientIdOfActiveMemberAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
     public async Task Signed_in_users_resolve_through_their_active_membership()
     {
         var id = Guid.NewGuid();
-        var clinic = new Clinic { Id = id };
-        _clinics.Setup(c => c.GetClinicIdOfActiveMemberAsync("u1", It.IsAny<CancellationToken>())).ReturnsAsync(id);
-        _clinics.Setup(c => c.GetClinicOfActiveMemberAsync("u1", It.IsAny<CancellationToken>())).ReturnsAsync(clinic);
-        var ctx = new CurrentClinicContext(_clinics.Object, Accessor(SignedIn("u1")));
-        Assert.Equal(id, await ctx.GetClinicIdAsync());
-        Assert.Same(clinic, await ctx.GetClinicAsync());
+        var client = new Client { Id = id };
+        _clients.Setup(c => c.GetClientIdOfActiveMemberAsync("u1", It.IsAny<CancellationToken>())).ReturnsAsync(id);
+        _clients.Setup(c => c.GetClientOfActiveMemberAsync("u1", It.IsAny<CancellationToken>())).ReturnsAsync(client);
+        var ctx = new CurrentClientContext(_clients.Object, Accessor(SignedIn("u1")));
+        Assert.Equal(id, await ctx.GetClientIdAsync());
+        Assert.Same(client, await ctx.GetClientAsync());
     }
 
     [Fact]
-    public async Task Clinic_context_loads_by_id()
+    public async Task Client_context_loads_by_id()
     {
-        var clinic = new Clinic { Id = Guid.NewGuid() };
-        _clinics.Setup(c => c.GetReadOnlyAsync(clinic.Id, It.IsAny<CancellationToken>())).ReturnsAsync(clinic);
-        Assert.Same(clinic, await new ClinicContext(_clinics.Object).GetByIdAsync(clinic.Id));
+        var client = new Client { Id = Guid.NewGuid() };
+        _clients.Setup(c => c.GetReadOnlyAsync(client.Id, It.IsAny<CancellationToken>())).ReturnsAsync(client);
+        Assert.Same(client, await new ClientContext(_clients.Object).GetByIdAsync(client.Id));
     }
 }
 
 public class InboxNotifierTests
 {
-    private readonly Guid _clinicId = Guid.NewGuid();
+    private readonly Guid _clientId = Guid.NewGuid();
     private readonly Mock<IClientProxy> _proxy = new();
     private readonly InboxNotifier _sut;
     private string? _group;
@@ -85,28 +85,28 @@ public class InboxNotifierTests
         _proxy.Verify(p => p.SendCoreAsync(method, It.Is<object?[]>(a => a.Length == 1), It.IsAny<CancellationToken>()), Times.Once);
 
     [Fact]
-    public async Task Every_notification_goes_to_the_clinic_group_with_its_event_name()
+    public async Task Every_notification_goes_to_the_client_group_with_its_event_name()
     {
         var id = Guid.NewGuid();
         var now = DateTimeOffset.UtcNow;
-        await _sut.NewMessageAsync(_clinicId, id, id, id, "inbound", "lead", "whatsapp_customer", now);
-        Assert.Equal(InboxHub.ClinicGroup(_clinicId), _group);
-        await _sut.MessageStatusUpdatedAsync(_clinicId, id, id, "read", now);
-        await _sut.ConversationUpdatedAsync(_clinicId, id);
-        await _sut.NotificationCreatedAsync(_clinicId, new NotificationResponse(id, "t", "title", null, null, null, null, null, false, now));
-        await _sut.AppointmentChangedAsync(_clinicId, id, "created");
-        await _sut.ConversationModeChangedAsync(_clinicId, id, "human");
-        await _sut.WhatsAppTemplateUpdatedAsync(_clinicId, id, "n", "approved", null, now);
-        await _sut.WhatsAppHealthUpdatedAsync(_clinicId, id, "healthy", null, null, null, null, null, now);
+        await _sut.NewMessageAsync(_clientId, id, id, id, "inbound", "lead", "whatsapp_customer", now);
+        Assert.Equal(InboxHub.ClientGroup(_clientId), _group);
+        await _sut.MessageStatusUpdatedAsync(_clientId, id, id, "read", now);
+        await _sut.ConversationUpdatedAsync(_clientId, id);
+        await _sut.NotificationCreatedAsync(_clientId, new NotificationResponse(id, "t", "title", null, null, null, null, null, false, now));
+        await _sut.AppointmentChangedAsync(_clientId, id, "created");
+        await _sut.ConversationModeChangedAsync(_clientId, id, "human");
+        await _sut.WhatsAppTemplateUpdatedAsync(_clientId, id, "n", "approved", null, now);
+        await _sut.WhatsAppHealthUpdatedAsync(_clientId, id, "healthy", null, null, null, null, null, now);
         foreach (var m in new[] { "NewMessage", "MessageStatusUpdated", "ConversationUpdated", "NotificationCreated", "AppointmentChanged", "ConversationModeChanged", "WhatsAppTemplateUpdated", "WhatsAppHealthUpdated" }) Sent(m);
     }
 
     [Fact]
-    public void Group_names_are_per_clinic()
+    public void Group_names_are_per_client()
     {
         var other = Guid.NewGuid();
-        Assert.NotEqual(InboxHub.ClinicGroup(_clinicId), InboxHub.ClinicGroup(other));
-        Assert.Contains(_clinicId.ToString("N"), InboxHub.ClinicGroup(_clinicId).Replace("-", ""));
+        Assert.NotEqual(InboxHub.ClientGroup(_clientId), InboxHub.ClientGroup(other));
+        Assert.Contains(_clientId.ToString("N"), InboxHub.ClientGroup(_clientId).Replace("-", ""));
     }
 }
 
@@ -258,15 +258,15 @@ public class QueueAndWorkerTests
     [Fact]
     public async Task Campaign_sender_sends_every_due_campaign_with_the_configured_batch_size()
     {
-        var clinicId = Guid.NewGuid();
-        var scheduled = new DueCampaign(Guid.NewGuid(), clinicId, CampaignStatus.Scheduled);
-        var running = new DueCampaign(Guid.NewGuid(), clinicId, CampaignStatus.Running);
-        var stopped = new DueCampaign(Guid.NewGuid(), clinicId, CampaignStatus.Running);
+        var clientId = Guid.NewGuid();
+        var scheduled = new DueCampaign(Guid.NewGuid(), clientId, CampaignStatus.Scheduled);
+        var running = new DueCampaign(Guid.NewGuid(), clientId, CampaignStatus.Running);
+        var stopped = new DueCampaign(Guid.NewGuid(), clientId, CampaignStatus.Running);
         var campaigns = new Mock<ICampaignService>();
         campaigns.Setup(c => c.ListDueAsync(It.IsAny<CancellationToken>())).ReturnsAsync(new List<DueCampaign> { scheduled, running, stopped });
-        campaigns.Setup(c => c.SendDueAsync(clinicId, scheduled.Id, 7, It.IsAny<CancellationToken>())).ReturnsAsync(new ProcessCampaignBatchResult(3, 3, 0, 0, true));
-        campaigns.Setup(c => c.SendDueAsync(clinicId, running.Id, 7, It.IsAny<CancellationToken>())).ReturnsAsync(new ProcessCampaignBatchResult(7, 6, 1, 40, false));
-        campaigns.Setup(c => c.SendDueAsync(clinicId, stopped.Id, 7, It.IsAny<CancellationToken>())).ReturnsAsync((ProcessCampaignBatchResult?)null);
+        campaigns.Setup(c => c.SendDueAsync(clientId, scheduled.Id, 7, It.IsAny<CancellationToken>())).ReturnsAsync(new ProcessCampaignBatchResult(3, 3, 0, 0, true));
+        campaigns.Setup(c => c.SendDueAsync(clientId, running.Id, 7, It.IsAny<CancellationToken>())).ReturnsAsync(new ProcessCampaignBatchResult(7, 6, 1, 40, false));
+        campaigns.Setup(c => c.SendDueAsync(clientId, stopped.Id, 7, It.IsAny<CancellationToken>())).ReturnsAsync((ProcessCampaignBatchResult?)null);
 
         var processed = await CampaignSender(campaigns.Object, batchSize: 7).RunOnceAsync(CancellationToken.None);
 
@@ -277,19 +277,19 @@ public class QueueAndWorkerTests
     [Fact]
     public async Task Campaign_sender_keeps_going_when_one_campaign_is_out_of_credit_or_fails()
     {
-        var clinicId = Guid.NewGuid();
-        var broke = new DueCampaign(Guid.NewGuid(), clinicId, CampaignStatus.Running);
-        var noPlan = new DueCampaign(Guid.NewGuid(), clinicId, CampaignStatus.Running);
-        var crashing = new DueCampaign(Guid.NewGuid(), clinicId, CampaignStatus.Running);
-        var fine = new DueCampaign(Guid.NewGuid(), clinicId, CampaignStatus.Running);
+        var clientId = Guid.NewGuid();
+        var broke = new DueCampaign(Guid.NewGuid(), clientId, CampaignStatus.Running);
+        var noPlan = new DueCampaign(Guid.NewGuid(), clientId, CampaignStatus.Running);
+        var crashing = new DueCampaign(Guid.NewGuid(), clientId, CampaignStatus.Running);
+        var fine = new DueCampaign(Guid.NewGuid(), clientId, CampaignStatus.Running);
         var campaigns = new Mock<ICampaignService>();
         campaigns.Setup(c => c.ListDueAsync(It.IsAny<CancellationToken>())).ReturnsAsync(new List<DueCampaign> { broke, noPlan, crashing, fine });
-        campaigns.Setup(c => c.SendDueAsync(clinicId, broke.Id, It.IsAny<int>(), It.IsAny<CancellationToken>()))
+        campaigns.Setup(c => c.SendDueAsync(clientId, broke.Id, It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new BillingDeniedException(UsageFailureReason.InsufficientFunds, "out of credit"));
-        campaigns.Setup(c => c.SendDueAsync(clinicId, noPlan.Id, It.IsAny<int>(), It.IsAny<CancellationToken>()))
+        campaigns.Setup(c => c.SendDueAsync(clientId, noPlan.Id, It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new EntitlementDeniedException("campaigns", "upgrade"));
-        campaigns.Setup(c => c.SendDueAsync(clinicId, crashing.Id, It.IsAny<int>(), It.IsAny<CancellationToken>())).ThrowsAsync(new Exception("db down"));
-        campaigns.Setup(c => c.SendDueAsync(clinicId, fine.Id, It.IsAny<int>(), It.IsAny<CancellationToken>())).ReturnsAsync(new ProcessCampaignBatchResult(2, 2, 0, 0, true));
+        campaigns.Setup(c => c.SendDueAsync(clientId, crashing.Id, It.IsAny<int>(), It.IsAny<CancellationToken>())).ThrowsAsync(new Exception("db down"));
+        campaigns.Setup(c => c.SendDueAsync(clientId, fine.Id, It.IsAny<int>(), It.IsAny<CancellationToken>())).ReturnsAsync(new ProcessCampaignBatchResult(2, 2, 0, 0, true));
 
         Assert.Equal(2, await CampaignSender(campaigns.Object).RunOnceAsync(CancellationToken.None));
     }

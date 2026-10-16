@@ -6,14 +6,14 @@ using Omni.App.Entities.Models;
 using Omni.App.Entities.Responses.Appointments;
 using Omni.App.Persistence.Contracts;
 using Omni.App.Persistence.Contracts.Appointments;
-using Omni.App.Persistence.Contracts.Clinics;
+using Omni.App.Persistence.Contracts.Clients;
 using Omni.App.Persistence.Contracts.Procedures;
 
 namespace Omni.App.Business.Services.Appointments;
 
 public class AvailabilityService : IAvailabilityService
 {
-    // Defaults for clinics without their own booking settings, read through IConfigManager (config.settings, else
+    // Defaults for clients without their own booking settings, read through IConfigManager (config.settings, else
     // the constants in Common/Statics/ConfigDefaults).
     private int DefaultDurationMinutes => _config.AvailabilityDefaultDurationMinutes;
     private int DefaultBufferMinutes => _config.AvailabilityDefaultBufferMinutes;
@@ -22,17 +22,17 @@ public class AvailabilityService : IAvailabilityService
     private int MaxRangeDays => _config.AvailabilityMaxRangeDays;
 
     private readonly IAvailabilityRepository _availability;
-    private readonly IClinicRepository _clinics;
+    private readonly IClientRepository _clients;
     private readonly IProcedureRepository _procedures;
     private readonly IAppointmentRepository _appointments;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IConfigManager _config;
 
-    public AvailabilityService(IAvailabilityRepository availability, IClinicRepository clinics, IProcedureRepository procedures, IAppointmentRepository appointments, IUnitOfWork unitOfWork,
+    public AvailabilityService(IAvailabilityRepository availability, IClientRepository clients, IProcedureRepository procedures, IAppointmentRepository appointments, IUnitOfWork unitOfWork,
         IConfigManager config)
     {
         _availability = availability;
-        _clinics = clinics;
+        _clients = clients;
         _procedures = procedures;
         _appointments = appointments;
         _unitOfWork = unitOfWork;
@@ -42,19 +42,19 @@ public class AvailabilityService : IAvailabilityService
     // ------------------------------------------------------------------ slots
 
     public async Task<AvailabilityResponse> GetSlotsAsync(
-        Guid clinicId, Guid? procedureId, DateOnly? from, int days, CancellationToken ct = default)
+        Guid clientId, Guid? procedureId, DateOnly? from, int days, CancellationToken ct = default)
     {
-        var ctx = await LoadAsync(clinicId, ct);
-        if (ctx is null) return NotConfigured("UTC", DefaultDurationMinutes, DateOnly.FromDateTime(DateTime.UtcNow), "Clinic not found.");
+        var ctx = await LoadAsync(clientId, ct);
+        if (ctx is null) return NotConfigured("UTC", DefaultDurationMinutes, DateOnly.FromDateTime(DateTime.UtcNow), "Client not found.");
 
-        var duration = await ResolveDurationAsync(clinicId, procedureId, ctx.Booking.DefaultConsultationDurationMinutes, ct);
+        var duration = await ResolveDurationAsync(clientId, procedureId, ctx.Booking.DefaultConsultationDurationMinutes, ct);
         var nowUtc = DateTimeOffset.UtcNow;
         var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(nowUtc, ctx.Tz).DateTime);
 
         if (!ctx.Configured)
         {
             return NotConfigured(ctx.Tz.Id, duration, today,
-                "This clinic hasn't set up its appointment availability yet, so no times can be offered.");
+                "This client hasn't set up its appointment availability yet, so no times can be offered.");
         }
 
         // A past date is almost always the caller working from the wrong "today". Don't silently search other dates —
@@ -80,8 +80,8 @@ public class AvailabilityService : IAvailabilityService
                 $"Bookings can only be made up to {ctx.Booking.MaximumAdvanceBookingDays} days ahead.", Array.Empty<AvailableSlotResponse>());
         }
 
-        await ctx.LoadExceptionsAsync(_availability, clinicId, start, end, ct);
-        var busy = await LoadBusyAsync(clinicId, ctx, start, end, ct);
+        await ctx.LoadExceptionsAsync(_availability, clientId, start, end, ct);
+        var busy = await LoadBusyAsync(clientId, ctx, start, end, ct);
 
         var buffer = ctx.Booking.BufferMinutes;
         var step = duration + buffer;
@@ -126,21 +126,21 @@ public class AvailabilityService : IAvailabilityService
     }
 
     public async Task<SlotCheck> CheckSlotAsync(
-        Guid clinicId, Guid? procedureId, DateTimeOffset start, DateTimeOffset? end, Guid? excludeAppointmentId = null, CancellationToken ct = default)
+        Guid clientId, Guid? procedureId, DateTimeOffset start, DateTimeOffset? end, Guid? excludeAppointmentId = null, CancellationToken ct = default)
     {
-        var ctx = await LoadAsync(clinicId, ct);
+        var ctx = await LoadAsync(clientId, ct);
         var fallbackEnd = end ?? start.AddMinutes(DefaultDurationMinutes);
-        if (ctx is null) return new SlotCheck("Clinic not found.", fallbackEnd);
-        if (!ctx.Configured) return new SlotCheck("This clinic hasn't set up its appointment availability yet.", fallbackEnd);
+        if (ctx is null) return new SlotCheck("Client not found.", fallbackEnd);
+        if (!ctx.Configured) return new SlotCheck("This client hasn't set up its appointment availability yet.", fallbackEnd);
 
-        var duration = await ResolveDurationAsync(clinicId, procedureId, ctx.Booking.DefaultConsultationDurationMinutes, ct);
+        var duration = await ResolveDurationAsync(clientId, procedureId, ctx.Booking.DefaultConsultationDurationMinutes, ct);
         var slotEnd = end ?? start.AddMinutes(duration);
         if (slotEnd <= start) return new SlotCheck("The appointment must end after it starts.", slotEnd);
 
         var nowUtc = DateTimeOffset.UtcNow;
         if (start < nowUtc.AddMinutes(ctx.Booking.MinimumBookingNoticeMinutes))
         {
-            return new SlotCheck("That time is too soon - it is inside the clinic's minimum booking notice.", slotEnd);
+            return new SlotCheck("That time is too soon - it is inside the client's minimum booking notice.", slotEnd);
         }
 
         var startLocal = TimeZoneInfo.ConvertTime(start, ctx.Tz).DateTime;
@@ -152,13 +152,13 @@ public class AvailabilityService : IAvailabilityService
             return new SlotCheck($"Bookings can only be made up to {ctx.Booking.MaximumAdvanceBookingDays} days ahead.", slotEnd);
         }
 
-        await ctx.LoadExceptionsAsync(_availability, clinicId, date, date, ct);
+        await ctx.LoadExceptionsAsync(_availability, clientId, date, date, ct);
         var inWindow = ctx.Windows(date).Any(w =>
             DateOnly.FromDateTime(endLocal) == date
             && TimeOnly.FromDateTime(startLocal) >= w.Start && TimeOnly.FromDateTime(endLocal) <= w.End);
-        if (!inWindow) return new SlotCheck("The clinic is not open for a consultation at that time.", slotEnd);
+        if (!inWindow) return new SlotCheck("The client is not open for a consultation at that time.", slotEnd);
 
-        var busy = await LoadBusyAsync(clinicId, ctx, date, date, ct, excludeAppointmentId);
+        var busy = await LoadBusyAsync(clientId, ctx, date, date, ct, excludeAppointmentId);
         if (IsBlocked(busy, ctx.Booking.BufferMinutes, start, slotEnd, out _))
         {
             return new SlotCheck("That time is no longer available - it overlaps another appointment.", slotEnd);
@@ -167,12 +167,12 @@ public class AvailabilityService : IAvailabilityService
         return new SlotCheck(null, slotEnd);
     }
 
-    // ------------------------------------------------------------------ settings (Clinic Info → Availability)
+    // ------------------------------------------------------------------ settings (Business Info → Availability)
 
-    public async Task<AvailabilitySettingsDto> GetSettingsAsync(Guid clinicId, CancellationToken ct = default)
+    public async Task<AvailabilitySettingsDto> GetSettingsAsync(Guid clientId, CancellationToken ct = default)
     {
-        var ctx = await LoadAsync(clinicId, ct)
-                  ?? throw new ArgumentException("Clinic not found.");
+        var ctx = await LoadAsync(clientId, ct)
+                  ?? throw new ArgumentException("Client not found.");
         var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, ctx.Tz).DateTime);
 
         var days = Enumerable.Range(0, 7).Select(dow =>
@@ -183,7 +183,7 @@ public class AvailabilityService : IAvailabilityService
                 : new DayRuleDto(dow, rule.IsOpen, Fmt(rule.StartTime), Fmt(rule.EndTime));
         }).ToList();
 
-        var exceptions = await _availability.ListExceptionsFromAsync(clinicId, today, ct);
+        var exceptions = await _availability.ListExceptionsFromAsync(clientId, today, ct);
 
         return new AvailabilitySettingsDto(
             ctx.Tz.Id,
@@ -197,10 +197,10 @@ public class AvailabilityService : IAvailabilityService
     }
 
     public async Task SaveScheduleAsync(
-        Guid clinicId, string timezone, IReadOnlyList<DayRuleDto> days, BookingRulesDto booking, CancellationToken ct = default)
+        Guid clientId, string timezone, IReadOnlyList<DayRuleDto> days, BookingRulesDto booking, CancellationToken ct = default)
     {
-        var clinic = await _clinics.GetAsync(clinicId, ct)
-                     ?? throw new ArgumentException("Clinic not found.");
+        var client = await _clients.GetAsync(clientId, ct)
+                     ?? throw new ArgumentException("Client not found.");
 
         timezone = (timezone ?? string.Empty).Trim();
         try { TimeZoneInfo.FindSystemTimeZoneById(timezone); }
@@ -232,15 +232,15 @@ public class AvailabilityService : IAvailabilityService
         if (parsed.Select(p => p.Dow).Distinct().Count() != parsed.Count) throw new ArgumentException("Duplicate day in the weekly schedule.");
 
         var now = DateTimeOffset.UtcNow;
-        var rules = await _availability.ListRulesAsync(clinicId, ct);
+        var rules = await _availability.ListRulesAsync(clientId, ct);
         foreach (var p in parsed)
         {
             var rule = rules.FirstOrDefault(r => r.DayOfWeek == p.Dow);
             if (rule is null)
             {
-                _availability.AddRule(new ClinicAvailabilityRule
+                _availability.AddRule(new AvailabilityRule
                 {
-                    Id = Guid.NewGuid(), ClinicId = clinicId, DayOfWeek = p.Dow, IsOpen = p.Open,
+                    Id = Guid.NewGuid(), ClientId = clientId, DayOfWeek = p.Dow, IsOpen = p.Open,
                     StartTime = p.Start, EndTime = p.End, CreatedAt = now, UpdatedAt = now
                 });
             }
@@ -250,10 +250,10 @@ public class AvailabilityService : IAvailabilityService
             }
         }
 
-        var settings = await _availability.GetBookingSettingsAsync(clinicId, ct);
+        var settings = await _availability.GetBookingSettingsAsync(clientId, ct);
         if (settings is null)
         {
-            settings = new ClinicBookingSettings { Id = Guid.NewGuid(), ClinicId = clinicId, CreatedAt = now };
+            settings = new BookingSettings { Id = Guid.NewGuid(), ClientId = clientId, CreatedAt = now };
             _availability.AddBookingSettings(settings);
         }
         settings.DefaultConsultationDurationMinutes = booking.DefaultDurationMinutes;
@@ -262,14 +262,14 @@ public class AvailabilityService : IAvailabilityService
         settings.MaximumAdvanceBookingDays = booking.MaxAdvanceDays;
         settings.UpdatedAt = now;
 
-        clinic.Timezone = timezone;
-        clinic.UpdatedAt = now;
+        client.Timezone = timezone;
+        client.UpdatedAt = now;
 
         await _unitOfWork.SaveChangesAsync(ct);
     }
 
     public async Task SaveExceptionAsync(
-        Guid clinicId, DateOnly date, bool isClosed, string? start, string? end, string? reason, CancellationToken ct = default)
+        Guid clientId, DateOnly date, bool isClosed, string? start, string? end, string? reason, CancellationToken ct = default)
     {
         TimeOnly? s = null, e = null;
         if (!isClosed)
@@ -284,10 +284,10 @@ public class AvailabilityService : IAvailabilityService
         if (reason is { Length: > 200 }) throw new ArgumentException("The reason must be 200 characters or fewer.");
 
         var now = DateTimeOffset.UtcNow;
-        var existing = await _availability.GetExceptionByDateAsync(clinicId, date, ct);
+        var existing = await _availability.GetExceptionByDateAsync(clientId, date, ct);
         if (existing is null)
         {
-            existing = new ClinicAvailabilityException { Id = Guid.NewGuid(), ClinicId = clinicId, Date = date, CreatedAt = now };
+            existing = new AvailabilityException { Id = Guid.NewGuid(), ClientId = clientId, Date = date, CreatedAt = now };
             _availability.AddException(existing);
         }
         existing.IsClosed = isClosed;
@@ -298,9 +298,9 @@ public class AvailabilityService : IAvailabilityService
         await _unitOfWork.SaveChangesAsync(ct);
     }
 
-    public async Task DeleteExceptionAsync(Guid clinicId, Guid exceptionId, CancellationToken ct = default)
+    public async Task DeleteExceptionAsync(Guid clientId, Guid exceptionId, CancellationToken ct = default)
     {
-        var existing = await _availability.GetExceptionAsync(clinicId, exceptionId, ct);
+        var existing = await _availability.GetExceptionAsync(clientId, exceptionId, ct);
         if (existing is null) return;
         _availability.RemoveException(existing);
         await _unitOfWork.SaveChangesAsync(ct);
@@ -313,33 +313,33 @@ public class AvailabilityService : IAvailabilityService
     private static AvailabilityResponse NotConfigured(string tz, int duration, DateOnly today, string message) =>
         new(false, tz, today.ToString("yyyy-MM-dd"), duration, string.Empty, string.Empty, message, Array.Empty<AvailableSlotResponse>());
 
-    /// <summary>Procedure's own consultation duration when it is active and has one; otherwise the clinic default.
-    /// A procedure that is unknown for this clinic or inactive is rejected — it can't be newly booked.</summary>
-    private async Task<int> ResolveDurationAsync(Guid clinicId, Guid? procedureId, int clinicDefault, CancellationToken ct)
+    /// <summary>Procedure's own consultation duration when it is active and has one; otherwise the client default.
+    /// A procedure that is unknown for this client or inactive is rejected — it can't be newly booked.</summary>
+    private async Task<int> ResolveDurationAsync(Guid clientId, Guid? procedureId, int clientDefault, CancellationToken ct)
     {
-        if (procedureId is null) return clinicDefault;
+        if (procedureId is null) return clientDefault;
 
-        var procedure = await _procedures.GetReadOnlyAsync(clinicId, procedureId.Value, ct);
+        var procedure = await _procedures.GetReadOnlyAsync(clientId, procedureId.Value, ct);
 
-        if (procedure is null) throw new ArgumentException("Procedure not found for this clinic.");
+        if (procedure is null) throw new ArgumentException("Procedure not found for this client.");
         if (!procedure.IsActive) throw new ArgumentException($"Procedure '{procedure.Name}' is inactive and can't be newly booked.");
 
-        return procedure.ConsultationDuration is > 0 ? procedure.ConsultationDuration.Value : clinicDefault;
+        return procedure.ConsultationDuration is > 0 ? procedure.ConsultationDuration.Value : clientDefault;
     }
 
-    private async Task<Ctx?> LoadAsync(Guid clinicId, CancellationToken ct)
+    private async Task<Ctx?> LoadAsync(Guid clientId, CancellationToken ct)
     {
-        var clinic = await _clinics.GetReadOnlyAsync(clinicId, ct);
-        if (clinic is null) return null;
+        var client = await _clients.GetReadOnlyAsync(clientId, ct);
+        if (client is null) return null;
 
         TimeZoneInfo tz;
-        try { tz = TimeZoneInfo.FindSystemTimeZoneById(clinic.Timezone); }
+        try { tz = TimeZoneInfo.FindSystemTimeZoneById(client.Timezone); }
         catch { tz = TimeZoneInfo.Utc; }
 
-        var rules = await _availability.ListRulesReadOnlyAsync(clinicId, ct);
-        var settings = await _availability.GetBookingSettingsReadOnlyAsync(clinicId, ct);
+        var rules = await _availability.ListRulesReadOnlyAsync(clientId, ct);
+        var settings = await _availability.GetBookingSettingsReadOnlyAsync(clientId, ct);
 
-        return new Ctx(tz, rules, settings ?? new ClinicBookingSettings
+        return new Ctx(tz, rules, settings ?? new BookingSettings
         {
             DefaultConsultationDurationMinutes = DefaultDurationMinutes,
             BufferMinutes = DefaultBufferMinutes,
@@ -349,14 +349,14 @@ public class AvailabilityService : IAvailabilityService
     }
 
     /// <summary>Blocking appointments that could touch the searched dates. An appointment with no end time occupies its
-    /// procedure's consultation duration, or the clinic default.</summary>
+    /// procedure's consultation duration, or the client default.</summary>
     private async Task<List<(DateTimeOffset Start, DateTimeOffset End)>> LoadBusyAsync(
-        Guid clinicId, Ctx ctx, DateOnly from, DateOnly to, CancellationToken ct, Guid? excludeAppointmentId = null)
+        Guid clientId, Ctx ctx, DateOnly from, DateOnly to, CancellationToken ct, Guid? excludeAppointmentId = null)
     {
         var lowUtc = new DateTimeOffset(from.AddDays(-1).ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
         var highUtc = new DateTimeOffset(to.AddDays(2).ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
 
-        var rows = await _appointments.ListBusyAsync(clinicId, lowUtc, highUtc, excludeAppointmentId, ct);
+        var rows = await _appointments.ListBusyAsync(clientId, lowUtc, highUtc, excludeAppointmentId, ct);
 
         return rows.Select(a => (a.ScheduledStart,
             a.ScheduledEnd ?? a.ScheduledStart.AddMinutes(a.ProcedureMinutes is > 0 ? a.ProcedureMinutes.Value : ctx.Booking.DefaultConsultationDurationMinutes)))
@@ -386,9 +386,9 @@ public class AvailabilityService : IAvailabilityService
 
     private sealed class Ctx
     {
-        private readonly Dictionary<DateOnly, ClinicAvailabilityException> _exceptions = new();
+        private readonly Dictionary<DateOnly, AvailabilityException> _exceptions = new();
 
-        public Ctx(TimeZoneInfo tz, List<ClinicAvailabilityRule> rules, ClinicBookingSettings booking)
+        public Ctx(TimeZoneInfo tz, List<AvailabilityRule> rules, BookingSettings booking)
         {
             Tz = tz;
             AllRules = rules;
@@ -396,15 +396,15 @@ public class AvailabilityService : IAvailabilityService
         }
 
         public TimeZoneInfo Tz { get; }
-        public ClinicBookingSettings Booking { get; }
-        public List<ClinicAvailabilityRule> AllRules { get; }
+        public BookingSettings Booking { get; }
+        public List<AvailabilityRule> AllRules { get; }
 
-        /// <summary>Configured = at least one weekday is open. Nothing is ever offered for an unconfigured clinic.</summary>
+        /// <summary>Configured = at least one weekday is open. Nothing is ever offered for an unconfigured client.</summary>
         public bool Configured => AllRules.Any(r => r.IsOpen);
 
-        public async Task LoadExceptionsAsync(IAvailabilityRepository availability, Guid clinicId, DateOnly from, DateOnly to, CancellationToken ct)
+        public async Task LoadExceptionsAsync(IAvailabilityRepository availability, Guid clientId, DateOnly from, DateOnly to, CancellationToken ct)
         {
-            var rows = await availability.ListExceptionsAsync(clinicId, from, to, ct);
+            var rows = await availability.ListExceptionsAsync(clientId, from, to, ct);
             _exceptions.Clear();
             foreach (var e in rows) _exceptions[e.Date] = e;
         }

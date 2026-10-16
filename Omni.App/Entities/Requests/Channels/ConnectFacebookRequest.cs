@@ -7,7 +7,7 @@ namespace Omni.App.Entities.Requests.Channels;
 /// option too in case a future caller uses the FB.login()/response_type:'code' pattern instead.
 /// </summary>
 public record ConnectFacebookRequest(
-    Guid ClinicId,
+    Guid ClientId,
     string? Code,
     string? AccessToken
 );

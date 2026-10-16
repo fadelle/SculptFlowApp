@@ -6,32 +6,32 @@ using Omni.App.Entities.Responses.Staff;
 
 namespace Omni.App.Pages.Staff;
 
-/// <summary>Staff: the users who have access to the current clinic (read-only list). The clinic always
-/// comes from the logged-in user (ICurrentClinicContext).</summary>
+/// <summary>Staff: the users who have access to the current client (read-only list). The client always
+/// comes from the logged-in user (ICurrentClientContext).</summary>
 public class IndexModel : PageModel
 {
-    private readonly ICurrentClinicContext _clinicContext;
+    private readonly ICurrentClientContext _clientContext;
     private readonly IStaffService _staff;
 
-    public IndexModel(ICurrentClinicContext clinicContext, IStaffService staff)
+    public IndexModel(ICurrentClientContext clientContext, IStaffService staff)
     {
-        _clinicContext = clinicContext;
+        _clientContext = clientContext;
         _staff = staff;
     }
 
-    public bool ClinicConfigured { get; private set; }
-    public string ClinicName { get; private set; } = string.Empty;
+    public bool ClientConfigured { get; private set; }
+    public string ClientName { get; private set; } = string.Empty;
     public string? CurrentUserId { get; private set; }
     public IReadOnlyList<StaffMemberResponse> Members { get; private set; } = Array.Empty<StaffMemberResponse>();
 
     public async Task OnGetAsync(CancellationToken ct)
     {
-        var clinic = await _clinicContext.GetClinicAsync(ct);
-        if (clinic is null) return;
+        var client = await _clientContext.GetClientAsync(ct);
+        if (client is null) return;
 
-        ClinicConfigured = true;
-        ClinicName = clinic.Name;
+        ClientConfigured = true;
+        ClientName = client.Name;
         CurrentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        Members = await _staff.ListAsync(clinic.Id, ct);
+        Members = await _staff.ListAsync(client.Id, ct);
     }
 }

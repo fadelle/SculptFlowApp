@@ -1,7 +1,7 @@
 namespace Omni.App.Entities.Requests.Appointments;
 
 public record CreateAppointmentRequest(
-    Guid ClinicId,
+    Guid ClientId,
     Guid LeadId,
     Guid? ProcedureId,
     string AppointmentType,

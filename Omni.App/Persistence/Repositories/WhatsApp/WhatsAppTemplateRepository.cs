@@ -22,22 +22,22 @@ public class WhatsAppTemplateRepository : IWhatsAppTemplateRepository
 
     public void Add(WhatsAppTemplate template) => _db.WhatsAppTemplates.Add(template);
 
-    public Task<WhatsAppTemplate?> GetAsync(Guid clinicId, Guid templateId, CancellationToken ct = default) =>
-        _db.WhatsAppTemplates.FirstOrDefaultAsync(t => t.ClinicId == clinicId && t.Id == templateId, ct);
+    public Task<WhatsAppTemplate?> GetAsync(Guid clientId, Guid templateId, CancellationToken ct = default) =>
+        _db.WhatsAppTemplates.FirstOrDefaultAsync(t => t.ClientId == clientId && t.Id == templateId, ct);
 
-    public async Task<IReadOnlyList<WhatsAppTemplate>> ListForClinicReadOnlyAsync(Guid clinicId, CancellationToken ct = default) =>
-        (await _cache.ReadThroughAsync(CacheKeys.WhatsAppTemplates(clinicId), CacheArea.Channels,
+    public async Task<IReadOnlyList<WhatsAppTemplate>> ListForClientReadOnlyAsync(Guid clientId, CancellationToken ct = default) =>
+        (await _cache.ReadThroughAsync(CacheKeys.WhatsAppTemplates(clientId), CacheArea.Channels,
             async token => await _db.WhatsAppTemplates.AsNoTracking()
-                .Where(t => t.ClinicId == clinicId)
+                .Where(t => t.ClientId == clientId)
                 .OrderByDescending(t => t.CreatedAt)
                 .ToListAsync(token), ct))!;
 
-    public async Task<WhatsAppTemplate?> GetReadOnlyAsync(Guid clinicId, Guid templateId, CancellationToken ct = default) =>
-        (await ListForClinicReadOnlyAsync(clinicId, ct)).FirstOrDefault(t => t.Id == templateId);
+    public async Task<WhatsAppTemplate?> GetReadOnlyAsync(Guid clientId, Guid templateId, CancellationToken ct = default) =>
+        (await ListForClientReadOnlyAsync(clientId, ct)).FirstOrDefault(t => t.Id == templateId);
 
-    public Task<WhatsAppTemplate?> FindByProviderTemplateIdAsync(Guid clinicId, string providerTemplateId, CancellationToken ct = default) =>
-        _db.WhatsAppTemplates.FirstOrDefaultAsync(t => t.ClinicId == clinicId && t.MetaTemplateId == providerTemplateId, ct);
+    public Task<WhatsAppTemplate?> FindByProviderTemplateIdAsync(Guid clientId, string providerTemplateId, CancellationToken ct = default) =>
+        _db.WhatsAppTemplates.FirstOrDefaultAsync(t => t.ClientId == clientId && t.MetaTemplateId == providerTemplateId, ct);
 
-    public Task<WhatsAppTemplate?> FindByNameAsync(Guid clinicId, string name, string language, CancellationToken ct = default) =>
-        _db.WhatsAppTemplates.FirstOrDefaultAsync(t => t.ClinicId == clinicId && t.Name == name && t.Language == language, ct);
+    public Task<WhatsAppTemplate?> FindByNameAsync(Guid clientId, string name, string language, CancellationToken ct = default) =>
+        _db.WhatsAppTemplates.FirstOrDefaultAsync(t => t.ClientId == clientId && t.Name == name && t.Language == language, ct);
 }

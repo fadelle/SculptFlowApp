@@ -18,14 +18,14 @@ public class BillingUsageRepository : IBillingUsageRepository
 
     public void Add(BillingUsageRecord usage) => _db.BillingUsageRecords.Add(usage);
 
-    public Task<BillingUsageRecord?> FindByKeyAsync(Guid clinicId, string idempotencyKey, CancellationToken ct = default) =>
-        _db.BillingUsageRecords.FirstOrDefaultAsync(u => u.ClinicId == clinicId && u.IdempotencyKey == idempotencyKey, ct);
+    public Task<BillingUsageRecord?> FindByKeyAsync(Guid clientId, string idempotencyKey, CancellationToken ct = default) =>
+        _db.BillingUsageRecords.FirstOrDefaultAsync(u => u.ClientId == clientId && u.IdempotencyKey == idempotencyKey, ct);
 
-    public Task<BillingUsageRecord?> FindByKeyReadOnlyAsync(Guid clinicId, string idempotencyKey, CancellationToken ct = default) =>
-        _db.BillingUsageRecords.AsNoTracking().FirstOrDefaultAsync(u => u.ClinicId == clinicId && u.IdempotencyKey == idempotencyKey, ct);
+    public Task<BillingUsageRecord?> FindByKeyReadOnlyAsync(Guid clientId, string idempotencyKey, CancellationToken ct = default) =>
+        _db.BillingUsageRecords.AsNoTracking().FirstOrDefaultAsync(u => u.ClientId == clientId && u.IdempotencyKey == idempotencyKey, ct);
 
-    public Task<BillingUsageRecord?> GetAsync(Guid clinicId, Guid usageId, CancellationToken ct = default) =>
-        _db.BillingUsageRecords.FirstOrDefaultAsync(u => u.ClinicId == clinicId && u.Id == usageId, ct);
+    public Task<BillingUsageRecord?> GetAsync(Guid clientId, Guid usageId, CancellationToken ct = default) =>
+        _db.BillingUsageRecords.FirstOrDefaultAsync(u => u.ClientId == clientId && u.Id == usageId, ct);
 
     public async Task<IReadOnlyList<BillingUsageRecord>> ListStaleReadOnlyAsync(DateTimeOffset createdBefore, int take,
         CancellationToken ct = default) =>
@@ -37,19 +37,19 @@ public class BillingUsageRepository : IBillingUsageRepository
             .Take(take)
             .ToListAsync(ct);
 
-    public async Task<(IReadOnlyList<BillingUsageRecord> Items, int Total)> ListClinicUsageAsync(Guid clinicId, int skip, int take,
+    public async Task<(IReadOnlyList<BillingUsageRecord> Items, int Total)> ListClientUsageAsync(Guid clientId, int skip, int take,
         CancellationToken ct = default)
     {
-        var query = _db.BillingUsageRecords.AsNoTracking().Where(u => u.ClinicId == clinicId && u.ChargeStatus != ChargeStatus.Failed);
+        var query = _db.BillingUsageRecords.AsNoTracking().Where(u => u.ClientId == clientId && u.ChargeStatus != ChargeStatus.Failed);
         var total = await query.CountAsync(ct);
         var rows = await query.OrderByDescending(u => u.OccurredAt).Skip(skip).Take(take).ToListAsync(ct);
         return (rows, total);
     }
 
-    public async Task<(IReadOnlyList<BillingUsageRecord> Items, int Total)> ListAdminUsageAsync(Guid clinicId, string? chargeStatus,
+    public async Task<(IReadOnlyList<BillingUsageRecord> Items, int Total)> ListAdminUsageAsync(Guid clientId, string? chargeStatus,
         string? eventType, DateTimeOffset? from, DateTimeOffset? to, int skip, int take, CancellationToken ct = default)
     {
-        var query = _db.BillingUsageRecords.AsNoTracking().Where(u => u.ClinicId == clinicId);
+        var query = _db.BillingUsageRecords.AsNoTracking().Where(u => u.ClientId == clientId);
         if (!string.IsNullOrWhiteSpace(chargeStatus)) query = query.Where(u => u.ChargeStatus == chargeStatus);
         if (!string.IsNullOrWhiteSpace(eventType)) query = query.Where(u => u.EventType == eventType);
         if (from is not null) query = query.Where(u => u.OccurredAt >= from);
@@ -59,30 +59,30 @@ public class BillingUsageRepository : IBillingUsageRepository
         return (rows, total);
     }
 
-    public Task<int> CountReservedAsync(Guid clinicId, CancellationToken ct = default) =>
-        _db.BillingUsageRecords.CountAsync(u => u.ClinicId == clinicId && u.ChargeStatus == ChargeStatus.Reserved, ct);
+    public Task<int> CountReservedAsync(Guid clientId, CancellationToken ct = default) =>
+        _db.BillingUsageRecords.CountAsync(u => u.ClientId == clientId && u.ChargeStatus == ChargeStatus.Reserved, ct);
 
-    public Task<decimal> SumReservedAsync(Guid clinicId, CancellationToken ct = default) =>
-        _db.BillingUsageRecords.Where(u => u.ClinicId == clinicId && u.ChargeStatus == ChargeStatus.Reserved).SumAsync(u => u.ReservedAmount, ct);
+    public Task<decimal> SumReservedAsync(Guid clientId, CancellationToken ct = default) =>
+        _db.BillingUsageRecords.Where(u => u.ClientId == clientId && u.ChargeStatus == ChargeStatus.Reserved).SumAsync(u => u.ReservedAmount, ct);
 
-    public async Task<IReadOnlyList<SettledUsageGroup>> GroupSettledAsync(Guid clinicId, DateTimeOffset since, CancellationToken ct = default) =>
+    public async Task<IReadOnlyList<SettledUsageGroup>> GroupSettledAsync(Guid clientId, DateTimeOffset since, CancellationToken ct = default) =>
         await _db.BillingUsageRecords.AsNoTracking()
-            .Where(u => u.ClinicId == clinicId && u.ChargeStatus == ChargeStatus.Settled && u.OccurredAt >= since)
+            .Where(u => u.ClientId == clientId && u.ChargeStatus == ChargeStatus.Settled && u.OccurredAt >= since)
             .GroupBy(u => u.EventType)
             .Select(g => new SettledUsageGroup(g.Key, g.Count(), g.Sum(u => u.Quantity), g.Sum(u => (u.Amount ?? 0) - u.RefundedAmount)))
             .ToListAsync(ct);
 
-    public async Task<IReadOnlyList<UnchargedUsageGroup>> GroupUnchargedAsync(Guid clinicId, DateTimeOffset since, CancellationToken ct = default) =>
+    public async Task<IReadOnlyList<UnchargedUsageGroup>> GroupUnchargedAsync(Guid clientId, DateTimeOffset since, CancellationToken ct = default) =>
         await _db.BillingUsageRecords.AsNoTracking()
-            .Where(u => u.ClinicId == clinicId && u.ChargeStatus == ChargeStatus.NotCharged
+            .Where(u => u.ClientId == clientId && u.ChargeStatus == ChargeStatus.NotCharged
                         && u.ProviderOutcome != ProviderOutcome.NotBillable && u.OccurredAt >= since)
             .GroupBy(u => new { u.EventType, u.Channel, u.ProviderBilling })
             .Select(g => new UnchargedUsageGroup(g.Key.EventType, g.Key.Channel, g.Key.ProviderBilling, g.Count(), g.Sum(u => u.Quantity)))
             .ToListAsync(ct);
 
-    public async Task<IReadOnlyList<BillableUsageGroup>> GroupBillableAsync(Guid clinicId, DateTimeOffset since, CancellationToken ct = default) =>
+    public async Task<IReadOnlyList<BillableUsageGroup>> GroupBillableAsync(Guid clientId, DateTimeOffset since, CancellationToken ct = default) =>
         await _db.BillingUsageRecords.AsNoTracking()
-            .Where(u => u.ClinicId == clinicId && u.ProviderOutcome == ProviderOutcome.Billable && u.OccurredAt >= since)
+            .Where(u => u.ClientId == clientId && u.ProviderOutcome == ProviderOutcome.Billable && u.OccurredAt >= since)
             .GroupBy(u => new { u.EventType, u.Channel, u.ProviderBilling })
             .Select(g => new BillableUsageGroup(
                 g.Key.EventType, g.Key.Channel, g.Key.ProviderBilling, g.Count(), g.Sum(u => u.Quantity),
@@ -94,9 +94,9 @@ public class BillingUsageRepository : IBillingUsageRepository
         CancellationToken ct = default) =>
         await _db.BillingUsageRecords.AsNoTracking()
             .Where(u => u.ProviderOutcome == ProviderOutcome.Billable && u.OccurredAt >= from && u.OccurredAt < to)
-            .GroupBy(u => new { u.ClinicId, u.Channel, u.EventType, u.ProviderBilling })
+            .GroupBy(u => new { u.ClientId, u.Channel, u.EventType, u.ProviderBilling })
             .Select(g => new ReportUsageGroup(
-                g.Key.ClinicId, g.Key.Channel, g.Key.EventType, g.Key.ProviderBilling, g.Count(), g.Sum(u => u.Quantity),
+                g.Key.ClientId, g.Key.Channel, g.Key.EventType, g.Key.ProviderBilling, g.Count(), g.Sum(u => u.Quantity),
                 g.Sum(u => u.ChargeStatus == ChargeStatus.Settled ? (u.Amount ?? 0) - u.RefundedAmount : 0),
                 g.Sum(u => u.ProviderCost ?? 0)))
             .ToListAsync(ct);

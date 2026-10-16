@@ -10,7 +10,7 @@ namespace Omni.App.Tests.Pages;
 
 public class CampaignCreatePageTests
 {
-    private static readonly Clinic Glow = SomeClinic(timezone: "UTC");
+    private static readonly Client Glow = SomeClient(timezone: "UTC");
     private readonly Mock<IWhatsAppTemplateService> _templates = new();
     private readonly Mock<ILeadService> _leads = new();
     private readonly Mock<IProcedureService> _procedures = new();
@@ -29,8 +29,8 @@ public class CampaignCreatePageTests
             .ReturnsAsync(Blank<CampaignResponse>() with { Id = Guid.NewGuid() });
     }
 
-    private CampaignCreate Sut(Clinic? clinic = null, bool none = false) =>
-        new CampaignCreate(ClinicContext(none ? null : clinic ?? Glow).Object, _templates.Object, _leads.Object, _procedures.Object, _campaigns.Object).Attach();
+    private CampaignCreate Sut(Client? client = null, bool none = false) =>
+        new CampaignCreate(ClientContext(none ? null : client ?? Glow).Object, _templates.Object, _leads.Object, _procedures.Object, _campaigns.Object).Attach();
 
     private static WhatsAppTemplateResponse Template(Guid id, string status = WhatsAppTemplateStatus.Approved, string body = "Hello {{1}}, see you {{2}} {{1}}") =>
         Blank<WhatsAppTemplateResponse>() with { Id = id, Status = status, Body = body };
@@ -58,11 +58,11 @@ public class CampaignCreatePageTests
     }
 
     [Fact]
-    public async Task Without_a_clinic_the_page_loads_empty()
+    public async Task Without_a_client_the_page_loads_empty()
     {
         var model = Sut(none: true);
         Assert.IsType<PageResult>(await model.OnGetAsync(default));
-        Assert.False(model.ClinicConfigured);
+        Assert.False(model.ClientConfigured);
         Assert.Empty(model.ApprovedTemplates);
     }
 
@@ -218,29 +218,29 @@ public class CampaignCreatePageTests
         var model = Sut(); model.Name = "n"; model.WhatsAppTemplateId = Guid.NewGuid();
         Assert.IsType<PageResult>(await model.OnPostAsync(default));
         Assert.Equal("Template not approved.", model.ErrorMessage);
-        Assert.True(model.ClinicConfigured);
+        Assert.True(model.ClientConfigured);
     }
 }
 
 public class WhatsAppTemplatePageTests
 {
-    private static readonly Clinic Glow = SomeClinic();
+    private static readonly Client Glow = SomeClient();
     private readonly Mock<IWhatsAppTemplateService> _templates = new();
-    private TemplateIndex Sut(bool none = false) => new TemplateIndex(ClinicContext(none ? null : Glow).Object, _templates.Object).Attach();
+    private TemplateIndex Sut(bool none = false) => new TemplateIndex(ClientContext(none ? null : Glow).Object, _templates.Object).Attach();
 
     private static WhatsAppTemplateResponse Template(string status, string name = "promo", string? rejection = null) =>
         Blank<WhatsAppTemplateResponse>() with { Name = name, Status = status, RejectionReason = rejection };
 
     [Fact]
-    public async Task The_page_lists_templates_or_is_empty_without_a_clinic()
+    public async Task The_page_lists_templates_or_is_empty_without_a_client()
     {
         _templates.Setup(t => t.ListAsync(Glow.Id, It.IsAny<CancellationToken>())).ReturnsAsync(new List<WhatsAppTemplateResponse> { Template("approved") });
         var model = Sut();
         Assert.IsType<PageResult>(await model.OnGetAsync(default));
-        Assert.Equal((true, Glow.Id, 1), (model.ClinicConfigured, model.ClinicId, model.Templates.Count));
+        Assert.Equal((true, Glow.Id, 1), (model.ClientConfigured, model.ClientId, model.Templates.Count));
         var none = Sut(true);
         await none.OnGetAsync(default);
-        Assert.False(none.ClinicConfigured);
+        Assert.False(none.ClientConfigured);
     }
 
     [Fact]

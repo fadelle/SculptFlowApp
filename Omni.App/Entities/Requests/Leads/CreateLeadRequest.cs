@@ -1,7 +1,7 @@
 namespace Omni.App.Entities.Requests.Leads;
 
 public record CreateLeadRequest(
-    Guid ClinicId,
+    Guid ClientId,
     Guid? ProcedureId,
     string? FullName,
     string? FirstName,
