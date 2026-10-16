@@ -1,12 +1,12 @@
 -- =====================================================================
--- Plastic Surgery Clinic Platform — MVP schema
+-- Omni platform — MVP schema
 -- =====================================================================
 -- Run this directly against your Postgres/Supabase database
 -- (psql, or the Supabase SQL Editor). This file is the source of
 -- truth for the schema; the EF Core entity classes in
--- PlasticSurgery/Entities/Models are mapped to match it exactly via
+-- Omni.App/Entities/Models are mapped to match it exactly via
 -- Fluent API rather than owning migrations themselves — see
--- PlasticSurgery/Persistence/Contexts/ApplicationDbContext.cs.
+-- Omni.App/Persistence/Contexts/ApplicationDbContext.cs.
 --
 -- Idempotent: safe to re-run (uses IF NOT EXISTS / OR REPLACE).
 --
@@ -22,7 +22,7 @@
 --   billing     plans, rate cards, subscriptions, wallets, usage, ledger
 --   config      settings (configuration overrides)
 -- public keeps only the shared set_updated_at() function and extensions.
--- The admin portal's own tables live in admin.* (SculptFlowAdmin repo).
+-- The admin portal's own tables live in admin.* (Omni.Admin repo).
 -- Always schema-qualify table names (core.clinics, crm.leads, ...).
 -- =====================================================================
 
@@ -1536,9 +1536,9 @@ create index if not exists ix_notifications_clinic_created on activity.notificat
 create index if not exists ix_notifications_clinic_unread on activity.notifications(clinic_id) where is_read = false;
 
 -- =====================================================================
--- Calendar Integrations — one-way (SculptFlow -> external) appointment sync via a dedicated n8n workflow.
--- SculptFlow never talks to Google/Microsoft directly and never stores their OAuth tokens: n8n owns the
--- actual provider connection (see Services/ICalendarSyncNotifier.cs), SculptFlow only stores the opaque
+-- Calendar Integrations — one-way (Omni -> external) appointment sync via a dedicated n8n workflow.
+-- Omni never talks to Google/Microsoft directly and never stores their OAuth tokens: n8n owns the
+-- actual provider connection (see Services/ICalendarSyncNotifier.cs), Omni only stores the opaque
 -- reference n8n gives back plus what staff chose (which calendar, sync on/off).
 -- ---------------------------------------------------------------------
 create table if not exists scheduling.calendar_integrations (
@@ -1549,11 +1549,11 @@ create table if not exists scheduling.calendar_integrations (
     check (status in ('disconnected','pending','connected','error')),
 
   -- Opaque handle n8n returns on a successful connect — n8n looks THIS up to find the stored OAuth
-  -- tokens for this clinic+provider. Never a raw access/refresh token; SculptFlow cannot use it itself.
+  -- tokens for this clinic+provider. Never a raw access/refresh token; Omni cannot use it itself.
   external_connection_ref  varchar(200),
   account_display_name     varchar(200),  -- e.g. the connected Google/Outlook account's email, for display only
 
-  selected_calendar_id     varchar(200),  -- external calendar id (opaque to SculptFlow)
+  selected_calendar_id     varchar(200),  -- external calendar id (opaque to Omni)
   selected_calendar_name   varchar(200),  -- human-readable, from the cached list below
 
   sync_enabled             boolean not null default false,
@@ -1614,7 +1614,7 @@ create trigger trg_appointment_calendar_syncs_updated_at before update on schedu
 alter table scheduling.appointment_calendar_syncs add column if not exists last_operation varchar(10);
 
 -- calendar_integrations: connect/list-calendars/disconnect now happen directly against Google/Outlook from
--- SculptFlow (no longer via n8n) — the clinic's own OAuth tokens are stored here so SculptFlow can refresh them
+-- Omni (no longer via n8n) — the clinic's own OAuth tokens are stored here so Omni can refresh them
 -- and hand a fresh access token to n8n's sync webhook for the one thing n8n still does (the actual create/update/
 -- cancel API call). MVP NOTE (same as channel_integrations.access_token): plain text — move to an encrypted
 -- column/secrets manager before this handles real patient data at scale.
@@ -1624,7 +1624,7 @@ alter table scheduling.calendar_integrations add column if not exists token_expi
 
 -- =====================================================================
 -- TikTok Login Kit — account connection only (NOT a messaging channel in this phase, so it's its own table
--- rather than a row in channel_integrations — see Data/Entities/TikTokIntegration.cs). SculptFlow owns the
+-- rather than a row in channel_integrations — see Data/Entities/TikTokIntegration.cs). Omni owns the
 -- whole OAuth2 relationship directly: connect, callback, token refresh, disconnect — no n8n involvement.
 -- ---------------------------------------------------------------------
 create table if not exists channels.tiktok_integrations (
@@ -1683,18 +1683,18 @@ alter table channels.channel_integrations drop column if exists provider_sender_
 alter table channels.whatsapp_templates drop column if exists provider;
 
 -- =====================================================================
--- SUBSCRIPTIONS & USAGE BILLING — schema "billing"  (module: PlasticSurgery/Billing, guide: docs/billing.md)
+-- SUBSCRIPTIONS & USAGE BILLING — schema "billing"  (module: Omni.App/Billing, guide: docs/billing.md)
 -- ---------------------------------------------------------------------
 -- Every billing table lives in its own Postgres schema, billing.*, like the product tables live in core.*, crm.* and so on.
 -- Three separate questions, never collapsed into one:
---   1. Subscription: what the clinic pays SculptFlow for access (a plan: price, period, entitlements, and an
+--   1. Subscription: what the clinic pays Omni for access (a plan: price, period, entitlements, and an
 --      optional monetary included credit per period).
 --   2. Provider billing responsibility: who pays the upstream provider (Meta, an SMS operator...) for a connected
 --      channel account: customer_direct | platform_funded | external_provider_direct | no_provider_usage_fee.
---   3. SculptFlow usage billing: whether SculptFlow itself charges the clinic for that usage (by default only when
---      SculptFlow pays the provider).
+--   3. Omni usage billing: whether Omni itself charges the clinic for that usage (by default only when
+--      Omni pays the provider).
 -- Usage is a BILLABLE EVENT. Every event can be recorded (usage analytics, provider cost where known), but only
--- events SculptFlow charges are rated, reserved, settled and paid (included credit first, then the prepaid wallet).
+-- events Omni charges are rated, reserved, settled and paid (included credit first, then the prepaid wallet).
 -- Money is numeric(18,6) in the account currency (one currency for now: Billing:Currency, default USD).
 -- Every balance change is one append-only row in billing.ledger_entries; billing.accounts caches the balances
 -- and must always equal the ledger sums (BillingQueryService.ReconcileAsync checks it).
@@ -1714,7 +1714,7 @@ create table if not exists billing.plans (
   price                  numeric(18,2) not null default 0 check (price >= 0),
   currency               char(3) not null default 'USD' check (currency ~ '^[A-Z]{3}$'),
   billing_period         varchar(10) not null default 'month' check (billing_period in ('month','year')),
-  -- Monetary credit granted each period, usable for any usage SculptFlow charges. Unused credit expires at renewal.
+  -- Monetary credit granted each period, usable for any usage Omni charges. Unused credit expires at renewal.
   included_usage_credit  numeric(18,2) not null default 0 check (included_usage_credit >= 0),
   rate_card_id           uuid,          -- optional plan rate card; FK added after billing.rate_cards exists
   is_active              boolean not null default true,
@@ -1772,9 +1772,9 @@ end $$;
 -- Rates: one price version for one billable event type, optionally narrowed by destination country, operator,
 -- provider and provider billing responsibility (null = any). The most specific match wins inside a card.
 -- provider_cost = what the upstream provider charges per unit (paid by whoever the usage's responsibility says);
--- client_rate = what SculptFlow charges the clinic per unit. They're independent: a customer-direct "service fee"
+-- client_rate = what Omni charges the clinic per unit. They're independent: a customer-direct "service fee"
 -- rate can have client_rate 0.01 and the provider cost only for reporting. Rates with provider_billing = null apply
--- only to platform_funded charging (and to cost reporting for any usage): SculptFlow never charges a customer-paid
+-- only to platform_funded charging (and to cost reporting for any usage): Omni never charges a customer-paid
 -- account a platform rate by fallback.
 -- A version is never edited: a price change closes the current row (effective_to) and adds a new one.
 create table if not exists billing.rates (
@@ -1830,7 +1830,7 @@ create trigger trg_rates_guard before update on billing.rates
   for each row execute function billing.rates_guard();
 
 -- One billing account (wallet) per clinic. spendable = wallet_balance + included_credit_balance - reserved_amount.
--- The wallet only finances what the clinic owes SculptFlow. wallet_balance can only go below zero when a settlement
+-- The wallet only finances what the clinic owes Omni. wallet_balance can only go below zero when a settlement
 -- costs more than was reserved (usage that already happened); reservations, subscription charges and manual
 -- debits never take it below zero.
 create table if not exists billing.accounts (
@@ -1872,7 +1872,7 @@ create trigger trg_subscriptions_updated_at before update on billing.subscriptio
   for each row execute function public.set_updated_at();
 
 -- Provider billing settings of one connected channel account (channels.channel_integrations row): who pays the upstream
--- provider, and whether SculptFlow charges usage on it. No row (or null values) = the defaults (channel/provider
+-- provider, and whether Omni charges usage on it. No row (or null values) = the defaults (channel/provider
 -- defaults in code + Billing:ProviderBilling:Defaults).
 create table if not exists billing.channel_account_settings (
   channel_integration_id  uuid primary key references channels.channel_integrations(id) on delete cascade,
@@ -1892,9 +1892,9 @@ drop trigger if exists trg_channel_account_settings_updated_at on billing.channe
 create trigger trg_channel_account_settings_updated_at before update on billing.channel_account_settings
   for each row execute function public.set_updated_at();
 
--- Usage records (CDRs): one row per billable event, whether or not SculptFlow charges it.
---   charge_status    = SculptFlow's money: reserved -> settled | released; failed = refused (no rate / not enough
---                      balance, nothing charged); not_charged = SculptFlow doesn't bill this usage (customer-paid
+-- Usage records (CDRs): one row per billable event, whether or not Omni charges it.
+--   charge_status    = Omni's money: reserved -> settled | released; failed = refused (no rate / not enough
+--                      balance, nothing charged); not_charged = Omni doesn't bill this usage (customer-paid
 --                      provider, no provider fee...) — never touches the wallet, included credit or ledger.
 --   provider_outcome = what happened at the provider: pending -> billable (e.g. delivered) | not_billable (failed).
 --   provider_billing = who paid the provider for it (snapshot of the account's responsibility at the time).
@@ -1981,7 +1981,7 @@ drop trigger if exists trg_usage_records_guard on billing.usage_records;
 create trigger trg_usage_records_guard before update on billing.usage_records
   for each row execute function billing.usage_records_guard();
 
--- Financial ledger: only real SculptFlow money movements (never uncharged usage). Append-only (updates are rejected
+-- Financial ledger: only real Omni money movements (never uncharged usage). Append-only (updates are rejected
 -- by a trigger). balance_after = that balance right after this entry. Signs: credits to a balance are positive,
 -- debits negative. A subscription_charge of 0 is allowed so every started period (trial, free plan) has exactly one
 -- charge row.

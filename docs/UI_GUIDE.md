@@ -57,7 +57,7 @@ fix bugs in both copies; keep screen-specific styles out of them.
 3. **Screens one at a time** with the recipes in §6, re-testing each form after it changes.
 4. **Auth screens** last (they often come from Identity UI; restyle without changing the flow).
 
-### 0.4 MySculptFlow clinic app — how this project applies the guide
+### 0.4 Omni clinic app — how this project applies the guide
 This app had its own hand-rolled CSS and 21 page scripts before Aurora. Where the rest of this guide is generic, **this
 section wins**. Copy says *patient* where the guide says *customer*: the people using the app are **clinic staff**.
 
@@ -65,7 +65,7 @@ section wins**. Copy says *patient* where the guide says *customer*: the people 
   toggle and the user menu, nothing more: no palette, scope, favourites, nav filter, section tabs or breadcrumbs (A13).
 - **No Bootstrap, jQuery or unobtrusive validation.** Appendix B is not installed. Forms post plain `name=` fields with
   HTML5 attributes; server-side rule errors come back as the page's `ErrorMessage`.
-- **Brand and look:** dark sidebar; teal brand (`data-brand="teal"` on `<html>` in both layouts); name *MySculptFlow*
+- **Brand and look:** dark sidebar; teal brand (`data-brand="teal"` on `<html>` in both layouts); name *Omni*
   with the clinic's name as the sidebar subtitle; `wwwroot/logo.svg` is the brand mark (no `_BrandMark`). The look is
   **calm**: `site.css` section 2 switches off the ambient backdrop, the glow under buttons and the panel sheen, and sets
   `--au-r-panel` to 18px. It also makes the teal ramp AA: primary `#0f766e` (5.5:1 on white), gradient

@@ -76,7 +76,7 @@ Generated from `Common/Statics/ConfigDefaults`; keep this table in step when you
 | WebScraping | MaxLinksPerPage | 300 | int 10–2000 | Most links taken from one page. |
 | WebScraping | MaxSourcesPerClinic | 25 | int 1–200 | How many websites one clinic may add. |
 | WebScraping | DevAllowedHosts | (empty) | string | Development environment only: comma-separated host:port entries the crawler may reach despite the SSRF rules (e.g. a local test site). Ignored outside Development. |
-| WebScraping | UserAgent | SculptFlowBot/1.0 (+https://sculptflowapp.onrender.com; clinic knowledge-base crawler) | string | The crawler's User-Agent header. |
+| WebScraping | UserAgent | OmniBot/1.0 (+https://sculptflowapp.onrender.com; clinic knowledge-base crawler) | string | The crawler's User-Agent header. |
 | Benchmark | GenerationSampleSize | 20 | int 1–200 | Chunks sent to n8n per question-generation request. |
 | Benchmark | SamplePoolSize | 60 | int 1–1000 | Chunks sampled to choose the generation chunks from. |
 | Benchmark | MinSourceChunkChars | 80 | int 1–5000 | Shortest chunk that may be used to generate a question. |

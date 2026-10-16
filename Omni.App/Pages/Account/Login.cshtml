@@ -1,0 +1,56 @@
+@page "/Account/Login"
+@model Omni.App.Pages.Account.LoginModel
+@inject Omni.App.Business.Contracts.Services.Clinics.IClinicRegistrationService Registration
+@{
+    ViewData["Title"] = "Sign in";
+    Layout = "_AuthLayout";
+}
+@* auth.js reads [data-auth-form], [data-busy-label], [data-pw], [data-pw-toggle] and [data-caps]. data-au-no-busy: auth.js
+   shows its own "Signing in…" state, so the kit doesn't add a second spinner. *@
+<div class="au-auth__card">
+    <div class="au-auth__brand">
+        <span class="au-brand__mark"><img class="auth-logo" src="~/logo.svg" alt="" width="56" height="56" /></span>
+        <div>
+            <h1 class="au-auth__title">Welcome back</h1>
+            <p class="au-auth__sub">Sign in to your clinic.</p>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(Model.ErrorMessage))
+    {
+        <div class="au-alert au-alert--error" role="alert">
+            <span class="au-icon au-alert__icon" aria-hidden="true">error</span>
+            <div class="au-alert__body">@Model.ErrorMessage</div>
+        </div>
+    }
+
+    <partial name="_GoogleButton" model="Model.ReturnUrl" />
+
+    <form method="post" class="au-auth__form" data-auth-form data-au-no-busy>
+        <div class="au-form-field">
+            <label class="au-form-label" for="login-email">Email</label>
+            <input type="email" name="Email" id="login-email" value="@Model.Email" class="au-input" autocomplete="username" placeholder="you@yourclinic.com" required autofocus="@string.IsNullOrEmpty(Model.Email)" />
+        </div>
+        <div class="au-form-field">
+            <label class="au-form-label" for="login-password">Password</label>
+            <span class="pw-wrap">
+                <input type="password" name="Password" id="login-password" class="au-input" autocomplete="current-password" required data-pw autofocus="@(!string.IsNullOrEmpty(Model.Email))" />
+                <button type="button" class="pw-eye" data-pw-toggle aria-label="Show password" title="Show password">👁</button>
+            </span>
+        </div>
+        <div class="caps-warn" data-caps hidden>⇪ Caps Lock is on</div>
+
+        <button type="submit" class="au-btn au-btn--primary au-btn--lg au-btn--block" data-busy-label="Signing in…">Sign in</button>
+    </form>
+
+    @if (Registration.IsSignupOpen)
+    {
+    <p class="au-auth__foot">
+        New to Omni? <a class="au-link" href="/Account/Register@(string.IsNullOrEmpty(Model.ReturnUrl) ? "" : "?ReturnUrl=" + Uri.EscapeDataString(Model.ReturnUrl))">Create a clinic account</a>
+    </p>
+    }
+</div>
+
+@section Scripts {
+    <script src="~/js/auth.js" asp-append-version="true"></script>
+}

@@ -1,7 +1,7 @@
 -- =====================================================================
 -- DEMO CLINIC SEED — a fully populated clinic for demos and screenshots.
 --
---   Clinic     "Aurora Aesthetic Clinic" (slug demo-sculptflow, Miami, America/New_York)
+--   Clinic     "Aurora Aesthetic Clinic" (slug demo-omni, Miami, America/New_York)
 --   Sign in    demo@aurora-demo.test   /   Demo-ChangeMe-2026      <-- PLACEHOLDER PASSWORD: CHANGE IT
 --              (two more staff: nurse@ / reception@aurora-demo.test, same placeholder password)
 --
@@ -20,7 +20,7 @@
 -- Run after Database/schema.sql (and optionally seed-config.sql):
 --   psql "<connection string of a NON-PRODUCTION database>" -f Database/seed-demo.sql
 --
--- Re-runnable: it first removes the demo clinic (slug demo-sculptflow, which cascades to everything
+-- Re-runnable: it first removes the demo clinic (slug demo-omni, which cascades to everything
 -- of the clinic) and its three staff users, then recreates it all with fixed GUIDs, so it never
 -- duplicates and the relative dates (days/hours before or after "now") are refreshed to look live.
 -- It touches nothing else except the shared billing plan 'demo-growth' (upserted).
@@ -59,7 +59,7 @@ begin
   -- ---------------------------------------------------------------
   -- 0. Clean previous run (clinic cascades to all its data)
   -- ---------------------------------------------------------------
-  delete from core.clinics where slug = 'demo-sculptflow';
+  delete from core.clinics where slug = 'demo-omni';
   delete from identity.identity_users where id in ('de000000-0000-4000-8000-0000000000a1',
     'de000000-0000-4000-8000-0000000000a2', 'de000000-0000-4000-8000-0000000000a3');
 
@@ -68,7 +68,7 @@ begin
   -- ---------------------------------------------------------------
   insert into core.clinics (id, name, slug, phone, email, website, country_code, timezone,
                             address, operating_hours, consultation_info, is_active, created_at)
-  values (c, 'Aurora Aesthetic Clinic', 'demo-sculptflow', '+1 305 555 0100', 'hello@aurora-demo.test',
+  values (c, 'Aurora Aesthetic Clinic', 'demo-omni', '+1 305 555 0100', 'hello@aurora-demo.test',
           'https://aurora-demo.test', 'US', 'America/New_York',
           '500 Example Avenue, Suite 12, Miami, FL 33101 (fictional address)',
           'Mon-Fri 9:00-17:00, Sat 10:00-14:00, closed Sunday',
@@ -136,7 +136,7 @@ begin
         meta_business_id, verified_name, account_status, account_review_status, phone_quality_rating, phone_status, name_status,
         is_healthy, health_level, last_problem_code, last_problem_message, last_webhook_at, last_health_event_at,
         telegram_bot_id, telegram_bot_username, webhook_status, webhook_registered_at, created_at) values
-    (pg_temp.did(20), c, 'whatsapp', 'connected', '+1 305 555 0100', 'demo-sculptflow-phone-0001', 'demo-waba-0001',
+    (pg_temp.did(20), c, 'whatsapp', 'connected', '+1 305 555 0100', 'demo-omni-phone-0001', 'demo-waba-0001',
         null, null, 'DEMO-NOT-A-REAL-TOKEN', 'demo-verify-token-whatsapp', null, now() - interval '1 hour', null,
         'demo-meta-business-0001', 'Aurora Aesthetic Clinic', 'APPROVED', 'APPROVED', 'GREEN', 'CONNECTED', 'APPROVED',
         true, 'healthy', null, null, now() - interval '5 minutes', now() - interval '3 days',
@@ -503,7 +503,7 @@ begin
   on conflict (plan_id, entitlement_key) do update set value = excluded.value;
 
   insert into billing.rate_cards (id, code, name, description, clinic_id, is_default, is_active)
-  values (pg_temp.did(1200), 'demo-sculptflow-card', 'Aurora custom pricing (demo)', 'Demo clinic price list.', c, false, true);
+  values (pg_temp.did(1200), 'demo-omni-card', 'Aurora custom pricing (demo)', 'Demo clinic price list.', c, false, true);
 
   insert into billing.rates (id, rate_card_id, event_type, provider, provider_billing, unit, provider_cost, client_rate, currency, effective_from, notes, created_by) values
     (pg_temp.did(1201), pg_temp.did(1200), 'whatsapp_marketing_message', null, null, 'message', 0.0250, 0.0500, 'USD', now() - interval '200 days', 'Demo rate', 'seed-demo'),

@@ -1,0 +1,112 @@
+@page "/Procedures"
+@model Omni.App.Pages.Procedures.IndexModel
+@{
+    ViewData["Title"] = "Procedures";
+}
+
+@if (!Model.ClinicConfigured)
+{
+    <partial name="_NoClinic" />
+}
+else
+{
+    <partial name="_Messages" model="new PageMessagesModel(Model.StatusMessage, Model.ErrorMessage)" />
+
+    <div class="au-page-head">
+        <div class="mw-640">
+            <p class="au-page-head__sub">
+                Treatments your clinic offers. Leads, bookings, campaigns and the AI assistant use this list.
+                <button type="button" class="link-btn" id="proc-how-btn" aria-expanded="false" aria-controls="proc-how">How it works</button>
+            </p>
+            <p class="au-help mt-1 mb-0" id="proc-how" hidden>
+                Procedures can't be deleted. Deactivate one to stop using it for new bookings while keeping past leads
+                and appointments intact. Put detailed information (pricing, recovery, preparation) in the
+                <a href="/KnowledgeBase">Knowledge Base</a>.
+            </p>
+        </div>
+        <div class="au-page-head__actions">
+            <a href="/Procedures/Edit" class="au-btn au-btn--primary"><span class="au-icon" aria-hidden="true">add</span>Add procedure</a>
+        </div>
+    </div>
+
+    @if (Model.Procedures.Count == 0)
+    {
+        var empty = new EmptyStateModel(Icon: "medical_services", Title: "Add your first procedure",
+            Text: "Leads, bookings and the AI assistant need to know what your clinic offers.",
+            ActionLabel: "Add procedure", ActionHref: "/Procedures/Edit");
+        <div class="au-panel au-panel--round"><partial name="_EmptyState" model="empty" /></div>
+    }
+    else
+    {
+        @* #proc-search, #proc-table tbody tr[data-search], tr[data-href] and #proc-no-match are read by procedures-page.js. *@
+        <div class="au-toolbar">
+            <div class="au-toolbar__filters">
+                <input type="search" id="proc-search" class="au-input search-input" placeholder="Search procedures" aria-label="Search procedures" />
+            </div>
+            <span class="au-toolbar__meta">@Model.Procedures.Count @(Model.Procedures.Count == 1 ? "procedure" : "procedures")</span>
+        </div>
+        <div class="au-table-card">
+            <div class="au-table-scroll">
+                <table class="au-table au-table--stack" id="proc-table">
+                    <thead>
+                        <tr>
+                            <th>Procedure</th>
+                            <th>Code</th>
+                            <th>Consultation</th>
+                            <th>Status</th>
+                            <th><span class="au-sr-only">Actions</span></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var p in Model.Procedures)
+                        {
+                            <tr class="row-link @(p.IsActive ? "" : "row-dim")" data-href="/Procedures/Edit/@p.Id" data-search="@($"{p.Name} {p.Code} {p.Description}".ToLowerInvariant())">
+                                <td data-label="Procedure">
+                                    <div class="min-w-0">
+                                        <a href="/Procedures/Edit/@p.Id" class="row-title">@p.Name</a>
+                                        @if (!string.IsNullOrWhiteSpace(p.Description))
+                                        {
+                                            <div class="cell-sub clip-1" title="@p.Description">@p.Description</div>
+                                        }
+                                    </div>
+                                </td>
+                                <td data-label="Code">
+                                    @if (!string.IsNullOrEmpty(p.Code))
+                                    {
+                                        <span class="code-chip">@p.Code</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-subtle">—</span>
+                                    }
+                                </td>
+                                <td data-label="Consultation">
+                                    @if (p.ConsultationDuration is { } d)
+                                    {
+                                        @($"{d} min")
+                                    }
+                                    else
+                                    {
+                                        <span class="text-warn-soft">Not set</span>
+                                    }
+                                </td>
+                                <td data-label="Status"><span class="badge @(p.IsActive ? "badge-green" : "badge-gray")">@(p.IsActive ? "Active" : "Inactive")</span></td>
+                                <td class="row-actions">
+                                    <a href="/Procedures/Edit/@p.Id" class="au-btn au-btn--outlined au-btn--sm">Edit</a>
+                                    <form method="post" asp-page-handler="Toggle" class="inline-form">
+                                        <input type="hidden" name="id" value="@p.Id" />
+                                        <input type="hidden" name="active" value="@((!p.IsActive).ToString().ToLowerInvariant())" />
+                                        <button type="submit" class="au-btn au-btn--text au-btn--sm">@(p.IsActive ? "Deactivate" : "Activate")</button>
+                                    </form>
+                                </td>
+                            </tr>
+                        }
+                        <tr class="empty-row" id="proc-no-match" hidden><td colspan="5">No procedures match your search.</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+
+    <script src="~/js/procedures-page.js" asp-append-version="true"></script>
+}

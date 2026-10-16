@@ -1,0 +1,59 @@
+@* The Aurora shell for signed-in clinic staff (docs/UI_GUIDE.md §3.1, §5, §0.4): dark sidebar, glass header with the
+   notification bell, theme toggle and user menu, toasts. Kept simple on purpose: no palette, scope, favourites or tabs. *@
+@{
+    var pageTitle = ViewData["Title"] as string;
+    var signedIn = User.Identity?.IsAuthenticated == true;
+    // A page whose own scripts use SignalR while loading sets ViewData["SignalRFirst"] = true: the client then loads in
+    // <head> (before the page body) instead of at the end, and only once.
+    var signalRFirst = ViewData["SignalRFirst"] is true;
+    const string signalRUrl = "https://cdn.jsdelivr.net/npm/@microsoft/signalr@8.0.0/dist/browser/signalr.min.js";
+}
+<!DOCTYPE html>
+<html lang="en" data-au-app="client" data-brand="teal">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@(string.IsNullOrEmpty(pageTitle) ? "Omni" : $"{pageTitle} · Omni")</title>
+    <partial name="_ThemeScript" />
+    <link rel="icon" type="image/svg+xml" href="~/logo.svg" />
+    <link rel="icon" href="~/favicon.ico" sizes="32x32" />
+    <link rel="stylesheet" href="~/css/fonts.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/aurora.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+    @if (signedIn && signalRFirst)
+    {
+        <script src="@signalRUrl"></script>
+    }
+    @* In <head> because page scripts inside @RenderBody() call window.OmniTime while loading; it defers its own DOM
+       work to DOMContentLoaded. *@
+    <script src="~/js/local-time.js" asp-append-version="true"></script>
+</head>
+<body>
+    <div class="au-app">
+        <partial name="_Sidebar" />
+        <div class="au-scrim"></div>
+        <div class="au-main-col">
+            <header class="au-header">
+                <partial name="_Header" />
+                <div class="au-topbar-progress" aria-hidden="true"><div class="au-topbar-progress__bar"></div></div>
+            </header>
+            <main class="au-main" id="main">
+                @RenderBody()
+            </main>
+        </div>
+    </div>
+    <div class="au-toasts" aria-live="polite"></div>
+
+    <script src="~/js/aurora.js" asp-append-version="true"></script>
+    @if (signedIn)
+    {
+        if (!signalRFirst)
+        {
+            <script src="@signalRUrl"></script>
+        }
+        <script src="~/js/notifications.js" asp-append-version="true"></script>
+        <script src="~/js/sidebar.js" asp-append-version="true"></script>
+    }
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

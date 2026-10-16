@@ -1,0 +1,348 @@
+@page "/Campaigns/Create"
+@model Omni.App.Pages.Campaigns.CreateModel
+@{
+    ViewData["Title"] = "New Campaign";
+    var hasTemplate = Model.SelectedTemplate is not null;
+    var hasBlanks = Model.PlaceholderNumbers.Count > 0;
+}
+
+@if (!Model.ClinicConfigured)
+{
+    <partial name="_NoClinic" />
+}
+else
+{
+    <div class="au-back-header">
+        <a class="au-icon-btn au-icon-btn--bordered" href="/Campaigns" aria-label="Back to Campaigns" title="Back to Campaigns">
+            <span class="au-icon" aria-hidden="true">arrow_back</span>
+        </a>
+        <div class="min-w-0">
+            <h2 class="au-back-header__title">New campaign</h2>
+            <span class="au-back-header__sub">Three steps: the message, who gets it, and when.</span>
+        </div>
+    </div>
+
+    <partial name="_Messages" model="new PageMessagesModel(null, Model.ErrorMessage)" />
+
+    @if (Model.ApprovedTemplates.Count == 0)
+    {
+        var empty = new EmptyStateModel(Icon: "description", Title: "You need an approved template first",
+            Text: "WhatsApp only allows approved templates in campaigns. Create one and wait for Meta to approve it.",
+            ActionLabel: "Go to WhatsApp Templates", ActionHref: "/WhatsApp/Templates", ActionIcon: "arrow_forward");
+        <div class="au-panel au-panel--round"><partial name="_EmptyState" model="empty" /></div>
+    }
+    else
+    {
+        <form method="post" id="campaign-form" class="create-wrap">
+            <input type="hidden" name="WhatsAppTemplateId" value="@Model.WhatsAppTemplateId" />
+
+            @* ---------------- 1. Message ---------------- *@
+            <section class="step au-panel au-panel--round">
+                <div class="step-head"><span class="step-num">1</span><h3>Message</h3></div>
+                <div class="msg-grid">
+                    <div>
+                        <label class="field">
+                            <span>Campaign name</span>
+                            <input type="text" name="Name" id="campaign-name" value="@Model.Name" class="text-input" placeholder="e.g. October reactivation" required />
+                        </label>
+                        <label class="field mt-2">
+                            <span>WhatsApp template</span>
+                            @* Picking a template reloads the page with it (keeping the name typed so far) — see campaign-create.js. *@
+                            <select id="template-select" class="select">
+                                <option value="">Choose an approved template…</option>
+                                @foreach (var t in Model.ApprovedTemplates)
+                                {
+                                    <option value="@t.Id" selected="@(t.Id == Model.WhatsAppTemplateId)">@t.Name (@t.Language)</option>
+                                }
+                            </select>
+                        </label>
+
+                        @if (hasTemplate && hasBlanks)
+                        {
+                            <div class="alert alert-warning mt-2 text-sm" id="blanks-warning" hidden>
+                                This template has blanks (@string.Join(", ", Model.PlaceholderNumbers.Select(n => "{{" + n + "}}"))).
+                                Blanks can only be filled when you <strong>pick people manually</strong> in step 2, or choose a template without blanks.
+                            </div>
+                            <div class="field mt-2" id="blanks-fields">
+                                <span>Fill in the blanks</span>
+                                @foreach (var n in Model.PlaceholderNumbers)
+                                {
+                                    var current = Model.Variables.GetValueOrDefault(n) ?? "{LeadFirstName}";
+                                    var isToken = current is "{LeadFirstName}" or "{LeadFullName}" or "{LeadPhone}";
+                                    <div class="var-row" data-var="@n">
+                                        <span class="var-tag">{{@n}}</span>
+                                        <select class="select var-mode" aria-label="Value for {{@n}}">
+                                            <option value="{LeadFirstName}" selected="@(current == "{LeadFirstName}")">Lead's first name</option>
+                                            <option value="{LeadFullName}" selected="@(current == "{LeadFullName}")">Lead's full name</option>
+                                            <option value="{LeadPhone}" selected="@(current == "{LeadPhone}")">Lead's phone</option>
+                                            <option value="__text" selected="@(!isToken)">Same text for everyone…</option>
+                                        </select>
+                                        <input type="text" class="text-input var-text" placeholder="Text for {{@n}}" value="@(isToken ? "" : current)" hidden="@isToken" />
+                                        <input type="hidden" name="Variables[@n]" class="var-value" value="@current" />
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                    <div>
+                        <span class="eyebrow">Preview</span>
+                        @if (hasTemplate)
+                        {
+                            <div class="wa-preview"><div class="wa-bubble" id="wa-bubble" data-body="@Model.SelectedTemplate!.Body">@Model.SelectedTemplate.Body<span class="wa-time">09:00</span></div></div>
+                        }
+                        else
+                        {
+                            <div class="wa-preview wa-empty">Pick a template to see the message here.</div>
+                        }
+                    </div>
+                </div>
+            </section>
+
+            @if (!hasTemplate)
+            {
+                <section class="step au-panel au-panel--round"><div class="step-head"><span class="step-num">2</span><h3>Audience</h3></div><div class="text-subtle text-sm">Choose a template first.</div></section>
+                <section class="step au-panel au-panel--round"><div class="step-head"><span class="step-num">3</span><h3>When</h3></div><div class="text-subtle text-sm">Choose a template first.</div></section>
+            }
+            else
+            {
+                @* ---------------- 2. Audience ---------------- *@
+                <section class="step au-panel au-panel--round">
+                    <div class="step-head">
+                        <span class="step-num">2</span><h3>Audience</h3>
+                        <button type="button" class="status-help-trigger" data-status-help-trigger title="What do these statuses mean?" aria-label="What do these statuses mean?">?</button>
+                    </div>
+
+                    @* These four radios are UI-only (not bound) — campaign-audience.js maps them onto the two hidden
+                       fields actually posted (AudienceType, ManualSelection). *@
+                    <div class="aud-grid">
+                        <label class="aud-card">
+                            <input type="radio" name="AudienceChoice" value="reactivation_no_consultation" data-audience-choice checked="@(Model.AudienceChoice == "reactivation_no_consultation")" />
+                            <span class="aud-title">Old leads who never booked <span class="badge badge-green">Recommended</span></span>
+                            <span class="aud-desc">Re-engage people who showed interest but never booked.</span>
+                        </label>
+                        <label class="aud-card">
+                            <input type="radio" name="AudienceChoice" value="all_eligible" data-audience-choice checked="@(Model.AudienceChoice == "all_eligible")" />
+                            <span class="aud-title">All contactable leads</span>
+                            <span class="aud-desc">Everyone you're allowed to message.</span>
+                        </label>
+                        <label class="aud-card">
+                            <input type="radio" name="AudienceChoice" value="custom" data-audience-choice checked="@(Model.AudienceChoice == "custom")" />
+                            <span class="aud-title">Custom audience</span>
+                            <span class="aud-desc">Filter by procedure, status, source, dates…</span>
+                        </label>
+                        <label class="aud-card">
+                            <input type="radio" name="AudienceChoice" value="manual" data-audience-choice checked="@(Model.AudienceChoice == "manual")" />
+                            <span class="aud-title">Pick people manually</span>
+                            <span class="aud-desc">Choose specific leads from your list.</span>
+                        </label>
+                    </div>
+
+                    <input type="hidden" name="AudienceType" id="audience-type-field" value="@Model.AudienceType" />
+                    <input type="hidden" name="ManualSelection" id="manual-selection-field" value="@(Model.ManualSelection ? "true" : "false")" />
+
+                    @* Old leads who never booked *@
+                    <div id="reactivation-panel" class="aud-panel" hidden>
+                        <div class="filter-row">
+                            <label class="field">
+                                <span>Inactive for</span>
+                                <select name="InactiveDays" id="inactive-days" class="select">
+                                    <option value="30" selected="@(Model.InactiveDays == 30)">30 days</option>
+                                    <option value="60" selected="@(Model.InactiveDays == 60)">60 days</option>
+                                    <option value="90" selected="@(Model.InactiveDays == 90)">90 days</option>
+                                </select>
+                            </label>
+                            <label class="field">
+                                <span>Procedure</span>
+                                <select name="ReactivationProcedureId" id="reactivation-procedure" class="select">
+                                    <option value="">All procedures</option>
+                                    @foreach (var p in Model.Procedures)
+                                    {
+                                        <option value="@p.Id" selected="@(p.Id == Model.ReactivationProcedureId)">@p.Name</option>
+                                    }
+                                </select>
+                            </label>
+                            @if (Model.LeadSources.Count > 0)
+                            {
+                                <label class="field">
+                                    <span>Lead source</span>
+                                    <select name="ReactivationSource" id="reactivation-source" class="select">
+                                        <option value="">Any source</option>
+                                        @foreach (var s in Model.LeadSources)
+                                        {
+                                            <option value="@s" selected="@(s == Model.ReactivationSource)">@Omni.App.Common.Helpers.FilterLabelHelper.Label(s)</option>
+                                        }
+                                    </select>
+                                </label>
+                            }
+                        </div>
+                        <div class="count-box">
+                            <div><span class="count-num" id="reactivation-match-count">—</span> <span class="text-muted">leads ready for reactivation</span></div>
+                            <button type="button" class="au-btn au-btn--outlined au-btn--sm" data-preview-btn data-preview-audience="reactivation_no_consultation" data-preview-target="reactivation-preview-list">Preview leads</button>
+                        </div>
+                        <div id="reactivation-preview-list" class="preview-leads-list" style="display:none"></div>
+                    </div>
+
+                    @* All contactable leads *@
+                    <div id="all-eligible-panel" class="aud-panel" hidden>
+                        <div class="text-subtle text-sm mt-2">Leaves out anyone without a phone number, who opted out, or who can't be messaged.</div>
+                        <div class="count-box">
+                            <div><span class="count-num" id="all-eligible-match-count">—</span> <span class="text-muted">contactable leads</span></div>
+                            <button type="button" class="au-btn au-btn--outlined au-btn--sm" data-preview-btn data-preview-audience="all_eligible" data-preview-target="all-eligible-preview-list">Preview leads</button>
+                        </div>
+                        <div id="all-eligible-preview-list" class="preview-leads-list" style="display:none"></div>
+                    </div>
+
+                    @* Custom audience — every filter in one grid *@
+                    <div id="custom-panel" class="aud-panel" hidden>
+                        <div class="filter-grid" id="advanced-filters">
+                            <label class="field">
+                                <span>Procedure</span>
+                                <select name="CustomProcedureId" id="custom-procedure" class="select">
+                                    <option value="">All procedures</option>
+                                    @foreach (var p in Model.Procedures)
+                                    {
+                                        <option value="@p.Id" selected="@(p.Id == Model.CustomProcedureId)">@p.Name</option>
+                                    }
+                                </select>
+                            </label>
+                            <label class="field">
+                                <span>Inactive for</span>
+                                <select name="CustomInactiveDays" id="custom-inactive-days" class="select">
+                                    <option value="" selected="@(Model.CustomInactiveDays is null)">Any time</option>
+                                    <option value="30" selected="@(Model.CustomInactiveDays == 30)">30+ days</option>
+                                    <option value="60" selected="@(Model.CustomInactiveDays == 60)">60+ days</option>
+                                    <option value="90" selected="@(Model.CustomInactiveDays == 90)">90+ days</option>
+                                </select>
+                            </label>
+                            <div class="field"><span>Lead status</span>@{ await RenderMultiSelect("CustomLeadStatuses", "Any status", Model.LeadStatusOptions, Model.CustomLeadStatuses); }</div>
+                            <div class="field"><span>Qualification</span>@{ await RenderMultiSelect("CustomQualificationStatuses", "Any", Model.QualificationStatusOptions, Model.CustomQualificationStatuses); }</div>
+                            @if (Model.LeadSources.Count > 0)
+                            {
+                                <div class="field"><span>Lead source</span>@{ await RenderMultiSelect("CustomSources", "Any source", Model.LeadSources, Model.CustomSources); }</div>
+                            }
+                            <div class="field"><span>Appointment status</span>@{ await RenderMultiSelect("CustomAppointmentStatuses", "Any", Model.AppointmentStatusOptions, Model.CustomAppointmentStatuses); }</div>
+                            <div class="field date-pair">
+                                <span>Created (from – to)</span>
+                                <div class="flex gap-1">
+                                    <input type="date" name="CustomCreatedAfter" id="custom-created-after" class="text-input" value="@(Model.CustomCreatedAfter?.ToString("yyyy-MM-dd"))" aria-label="Created after" />
+                                    <input type="date" name="CustomCreatedBefore" id="custom-created-before" class="text-input" value="@(Model.CustomCreatedBefore?.ToString("yyyy-MM-dd"))" aria-label="Created before" />
+                                </div>
+                            </div>
+                            <div class="field date-pair">
+                                <span>Last contacted (from – to)</span>
+                                <div class="flex gap-1">
+                                    <input type="date" name="CustomLastContactedAfter" id="custom-last-contacted-after" class="text-input" value="@(Model.CustomLastContactedAfter?.ToString("yyyy-MM-dd"))" aria-label="Last contacted after" />
+                                    <input type="date" name="CustomLastContactedBefore" id="custom-last-contacted-before" class="text-input" value="@(Model.CustomLastContactedBefore?.ToString("yyyy-MM-dd"))" aria-label="Last contacted before" />
+                                </div>
+                            </div>
+                            <label class="field">
+                                <span>Country</span>
+                                <input type="text" name="CustomCountry" id="custom-country" class="text-input" value="@Model.CustomCountry" placeholder="e.g. LB" />
+                            </label>
+                            <label class="field">
+                                <span>City</span>
+                                <input type="text" name="CustomCity" id="custom-city" class="text-input" value="@Model.CustomCity" placeholder="e.g. Beirut" />
+                            </label>
+                        </div>
+                        <div class="active-filters" id="custom-active-filters" hidden></div>
+                        <div class="count-box">
+                            <div><span class="count-num" id="custom-match-count">—</span> <span class="text-muted">matching leads</span></div>
+                            <button type="button" class="au-btn au-btn--outlined au-btn--sm" data-preview-btn data-preview-audience="custom" data-preview-target="custom-preview-list">Preview leads</button>
+                        </div>
+                        <div id="custom-preview-list" class="preview-leads-list" style="display:none"></div>
+                    </div>
+
+                    @* Pick people manually *@
+                    <div id="manual-recipients" class="aud-panel" hidden>
+                        <div class="flex items-center gap-2 mt-2 flex-wrap">
+                            <input type="search" id="lead-search-input" value="@Model.Search" class="text-input search-input manual-search" placeholder="Search by name or phone…" autocomplete="off" />
+                            <span class="text-subtle text-sm" id="manual-search-hint">
+                                @(Model.Leads.Count >= 200 ? "Showing the first 200 leads. Press Enter to search all of them." : "Filters as you type.")
+                            </span>
+                            <span class="sel-count" id="manual-selected-count">0 selected</span>
+                        </div>
+                        <div class="au-table-card mt-2 manual-table">
+                            <div class="au-table-scroll" style="--au-table-max-h: 360px">
+                            <table class="au-table">
+                                <thead><tr><th class="au-shrink"><input type="checkbox" id="manual-select-all" title="Select all shown" aria-label="Select all shown" /></th><th>Name</th><th>Phone</th><th>Status</th></tr></thead>
+                                <tbody>
+                                    @foreach (var lead in Model.Leads)
+                                    {
+                                        <tr data-search="@(((lead.FullName ?? "") + " " + (lead.Phone ?? "")).ToLowerInvariant())">
+                                            <td><input type="checkbox" name="LeadIds" value="@lead.Id" checked="@Model.LeadIds.Contains(lead.Id)" /></td>
+                                            <td><div class="cell-person"><span class="avatar-sm">@(string.IsNullOrWhiteSpace(lead.FullName) ? "?" : lead.FullName.Trim()[..1])</span>@(lead.FullName ?? "—")</div></td>
+                                            <td>@(lead.Phone ?? "—")</td>
+                                            <td><span class="badge @Omni.App.Common.Helpers.StatusBadgeHelper.CssClass(lead.Status)">@Omni.App.Common.Helpers.FilterLabelHelper.Label(lead.Status)</span></td>
+                                        </tr>
+                                    }
+                                    <tr class="empty-row" id="manual-empty" hidden="@(Model.Leads.Count > 0)"><td colspan="4">No leads match this search.</td></tr>
+                                </tbody>
+                            </table>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                @* ---------------- 3. When ---------------- *@
+                <section class="step au-panel au-panel--round">
+                    <div class="step-head"><span class="step-num">3</span><h3>When</h3></div>
+                    <div class="seg" role="radiogroup" aria-label="When to send">
+                        <label class="seg-opt"><input type="radio" name="SendOption" value="now" checked="@(Model.SendOption != "later")" /><span>Send now</span></label>
+                        <label class="seg-opt"><input type="radio" name="SendOption" value="later" checked="@(Model.SendOption == "later")" /><span>Schedule</span></label>
+                    </div>
+                    <div class="text-subtle text-sm mt-2" id="send-now-hint">Messages start going out as soon as you create the campaign.</div>
+                    <div class="flex items-center gap-2 mt-2 flex-wrap" id="schedule-fields" hidden>
+                        <input type="date" name="ScheduleDate" class="text-input w-auto" value="@Model.ScheduleDate?.ToString("yyyy-MM-dd")" aria-label="Date" />
+                        <input type="time" name="ScheduleTime" class="text-input w-auto" value="@(Model.ScheduleTime?.ToString("HH:mm") ?? "09:00")" aria-label="Time" />
+                        <span class="text-subtle text-sm">your time (<span data-viewer-tz>@Model.ViewerTimezone</span>)</span>
+                    </div>
+                </section>
+
+                <div class="summary-bar">
+                    <div id="summary-text"><strong>Ready:</strong> @Model.SelectedTemplate!.Name</div>
+                    <div class="flex gap-2">
+                        <a href="/Campaigns" class="au-btn au-btn--text">Cancel</a>
+                        <button type="submit" class="au-btn au-btn--primary" id="create-btn"><span class="au-icon" aria-hidden="true">send</span>Create campaign</button>
+                    </div>
+                </div>
+            }
+        </form>
+
+        <partial name="_StatusHelp" />
+        <script src="~/js/multi-select.js" asp-append-version="true"></script>
+        <script src="~/js/campaign-audience.js" asp-append-version="true"></script>
+        <script src="~/js/campaign-create.js" asp-append-version="true"></script>
+        <script src="~/js/status-help.js" asp-append-version="true"></script>
+    }
+}
+
+@functions {
+    /// <summary>Renders one filter dropdown — checkboxes with clinic-friendly labels
+    /// (FilterLabelHelper) wrapped in the .ms markup wwwroot/js/multi-select.js turns into a
+    /// searchable chips dropdown. The checkboxes are the real, only form data; the JS is purely
+    /// presentational on top.</summary>
+    private async Task RenderMultiSelect(string name, string label, IReadOnlyList<string> options, List<string> selected)
+    {
+        <div class="ms" data-ms data-ms-label="@label">
+            <button type="button" class="ms-trigger">
+                <span class="ms-trigger-text">@label</span>
+                <span class="ms-caret">▾</span>
+            </button>
+            <div class="ms-chips"></div>
+            <div class="ms-panel" hidden>
+                <input type="text" class="ms-search text-input" placeholder="Search…" />
+                <div class="ms-options">
+                    @foreach (var value in options)
+                    {
+                        <label class="ms-option">
+                            <input type="checkbox" name="@name" value="@value" checked="@selected.Contains(value)" />
+                            <span>@Omni.App.Common.Helpers.FilterLabelHelper.Label(value)</span>
+                        </label>
+                    }
+                </div>
+                <button type="button" class="au-btn au-btn--outlined au-btn--sm ms-clear-btn">Clear</button>
+            </div>
+        </div>
+        await Task.CompletedTask;
+    }
+}

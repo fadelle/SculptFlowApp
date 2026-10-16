@@ -1,4 +1,4 @@
-# MySculptFlow (SculptFlow)
+# Omni
 
 Multi-tenant SaaS for plastic surgery clinics. A lead messages a clinic on WhatsApp or Telegram, an AI agent
 (orchestrated by n8n) answers from the clinic's Knowledge Base, qualifies the lead and books consultations, and
@@ -12,7 +12,7 @@ This README is only a short orientation.
 ## Stack
 
 - .NET 10, ASP.NET Core Razor Pages (staff dashboard) + Web API controllers (dashboard JS, n8n, Meta, Telegram).
-  Project/assembly name is `PlasticSurgery`; only user-visible text says MySculptFlow.
+  Project/assembly name is `Omni.App`; only user-visible text says Omni.
 - EF Core / Npgsql on Supabase PostgreSQL with pgvector. The schema is hand-written in `Database/schema.sql`
   (idempotent, appended blocks), not EF migrations; `ApplicationDbContext` is kept in sync by hand.
 - ASP.NET Core Identity (role-free); every user belongs to exactly one clinic via `clinic_users`.
@@ -45,7 +45,7 @@ This README is only a short orientation.
    Both are idempotent. Tables live in one Postgres schema per area (`core`, `crm`, `billing`, ...); running
    `schema.sql` on a database created before 2026-10-07 moves its tables out of `public` (back it up first).
 
-2. **Secrets.** From the `PlasticSurgery` project folder, use user-secrets (never commit real values):
+2. **Secrets.** From the `Omni.App` project folder, use user-secrets (never commit real values):
    ```
    dotnet user-secrets set "ConnectionStrings:Postgres" "Host=...;Port=5432;Database=...;Username=...;Password=..."
    ```
@@ -55,13 +55,13 @@ This README is only a short orientation.
 3. **Run.**
    ```
    dotnet build
-   dotnet run --project PlasticSurgery --launch-profile https
+   dotnet run --project Omni.App --launch-profile https
    ```
    Open `https://localhost:7276`, register an account (this creates a new clinic) and you land on `/dashboard`.
    Swagger is at `/swagger` in Development only. There is no Razor runtime compilation, so `.cshtml`/`.cs` changes
    need a stop, build and run.
 
-4. **Tests.** `dotnet test PlasticSurgery.Tests`. The billing database tests need `SCULPTFLOW_TEST_DB` set to a
+4. **Tests.** `dotnet test Omni.App.Tests`. The billing database tests need `OMNI_TEST_DB` set to a
    throwaway local PostgreSQL server (e.g. `Host=localhost;Port=5432;Username=postgres;Password=...`); each run creates
    and drops its own database. Without it those tests are skipped. Never point it at Supabase.
 

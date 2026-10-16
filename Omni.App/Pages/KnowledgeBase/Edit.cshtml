@@ -1,0 +1,206 @@
+@page "/KnowledgeBase/Edit/{id:guid?}"
+@model Omni.App.Pages.KnowledgeBase.EditModel
+@{
+    ViewData["Title"] = Model.IsNew ? "Add Knowledge" : "Edit Knowledge";
+    var maxMb = Model.MaxUploadBytes / 1024.0 / 1024.0;
+    var backLabel = Model.BackUrl.StartsWith("/KnowledgeBase/Websites", StringComparison.OrdinalIgnoreCase) ? "Website" : "Knowledge Base";
+    var activeMode = Model.ShowUploadTab ? "upload" : Model.ShowWebsiteTab ? "website" : "manual";
+}
+
+@functions {
+    // Active on/off switch: a real checkbox (name=IsActive, value=true) styled as a switch.
+    private Microsoft.AspNetCore.Html.IHtmlContent ActiveSwitch(bool isChecked, string what) => new Microsoft.AspNetCore.Html.HtmlString(
+        $"<label class=\"switch-row\"><input type=\"checkbox\" name=\"IsActive\" value=\"true\" class=\"switch-input\"{(isChecked ? " checked" : "")} /><span class=\"switch\" aria-hidden=\"true\"></span> Active <span class=\"text-subtle\">— the AI can use {what}</span></label>");
+
+    private Microsoft.AspNetCore.Html.IHtmlContent CategorySelect(string selected)
+    {
+        var sb = new System.Text.StringBuilder("<select name=\"Category\" class=\"au-select\">");
+        foreach (var (value, label) in Model.CategoryOptions)
+        {
+            sb.Append("<option value=\"").Append(System.Net.WebUtility.HtmlEncode(value)).Append('"')
+              .Append(value == selected ? " selected" : "").Append('>').Append(System.Net.WebUtility.HtmlEncode(label)).Append("</option>");
+        }
+        return new Microsoft.AspNetCore.Html.HtmlString(sb.Append("</select>").ToString());
+    }
+}
+
+@if (!Model.ClinicConfigured)
+{
+    <partial name="_NoClinic" />
+}
+else
+{
+    <div class="au-back-header">
+        <a class="au-icon-btn au-icon-btn--bordered" href="@Model.BackUrl" aria-label="Back to @backLabel" title="Back to @backLabel">
+            <span class="au-icon" aria-hidden="true">arrow_back</span>
+        </a>
+        <div class="min-w-0">
+            <h2 class="au-back-header__title">@(Model.IsNew ? "Add knowledge" : Model.Title)</h2>
+            <span class="au-back-header__sub">@(Model.IsNew ? "Write it, upload a document, or import your website." : "What your AI assistant may tell patients.")</span>
+        </div>
+    </div>
+
+    <partial name="_Messages" model="new PageMessagesModel(null, Model.ErrorMessage)" />
+
+    @* knowledge-page.js reads [data-kb-tab], .kb-choice, #kb-panel-*, #kb-body, #kb-body-count, #kb-add-qa, the drop zone
+       ids (#kb-dropzone, #kb-file, #kb-drop-*) and .seg-cards .cat-card. *@
+    <section class="au-panel au-panel--round au-panel--pad mw-720">
+
+        @if (Model.IsNew)
+        {
+            <div class="kb-choices" role="radiogroup" aria-label="How to add knowledge">
+                <label class="kb-choice @(activeMode == "manual" ? "on" : "")"><input type="radio" name="kb-mode" value="manual" data-kb-tab="manual" checked="@(activeMode == "manual")" /><span class="kb-choice-icon au-icon" aria-hidden="true">edit_note</span><strong>Write it</strong><small>Type FAQs, policies or any text.</small></label>
+                <label class="kb-choice @(activeMode == "upload" ? "on" : "")"><input type="radio" name="kb-mode" value="upload" data-kb-tab="upload" checked="@(activeMode == "upload")" /><span class="kb-choice-icon au-icon" aria-hidden="true">upload_file</span><strong>Upload a document</strong><small>PDF, Word or text file.</small></label>
+                <label class="kb-choice @(activeMode == "website" ? "on" : "")"><input type="radio" name="kb-mode" value="website" data-kb-tab="website" checked="@(activeMode == "website")" /><span class="kb-choice-icon au-icon" aria-hidden="true">language</span><strong>Import a website</strong><small>Read pages from your site.</small></label>
+            </div>
+        }
+
+        @* ---------- Manual entry / edit ---------- *@
+        <div id="kb-panel-manual" hidden="@(Model.IsNew && activeMode != "manual")">
+            <form method="post" class="au-stack">
+                @if (Model.IsWebsite || Model.IsUpload)
+                {
+                    <div class="src-banner">
+                        <span class="src-icon @(Model.IsWebsite ? "src-web" : "src-up")"><span class="au-icon au-icon--sm" aria-hidden="true">@(Model.IsWebsite ? "language" : "description")</span></span>
+                        <div class="flex-1 min-w-0">
+                            @if (Model.IsWebsite)
+                            {
+                                <text>From the page </text><a href="@Model.SourceUrl" target="_blank" rel="noopener noreferrer" class="au-link break-all">@Omni.App.Common.Helpers.UrlDisplayHelper.Readable(Model.SourceUrl ?? "")</a>
+                                <div class="cell-sub">The text updates when the website is imported again. Title, category and Active can be changed here.</div>
+                            }
+                            else
+                            {
+                                <text>From </text><strong>@Model.OriginalFileName</strong>
+                                @if (Model.FileSizeBytes.HasValue) { <text> (@((Model.FileSizeBytes.Value / 1024.0).ToString("0")) KB)</text> }
+                                <div class="cell-sub">To change the text, upload the document again.</div>
+                            }
+                        </div>
+                    </div>
+                }
+
+                <div class="au-form-grid">
+                    <div class="au-form-field">
+                        <label class="au-form-label" for="kb-title">Title<span class="au-required">*</span></label>
+                        <input type="text" name="Title" id="kb-title" value="@Model.Title" class="au-input" maxlength="200" required placeholder="e.g. Rhinoplasty recovery" />
+                    </div>
+                    <label class="au-form-field">
+                        <span class="au-form-label">Category</span>
+                        @CategorySelect(Model.Category)
+                    </label>
+                </div>
+
+                @if (Model.IsWebsite || Model.IsUpload)
+                {
+                    <div class="au-form-field">
+                        <span class="au-form-label">Text the AI reads</span>
+                        <div class="readonly-text" dir="auto">@Model.Body</div>
+                    </div>
+                }
+                else
+                {
+                    <div class="au-form-field">
+                        <div class="flex items-center justify-between">
+                            <label class="au-form-label" for="kb-body">Content<span class="au-required">*</span></label>
+                            <button type="button" class="au-btn au-btn--text au-btn--sm" id="kb-add-qa"><span class="au-icon" aria-hidden="true">add</span>Add Q&amp;A</button>
+                        </div>
+                        <textarea name="Body" id="kb-body" rows="12" class="au-textarea" required dir="auto"
+                                  placeholder="Write the approved information the AI is allowed to share.&#10;&#10;For FAQs you can write:&#10;Q: Do I stay overnight after rhinoplasty?&#10;A: No, it's a day-case procedure.">@Model.Body</textarea>
+                        <span class="au-help counter" id="kb-body-count"></span>
+                    </div>
+                }
+
+                @ActiveSwitch(Model.IsActive, "this entry")
+
+                <div class="au-form-actions">
+                    <span class="au-help form-actions-note">Takes a few seconds to prepare for AI search.</span>
+                    <a href="@Model.BackUrl" class="au-btn au-btn--text">Cancel</a>
+                    <button type="submit" class="au-btn au-btn--primary">@(Model.IsNew ? "Add to Knowledge Base" : "Save changes")</button>
+                </div>
+            </form>
+        </div>
+
+        @* ---------- Upload Document (new entries only) ---------- *@
+        @if (Model.IsNew)
+        {
+            <div id="kb-panel-upload" hidden="@(activeMode != "upload")">
+                <form method="post" asp-page-handler="Upload" enctype="multipart/form-data" class="au-stack">
+                    <label class="dropzone" id="kb-dropzone" data-max-bytes="@Model.MaxUploadBytes">
+                        <input type="file" name="UploadFile" id="kb-file" accept=".pdf,.docx,.txt" required class="dropzone-input" />
+                        <span class="kb-choice-icon" id="kb-drop-icon">⇪</span>
+                        <div class="flex-1 min-w-0">
+                            <strong id="kb-drop-title">Drop a file here or click to choose</strong>
+                            <div class="cell-sub" id="kb-drop-sub">PDF, DOCX or TXT, up to @maxMb.ToString("0.#") MB. Scanned images can't be read.</div>
+                        </div>
+                    </label>
+
+                    <div class="au-form-grid">
+                        <div class="au-form-field">
+                            <label class="au-form-label" for="kb-upload-title">Title <span class="opt">optional</span></label>
+                            <input type="text" name="Title" id="kb-upload-title" value="@Model.Title" class="au-input" maxlength="200" placeholder="Uses the file name" />
+                        </div>
+                        <label class="au-form-field">
+                            <span class="au-form-label">Category</span>
+                            @CategorySelect(Model.Category)
+                        </label>
+                    </div>
+
+                    @ActiveSwitch(Model.ErrorMessage is null || Model.IsActive, "this document")
+
+                    <div class="au-form-actions">
+                        <span class="au-help form-actions-note">Only the text is kept, not the file.</span>
+                        <a href="@Model.BackUrl" class="au-btn au-btn--text">Cancel</a>
+                        <button type="submit" class="au-btn au-btn--primary"><span class="au-icon" aria-hidden="true">upload</span>Upload</button>
+                    </div>
+                </form>
+            </div>
+
+            @* ---------- Website (new entries only) ---------- *@
+            <div id="kb-panel-website" hidden="@(activeMode != "website")">
+                <form method="post" asp-page-handler="Website" class="au-stack">
+                    <div class="au-form-field">
+                        <label class="au-form-label" for="kb-website-url">Website address<span class="au-required">*</span></label>
+                        <input type="text" name="WebsiteUrl" id="kb-website-url" value="@Model.WebsiteUrl" class="au-input" maxlength="2000" required
+                               placeholder="https://www.yourclinic.com" inputmode="url" autocomplete="off" />
+                    </div>
+
+                    <div class="au-form-field">
+                        <span class="au-form-label">What to import</span>
+                        <div class="seg-cards">
+                            <label class="cat-card @(Model.WebsiteMode != "single_page" ? "on" : "")">
+                                <input type="radio" name="WebsiteMode" value="crawl_site" checked="@(Model.WebsiteMode != "single_page")" />
+                                <strong>Whole website</strong><small>Follows links on the same site.</small>
+                            </label>
+                            <label class="cat-card @(Model.WebsiteMode == "single_page" ? "on" : "")">
+                                <input type="radio" name="WebsiteMode" value="single_page" checked="@(Model.WebsiteMode == "single_page")" />
+                                <strong>Just this page</strong><small>Only the address above.</small>
+                            </label>
+                        </div>
+                    </div>
+
+                    <label class="au-form-field">
+                        <span class="au-form-label">Category</span>
+                        @CategorySelect(Model.Category)
+                    </label>
+
+                    @ActiveSwitch(Model.ErrorMessage is null || Model.IsActive, "these pages")
+
+                    <details class="kb-more">
+                        <summary>What gets imported?</summary>
+                        <p class="au-help mt-1">
+                            Only the text of public pages on this website. No images, videos or files, and links to other websites
+                            aren't followed. The site's <code>robots.txt</code> is respected, and pages built entirely with JavaScript can't be read.
+                            It runs in the background, so you can leave this page; progress shows on the website's page.
+                        </p>
+                    </details>
+
+                    <div class="au-form-actions">
+                        <a href="@Model.BackUrl" class="au-btn au-btn--text">Cancel</a>
+                        <button type="submit" class="au-btn au-btn--primary"><span class="au-icon" aria-hidden="true">language</span>Import website</button>
+                    </div>
+                </form>
+            </div>
+        }
+    </section>
+
+    <script src="~/js/knowledge-page.js" asp-append-version="true"></script>
+}

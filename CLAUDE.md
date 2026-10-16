@@ -1,4 +1,4 @@
-# SculptFlow — instructions for AI assistants
+# Omni — instructions for AI assistants
 
 Shared rules (no commits, token saving, model choice): see the workspace root `..\CLAUDE.md`.
 
@@ -16,7 +16,7 @@ UI: follow docs/UI_GUIDE.md for every screen; keep it up to date.
 
 ## Code architecture (standing rule, agreed 2026-10-06)
 
-The admin portal (`..\SculptFlowAdmin`) uses the same layout. Namespace = folder path (`PlasticSurgery.Business.Services.Leads`).
+The admin portal (`..\SculptFlowAdmin`) uses the same layout. Namespace = folder path (`Omni.App.Business.Services.Leads`).
 
 | Folder | What goes there |
 |---|---|
@@ -83,7 +83,7 @@ Every table lives in its area's Postgres schema, never `public` (only `set_updat
 | `activity` | events, notifications, api_route_stats (API timings), app_logs (error log), message_trace_steps (message trace) |
 | `billing` | plans, rate cards, subscriptions, accounts, usage, ledger, channel account settings |
 | `config` | settings (configuration overrides) |
-| `admin` | the admin portal's own tables (SculptFlowAdmin repo) |
+| `admin` | the admin portal's own tables (admin portal repo, project `Omni.Admin`) |
 
 - New table → its area's schema; add a schema only for a genuinely new area (never `auth`, `storage`, `realtime`,
   `extensions`, `graphql`, `vault`: Supabase reserves them).
@@ -133,12 +133,19 @@ Full detail and the declared-settings table: `docs/configuration.md`.
 
 ## Platform-admin APIs (standing rule, agreed 2026-10-07)
 
-The SculptFlowAdmin portal reads and writes everything about clinics through `/api/platform-admin/{domain}`; it has no
+The Omni.Admin portal reads and writes everything about clinics through `/api/platform-admin/{domain}`; it has no
 access to the main tables. Cross-clinic reads live in `Persistence/Repositories/PlatformAdmin` (+ `Entities/Dtos/PlatformAdmin`,
 `Business/Mappers/PlatformAdmin`); `Business/Services/PlatformAdmin` delegates every write to the service a clinic uses
 (so rules, provider calls and cache clearing happen once) and answers `PlatformAdminChange { clinicId }` for the portal's
 audit. Details never carry secrets. A new portal feature = endpoint here + client/service/page in the portal, with the
 portal's copy of the request/response shapes kept in step.
+
+## Old names guard (Milestone A)
+
+`Omni.App.Tests/Guards/LeftoverNamesTests` fails when an old word (clinic, lead, procedure, appointment, staff, patient,
+consultation, ai_agent, max_agents, the old product names…) appears in a tracked file outside
+`Guards/leftover-names-allowlist.txt`, a `leftover-ok: <reason>` line marker, or its `PendingScopes`. New code uses the
+new names; a rename session removes its words from `PendingScopes`.
 
 ## Other docs (read on demand)
 

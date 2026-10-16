@@ -1,12 +1,12 @@
 // Rebuilds the self-hosted Material Symbols subset (docs/UI_GUIDE.md §0.4 "Fonts and icons").
 // Scans the views and scripts for icon names, asks Google Fonts for a font holding only those glyphs, and saves it as
-// PlasticSurgery/wwwroot/fonts/material-symbols-outlined.woff2 (+ icons.txt, the list it contains).
+// Omni.App/wwwroot/fonts/material-symbols-outlined.woff2 (+ icons.txt, the list it contains).
 // Run from the repo root after adding an icon:  node docs/tools/icon-font.js
 // Needs Node 18+ and internet access on the developer machine only; the app never calls Google.
 const fs = require('fs');
 const path = require('path');
 
-const web = path.join(__dirname, '..', '..', 'PlasticSurgery');
+const web = path.join(__dirname, '..', '..', 'Omni.App');
 const out = path.join(web, 'wwwroot', 'fonts');
 
 // Icons the kit (aurora.js / aurora.css) draws itself.

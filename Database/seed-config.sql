@@ -1,6 +1,6 @@
 -- =====================================================================
 -- Configuration seed: one config.settings row per setting declared in
--- PlasticSurgery/Common/Statics/ConfigDefaults.cs, with its default value.
+-- Omni.App/Common/Statics/ConfigDefaults.cs, with its default value.
 -- GENERATED from ConfigDefaults (60 settings); regenerate it when a setting is added.
 --
 -- Safe to re-run: a row that already exists is left alone, so values
@@ -51,7 +51,7 @@ insert into config.settings (section, key, value, updated_by) values
   ('WebScraping', 'MaxLinksPerPage', '300', 'seed'),
   ('WebScraping', 'MaxSourcesPerClinic', '25', 'seed'),
   ('WebScraping', 'DevAllowedHosts', '', 'seed'),
-  ('WebScraping', 'UserAgent', 'SculptFlowBot/1.0 (+https://sculptflowapp.onrender.com; clinic knowledge-base crawler)', 'seed'),
+  ('WebScraping', 'UserAgent', 'OmniBot/1.0 (+https://sculptflowapp.onrender.com; clinic knowledge-base crawler)', 'seed'),
   ('Benchmark', 'GenerationSampleSize', '20', 'seed'),
   ('Benchmark', 'SamplePoolSize', '60', 'seed'),
   ('Benchmark', 'MinSourceChunkChars', '80', 'seed'),

@@ -1,0 +1,155 @@
+@page "/dashboard/leads"
+@model Omni.App.Pages.Dashboard.LeadsModel
+@{
+    ViewData["Title"] = "Interested People";
+    var now = DateTimeOffset.UtcNow;
+    var filtered = !string.IsNullOrWhiteSpace(Model.Search) || !string.IsNullOrWhiteSpace(Model.Status) || !string.IsNullOrWhiteSpace(Model.Source);
+
+    // Presentation only: which channel icon a free-text leads.source value gets (null = show the text).
+    static string? SourceChannel(string? source)
+    {
+        var s = (source ?? "").ToLowerInvariant();
+        if (s.Contains("whatsapp")) return "whatsapp";
+        if (s.Contains("instagram")) return "instagram";
+        if (s.Contains("facebook") || s.Contains("meta")) return "facebook";
+        if (s.Contains("telegram")) return "telegram";
+        if (s.Contains("google")) return "google";
+        if (s.Contains("website") || s == "web") return "website";
+        if (s.Contains("email")) return "email";
+        if (s.Contains("sms")) return "sms";
+        return null;
+    }
+
+    string PageLink(int p) =>
+        $"/dashboard/leads?PageNumber={p}&Status={Uri.EscapeDataString(Model.Status ?? "")}&Source={Uri.EscapeDataString(Model.Source ?? "")}&Search={Uri.EscapeDataString(Model.Search ?? "")}";
+}
+
+@if (!Model.ClinicConfigured)
+{
+    <partial name="_NoClinic" />
+}
+else
+{
+    <div class="au-page-head">
+        <p class="au-page-head__sub">Everyone who has shown interest in your clinic. Open a person to update their status.</p>
+    </div>
+
+    @* #leads-filters and #leads-results are read by wwwroot/js/leads.js (live search swaps the results in place). *@
+    <form method="get" class="au-toolbar" id="leads-filters">
+        <div class="au-toolbar__filters">
+            <input type="search" name="Search" value="@Model.Search" placeholder="Search by name or phone…" class="au-input search-input leads-search" aria-label="Search leads" autocomplete="off" />
+            <select name="Status" class="au-select" aria-label="Status" onchange="this.form.requestSubmit()">
+                <option value="">All statuses</option>
+                @foreach (var status in Model.AllStatuses)
+                {
+                    <option value="@status" selected="@(status == Model.Status)">@FilterLabelHelper.Label(status)</option>
+                }
+            </select>
+            <select name="Source" class="au-select" aria-label="Source" onchange="this.form.requestSubmit()">
+                <option value="">All sources</option>
+                @foreach (var source in Model.AllSources)
+                {
+                    <option value="@source" selected="@(string.Equals(source, Model.Source, StringComparison.OrdinalIgnoreCase))">@FilterLabelHelper.Label(source)</option>
+                }
+            </select>
+        </div>
+        <div class="au-toolbar__actions">
+            @if (filtered)
+            {
+                <a class="au-btn au-btn--text" href="/dashboard/leads">Clear</a>
+            }
+            <button type="submit" class="au-btn au-btn--outlined"><span class="au-icon" aria-hidden="true">search</span>Search</button>
+        </div>
+    </form>
+
+    <div id="leads-results">
+        <div class="au-table-card">
+            @if (Model.Leads.Count == 0)
+            {
+                var empty = filtered
+                    ? new EmptyStateModel(Icon: "search_off", Title: "No one matches these filters",
+                        Text: "Try a different name, phone, status or source.", ActionLabel: "Clear filters", ActionHref: "/dashboard/leads", ActionIcon: "filter_alt_off")
+                    : new EmptyStateModel(Icon: "group", Title: "No interested people yet",
+                        Text: "People who message your clinic or fill in one of your forms show up here.",
+                        ActionLabel: "Connect a messaging channel", ActionHref: "/settings/integrations", ActionIcon: "hub");
+                <partial name="_EmptyState" model="empty" />
+            }
+            else
+            {
+                <div class="au-table-scroll">
+                    <table class="au-table au-table--stack">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Phone</th>
+                                <th>Procedure</th>
+                                <th>Source</th>
+                                <th>Status</th>
+                                <th>Qualification</th>
+                                <th>Last contact</th>
+                                <th>Next follow-up</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var lead in Model.Leads)
+                            {
+                                var channel = SourceChannel(lead.Source);
+                                var overdue = lead.NextFollowupAt is not null && lead.NextFollowupAt < now;
+                                <tr class="row-link" data-href="/dashboard/leads/@lead.Id">
+                                    <td data-label="Name"><a class="cell-person" href="/dashboard/leads/@lead.Id"><span class="avatar-sm">@(string.IsNullOrWhiteSpace(lead.FullName) ? "?" : lead.FullName.Trim()[..1])</span>@(lead.FullName ?? "—")</a></td>
+                                    <td data-label="Phone">@(lead.Phone ?? "—")</td>
+                                    <td data-label="Procedure">@(lead.ProcedureName ?? "—")</td>
+                                    <td data-label="Source">
+                                        @if (channel is null)
+                                        {
+                                            @(string.IsNullOrWhiteSpace(lead.Source) ? "—" : FilterLabelHelper.Label(lead.Source))
+                                        }
+                                        else
+                                        {
+                                            var svg = ChannelIconHelper.Svg(channel);
+                                            <span class="source-icon" style="background:@(channel == "google" ? "#4285F4" : ChannelIconHelper.Hex(channel))" title="@FilterLabelHelper.Label(lead.Source)" aria-label="@FilterLabelHelper.Label(lead.Source)">
+                                                @if (svg is not null) { @Html.Raw(svg) } else { @(channel == "google" ? "G" : ChannelIconHelper.Initials(channel)) }
+                                            </span>
+                                        }
+                                    </td>
+                                    <td data-label="Status"><span class="badge @StatusBadgeHelper.CssClass(lead.Status)">@FilterLabelHelper.Label(lead.Status)</span></td>
+                                    <td data-label="Qualification"><span class="badge @StatusBadgeHelper.CssClass(lead.QualificationStatus)">@FilterLabelHelper.Label(lead.QualificationStatus)</span></td>
+                                    <td data-label="Last contact">@LocalTimeHelper.Time(lead.LastContactAt)</td>
+                                    <td data-label="Next follow-up">
+                                        @if (overdue)
+                                        {
+                                            <span class="overdue" title="This follow-up date has passed">@LocalTimeHelper.Time(lead.NextFollowupAt) · overdue</span>
+                                        }
+                                        else
+                                        {
+                                            @LocalTimeHelper.Time(lead.NextFollowupAt)
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+            @if (Model.TotalCount > 0)
+            {
+                <div class="au-pager">
+                    <span class="au-pager__count"><strong>@Model.TotalCount</strong> @(Model.TotalCount == 1 ? "person" : "people")</span>
+                    @if (Model.TotalPages > 1)
+                    {
+                        <ul class="pagination" aria-label="Pages">
+                            @for (var p = 1; p <= Model.TotalPages; p++)
+                            {
+                                <li class="@(p == Model.PageNumber ? "active" : "")">
+                                    <a href="@PageLink(p)" aria-current="@(p == Model.PageNumber ? "page" : null)">@p</a>
+                                </li>
+                            }
+                        </ul>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+
+    <script src="~/js/leads.js" asp-append-version="true"></script>
+}

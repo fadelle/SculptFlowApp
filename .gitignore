@@ -19,4 +19,7 @@ Thumbs.db
 
 # Logs
 *.log
-/PlasticSurgery/Properties/launchSettings.json
+/Omni.App/Properties/launchSettings.json
+
+# Test output (coverage reports)
+**/TestResults/

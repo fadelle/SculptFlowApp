@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="Omni.App/Omni.App.csproj" />
+  <Project Path="Omni.App.Tests/Omni.App.Tests.csproj" />
+</Solution>

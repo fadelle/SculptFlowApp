@@ -1,20 +1,20 @@
 # Subscriptions & usage billing
 
-Developer guide for the billing module (`PlasticSurgery/Billing/`, tables in the Postgres schema `billing.*`). The
+Developer guide for the billing module (`Omni.App/Billing/`, tables in the Postgres schema `billing.*`). The
 high-level picture and diagram are in `docs/system-design.html` §2.6; this file is the "how it works and how to extend it"
 version.
 
 ## Three separate questions — never collapse them
 
-| | 1. Platform subscription | 2. Provider billing responsibility | 3. SculptFlow usage billing |
+| | 1. Platform subscription | 2. Provider billing responsibility | 3. Omni usage billing |
 |---|---|---|---|
-| Question | What does the clinic pay SculptFlow for access? | Who pays the upstream provider (Meta, SMS operator…)? | Does SculptFlow charge the clinic for this usage? |
+| Question | What does the clinic pay Omni for access? | Who pays the upstream provider (Meta, SMS operator…)? | Does Omni charge the clinic for this usage? |
 | Decided by | the clinic's **plan** | the **connected channel account** | the account's arrangement (+ rate cards for the price) |
 | Code | `SubscriptionService`, `EntitlementService` | `ProviderBillingService` | `BillingService`, `MessageBillingService` |
-| Money | wallet pays the plan price each period | never SculptFlow's wallet unless SculptFlow pays the provider | included credit first, then wallet |
+| Money | wallet pays the plan price each period | never Omni's wallet unless Omni pays the provider | included credit first, then wallet |
 
 There are no per-channel quotas. A plan may include a **monetary** credit (e.g. Growth: $99/month with $25 of credit) spent
-on whatever SculptFlow charges, at its own selling price. Unused credit expires at renewal.
+on whatever Omni charges, at its own selling price. Unused credit expires at renewal.
 
 Everything is off until `Billing:Enabled = true`: nothing is recorded or charged, every clinic may use every feature, the
 worker idles. Plans, rate cards, wallets and account arrangements can be prepared through the admin API while it's off.
@@ -55,11 +55,11 @@ nothing checks them yet.
 Configured per **connected channel account** (a `channel_integrations` row), never assumed per channel — two WhatsApp
 accounts can differ.
 
-| Value | Admin label | Meaning | SculptFlow usage billing by default |
+| Value | Admin label | Meaning | Omni usage billing by default |
 |---|---|---|---|
 | `customer_direct` | Customer pays provider directly | e.g. the clinic's own WABA with its own Meta payment method | off |
-| `platform_funded` | SculptFlow pays provider | an SMS aggregator SculptFlow owns | **on** |
-| `external_provider_direct` | Customer pays external provider | the clinic's own Viber/SMS/… provider account that SculptFlow only integrates | off |
+| `platform_funded` | Omni pays provider | an SMS aggregator Omni owns | **on** |
+| `external_provider_direct` | Customer pays external provider | the clinic's own Viber/SMS/… provider account that Omni only integrates | off |
 | `no_provider_usage_fee` | No provider usage fee | Telegram, Messenger, TikTok conversations | off |
 
 Resolution (`ProviderBillingService.ResolveAsync`): the account's override in `billing.channel_account_settings` → `Billing:ProviderBilling:Defaults`
@@ -70,14 +70,14 @@ WhatsApp defaults to `platform_funded` because that's how billing behaved before
 connected through Meta's Embedded Signup usually pays Meta itself: set that account to `customer_direct`, or
 set `Billing:ProviderBilling:Defaults:whatsapp_meta = customer_direct` once that's the norm.
 
-The account override can also set **SculptFlow usage billing** explicitly: on for a customer-paid account (a SculptFlow usage
-fee, priced by rates set for that responsibility) or off for a funded one (SculptFlow absorbs the cost).
+The account override can also set **Omni usage billing** explicitly: on for a customer-paid account (an Omni usage
+fee, priced by rates set for that responsibility) or off for a funded one (Omni absorbs the cost).
 
-## 3. SculptFlow usage billing
+## 3. Omni usage billing
 
 ```
 Channel account ─► provider billing responsibility ─┐
-Usage ─► channel policy ─► Billable event ──────────┴─► SculptFlow charges it?
+Usage ─► channel policy ─► Billable event ──────────┴─► Omni charges it?
      yes ─► rating ─► reservation ─► send ─► provider outcome ─► settle (credit, then wallet) | release ─► ledger
      no  ─► usage record (provider cost where known) ─► provider outcome — no rate needed, no hold, no wallet, no ledger
 ```
@@ -87,21 +87,21 @@ Usage ─► channel policy ─► Billable event ──────────
 `BillableEvent` = clinic, **idempotency key**, event type (`whatsapp_marketing_message`, `sms_segment`, `telegram_message`,
 `voice_minute`, `ai_token`, …), channel, quantity, unit, country/operator/provider, **`ProviderBilling`**, **`ChargeUsage`**
 (null = only when `platform_funded`), connected account, occurred-at, related message/conversation/campaign. Event types are
-free text (`[a-z0-9_]+`); a new one needs only rates — and only if SculptFlow charges it.
+free text (`[a-z0-9_]+`); a new one needs only rates — and only if Omni charges it.
 
 ### Usage records: two separate statuses
 
-- `charge_status` (SculptFlow's money): `reserved` → `settled` | `released`; `failed` = refused (no rate / not enough
-  balance); **`not_charged`** = SculptFlow doesn't bill it.
+- `charge_status` (Omni's money): `reserved` → `settled` | `released`; `failed` = refused (no rate / not enough
+  balance); **`not_charged`** = Omni doesn't bill it.
 - `provider_outcome` (the provider side): `pending` → `billable` (delivered) | `not_billable` (failed).
 - `provider_billing` snapshots who paid the provider; `provider_cost` holds the provider's cost when a rate knows it
-  (paid by SculptFlow only when `platform_funded`); `amount` is what SculptFlow charged (0 when not charged).
+  (paid by Omni only when `platform_funded`); `amount` is what Omni charged (0 when not charged).
 
 ### Wallet and ledger
 
 One `billing.accounts` row per clinic: `wallet_balance`, `included_credit_balance`, `reserved_amount`.
 **Spendable = wallet + included credit − reserved.** The wallet and included credit only finance what the clinic owes
-SculptFlow. Every change is a `billing.ledger_entries` row in the same transaction (append-only), and
+Omni. Every change is a `billing.ledger_entries` row in the same transaction (append-only), and
 `GET …/reconciliation` checks they agree. Uncharged usage never creates a ledger row.
 
 ### Rate cards
@@ -112,8 +112,8 @@ SculptFlow. Every change is a `billing.ledger_entries` row in the same transacti
 - A rate version has provider cost and client rate as **independent** numbers, a currency and an effective period.
   Versions never change (DB trigger) and never overlap (exclusion constraint); adding one closes the current one; none can
   start in the past. Usage snapshots its prices, so history never changes.
-- `provider_billing` on a rate: null = SculptFlow-funded pricing (and cost reporting for any account). Set to e.g.
-  `customer_direct` it is a **SculptFlow usage fee** for customer-paid accounts. Charging a non-funded account only ever uses
+- `provider_billing` on a rate: null = Omni-funded pricing (and cost reporting for any account). Set to e.g.
+  `customer_direct` it is a **Omni usage fee** for customer-paid accounts. Charging a non-funded account only ever uses
   a rate for exactly its responsibility — never the platform rate by fallback.
 - Charged usage with no rate → refused (`rate_not_found`), recorded as failed, logged; nothing is guessed. Uncharged usage
   never fails for a missing rate.
@@ -138,7 +138,7 @@ idempotency after the lock, changes balances only through `BillingLedger.PostAsy
 
 ## Channel integration
 
-`IChannelBillingPolicy` (one per channel) says WHAT the usage is; `ProviderBillingService` says WHO pays and WHETHER SculptFlow
+`IChannelBillingPolicy` (one per channel) says WHAT the usage is; `ProviderBillingService` says WHO pays and WHETHER Omni
 charges. `MessageBillingService` joins them for every outbound message: subscription check → resolve the account's
 arrangement → record or reserve (key `{channel}:message:{messageId}`) → provider call (release on failure) → status callbacks
 settle or release. A failure to record *uncharged* usage is logged and never blocks the message.
@@ -153,11 +153,11 @@ settle or release. A failure to record *uncharged* usage is logged and never blo
 | Situation | Provider billing | Usage record | Wallet / credit / ledger |
 |---|---|---|---|
 | Customer-funded WABA (clinic's own Meta card) | `customer_direct` | yes, Meta's cost recorded as paid by the clinic | untouched |
-| SculptFlow-funded WhatsApp (today's default) | `platform_funded` | yes, cost + SculptFlow price | reserved, then credit/wallet + ledger |
-| SMS through SculptFlow's aggregator (future) | `platform_funded` | yes, `sms_segment` × segments, destination pricing | reserved, then credit/wallet + ledger |
-| Viber on the clinic's own provider account (future) | `external_provider_direct` | yes | untouched (unless a SculptFlow fee is turned on) |
+| Omni-funded WhatsApp (today's default) | `platform_funded` | yes, cost + Omni price | reserved, then credit/wallet + ledger |
+| SMS through Omni's aggregator (future) | `platform_funded` | yes, `sms_segment` × segments, destination pricing | reserved, then credit/wallet + ledger |
+| Viber on the clinic's own provider account (future) | `external_provider_direct` | yes | untouched (unless an Omni fee is turned on) |
 | Messenger / TikTok / Telegram conversations | `no_provider_usage_fee` | yes (or nothing, if the policy doesn't describe it) | untouched — monetized through the subscription |
-| Customer-funded WABA **with a SculptFlow usage fee** | `customer_direct` + usage billing on | yes | the fee only (rate with `provider_billing = customer_direct`) |
+| Customer-funded WABA **with an Omni usage fee** | `customer_direct` + usage billing on | yes | the fee only (rate with `provider_billing = customer_direct`) |
 
 ## How to add a new billable channel
 
@@ -169,7 +169,7 @@ settle or release. A failure to record *uncharged* usage is logged and never blo
 4. If the channel sends through `MessageService`, nothing else is needed. Otherwise resolve the arrangement with
    `IProviderBillingService.ResolveAsync`, then call `IBillingService.ReserveAsync` / `SettleAsync` / `ReleaseAsync` with a
    stable key.
-5. Add rates for the new event types where SculptFlow charges them.
+5. Add rates for the new event types where Omni charges them.
 
 ## How to add a new plan
 
@@ -193,7 +193,7 @@ POST /api/platform-admin/billing/rate-cards/default/rates
   "providerCost": 0.055, "clientRate": 0.07, "providerBilling": null }
 ```
 
-Starts now (or later), closes the current version of the same rate. A SculptFlow usage fee for customer-paid WABAs:
+Starts now (or later), closes the current version of the same rate. An Omni usage fee for customer-paid WABAs:
 `"providerBilling": "customer_direct", "clientRate": 0.01`. Custom pricing for one clinic: `POST /rate-cards` with
 `{ "code": "clinic-acme", "name": "Acme pricing", "clinicId": "…" }`, then add only what differs. Check with
 `GET /clinics/{id}/quote?eventType=…&country=…&provider=…&providerBilling=…`.
@@ -219,7 +219,7 @@ Changes apply to future usage only; recorded usage keeps its snapshot. Each chan
 4. Give every existing clinic a plan (and top up wallets as payments arrive); set each WhatsApp account's arrangement.
 5. Optionally `Billing__SignupPlanCode`. Then `Billing__Enabled=true` and redeploy.
 
-## Admin API (all under `/api/platform-admin/billing`, header `X-Platform-Admin-Key`, actor in `X-Admin-Actor`; normally used through the SculptFlowAdmin portal's Billing pages)
+## Admin API (all under `/api/platform-admin/billing`, header `X-Platform-Admin-Key`, actor in `X-Admin-Actor`; normally used through the Omni.Admin portal's Billing pages)
 
 Plans: `GET/POST plans`, `GET/PUT plans/{code}`, `PUT plans/{code}/entitlements`, `GET entitlements` ·
 Rate cards: `GET/POST rate-cards`, `PUT rate-cards/{code}`, `GET/POST rate-cards/{code}/rates`, `POST rates/{id}/close` ·
@@ -228,8 +228,8 @@ Provider billing: `GET provider-billing`, `GET clinics/{id}/channel-accounts`, `
 Clinics: `GET accounts`, `GET clinics/{id}`, `POST clinics/{id}/subscription` (+ `/cancel`, `/resume`, `/renew`),
 `POST clinics/{id}/wallet/top-ups`, `POST clinics/{id}/wallet/adjustments`, `GET clinics/{id}/usage`,
 `POST clinics/{id}/usage/{usageId}/refund`, `GET clinics/{id}/ledger`, `GET clinics/{id}/reconciliation`,
-`GET clinics/{id}/quote` · Reporting: `GET report?from=&to=` (usage revenue, provider cost paid by SculptFlow vs paid
-externally, margin, subscription revenue, top-ups). The clinic's own read-only view: Settings → Billing (SculptFlow charges
+`GET clinics/{id}/quote` · Reporting: `GET report?from=&to=` (usage revenue, provider cost paid by Omni vs paid
+externally, margin, subscription revenue, top-ups). The clinic's own read-only view: Settings → Billing (Omni charges
 apart from provider-direct usage) and `GET /api/billing/summary|usage|transactions`.
 
 ## Postponed on purpose
@@ -242,12 +242,12 @@ AI channels themselves.
 
 ## Tests
 
-`PlasticSurgery.Tests` — pure rules run anywhere; the database tests need a throwaway PostgreSQL:
+`Omni.App.Tests` — pure rules run anywhere; the database tests need a throwaway PostgreSQL:
 
 ```
-$env:SCULPTFLOW_TEST_DB = "Host=localhost;Port=5432;Username=postgres;Password=…"   # never Supabase
-dotnet test PlasticSurgery.Tests
+$env:OMNI_TEST_DB = "Host=localhost;Port=5432;Username=postgres;Password=…"   # never Supabase
+dotnet test Omni.App.Tests
 ```
 
-Each run creates `sculptflow_test_*`, applies `Database/schema.sql`, and drops it. Every money test ends by checking the
+Each run creates `omni_test_*`, applies `Database/schema.sql`, and drops it. Every money test ends by checking the
 ledger chain and that balances reconcile.

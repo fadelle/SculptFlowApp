@@ -1,0 +1,26 @@
+# Allowlist for LeftoverNamesTests (Milestone A rename guard). Keep it short; say why above every entry.
+#   path: <glob>                  never scanned (** any depth, * within one folder)
+#   path: <glob> | word,word      only these words are allowed there
+#   token: <literal>              removed before matching, in every file
+# For a single legitimate line, put "leftover-ok: <reason>" on the line instead.
+
+# The guard itself lists the old words.
+path: Omni.App.Tests/Guards/LeftoverNameScanner.cs
+path: Omni.App.Tests/Guards/LeftoverNamesTests.cs
+path: Omni.App.Tests/Guards/leftover-names-allowlist.txt
+
+# Old migration notes, kept as written (decision D8).
+path: PROJECT_HANDOFF.md
+
+# One-off data migrations read the old table and column names.
+path: Database/migrations/**
+
+# Third-party browser libraries, if any are added.
+path: Omni.App/wwwroot/lib/**
+
+# The live Render host; it changes when Mohammad renames the Render service after the merge.
+token: sculptflowapp.onrender.com
+
+# Local checkout folders keep their names during Milestone A (decision D6).
+token: ..\SculptFlowAdmin
+token: ../SculptFlowAdmin
