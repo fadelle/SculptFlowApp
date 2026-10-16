@@ -20,9 +20,9 @@ public interface IInboxNotifier
 
     Task ConversationUpdatedAsync(Guid clientId, Guid conversationId, CancellationToken ct = default);
 
-    /// <summary>Tells the client's open Appointments calendars that an appointment was created, rescheduled, canceled or had its status changed, so
+    /// <summary>Tells the client's open Bookings calendars that a booking was created, rescheduled, canceled or had its status changed, so
     /// they re-fetch the visible month. Sent only AFTER the change is committed. change: created | rescheduled | canceled | status_changed.</summary>
-    Task AppointmentChangedAsync(Guid clientId, Guid appointmentId, string change, CancellationToken ct = default);
+    Task BookingChangedAsync(Guid clientId, Guid bookingId, string change, CancellationToken ct = default);
 
     Task ConversationModeChangedAsync(Guid clientId, Guid conversationId, string mode, CancellationToken ct = default);
 

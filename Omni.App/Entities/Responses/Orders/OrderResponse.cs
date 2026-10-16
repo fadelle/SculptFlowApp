@@ -7,7 +7,7 @@ public record OrderResponse(
     string? LeadFullName,
     Guid ServiceId,
     string? ServiceName,
-    Guid? AppointmentId,
+    Guid? BookingId,
     string Status,
     decimal? QuotedAmount,
     decimal? DepositAmount,

@@ -2,7 +2,7 @@ using Omni.App.Entities.Models;
 
 namespace Omni.App.Persistence.Contracts.Calendars;
 
-/// <summary>Google/Outlook calendar connections, their calendar lists and per-appointment sync rows. Tracked.</summary>
+/// <summary>Google/Outlook calendar connections, their calendar lists and per-booking sync rows. Tracked.</summary>
 public interface ICalendarIntegrationRepository
 {
     void Add(CalendarIntegration integration);
@@ -23,7 +23,7 @@ public interface ICalendarIntegrationRepository
 
     void RemoveCalendars(CalendarIntegration integration);
 
-    Task<AppointmentCalendarSync?> GetSyncAsync(Guid appointmentId, Guid integrationId, CancellationToken ct = default);
+    Task<BookingCalendarSync?> GetSyncAsync(Guid bookingId, Guid integrationId, CancellationToken ct = default);
 
-    void AddSync(AppointmentCalendarSync sync);
+    void AddSync(BookingCalendarSync sync);
 }

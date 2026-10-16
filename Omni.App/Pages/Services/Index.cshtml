@@ -20,7 +20,7 @@ else
             </p>
             <p class="au-help mt-1 mb-0" id="svc-how" hidden>
                 Services can't be deleted. Deactivate one to stop using it for new bookings while keeping past leads
-                and appointments intact. Put detailed information (pricing, recovery, preparation) in the
+                and bookings intact. Put detailed information (pricing, recovery, preparation) in the
                 <a href="/KnowledgeBase">Knowledge Base</a>.
             </p>
         </div>
@@ -52,7 +52,7 @@ else
                         <tr>
                             <th>Service</th>
                             <th>Code</th>
-                            <th>Consultation</th>
+                            <th>Booking</th>
                             <th>Status</th>
                             <th><span class="au-sr-only">Actions</span></th>
                         </tr>
@@ -80,8 +80,8 @@ else
                                         <span class="text-subtle">—</span>
                                     }
                                 </td>
-                                <td data-label="Consultation">
-                                    @if (p.ConsultationDuration is { } d)
+                                <td data-label="Booking">
+                                    @if (p.BookingDuration is { } d)
                                     {
                                         @($"{d} min")
                                     }

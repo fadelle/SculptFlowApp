@@ -76,7 +76,7 @@ Every table lives in its area's Postgres schema, never `public` (only `set_updat
 | `core` | business_types, clients, services |
 | `identity` | identity_users/_claims/_logins/_tokens, client_users |
 | `crm` | pipeline_stages, leads, orders, conversations, messages, inbox_settings |
-| `scheduling` | appointments, availability rules/exceptions, booking_settings, calendar integrations and syncs |
+| `scheduling` | bookings, availability rules/exceptions, booking_settings, calendar integrations and syncs |
 | `channels` | channel_integrations, whatsapp_templates, whatsapp_health_events, tiktok_integrations |
 | `marketing` | campaigns, campaign_recipients |
 | `knowledge` | every knowledge_* table |
@@ -116,7 +116,7 @@ Full detail and the declared-settings table: `docs/configuration.md`.
   it without other changes.
 - Every key and lifetime lives in `Common/Statics/CacheKeys` as `area:thing:id`, so an area can be dropped by prefix.
 - Cache plain DTOs/records or read-only entity copies (stored as JSON copies), never tracked EF entities, and nothing
-  whose staleness costs money (balances, ledger) or that changes every request (messages, conversations, appointments).
+  whose staleness costs money (balances, ledger) or that changes every request (messages, conversations, bookings).
 - Table caches (agreed 2026-10-14) live in the repository's `...ReadOnlyAsync` reads: clients, business types (with stages),
   inbox settings, client memberships, services, availability rules/settings/exceptions, calendar connections, channel connections, TikTok, WhatsApp
   templates, rating cards, rates, channel account billing. Code that will change a row loads it tracked (uncached).
@@ -155,7 +155,7 @@ portal's copy of the request/response shapes kept in step.
 ## Old names guard (Milestone A)
 
 `Omni.App.Tests/Guards/LeftoverNamesTests` fails when an old word (clinic, lead, procedure, appointment, staff, patient, <!-- leftover-ok: lists the old words -->
-consultation, ai_agent, max_agents, the old product names…) appears in a tracked file outside
+consultation, ai_agent, max_agents, the old product names…) appears in a tracked file outside <!-- leftover-ok: lists the old words -->
 `Guards/leftover-names-allowlist.txt`, a `leftover-ok: <reason>` line marker, or its `PendingScopes`. New code uses the
 new names; a rename session removes its words from `PendingScopes`.
 

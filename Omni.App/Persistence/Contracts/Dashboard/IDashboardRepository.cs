@@ -11,7 +11,7 @@ public interface IDashboardRepository
     Task<(IReadOnlyList<DashboardLeadRow> Items, int TotalCount)> ListLeadsAsync(Guid clientId, string? status, string? search,
         string? source, int skip, int take, CancellationToken ct = default);
 
-    Task<(IReadOnlyList<DashboardAppointmentRow> Items, int TotalCount)> ListAppointmentsAsync(Guid clientId, string? status,
+    Task<(IReadOnlyList<DashboardBookingRow> Items, int TotalCount)> ListBookingsAsync(Guid clientId, string? status,
         string? search, int skip, int take, CancellationToken ct = default);
 
     /// <summary>Per service, ordered by completed revenue (highest first).</summary>

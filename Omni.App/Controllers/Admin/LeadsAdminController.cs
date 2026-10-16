@@ -8,7 +8,7 @@ namespace Omni.App.Controllers.Admin;
 
 /// <summary>
 /// Platform-admin leads API (internal; called by the Omni.Admin portal): leads, conversations, messages and
-/// appointments across clients. Writes answer { clientId }. Errors: 400 invalid input, 404 not found.
+/// bookings across clients. Writes answer { clientId }. Errors: 400 invalid input, 404 not found.
 /// </summary>
 [ApiController]
 [AllowAnonymous]
@@ -66,12 +66,12 @@ public class LeadsAdminController : ControllerBase
         [FromQuery] string? search, [FromQuery] int page, CancellationToken ct) =>
         Ok(await _leads.ListMessagesAsync(clientId, failedOnly, sender, search, page, ct));
 
-    [HttpGet("appointments")]
-    public async Task<IActionResult> Appointments([FromQuery] Guid? clientId, [FromQuery] Guid? leadId, [FromQuery] string? status,
+    [HttpGet("bookings")]
+    public async Task<IActionResult> Bookings([FromQuery] Guid? clientId, [FromQuery] Guid? leadId, [FromQuery] string? status,
         [FromQuery] bool upcomingOnly, [FromQuery] int page, CancellationToken ct) =>
-        Ok(await _leads.ListAppointmentsAsync(clientId, leadId, status, upcomingOnly, page, ct));
+        Ok(await _leads.ListBookingsAsync(clientId, leadId, status, upcomingOnly, page, ct));
 
-    [HttpPut("appointments/{id:guid}/status")]
-    public async Task<IActionResult> SetAppointmentStatus(Guid id, [FromBody] StatusBody request, CancellationToken ct) =>
-        Ok(await _leads.SetAppointmentStatusAsync(id, request.Status, ct));
+    [HttpPut("bookings/{id:guid}/status")]
+    public async Task<IActionResult> SetBookingStatus(Guid id, [FromBody] StatusBody request, CancellationToken ct) =>
+        Ok(await _leads.SetBookingStatusAsync(id, request.Status, ct));
 }

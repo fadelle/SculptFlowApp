@@ -24,14 +24,14 @@ public abstract class ClientControllerTestBase
     protected static void IsForbid<T>(ActionResult<T> result) => Assert.IsType<ForbidResult>(result.Result);
 }
 
-public class LeadsAndAppointmentsControllerTests : ClientControllerTestBase
+public class LeadsAndBookingsControllerTests : ClientControllerTestBase
 {
     private readonly Mock<ILeadService> _leads = new();
-    private readonly Mock<IAppointmentService> _appointments = new();
+    private readonly Mock<IBookingService> _bookings = new();
     private readonly Mock<IAvailabilityService> _availability = new();
 
     private LeadsController Leads() => new LeadsController(_leads.Object, Client.Object).With();
-    private AppointmentsController Appts() => new AppointmentsController(_appointments.Object, _availability.Object, Client.Object).With();
+    private BookingsController Appts() => new BookingsController(_bookings.Object, _availability.Object, Client.Object).With();
 
     private LeadResponse Lead() => new(Guid.NewGuid(), ClientId, null, null, "Ann", null, null, null, null, "web", null, null, null, "new", "unknown", null, null, null, null, true, null, null, null, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow);
 
@@ -80,20 +80,20 @@ public class LeadsAndAppointmentsControllerTests : ClientControllerTestBase
     }
 
     [Fact]
-    public async Task Appointment_creation_always_uses_the_signed_in_client_not_the_one_in_the_body()
+    public async Task Booking_creation_always_uses_the_signed_in_client_not_the_one_in_the_body()
     {
         var other = Guid.NewGuid();
-        var req = new CreateAppointmentRequest(other, Guid.NewGuid(), null, "consultation", DateTimeOffset.UtcNow.AddDays(1), null, null, null, null);
-        CreateAppointmentRequest? seen = null;
-        _appointments.Setup(a => a.CreateAsync(It.IsAny<CreateAppointmentRequest>(), It.IsAny<CancellationToken>()))
-            .Callback<CreateAppointmentRequest, CancellationToken>((r, _) => seen = r)
-            .ReturnsAsync(new AppointmentResponse(Guid.NewGuid(), ClientId, req.LeadId, null, null, null, "consultation", "booked", req.ScheduledStart, null, null, null, null, DateTimeOffset.UtcNow));
+        var req = new CreateBookingRequest(other, Guid.NewGuid(), null, "standard", DateTimeOffset.UtcNow.AddDays(1), null, null, null, null);
+        CreateBookingRequest? seen = null;
+        _bookings.Setup(a => a.CreateAsync(It.IsAny<CreateBookingRequest>(), It.IsAny<CancellationToken>()))
+            .Callback<CreateBookingRequest, CancellationToken>((r, _) => seen = r)
+            .ReturnsAsync(new BookingResponse(Guid.NewGuid(), ClientId, req.LeadId, null, null, null, "standard", "booked", req.ScheduledStart, null, null, null, null, DateTimeOffset.UtcNow));
         Assert.IsType<CreatedAtActionResult>((await Appts().Create(req, default)).Result);
         Assert.Equal(ClientId, seen!.ClientId);
     }
 
     [Fact]
-    public async Task Appointment_reads_status_and_availability()
+    public async Task Booking_reads_status_and_availability()
     {
         _availability.Setup(a => a.GetSlotsAsync(ClientId, null, null, 7, It.IsAny<CancellationToken>())).ReturnsAsync(new AvailabilityResponse(true, "UTC", "t", 30, "a", "b", null, []));
         Assert.IsType<OkObjectResult>((await Appts().GetAvailable(null, null, null, default)).Result);
@@ -102,8 +102,8 @@ public class LeadsAndAppointmentsControllerTests : ClientControllerTestBase
         Assert.IsType<OkObjectResult>((await Appts().GetAvailable(null, date, null, default)).Result);
 
         Assert.IsType<NotFoundResult>((await Appts().GetById(Guid.NewGuid(), default)).Result);
-        Assert.IsType<NotFoundResult>((await Appts().UpdateStatus(Guid.NewGuid(), new UpdateAppointmentStatusRequest("attended"), default)).Result);
-        _appointments.Setup(a => a.ListAsync(ClientId, "booked", null, null, 0, 200, It.IsAny<CancellationToken>())).ReturnsAsync((new List<AppointmentResponse>() as IReadOnlyList<AppointmentResponse>, 0));
+        Assert.IsType<NotFoundResult>((await Appts().UpdateStatus(Guid.NewGuid(), new UpdateBookingStatusRequest("attended"), default)).Result);
+        _bookings.Setup(a => a.ListAsync(ClientId, "booked", null, null, 0, 200, It.IsAny<CancellationToken>())).ReturnsAsync((new List<BookingResponse>() as IReadOnlyList<BookingResponse>, 0));
         Assert.IsType<OkObjectResult>((await Appts().List("booked", null, null, 0, 5000, default)).Result);
         NoClient();
         Assert.IsType<ForbidResult>((await Appts().GetAvailable(null, null, null, default)).Result);
@@ -118,17 +118,17 @@ public class LeadsAndAppointmentsControllerTests : ClientControllerTestBase
     public async Task Calendar_rejects_out_of_range_months_and_years(int month, int year)
     {
         Assert.IsType<BadRequestObjectResult>((await Appts().GetCalendarMonth(year, month, null, default)).Result);
-        _appointments.Verify(a => a.GetCalendarMonthAsync(It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<TimeZoneInfo?>(), It.IsAny<CancellationToken>()), Times.Never);
+        _bookings.Verify(a => a.GetCalendarMonthAsync(It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<TimeZoneInfo?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
     public async Task Calendar_uses_the_viewers_cookie_zone_only_for_the_mine_view()
     {
-        _appointments.Setup(a => a.GetCalendarMonthAsync(ClientId, 2026, 3, null, It.IsAny<CancellationToken>())).ReturnsAsync(new CalendarMonthResponse(2026, 3, "UTC", "UTC", "a", "b", [], 0));
+        _bookings.Setup(a => a.GetCalendarMonthAsync(ClientId, 2026, 3, null, It.IsAny<CancellationToken>())).ReturnsAsync(new CalendarMonthResponse(2026, 3, "UTC", "UTC", "a", "b", [], 0));
         Assert.IsType<OkObjectResult>((await Appts().GetCalendarMonth(2026, 3, null, default)).Result);
 
-        var controller = new AppointmentsController(_appointments.Object, _availability.Object, Client.Object).With(h => h.Request.Headers.Cookie = $"{ViewerTimeZone.CookieName}=Asia/Beirut");
-        _appointments.Setup(a => a.GetCalendarMonthAsync(ClientId, 2026, 3, It.Is<TimeZoneInfo?>(z => z != null && z.Id == "Asia/Beirut"), It.IsAny<CancellationToken>())).ReturnsAsync(new CalendarMonthResponse(2026, 3, "Asia/Beirut", "UTC", "a", "b", [], 0));
+        var controller = new BookingsController(_bookings.Object, _availability.Object, Client.Object).With(h => h.Request.Headers.Cookie = $"{ViewerTimeZone.CookieName}=Asia/Beirut");
+        _bookings.Setup(a => a.GetCalendarMonthAsync(ClientId, 2026, 3, It.Is<TimeZoneInfo?>(z => z != null && z.Id == "Asia/Beirut"), It.IsAny<CancellationToken>())).ReturnsAsync(new CalendarMonthResponse(2026, 3, "Asia/Beirut", "UTC", "a", "b", [], 0));
         Assert.IsType<OkObjectResult>((await controller.GetCalendarMonth(2026, 3, "mine", default)).Result);
         Assert.IsType<OkObjectResult>((await controller.GetCalendarMonth(2026, 3, "client", default)).Result);
     }

@@ -6,6 +6,6 @@ public record DashboardAttentionResponse(
     int ConversationsNeedingStaff,
     /// <summary>Leads whose next follow-up date has passed and who aren't closed out (lost / not interested / surgery booked).</summary>
     int OverdueFollowups,
-    /// <summary>Past appointments still booked/confirmed — no attended / no-show / canceled recorded yet.</summary>
-    int AppointmentsNeedingOutcome
+    /// <summary>Past bookings still booked/confirmed — no attended / no-show / canceled recorded yet.</summary>
+    int BookingsNeedingOutcome
 );

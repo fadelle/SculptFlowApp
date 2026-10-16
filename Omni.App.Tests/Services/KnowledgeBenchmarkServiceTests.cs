@@ -51,7 +51,7 @@ public class KnowledgeBenchmarkServiceTests
     private KnowledgeBenchmarkService Sut() => new(_repo.Object, _documents.Object, _uow.Object, _search.Object, _settings.Object,
         _generator.Object, new KnowledgeBenchmarkScorer(), _queue.Object, NullLogger<KnowledgeBenchmarkService>.Instance, _config.Object);
 
-    private (Guid Doc, Guid Chunk) LiveChunk(string content = "The consultation costs fifty dollars and lasts thirty minutes.", string title = "Pricing", bool docActive = true)
+    private (Guid Doc, Guid Chunk) LiveChunk(string content = "The booking costs fifty dollars and lasts thirty minutes.", string title = "Pricing", bool docActive = true)
     {
         var doc = Guid.NewGuid();
         var chunk = Guid.NewGuid();
@@ -60,7 +60,7 @@ public class KnowledgeBenchmarkServiceTests
         return (doc, chunk);
     }
 
-    private KnowledgeRetrievalBenchmarkCase Case((Guid Doc, Guid Chunk) at, string question = "How much is a consultation?", string? content = "The consultation costs fifty dollars and lasts thirty minutes.")
+    private KnowledgeRetrievalBenchmarkCase Case((Guid Doc, Guid Chunk) at, string question = "How much is a booking?", string? content = "The booking costs fifty dollars and lasts thirty minutes.")
     {
         var c = new KnowledgeRetrievalBenchmarkCase
         {

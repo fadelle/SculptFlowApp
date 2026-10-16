@@ -12,11 +12,11 @@ public class Client
     public string Timezone { get; set; } = "UTC";
 
     /// <summary>Free-text fields the AI agent's get_client_info tool reads to answer general
-    /// questions (location, hours, consultation policy) — plain text, not a structured schedule,
+    /// questions (location, hours, booking policy) — plain text, not a structured schedule,
     /// matching this MVP's level of the rest of Client. Edited under Settings → Business Info.</summary>
     public string? Address { get; set; }
     public string? OperatingHours { get; set; }
-    public string? ConsultationInfo { get; set; }
+    public string? BookingInfo { get; set; }
 
     /// <summary>core.business_types.code: the words, stages and AI profile this client uses. Chosen at sign-up; changed
     /// only by a platform admin (PUT /api/platform-admin/clients/{id}/business-type), which also moves contacts' stages.</summary>

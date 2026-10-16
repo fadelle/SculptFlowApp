@@ -1,7 +1,7 @@
 namespace Omni.App.Common.Helpers;
 
 /// <summary>
-/// Maps free-text status values (lead status, qualification status, appointment status) to a
+/// Maps free-text status values (lead status, qualification status, booking status) to a
 /// client-friendly display label for the Campaign audience filter UI. Purely presentational — the
 /// underlying stored/backend values (Database/schema.sql's check constraints, the *Status static
 /// classes in Data/Entities) are unchanged; this only controls what client staff read on screen.
@@ -14,8 +14,8 @@ public static class FilterLabelHelper
         ["new"] = "New",
         ["contacted"] = "Contacted",
         ["qualified"] = "Qualified",
-        ["consultation_booked"] = "Consultation booked",
-        ["consultation_attended"] = "Consultation attended",
+        ["consultation_booked"] = "Booked",
+        ["consultation_attended"] = "Attended",
         ["no_show"] = "No-show",
         ["surgery_booked"] = "Surgery booked",
         ["not_interested"] = "Not interested",
@@ -30,7 +30,7 @@ public static class FilterLabelHelper
         ["medical_question"] = "Medical question",
         ["spam"] = "Spam",
 
-        // appointment statuses
+        // booking statuses
         ["booked"] = "Booked",
         ["confirmed"] = "Confirmed",
         ["attended"] = "Attended",

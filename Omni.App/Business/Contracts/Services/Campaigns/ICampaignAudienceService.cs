@@ -6,7 +6,7 @@ namespace Omni.App.Business.Contracts.Services.Campaigns;
 /// The single place that turns a Campaign's AudienceType + AudienceFilters into an actual list of
 /// leads. Centralized so every audience type — including a future one — automatically respects the
 /// same mandatory contactability exclusions, and so "old lead reactivation" eligibility is computed
-/// from real lead/conversation/appointment activity rather than a stored flag on Lead.
+/// from real lead/conversation/booking activity rather than a stored flag on Lead.
 /// </summary>
 public interface ICampaignAudienceService
 {

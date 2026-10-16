@@ -1,4 +1,4 @@
-using Omni.App.Business.Contracts.Services.Appointments;
+using Omni.App.Business.Contracts.Services.Bookings;
 using Omni.App.Business.Contracts.Services.BusinessTypes;
 using Omni.App.Business.Contracts.Services.Inbox;
 using Omni.App.Business.Contracts.Services.PlatformAdmin;
@@ -18,18 +18,18 @@ public class LeadAdminService : ILeadAdminService
     private readonly ILeadAdminRepository _repository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IConversationService _conversations;
-    private readonly IAppointmentService _appointments;
+    private readonly IBookingService _bookings;
     private readonly TimeProvider _time;
     private readonly IBusinessTypeService _businessTypes;
 
     public LeadAdminService(ILeadAdminRepository repository, IUnitOfWork unitOfWork, IConversationService conversations,
-        IAppointmentService appointments, TimeProvider time, IBusinessTypeService businessTypes)
+        IBookingService bookings, TimeProvider time, IBusinessTypeService businessTypes)
     {
         _businessTypes = businessTypes;
         _repository = repository;
         _unitOfWork = unitOfWork;
         _conversations = conversations;
-        _appointments = appointments;
+        _bookings = bookings;
         _time = time;
     }
 
@@ -56,9 +56,9 @@ public class LeadAdminService : ILeadAdminService
         CancellationToken ct) =>
         _repository.ListMessagesAsync(clientId, failedOnly, sender, search, page, ct);
 
-    public Task<PagedResponse<AppointmentRow>> ListAppointmentsAsync(Guid? clientId, Guid? leadId, string? status, bool upcomingOnly,
+    public Task<PagedResponse<BookingRow>> ListBookingsAsync(Guid? clientId, Guid? leadId, string? status, bool upcomingOnly,
         int page, CancellationToken ct) =>
-        _repository.ListAppointmentsAsync(clientId, leadId, status, upcomingOnly, page, ct);
+        _repository.ListBookingsAsync(clientId, leadId, status, upcomingOnly, page, ct);
 
     public async Task<PlatformAdminChange> UpdateLeadAsync(Guid id, LeadUpdate update, CancellationToken ct)
     {
@@ -103,11 +103,11 @@ public class LeadAdminService : ILeadAdminService
         return new PlatformAdminChange(conversation.ClientId);
     }
 
-    public async Task<PlatformAdminChange> SetAppointmentStatusAsync(Guid id, string status, CancellationToken ct)
+    public async Task<PlatformAdminChange> SetBookingStatusAsync(Guid id, string status, CancellationToken ct)
     {
-        var appointment = await _repository.GetAppointmentForUpdateAsync(id, ct) ?? throw new KeyNotFoundException("Appointment not found.");
+        var booking = await _repository.GetBookingForUpdateAsync(id, ct) ?? throw new KeyNotFoundException("Booking not found.");
         // The client's own path: validates the status and pushes the change to a connected calendar.
-        if (appointment.Status != status) await _appointments.UpdateStatusAsync(appointment.ClientId, id, status, ct);
-        return new PlatformAdminChange(appointment.ClientId);
+        if (booking.Status != status) await _bookings.UpdateStatusAsync(booking.ClientId, id, status, ct);
+        return new PlatformAdminChange(booking.ClientId);
     }
 }

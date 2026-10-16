@@ -17,9 +17,9 @@ public static class ConfigDefaults
     public static readonly ConfigDefinition AccountsSignupsPerIpPerHour = new("Accounts", "SignupsPerIpPerHour", "20", ConfigValueType.Int,
         "Most sign-up attempts one IP address may make per hour (Register and the Google client-name step).", 1, 1000);
     public static readonly ConfigDefinition AvailabilityDefaultDurationMinutes = new("Availability", "DefaultDurationMinutes", "30", ConfigValueType.Int,
-        "Consultation length (minutes) for clients that haven't set their own booking settings.", 5, 480);
+        "Booking length (minutes) for clients that haven't set their own booking settings.", 5, 480);
     public static readonly ConfigDefinition AvailabilityDefaultBufferMinutes = new("Availability", "DefaultBufferMinutes", "0", ConfigValueType.Int,
-        "Gap (minutes) between consultations for clients that haven't set their own booking settings.", 0, 240);
+        "Gap (minutes) between bookings for clients that haven't set their own booking settings.", 0, 240);
     public static readonly ConfigDefinition AvailabilityDefaultNoticeMinutes = new("Availability", "DefaultNoticeMinutes", "240", ConfigValueType.Int,
         "Minimum notice (minutes) before a bookable slot, for clients that haven't set their own.", 0, 10080);
     public static readonly ConfigDefinition AvailabilityDefaultHorizonDays = new("Availability", "DefaultHorizonDays", "60", ConfigValueType.Int,
@@ -109,7 +109,7 @@ public static class ConfigDefaults
     public static readonly ConfigDefinition CampaignsDefaultInactiveDays = new("Campaigns", "DefaultInactiveDays", "60", ConfigValueType.Int,
         "Default \"inactive for\" days of a reactivation audience.", 1, 3650);
     public static readonly ConfigDefinition CampaignsBookingAttributionDays = new("Campaigns", "BookingAttributionDays", "14", ConfigValueType.Int,
-        "A consultation booked this many days after a patient replied to a campaign counts as that campaign's booking.", 1, 365);
+        "A booking made this many days after a patient replied to a campaign counts as that campaign's booking.", 1, 365);
     public static readonly ConfigDefinition CampaignsSenderIntervalSeconds = new("Campaigns", "SenderIntervalSeconds", "60", ConfigValueType.Int,
         "How often the campaign sender starts campaigns whose scheduled time has come and sends the next batch of every running campaign.", 10, 3600);
     public static readonly ConfigDefinition CampaignsSendBatchSize = new("Campaigns", "SendBatchSize", "20", ConfigValueType.Int,

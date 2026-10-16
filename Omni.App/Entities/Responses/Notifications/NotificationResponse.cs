@@ -9,7 +9,7 @@ public record NotificationResponse(
     string? Message,
     Guid? LeadId,
     Guid? ConversationId,
-    Guid? AppointmentId,
+    Guid? BookingId,
     string? Link,
     bool IsRead,
     DateTimeOffset CreatedAt

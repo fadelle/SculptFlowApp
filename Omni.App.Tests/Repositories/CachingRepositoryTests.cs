@@ -7,7 +7,7 @@ using Omni.App.Business.Services.Inbox;
 using Omni.App.Persistence.Repositories.Inbox;
 using Omni.App.Persistence.Contexts;
 using Omni.App.Persistence.Helpers;
-using Omni.App.Persistence.Repositories.Appointments;
+using Omni.App.Persistence.Repositories.Bookings;
 using Omni.App.Persistence.Repositories.Clients;
 using Omni.App.Persistence.Repositories.Catalog;
 
@@ -200,7 +200,7 @@ public class CachingRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixt
             (await new ServiceRepository(db, _cache).GetAsync(c.Id, botox.Id))!.IsActive = false;
             new AvailabilityRepository(db, _cache).AddBookingSettings(new BookingSettings
             {
-                Id = Guid.NewGuid(), ClientId = c.Id, DefaultConsultationDurationMinutes = 45, BufferMinutes = 5,
+                Id = Guid.NewGuid(), ClientId = c.Id, DefaultBookingDurationMinutes = 45, BufferMinutes = 5,
                 MinimumBookingNoticeMinutes = 60, MaximumAdvanceBookingDays = 30, CreatedAt = Now, UpdatedAt = Now,
             });
             await db.SaveChangesAsync();
@@ -210,7 +210,7 @@ public class CachingRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixt
         var services = new ServiceRepository(read, _cache);
         Assert.Equal(["Abdominoplasty"], (await services.ListAsync(c.Id, activeOnly: true)).Select(p => p.Name));
         Assert.Equal(["Abdominoplasty", "Botox"], (await services.ListAsync(c.Id, activeOnly: false)).Select(p => p.Name));
-        Assert.Equal(45, (await new AvailabilityRepository(read, _cache).GetBookingSettingsReadOnlyAsync(c.Id))!.DefaultConsultationDurationMinutes);
+        Assert.Equal(45, (await new AvailabilityRepository(read, _cache).GetBookingSettingsReadOnlyAsync(c.Id))!.DefaultBookingDurationMinutes);
     }
 
     [PostgresFact]

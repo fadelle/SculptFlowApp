@@ -162,7 +162,7 @@ What changes for customers:
 | A5 | **Errors are friendly and actionable**: what happened, what to do next, and a short reference code. Never show exception names, stack traces, SQL or HTTP internals. |
 | A6 | **Every screen has loading, empty and error states.** Empty states say what's empty and offer the next step (a button). |
 | A7 | **Destructive or irreversible actions are confirmed** (`data-au-confirm`, danger tone, default focus on Cancel) and the confirm says the consequence. |
-| A8 | **Every form submit gets feedback** — a toast after redirect ("Your appointment is booked."), inline field errors on validation. |
+| A8 | **Every form submit gets feedback** — a toast after redirect ("Your booking is booked."), inline field errors on validation. |
 | A9 | **Mobile-first.** Check every screen at 390px: tables use `.au-table--stack`, actions wrap, touch targets ≥ 40px, no horizontal scroll except inside a table card. |
 | A10 | **Accessible (WCAG AA).** Labels on every field, `aria-label` on icon-only buttons, visible focus ring, 4.5:1 text contrast in both modes, reduced motion honoured. |
 | A11 | **Consistent status colours.** success = done/confirmed/paid · warning = pending/awaiting · error = failed/overdue/cancelled-by-error · info = informational · neutral outlined = inactive/past. |
@@ -213,7 +213,7 @@ What changes for customers:
             <div class="au-side-scroll">
                 @* one .au-nav-row per page — keep the project's existing links and their order *@
                 <div class="au-nav-row"><a class="au-nav-item is-active" href="~/" aria-current="page"><span class="au-icon" aria-hidden="true">home</span><span class="au-nav-item__label">Home</span></a></div>
-                <div class="au-nav-row"><a class="au-nav-item" href="~/Appointments"><span class="au-icon" aria-hidden="true">event</span><span class="au-nav-item__label">Appointments</span></a></div>
+                <div class="au-nav-row"><a class="au-nav-item" href="~/Bookings"><span class="au-icon" aria-hidden="true">event</span><span class="au-nav-item__label">Bookings</span></a></div>
                 <div class="au-side-section">Account</div>
                 <div class="au-nav-row"><a class="au-nav-item" href="~/Profile"><span class="au-icon" aria-hidden="true">person</span><span class="au-nav-item__label">Profile</span></a></div>
             </div>
@@ -246,7 +246,7 @@ What changes for customers:
 ```
 
 - Active state: mark the current page's row `is-active` + `aria-current="page"` (match on the
-  request path, segment-aware: `/Appointments` also covers `/Appointments/Details/7`).
+  request path, segment-aware: `/Bookings` also covers `/Bookings/Details/7`).
 - `data-au-app="client"` namespaces the stored preferences (`client.themeMode`, …); the pre-paint
   script must use the same prefix.
 - CSS order: **bootstrap → site → aurora → aurora-bootstrap**.
@@ -333,7 +333,7 @@ gradient in both modes.
 │ ┃▣ Home      │  Your next visit is Thursday at 10:30.                    │
 │  ▢ Appts     │  ① Choose service ──── ② Pick a time ──── ③ Confirm       │ ← .au-steps (flows)
 │  ▢ Invoices  │  ╭ Book a visit  → ╮ ╭ Pay an invoice → ╮ ╭ Message us → ╮│ ← .au-action-card
-│ ACCOUNT ─────│  ╭ Upcoming appointments ──────────────────── See all → ╮ │
+│ ACCOUNT ─────│  ╭ Upcoming bookings ──────────────────── See all → ╮ │
 │  ▢ Profile   │  │ table (stacks into cards on mobile)                   │ │
 │  ▢ Help      │  ╰───────────────────────────────────────────────────────╯ │
 └──────────────┴───────────────────────────────────────────────────────────┘
@@ -351,13 +351,13 @@ gradient in both modes.
 ## 6. Screen recipes
 
 ### 6.1 Home
-`.au-page-head` (greeting + the single most important fact, e.g. next appointment; actions on the
+`.au-page-head` (greeting + the single most important fact, e.g. next booking; actions on the
 right) → optional `.au-steps` if a flow is in progress → a `.au-grid au-grid--3` of
 `.au-action-card` (icon tile tinted with `style="--tile: var(--au-success)"` etc., title, one line,
 arrow) → panels (`.au-panel au-panel--round au-panel--pad`) for upcoming items, with "See all →".
 
 ```html
-<a class="au-action-card" href="/Appointments/Book">
+<a class="au-action-card" href="/Bookings/Book">
   <span class="au-icon-tile"><span class="au-icon" aria-hidden="true">event_available</span></span>
   <span><span class="au-action-card__title">Book a visit</span>
         <span class="au-action-card__text">Choose a doctor and a time that suits you.</span></span>
@@ -365,7 +365,7 @@ arrow) → panels (`.au-panel au-panel--round au-panel--pad`) for upcoming items
 </a>
 ```
 
-### 6.2 List (appointments, invoices, documents)
+### 6.2 List (bookings, invoices, documents)
 
 ```html
 <div class="au-table-card">
@@ -415,7 +415,7 @@ A reference number the customer may quote is shown with `.au-mono` + copy button
   <div class="au-auth__card">
     <div class="au-auth__brand">
       <span class="au-brand__mark"><!-- 56px brand mark --></span>
-      <div><h1 class="au-auth__title">Welcome back</h1><p class="au-auth__sub">Sign in to manage your appointments.</p></div>
+      <div><h1 class="au-auth__title">Welcome back</h1><p class="au-auth__sub">Sign in to manage your bookings.</p></div>
     </div>
     <form class="au-auth__form" method="post"><!-- the EXISTING form fields, restyled as .au-form-field -->
       <div class="au-form-field"><label class="au-form-label" for="Email">Email</label><input class="au-input" id="Email" … /></div>
@@ -434,7 +434,7 @@ change the Identity handlers.
 
 ### 6.6 Feedback
 - **Toasts** (bottom-right, filled, 4.5s): after every successful submit + redirect. Server side,
-  render `<div hidden data-au-toast="success">Your appointment is booked.</div>` (e.g. from TempData);
+  render `<div hidden data-au-toast="success">Your booking is booked.</div>` (e.g. from TempData);
   client side `Aurora.toast.success('…')`.
 - **Inline alerts** (`.au-alert` + tone): persistent page-level messages ("You have 1 unpaid invoice.").
 - **Errors**: `.au-alert.au-alert--error` with a title ("We couldn't save your changes"), one plain
@@ -442,8 +442,8 @@ change the Identity handlers.
   first characters of the trace id) — log the full details server-side, show none of them.
 - **Error / 404 pages**: `.au-fullpage-msg` (gradient code, heading, one friendly sentence, a
   "Back to home" primary button, the reference code).
-- **Confirm**: `data-au-confirm="Cancel your appointment on Oct 16? This can't be undone."`
-  + `data-au-confirm-tone="danger"` + `data-au-confirm-label="Cancel appointment"`.
+- **Confirm**: `data-au-confirm="Cancel your booking on Oct 16? This can't be undone."`
+  + `data-au-confirm-tone="danger"` + `data-au-confirm-label="Cancel booking"`.
 - **Loading**: navigation/submits show the 2px top bar automatically; async blocks use `.au-skeleton`.
 
 ---
@@ -489,8 +489,8 @@ inline SVG a unique gradient id.
 
 ## 8. Content & UX rules for customers
 
-- **Voice:** warm, short, second person ("Your appointment is confirmed"). Buttons are verbs
-  ("Book appointment", "Pay now"). No jargon, no internal codes, no ALL-CAPS statuses.
+- **Voice:** warm, short, second person ("Your booking is confirmed"). Buttons are verbs
+  ("Book now", "Pay now"). No jargon, no internal codes, no ALL-CAPS statuses.
 - **Status labels:** map every internal status to a plain label + tone in ONE place per status type,
   and reuse it on every screen.
 - **Dates:** relative where it helps ("Tomorrow · 10:30"), otherwise one style app-wide
@@ -498,7 +498,7 @@ inline SVG a unique gradient id.
 - **Money:** currency code/symbol per locale, two decimals, right-aligned in tables.
 - **Empty states:** say what's empty *and* offer the next step.
 - **Errors:** what happened · what to do · reference code. Never blame the user; never expose internals.
-- **Confirmations:** state the consequence and the object ("Cancel your appointment on Oct 16?").
+- **Confirmations:** state the consequence and the object ("Cancel your booking on Oct 16?").
 - **Touch:** controls ≥ 40px tall, primary actions reachable without horizontal scrolling at 390px.
 - **Performance:** self-hosted, subset fonts; no extra UI frameworks; images sized and lazy-loaded.
 

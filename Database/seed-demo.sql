@@ -67,7 +67,7 @@ begin
   -- 1. Client + info the AI quotes
   -- ---------------------------------------------------------------
   insert into core.clients (id, name, slug, phone, email, website, country_code, timezone,
-                            address, operating_hours, consultation_info, business_type_code, is_active, created_at)
+                            address, operating_hours, booking_info, business_type_code, is_active, created_at)
   values (c, 'Aurora Aesthetic Clinic', 'demo-omni', '+1 305 555 0100', 'hello@aurora-demo.test',
           'https://aurora-demo.test', 'US', 'America/New_York',
           '500 Example Avenue, Suite 12, Miami, FL 33101 (fictional address)',
@@ -98,7 +98,7 @@ begin
   -- ---------------------------------------------------------------
   -- 3. Services
   -- ---------------------------------------------------------------
-  insert into core.services (id, client_id, name, code, description, consultation_duration, is_active) values
+  insert into core.services (id, client_id, name, code, description, booking_duration, is_active) values
     (pg_temp.did(10), c, 'Rhinoplasty',          'RHINO',      'Reshaping of the nose for function or appearance.', 45, true),
     (pg_temp.did(11), c, 'Liposuction',          'LIPO',       'Targeted removal of stubborn fat deposits.', 30, true),
     (pg_temp.did(12), c, 'Facelift',             'FACELIFT',   'Lifts and tightens the face and neck.', 45, true),
@@ -282,7 +282,7 @@ begin
   -- ---------------------------------------------------------------
   -- 9. Appointments + orders
   -- ---------------------------------------------------------------
-  insert into scheduling.appointments (id, client_id, lead_id, service_id, appointment_type, status, scheduled_start, scheduled_end,
+  insert into scheduling.bookings (id, client_id, lead_id, service_id, booking_type, status, scheduled_start, scheduled_end,
                                        location_type, location_name, notes, created_at) values
     (pg_temp.did(300), c, pg_temp.did(100), pg_temp.did(10), 'consultation', 'attended',  pg_temp.at(-18, '10:00'), pg_temp.at(-18, '10:45'), 'in_person', 'Aurora Aesthetic Clinic, Suite 12', 'Discussed goals; quote prepared.', now() - interval '25 days'),
     (pg_temp.did(301), c, pg_temp.did(100), pg_temp.did(10), 'surgery',      'booked',    pg_temp.at(21, '08:00'),  pg_temp.at(21, '11:00'),  'in_person', 'Aurora Surgical Suite', 'Pre-op bloodwork required.', now() - interval '10 days'),
@@ -298,7 +298,7 @@ begin
     (pg_temp.did(311), c, pg_temp.did(108), pg_temp.did(12), 'consultation', 'canceled',  pg_temp.at(-100, '10:00'),pg_temp.at(-100, '10:45'), 'in_person', 'Aurora Aesthetic Clinic, Suite 12', 'Patient canceled, found another clinic.', now() - interval '130 days'),
     (pg_temp.did(312), c, pg_temp.did(104), pg_temp.did(13), 'consultation', 'booked',    pg_temp.at(3, '13:00'),   pg_temp.at(3, '13:30'),   'in_person', 'Aurora Aesthetic Clinic, Suite 12', 'Wants to discuss financing.', now() - interval '20 minutes');
 
-  insert into crm.orders (id, client_id, lead_id, service_id, appointment_id, status, quoted_amount, deposit_amount,
+  insert into crm.orders (id, client_id, lead_id, service_id, booking_id, status, quoted_amount, deposit_amount,
                                              final_amount, currency_code, service_date, notes, created_at) values
     (pg_temp.did(320), c, pg_temp.did(100), pg_temp.did(10), pg_temp.did(301), 'confirmed',    6500, 1500, null, 'USD', pg_temp.at(21, '08:00'), 'Deposit received.', now() - interval '10 days'),
     (pg_temp.did(321), c, pg_temp.did(109), pg_temp.did(13), pg_temp.did(304), 'quoted',       7800, null, null, 'USD', null, 'Awaiting decision.', now() - interval '4 days'),
@@ -321,7 +321,7 @@ begin
     (pg_temp.did(405), c, 5, true,  '09:00', '17:00'),
     (pg_temp.did(406), c, 6, true,  '10:00', '14:00');
 
-  insert into scheduling.booking_settings (id, client_id, default_consultation_duration_minutes, buffer_minutes,
+  insert into scheduling.booking_settings (id, client_id, default_booking_duration_minutes, buffer_minutes,
                                                   minimum_booking_notice_minutes, maximum_advance_booking_days)
   values (pg_temp.did(410), c, 30, 10, 240, 60);
 
@@ -345,13 +345,13 @@ begin
     (pg_temp.did(432), pg_temp.did(430), 'demo-calendar-primary', 'Aurora Consultations', true),
     (pg_temp.did(433), pg_temp.did(430), 'demo-calendar-surgery', 'Aurora Surgeries', false);
 
-  insert into scheduling.appointment_calendar_syncs (id, appointment_id, calendar_integration_id, external_event_id, status, last_operation) values
+  insert into scheduling.booking_calendar_syncs (id, booking_id, calendar_integration_id, external_event_id, status, last_operation) values
     (pg_temp.did(434), pg_temp.did(302), pg_temp.did(430), 'demo-event-0001', 'synced', 'create'),
     (pg_temp.did(435), pg_temp.did(307), pg_temp.did(430), 'demo-event-0002', 'synced', 'create'),
     (pg_temp.did(436), pg_temp.did(311), pg_temp.did(430), 'demo-event-0003', 'canceled', 'cancel'),
     (pg_temp.did(437), pg_temp.did(310), pg_temp.did(430), null, 'pending', 'create');
 
-  update scheduling.appointments set external_calendar_id = 'demo-calendar-primary', external_event_id = 'demo-event-0001' where id = pg_temp.did(302);
+  update scheduling.bookings set external_calendar_id = 'demo-calendar-primary', external_event_id = 'demo-event-0001' where id = pg_temp.did(302);
 
   -- ---------------------------------------------------------------
   -- 12. Knowledge base
@@ -415,7 +415,7 @@ begin
         scheduled_at, started_at, completed_at, created_by_user_id, created_at) values
     (pg_temp.did(700), c, 'Spring Consultation Offer', pg_temp.did(41), 'completed', 'promotion', 'whatsapp', 'all_eligible', null,
         now() - interval '20 days', now() - interval '20 days', now() - interval '20 days' + interval '15 minutes', null, now() - interval '22 days'),
-    (pg_temp.did(701), c, 'Old Lead Reactivation', pg_temp.did(42), 'running', 'reactivation', 'whatsapp', 'reactivation_no_consultation', '{"minDaysSinceLastContact": 90}',
+    (pg_temp.did(701), c, 'Old Lead Reactivation', pg_temp.did(42), 'running', 'reactivation', 'whatsapp', 'reactivation_no_booking', '{"minDaysSinceLastContact": 90}',
         now() - interval '2 hours', now() - interval '2 hours', null, null, now() - interval '1 day'),
     (pg_temp.did(702), c, 'Botox Event Invite', pg_temp.did(44), 'draft', 'event', 'whatsapp', 'custom', '{"procedure": "INJECTABLES"}',
         null, null, null, null, now() - interval '2 days'),
@@ -449,19 +449,19 @@ begin
         'read', now() - interval '2 hours', now() - interval '2 hours', now() - interval '1 hour', pg_temp.did(42), pg_temp.did(701), pg_temp.did(721), now() - interval '2 hours');
   update marketing.campaign_recipients set message_id = pg_temp.did(1100) where id = pg_temp.did(710);
   update marketing.campaign_recipients set message_id = pg_temp.did(1101) where id = pg_temp.did(721);
-  update marketing.campaign_recipients set appointment_id = pg_temp.did(300) where id = pg_temp.did(710);
+  update marketing.campaign_recipients set booking_id = pg_temp.did(300) where id = pg_temp.did(710);
 
   -- ---------------------------------------------------------------
   -- 14. Notifications (bell)
   -- ---------------------------------------------------------------
-  insert into activity.notifications (id, client_id, type, title, message, lead_id, conversation_id, appointment_id, channel_integration_id,
+  insert into activity.notifications (id, client_id, type, title, message, lead_id, conversation_id, booking_id, channel_integration_id,
         link, is_read, read_at, created_at) values
     (pg_temp.did(800), c, 'NEW_LEAD',               'New lead: Karim Nasser', 'Karim wrote in on Telegram about a consultation in Arabic.', pg_temp.did(103), pg_temp.did(203), null, null, '/inbox?conversationId=' || pg_temp.did(203), false, null, now() - interval '2 hours'),
     (pg_temp.did(801), c, 'HANDOFF',                'Olivia Reed needs a human', 'Asked about financing and medical history on Instagram.', pg_temp.did(104), pg_temp.did(204), null, null, '/inbox?conversationId=' || pg_temp.did(204), false, null, now() - interval '38 minutes'),
-    (pg_temp.did(802), c, 'APPOINTMENT_BOOKED',     'Consultation booked: Noah Bennett', 'Saturday at 10:00.', pg_temp.did(105), null, pg_temp.did(310), null, '/dashboard/appointments/' || pg_temp.did(310), false, null, now() - interval '2 hours'),
-    (pg_temp.did(803), c, 'APPOINTMENT_BOOKED',     'Consultation booked: Isabella Rossi', 'Booked by the AI assistant via Facebook.', pg_temp.did(111), pg_temp.did(210), pg_temp.did(307), null, '/dashboard/appointments/' || pg_temp.did(307), true, now() - interval '20 hours', now() - interval '1 day'),
-    (pg_temp.did(804), c, 'APPOINTMENT_RESCHEDULED','Consultation rescheduled: Mia Torres', 'Moved to next week at the patient''s request.', pg_temp.did(106), pg_temp.did(206), pg_temp.did(309), null, '/dashboard/appointments/' || pg_temp.did(309), true, now() - interval '20 hours', now() - interval '1 day'),
-    (pg_temp.did(805), c, 'APPOINTMENT_CANCELLED',  'Consultation canceled: Ava Collins', 'Cancelled by the patient.', pg_temp.did(108), null, pg_temp.did(311), null, '/dashboard/appointments/' || pg_temp.did(311), true, now() - interval '99 days', now() - interval '100 days'),
+    (pg_temp.did(802), c, 'BOOKING_CREATED',     'Consultation booked: Noah Bennett', 'Saturday at 10:00.', pg_temp.did(105), null, pg_temp.did(310), null, '/dashboard/bookings/' || pg_temp.did(310), false, null, now() - interval '2 hours'),
+    (pg_temp.did(803), c, 'BOOKING_CREATED',     'Consultation booked: Isabella Rossi', 'Booked by the AI assistant via Facebook.', pg_temp.did(111), pg_temp.did(210), pg_temp.did(307), null, '/dashboard/bookings/' || pg_temp.did(307), true, now() - interval '20 hours', now() - interval '1 day'),
+    (pg_temp.did(804), c, 'BOOKING_RESCHEDULED','Consultation rescheduled: Mia Torres', 'Moved to next week at the patient''s request.', pg_temp.did(106), pg_temp.did(206), pg_temp.did(309), null, '/dashboard/bookings/' || pg_temp.did(309), true, now() - interval '20 hours', now() - interval '1 day'),
+    (pg_temp.did(805), c, 'BOOKING_CANCELED',  'Consultation canceled: Ava Collins', 'Cancelled by the patient.', pg_temp.did(108), null, pg_temp.did(311), null, '/dashboard/bookings/' || pg_temp.did(311), true, now() - interval '99 days', now() - interval '100 days'),
     (pg_temp.did(806), c, 'CAMPAIGN_REPLY',         'Campaign reply: Daniel Brooks', 'Replied to "Spring Consultation Offer".', pg_temp.did(101), pg_temp.did(201), null, null, '/inbox?conversationId=' || pg_temp.did(201), true, now() - interval '19 days', now() - interval '19 days 22 hours'),
     (pg_temp.did(807), c, 'OUTBOUND_MESSAGE_FAILED','Message not delivered: Mia Torres', 'The re-engagement message could not be sent (24-hour window closed).', pg_temp.did(106), pg_temp.did(206), null, pg_temp.did(20), '/inbox?conversationId=' || pg_temp.did(206), false, null, now() - interval '25 hours'),
     (pg_temp.did(808), c, 'INTEGRATION_UNHEALTHY',  'Facebook connection needs attention', 'The access token expired. Reconnect the page.', null, null, null, pg_temp.did(22), '/settings/channels', false, null, now() - interval '9 days');
@@ -469,21 +469,21 @@ begin
   -- ---------------------------------------------------------------
   -- 15. Activity events (feed + analytics)
   -- ---------------------------------------------------------------
-  insert into activity.events (id, client_id, lead_id, conversation_id, appointment_id, event_type, source, metadata, created_at) values
+  insert into activity.events (id, client_id, lead_id, conversation_id, booking_id, event_type, source, metadata, created_at) values
     (pg_temp.did(900), c, pg_temp.did(100), pg_temp.did(200), null,             'lead_created',           'instagram', '{}', now() - interval '25 days'),
-    (pg_temp.did(901), c, pg_temp.did(100), pg_temp.did(200), pg_temp.did(300), 'consultation_booked',    'ai',        '{}', now() - interval '25 days' + interval '10 minutes'),
-    (pg_temp.did(902), c, pg_temp.did(100), null,             pg_temp.did(300), 'consultation_attended',  'staff',     '{}', now() - interval '18 days'),
+    (pg_temp.did(901), c, pg_temp.did(100), pg_temp.did(200), pg_temp.did(300), 'booking_created',        'ai',        '{}', now() - interval '25 days' + interval '10 minutes'),
+    (pg_temp.did(902), c, pg_temp.did(100), null,             pg_temp.did(300), 'booking_attended',       'staff',     '{}', now() - interval '18 days'),
     (pg_temp.did(903), c, pg_temp.did(100), null,             pg_temp.did(301), 'order_confirmed',       'staff',     '{"amount": 6500, "deposit": 1500}', now() - interval '10 days'),
-    (pg_temp.did(904), c, pg_temp.did(101), pg_temp.did(201), pg_temp.did(302), 'consultation_booked',    'ai',        '{}', now() - interval '7 days'),
-    (pg_temp.did(905), c, pg_temp.did(102), null,             pg_temp.did(303), 'consultation_no_show',   'staff',     '{}', now() - interval '2 days'),
+    (pg_temp.did(904), c, pg_temp.did(101), pg_temp.did(201), pg_temp.did(302), 'booking_created',        'ai',        '{}', now() - interval '7 days'),
+    (pg_temp.did(905), c, pg_temp.did(102), null,             pg_temp.did(303), 'booking_no_show',        'staff',     '{}', now() - interval '2 days'),
     (pg_temp.did(906), c, pg_temp.did(103), pg_temp.did(203), null,             'lead_created',           'website',   '{}', now() - interval '2 hours'),
     (pg_temp.did(907), c, pg_temp.did(104), pg_temp.did(204), null,             'human_handoff',          'ai',        '{"reason": "financing and medical history"}', now() - interval '38 minutes'),
-    (pg_temp.did(908), c, pg_temp.did(105), pg_temp.did(205), pg_temp.did(310), 'consultation_booked',    'staff',     '{}', now() - interval '2 hours'),
+    (pg_temp.did(908), c, pg_temp.did(105), pg_temp.did(205), pg_temp.did(310), 'booking_created',        'staff',     '{}', now() - interval '2 hours'),
     (pg_temp.did(909), c, pg_temp.did(106), pg_temp.did(206), null,             'message_failed',         'whatsapp',  '{"code": "131047"}', now() - interval '25 hours'),
-    (pg_temp.did(910), c, pg_temp.did(109), null,             pg_temp.did(304), 'consultation_attended',  'staff',     '{}', now() - interval '4 days'),
+    (pg_temp.did(910), c, pg_temp.did(109), null,             pg_temp.did(304), 'booking_attended',       'staff',     '{}', now() - interval '4 days'),
     (pg_temp.did(911), c, pg_temp.did(110), null,             pg_temp.did(306), 'order_confirmed',       'staff',     '{"amount": 5000}', now() - interval '35 days'),
     (pg_temp.did(912), c, pg_temp.did(108), null,             null,             'lead_contacted',         'campaign',  '{"campaign": "Old Lead Reactivation"}', now() - interval '2 hours'),
-    (pg_temp.did(913), c, pg_temp.did(111), pg_temp.did(210), pg_temp.did(307), 'consultation_booked',    'ai',        '{}', now() - interval '1 day'),
+    (pg_temp.did(913), c, pg_temp.did(111), pg_temp.did(210), pg_temp.did(307), 'booking_created',        'ai',        '{}', now() - interval '1 day'),
     (pg_temp.did(914), c, pg_temp.did(113), pg_temp.did(211), null,             'conversation_closed',    'staff',     '{}', now() - interval '10 days');
 
   -- ---------------------------------------------------------------

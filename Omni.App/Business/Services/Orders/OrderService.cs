@@ -46,7 +46,7 @@ public class OrderService : IOrderService
             ClientId = request.ClientId,
             LeadId = request.LeadId,
             ServiceId = request.ServiceId,
-            AppointmentId = request.AppointmentId,
+            BookingId = request.BookingId,
             Status = OrderStatus.Considering,
             QuotedAmount = request.QuotedAmount,
             CurrencyCode = request.CurrencyCode,

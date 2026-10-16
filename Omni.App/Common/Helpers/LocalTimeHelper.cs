@@ -21,7 +21,7 @@ public static class LocalTimeHelper
     };
 
     /// <summary><c>&lt;time&gt;</c> element showing <paramref name="value"/> in viewer-local time; <paramref name="empty"/> when null.
-    /// With <paramref name="clientTimeZone"/> (appointment pages) it shows client time instead, unless the viewer picked
+    /// With <paramref name="clientTimeZone"/> (booking pages) it shows client time instead, unless the viewer picked
     /// "My time" on the page's _TimeViewSwitch.</summary>
     public static IHtmlContent Time(DateTimeOffset? value, string format = "datetime", string empty = "—", string? clientTimeZone = null)
     {

@@ -59,11 +59,11 @@
   renderPreview();
 
   // ---------------------------------------------------------------- audience
-  var countFor = { reactivation_no_consultation: 'reactivation-match-count', all_eligible: 'all-eligible-match-count', custom: 'custom-match-count' };
+  var countFor = { reactivation_no_booking: 'reactivation-match-count', all_eligible: 'all-eligible-match-count', custom: 'custom-match-count' };
 
   function choice() {
     var r = form.querySelector('[data-audience-choice]:checked');
-    return r ? r.value : 'reactivation_no_consultation';
+    return r ? r.value : 'reactivation_no_booking';
   }
 
   function syncCards() {

@@ -1,6 +1,6 @@
 -- =====================================================================
 -- Seed data for local/dev testing — 1 client, a few services,
--- several leads spread across the pipeline, appointments, and one
+-- several leads spread across the pipeline, bookings, and one
 -- completed order with revenue, so the dashboard has
 -- something real to show. Safe to re-run: clears existing seed rows
 -- for this client slug first.
@@ -28,22 +28,22 @@ begin
   values ('Demo Aesthetic Clinic', 'demo-clinic', '+96170000000', 'hello@democlinic.test', 'Asia/Beirut', 'clinic') -- leftover-ok: demo clinic data
   returning id into v_client_id;
 
-  insert into core.services (client_id, name, code, consultation_duration)
+  insert into core.services (client_id, name, code, booking_duration)
   values (v_client_id, 'Rhinoplasty', 'RHINO', 45)
   returning id into v_rhino_id;
 
-  insert into core.services (client_id, name, code, consultation_duration)
+  insert into core.services (client_id, name, code, booking_duration)
   values (v_client_id, 'Liposuction', 'LIPO', 30)
   returning id into v_lipo_id;
 
-  insert into core.services (client_id, name, code, consultation_duration)
+  insert into core.services (client_id, name, code, booking_duration)
   values (v_client_id, 'Facelift', 'FACELIFT', 45)
   returning id into v_facelift_id;
 
-  insert into core.services (client_id, name, code, consultation_duration)
+  insert into core.services (client_id, name, code, booking_duration)
   values (v_client_id, 'Breast Augmentation', 'BREAST-AUG', 30);
 
-  insert into core.services (client_id, name, code, consultation_duration)
+  insert into core.services (client_id, name, code, booking_duration)
   values (v_client_id, 'Tummy Tuck', 'TUMMY-TUCK', 30);
 
   -- Lead 1: Sarah — full journey through to surgery booked + revenue
@@ -63,7 +63,7 @@ begin
     (v_client_id, v_appt_sarah, v_lead_sarah, 'outbound', 'ai', 'whatsapp', 'Hi Sarah! Happy to help. Could you tell me your preferred timeline?', true, now() - interval '20 days', null),
     (v_client_id, v_appt_sarah, v_lead_sarah, 'inbound', 'lead', 'whatsapp', 'Within the next 2 months', false, null, now() - interval '19 days');
 
-  insert into scheduling.appointments (client_id, lead_id, service_id, status, scheduled_start, scheduled_end, location_type)
+  insert into scheduling.bookings (client_id, lead_id, service_id, status, scheduled_start, scheduled_end, location_type)
   values (v_client_id, v_lead_sarah, v_rhino_id, 'attended', now() - interval '5 days', now() - interval '5 days' + interval '45 minutes', 'in_person');
 
   insert into crm.orders (client_id, lead_id, service_id, status, quoted_amount, deposit_amount, final_amount, currency_code, service_date)
@@ -72,17 +72,17 @@ begin
   insert into activity.events (client_id, lead_id, event_type, source, metadata)
   values
     (v_client_id, v_lead_sarah, 'lead_created', 'instagram', '{}'::jsonb),
-    (v_client_id, v_lead_sarah, 'consultation_attended', 'staff', '{}'::jsonb),
+    (v_client_id, v_lead_sarah, 'booking_attended', 'staff', '{}'::jsonb),
     (v_client_id, v_lead_sarah, 'order_confirmed', 'staff', '{"amount": 5000}'::jsonb);
 
-  -- Lead 2: Omar — booked, upcoming consultation
+  -- Lead 2: Omar — booked, upcoming booking
   insert into crm.leads (client_id, service_id, full_name, first_name, last_name, phone, source,
                       external_lead_id, status, qualification_status, city, created_at)
   values (v_client_id, v_lipo_id, 'Omar Khalil', 'Omar', 'Khalil', '+96172222222', 'facebook',
           'fb-lead-002', 'consultation_booked', 'warm', 'Jounieh', now() - interval '6 days')
   returning id into v_lead_omar;
 
-  insert into scheduling.appointments (client_id, lead_id, service_id, status, scheduled_start, location_type)
+  insert into scheduling.bookings (client_id, lead_id, service_id, status, scheduled_start, location_type)
   values (v_client_id, v_lead_omar, v_lipo_id, 'booked', now() + interval '3 days', 'in_person');
 
   -- Lead 3: Lina — no-show, needs recovery follow-up
@@ -92,7 +92,7 @@ begin
           'no_show', 'warm', 'Beirut', now() - interval '10 days')
   returning id into v_lead_lina;
 
-  insert into scheduling.appointments (client_id, lead_id, service_id, status, scheduled_start, location_type)
+  insert into scheduling.bookings (client_id, lead_id, service_id, status, scheduled_start, location_type)
   values (v_client_id, v_lead_lina, v_facelift_id, 'no_show', now() - interval '2 days', 'in_person');
 
   -- Lead 4: Karim — brand new, just came in, not contacted yet

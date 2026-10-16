@@ -38,7 +38,7 @@ public class CatalogService : ICatalogService
 
     public async Task<ServiceResponse> CreateAsync(CreateServiceRequest request, CancellationToken ct = default)
     {
-        var (name, code, description) = Validate(request.Name, request.Code, request.Description, request.ConsultationDuration);
+        var (name, code, description) = Validate(request.Name, request.Code, request.Description, request.BookingDuration);
         await EnsureNameAvailableAsync(request.ClientId, name, exceptId: null, ct);
 
         var service = new Service
@@ -48,7 +48,7 @@ public class CatalogService : ICatalogService
             Name = name,
             Code = code,
             Description = description,
-            ConsultationDuration = request.ConsultationDuration,
+            BookingDuration = request.BookingDuration,
             IsActive = true,
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow
@@ -64,13 +64,13 @@ public class CatalogService : ICatalogService
         var service = await _services.GetAsync(clientId, id, ct);
         if (service is null) return null;
 
-        var (name, code, description) = Validate(request.Name, request.Code, request.Description, request.ConsultationDuration);
+        var (name, code, description) = Validate(request.Name, request.Code, request.Description, request.BookingDuration);
         await EnsureNameAvailableAsync(clientId, name, exceptId: id, ct);
 
         service.Name = name;
         service.Code = code;
         service.Description = description;
-        service.ConsultationDuration = request.ConsultationDuration;
+        service.BookingDuration = request.BookingDuration;
         service.UpdatedAt = DateTimeOffset.UtcNow;
 
         await _unitOfWork.SaveChangesAsync(ct);
@@ -111,7 +111,7 @@ public class CatalogService : ICatalogService
     }
 
     private static (string Name, string? Code, string? Description) Validate(
-        string? name, string? code, string? description, int? consultationDuration)
+        string? name, string? code, string? description, int? bookingDuration)
     {
         var trimmedName = (name ?? string.Empty).Trim();
         var trimmedCode = string.IsNullOrWhiteSpace(code) ? null : code.Trim();
@@ -124,9 +124,9 @@ public class CatalogService : ICatalogService
         {
             throw new ArgumentException($"Description must be {MaxDescriptionLength} characters or fewer — put detailed information in the Knowledge Base.");
         }
-        if (consultationDuration is < 1 or > MaxDurationMinutes)
+        if (bookingDuration is < 1 or > MaxDurationMinutes)
         {
-            throw new ArgumentException($"Consultation duration must be between 1 and {MaxDurationMinutes} minutes.");
+            throw new ArgumentException($"Booking duration must be between 1 and {MaxDurationMinutes} minutes.");
         }
 
         return (trimmedName, trimmedCode, trimmedDescription);

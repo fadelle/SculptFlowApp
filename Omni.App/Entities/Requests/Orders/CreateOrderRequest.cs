@@ -4,7 +4,7 @@ public record CreateOrderRequest(
     Guid ClientId,
     Guid LeadId,
     Guid ServiceId,
-    Guid? AppointmentId,
+    Guid? BookingId,
     decimal? QuotedAmount,
     string? CurrencyCode,
     string? Notes

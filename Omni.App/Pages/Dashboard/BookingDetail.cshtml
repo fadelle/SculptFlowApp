@@ -1,0 +1,57 @@
+@page "/dashboard/bookings/{id:guid}"
+@model Omni.App.Pages.Dashboard.BookingDetailModel
+@{
+    ViewData["Title"] = "Booking";
+}
+
+@if (!Model.ClientConfigured)
+{
+    <partial name="_NoClient" />
+}
+else if (Model.Booking is null)
+{
+    var missing = new EmptyStateModel(Icon: "event_busy", Title: "This booking isn't in your calendar",
+        ActionLabel: "Back to Bookings", ActionHref: "/dashboard/bookings", ActionIcon: "arrow_back");
+    <div class="au-panel au-panel--round"><partial name="_EmptyState" model="missing" /></div>
+}
+else
+{
+    var appt = Model.Booking;
+
+    <div class="au-back-header">
+        <a class="au-icon-btn au-icon-btn--bordered" href="/dashboard/bookings" aria-label="Back to Bookings" title="Back to Bookings">
+            <span class="au-icon" aria-hidden="true">arrow_back</span>
+        </a>
+        <span class="avatar-md" aria-hidden="true">@(string.IsNullOrWhiteSpace(appt.LeadFullName) ? "?" : appt.LeadFullName.Trim()[..1])</span>
+        <div class="min-w-0">
+            <h2 class="au-back-header__title">@(appt.LeadFullName ?? "—")</h2>
+            <span class="au-back-header__sub">@(appt.ServiceName ?? "No service on file") · @LocalTimeHelper.Time(appt.ScheduledStart, "datetime-year", clientTimeZone: Model.ClientTimezone)</span>
+        </div>
+    </div>
+    <div class="detail-chips">
+        <span class="badge @StatusBadgeHelper.CssClass(appt.Status)">@FilterLabelHelper.Label(appt.Status)</span>
+        <a class="au-btn au-btn--outlined au-btn--sm" href="/dashboard/leads/@appt.LeadId"><span class="au-icon" aria-hidden="true">person</span>Open patient</a>
+        <partial name="_TimeViewSwitch" model="Model.ClientTimezone" />
+    </div>
+
+    <partial name="_Messages" model="new PageMessagesModel(Model.StatusMessage, Model.ErrorMessage)" />
+
+    <section class="au-panel au-panel--round au-panel--pad mw-480" aria-labelledby="appt-update-title">
+        <div class="au-panel__head"><h3 class="au-panel__title" id="appt-update-title">Update this booking</h3></div>
+        <form method="post">
+            <div class="au-form-field">
+                <label class="au-form-label" for="appt-status">Status</label>
+                <select name="Status" id="appt-status" class="au-select">
+                    @foreach (var s in Model.StatusOptions)
+                    {
+                        <option value="@s" selected="@(s == Model.Status)">@FilterLabelHelper.Label(s)</option>
+                    }
+                </select>
+            </div>
+            <div class="au-form-actions">
+                <a href="/dashboard/bookings" class="au-btn au-btn--text">Back to the calendar</a>
+                <button type="submit" class="au-btn au-btn--primary">Save changes</button>
+            </div>
+        </form>
+    </section>
+}

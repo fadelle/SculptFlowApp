@@ -1,9 +1,9 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Omni.App.Business.Contracts.Managers;
-using Omni.App.Business.Contracts.Services.Appointments;
+using Omni.App.Business.Contracts.Services.Bookings;
 using Omni.App.Business.Contracts.Services.Clients;
-using Omni.App.Entities.Dtos.Appointments;
+using Omni.App.Entities.Dtos.Bookings;
 using Omni.App.Business.Contracts.Services.Inbox;
 using Omni.App.Entities.Dtos.Inbox;
 using Omni.App.Entities.Models;
@@ -13,8 +13,8 @@ using Omni.App.Entities.Requests.Inbox;
 namespace Omni.App.Pages.Settings;
 
 /// <summary>Settings → Business Info. Tabs: General (the free-text info the AI's get_client_info tool quotes),
-/// Availability (the structured weekly schedule, booking rules and date exceptions that drive real appointment slots —
-/// see Business/Services/Appointments/AvailabilityService.cs) and AI assistant (whether the AI bot answers new and
+/// Availability (the structured weekly schedule, booking rules and date exceptions that drive real booking slots —
+/// see Business/Services/Bookings/AvailabilityService.cs) and AI assistant (whether the AI bot answers new and
 /// reopened conversations; shown only when the plan includes the AI agent — see InboxSettingsService). The free-text
 /// Operating hours are never parsed for booking.</summary>
 public class BusinessInfoModel : PageModel
@@ -91,7 +91,7 @@ public class BusinessInfoModel : PageModel
     public string? OperatingHours { get; set; }
 
     [BindProperty]
-    public string? ConsultationInfo { get; set; }
+    public string? BookingInfo { get; set; }
 
     [TempData]
     public string? StatusMessage { get; set; }
@@ -146,7 +146,7 @@ public class BusinessInfoModel : PageModel
         Website = client.Website;
         Address = client.Address;
         OperatingHours = client.OperatingHours;
-        ConsultationInfo = client.ConsultationInfo;
+        BookingInfo = client.BookingInfo;
         InboxSettings = await _inboxSettings.GetAsync(client.Id, ct);
 
         if (string.Equals(tab, "availability", StringComparison.OrdinalIgnoreCase))
@@ -169,7 +169,7 @@ public class BusinessInfoModel : PageModel
         try
         {
             await _profile.UpdateDetailsAsync(client.Id,
-                new UpdateClientDetailsRequest(Name, Phone, Email, Website, Address, OperatingHours, ConsultationInfo), ct);
+                new UpdateClientDetailsRequest(Name, Phone, Email, Website, Address, OperatingHours, BookingInfo), ct);
         }
         catch (ArgumentException ex)
         {
@@ -281,6 +281,6 @@ public class BusinessInfoModel : PageModel
         Website = client.Website;
         Address = client.Address;
         OperatingHours = client.OperatingHours;
-        ConsultationInfo = client.ConsultationInfo;
+        BookingInfo = client.BookingInfo;
     }
 }

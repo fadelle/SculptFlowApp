@@ -80,9 +80,9 @@
     var plural = function (n, one, many) { return n + ' ' + (String(n) === '1' ? one : many); };
     var syncSummary = function () {
       var d = val('duration'), b = val('buffer'), n = val('notice'), a = val('advance');
-      summary.textContent = 'Patients can book ' + (d || '?') + '-minute consultations, from '
+      summary.textContent = 'Patients can book ' + (d || '?') + '-minute bookings, from '
         + (n === '0' ? 'right away' : plural(n || '?', 'hour', 'hours')) + ' to ' + plural(a || '?', 'day', 'days') + ' ahead'
-        + (b && b !== '0' ? ', with ' + b + ' minutes between appointments.' : ', back to back.');
+        + (b && b !== '0' ? ', with ' + b + ' minutes between bookings.' : ', back to back.');
     };
     document.querySelectorAll('[data-rule]').forEach(function (el) { el.addEventListener('input', syncSummary); });
     syncSummary();

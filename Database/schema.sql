@@ -14,7 +14,7 @@
 --   core        business types, clients, services
 --   identity    ASP.NET Identity users/claims/logins/tokens, client_users
 --   crm         pipeline stages, leads, orders, conversations, messages, inbox settings
---   scheduling  appointments, availability, calendar sync
+--   scheduling  bookings, availability, calendar sync
 --   channels    channel integrations, WhatsApp templates/health, TikTok
 --   marketing   campaigns, campaign recipients
 --   knowledge   the knowledge base, website scraping, retrieval benchmarks
@@ -68,14 +68,14 @@ begin
     ('leads', 'crm'),
     ('conversations', 'crm'),
     ('messages', 'crm'),
-    ('appointments', 'scheduling'),
+    ('bookings', 'scheduling'),
     ('orders', 'crm'),
     ('availability_rules', 'scheduling'),
     ('availability_exceptions', 'scheduling'),
     ('booking_settings', 'scheduling'),
     ('calendar_integrations', 'scheduling'),
     ('calendar_integration_calendars', 'scheduling'),
-    ('appointment_calendar_syncs', 'scheduling'),
+    ('booking_calendar_syncs', 'scheduling'),
     ('channel_integrations', 'channels'),
     ('whatsapp_templates', 'channels'),
     ('whatsapp_health_events', 'channels'),
@@ -113,7 +113,7 @@ end $$;
 -- admin portal (/api/platform-admin/business-types).
 --   name         {"en": "Salon", "ar": "...", "fr": "..."}
 --   terminology  {"en": {"contact": {"one": "patient", "other": "patients"}, ...}, "ar": {...}}
---   labels       {"en": "Consultation booked", "ar": "...", "fr": "..."}
+--   labels       {"en": "Booked", "ar": "...", "fr": "..."}
 -- English is required everywhere; other languages fall back to it.
 -- ---------------------------------------------------------------------
 create table if not exists core.business_types (
@@ -231,7 +231,7 @@ create table if not exists core.clients (
   timezone      varchar(100) not null default 'UTC',
   address            text,
   operating_hours    text,
-  consultation_info  text,
+  booking_info  text,
   business_type_code varchar(50) not null constraint fk_clients_business_type references core.business_types(code),
   default_language   varchar(10) not null default 'en',
   is_active     boolean not null default true,
@@ -270,7 +270,7 @@ create table if not exists core.services (
   name                   varchar(200) not null,
   code                   varchar(100),
   description            text,
-  consultation_duration  integer,
+  booking_duration  integer,
   is_active              boolean not null default true,
   created_at             timestamptz not null default now(),
   updated_at             timestamptz not null default now()
@@ -414,15 +414,15 @@ create index if not exists ix_messages_lead_id on crm.messages(lead_id);
 create index if not exists ix_messages_created_at on crm.messages(created_at);
 
 -- ---------------------------------------------------------------------
--- 6. appointments
+-- 6. bookings
 -- ---------------------------------------------------------------------
-create table if not exists scheduling.appointments (
+create table if not exists scheduling.bookings (
   id                    uuid primary key default gen_random_uuid(),
   client_id             uuid not null references core.clients(id) on delete cascade,
   lead_id               uuid not null references crm.leads(id) on delete cascade,
   service_id            uuid references core.services(id) on delete set null,
 
-  appointment_type      varchar(50) not null default 'consultation',
+  booking_type      varchar(50) not null default 'standard',
   status                varchar(50) not null default 'booked',
   scheduled_start       timestamptz not null,
   scheduled_end         timestamptz,
@@ -436,19 +436,19 @@ create table if not exists scheduling.appointments (
   created_at            timestamptz not null default now(),
   updated_at            timestamptz not null default now(),
 
-  constraint ck_appointments_status check (status in (
+  constraint ck_bookings_status check (status in (
     'booked','confirmed','attended','no_show','canceled','rescheduled'
   ))
 );
 
-create index if not exists ix_appointments_client_id on scheduling.appointments(client_id);
-create index if not exists ix_appointments_lead_id on scheduling.appointments(lead_id);
-create index if not exists ix_appointments_scheduled_start on scheduling.appointments(scheduled_start);
-create index if not exists ix_appointments_status on scheduling.appointments(status);
+create index if not exists ix_bookings_client_id on scheduling.bookings(client_id);
+create index if not exists ix_bookings_lead_id on scheduling.bookings(lead_id);
+create index if not exists ix_bookings_scheduled_start on scheduling.bookings(scheduled_start);
+create index if not exists ix_bookings_status on scheduling.bookings(status);
 
-drop trigger if exists trg_appointments_updated_at on scheduling.appointments;
-create trigger trg_appointments_updated_at
-  before update on scheduling.appointments
+drop trigger if exists trg_bookings_updated_at on scheduling.bookings;
+create trigger trg_bookings_updated_at
+  before update on scheduling.bookings
   for each row execute function set_updated_at();
 
 -- ---------------------------------------------------------------------
@@ -459,7 +459,7 @@ create table if not exists crm.orders (
   client_id         uuid not null references core.clients(id) on delete cascade,
   lead_id           uuid not null references crm.leads(id) on delete cascade,
   service_id        uuid not null references core.services(id) on delete restrict,
-  appointment_id    uuid references scheduling.appointments(id) on delete set null,
+  booking_id    uuid references scheduling.bookings(id) on delete set null,
 
   status            varchar(50) not null default 'considering',
   quoted_amount     numeric(12,2),
@@ -494,7 +494,7 @@ create table if not exists activity.events (
   client_id        uuid not null references core.clients(id) on delete cascade,
   lead_id          uuid references crm.leads(id) on delete set null,
   conversation_id  uuid references crm.conversations(id) on delete set null,
-  appointment_id   uuid references scheduling.appointments(id) on delete set null,
+  booking_id   uuid references scheduling.bookings(id) on delete set null,
   event_type       varchar(100) not null,
   source            varchar(50),
   metadata         jsonb not null default '{}'::jsonb,
@@ -767,12 +767,12 @@ end $$;
 
 -- ---------------------------------------------------------------------
 -- AI agent tool surface (Controllers/AiController.cs) — clients gains the free-text fields
--- get_client_info reads. No new tables: appointment reschedule reuses scheduled_start/end,
+-- get_client_info reads. No new tables: booking reschedule reuses scheduled_start/end,
 -- and cancel/handoff reuse existing status/mode columns.
 -- ---------------------------------------------------------------------
 alter table core.clients add column if not exists address text;
 alter table core.clients add column if not exists operating_hours text;
-alter table core.clients add column if not exists consultation_info text;
+alter table core.clients add column if not exists booking_info text;
 
 -- WhatsApp phone number registration (Cloud API requires this after Embedded Signup — see
 -- ChannelIntegrationService.ConnectWhatsAppAsync / MetaGraphClient.RegisterPhoneNumberAsync).
@@ -994,7 +994,7 @@ create trigger trg_client_users_updated_at
 -- first-class instead of always requiring an explicit lead list) and reply/booking attribution on
 -- campaign_recipients. See Services/ICampaignAudienceService.cs for how eligibility is computed —
 -- deliberately NOT a stored lead.is_old_lead / incomplete_booking flag; derived live from
--- leads/conversations/appointments every time a campaign is created.
+-- leads/conversations/bookings every time a campaign is created.
 -- =====================================================================
 
 alter table marketing.campaigns add column if not exists campaign_type varchar(30) not null default 'custom';
@@ -1015,7 +1015,7 @@ end $$;
 
 do $$ begin
   if not exists (select 1 from pg_constraint where conname = 'ck_campaigns_audience_type') then
-    alter table marketing.campaigns add constraint ck_campaigns_audience_type check (audience_type in ('all_eligible','reactivation_no_consultation','custom'));
+    alter table marketing.campaigns add constraint ck_campaigns_audience_type check (audience_type in ('all_eligible','reactivation_no_booking','custom'));
   end if;
 end $$;
 
@@ -1033,7 +1033,7 @@ create index if not exists ix_campaigns_campaign_type on marketing.campaigns(cam
 -- campaign_recipients: reply/booking attribution + skip tracking
 -- ---------------------------------------------------------------------
 alter table marketing.campaign_recipients add column if not exists external_message_id varchar(200);
-alter table marketing.campaign_recipients add column if not exists appointment_id uuid;
+alter table marketing.campaign_recipients add column if not exists booking_id uuid;
 alter table marketing.campaign_recipients add column if not exists skip_reason varchar(50);
 alter table marketing.campaign_recipients add column if not exists failure_code varchar(100);
 alter table marketing.campaign_recipients add column if not exists replied_at timestamptz;
@@ -1049,9 +1049,9 @@ do $$ begin
 end $$;
 
 do $$ begin
-  if not exists (select 1 from pg_constraint where conname = 'fk_campaign_recipients_appointment_id') then
-    alter table marketing.campaign_recipients add constraint fk_campaign_recipients_appointment_id
-      foreign key (appointment_id) references scheduling.appointments(id) on delete set null;
+  if not exists (select 1 from pg_constraint where conname = 'fk_campaign_recipients_booking_id') then
+    alter table marketing.campaign_recipients add constraint fk_campaign_recipients_booking_id
+      foreign key (booking_id) references scheduling.bookings(id) on delete set null;
   end if;
 end $$;
 
@@ -1061,8 +1061,8 @@ alter table marketing.campaign_recipients add constraint ck_campaign_recipients_
 
 create index if not exists ix_campaign_recipients_external_message_id
   on marketing.campaign_recipients(external_message_id) where external_message_id is not null;
-create index if not exists ix_campaign_recipients_appointment_id
-  on marketing.campaign_recipients(appointment_id) where appointment_id is not null;
+create index if not exists ix_campaign_recipients_booking_id
+  on marketing.campaign_recipients(booking_id) where booking_id is not null;
 -- ux_campaign_recipients_campaign_lead (UNIQUE(campaign_id, lead_id)) already exists from the
 -- original campaign_recipients table above — no change needed for the "no duplicate lead in the
 -- same campaign" requirement.
@@ -1079,7 +1079,7 @@ create table if not exists knowledge.knowledge_documents (
   id          uuid primary key default gen_random_uuid(),
   client_id   uuid not null references core.clients(id) on delete cascade,
   title       varchar(200) not null,
-  -- Extensible string (general, faq, policy, doctor, service, pricing, payment, consultation,
+  -- Extensible string (general, faq, policy, doctor, service, pricing, payment, booking,
   -- preparation, recovery, ...) — deliberately no CHECK, like campaigns.campaign_type.
   category    varchar(50) not null default 'general',
   content     text not null,
@@ -1612,7 +1612,7 @@ create trigger trg_availability_rules_updated_at before update on scheduling.ava
 create table if not exists scheduling.booking_settings (
   id                                    uuid primary key default gen_random_uuid(),
   client_id                             uuid not null unique references core.clients(id) on delete cascade,
-  default_consultation_duration_minutes integer not null default 30 check (default_consultation_duration_minutes > 0),
+  default_booking_duration_minutes integer not null default 30 check (default_booking_duration_minutes > 0),
   buffer_minutes                        integer not null default 0 check (buffer_minutes >= 0),
   minimum_booking_notice_minutes        integer not null default 240 check (minimum_booking_notice_minutes >= 0),
   maximum_advance_booking_days          integer not null default 60 check (maximum_advance_booking_days > 0),
@@ -1645,21 +1645,21 @@ create trigger trg_availability_exceptions_updated_at before update on schedulin
 
 -- =====================================================================
 -- Notifications — a simple per-client notification center for staff (bell/list). Created ONLY from confirmed
--- backend events (a message actually sent, an appointment actually booked...), never from an AI intention alone.
+-- backend events (a message actually sent, a booking actually booked...), never from an AI intention alone.
 -- ---------------------------------------------------------------------
 create table if not exists activity.notifications (
   id                      uuid primary key default gen_random_uuid(),
   client_id               uuid not null references core.clients(id) on delete cascade,
   type                    varchar(40) not null
-    check (type in ('NEW_LEAD','HANDOFF','APPOINTMENT_BOOKED','APPOINTMENT_RESCHEDULED','APPOINTMENT_CANCELLED',
+    check (type in ('NEW_LEAD','HANDOFF','BOOKING_CREATED','BOOKING_RESCHEDULED','BOOKING_CANCELED',
                      'CAMPAIGN_REPLY','OUTBOUND_MESSAGE_FAILED','INTEGRATION_UNHEALTHY')),
   title                   varchar(200) not null,
   message                 text,
   lead_id                 uuid references crm.leads(id) on delete set null,
   conversation_id         uuid references crm.conversations(id) on delete set null,
-  appointment_id          uuid references scheduling.appointments(id) on delete set null,
+  booking_id          uuid references scheduling.bookings(id) on delete set null,
   channel_integration_id  uuid references channels.channel_integrations(id) on delete set null,
-  -- Precomputed relative URL (e.g. "/inbox?conversationId=..." or "/dashboard/appointments/{id}") so the
+  -- Precomputed relative URL (e.g. "/inbox?conversationId=..." or "/dashboard/bookings/{id}") so the
   -- bell UI never has to know which entity type maps to which page.
   link                    varchar(300),
   is_read                 boolean not null default false,
@@ -1670,7 +1670,7 @@ create index if not exists ix_notifications_client_created on activity.notificat
 create index if not exists ix_notifications_client_unread on activity.notifications(client_id) where is_read = false;
 
 -- =====================================================================
--- Calendar Integrations — one-way (Omni -> external) appointment sync via a dedicated n8n workflow.
+-- Calendar Integrations — one-way (Omni -> external) booking sync via a dedicated n8n workflow.
 -- Omni never talks to Google/Microsoft directly and never stores their OAuth tokens: n8n owns the
 -- actual provider connection (see Services/ICalendarSyncNotifier.cs), Omni only stores the opaque
 -- reference n8n gives back plus what staff chose (which calendar, sync on/off).
@@ -1720,13 +1720,13 @@ create index if not exists ix_calendar_integration_calendars_integration on sche
 create unique index if not exists ux_calendar_integration_calendars_ext
   on scheduling.calendar_integration_calendars(calendar_integration_id, external_calendar_id);
 
--- One row per (appointment, connected calendar) — the dedup/consistency mechanism: the SAME row is
+-- One row per (booking, connected calendar) — the dedup/consistency mechanism: the SAME row is
 -- reused across create -> reschedule -> cancel, so a reschedule updates the stored external_event_id's
 -- event instead of ever creating a second one. last_request_id correlates an outstanding n8n call with
 -- its callback.
-create table if not exists scheduling.appointment_calendar_syncs (
+create table if not exists scheduling.booking_calendar_syncs (
   id                       uuid primary key default gen_random_uuid(),
-  appointment_id           uuid not null references scheduling.appointments(id) on delete cascade,
+  booking_id           uuid not null references scheduling.bookings(id) on delete cascade,
   calendar_integration_id  uuid not null references scheduling.calendar_integrations(id) on delete cascade,
   external_event_id        varchar(200),
   status                   varchar(20) not null default 'pending'
@@ -1736,16 +1736,16 @@ create table if not exists scheduling.appointment_calendar_syncs (
   created_at               timestamptz not null default now(),
   updated_at               timestamptz not null default now()
 );
-create unique index if not exists ux_appointment_calendar_syncs_appt_integration
-  on scheduling.appointment_calendar_syncs(appointment_id, calendar_integration_id);
-create index if not exists ix_appointment_calendar_syncs_integration on scheduling.appointment_calendar_syncs(calendar_integration_id);
-drop trigger if exists trg_appointment_calendar_syncs_updated_at on scheduling.appointment_calendar_syncs;
-create trigger trg_appointment_calendar_syncs_updated_at before update on scheduling.appointment_calendar_syncs
+create unique index if not exists ux_booking_calendar_syncs_booking_integration
+  on scheduling.booking_calendar_syncs(booking_id, calendar_integration_id);
+create index if not exists ix_booking_calendar_syncs_integration on scheduling.booking_calendar_syncs(calendar_integration_id);
+drop trigger if exists trg_booking_calendar_syncs_updated_at on scheduling.booking_calendar_syncs;
+create trigger trg_booking_calendar_syncs_updated_at before update on scheduling.booking_calendar_syncs
   for each row execute function set_updated_at();
 
--- appointment_calendar_syncs: the sync row didn't know which operation (create/update/cancel) its last request
+-- booking_calendar_syncs: the sync row didn't know which operation (create/update/cancel) its last request
 -- was for, so a successful cancel callback couldn't be told apart from a successful create/update one.
-alter table scheduling.appointment_calendar_syncs add column if not exists last_operation varchar(10);
+alter table scheduling.booking_calendar_syncs add column if not exists last_operation varchar(10);
 
 -- calendar_integrations: connect/list-calendars/disconnect now happen directly against Google/Outlook from
 -- Omni (no longer via n8n) — the client's own OAuth tokens are stored here so Omni can refresh them

@@ -19,10 +19,10 @@ public interface IConfigManager
     int AccountsSignupsPerIpPerHour { get; }
 
     // ---- Availability
-    /// <summary>Consultation length (minutes) for clients that haven't set their own booking settings. Default 30.</summary>
+    /// <summary>Booking length (minutes) for clients that haven't set their own booking settings. Default 30.</summary>
     int AvailabilityDefaultDurationMinutes { get; }
 
-    /// <summary>Gap (minutes) between consultations for clients that haven't set their own booking settings. Default 0.</summary>
+    /// <summary>Gap (minutes) between bookings for clients that haven't set their own booking settings. Default 0.</summary>
     int AvailabilityDefaultBufferMinutes { get; }
 
     /// <summary>Minimum notice (minutes) before a bookable slot, for clients that haven't set their own. Default 240.</summary>
@@ -162,7 +162,7 @@ public interface IConfigManager
     /// <summary>Default "inactive for" days of a reactivation audience. Default 60.</summary>
     int CampaignsDefaultInactiveDays { get; }
 
-    /// <summary>Days after a campaign reply within which a booked consultation is attributed to that campaign.</summary>
+    /// <summary>Days after a campaign reply within which a booking made is attributed to that campaign.</summary>
     int CampaignsBookingAttributionDays { get; }
 
     /// <summary>Seconds between campaign sender runs (start due scheduled campaigns, send the next batch of running ones). Default 60.</summary>

@@ -138,9 +138,9 @@ public class LeadServiceTests
 
     [Theory]
     [InlineData(LeadStatus.Qualified, EventTypes.LeadQualified)]
-    [InlineData(LeadStatus.ConsultationBooked, EventTypes.ConsultationBooked)]
-    [InlineData(LeadStatus.ConsultationAttended, EventTypes.ConsultationAttended)]
-    [InlineData(LeadStatus.NoShow, EventTypes.ConsultationNoShow)]
+    [InlineData(LeadStatus.Booked, EventTypes.BookingCreated)]
+    [InlineData(LeadStatus.Attended, EventTypes.BookingAttended)]
+    [InlineData(LeadStatus.NoShow, EventTypes.BookingNoShow)]
     [InlineData(LeadStatus.NeedsHuman, EventTypes.HumanHandoff)]
     [InlineData(LeadStatus.Contacted, EventTypes.LeadContacted)]
     [InlineData(LeadStatus.Lost, EventTypes.LeadContacted)]

@@ -188,9 +188,9 @@ public class LeadService : ILeadService
             var eventType = request.Status switch
             {
                 LeadStatus.Qualified => EventTypes.LeadQualified,
-                LeadStatus.ConsultationBooked => EventTypes.ConsultationBooked,
-                LeadStatus.ConsultationAttended => EventTypes.ConsultationAttended,
-                LeadStatus.NoShow => EventTypes.ConsultationNoShow,
+                LeadStatus.Booked => EventTypes.BookingCreated,
+                LeadStatus.Attended => EventTypes.BookingAttended,
+                LeadStatus.NoShow => EventTypes.BookingNoShow,
                 LeadStatus.NeedsHuman => EventTypes.HumanHandoff,
                 _ => EventTypes.LeadContacted
             };

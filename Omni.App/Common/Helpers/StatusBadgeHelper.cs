@@ -1,7 +1,7 @@
 namespace Omni.App.Common.Helpers;
 
 /// <summary>
-/// Maps the free-text status columns (leads.status, appointments.status, etc.) to a badge color
+/// Maps the free-text status columns (leads.status, bookings.status, etc.) to a badge color
 /// class for the dashboard UI. Purely presentational — the underlying values are still whatever
 /// Database/schema.sql's check constraints allow.
 /// </summary>
@@ -29,7 +29,7 @@ public static class StatusBadgeHelper
         ["medical_question"] = "badge-purple",
         ["spam"] = "badge-gray",
 
-        // appointment statuses
+        // booking statuses
         ["booked"] = "badge-amber",
         ["confirmed"] = "badge-blue",
         ["attended"] = "badge-green",

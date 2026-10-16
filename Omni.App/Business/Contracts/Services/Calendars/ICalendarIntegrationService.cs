@@ -1,15 +1,15 @@
 using Omni.App.Entities.Dtos.Calendars;
 using Omni.App.Entities.Requests.Calendars;
-using Omni.App.Entities.Responses.Appointments;
+using Omni.App.Entities.Responses.Bookings;
 using Omni.App.Entities.Responses.Calendars;
 
 namespace Omni.App.Business.Contracts.Services.Calendars;
 
 /// <summary>
-/// Calendar Integrations (Settings → Calendar Integrations): one-way Omni → Google/Outlook appointment sync.
+/// Calendar Integrations (Settings → Calendar Integrations): one-way Omni → Google/Outlook booking sync.
 /// Omni owns the OAuth relationship directly — connect, disconnect and calendar listing all talk to the
 /// provider itself (see ICalendarProviderClient, CalendarOAuthController) and work even if n8n is unreachable. n8n's
-/// only remaining role is executing the actual appointment create/update/cancel call (TriggerAppointmentSyncAsync /
+/// only remaining role is executing the actual booking create/update/cancel call (TriggerBookingSyncAsync /
 /// ICalendarSyncNotifier), using an access token Omni refreshed and hands over fresh each time.
 /// </summary>
 public interface ICalendarIntegrationService
@@ -37,7 +37,7 @@ public interface ICalendarIntegrationService
     /// that case).</summary>
     Task RequestRefreshCalendarsAsync(Guid clientId, string provider, CancellationToken ct = default);
 
-    /// <summary>Staff picking which calendar Omni appointments sync to — a plain local write, validated
+    /// <summary>Staff picking which calendar Omni bookings sync to — a plain local write, validated
     /// against the cached list from the last connect/refresh. No provider call.</summary>
     Task<CalendarIntegrationResponse> SelectCalendarAsync(Guid clientId, string provider, string externalCalendarId, CancellationToken ct = default);
 
@@ -45,17 +45,17 @@ public interface ICalendarIntegrationService
 
     /// <summary>Clears the connection (status, account, selected calendar, cached list, tokens) and best-effort asks
     /// the provider to revoke them. Always clears local state even if the provider is unreachable. Existing
-    /// AppointmentCalendarSync history is left alone (not deleted) — reconnecting later starts a fresh
+    /// BookingCalendarSync history is left alone (not deleted) — reconnecting later starts a fresh
     /// external_event_id trail rather than resurrecting stale references.</summary>
     Task DisconnectAsync(Guid clientId, string provider, CancellationToken ct = default);
 
-    /// <summary>n8n's reply to an appointment sync trigger. A callback whose RequestId doesn't match the
-    /// AppointmentCalendarSync row's LastRequestId is a stale/superseded reply and is ignored.</summary>
+    /// <summary>n8n's reply to a booking sync trigger. A callback whose RequestId doesn't match the
+    /// BookingCalendarSync row's LastRequestId is a stale/superseded reply and is ignored.</summary>
     Task ApplySyncCallbackAsync(CalendarSyncCallbackRequest request, CancellationToken ct = default);
 
-    /// <summary>Called from AppointmentService once a booking/reschedule/cancellation has already succeeded and been
+    /// <summary>Called from BookingService once a booking/reschedule/cancellation has already succeeded and been
     /// saved — never before. Refreshes each connected integration's access token if needed, then fires one sync
     /// trigger per connected-and-enabled calendar for this client. Best-effort: never throws, so a calendar problem
-    /// can never affect the appointment operation that triggered it.</summary>
-    Task TriggerAppointmentSyncAsync(Guid clientId, AppointmentResponse appointment, string operation, CancellationToken ct = default);
+    /// can never affect the booking operation that triggered it.</summary>
+    Task TriggerBookingSyncAsync(Guid clientId, BookingResponse booking, string operation, CancellationToken ct = default);
 }

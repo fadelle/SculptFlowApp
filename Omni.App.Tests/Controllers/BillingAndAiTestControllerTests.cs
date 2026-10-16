@@ -6,7 +6,7 @@ using Omni.App.Controllers.Admin;
 using Omni.App.Controllers.Integrations;
 using Omni.App.Entities.Dtos.Billing;
 using Omni.App.Entities.Requests.Billing;
-using Omni.App.Entities.Responses.Appointments;
+using Omni.App.Entities.Responses.Bookings;
 
 namespace Omni.App.Tests.Controllers;
 
@@ -326,14 +326,14 @@ public class AiTestControllerTests
     [InlineData("booked", true, "created")]
     [InlineData("RESCHEDULED", true, "rescheduled")]
     [InlineData("CONFIRMATION_REQUIRED", false, "none")]
-    [InlineData("MULTIPLE_UPCOMING_APPOINTMENTS", false, "none")]
+    [InlineData("MULTIPLE_UPCOMING_BOOKINGS", false, "none")]
     [InlineData("SLOT_UNAVAILABLE", false, "none")]
     [InlineData("LEAD_NOT_FOUND", false, "none")]
     [InlineData("INVALID_REQUEST", false, "none")]
     public void Schedule_returns_the_canned_result_for_each_code(string code, bool success, string action)
     {
         var result = Assert.IsType<OkObjectResult>(_sut.Schedule(code).Result);
-        var body = Assert.IsType<ScheduleConsultationResult>(result.Value);
+        var body = Assert.IsType<ScheduleBookingResult>(result.Value);
         Assert.Equal(success, body.Success);
         Assert.Equal(action, body.Operation);
         Assert.Equal(code.ToUpperInvariant(), body.Code);
@@ -341,13 +341,13 @@ public class AiTestControllerTests
 
     [Theory]
     [InlineData("CANCELED", true)]
-    [InlineData("NO_UPCOMING_APPOINTMENT", false)]
-    [InlineData("MULTIPLE_UPCOMING_APPOINTMENTS", false)]
+    [InlineData("NO_UPCOMING_BOOKING", false)]
+    [InlineData("MULTIPLE_UPCOMING_BOOKINGS", false)]
     [InlineData("INVALID_REQUEST", false)]
     public void Cancel_returns_the_canned_result_for_each_code(string code, bool success)
     {
         var result = Assert.IsType<OkObjectResult>(_sut.Cancel(code).Result);
-        var body = Assert.IsType<CancelConsultationResult>(result.Value);
+        var body = Assert.IsType<CancelBookingResult>(result.Value);
         Assert.Equal(success, body.Success);
         Assert.Equal(code, body.Code);
     }
@@ -363,9 +363,9 @@ public class AiTestControllerTests
     }
 
     [Fact]
-    public void Canned_multiple_appointments_include_two_candidates()
+    public void Canned_multiple_bookings_include_two_candidates()
     {
-        var body = (ScheduleConsultationResult)((OkObjectResult)_sut.Schedule("MULTIPLE_UPCOMING_APPOINTMENTS").Result!).Value!;
-        Assert.Equal(2, body.ExistingUpcomingAppointments!.Count());
+        var body = (ScheduleBookingResult)((OkObjectResult)_sut.Schedule("MULTIPLE_UPCOMING_BOOKINGS").Result!).Value!;
+        Assert.Equal(2, body.ExistingUpcomingBookings!.Count());
     }
 }

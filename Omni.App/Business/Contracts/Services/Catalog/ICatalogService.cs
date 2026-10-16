@@ -4,10 +4,10 @@ using Omni.App.Entities.Responses.Catalog;
 namespace Omni.App.Business.Contracts.Services.Catalog;
 
 /// <summary>
-/// A client's service catalog — structured business data (name, code, consultation duration, a short
+/// A client's service catalog — structured business data (name, code, booking duration, a short
 /// description, active flag), NOT medical knowledge: detailed pricing/recovery/preparation content
 /// belongs in the Knowledge Base. Services are never hard-deleted through this service, because
-/// leads, appointments and orders reference them; staff deactivate instead. Everything is
+/// leads, bookings and orders reference them; staff deactivate instead. Everything is
 /// scoped by clientId (resolved from the logged-in user by the callers).
 /// </summary>
 public interface ICatalogService
@@ -27,7 +27,7 @@ public interface ICatalogService
     /// lists the AI's get_services tool and the Campaign service filter read.</summary>
     Task<ServiceResponse?> SetActiveAsync(Guid clientId, Guid id, bool isActive, CancellationToken ct = default);
 
-    /// <summary>Guard for NEW activity that references a service (booking a consultation, creating a
+    /// <summary>Guard for NEW activity that references a service (making a booking, creating a
     /// order, assigning service interest to a lead). Throws ArgumentException if the
     /// service isn't in this client or is inactive. Existing records that already point at a
     /// now-inactive service are untouched — this is only called when something new is being set.</summary>

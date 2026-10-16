@@ -22,7 +22,7 @@ public interface ILeadAdminRepository
     Task<PagedResponse<MessageRow>> ListMessagesAsync(Guid? clientId, bool failedOnly, string? sender, string? search,
         int page, CancellationToken ct = default);
 
-    Task<PagedResponse<AppointmentRow>> ListAppointmentsAsync(Guid? clientId, Guid? leadId, string? status, bool upcomingOnly,
+    Task<PagedResponse<BookingRow>> ListBookingsAsync(Guid? clientId, Guid? leadId, string? status, bool upcomingOnly,
         int page, CancellationToken ct = default);
 
     /// <summary>Tracked.</summary>
@@ -32,5 +32,5 @@ public interface ILeadAdminRepository
     Task<Conversation?> GetConversationForUpdateAsync(Guid id, CancellationToken ct = default);
 
     /// <summary>Tracked.</summary>
-    Task<Appointment?> GetAppointmentForUpdateAsync(Guid id, CancellationToken ct = default);
+    Task<Booking?> GetBookingForUpdateAsync(Guid id, CancellationToken ct = default);
 }

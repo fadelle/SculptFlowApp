@@ -8,8 +8,8 @@ public static class LeadStatus
     public const string New = "new";
     public const string Contacted = "contacted";
     public const string Qualified = "qualified";
-    public const string ConsultationBooked = "consultation_booked";
-    public const string ConsultationAttended = "consultation_attended";
+    public const string Booked = "consultation_booked";
+    public const string Attended = "consultation_attended";
     public const string NoShow = "no_show";
     public const string SurgeryBooked = "surgery_booked";
     public const string NotInterested = "not_interested";

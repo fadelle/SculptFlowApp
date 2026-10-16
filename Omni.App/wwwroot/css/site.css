@@ -724,7 +724,7 @@ td .cell-sub { white-space: nowrap; }
 .au-main > .au-alert:first-child { margin-top: 0; }
 .au-main > .au-alert { margin-bottom: 16px; }
 
-/* Popups: an overlay holding a .card (status help, appointment, templates, integrations). The scripts close
+/* Popups: an overlay holding a .card (status help, booking, templates, integrations). The scripts close
    them when the overlay itself is clicked, so the card stays the overlay's direct child. */
 .bm-overlay,
 .status-help-overlay {
@@ -957,7 +957,7 @@ td .cell-sub { white-space: nowrap; }
   .stat-card .value { font-size: 1.5rem; }
 }
 
-/* ---- Interested People / Lead / Appointment ---- */
+/* ---- Interested People / Lead / Booking ---- */
 .source-icon {
   display: inline-flex;
   align-items: center;
@@ -1259,7 +1259,7 @@ td .cell-sub { white-space: nowrap; }
 .inbox-lead-head strong { font-size: 1rem; }
 .inbox-lead-close { position: absolute; top: -0.4rem; right: -0.4rem; }
 .inbox-lead-section .eyebrow { display: block; margin-bottom: 0.45rem; }
-/* Lead journey: new → qualified → consultation → surgery */
+/* Lead journey: new → qualified → booking → surgery */
 .journey { display: flex; gap: 4px; }
 .journey i { flex: 1; height: 6px; border-radius: 3px; background: var(--au-meter-track); }
 .journey i.on { background: var(--au-primary); }
@@ -1286,7 +1286,7 @@ td .cell-sub { white-space: nowrap; }
   .inbox-composer-hint { display: none; }
 }
 
-/* ---- Appointments: month calendar (appointments-calendar.js) ---- */
+/* ---- Bookings: month calendar (bookings-calendar.js) ---- */
 .cal-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.75rem; margin-bottom: 1rem; }
 .cal-nav { display: flex; align-items: center; gap: 0.6rem; }
 .cal-header__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
@@ -1349,7 +1349,7 @@ td .cell-sub { white-space: nowrap; }
 .picker-chip-label { flex: 1; min-width: 0; overflow: hidden; font-size: 0.875rem; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
 .picker-chip-x { padding: 0.1rem 0.35rem; border: none; border-radius: var(--au-r-xs); background: none; color: var(--text-muted); font-size: 1.1rem; line-height: 1; cursor: pointer; }
 .picker-chip-x:hover { background: var(--au-hover); color: var(--text); }
-/* "Today: 3 appointments · next at 11:00 with Layla H." */
+/* "Today: 3 bookings · next at 11:00 with Layla H." */
 .today-line { margin-bottom: 1rem; padding: 0.6rem 0.9rem; border: 1px solid var(--border); border-radius: var(--au-r-sm); background: var(--au-paper); color: var(--text-muted); font-size: 0.875rem; }
 .today-line strong { color: var(--text); }
 /* Status colour key under the calendar */

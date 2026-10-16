@@ -5,7 +5,7 @@ namespace Omni.App.Business.Contracts.Services.Dashboard;
 
 public interface IDashboardService
 {
-    /// <summary>Funnel numbers for [from, to): leads created, appointments booked (created), appointments attended
+    /// <summary>Funnel numbers for [from, to): leads created, bookings made (created), bookings attended
     /// (scheduled in range), orders created, and revenue from bookings completed in range. Null bounds are open-ended.</summary>
     Task<DashboardSummaryResponse> GetSummaryAsync(Guid clientId, DateTimeOffset? from = null, DateTimeOffset? to = null, CancellationToken ct = default);
 
@@ -16,8 +16,8 @@ public interface IDashboardService
     Task<(IReadOnlyList<DashboardLeadRow> Items, int TotalCount)> GetLeadsAsync(
         Guid clientId, string? status, string? search, string? source, int skip, int take, CancellationToken ct = default);
 
-    /// <summary>search matches the appointment's lead full name or phone (case-insensitive substring).</summary>
-    Task<(IReadOnlyList<DashboardAppointmentRow> Items, int TotalCount)> GetAppointmentsAsync(
+    /// <summary>search matches the booking's lead full name or phone (case-insensitive substring).</summary>
+    Task<(IReadOnlyList<DashboardBookingRow> Items, int TotalCount)> GetBookingsAsync(
         Guid clientId, string? status, string? search, int skip, int take, CancellationToken ct = default);
 
     /// <summary>Per-service counts for [from, to), using the same date rules as GetSummaryAsync.</summary>

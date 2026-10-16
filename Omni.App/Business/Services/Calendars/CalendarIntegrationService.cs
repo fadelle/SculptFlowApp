@@ -7,7 +7,7 @@ using Omni.App.Common.Enums;
 using Omni.App.Entities.Dtos.Calendars;
 using Omni.App.Entities.Models;
 using Omni.App.Entities.Requests.Calendars;
-using Omni.App.Entities.Responses.Appointments;
+using Omni.App.Entities.Responses.Bookings;
 using Omni.App.Entities.Responses.Calendars;
 using Omni.App.Persistence.Contracts;
 using Omni.App.Persistence.Contracts.Calendars;
@@ -225,7 +225,7 @@ public class CalendarIntegrationService : ICalendarIntegrationService
 
     public async Task ApplySyncCallbackAsync(CalendarSyncCallbackRequest request, CancellationToken ct = default)
     {
-        var sync = await _calendars.GetSyncAsync(request.AppointmentId, request.CalendarIntegrationId, ct);
+        var sync = await _calendars.GetSyncAsync(request.BookingId, request.CalendarIntegrationId, ct);
         if (sync is null || sync.LastRequestId != request.RequestId) return; // unknown or superseded by a later request
 
         var integration = await _calendars.GetByIdAsync(request.ClientId, request.CalendarIntegrationId, ct);
@@ -236,7 +236,7 @@ public class CalendarIntegrationService : ICalendarIntegrationService
 
         if (request.Success)
         {
-            sync.Status = sync.LastOperation == "cancel" ? AppointmentCalendarSyncStatus.Canceled : AppointmentCalendarSyncStatus.Synced;
+            sync.Status = sync.LastOperation == "cancel" ? BookingCalendarSyncStatus.Canceled : BookingCalendarSyncStatus.Synced;
             if (!string.IsNullOrWhiteSpace(request.ExternalEventId)) sync.ExternalEventId = request.ExternalEventId;
             sync.LastError = null;
             integration.IsHealthy = true;
@@ -245,7 +245,7 @@ public class CalendarIntegrationService : ICalendarIntegrationService
         }
         else
         {
-            sync.Status = AppointmentCalendarSyncStatus.Failed;
+            sync.Status = BookingCalendarSyncStatus.Failed;
             sync.LastError = request.ErrorMessage;
             integration.IsHealthy = false;
             integration.LastProblemMessage = request.ErrorMessage ?? "A calendar sync failed.";
@@ -255,7 +255,7 @@ public class CalendarIntegrationService : ICalendarIntegrationService
         await _unitOfWork.SaveChangesAsync(ct);
 
         // Only on the transition into unhealthy — a connection that is already flagged, or one that only ever
-        // succeeds, must not spam a notification on every appointment change.
+        // succeeds, must not spam a notification on every booking change.
         if (!request.Success && wasHealthy)
         {
             await _notifications.CreateAsync(integration.ClientId, NotificationType.IntegrationUnhealthy,
@@ -265,7 +265,7 @@ public class CalendarIntegrationService : ICalendarIntegrationService
         }
     }
 
-    public async Task TriggerAppointmentSyncAsync(Guid clientId, AppointmentResponse appointment, string operation, CancellationToken ct = default)
+    public async Task TriggerBookingSyncAsync(Guid clientId, BookingResponse booking, string operation, CancellationToken ct = default)
     {
         try
         {
@@ -283,9 +283,9 @@ public class CalendarIntegrationService : ICalendarIntegrationService
 
             var client = await _clients.GetReadOnlyAsync(clientId, ct);
             var timezone = client?.Timezone ?? "UTC";
-            var title = $"{appointment.LeadFullName ?? "Patient"} — {appointment.ServiceName ?? appointment.AppointmentType}";
-            var description = BuildDescription(appointment);
-            var link = $"/dashboard/appointments/{appointment.Id}";
+            var title = $"{booking.LeadFullName ?? "Patient"} — {booking.ServiceName ?? booking.BookingType}";
+            var description = BuildDescription(booking);
+            var link = $"/dashboard/bookings/{booking.Id}";
 
             foreach (var integration in integrations)
             {
@@ -301,26 +301,26 @@ public class CalendarIntegrationService : ICalendarIntegrationService
                     continue;
                 }
 
-                var sync = await _calendars.GetSyncAsync(appointment.Id, integration.Id, ct);
+                var sync = await _calendars.GetSyncAsync(booking.Id, integration.Id, ct);
 
                 // A cancelled sync row (its external event was already removed) stays cancelled forever — an
-                // appointment that reaches this point again would be a fresh booking, which BookAvailableSlotAsync's
-                // own one-upcoming-per-lead guard already prevents from reusing the same appointment row.
-                if (sync is not null && sync.Status == AppointmentCalendarSyncStatus.Canceled && syncOp != "create") continue;
+                // booking that reaches this point again would be a fresh booking, which BookAvailableSlotAsync's
+                // own one-upcoming-per-lead guard already prevents from reusing the same booking row.
+                if (sync is not null && sync.Status == BookingCalendarSyncStatus.Canceled && syncOp != "create") continue;
 
                 string effectiveOp = syncOp;
                 if (sync is null)
                 {
-                    sync = new AppointmentCalendarSync
+                    sync = new BookingCalendarSync
                     {
-                        Id = Guid.NewGuid(), AppointmentId = appointment.Id, CalendarIntegrationId = integration.Id,
-                        Status = AppointmentCalendarSyncStatus.Pending, CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow
+                        Id = Guid.NewGuid(), BookingId = booking.Id, CalendarIntegrationId = integration.Id,
+                        Status = BookingCalendarSyncStatus.Pending, CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow
                     };
                     _calendars.AddSync(sync);
                 }
                 else if (effectiveOp == "create")
                 {
-                    // A sync row already exists for this appointment+calendar (a retried "created" notification,
+                    // A sync row already exists for this booking+calendar (a retried "created" notification,
                     // never expected in normal operation) — send it as an update instead of risking a duplicate.
                     effectiveOp = "update";
                 }
@@ -328,22 +328,22 @@ public class CalendarIntegrationService : ICalendarIntegrationService
                 var requestId = Guid.NewGuid();
                 sync.LastRequestId = requestId;
                 sync.LastOperation = effectiveOp;
-                sync.Status = AppointmentCalendarSyncStatus.Pending;
+                sync.Status = BookingCalendarSyncStatus.Pending;
                 sync.UpdatedAt = DateTimeOffset.UtcNow;
                 await _unitOfWork.SaveChangesAsync(ct);
 
                 await _notifier.NotifySyncAsync(new CalendarSyncTriggerPayload(
-                    clientId, appointment.Id, integration.Id, integration.Provider, accessToken,
+                    clientId, booking.Id, integration.Id, integration.Provider, accessToken,
                     integration.SelectedCalendarId!, effectiveOp, requestId,
                     effectiveOp == "create" ? null : sync.ExternalEventId,
-                    appointment.ScheduledStart, appointment.ScheduledEnd, timezone,
+                    booking.ScheduledStart, booking.ScheduledEnd, timezone,
                     title, description, link), ct);
             }
         }
         catch
         {
-            // Calendar sync is always secondary to the appointment operation that already succeeded — never
-            // let a problem here surface to the caller (AppointmentService).
+            // Calendar sync is always secondary to the booking operation that already succeeded — never
+            // let a problem here surface to the caller (BookingService).
         }
     }
 
@@ -413,10 +413,10 @@ public class CalendarIntegrationService : ICalendarIntegrationService
         return row;
     }
 
-    private static string BuildDescription(AppointmentResponse a)
+    private static string BuildDescription(BookingResponse a)
     {
         // Deliberately conservative: no notes, no conversation history, no medical detail — only what's already
-        // shown on the Omni calendar day-cell/drawer (see appointments-calendar.js).
+        // shown on the Omni calendar day-cell/drawer (see bookings-calendar.js).
         var parts = new List<string> { $"Status: {a.Status}" };
         if (!string.IsNullOrWhiteSpace(a.LocationName)) parts.Add($"Location: {a.LocationName}");
         return string.Join("\n", parts);

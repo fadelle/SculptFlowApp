@@ -6,6 +6,6 @@ public record CampaignListRow(
     int TotalRecipients, int Sent, int Delivered, int Failed,
     DateTimeOffset? ScheduledAt, DateTimeOffset CreatedAt,
     int Read = 0, int Replied = 0,
-    /// <summary>all_eligible | reactivation_no_consultation | custom — with AudienceFilters null for a hand-picked list.</summary>
+    /// <summary>all_eligible | reactivation_no_booking | custom — with AudienceFilters null for a hand-picked list.</summary>
     string? AudienceType = null, bool ManuallySelected = false
 );

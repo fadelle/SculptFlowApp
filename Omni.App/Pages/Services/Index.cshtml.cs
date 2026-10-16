@@ -47,7 +47,7 @@ public class IndexModel : PageModel
         if (service is null) ErrorMessage = "Service not found.";
         else StatusMessage = active
             ? $"{service.Name} is active again."
-            : $"{service.Name} deactivated — existing leads and appointments keep it, but it can't be used for new bookings.";
+            : $"{service.Name} deactivated — existing leads and bookings keep it, but it can't be used for new bookings.";
         return RedirectToPage();
     }
 }

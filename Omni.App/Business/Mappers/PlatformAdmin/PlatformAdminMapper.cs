@@ -8,7 +8,7 @@ public static class PlatformAdminMapper
 {
     public static ClientDetail ToDetail(Client c) => new(
         c.Id, c.Name, c.Slug, c.Phone, c.Email, c.Website, c.CountryCode, c.Timezone, c.Address, c.OperatingHours,
-        c.ConsultationInfo, c.IsActive, c.CreatedAt, c.UpdatedAt, c.BusinessTypeCode, c.DefaultLanguage);
+        c.BookingInfo, c.IsActive, c.CreatedAt, c.UpdatedAt, c.BusinessTypeCode, c.DefaultLanguage);
 
     /// <summary>Expects Client to be loaded.</summary>
     public static ChannelDetail ToDetail(ChannelIntegration r) => new(
@@ -29,7 +29,7 @@ public static class PlatformAdminMapper
         l.LastContactAt, l.NextFollowupAt, l.CreatedAt, l.UpdatedAt);
 
     public static LeadEventRow ToRow(EventLog e) =>
-        new(e.Id, e.LeadId, e.ConversationId, e.AppointmentId, e.EventType, e.Source, e.Metadata, e.CreatedAt);
+        new(e.Id, e.LeadId, e.ConversationId, e.BookingId, e.EventType, e.Source, e.Metadata, e.CreatedAt);
 
     /// <summary>Expects Lead to be loaded.</summary>
     public static ConversationDetail ToDetail(Conversation c, DateTimeOffset now) => new(

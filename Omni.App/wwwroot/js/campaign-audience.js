@@ -12,7 +12,7 @@
 // the filters JSON, and renders what the server already computed.
 (function () {
   var CHOICE_TO_TYPE = {
-    reactivation_no_consultation: 'reactivation_no_consultation',
+    reactivation_no_booking: 'reactivation_no_booking',
     all_eligible: 'all_eligible',
     custom: 'custom',
     manual: 'custom'
@@ -22,7 +22,7 @@
   var audienceTypeField = document.getElementById('audience-type-field');
   var manualSelectionField = document.getElementById('manual-selection-field');
   var panels = {
-    reactivation_no_consultation: document.getElementById('reactivation-panel'),
+    reactivation_no_booking: document.getElementById('reactivation-panel'),
     all_eligible: document.getElementById('all-eligible-panel'),
     custom: document.getElementById('custom-panel'),
     manual: document.getElementById('manual-recipients')
@@ -44,7 +44,7 @@
     for (var i = 0; i < radios.length; i++) {
       if (radios[i].checked) return radios[i].value;
     }
-    return 'reactivation_no_consultation';
+    return 'reactivation_no_booking';
   }
 
   function val(id) {
@@ -74,8 +74,8 @@
     if (qualificationStatuses.length) filters.qualificationStatuses = qualificationStatuses;
     var sources = checkedValues('CustomSources');
     if (sources.length) filters.sources = sources;
-    var appointmentStatuses = checkedValues('CustomAppointmentStatuses');
-    if (appointmentStatuses.length) filters.appointmentStatuses = appointmentStatuses;
+    var bookingStatuses = checkedValues('CustomBookingStatuses');
+    if (bookingStatuses.length) filters.bookingStatuses = bookingStatuses;
 
     // Date filters are whole days in the viewer's own timezone; send that midnight as UTC (same as the form post).
     // The "to" date is inclusive, so it becomes midnight at the start of the next day.
@@ -90,7 +90,7 @@
   }
 
   function filtersFor(choice) {
-    if (choice === 'reactivation_no_consultation') return reactivationFilters();
+    if (choice === 'reactivation_no_booking') return reactivationFilters();
     if (choice === 'custom') return customFilters();
     return null; // all_eligible / manual — no filters to build
   }
@@ -109,7 +109,7 @@
   }
 
   function countElFor(choice) {
-    return choice === 'reactivation_no_consultation' ? 'reactivation-match-count'
+    return choice === 'reactivation_no_booking' ? 'reactivation-match-count'
       : choice === 'all_eligible' ? 'all-eligible-match-count'
       : choice === 'custom' ? 'custom-match-count' : null;
   }
@@ -164,7 +164,7 @@
         '#custom-service, #custom-inactive-days, #custom-created-after, #custom-created-before, ' +
         '#custom-last-contacted-after, #custom-last-contacted-before, ' +
         'input[name="CustomLeadStatuses"], input[name="CustomQualificationStatuses"], ' +
-        'input[name="CustomSources"], input[name="CustomAppointmentStatuses"]')) {
+        'input[name="CustomSources"], input[name="CustomBookingStatuses"]')) {
         onFilterChanged();
       }
     });

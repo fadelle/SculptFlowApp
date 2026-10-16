@@ -211,7 +211,7 @@ public class LabelAndBadgeTests
     [Theory]
     [InlineData(null, "—")]
     [InlineData("", "—")]
-    [InlineData("consultation_booked", "Consultation booked")]
+    [InlineData("consultation_booked", "Booked")]
     [InlineData("NO_SHOW", "No-show")]
     [InlineData("some_new_status", "Some new status")]
     public void FilterLabel(string? v, string expected) => Assert.Equal(expected, FilterLabelHelper.Label(v));

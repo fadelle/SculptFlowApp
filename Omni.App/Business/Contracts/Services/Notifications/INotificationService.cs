@@ -9,8 +9,8 @@ namespace Omni.App.Business.Contracts.Services.Notifications;
 ///                             (LeadService.GetOrCreateByPhoneAsync/GetOrCreateByExternalIdAsync's WasCreated).
 ///   HANDOFF                 — ConversationService.HandoffToHumanAsync, after the mode is actually saved as human
 ///                             (not staff Take Over — that's the staff's own action, they already know).
-///   APPOINTMENT_BOOKED/RESCHEDULED/CANCELLED
-///                            — AppointmentService, after the appointment row is actually committed.
+///   BOOKING_CREATED/RESCHEDULED/CANCELED
+///                            — BookingService, after the booking row is actually committed.
 ///   CAMPAIGN_REPLY           — MessageService.IngestAsync, the first inbound customer message after a
 ///                             CampaignRecipient's SentAt (persists CampaignRecipient.RepliedAt once).
 ///   OUTBOUND_MESSAGE_FAILED  — MessageService, a send that actually failed (IChannelSender threw before any
@@ -29,7 +29,7 @@ public interface INotificationService
     /// not be undone or interrupted by a notification-only problem.</summary>
     Task CreateAsync(
         Guid clientId, string type, string title, string? message,
-        Guid? leadId = null, Guid? conversationId = null, Guid? appointmentId = null, Guid? channelIntegrationId = null,
+        Guid? leadId = null, Guid? conversationId = null, Guid? bookingId = null, Guid? channelIntegrationId = null,
         string? link = null, CancellationToken ct = default);
 
     Task<NotificationListResponse> ListAsync(Guid clientId, int skip, int take, CancellationToken ct = default);

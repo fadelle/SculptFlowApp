@@ -8,13 +8,13 @@ public static class CampaignAudienceType
     /// missing phone, opted out).</summary>
     public const string AllEligible = "all_eligible";
     /// <summary>Old/inactive leads with prior interest/activity who never reached a successfully
-    /// booked or completed consultation — see CampaignAudienceService.</summary>
-    public const string ReactivationNoConsultation = "reactivation_no_consultation";
+    /// booked or completed booking — see CampaignAudienceService.</summary>
+    public const string ReactivationNoBooking = "reactivation_no_booking";
     /// <summary>Client-defined filters (AudienceFilters), or an explicit hand-picked lead list.</summary>
     public const string Custom = "custom";
 
     public static readonly IReadOnlySet<string> All = new HashSet<string>
     {
-        AllEligible, ReactivationNoConsultation, Custom
+        AllEligible, ReactivationNoBooking, Custom
     };
 }

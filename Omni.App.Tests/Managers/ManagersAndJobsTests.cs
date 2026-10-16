@@ -19,7 +19,7 @@ public class EventLoggerTests
         repo.Setup(r => r.Add(It.IsAny<EventLog>())).Callback<EventLog>(e => added = e);
         var client = Guid.NewGuid(); var lead = Guid.NewGuid(); var convo = Guid.NewGuid(); var appt = Guid.NewGuid();
         new EventLogger(repo.Object).Log(client, "lead_created", lead, convo, appt, "n8n", "{\"a\":1}");
-        Assert.Equal((client, lead, convo, appt, "lead_created", "n8n", "{\"a\":1}"), (added!.ClientId, added.LeadId, added.ConversationId, added.AppointmentId, added.EventType, added.Source, added.Metadata));
+        Assert.Equal((client, lead, convo, appt, "lead_created", "n8n", "{\"a\":1}"), (added!.ClientId, added.LeadId, added.ConversationId, added.BookingId, added.EventType, added.Source, added.Metadata));
         Assert.NotEqual(Guid.Empty, added.Id);
 
         new EventLogger(repo.Object).Log(client, "x", metadataJson: "  ");
@@ -94,11 +94,11 @@ public class InboxNotifierTests
         await _sut.MessageStatusUpdatedAsync(_clientId, id, id, "read", now);
         await _sut.ConversationUpdatedAsync(_clientId, id);
         await _sut.NotificationCreatedAsync(_clientId, new NotificationResponse(id, "t", "title", null, null, null, null, null, false, now));
-        await _sut.AppointmentChangedAsync(_clientId, id, "created");
+        await _sut.BookingChangedAsync(_clientId, id, "created");
         await _sut.ConversationModeChangedAsync(_clientId, id, "human");
         await _sut.WhatsAppTemplateUpdatedAsync(_clientId, id, "n", "approved", null, now);
         await _sut.WhatsAppHealthUpdatedAsync(_clientId, id, "healthy", null, null, null, null, null, now);
-        foreach (var m in new[] { "NewMessage", "MessageStatusUpdated", "ConversationUpdated", "NotificationCreated", "AppointmentChanged", "ConversationModeChanged", "WhatsAppTemplateUpdated", "WhatsAppHealthUpdated" }) Sent(m);
+        foreach (var m in new[] { "NewMessage", "MessageStatusUpdated", "ConversationUpdated", "NotificationCreated", "BookingChanged", "ConversationModeChanged", "WhatsAppTemplateUpdated", "WhatsAppHealthUpdated" }) Sent(m);
     }
 
     [Fact]

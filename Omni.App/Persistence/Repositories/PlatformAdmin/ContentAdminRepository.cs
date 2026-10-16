@@ -69,7 +69,7 @@ public class ContentAdminRepository : IContentAdminRepository
         var q = _db.Services.AsNoTracking().AsQueryable();
         if (clientId.HasValue) q = q.Where(p => p.ClientId == clientId.Value);
         return q.OrderBy(p => p.Client!.Name).ThenBy(p => p.Name)
-            .Select(p => new ServiceRow(p.Id, p.ClientId, p.Client!.Name, p.Name, p.Code, p.ConsultationDuration, p.IsActive,
+            .Select(p => new ServiceRow(p.Id, p.ClientId, p.Client!.Name, p.Name, p.Code, p.BookingDuration, p.IsActive,
                 _db.Leads.Count(l => l.ServiceId == p.Id), p.UpdatedAt))
             .Take(2000).ToListAsync(ct);
     }

@@ -6,7 +6,7 @@ using Omni.App.Entities.Requests.Catalog;
 
 namespace Omni.App.Pages.Services;
 
-/// <summary>Add / edit one service (name, code, consultation duration, short description). New
+/// <summary>Add / edit one service (name, code, booking duration, short description). New
 /// services start active; activating/deactivating happens from the list. The client always comes from
 /// the logged-in user.</summary>
 public class EditModel : PageModel
@@ -54,7 +54,7 @@ public class EditModel : PageModel
 
         Name = service.Name;
         Code = service.Code;
-        DurationMinutes = service.ConsultationDuration;
+        DurationMinutes = service.BookingDuration;
         Description = service.Description;
         return Page();
     }

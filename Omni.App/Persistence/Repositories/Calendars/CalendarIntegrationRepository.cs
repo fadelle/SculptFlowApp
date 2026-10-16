@@ -38,7 +38,7 @@ public class CalendarIntegrationRepository : ICalendarIntegrationRepository
 
     public async Task<IReadOnlyList<CalendarIntegration>> ListSyncTargetsAsync(Guid clientId, CancellationToken ct = default)
     {
-        // Runs on every appointment change and most clients sync nothing: answer "none" from the cached list first.
+        // Runs on every booking change and most clients sync nothing: answer "none" from the cached list first.
         if (!(await ListWithCalendarsReadOnlyAsync(clientId, ct)).Any(IsSyncTarget)) return Array.Empty<CalendarIntegration>();
 
         return await _db.CalendarIntegrations
@@ -59,9 +59,9 @@ public class CalendarIntegrationRepository : ICalendarIntegrationRepository
     public void RemoveCalendars(CalendarIntegration integration) =>
         _db.CalendarIntegrationCalendars.RemoveRange(integration.Calendars);
 
-    public Task<AppointmentCalendarSync?> GetSyncAsync(Guid appointmentId, Guid integrationId, CancellationToken ct = default) =>
-        _db.AppointmentCalendarSyncs.FirstOrDefaultAsync(
-            s => s.AppointmentId == appointmentId && s.CalendarIntegrationId == integrationId, ct);
+    public Task<BookingCalendarSync?> GetSyncAsync(Guid bookingId, Guid integrationId, CancellationToken ct = default) =>
+        _db.BookingCalendarSyncs.FirstOrDefaultAsync(
+            s => s.BookingId == bookingId && s.CalendarIntegrationId == integrationId, ct);
 
-    public void AddSync(AppointmentCalendarSync sync) => _db.AppointmentCalendarSyncs.Add(sync);
+    public void AddSync(BookingCalendarSync sync) => _db.BookingCalendarSyncs.Add(sync);
 }

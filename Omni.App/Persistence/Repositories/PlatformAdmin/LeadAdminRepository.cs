@@ -91,18 +91,18 @@ public class LeadAdminRepository : ILeadAdminRepository
             .ToPagedAsync(page, ct: ct);
     }
 
-    public Task<PagedResponse<AppointmentRow>> ListAppointmentsAsync(Guid? clientId, Guid? leadId, string? status, bool upcomingOnly,
+    public Task<PagedResponse<BookingRow>> ListBookingsAsync(Guid? clientId, Guid? leadId, string? status, bool upcomingOnly,
         int page, CancellationToken ct = default)
     {
         var now = DateTimeOffset.UtcNow;
-        var q = _db.Appointments.AsNoTracking().AsQueryable();
+        var q = _db.Bookings.AsNoTracking().AsQueryable();
         if (clientId.HasValue) q = q.Where(a => a.ClientId == clientId.Value);
         if (leadId.HasValue) q = q.Where(a => a.LeadId == leadId.Value);
         if (!string.IsNullOrWhiteSpace(status)) q = q.Where(a => a.Status == status);
         q = upcomingOnly
             ? q.Where(a => a.ScheduledStart >= now).OrderBy(a => a.ScheduledStart)
             : q.OrderByDescending(a => a.ScheduledStart);
-        return q.Select(a => new AppointmentRow(a.Id, a.ClientId,
+        return q.Select(a => new BookingRow(a.Id, a.ClientId,
                 _db.Clients.Where(x => x.Id == a.ClientId).Select(x => x.Name).FirstOrDefault() ?? "",
                 _db.Clients.Where(x => x.Id == a.ClientId).Select(x => x.Timezone).FirstOrDefault() ?? "UTC",
                 a.LeadId, a.Lead!.FullName ?? ((a.Lead.FirstName ?? "") + " " + (a.Lead.LastName ?? "")).Trim(),
@@ -119,6 +119,6 @@ public class LeadAdminRepository : ILeadAdminRepository
         _db.Conversations.FirstOrDefaultAsync(x => x.Id == id, ct);
 
     /// <summary>Tracked.</summary>
-    public Task<Appointment?> GetAppointmentForUpdateAsync(Guid id, CancellationToken ct = default) =>
-        _db.Appointments.FirstOrDefaultAsync(x => x.Id == id, ct);
+    public Task<Booking?> GetBookingForUpdateAsync(Guid id, CancellationToken ct = default) =>
+        _db.Bookings.FirstOrDefaultAsync(x => x.Id == id, ct);
 }

@@ -23,7 +23,7 @@ public class NotificationService : INotificationService
 
     public async Task CreateAsync(
         Guid clientId, string type, string title, string? message,
-        Guid? leadId = null, Guid? conversationId = null, Guid? appointmentId = null, Guid? channelIntegrationId = null,
+        Guid? leadId = null, Guid? conversationId = null, Guid? bookingId = null, Guid? channelIntegrationId = null,
         string? link = null, CancellationToken ct = default)
     {
         try
@@ -37,7 +37,7 @@ public class NotificationService : INotificationService
                 Message = message,
                 LeadId = leadId,
                 ConversationId = conversationId,
-                AppointmentId = appointmentId,
+                BookingId = bookingId,
                 ChannelIntegrationId = channelIntegrationId,
                 Link = link,
                 IsRead = false,
@@ -51,7 +51,7 @@ public class NotificationService : INotificationService
         catch
         {
             // Never let a notification problem fail or roll back the real operation it's attached to — the
-            // appointment/message/handoff/etc. it describes has already succeeded and stays succeeded either way.
+            // booking/message/handoff/etc. it describes has already succeeded and stays succeeded either way.
         }
     }
 

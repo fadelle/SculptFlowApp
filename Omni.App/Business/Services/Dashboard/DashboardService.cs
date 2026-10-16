@@ -24,7 +24,7 @@ public class DashboardService : IDashboardService
         var oldLeadsRecovered = 0;
 
         return new DashboardSummaryResponse(
-            counts.NewInterestedPeople, counts.ConsultationsBooked, counts.ConsultationsAttended,
+            counts.NewInterestedPeople, counts.BookingsMade, counts.BookingsAttended,
             counts.SurgeriesBooked, counts.Revenue, oldLeadsRecovered
         );
     }
@@ -33,9 +33,9 @@ public class DashboardService : IDashboardService
         Guid clientId, string? status, string? search, string? source, int skip, int take, CancellationToken ct = default) =>
         _dashboard.ListLeadsAsync(clientId, status, search, source, skip, take, ct);
 
-    public Task<(IReadOnlyList<DashboardAppointmentRow> Items, int TotalCount)> GetAppointmentsAsync(
+    public Task<(IReadOnlyList<DashboardBookingRow> Items, int TotalCount)> GetBookingsAsync(
         Guid clientId, string? status, string? search, int skip, int take, CancellationToken ct = default) =>
-        _dashboard.ListAppointmentsAsync(clientId, status, search, skip, take, ct);
+        _dashboard.ListBookingsAsync(clientId, status, search, skip, take, ct);
 
     public Task<IReadOnlyList<DashboardServiceRow>> GetServiceStatsAsync(
         Guid clientId, DateTimeOffset? from = null, DateTimeOffset? to = null, CancellationToken ct = default) =>
@@ -44,6 +44,6 @@ public class DashboardService : IDashboardService
     public async Task<DashboardAttentionResponse> GetAttentionAsync(Guid clientId, CancellationToken ct = default)
     {
         var counts = await _dashboard.GetAttentionCountsAsync(clientId, DateTimeOffset.UtcNow, ct);
-        return new DashboardAttentionResponse(counts.ConversationsNeedingStaff, counts.OverdueFollowups, counts.AppointmentsNeedingOutcome);
+        return new DashboardAttentionResponse(counts.ConversationsNeedingStaff, counts.OverdueFollowups, counts.BookingsNeedingOutcome);
     }
 }

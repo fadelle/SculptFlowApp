@@ -69,7 +69,7 @@ public class WhatsAppTemplateService : IWhatsAppTemplateService
         // Meta only accepts lower-case letters, digits and underscores (max 512); catch it here rather than at submission.
         if (request.Name.Length > 512 || !request.Name.All(c => c is (>= 'a' and <= 'z') or (>= '0' and <= '9') or '_'))
         {
-            throw new ArgumentException("Template names may only use lower-case letters, numbers and underscores (e.g. appointment_reminder).", nameof(request));
+            throw new ArgumentException("Template names may only use lower-case letters, numbers and underscores (e.g. booking_reminder).", nameof(request));
         }
 
         var now = DateTimeOffset.UtcNow;

@@ -102,7 +102,7 @@ public class NotificationRepositoryTests(PostgresFixture fixture) : RepoTestBase
 {
     private static Notification Note(Guid clientId, bool read, int minutesAgo) => new()
     {
-        Id = Guid.NewGuid(), ClientId = clientId, Type = NotificationType.AppointmentBooked, Title = "t" + minutesAgo, IsRead = read,
+        Id = Guid.NewGuid(), ClientId = clientId, Type = NotificationType.BookingCreated, Title = "t" + minutesAgo, IsRead = read,
         CreatedAt = Now.AddMinutes(-minutesAgo),
     };
 
@@ -411,11 +411,11 @@ public class CalendarRepositoryTests(PostgresFixture fixture) : RepoTestBase(fix
         Assert.False(await IsTargetAsync(i => i.Status = CalendarIntegrationStatus.Disconnected));
     }
     [PostgresFact]
-    public async Task Calendars_can_be_replaced_and_removed_and_syncs_tracked_per_appointment()
+    public async Task Calendars_can_be_replaced_and_removed_and_syncs_tracked_per_booking()
     {
         var c = MakeClient();
         var lead = MakeLead(c.Id);
-        var appt = MakeAppointment(c.Id, lead.Id, Now.AddDays(1));
+        var appt = MakeBooking(c.Id, lead.Id, Now.AddDays(1));
         var integration = Integration(c.Id, "google");
         var old = new CalendarIntegrationCalendar { Id = Guid.NewGuid(), CalendarIntegrationId = integration.Id, ExternalCalendarId = "old", Name = "Old", CreatedAt = Now };
         await SeedAsync(c, lead, appt, integration, old);
@@ -425,7 +425,7 @@ public class CalendarRepositoryTests(PostgresFixture fixture) : RepoTestBase(fix
             var repo = new CalendarIntegrationRepository(db);
             var loaded = (await repo.GetWithCalendarsAsync(c.Id, "google"))!;
             repo.ReplaceCalendars(loaded, [new CalendarIntegrationCalendar { Id = Guid.NewGuid(), CalendarIntegrationId = integration.Id, ExternalCalendarId = "new", Name = "New", CreatedAt = Now }]);
-            repo.AddSync(new AppointmentCalendarSync { Id = Guid.NewGuid(), AppointmentId = appt.Id, CalendarIntegrationId = integration.Id, CreatedAt = Now, UpdatedAt = Now });
+            repo.AddSync(new BookingCalendarSync { Id = Guid.NewGuid(), BookingId = appt.Id, CalendarIntegrationId = integration.Id, CreatedAt = Now, UpdatedAt = Now });
             await db.SaveChangesAsync();
         }
 

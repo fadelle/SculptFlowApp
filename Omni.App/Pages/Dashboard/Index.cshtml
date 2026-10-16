@@ -63,7 +63,7 @@ else
     </div>
 
     <h2 class="section-title">Needs your attention</h2>
-    @if (attention.ConversationsNeedingStaff + attention.OverdueFollowups + attention.AppointmentsNeedingOutcome == 0)
+    @if (attention.ConversationsNeedingStaff + attention.OverdueFollowups + attention.BookingsNeedingOutcome == 0)
     {
         <div class="au-alert au-alert--success" role="status">
             <span class="au-icon au-alert__icon" aria-hidden="true">check_circle</span>
@@ -91,11 +91,11 @@ else
                     <span class="au-icon au-action-card__arrow" aria-hidden="true">arrow_forward</span>
                 </a>
             }
-            @if (attention.AppointmentsNeedingOutcome > 0)
+            @if (attention.BookingsNeedingOutcome > 0)
             {
-                <a class="au-action-card" href="/dashboard/appointments">
+                <a class="au-action-card" href="/dashboard/bookings">
                     <span class="au-icon-tile" style="--tile: var(--au-warning)"><span class="au-icon" aria-hidden="true">event_note</span></span>
-                    <span><span class="au-action-card__title">@attention.AppointmentsNeedingOutcome past @(attention.AppointmentsNeedingOutcome == 1 ? "appointment needs" : "appointments need") an outcome</span>
+                    <span><span class="au-action-card__title">@attention.BookingsNeedingOutcome past @(attention.BookingsNeedingOutcome == 1 ? "booking needs" : "bookings need") an outcome</span>
                         <span class="au-action-card__text">Mark them attended, no-show or canceled.</span></span>
                     <span class="au-icon au-action-card__arrow" aria-hidden="true">arrow_forward</span>
                 </a>
@@ -111,19 +111,19 @@ else
             <span class="au-stat__hint">New in this period</span>
         </div>
         <div class="au-stat">
-            <span class="au-eyebrow">Consultations booked</span>
-            <div class="au-stat__value">@s.ConsultationsBooked</div>
-            <span class="au-stat__hint">@Rate(s.ConsultationsBooked, s.NewInterestedPeople) of interested people</span>
+            <span class="au-eyebrow">Bookings made</span>
+            <div class="au-stat__value">@s.BookingsMade</div>
+            <span class="au-stat__hint">@Rate(s.BookingsMade, s.NewInterestedPeople) of interested people</span>
         </div>
         <div class="au-stat">
-            <span class="au-eyebrow">Consultations attended</span>
-            <div class="au-stat__value">@s.ConsultationsAttended</div>
-            <span class="au-stat__hint">@Rate(s.ConsultationsAttended, s.ConsultationsBooked) of booked</span>
+            <span class="au-eyebrow">Bookings attended</span>
+            <div class="au-stat__value">@s.BookingsAttended</div>
+            <span class="au-stat__hint">@Rate(s.BookingsAttended, s.BookingsMade) of booked</span>
         </div>
         <div class="au-stat">
             <span class="au-eyebrow">Surgeries booked</span>
             <div class="au-stat__value">@s.SurgeriesBooked</div>
-            <span class="au-stat__hint">@Rate(s.SurgeriesBooked, s.ConsultationsAttended) of attended</span>
+            <span class="au-stat__hint">@Rate(s.SurgeriesBooked, s.BookingsAttended) of attended</span>
         </div>
     </div>
 
@@ -181,9 +181,9 @@ else
             <span><span class="au-action-card__title">Interested People</span><span class="au-action-card__text">Every lead and their status.</span></span>
             <span class="au-icon au-action-card__arrow" aria-hidden="true">arrow_forward</span>
         </a>
-        <a class="au-action-card" href="/dashboard/appointments">
+        <a class="au-action-card" href="/dashboard/bookings">
             <span class="au-icon-tile"><span class="au-icon" aria-hidden="true">calendar_month</span></span>
-            <span><span class="au-action-card__title">Appointments</span><span class="au-action-card__text">Consultations and surgeries.</span></span>
+            <span><span class="au-action-card__title">Bookings</span><span class="au-action-card__text">Bookings and surgeries.</span></span>
             <span class="au-icon au-action-card__arrow" aria-hidden="true">arrow_forward</span>
         </a>
     </div>

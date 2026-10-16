@@ -33,13 +33,13 @@ public class SmallClientControllerTests : ClientControllerTestBase
     {
         _dashboard.Setup(d => d.GetLeadsAsync(ClientId, "new", "q", "web", 3, 200, It.IsAny<CancellationToken>()))
             .ReturnsAsync((new List<DashboardLeadRow>() as IReadOnlyList<DashboardLeadRow>, 7)).Verifiable();
-        _dashboard.Setup(d => d.GetAppointmentsAsync(ClientId, "booked", null, 0, 1, It.IsAny<CancellationToken>()))
-            .ReturnsAsync((new List<DashboardAppointmentRow>() as IReadOnlyList<DashboardAppointmentRow>, 2)).Verifiable();
+        _dashboard.Setup(d => d.GetBookingsAsync(ClientId, "booked", null, 0, 1, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((new List<DashboardBookingRow>() as IReadOnlyList<DashboardBookingRow>, 2)).Verifiable();
         var sut = Dashboard();
         var leads = Assert.IsType<OkObjectResult>((await sut.Leads("new", "q", "web", 3, 5000, default)).Result);
         Assert.Contains("totalCount = 7", leads.Value!.ToString());
         Assert.Contains("take = 200", leads.Value!.ToString());
-        var appts = Assert.IsType<OkObjectResult>((await sut.Appointments("booked", null, 0, 0, default)).Result);
+        var appts = Assert.IsType<OkObjectResult>((await sut.Bookings("booked", null, 0, 0, default)).Result);
         Assert.Contains("take = 1", appts.Value!.ToString());
         _dashboard.Verify();
     }

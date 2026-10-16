@@ -13,7 +13,7 @@ else
     <partial name="_Messages" model="new PageMessagesModel(Model.StatusMessage, Model.ErrorMessage)" />
 
     <div class="au-page-head">
-        <p class="au-page-head__sub">Show your Omni appointments in Google or Outlook. <span class="one-way">Omni → your calendar</span></p>
+        <p class="au-page-head__sub">Show your Omni bookings in Google or Outlook. <span class="one-way">Omni → your calendar</span></p>
     </div>
     <p class="cell-sub mb-3">Booking, moving or cancelling here updates your calendar. Changes made in Google or Outlook don't come back.</p>
 
@@ -61,7 +61,7 @@ else
                 <span class="channel-mark int-notch ch-@provider" title="@title">@Html.Raw(Omni.App.Common.Helpers.ChannelIconHelper.BrandSvg(provider) ?? initials)</span>
                 <div class="flex-1 min-w-0">
                     <div class="integration-title">@title</div>
-                    <div class="cell-sub">@(connected && !string.IsNullOrEmpty(info!.AccountDisplayName) ? info.AccountDisplayName : $"Show your Omni appointments in {shortName}.")</div>
+                    <div class="cell-sub">@(connected && !string.IsNullOrEmpty(info!.AccountDisplayName) ? info.AccountDisplayName : $"Show your Omni bookings in {shortName}.")</div>
                 </div>
                 <span class="status-pill"><span class="dot @dot"></span>@label</span>
             </div>
@@ -109,7 +109,7 @@ else
             else
             {
                 <div class="int-strip int-strip-note">
-                    <div><span class="cell-sub">When connected</span><span class="int-val">Every appointment booked, moved or cancelled here shows up in @shortName.</span></div>
+                    <div><span class="cell-sub">When connected</span><span class="int-val">Every booking made, moved or cancelled here shows up in @shortName.</span></div>
                 </div>
             }
 
@@ -142,7 +142,7 @@ else
                         </form>
                     }
                     <form method="post" asp-page-handler="Disconnect" class="inline-form int-foot-end"
-                          data-au-confirm="Disconnect @title? Appointments stop syncing to it until you connect it again." data-au-confirm-title="Disconnect @title" data-au-confirm-label="Disconnect" data-au-confirm-tone="danger">
+                          data-au-confirm="Disconnect @title? Bookings stop syncing to it until you connect it again." data-au-confirm-title="Disconnect @title" data-au-confirm-label="Disconnect" data-au-confirm-tone="danger">
                         <input type="hidden" name="provider" value="@provider" />
                         <button type="submit" class="au-btn au-btn--text au-btn--sm btn-danger-text">Disconnect</button>
                     </form>
@@ -160,7 +160,7 @@ else
                             <span class="channel-mark ch-@provider" style="background:@accentHex">@Html.Raw(Omni.App.Common.Helpers.ChannelIconHelper.BrandSvg(provider) ?? initials)</span>
                             <div class="min-w-0">
                                 <h3 class="card-title m-0" id="@(modalId)-title">@(hasCalendar ? "Change calendar" : "Choose a calendar")</h3>
-                                <div class="cell-sub">Where new @shortName appointments are added.</div>
+                                <div class="cell-sub">Where new @shortName bookings are added.</div>
                             </div>
                         </div>
                         <button type="button" class="au-icon-btn" data-close aria-label="Close" title="Close"><span class="au-icon" aria-hidden="true">close</span></button>

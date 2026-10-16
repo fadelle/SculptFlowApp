@@ -23,10 +23,10 @@ namespace Omni.App.Pages.Campaigns;
 /// send-now vs schedule-later.
 ///
 /// Audience is presented as three business-framed choices — "Old leads who never booked"
-/// (AudienceType.ReactivationNoConsultation, the flagship reactivation feature), "All contactable
+/// (AudienceType.ReactivationNoBooking, the flagship reactivation feature), "All contactable
 /// leads" (AllEligible), and "Build a custom audience" (Custom, with a progressive-disclosure
 /// filter builder: a couple of common fields up front, the rest behind "Advanced filters" — see
-/// Create.cshtml). Internal enum values (all_eligible, reactivation_no_consultation, custom) never
+/// Create.cshtml). Internal enum values (all_eligible, reactivation_no_booking, custom) never
 /// reach the UI text, only the radio `value`s wwwroot/js/campaign-audience.js reads.
 ///
 /// "Build a custom audience" also has a "pick leads yourself" escape hatch (ManualSelection) that
@@ -72,7 +72,7 @@ public class CreateModel : PageModel
     public IReadOnlyList<Entities.Dtos.BusinessTypes.PipelineStageOption> Stages { get; private set; } =
         Array.Empty<Entities.Dtos.BusinessTypes.PipelineStageOption>();
     public IReadOnlyList<string> QualificationStatusOptions { get; } = LeadQualificationStatus.All.OrderBy(s => s).ToList();
-    public IReadOnlyList<string> AppointmentStatusOptions { get; } = AppointmentStatus.All.OrderBy(s => s).ToList();
+    public IReadOnlyList<string> BookingStatusOptions { get; } = BookingStatus.All.OrderBy(s => s).ToList();
 
     // SupportsGet so the typed name survives picking a template (which reloads the page with ?WhatsAppTemplateId=).
     [BindProperty(SupportsGet = true)]
@@ -84,11 +84,11 @@ public class CreateModel : PageModel
     [BindProperty(SupportsGet = true)]
     public string? Search { get; set; }
 
-    /// <summary>all_eligible | reactivation_no_consultation | custom — see CampaignAudienceType.
+    /// <summary>all_eligible | reactivation_no_booking | custom — see CampaignAudienceType.
     /// Defaults to reactivation: it's the flagship option, so a client opening this page for the
     /// first time sees it pre-selected rather than having to notice and pick it.</summary>
     [BindProperty]
-    public string AudienceType { get; set; } = CampaignAudienceType.ReactivationNoConsultation;
+    public string AudienceType { get; set; } = CampaignAudienceType.ReactivationNoBooking;
 
     // "Old leads who never booked" — deliberately just three simple controls (see class remarks).
     [BindProperty]
@@ -120,7 +120,7 @@ public class CreateModel : PageModel
     [BindProperty]
     public DateTime? CustomLastContactedBefore { get; set; }
     [BindProperty]
-    public List<string> CustomAppointmentStatuses { get; set; } = new();
+    public List<string> CustomBookingStatuses { get; set; } = new();
     [BindProperty]
     public string? CustomCountry { get; set; }
     [BindProperty]
@@ -142,7 +142,7 @@ public class CreateModel : PageModel
         AudienceType == CampaignAudienceType.Custom && ManualSelection ? "manual"
         : AudienceType == CampaignAudienceType.Custom ? "custom"
         : AudienceType == CampaignAudienceType.AllEligible ? "all_eligible"
-        : "reactivation_no_consultation";
+        : "reactivation_no_booking";
 
     [BindProperty]
     public List<Guid> LeadIds { get; set; } = new();
@@ -231,7 +231,7 @@ public class CreateModel : PageModel
                 leadIdsForRequest = new List<Guid>();
             }
 
-            var campaignType = AudienceType == CampaignAudienceType.ReactivationNoConsultation
+            var campaignType = AudienceType == CampaignAudienceType.ReactivationNoBooking
                 ? CampaignType.Reactivation
                 : (string?)null;
 
@@ -296,7 +296,7 @@ public class CreateModel : PageModel
     private string? BuildAudienceFiltersJson(TimeZoneInfo viewerTz)
     {
         CampaignAudienceFilters filters;
-        if (AudienceType == CampaignAudienceType.ReactivationNoConsultation)
+        if (AudienceType == CampaignAudienceType.ReactivationNoBooking)
         {
             filters = new CampaignAudienceFilters(
                 InactiveDays: InactiveDays,
@@ -315,7 +315,7 @@ public class CreateModel : PageModel
                 CreatedBefore: LocalMidnightUtc(CustomCreatedBefore?.AddDays(1), viewerTz),
                 LastContactedAfter: LocalMidnightUtc(CustomLastContactedAfter, viewerTz),
                 LastContactedBefore: LocalMidnightUtc(CustomLastContactedBefore?.AddDays(1), viewerTz),
-                AppointmentStatuses: CustomAppointmentStatuses.Count > 0 ? CustomAppointmentStatuses : null,
+                BookingStatuses: CustomBookingStatuses.Count > 0 ? CustomBookingStatuses : null,
                 Countries: string.IsNullOrWhiteSpace(CustomCountry) ? null : new[] { CustomCountry },
                 Cities: string.IsNullOrWhiteSpace(CustomCity) ? null : new[] { CustomCity });
         }

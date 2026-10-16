@@ -9,8 +9,8 @@ namespace Omni.App.Entities.Dtos.Campaigns;
 /// Sources are used by both the reactivation and custom audiences; everything below Sources is
 /// "advanced" — offered only in the custom-audience builder's progressive-disclosure section, per
 /// the Campaign creation UI (see wwwroot/js/campaign-audience.js). Every field maps to an existing
-/// Lead/Appointment column (QualificationStatus, CreatedAt, LastContactAt, CountryCode, City,
-/// Appointment.Status) — no schema change, just more ways to slice data that already exists.</summary>
+/// Lead/Booking column (QualificationStatus, CreatedAt, LastContactAt, CountryCode, City,
+/// Booking.Status) — no schema change, just more ways to slice data that already exists.</summary>
 public record CampaignAudienceFilters(
     [property: JsonPropertyName("inactiveDays")] int? InactiveDays = null,
     [property: JsonPropertyName("serviceId")] Guid? ServiceId = null,
@@ -21,7 +21,7 @@ public record CampaignAudienceFilters(
     [property: JsonPropertyName("createdBefore")] DateTimeOffset? CreatedBefore = null,
     [property: JsonPropertyName("lastContactedAfter")] DateTimeOffset? LastContactedAfter = null,
     [property: JsonPropertyName("lastContactedBefore")] DateTimeOffset? LastContactedBefore = null,
-    [property: JsonPropertyName("appointmentStatuses")] IReadOnlyList<string>? AppointmentStatuses = null,
+    [property: JsonPropertyName("bookingStatuses")] IReadOnlyList<string>? BookingStatuses = null,
     [property: JsonPropertyName("countries")] IReadOnlyList<string>? Countries = null,
     [property: JsonPropertyName("cities")] IReadOnlyList<string>? Cities = null
 )

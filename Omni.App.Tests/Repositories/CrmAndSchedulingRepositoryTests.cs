@@ -1,7 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
-using Omni.App.Persistence.Repositories.Appointments;
+using Omni.App.Persistence.Repositories.Bookings;
 using Omni.App.Persistence.Repositories.Clients;
 using Omni.App.Persistence.Repositories.Inbox;
 using Omni.App.Persistence.Repositories.Leads;
@@ -299,7 +299,7 @@ public class ConversationAndMessageRepositoryTests(PostgresFixture fixture) : Re
     }
 }
 
-public class AppointmentRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixture)
+public class BookingRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixture)
 {
     private async Task<(Client Client, Lead Lead, Service Proc)> SeedBaseAsync(int? duration = 45)
     {
@@ -313,11 +313,11 @@ public class AppointmentRepositoryTests(PostgresFixture fixture) : RepoTestBase(
     {
         var (c, lead, svc) = await SeedBaseAsync();
         var other = MakeClient();
-        var appt = MakeAppointment(c.Id, lead.Id, Now.AddDays(1), serviceId: svc.Id);
+        var appt = MakeBooking(c.Id, lead.Id, Now.AddDays(1), serviceId: svc.Id);
         await SeedAsync(other, appt);
 
         await using var db = NewContext();
-        var repo = new AppointmentRepository(db);
+        var repo = new BookingRepository(db);
         Assert.NotNull(await repo.GetAsync(c.Id, appt.Id));
         Assert.Null(await repo.GetAsync(other.Id, appt.Id));
         var detailed = (await repo.GetWithDetailsAsync(c.Id, appt.Id))!;
@@ -333,14 +333,14 @@ public class AppointmentRepositoryTests(PostgresFixture fixture) : RepoTestBase(
     public async Task Upcoming_for_a_lead_means_future_and_booked_or_confirmed()
     {
         var (c, lead, _) = await SeedBaseAsync();
-        var future2 = MakeAppointment(c.Id, lead.Id, Now.AddDays(2), AppointmentStatus.Confirmed);
-        var future1 = MakeAppointment(c.Id, lead.Id, Now.AddDays(1));
-        var canceled = MakeAppointment(c.Id, lead.Id, Now.AddDays(3), AppointmentStatus.Canceled);
-        var past = MakeAppointment(c.Id, lead.Id, Now.AddDays(-1));
+        var future2 = MakeBooking(c.Id, lead.Id, Now.AddDays(2), BookingStatus.Confirmed);
+        var future1 = MakeBooking(c.Id, lead.Id, Now.AddDays(1));
+        var canceled = MakeBooking(c.Id, lead.Id, Now.AddDays(3), BookingStatus.Canceled);
+        var past = MakeBooking(c.Id, lead.Id, Now.AddDays(-1));
         await SeedAsync(future2, future1, canceled, past);
 
         await using var db = NewContext();
-        var upcoming = await new AppointmentRepository(db).ListUpcomingForLeadAsync(c.Id, lead.Id, Now);
+        var upcoming = await new BookingRepository(db).ListUpcomingForLeadAsync(c.Id, lead.Id, Now);
         Assert.Equal([future1.Id, future2.Id], upcoming.Select(a => a.Id));
     }
 
@@ -348,17 +348,17 @@ public class AppointmentRepositoryTests(PostgresFixture fixture) : RepoTestBase(
     public async Task List_filters_by_status_and_dates_and_pages()
     {
         var (c, lead, _) = await SeedBaseAsync();
-        var a1 = MakeAppointment(c.Id, lead.Id, Now.AddDays(1));
-        var a2 = MakeAppointment(c.Id, lead.Id, Now.AddDays(2), AppointmentStatus.Confirmed);
-        var a3 = MakeAppointment(c.Id, lead.Id, Now.AddDays(3));
+        var a1 = MakeBooking(c.Id, lead.Id, Now.AddDays(1));
+        var a2 = MakeBooking(c.Id, lead.Id, Now.AddDays(2), BookingStatus.Confirmed);
+        var a3 = MakeBooking(c.Id, lead.Id, Now.AddDays(3));
         await SeedAsync(a1, a2, a3);
 
         await using var db = NewContext();
-        var repo = new AppointmentRepository(db);
+        var repo = new BookingRepository(db);
         var (all, total) = await repo.ListAsync(c.Id, null, null, null, 0, 10);
         Assert.Equal(3, total);
         Assert.Equal([a1.Id, a2.Id, a3.Id], all.Select(a => a.Id));
-        Assert.Equal(1, (await repo.ListAsync(c.Id, AppointmentStatus.Confirmed, null, null, 0, 10)).TotalCount);
+        Assert.Equal(1, (await repo.ListAsync(c.Id, BookingStatus.Confirmed, null, null, 0, 10)).TotalCount);
         Assert.Equal([a2.Id], (await repo.ListAsync(c.Id, null, Now.AddDays(2), Now.AddDays(2), 0, 10)).Items.Select(a => a.Id));
         Assert.Equal([a2.Id], (await repo.ListAsync(c.Id, null, null, null, 1, 1)).Items.Select(a => a.Id));
     }
@@ -367,13 +367,13 @@ public class AppointmentRepositoryTests(PostgresFixture fixture) : RepoTestBase(
     public async Task Starting_between_is_half_open_and_ordered()
     {
         var (c, lead, _) = await SeedBaseAsync();
-        var inside2 = MakeAppointment(c.Id, lead.Id, Now.AddHours(5));
-        var inside1 = MakeAppointment(c.Id, lead.Id, Now);
-        var atEnd = MakeAppointment(c.Id, lead.Id, Now.AddHours(10));
+        var inside2 = MakeBooking(c.Id, lead.Id, Now.AddHours(5));
+        var inside1 = MakeBooking(c.Id, lead.Id, Now);
+        var atEnd = MakeBooking(c.Id, lead.Id, Now.AddHours(10));
         await SeedAsync(inside2, inside1, atEnd);
 
         await using var db = NewContext();
-        var found = await new AppointmentRepository(db).ListStartingBetweenAsync(c.Id, Now, Now.AddHours(10));
+        var found = await new BookingRepository(db).ListStartingBetweenAsync(c.Id, Now, Now.AddHours(10));
         Assert.Equal([inside1.Id, inside2.Id], found.Select(a => a.Id));
     }
 
@@ -382,27 +382,27 @@ public class AppointmentRepositoryTests(PostgresFixture fixture) : RepoTestBase(
     {
         var (c, lead, _) = await SeedBaseAsync();
         await SeedAsync(
-            MakeAppointment(c.Id, lead.Id, Now.AddDays(-1)),
-            MakeAppointment(c.Id, lead.Id, Now.AddDays(-2), AppointmentStatus.Confirmed),
-            MakeAppointment(c.Id, lead.Id, Now.AddDays(-3), AppointmentStatus.Attended),
-            MakeAppointment(c.Id, lead.Id, Now.AddDays(1)));
+            MakeBooking(c.Id, lead.Id, Now.AddDays(-1)),
+            MakeBooking(c.Id, lead.Id, Now.AddDays(-2), BookingStatus.Confirmed),
+            MakeBooking(c.Id, lead.Id, Now.AddDays(-3), BookingStatus.Attended),
+            MakeBooking(c.Id, lead.Id, Now.AddDays(1)));
         await using var db = NewContext();
-        Assert.Equal(2, await new AppointmentRepository(db).CountNeedingOutcomeAsync(c.Id, Now));
+        Assert.Equal(2, await new BookingRepository(db).CountNeedingOutcomeAsync(c.Id, Now));
     }
 
     [PostgresFact]
-    public async Task Busy_rows_skip_canceled_rescheduled_and_the_excluded_appointment()
+    public async Task Busy_rows_skip_canceled_rescheduled_and_the_excluded_booking()
     {
         var (c, lead, _) = await SeedBaseAsync(duration: 45);
-        var busy = MakeAppointment(c.Id, lead.Id, Now.AddHours(1), serviceId: (await NewContext().Services.FirstAsync(p => p.ClientId == c.Id)).Id);
-        var excluded = MakeAppointment(c.Id, lead.Id, Now.AddHours(2));
-        var canceled = MakeAppointment(c.Id, lead.Id, Now.AddHours(3), AppointmentStatus.Canceled);
-        var moved = MakeAppointment(c.Id, lead.Id, Now.AddHours(4), AppointmentStatus.Rescheduled);
-        var outside = MakeAppointment(c.Id, lead.Id, Now.AddDays(5));
+        var busy = MakeBooking(c.Id, lead.Id, Now.AddHours(1), serviceId: (await NewContext().Services.FirstAsync(p => p.ClientId == c.Id)).Id);
+        var excluded = MakeBooking(c.Id, lead.Id, Now.AddHours(2));
+        var canceled = MakeBooking(c.Id, lead.Id, Now.AddHours(3), BookingStatus.Canceled);
+        var moved = MakeBooking(c.Id, lead.Id, Now.AddHours(4), BookingStatus.Rescheduled);
+        var outside = MakeBooking(c.Id, lead.Id, Now.AddDays(5));
         await SeedAsync(busy, excluded, canceled, moved, outside);
 
         await using var db = NewContext();
-        var repo = new AppointmentRepository(db);
+        var repo = new BookingRepository(db);
         var rows = await repo.ListBusyAsync(c.Id, Now, Now.AddDays(1), excluded.Id);
         var row = Assert.Single(rows);
         Assert.Equal(busy.ScheduledStart, row.ScheduledStart);
@@ -414,12 +414,12 @@ public class AppointmentRepositoryTests(PostgresFixture fixture) : RepoTestBase(
     public async Task Details_are_loaded_on_demand_and_the_booking_lock_can_be_taken()
     {
         var (c, lead, svc) = await SeedBaseAsync();
-        var appt = MakeAppointment(c.Id, lead.Id, Now.AddDays(1), serviceId: svc.Id);
-        var noProc = MakeAppointment(c.Id, lead.Id, Now.AddDays(2));
+        var appt = MakeBooking(c.Id, lead.Id, Now.AddDays(1), serviceId: svc.Id);
+        var noProc = MakeBooking(c.Id, lead.Id, Now.AddDays(2));
         await SeedAsync(appt, noProc);
 
         await using var db = NewContext();
-        var repo = new AppointmentRepository(db);
+        var repo = new BookingRepository(db);
         var tracked = (await repo.GetAsync(c.Id, appt.Id))!;
         await repo.LoadDetailsAsync(tracked);
         Assert.NotNull(tracked.Lead);
@@ -437,14 +437,14 @@ public class AppointmentRepositoryTests(PostgresFixture fixture) : RepoTestBase(
     public async Task Adding_saves_through_the_context()
     {
         var (c, lead, _) = await SeedBaseAsync();
-        var appt = MakeAppointment(c.Id, lead.Id, Now.AddDays(1));
+        var appt = MakeBooking(c.Id, lead.Id, Now.AddDays(1));
         await using (var db = NewContext())
         {
-            new AppointmentRepository(db).Add(appt);
+            new BookingRepository(db).Add(appt);
             await db.SaveChangesAsync();
         }
         await using var check = NewContext();
-        Assert.NotNull(await new AppointmentRepository(check).GetAsync(c.Id, appt.Id));
+        Assert.NotNull(await new BookingRepository(check).GetAsync(c.Id, appt.Id));
     }
 }
 

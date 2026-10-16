@@ -6,5 +6,5 @@ public record UpdateServiceRequest(
     string Name,
     string? Code,
     string? Description,
-    int? ConsultationDuration
+    int? BookingDuration
 );

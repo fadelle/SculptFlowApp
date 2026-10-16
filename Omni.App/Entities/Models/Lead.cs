@@ -42,6 +42,6 @@ public class Lead
     public Client? Client { get; set; }
     public Service? Service { get; set; }
     public ICollection<Conversation> Conversations { get; set; } = new List<Conversation>();
-    public ICollection<Appointment> Appointments { get; set; } = new List<Appointment>();
+    public ICollection<Booking> Bookings { get; set; } = new List<Booking>();
     public ICollection<Order> Orders { get; set; } = new List<Order>();
 }

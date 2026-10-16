@@ -70,7 +70,7 @@ public class CampaignCreatePageTests
     [InlineData("custom", true, "manual")]
     [InlineData("custom", false, "custom")]
     [InlineData("all_eligible", false, "all_eligible")]
-    [InlineData("reactivation_no_consultation", false, "reactivation_no_consultation")]
+    [InlineData("reactivation_no_booking", false, "reactivation_no_booking")]
     public void The_audience_choice_summarises_type_and_manual_selection(string type, bool manual, string expected)
     {
         var model = Sut(); model.AudienceType = type; model.ManualSelection = manual;
@@ -152,7 +152,7 @@ public class CampaignCreatePageTests
     {
         var model = Sut(); model.Name = "Custom"; model.WhatsAppTemplateId = Guid.NewGuid(); model.AudienceType = CampaignAudienceType.Custom; model.SendOption = "draft";
         model.CustomInactiveDays = 10; model.CustomLeadStatuses = ["new"]; model.CustomSources = ["web"]; model.CustomQualificationStatuses = ["hot"];
-        model.CustomAppointmentStatuses = ["attended"]; model.CustomCountry = "LB"; model.CustomCity = "Beirut";
+        model.CustomBookingStatuses = ["attended"]; model.CustomCountry = "LB"; model.CustomCity = "Beirut";
         model.CustomCreatedAfter = new DateTime(2026, 3, 1); model.CustomCreatedBefore = new DateTime(2026, 3, 10);
         model.CustomLastContactedAfter = new DateTime(2026, 2, 1); model.CustomLastContactedBefore = new DateTime(2026, 2, 5);
         await model.OnPostAsync(default);
@@ -163,7 +163,7 @@ public class CampaignCreatePageTests
         Assert.Equal(new DateTimeOffset(2026, 2, 6, 0, 0, 0, TimeSpan.Zero), f.LastContactedBefore);
         Assert.Equal((10, "LB", "Beirut"), (f.InactiveDays, Assert.Single(f.Countries!), Assert.Single(f.Cities!)));
         Assert.Equal(["new"], f.LeadStatuses);
-        Assert.Equal(["attended"], f.AppointmentStatuses);
+        Assert.Equal(["attended"], f.BookingStatuses);
         Assert.Equal(["hot"], f.QualificationStatuses);
     }
 

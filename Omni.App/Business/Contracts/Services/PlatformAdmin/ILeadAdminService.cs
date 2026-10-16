@@ -4,7 +4,7 @@ using Omni.App.Entities.Responses.Billing;
 
 namespace Omni.App.Business.Contracts.Services.PlatformAdmin;
 
-/// <summary>Leads, conversations, messages and appointments across clients, for the admin portal.</summary>
+/// <summary>Leads, conversations, messages and bookings across clients, for the admin portal.</summary>
 public interface ILeadAdminService
 {
     Task<PagedResponse<LeadRow>> ListLeadsAsync(Guid? clientId, string? status, string? search, int page, CancellationToken ct);
@@ -23,7 +23,7 @@ public interface ILeadAdminService
     Task<PagedResponse<MessageRow>> ListMessagesAsync(Guid? clientId, bool failedOnly, string? sender, string? search, int page,
         CancellationToken ct);
 
-    Task<PagedResponse<AppointmentRow>> ListAppointmentsAsync(Guid? clientId, Guid? leadId, string? status, bool upcomingOnly, int page,
+    Task<PagedResponse<BookingRow>> ListBookingsAsync(Guid? clientId, Guid? leadId, string? status, bool upcomingOnly, int page,
         CancellationToken ct);
 
     Task<PlatformAdminChange> UpdateLeadAsync(Guid id, LeadUpdate update, CancellationToken ct);
@@ -33,5 +33,5 @@ public interface ILeadAdminService
 
     Task<PlatformAdminChange> SetStatusAsync(Guid id, string status, CancellationToken ct);
 
-    Task<PlatformAdminChange> SetAppointmentStatusAsync(Guid id, string status, CancellationToken ct);
+    Task<PlatformAdminChange> SetBookingStatusAsync(Guid id, string status, CancellationToken ct);
 }

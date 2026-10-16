@@ -36,9 +36,9 @@ public class OverviewAdminRepository : IOverviewAdminRepository
             await _db.Messages.CountAsync(m => m.CreatedAt >= week && m.SenderType == MessageSenderType.Ai, ct),
             await _db.Messages.CountAsync(m => m.CreatedAt >= week && m.Direction == MessageDirection.Inbound, ct),
             await _db.Messages.CountAsync(m => m.CreatedAt >= week && m.FailedAt != null, ct),
-            await _db.Appointments.CountAsync(a => a.ScheduledStart >= now && a.Status != AppointmentStatus.Canceled
-                                                   && a.Status != AppointmentStatus.Rescheduled, ct),
-            await _db.Appointments.CountAsync(a => a.CreatedAt >= week, ct),
+            await _db.Bookings.CountAsync(a => a.ScheduledStart >= now && a.Status != BookingStatus.Canceled
+                                                   && a.Status != BookingStatus.Rescheduled, ct),
+            await _db.Bookings.CountAsync(a => a.CreatedAt >= week, ct),
             await _db.Campaigns.CountAsync(c => c.Status == CampaignStatus.Running, ct),
             await _db.ChannelIntegrations.CountAsync(c => c.Status == ChannelIntegrationStatus.Connected, ct),
             await _db.ChannelIntegrations.CountAsync(c => c.Status == ChannelIntegrationStatus.Error
@@ -143,7 +143,7 @@ public class OverviewAdminRepository : IOverviewAdminRepository
         return q.OrderByDescending(e => e.CreatedAt)
             .Select(e => new EventRow(e.Id, e.ClientId,
                 _db.Clients.Where(x => x.Id == e.ClientId).Select(x => x.Name).FirstOrDefault() ?? "",
-                e.EventType, e.Source, e.LeadId, e.ConversationId, e.AppointmentId, e.Metadata, e.CreatedAt))
+                e.EventType, e.Source, e.LeadId, e.ConversationId, e.BookingId, e.Metadata, e.CreatedAt))
             .ToPagedAsync(page, ct: ct);
     }
 

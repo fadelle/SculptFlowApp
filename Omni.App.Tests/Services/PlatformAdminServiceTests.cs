@@ -10,13 +10,13 @@ public class LeadAdminServiceTests
     private readonly Mock<ILeadAdminRepository> _repo = new();
     private readonly Mock<IUnitOfWork> _uow = new();
     private readonly Mock<IConversationService> _conversations = new();
-    private readonly Mock<IAppointmentService> _appointments = new();
+    private readonly Mock<IBookingService> _bookings = new();
     private readonly TimeProvider _time = TimeProvider.System;
     private readonly Guid _clientId = Guid.NewGuid();
 
     private readonly Mock<IBusinessTypeService> _businessTypes = TextKit.PermissiveBusinessTypes();
 
-    private LeadAdminService Sut() => new(_repo.Object, _uow.Object, _conversations.Object, _appointments.Object, _time, _businessTypes.Object);
+    private LeadAdminService Sut() => new(_repo.Object, _uow.Object, _conversations.Object, _bookings.Object, _time, _businessTypes.Object);
 
     [Fact]
     public async Task Lead_update_validates_values_and_tracks_opt_out_transitions()
@@ -72,15 +72,15 @@ public class LeadAdminServiceTests
     }
 
     [Fact]
-    public async Task Appointment_status_goes_through_the_appointment_service_only_when_it_changes()
+    public async Task Booking_status_goes_through_the_booking_service_only_when_it_changes()
     {
-        await Assert.ThrowsAsync<KeyNotFoundException>(() => Sut().SetAppointmentStatusAsync(Guid.NewGuid(), "attended", default));
-        var a = new Appointment { Id = Guid.NewGuid(), ClientId = _clientId, Status = AppointmentStatus.Booked };
-        _repo.Setup(r => r.GetAppointmentForUpdateAsync(a.Id, It.IsAny<CancellationToken>())).ReturnsAsync(a);
-        await Sut().SetAppointmentStatusAsync(a.Id, AppointmentStatus.Booked, default);
-        _appointments.Verify(x => x.UpdateStatusAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
-        Assert.Equal(_clientId, (await Sut().SetAppointmentStatusAsync(a.Id, AppointmentStatus.Attended, default)).ClientId);
-        _appointments.Verify(x => x.UpdateStatusAsync(_clientId, a.Id, AppointmentStatus.Attended, It.IsAny<CancellationToken>()), Times.Once);
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => Sut().SetBookingStatusAsync(Guid.NewGuid(), "attended", default));
+        var a = new Booking { Id = Guid.NewGuid(), ClientId = _clientId, Status = BookingStatus.Booked };
+        _repo.Setup(r => r.GetBookingForUpdateAsync(a.Id, It.IsAny<CancellationToken>())).ReturnsAsync(a);
+        await Sut().SetBookingStatusAsync(a.Id, BookingStatus.Booked, default);
+        _bookings.Verify(x => x.UpdateStatusAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        Assert.Equal(_clientId, (await Sut().SetBookingStatusAsync(a.Id, BookingStatus.Attended, default)).ClientId);
+        _bookings.Verify(x => x.UpdateStatusAsync(_clientId, a.Id, BookingStatus.Attended, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -112,7 +112,7 @@ public class LeadAdminServiceTests
         await Sut().ListLeadsAsync(_clientId, "new", "q", 2, default);
         await Sut().ListConversationsAsync(_clientId, null, "whatsapp", "ai", "active", 1, default);
         await Sut().ListMessagesAsync(_clientId, true, "ai", "q", 3, default);
-        await Sut().ListAppointmentsAsync(_clientId, null, "booked", true, 1, default);
+        await Sut().ListBookingsAsync(_clientId, null, "booked", true, 1, default);
         _repo.Verify(r => r.ListLeadsAsync(_clientId, "new", "q", 2, It.IsAny<CancellationToken>()), Times.Once);
         _repo.Verify(r => r.ListMessagesAsync(_clientId, true, "ai", "q", 3, It.IsAny<CancellationToken>()), Times.Once);
     }

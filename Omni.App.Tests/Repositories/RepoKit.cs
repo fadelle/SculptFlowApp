@@ -63,7 +63,7 @@ public abstract class RepoTestBase
 
     protected static Service MakeService(Guid clientId, string name = "Rhinoplasty", bool active = true, int? duration = null) => new()
     {
-        Id = Guid.NewGuid(), ClientId = clientId, Name = name, IsActive = active, ConsultationDuration = duration, CreatedAt = Now, UpdatedAt = Now,
+        Id = Guid.NewGuid(), ClientId = clientId, Name = name, IsActive = active, BookingDuration = duration, CreatedAt = Now, UpdatedAt = Now,
     };
 
     protected static Lead MakeLead(Guid clientId, string? name = "Ann", string? phone = null, Guid? serviceId = null, string status = LeadStatus.New,
@@ -87,7 +87,7 @@ public abstract class RepoTestBase
         Channel = c.Channel, Content = content, Origin = origin, ExternalMessageId = externalId, CreatedAt = createdAt ?? Now,
     };
 
-    protected static Appointment MakeAppointment(Guid clientId, Guid leadId, DateTimeOffset start, string status = AppointmentStatus.Booked,
+    protected static Booking MakeBooking(Guid clientId, Guid leadId, DateTimeOffset start, string status = BookingStatus.Booked,
         Guid? serviceId = null, DateTimeOffset? end = null) => new()
     {
         Id = Guid.NewGuid(), ClientId = clientId, LeadId = leadId, ServiceId = serviceId, ScheduledStart = start, ScheduledEnd = end,

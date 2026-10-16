@@ -1,5 +1,5 @@
-﻿using Omni.App.Business.Services.Appointments;
-using Omni.App.Entities.Dtos.Appointments;
+﻿using Omni.App.Business.Services.Bookings;
+using Omni.App.Entities.Dtos.Bookings;
 
 namespace Omni.App.Tests.Services;
 
@@ -9,14 +9,14 @@ public class AvailabilityServiceTests
     private readonly Mock<IAvailabilityRepository> _availability = new();
     private readonly Mock<IClientRepository> _clients = new();
     private readonly Mock<IServiceRepository> _services = new();
-    private readonly Mock<IAppointmentRepository> _appointments = new();
+    private readonly Mock<IBookingRepository> _bookings = new();
     private readonly Mock<IUnitOfWork> _uow = new();
     private readonly Mock<IConfigManager> _config = new();
     private readonly Client _client;
     private readonly List<AvailabilityRule> _rules = new();
     private BookingSettings? _settings;
     private readonly List<AvailabilityException> _exceptions = new();
-    private readonly List<BusyAppointmentRow> _busy = new();
+    private readonly List<BusyBookingRow> _busy = new();
 
     public AvailabilityServiceTests()
     {
@@ -36,12 +36,12 @@ public class AvailabilityServiceTests
             .ReturnsAsync((Guid _, DateOnly f, DateOnly t, CancellationToken _) => _exceptions.Where(e => e.Date >= f && e.Date <= t).ToList());
         _availability.Setup(a => a.ListExceptionsFromAsync(_clientId, It.IsAny<DateOnly>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Guid _, DateOnly f, CancellationToken _) => _exceptions.Where(e => e.Date >= f).ToList());
-        _appointments.Setup(a => a.ListBusyAsync(_clientId, It.IsAny<DateTimeOffset>(), It.IsAny<DateTimeOffset>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+        _bookings.Setup(a => a.ListBusyAsync(_clientId, It.IsAny<DateTimeOffset>(), It.IsAny<DateTimeOffset>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => _busy.ToList());
     }
 
     private AvailabilityService Sut() =>
-        new(_availability.Object, _clients.Object, _services.Object, _appointments.Object, _uow.Object, _config.Object);
+        new(_availability.Object, _clients.Object, _services.Object, _bookings.Object, _uow.Object, _config.Object);
 
     private void OpenEveryDay(string start = "09:00", string end = "17:00")
     {
@@ -84,7 +84,7 @@ public class AvailabilityServiceTests
     public async Task Start_beyond_the_booking_horizon_is_rejected()
     {
         OpenEveryDay();
-        _settings = new BookingSettings { DefaultConsultationDurationMinutes = 30, MaximumAdvanceBookingDays = 10 };
+        _settings = new BookingSettings { DefaultBookingDurationMinutes = 30, MaximumAdvanceBookingDays = 10 };
         var r = await Sut().GetSlotsAsync(_clientId, null, Today.AddDays(11), 3);
         Assert.Empty(r.Slots);
         Assert.Contains("up to 10 days ahead", r.Message);
@@ -106,18 +106,18 @@ public class AvailabilityServiceTests
     public async Task Buffer_widens_the_step_and_range_is_clamped()
     {
         OpenEveryDay("09:00", "11:00");
-        _settings = new BookingSettings { DefaultConsultationDurationMinutes = 30, BufferMinutes = 15, MaximumAdvanceBookingDays = 60 };
+        _settings = new BookingSettings { DefaultBookingDurationMinutes = 30, BufferMinutes = 15, MaximumAdvanceBookingDays = 60 };
         var r = await Sut().GetSlotsAsync(_clientId, null, Today.AddDays(1), 1000);
         Assert.Equal(["09:00", "09:45", "10:30"], r.Slots.Where(s => s.Date == Today.AddDays(1).ToString("yyyy-MM-dd")).Select(s => s.Time));
         Assert.Equal(Today.AddDays(1 + 13).ToString("yyyy-MM-dd"), r.To); // MaxRangeDays = 14
     }
 
     [Fact]
-    public async Task Existing_appointments_block_slots_and_the_search_jumps_past_them()
+    public async Task Existing_bookings_block_slots_and_the_search_jumps_past_them()
     {
         OpenEveryDay("09:00", "12:00");
         var day = Today.AddDays(2);
-        _busy.Add(new BusyAppointmentRow(new DateTimeOffset(day.ToDateTime(new TimeOnly(9, 10)), TimeSpan.Zero), new DateTimeOffset(day.ToDateTime(new TimeOnly(9, 40)), TimeSpan.Zero), null));
+        _busy.Add(new BusyBookingRow(new DateTimeOffset(day.ToDateTime(new TimeOnly(9, 10)), TimeSpan.Zero), new DateTimeOffset(day.ToDateTime(new TimeOnly(9, 40)), TimeSpan.Zero), null));
         var r = await Sut().GetSlotsAsync(_clientId, null, day, 1);
         Assert.Equal(["09:40", "10:10", "10:40", "11:10"], r.Slots.Select(s => s.Time));
     }
@@ -127,7 +127,7 @@ public class AvailabilityServiceTests
     {
         OpenEveryDay("09:00", "11:00");
         var day = Today.AddDays(2);
-        _busy.Add(new BusyAppointmentRow(new DateTimeOffset(day.ToDateTime(new TimeOnly(9, 0)), TimeSpan.Zero), null, 60));
+        _busy.Add(new BusyBookingRow(new DateTimeOffset(day.ToDateTime(new TimeOnly(9, 0)), TimeSpan.Zero), null, 60));
         var r = await Sut().GetSlotsAsync(_clientId, null, day, 1);
         Assert.Equal(["10:00", "10:30"], r.Slots.Select(s => s.Time));
     }
@@ -149,7 +149,7 @@ public class AvailabilityServiceTests
     public async Task Minimum_notice_hides_early_slots_today()
     {
         OpenEveryDay("00:00", "23:59");
-        _settings = new BookingSettings { DefaultConsultationDurationMinutes = 30, MinimumBookingNoticeMinutes = 60 * 48, MaximumAdvanceBookingDays = 60 };
+        _settings = new BookingSettings { DefaultBookingDurationMinutes = 30, MinimumBookingNoticeMinutes = 60 * 48, MaximumAdvanceBookingDays = 60 };
         var r = await Sut().GetSlotsAsync(_clientId, null, Today, 1);
         Assert.Empty(r.Slots);
         Assert.Equal("No available times in this date range.", r.Message);
@@ -159,13 +159,13 @@ public class AvailabilityServiceTests
     public async Task Service_duration_overrides_default_and_bad_services_are_rejected()
     {
         OpenEveryDay("09:00", "11:00");
-        var svc = new Service { Id = Guid.NewGuid(), ClientId = _clientId, Name = "Rhino", IsActive = true, ConsultationDuration = 60 };
+        var svc = new Service { Id = Guid.NewGuid(), ClientId = _clientId, Name = "Rhino", IsActive = true, BookingDuration = 60 };
         _services.Setup(p => p.GetReadOnlyAsync(_clientId, svc.Id, It.IsAny<CancellationToken>())).ReturnsAsync(svc);
         var r = await Sut().GetSlotsAsync(_clientId, svc.Id, Today.AddDays(2), 1);
         Assert.Equal(60, r.DurationMinutes);
         Assert.Equal(["09:00", "10:00"], r.Slots.Select(s => s.Time));
 
-        svc.ConsultationDuration = null;
+        svc.BookingDuration = null;
         Assert.Equal(30, (await Sut().GetSlotsAsync(_clientId, svc.Id, Today.AddDays(2), 1)).DurationMinutes);
 
         svc.IsActive = false;
@@ -222,16 +222,16 @@ public class AvailabilityServiceTests
     }
 
     [Fact]
-    public async Task CheckSlot_detects_overlap_but_can_exclude_the_appointment_being_moved()
+    public async Task CheckSlot_detects_overlap_but_can_exclude_the_booking_being_moved()
     {
         OpenEveryDay();
-        _busy.Add(new BusyAppointmentRow(At(3, 10), At(3, 10, 30), null));
+        _busy.Add(new BusyBookingRow(At(3, 10), At(3, 10, 30), null));
         Assert.Contains("overlaps", (await Sut().CheckSlotAsync(_clientId, null, At(3, 10, 15), null)).Error);
         Assert.Null((await Sut().CheckSlotAsync(_clientId, null, At(3, 10, 30), null)).Error);
 
         var excluded = Guid.NewGuid();
-        _appointments.Setup(a => a.ListBusyAsync(_clientId, It.IsAny<DateTimeOffset>(), It.IsAny<DateTimeOffset>(), excluded, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Array.Empty<BusyAppointmentRow>());
+        _bookings.Setup(a => a.ListBusyAsync(_clientId, It.IsAny<DateTimeOffset>(), It.IsAny<DateTimeOffset>(), excluded, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<BusyBookingRow>());
         Assert.Null((await Sut().CheckSlotAsync(_clientId, null, At(3, 10, 15), null, excluded)).Error);
     }
 
@@ -239,8 +239,8 @@ public class AvailabilityServiceTests
     public async Task CheckSlot_respects_buffer_and_closed_exceptions()
     {
         OpenEveryDay();
-        _settings = new BookingSettings { DefaultConsultationDurationMinutes = 30, BufferMinutes = 15, MaximumAdvanceBookingDays = 60 };
-        _busy.Add(new BusyAppointmentRow(At(3, 10), At(3, 10, 30), null));
+        _settings = new BookingSettings { DefaultBookingDurationMinutes = 30, BufferMinutes = 15, MaximumAdvanceBookingDays = 60 };
+        _busy.Add(new BusyBookingRow(At(3, 10), At(3, 10, 30), null));
         Assert.NotNull((await Sut().CheckSlotAsync(_clientId, null, At(3, 10, 30), null)).Error);
         Assert.Null((await Sut().CheckSlotAsync(_clientId, null, At(3, 10, 45), null)).Error);
 
@@ -283,7 +283,7 @@ public class AvailabilityServiceTests
         Assert.Equal(7, added.Count);
         Assert.Equal(5, added.Count(r => r.IsOpen));
         Assert.Equal("Asia/Beirut", _client.Timezone);
-        Assert.Equal((30, 10, 120, 90), (_settings!.DefaultConsultationDurationMinutes, _settings.BufferMinutes, _settings.MinimumBookingNoticeMinutes, _settings.MaximumAdvanceBookingDays));
+        Assert.Equal((30, 10, 120, 90), (_settings!.DefaultBookingDurationMinutes, _settings.BufferMinutes, _settings.MinimumBookingNoticeMinutes, _settings.MaximumAdvanceBookingDays));
         _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 

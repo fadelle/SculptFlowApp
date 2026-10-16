@@ -47,7 +47,7 @@ public class ChannelAdminRepository : IChannelAdminRepository
                 _db.Clients.Where(x => x.Id == c.ClientId).Select(x => x.Name).FirstOrDefault() ?? "",
                 c.Provider, c.Status, c.AccountDisplayName, c.SelectedCalendarName, c.SyncEnabled, c.IsHealthy,
                 c.LastProblemMessage, c.LastSyncedAt,
-                _db.AppointmentCalendarSyncs.Count(s => s.CalendarIntegrationId == c.Id && s.Status == AppointmentCalendarSyncStatus.Failed)))
+                _db.BookingCalendarSyncs.Count(s => s.CalendarIntegrationId == c.Id && s.Status == BookingCalendarSyncStatus.Failed)))
             .ToListAsync(ct);
     }
 

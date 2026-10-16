@@ -116,7 +116,7 @@ else
                        fields actually posted (AudienceType, ManualSelection). *@
                     <div class="aud-grid">
                         <label class="aud-card">
-                            <input type="radio" name="AudienceChoice" value="reactivation_no_consultation" data-audience-choice checked="@(Model.AudienceChoice == "reactivation_no_consultation")" />
+                            <input type="radio" name="AudienceChoice" value="reactivation_no_booking" data-audience-choice checked="@(Model.AudienceChoice == "reactivation_no_booking")" />
                             <span class="aud-title">Old leads who never booked <span class="badge badge-green">Recommended</span></span>
                             <span class="aud-desc">Re-engage people who showed interest but never booked.</span>
                         </label>
@@ -177,7 +177,7 @@ else
                         </div>
                         <div class="count-box">
                             <div><span class="count-num" id="reactivation-match-count">—</span> <span class="text-muted">leads ready for reactivation</span></div>
-                            <button type="button" class="au-btn au-btn--outlined au-btn--sm" data-preview-btn data-preview-audience="reactivation_no_consultation" data-preview-target="reactivation-preview-list">Preview leads</button>
+                            <button type="button" class="au-btn au-btn--outlined au-btn--sm" data-preview-btn data-preview-audience="reactivation_no_booking" data-preview-target="reactivation-preview-list">Preview leads</button>
                         </div>
                         <div id="reactivation-preview-list" class="preview-leads-list" style="display:none"></div>
                     </div>
@@ -220,7 +220,7 @@ else
                             {
                                 <div class="field"><span>Lead source</span>@{ await RenderMultiSelect("CustomSources", "Any source", Model.LeadSources, Model.CustomSources); }</div>
                             }
-                            <div class="field"><span>Appointment status</span>@{ await RenderMultiSelect("CustomAppointmentStatuses", "Any", Model.AppointmentStatusOptions, Model.CustomAppointmentStatuses); }</div>
+                            <div class="field"><span>Booking status</span>@{ await RenderMultiSelect("CustomBookingStatuses", "Any", Model.BookingStatusOptions, Model.CustomBookingStatuses); }</div>
                             <div class="field date-pair">
                                 <span>Created (from – to)</span>
                                 <div class="flex gap-1">

@@ -1,5 +1,5 @@
 using Omni.App.Persistence.Contracts;
-using Omni.App.Persistence.Contracts.Appointments;
+using Omni.App.Persistence.Contracts.Bookings;
 using Omni.App.Persistence.Contracts.Billing;
 using Omni.App.Persistence.Contracts.BusinessTypes;
 using Omni.App.Persistence.Contracts.Calendars;
@@ -19,7 +19,7 @@ using Omni.App.Persistence.Contracts.TikTok;
 using Omni.App.Persistence.Contracts.Users;
 using Omni.App.Persistence.Contracts.WhatsApp;
 using Omni.App.Persistence.Repositories;
-using Omni.App.Persistence.Repositories.Appointments;
+using Omni.App.Persistence.Repositories.Bookings;
 using Omni.App.Persistence.Repositories.Billing;
 using Omni.App.Persistence.Repositories.BusinessTypes;
 using Omni.App.Persistence.Repositories.Calendars;
@@ -78,7 +78,7 @@ public static class PersistenceModule
         services.AddScoped<ICampaignRepository, CampaignRepository>();
         services.AddScoped<ICampaignAudienceRepository, CampaignAudienceRepository>();
         services.AddScoped<ITikTokIntegrationRepository, TikTokIntegrationRepository>();
-        services.AddScoped<IAppointmentRepository, AppointmentRepository>();
+        services.AddScoped<IBookingRepository, BookingRepository>();
         services.AddScoped<IAvailabilityRepository, AvailabilityRepository>();
         services.AddScoped<ICalendarIntegrationRepository, CalendarIntegrationRepository>();
         services.AddScoped<IKnowledgeDocumentRepository, KnowledgeDocumentRepository>();

@@ -18,7 +18,7 @@ public class EventLogger : IEventLogger
     }
 
     public void Log(Guid clientId, string eventType, Guid? leadId = null, Guid? conversationId = null,
-        Guid? appointmentId = null, string? source = null, string metadataJson = "{}")
+        Guid? bookingId = null, string? source = null, string metadataJson = "{}")
     {
         _events.Add(new EventLog
         {
@@ -26,7 +26,7 @@ public class EventLogger : IEventLogger
             ClientId = clientId,
             LeadId = leadId,
             ConversationId = conversationId,
-            AppointmentId = appointmentId,
+            BookingId = bookingId,
             EventType = eventType,
             Source = source,
             Metadata = string.IsNullOrWhiteSpace(metadataJson) ? "{}" : metadataJson,

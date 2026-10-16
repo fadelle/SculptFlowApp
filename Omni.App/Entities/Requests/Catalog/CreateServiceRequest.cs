@@ -5,5 +5,5 @@ public record CreateServiceRequest(
     string Name,
     string? Code,
     string? Description,
-    int? ConsultationDuration
+    int? BookingDuration
 );

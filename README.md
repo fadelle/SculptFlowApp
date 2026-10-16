@@ -1,7 +1,7 @@
 # Omni
 
 Multi-tenant SaaS for plastic surgery clients. A lead messages a client on WhatsApp or Telegram, an AI agent
-(orchestrated by n8n) answers from the client's Knowledge Base, qualifies the lead and books consultations, and
+(orchestrated by n8n) answers from the client's Knowledge Base, qualifies the lead and makes bookings, and
 staff can take over any conversation from the dashboard Inbox. Clients also run WhatsApp template campaigns
 (especially old-lead reactivation) against their existing leads.
 
@@ -23,8 +23,8 @@ This README is only a short orientation.
 ## Main features
 
 - Inbox (WhatsApp + Telegram) with AI / human modes, take over / return to AI, unread tracking, 24h WhatsApp window
-- Leads, services, appointments month calendar, structured client availability, AI booking tools
-  (`get_available_slots`, `schedule_consultation`, `cancel_consultation`, `get_my_appointments`)
+- Leads, services, bookings month calendar, structured client availability, AI booking tools
+  (`get_available_slots`, `schedule_booking`, `cancel_booking`, `get_my_bookings`)
 - WhatsApp Embedded Signup, templates, health monitoring; Telegram bot channel
 - Campaigns with audience picker (old leads who never booked, all contactable, custom filters, manual)
 - Knowledge Base: manual entries, PDF/DOCX/TXT upload, website crawling, semantic search (its retrieval benchmark is run from the admin portal)

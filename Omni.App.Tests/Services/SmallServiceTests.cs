@@ -268,14 +268,14 @@ public class StaffDashboardClientProfileTests
             .ReturnsAsync(new DashboardAttentionCounts(3, 2, 1));
         var sut = new DashboardService(repo.Object);
         var s = await sut.GetSummaryAsync(_clientId);
-        Assert.Equal((10, 5, 4, 2, 1500m, 0), (s.NewInterestedPeople, s.ConsultationsBooked, s.ConsultationsAttended, s.SurgeriesBooked, s.Revenue, s.OldLeadsRecovered));
+        Assert.Equal((10, 5, 4, 2, 1500m, 0), (s.NewInterestedPeople, s.BookingsMade, s.BookingsAttended, s.SurgeriesBooked, s.Revenue, s.OldLeadsRecovered));
         var a = await sut.GetAttentionAsync(_clientId);
-        Assert.Equal((3, 2, 1), (a.ConversationsNeedingStaff, a.OverdueFollowups, a.AppointmentsNeedingOutcome));
+        Assert.Equal((3, 2, 1), (a.ConversationsNeedingStaff, a.OverdueFollowups, a.BookingsNeedingOutcome));
         await sut.GetLeadsAsync(_clientId, "new", "q", "src", 0, 10);
-        await sut.GetAppointmentsAsync(_clientId, "booked", "q", 0, 10);
+        await sut.GetBookingsAsync(_clientId, "booked", "q", 0, 10);
         await sut.GetServiceStatsAsync(_clientId);
         repo.Verify(r => r.ListLeadsAsync(_clientId, "new", "q", "src", 0, 10, It.IsAny<CancellationToken>()), Times.Once);
-        repo.Verify(r => r.ListAppointmentsAsync(_clientId, "booked", "q", 0, 10, It.IsAny<CancellationToken>()), Times.Once);
+        repo.Verify(r => r.ListBookingsAsync(_clientId, "booked", "q", 0, 10, It.IsAny<CancellationToken>()), Times.Once);
         repo.Verify(r => r.GetServiceStatsAsync(_clientId, null, null, It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -291,7 +291,7 @@ public class StaffDashboardClientProfileTests
         await Assert.ThrowsAsync<ArgumentException>(() => sut.UpdateDetailsAsync(_clientId, new UpdateClientDetailsRequest(" ", null, null, null, null, null, null)));
         await Assert.ThrowsAsync<ArgumentException>(() => sut.UpdateDetailsAsync(_clientId, new UpdateClientDetailsRequest(new string('n', 201), null, null, null, null, null, null)));
         await sut.UpdateDetailsAsync(_clientId, new UpdateClientDetailsRequest(" New Name ", "123", "a@b.c", "https://x", "street", "9-5", "info"));
-        Assert.Equal(("New Name", "123", "a@b.c", "https://x", "street", "9-5", "info"), (client.Name, client.Phone, client.Email, client.Website, client.Address, client.OperatingHours, client.ConsultationInfo));
+        Assert.Equal(("New Name", "123", "a@b.c", "https://x", "street", "9-5", "info"), (client.Name, client.Phone, client.Email, client.Website, client.Address, client.OperatingHours, client.BookingInfo));
         uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
 
         clients.Setup(c => c.GetAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync((Client?)null);

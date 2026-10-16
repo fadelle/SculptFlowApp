@@ -11,7 +11,7 @@ namespace Omni.App.Controllers.Integrations;
 
 /// <summary>The real, browser-redirect OAuth2 flow for Calendar Integrations — Omni itself talks to Google/
 /// Microsoft here (see ICalendarProviderClient); n8n has no role in connect/disconnect at all (only in
-/// TriggerAppointmentSyncAsync's sync call, elsewhere). Not a JSON API — actions redirect the whole page, first to
+/// TriggerBookingSyncAsync's sync call, elsewhere). Not a JSON API — actions redirect the whole page, first to
 /// the provider's consent screen and then back to Settings → Calendar Integrations, the same way
 /// CalendarIntegrations.cshtml's plain server-form actions do. Extends Controller (not DashboardApiController):
 /// TempData — used to carry the result back to the settings page across the redirect — is only wired up on the

@@ -8,9 +8,9 @@ public static class EventTypes
     public const string LeadCreated = "lead_created";
     public const string LeadContacted = "lead_contacted";
     public const string LeadQualified = "lead_qualified";
-    public const string ConsultationBooked = "consultation_booked";
-    public const string ConsultationAttended = "consultation_attended";
-    public const string ConsultationNoShow = "consultation_no_show";
+    public const string BookingCreated = "booking_created";
+    public const string BookingAttended = "booking_attended";
+    public const string BookingNoShow = "booking_no_show";
     public const string HumanHandoff = "human_handoff";
     public const string OrderConfirmed = "order_confirmed";
     public const string MessageFailed = "message_failed";
@@ -27,8 +27,8 @@ public static class EventTypes
     public const string CampaignMessageSent = "campaign_message_sent";
 
     // AI agent tool surface — see Controllers/Integrations/AiController.cs.
-    public const string ConsultationRescheduled = "consultation_rescheduled";
-    public const string ConsultationCancelled = "consultation_cancelled";
+    public const string BookingRescheduled = "booking_rescheduled";
+    public const string BookingCanceled = "booking_canceled";
 
     // WhatsApp webhook event routing (n8n → WhatsAppIntegrationEventsController).
     public const string WhatsAppTemplateStatusChanged = "whatsapp_template_status_changed";

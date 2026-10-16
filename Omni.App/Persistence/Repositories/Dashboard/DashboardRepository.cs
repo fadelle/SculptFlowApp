@@ -19,14 +19,14 @@ public class DashboardRepository : IDashboardRepository
     public async Task<DashboardSummaryCounts> GetSummaryCountsAsync(Guid clientId, DateTimeOffset? from, DateTimeOffset? to,
         CancellationToken ct = default)
     {
-        var appointments = _db.Appointments.Where(a => a.ClientId == clientId);
+        var bookings = _db.Bookings.Where(a => a.ClientId == clientId);
         var orders = _db.Orders.Where(b => b.ClientId == clientId);
 
         var newInterestedPeople = await InRange(_db.Leads.Where(l => l.ClientId == clientId), l => l.CreatedAt, from, to).CountAsync(ct);
 
-        var consultationsBooked = await InRange(appointments, a => a.CreatedAt, from, to).CountAsync(ct);
+        var bookingsMade = await InRange(bookings, a => a.CreatedAt, from, to).CountAsync(ct);
 
-        var consultationsAttended = await InRange(appointments.Where(a => a.Status == AppointmentStatus.Attended), a => a.ScheduledStart, from, to)
+        var bookingsAttended = await InRange(bookings.Where(a => a.Status == BookingStatus.Attended), a => a.ScheduledStart, from, to)
             .CountAsync(ct);
 
         var surgeriesBooked = await InRange(orders, b => b.CreatedAt, from, to).CountAsync(ct);
@@ -35,7 +35,7 @@ public class DashboardRepository : IDashboardRepository
         var revenue = await InRange(orders.Where(b => b.Status == OrderStatus.Completed), b => b.ServiceDate ?? b.UpdatedAt, from, to)
             .SumAsync(b => (decimal?)b.FinalAmount, ct) ?? 0m;
 
-        return new DashboardSummaryCounts(newInterestedPeople, consultationsBooked, consultationsAttended, surgeriesBooked, revenue);
+        return new DashboardSummaryCounts(newInterestedPeople, bookingsMade, bookingsAttended, surgeriesBooked, revenue);
     }
 
     public async Task<(IReadOnlyList<DashboardLeadRow> Items, int TotalCount)> ListLeadsAsync(Guid clientId, string? status,
@@ -68,10 +68,10 @@ public class DashboardRepository : IDashboardRepository
         return (items, totalCount);
     }
 
-    public async Task<(IReadOnlyList<DashboardAppointmentRow> Items, int TotalCount)> ListAppointmentsAsync(Guid clientId,
+    public async Task<(IReadOnlyList<DashboardBookingRow> Items, int TotalCount)> ListBookingsAsync(Guid clientId,
         string? status, string? search, int skip, int take, CancellationToken ct = default)
     {
-        var query = _db.Appointments
+        var query = _db.Bookings
             .Include(a => a.Lead)
             .Include(a => a.Service)
             .Where(a => a.ClientId == clientId);
@@ -89,7 +89,7 @@ public class DashboardRepository : IDashboardRepository
             .OrderBy(a => a.ScheduledStart)
             .Skip(skip)
             .Take(take)
-            .Select(a => new DashboardAppointmentRow(
+            .Select(a => new DashboardBookingRow(
                 a.Id, a.Lead!.FullName, a.Lead.Phone, a.Service!.Name, a.Status, a.ScheduledStart, a.LocationType))
             .ToListAsync(ct);
 
@@ -134,9 +134,9 @@ public class DashboardRepository : IDashboardRepository
             && l.NextFollowupAt != null && l.NextFollowupAt < now
             && l.Status != LeadStatus.Lost && l.Status != LeadStatus.NotInterested && l.Status != LeadStatus.SurgeryBooked, ct);
 
-        // Same rule as the Appointments calendar's "needs an outcome" notice.
-        var needsOutcome = await _db.Appointments.CountAsync(a => a.ClientId == clientId && a.ScheduledStart < now
-            && (a.Status == AppointmentStatus.Booked || a.Status == AppointmentStatus.Confirmed), ct);
+        // Same rule as the Bookings calendar's "needs an outcome" notice.
+        var needsOutcome = await _db.Bookings.CountAsync(a => a.ClientId == clientId && a.ScheduledStart < now
+            && (a.Status == BookingStatus.Booked || a.Status == BookingStatus.Confirmed), ct);
 
         return new DashboardAttentionCounts(conversations, overdueFollowups, needsOutcome);
     }

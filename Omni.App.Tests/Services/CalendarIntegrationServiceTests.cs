@@ -36,8 +36,8 @@ public class CalendarIntegrationServiceTests
         Calendars = { new CalendarIntegrationCalendar { ExternalCalendarId = "cal1", Name = "Main", IsPrimary = true } }
     };
 
-    private static AppointmentResponse Appt(Guid? id = null) => new(id ?? Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "Ann", null, null,
-        "consultation", "booked", DateTimeOffset.UtcNow.AddDays(2), DateTimeOffset.UtcNow.AddDays(2).AddMinutes(30), null, "Room 1", null, DateTimeOffset.UtcNow);
+    private static BookingResponse Appt(Guid? id = null) => new(id ?? Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "Ann", null, null,
+        "standard", "booked", DateTimeOffset.UtcNow.AddDays(2), DateTimeOffset.UtcNow.AddDays(2).AddMinutes(30), null, "Room 1", null, DateTimeOffset.UtcNow);
 
     // ---------------------------------------------------------------- list / connect
 
@@ -186,9 +186,9 @@ public class CalendarIntegrationServiceTests
 
     // ---------------------------------------------------------------- sync callback
 
-    private AppointmentCalendarSync SyncRow(Guid requestId, string op = "create") => new()
+    private BookingCalendarSync SyncRow(Guid requestId, string op = "create") => new()
     {
-        Id = Guid.NewGuid(), LastRequestId = requestId, LastOperation = op, Status = AppointmentCalendarSyncStatus.Pending
+        Id = Guid.NewGuid(), LastRequestId = requestId, LastOperation = op, Status = BookingCalendarSyncStatus.Pending
     };
 
     [Fact]
@@ -200,7 +200,7 @@ public class CalendarIntegrationServiceTests
         var apptId = Guid.NewGuid();
         _calendars.Setup(c => c.GetSyncAsync(apptId, integ.Id, It.IsAny<CancellationToken>())).ReturnsAsync(sync);
         await Sut().ApplySyncCallbackAsync(new CalendarSyncCallbackRequest(_clientId, apptId, integ.Id, rid, true, "ev1", null));
-        Assert.Equal((AppointmentCalendarSyncStatus.Synced, "ev1", null), (sync.Status, sync.ExternalEventId, sync.LastError));
+        Assert.Equal((BookingCalendarSyncStatus.Synced, "ev1", null), (sync.Status, sync.ExternalEventId, sync.LastError));
         Assert.NotNull(integ.LastSyncedAt);
     }
 
@@ -213,7 +213,7 @@ public class CalendarIntegrationServiceTests
         var apptId = Guid.NewGuid();
         _calendars.Setup(c => c.GetSyncAsync(apptId, integ.Id, It.IsAny<CancellationToken>())).ReturnsAsync(sync);
         await Sut().ApplySyncCallbackAsync(new CalendarSyncCallbackRequest(_clientId, apptId, integ.Id, rid, true, null, null));
-        Assert.Equal(AppointmentCalendarSyncStatus.Canceled, sync.Status);
+        Assert.Equal(BookingCalendarSyncStatus.Canceled, sync.Status);
     }
 
     [Fact]
@@ -227,7 +227,7 @@ public class CalendarIntegrationServiceTests
         var request = new CalendarSyncCallbackRequest(_clientId, apptId, integ.Id, rid, false, null, "quota");
 
         await Sut().ApplySyncCallbackAsync(request);
-        Assert.Equal((AppointmentCalendarSyncStatus.Failed, "quota", false), (sync.Status, sync.LastError, integ.IsHealthy));
+        Assert.Equal((BookingCalendarSyncStatus.Failed, "quota", false), (sync.Status, sync.LastError, integ.IsHealthy));
         _notifications.Verify(n => n.CreateAsync(_clientId, NotificationType.IntegrationUnhealthy, "Google Calendar calendar sync needs attention", "quota",
             null, null, null, null, "/settings/calendar-integrations", It.IsAny<CancellationToken>()), Times.Once);
 
@@ -244,7 +244,7 @@ public class CalendarIntegrationServiceTests
         await Sut().ApplySyncCallbackAsync(new CalendarSyncCallbackRequest(_clientId, apptId, integ.Id, Guid.NewGuid(), true, null, null));
         _calendars.Setup(c => c.GetSyncAsync(apptId, integ.Id, It.IsAny<CancellationToken>())).ReturnsAsync(sync);
         await Sut().ApplySyncCallbackAsync(new CalendarSyncCallbackRequest(_clientId, apptId, integ.Id, Guid.NewGuid(), true, null, null));
-        Assert.Equal(AppointmentCalendarSyncStatus.Pending, sync.Status);
+        Assert.Equal(BookingCalendarSyncStatus.Pending, sync.Status);
         _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -258,12 +258,12 @@ public class CalendarIntegrationServiceTests
     {
         var integ = Connected();
         _calendars.Setup(c => c.ListSyncTargetsAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(new List<CalendarIntegration> { integ });
-        AppointmentCalendarSync? added = null;
-        _calendars.Setup(c => c.AddSync(It.IsAny<AppointmentCalendarSync>())).Callback<AppointmentCalendarSync>(s => added = s);
+        BookingCalendarSync? added = null;
+        _calendars.Setup(c => c.AddSync(It.IsAny<BookingCalendarSync>())).Callback<BookingCalendarSync>(s => added = s);
         CalendarSyncTriggerPayload? sent = null;
         _notifier.Setup(n => n.NotifySyncAsync(It.IsAny<CalendarSyncTriggerPayload>(), It.IsAny<CancellationToken>())).Callback<CalendarSyncTriggerPayload, CancellationToken>((p, _) => sent = p);
 
-        await Sut().TriggerAppointmentSyncAsync(_clientId, Appt(), change, default);
+        await Sut().TriggerBookingSyncAsync(_clientId, Appt(), change, default);
 
         Assert.Equal(op, sent!.Operation);
         Assert.Equal(("access", "cal1", "Asia/Beirut"), (sent.AccessToken, sent.ExternalCalendarId, sent.Timezone));
@@ -276,9 +276,9 @@ public class CalendarIntegrationServiceTests
     [Fact]
     public async Task Trigger_ignores_status_changes_and_clients_without_targets()
     {
-        await Sut().TriggerAppointmentSyncAsync(_clientId, Appt(), "status_changed", default);
+        await Sut().TriggerBookingSyncAsync(_clientId, Appt(), "status_changed", default);
         _calendars.Setup(c => c.ListSyncTargetsAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(new List<CalendarIntegration>());
-        await Sut().TriggerAppointmentSyncAsync(_clientId, Appt(), "created", default);
+        await Sut().TriggerBookingSyncAsync(_clientId, Appt(), "created", default);
         _notifier.Verify(n => n.NotifySyncAsync(It.IsAny<CalendarSyncTriggerPayload>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -288,19 +288,19 @@ public class CalendarIntegrationServiceTests
         var integ = Connected();
         _calendars.Setup(c => c.ListSyncTargetsAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(new List<CalendarIntegration> { integ });
         var appt = Appt();
-        var sync = new AppointmentCalendarSync { Id = Guid.NewGuid(), Status = AppointmentCalendarSyncStatus.Synced, ExternalEventId = "ev9" };
+        var sync = new BookingCalendarSync { Id = Guid.NewGuid(), Status = BookingCalendarSyncStatus.Synced, ExternalEventId = "ev9" };
         _calendars.Setup(c => c.GetSyncAsync(appt.Id, integ.Id, It.IsAny<CancellationToken>())).ReturnsAsync(sync);
         var ops = new List<(string Op, string? Event)>();
         _notifier.Setup(n => n.NotifySyncAsync(It.IsAny<CalendarSyncTriggerPayload>(), It.IsAny<CancellationToken>()))
             .Callback<CalendarSyncTriggerPayload, CancellationToken>((p, _) => ops.Add((p.Operation, p.ExternalEventId)));
 
-        await Sut().TriggerAppointmentSyncAsync(_clientId, appt, "rescheduled", default);
-        await Sut().TriggerAppointmentSyncAsync(_clientId, appt, "created", default); // retried create becomes an update
-        sync.Status = AppointmentCalendarSyncStatus.Canceled;
-        await Sut().TriggerAppointmentSyncAsync(_clientId, appt, "rescheduled", default);
+        await Sut().TriggerBookingSyncAsync(_clientId, appt, "rescheduled", default);
+        await Sut().TriggerBookingSyncAsync(_clientId, appt, "created", default); // retried create becomes an update
+        sync.Status = BookingCalendarSyncStatus.Canceled;
+        await Sut().TriggerBookingSyncAsync(_clientId, appt, "rescheduled", default);
 
         Assert.Equal([("update", "ev9"), ("update", "ev9")], ops);
-        _calendars.Verify(c => c.AddSync(It.IsAny<AppointmentCalendarSync>()), Times.Never);
+        _calendars.Verify(c => c.AddSync(It.IsAny<BookingCalendarSync>()), Times.Never);
     }
 
     [Fact]
@@ -310,13 +310,13 @@ public class CalendarIntegrationServiceTests
         bad.TokenExpiresAt = DateTimeOffset.UtcNow.AddSeconds(5);
         bad.RefreshToken = null;
         _calendars.Setup(c => c.ListSyncTargetsAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(new List<CalendarIntegration> { bad });
-        await Sut().TriggerAppointmentSyncAsync(_clientId, Appt(), "created", default);
+        await Sut().TriggerBookingSyncAsync(_clientId, Appt(), "created", default);
         Assert.False(bad.IsHealthy);
         Assert.Contains("no refresh token", bad.LastProblemMessage);
         _notifier.Verify(n => n.NotifySyncAsync(It.IsAny<CalendarSyncTriggerPayload>(), It.IsAny<CancellationToken>()), Times.Never);
 
         _calendars.Setup(c => c.ListSyncTargetsAsync(_clientId, It.IsAny<CancellationToken>())).ThrowsAsync(new InvalidOperationException("db down"));
-        await Sut().TriggerAppointmentSyncAsync(_clientId, Appt(), "created", default); // swallowed by design
+        await Sut().TriggerBookingSyncAsync(_clientId, Appt(), "created", default); // swallowed by design
     }
 
     [Fact]
@@ -326,7 +326,7 @@ public class CalendarIntegrationServiceTests
         integ.TokenExpiresAt = DateTimeOffset.UtcNow.AddSeconds(5);
         _google.Setup(g => g.RefreshAccessTokenAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ThrowsAsync(new HttpRequestException("invalid_grant"));
         _calendars.Setup(c => c.ListSyncTargetsAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(new List<CalendarIntegration> { integ });
-        await Sut().TriggerAppointmentSyncAsync(_clientId, Appt(), "created", default);
+        await Sut().TriggerBookingSyncAsync(_clientId, Appt(), "created", default);
         Assert.False(integ.IsHealthy);
         Assert.Contains("invalid_grant", integ.LastProblemMessage);
     }

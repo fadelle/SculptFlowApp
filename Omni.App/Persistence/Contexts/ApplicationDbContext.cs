@@ -31,7 +31,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
     public DbSet<Lead> Leads => Set<Lead>();
     public DbSet<Conversation> Conversations => Set<Conversation>();
     public DbSet<Message> Messages => Set<Message>();
-    public DbSet<Appointment> Appointments => Set<Appointment>();
+    public DbSet<Booking> Bookings => Set<Booking>();
     public DbSet<Order> Orders => Set<Order>();
     public DbSet<EventLog> Events => Set<EventLog>();
     public DbSet<ChannelIntegration> ChannelIntegrations => Set<ChannelIntegration>();
@@ -57,7 +57,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<CalendarIntegration> CalendarIntegrations => Set<CalendarIntegration>();
     public DbSet<CalendarIntegrationCalendar> CalendarIntegrationCalendars => Set<CalendarIntegrationCalendar>();
-    public DbSet<AppointmentCalendarSync> AppointmentCalendarSyncs => Set<AppointmentCalendarSync>();
+    public DbSet<BookingCalendarSync> BookingCalendarSyncs => Set<BookingCalendarSync>();
     public DbSet<TikTokIntegration> TikTokIntegrations => Set<TikTokIntegration>();
     public DbSet<SubscriptionPlan> SubscriptionPlans => Set<SubscriptionPlan>();
     public DbSet<SubscriptionPlanEntitlement> SubscriptionPlanEntitlements => Set<SubscriptionPlanEntitlement>();
@@ -147,7 +147,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.Property(x => x.Timezone).HasColumnName("timezone").HasMaxLength(100).IsRequired();
             e.Property(x => x.Address).HasColumnName("address");
             e.Property(x => x.OperatingHours).HasColumnName("operating_hours");
-            e.Property(x => x.ConsultationInfo).HasColumnName("consultation_info");
+            e.Property(x => x.BookingInfo).HasColumnName("booking_info");
             e.Property(x => x.BusinessTypeCode).HasColumnName("business_type_code").HasMaxLength(50).IsRequired();
             e.Property(x => x.DefaultLanguage).HasColumnName("default_language").HasMaxLength(10).IsRequired();
             e.Property(x => x.IsActive).HasColumnName("is_active");
@@ -200,7 +200,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.Property(x => x.Name).HasColumnName("name").HasMaxLength(200).IsRequired();
             e.Property(x => x.Code).HasColumnName("code").HasMaxLength(100);
             e.Property(x => x.Description).HasColumnName("description");
-            e.Property(x => x.ConsultationDuration).HasColumnName("consultation_duration");
+            e.Property(x => x.BookingDuration).HasColumnName("booking_duration");
             e.Property(x => x.IsActive).HasColumnName("is_active");
             e.Property(x => x.CreatedAt).HasColumnName("created_at");
             e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
@@ -348,17 +348,17 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
         });
 
         // ---------------------------------------------------------------
-        // appointments
+        // bookings
         // ---------------------------------------------------------------
-        modelBuilder.Entity<Appointment>(e =>
+        modelBuilder.Entity<Booking>(e =>
         {
-            e.ToTable("appointments", "scheduling");
+            e.ToTable("bookings", "scheduling");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
             e.Property(x => x.ClientId).HasColumnName("client_id");
             e.Property(x => x.LeadId).HasColumnName("lead_id");
             e.Property(x => x.ServiceId).HasColumnName("service_id");
-            e.Property(x => x.AppointmentType).HasColumnName("appointment_type").HasMaxLength(50).IsRequired();
+            e.Property(x => x.BookingType).HasColumnName("booking_type").HasMaxLength(50).IsRequired();
             e.Property(x => x.Status).HasColumnName("status").HasMaxLength(50).IsRequired();
             e.Property(x => x.ScheduledStart).HasColumnName("scheduled_start").IsRequired();
             e.Property(x => x.ScheduledEnd).HasColumnName("scheduled_end");
@@ -371,7 +371,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.Property(x => x.CreatedAt).HasColumnName("created_at");
             e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
 
-            e.HasOne(x => x.Lead).WithMany(l => l.Appointments)
+            e.HasOne(x => x.Lead).WithMany(l => l.Bookings)
                 .HasForeignKey(x => x.LeadId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne(x => x.Service).WithMany()
                 .HasForeignKey(x => x.ServiceId).OnDelete(DeleteBehavior.SetNull);
@@ -393,7 +393,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.Property(x => x.ClientId).HasColumnName("client_id");
             e.Property(x => x.LeadId).HasColumnName("lead_id");
             e.Property(x => x.ServiceId).HasColumnName("service_id");
-            e.Property(x => x.AppointmentId).HasColumnName("appointment_id");
+            e.Property(x => x.BookingId).HasColumnName("booking_id");
             e.Property(x => x.Status).HasColumnName("status").HasMaxLength(50).IsRequired();
             e.Property(x => x.QuotedAmount).HasColumnName("quoted_amount").HasColumnType("numeric(12,2)");
             e.Property(x => x.DepositAmount).HasColumnName("deposit_amount").HasColumnType("numeric(12,2)");
@@ -408,8 +408,8 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
                 .HasForeignKey(x => x.LeadId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne(x => x.Service).WithMany()
                 .HasForeignKey(x => x.ServiceId).OnDelete(DeleteBehavior.Restrict);
-            e.HasOne(x => x.Appointment).WithMany(a => a.Orders)
-                .HasForeignKey(x => x.AppointmentId).OnDelete(DeleteBehavior.SetNull);
+            e.HasOne(x => x.Booking).WithMany(a => a.Orders)
+                .HasForeignKey(x => x.BookingId).OnDelete(DeleteBehavior.SetNull);
 
             e.HasIndex(x => x.ClientId);
             e.HasIndex(x => x.LeadId);
@@ -427,7 +427,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.Property(x => x.ClientId).HasColumnName("client_id");
             e.Property(x => x.LeadId).HasColumnName("lead_id");
             e.Property(x => x.ConversationId).HasColumnName("conversation_id");
-            e.Property(x => x.AppointmentId).HasColumnName("appointment_id");
+            e.Property(x => x.BookingId).HasColumnName("booking_id");
             e.Property(x => x.EventType).HasColumnName("event_type").HasMaxLength(100).IsRequired();
             e.Property(x => x.Source).HasColumnName("source").HasMaxLength(50);
             e.Property(x => x.Metadata).HasColumnName("metadata").HasColumnType("jsonb");
@@ -435,7 +435,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
 
             // These weren't configured before — EventLog has no CLR nav properties for them, but EF
             // still needs to know the FK relationships exist (they do, in schema.sql) so it orders
-            // inserts correctly: a brand-new Lead/Conversation/Appointment added in the same
+            // inserts correctly: a brand-new Lead/Conversation/Booking added in the same
             // SaveChangesAsync call as an EventLog row referencing it must insert first, and without
             // this EF has no dependency info to guarantee that ordering (see LeadService.CreateOrGetAsync
             // / GetOrCreateByPhoneAsync, both of which add a new Lead and log its creation event in
@@ -446,8 +446,8 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
                 .HasForeignKey(x => x.LeadId).OnDelete(DeleteBehavior.SetNull);
             e.HasOne<Conversation>().WithMany()
                 .HasForeignKey(x => x.ConversationId).OnDelete(DeleteBehavior.SetNull);
-            e.HasOne<Appointment>().WithMany()
-                .HasForeignKey(x => x.AppointmentId).OnDelete(DeleteBehavior.SetNull);
+            e.HasOne<Booking>().WithMany()
+                .HasForeignKey(x => x.BookingId).OnDelete(DeleteBehavior.SetNull);
 
             e.HasIndex(x => x.ClientId);
             e.HasIndex(x => x.EventType);
@@ -606,7 +606,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.Property(x => x.ConversationId).HasColumnName("conversation_id");
             e.Property(x => x.MessageId).HasColumnName("message_id");
             e.Property(x => x.ExternalMessageId).HasColumnName("external_message_id").HasMaxLength(200);
-            e.Property(x => x.AppointmentId).HasColumnName("appointment_id");
+            e.Property(x => x.BookingId).HasColumnName("booking_id");
             e.Property(x => x.PhoneNumber).HasColumnName("phone_number").HasMaxLength(50).IsRequired();
             e.Property(x => x.VariablesJson).HasColumnName("variables_json").HasColumnType("jsonb");
             e.Property(x => x.Status).HasColumnName("status").HasMaxLength(20).IsRequired();
@@ -627,15 +627,15 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
                 .HasForeignKey(x => x.CampaignId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne(x => x.Lead).WithMany()
                 .HasForeignKey(x => x.LeadId).OnDelete(DeleteBehavior.Cascade);
-            e.HasOne(x => x.Appointment).WithMany()
-                .HasForeignKey(x => x.AppointmentId).OnDelete(DeleteBehavior.SetNull);
+            e.HasOne(x => x.Booking).WithMany()
+                .HasForeignKey(x => x.BookingId).OnDelete(DeleteBehavior.SetNull);
 
             e.HasIndex(x => x.ClientId);
             e.HasIndex(x => x.CampaignId);
             e.HasIndex(x => x.LeadId);
             e.HasIndex(x => x.Status);
             e.HasIndex(x => x.ExternalMessageId);
-            e.HasIndex(x => x.AppointmentId);
+            e.HasIndex(x => x.BookingId);
             e.HasIndex(x => new { x.CampaignId, x.LeadId })
                 .IsUnique()
                 .HasDatabaseName("ux_campaign_recipients_campaign_lead");
@@ -675,7 +675,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
 
         // ---------------------------------------------------------------
         // Structured availability (availability_rules / booking_settings / availability_exceptions)
-        // — see Business/Services/Appointments/AvailabilityService.cs.
+        // — see Business/Services/Bookings/AvailabilityService.cs.
         // ---------------------------------------------------------------
         modelBuilder.Entity<AvailabilityRule>(e =>
         {
@@ -698,7 +698,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
             e.Property(x => x.ClientId).HasColumnName("client_id");
-            e.Property(x => x.DefaultConsultationDurationMinutes).HasColumnName("default_consultation_duration_minutes");
+            e.Property(x => x.DefaultBookingDurationMinutes).HasColumnName("default_booking_duration_minutes");
             e.Property(x => x.BufferMinutes).HasColumnName("buffer_minutes");
             e.Property(x => x.MinimumBookingNoticeMinutes).HasColumnName("minimum_booking_notice_minutes");
             e.Property(x => x.MaximumAdvanceBookingDays).HasColumnName("maximum_advance_booking_days");
@@ -789,7 +789,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.Property(x => x.Message).HasColumnName("message");
             e.Property(x => x.LeadId).HasColumnName("lead_id");
             e.Property(x => x.ConversationId).HasColumnName("conversation_id");
-            e.Property(x => x.AppointmentId).HasColumnName("appointment_id");
+            e.Property(x => x.BookingId).HasColumnName("booking_id");
             e.Property(x => x.ChannelIntegrationId).HasColumnName("channel_integration_id");
             e.Property(x => x.Link).HasColumnName("link").HasMaxLength(300);
             e.Property(x => x.IsRead).HasColumnName("is_read");
@@ -797,7 +797,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.Property(x => x.CreatedAt).HasColumnName("created_at");
 
             e.HasOne<Client>().WithMany().HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Cascade);
-            // Lead/Conversation/Appointment/ChannelIntegration are all "set null" on delete in the DB — no CLR
+            // Lead/Conversation/Booking/ChannelIntegration are all "set null" on delete in the DB — no CLR
             // navigation to any of them (matches Lead.AssignedStaffId's scalar-FK-only pattern); a notification
             // outliving the row it points at just shows a dead link, never blocks the delete.
 
@@ -851,12 +851,12 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
                 .HasDatabaseName("ux_calendar_integration_calendars_ext");
         });
 
-        modelBuilder.Entity<AppointmentCalendarSync>(e =>
+        modelBuilder.Entity<BookingCalendarSync>(e =>
         {
-            e.ToTable("appointment_calendar_syncs", "scheduling");
+            e.ToTable("booking_calendar_syncs", "scheduling");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
-            e.Property(x => x.AppointmentId).HasColumnName("appointment_id");
+            e.Property(x => x.BookingId).HasColumnName("booking_id");
             e.Property(x => x.CalendarIntegrationId).HasColumnName("calendar_integration_id");
             e.Property(x => x.ExternalEventId).HasColumnName("external_event_id").HasMaxLength(200);
             e.Property(x => x.Status).HasColumnName("status").HasMaxLength(20).IsRequired();
@@ -866,11 +866,11 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.Property(x => x.CreatedAt).HasColumnName("created_at");
             e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
 
-            e.HasOne<Appointment>().WithMany().HasForeignKey(x => x.AppointmentId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<Booking>().WithMany().HasForeignKey(x => x.BookingId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne<CalendarIntegration>().WithMany().HasForeignKey(x => x.CalendarIntegrationId).OnDelete(DeleteBehavior.Cascade);
 
-            e.HasIndex(x => new { x.AppointmentId, x.CalendarIntegrationId }).IsUnique()
-                .HasDatabaseName("ux_appointment_calendar_syncs_appt_integration");
+            e.HasIndex(x => new { x.BookingId, x.CalendarIntegrationId }).IsUnique()
+                .HasDatabaseName("ux_booking_calendar_syncs_booking_integration");
         });
 
         // ---------------------------------------------------------------

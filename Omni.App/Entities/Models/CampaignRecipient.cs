@@ -25,8 +25,8 @@ public class CampaignRecipient
     /// keeping it here avoids ever having to join through messages for reporting.</summary>
     public string? ExternalMessageId { get; set; }
 
-    /// <summary>Set when this recipient later books a consultation attributed to this campaign.</summary>
-    public Guid? AppointmentId { get; set; }
+    /// <summary>Set when this recipient later makes a booking attributed to this campaign.</summary>
+    public Guid? BookingId { get; set; }
 
     public string PhoneNumber { get; set; } = string.Empty;
     /// <summary>Raw JSON — this recipient's values for the template's {{1}}, {{2}}... placeholders.</summary>
@@ -49,7 +49,7 @@ public class CampaignRecipient
     /// CampaignService.ComputeStats for the current best-effort read-time version; this column lets
     /// that become a persisted one-time write later without a schema change).</summary>
     public DateTimeOffset? RepliedAt { get; set; }
-    /// <summary>Set together with AppointmentId when a booking is attributed to this campaign.</summary>
+    /// <summary>Set together with BookingId when a booking is attributed to this campaign.</summary>
     public DateTimeOffset? BookedAt { get; set; }
     public DateTimeOffset? FailedAt { get; set; }
 
@@ -58,5 +58,5 @@ public class CampaignRecipient
 
     public Campaign? Campaign { get; set; }
     public Lead? Lead { get; set; }
-    public Appointment? Appointment { get; set; }
+    public Booking? Booking { get; set; }
 }

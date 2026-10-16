@@ -56,11 +56,11 @@ public static class CacheKeys
     // ---- Scheduling: weekly rules, booking settings and date exceptions (every free-slot search reads all three).
     public const string AvailabilityPrefix = "scheduling:availability:";
     public static string AvailabilityRules(Guid clientId) => AvailabilityPrefix + "rules:" + clientId.ToString("N");
-    public static string BookingSettings(Guid clientId) => AvailabilityPrefix + "booking:" + clientId.ToString("N");
+    public static string BookingSettings(Guid clientId) => AvailabilityPrefix + "booking-settings:" + clientId.ToString("N");
     public static string AvailabilityExceptions(Guid clientId) => AvailabilityPrefix + "exceptions:" + clientId.ToString("N");
 
     // ---- Scheduling: a client's calendar connections with their calendar lists (Settings page, and the "anything to
-    // sync?" check on every appointment change).
+    // sync?" check on every booking change).
     public const string CalendarsPrefix = "scheduling:calendars:";
     public static string Calendars(Guid clientId) => CalendarsPrefix + clientId.ToString("N");
 

@@ -8,7 +8,7 @@ public class Order
     public Guid ClientId { get; set; }
     public Guid LeadId { get; set; }
     public Guid ServiceId { get; set; }
-    public Guid? AppointmentId { get; set; }
+    public Guid? BookingId { get; set; }
 
     public string Status { get; set; } = OrderStatus.Considering;
     public decimal? QuotedAmount { get; set; }
@@ -23,5 +23,5 @@ public class Order
 
     public Lead? Lead { get; set; }
     public Service? Service { get; set; }
-    public Appointment? Appointment { get; set; }
+    public Booking? Booking { get; set; }
 }

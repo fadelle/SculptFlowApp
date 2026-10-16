@@ -65,7 +65,7 @@ else
             <div class="au-empty">
                 <span class="au-empty__icon"><span class="au-icon" aria-hidden="true">description</span></span>
                 <div class="empty-title">No templates yet</div>
-                <p class="empty-text">Create your first one, for example an appointment reminder. Meta usually reviews it within minutes.</p>
+                <p class="empty-text">Create your first one, for example a booking reminder. Meta usually reviews it within minutes.</p>
                 <button type="button" class="au-btn au-btn--primary" data-open-new-template><span class="au-icon" aria-hidden="true">add</span>New template</button>
             </div>
         </div>
@@ -190,7 +190,7 @@ else
                     <div class="integration-form">
                         <label class="field">
                             <span>Name</span>
-                            <input type="text" name="Name" id="tpl-name" value="@Model.Name" placeholder="e.g. appointment_reminder" class="text-input" required maxlength="512" autocomplete="off" />
+                            <input type="text" name="Name" id="tpl-name" value="@Model.Name" placeholder="e.g. booking_reminder" class="text-input" required maxlength="512" autocomplete="off" />
                             <small class="hint-line">Lowercase and underscores are applied as you type (Meta's rule).</small>
                         </label>
 
@@ -242,7 +242,7 @@ else
                                 Message
                                 <button type="button" class="link-btn" id="tpl-insert-blank">+ Insert blank</button>
                             </span>
-                            <textarea name="Body" id="tpl-body" rows="4" class="text-input" required maxlength="1024" dir="auto" aria-label="Message" placeholder="Hi {{1}}, this is a reminder of your appointment on {{2}}.">@Model.Body</textarea>
+                            <textarea name="Body" id="tpl-body" rows="4" class="text-input" required maxlength="1024" dir="auto" aria-label="Message" placeholder="Hi {{1}}, this is a reminder of your booking on {{2}}.">@Model.Body</textarea>
                             <small class="hint-line right" data-counter-for="tpl-body" data-max="1024"></small>
                         </div>
 

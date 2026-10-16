@@ -12,7 +12,7 @@ public class BusinessInfoPageTests
     private static readonly Client Glow = new()
     {
         Id = Guid.NewGuid(), Name = "Glow", Slug = "glow", Phone = "123", Email = "a@glow.test", Website = "https://glow.test",
-        Address = "Main St", OperatingHours = "9-5", ConsultationInfo = "Free", Timezone = "UTC",
+        Address = "Main St", OperatingHours = "9-5", BookingInfo = "Free", Timezone = "UTC",
     };
     private readonly Mock<IClientProfileService> _profile = new();
     private readonly Mock<IAvailabilityService> _availability = new();

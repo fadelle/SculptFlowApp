@@ -318,7 +318,7 @@
     surgery_booked: 'badge-teal', not_interested: 'badge-gray', needs_human: 'badge-red', lost: 'badge-gray'
   };
 
-  // How far along new -> qualified -> consultation -> surgery a lead status is (0 = off that path).
+  // How far along new -> qualified -> booking -> surgery a lead status is (0 = off that path).
   var JOURNEY_STEP = {
     new: 1, contacted: 1, qualified: 2, consultation_booked: 3, consultation_attended: 3, surgery_booked: 4
   };

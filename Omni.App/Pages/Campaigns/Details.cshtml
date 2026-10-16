@@ -27,7 +27,7 @@ else if (Model.Details is not null)
     var isManual = c.AudienceType == CampaignAudienceType.Custom && string.IsNullOrWhiteSpace(c.AudienceFilters);
     var audience = isManual ? "Picked manually" : c.AudienceType switch
     {
-        CampaignAudienceType.ReactivationNoConsultation => "Old leads who never booked",
+        CampaignAudienceType.ReactivationNoBooking => "Old leads who never booked",
         CampaignAudienceType.AllEligible => "All contactable leads",
         _ => "Custom audience"
     };

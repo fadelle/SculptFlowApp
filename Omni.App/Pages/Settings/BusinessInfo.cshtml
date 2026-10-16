@@ -68,7 +68,7 @@ else
             </div>
 
             <div class="set-section">
-                <div class="set-section-head"><strong>Location</strong><div class="cell-sub">Where patients come for appointments.</div></div>
+                <div class="set-section-head"><strong>Location</strong><div class="cell-sub">Where patients come for bookings.</div></div>
                 <div class="set-section-body">
                     <label class="field">
                         <span>Address</span>
@@ -86,8 +86,8 @@ else
                         <small class="text-subtle">Only for answering questions. The times patients can actually book come from <a asp-page="/Settings/BusinessInfo" asp-route-tab="availability">Opening hours &amp; booking</a>.</small>
                     </label>
                     <label class="field">
-                        <span>Consultation rules and other info</span>
-                        <textarea name="ConsultationInfo" rows="3" class="text-input" placeholder="e.g. Free first consultation. $50 deposit to book surgery." dir="auto">@Model.ConsultationInfo</textarea>
+                        <span>Booking rules and other info</span>
+                        <textarea name="BookingInfo" rows="3" class="text-input" placeholder="e.g. Free first booking. $50 deposit to book surgery." dir="auto">@Model.BookingInfo</textarea>
                     </label>
                 </div>
             </div>
@@ -141,12 +141,12 @@ else
                 <span class="au-icon au-alert__icon" aria-hidden="true">warning</span>
                 <div class="au-alert__body">
                     <div class="au-alert__title">Patients can't book yet</div>
-                    Turn on at least one day below and save, so the AI assistant can offer appointment times.
+                    Turn on at least one day below and save, so the AI assistant can offer booking times.
                 </div>
             </div>
         }
         <p class="au-page-head__sub mb-3">
-            When patients can book. The AI assistant only offers times that fit these hours, your existing appointments and the rules below.
+            When patients can book. The AI assistant only offers times that fit these hours, your existing bookings and the rules below.
         </p>
 
         <form method="post" asp-page-handler="SaveAvailability" class="au-panel au-panel--round integration-form client-form" id="avail-form">
@@ -195,15 +195,15 @@ else
             </div>
 
             <div class="set-section">
-                <div class="set-section-head"><strong>Booking rules</strong><div class="cell-sub">Applied to every appointment the AI offers.</div></div>
+                <div class="set-section-head"><strong>Booking rules</strong><div class="cell-sub">Applied to every booking the AI offers.</div></div>
                 <div class="set-section-body">
                     <div class="rules">
                         <label class="set-row">
-                            <div><strong>Consultation length</strong><div class="cell-sub">Unless the service sets its own.</div></div>
+                            <div><strong>Booking length</strong><div class="cell-sub">Unless the service sets its own.</div></div>
                             <span class="unit-input"><input type="number" name="DefaultDurationMinutes" value="@av.Booking.DefaultDurationMinutes" min="5" max="480" class="text-input set-input" data-rule="duration" /><span>min</span></span>
                         </label>
                         <label class="set-row">
-                            <div><strong>Gap between appointments</strong></div>
+                            <div><strong>Gap between bookings</strong></div>
                             <span class="unit-input"><input type="number" name="BufferMinutes" value="@av.Booking.BufferMinutes" min="0" max="240" class="text-input set-input" data-rule="buffer" /><span>min</span></span>
                         </label>
                         <label class="set-row">

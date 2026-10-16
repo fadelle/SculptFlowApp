@@ -56,7 +56,7 @@ public class ClientAdminService : IClientAdminService
         client.Timezone = tz;
         client.Address = Clean(update.Address);
         client.OperatingHours = Clean(update.OperatingHours);
-        client.ConsultationInfo = Clean(update.ConsultationInfo);
+        client.BookingInfo = Clean(update.BookingInfo);
         client.UpdatedAt = _time.GetUtcNow();
         await _unitOfWork.SaveChangesAsync(ct);
         return new PlatformAdminChange(id);

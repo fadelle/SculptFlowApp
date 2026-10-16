@@ -12,7 +12,7 @@
     };
     static string AudienceLabel(string? type, bool manual) => manual ? "Picked manually" : type switch
     {
-        CampaignAudienceType.ReactivationNoConsultation => "Old leads who never booked",
+        CampaignAudienceType.ReactivationNoBooking => "Old leads who never booked",
         CampaignAudienceType.AllEligible => "All contactable leads",
         CampaignAudienceType.Custom => "Custom audience",
         _ => "—"

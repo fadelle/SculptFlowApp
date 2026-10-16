@@ -38,8 +38,8 @@ public class InboxNotifier : IInboxNotifier
     public Task NotificationCreatedAsync(Guid clientId, NotificationResponse notification, CancellationToken ct = default) =>
         ClientGroup(clientId).SendAsync("NotificationCreated", notification, ct);
 
-    public Task AppointmentChangedAsync(Guid clientId, Guid appointmentId, string change, CancellationToken ct = default) =>
-        ClientGroup(clientId).SendAsync("AppointmentChanged", new { appointmentId, change }, ct);
+    public Task BookingChangedAsync(Guid clientId, Guid bookingId, string change, CancellationToken ct = default) =>
+        ClientGroup(clientId).SendAsync("BookingChanged", new { bookingId, change }, ct);
 
     public Task ConversationModeChangedAsync(Guid clientId, Guid conversationId, string mode, CancellationToken ct = default) =>
         ClientGroup(clientId).SendAsync("ConversationModeChanged", new { conversationId, mode }, ct);

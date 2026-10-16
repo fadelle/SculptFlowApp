@@ -8,7 +8,7 @@ namespace Omni.App.Controllers.Integrations;
 /// <summary>Where the dedicated n8n Calendar Sync workflow reports back — the callback counterpart of
 /// ICalendarSyncNotifier's one outbound trigger. Server-to-server only (X-Ingest-Key), same trust level as
 /// /api/messages/ingest and the Knowledge Benchmark's callback. Connect/disconnect no longer involve n8n at all
-/// (see CalendarOAuthController) — this now only ever handles the appointment sync callback. Trusts the id in the
+/// (see CalendarOAuthController) — this now only ever handles the booking sync callback. Trusts the id in the
 /// body only after confirming it belongs to the client the request claims — see CalendarIntegrationService for the
 /// checks.</summary>
 [ApiController]
@@ -24,7 +24,7 @@ public class CalendarIntegrationsIngestController : ControllerBase
         _calendar = calendar;
     }
 
-    /// <summary>n8n's reply to an appointment create/update/cancel sync trigger.</summary>
+    /// <summary>n8n's reply to a booking create/update/cancel sync trigger.</summary>
     [HttpPost("sync-callback")]
     public async Task<ActionResult> SyncCallback([FromBody] CalendarSyncCallbackRequest request, CancellationToken ct)
     {

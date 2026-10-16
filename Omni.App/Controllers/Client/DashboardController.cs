@@ -50,8 +50,8 @@ public class DashboardController : DashboardApiController
         return Ok(new { items, totalCount, skip, take });
     }
 
-    [HttpGet("appointments")]
-    public async Task<ActionResult<object>> Appointments(
+    [HttpGet("bookings")]
+    public async Task<ActionResult<object>> Bookings(
         [FromQuery] string? status, [FromQuery] string? search, [FromQuery] int skip = 0, [FromQuery] int take = 50, CancellationToken ct = default)
     {
         var clientId = await GetClientIdAsync(ct);
@@ -59,7 +59,7 @@ public class DashboardController : DashboardApiController
 
         skip = Math.Max(skip, 0);
         take = Math.Clamp(take, 1, 200);
-        var (items, totalCount) = await _dashboard.GetAppointmentsAsync(clientId.Value, status, search, skip, take, ct);
+        var (items, totalCount) = await _dashboard.GetBookingsAsync(clientId.Value, status, search, skip, take, ct);
         return Ok(new { items, totalCount, skip, take });
     }
 

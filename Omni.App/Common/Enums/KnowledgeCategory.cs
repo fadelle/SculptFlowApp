@@ -10,7 +10,7 @@ public static class KnowledgeCategory
     public const string Doctor = "doctor";
     public const string Service = "service";
     public const string Pricing = "pricing";
-    public const string Consultation = "consultation";
+    public const string Booking = "booking";
     public const string Payment = "payment";
     public const string Preparation = "preparation";
     public const string Recovery = "recovery";
@@ -23,7 +23,7 @@ public static class KnowledgeCategory
         (Doctor, "Doctor"),
         (Service, "Service Information"),
         (Pricing, "Pricing"),
-        (Consultation, "Consultation"),
+        (Booking, "Booking"),
         (Payment, "Payment / Financing"),
         (Preparation, "Preparation"),
         (Recovery, "Recovery"),

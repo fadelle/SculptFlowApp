@@ -8,7 +8,7 @@ using Omni.App.Entities.Responses.Calendars;
 namespace Omni.App.Pages.Settings;
 
 /// <summary>Settings → Calendar Integrations: connect Google/Outlook calendars for one-way Omni → external
-/// appointment sync. Plain server-rendered forms, no JS — same idiom as Business Info's Availability tab — except
+/// booking sync. Plain server-rendered forms, no JS — same idiom as Business Info's Availability tab — except
 /// "Connect", which is a plain link to CalendarOAuthController (a full-page redirect to the provider's own consent
 /// screen can't happen from a form POST handler). That controller sets StatusMessage/ErrorMessage TempData directly
 /// before redirecting back here, the same TempData keys OnPost* below use.</summary>

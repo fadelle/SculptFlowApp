@@ -6,5 +6,5 @@ namespace Omni.App.Business.Contracts.Managers;
 public interface IEventLogger
 {
     void Log(Guid clientId, string eventType, Guid? leadId = null, Guid? conversationId = null,
-        Guid? appointmentId = null, string? source = null, string metadataJson = "{}");
+        Guid? bookingId = null, string? source = null, string metadataJson = "{}");
 }

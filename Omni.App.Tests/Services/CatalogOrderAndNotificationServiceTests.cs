@@ -36,7 +36,7 @@ public class ServiceServiceTests
         Service? added = null;
         _repo.Setup(r => r.Add(It.IsAny<Service>())).Callback<Service>(p => added = p);
         var r = await Sut().CreateAsync(new CreateServiceRequest(_clientId, "  Facelift ", " FL ", "  ", 45));
-        Assert.Equal(("Facelift", "FL", null, 45, true), (added!.Name, added.Code, added.Description, added.ConsultationDuration, added.IsActive));
+        Assert.Equal(("Facelift", "FL", null, 45, true), (added!.Name, added.Code, added.Description, added.BookingDuration, added.IsActive));
         Assert.Equal("Facelift", r.Name);
     }
 
@@ -69,7 +69,7 @@ public class ServiceServiceTests
     {
         var p = Existing();
         var r = await Sut().UpdateAsync(_clientId, p.Id, new UpdateServiceRequest("Nose job", "NJ", "desc", 30));
-        Assert.Equal(("Nose job", "NJ", "desc", 30), (p.Name, p.Code, p.Description, p.ConsultationDuration));
+        Assert.Equal(("Nose job", "NJ", "desc", 30), (p.Name, p.Code, p.Description, p.BookingDuration));
         _repo.Verify(x => x.NameExistsAsync(_clientId, "Nose job", p.Id, It.IsAny<CancellationToken>()), Times.Once);
         Assert.Equal("Nose job", r!.Name);
         Assert.Null(await Sut().UpdateAsync(_clientId, Guid.NewGuid(), new UpdateServiceRequest("x", null, null, null)));
@@ -167,7 +167,7 @@ public class OrderServiceTests
     [Fact]
     public async Task Completing_an_order_marks_the_lead_and_logs_the_amount_invariantly()
     {
-        var lead = new Lead { Id = Guid.NewGuid(), Status = LeadStatus.ConsultationAttended };
+        var lead = new Lead { Id = Guid.NewGuid(), Status = LeadStatus.Attended };
         _leads.Setup(l => l.GetByIdAsync(lead.Id, It.IsAny<CancellationToken>())).ReturnsAsync(lead);
         var b = MakeOrder(leadId: lead.Id);
         await Sut().UpdateAsync(_clientId, b.Id, new UpdateOrderRequest(OrderStatus.Completed, null, null, 1234.5m, null, null, null));
@@ -188,7 +188,7 @@ public class OrderServiceTests
     [InlineData(OrderStatus.DepositPaid)]
     public async Task Confirming_an_order_moves_the_lead_to_surgery_booked(string status)
     {
-        var lead = new Lead { Id = Guid.NewGuid(), Status = LeadStatus.ConsultationAttended };
+        var lead = new Lead { Id = Guid.NewGuid(), Status = LeadStatus.Attended };
         _leads.Setup(l => l.GetByIdAsync(lead.Id, It.IsAny<CancellationToken>())).ReturnsAsync(lead);
         var b = MakeOrder(leadId: lead.Id);
         await Sut().UpdateAsync(_clientId, b.Id, new UpdateOrderRequest(status, null, null, null, null, null, null));
@@ -209,11 +209,11 @@ public class OrderServiceTests
     [Fact]
     public async Task Earlier_stages_leave_the_lead_alone()
     {
-        var lead = new Lead { Id = Guid.NewGuid(), Status = LeadStatus.ConsultationAttended };
+        var lead = new Lead { Id = Guid.NewGuid(), Status = LeadStatus.Attended };
         _leads.Setup(l => l.GetByIdAsync(lead.Id, It.IsAny<CancellationToken>())).ReturnsAsync(lead);
         var b = MakeOrder(leadId: lead.Id);
         await Sut().UpdateAsync(_clientId, b.Id, new UpdateOrderRequest(OrderStatus.Quoted, null, null, null, null, null, null));
-        Assert.Equal(LeadStatus.ConsultationAttended, lead.Status);
+        Assert.Equal(LeadStatus.Attended, lead.Status);
     }
 
     [Fact]

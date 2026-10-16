@@ -32,7 +32,7 @@ public class ClientProfileService : IClientProfileService
         client.Website = request.Website;
         client.Address = request.Address;
         client.OperatingHours = request.OperatingHours;
-        client.ConsultationInfo = request.ConsultationInfo;
+        client.BookingInfo = request.BookingInfo;
         client.UpdatedAt = DateTimeOffset.UtcNow;
         await _unitOfWork.SaveChangesAsync(ct);
     }

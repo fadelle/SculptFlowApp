@@ -312,8 +312,8 @@ public class IngestAndAdminControllerTests
         await lc.ConversationMessages(id, 0, default); await lc.ConversationMessages(id, 25, default);
         leads.Verify(l => l.MessagesAsync(id, 500, It.IsAny<CancellationToken>()), Times.Once);
         leads.Verify(l => l.MessagesAsync(id, 25, It.IsAny<CancellationToken>()), Times.Once);
-        await lc.SetMode(id, new ModeBody("human"), default); await lc.SetStatus(id, new StatusBody("closed"), default); await lc.SetAppointmentStatus(id, new StatusBody("attended"), default);
-        await lc.Messages(null, true, null, null, 1, default); await lc.Appointments(null, null, null, false, 1, default);
+        await lc.SetMode(id, new ModeBody("human"), default); await lc.SetStatus(id, new StatusBody("closed"), default); await lc.SetBookingStatus(id, new StatusBody("attended"), default);
+        await lc.Messages(null, true, null, null, 1, default); await lc.Bookings(null, null, null, false, 1, default);
         leads.Verify(l => l.SetModeAsync(id, "human", It.IsAny<CancellationToken>()), Times.Once);
 
         var content = new Mock<IContentAdminService>();

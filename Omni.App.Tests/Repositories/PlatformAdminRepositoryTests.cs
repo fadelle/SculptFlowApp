@@ -12,7 +12,7 @@ namespace Omni.App.Tests.Repositories;
 public class PlatformAdminRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixture)
 {
     private sealed record World(Client Client, Service Service, Lead Lead, Conversation Conversation, Message Inbound, Message Failed,
-        Appointment Upcoming, ChannelIntegration WhatsApp);
+        Booking Upcoming, ChannelIntegration WhatsApp);
 
     private async Task<World> SeedWorldAsync(string? clientName = null)
     {
@@ -24,7 +24,7 @@ public class PlatformAdminRepositoryTests(PostgresFixture fixture) : RepoTestBas
         var inbound = MakeMessage(convo, content: "hello world", createdAt: DateTimeOffset.UtcNow.AddHours(-1));
         var failed = MakeMessage(convo, MessageDirection.Outbound, MessageOrigin.Ai, "oops", DateTimeOffset.UtcNow.AddMinutes(-30));
         failed.SenderType = "ai"; failed.DeliveryStatus = "failed"; failed.FailedAt = DateTimeOffset.UtcNow; failed.FailureCode = "131026";
-        var upcoming = MakeAppointment(client.Id, lead.Id, DateTimeOffset.UtcNow.AddDays(2), serviceId: svc.Id);
+        var upcoming = MakeBooking(client.Id, lead.Id, DateTimeOffset.UtcNow.AddDays(2), serviceId: svc.Id);
         var wa = new ChannelIntegration
         {
             Id = Guid.NewGuid(), ClientId = client.Id, Channel = ChannelType.WhatsApp, Status = ChannelIntegrationStatus.Connected,
@@ -63,7 +63,7 @@ public class PlatformAdminRepositoryTests(PostgresFixture fixture) : RepoTestBas
         Assert.NotNull(await repo.GetForUpdateAsync(w.Client.Id));
 
         var counts = await repo.CountsAsync(w.Client.Id);
-        Assert.Equal((1, 1, 2, 1, 1), (counts.Leads, counts.Conversations, counts.Messages, counts.UpcomingAppointments, counts.Services));
+        Assert.Equal((1, 1, 2, 1, 1), (counts.Leads, counts.Conversations, counts.Messages, counts.UpcomingBookings, counts.Services));
         Assert.Equal(1, counts.FailedMessagesLast7Days);
     }
 
@@ -127,10 +127,10 @@ public class PlatformAdminRepositoryTests(PostgresFixture fixture) : RepoTestBas
         Assert.True(await repo.HasOtherActiveMembershipAsync(user.Id, Guid.NewGuid()));
     }
 
-    // ---- leads, conversations, messages, appointments -----------------------------------------------------------
+    // ---- leads, conversations, messages, bookings -----------------------------------------------------------
 
     [PostgresFact]
-    public async Task Leads_conversations_messages_and_appointments_are_listed_and_filtered()
+    public async Task Leads_conversations_messages_and_bookings_are_listed_and_filtered()
     {
         var w = await SeedWorldAsync();
         var evt = new EventLog { Id = Guid.NewGuid(), ClientId = w.Client.Id, LeadId = w.Lead.Id, EventType = EventTypes.OrderConfirmed, CreatedAt = Now };
@@ -160,13 +160,13 @@ public class PlatformAdminRepositoryTests(PostgresFixture fixture) : RepoTestBas
         Assert.Equal(w.Failed.Id, Assert.Single((await repo.ListMessagesAsync(w.Client.Id, false, "ai", null, 1)).Items).Id);
         Assert.Equal(w.Inbound.Id, Assert.Single((await repo.ListMessagesAsync(w.Client.Id, false, null, "HELLO", 1)).Items).Id);
 
-        Assert.Equal(w.Upcoming.Id, Assert.Single((await repo.ListAppointmentsAsync(w.Client.Id, null, null, false, 1)).Items).Id);
-        Assert.Single((await repo.ListAppointmentsAsync(w.Client.Id, w.Lead.Id, AppointmentStatus.Booked, true, 1)).Items);
-        Assert.Empty((await repo.ListAppointmentsAsync(w.Client.Id, null, AppointmentStatus.Canceled, false, 1)).Items);
+        Assert.Equal(w.Upcoming.Id, Assert.Single((await repo.ListBookingsAsync(w.Client.Id, null, null, false, 1)).Items).Id);
+        Assert.Single((await repo.ListBookingsAsync(w.Client.Id, w.Lead.Id, BookingStatus.Booked, true, 1)).Items);
+        Assert.Empty((await repo.ListBookingsAsync(w.Client.Id, null, BookingStatus.Canceled, false, 1)).Items);
 
         Assert.NotNull(await repo.GetLeadForUpdateAsync(w.Lead.Id));
         Assert.NotNull(await repo.GetConversationForUpdateAsync(w.Conversation.Id));
-        Assert.NotNull(await repo.GetAppointmentForUpdateAsync(w.Upcoming.Id));
+        Assert.NotNull(await repo.GetBookingForUpdateAsync(w.Upcoming.Id));
     }
 
     // ---- campaigns, templates, services, knowledge ----------------------------------------------------------------

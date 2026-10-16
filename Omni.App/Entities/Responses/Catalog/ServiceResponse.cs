@@ -6,6 +6,6 @@ public record ServiceResponse(
     string Name,
     string? Code,
     string? Description,
-    int? ConsultationDuration,
+    int? BookingDuration,
     bool IsActive
 );

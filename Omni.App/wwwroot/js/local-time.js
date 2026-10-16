@@ -3,7 +3,7 @@
 // grid, date ranges, typed dates/times — Pages/Shared/ViewerTimeZone) uses the viewer's clock too. Only Client
 // Info → Availability is entered in the client's timezone.
 //
-// Appointment pages default to CLIENT time: elements carrying data-client-tz show in that zone. When the viewer's
+// Booking pages default to CLIENT time: elements carrying data-client-tz show in that zone. When the viewer's
 // timezone differs from the client's, Pages/Shared/_TimeViewSwitch ("Client time | My time") appears; the choice is
 // remembered per browser and announced as a window "sf-time-view" event so page scripts can reload.
 //

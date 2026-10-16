@@ -9,13 +9,13 @@ namespace Omni.App.Persistence.Repositories.Campaigns;
 
 public class CampaignAudienceRepository : ICampaignAudienceRepository
 {
-    /// <summary>Appointment statuses that mean "this lead already reached a consultation" — excluded
+    /// <summary>Booking statuses that mean "this lead already reached a booking" — excluded
     /// from reactivation. Canceled/NoShow do NOT count: a lead who cancelled or didn't show never
-    /// actually had the consultation, so they remain eligible for reactivation. Rescheduled counts as
-    /// booked (it's a live appointment moved to a new time, not an abandoned one).</summary>
-    private static readonly string[] BookedOrCompletedAppointmentStatuses =
+    /// actually had the booking, so they remain eligible for reactivation. Rescheduled counts as
+    /// booked (it's a live booking moved to a new time, not an abandoned one).</summary>
+    private static readonly string[] BookedOrCompletedBookingStatuses =
     {
-        AppointmentStatus.Booked, AppointmentStatus.Confirmed, AppointmentStatus.Rescheduled, AppointmentStatus.Attended
+        BookingStatus.Booked, BookingStatus.Confirmed, BookingStatus.Rescheduled, BookingStatus.Attended
     };
 
     private readonly ApplicationDbContext _db;
@@ -47,15 +47,15 @@ public class CampaignAudienceRepository : ICampaignAudienceRepository
         return audienceType switch
         {
             CampaignAudienceType.AllEligible => contactable,
-            CampaignAudienceType.ReactivationNoConsultation => ApplyReactivationRules(contactable, filters, defaultInactiveDays),
+            CampaignAudienceType.ReactivationNoBooking => ApplyReactivationRules(contactable, filters, defaultInactiveDays),
             CampaignAudienceType.Custom => ApplyCustomFilters(contactable, filters),
             _ => contactable.Where(_ => false)
         };
     }
 
     /// <summary>"Old lead reactivation" — prior interest/activity, inactive for N days, and never
-    /// reached a booked/confirmed/completed consultation. Nothing here reads a stored flag; every
-    /// condition is derived live from leads/conversations/appointments (see class remarks in
+    /// reached a booked/confirmed/completed booking. Nothing here reads a stored flag; every
+    /// condition is derived live from leads/conversations/bookings (see class remarks in
     /// ICampaignAudienceService).</summary>
     private static IQueryable<Lead> ApplyReactivationRules(IQueryable<Lead> query, CampaignAudienceFilters filters, int defaultInactiveDays)
     {
@@ -68,15 +68,15 @@ public class CampaignAudienceRepository : ICampaignAudienceRepository
             // Inactive: no logged contact and no conversation activity more recent than the cutoff.
             (l.LastContactAt == null || l.LastContactAt <= cutoff) &&
             !l.Conversations.Any(c => c.LastMessageAt != null && c.LastMessageAt > cutoff) &&
-            // Never reached a successfully booked/completed consultation.
-            !l.Appointments.Any(a => BookedOrCompletedAppointmentStatuses.Contains(a.Status)));
+            // Never reached a successfully booked/completed booking.
+            !l.Bookings.Any(a => BookedOrCompletedBookingStatuses.Contains(a.Status)));
 
         return ApplyOptionalScopingFilters(query, filters);
     }
 
     /// <summary>Client-defined filters — no "never booked" requirement, just whichever optional
     /// fields the client set. Common ones (leadStatuses, sources, serviceId, inactiveDays) are
-    /// shared with reactivation; everything past that (qualification, dates, appointment status,
+    /// shared with reactivation; everything past that (qualification, dates, booking status,
     /// country/city/language) only ever applies here — the custom-audience "Advanced filters"
     /// section in the Campaign creation UI.</summary>
     private static IQueryable<Lead> ApplyCustomFilters(IQueryable<Lead> query, CampaignAudienceFilters filters)
@@ -116,9 +116,9 @@ public class CampaignAudienceRepository : ICampaignAudienceRepository
         {
             query = query.Where(l => l.LastContactAt != null && l.LastContactAt < lastContactedBefore.Value);
         }
-        if (filters.AppointmentStatuses is { Count: > 0 })
+        if (filters.BookingStatuses is { Count: > 0 })
         {
-            query = query.Where(l => l.Appointments.Any(a => filters.AppointmentStatuses.Contains(a.Status)));
+            query = query.Where(l => l.Bookings.Any(a => filters.BookingStatuses.Contains(a.Status)));
         }
         if (filters.Countries is { Count: > 0 })
         {

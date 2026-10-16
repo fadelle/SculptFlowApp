@@ -4,7 +4,7 @@ public class BookingSettings
 {
     public Guid Id { get; set; }
     public Guid ClientId { get; set; }
-    public int DefaultConsultationDurationMinutes { get; set; } = 30;
+    public int DefaultBookingDurationMinutes { get; set; } = 30;
     public int BufferMinutes { get; set; }
     public int MinimumBookingNoticeMinutes { get; set; } = 240;
     public int MaximumAdvanceBookingDays { get; set; } = 60;
