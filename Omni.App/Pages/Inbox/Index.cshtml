@@ -1,7 +1,7 @@
 @page "/inbox"
 @model Omni.App.Pages.Inbox.IndexModel
 @{
-    ViewData["Title"] = "Inbox";
+    ViewData["Title"] = T["inbox.title"].Value;
     ViewData["SignalRFirst"] = true; // the layout loads the SignalR client before this page's scripts
 
     // Presentation only — mirrors initials()/modeLabel() in wwwroot/js/inbox.js, which re-renders this list on load.
@@ -11,7 +11,8 @@
         if (parts.Length == 0) return "?";
         return parts.Length == 1 ? parts[0][..1] : string.Concat(parts[0][..1], parts[^1][..1]);
     }
-    static string ModeLabel(string mode) => mode switch { "ai" => "AI", "human" => "Team", "approval" => "Approval", _ => mode };
+    string ModeLabel(string mode) => mode switch { "ai" => T["inbox.mode.ai"], "human" => T["inbox.mode.human"], "approval" => T["inbox.mode.approval"], _ => mode };
+    var unknownName = T["inbox.unknownName"].Value;
 }
 
 @if (!Model.ClientConfigured)
@@ -25,18 +26,18 @@ else
     <div class="inbox-shell" id="inbox-shell">
         <div class="inbox-sidebar">
             <div class="inbox-list-head">
-                <input type="search" class="text-input search-input" id="inbox-search" placeholder="Search name or phone" aria-label="Search conversations" autocomplete="off" />
-                <div class="inbox-filters" role="tablist" aria-label="Filter conversations">
-                    <button type="button" class="inbox-filter active" data-filter="all">All <span class="inbox-filter-count" data-count="all"></span></button>
-                    <button type="button" class="inbox-filter" data-filter="needs">Needs you <span class="inbox-filter-count" data-count="needs"></span></button>
-                    <button type="button" class="inbox-filter" data-filter="ai">AI <span class="inbox-filter-count" data-count="ai"></span></button>
-                    <button type="button" class="inbox-filter" data-filter="closed">Closed <span class="inbox-filter-count" data-count="closed"></span></button>
+                <input type="search" class="text-input search-input" id="inbox-search" placeholder="@T["inbox.search.placeholder"]" aria-label="@T["inbox.search.label"]" autocomplete="off" />
+                <div class="inbox-filters" role="tablist" aria-label="@T["inbox.filter.label"]">
+                    <button type="button" class="inbox-filter active" data-filter="all">@T["inbox.filter.all"] <span class="inbox-filter-count" data-count="all"></span></button>
+                    <button type="button" class="inbox-filter" data-filter="needs">@T["inbox.filter.needs"] <span class="inbox-filter-count" data-count="needs"></span></button>
+                    <button type="button" class="inbox-filter" data-filter="ai">@T["inbox.mode.ai"] <span class="inbox-filter-count" data-count="ai"></span></button>
+                    <button type="button" class="inbox-filter" data-filter="closed">@T["inbox.filter.closed"] <span class="inbox-filter-count" data-count="closed"></span></button>
                 </div>
             </div>
             <div class="inbox-list" id="inbox-list">
                 @foreach (var c in Model.Conversations)
                 {
-                    <div class="inbox-conv-item" data-conversation-id="@c.Id" data-contact-name="@(c.ContactFullName ?? "Unknown")" data-service-name="@(c.ServiceName ?? "")" data-channel="@c.Channel">
+                    <div class="inbox-conv-item" data-conversation-id="@c.Id" data-contact-name="@(c.ContactFullName ?? unknownName)" data-service-name="@(c.ServiceName ?? "")" data-channel="@c.Channel">
                         <span class="inbox-avatar">
                             @Initials(c.ContactFullName)
                             <span class="inbox-channel-icon" style="background:@Omni.App.Common.Helpers.ChannelIconHelper.Hex(c.Channel)" title="@c.Channel">
@@ -53,7 +54,7 @@ else
                         </span>
                         <div class="inbox-conv-main">
                             <div class="inbox-conv-top">
-                                <span class="inbox-conv-name">@(c.ContactFullName ?? "Unknown")</span>
+                                <span class="inbox-conv-name">@(c.ContactFullName ?? unknownName)</span>
                                 <span class="inbox-conv-time" data-timestamp="@((c.LastMessageAt ?? c.CreatedAt).ToString("O"))"></span>
                             </div>
                             @if (!string.IsNullOrEmpty(c.ServiceName))
@@ -61,7 +62,7 @@ else
                                 <div class="inbox-conv-service">@c.ServiceName</div>
                             }
                             <div class="inbox-conv-bottom">
-                                <span class="inbox-conv-preview">@(c.LastMessagePreview ?? "No messages yet")</span>
+                                <span class="inbox-conv-preview">@(c.LastMessagePreview ?? T["inbox.list.noMessages"].Value)</span>
                                 <span class="inbox-mode inbox-mode-@c.Mode">@ModeLabel(c.Mode)</span>
                             </div>
                         </div>
@@ -69,7 +70,7 @@ else
                 }
                 @if (Model.Conversations.Count == 0)
                 {
-                    <div class="inbox-list-message">No conversations yet.</div>
+                    <div class="inbox-list-message">@T["inbox.list.empty"]</div>
                 }
             </div>
         </div>
@@ -77,13 +78,13 @@ else
         <div class="inbox-thread" id="inbox-thread">
             <div class="inbox-empty" id="inbox-empty">
                 <span class="au-empty__icon"><span class="au-icon" aria-hidden="true">forum</span></span>
-                <p class="empty-title">Pick a conversation</p>
-                <p class="empty-text">When a contact writes to your client, the conversation shows up on the left.</p>
+                <p class="empty-title">@T["inbox.thread.emptyTitle"]</p>
+                <p class="empty-text">@T["inbox.thread.emptyText"]</p>
             </div>
 
             <div class="inbox-thread-inner" id="inbox-thread-inner" hidden>
                 <div class="inbox-thread-header">
-                    <button type="button" class="au-icon-btn inbox-back" id="inbox-btn-back" aria-label="Back to conversations" title="Back to conversations">
+                    <button type="button" class="au-icon-btn inbox-back" id="inbox-btn-back" aria-label="@T["inbox.thread.back"]" title="@T["inbox.thread.back"]">
                         <span class="au-icon" aria-hidden="true">arrow_back</span>
                     </button>
                     <span class="inbox-avatar" id="inbox-thread-avatar"></span>
@@ -93,19 +94,19 @@ else
                     </div>
                     <div class="inbox-thread-actions">
                         <span class="inbox-mode" id="inbox-thread-mode"></span>
-                        <button type="button" class="au-btn au-btn--outlined au-btn--sm" id="inbox-btn-takeover">Take over</button>
-                        <button type="button" class="au-btn au-btn--outlined au-btn--sm" id="inbox-btn-return-ai">Return to AI</button>
-                        <button type="button" class="au-btn au-btn--outlined au-btn--sm" id="inbox-btn-reopen" title="Move this conversation back to the working list" hidden>Reopen</button>
-                        <button type="button" class="au-btn au-btn--text au-btn--sm" id="inbox-btn-info" title="Customer info" aria-label="Customer info">
-                            <span class="au-icon" aria-hidden="true">info</span>Info
+                        <button type="button" class="au-btn au-btn--outlined au-btn--sm" id="inbox-btn-takeover">@T["inbox.thread.takeOver"]</button>
+                        <button type="button" class="au-btn au-btn--outlined au-btn--sm" id="inbox-btn-return-ai">@T["inbox.thread.returnToAi"]</button>
+                        <button type="button" class="au-btn au-btn--outlined au-btn--sm" id="inbox-btn-reopen" title="@T["inbox.thread.reopenHelp"]" hidden>@T["inbox.thread.reopen"]</button>
+                        <button type="button" class="au-btn au-btn--text au-btn--sm" id="inbox-btn-info" title="@T["inbox.contact.show"]" aria-label="@T["inbox.contact.show"]">
+                            <span class="au-icon" aria-hidden="true">info</span>@T["inbox.thread.info"]
                         </button>
                         <div class="inbox-more">
-                            <button type="button" class="au-icon-btn au-icon-btn--sm" id="inbox-btn-more" title="More actions" aria-label="More actions" aria-haspopup="menu" aria-expanded="false">
+                            <button type="button" class="au-icon-btn au-icon-btn--sm" id="inbox-btn-more" title="@T["inbox.thread.more"]" aria-label="@T["inbox.thread.more"]" aria-haspopup="menu" aria-expanded="false">
                                 <span class="au-icon" aria-hidden="true">more_horiz</span>
                             </button>
                             <div class="inbox-more-menu" id="inbox-more-menu" role="menu" hidden>
                                 <button type="button" class="user-menu-item user-menu-danger" id="inbox-btn-close" role="menuitem">
-                                    <span class="au-icon" aria-hidden="true">block</span>Close conversation
+                                    <span class="au-icon" aria-hidden="true">block</span>@T["inbox.thread.close"]
                                 </button>
                             </div>
                         </div>
@@ -115,32 +116,32 @@ else
                 <div class="inbox-messages" id="inbox-messages"></div>
 
                 <div class="inbox-window-closed-notice" id="inbox-window-closed-notice" hidden>
-                    The 24-hour WhatsApp window is closed. To reach this person, send an approved template.
+                    @T["inbox.thread.windowClosed"]
                 </div>
 
                 <form class="inbox-composer" id="inbox-composer">
-                    <textarea class="inbox-composer-input" id="inbox-composer-input" placeholder="Write a reply…" rows="2" aria-label="Your reply"></textarea>
+                    <textarea class="inbox-composer-input" id="inbox-composer-input" placeholder="@T["inbox.composer.placeholder"]" rows="2" aria-label="@T["inbox.composer.label"]"></textarea>
                     <div class="inbox-composer-bar">
                         <button type="button" class="au-btn au-btn--text-primary au-btn--sm" id="inbox-btn-send-template">
-                            <span class="au-icon" aria-hidden="true">description</span>Send template
+                            <span class="au-icon" aria-hidden="true">description</span>@T["inbox.composer.sendTemplate"]
                         </button>
-                        <span class="inbox-composer-hint">Enter to send · Shift+Enter for a new line</span>
+                        <span class="inbox-composer-hint">@T["inbox.composer.hint"]</span>
                         <button type="submit" class="au-btn au-btn--primary au-btn--sm" id="inbox-composer-send">
-                            <span class="au-icon" aria-hidden="true">send</span>Send
+                            <span class="au-icon" aria-hidden="true">send</span>@T["inbox.composer.send"]
                         </button>
                     </div>
                 </form>
 
                 <form class="inbox-template-picker" id="inbox-template-picker" hidden>
-                    <span class="eyebrow">Send an approved template</span>
-                    <select class="select" id="inbox-template-select" aria-label="Template"></select>
+                    <span class="eyebrow">@T["inbox.template.title"]</span>
+                    <select class="select" id="inbox-template-select" aria-label="@T["inbox.template.label"]"></select>
                     <div id="inbox-template-variables"></div>
                     <div id="inbox-template-preview" class="inbox-template-preview"></div>
                     <div class="flex items-center gap-2">
                         <button type="submit" class="au-btn au-btn--primary au-btn--sm" id="inbox-template-send">
-                            <span class="au-icon" aria-hidden="true">send</span>Send
+                            <span class="au-icon" aria-hidden="true">send</span>@T["inbox.composer.send"]
                         </button>
-                        <button type="button" class="au-btn au-btn--text au-btn--sm" id="inbox-template-cancel">Cancel</button>
+                        <button type="button" class="au-btn au-btn--text au-btn--sm" id="inbox-template-cancel">@T["common.cancel"]</button>
                     </div>
                 </form>
             </div>
@@ -148,7 +149,7 @@ else
 
         <aside class="inbox-contact-info" id="inbox-contact-info" hidden>
             <div class="inbox-contact-head">
-                <button type="button" class="au-icon-btn au-icon-btn--sm inbox-contact-close" id="inbox-contact-close" aria-label="Hide customer info" title="Hide customer info">
+                <button type="button" class="au-icon-btn au-icon-btn--sm inbox-contact-close" id="inbox-contact-close" aria-label="@T["inbox.contact.hide"]" title="@T["inbox.contact.hide"]">
                     <span class="au-icon" aria-hidden="true">close</span>
                 </button>
                 <span class="inbox-avatar inbox-avatar-lg" id="inbox-contact-avatar"></span>
@@ -157,25 +158,25 @@ else
             </div>
 
             <div class="inbox-contact-section" id="inbox-contact-journey-wrap">
-                <span class="eyebrow">Journey</span>
+                <span class="eyebrow">@T["inbox.contact.journey"]</span>
                 <div class="journey" id="inbox-contact-journey">@foreach (var _ in IndexModel.JourneyCategories){<i></i>}</div>
                 <div class="journey-labels">@foreach (var category in IndexModel.JourneyCategories){<span>@Model.JourneyLabel(category)</span>}</div>
             </div>
 
             <div class="inbox-contact-section">
-                <span class="eyebrow">Details</span>
-                <div class="inbox-contact-info-row"><span>Phone</span><strong id="inbox-contact-phone">—</strong></div>
-                <div class="inbox-contact-info-row"><span>Email</span><strong id="inbox-contact-email">—</strong></div>
-                <div class="inbox-contact-info-row"><span>Service</span><strong id="inbox-contact-service">—</strong></div>
-                <div class="inbox-contact-info-row"><span>Source</span><strong id="inbox-contact-source">—</strong></div>
-                <div class="inbox-contact-info-row"><span>Timeline</span><strong id="inbox-contact-timeline">—</strong></div>
-                <div class="inbox-contact-info-row"><span>Next follow-up</span><strong id="inbox-contact-followup">—</strong></div>
-                <div class="inbox-contact-info-row"><span>Contact since</span><strong id="inbox-contact-created">—</strong></div>
+                <span class="eyebrow">@T["inbox.contact.details"]</span>
+                <div class="inbox-contact-info-row"><span>@T["inbox.contact.phone"]</span><strong id="inbox-contact-phone">—</strong></div>
+                <div class="inbox-contact-info-row"><span>@T["inbox.contact.email"]</span><strong id="inbox-contact-email">—</strong></div>
+                <div class="inbox-contact-info-row"><span>@T["inbox.contact.service"]</span><strong id="inbox-contact-service">—</strong></div>
+                <div class="inbox-contact-info-row"><span>@T["inbox.contact.source"]</span><strong id="inbox-contact-source">—</strong></div>
+                <div class="inbox-contact-info-row"><span>@T["inbox.contact.timeline"]</span><strong id="inbox-contact-timeline">—</strong></div>
+                <div class="inbox-contact-info-row"><span>@T["inbox.contact.nextFollowUp"]</span><strong id="inbox-contact-followup">—</strong></div>
+                <div class="inbox-contact-info-row"><span>@T["inbox.contact.since"]</span><strong id="inbox-contact-created">—</strong></div>
             </div>
 
             <div class="inbox-contact-actions">
-                <a class="au-btn au-btn--outlined" id="inbox-contact-profile" href="#"><span class="au-icon" aria-hidden="true">person</span>Open full profile</a>
-                <a class="au-btn au-btn--outlined" href="/dashboard/bookings"><span class="au-icon" aria-hidden="true">calendar_month</span>Go to Bookings</a>
+                <a class="au-btn au-btn--outlined" id="inbox-contact-profile" href="#"><span class="au-icon" aria-hidden="true">person</span>@T["inbox.contact.profile"]</a>
+                <a class="au-btn au-btn--outlined" href="/dashboard/bookings"><span class="au-icon" aria-hidden="true">calendar_month</span>@T["inbox.contact.bookings"]</a>
             </div>
         </aside>
     </div>

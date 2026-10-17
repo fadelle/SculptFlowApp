@@ -20,7 +20,7 @@ public class BusinessInfoPageTests
 
     public BusinessInfoPageTests() => InboxSettings(planIncludesBot: true);
 
-    private BusinessInfo Sut(bool none = false) => new BusinessInfo(ClientContext(none ? null : Glow).Object, _profile.Object, _availability.Object, _inboxSettings.Object).Attach();
+    private BusinessInfo Sut(bool none = false) => new BusinessInfo(ClientContext(none ? null : Glow).Object, _profile.Object, _availability.Object, _inboxSettings.Object, TextKit.Localizer()).Attach();
 
     private void InboxSettings(bool planIncludesBot) =>
         _inboxSettings.Setup(a => a.GetAsync(Glow.Id, It.IsAny<CancellationToken>())).ReturnsAsync(new InboxSettingsDto(planIncludesBot, true, false));
@@ -51,7 +51,7 @@ public class BusinessInfoPageTests
     {
         var model = Sut(); model.Name = "Glow"; model.Phone = "999";
         Assert.IsType<RedirectToPageResult>(await model.OnPostAsync(default));
-        Assert.Equal("Client details saved.", model.StatusMessage);
+        Assert.Equal("Business details saved.", model.StatusMessage);
         _profile.Verify(p => p.UpdateDetailsAsync(Glow.Id, new UpdateClientDetailsRequest("Glow", "999", null, null, null, null, null), It.IsAny<CancellationToken>()), Times.Once);
 
         _profile.Setup(p => p.UpdateDetailsAsync(Glow.Id, It.IsAny<UpdateClientDetailsRequest>(), It.IsAny<CancellationToken>())).ThrowsAsync(new ArgumentException("Name is required."));
@@ -181,7 +181,7 @@ public class IntegrationsPageTests
     private readonly Mock<ITikTokIntegrationService> _tiktok = new();
 
     private IntegrationsPage Sut(bool none = false, params (string Key, string? Value)[] config) =>
-        new IntegrationsPage(ClientContext(none ? null : Glow).Object, _integrations.Object, ControllerTestKit.Config(config), _telegram.Object, _tiktok.Object).Attach();
+        new IntegrationsPage(ClientContext(none ? null : Glow).Object, _integrations.Object, ControllerTestKit.Config(config), _telegram.Object, _tiktok.Object, TextKit.Localizer()).Attach();
 
     [Fact]
     public async Task The_page_lists_channels_by_name()

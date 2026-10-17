@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.Extensions.Localization;
 using Omni.App.Business.Contracts.Managers;
 using Omni.App.Business.Contracts.Services.Dashboard;
 using Omni.App.Business.Contracts.Services.WhatsApp;
@@ -19,27 +20,21 @@ public class IndexModel : PageModel
 {
     private readonly ICurrentClientContext _clientContext;
     private readonly IDashboardService _dashboard;
-    private readonly IWhatsAppHealthService _whatsAppHealth;
+    private const string AllTimeKey = "dashboard.period.all";
 
-    public IndexModel(ICurrentClientContext clientContext, IDashboardService dashboard, IWhatsAppHealthService whatsAppHealth)
+    private readonly IWhatsAppHealthService _whatsAppHealth;
+    private readonly IStringLocalizer _text;
+
+    public IndexModel(ICurrentClientContext clientContext, IDashboardService dashboard, IWhatsAppHealthService whatsAppHealth, IStringLocalizer text)
     {
         _clientContext = clientContext;
         _dashboard = dashboard;
         _whatsAppHealth = whatsAppHealth;
+        _text = text;
     }
 
-    /// <summary>The period dropdown's choices, in display order (value, label).</summary>
-    public static readonly IReadOnlyList<(string Value, string Label)> Periods = new[]
-    {
-        ("this_week", "This week"),
-        ("last_week", "Last week"),
-        ("this_month", "This month"),
-        ("last_month", "Last month"),
-        ("7d", "Last 7 days"),
-        ("30d", "Last 30 days"),
-        ("all", "All time"),
-        ("custom", "Custom range…"),
-    };
+    /// <summary>The period dropdown's choices, in display order (the page names each one).</summary>
+    public static readonly IReadOnlyList<string> Periods = ["this_week", "last_week", "this_month", "last_month", "7d", "30d", "all", "custom"];
 
     [BindProperty(SupportsGet = true)]
     public string Period { get; set; } = "this_month";
@@ -58,7 +53,7 @@ public class IndexModel : PageModel
     public DashboardAttentionResponse? Attention { get; private set; }
     public IReadOnlyList<DashboardServiceRow> Services { get; private set; } = Array.Empty<DashboardServiceRow>();
     /// <summary>Human-readable description of the selected range, e.g. "Sep 1 – Sep 30, 2026".</summary>
-    public string RangeLabel { get; private set; } = "All time";
+    public string RangeLabel { get; private set; } = string.Empty;
     /// <summary>Null means "no WhatsApp connection yet" — the indicator shows a neutral state, not
     /// a warning, since an unconnected number isn't itself a problem for a brand-new client.</summary>
     public WhatsAppHealthResponse? WhatsAppHealth { get; private set; }
@@ -79,7 +74,7 @@ public class IndexModel : PageModel
         var tz = ViewerTimeZone.Resolve(Request, client.Timezone);
         var (fromDate, toDate) = ResolveRange(TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, tz).Date);
         RangeLabel = fromDate is null || toDate is null
-            ? "All time"
+            ? _text[AllTimeKey].Value
             : fromDate == toDate
                 ? fromDate.Value.ToString("MMM d, yyyy")
                 : $"{fromDate.Value:MMM d} – {toDate.Value:MMM d, yyyy}";

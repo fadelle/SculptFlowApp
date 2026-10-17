@@ -1,8 +1,10 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.Extensions.Localization;
 using Omni.App.Business.Contracts.Managers;
 using Omni.App.Business.Contracts.Services.Bookings;
 using Omni.App.Business.Contracts.Services.Clients;
+using Omni.App.Common.Helpers;
 using Omni.App.Entities.Dtos.Bookings;
 using Omni.App.Business.Contracts.Services.Inbox;
 using Omni.App.Entities.Dtos.Inbox;
@@ -40,11 +42,20 @@ public class BusinessInfoModel : PageModel
     private readonly IClientProfileService _profile;
     private readonly IAvailabilityService _availability;
     private readonly IInboxSettingsService _inboxSettings;
+    private readonly IStringLocalizer _text;
+
+    private const string DetailsSavedKey = "businessInfo.done.details";
+    private const string NoAiKey = "businessInfo.errors.noAi";
+    private const string AiSavedKey = "businessInfo.done.ai";
+    private const string HoursSavedKey = "businessInfo.done.hours";
+    private const string DateSavedKey = "businessInfo.done.dateSaved";
+    private const string DateRemovedKey = "businessInfo.done.dateRemoved";
 
     public BusinessInfoModel(ICurrentClientContext clientContext, IClientProfileService profile, IAvailabilityService availability,
-        IInboxSettingsService inboxSettings)
+        IInboxSettingsService inboxSettings, IStringLocalizer text)
     {
         _inboxSettings = inboxSettings;
+        _text = text;
         _clientContext = clientContext;
         _profile = profile;
         _availability = availability;
@@ -176,12 +187,12 @@ public class BusinessInfoModel : PageModel
             // Redisplay the form with what was typed instead of saving.
             ClientConfigured = true;
             Name = (Name ?? string.Empty).Trim();
-            ErrorMessage = ex.Message;
+            ErrorMessage = _text.Localize(ex);
             InboxSettings = await _inboxSettings.GetAsync(client.Id, ct);
             return Page();
         }
 
-        StatusMessage = "Client details saved.";
+        StatusMessage = _text[DetailsSavedKey].Value;
         return RedirectToPage();
     }
 
@@ -194,12 +205,12 @@ public class BusinessInfoModel : PageModel
         // changes nothing.
         if (!(await _inboxSettings.GetAsync(client.Id, ct)).PlanIncludesAiBot)
         {
-            StatusMessage = "Your plan doesn't include the AI assistant.";
+            StatusMessage = _text[NoAiKey].Value;
             return RedirectToPage();
         }
 
         await _inboxSettings.UpdateAsync(client.Id, new UpdateInboxSettingsRequest(AiBotNewConversations, AiBotReopenedConversations), ct);
-        StatusMessage = "AI assistant settings saved.";
+        StatusMessage = _text[AiSavedKey].Value;
         return RedirectToPage(new { tab = "ai" });
     }
 
@@ -220,14 +231,14 @@ public class BusinessInfoModel : PageModel
         {
             ClientConfigured = true;
             ActiveTab = "availability";
-            ErrorMessage = ex.Message;
+            ErrorMessage = _text.Localize(ex);
             var saved = await _availability.GetSettingsAsync(client.Id, ct);
             Availability = saved with { Timezone = timezone, Days = days, Booking = booking };
             await FillGeneralAsync(client);
             return Page();
         }
 
-        StatusMessage = "Opening hours saved.";
+        StatusMessage = _text[HoursSavedKey].Value;
         return RedirectToPage(new { tab = "availability" });
     }
 
@@ -238,20 +249,20 @@ public class BusinessInfoModel : PageModel
 
         try
         {
-            if (!DateOnly.TryParse(ExceptionDate, out var date)) throw new ArgumentException("Pick a date.");
+            if (!DateOnly.TryParse(ExceptionDate, out var date)) throw new ArgumentException("businessInfo.errors.pickDate");
             await _availability.SaveExceptionAsync(client.Id, date, ExceptionClosed, ExceptionStart, ExceptionEnd, ExceptionReason, ct);
         }
         catch (ArgumentException ex)
         {
             ClientConfigured = true;
             ActiveTab = "availability";
-            ErrorMessage = ex.Message;
+            ErrorMessage = _text.Localize(ex);
             Availability = await _availability.GetSettingsAsync(client.Id, ct);
             await FillGeneralAsync(client);
             return Page();
         }
 
-        StatusMessage = "Special date saved.";
+        StatusMessage = _text[DateSavedKey].Value;
         return RedirectToPage(new { tab = "availability" });
     }
 
@@ -261,7 +272,7 @@ public class BusinessInfoModel : PageModel
         if (client is null) return RedirectToPage();
 
         await _availability.DeleteExceptionAsync(client.Id, id, ct);
-        StatusMessage = "Special date removed.";
+        StatusMessage = _text[DateRemovedKey].Value;
         return RedirectToPage(new { tab = "availability" });
     }
 

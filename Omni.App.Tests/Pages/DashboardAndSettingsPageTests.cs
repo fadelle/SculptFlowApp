@@ -191,7 +191,7 @@ public class DashboardPageTests
             .ReturnsAsync(new List<DashboardServiceRow>());
         dashboard.Setup(d => d.GetAttentionAsync(Glow.Id, It.IsAny<CancellationToken>())).ReturnsAsync(Blank<DashboardAttentionResponse>());
         var health = new Mock<IWhatsAppHealthService>();
-        var model = new DashboardIndex(ClientContext(Glow).Object, dashboard.Object, health.Object) { Period = period, From = from, To = to }.Attach();
+        var model = new DashboardIndex(ClientContext(Glow).Object, dashboard.Object, health.Object, TextKit.Localizer()) { Period = period, From = from, To = to }.Attach();
         await model.OnGetAsync(default);
         return (model, seenFrom, seenTo);
     }
@@ -269,7 +269,7 @@ public class DashboardPageTests
         dashboard.Setup(d => d.GetSummaryAsync(Glow.Id, It.IsAny<DateTimeOffset?>(), It.IsAny<DateTimeOffset?>(), It.IsAny<CancellationToken>()))
             .Callback<Guid, DateTimeOffset?, DateTimeOffset?, CancellationToken>((_, f, _, _) => seenFrom = f)
             .ReturnsAsync(Blank<DashboardSummaryResponse>());
-        var model = new DashboardIndex(ClientContext(Glow).Object, dashboard.Object, Mock.Of<IWhatsAppHealthService>())
+        var model = new DashboardIndex(ClientContext(Glow).Object, dashboard.Object, Mock.Of<IWhatsAppHealthService>(), TextKit.Localizer())
         {
             Period = "custom", From = new DateOnly(2026, 3, 1), To = new DateOnly(2026, 3, 2),
         }.Attach(configure: http => http.Request.Headers.Cookie = "omni-tz=Asia/Tokyo");
@@ -280,7 +280,7 @@ public class DashboardPageTests
     [Fact]
     public async Task Without_a_client_the_dashboard_stays_empty()
     {
-        var model = new DashboardIndex(ClientContext(null).Object, Mock.Of<IDashboardService>(), Mock.Of<IWhatsAppHealthService>()).Attach();
+        var model = new DashboardIndex(ClientContext(null).Object, Mock.Of<IDashboardService>(), Mock.Of<IWhatsAppHealthService>(), TextKit.Localizer()).Attach();
         await model.OnGetAsync(default);
         Assert.False(model.ClientConfigured);
         Assert.Null(model.Summary);

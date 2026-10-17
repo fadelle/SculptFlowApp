@@ -12,11 +12,11 @@
     <div class="au-alert au-alert--error" role="alert">
         <span class="au-icon au-alert__icon" aria-hidden="true">error</span>
         <div class="au-alert__body">
-            <div class="au-alert__title">That didn't go through</div>
+            <div class="au-alert__title">@T["messages.error.title"]</div>
             @summary
             @if (details is not null)
             {
-                <details class="alert-details"><summary>Technical details</summary><div>@details</div></details>
+                <details class="alert-details"><summary>@T["messages.error.details"]</summary><div>@details</div></details>
             }
         </div>
     </div>

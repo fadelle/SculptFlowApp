@@ -1,11 +1,22 @@
 @page "/dashboard"
 @model Omni.App.Pages.Dashboard.IndexModel
 @{
-    ViewData["Title"] = "Dashboard";
+    ViewData["Title"] = T["dashboard.title"].Value;
     ViewData["SignalRFirst"] = true; // the layout loads the SignalR client before this page's scripts
 
-    // Presentation only: "36% of interested people" under a funnel card ("—" when there's nothing to compare to).
+    // Presentation only: "36% of new contacts" under a funnel card ("—" when there's nothing to compare to).
     static string Rate(int part, int whole) => whole > 0 ? $"{Math.Round(part * 100.0 / whole)}%" : "—";
+    string PeriodLabel(string period) => period switch
+    {
+        "this_week" => T["dashboard.period.thisWeek"],
+        "last_week" => T["dashboard.period.lastWeek"],
+        "this_month" => T["dashboard.period.thisMonth"],
+        "last_month" => T["dashboard.period.lastMonth"],
+        "7d" => T["dashboard.period.last7Days"],
+        "30d" => T["dashboard.period.last30Days"],
+        "all" => T["dashboard.period.all"],
+        _ => T["dashboard.period.custom"],
+    };
 }
 
 @if (!Model.ClientConfigured)
@@ -13,9 +24,8 @@
     <div class="au-alert au-alert--warning" role="status">
         <span class="au-icon au-alert__icon" aria-hidden="true">warning</span>
         <div class="au-alert__body">
-            <div class="au-alert__title">Your account isn't linked to a client yet</div>
-            New accounts get their own client when they register. If you signed up before that, ask Omni support to
-            link your account to your client.
+            <div class="au-alert__title">@T["noClient.title"]</div>
+            @T["dashboard.noClient.text"]
         </div>
     </div>
 }
@@ -34,27 +44,27 @@ else
         "disconnected" => "badge-gray",
         _ => "badge-gray"
     };
-    var whatsAppLabel = Model.WhatsAppHealth is null ? "Not connected"
-        : whatsAppLevel == "healthy" ? "Healthy" : "Attention Required";
+    var whatsAppLabel = Model.WhatsAppHealth is null ? T["dashboard.whatsApp.notConnected"]
+        : whatsAppLevel == "healthy" ? T["dashboard.whatsApp.healthy"] : T["dashboard.whatsApp.attention"];
 
     <div class="au-page-head">
-        <p class="au-page-head__sub">@Model.ClientName: what needs you, and how this period is going.</p>
+        <p class="au-page-head__sub">@T["dashboard.intro", Model.ClientName ?? ""]</p>
         <div class="au-page-head__actions">
             <form method="get" class="period-form" id="period-form">
-                <select name="Period" class="select" id="period-select" aria-label="Period">
-                    @foreach (var (value, label) in Omni.App.Pages.Dashboard.IndexModel.Periods)
+                <select name="Period" class="select" id="period-select" aria-label="@T["dashboard.period.label"]">
+                    @foreach (var value in Omni.App.Pages.Dashboard.IndexModel.Periods)
                     {
-                        <option value="@value" selected="@(value == Model.Period)">@label</option>
+                        <option value="@value" selected="@(value == Model.Period)">@PeriodLabel(value)</option>
                     }
                 </select>
                 <span class="period-custom" id="period-custom" hidden="@(!custom)">
-                    <input type="date" name="From" class="text-input" value="@Model.From?.ToString("yyyy-MM-dd")" aria-label="From" />
+                    <input type="date" name="From" class="text-input" value="@Model.From?.ToString("yyyy-MM-dd")" aria-label="@T["dashboard.period.from"]" />
                     <span class="text-subtle">–</span>
-                    <input type="date" name="To" class="text-input" value="@Model.To?.ToString("yyyy-MM-dd")" aria-label="To" />
-                    <button type="submit" class="au-btn au-btn--outlined">Apply</button>
+                    <input type="date" name="To" class="text-input" value="@Model.To?.ToString("yyyy-MM-dd")" aria-label="@T["dashboard.period.to"]" />
+                    <button type="submit" class="au-btn au-btn--outlined">@T["dashboard.period.apply"]</button>
                 </span>
             </form>
-            <a href="/WhatsApp/Health" class="health-pill" title="WhatsApp connection health">
+            <a href="/WhatsApp/Health" class="health-pill" title="@T["dashboard.whatsApp.title"]">
                 <span id="dashboard-whatsapp-health-dot" class="health-dot @whatsAppDotClass"></span>
                 <span class="text-muted">WhatsApp</span>
                 <span id="dashboard-whatsapp-health-label">@whatsAppLabel</span>
@@ -62,12 +72,12 @@ else
         </div>
     </div>
 
-    <h2 class="section-title">Needs your attention</h2>
+    <h2 class="section-title">@T["dashboard.attention.title"]</h2>
     @if (attention.ConversationsNeedingHuman + attention.OverdueFollowups + attention.BookingsNeedingOutcome == 0)
     {
         <div class="au-alert au-alert--success" role="status">
             <span class="au-icon au-alert__icon" aria-hidden="true">check_circle</span>
-            <div class="au-alert__body">All clear: nothing is waiting on you.</div>
+            <div class="au-alert__body">@T["dashboard.attention.allClear"]</div>
         </div>
     }
     else
@@ -77,8 +87,8 @@ else
             {
                 <a class="au-action-card" href="/inbox?filter=needs">
                     <span class="au-icon-tile" style="--tile: var(--au-warning)"><span class="au-icon" aria-hidden="true">forum</span></span>
-                    <span><span class="au-action-card__title">@attention.ConversationsNeedingHuman @(attention.ConversationsNeedingHuman == 1 ? "conversation is" : "conversations are") waiting for you</span>
-                        <span class="au-action-card__text">Reply in the Inbox.</span></span>
+                    <span><span class="au-action-card__title">@(attention.ConversationsNeedingHuman == 1 ? T["dashboard.attention.conversationsOne"] : T["dashboard.attention.conversationsOther", attention.ConversationsNeedingHuman])</span>
+                        <span class="au-action-card__text">@T["dashboard.attention.conversationsText"]</span></span>
                     <span class="au-icon au-action-card__arrow" aria-hidden="true">arrow_forward</span>
                 </a>
             }
@@ -86,8 +96,8 @@ else
             {
                 <a class="au-action-card" href="/dashboard/contacts">
                     <span class="au-icon-tile" style="--tile: var(--au-warning)"><span class="au-icon" aria-hidden="true">schedule</span></span>
-                    <span><span class="au-action-card__title">@attention.OverdueFollowups overdue @(attention.OverdueFollowups == 1 ? "follow-up" : "follow-ups")</span>
-                        <span class="au-action-card__text">Get back to these people.</span></span>
+                    <span><span class="au-action-card__title">@(attention.OverdueFollowups == 1 ? T["dashboard.attention.followUpsOne"] : T["dashboard.attention.followUpsOther", attention.OverdueFollowups])</span>
+                        <span class="au-action-card__text">@T["dashboard.attention.followUpsText"]</span></span>
                     <span class="au-icon au-action-card__arrow" aria-hidden="true">arrow_forward</span>
                 </a>
             }
@@ -95,54 +105,54 @@ else
             {
                 <a class="au-action-card" href="/dashboard/bookings">
                     <span class="au-icon-tile" style="--tile: var(--au-warning)"><span class="au-icon" aria-hidden="true">event_note</span></span>
-                    <span><span class="au-action-card__title">@attention.BookingsNeedingOutcome past @(attention.BookingsNeedingOutcome == 1 ? "booking needs" : "bookings need") an outcome</span>
-                        <span class="au-action-card__text">Mark them attended, no-show or canceled.</span></span>
+                    <span><span class="au-action-card__title">@(attention.BookingsNeedingOutcome == 1 ? T["dashboard.attention.outcomesOne"] : T["dashboard.attention.outcomesOther", attention.BookingsNeedingOutcome])</span>
+                        <span class="au-action-card__text">@T["dashboard.attention.outcomesText"]</span></span>
                     <span class="au-icon au-action-card__arrow" aria-hidden="true">arrow_forward</span>
                 </a>
             }
         </div>
     }
 
-    <h2 class="section-title">Contact funnel <span class="section-title__sub">@Model.RangeLabel</span></h2>
+    <h2 class="section-title">@T["dashboard.funnel.title"] <span class="section-title__sub">@Model.RangeLabel</span></h2>
     <div class="au-grid au-grid--4">
         <div class="au-stat stat-accent">
-            <span class="au-eyebrow">Interested people</span>
+            <span class="au-eyebrow">@T["dashboard.funnel.newContacts"]</span>
             <div class="au-stat__value">@s.NewInterestedPeople</div>
-            <span class="au-stat__hint">New in this period</span>
+            <span class="au-stat__hint">@T["dashboard.funnel.newContactsHint"]</span>
         </div>
         <div class="au-stat">
-            <span class="au-eyebrow">Bookings made</span>
+            <span class="au-eyebrow">@T["dashboard.funnel.bookingsMade"]</span>
             <div class="au-stat__value">@s.BookingsMade</div>
-            <span class="au-stat__hint">@Rate(s.BookingsMade, s.NewInterestedPeople) of interested people</span>
+            <span class="au-stat__hint">@T["dashboard.funnel.bookingsMadeHint", Rate(s.BookingsMade, s.NewInterestedPeople)]</span>
         </div>
         <div class="au-stat">
-            <span class="au-eyebrow">Bookings attended</span>
+            <span class="au-eyebrow">@T["dashboard.funnel.bookingsAttended"]</span>
             <div class="au-stat__value">@s.BookingsAttended</div>
-            <span class="au-stat__hint">@Rate(s.BookingsAttended, s.BookingsMade) of booked</span>
+            <span class="au-stat__hint">@T["dashboard.funnel.bookingsAttendedHint", Rate(s.BookingsAttended, s.BookingsMade)]</span>
         </div>
         <div class="au-stat">
-            <span class="au-eyebrow">Orders made</span>
+            <span class="au-eyebrow">@T["dashboard.funnel.ordersMade"]</span>
             <div class="au-stat__value">@s.OrdersMade</div>
-            <span class="au-stat__hint">@Rate(s.OrdersMade, s.BookingsAttended) of attended</span>
+            <span class="au-stat__hint">@T["dashboard.funnel.ordersMadeHint", Rate(s.OrdersMade, s.BookingsAttended)]</span>
         </div>
     </div>
 
-    <h2 class="section-title">Results</h2>
+    <h2 class="section-title">@T["dashboard.results.title"]</h2>
     <div class="au-grid au-grid--4">
         <div class="au-stat">
-            <span class="au-eyebrow">Revenue from completed orders</span>
+            <span class="au-eyebrow">@T["dashboard.results.revenue"]</span>
             <div class="au-stat__value">@UiTextHelper.Amount(s.Revenue)</div>
-            <span class="au-stat__hint">In this period</span>
+            <span class="au-stat__hint">@T["dashboard.results.revenueHint"]</span>
         </div>
     </div>
 
-    <h2 class="section-title">By service</h2>
+    <h2 class="section-title">@T["dashboard.services.title"]</h2>
     <div class="au-table-card">
         @if (Model.Services.Count == 0)
         {
-            var empty = new EmptyStateModel(Icon: "medical_services", Title: "No services yet",
-                Text: "Add the services your client offers to see interest and bookings for each one.",
-                ActionLabel: "Add a service", ActionHref: "/Services/Edit");
+            var empty = new EmptyStateModel(Icon: "medical_services", Title: T["dashboard.services.emptyTitle"].Value,
+                Text: T["dashboard.services.emptyText"].Value,
+                ActionLabel: T["dashboard.services.emptyAction"].Value, ActionHref: "/Services/Edit");
             <partial name="_EmptyState" model="empty" />
         }
         else
@@ -150,17 +160,17 @@ else
             <div class="au-table-scroll">
                 <table class="au-table au-table--stack">
                     <thead>
-                        <tr><th>Service</th><th class="au-right">Interested</th><th class="au-right">Bookings</th><th class="au-right">Completed</th><th class="au-right">Revenue</th></tr>
+                        <tr><th>@T["dashboard.services.service"]</th><th class="au-right">@T["dashboard.services.interested"]</th><th class="au-right">@T["dashboard.services.orders"]</th><th class="au-right">@T["dashboard.services.completed"]</th><th class="au-right">@T["dashboard.services.revenue"]</th></tr>
                     </thead>
                     <tbody>
                         @foreach (var p in Model.Services)
                         {
                             <tr>
-                                <td data-label="Service"><strong>@p.ServiceName</strong></td>
-                                <td data-label="Interested" class="au-right">@p.ContactCount</td>
-                                <td data-label="Bookings" class="au-right">@p.OrderCount</td>
-                                <td data-label="Completed" class="au-right">@p.CompletedCount</td>
-                                <td data-label="Revenue" class="au-right">@UiTextHelper.Amount(p.CompletedRevenue)</td>
+                                <td data-label="@T["dashboard.services.service"]"><strong>@p.ServiceName</strong></td>
+                                <td data-label="@T["dashboard.services.interested"]" class="au-right">@p.ContactCount</td>
+                                <td data-label="@T["dashboard.services.orders"]" class="au-right">@p.OrderCount</td>
+                                <td data-label="@T["dashboard.services.completed"]" class="au-right">@p.CompletedCount</td>
+                                <td data-label="@T["dashboard.services.revenue"]" class="au-right">@UiTextHelper.Amount(p.CompletedRevenue)</td>
                             </tr>
                         }
                     </tbody>
@@ -169,21 +179,21 @@ else
         }
     </div>
 
-    <h2 class="section-title">Jump to</h2>
+    <h2 class="section-title">@T["dashboard.jump.title"]</h2>
     <div class="au-grid au-grid--3">
         <a class="au-action-card" href="/inbox">
             <span class="au-icon-tile"><span class="au-icon" aria-hidden="true">chat</span></span>
-            <span><span class="au-action-card__title">Inbox</span><span class="au-action-card__text">Reply to contacts.</span></span>
+            <span><span class="au-action-card__title">@T["nav.inbox"]</span><span class="au-action-card__text">@T["dashboard.jump.inbox"]</span></span>
             <span class="au-icon au-action-card__arrow" aria-hidden="true">arrow_forward</span>
         </a>
         <a class="au-action-card" href="/dashboard/contacts">
             <span class="au-icon-tile"><span class="au-icon" aria-hidden="true">group</span></span>
-            <span><span class="au-action-card__title">Interested People</span><span class="au-action-card__text">Every contact and their status.</span></span>
+            <span><span class="au-action-card__title">@T["nav.contacts"]</span><span class="au-action-card__text">@T["dashboard.jump.contacts"]</span></span>
             <span class="au-icon au-action-card__arrow" aria-hidden="true">arrow_forward</span>
         </a>
         <a class="au-action-card" href="/dashboard/bookings">
             <span class="au-icon-tile"><span class="au-icon" aria-hidden="true">calendar_month</span></span>
-            <span><span class="au-action-card__title">Bookings</span><span class="au-action-card__text">Bookings and orders.</span></span>
+            <span><span class="au-action-card__title">@T["nav.bookings"]</span><span class="au-action-card__text">@T["dashboard.jump.bookings"]</span></span>
             <span class="au-icon au-action-card__arrow" aria-hidden="true">arrow_forward</span>
         </a>
     </div>

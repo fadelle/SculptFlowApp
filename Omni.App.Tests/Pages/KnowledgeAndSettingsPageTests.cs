@@ -441,7 +441,7 @@ public class KnowledgeSettingsAndWebsitePageTests
     {
         var calendar = new Mock<ICalendarIntegrationService>();
         calendar.Setup(c => c.ListAsync(Glow.Id, It.IsAny<CancellationToken>())).ReturnsAsync(new List<CalendarIntegrationResponse>());
-        var model = new CalendarPage(ClientContext(Glow).Object, calendar.Object).Attach();
+        var model = new CalendarPage(ClientContext(Glow).Object, calendar.Object, TextKit.Localizer()).Attach();
         await model.OnGetAsync(default);
         Assert.True(model.ClientConfigured);
 
@@ -475,7 +475,7 @@ public class KnowledgeSettingsAndWebsitePageTests
     public async Task Calendar_page_without_a_client_does_nothing()
     {
         var calendar = new Mock<ICalendarIntegrationService>();
-        var model = new CalendarPage(ClientContext(null).Object, calendar.Object).Attach();
+        var model = new CalendarPage(ClientContext(null).Object, calendar.Object, TextKit.Localizer()).Attach();
         await model.OnGetAsync(default);
         Assert.False(model.ClientConfigured);
         Assert.IsType<RedirectToPageResult>(await model.OnPostRefreshCalendarsAsync("google", default));

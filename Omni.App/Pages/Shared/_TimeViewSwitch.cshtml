@@ -1,7 +1,7 @@
 @model string
-@* "Client time | My time" for booking pages. Model = the client's IANA timezone. local-time.js shows it only when
+@* "{Client} time | My time" for booking pages. Model = the client's IANA timezone. local-time.js shows it only when
    the viewer's timezone differs from the client's, and remembers the choice per browser (default: client time). *@
-<div class="seg time-view-switch" role="radiogroup" aria-label="Show times in" data-client-tz="@Model" hidden>
-    <label class="seg-opt"><input type="radio" name="time-view" value="client" /><span>Client time</span></label>
-    <label class="seg-opt"><input type="radio" name="time-view" value="mine" /><span>My time</span></label>
+<div class="seg time-view-switch" role="radiogroup" aria-label="@T["timeView.label"]" data-client-tz="@Model" hidden>
+    <label class="seg-opt"><input type="radio" name="time-view" value="client" /><span>@T["timeView.client"]</span></label>
+    <label class="seg-opt"><input type="radio" name="time-view" value="mine" /><span>@T["timeView.mine"]</span></label>
 </div>

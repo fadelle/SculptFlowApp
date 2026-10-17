@@ -1,4 +1,6 @@
 using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.Localization;
+using Omni.App.Common.Configs;
 using Omni.App.Entities.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
@@ -7,11 +9,17 @@ namespace Omni.App.Pages.Account;
 
 public class LoginModel : PageModel
 {
-    private readonly SignInManager<AppUser> _signInManager;
+    private const string MissingFieldsKey = "login.errors.missingFields";
+    private const string WrongPasswordKey = "login.errors.wrongPassword";
+    private const string LockedOutKey = "login.errors.lockedOut";
 
-    public LoginModel(SignInManager<AppUser> signInManager)
+    private readonly SignInManager<AppUser> _signInManager;
+    private readonly IStringLocalizer _text;
+
+    public LoginModel(SignInManager<AppUser> signInManager, IStringLocalizer text)
     {
         _signInManager = signInManager;
+        _text = text;
     }
 
     [BindProperty]
@@ -28,23 +36,21 @@ public class LoginModel : PageModel
     public void OnGet(string? externalError)
     {
         // Set by GoogleAuthController / the Google handler as a fixed code; only known codes become text.
-        ErrorMessage = Omni.App.Common.Configs.GoogleLoginSettings.ErrorMessage(externalError);
+        ErrorMessage = GoogleLoginSettings.ErrorKey(externalError) is { } key ? _text[key].Value : null;
     }
 
     public async Task<IActionResult> OnPostAsync()
     {
         if (string.IsNullOrWhiteSpace(Email) || string.IsNullOrWhiteSpace(Password))
         {
-            ErrorMessage = "Enter your email and password.";
+            ErrorMessage = _text[MissingFieldsKey].Value;
             return Page();
         }
 
         var result = await _signInManager.PasswordSignInAsync(Email, Password, isPersistent: true, lockoutOnFailure: true);
         if (!result.Succeeded)
         {
-            ErrorMessage = result.IsLockedOut
-                ? "Too many attempts. For your security, wait a few minutes and try again."
-                : "That email and password don't match. Check them and try again.";
+            ErrorMessage = _text[result.IsLockedOut ? LockedOutKey : WrongPasswordKey].Value;
             return Page();
         }
 

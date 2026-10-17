@@ -1,10 +1,12 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.Extensions.Localization;
 using Omni.App.Business.Contracts.Managers;
 using Omni.App.Business.Contracts.Services.Channels;
 using Omni.App.Business.Contracts.Services.TikTok;
 using Omni.App.Common.Enums;
 using Omni.App.Common.Exceptions;
+using Omni.App.Common.Helpers;
 using Omni.App.Entities.Requests.Channels;
 using Omni.App.Entities.Responses.Channels;
 using Omni.App.Entities.Responses.TikTok;
@@ -19,16 +21,26 @@ public class IntegrationsModel : PageModel
     private readonly IConfiguration _configuration;
     private readonly ITelegramIntegrationService _telegram;
     private readonly ITikTokIntegrationService _tiktok;
+    private readonly IStringLocalizer _text;
+
+    private const string SavedKey = "integrations.done.saved";
+    private const string DisconnectedKey = "integrations.done.disconnected";
+    private const string TelegramConnectedKey = "integrations.telegram.connected";
+    private const string TelegramUnnamedKey = "integrations.telegram.unnamed";
+    private const string TelegramFailedKey = "integrations.telegram.connectFailed";
+    private const string TelegramActiveKey = "integrations.telegram.webhookActive";
+    private const string TelegramCheckedKey = "integrations.telegram.webhookChecked";
 
     public IntegrationsModel(
         ICurrentClientContext clientContext, IChannelIntegrationService integrations, IConfiguration configuration,
-        ITelegramIntegrationService telegram, ITikTokIntegrationService tiktok)
+        ITelegramIntegrationService telegram, ITikTokIntegrationService tiktok, IStringLocalizer text)
     {
         _clientContext = clientContext;
         _integrations = integrations;
         _configuration = configuration;
         _telegram = telegram;
         _tiktok = tiktok;
+        _text = text;
     }
 
     public bool ClientConfigured { get; private set; }
@@ -105,11 +117,11 @@ public class IntegrationsModel : PageModel
             await _integrations.SaveAsync(new SaveChannelIntegrationRequest(
                 client.Id, Channel, DisplayName, PhoneNumberId, WhatsAppBusinessId,
                 PageId, InstagramBusinessId, AccessToken, WebhookVerifyToken), ct);
-            StatusMessage = $"{Label(Channel)} connection saved.";
+            StatusMessage = _text[SavedKey, Label(Channel)].Value;
         }
         catch (InvalidOperationException ex) // e.g. the plan's channel limit
         {
-            ErrorMessage = ex.Message;
+            ErrorMessage = _text.Localize(ex);
         }
         return RedirectToPage();
     }
@@ -126,11 +138,11 @@ public class IntegrationsModel : PageModel
         try
         {
             var result = await _telegram.ConnectAsync(client.Id, BotToken, ct);
-            StatusMessage = $"Telegram connected — bot {result.DisplayName ?? "(unnamed)"}. The webhook was registered automatically.";
+            StatusMessage = _text[TelegramConnectedKey, result.DisplayName ?? _text[TelegramUnnamedKey].Value].Value;
         }
         catch (Exception ex) when (ex is ArgumentException or TelegramApiException or InvalidOperationException)
         {
-            ErrorMessage = "Could not connect Telegram: " + ex.Message;
+            ErrorMessage = _text[TelegramFailedKey, _text.Localize(ex)].Value;
         }
 
         return RedirectToPage();
@@ -145,9 +157,7 @@ public class IntegrationsModel : PageModel
         }
 
         var result = await _telegram.RefreshStatusAsync(client.Id, ct);
-        StatusMessage = result.WebhookStatus == WebhookStatus.Active
-            ? "Telegram webhook is active."
-            : "Telegram webhook check finished — see the status below.";
+        StatusMessage = _text[result.WebhookStatus == WebhookStatus.Active ? TelegramActiveKey : TelegramCheckedKey].Value;
         return RedirectToPage();
     }
 
@@ -160,7 +170,7 @@ public class IntegrationsModel : PageModel
         }
 
         await _integrations.DisconnectAsync(client.Id, Channel, ct);
-        StatusMessage = $"{Label(Channel)} disconnected.";
+        StatusMessage = _text[DisconnectedKey, Label(Channel)].Value;
         return RedirectToPage();
     }
 
@@ -173,7 +183,7 @@ public class IntegrationsModel : PageModel
         }
 
         await _tiktok.DisconnectAsync(client.Id, ct);
-        StatusMessage = "TikTok disconnected.";
+        StatusMessage = _text[DisconnectedKey, "TikTok"].Value;
         return RedirectToPage();
     }
 

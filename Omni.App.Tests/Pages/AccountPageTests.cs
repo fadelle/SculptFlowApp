@@ -27,7 +27,7 @@ public class AccountPageTests
     [InlineData(null, null)]
     public void Login_shows_a_message_only_for_known_google_error_codes(string? code, string? expected)
     {
-        var model = new LoginModel(SignIn().Object).Attach();
+        var model = new LoginModel(SignIn().Object, TextKit.Localizer()).Attach();
         model.OnGet(code);
         Assert.Equal(expected, model.ErrorMessage);
     }
@@ -38,7 +38,7 @@ public class AccountPageTests
     public async Task Login_needs_both_fields_and_does_not_call_identity(string email, string password)
     {
         var signIn = SignIn();
-        var model = new LoginModel(signIn.Object) { Email = email, Password = password }.Attach();
+        var model = new LoginModel(signIn.Object, TextKit.Localizer()) { Email = email, Password = password }.Attach();
         Assert.IsType<PageResult>(await model.OnPostAsync());
         Assert.Equal("Enter your email and password.", model.ErrorMessage);
         signIn.Verify(s => s.PasswordSignInAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<bool>()), Times.Never);
@@ -50,7 +50,7 @@ public class AccountPageTests
         var signIn = SignIn();
         signIn.SetupSequence(s => s.PasswordSignInAsync("a@x.com", "bad", true, true))
             .ReturnsAsync(SignInResult.Failed).ReturnsAsync(SignInResult.LockedOut);
-        var model = new LoginModel(signIn.Object) { Email = "a@x.com", Password = "bad" }.Attach();
+        var model = new LoginModel(signIn.Object, TextKit.Localizer()) { Email = "a@x.com", Password = "bad" }.Attach();
 
         Assert.IsType<PageResult>(await model.OnPostAsync());
         Assert.Contains("don't match", model.ErrorMessage);
@@ -64,7 +64,7 @@ public class AccountPageTests
         // AppSignInManager answers NotAllowed for them; the page must not tell anyone the account exists.
         var signIn = SignIn();
         signIn.Setup(s => s.PasswordSignInAsync("ada@x.com", "right", true, true)).ReturnsAsync(SignInResult.NotAllowed);
-        var model = new LoginModel(signIn.Object) { Email = "ada@x.com", Password = "right" }.Attach();
+        var model = new LoginModel(signIn.Object, TextKit.Localizer()) { Email = "ada@x.com", Password = "right" }.Attach();
         Assert.IsType<PageResult>(await model.OnPostAsync());
         Assert.Equal("That email and password don't match. Check them and try again.", model.ErrorMessage);
     }
@@ -78,7 +78,7 @@ public class AccountPageTests
     {
         var signIn = SignIn();
         signIn.Setup(s => s.PasswordSignInAsync("a@x.com", "pw", true, true)).ReturnsAsync(SignInResult.Success);
-        var model = new LoginModel(signIn.Object) { Email = "a@x.com", Password = "pw", ReturnUrl = returnUrl }.Attach();
+        var model = new LoginModel(signIn.Object, TextKit.Localizer()) { Email = "a@x.com", Password = "pw", ReturnUrl = returnUrl }.Attach();
         Assert.Equal(expected, RedirectTarget(await model.OnPostAsync()));
     }
 
@@ -184,7 +184,7 @@ public class AccountPageTests
 
         Assert.Equal("/Account/Login?externalError=signup_closed", RedirectTarget(await model.OnGetAsync()));
         auth.Verify(a => a.SignOutAsync(It.IsAny<Microsoft.AspNetCore.Http.HttpContext>(), IdentityConstants.ExternalScheme, It.IsAny<AuthenticationProperties?>()), Times.Once);
-        Assert.NotNull(Omni.App.Common.Configs.GoogleLoginSettings.ErrorMessage("signup_closed"));
+        Assert.NotNull(Omni.App.Common.Configs.GoogleLoginSettings.ErrorKey("signup_closed"));
     }
 
     [Fact]

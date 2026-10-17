@@ -1,7 +1,7 @@
 @page "/Account/Register"
 @model Omni.App.Pages.Account.RegisterModel
 @{
-    ViewData["Title"] = "Create your client account";
+    ViewData["Title"] = T["register.title"].Value;
     Layout = "_AuthLayout";
     var loginUrl = "/Account/Login" + (string.IsNullOrEmpty(Model.ReturnUrl) ? "" : "?ReturnUrl=" + Uri.EscapeDataString(Model.ReturnUrl));
     // Identity reports a used email as "... is already taken." — offer to sign in instead.
@@ -13,8 +13,8 @@
     <div class="au-auth__brand">
         <span class="au-brand__mark"><img class="auth-logo" src="~/logo.svg" alt="" width="56" height="56" /></span>
         <div>
-            <h1 class="au-auth__title">Create your client account</h1>
-            <p class="au-auth__sub">Takes a minute. You'll set up your own client workspace.</p>
+            <h1 class="au-auth__title">@T["register.title"]</h1>
+            <p class="au-auth__sub">@T["register.subtitle"]</p>
         </div>
     </div>
 
@@ -22,9 +22,9 @@
     {
         <div class="au-alert au-alert--warning" role="status">
             <span class="au-icon au-alert__icon" aria-hidden="true">info</span>
-            <div class="au-alert__body">New client sign-ups are closed right now. Contact Omni to get an account.</div>
+            <div class="au-alert__body">@T["register.closed"]</div>
         </div>
-        <p class="au-auth__foot">Already have an account? <a class="au-link" href="@loginUrl">Sign in</a></p>
+        <p class="au-auth__foot">@T["register.haveAccount"] <a class="au-link" href="@loginUrl">@T["login.submit"]</a></p>
     }
     else
     {
@@ -35,7 +35,7 @@
             <div class="au-alert__body">
                 @if (emailTaken)
                 {
-                    <text>An account with this email already exists. <a class="au-link" href="@loginUrl">Sign in instead</a>?</text>
+                    <text>@T["register.emailTaken"] <a class="au-link" href="@loginUrl">@T["register.signInInstead"]</a></text>
                 }
                 else
                 {
@@ -49,17 +49,17 @@
 
     <form method="post" class="au-auth__form" data-auth-form data-au-no-busy>
         <div class="au-form-field">
-            <label class="au-form-label" for="reg-name">Your full name</label>
-            <input type="text" name="FullName" id="reg-name" value="@Model.FullName" class="au-input" autocomplete="name" maxlength="200" required autofocus placeholder="Rana Khoury" />
+            <label class="au-form-label" for="reg-name">@T["register.fullName"]</label>
+            <input type="text" name="FullName" id="reg-name" value="@Model.FullName" class="au-input" autocomplete="name" maxlength="200" required autofocus placeholder="@T["register.fullNamePlaceholder"]" />
         </div>
         <div class="au-form-field">
-            <label class="au-form-label" for="reg-email">Email</label>
-            <input type="email" name="Email" id="reg-email" value="@Model.Email" class="au-input" autocomplete="username" required placeholder="you@yourbusiness.com" />
+            <label class="au-form-label" for="reg-email">@T["auth.email"]</label>
+            <input type="email" name="Email" id="reg-email" value="@Model.Email" class="au-input" autocomplete="username" required placeholder="@T["auth.emailPlaceholder"]" />
         </div>
         <div class="au-form-field">
-            <label class="au-form-label" for="reg-client">Client name</label>
+            <label class="au-form-label" for="reg-client">@T["signup.clientName"]</label>
             <input type="text" name="ClientName" id="reg-client" value="@Model.ClientName" class="au-input" autocomplete="organization" maxlength="200" required
-                   placeholder="e.g. Glow Aesthetic Client" />
+                   placeholder="@T["signup.clientNamePlaceholder"]" />
         </div>
         <div class="au-form-field">
             <label class="au-form-label" for="reg-business-type">@T["signup.businessType.label"]</label>
@@ -73,27 +73,27 @@
             <small class="au-help" id="reg-business-type-help">@T["signup.businessType.help"]</small>
         </div>
         <div class="au-form-field">
-            <label class="au-form-label" for="reg-password">Password</label>
+            <label class="au-form-label" for="reg-password">@T["auth.password"]</label>
             <span class="pw-wrap">
                 <input type="password" name="Password" id="reg-password" class="au-input" autocomplete="new-password" required minlength="6" data-pw data-pw-new />
-                <button type="button" class="pw-eye" data-pw-toggle aria-label="Show password" title="Show password">👁</button>
+                <button type="button" class="pw-eye" data-pw-toggle aria-label="@T["auth.password.show"]" title="@T["auth.password.show"]">👁</button>
             </span>
-            <small class="text-subtle" data-pw-rule>At least 6 characters</small>
+            <small class="text-subtle" data-pw-rule>@T["register.passwordRule"]</small>
         </div>
         <div class="au-form-field">
-            <label class="au-form-label" for="reg-confirm">Confirm password</label>
+            <label class="au-form-label" for="reg-confirm">@T["register.confirmPassword"]</label>
             <span class="pw-wrap">
                 <input type="password" name="ConfirmPassword" id="reg-confirm" class="au-input" autocomplete="new-password" required minlength="6" data-pw data-pw-confirm />
-                <button type="button" class="pw-eye" data-pw-toggle aria-label="Show password" title="Show password">👁</button>
+                <button type="button" class="pw-eye" data-pw-toggle aria-label="@T["auth.password.show"]" title="@T["auth.password.show"]">👁</button>
             </span>
             <small data-pw-match hidden></small>
         </div>
-        <div class="caps-warn" data-caps hidden>⇪ Caps Lock is on</div>
+        <div class="caps-warn" data-caps hidden>⇪ @T["auth.password.capsLock"]</div>
 
-        <button type="submit" class="au-btn au-btn--primary au-btn--lg au-btn--block" data-busy-label="Creating your account…">Create account</button>
+        <button type="submit" class="au-btn au-btn--primary au-btn--lg au-btn--block" data-busy-label="@T["register.submitBusy"]">@T["register.submit"]</button>
     </form>
 
-    <p class="au-auth__foot">Already have an account? <a class="au-link" href="@loginUrl">Sign in</a></p>
+    <p class="au-auth__foot">@T["register.haveAccount"] <a class="au-link" href="@loginUrl">@T["login.submit"]</a></p>
     }
 </div>
 

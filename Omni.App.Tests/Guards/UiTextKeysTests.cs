@@ -6,7 +6,7 @@ namespace Omni.App.Tests.Guards;
 /// <summary>
 /// The UI strings files (Omni.App/Resources/i18n/*.json) and the code agree: every key the code uses exists in en.json,
 /// every en.json key is used, and every placeholder is an argument ({0}) or a business-type term ({contact}…).
-/// Keys are found where the code names them: <c>T["key"]</c> / <c>_text["key"]</c> (Razor and C#), an exception thrown
+/// Keys are found where the code names them: <c>T["key"]</c> / <c>_text["key"]</c> / <c>T.Html("key")</c> (Razor and C#), an exception thrown
 /// with a key as its message, a <c>…Key = "key"</c> constant, and <c>omniText.t('key')</c> in JS.
 /// </summary>
 public partial class UiTextKeysTests
@@ -32,7 +32,7 @@ public partial class UiTextKeysTests
         {
             // Comment lines may show the syntax with sample keys; only code counts.
             var text = string.Join('\n', File.ReadLines(file).Where(l => !IsComment(l.TrimStart())));
-            var patterns = file.EndsWith(".js") ? [JsKey()] : new[] { IndexerKey(), ExceptionKey(), ConstantKey() };
+            var patterns = file.EndsWith(".js") ? [JsKey()] : new[] { IndexerKey(), HtmlKey(), ExceptionKey(), ConstantKey() };
             foreach (var match in patterns.SelectMany(p => p.Matches(text)))
             {
                 var key = match.Groups[1].Value;
@@ -100,6 +100,9 @@ public partial class UiTextKeysTests
 
     [GeneratedRegex("""\b(?:T|_text|Text|_localizer|Localizer)\[\s*"([^"]+)"\s*[,\]]""")]
     private static partial Regex IndexerKey();
+
+    [GeneratedRegex("""\b(?:T|_text|Text)\.Html\(\s*"([^"]+)"\s*[,)]""")]
+    private static partial Regex HtmlKey();
 
     [GeneratedRegex("""Exception\(\s*"([a-z][A-Za-z0-9]*(?:\.[A-Za-z0-9]+)+)"\s*\)""")]
     private static partial Regex ExceptionKey();

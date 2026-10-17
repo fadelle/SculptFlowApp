@@ -17,8 +17,8 @@
 <div id="status-help-overlay" class="status-help-overlay" hidden>
     <div class="status-help-card card" role="dialog" aria-modal="true" aria-labelledby="status-help-title">
         <div class="status-help-header">
-            <h3 id="status-help-title">What do these mean?</h3>
-            <button type="button" class="au-icon-btn" id="status-help-close" aria-label="Close" title="Close"><span class="au-icon" aria-hidden="true">close</span></button>
+            <h3 id="status-help-title">@T["statusHelp.title"]</h3>
+            <button type="button" class="au-icon-btn" id="status-help-close" aria-label="@T["common.close"]" title="@T["common.close"]"><span class="au-icon" aria-hidden="true">close</span></button>
         </div>
 
         <section class="status-help-section">
@@ -33,45 +33,35 @@
         </section>
 
         <section class="status-help-section">
-            <h4>Qualification status</h4>
-            <p class="text-subtle">How promising this contact looks — set by the AI during conversation, or by members directly.</p>
+            <h4>@T["statusHelp.qualification.title"]</h4>
+            <p class="text-subtle">@T["statusHelp.qualification.intro"]</p>
             <dl>
-                <dt>Unknown</dt><dd>Not yet assessed.</dd>
-                <dt>Hot</dt><dd>High intent — likely to book soon.</dd>
-                <dt>Warm</dt><dd>Interested, but not urgent.</dd>
-                <dt>Cold</dt><dd>Low intent — unlikely to convert soon.</dd>
-                <dt>Needs human review</dt><dd>The AI couldn't confidently qualify this contact — flagged for members.</dd>
-                <dt>Spam</dt><dd>Not a genuine contact.</dd>
+                <dt>@T["statusHelp.qualification.unknown"]</dt><dd>@T["statusHelp.qualification.unknownHelp"]</dd>
+                <dt>@T["statusHelp.qualification.hot"]</dt><dd>@T["statusHelp.qualification.hotHelp"]</dd>
+                <dt>@T["statusHelp.qualification.warm"]</dt><dd>@T["statusHelp.qualification.warmHelp"]</dd>
+                <dt>@T["statusHelp.qualification.cold"]</dt><dd>@T["statusHelp.qualification.coldHelp"]</dd>
+                <dt>@T["statusHelp.qualification.needsHuman"]</dt><dd>@T["statusHelp.qualification.needsHumanHelp"]</dd>
+                <dt>@T["statusHelp.qualification.spam"]</dt><dd>@T["statusHelp.qualification.spamHelp"]</dd>
             </dl>
         </section>
 
         <section class="status-help-section">
-            <h4>Contact source</h4>
-            <p class="text-subtle">
-                Where the contact came from. There's no fixed list — it's free text, so it grows to match
-                however your client actually acquires contacts (e.g. <em>facebook</em>, <em>instagram</em>,
-                <em>google</em>, <em>website</em>, <em>referral</em>, <em>whatsapp</em>, or anything else
-                via "Other…"). Used to filter campaigns by acquisition channel.
-            </p>
+            <h4>@T["statusHelp.source.title"]</h4>
+            <p class="text-subtle">@T["statusHelp.source.intro", "facebook, instagram, google, website, referral, whatsapp"]</p>
         </section>
 
         <section class="status-help-section">
-            <h4>Booking status</h4>
-            <p class="text-subtle">The state of one specific booking.</p>
+            <h4>@T["statusHelp.booking.title"]</h4>
+            <p class="text-subtle">@T["statusHelp.booking.intro"]</p>
             <dl>
-                <dt>Booked</dt><dd>A booking time has been scheduled.</dd>
-                <dt>Confirmed</dt><dd>The client or contact has confirmed they'll attend.</dd>
-                <dt>Attended</dt><dd>The booking took place.</dd>
-                <dt>No-show</dt><dd>They didn't show up.</dd>
-                <dt>Canceled</dt><dd>The booking was canceled.</dd>
-                <dt>Rescheduled</dt><dd>The booking time was moved to a new date/time.</dd>
+                <dt>@T["statusHelp.booking.booked"]</dt><dd>@T["statusHelp.booking.bookedHelp"]</dd>
+                <dt>@T["statusHelp.booking.confirmed"]</dt><dd>@T["statusHelp.booking.confirmedHelp"]</dd>
+                <dt>@T["statusHelp.booking.attended"]</dt><dd>@T["statusHelp.booking.attendedHelp"]</dd>
+                <dt>@T["statusHelp.booking.noShow"]</dt><dd>@T["statusHelp.booking.noShowHelp"]</dd>
+                <dt>@T["statusHelp.booking.canceled"]</dt><dd>@T["statusHelp.booking.canceledHelp"]</dd>
+                <dt>@T["statusHelp.booking.rescheduled"]</dt><dd>@T["statusHelp.booking.rescheduledHelp"]</dd>
             </dl>
-            <p class="text-subtle">
-                <strong>Matters for "Old contacts who never booked":</strong> Booked, Confirmed, Rescheduled,
-                or Attended means the contact has a real booking on record, so they stop matching that
-                reactivation audience. Canceled and No-show don't count as a successful booking — those
-                contacts stay eligible for reactivation.
-            </p>
+            <p class="text-subtle"><strong>@T["statusHelp.booking.reactivationTitle"]</strong> @T["statusHelp.booking.reactivationText"]</p>
         </section>
     </div>
 </div>

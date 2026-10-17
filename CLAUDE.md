@@ -134,7 +134,8 @@ Full detail and the declared-settings table: `docs/configuration.md`.
 ## UI text and business types (standing rule, Milestone A S3)
 
 - Every UI string a change writes or edits goes into `Omni.App/Resources/i18n/en.json` (flat keys `area.element.state`):
-  Razor `@T["key"]`, JS `omniText.t('key', [args])`, server messages `throw new ArgumentException("key").WithArgs(...)`
+  Razor `@T["key"]` (`@T.Html("key", args)` when an argument is HTML, e.g. a `LocalTimeHelper.Time` tag), page models an
+  injected `IStringLocalizer` with `…Key` constants, JS `omniText.t('key', [args])`, server messages `throw new ArgumentException("key").WithArgs(...)`
   (`[ApiErrors]` and `TextError.Localize` turn keys into text; a plain message still shows as written).
 - Placeholders: `{0}`… for arguments; `{contact}` `{contacts}` `{Contact}` `{Contacts}` (same for member, service, booking,
   order, client) for the client's business-type words. Never glue a word into a sentence Arabic can't follow.

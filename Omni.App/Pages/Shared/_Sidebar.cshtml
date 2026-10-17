@@ -20,40 +20,40 @@
             + $"<span class=\"au-icon\" aria-hidden=\"true\">{icon}</span><span class=\"au-nav-item__label\">{enc.Encode(label)}</span>{extra}</a></div>");
     }
 }
-<nav class="au-sidebar" aria-label="Main navigation">
+<nav class="au-sidebar" aria-label="@T["nav.label"]">
     <a class="au-brand" href="/dashboard">
         <span class="au-brand__mark"><img class="au-brand__logo" src="~/logo.svg" alt="" width="38" height="38" /></span>
         <span class="au-brand__text">
             <span class="au-brand__name">Omni</span>
-            <span class="au-brand__sub" title="@clientName">@(string.IsNullOrWhiteSpace(clientName) ? "Client Dashboard" : clientName)</span>
+            <span class="au-brand__sub" title="@clientName">@(string.IsNullOrWhiteSpace(clientName) ? T["nav.brandSub"].Value : clientName)</span>
         </span>
     </a>
     <div class="au-side-rule"></div>
     <div class="au-side-scroll">
-        <div class="au-side-section">Daily work</div>
-        @Row("/dashboard", "space_dashboard", "Dashboard", dashboardActive) @* icon:space_dashboard *@
-        @Row("/inbox", "chat", "Inbox", IsActive("/inbox"),
+        <div class="au-side-section">@T["nav.section.daily"]</div>
+        @Row("/dashboard", "space_dashboard", T["nav.dashboard"].Value, dashboardActive) @* icon:space_dashboard *@
+        @Row("/inbox", "chat", T["nav.inbox"].Value, IsActive("/inbox"),
             "<span class=\"au-nav-count sidebar-badge\" id=\"sidebar-inbox-badge\" hidden></span>") @* icon:chat *@
-        @Row("/dashboard/contacts", "group", "Interested People", IsActive("/dashboard/contacts")) @* icon:group *@
-        @Row("/dashboard/bookings", "calendar_month", "Bookings", IsActive("/dashboard/bookings")) @* icon:calendar_month *@
+        @Row("/dashboard/contacts", "group", T["nav.contacts"].Value, IsActive("/dashboard/contacts")) @* icon:group *@
+        @Row("/dashboard/bookings", "calendar_month", T["nav.bookings"].Value, IsActive("/dashboard/bookings")) @* icon:calendar_month *@
 
-        <div class="au-side-section">Marketing</div>
-        @Row("/Campaigns", "campaign", "Campaigns", IsActive("/Campaigns")) @* icon:campaign *@
-        @Row("/WhatsApp/Templates", "description", "WhatsApp Templates", IsActive("/WhatsApp/Templates")) @* icon:description *@
-        @Row("/WhatsApp/Health", "monitor_heart", "WhatsApp Health", IsActive("/WhatsApp/Health")) @* icon:monitor_heart *@
+        <div class="au-side-section">@T["nav.section.marketing"]</div>
+        @Row("/Campaigns", "campaign", T["nav.campaigns"].Value, IsActive("/Campaigns")) @* icon:campaign *@
+        @Row("/WhatsApp/Templates", "description", T["nav.whatsAppTemplates"].Value, IsActive("/WhatsApp/Templates")) @* icon:description *@
+        @Row("/WhatsApp/Health", "monitor_heart", T["nav.whatsAppHealth"].Value, IsActive("/WhatsApp/Health")) @* icon:monitor_heart *@
 
-        <div class="au-side-section">Client setup</div>
-        @Row("/Services", "medical_services", "Services", IsActive("/Services")) @* icon:medical_services *@
-        @Row("/KnowledgeBase", "menu_book", "Knowledge Base", IsActive("/KnowledgeBase")) @* icon:menu_book *@
+        <div class="au-side-section">@T["nav.section.setup"]</div>
+        @Row("/Services", "medical_services", T["nav.services"].Value, IsActive("/Services")) @* icon:medical_services *@
+        @Row("/KnowledgeBase", "menu_book", T["nav.knowledgeBase"].Value, IsActive("/KnowledgeBase")) @* icon:menu_book *@
 
-        <div class="au-side-section">Settings</div>
-        @Row("/settings/business-info", "apartment", "Business Info", IsActive("/settings/business-info")) @* icon:apartment *@
+        <div class="au-side-section">@T["nav.section.settings"]</div>
+        @Row("/settings/business-info", "apartment", T["nav.businessInfo"].Value, IsActive("/settings/business-info")) @* icon:apartment *@
         @Row("/Members", "badge", T["nav.members"].Value, IsActive("/Members")) @* icon:badge *@
-        @Row("/settings/integrations", "hub", "Messaging Integrations", IsActive("/settings/integrations")) @* icon:hub *@
-        @Row("/settings/calendar-integrations", "event_available", "Calendar Integrations", IsActive("/settings/calendar-integrations")) @* icon:event_available *@
+        @Row("/settings/integrations", "hub", T["nav.integrations"].Value, IsActive("/settings/integrations")) @* icon:hub *@
+        @Row("/settings/calendar-integrations", "event_available", T["nav.calendarIntegrations"].Value, IsActive("/settings/calendar-integrations")) @* icon:event_available *@
         @if (Settings.BillingEnabled)
         {
-            @Row("/settings/billing", "credit_card", "Billing", IsActive("/settings/billing")) @* icon:credit_card *@
+            @Row("/settings/billing", "credit_card", T["nav.billing"].Value, IsActive("/settings/billing")) @* icon:credit_card *@
         }
     </div>
 </nav>

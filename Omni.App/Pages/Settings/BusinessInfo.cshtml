@@ -1,8 +1,14 @@
 @page "/settings/business-info"
 @model Omni.App.Pages.Settings.BusinessInfoModel
 @{
-    ViewData["Title"] = "Business Info";
+    ViewData["Title"] = T["nav.businessInfo"].Value;
+    // English day names are the rows' data-day values (business-info.js finds Monday by it); people see DayLabel.
     var dayNames = new[] { "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday" };
+    string DayLabel(int day) => day switch
+    {
+        0 => T["days.sunday"], 1 => T["days.monday"], 2 => T["days.tuesday"], 3 => T["days.wednesday"],
+        4 => T["days.thursday"], 5 => T["days.friday"], _ => T["days.saturday"],
+    };
     static (string Month, string Day, string Long) DateParts(string value) =>
         DateOnly.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, out var d)
             ? (d.ToString("MMM"), d.Day.ToString(), d.ToString("ddd, MMM d, yyyy"))
@@ -17,12 +23,12 @@ else
 {
     <partial name="_Messages" model="new PageMessagesModel(Model.StatusMessage, Model.ErrorMessage)" />
 
-    <nav class="au-tabs page-tabs" aria-label="Client info sections">
-        <a asp-page="/Settings/BusinessInfo" class="au-tab @(Model.ActiveTab == "general" ? "is-active" : "")" aria-current="@(Model.ActiveTab == "general" ? "page" : null)"><span class="au-icon" aria-hidden="true">apartment</span>Client details</a>
-        <a asp-page="/Settings/BusinessInfo" asp-route-tab="availability" class="au-tab @(Model.ActiveTab == "availability" ? "is-active" : "")" aria-current="@(Model.ActiveTab == "availability" ? "page" : null)"><span class="au-icon" aria-hidden="true">schedule</span>Opening hours &amp; booking</a>
+    <nav class="au-tabs page-tabs" aria-label="@T["businessInfo.tabs.label"]">
+        <a asp-page="/Settings/BusinessInfo" class="au-tab @(Model.ActiveTab == "general" ? "is-active" : "")" aria-current="@(Model.ActiveTab == "general" ? "page" : null)"><span class="au-icon" aria-hidden="true">apartment</span>@T["businessInfo.tabs.details"]</a>
+        <a asp-page="/Settings/BusinessInfo" asp-route-tab="availability" class="au-tab @(Model.ActiveTab == "availability" ? "is-active" : "")" aria-current="@(Model.ActiveTab == "availability" ? "page" : null)"><span class="au-icon" aria-hidden="true">schedule</span>@T["businessInfo.tabs.hours"]</a>
         @if (Model.InboxSettings?.PlanIncludesAiBot == true)
         {
-            <a asp-page="/Settings/BusinessInfo" asp-route-tab="ai" class="au-tab @(Model.ActiveTab == "ai" ? "is-active" : "")" aria-current="@(Model.ActiveTab == "ai" ? "page" : null)"><span class="au-icon" aria-hidden="true">smart_toy</span>AI assistant</a>
+            <a asp-page="/Settings/BusinessInfo" asp-route-tab="ai" class="au-tab @(Model.ActiveTab == "ai" ? "is-active" : "")" aria-current="@(Model.ActiveTab == "ai" ? "page" : null)"><span class="au-icon" aria-hidden="true">smart_toy</span>@T["businessInfo.tabs.ai"]</a>
         }
     </nav>
 
@@ -31,36 +37,36 @@ else
 
     if (Model.ActiveTab == "general")
     {
-        <p class="au-page-head__sub mb-3">Your AI assistant uses these details to answer contacts' questions, so it never has to guess.</p>
+        <p class="au-page-head__sub mb-3">@T["businessInfo.details.intro"]</p>
 
         <form method="post" class="au-panel au-panel--round integration-form client-form" id="client-form" data-dirty-form>
             <div class="set-section">
-                <div class="set-section-head"><strong>Client</strong><div class="cell-sub">The name contacts see.</div></div>
+                <div class="set-section-head"><strong>@T["businessInfo.details.client"]</strong><div class="cell-sub">@T["businessInfo.details.clientHelp"]</div></div>
                 <div class="set-section-body">
                     <label class="field">
-                        <span>Client name</span>
+                        <span>@T["signup.clientName"]</span>
                         <input type="text" name="Name" value="@Model.Name" class="text-input" maxlength="200" required />
                     </label>
                 </div>
             </div>
 
             <div class="set-section">
-                <div class="set-section-head"><strong>Contact</strong><div class="cell-sub">How contacts reach you.</div></div>
+                <div class="set-section-head"><strong>@T["businessInfo.details.reach"]</strong><div class="cell-sub">@T["businessInfo.details.reachHelp"]</div></div>
                 <div class="set-section-body">
                     <div class="form-row-contact">
                         <label class="field">
-                            <span>Phone</span>
+                            <span>@T["businessInfo.details.phone"]</span>
                             <input type="tel" name="Phone" value="@Model.Phone" class="text-input" placeholder="+961 1 555 123" autocomplete="off" />
                         </label>
                         <label class="field">
-                            <span>Email</span>
-                            <input type="text" inputmode="email" name="Email" value="@Model.Email" class="text-input" placeholder="hello@yourbusiness.com" autocomplete="off" />
+                            <span>@T["auth.email"]</span>
+                            <input type="text" inputmode="email" name="Email" value="@Model.Email" class="text-input" placeholder="@T["businessInfo.details.emailPlaceholder"]" autocomplete="off" />
                         </label>
                         <label class="field">
-                            <span>Website</span>
+                            <span>@T["businessInfo.details.website"]</span>
                             <span class="input-with-link">
-                                <input type="text" inputmode="url" name="Website" id="client-website" value="@Model.Website" class="text-input" placeholder="https://yourbusiness.com" autocomplete="off" />
-                                <a href="@Model.Website" id="client-website-open" class="au-icon-btn au-icon-btn--bordered" target="_blank" rel="noopener noreferrer" title="Open website" aria-label="Open website" hidden="@string.IsNullOrWhiteSpace(Model.Website)"><span class="au-icon" aria-hidden="true">open_in_new</span></a>
+                                <input type="text" inputmode="url" name="Website" id="client-website" value="@Model.Website" class="text-input" placeholder="@T["businessInfo.details.websitePlaceholder"]" autocomplete="off" />
+                                <a href="@Model.Website" id="client-website-open" class="au-icon-btn au-icon-btn--bordered" target="_blank" rel="noopener noreferrer" title="@T["businessInfo.details.openWebsite"]" aria-label="@T["businessInfo.details.openWebsite"]" hidden="@string.IsNullOrWhiteSpace(Model.Website)"><span class="au-icon" aria-hidden="true">open_in_new</span></a>
                             </span>
                         </label>
                     </div>
@@ -68,68 +74,68 @@ else
             </div>
 
             <div class="set-section">
-                <div class="set-section-head"><strong>Location</strong><div class="cell-sub">Where contacts come for bookings.</div></div>
+                <div class="set-section-head"><strong>@T["businessInfo.details.location"]</strong><div class="cell-sub">@T["businessInfo.details.locationHelp"]</div></div>
                 <div class="set-section-body">
                     <label class="field">
-                        <span>Address</span>
-                        <textarea name="Address" rows="2" class="text-input" placeholder="Street, building, floor, city" dir="auto">@Model.Address</textarea>
+                        <span>@T["businessInfo.details.address"]</span>
+                        <textarea name="Address" rows="2" class="text-input" placeholder="@T["businessInfo.details.addressPlaceholder"]" dir="auto">@Model.Address</textarea>
                     </label>
                 </div>
             </div>
 
             <div class="set-section">
-                <div class="set-section-head"><strong>For contacts</strong><div class="cell-sub">Written the way you would say it to a contact.</div></div>
+                <div class="set-section-head"><strong>@T["businessInfo.details.forContacts"]</strong><div class="cell-sub">@T["businessInfo.details.forContactsHelp"]</div></div>
                 <div class="set-section-body">
                     <label class="field">
-                        <span>Opening hours, in words</span>
-                        <textarea name="OperatingHours" rows="2" class="text-input" placeholder="e.g. Mon–Fri 9am–6pm, Sat 10am–2pm, closed Sundays" dir="auto">@Model.OperatingHours</textarea>
-                        <small class="text-subtle">Only for answering questions. The times contacts can actually book come from <a asp-page="/Settings/BusinessInfo" asp-route-tab="availability">Opening hours &amp; booking</a>.</small>
+                        <span>@T["businessInfo.details.hoursText"]</span>
+                        <textarea name="OperatingHours" rows="2" class="text-input" placeholder="@T["businessInfo.details.hoursTextPlaceholder"]" dir="auto">@Model.OperatingHours</textarea>
+                        <small class="text-subtle">@T["businessInfo.details.hoursTextHelp"] <a asp-page="/Settings/BusinessInfo" asp-route-tab="availability">@T["businessInfo.details.hoursTextLink"]</a></small>
                     </label>
                     <label class="field">
-                        <span>Booking rules and other info</span>
-                        <textarea name="BookingInfo" rows="3" class="text-input" placeholder="e.g. Free first booking. $50 deposit to book a service." dir="auto">@Model.BookingInfo</textarea>
+                        <span>@T["businessInfo.details.bookingInfo"]</span>
+                        <textarea name="BookingInfo" rows="3" class="text-input" placeholder="@T["businessInfo.details.bookingInfoPlaceholder"]" dir="auto">@Model.BookingInfo</textarea>
                     </label>
                 </div>
             </div>
 
             <div class="save-bar is-idle" data-save-bar>
-                <span class="text-subtle text-sm" data-save-text>All changes saved</span>
+                <span class="text-subtle text-sm" data-save-text>@T["businessInfo.save.allSaved"]</span>
                 <div class="flex gap-2">
-                    <button type="reset" class="au-btn au-btn--text" data-discard hidden>Discard</button>
-                    <button type="submit" class="au-btn au-btn--primary">Save changes</button>
+                    <button type="reset" class="au-btn au-btn--text" data-discard hidden>@T["businessInfo.save.discard"]</button>
+                    <button type="submit" class="au-btn au-btn--primary">@T["common.saveChanges"]</button>
                 </div>
             </div>
         </form>
     }
     else if (Model.ActiveTab == "ai" && Model.InboxSettings is { } bot)
     {
-        <p class="au-page-head__sub mb-3">Choose when the AI assistant replies to contacts. When it's off, the conversation goes straight to your team in the Inbox.</p>
+        <p class="au-page-head__sub mb-3">@T["businessInfo.ai.intro"]</p>
 
         <form method="post" asp-page-handler="SaveAiBot" class="au-panel au-panel--round integration-form client-form" id="inbox-settings-form">
             <div class="set-section">
-                <div class="set-section-head"><strong>New conversations</strong><div class="cell-sub">A contact writing to you for the first time.</div></div>
+                <div class="set-section-head"><strong>@T["businessInfo.ai.new"]</strong><div class="cell-sub">@T["businessInfo.ai.newHelp"]</div></div>
                 <div class="set-section-body">
                     <label class="au-check">
                         <input type="checkbox" class="au-switch" role="switch" name="AiBotNewConversations" value="true" checked="@bot.AiBotNewConversations" />
-                        AI assistant replies first
+                        @T["businessInfo.ai.newSwitch"]
                     </label>
-                    <small class="text-subtle">Off: new conversations start with your team.</small>
+                    <small class="text-subtle">@T["businessInfo.ai.newOff"]</small>
                 </div>
             </div>
 
             <div class="set-section">
-                <div class="set-section-head"><strong>Reopened conversations</strong><div class="cell-sub">A contact writing again after you closed the conversation.</div></div>
+                <div class="set-section-head"><strong>@T["businessInfo.ai.reopened"]</strong><div class="cell-sub">@T["businessInfo.ai.reopenedHelp"]</div></div>
                 <div class="set-section-body">
                     <label class="au-check">
                         <input type="checkbox" class="au-switch" role="switch" name="AiBotReopenedConversations" value="true" checked="@bot.AiBotReopenedConversations" />
-                        AI assistant keeps replying
+                        @T["businessInfo.ai.reopenedSwitch"]
                     </label>
-                    <small class="text-subtle">Off: a reopened conversation goes to your team. You can still hand any conversation back to the AI from the Inbox.</small>
+                    <small class="text-subtle">@T["businessInfo.ai.reopenedOff"]</small>
                 </div>
             </div>
 
             <div class="save-row">
-                <button type="submit" class="au-btn au-btn--primary">Save AI assistant settings</button>
+                <button type="submit" class="au-btn au-btn--primary">@T["businessInfo.ai.save"]</button>
             </div>
         </form>
     }
@@ -140,21 +146,21 @@ else
             <div class="au-alert au-alert--warning" role="status">
                 <span class="au-icon au-alert__icon" aria-hidden="true">warning</span>
                 <div class="au-alert__body">
-                    <div class="au-alert__title">Contacts can't book yet</div>
-                    Turn on at least one day below and save, so the AI assistant can offer booking times.
+                    <div class="au-alert__title">@T["businessInfo.hours.notConfiguredTitle"]</div>
+                    @T["businessInfo.hours.notConfiguredText"]
                 </div>
             </div>
         }
         <p class="au-page-head__sub mb-3">
-            When contacts can book. The AI assistant only offers times that fit these hours, your existing bookings and the rules below.
+            @T["businessInfo.hours.intro"]
         </p>
 
         <form method="post" asp-page-handler="SaveAvailability" class="au-panel au-panel--round integration-form client-form" id="avail-form">
             <div class="set-section">
-                <div class="set-section-head"><strong>Timezone</strong><div class="cell-sub">All times on this page.</div></div>
+                <div class="set-section-head"><strong>@T["businessInfo.hours.timezone"]</strong><div class="cell-sub">@T["businessInfo.hours.timezoneHelp"]</div></div>
                 <div class="set-section-body">
                     <div class="flex items-center gap-3 flex-wrap">
-                        <select name="TimezoneId" id="avail-tz" class="au-select w-auto" aria-label="Timezone">
+                        <select name="TimezoneId" id="avail-tz" class="au-select w-auto" aria-label="@T["businessInfo.hours.timezone"]">
                             @foreach (var tz in Model.TimezoneOptions(av.Timezone))
                             {
                                 <option value="@tz" selected="@(tz == av.Timezone)">@tz</option>
@@ -166,7 +172,7 @@ else
             </div>
 
             <div class="set-section">
-                <div class="set-section-head"><strong>Weekly hours</strong><div class="cell-sub" id="avail-open-count"></div></div>
+                <div class="set-section-head"><strong>@T["businessInfo.hours.weekly"]</strong><div class="cell-sub" id="avail-open-count"></div></div>
                 <div class="set-section-body">
                     <div class="week" id="avail-week">
                         @{ var i = 0; }
@@ -177,42 +183,42 @@ else
                                 <label class="switch-row">
                                     <input type="checkbox" name="Days[@i].IsOpen" value="true" class="switch-input" data-day-open checked="@d.IsOpen" />
                                     <span class="switch" aria-hidden="true"></span>
-                                    <span class="week-day">@dayNames[d.DayOfWeek]</span>
+                                    <span class="week-day">@DayLabel(d.DayOfWeek)</span>
                                 </label>
                                 <span class="week-times">
-                                    <input type="time" name="Days[@i].Start" value="@d.Start" class="text-input avail-time" data-day-start aria-label="@dayNames[d.DayOfWeek] opens" />
-                                    <span class="text-subtle">to</span>
-                                    <input type="time" name="Days[@i].End" value="@d.End" class="text-input avail-time" data-day-end aria-label="@dayNames[d.DayOfWeek] closes" />
-                                    <span class="field-err" data-day-err hidden>Must end after it starts</span>
+                                    <input type="time" name="Days[@i].Start" value="@d.Start" class="text-input avail-time" data-day-start aria-label="@T["businessInfo.hours.opens", DayLabel(d.DayOfWeek)]" />
+                                    <span class="text-subtle">@T["businessInfo.hours.to"]</span>
+                                    <input type="time" name="Days[@i].End" value="@d.End" class="text-input avail-time" data-day-end aria-label="@T["businessInfo.hours.closes", DayLabel(d.DayOfWeek)]" />
+                                    <span class="field-err" data-day-err hidden>@T["businessInfo.hours.endAfterStart"]</span>
                                 </span>
-                                <span class="text-subtle week-closed">Closed</span>
+                                <span class="text-subtle week-closed">@T["businessInfo.hours.closed"]</span>
                             </div>
                             i++;
                         }
-                        <div><button type="button" class="au-btn au-btn--text au-btn--sm mt-1" id="avail-copy"><span class="au-icon" aria-hidden="true">content_copy</span>Copy Monday's hours to all open days</button></div>
+                        <div><button type="button" class="au-btn au-btn--text au-btn--sm mt-1" id="avail-copy"><span class="au-icon" aria-hidden="true">content_copy</span>@T["businessInfo.hours.copyMonday"]</button></div>
                     </div>
                 </div>
             </div>
 
             <div class="set-section">
-                <div class="set-section-head"><strong>Booking rules</strong><div class="cell-sub">Applied to every booking the AI offers.</div></div>
+                <div class="set-section-head"><strong>@T["businessInfo.rules.title"]</strong><div class="cell-sub">@T["businessInfo.rules.help"]</div></div>
                 <div class="set-section-body">
                     <div class="rules">
                         <label class="set-row">
-                            <div><strong>Booking length</strong><div class="cell-sub">Unless the service sets its own.</div></div>
-                            <span class="unit-input"><input type="number" name="DefaultDurationMinutes" value="@av.Booking.DefaultDurationMinutes" min="5" max="480" class="text-input set-input" data-rule="duration" /><span>min</span></span>
+                            <div><strong>@T["businessInfo.rules.length"]</strong><div class="cell-sub">@T["businessInfo.rules.lengthHelp"]</div></div>
+                            <span class="unit-input"><input type="number" name="DefaultDurationMinutes" value="@av.Booking.DefaultDurationMinutes" min="5" max="480" class="text-input set-input" data-rule="duration" /><span>@T["businessInfo.rules.minutes"]</span></span>
                         </label>
                         <label class="set-row">
-                            <div><strong>Gap between bookings</strong></div>
-                            <span class="unit-input"><input type="number" name="BufferMinutes" value="@av.Booking.BufferMinutes" min="0" max="240" class="text-input set-input" data-rule="buffer" /><span>min</span></span>
+                            <div><strong>@T["businessInfo.rules.gap"]</strong></div>
+                            <span class="unit-input"><input type="number" name="BufferMinutes" value="@av.Booking.BufferMinutes" min="0" max="240" class="text-input set-input" data-rule="buffer" /><span>@T["businessInfo.rules.minutes"]</span></span>
                         </label>
                         <label class="set-row">
-                            <div><strong>Book at least</strong></div>
-                            <span class="unit-input"><input type="number" name="NoticeHours" value="@(av.Booking.MinimumNoticeMinutes / 60)" min="0" max="720" class="text-input set-input" data-rule="notice" /><span>hours ahead</span></span>
+                            <div><strong>@T["businessInfo.rules.notice"]</strong></div>
+                            <span class="unit-input"><input type="number" name="NoticeHours" value="@(av.Booking.MinimumNoticeMinutes / 60)" min="0" max="720" class="text-input set-input" data-rule="notice" /><span>@T["businessInfo.rules.hoursAhead"]</span></span>
                         </label>
                         <label class="set-row">
-                            <div><strong>Book up to</strong></div>
-                            <span class="unit-input"><input type="number" name="MaxAdvanceDays" value="@av.Booking.MaxAdvanceDays" min="1" max="365" class="text-input set-input" data-rule="advance" /><span>days ahead</span></span>
+                            <div><strong>@T["businessInfo.rules.advance"]</strong></div>
+                            <span class="unit-input"><input type="number" name="MaxAdvanceDays" value="@av.Booking.MaxAdvanceDays" min="1" max="365" class="text-input set-input" data-rule="advance" /><span>@T["businessInfo.rules.daysAhead"]</span></span>
                         </label>
                     </div>
                     <div class="kb-hint" id="avail-summary"></div>
@@ -220,18 +226,18 @@ else
             </div>
 
             <div class="save-row">
-                <button type="submit" class="au-btn au-btn--primary">Save opening hours</button>
+                <button type="submit" class="au-btn au-btn--primary">@T["businessInfo.hours.save"]</button>
             </div>
         </form>
 
-        <h2 class="section-title">Special dates</h2>
-        <p class="text-muted mb-2">Holidays, shorter days or extra openings. These replace the weekly hours on that date.</p>
+        <h2 class="section-title">@T["businessInfo.dates.title"]</h2>
+        <p class="text-muted mb-2">@T["businessInfo.dates.intro"]</p>
 
         <div class="au-panel au-panel--round">
             @if (av.Exceptions.Count == 0)
             {
-                var none = new EmptyStateModel(Icon: "event_busy", Title: "No special dates",
-                    Text: "Add one below for a holiday or a day with different hours.");
+                var none = new EmptyStateModel(Icon: "event_busy", Title: T["businessInfo.dates.emptyTitle"].Value,
+                    Text: T["businessInfo.dates.emptyText"].Value);
                 <partial name="_EmptyState" model="none" />
             }
             else
@@ -244,18 +250,18 @@ else
                             <div class="date-chip"><span>@parts.Month</span><strong>@parts.Day</strong></div>
                             <div class="flex-1 min-w-0">
                                 <div class="tl-title">@parts.Long</div>
-                                <div class="cell-sub">@(string.IsNullOrWhiteSpace(ex.Reason) ? "No reason given" : ex.Reason)</div>
+                                <div class="cell-sub">@(string.IsNullOrWhiteSpace(ex.Reason) ? T["businessInfo.dates.noReason"].Value : ex.Reason)</div>
                             </div>
                             @if (ex.IsClosed)
                             {
-                                <span class="badge badge-gray">Closed</span>
+                                <span class="badge badge-gray">@T["businessInfo.hours.closed"]</span>
                             }
                             else
                             {
                                 <span class="badge badge-blue">@ex.Start–@ex.End</span>
                             }
                             <form method="post" asp-page-handler="DeleteException" asp-route-id="@ex.Id" class="inline-form">
-                                <button type="submit" class="au-btn au-btn--text au-btn--sm btn-danger-text">Remove</button>
+                                <button type="submit" class="au-btn au-btn--text au-btn--sm btn-danger-text">@T["businessInfo.dates.remove"]</button>
                             </form>
                         </div>
                     }
@@ -266,30 +272,30 @@ else
                 <input type="hidden" name="ExceptionClosed" id="exc-closed" value="true" />
                 <div class="add-date-row">
                     <label class="field">
-                        <span>Date</span>
+                        <span>@T["businessInfo.dates.date"]</span>
                         <input type="date" name="ExceptionDate" class="text-input" required />
                     </label>
                     <div class="field">
-                        <span>That day</span>
+                        <span>@T["businessInfo.dates.thatDay"]</span>
                         <div class="seg" id="exc-mode">
-                            <button type="button" class="on" data-closed="true">Closed</button>
-                            <button type="button" data-closed="false">Different hours</button>
+                            <button type="button" class="on" data-closed="true">@T["businessInfo.hours.closed"]</button>
+                            <button type="button" data-closed="false">@T["businessInfo.dates.differentHours"]</button>
                         </div>
                     </div>
                     <label class="field" data-exc-time hidden>
-                        <span>From</span>
+                        <span>@T["dashboard.period.from"]</span>
                         <input type="time" name="ExceptionStart" id="exc-start" class="text-input" />
                     </label>
                     <label class="field" data-exc-time hidden>
-                        <span>To</span>
+                        <span>@T["dashboard.period.to"]</span>
                         <input type="time" name="ExceptionEnd" id="exc-end" class="text-input" />
                     </label>
                 </div>
                 <label class="field">
-                    <span>Reason <em class="opt">optional, only members see it</em></span>
-                    <input type="text" name="ExceptionReason" class="text-input" maxlength="200" placeholder="e.g. Holiday, doctor away" />
+                    <span>@T["businessInfo.dates.reason"] <em class="opt">@T["businessInfo.dates.reasonHelp"]</em></span>
+                    <input type="text" name="ExceptionReason" class="text-input" maxlength="200" placeholder="@T["businessInfo.dates.reasonPlaceholder"]" />
                 </label>
-                <div><button type="submit" class="au-btn au-btn--primary"><span class="au-icon" aria-hidden="true">add</span>Add date</button></div>
+                <div><button type="submit" class="au-btn au-btn--primary"><span class="au-icon" aria-hidden="true">add</span>@T["businessInfo.dates.add"]</button></div>
             </form>
         </div>
     }

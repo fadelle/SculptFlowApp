@@ -14,15 +14,21 @@ public static class GoogleLoginSettings
         !string.IsNullOrWhiteSpace(configuration["GoogleLogin:ClientId"])
         && !string.IsNullOrWhiteSpace(configuration["GoogleLogin:ClientSecret"]);
 
-    /// <summary>Fixed, user-safe wording for the externalError codes the sign-in page can receive — the page
-    /// never echoes arbitrary text from the query string.</summary>
-    public static string? ErrorMessage(string? code) => code switch
+    private const string CancelledKey = "auth.google.errors.cancelled";
+    private const string FailedKey = "auth.google.errors.failed";
+    private const string UnverifiedKey = "auth.google.errors.unverified";
+    private const string LockedKey = "login.errors.lockedOut";
+    private const string SignupClosedKey = "auth.google.errors.signupClosed";
+
+    /// <summary>The UI text key (en.json) for an externalError code the sign-in page can receive: fixed, user-safe
+    /// wording, so the page never echoes arbitrary text from the query string. Null for an unknown code.</summary>
+    public static string? ErrorKey(string? code) => code switch
     {
-        "cancelled" => "Google sign-in was cancelled.",
-        "failed" => "Google sign-in didn't work. Please try again.",
-        "unverified" => "Google couldn't confirm that email address, so we can't sign you in with it.",
-        "locked" => "Too many attempts. For your security, wait a few minutes and try again.",
-        "signup_closed" => "There's no Omni account for that Google address, and new client sign-ups are closed right now.",
+        "cancelled" => CancelledKey,
+        "failed" => FailedKey,
+        "unverified" => UnverifiedKey,
+        "locked" => LockedKey,
+        "signup_closed" => SignupClosedKey,
         _ => null
     };
 }

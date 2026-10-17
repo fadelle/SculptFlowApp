@@ -250,6 +250,26 @@ public class TextTests
         Assert.Empty(TextError.ArgsOf(new Exception()));
     }
 
+    private static string Render(Microsoft.AspNetCore.Html.IHtmlContent html)
+    {
+        using var writer = new StringWriter();
+        html.WriteTo(writer, System.Text.Encodings.Web.HtmlEncoder.Default);
+        return writer.ToString();
+    }
+
+    [Fact]
+    public void Html_text_encodes_the_text_and_plain_arguments_but_keeps_html_arguments()
+    {
+        var catalog = Catalog("""{"a": "<{contact}> until {0}, by {1}.", "b": "{1} then {0}", "c": "Only {0} and {5}"}""");
+        var text = new JsonStringLocalizer(catalog, TextKit.Context("en", TermPlaceholders.Build(GuestWords)));
+        var time = new Microsoft.AspNetCore.Html.HtmlString("<time>May 1</time>");
+
+        Assert.Equal("&lt;guest&gt; until <time>May 1</time>, by &lt;b&gt;Ana&lt;/b&gt;.", Render(text.Html("a", time, "<b>Ana</b>")));
+        Assert.Equal("2 then <time>May 1</time>", Render(text.Html("b", time, 2)));
+        Assert.Equal("Only  and {5}", Render(text.Html("c", (object?)null)));      // a null argument is empty; a missing one stays
+        Assert.Equal("no.such.key", Render(text.Html("no.such.key")));
+    }
+
     // ---- api errors ---------------------------------------------------------------------------------------------
 
     private static object? ErrorBody(Exception exception, IServiceProvider? services)

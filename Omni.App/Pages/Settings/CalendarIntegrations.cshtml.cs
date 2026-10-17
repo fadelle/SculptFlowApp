@@ -1,8 +1,10 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.Extensions.Localization;
 using Omni.App.Business.Contracts.Managers;
 using Omni.App.Business.Contracts.Services.Calendars;
 using Omni.App.Common.Enums;
+using Omni.App.Common.Helpers;
 using Omni.App.Entities.Responses.Calendars;
 
 namespace Omni.App.Pages.Settings;
@@ -15,12 +17,20 @@ namespace Omni.App.Pages.Settings;
 public class CalendarIntegrationsModel : PageModel
 {
     private readonly ICurrentClientContext _clientContext;
-    private readonly ICalendarIntegrationService _calendar;
+    private const string RefreshedKey = "calendars.done.refreshed";
+    private const string SelectedKey = "calendars.done.selected";
+    private const string SyncOnKey = "calendars.done.syncOn";
+    private const string SyncOffKey = "calendars.done.syncOff";
+    private const string DisconnectedKey = "calendars.done.disconnected";
 
-    public CalendarIntegrationsModel(ICurrentClientContext clientContext, ICalendarIntegrationService calendar)
+    private readonly ICalendarIntegrationService _calendar;
+    private readonly IStringLocalizer _text;
+
+    public CalendarIntegrationsModel(ICurrentClientContext clientContext, ICalendarIntegrationService calendar, IStringLocalizer text)
     {
         _clientContext = clientContext;
         _calendar = calendar;
+        _text = text;
     }
 
     public bool ClientConfigured { get; private set; }
@@ -49,9 +59,9 @@ public class CalendarIntegrationsModel : PageModel
         try
         {
             await _calendar.RequestRefreshCalendarsAsync(client.Id, provider, ct);
-            StatusMessage = "Calendar list refreshed.";
+            StatusMessage = _text[RefreshedKey].Value;
         }
-        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException) { ErrorMessage = ex.Message; }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException) { ErrorMessage = _text.Localize(ex); }
         return RedirectToPage();
     }
 
@@ -63,9 +73,9 @@ public class CalendarIntegrationsModel : PageModel
         try
         {
             await _calendar.SelectCalendarAsync(client.Id, provider, externalCalendarId, ct);
-            StatusMessage = "Calendar selected.";
+            StatusMessage = _text[SelectedKey].Value;
         }
-        catch (ArgumentException ex) { ErrorMessage = ex.Message; }
+        catch (ArgumentException ex) { ErrorMessage = _text.Localize(ex); }
         return RedirectToPage();
     }
 
@@ -77,9 +87,9 @@ public class CalendarIntegrationsModel : PageModel
         try
         {
             await _calendar.SetSyncEnabledAsync(client.Id, provider, enabled, ct);
-            StatusMessage = enabled ? "Sync turned on." : "Sync turned off.";
+            StatusMessage = _text[enabled ? SyncOnKey : SyncOffKey].Value;
         }
-        catch (ArgumentException ex) { ErrorMessage = ex.Message; }
+        catch (ArgumentException ex) { ErrorMessage = _text.Localize(ex); }
         return RedirectToPage();
     }
 
@@ -89,7 +99,7 @@ public class CalendarIntegrationsModel : PageModel
         if (client is null) return RedirectToPage();
 
         await _calendar.DisconnectAsync(client.Id, provider, ct);
-        StatusMessage = $"{ProviderLabel(provider)} disconnected.";
+        StatusMessage = _text[DisconnectedKey, ProviderLabel(provider)].Value;
         return RedirectToPage();
     }
 

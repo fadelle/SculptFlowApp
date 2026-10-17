@@ -1,7 +1,7 @@
 @page "/settings/integrations"
 @model Omni.App.Pages.Settings.IntegrationsModel
 @{
-    ViewData["Title"] = "Messaging Integrations";
+    ViewData["Title"] = T["nav.integrations"].Value;
     // One entry per card on the page: the summary total, counts and rendering all come from this list.
     (bool Connected, bool Attention) MessagingState(string ch) =>
         Model.Channels.TryGetValue(ch, out var i)
@@ -10,11 +10,11 @@
     var cards = new List<(bool Connected, bool Attention, Func<Task> Render)>
     {
         (MessagingState(ChannelType.WhatsApp).Connected, MessagingState(ChannelType.WhatsApp).Attention,
-            () => RenderChannelCard(ChannelType.WhatsApp, "WA", "#25D366", "WhatsApp Business", "Chat with contacts, send reminders and campaigns.", "Chat with contacts on WhatsApp, and send reminders and campaigns.", oauth: true)),
+            () => RenderChannelCard(ChannelType.WhatsApp, "WA", "#25D366", "WhatsApp Business", T["integrations.whatsApp.purpose"].Value, T["integrations.whatsApp.whenConnected"].Value, oauth: true)),
         (MessagingState(ChannelType.Instagram).Connected, MessagingState(ChannelType.Instagram).Attention,
-            () => RenderChannelCard(ChannelType.Instagram, "IG", "#C13584", "Instagram", "Answer Instagram direct messages.", "Contacts' Instagram DMs arrive in your Inbox, and the AI assistant can answer them.", oauth: false)),
+            () => RenderChannelCard(ChannelType.Instagram, "IG", "#C13584", "Instagram", T["integrations.instagram.purpose"].Value, T["integrations.instagram.whenConnected"].Value, oauth: false)),
         (MessagingState(ChannelType.Facebook).Connected, MessagingState(ChannelType.Facebook).Attention,
-            () => RenderChannelCard(ChannelType.Facebook, "FB", "#1877F2", "Facebook Messenger", "Answer messages sent to your Facebook page.", "Messages to your Facebook page arrive in your Inbox, and the AI assistant can answer them.", oauth: true)),
+            () => RenderChannelCard(ChannelType.Facebook, "FB", "#1877F2", "Facebook Messenger", T["integrations.facebook.purpose"].Value, T["integrations.facebook.whenConnected"].Value, oauth: true)),
         (MessagingState(ChannelType.Telegram).Connected, MessagingState(ChannelType.Telegram).Attention,
             () => RenderTelegramCard()),
         (Model.TikTok?.Status == TikTokIntegrationStatus.Connected, Model.TikTok?.Status == TikTokIntegrationStatus.Error,
@@ -33,13 +33,13 @@ else
     <partial name="_Messages" model="new PageMessagesModel(Model.StatusMessage, Model.ErrorMessage)" />
 
     <div class="au-page-head">
-        <p class="au-page-head__sub">Connect the apps contacts message you on. Messages from all of them arrive in your Inbox.</p>
+        <p class="au-page-head__sub">@T["integrations.intro"]</p>
     </div>
     <div class="int-summary">
-        <strong>@connectedCount of @cards.Count channels connected</strong>
+        <strong>@T["integrations.summary", connectedCount, cards.Count]</strong>
         @if (attentionCount > 0)
         {
-            <span class="text-danger-soft"> · @attentionCount need@(attentionCount == 1 ? "s" : "") attention</span>
+            <span class="text-danger-soft"> · @(attentionCount == 1 ? T["integrations.summaryAttentionOne"] : T["integrations.summaryAttentionOther", attentionCount])</span>
         }
     </div>
 
@@ -68,7 +68,7 @@ else
             var pin = btn.parentElement.querySelector('[data-pin]');
             var shown = pin.textContent !== '••••••';
             pin.textContent = shown ? '••••••' : pin.getAttribute('data-pin');
-            btn.textContent = shown ? 'Show' : 'Hide';
+            btn.textContent = shown ? btn.getAttribute('data-show-label') : btn.getAttribute('data-hide-label');
         });
     });
 
@@ -100,9 +100,9 @@ else
 
     private async Task RenderStatusPill(ChannelIntegrationResponse? info)
     {
-        var (label, dot) = info is not null && NeedsAttention(info) ? ("Needs attention", "dot-red")
-            : info?.Status == ChannelIntegrationStatus.Connected ? ("Connected", "dot-green")
-            : ("Not connected", "dot-gray");
+        var (label, dot) = info is not null && NeedsAttention(info) ? (T["integrations.state.attention"].Value, "dot-red")
+            : info?.Status == ChannelIntegrationStatus.Connected ? (T["integrations.state.connected"].Value, "dot-green")
+            : (T["integrations.state.notConnected"].Value, "dot-gray");
         <span class="status-pill"><span class="dot @dot"></span>@label</span>
         await Task.CompletedTask;
     }
@@ -120,7 +120,7 @@ else
                         <div class="cell-sub">@subtitle</div>
                     </div>
                 </div>
-                <button type="button" class="au-icon-btn" data-close aria-label="Close" title="Close"><span class="au-icon" aria-hidden="true">close</span></button>
+                <button type="button" class="au-icon-btn" data-close aria-label="@T["common.close"]" title="@T["common.close"]"><span class="au-icon" aria-hidden="true">close</span></button>
             </div>
         await Task.CompletedTask;
     }
@@ -164,11 +164,11 @@ else
             {
                 <div class="int-strip int-strip-problem">
                     <div>
-                        <span class="cell-sub">Problem</span>
-                        <span class="int-val">@title stopped working. Reconnect to keep sending and receiving messages.</span>
+                        <span class="cell-sub">@T["integrations.strip.problem"]</span>
+                        <span class="int-val">@T["integrations.channel.stopped", title]</span>
                         @if (!string.IsNullOrEmpty(info!.LastError))
                         {
-                            <details class="mt-1"><summary class="cell-sub">Technical details</summary><div class="cell-sub break-word">@info.LastError</div></details>
+                            <details class="mt-1"><summary class="cell-sub">@T["messages.error.details"]</summary><div class="cell-sub break-word">@info.LastError</div></details>
                         }
                     </div>
                 </div>
@@ -179,13 +179,13 @@ else
                     @if (!string.IsNullOrEmpty(info!.Pin))
                     {
                         <div>
-                            <span class="cell-sub">Two-step PIN</span>
-                            <span class="int-val"><code data-pin="@info.Pin">••••••</code> <button type="button" class="link-btn" data-pin-toggle>Show</button></span>
+                            <span class="cell-sub">@T["integrations.whatsApp.pin"]</span>
+                            <span class="int-val"><code data-pin="@info.Pin">••••••</code> <button type="button" class="link-btn" data-pin-toggle data-show-label="@T["integrations.whatsApp.pinShow"]" data-hide-label="@T["integrations.whatsApp.pinHide"]">@T["integrations.whatsApp.pinShow"]</button></span>
                         </div>
                     }
                     <div>
-                        <span class="cell-sub">Health</span>
-                        <span class="int-val"><a href="/WhatsApp/Health">View WhatsApp Health →</a></span>
+                        <span class="cell-sub">@T["integrations.whatsApp.health"]</span>
+                        <span class="int-val"><a href="/WhatsApp/Health">@T["integrations.whatsApp.viewHealth"]</a></span>
                     </div>
                 </div>
             }
@@ -193,12 +193,12 @@ else
             {
                 <div class="int-strip">
                     <div>
-                        <span class="cell-sub">@(channel == ChannelType.Instagram ? "Instagram account" : "Facebook page")</span>
+                        <span class="cell-sub">@(channel == ChannelType.Instagram ? T["integrations.instagram.account"] : T["integrations.facebook.page"])</span>
                         <span class="int-val">@(string.IsNullOrEmpty(info!.DisplayName) ? (channel == ChannelType.Instagram ? info.InstagramBusinessId : info.PageId) ?? "—" : info.DisplayName)</span>
                     </div>
                     <div>
-                        <span class="cell-sub">Messages</span>
-                        <span class="int-val">Arrive in your Inbox</span>
+                        <span class="cell-sub">@T["integrations.messages.label"]</span>
+                        <span class="int-val">@T["integrations.messages.inbox"]</span>
                     </div>
                 </div>
             }
@@ -206,7 +206,7 @@ else
             {
                 <div class="int-strip int-strip-note">
                     <div>
-                        <span class="cell-sub">When connected</span>
+                        <span class="cell-sub">@T["integrations.strip.whenConnected"]</span>
                         <span class="int-val">@whenConnected</span>
                     </div>
                 </div>
@@ -216,7 +216,7 @@ else
             {
                 @if (string.IsNullOrEmpty(configId))
                 {
-                    <div class="cell-sub" title="Meta Login Configuration ID missing in appsettings.json (Meta section)">Facebook sign-in isn't set up for this app yet, so use manual setup for now.</div>
+                    <div class="cell-sub" title="@T["integrations.meta.missingConfigHelp"]">@T["integrations.meta.missingConfig"]</div>
                 }
                 else
                 {
@@ -237,28 +237,28 @@ else
                         <button type="button" class="au-btn au-btn--primary au-btn--sm"
                                 onclick="@(string.IsNullOrEmpty(jsFunction) ? null : jsFunction + "()")"
                                 disabled="@string.IsNullOrEmpty(configId)">
-                            @(isError ? "Reconnect with Facebook" : "Continue with Facebook")
+                            @(isError ? T["integrations.meta.reconnect"] : T["integrations.meta.continue"])
                         </button>
                     }
                 }
                 <button type="button" class="au-btn au-btn--sm @(connected || isError || oauth ? "au-btn--text" : "au-btn--primary")" data-open="@modalId">
-                    @(connected || isError ? "Account details" : oauth ? "Set up manually" : "Set up")
+                    @(connected || isError ? T["integrations.manual.details"] : oauth ? T["integrations.manual.setUpManually"] : T["integrations.manual.setUp"])
                 </button>
                 @if (connected || isError)
                 {
                     <form method="post" asp-page-handler="Disconnect" class="inline-form int-foot-end"
-                          data-au-confirm="Disconnect @title? Messages on this channel stop until you connect it again." data-au-confirm-title="Disconnect @title" data-au-confirm-label="Disconnect" data-au-confirm-tone="danger">
+                          data-au-confirm="@T["integrations.channel.disconnectConfirm", title]" data-au-confirm-title="@T["integrations.disconnectTitle", title]" data-au-confirm-label="@T["integrations.action.disconnect"]" data-au-confirm-tone="danger">
                         <input type="hidden" name="Channel" value="@channel" />
-                        <button type="submit" class="au-btn au-btn--text au-btn--sm btn-danger-text">Disconnect</button>
+                        <button type="submit" class="au-btn au-btn--text au-btn--sm btn-danger-text">@T["integrations.action.disconnect"]</button>
                     </form>
                 }
             </div>
         </div>
 
         await RenderModalStart(modalId, channel, accentHex,
-            connected || isError ? $"{title} account details" : oauth ? $"Set up {title} manually" : $"Set up {title}",
-            connected || isError ? (info?.DisplayName ?? "Change the IDs or the access token.")
-                : oauth ? "Only if signing in with Facebook doesn't work for you." : "With the IDs and a token from your Meta app.");
+            connected || isError ? T["integrations.manual.detailsTitle", title] : oauth ? T["integrations.manual.setUpManuallyTitle", title] : T["integrations.manual.setUpTitle", title],
+            connected || isError ? (info?.DisplayName ?? T["integrations.manual.detailsSub"].Value)
+                : oauth ? T["integrations.manual.setUpManuallySub"] : T["integrations.manual.setUpSub"]);
         await RenderManualForm(channel, info, connected);
         await RenderModalEnd();
     }
@@ -280,11 +280,11 @@ else
                     <div class="cell-sub">
                         @if (!string.IsNullOrEmpty(info?.TelegramBotUsername))
                         {
-                            <text>@(connected ? "" : "Last bot ")@("@" + info!.TelegramBotUsername)</text>
+                            <text>@(connected ? "@" + info!.TelegramBotUsername : T["integrations.telegram.lastBot", "@" + info!.TelegramBotUsername].Value)</text>
                         }
                         else
                         {
-                            <text>Answer messages sent to your Telegram bot.</text>
+                            <text>@T["integrations.telegram.purpose"]</text>
                         }
                     </div>
                 </div>
@@ -295,9 +295,9 @@ else
             {
                 <div class="int-strip int-strip-problem">
                     <div>
-                        <span class="cell-sub">Problem</span>
-                        <span class="int-val">Telegram can't deliver messages to us right now. Try "Check connection", or use a different bot.</span>
-                        <details class="mt-1"><summary class="cell-sub">Technical details</summary><div class="cell-sub break-word">@info!.LastError</div></details>
+                        <span class="cell-sub">@T["integrations.strip.problem"]</span>
+                        <span class="int-val">@T["integrations.telegram.problem"]</span>
+                        <details class="mt-1"><summary class="cell-sub">@T["messages.error.details"]</summary><div class="cell-sub break-word">@info!.LastError</div></details>
                     </div>
                 </div>
             }
@@ -305,13 +305,13 @@ else
             {
                 <div class="int-strip">
                     <div>
-                        <span class="cell-sub">Receiving messages</span>
-                        <span class="int-val">@(info!.WebhookStatus switch { WebhookStatus.Active => "Yes", WebhookStatus.Pending => "Setting up…", _ => "No" })</span>
+                        <span class="cell-sub">@T["integrations.telegram.receiving"]</span>
+                        <span class="int-val">@(info!.WebhookStatus switch { WebhookStatus.Active => T["integrations.telegram.receivingYes"], WebhookStatus.Pending => T["integrations.telegram.receivingPending"], _ => T["integrations.telegram.receivingNo"] })</span>
                     </div>
                     <div>
-                        <span class="cell-sub">Last message</span>
+                        <span class="cell-sub">@T["integrations.telegram.lastMessage"]</span>
                         <span class="int-val" title="@(info.LastWebhookAt?.ToString("MMM d, HH:mm") + " UTC")">
-                            @if (info.LastWebhookAt is { } last) { @LocalTimeHelper.Ago(last) } else { <text>None yet · send your bot a message to test</text> }
+                            @if (info.LastWebhookAt is { } last) { @LocalTimeHelper.Ago(last) } else { <text>@T["integrations.telegram.noMessage"]</text> }
                         </span>
                     </div>
                 </div>
@@ -320,8 +320,8 @@ else
             {
                 <div class="int-strip int-strip-note">
                     <div>
-                        <span class="cell-sub">When connected</span>
-                        <span class="int-val">Messages to your Telegram bot arrive in your Inbox, and the AI assistant can answer them.</span>
+                        <span class="cell-sub">@T["integrations.strip.whenConnected"]</span>
+                        <span class="int-val">@T["integrations.telegram.whenConnected"]</span>
                     </div>
                 </div>
             }
@@ -330,26 +330,26 @@ else
                 @if (connected)
                 {
                     <form method="post" asp-page-handler="RefreshTelegram" class="inline-form">
-                        <button type="submit" class="au-btn au-btn--outlined au-btn--sm">Check connection</button>
+                        <button type="submit" class="au-btn au-btn--outlined au-btn--sm">@T["integrations.telegram.check"]</button>
                     </form>
-                    <button type="button" class="au-btn au-btn--text au-btn--sm" data-open="@modalId">Use a different bot</button>
+                    <button type="button" class="au-btn au-btn--text au-btn--sm" data-open="@modalId">@T["integrations.telegram.otherBot"]</button>
                     <form method="post" asp-page-handler="Disconnect" class="inline-form int-foot-end"
-                          data-au-confirm="Disconnect Telegram? The bot stops receiving and sending messages until you connect it again. Existing conversations are kept." data-au-confirm-title="Disconnect Telegram" data-au-confirm-label="Disconnect" data-au-confirm-tone="danger">
+                          data-au-confirm="@T["integrations.telegram.disconnectConfirm"]" data-au-confirm-title="@T["integrations.disconnectTitle", "Telegram"]" data-au-confirm-label="@T["integrations.action.disconnect"]" data-au-confirm-tone="danger">
                         <input type="hidden" name="Channel" value="@ChannelType.Telegram" />
-                        <button type="submit" class="au-btn au-btn--text au-btn--sm btn-danger-text">Disconnect</button>
+                        <button type="submit" class="au-btn au-btn--text au-btn--sm btn-danger-text">@T["integrations.action.disconnect"]</button>
                     </form>
                 }
                 else
                 {
-                    <button type="button" class="au-btn au-btn--primary au-btn--sm" data-open="@modalId">Connect</button>
+                    <button type="button" class="au-btn au-btn--primary au-btn--sm" data-open="@modalId">@T["integrations.action.connect"]</button>
                 }
             </div>
         </div>
 
         await RenderModalStart(modalId, ChannelType.Telegram, "#229ED9",
-            connected ? "Use a different bot" : "Connect Telegram",
-            connected && !string.IsNullOrEmpty(info?.TelegramBotUsername) ? "Replaces @" + info!.TelegramBotUsername + "." : "Create a bot in Telegram, then paste its token.");
-        await RenderTelegramConnectForm(connected ? "Reconnect" : "Connect");
+            connected ? T["integrations.telegram.otherBot"] : T["integrations.telegram.connectTitle"],
+            connected && !string.IsNullOrEmpty(info?.TelegramBotUsername) ? T["integrations.telegram.replaces", "@" + info!.TelegramBotUsername] : T["integrations.telegram.connectSub"]);
+        await RenderTelegramConnectForm(connected ? T["integrations.action.reconnect"] : T["integrations.action.connect"]);
         await RenderModalEnd();
     }
 
@@ -357,19 +357,19 @@ else
     {
         <form method="post" asp-page-handler="ConnectTelegram" class="integration-form">
             <ol class="steps">
-                <li>Open <strong>@@BotFather</strong> in Telegram.</li>
-                <li>Send <code>/newbot</code> and follow the steps.</li>
-                <li>Paste the token it gives you:</li>
+                <li>@T.Html("integrations.telegram.step1", new Microsoft.AspNetCore.Html.HtmlString("<strong>@BotFather</strong>"))</li>
+                <li>@T.Html("integrations.telegram.step2", new Microsoft.AspNetCore.Html.HtmlString("<code>/newbot</code>"))</li>
+                <li>@T["integrations.telegram.step3"]</li>
             </ol>
             <label class="field">
-                <span>Bot token</span>
+                <span>@T["integrations.telegram.token"]</span>
                 <input type="password" name="BotToken" class="text-input" autocomplete="off" spellcheck="false"
                        placeholder="123456789:AA…" required />
-                <small class="text-subtle">We check the token and set everything up. It's never shown again.</small>
+                <small class="text-subtle">@T["integrations.telegram.tokenHelp"]</small>
             </label>
             <div class="flex items-center gap-2">
                 <button type="submit" class="au-btn au-btn--primary au-btn--sm">@buttonLabel</button>
-                <button type="button" class="au-btn au-btn--outlined au-btn--sm" data-close>Cancel</button>
+                <button type="button" class="au-btn au-btn--outlined au-btn--sm" data-close>@T["common.cancel"]</button>
             </div>
         </form>
         await Task.CompletedTask;
@@ -385,17 +385,17 @@ else
         var pending = info?.Status == TikTokIntegrationStatus.Pending;
         var failed = info?.Status == TikTokIntegrationStatus.Error;
         var unhealthy = connected && info is not null && !info.IsHealthy;
-        var (label, dot) = failed || unhealthy ? ("Needs attention", "dot-red")
-            : connected ? ("Connected", "dot-green")
-            : pending ? ("Connecting…", "dot-gray")
-            : ("Not connected", "dot-gray");
+        var (label, dot) = failed || unhealthy ? (T["integrations.state.attention"].Value, "dot-red")
+            : connected ? (T["integrations.state.connected"].Value, "dot-green")
+            : pending ? (T["integrations.state.connecting"].Value, "dot-gray")
+            : (T["integrations.state.notConnected"].Value, "dot-gray");
 
         <div class="card int-card int-framed @(failed || unhealthy ? "int-card-error" : "")" style="--ch:#000000">
             <div class="int-head">
                 <span class="channel-mark int-notch ch-tiktok" title="TikTok">@Html.Raw(Omni.App.Common.Helpers.ChannelIconHelper.BrandSvg("tiktok"))</span>
                 <div class="flex-1 min-w-0">
                     <div class="integration-title">TikTok</div>
-                    <div class="cell-sub">@(connected && !string.IsNullOrEmpty(info!.DisplayName) ? info.DisplayName : "Connect your client's TikTok account.")</div>
+                    <div class="cell-sub">@(connected && !string.IsNullOrEmpty(info!.DisplayName) ? info.DisplayName : T["integrations.tiktok.purpose"].Value)</div>
                 </div>
                 <span class="status-pill"><span class="dot @dot"></span>@label</span>
             </div>
@@ -404,11 +404,11 @@ else
             {
                 <div class="int-strip int-strip-problem">
                     <div>
-                        <span class="cell-sub">Problem</span>
-                        <span class="int-val">TikTok stopped working. Reconnect to keep the connection active.</span>
+                        <span class="cell-sub">@T["integrations.strip.problem"]</span>
+                        <span class="int-val">@T["integrations.tiktok.stopped"]</span>
                         @if (!string.IsNullOrEmpty(info?.LastProblemMessage))
                         {
-                            <details class="mt-1"><summary class="cell-sub">Technical details</summary><div class="cell-sub break-word">@info.LastProblemMessage</div></details>
+                            <details class="mt-1"><summary class="cell-sub">@T["messages.error.details"]</summary><div class="cell-sub break-word">@info.LastProblemMessage</div></details>
                         }
                     </div>
                 </div>
@@ -417,45 +417,45 @@ else
             {
                 <div class="int-strip">
                     <div>
-                        <span class="cell-sub">TikTok account</span>
-                        <span class="int-val">@(info!.DisplayName ?? "Connected")</span>
+                        <span class="cell-sub">@T["integrations.tiktok.account"]</span>
+                        <span class="int-val">@(info!.DisplayName ?? T["integrations.state.connected"].Value)</span>
                     </div>
                 </div>
             }
             else if (pending)
             {
                 <div class="int-strip int-strip-note">
-                    <div><span class="cell-sub">Not finished</span><span class="int-val">The sign-in to TikTok wasn't finished. Start again, or reset it.</span></div>
+                    <div><span class="cell-sub">@T["integrations.strip.notFinished"]</span><span class="int-val">@T["calendars.notFinished", "TikTok"]</span></div>
                 </div>
             }
             else
             {
                 <div class="int-strip int-strip-note">
-                    <div><span class="cell-sub">When connected</span><span class="int-val">See which TikTok account is linked to your client.</span></div>
+                    <div><span class="cell-sub">@T["integrations.strip.whenConnected"]</span><span class="int-val">@T["integrations.tiktok.whenConnected"]</span></div>
                 </div>
             }
 
             <div class="int-foot">
                 @if (pending || failed)
                 {
-                    <a href="/tiktok-oauth/connect" class="au-btn au-btn--primary au-btn--sm">@(pending ? "Start again" : "Try again")</a>
+                    <a href="/tiktok-oauth/connect" class="au-btn au-btn--primary au-btn--sm">@(pending ? T["integrations.action.startAgain"] : T["integrations.action.tryAgain"])</a>
                     <form method="post" asp-page-handler="DisconnectTikTok" class="inline-form">
-                        <button type="submit" class="au-btn au-btn--text au-btn--sm">Cancel / reset</button>
+                        <button type="submit" class="au-btn au-btn--text au-btn--sm">@T["integrations.action.reset"]</button>
                     </form>
                 }
                 else if (!connected)
                 {
-                    <a href="/tiktok-oauth/connect" class="au-btn au-btn--primary au-btn--sm">Connect</a>
+                    <a href="/tiktok-oauth/connect" class="au-btn au-btn--primary au-btn--sm">@T["integrations.action.connect"]</a>
                 }
                 else
                 {
                     @if (unhealthy)
                     {
-                        <a href="/tiktok-oauth/connect" class="au-btn au-btn--primary au-btn--sm">Reconnect</a>
+                        <a href="/tiktok-oauth/connect" class="au-btn au-btn--primary au-btn--sm">@T["integrations.action.reconnect"]</a>
                     }
                     <form method="post" asp-page-handler="DisconnectTikTok" class="inline-form int-foot-end"
-                          data-au-confirm="Disconnect TikTok? Your client won't show a connected TikTok account until you connect it again." data-au-confirm-title="Disconnect TikTok" data-au-confirm-label="Disconnect" data-au-confirm-tone="danger">
-                        <button type="submit" class="au-btn au-btn--text au-btn--sm btn-danger-text">Disconnect</button>
+                          data-au-confirm="@T["integrations.tiktok.disconnectConfirm"]" data-au-confirm-title="@T["integrations.disconnectTitle", "TikTok"]" data-au-confirm-label="@T["integrations.action.disconnect"]" data-au-confirm-tone="danger">
+                        <button type="submit" class="au-btn au-btn--text au-btn--sm btn-danger-text">@T["integrations.action.disconnect"]</button>
                     </form>
                 }
             </div>
@@ -471,64 +471,64 @@ else
 
             <div class="form-row-even">
                 <label class="field">
-                    <span>Display name</span>
-                    <input type="text" name="DisplayName" value="@(info?.DisplayName)" placeholder="e.g. Client front desk" class="text-input" />
+                    <span>@T["integrations.manual.displayName"]</span>
+                    <input type="text" name="DisplayName" value="@(info?.DisplayName)" placeholder="@T["integrations.manual.displayNamePlaceholder"]" class="text-input" />
                 </label>
 
                 @if (channel == ChannelType.WhatsApp)
                 {
                     <label class="field">
-                        <span>Phone number ID</span>
+                        <span>@T["integrations.manual.phoneNumberId"]</span>
                         <input type="text" name="PhoneNumberId" value="@(info?.PhoneNumberId)" class="text-input" />
-                        <small class="text-subtle">Meta app → WhatsApp → API Setup</small>
+                        <small class="text-subtle">@T["integrations.manual.phoneNumberIdHelp"]</small>
                     </label>
                     <label class="field">
-                        <span>WhatsApp Business Account ID</span>
+                        <span>@T["integrations.manual.wabaId"]</span>
                         <input type="text" name="WhatsAppBusinessId" value="@(info?.WhatsAppBusinessId)" class="text-input" />
-                        <small class="text-subtle">Same page, under the phone number</small>
+                        <small class="text-subtle">@T["integrations.manual.wabaIdHelp"]</small>
                     </label>
                     <label class="field">
-                        <span>Webhook verify token</span>
+                        <span>@T["integrations.manual.verifyToken"]</span>
                         <input type="text" name="WebhookVerifyToken"
-                               placeholder="@(info?.HasWebhookVerifyToken == true ? "•••••••• (leave blank to keep)" : "Any word you choose")"
+                               placeholder="@(info?.HasWebhookVerifyToken == true ? T["integrations.manual.keepSecret"] : T["integrations.manual.verifyTokenPlaceholder"])"
                                class="text-input" />
-                        <small class="text-subtle">Type the same word in Meta's webhook settings</small>
+                        <small class="text-subtle">@T["integrations.manual.verifyTokenHelp"]</small>
                     </label>
                 }
                 else if (channel == ChannelType.Instagram)
                 {
                     <label class="field">
-                        <span>Instagram Business Account ID</span>
+                        <span>@T["integrations.manual.instagramId"]</span>
                         <input type="text" name="InstagramBusinessId" value="@(info?.InstagramBusinessId)" class="text-input" />
-                        <small class="text-subtle">Meta Business Suite → Settings → Instagram accounts</small>
+                        <small class="text-subtle">@T["integrations.manual.instagramIdHelp"]</small>
                     </label>
                     <label class="field">
-                        <span>Linked Facebook Page ID</span>
+                        <span>@T["integrations.manual.linkedPageId"]</span>
                         <input type="text" name="PageId" value="@(info?.PageId)" class="text-input" />
-                        <small class="text-subtle">Your Facebook page → About → Page transparency</small>
+                        <small class="text-subtle">@T["integrations.manual.pageIdHelp"]</small>
                     </label>
                 }
                 else if (channel == ChannelType.Facebook)
                 {
                     <label class="field">
-                        <span>Page ID</span>
+                        <span>@T["integrations.manual.pageId"]</span>
                         <input type="text" name="PageId" value="@(info?.PageId)" class="text-input" />
-                        <small class="text-subtle">Your Facebook page → About → Page transparency</small>
+                        <small class="text-subtle">@T["integrations.manual.pageIdHelp"]</small>
                     </label>
                 }
             </div>
 
             <label class="field">
-                <span>Access token</span>
+                <span>@T["integrations.manual.accessToken"]</span>
                 <input type="password" name="AccessToken"
-                       placeholder="@(tokenOnFile ? "•••••••• (leave blank to keep)" : "Paste a permanent access token")"
+                       placeholder="@(tokenOnFile ? T["integrations.manual.keepSecret"] : T["integrations.manual.accessTokenPlaceholder"])"
                        class="text-input" autocomplete="off" />
-                <small class="text-subtle">@(tokenOnFile ? "A token is saved. It's hidden for your security." : "Stored safely and never shown again.")</small>
+                <small class="text-subtle">@(tokenOnFile ? T["integrations.manual.tokenSaved"] : T["integrations.manual.tokenNew"])</small>
             </label>
 
             <div class="flex items-center gap-2">
-                <button type="submit" class="au-btn au-btn--primary au-btn--sm">@(connected ? "Save changes" : "Connect")</button>
-                <button type="button" class="au-btn au-btn--outlined au-btn--sm" data-close>Cancel</button>
+                <button type="submit" class="au-btn au-btn--primary au-btn--sm">@(connected ? T["common.saveChanges"] : T["integrations.action.connect"])</button>
+                <button type="button" class="au-btn au-btn--outlined au-btn--sm" data-close>@T["common.cancel"]</button>
             </div>
         </form>
         await Task.CompletedTask;
