@@ -21,7 +21,7 @@ The admin portal (`..\SculptFlowAdmin`) uses the same layout. Namespace = folder
 | Folder | What goes there |
 |---|---|
 | `Controllers/Admin` | Platform-admin APIs (`/api/platform-admin/{domain}`, `[RequirePlatformAdminKey]`), called by the admin portal |
-| `Controllers/Client` | Client dashboard APIs (signed-in staff); base `DashboardApiController` |
+| `Controllers/Client` | Client dashboard APIs (signed-in `client` and `member` users); base `DashboardApiController` |
 | `Controllers/Integrations` | Webhooks, n8n ingest and AI tool endpoints, OAuth callbacks |
 | `Controllers/Filters` | Auth/filter attributes (`RequireIngestKey`, `RequirePlatformAdminKey`, `ApiErrors`) |
 | `Pages/` | Razor Pages (PageModels follow the controller rules) |
@@ -74,7 +74,7 @@ Every table lives in its area's Postgres schema, never `public` (only `set_updat
 | Schema | Tables |
 |---|---|
 | `core` | business_types, clients, services |
-| `identity` | identity_users/_claims/_logins/_tokens, client_users |
+| `identity` | users (role admin/client/member), user_claims/_logins/_tokens, client_users |
 | `crm` | pipeline_stages, contacts, orders, conversations, messages, inbox_settings |
 | `scheduling` | bookings, availability rules/exceptions, booking_settings, calendar integrations and syncs |
 | `channels` | channel_integrations, whatsapp_templates, whatsapp_health_events, tiktok_integrations |
@@ -143,6 +143,15 @@ Full detail and the declared-settings table: `docs/configuration.md`.
   (`crm.pipeline_stages`). Code and reports work with stage **categories** (`StageCategory`), never one type's stage keys:
   move a contact with `IBusinessTypeService.GetPipelineAsync` → `ClientPipeline` (`EntryKey`, `MoveTo(current, category)`,
   `Resolve(keyOrCategory)`); people see labels. No code branches on a business type's code.
+
+## Users and roles (standing rule, Milestone A S7)
+
+- One users table, `identity.users` (`AppUser : IdentityUser`), with `role` (`UserRole`): `admin` uses only the admin
+  portal (it signs in through `/api/platform-admin/auth/login`), `client` and `member` use only this app. Only `client`
+  manages members (`MemberService`, `UnauthorizedAccessException` → 403). Seats = active client + member users (`max_users`).
+- Access is checked on every request, never only at login: `CurrentClientContext` (`UserAccess`: role, client, language)
+  and the cookie's `OnValidatePrincipal`. A rule that depends on the role takes the caller's `UserAccess`.
+- One active `client_users` row per user is a rule in code (check it before activating one), not an index.
 
 ## Platform-admin APIs (standing rule, agreed 2026-10-07)
 

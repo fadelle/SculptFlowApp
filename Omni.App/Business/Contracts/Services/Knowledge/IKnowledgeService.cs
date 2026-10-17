@@ -26,7 +26,7 @@ public interface IKnowledgeService
     /// <summary>Creates a document from ONE uploaded PDF/DOCX/TXT: validates size/type, extracts and
     /// normalizes the text, then runs the same chunk → embed → store pipeline as a manual entry. The
     /// original file is not kept — only its name/type/size and the extracted text (in Content).
-    /// Throws InvalidDocumentException (an ArgumentException) for anything staff can fix, and
+    /// Throws InvalidDocumentException (an ArgumentException) for anything members can fix, and
     /// InvalidOperationException if embedding fails (nothing is saved in either case).</summary>
     Task<KnowledgeDocumentResponse> CreateFromUploadAsync(
         Guid clientId, UploadKnowledgeRequest request, string fileName, Stream content, long length, CancellationToken ct = default);

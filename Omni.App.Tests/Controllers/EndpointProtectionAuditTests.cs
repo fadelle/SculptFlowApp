@@ -22,7 +22,7 @@ public class EndpointProtectionAuditTests
         ["GoogleAuthController.Callback"] = "Google OAuth callback",
         ["TikTokController.Reachable"] = "TikTok reachability check",
         ["TikTokController.Receive"] = "TikTok webhook, no verification yet (logs only the body size)",
-        ["ConversationsController.SendMessage"] = "AI sends are checked inside the action against the ingest key; staff sends require sign-in",
+        ["ConversationsController.SendMessage"] = "AI sends are checked inside the action against the ingest key; member sends require sign-in",
         ["UiTextController.Strings"] = "UI strings for the browser (the sign-in pages need them); no data",
     };
 

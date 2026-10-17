@@ -276,7 +276,7 @@ public class BookingService : IBookingService
 
         booking.ScheduledStart = newStart.ToUniversalTime();
         booking.ScheduledEnd = check.End.ToUniversalTime();
-        // A rescheduled time isn't "confirmed" again until the client/staff confirms it — same
+        // A rescheduled time isn't "confirmed" again until the client/member confirms it — same
         // status a brand-new booking starts at.
         booking.Status = BookingStatus.Booked;
         booking.UpdatedAt = DateTimeOffset.UtcNow;
@@ -490,7 +490,7 @@ public class BookingService : IBookingService
     }
 
     /// <summary>The booking a reschedule/cancel acts on: the given id, or — when the AI sends none — the contact's single upcoming
-    /// booking. Null when the contact has none; several upcoming ones (only staff can create them) need an explicit id.</summary>
+    /// booking. Null when the contact has none; several upcoming ones (only members can create them) need an explicit id.</summary>
     private async Task<Guid?> ResolveTargetAsync(Guid clientId, Guid contactId, Guid? id, CancellationToken ct)
     {
         if (id is not null) return id;

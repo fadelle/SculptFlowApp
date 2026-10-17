@@ -3,12 +3,13 @@ using Omni.App.Entities.Responses.Billing;
 
 namespace Omni.App.Business.Contracts.Services.PlatformAdmin;
 
-/// <summary>Staff accounts (Identity users and their client memberships) across clients, for the admin portal.</summary>
-public interface IStaffAdminService
+/// <summary>Client and member users (and their client memberships) across clients, for the admin portal. Admin users
+/// are not here: see IAdminAccountService.</summary>
+public interface IMemberAdminService
 {
-    Task<PagedResponse<StaffRow>> ListAsync(Guid? clientId, string? search, int page, CancellationToken ct);
+    Task<PagedResponse<MemberRow>> ListAsync(Guid? clientId, string? search, int page, CancellationToken ct);
 
-    Task<StaffRow?> GetAsync(string userId, CancellationToken ct);
+    Task<MemberRow?> GetAsync(string userId, CancellationToken ct);
 
     /// <summary>Throws InvalidOperationException when the user has no membership, or another one is already active.</summary>
     Task<PlatformAdminChange> SetMembershipActiveAsync(string userId, bool active, CancellationToken ct);

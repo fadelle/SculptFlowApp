@@ -23,7 +23,7 @@ public interface ITelegramIntegrationService
 {
     /// <summary>Throws ArgumentException (malformed token), TelegramApiException (Telegram rejected the
     /// token / webhook) or InvalidOperationException (no public URL configured, or the bot is already
-    /// connected to a different client). Messages are safe to show to staff and never contain the token.</summary>
+    /// connected to a different client). Messages are safe to show to members and never contain the token.</summary>
     Task<ChannelIntegrationResponse> ConnectAsync(Guid clientId, string? botToken, CancellationToken ct = default);
 
     /// <summary>Asks Telegram (getWebhookInfo) whether the webhook is still registered to us and

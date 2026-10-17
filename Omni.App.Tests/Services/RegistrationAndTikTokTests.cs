@@ -12,7 +12,7 @@ public class ClientRegistrationServiceTests
     private readonly Mock<IBillingAccountRepository> _accounts = new();
     private readonly Mock<IUnitOfWork> _uow = new();
     private readonly Mock<IUnitOfWorkTransaction> _tx = new();
-    private readonly Mock<UserManager<IdentityUser>> _users;
+    private readonly Mock<UserManager<AppUser>> _users;
     private readonly Mock<IKnowledgeSettingsService> _knowledge = new();
     private readonly Mock<ISubscriptionService> _subscriptions = new();
     private readonly Mock<IConfigManager> _config = new();
@@ -20,12 +20,12 @@ public class ClientRegistrationServiceTests
 
     public ClientRegistrationServiceTests()
     {
-        _users = new Mock<UserManager<IdentityUser>>(Mock.Of<IUserStore<IdentityUser>>(), null!, null!, null!, null!, null!, null!, null!, null!);
+        _users = new Mock<UserManager<AppUser>>(Mock.Of<IUserStore<AppUser>>(), null!, null!, null!, null!, null!, null!, null!, null!);
         _uow.Setup(u => u.BeginTransactionAsync(It.IsAny<CancellationToken>())).ReturnsAsync(_tx.Object);
-        _users.Setup(u => u.CreateAsync(It.IsAny<IdentityUser>(), It.IsAny<string>())).ReturnsAsync(IdentityResult.Success);
-        _users.Setup(u => u.CreateAsync(It.IsAny<IdentityUser>())).ReturnsAsync(IdentityResult.Success);
-        _users.Setup(u => u.AddClaimAsync(It.IsAny<IdentityUser>(), It.IsAny<Claim>())).ReturnsAsync(IdentityResult.Success);
-        _users.Setup(u => u.AddLoginAsync(It.IsAny<IdentityUser>(), It.IsAny<UserLoginInfo>())).ReturnsAsync(IdentityResult.Success);
+        _users.Setup(u => u.CreateAsync(It.IsAny<AppUser>(), It.IsAny<string>())).ReturnsAsync(IdentityResult.Success);
+        _users.Setup(u => u.CreateAsync(It.IsAny<AppUser>())).ReturnsAsync(IdentityResult.Success);
+        _users.Setup(u => u.AddClaimAsync(It.IsAny<AppUser>(), It.IsAny<Claim>())).ReturnsAsync(IdentityResult.Success);
+        _users.Setup(u => u.AddLoginAsync(It.IsAny<AppUser>(), It.IsAny<UserLoginInfo>())).ReturnsAsync(IdentityResult.Success);
         _config.SetupGet(c => c.BillingCurrency).Returns("USD");
         _config.SetupGet(c => c.BillingSignupPlanCode).Returns(" starter ");
         _config.SetupGet(c => c.BillingEnabled).Returns(true);
@@ -46,8 +46,8 @@ public class ClientRegistrationServiceTests
 
         Assert.All(new[] { normal, google }, r => Assert.Equal(ClientRegistrationService.SignupClosedMessage, Assert.Single(r.Errors)));
         _uow.Verify(u => u.BeginTransactionAsync(It.IsAny<CancellationToken>()), Times.Never);
-        _users.Verify(u => u.CreateAsync(It.IsAny<IdentityUser>()), Times.Never);
-        _users.Verify(u => u.CreateAsync(It.IsAny<IdentityUser>(), It.IsAny<string>()), Times.Never);
+        _users.Verify(u => u.CreateAsync(It.IsAny<AppUser>()), Times.Never);
+        _users.Verify(u => u.CreateAsync(It.IsAny<AppUser>(), It.IsAny<string>()), Times.Never);
 
         _config.SetupGet(c => c.AccountsSignupEnabled).Returns(true);
         Assert.True(Sut().IsSignupOpen);
@@ -94,7 +94,9 @@ public class ClientRegistrationServiceTests
         Assert.Equal((TextKit.Clinic, "en"), (client.BusinessTypeCode, client.DefaultLanguage));  // the chosen type, the sign-up language
         Assert.Equal((client.Id, r.User!.Id), (membership!.ClientId, membership.UserId));
         Assert.Equal(("USD", client.Id), (account!.Currency, account.ClientId));
-        _users.Verify(u => u.AddClaimAsync(r.User, It.Is<Claim>(c => c.Type == ClientRegistrationService.FullNameClaimType && c.Value == "Ann Lee")), Times.Once);
+        // The person signing up is the client user: role client, name on the user row (no claim), active.
+        Assert.Equal((UserRole.Client, "Ann Lee", true, "ann@x.com"), (r.User.Role, r.User.FullName, r.User.IsActive, r.User.UserName));
+        _users.Verify(u => u.AddClaimAsync(It.IsAny<AppUser>(), It.IsAny<Claim>()), Times.Never);
         _knowledge.Verify(k => k.GetAsync(client.Id, It.IsAny<CancellationToken>()), Times.Once);
         _tx.Verify(t => t.CommitAsync(It.IsAny<CancellationToken>()), Times.Once);
         _subscriptions.Verify(s => s.StartAsync(It.Is<StartSubscriptionRequest>(q => q.ClientId == client.Id && q.PlanCode == "starter" && !q.ChargeFirstPeriod), It.IsAny<CancellationToken>()), Times.Once);
@@ -140,16 +142,13 @@ public class ClientRegistrationServiceTests
     [Fact]
     public async Task Identity_errors_roll_back_and_are_returned()
     {
-        _users.Setup(u => u.CreateAsync(It.IsAny<IdentityUser>(), It.IsAny<string>())).ReturnsAsync(IdentityResult.Failed(new IdentityError { Description = "Password too weak" }));
+        _users.Setup(u => u.CreateAsync(It.IsAny<AppUser>(), It.IsAny<string>())).ReturnsAsync(IdentityResult.Failed(new IdentityError { Description = "Password too weak" }));
         var r = await Sut().RegisterAsync(Req());
         Assert.Equal("Password too weak", Assert.Single(r.Errors));
         _tx.Verify(t => t.RollbackAsync(It.IsAny<CancellationToken>()), Times.Once);
         _uow.Verify(u => u.DiscardChanges(), Times.Once);
         _clients.Verify(c => c.Add(It.IsAny<Client>()), Times.Never);
 
-        _users.Setup(u => u.CreateAsync(It.IsAny<IdentityUser>(), It.IsAny<string>())).ReturnsAsync(IdentityResult.Success);
-        _users.Setup(u => u.AddClaimAsync(It.IsAny<IdentityUser>(), It.IsAny<Claim>())).ReturnsAsync(IdentityResult.Failed(new IdentityError { Description = "claim failed" }));
-        Assert.Equal("claim failed", Assert.Single((await Sut().RegisterAsync(Req())).Errors));
     }
 
     [Fact]
@@ -197,13 +196,13 @@ public class ClientRegistrationServiceTests
     [Fact]
     public async Task External_registration_links_the_provider_and_confirms_the_email()
     {
-        IdentityUser? created = null;
-        _users.Setup(u => u.CreateAsync(It.IsAny<IdentityUser>())).Callback<IdentityUser>(u => created = u).ReturnsAsync(IdentityResult.Success);
+        AppUser? created = null;
+        _users.Setup(u => u.CreateAsync(It.IsAny<AppUser>())).Callback<AppUser>(u => created = u).ReturnsAsync(IdentityResult.Success);
         var r = await Sut().RegisterExternalAsync(new RegisterExternalClientRequest(" ", "Glow", "g@x.com", "Google", "key-1", "Google", TextKit.Clinic));
         Assert.True(r.Succeeded);
         Assert.True(created!.EmailConfirmed);
         _users.Verify(u => u.AddLoginAsync(created, It.Is<UserLoginInfo>(l => l.LoginProvider == "Google" && l.ProviderKey == "key-1")), Times.Once);
-        _users.Verify(u => u.AddClaimAsync(created, It.Is<Claim>(c => c.Value == "g@x.com")), Times.Once); // name falls back to the email
+        Assert.Equal(("g@x.com", UserRole.Client), (created.FullName, created.Role)); // name falls back to the email
     }
 
     [Fact]
@@ -212,7 +211,7 @@ public class ClientRegistrationServiceTests
         Assert.False((await Sut().RegisterExternalAsync(new RegisterExternalClientRequest("n", " ", "g@x.com", "Google", "k", null, TextKit.Clinic))).Succeeded);
         Assert.False((await Sut().RegisterExternalAsync(new RegisterExternalClientRequest("n", "c", "bad", "Google", "k", null, TextKit.Clinic))).Succeeded);
         Assert.False((await Sut().RegisterExternalAsync(new RegisterExternalClientRequest("n", new string('c', 201), "g@x.com", "Google", "k", null, TextKit.Clinic))).Succeeded);
-        _users.Setup(u => u.AddLoginAsync(It.IsAny<IdentityUser>(), It.IsAny<UserLoginInfo>())).ReturnsAsync(IdentityResult.Failed(new IdentityError { Description = "already linked" }));
+        _users.Setup(u => u.AddLoginAsync(It.IsAny<AppUser>(), It.IsAny<UserLoginInfo>())).ReturnsAsync(IdentityResult.Failed(new IdentityError { Description = "already linked" }));
         Assert.Equal("already linked", Assert.Single((await Sut().RegisterExternalAsync(new RegisterExternalClientRequest("n", "c", "g@x.com", "Google", "k", null, TextKit.Clinic))).Errors));
     }
 

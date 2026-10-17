@@ -14,7 +14,7 @@ public interface IWhatsAppTemplateProvider
     bool IsReady(ChannelIntegration integration);
 
     /// <summary>Submits a new template for WhatsApp review. Throws WhatsAppTemplateProviderException when Meta
-    /// refuses it; its message is stored as the template's rejection reason, so it's shown to staff.</summary>
+    /// refuses it; its message is stored as the template's rejection reason, so it's shown to members.</summary>
     Task<WhatsAppTemplateSubmitResult> SubmitAsync(ChannelIntegration integration, WhatsAppTemplate template, CancellationToken ct = default);
 
     Task<WhatsAppTemplateStatusResult> GetStatusAsync(ChannelIntegration integration, WhatsAppTemplate template, CancellationToken ct = default);

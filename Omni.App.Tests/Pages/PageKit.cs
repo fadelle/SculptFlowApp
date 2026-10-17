@@ -44,11 +44,15 @@ internal static class PageKit
         _ => throw new Xunit.Sdk.XunitException("Unexpected " + result.GetType().Name),
     };
 
-    public static Mock<ICurrentClientContext> ClientContext(Client? client)
+    /// <summary>The signed-in user (<paramref name="userId"/>, <paramref name="role"/>) works in <paramref name="client"/>;
+    /// null = no access at all.</summary>
+    public static Mock<ICurrentClientContext> ClientContext(Client? client, string role = UserRole.Client, string userId = "user-1")
     {
         var mock = new Mock<ICurrentClientContext>();
         mock.Setup(c => c.GetClientAsync(It.IsAny<CancellationToken>())).ReturnsAsync(client);
         mock.Setup(c => c.GetClientIdAsync(It.IsAny<CancellationToken>())).ReturnsAsync(client?.Id);
+        mock.Setup(c => c.GetAccessAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(client is null ? null : new UserAccess(userId, client.Id, role, null, null, null));
         return mock;
     }
 

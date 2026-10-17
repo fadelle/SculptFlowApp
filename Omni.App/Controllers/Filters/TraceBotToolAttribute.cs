@@ -9,7 +9,7 @@ using Omni.App.Entities.Dtos.Monitoring;
 namespace Omni.App.Controllers.Filters;
 
 /// <summary>
-/// Records every call the AI agent (n8n) makes to a tool endpoint as a bot.tool_called step in the message trace: which
+/// Records every call the AI assistant (n8n) makes to a tool endpoint as a bot.tool_called step in the message trace: which
 /// tool (the action's route template), the answer's status, how long it took, and the client/conversation/contact ids
 /// found in the arguments. n8n sends the message's traceparent back on these calls, so they land in that message's trace.
 /// A 4xx/5xx answer is a failed step (the bot asked for something it couldn't get). Never changes the response.

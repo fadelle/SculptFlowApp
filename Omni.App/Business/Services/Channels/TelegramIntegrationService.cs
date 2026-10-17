@@ -160,7 +160,7 @@ public class TelegramIntegrationService : ITelegramIntegrationService
             if (!await TryDeleteWebhookAsync(row.AccessToken, ct))
             {
                 // Still disconnect locally — inbound is rejected (404) once status != connected, so a
-                // leftover webhook at Telegram is inert — but tell staff it wasn't cleaned up.
+                // leftover webhook at Telegram is inert — but tell the user it wasn't cleaned up.
                 note = "Disconnected, but Telegram couldn't be told to remove the webhook. It is harmless and will be replaced on reconnect.";
             }
         }

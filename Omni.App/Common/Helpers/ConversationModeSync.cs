@@ -6,7 +6,7 @@ namespace Omni.App.Common.Helpers;
 /// <summary>Single place that changes Conversation.Mode — keeps the legacy AiEnabled/HumanTakeover
 /// booleans in sync so nothing writes them independently and lets them drift. Used by both
 /// ConversationService (explicit Take Over/Return to AI/Close) and MessageService (implicit mode
-/// changes triggered by a staff message arriving from the dashboard or the WhatsApp Business app).</summary>
+/// changes triggered by a member message arriving from the dashboard or the WhatsApp Business app).</summary>
 public static class ConversationModeSync
 {
     public static void Apply(Conversation conversation, string mode, DateTimeOffset? at = null)
@@ -16,7 +16,7 @@ public static class ConversationModeSync
         conversation.AiEnabled = mode == ConversationMode.Ai;
         conversation.HumanTakeover = mode == ConversationMode.Human;
 
-        var note = previous == ConversationMode.Ai && mode == ConversationMode.Human ? "Handed from AI to staff"
+        var note = previous == ConversationMode.Ai && mode == ConversationMode.Human ? "Handed from AI to your team"
             : previous == ConversationMode.Human && mode == ConversationMode.Ai ? "Returned to AI"
             : null;
         if (note is null) return;

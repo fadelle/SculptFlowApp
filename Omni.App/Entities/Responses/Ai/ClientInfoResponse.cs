@@ -1,6 +1,6 @@
 namespace Omni.App.Entities.Responses.Ai;
 
-/// <summary>Response for GET /api/ai/client-info — general info the AI agent answers questions
+/// <summary>Response for GET /api/ai/client-info — general info the AI assistant answers questions
 /// from directly instead of inventing it. Address/OperatingHours/BookingInfo are free text
 /// (see Client entity), matching this MVP's level of structure elsewhere.</summary>
 public record ClientInfoResponse(

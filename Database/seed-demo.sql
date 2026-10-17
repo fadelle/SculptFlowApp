@@ -3,7 +3,7 @@
 --
 --   Client     "Aurora Aesthetic Client" (slug demo-omni, Miami, America/New_York)
 --   Sign in    demo@aurora-demo.test   /   Demo-ChangeMe-2026      <-- PLACEHOLDER PASSWORD: CHANGE IT
---              (two more staff: nurse@ / reception@aurora-demo.test, same placeholder password)
+--              (the client user; two members: nurse@ / reception@aurora-demo.test, same placeholder password)
 --
 -- Everything is FICTIONAL: people, 555-01xx phone numbers, .test e-mail domains, and every
 -- token / id / calendar link below is a dummy value that works against no real service.
@@ -12,7 +12,7 @@
 --
 -- Covers: dashboard (contacts across the pipeline, revenue, appointments), inbox (WhatsApp, Telegram,
 -- Instagram, Facebook conversations: AI / human / approval modes, unread, service window), contacts,
--- orders, appointments (+ calendar sync), staff, services, knowledge base (manual,
+-- orders, appointments (+ calendar sync), members, services, knowledge base (manual,
 -- upload and website entries), WhatsApp templates, campaigns with recipients, notifications,
 -- activity events, client info, availability + booking rules + date exceptions, channel
 -- connections (+ health history), TikTok, billing (plan, subscription, wallet, usage, ledger).
@@ -21,7 +21,7 @@
 --   psql "<connection string of a NON-PRODUCTION database>" -f Database/seed-demo.sql
 --
 -- Re-runnable: it first removes the demo client (slug demo-omni, which cascades to everything
--- of the client) and its three staff users, then recreates it all with fixed GUIDs, so it never
+-- of the client) and its three users, then recreates it all with fixed GUIDs, so it never
 -- duplicates and the relative dates (days/hours before or after "now") are refreshed to look live.
 -- It touches nothing else except the shared billing plan 'demo-growth' (upserted).
 -- Does not touch the other seed (Database/seed.sql, slug demo-client).
@@ -60,7 +60,7 @@ begin
   -- 0. Clean previous run (client cascades to all its data)
   -- ---------------------------------------------------------------
   delete from core.clients where slug = 'demo-omni';
-  delete from identity.identity_users where id in ('de000000-0000-4000-8000-0000000000a1',
+  delete from identity.users where id in ('de000000-0000-4000-8000-0000000000a1',
     'de000000-0000-4000-8000-0000000000a2', 'de000000-0000-4000-8000-0000000000a3');
 
   -- ---------------------------------------------------------------
@@ -76,19 +76,14 @@ begin
           'clinic', true, now() - interval '120 days');
 
   -- ---------------------------------------------------------------
-  -- 2. Staff (identity users + client memberships)
+  -- 2. Users (the client user who signed up + two members) and their client memberships
   -- ---------------------------------------------------------------
-  insert into identity.identity_users (id, user_name, normalized_user_name, email, normalized_email, email_confirmed,
-                                       password_hash, security_stamp, concurrency_stamp, lockout_enabled)
+  insert into identity.users (id, role, full_name, is_active, user_name, normalized_user_name, email, normalized_email,
+                              email_confirmed, password_hash, security_stamp, concurrency_stamp, lockout_enabled, created_at)
   values
-    ('de000000-0000-4000-8000-0000000000a1', 'demo@aurora-demo.test', 'DEMO@AURORA-DEMO.TEST', 'demo@aurora-demo.test', 'DEMO@AURORA-DEMO.TEST', true, pwd_hash, 'DEMOSTAMP0000000000000000000000A1', 'de000000-0000-4000-8000-0000000000b1', true),
-    ('de000000-0000-4000-8000-0000000000a2', 'nurse@aurora-demo.test', 'NURSE@AURORA-DEMO.TEST', 'nurse@aurora-demo.test', 'NURSE@AURORA-DEMO.TEST', true, pwd_hash, 'DEMOSTAMP0000000000000000000000A2', 'de000000-0000-4000-8000-0000000000b2', true),
-    ('de000000-0000-4000-8000-0000000000a3', 'reception@aurora-demo.test', 'RECEPTION@AURORA-DEMO.TEST', 'reception@aurora-demo.test', 'RECEPTION@AURORA-DEMO.TEST', true, pwd_hash, 'DEMOSTAMP0000000000000000000000A3', 'de000000-0000-4000-8000-0000000000b3', true);
-
-  insert into identity.identity_user_claims (user_id, claim_type, claim_value) values
-    ('de000000-0000-4000-8000-0000000000a1', 'full_name', 'Dr. Amelia Hart'),
-    ('de000000-0000-4000-8000-0000000000a2', 'full_name', 'Jordan Blake, RN'),
-    ('de000000-0000-4000-8000-0000000000a3', 'full_name', 'Priya Shah');
+    ('de000000-0000-4000-8000-0000000000a1', 'client', 'Dr. Amelia Hart', true, 'demo@aurora-demo.test', 'DEMO@AURORA-DEMO.TEST', 'demo@aurora-demo.test', 'DEMO@AURORA-DEMO.TEST', true, pwd_hash, 'DEMOSTAMP0000000000000000000000A1', 'de000000-0000-4000-8000-0000000000b1', true, now() - interval '120 days'),
+    ('de000000-0000-4000-8000-0000000000a2', 'member', 'Jordan Blake, RN', true, 'nurse@aurora-demo.test', 'NURSE@AURORA-DEMO.TEST', 'nurse@aurora-demo.test', 'NURSE@AURORA-DEMO.TEST', true, pwd_hash, 'DEMOSTAMP0000000000000000000000A2', 'de000000-0000-4000-8000-0000000000b2', true, now() - interval '90 days'),
+    ('de000000-0000-4000-8000-0000000000a3', 'member', 'Priya Shah', true, 'reception@aurora-demo.test', 'RECEPTION@AURORA-DEMO.TEST', 'reception@aurora-demo.test', 'RECEPTION@AURORA-DEMO.TEST', true, pwd_hash, 'DEMOSTAMP0000000000000000000000A3', 'de000000-0000-4000-8000-0000000000b3', true, now() - interval '60 days');
 
   insert into identity.client_users (id, client_id, user_id, is_active, created_at) values
     (pg_temp.did(2), c, 'de000000-0000-4000-8000-0000000000a1', true, now() - interval '120 days'),
@@ -220,7 +215,7 @@ begin
    (3, pg_temp.did(200), pg_temp.did(100), 'inbound',  'contact',  'whatsapp', 'whatsapp_customer', 35980, null, 'Within the next 2 months, ideally.', false),
    (4, pg_temp.did(200), pg_temp.did(100), 'outbound', 'ai',    'whatsapp', 'ai',               35975, 'read', 'Great, we have openings this week. Would Thursday at 10:00 or Friday at 14:00 suit you?', true),
    (5, pg_temp.did(200), pg_temp.did(100), 'inbound',  'contact',  'whatsapp', 'whatsapp_customer', 35960, null, 'Thursday at 10 works.', false),
-   (6, pg_temp.did(200), pg_temp.did(100), 'outbound', 'staff', 'whatsapp', 'dashboard',        2900,  'read', 'Hi Sarah, Dr. Hart here. Your surgery date is confirmed. Please read the preparation guide we sent and tell me if anything is unclear.', false),
+   (6, pg_temp.did(200), pg_temp.did(100), 'outbound', 'member', 'whatsapp', 'dashboard',        2900,  'read', 'Hi Sarah, Dr. Hart here. Your surgery date is confirmed. Please read the preparation guide we sent and tell me if anything is unclear.', false),
    (7, pg_temp.did(200), pg_temp.did(100), 'inbound',  'contact',  'whatsapp', 'whatsapp_customer', 2880,  null, 'Thank you doctor, all clear. See you then!', false),
    -- Daniel (WhatsApp)
    (10, pg_temp.did(201), pg_temp.did(101), 'inbound',  'contact', 'whatsapp', 'whatsapp_customer', 11500, null, 'Hello, I would like information about liposuction on the abdomen.', false),
@@ -245,7 +240,7 @@ begin
    (44, pg_temp.did(204), pg_temp.did(104), 'inbound',  'contact', 'instagram','whatsapp_customer', 35, null, 'Hello? Is someone there?', false),
    -- Noah (Telegram, approval mode)
    (50, pg_temp.did(205), pg_temp.did(105), 'inbound',  'contact', 'telegram', 'telegram_customer', 7200, null, 'What is the price range for a tummy tuck?', false),
-   (51, pg_temp.did(205), pg_temp.did(105), 'outbound', 'staff','telegram', 'dashboard',         7100, 'delivered', 'Hi Noah, tummy tucks at Aurora typically range from $7,500 to $11,000 depending on the extent. A consultation gives you an exact quote.', false),
+   (51, pg_temp.did(205), pg_temp.did(105), 'outbound', 'member','telegram', 'dashboard',         7100, 'delivered', 'Hi Noah, tummy tucks at Aurora typically range from $7,500 to $11,000 depending on the extent. A consultation gives you an exact quote.', false),
    (52, pg_temp.did(205), pg_temp.did(105), 'inbound',  'contact', 'telegram', 'telegram_customer', 180, null, 'Ok. Can I come this Saturday? And what should I bring?', false),
    -- Mia (WhatsApp, Spanish)
    (60, pg_temp.did(206), pg_temp.did(106), 'inbound',  'contact', 'whatsapp', 'whatsapp_customer', 5800, null, 'Hola, cuanto cuesta el botox?', false),
@@ -257,13 +252,13 @@ begin
    -- Sophia (WhatsApp)
    (80, pg_temp.did(209), pg_temp.did(109), 'inbound',  'contact', 'whatsapp', 'whatsapp_customer', 20100, null, 'Hi! Lucas told me about you. I want to ask about augmentation.', false),
    (81, pg_temp.did(209), pg_temp.did(109), 'outbound', 'ai',   'whatsapp', 'ai',                20095, 'read', 'Welcome Sophia! Happy to help. Shall we schedule a consultation?', true),
-   (82, pg_temp.did(209), pg_temp.did(109), 'outbound', 'staff','whatsapp', 'whatsapp_business_app', 4400, 'read', 'Hi Sophia, your quote is ready. Let me know once you have decided and I will hold a surgery date.', false),
+   (82, pg_temp.did(209), pg_temp.did(109), 'outbound', 'member','whatsapp', 'whatsapp_business_app', 4400, 'read', 'Hi Sophia, your quote is ready. Let me know once you have decided and I will hold a surgery date.', false),
    -- Isabella (Facebook)
    (90, pg_temp.did(210), pg_temp.did(111), 'inbound',  'contact', 'facebook', 'whatsapp_customer', 8600, null, 'Buongiorno, vorrei prenotare una consulenza per un lifting.', false),
    (91, pg_temp.did(210), pg_temp.did(111), 'outbound', 'ai',   'facebook', 'ai',                8595, 'read', 'Buongiorno Isabella! Ho prenotato una consulenza per voi tra 4 giorni alle 11:00.', true),
    -- Grace (Facebook, closed)
    (95, pg_temp.did(211), pg_temp.did(113), 'inbound',  'contact', 'facebook', 'whatsapp_customer', 14400, null, 'I take blood thinners. Is Botox safe for me? Also please stop sending promotions.', false),
-   (96, pg_temp.did(211), pg_temp.did(113), 'outbound', 'staff','facebook', 'dashboard',         14390, 'read', 'Hi Grace, Dr. Hart will review your medication before any treatment, and we have removed you from promotions.', false);
+   (96, pg_temp.did(211), pg_temp.did(113), 'outbound', 'member','facebook', 'dashboard',         14390, 'read', 'Hi Grace, Dr. Hart will review your medication before any treatment, and we have removed you from promotions.', false);
 
   insert into crm.messages (id, client_id, conversation_id, contact_id, direction, sender_type, channel, origin, message_type, content,
                             delivery_status, is_ai_generated, sent_at, received_at, delivered_at, read_at, failed_at,
@@ -326,7 +321,7 @@ begin
   values (pg_temp.did(410), c, 30, 10, 240, 60);
 
   insert into scheduling.availability_exceptions (id, client_id, date, is_closed, start_time, end_time, reason) values
-    (pg_temp.did(420), c, (pg_temp.at(12, '12:00') at time zone 'America/New_York')::date, true,  null,    null,    'Staff training day'),
+    (pg_temp.did(420), c, (pg_temp.at(12, '12:00') at time zone 'America/New_York')::date, true,  null,    null,    'Team training day'),
     (pg_temp.did(421), c, (pg_temp.at(19, '12:00') at time zone 'America/New_York')::date, false, '12:00', '16:00', 'Short day: surgeon at a conference'),
     (pg_temp.did(422), c, (pg_temp.at(26, '12:00') at time zone 'America/New_York')::date, true,  null,    null,    'Public holiday');
 
@@ -472,19 +467,19 @@ begin
   insert into activity.events (id, client_id, contact_id, conversation_id, booking_id, event_type, source, metadata, created_at) values
     (pg_temp.did(900), c, pg_temp.did(100), pg_temp.did(200), null,             'contact_created',           'instagram', '{}', now() - interval '25 days'),
     (pg_temp.did(901), c, pg_temp.did(100), pg_temp.did(200), pg_temp.did(300), 'booking_created',        'ai',        '{}', now() - interval '25 days' + interval '10 minutes'),
-    (pg_temp.did(902), c, pg_temp.did(100), null,             pg_temp.did(300), 'booking_attended',       'staff',     '{}', now() - interval '18 days'),
-    (pg_temp.did(903), c, pg_temp.did(100), null,             pg_temp.did(301), 'order_confirmed',       'staff',     '{"amount": 6500, "deposit": 1500}', now() - interval '10 days'),
+    (pg_temp.did(902), c, pg_temp.did(100), null,             pg_temp.did(300), 'booking_attended',       'member',      '{}', now() - interval '18 days'),
+    (pg_temp.did(903), c, pg_temp.did(100), null,             pg_temp.did(301), 'order_confirmed',       'member',      '{"amount": 6500, "deposit": 1500}', now() - interval '10 days'),
     (pg_temp.did(904), c, pg_temp.did(101), pg_temp.did(201), pg_temp.did(302), 'booking_created',        'ai',        '{}', now() - interval '7 days'),
-    (pg_temp.did(905), c, pg_temp.did(102), null,             pg_temp.did(303), 'booking_no_show',        'staff',     '{}', now() - interval '2 days'),
+    (pg_temp.did(905), c, pg_temp.did(102), null,             pg_temp.did(303), 'booking_no_show',        'member',      '{}', now() - interval '2 days'),
     (pg_temp.did(906), c, pg_temp.did(103), pg_temp.did(203), null,             'contact_created',           'website',   '{}', now() - interval '2 hours'),
     (pg_temp.did(907), c, pg_temp.did(104), pg_temp.did(204), null,             'human_handoff',          'ai',        '{"reason": "financing and medical history"}', now() - interval '38 minutes'),
-    (pg_temp.did(908), c, pg_temp.did(105), pg_temp.did(205), pg_temp.did(310), 'booking_created',        'staff',     '{}', now() - interval '2 hours'),
+    (pg_temp.did(908), c, pg_temp.did(105), pg_temp.did(205), pg_temp.did(310), 'booking_created',        'member',      '{}', now() - interval '2 hours'),
     (pg_temp.did(909), c, pg_temp.did(106), pg_temp.did(206), null,             'message_failed',         'whatsapp',  '{"code": "131047"}', now() - interval '25 hours'),
-    (pg_temp.did(910), c, pg_temp.did(109), null,             pg_temp.did(304), 'booking_attended',       'staff',     '{}', now() - interval '4 days'),
-    (pg_temp.did(911), c, pg_temp.did(110), null,             pg_temp.did(306), 'order_confirmed',       'staff',     '{"amount": 5000}', now() - interval '35 days'),
+    (pg_temp.did(910), c, pg_temp.did(109), null,             pg_temp.did(304), 'booking_attended',       'member',      '{}', now() - interval '4 days'),
+    (pg_temp.did(911), c, pg_temp.did(110), null,             pg_temp.did(306), 'order_confirmed',       'member',      '{"amount": 5000}', now() - interval '35 days'),
     (pg_temp.did(912), c, pg_temp.did(108), null,             null,             'contact_contacted',         'campaign',  '{"campaign": "Old Contact Reactivation"}', now() - interval '2 hours'),
     (pg_temp.did(913), c, pg_temp.did(111), pg_temp.did(210), pg_temp.did(307), 'booking_created',        'ai',        '{}', now() - interval '1 day'),
-    (pg_temp.did(914), c, pg_temp.did(113), pg_temp.did(211), null,             'conversation_closed',    'staff',     '{}', now() - interval '10 days');
+    (pg_temp.did(914), c, pg_temp.did(113), pg_temp.did(211), null,             'conversation_closed',    'member',      '{}', now() - interval '10 days');
 
   -- ---------------------------------------------------------------
   -- 16. Billing: plan, subscription, wallet, usage, ledger
@@ -497,8 +492,8 @@ begin
   returning id into v_plan;
 
   insert into billing.plan_entitlements (plan_id, entitlement_key, value) values
-    (v_plan, 'campaigns', 'true'), (v_plan, 'ai_agent', 'true'), (v_plan, 'advanced_reporting', 'true'),
-    (v_plan, 'api_access', 'false'), (v_plan, 'max_agents', '3'), (v_plan, 'max_whatsapp_numbers', '2'),
+    (v_plan, 'campaigns', 'true'), (v_plan, 'ai_assistant', 'true'), (v_plan, 'advanced_reporting', 'true'),
+    (v_plan, 'api_access', 'false'), (v_plan, 'max_users', '3'), (v_plan, 'max_whatsapp_numbers', '2'),
     (v_plan, 'max_channel_connections', '6')
   on conflict (plan_id, entitlement_key) do update set value = excluded.value;
 

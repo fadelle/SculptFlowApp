@@ -25,7 +25,7 @@ using Omni.App.Persistence.Contracts.WhatsApp;
 
 namespace Omni.App.Business.Services.Inbox;
 
-/// <summary>Every outbound send (staff text, AI reply, template, campaign template) follows the same billing steps:
+/// <summary>Every outbound send (member text, AI reply, template, campaign template) follows the same billing steps:
 /// subscription check -> reserve (the channel's billing policy decides whether/what is billable) -> provider call
 /// (release on failure) -> Message row saved with the id the reservation was keyed on. Delivery callbacks then
 /// settle or release it (HandleStatusUpdateAsync). See Common/Enums/OutboundMessageKind.cs.</summary>
@@ -135,7 +135,7 @@ public class MessageService : IMessageService
         if (conversation is null) return null;
 
         var messageId = Guid.NewGuid();
-        _tracer.Step(TraceSteps.SendRequested, TraceOutcomes.Ok, Ids(conversation, messageId), detail: new { kind = "staff" });
+        _tracer.Step(TraceSteps.SendRequested, TraceOutcomes.Ok, Ids(conversation, messageId), detail: new { kind = "member" });
         var billingHold = await PrepareTracedBillingAsync(conversation, messageId, OutboundMessageKind.Text, null, null, ct);
 
         // Channel-specific rules (WhatsApp's 24h window + phone, Telegram's connected bot + chat id)
@@ -163,7 +163,7 @@ public class MessageService : IMessageService
             ConversationId = conversationId,
             ContactId = conversation.ContactId,
             Direction = MessageDirection.Outbound,
-            SenderType = MessageSenderType.Staff,
+            SenderType = MessageSenderType.Member,
             Origin = MessageOrigin.Dashboard,
             Channel = conversation.Channel,
             MessageType = string.IsNullOrWhiteSpace(request.MessageType) ? "text" : request.MessageType,
@@ -180,7 +180,7 @@ public class MessageService : IMessageService
         conversation.LastMessageDirection = MessageDirection.Outbound;
         conversation.UpdatedAt = now;
 
-        // Staff sending from the dashboard means a human is handling this conversation now.
+        // Members sending from the dashboard means a human is handling this conversation now.
         var modeChanged = conversation.Mode != ConversationMode.Human;
         ConversationModeSync.Apply(conversation, ConversationMode.Human, now);
 
@@ -191,14 +191,14 @@ public class MessageService : IMessageService
         }
 
         // Don't log message content into event metadata — just that a send happened and by whom.
-        _events.Log(clientId, EventTypes.StaffMessageSentDashboard,
+        _events.Log(clientId, EventTypes.MemberMessageSentDashboard,
             contactId: conversation.ContactId, conversationId: conversationId, source: MessageOrigin.Dashboard);
 
         await _unitOfWork.SaveChangesAsync(ct);
         await _billing.SentAsync(billingHold, ct);
 
         await _notifier.NewMessageAsync(clientId, conversationId, message.Id, conversation.ContactId,
-            MessageDirection.Outbound, MessageSenderType.Staff, MessageOrigin.Dashboard, now, ct);
+            MessageDirection.Outbound, MessageSenderType.Member, MessageOrigin.Dashboard, now, ct);
         if (modeChanged)
         {
             await _notifier.ConversationModeChangedAsync(clientId, conversationId, ConversationMode.Human, ct);
@@ -264,7 +264,7 @@ public class MessageService : IMessageService
         _messages.Add(message);
 
         // AI sending a reply keeps the conversation in AI mode — never flip to human here (that's
-        // what distinguishes this from SendAsync's staff path).
+        // what distinguishes this from SendAsync's member path).
         conversation.LastMessageAt = now;
         conversation.LastMessageDirection = MessageDirection.Outbound;
         conversation.UpdatedAt = now;
@@ -293,7 +293,7 @@ public class MessageService : IMessageService
 
     /// <summary>Campaign-origin variant of SendTemplateAsync — same WhatsApp send + Message-row logic,
     /// but stamps Origin.Campaign and links CampaignId/CampaignRecipientId instead of acting as a
-    /// plain staff Inbox send. Used exclusively by CampaignService.ProcessRecipientAsync.</summary>
+    /// plain members Inbox send. Used exclusively by CampaignService.ProcessRecipientAsync.</summary>
     public Task<MessageResponse?> SendCampaignTemplateAsync(
         Guid clientId, Guid conversationId, Guid whatsAppTemplateId, IReadOnlyList<string> bodyParameters,
         Guid campaignId, Guid campaignRecipientId, CancellationToken ct = default) =>
@@ -355,7 +355,7 @@ public class MessageService : IMessageService
             ConversationId = conversationId,
             ContactId = conversation.ContactId,
             Direction = MessageDirection.Outbound,
-            SenderType = MessageSenderType.Staff,
+            SenderType = MessageSenderType.Member,
             Origin = origin,
             Channel = ConversationChannel.WhatsApp,
             MessageType = "template",
@@ -386,14 +386,14 @@ public class MessageService : IMessageService
             conversation.Contact.UpdatedAt = now;
         }
 
-        var eventType = origin == MessageOrigin.Campaign ? EventTypes.CampaignMessageSent : EventTypes.StaffMessageSentDashboard;
+        var eventType = origin == MessageOrigin.Campaign ? EventTypes.CampaignMessageSent : EventTypes.MemberMessageSentDashboard;
         _events.Log(clientId, eventType, contactId: conversation.ContactId, conversationId: conversationId, source: origin);
 
         await _unitOfWork.SaveChangesAsync(ct);
         await _billing.SentAsync(billingHold, ct);
 
         await _notifier.NewMessageAsync(clientId, conversationId, message.Id, conversation.ContactId,
-            MessageDirection.Outbound, MessageSenderType.Staff, origin, now, ct);
+            MessageDirection.Outbound, MessageSenderType.Member, origin, now, ct);
         if (modeChanged)
         {
             await _notifier.ConversationModeChangedAsync(clientId, conversationId, ConversationMode.Human, ct);
@@ -453,11 +453,11 @@ public class MessageService : IMessageService
                 MessageDirection.Inbound, MessageSenderType.Contact, MessageOrigin.CustomerFor(request.Channel),
                 false, false, EventTypes.ContactMessageReceived),
 
-            // Coexistence echo: staff replied from the WhatsApp Business phone app directly. This
+            // Coexistence echo: members replied from the WhatsApp Business phone app directly. This
             // is never a customer message and must never trigger the AI — force human mode.
             IngestEventType.BusinessAppEcho => (
-                MessageDirection.Outbound, MessageSenderType.Staff, MessageOrigin.WhatsAppBusinessApp,
-                false, true, EventTypes.StaffMessageSentWhatsAppApp),
+                MessageDirection.Outbound, MessageSenderType.Member, MessageOrigin.WhatsAppBusinessApp,
+                false, true, EventTypes.MemberMessageSentWhatsAppApp),
 
             IngestEventType.AiMessage => (
                 MessageDirection.Outbound, MessageSenderType.Ai, MessageOrigin.Ai,
@@ -496,7 +496,7 @@ public class MessageService : IMessageService
 
         // The 24h WhatsApp service window only ever opens/extends on a genuine customer message —
         // business_app_echo, ai_message (and elsewhere: dashboard, campaign sends) must NOT touch
-        // this, or staff/AI could keep a window open indefinitely just by replying to themselves.
+        // this, or member/AI could keep a window open indefinitely just by replying to themselves.
         var reopened = false;
         if (request.EventType == IngestEventType.CustomerMessage)
         {
@@ -518,22 +518,22 @@ public class MessageService : IMessageService
         {
             ConversationModeSync.Apply(conversation, ConversationMode.Human, now);
             modeChanged = true;
-            modeReason = "staff_replied_from_business_app";
+            modeReason = "member_replied_from_business_app";
         }
         else if (request.EventType == IngestEventType.CustomerMessage && conversation.Mode == ConversationMode.Ai)
         {
-            // The bot can't answer when the plan no longer includes the AI agent, and the client may send conversations a
-            // contact reopens straight to staff. Either way the conversation goes to human mode (same state as a handoff),
-            // so it lands in staff's needs-attention list and n8n is never called (see aiEligible below).
+            // The bot can't answer when the plan no longer includes the AI assistant, and the client may send conversations a
+            // contact reopens straight to members. Either way the conversation goes to human mode (same state as a handoff),
+            // so it lands in the team's needs-attention list and n8n is never called (see aiEligible below).
             var inboxSettings = await _inboxSettings.GetAsync(request.ClientId, ct);
             if (!inboxSettings.PlanIncludesAiBot || (reopened && !inboxSettings.AiBotAnswersReopened))
             {
                 ConversationModeSync.Apply(conversation, ConversationMode.Human, now);
                 modeChanged = true;
-                modeReason = inboxSettings.PlanIncludesAiBot ? "reopened_to_staff" : "plan_without_ai_agent";
+                modeReason = inboxSettings.PlanIncludesAiBot ? "reopened_to_human" : "plan_without_ai_assistant";
                 _events.Log(request.ClientId, EventTypes.HumanHandoff, contactId: request.ContactId,
                     conversationId: request.ConversationId, source: MessageOrigin.System,
-                    metadataJson: inboxSettings.PlanIncludesAiBot ? "{\"reason\":\"reopened_to_staff\"}" : "{\"reason\":\"plan_without_ai_agent\"}");
+                    metadataJson: inboxSettings.PlanIncludesAiBot ? "{\"reason\":\"reopened_to_human\"}" : "{\"reason\":\"plan_without_ai_assistant\"}");
             }
         }
 
@@ -612,14 +612,14 @@ public class MessageService : IMessageService
         // customer message, in a conversation currently in AI mode, with a message type the AI is
         // equipped to handle. Media/location/contact/reaction messages are saved but never reach
         // the AI "initially" per the event-routing table — extend AiEligibleMessageTypes if/when
-        // the AI agent gains multimodal handling.
+        // the AI assistant gains multimodal handling.
         var aiEligible = request.EventType == IngestEventType.CustomerMessage
             && conversation.Mode == ConversationMode.Ai
             && AiEligibleMessageTypes.Contains(message.MessageType);
         if (request.EventType == IngestEventType.CustomerMessage && !aiEligible)
         {
             // Why the bot won't see this message: the most specific reason first.
-            var reason = modeReason ?? (conversation.Mode != ConversationMode.Ai ? "conversation_with_staff" : "message_type_not_supported");
+            var reason = modeReason ?? (conversation.Mode != ConversationMode.Ai ? "conversation_in_human_mode" : "message_type_not_supported");
             _tracer.Step(TraceSteps.BotSkipped, TraceOutcomes.Skipped, ids, detail: new { reason, type = message.MessageType });
         }
 
@@ -627,7 +627,7 @@ public class MessageService : IMessageService
             conversation.Mode, aiEligible);
     }
 
-    /// <summary>Customer message types the AI agent is allowed to see — see IngestMessageResult.AiEligible.</summary>
+    /// <summary>Customer message types the AI assistant is allowed to see — see IngestMessageResult.AiEligible.</summary>
     private static readonly HashSet<string> AiEligibleMessageTypes = new(StringComparer.OrdinalIgnoreCase) { "text", "interactive" };
     // (Telegram commands like /start arrive as message type "command" and media as "image"/"audio"/…,
     // so they're saved to the Inbox but never reach the AI.)
@@ -763,7 +763,7 @@ public class MessageService : IMessageService
     }
 
     /// <summary>OUTBOUND_MESSAGE_FAILED for a send that failed synchronously (IChannelSender/IWhatsAppService threw
-    /// before any Message row existed). The exception's own message is never surfaced here — staff see an
+    /// before any Message row existed). The exception's own message is never surfaced here — members see an
     /// operational sentence, not a raw technical error (Application logs still have the real exception).</summary>
     private Task NotifyOutboundFailureAsync(Guid clientId, Conversation conversation, CancellationToken ct)
     {

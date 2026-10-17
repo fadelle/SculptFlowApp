@@ -1,6 +1,4 @@
 using System.Globalization;
-using System.Net.Mail;
-using System.Security.Claims;
 using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Identity;
@@ -11,6 +9,7 @@ using Omni.App.Business.Contracts.Services.BusinessTypes;
 using Omni.App.Business.Contracts.Services.Clients;
 using Omni.App.Business.Contracts.Services.Knowledge;
 using Omni.App.Common.Enums;
+using Omni.App.Common.Helpers;
 using Omni.App.Entities.Dtos.Clients;
 using Omni.App.Entities.Models;
 using Omni.App.Entities.Requests.Billing;
@@ -23,9 +22,6 @@ namespace Omni.App.Business.Services.Clients;
 
 public partial class ClientRegistrationService : IClientRegistrationService
 {
-    /// <summary>Identity claim type the user's full name is stored under (identity_user_claims).</summary>
-    public const string FullNameClaimType = StaffClaims.FullName;
-
     private const int MaxNameLength = 200;
     private const int MaxSlugLength = 60;
     private const int MaxSlugAttempts = 3;
@@ -33,7 +29,7 @@ public partial class ClientRegistrationService : IClientRegistrationService
     private readonly IClientRepository _clients;
     private readonly IBillingAccountRepository _billingAccounts;
     private readonly IUnitOfWork _unitOfWork;
-    private readonly UserManager<IdentityUser> _users;
+    private readonly UserManager<AppUser> _users;
     private readonly IKnowledgeSettingsService _knowledgeSettings;
     private readonly ILogger<ClientRegistrationService> _logger;
     private readonly ISubscriptionService _subscriptions;
@@ -42,7 +38,7 @@ public partial class ClientRegistrationService : IClientRegistrationService
     private readonly ITextContext _text;
 
     public ClientRegistrationService(
-        IClientRepository clients, IBillingAccountRepository billingAccounts, IUnitOfWork unitOfWork, UserManager<IdentityUser> users, IKnowledgeSettingsService knowledgeSettings,
+        IClientRepository clients, IBillingAccountRepository billingAccounts, IUnitOfWork unitOfWork, UserManager<AppUser> users, IKnowledgeSettingsService knowledgeSettings,
         ILogger<ClientRegistrationService> logger, ISubscriptionService subscriptions,
         IConfigManager config, IBusinessTypeService businessTypes, ITextContext text)
     {
@@ -79,7 +75,7 @@ public partial class ClientRegistrationService : IClientRegistrationService
         if (clientName.Length == 0) return ClientRegistrationResult.Fail("Client name is required.");
         if (fullName.Length > MaxNameLength) return ClientRegistrationResult.Fail($"Full name must be {MaxNameLength} characters or fewer.");
         if (clientName.Length > MaxNameLength) return ClientRegistrationResult.Fail($"Client name must be {MaxNameLength} characters or fewer.");
-        if (!IsValidEmail(email)) return ClientRegistrationResult.Fail("Enter a valid email address.");
+        if (!EmailAddress.IsValid(email)) return ClientRegistrationResult.Fail("Enter a valid email address.");
         if (password.Length == 0) return ClientRegistrationResult.Fail("Password is required.");
         if (!string.Equals(password, request.ConfirmPassword, StringComparison.Ordinal))
         {
@@ -102,7 +98,7 @@ public partial class ClientRegistrationService : IClientRegistrationService
         if (clientName.Length == 0) return ClientRegistrationResult.Fail("Client name is required.");
         if (fullName.Length > MaxNameLength) fullName = fullName[..MaxNameLength];
         if (clientName.Length > MaxNameLength) return ClientRegistrationResult.Fail($"Client name must be {MaxNameLength} characters or fewer.");
-        if (!IsValidEmail(email)) return ClientRegistrationResult.Fail("Enter a valid email address.");
+        if (!EmailAddress.IsValid(email)) return ClientRegistrationResult.Fail("Enter a valid email address.");
         if (!await _businessTypes.IsActiveAsync(request.BusinessTypeCode, ct)) return ClientRegistrationResult.Fail(BusinessTypeRequiredKey);
 
         return await CreateAccountAsync(fullName, clientName, email, request.BusinessTypeCode!.Trim(), async user =>
@@ -115,7 +111,7 @@ public partial class ClientRegistrationService : IClientRegistrationService
     }
 
     private async Task<ClientRegistrationResult> CreateAccountAsync(
-        string fullName, string clientName, string email, string businessTypeCode, Func<IdentityUser, Task<IdentityResult>> createUser,
+        string fullName, string clientName, string email, string businessTypeCode, Func<AppUser, Task<IdentityResult>> createUser,
         CancellationToken ct)
     {
         for (var attempt = 0; attempt < MaxSlugAttempts; attempt++)
@@ -125,7 +121,13 @@ public partial class ClientRegistrationService : IClientRegistrationService
             await using var tx = await _unitOfWork.BeginTransactionAsync(ct);
             try
             {
-                var user = new IdentityUser { UserName = email, Email = email };
+                var now = DateTimeOffset.UtcNow;
+                // The person signing up is the client user (role client): the one who manages the client's members.
+                var user = new AppUser
+                {
+                    UserName = email, Email = email, FullName = fullName, Role = UserRole.Client, IsActive = true,
+                    CreatedAt = now, UpdatedAt = now
+                };
                 var created = await createUser(user);
                 if (!created.Succeeded)
                 {
@@ -133,14 +135,6 @@ public partial class ClientRegistrationService : IClientRegistrationService
                     return ClientRegistrationResult.Fail(created.Errors.Select(e => e.Description));
                 }
 
-                var claim = await _users.AddClaimAsync(user, new Claim(FullNameClaimType, fullName));
-                if (!claim.Succeeded)
-                {
-                    await RollbackAsync(tx, ct);
-                    return ClientRegistrationResult.Fail(claim.Errors.Select(e => e.Description));
-                }
-
-                var now = DateTimeOffset.UtcNow;
                 var client = new Client
                 {
                     Id = Guid.NewGuid(),
@@ -266,13 +260,6 @@ public partial class ClientRegistrationService : IClientRegistrationService
     }
 
     private static string Trim(string s, int max) => s.Length <= max ? s : s[..max].TrimEnd('-');
-
-    private static bool IsValidEmail(string email)
-    {
-        if (email.Length == 0 || email.Length > 256) return false;
-        try { return new MailAddress(email).Address == email; }
-        catch (FormatException) { return false; }
-    }
 
     [GeneratedRegex("[^a-z0-9]+")]
     private static partial Regex NonSlugChars();

@@ -48,7 +48,7 @@
 
         <div class="au-side-section">Settings</div>
         @Row("/settings/business-info", "apartment", "Business Info", IsActive("/settings/business-info")) @* icon:apartment *@
-        @Row("/Staff", "badge", "Staff", IsActive("/Staff")) @* icon:badge *@
+        @Row("/Members", "badge", T["nav.members"].Value, IsActive("/Members")) @* icon:badge *@
         @Row("/settings/integrations", "hub", "Messaging Integrations", IsActive("/settings/integrations")) @* icon:hub *@
         @Row("/settings/calendar-integrations", "event_available", "Calendar Integrations", IsActive("/settings/calendar-integrations")) @* icon:event_available *@
         @if (Settings.BillingEnabled)

@@ -57,7 +57,7 @@ public class MessageServiceTests
         return c;
     }
 
-    // ---------------------------------------------------------------- staff text
+    // ---------------------------------------------------------------- member text
 
     [Fact]
     public async Task Send_validates_content_and_conversation()
@@ -75,14 +75,14 @@ public class MessageServiceTests
 
         var r = await Sut().SendAsync(_clientId, c.Id, new SendMessageRequest("hello"));
 
-        Assert.Equal(("wamid.sent", MessageSenderType.Staff, MessageOrigin.Dashboard, "text"), (saved!.ExternalMessageId, saved.SenderType, saved.Origin, saved.MessageType));
+        Assert.Equal(("wamid.sent", MessageSenderType.Member, MessageOrigin.Dashboard, "text"), (saved!.ExternalMessageId, saved.SenderType, saved.Origin, saved.MessageType));
         Assert.Equal((ConversationMode.Human, true), (c.Mode, c.HumanTakeover));
         Assert.NotNull(_contact.LastContactAt);
         _entitlements.Verify(e => e.EnsureCanSendMessagesAsync(_clientId, It.IsAny<CancellationToken>()), Times.Once);
         _billing.Verify(b => b.ReserveOutboundAsync(It.Is<OutboundMessageBillingContext>(x => x.Kind == OutboundMessageKind.Text && x.ServiceWindowOpen && x.RecipientAddress == "96170123456" && x.MessageId == saved.Id), It.IsAny<CancellationToken>()), Times.Once);
         _billing.Verify(b => b.SentAsync(_hold, It.IsAny<CancellationToken>()), Times.Once);
         _notifier.Verify(n => n.ConversationModeChangedAsync(_clientId, c.Id, ConversationMode.Human, It.IsAny<CancellationToken>()), Times.Once);
-        _notifier.Verify(n => n.NewMessageAsync(_clientId, c.Id, saved.Id, _contactId, MessageDirection.Outbound, MessageSenderType.Staff, MessageOrigin.Dashboard, It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()), Times.Once);
+        _notifier.Verify(n => n.NewMessageAsync(_clientId, c.Id, saved.Id, _contactId, MessageDirection.Outbound, MessageSenderType.Member, MessageOrigin.Dashboard, It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()), Times.Once);
         Assert.Equal(saved.Id, r!.Id);
     }
 
@@ -148,7 +148,7 @@ public class MessageServiceTests
     }
 
     [Fact]
-    public async Task AiReply_failure_releases_the_hold_but_does_not_notify_staff()
+    public async Task AiReply_failure_releases_the_hold_but_does_not_notify_members()
     {
         var c = Conv();
         _sender.Setup(s => s.SendTextAsync(It.IsAny<Conversation>(), It.IsAny<string>(), It.IsAny<CancellationToken>())).ThrowsAsync(new ChannelSendException("x"));
@@ -327,8 +327,8 @@ public class MessageServiceTests
 
     [Theory]
     [InlineData(true, true, ConversationMode.Ai)]      // bot on for reopened: stays with the AI
-    [InlineData(true, false, ConversationMode.Human)]  // client sends reopened conversations to staff
-    [InlineData(false, true, ConversationMode.Human)]  // plan without the AI agent: always staff
+    [InlineData(true, false, ConversationMode.Human)]  // client sends reopened conversations to members
+    [InlineData(false, true, ConversationMode.Human)]  // plan without the AI assistant: always members
     public async Task A_reopened_conversation_follows_the_clients_ai_bot_setting(bool planIncludesBot, bool reopenedOn, string expectedMode)
     {
         InboxSettings(planIncludesBot, reopenedOn);
@@ -345,7 +345,7 @@ public class MessageServiceTests
     }
 
     [Fact]
-    public async Task A_customer_message_in_an_ai_conversation_goes_to_staff_when_the_plan_lost_the_ai_agent()
+    public async Task A_customer_message_in_an_ai_conversation_goes_to_human_when_the_plan_lost_the_ai_assistant()
     {
         InboxSettings(planIncludesBot: false, reopenedConversations: true);
         var c = Conv();
@@ -353,7 +353,7 @@ public class MessageServiceTests
         var r = await Sut().IngestAsync(Ingest(c.Id, IngestEventType.CustomerMessage));
 
         Assert.Equal((ConversationMode.Human, false, true), (c.Mode, r.AiEligible, c.HumanTakeover));
-        _events.Verify(e => e.Log(_clientId, EventTypes.HumanHandoff, _contactId, c.Id, null, MessageOrigin.System, "{\"reason\":\"plan_without_ai_agent\"}"), Times.Once);
+        _events.Verify(e => e.Log(_clientId, EventTypes.HumanHandoff, _contactId, c.Id, null, MessageOrigin.System, "{\"reason\":\"plan_without_ai_assistant\"}"), Times.Once);
     }
 
     [Fact]
@@ -403,7 +403,7 @@ public class MessageServiceTests
         Message? saved = null;
         _messages.Setup(m => m.Add(It.IsAny<Message>())).Callback<Message>(m => saved = m);
         var r = await Sut().IngestAsync(Ingest(c.Id, IngestEventType.BusinessAppEcho));
-        Assert.Equal((MessageDirection.Outbound, MessageSenderType.Staff, MessageOrigin.WhatsAppBusinessApp), (saved!.Direction, saved.SenderType, saved.Origin));
+        Assert.Equal((MessageDirection.Outbound, MessageSenderType.Member, MessageOrigin.WhatsAppBusinessApp), (saved!.Direction, saved.SenderType, saved.Origin));
         Assert.Equal(ConversationMode.Human, c.Mode);
         Assert.False(r.AiEligible);
         _notifier.Verify(n => n.ConversationModeChangedAsync(_clientId, c.Id, ConversationMode.Human, It.IsAny<CancellationToken>()), Times.Once);
@@ -494,7 +494,7 @@ public class MessageServiceTests
     }
 
     [Fact]
-    public async Task First_failure_stores_the_reason_and_notifies_staff_once()
+    public async Task First_failure_stores_the_reason_and_notifies_members_once()
     {
         _contacts.Setup(l => l.GetFullNameAsync(_contactId, It.IsAny<CancellationToken>())).ReturnsAsync("Ann Lee");
         var m = FoundMessage(Outbound("sent"));
@@ -552,7 +552,7 @@ public class MessageServiceTests
     }
 
     [Fact]
-    public async Task A_staff_send_records_its_steps_and_stamps_the_message_with_the_trace()
+    public async Task A_member_send_records_its_steps_and_stamps_the_message_with_the_trace()
     {
         var c = Conv();
         var steps = RecordSteps();
@@ -564,7 +564,7 @@ public class MessageServiceTests
 
         Assert.Equal([TraceSteps.SendRequested, TraceSteps.SendProviderAccepted], steps.Select(s => s.Step));
         Assert.Equal((_clientId, c.Id, saved!.Id, ConversationChannel.WhatsApp), (steps[0].Ids.ClientId!.Value, steps[0].Ids.ConversationId!.Value, steps[0].Ids.MessageId!.Value, steps[0].Ids.Channel));
-        Assert.Contains("\"kind\":\"staff\"", steps[0].Detail);
+        Assert.Contains("\"kind\":\"member\"", steps[0].Detail);
         Assert.Equal("wamid.sent", steps[1].Ids.ExternalMessageId);
         Assert.Equal(activity.TraceId.ToHexString(), saved.TraceId);
     }
@@ -625,7 +625,7 @@ public class MessageServiceTests
     {
         var steps = RecordSteps();
         await Sut().IngestAsync(Ingest(Conv(ConversationMode.Human).Id, IngestEventType.CustomerMessage));
-        Assert.Contains("conversation_with_staff", steps.Single(s => s.Step == TraceSteps.BotSkipped).Detail);
+        Assert.Contains("conversation_in_human_mode", steps.Single(s => s.Step == TraceSteps.BotSkipped).Detail);
 
         steps.Clear();
         await Sut().IngestAsync(Ingest(Conv().Id, IngestEventType.CustomerMessage, externalId: "e2", messageType: "image"));
@@ -634,8 +634,8 @@ public class MessageServiceTests
         steps.Clear();
         InboxSettings(planIncludesBot: false, reopenedConversations: true);
         await Sut().IngestAsync(Ingest(Conv().Id, IngestEventType.CustomerMessage, externalId: "e3"));
-        Assert.Contains("plan_without_ai_agent", steps.Single(s => s.Step == TraceSteps.ConversationModeChanged).Detail);
-        Assert.Contains("plan_without_ai_agent", steps.Single(s => s.Step == TraceSteps.BotSkipped).Detail);
+        Assert.Contains("plan_without_ai_assistant", steps.Single(s => s.Step == TraceSteps.ConversationModeChanged).Detail);
+        Assert.Contains("plan_without_ai_assistant", steps.Single(s => s.Step == TraceSteps.BotSkipped).Detail);
 
         steps.Clear();
         var closed = Conv();
@@ -643,11 +643,11 @@ public class MessageServiceTests
         InboxSettings(planIncludesBot: true, reopenedConversations: false);
         await Sut().IngestAsync(Ingest(closed.Id, IngestEventType.CustomerMessage, externalId: "e4"));
         Assert.Contains(steps, s => s.Step == TraceSteps.ConversationReopened);
-        Assert.Contains("reopened_to_staff", steps.Single(s => s.Step == TraceSteps.BotSkipped).Detail);
+        Assert.Contains("reopened_to_human", steps.Single(s => s.Step == TraceSteps.BotSkipped).Detail);
 
         steps.Clear();
         await Sut().IngestAsync(Ingest(Conv().Id, IngestEventType.BusinessAppEcho, externalId: "e5"));
-        Assert.Contains("staff_replied_from_business_app", steps.Single(s => s.Step == TraceSteps.ConversationModeChanged).Detail);
+        Assert.Contains("member_replied_from_business_app", steps.Single(s => s.Step == TraceSteps.ConversationModeChanged).Detail);
         Assert.DoesNotContain(steps, s => s.Step == TraceSteps.BotSkipped); // not a customer message
     }
 

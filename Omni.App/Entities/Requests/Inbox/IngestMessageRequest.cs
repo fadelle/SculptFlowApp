@@ -3,7 +3,7 @@ namespace Omni.App.Entities.Requests.Inbox;
 /// <summary>
 /// Body for POST /api/messages/ingest — the one trusted entry point n8n uses to record everything
 /// that happens on a WhatsApp thread that our own backend didn't directly cause: a customer
-/// message, a staff reply echoed from the WhatsApp Business phone app, an AI reply n8n already
+/// message, a member reply echoed from the WhatsApp Business phone app, an AI reply n8n already
 /// sent itself, or a delivery-status update. See IngestEventType for the eventType values and
 /// MessageService.IngestAsync for how each one is mapped.
 /// </summary>

@@ -60,10 +60,10 @@ begin
   for t in select * from (values
     ('clients', 'core'),
     ('services', 'core'),
-    ('identity_users', 'identity'),
-    ('identity_user_claims', 'identity'),
-    ('identity_user_logins', 'identity'),
-    ('identity_user_tokens', 'identity'),
+    ('users', 'identity'),
+    ('user_claims', 'identity'),
+    ('user_logins', 'identity'),
+    ('user_tokens', 'identity'),
     ('client_users', 'identity'),
     ('contacts', 'crm'),
     ('conversations', 'crm'),
@@ -313,7 +313,7 @@ create table if not exists crm.contacts (
   desired_timeline      varchar(100),
   notes                 text,
 
-  assigned_staff_id     uuid,
+  assigned_user_id     text,             -- identity.users.id (not assigned by any feature yet)
 
   -- consent / opt-out (Development Principle 9: build this in early)
   marketing_opt_in      boolean not null default true,
@@ -403,7 +403,7 @@ create table if not exists crm.messages (
   created_at           timestamptz not null default now(),
 
   constraint ck_messages_direction check (direction in ('inbound','outbound')),
-  constraint ck_messages_sender_type check (sender_type in ('contact','ai','staff','system'))
+  constraint ck_messages_sender_type check (sender_type in ('contact','ai','member','system'))
 );
 
 create index if not exists ix_messages_client_id on crm.messages(client_id);
@@ -428,7 +428,7 @@ create table if not exists scheduling.bookings (
   location_name         varchar(200),
   external_calendar_id  varchar(200),
   external_event_id     varchar(200),
-  assigned_staff_id     uuid,
+  assigned_user_id     text,             -- identity.users.id (not assigned by any feature yet)
   notes                 text,
 
   created_at            timestamptz not null default now(),
@@ -552,7 +552,7 @@ create trigger trg_channel_integrations_updated_at
   for each row execute function set_updated_at();
 
 -- =====================================================================
--- End of MVP schema (9 tables). LATER tables (staff, campaigns,
+-- End of MVP schema (9 tables). LATER tables (members, campaigns,
 -- followups, payments, client_settings, knowledge_documents,
 -- automation_runs, audit_logs) are intentionally not created yet —
 -- see the plan's "LATER TABLES" section.
@@ -562,7 +562,7 @@ create trigger trg_channel_integrations_updated_at
 -- Inbox: message origin + conversation mode
 --
 -- origin tells the Inbox UI (and the AI-collision guard) which system actually produced a
--- message — a "staff" sender could be replying from the dashboard or directly from the WhatsApp
+-- message — a "members" sender could be replying from the dashboard or directly from the WhatsApp
 -- Business phone app (coexistence echoes), and those must never be confused with a customer
 -- message or trigger the AI. mode replaces the old ai_enabled/human_takeover pair as the single
 -- source of truth for whether AI may reply — those two booleans are kept (not dropped) for
@@ -605,7 +605,7 @@ update crm.conversations set mode = case when human_takeover then 'human' else '
 --
 -- The service window: WhatsApp only allows free-form (non-template) outbound messages within 24h
 -- of the customer's last inbound message. last_customer_message_at/service_window_expires_at are
--- updated ONLY when a genuine inbound whatsapp_customer message is ingested (never by staff, AI,
+-- updated ONLY when a genuine inbound whatsapp_customer message is ingested (never by members, AI,
 -- or campaign sends — see MessageService.IngestAsync) — see Conversation.IsServiceWindowOpen().
 -- ---------------------------------------------------------------------
 
@@ -764,7 +764,7 @@ do $$ begin
 end $$;
 
 -- ---------------------------------------------------------------------
--- AI agent tool surface (Controllers/AiController.cs) — clients gains the free-text fields
+-- AI assistant tool surface (Controllers/AiController.cs) — clients gains the free-text fields
 -- get_client_info reads. No new tables: booking reschedule reuses scheduled_start/end,
 -- and cancel/handoff reuse existing status/mode columns.
 -- ---------------------------------------------------------------------
@@ -894,23 +894,28 @@ create unique index if not exists ux_whatsapp_health_events_connection_type_occu
   on channels.whatsapp_health_events(channel_integration_id, event_type, occurred_at);
 
 -- =====================================================================
--- ASP.NET Core Identity (authentication only) + client_users
+-- Users (ASP.NET Core Identity) + client_users
 --
--- MVP scope decision: ignore roles/permissions completely — no owner/manager/receptionist/specialist,
--- no permissions matrix. Identity is used ONLY to authenticate a user; client_users is the ONLY
--- thing that ties an authenticated user to a client (assumed one active membership per user — see
--- Services/ICurrentClientContext.cs, the sole reader of this table for every dashboard page/API).
+-- One users table for everyone who signs in. users.role says which app a user may use:
+--   admin   the admin portal only (it signs in through POST /api/platform-admin/auth/login); no client
+--   client  the main app; the person who signed the client up, manages its members
+--   member  the main app; added by a client user, uses everything except member management
+-- The main app checks the role, users.is_active and an active client_users row on every request
+-- (cookie validation), not only at login. Contacts never sign in.
 --
--- These tables mirror ASP.NET Core Identity's standard IdentityUserContext<IdentityUser> shape
--- (deliberately the role-free variant — no AspNetRoles/AspNetUserRoles/AspNetRoleClaims), renamed
--- to this schema's snake_case convention via Fluent API in ApplicationDbContext.OnModelCreating
--- rather than keeping EF's default "AspNetUsers" etc. IdentityUser.Id is a string (Identity's
--- default key type — populated as a GUID string by the app, not DB-generated), which is why
--- client_users.user_id is text, not uuid.
+-- The tables keep ASP.NET Core Identity's IdentityUserContext shape (no role tables: the role is a
+-- column), in snake_case (ApplicationDbContext maps them onto AppUser). users.id is a string (a GUID
+-- the app generates), so client_users.user_id is text. Lockout uses Identity's own fields
+-- (lockout_end, access_failed_count): 5 failed sign-ins lock an account for 15 minutes.
 -- =====================================================================
 
-create table if not exists identity.identity_users (
+create table if not exists identity.users (
   id                          text primary key,
+  role                        varchar(20) not null,
+  full_name                   text,
+  language                    varchar(5),
+  is_active                   boolean not null default true,
+  last_login_at               timestamptz,
   user_name                   varchar(256),
   normalized_user_name        varchar(256),
   email                       varchar(256),
@@ -924,34 +929,45 @@ create table if not exists identity.identity_users (
   two_factor_enabled          boolean not null default false,
   lockout_end                 timestamptz,
   lockout_enabled             boolean not null default true,
-  access_failed_count         integer not null default 0
+  access_failed_count         integer not null default 0,
+  created_at                  timestamptz not null default now(),
+  updated_at                  timestamptz not null default now(),
+
+  constraint ck_users_role check (role in ('admin','client','member')),
+  constraint ck_users_language check (language is null or language in ('en','ar','fr'))
 );
 
-create unique index if not exists "UserNameIndex" on identity.identity_users(normalized_user_name);
-create index if not exists "EmailIndex" on identity.identity_users(normalized_email);
+create unique index if not exists ux_users_normalized_user_name on identity.users(normalized_user_name);
+create index if not exists ix_users_normalized_email on identity.users(normalized_email);
+create index if not exists ix_users_role on identity.users(role);
 
-create table if not exists identity.identity_user_claims (
+drop trigger if exists trg_users_updated_at on identity.users;
+create trigger trg_users_updated_at
+  before update on identity.users
+  for each row execute function set_updated_at();
+
+create table if not exists identity.user_claims (
   id            integer generated always as identity primary key,
-  user_id       text not null references identity.identity_users(id) on delete cascade,
+  user_id       text not null references identity.users(id) on delete cascade,
   claim_type    text,
   claim_value   text
 );
 
-create index if not exists ix_identity_user_claims_user_id on identity.identity_user_claims(user_id);
+create index if not exists ix_user_claims_user_id on identity.user_claims(user_id);
 
-create table if not exists identity.identity_user_logins (
+create table if not exists identity.user_logins (
   login_provider          varchar(128) not null,
   provider_key             varchar(128) not null,
   provider_display_name   text,
-  user_id                  text not null references identity.identity_users(id) on delete cascade,
+  user_id                  text not null references identity.users(id) on delete cascade,
 
   primary key (login_provider, provider_key)
 );
 
-create index if not exists ix_identity_user_logins_user_id on identity.identity_user_logins(user_id);
+create index if not exists ix_user_logins_user_id on identity.user_logins(user_id);
 
-create table if not exists identity.identity_user_tokens (
-  user_id          text not null references identity.identity_users(id) on delete cascade,
+create table if not exists identity.user_tokens (
+  user_id          text not null references identity.users(id) on delete cascade,
   login_provider   varchar(128) not null,
   name             varchar(128) not null,
   value            text,
@@ -960,24 +976,23 @@ create table if not exists identity.identity_user_tokens (
 );
 
 -- ---------------------------------------------------------------------
--- client_users
+-- client_users: links a client or member user to their client (admins have none). A user has at
+-- most one ACTIVE membership; that is a rule in code (MemberService and the platform-admin members
+-- API check it before activating one), not a unique index, so a user may later belong to several
+-- clients (agencies). The current client is the user's active membership.
 -- ---------------------------------------------------------------------
 create table if not exists identity.client_users (
   id            uuid primary key default gen_random_uuid(),
   client_id     uuid not null references core.clients(id) on delete cascade,
-  user_id       text not null references identity.identity_users(id) on delete cascade,
+  user_id       text not null references identity.users(id) on delete cascade,
   is_active     boolean not null default true,
   created_at    timestamptz not null default now(),
   updated_at    timestamptz not null default now()
 );
 
 create unique index if not exists ux_client_users_client_user on identity.client_users(client_id, user_id);
--- Superseded by the unique filtered index below — enforces "one active client membership per
--- user", the MVP assumption CurrentClientContext's first-active-row lookup relies on.
--- Historical/inactive rows for the same user are unrestricted; only one active row per user can
--- ever exist.
-drop index if exists ix_client_users_user_id;
-create unique index if not exists ux_client_users_user_active on identity.client_users(user_id) where is_active = true;
+drop index if exists identity.ux_client_users_user_active;
+create index if not exists ix_client_users_user_id on identity.client_users(user_id);
 
 drop trigger if exists trg_client_users_updated_at on identity.client_users;
 create trigger trg_client_users_updated_at
@@ -1067,8 +1082,8 @@ create index if not exists ix_campaign_recipients_booking_id
 
 
 -- =====================================================================
--- Client Knowledge Base — knowledge_documents (what staff type in) + knowledge_chunks (the
--- embedded slices the AI agent searches semantically). Everything is scoped by client_id; every
+-- Client Knowledge Base — knowledge_documents (what members type in) + knowledge_chunks (the
+-- embedded slices the AI assistant searches semantically). Everything is scoped by client_id; every
 -- search filters on it. See Services/IKnowledgeService.cs and IKnowledgeSearchService.cs.
 -- =====================================================================
 create extension if not exists vector;
@@ -1125,7 +1140,7 @@ create trigger trg_knowledge_chunks_updated_at
 
 -- =====================================================================
 -- Knowledge Base search settings — one row per client (unique client_id), created lazily by
--- IKnowledgeSettingsService with the system defaults. Staff edit only chunk size/overlap, top_k and
+-- IKnowledgeSettingsService with the system defaults. Members edit only chunk size/overlap, top_k and
 -- minimum_similarity; embedding_model, vector_dimension, similarity_method and vector_index_type are
 -- persisted for transparency but read-only in the UI (changing them means re-embedding and/or a
 -- migration of knowledge_chunks.embedding). Secrets such as the embeddings API key are NEVER stored
@@ -1229,7 +1244,7 @@ end $$;
 -- ---------------------------------------------------------------------
 -- Inbox: unread tracking
 --
--- last_read_at = when staff last opened the conversation (shared across the client's staff). Unread =
+-- last_read_at = when members last opened the conversation (shared across the client's members). Unread =
 -- inbound messages newer than it. Existing conversations are backfilled as "read" exactly once (when
 -- the column is first added); conversations created later start NULL = everything unread.
 -- ---------------------------------------------------------------------
@@ -1570,7 +1585,7 @@ set generation_id = c.generation_id
 from knowledge.knowledge_retrieval_benchmark_cases c
 where r.benchmark_case_id = c.id and c.generation_id is not null and r.generation_id is null;
 
--- Retrieval Benchmark: a pending generation can be stopped by staff ("Stop generating"). Status 'cancelled' frees Generate at once
+-- Retrieval Benchmark: a pending generation can be stopped by a member ("Stop generating"). Status 'cancelled' frees Generate at once
 -- and makes the app refuse n8n's late callback for that generation.
 alter table knowledge.knowledge_retrieval_benchmark_generations drop constraint if exists ck_kbg_status;
 alter table knowledge.knowledge_retrieval_benchmark_generations add constraint ck_kbg_status
@@ -1642,7 +1657,7 @@ create trigger trg_availability_exceptions_updated_at before update on schedulin
   for each row execute function set_updated_at();
 
 -- =====================================================================
--- Notifications — a simple per-client notification center for staff (bell/list). Created ONLY from confirmed
+-- Notifications — a simple per-client notification center for members (bell/list). Created ONLY from confirmed
 -- backend events (a message actually sent, a booking actually booked...), never from an AI intention alone.
 -- ---------------------------------------------------------------------
 create table if not exists activity.notifications (
@@ -1671,7 +1686,7 @@ create index if not exists ix_notifications_client_unread on activity.notificati
 -- Calendar Integrations — one-way (Omni -> external) booking sync via a dedicated n8n workflow.
 -- Omni never talks to Google/Microsoft directly and never stores their OAuth tokens: n8n owns the
 -- actual provider connection (see Services/ICalendarSyncNotifier.cs), Omni only stores the opaque
--- reference n8n gives back plus what staff chose (which calendar, sync on/off).
+-- reference n8n gives back plus what the member chose (which calendar, sync on/off).
 -- ---------------------------------------------------------------------
 create table if not exists scheduling.calendar_integrations (
   id                       uuid primary key default gen_random_uuid(),
@@ -1792,7 +1807,7 @@ create trigger trg_tiktok_integrations_updated_at before update on channels.tikt
 -- Infobip removed (2026-10-12): WhatsApp is Meta Cloud API only, one provider per channel. Drops what the
 -- Infobip period added. Before dropping, Infobip-connected WhatsApp rows are disconnected (they have no Meta
 -- credentials; the client reconnects with Facebook sign-in) and templates approved through Infobip go back to
--- draft so staff can resubmit them to Meta (Retry submit). Re-runnable: does nothing once the columns are gone.
+-- draft so members can resubmit them to Meta (Retry submit). Re-runnable: does nothing once the columns are gone.
 -- ---------------------------------------------------------------
 do $$
 begin
@@ -2264,7 +2279,7 @@ create index if not exists ix_app_logs_client on activity.app_logs(client_id, oc
 -- Message trace: activity.message_trace_steps (+ crm.messages.trace_id)
 --
 -- One row per step a message takes through the app that nothing else records: webhook received/rejected, client not
--- found, duplicate delivery, saved, inbox notified, conversation reopened / moved to staff, bot skipped (and why),
+-- found, duplicate delivery, saved, inbox notified, conversation reopened / moved to members, bot skipped (and why),
 -- bot triggered or failed (n8n), the bot's tool calls, send requested / blocked / rejected, provider accepted or failed.
 -- trace_id is the W3C trace id of the request (n8n sends it back as traceparent, so the bot's callbacks join the same
 -- trace). Delivery statuses, billing and business events are not copied here: the trace view reads them from
@@ -2306,8 +2321,8 @@ create index if not exists ix_messages_trace_id on crm.messages(trace_id) where 
 --
 -- How a client's Inbox handles conversations (Business/Services/Inbox/InboxSettingsService). One column per setting, so
 -- a new setting is a new column here. Today: whether the AI bot answers new conversations and conversations a contact
--- reopens (off = they start with / move to staff, human mode); they only take effect while the plan includes the
--- ai_agent entitlement. A client without a row uses the column defaults, so existing clients keep the bot on.
+-- reopens (off = they start with / move to members, human mode); they only take effect while the plan includes the
+-- ai_assistant entitlement. A client without a row uses the column defaults, so existing clients keep the bot on.
 -- channel_integration_id null = the client-wide row (the only kind used today); a row per channel connection can be
 -- added later to override the client-wide one for that channel.
 -- =====================================================================

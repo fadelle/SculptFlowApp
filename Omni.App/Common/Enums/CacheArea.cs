@@ -4,7 +4,7 @@ namespace Omni.App.Common.Enums;
 public enum CacheArea
 {
     Clients,
-    StaffLookup,
+    Memberships,
     Services,
     Scheduling,
     Channels,

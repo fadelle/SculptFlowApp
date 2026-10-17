@@ -1,42 +1,38 @@
 using Microsoft.AspNetCore.Identity;
+using Omni.App.Business.Contracts.Services.Members;
 using Omni.App.Business.Contracts.Services.PlatformAdmin;
+using Omni.App.Common.Enums;
+using Omni.App.Entities.Models;
 using Omni.App.Entities.Dtos.PlatformAdmin;
 using Omni.App.Entities.Responses.Billing;
-using Omni.App.Persistence.Contracts;
 using Omni.App.Persistence.Contracts.PlatformAdmin;
 
 namespace Omni.App.Business.Services.PlatformAdmin;
 
-public class StaffAdminService : IStaffAdminService
+public class MemberAdminService : IMemberAdminService
 {
-    private readonly IStaffAdminRepository _repository;
-    private readonly IUnitOfWork _unitOfWork;
-    private readonly UserManager<IdentityUser> _users;
-    private readonly TimeProvider _time;
+    private readonly IMemberAdminRepository _repository;
+    private readonly IMemberService _members;
+    private readonly UserManager<AppUser> _users;
 
-    public StaffAdminService(IStaffAdminRepository repository, IUnitOfWork unitOfWork, UserManager<IdentityUser> users, TimeProvider time)
+    public MemberAdminService(IMemberAdminRepository repository, IMemberService members, UserManager<AppUser> users)
     {
         _repository = repository;
-        _unitOfWork = unitOfWork;
+        _members = members;
         _users = users;
-        _time = time;
     }
 
-    public Task<PagedResponse<StaffRow>> ListAsync(Guid? clientId, string? search, int page, CancellationToken ct) =>
+    public Task<PagedResponse<MemberRow>> ListAsync(Guid? clientId, string? search, int page, CancellationToken ct) =>
         _repository.ListAsync(clientId, search, page, ct);
 
-    public Task<StaffRow?> GetAsync(string userId, CancellationToken ct) => _repository.GetAsync(userId, ct);
+    public Task<MemberRow?> GetAsync(string userId, CancellationToken ct) => _repository.GetAsync(userId, ct);
 
     public async Task<PlatformAdminChange> SetMembershipActiveAsync(string userId, bool active, CancellationToken ct)
     {
         var membership = await _repository.GetLatestMembershipAsync(userId, ct)
                          ?? throw new InvalidOperationException("This user has no client membership.");
-        if (membership.IsActive == active) return new PlatformAdminChange(membership.ClientId);
-        if (active && await _repository.HasOtherActiveMembershipAsync(userId, membership.Id, ct))
-            throw new InvalidOperationException("This user already has another active client membership.");
-        membership.IsActive = active;
-        membership.UpdatedAt = _time.GetUtcNow();
-        await _unitOfWork.SaveChangesAsync(ct);
+        // Same rules as a client deactivating/reactivating its own member (one active membership per user, seats).
+        await _members.SetMembershipActiveAsync(membership, active, ct);
         return new PlatformAdminChange(membership.ClientId);
     }
 
@@ -70,8 +66,11 @@ public class StaffAdminService : IStaffAdminService
         return new PlatformAdminChange(await _repository.ClientOfAsync(userId, ct));
     }
 
-    private async Task<IdentityUser> FindAsync(string userId) =>
-        await _users.FindByIdAsync(userId) ?? throw new KeyNotFoundException("User not found.");
+    /// <summary>A client or member user; admins are managed through /api/platform-admin/admins instead.</summary>
+    private async Task<AppUser> FindAsync(string userId) =>
+        await _users.FindByIdAsync(userId) is { } user && user.Role != UserRole.Admin
+            ? user
+            : throw new KeyNotFoundException("User not found.");
 
     private static void Check(IdentityResult result)
     {

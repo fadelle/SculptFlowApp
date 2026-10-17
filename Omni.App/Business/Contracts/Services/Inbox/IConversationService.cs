@@ -31,26 +31,26 @@ public interface IConversationService
 
     Task<IReadOnlyList<MessageResponse>> GetMessagesAsync(Guid clientId, Guid conversationId, CancellationToken ct = default);
 
-    /// <summary>Marks the conversation as read by staff now (clears its unread count). False if it
+    /// <summary>Marks the conversation as read by members now (clears its unread count). False if it
     /// isn't in this client. Notifies the client's Inbox clients so other open Inboxes update.</summary>
     Task<bool> MarkReadAsync(Guid clientId, Guid conversationId, CancellationToken ct = default);
 
-    /// <summary>Staff explicitly takes over — AI stops auto-replying.</summary>
+    /// <summary>A member explicitly takes over — AI stops auto-replying.</summary>
     Task<ConversationResponse?> TakeOverAsync(Guid clientId, Guid conversationId, CancellationToken ct = default);
 
     /// <summary>AI-agent-initiated handoff (medical question, upset customer, AI uncertain, etc.) —
     /// same effect as TakeOverAsync (flips to human mode) but attributed to the AI as the source,
-    /// with an optional reason recorded on the event, so staff can see why the AI backed off. Used
-    /// by the AI agent's handoff_to_human tool — see Controllers/Integrations/AiController.cs.</summary>
+    /// with an optional reason recorded on the event, so members can see why the AI backed off. Used
+    /// by the AI assistant's handoff_to_human tool — see Controllers/Integrations/AiController.cs.</summary>
     Task<ConversationResponse?> HandoffToHumanAsync(Guid clientId, Guid conversationId, string? reason, CancellationToken ct = default);
 
-    /// <summary>Staff hands the conversation back — AI may auto-reply again. Throws EntitlementDeniedException (422) when
-    /// the client's plan doesn't include the AI agent.</summary>
+    /// <summary>A member hands the conversation back — AI may auto-reply again. Throws EntitlementDeniedException (422) when
+    /// the client's plan doesn't include the AI assistant.</summary>
     Task<ConversationResponse?> ReturnToAiAsync(Guid clientId, Guid conversationId, CancellationToken ct = default);
 
     Task<ConversationResponse?> CloseAsync(Guid clientId, Guid conversationId, CancellationToken ct = default);
 
-    /// <summary>Staff brings a closed conversation back into the working list. A conversation that is already
+    /// <summary>A member brings a closed conversation back into the working list. A conversation that is already
     /// active is returned unchanged (no event, no broadcast); null if it isn't in this client. A contact's next
     /// message does the same automatically — see MessageService.IngestAsync.</summary>
     Task<ConversationResponse?> ReopenAsync(Guid clientId, Guid conversationId, CancellationToken ct = default);

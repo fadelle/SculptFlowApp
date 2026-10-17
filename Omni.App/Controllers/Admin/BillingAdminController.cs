@@ -11,7 +11,7 @@ using Omni.App.Entities.Requests.Billing;
 namespace Omni.App.Controllers.Admin;
 
 /// <summary>
-/// Platform-admin billing API (internal; Omni staff, never clients): plans and entitlements, rate cards and
+/// Platform-admin billing API (internal; Omni admins, never clients): plans and entitlements, rate cards and
 /// rate versions, client subscriptions, wallet top-ups/adjustments, refunds, usage and ledger history,
 /// reconciliation, price quotes, a revenue report, and per connected channel account who pays the provider. Protected by X-Platform-Admin-Key (RequirePlatformAdminKey); called by the Omni.Admin portal.
 /// Money-moving POSTs (top-up, adjustment, start/change plan) require an Idempotency-Key header, so a retried

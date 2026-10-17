@@ -36,9 +36,9 @@ public class Message
     public string? MetadataJson { get; set; }
 
     /// <summary>Which system actually produced this message — see <see cref="MessageOrigin"/>.
-    /// Distinct from SenderType/Direction: a "staff" sender could originate from the dashboard or
+    /// Distinct from SenderType/Direction: a "members" sender could originate from the dashboard or
     /// from the WhatsApp Business phone app directly (coexistence echoes), and the Inbox UI needs
-    /// to tell those apart without exposing raw Meta terminology to client staff.</summary>
+    /// to tell those apart without exposing raw Meta terminology to client members.</summary>
     public string Origin { get; set; } = MessageOrigin.System;
 
     /// <summary>Set when this message was a WhatsApp template send (Inbox "Send Template" or a

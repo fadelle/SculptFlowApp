@@ -5,7 +5,7 @@ using static Omni.App.Tests.Pages.PageKit;
 using DashboardIndex = Omni.App.Pages.Dashboard.IndexModel;
 using ServiceIndex = Omni.App.Pages.Services.IndexModel;
 using ServiceEdit = Omni.App.Pages.Services.EditModel;
-using StaffIndex = Omni.App.Pages.Staff.IndexModel;
+using MembersIndex = Omni.App.Pages.Members.IndexModel;
 using InboxIndex = Omni.App.Pages.Inbox.IndexModel;
 using CampaignIndex = Omni.App.Pages.Campaigns.IndexModel;
 using CampaignDetails = Omni.App.Pages.Campaigns.DetailsModel;
@@ -18,21 +18,85 @@ public class SimpleListPageTests
 {
     private static readonly Client Glow = SomeClient();
 
-    [Fact]
-    public async Task Staff_page_lists_members_and_knows_the_current_user()
+    private static Mock<IEntitlementService> Seats(int? limit)
     {
-        var staff = new Mock<IStaffService>();
-        staff.Setup(s => s.ListAsync(Glow.Id, It.IsAny<CancellationToken>())).ReturnsAsync(new List<StaffMemberResponse> { Blank<StaffMemberResponse>() });
-        var model = new StaffIndex(ClientContext(Glow).Object, staff.Object).Attach(UserWithId("user-1"));
+        var entitlements = new Mock<IEntitlementService>();
+        var values = limit is null ? new Dictionary<string, string>() : new Dictionary<string, string> { [EntitlementKeys.MaxUsers] = limit.Value.ToString() };
+        entitlements.Setup(e => e.GetAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(limit is null ? ClientEntitlements.Unrestricted : new ClientEntitlements(true, true, "active", "p", "P", null, values));
+        return entitlements;
+    }
+
+    private static MemberResponse Person(string id, bool active = true, string role = UserRole.Member) =>
+        new(id, "Name " + id, id + "@x.com", role, active, DateTimeOffset.UtcNow, null);
+
+    [Fact]
+    public async Task Members_page_lists_members_and_knows_the_current_user()
+    {
+        var members = new Mock<IMemberService>();
+        members.Setup(s => s.ListAsync(Glow.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<MemberResponse> { Person("user-1", role: UserRole.Client), Person("m1"), Person("m2", active: false) });
+        var model = new MembersIndex(ClientContext(Glow).Object, members.Object, Seats(5).Object, TextKit.Localizer()).Attach(UserWithId("user-1"));
         await model.OnGetAsync(default);
         Assert.True(model.ClientConfigured);
-        Assert.Equal(("Glow Client", "user-1"), (model.ClientName, model.CurrentUserId));
-        Assert.Single(model.Members);
+        Assert.Equal(("Glow Client", "user-1", true), (model.ClientName, model.CurrentUserId, model.CanManage));
+        Assert.Equal((3, 2, (int?)5), (model.Members.Count, model.SeatsInUse, model.SeatLimit));
 
-        var empty = new StaffIndex(ClientContext(null).Object, staff.Object).Attach();
+        var empty = new MembersIndex(ClientContext(null).Object, members.Object, Seats(null).Object, TextKit.Localizer()).Attach();
         await empty.OnGetAsync(default);
         Assert.False(empty.ClientConfigured);
         Assert.Empty(empty.Members);
+    }
+
+    [Fact]
+    public async Task A_member_sees_the_list_but_cannot_manage_it()
+    {
+        var members = new Mock<IMemberService>();
+        members.Setup(s => s.ListAsync(Glow.Id, It.IsAny<CancellationToken>())).ReturnsAsync(new List<MemberResponse> { Person("m1") });
+        var model = new MembersIndex(ClientContext(Glow, UserRole.Member, "m1").Object, members.Object, Seats(null).Object, TextKit.Localizer()).Attach();
+        await model.OnGetAsync(default);
+        Assert.Equal((false, (int?)null), (model.CanManage, model.SeatLimit));
+    }
+
+    [Fact]
+    public async Task Adding_a_member_redirects_with_a_message_and_a_refusal_stays_on_the_page()
+    {
+        var members = new Mock<IMemberService>();
+        members.Setup(s => s.ListAsync(Glow.Id, It.IsAny<CancellationToken>())).ReturnsAsync(new List<MemberResponse>());
+        members.Setup(s => s.AddAsync(It.Is<UserAccess>(a => a.ClientId == Glow.Id), new AddMemberRequest("Ann Lee", "ann@x.com", "Pw-12345"), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Person("ann"));
+        var model = new MembersIndex(ClientContext(Glow).Object, members.Object, Seats(null).Object, TextKit.Localizer())
+            { FullName = "Ann Lee", Email = "ann@x.com", Password = "Pw-12345" }.Attach();
+        Assert.Equal("page:(same)", RedirectTarget(await model.OnPostAddAsync(default)));
+        Assert.Equal("Name ann can sign in now.", model.StatusMessage);
+
+        members.Setup(s => s.AddAsync(It.IsAny<UserAccess>(), It.IsAny<AddMemberRequest>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new ArgumentException("members.errors.emailTaken"));
+        var refused = new MembersIndex(ClientContext(Glow).Object, members.Object, Seats(null).Object, TextKit.Localizer())
+            { FullName = "Ann Lee", Email = "ann@x.com", Password = "Pw-12345" }.Attach();
+        Assert.IsType<PageResult>(await refused.OnPostAddAsync(default));
+        Assert.Equal(("Someone already signs in with this email.", null), (refused.ErrorMessage, refused.Password));
+        Assert.Equal("ann@x.com", refused.Email);
+    }
+
+    [Fact]
+    public async Task Deactivating_goes_through_the_member_rules()
+    {
+        var members = new Mock<IMemberService>();
+        members.Setup(s => s.ListAsync(Glow.Id, It.IsAny<CancellationToken>())).ReturnsAsync(new List<MemberResponse>());
+        var model = new MembersIndex(ClientContext(Glow).Object, members.Object, Seats(null).Object, TextKit.Localizer()).Attach();
+        Assert.Equal("page:(same)", RedirectTarget(await model.OnPostDeactivateAsync("m1", "Mo", default)));
+        Assert.Equal("Mo can't sign in any more.", model.StatusMessage);
+        members.Verify(s => s.SetActiveAsync(It.Is<UserAccess>(a => a.Role == UserRole.Client), "m1", false, It.IsAny<CancellationToken>()), Times.Once);
+
+        members.Setup(s => s.SetActiveAsync(It.IsAny<UserAccess>(), "m1", true, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new EntitlementDeniedException(EntitlementKeys.MaxUsers, "Your plan allows 2 seats."));
+        var full = new MembersIndex(ClientContext(Glow).Object, members.Object, Seats(2).Object, TextKit.Localizer()).Attach();
+        Assert.IsType<PageResult>(await full.OnPostReactivateAsync("m1", "Mo", default));
+        Assert.Equal("Your plan allows 2 seats.", full.ErrorMessage);
+
+        var nobody = new MembersIndex(ClientContext(null).Object, members.Object, Seats(null).Object, TextKit.Localizer()).Attach();
+        Assert.IsType<ForbidResult>(await nobody.OnPostReactivateAsync("m1", "Mo", default));
     }
 
     [Fact]
@@ -45,7 +109,7 @@ public class SimpleListPageTests
         inboxSettings.Setup(a => a.GetAsync(Glow.Id, It.IsAny<CancellationToken>())).ReturnsAsync(new InboxSettingsDto(false, true, true));
         var model = new InboxIndex(ClientContext(Glow).Object, conversations.Object, inboxSettings.Object, PipelineKit.Types().Object).Attach();
         await model.OnGetAsync(default);
-        Assert.Equal((true, Glow.Id, false), (model.ClientConfigured, model.ClientId, model.AiAgentAvailable));
+        Assert.Equal((true, Glow.Id, false), (model.ClientConfigured, model.ClientId, model.AiAssistantAvailable));
         Assert.Equal(["New", "Booked", "Attended", "Customer"], InboxIndex.JourneyCategories.Select(model.JourneyLabel)); // the client's own stage labels
         conversations.Verify();
 

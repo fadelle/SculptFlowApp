@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
+using Omni.App.Entities.Models;
 using Microsoft.AspNetCore.Mvc;
 using Omni.App.Common.Configs;
 
@@ -12,19 +13,20 @@ namespace Omni.App.Controllers.Client;
 /// held in the short-lived external cookie. Outcomes:
 ///  - a Google login already linked to a user -> sign in;
 ///  - an existing account with the same email -> link it, then sign in;
+///  - either of those for a user the main app refuses (admin, deactivated, no active membership) -> generic failure;
 ///  - nobody yet -> CompleteGoogleSignup asks for the client name (a signup always creates a NEW client).
 /// An email is only ever trusted when Google reports it as verified.</summary>
 [Route("auth/google")]
 [AllowAnonymous]
 public class GoogleAuthController : Controller
 {
-    private readonly SignInManager<IdentityUser> _signIn;
-    private readonly UserManager<IdentityUser> _users;
+    private readonly SignInManager<AppUser> _signIn;
+    private readonly UserManager<AppUser> _users;
     private readonly IConfiguration _configuration;
     private readonly ILogger<GoogleAuthController> _logger;
 
     public GoogleAuthController(
-        SignInManager<IdentityUser> signIn, UserManager<IdentityUser> users, IConfiguration configuration,
+        SignInManager<AppUser> signIn, UserManager<AppUser> users, IConfiguration configuration,
         ILogger<GoogleAuthController> logger)
     {
         _signIn = signIn;
@@ -61,6 +63,8 @@ public class GoogleAuthController : Controller
             return LocalRedirect(destination);
         }
         if (result.IsLockedOut) return await ExternalFailure("locked");
+        // Linked, but not allowed in the main app (an admin, a deactivated user, a removed member): same generic failure.
+        if (result.IsNotAllowed) return await ExternalFailure("failed");
 
         // 2) Not linked yet: only go further with an email Google itself has verified.
         var email = info.Principal.FindFirstValue(ClaimTypes.Email);
@@ -75,6 +79,8 @@ public class GoogleAuthController : Controller
         }
 
         if (await _users.IsLockedOutAsync(existing)) return await ExternalFailure("locked");
+        // Only a user allowed in the main app gets Google linked and signed in (never an admin account).
+        if (!await _signIn.CanSignInAsync(existing)) return await ExternalFailure("failed");
 
         var linked = await _users.AddLoginAsync(existing, info);
         if (!linked.Succeeded)

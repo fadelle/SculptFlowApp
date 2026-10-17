@@ -44,6 +44,6 @@ public class DashboardService : IDashboardService
     public async Task<DashboardAttentionResponse> GetAttentionAsync(Guid clientId, CancellationToken ct = default)
     {
         var counts = await _dashboard.GetAttentionCountsAsync(clientId, DateTimeOffset.UtcNow, ct);
-        return new DashboardAttentionResponse(counts.ConversationsNeedingStaff, counts.OverdueFollowups, counts.BookingsNeedingOutcome);
+        return new DashboardAttentionResponse(counts.ConversationsNeedingHuman, counts.OverdueFollowups, counts.BookingsNeedingOutcome);
     }
 }

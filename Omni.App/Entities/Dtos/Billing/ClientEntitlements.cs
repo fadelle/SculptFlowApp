@@ -43,10 +43,10 @@ public sealed class ClientEntitlements
 
     public bool CanSendMessages => !BillingEnabled || HasAccess;
     public bool CanUseCampaigns => IsEnabled(EntitlementKeys.Campaigns);
-    public bool CanUseAiAgent => IsEnabled(EntitlementKeys.AiAgent);
+    public bool CanUseAiAssistant => IsEnabled(EntitlementKeys.AiAssistant);
     public bool CanUseApi => IsEnabled(EntitlementKeys.ApiAccess);
     public bool CanUseAdvancedReporting => IsEnabled(EntitlementKeys.AdvancedReporting);
-    public int? MaximumAgents => Limit(EntitlementKeys.MaxAgents);
+    public int? MaximumUsers => Limit(EntitlementKeys.MaxUsers);
     public int? MaximumWhatsAppNumbers => Limit(EntitlementKeys.MaxWhatsAppNumbers);
     public int? MaximumChannelConnections => Limit(EntitlementKeys.MaxChannelConnections);
 

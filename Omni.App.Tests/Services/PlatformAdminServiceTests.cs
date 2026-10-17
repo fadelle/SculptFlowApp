@@ -202,18 +202,20 @@ public class ClientAdminServiceTests
     }
 }
 
-public class StaffAdminServiceTests
+public class MemberAdminServiceTests
 {
-    private readonly Mock<IStaffAdminRepository> _repo = new();
-    private readonly Mock<IUnitOfWork> _uow = new();
-    private readonly Mock<UserManager<IdentityUser>> _users;
-    private readonly IdentityUser _user = new() { Id = "u1", UserName = "a@x.com" };
+    private readonly Mock<IMemberAdminRepository> _repo = new();
+    private readonly Mock<IMemberService> _members = new();
+    private readonly Mock<UserManager<AppUser>> _users;
+    private readonly AppUser _user = new() { Id = "u1", UserName = "a@x.com", Role = UserRole.Member };
+    private readonly AppUser _admin = new() { Id = "admin-1", UserName = "ad@x.com", Role = UserRole.Admin };
     private readonly Guid _clientId = Guid.NewGuid();
 
-    public StaffAdminServiceTests()
+    public MemberAdminServiceTests()
     {
-        _users = new Mock<UserManager<IdentityUser>>(Mock.Of<IUserStore<IdentityUser>>(), null!, null!, null!, null!, null!, null!, null!, null!);
+        _users = new Mock<UserManager<AppUser>>(Mock.Of<IUserStore<AppUser>>(), null!, null!, null!, null!, null!, null!, null!, null!);
         _users.Setup(u => u.FindByIdAsync("u1")).ReturnsAsync(_user);
+        _users.Setup(u => u.FindByIdAsync("admin-1")).ReturnsAsync(_admin);
         _users.Setup(u => u.SetLockoutEnabledAsync(_user, true)).ReturnsAsync(IdentityResult.Success);
         _users.Setup(u => u.SetLockoutEndDateAsync(_user, It.IsAny<DateTimeOffset?>())).ReturnsAsync(IdentityResult.Success);
         _users.Setup(u => u.ResetAccessFailedCountAsync(_user)).ReturnsAsync(IdentityResult.Success);
@@ -225,24 +227,29 @@ public class StaffAdminServiceTests
         _repo.Setup(r => r.ClientOfAsync("u1", It.IsAny<CancellationToken>())).ReturnsAsync(_clientId);
     }
 
-    private StaffAdminService Sut() => new(_repo.Object, _uow.Object, _users.Object, TimeProvider.System);
+    private MemberAdminService Sut() => new(_repo.Object, _members.Object, _users.Object);
 
     [Fact]
-    public async Task Membership_toggle_rules()
+    public async Task Membership_toggle_goes_through_the_member_rules()
     {
         await Assert.ThrowsAsync<InvalidOperationException>(() => Sut().SetMembershipActiveAsync("u1", true, default));
         var m = new ClientUser { Id = Guid.NewGuid(), ClientId = _clientId, IsActive = false };
         _repo.Setup(r => r.GetLatestMembershipAsync("u1", It.IsAny<CancellationToken>())).ReturnsAsync(m);
-        _repo.Setup(r => r.HasOtherActiveMembershipAsync("u1", m.Id, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        _members.Setup(x => x.SetMembershipActiveAsync(m, true, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("members.errors.otherClient"));
         await Assert.ThrowsAsync<InvalidOperationException>(() => Sut().SetMembershipActiveAsync("u1", true, default));
-        Assert.False(m.IsActive);
 
-        _repo.Setup(r => r.HasOtherActiveMembershipAsync("u1", m.Id, It.IsAny<CancellationToken>())).ReturnsAsync(false);
+        _members.Setup(x => x.SetMembershipActiveAsync(m, true, It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
         Assert.Equal(_clientId, (await Sut().SetMembershipActiveAsync("u1", true, default)).ClientId);
-        Assert.True(m.IsActive);
-        _uow.Invocations.Clear();
-        await Sut().SetMembershipActiveAsync("u1", true, default); // unchanged → no save
-        _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+        _members.Verify(x => x.SetMembershipActiveAsync(m, true, It.IsAny<CancellationToken>()), Times.Exactly(2));
+    }
+
+    [Fact]
+    public async Task Admin_users_are_not_managed_through_the_members_api()
+    {
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => Sut().SetLoginLockedAsync("admin-1", true, default));
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => Sut().SetPasswordAsync("admin-1", "Str0ng!pass", default));
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => Sut().SetEmailConfirmedAsync("admin-1", true, default));
     }
 
     [Fact]
@@ -268,7 +275,7 @@ public class StaffAdminServiceTests
     public async Task Password_reset_validates_replaces_and_resets_failures()
     {
         await Assert.ThrowsAsync<ArgumentException>(() => Sut().SetPasswordAsync("u1", "", default));
-        var validator = new Mock<IPasswordValidator<IdentityUser>>();
+        var validator = new Mock<IPasswordValidator<AppUser>>();
         validator.Setup(v => v.ValidateAsync(_users.Object, _user, "weak")).ReturnsAsync(IdentityResult.Failed(new IdentityError { Description = "too weak" }));
         validator.Setup(v => v.ValidateAsync(_users.Object, _user, "Str0ng!pass")).ReturnsAsync(IdentityResult.Success);
         _users.Object.PasswordValidators.Add(validator.Object);

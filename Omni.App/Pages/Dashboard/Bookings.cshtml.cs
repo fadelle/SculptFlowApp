@@ -6,7 +6,7 @@ namespace Omni.App.Pages.Dashboard;
 /// <summary>Page 3 — Bookings: a month calendar. Only the page shell; everything on it (the visible month's
 /// bookings, the day drawer, creating a booking) is loaded and driven through the existing
 /// /api/bookings API (wwwroot/js/bookings-calendar.js) — the SAME bookings table and services used
-/// by the AI agent's booking tools and the rest of the dashboard. Clicking a booking in the day drawer opens
+/// by the AI assistant's booking tools and the rest of the dashboard. Clicking a booking in the day drawer opens
 /// the existing /dashboard/bookings/{id} detail page (BookingDetailModel) — reused as-is, not duplicated.</summary>
 public class BookingsModel : PageModel
 {

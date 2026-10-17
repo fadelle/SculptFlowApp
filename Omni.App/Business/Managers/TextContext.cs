@@ -34,10 +34,11 @@ public class TextContext : ITextContext
     {
         try
         {
+            var access = await _currentClient.GetAccessAsync(ct);
             var client = await _currentClient.GetClientAsync(ct);
             var acceptLanguage = _http.HttpContext?.Request.Headers.AcceptLanguage.ToString();
-            // users.language goes in front of the client's default in S7.
-            Language = LanguagePicker.Pick([client?.DefaultLanguage], acceptLanguage, _catalog.Languages);
+            // The user's own language first, then the client's default, then the browser's.
+            Language = LanguagePicker.Pick([access?.Language, client?.DefaultLanguage], acceptLanguage, _catalog.Languages);
             _terms = TermPlaceholders.Build(client is null
                 ? _terminology.Defaults(Language)
                 : await _terminology.ForBusinessTypeAsync(client.BusinessTypeCode, Language, ct));

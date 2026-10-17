@@ -75,7 +75,7 @@ public class KnowledgeService : IKnowledgeService
                 $"This file is {length / 1024.0 / 1024.0:0.#} MB — the maximum upload size is {MaxUploadBytes / 1024.0 / 1024.0:0.#} MB.");
         }
 
-        // Extraction validates the type (extension + contents) and throws a staff-readable message for
+        // Extraction validates the type (extension + contents) and throws a user-readable message for
         // every user-fixable problem. Nothing is written until the text has been extracted successfully.
         var text = await _extractor.ExtractAsync(content, fileName, ct);
 

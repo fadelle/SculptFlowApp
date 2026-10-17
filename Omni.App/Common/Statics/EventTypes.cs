@@ -22,12 +22,12 @@ public static class EventTypes
     public const string ConversationClosed = "conversation_closed";
     public const string ConversationReopened = "conversation_reopened";
     public const string ContactMessageReceived = "contact_message_received";
-    public const string StaffMessageSentDashboard = "staff_message_sent_dashboard";
-    public const string StaffMessageSentWhatsAppApp = "staff_message_sent_whatsapp_app";
+    public const string MemberMessageSentDashboard = "member_message_sent_dashboard";
+    public const string MemberMessageSentWhatsAppApp = "member_message_sent_whatsapp_app";
     public const string AiMessageSent = "ai_message_sent";
     public const string CampaignMessageSent = "campaign_message_sent";
 
-    // AI agent tool surface — see Controllers/Integrations/AiController.cs.
+    // AI assistant tool surface — see Controllers/Integrations/AiController.cs.
     public const string BookingRescheduled = "booking_rescheduled";
     public const string BookingCanceled = "booking_canceled";
 

@@ -35,33 +35,36 @@ public class ClientRepository : IClientRepository
 
     public void AddMembership(ClientUser membership) => _db.ClientUsers.Add(membership);
 
-    public async Task<Client?> GetClientOfActiveMemberAsync(string userId, CancellationToken ct = default)
-    {
-        var clientId = await GetClientIdOfActiveMemberAsync(userId, ct);
-        return clientId is null ? null : await GetReadOnlyAsync(clientId.Value, ct);
-    }
+    public Task<UserAccess?> GetUserAccessAsync(string userId, CancellationToken ct = default) =>
+        _cache.ReadThroughValueAsync(CacheKeys.Membership(userId), CacheArea.Memberships,
+            async token => await (
+                from u in _db.Users.AsNoTracking()
+                where u.Id == userId && u.IsActive && (u.Role == UserRole.Client || u.Role == UserRole.Member)
+                join cu in _db.ClientUsers.AsNoTracking() on u.Id equals cu.UserId
+                where cu.IsActive
+                orderby cu.CreatedAt
+                select new UserAccess(u.Id, cu.ClientId, u.Role, u.Language, u.FullName, u.SecurityStamp)).FirstOrDefaultAsync(token), ct);
 
-    public Task<Guid?> GetClientIdOfActiveMemberAsync(string userId, CancellationToken ct = default) =>
-        _cache.ReadThroughValueAsync(CacheKeys.Membership(userId), CacheArea.StaffLookup,
-            async token => (await _db.ClientUsers.AsNoTracking()
-                .Where(cu => cu.UserId == userId && cu.IsActive)
-                .Select(cu => new { cu.ClientId })
-                .FirstOrDefaultAsync(token))?.ClientId, ct);
-
-    public async Task<IReadOnlyList<StaffMemberRow>> ListStaffAsync(Guid clientId, string fullNameClaimType, CancellationToken ct = default) =>
+    public async Task<IReadOnlyList<ClientMemberRow>> ListMembersAsync(Guid clientId, CancellationToken ct = default) =>
         await (
-            from cu in _db.ClientUsers
+            from cu in _db.ClientUsers.AsNoTracking()
             where cu.ClientId == clientId
-            join u in _db.Users on cu.UserId equals u.Id
-            select new StaffMemberRow(
-                cu.UserId,
-                u.Email,
-                cu.IsActive,
-                cu.CreatedAt,
-                _db.UserClaims
-                    .Where(c => c.UserId == u.Id && c.ClaimType == fullNameClaimType)
-                    .Select(c => c.ClaimValue)
-                    .FirstOrDefault())).ToListAsync(ct);
+            join u in _db.Users.AsNoTracking() on cu.UserId equals u.Id
+            select new ClientMemberRow(cu.UserId, u.Email, u.FullName, u.Role, cu.IsActive && u.IsActive, cu.CreatedAt, u.LastLoginAt))
+            .ToListAsync(ct);
+
+    public Task<ClientUser?> GetMembershipAsync(Guid clientId, string userId, CancellationToken ct = default) =>
+        _db.ClientUsers.FirstOrDefaultAsync(cu => cu.ClientId == clientId && cu.UserId == userId, ct);
+
+    public Task<bool> HasOtherActiveMembershipAsync(string userId, Guid exceptMembershipId, CancellationToken ct = default) =>
+        _db.ClientUsers.AnyAsync(cu => cu.UserId == userId && cu.IsActive && cu.Id != exceptMembershipId, ct);
+
+    public Task<int> CountSeatsInUseAsync(Guid clientId, CancellationToken ct = default) =>
+        (from cu in _db.ClientUsers
+         where cu.ClientId == clientId && cu.IsActive
+         join u in _db.Users on cu.UserId equals u.Id
+         where u.IsActive && (u.Role == UserRole.Client || u.Role == UserRole.Member)
+         select cu.Id).CountAsync(ct);
 
     public async Task<IReadOnlyList<ClientSummaryRow>> ListByNamePrefixAsync(string namePrefix, CancellationToken ct = default) =>
         await _db.Clients.AsNoTracking()

@@ -3,8 +3,8 @@ using Omni.App.Common.Enums;
 namespace Omni.App.Entities.Models;
 
 /// <summary>
-/// One piece of client-approved knowledge staff typed into the Knowledge Base (an FAQ, a policy,
-/// doctor info, pricing, ...). The AI agent never reads this table directly — content is split into
+/// One piece of client-approved knowledge members typed into the Knowledge Base (an FAQ, a policy,
+/// doctor info, pricing, ...). The AI assistant never reads this table directly — content is split into
 /// KnowledgeChunk rows (with embeddings) and searched semantically via IKnowledgeSearchService.
 /// Everything here is scoped by ClientId; knowledge from one client is never visible to another.
 /// </summary>
@@ -18,7 +18,7 @@ public class KnowledgeDocument
     /// deliberately no DB CHECK, like campaigns.campaign_type, so new categories need no migration.</summary>
     public string Category { get; set; } = KnowledgeCategory.General;
 
-    /// <summary>The text that gets chunked and embedded. For a manual entry it's what staff typed; for an
+    /// <summary>The text that gets chunked and embedded. For a manual entry it's what members typed; for an
     /// uploaded file it's the normalized text extracted from it — so re-indexing never needs the original file.</summary>
     public string Content { get; set; } = string.Empty;
 

@@ -93,7 +93,8 @@ public static class PersistenceModule
         // Platform admin (cross-client reads for the admin portal)
         services.AddScoped<IClientAdminRepository, ClientAdminRepository>();
         services.AddScoped<IChannelAdminRepository, ChannelAdminRepository>();
-        services.AddScoped<IStaffAdminRepository, StaffAdminRepository>();
+        services.AddScoped<IMemberAdminRepository, MemberAdminRepository>();
+        services.AddScoped<IAdminUserRepository, AdminUserRepository>();
         services.AddScoped<IContactAdminRepository, ContactAdminRepository>();
         services.AddScoped<IContentAdminRepository, ContentAdminRepository>();
         services.AddScoped<IOverviewAdminRepository, OverviewAdminRepository>();

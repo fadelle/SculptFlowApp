@@ -274,7 +274,7 @@ public partial class KnowledgeBenchmarkService
         // Only a still-pending generation can be stopped. The status flip is a single conditional UPDATE, so it races safely with
         // n8n's callback: whichever claims the row first wins (a callback that already completed it makes this a no-op).
         var now = DateTimeOffset.UtcNow;
-        var message = "Stopped by staff before n8n sent the questions. Any reply n8n sends later is ignored.";
+        var message = "stopped by a member before n8n sent the questions. Any reply n8n sends later is ignored.";
         var stopped = await _benchmark.CancelPendingGenerationAsync(clientId, generationId, message, now, ct);
 
         var current = await _benchmark.GetGenerationReadOnlyAsync(clientId, generationId, ct)

@@ -12,11 +12,11 @@ namespace Omni.App.Tests.Pages;
 
 public class AccountPageTests
 {
-    private readonly Mock<UserManager<IdentityUser>> _users =
-        new(Mock.Of<IUserStore<IdentityUser>>(), null!, null!, null!, null!, null!, null!, null!, null!);
+    private readonly Mock<UserManager<AppUser>> _users =
+        new(Mock.Of<IUserStore<AppUser>>(), null!, null!, null!, null!, null!, null!, null!, null!);
 
-    private Mock<SignInManager<IdentityUser>> SignIn() =>
-        new(_users.Object, Mock.Of<Microsoft.AspNetCore.Http.IHttpContextAccessor>(), Mock.Of<IUserClaimsPrincipalFactory<IdentityUser>>(), null!, null!, null!, null!);
+    private Mock<SignInManager<AppUser>> SignIn() =>
+        new(_users.Object, Mock.Of<Microsoft.AspNetCore.Http.IHttpContextAccessor>(), Mock.Of<IUserClaimsPrincipalFactory<AppUser>>(), null!, null!, null!, null!);
 
     // ---- login ------------------------------------------------------------------------------------------------
 
@@ -58,6 +58,17 @@ public class AccountPageTests
         Assert.Contains("Too many attempts", model.ErrorMessage);
     }
 
+    [Fact]
+    public async Task Login_refusing_an_admin_or_a_removed_member_reads_like_a_wrong_password()
+    {
+        // AppSignInManager answers NotAllowed for them; the page must not tell anyone the account exists.
+        var signIn = SignIn();
+        signIn.Setup(s => s.PasswordSignInAsync("ada@x.com", "right", true, true)).ReturnsAsync(SignInResult.NotAllowed);
+        var model = new LoginModel(signIn.Object) { Email = "ada@x.com", Password = "right" }.Attach();
+        Assert.IsType<PageResult>(await model.OnPostAsync());
+        Assert.Equal("That email and password don't match. Check them and try again.", model.ErrorMessage);
+    }
+
     [Theory]
     [InlineData("/contacts", "/contacts")]
     [InlineData("https://evil.example/", "/dashboard")]
@@ -84,13 +95,13 @@ public class AccountPageTests
 
         Assert.IsType<PageResult>(await model.OnPostAsync(default));
         Assert.Equal("Email taken. Password too short.", model.ErrorMessage);
-        signIn.Verify(s => s.SignInAsync(It.IsAny<IdentityUser>(), It.IsAny<bool>(), It.IsAny<string?>()), Times.Never);
+        signIn.Verify(s => s.SignInAsync(It.IsAny<AppUser>(), It.IsAny<bool>(), It.IsAny<string?>()), Times.Never);
     }
 
     [Fact]
     public async Task Register_success_signs_the_new_user_in_and_forwards_the_form()
     {
-        var user = new IdentityUser { Email = "a@x.com" };
+        var user = new AppUser { Email = "a@x.com" };
         RegisterClientRequest? seen = null;
         var registration = new Mock<IClientRegistrationService>();
         registration.Setup(r => r.RegisterAsync(It.IsAny<RegisterClientRequest>(), It.IsAny<CancellationToken>()))
@@ -186,7 +197,7 @@ public class AccountPageTests
     [Fact]
     public async Task Complete_signup_creates_the_account_signs_in_and_clears_the_external_cookie()
     {
-        var user = new IdentityUser { Email = "g@x.com" };
+        var user = new AppUser { Email = "g@x.com" };
         RegisterExternalClientRequest? seen = null;
         var registration = new Mock<IClientRegistrationService>();
         registration.Setup(r => r.RegisterExternalAsync(It.IsAny<RegisterExternalClientRequest>(), It.IsAny<CancellationToken>()))
@@ -219,7 +230,7 @@ public class AccountPageTests
         Assert.IsType<PageResult>(await model.OnPostAsync(default));
         Assert.Equal("Client name is required.", model.ErrorMessage);
         Assert.Equal(2, model.BusinessTypes.Count);
-        signIn.Verify(s => s.SignInAsync(It.IsAny<IdentityUser>(), It.IsAny<bool>(), It.IsAny<string?>()), Times.Never);
+        signIn.Verify(s => s.SignInAsync(It.IsAny<AppUser>(), It.IsAny<bool>(), It.IsAny<string?>()), Times.Never);
     }
 
     // ---- logout and error -----------------------------------------------------------------------------------------

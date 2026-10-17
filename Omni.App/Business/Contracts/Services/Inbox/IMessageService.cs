@@ -7,10 +7,10 @@ namespace Omni.App.Business.Contracts.Services.Inbox;
 /// <summary>
 /// Central message orchestration — the one place that writes to the messages table for both
 /// directions of traffic:
-///   - SendAsync: staff replying from the dashboard (Case B). Calls IWhatsAppService to actually
+///   - SendAsync: member replying from the dashboard (Case B). Calls IWhatsAppService to actually
 ///     send, then records it. n8n's eventual AI-reply path should call this same method (or a
 ///     thin wrapper around it) instead of duplicating WhatsApp-sending logic.
-///   - IngestAsync: everything the backend didn't itself cause — a customer message, a staff
+///   - IngestAsync: everything the backend didn't itself cause — a customer message, a member
 ///     reply echoed from the WhatsApp Business phone app, an AI message n8n already sent, or a
 ///     delivery-status update (Cases A, C, and status webhooks).
 /// Both paths go through the same idempotency check (external_message_id) and the same SignalR
@@ -36,10 +36,10 @@ public interface IMessageService
 
     Task<IngestMessageResult> IngestAsync(IngestMessageRequest request, CancellationToken ct = default);
 
-    /// <summary>The AI agent's own send path (POST /api/conversations/{id}/messages/send with
+    /// <summary>The AI assistant's own send path (POST /api/conversations/{id}/messages/send with
     /// Sender="ai") — re-checks conversation.mode == ai fresh from the database immediately before
     /// sending (a human may have taken over while the AI was "thinking"), throwing
-    /// ConversationNotInAiModeException if not. Unlike SendAsync (staff), this never flips the
+    /// ConversationNotInAiModeException if not. Unlike SendAsync (members), this never flips the
     /// conversation to human mode — origin=ai, sender_type=ai throughout.</summary>
     Task<MessageResponse?> SendAiReplyAsync(Guid clientId, Guid conversationId, string content, CancellationToken ct = default);
 }

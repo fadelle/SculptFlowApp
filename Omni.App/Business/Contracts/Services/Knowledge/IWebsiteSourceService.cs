@@ -8,7 +8,7 @@ namespace Omni.App.Business.Contracts.Services.Knowledge;
 /// activate/deactivate, delete. It only manages rows and queues work — the crawling itself is
 /// <see cref="IWebsiteScrapeProcessor"/>'s job, run in the background. EVERY method takes the clientId the
 /// caller resolved from CurrentClientContext and scopes every query by it.
-/// Throws ArgumentException (staff-readable message) for invalid input or a refused action.
+/// Throws ArgumentException (user-readable message) for invalid input or a refused action.
 /// </summary>
 public interface IWebsiteSourceService
 {

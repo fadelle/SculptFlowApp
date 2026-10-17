@@ -110,7 +110,7 @@ public class ConfigManager : IConfigManager
 
     // ---- Cache
     public int CacheClientsMinutes => GetInt(ConfigDefaults.CacheClientsMinutes);
-    public int CacheStaffLookupMinutes => GetInt(ConfigDefaults.CacheStaffLookupMinutes);
+    public int CacheMembershipsMinutes => GetInt(ConfigDefaults.CacheMembershipsMinutes);
     public int CacheServicesMinutes => GetInt(ConfigDefaults.CacheServicesMinutes);
     public int CacheSchedulingMinutes => GetInt(ConfigDefaults.CacheSchedulingMinutes);
     public int CacheChannelsMinutes => GetInt(ConfigDefaults.CacheChannelsMinutes);

@@ -77,7 +77,7 @@ public static class StatusBadgeHelper
     /// <summary>Simplified label for a WhatsApp template status — anything Meta sends that isn't
     /// one of our known six (e.g. "flagged", "in_appeal", a status Meta introduces later) is shown
     /// as "Problem" rather than the raw Meta term, per "translate events into simple human-readable
-    /// states, don't expose raw Meta complexity to staff".</summary>
+    /// states, don't expose raw Meta complexity to members".</summary>
     public static string TemplateStatusLabel(string? status)
     {
         if (status is null) return "Unknown";
@@ -91,7 +91,7 @@ public static class StatusBadgeHelper
     public static string TemplateStatusCssClass(string? status) =>
         status is not null && KnownTemplateStatuses.Contains(status) ? CssClass(status) : "badge-red";
 
-    /// <summary>Label for a campaign status. Stored "paused" is what the Stop button sets, so staff read it as "Stopped";
+    /// <summary>Label for a campaign status. Stored "paused" is what the Stop button sets, so members read it as "Stopped";
     /// every other status uses the shared FilterLabelHelper wording.</summary>
     public static string CampaignStatusLabel(string? status) =>
         string.Equals(status, "paused", StringComparison.OrdinalIgnoreCase) ? "Stopped" : FilterLabelHelper.Label(status);

@@ -15,7 +15,7 @@ namespace Omni.App.Pages.Settings;
 /// <summary>Settings → Business Info. Tabs: General (the free-text info the AI's get_client_info tool quotes),
 /// Availability (the structured weekly schedule, booking rules and date exceptions that drive real booking slots —
 /// see Business/Services/Bookings/AvailabilityService.cs) and AI assistant (whether the AI bot answers new and
-/// reopened conversations; shown only when the plan includes the AI agent — see InboxSettingsService). The free-text
+/// reopened conversations; shown only when the plan includes the AI assistant — see InboxSettingsService). The free-text
 /// Operating hours are never parsed for booking.</summary>
 public class BusinessInfoModel : PageModel
 {
@@ -190,7 +190,7 @@ public class BusinessInfoModel : PageModel
         var client = await _clientContext.GetClientAsync(ct);
         if (client is null) return RedirectToPage();
 
-        // The switches are only offered while the plan includes the AI agent; a stale form posted after a downgrade
+        // The switches are only offered while the plan includes the AI assistant; a stale form posted after a downgrade
         // changes nothing.
         if (!(await _inboxSettings.GetAsync(client.Id, ct)).PlanIncludesAiBot)
         {

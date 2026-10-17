@@ -14,6 +14,6 @@ public record ConversationListRow(
     string? LastMessageDirection,
     DateTimeOffset? LastMessageAt,
     DateTimeOffset CreatedAt,
-    /// <summary>Inbound (customer) messages received since staff last opened the conversation.</summary>
+    /// <summary>Inbound (customer) messages received since members last opened the conversation.</summary>
     int UnreadCount = 0
 );

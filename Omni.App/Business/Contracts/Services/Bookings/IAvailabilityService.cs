@@ -3,7 +3,7 @@ using Omni.App.Entities.Responses.Bookings;
 
 namespace Omni.App.Business.Contracts.Services.Bookings;
 
-/// <summary>Client-level booking availability: the weekly schedule, date exceptions and booking rules staff configure
+/// <summary>Client-level booking availability: the weekly schedule, date exceptions and booking rules members configure
 /// under Business Info → Availability, turned into real bookable slots. This — not the free-text Operating Hours — is the
 /// booking source of truth. Everything is client-scoped and computed in the client's own timezone (Client.Timezone).</summary>
 public interface IAvailabilityService

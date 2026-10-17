@@ -65,7 +65,7 @@ public static class MetaWebhookParser
                 break;
 
             case "smb_message_echoes":
-                // Staff replying from the WhatsApp Business App (Coexistence) — Meta delivers this
+                // A member replying from the WhatsApp Business App (Coexistence) — Meta delivers this
                 // on its own dedicated field with the same message shape as "messages", not mixed
                 // into "messages" itself. Every entry here is unconditionally an echo.
                 foreach (var e in ParseMessageEntries(wabaId, value, ParsedMetaEventKind.BusinessAppEcho)) yield return e;
@@ -164,7 +164,7 @@ public static class MetaWebhookParser
         }
     }
 
-    /// <summary>Shared by "messages" (customer case) and "smb_message_echoes" (staff/Coexistence
+    /// <summary>Shared by "messages" (customer case) and "smb_message_echoes" (member/Coexistence
     /// case) — both carry the same value.metadata/contacts[]/messages[] shape; only which Kind the
     /// caller wants differs. Meta's "contacts[]" identifies the OTHER party in the thread (the
     /// customer) regardless of which field/direction this particular payload represents.</summary>

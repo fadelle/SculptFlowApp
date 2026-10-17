@@ -15,6 +15,8 @@ public abstract class RepoTestBase
 
     protected RepoTestBase(PostgresFixture fixture) => _fixture = fixture;
 
+    protected string ConnectionString => _fixture.ConnectionString;
+
     protected ApplicationDbContext NewContext() =>
         new(new DbContextOptionsBuilder<ApplicationDbContext>().UseNpgsql(_fixture.ConnectionString).Options);
 
@@ -48,6 +50,18 @@ public abstract class RepoTestBase
     };
 
     protected static readonly DateTimeOffset Now = new(2026, 6, 15, 12, 0, 0, TimeSpan.Zero);
+
+    /// <summary>A user row (identity.users) with a unique email; role client unless said otherwise.</summary>
+    protected static AppUser MakeUser(string? email = null, string role = UserRole.Client, string? fullName = null, bool active = true)
+    {
+        email ??= $"u-{Guid.NewGuid():N}@x.com";
+        return new AppUser
+        {
+            Id = Guid.NewGuid().ToString(), UserName = email, NormalizedUserName = email.ToUpperInvariant(), Email = email,
+            NormalizedEmail = email.ToUpperInvariant(), Role = role, FullName = fullName, IsActive = active, SecurityStamp = Guid.NewGuid().ToString(),
+            CreatedAt = Now, UpdatedAt = Now
+        };
+    }
 
     protected static Client MakeClient(string? name = null, string timezone = "UTC", string businessType = TextKit.General) => new()
     {

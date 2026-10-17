@@ -12,7 +12,7 @@ public class KnowledgeWebsiteSource
     public Guid Id { get; set; }
     public Guid ClientId { get; set; }
 
-    /// <summary>What staff typed.</summary>
+    /// <summary>What members typed.</summary>
     public string StartUrl { get; set; } = string.Empty;
     /// <summary>Identity of the source (unique per client) — see UrlNormalizer.</summary>
     public string NormalizedStartUrl { get; set; } = string.Empty;

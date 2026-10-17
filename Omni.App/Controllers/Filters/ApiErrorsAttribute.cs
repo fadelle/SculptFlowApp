@@ -11,6 +11,7 @@ namespace Omni.App.Controllers.Filters;
 /// don't need their own try/catch. The body is always <c>{ "error": "message" }</c>:
 /// <list type="bullet">
 /// <item>400: <see cref="ArgumentException"/> (invalid input).</item>
+/// <item>403: <see cref="UnauthorizedAccessException"/> (signed in, but the user's role may not do this).</item>
 /// <item>404: <see cref="KeyNotFoundException"/>.</item>
 /// <item>409: a duplicate or overlapping record, the WhatsApp 24-hour window is closed, a benchmark run or question
 /// generation is already in progress.</item>
@@ -55,6 +56,7 @@ public sealed class ApiErrorsAttribute : ExceptionFilterAttribute
         ServiceWindowClosedException or DuplicateRecordException or OverlappingRecordException => StatusCodes.Status409Conflict,
         BenchmarkGeneratorNotConfiguredException => StatusCodes.Status503ServiceUnavailable,
         ChannelSendException or MetaGraphApiException or BenchmarkGenerationException => StatusCodes.Status502BadGateway,
+        UnauthorizedAccessException => StatusCodes.Status403Forbidden,
         KeyNotFoundException => StatusCodes.Status404NotFound,
         ArgumentException => StatusCodes.Status400BadRequest,
         InvalidOperationException => StatusCodes.Status422UnprocessableEntity,

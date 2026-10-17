@@ -170,15 +170,15 @@ public class PureBillingRuleTests
 
     [Theory]
     [InlineData(EntitlementKeys.Campaigns, "TRUE", "true")]
-    [InlineData(EntitlementKeys.MaxAgents, " 5 ", "5")]
-    [InlineData(EntitlementKeys.MaxAgents, "Unlimited", "unlimited")]
+    [InlineData(EntitlementKeys.MaxUsers, " 5 ", "5")]
+    [InlineData(EntitlementKeys.MaxUsers, "Unlimited", "unlimited")]
     public void EntitlementValues_AreNormalized(string key, string value, string expected) =>
         Assert.Equal(expected, EntitlementCatalog.NormalizeValue(key, value));
 
     [Theory]
     [InlineData(EntitlementKeys.Campaigns, "5")]
-    [InlineData(EntitlementKeys.MaxAgents, "yes")]
-    [InlineData(EntitlementKeys.MaxAgents, "-1")]
+    [InlineData(EntitlementKeys.MaxUsers, "yes")]
+    [InlineData(EntitlementKeys.MaxUsers, "-1")]
     [InlineData("not_a_key", "true")]
     public void EntitlementValues_OfTheWrongKind_AreRejected(string key, string value) =>
         Assert.Throws<ArgumentException>(() => EntitlementCatalog.NormalizeValue(key, value));
@@ -188,24 +188,24 @@ public class PureBillingRuleTests
     {
         var values = new Dictionary<string, string>
         {
-            [EntitlementKeys.Campaigns] = "true", [EntitlementKeys.AiAgent] = "false",
-            [EntitlementKeys.MaxAgents] = "3", [EntitlementKeys.MaxChannelConnections] = "unlimited"
+            [EntitlementKeys.Campaigns] = "true", [EntitlementKeys.AiAssistant] = "false",
+            [EntitlementKeys.MaxUsers] = "3", [EntitlementKeys.MaxChannelConnections] = "unlimited"
         };
         var active = new ClientEntitlements(true, true, SubscriptionStatus.Active, "growth", "Growth", null, values);
         Assert.True(active.CanSendMessages);
         Assert.True(active.CanUseCampaigns);
-        Assert.False(active.CanUseAiAgent);
+        Assert.False(active.CanUseAiAssistant);
         Assert.False(active.CanUseAdvancedReporting); // not listed = off
-        Assert.Equal(3, active.MaximumAgents);
+        Assert.Equal(3, active.MaximumUsers);
         Assert.Null(active.MaximumChannelConnections); // unlimited
         Assert.Equal(0, active.MaximumWhatsAppNumbers); // not listed = 0
 
         var expired = new ClientEntitlements(true, false, SubscriptionStatus.Expired, "growth", "Growth", null, values);
         Assert.False(expired.CanSendMessages);
         Assert.False(expired.CanUseCampaigns);
-        Assert.Equal(0, expired.MaximumAgents);
+        Assert.Equal(0, expired.MaximumUsers);
 
         Assert.True(ClientEntitlements.Unrestricted.CanUseCampaigns);
-        Assert.Null(ClientEntitlements.Unrestricted.MaximumAgents);
+        Assert.Null(ClientEntitlements.Unrestricted.MaximumUsers);
     }
 }

@@ -8,7 +8,7 @@ namespace Omni.App.Controllers.Integrations;
 
 /// <summary>
 /// Trusted ingest endpoint for n8n — the one entry point for everything on a WhatsApp thread our
-/// own backend didn't directly cause: a customer message, a staff reply echoed from the WhatsApp
+/// own backend didn't directly cause: a customer message, a member reply echoed from the WhatsApp
 /// Business phone app, an AI message n8n already sent, or a delivery-status update. Protected by a
 /// shared-secret header (RequireIngestKey), not the open clientId-parameter trust level the rest
 /// of the MVP API uses — this endpoint can create/modify data across any client n8n asks for by

@@ -26,7 +26,7 @@ public interface IContactService
     /// <summary>The client's pipeline stages in order, labelled in the user's language (stage filters, badges, dropdowns).</summary>
     Task<IReadOnlyList<PipelineStageOption>> ListStagesAsync(Guid clientId, CancellationToken ct = default);
 
-    /// <summary>Narrower update for the AI agent's update_contact tool — service interest, language,
+    /// <summary>Narrower update for the AI assistant's update_contact tool — service interest, language,
     /// timeline, notes, follow-up date, qualification and stage (a stage key or a category) only. See
     /// UpdateContactContextRequest for why identity fields are excluded.</summary>
     Task<ContactResponse?> UpdateContextAsync(Guid clientId, Guid id, UpdateContactContextRequest request, CancellationToken ct = default);

@@ -1,8 +1,8 @@
 # Omni
 
-Multi-tenant SaaS for service businesses. A contact messages a client on WhatsApp or Telegram, an AI agent
+Multi-tenant SaaS for service businesses. A contact messages a client on WhatsApp or Telegram, an AI assistant
 (orchestrated by n8n) answers from the client's Knowledge Base, qualifies the contact and makes bookings, and
-staff can take over any conversation from the dashboard Inbox. Clients also run WhatsApp template campaigns
+members can take over any conversation from the dashboard Inbox. Clients also run WhatsApp template campaigns
 (especially old-contact reactivation) against their existing contacts.
 
 **For the full, current state of the project read [`PROJECT_HANDOFF.md`](PROJECT_HANDOFF.md) first.** It is the
@@ -11,7 +11,7 @@ This README is only a short orientation.
 
 ## Stack
 
-- .NET 10, ASP.NET Core Razor Pages (staff dashboard) + Web API controllers (dashboard JS, n8n, Meta, Telegram).
+- .NET 10, ASP.NET Core Razor Pages (client dashboard) + Web API controllers (dashboard JS, n8n, Meta, Telegram).
   Project/assembly name is `Omni.App`; only user-visible text says Omni.
 - EF Core / Npgsql on Supabase PostgreSQL with pgvector. The schema is hand-written in `Database/schema.sql`
   (idempotent, appended blocks), not EF migrations; `ApplicationDbContext` is kept in sync by hand.
@@ -28,8 +28,8 @@ This README is only a short orientation.
 - WhatsApp Embedded Signup, templates, health monitoring; Telegram bot channel
 - Campaigns with audience picker (old contacts who never booked, all contactable, custom filters, manual)
 - Knowledge Base: manual entries, PDF/DOCX/TXT upload, website crawling, semantic search (its retrieval benchmark is run from the admin portal)
-- Staff notification bell; Calendar Integrations (one-way Google/Outlook sync through a separate n8n workflow)
-- Self-service registration (new user → new isolated client), Staff list, Business Info settings
+- Notification bell; Calendar Integrations (one-way Google/Outlook sync through a separate n8n workflow)
+- Self-service registration (new client user → new isolated client); the client user adds members (Members page); Business Info settings
 - Subscriptions & prepaid usage billing (plans + entitlements, wallet, rate cards, billable events, ledger) — off until
   `Billing:Enabled`; see [`docs/billing.md`](docs/billing.md)
 
@@ -57,7 +57,9 @@ This README is only a short orientation.
    dotnet build
    dotnet run --project Omni.App --launch-profile https
    ```
-   Open `https://localhost:7276`, register an account (this creates a new client) and you land on `/dashboard`.
+   Open `https://localhost:7276`, register an account (this creates a new client and its client user) and you land on
+   `/dashboard`. Admin users (for the admin portal) are made with the CLI, then from the portal's Admins page:
+   `dotnet run --project Omni.App -- create-admin <email> "<full name>"` (password from `ADMIN_PASSWORD` or typed in).
    Swagger is at `/swagger` in Development only. There is no Razor runtime compilation, so `.cshtml`/`.cs` changes
    need a stop, build and run.
 

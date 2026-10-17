@@ -24,7 +24,7 @@ public class Conversation
 
     /// <summary>When the customer last sent a genuine inbound WhatsApp message (Origin ==
     /// WhatsAppCustomer). Only ever set by that one case — see MessageService.IngestAsync's
-    /// handling of IngestEventType.CustomerMessage. Staff/AI/campaign sends never touch this.</summary>
+    /// handling of IngestEventType.CustomerMessage. Member/AI/campaign sends never touch this.</summary>
     public DateTimeOffset? LastCustomerMessageAt { get; set; }
 
     /// <summary>Denormalized LastCustomerMessageAt + WhatsApp's 24-hour customer service window,
@@ -32,7 +32,7 @@ public class Conversation
     /// interval math everywhere it's checked. Recomputed alongside LastCustomerMessageAt.</summary>
     public DateTimeOffset? ServiceWindowExpiresAt { get; set; }
 
-    /// <summary>When staff last opened this conversation (shared by all the client's staff). Inbound
+    /// <summary>When members last opened this conversation (shared by all the client's members). Inbound
     /// messages newer than this are "unread"; null = never opened, so every inbound message is unread.</summary>
     public DateTimeOffset? LastReadAt { get; set; }
 

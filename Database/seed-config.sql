@@ -73,7 +73,7 @@ insert into config.settings (section, key, value, updated_by) values
   ('Voice', 'MaxBytes', '10485760', 'seed'),
   ('Dashboard', 'ContactsPageSize', '25', 'seed'),
   ('Cache', 'ClientsMinutes', '60', 'seed'),
-  ('Cache', 'StaffLookupMinutes', '10', 'seed'),
+  ('Cache', 'MembershipsMinutes', '10', 'seed'),
   ('Cache', 'ServicesMinutes', '60', 'seed'),
   ('Cache', 'SchedulingMinutes', '60', 'seed'),
   ('Cache', 'ChannelsMinutes', '60', 'seed'),

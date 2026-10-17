@@ -6,7 +6,7 @@ namespace Omni.App.Entities.Models;
 /// One row per client (unique on ClientId) holding the Knowledge Base's retrieval/embedding
 /// configuration. Created lazily with the system defaults the first time a client uses the Knowledge
 /// Base (see IKnowledgeSettingsService). Only the tuning fields — chunk size, chunk overlap, top K and
-/// minimum similarity — are editable by client staff; the embedding model, vector dimension,
+/// minimum similarity — are editable by client members; the embedding model, vector dimension,
 /// similarity method and vector index type are persisted so it's always clear what a client's stored
 /// vectors were built with, but are read-only (changing them means re-embedding and/or a database
 /// migration). API keys and other secrets are NEVER stored here — they stay in configuration.

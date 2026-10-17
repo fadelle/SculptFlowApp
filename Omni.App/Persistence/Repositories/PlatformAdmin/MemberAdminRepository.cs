@@ -1,6 +1,5 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.AspNetCore.Identity;
-using Omni.App.Common.Statics;
+using Omni.App.Common.Enums;
 using Omni.App.Entities.Dtos.PlatformAdmin;
 using Omni.App.Entities.Models;
 using Omni.App.Entities.Responses.Billing;
@@ -10,19 +9,20 @@ using Omni.App.Persistence.Helpers;
 
 namespace Omni.App.Persistence.Repositories.PlatformAdmin;
 
-public class StaffAdminRepository : IStaffAdminRepository
+public class MemberAdminRepository : IMemberAdminRepository
 {
     private readonly ApplicationDbContext _db;
 
-    public StaffAdminRepository(ApplicationDbContext db)
+    public MemberAdminRepository(ApplicationDbContext db)
     {
         _db = db;
     }
 
-    public async Task<PagedResponse<StaffRow>> ListAsync(Guid? clientId, string? search, int page, CancellationToken ct = default)
+    public async Task<PagedResponse<MemberRow>> ListAsync(Guid? clientId, string? search, int page, CancellationToken ct = default)
     {
         var now = DateTimeOffset.UtcNow;
         var q = from u in _db.Users.AsNoTracking()
+                where u.Role != UserRole.Admin
                 join m in _db.ClientUsers.AsNoTracking() on u.Id equals m.UserId into ms
                 from m in ms.DefaultIfEmpty()
                 select new { u, m };
@@ -31,14 +31,12 @@ public class StaffAdminRepository : IStaffAdminRepository
         {
             var like = QueryPaging.Like(search);
             q = q.Where(x => (x.u.Email != null && EF.Functions.ILike(x.u.Email, like))
-                             || _db.UserClaims.Any(c => c.UserId == x.u.Id && c.ClaimType == StaffClaims.FullName
-                                                        && c.ClaimValue != null && EF.Functions.ILike(c.ClaimValue, like)));
+                             || (x.u.FullName != null && EF.Functions.ILike(x.u.FullName, like)));
         }
 
         return await q.OrderByDescending(x => x.m != null ? x.m.CreatedAt : DateTimeOffset.MinValue)
-            .Select(x => new StaffRow(
-                x.u.Id, x.u.Email,
-                _db.UserClaims.Where(c => c.UserId == x.u.Id && c.ClaimType == StaffClaims.FullName).Select(c => c.ClaimValue).FirstOrDefault(),
+            .Select(x => new MemberRow(
+                x.u.Id, x.u.Email, x.u.FullName,
                 x.m != null ? x.m.Id : null,
                 x.m != null ? x.m.ClientId : null,
                 x.m != null ? _db.Clients.Where(c => c.Id == x.m.ClientId).Select(c => c.Name).FirstOrDefault() : null,
@@ -48,22 +46,22 @@ public class StaffAdminRepository : IStaffAdminRepository
                 x.u.AccessFailedCount,
                 x.u.PasswordHash != null,
                 _db.UserLogins.Any(l => l.UserId == x.u.Id),
-                x.m != null ? x.m.CreatedAt : null))
+                x.m != null ? x.m.CreatedAt : null,
+                x.u.Role, x.u.IsActive, x.u.LastLoginAt))
             .ToPagedAsync(page, ct: ct);
     }
 
-    public async Task<StaffRow?> GetAsync(string userId, CancellationToken ct = default)
+    public async Task<MemberRow?> GetAsync(string userId, CancellationToken ct = default)
     {
         var now = DateTimeOffset.UtcNow;
-        var u = await _db.Users.AsNoTracking().FirstOrDefaultAsync(x => x.Id == userId, ct);
+        var u = await _db.Users.AsNoTracking().FirstOrDefaultAsync(x => x.Id == userId && x.Role != UserRole.Admin, ct);
         if (u is null) return null;
         var m = await _db.ClientUsers.AsNoTracking().Include(x => x.Client)
             .OrderByDescending(x => x.IsActive).FirstOrDefaultAsync(x => x.UserId == userId, ct);
-        var name = await _db.UserClaims.Where(c => c.UserId == userId && c.ClaimType == StaffClaims.FullName)
-            .Select(c => c.ClaimValue).FirstOrDefaultAsync(ct);
         var google = await _db.UserLogins.AnyAsync(l => l.UserId == userId, ct);
-        return new StaffRow(u.Id, u.Email, name, m?.Id, m?.ClientId, m?.Client?.Name, m?.IsActive == true,
-            u.LockoutEnd > now, u.EmailConfirmed, u.AccessFailedCount, u.PasswordHash != null, google, m?.CreatedAt);
+        return new MemberRow(u.Id, u.Email, u.FullName, m?.Id, m?.ClientId, m?.Client?.Name, m?.IsActive == true,
+            u.LockoutEnd > now, u.EmailConfirmed, u.AccessFailedCount, u.PasswordHash != null, google, m?.CreatedAt,
+            u.Role, u.IsActive, u.LastLoginAt);
     }
 
     public Task<Guid?> ClientOfAsync(string userId, CancellationToken ct = default) =>
@@ -73,7 +71,4 @@ public class StaffAdminRepository : IStaffAdminRepository
     /// <summary>Tracked: the user's most recently updated membership.</summary>
     public Task<ClientUser?> GetLatestMembershipAsync(string userId, CancellationToken ct = default) =>
         _db.ClientUsers.Where(x => x.UserId == userId).OrderByDescending(x => x.UpdatedAt).FirstOrDefaultAsync(ct);
-
-    public Task<bool> HasOtherActiveMembershipAsync(string userId, Guid exceptMembershipId, CancellationToken ct = default) =>
-        _db.ClientUsers.AnyAsync(x => x.UserId == userId && x.IsActive && x.Id != exceptMembershipId, ct);
 }

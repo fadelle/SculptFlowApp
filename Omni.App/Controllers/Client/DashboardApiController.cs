@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Omni.App.Business.Contracts.Managers;
 using Omni.App.Controllers.Filters;
+using Omni.App.Entities.Dtos.Clients;
 
 namespace Omni.App.Controllers.Client;
 
@@ -29,4 +30,8 @@ public abstract class DashboardApiController : ControllerBase
     /// Forbid() (403), not Unauthorized() (401 is for "not logged in at all", which the auth
     /// middleware already handles before an action method ever runs).</summary>
     protected Task<Guid?> GetClientIdAsync(CancellationToken ct) => _clientContext.GetClientIdAsync(ct);
+
+    /// <summary>The signed-in user's access (client, role), or null like <see cref="GetClientIdAsync"/>; for actions
+    /// whose rules depend on the role.</summary>
+    protected Task<UserAccess?> GetAccessAsync(CancellationToken ct) => _clientContext.GetAccessAsync(ct);
 }

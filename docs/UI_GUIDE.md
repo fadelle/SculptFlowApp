@@ -59,9 +59,9 @@ fix bugs in both copies; keep screen-specific styles out of them.
 
 ### 0.4 Omni client app — how this project applies the guide
 This app had its own hand-rolled CSS and 21 page scripts before Aurora. Where the rest of this guide is generic, **this
-section wins**. Copy says *contact* where the guide says *customer*: the people using the app are **client staff**.
+section wins**. Copy says *contact* where the guide says *customer*: the people using the app are **clients and their members**.
 
-- **Keep it simple** (decided 2026-10-09). Staff get the sidebar, the page title, the notification bell, the theme
+- **Keep it simple** (decided 2026-10-09). Members get the sidebar, the page title, the notification bell, the theme
   toggle and the user menu, nothing more: no palette, scope, favourites, nav filter, section tabs or breadcrumbs (A13).
 - **No Bootstrap, jQuery or unobtrusive validation.** Appendix B is not installed. Forms post plain `name=` fields with
   HTML5 attributes; server-side rule errors come back as the page's `ErrorMessage`.

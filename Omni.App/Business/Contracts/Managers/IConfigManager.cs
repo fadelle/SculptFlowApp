@@ -205,8 +205,8 @@ public interface IConfigManager
     // ---- Cache (lifetimes of the table caches, read by CacheManager.LifetimeOf)
     /// <summary>Client rows (signed-in client, the bot's client info). Lifetime in minutes. Default 60.</summary>
     int CacheClientsMinutes { get; }
-    /// <summary>Which client a signed-in user belongs to. Keep it short: it is how long a removed staff member could keep access if a removal were ever missed. Lifetime in minutes. Default 10.</summary>
-    int CacheStaffLookupMinutes { get; }
+    /// <summary>Which client a signed-in user belongs to. Keep it short: it is how long a removed member could keep access if a removal were ever missed. Lifetime in minutes. Default 10.</summary>
+    int CacheMembershipsMinutes { get; }
     /// <summary>A client's services. Lifetime in minutes. Default 60.</summary>
     int CacheServicesMinutes { get; }
     /// <summary>Weekly hours, booking settings, closed dates and calendar connections. Lifetime in minutes. Default 60.</summary>

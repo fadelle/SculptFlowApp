@@ -143,7 +143,7 @@ public class ConversationsControllerTests : ClientControllerTestBase
     private ConversationsController Sut(Action<HttpContext>? configure = null) =>
         new ConversationsController(_conversations.Object, _messages.Object, ControllerTestKit.Config(("N8n:IngestApiKey", _ingestKey)), Client.Object).With(configure);
 
-    private static MessageResponse Msg() => new(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "outbound", "staff", "dashboard", "whatsapp", "text", "hi", null, false, null, null, null, null, DateTimeOffset.UtcNow, null, null, null, null, null, null, null);
+    private static MessageResponse Msg() => new(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "outbound", "member", "dashboard", "whatsapp", "text", "hi", null, false, null, null, null, null, DateTimeOffset.UtcNow, null, null, null, null, null, null, null);
 
     private ConversationResponse Convo() => new(Guid.NewGuid(), ClientId, Guid.NewGuid(), "whatsapp", "active", "ai", true, false, null, null, null, false, DateTimeOffset.UtcNow);
 
@@ -191,7 +191,7 @@ public class ConversationsControllerTests : ClientControllerTestBase
     }
 
     [Fact]
-    public async Task Every_staff_action_is_forbidden_without_a_client()
+    public async Task Every_member_action_is_forbidden_without_a_client()
     {
         NoClient();
         var id = Guid.NewGuid();
@@ -207,7 +207,7 @@ public class ConversationsControllerTests : ClientControllerTestBase
     }
 
     [Fact]
-    public async Task A_staff_send_needs_a_signed_in_user_with_a_client()
+    public async Task A_member_send_needs_a_signed_in_user_with_a_client()
     {
         var id = Guid.NewGuid();
         var request = new SendMessageRequest("hello");

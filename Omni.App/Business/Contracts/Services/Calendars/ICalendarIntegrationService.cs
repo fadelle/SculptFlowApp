@@ -37,7 +37,7 @@ public interface ICalendarIntegrationService
     /// that case).</summary>
     Task RequestRefreshCalendarsAsync(Guid clientId, string provider, CancellationToken ct = default);
 
-    /// <summary>Staff picking which calendar Omni bookings sync to — a plain local write, validated
+    /// <summary>A member picking which calendar Omni bookings sync to — a plain local write, validated
     /// against the cached list from the last connect/refresh. No provider call.</summary>
     Task<CalendarIntegrationResponse> SelectCalendarAsync(Guid clientId, string provider, string externalCalendarId, CancellationToken ct = default);
 

@@ -63,7 +63,7 @@ public class OverviewAdminRepository : IOverviewAdminRepository
             var d = from.AddDays(i);
             var g = byDay[d];
             return new DailyCount(DateOnly.FromDateTime(d), g.Count(m => m.Direction == MessageDirection.Inbound),
-                g.Count(m => m.SenderType == MessageSenderType.Ai), g.Count(m => m.SenderType == MessageSenderType.Staff),
+                g.Count(m => m.SenderType == MessageSenderType.Ai), g.Count(m => m.SenderType == MessageSenderType.Member),
                 g.Count(m => m.Failed));
         }).ToList();
     }

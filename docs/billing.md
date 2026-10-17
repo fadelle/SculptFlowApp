@@ -30,7 +30,7 @@ worker idles. Plans, rate cards, wallets and account arrangements can be prepare
 - Renewal (`BillingMaintenanceWorker`, every few minutes): next contiguous period, same charges. Can't pay → `past_due`;
   every run retries, so a top-up renews it.
 - Expired / cancelled / no plan: the client signs in and sees all its data, but can't send messages, run campaigns,
-  use the AI agent or connect channels.
+  use the AI assistant or connect channels.
 
 ### Entitlements
 
@@ -38,16 +38,17 @@ Ask `IEntitlementService`, never compare plan names:
 
 ```csharp
 var e = await _entitlements.GetAsync(clientId, ct);
-if (e.CanUseCampaigns) ...            // also CanUseAiAgent, CanUseApi, CanUseAdvancedReporting, CanSendMessages
-var max = e.MaximumAgents;            // null = unlimited; also MaximumWhatsAppNumbers, MaximumChannelConnections
+if (e.CanUseCampaigns) ...            // also CanUseAiAssistant, CanUseApi, CanUseAdvancedReporting, CanSendMessages
+var max = e.MaximumUsers;            // null = unlimited; also MaximumWhatsAppNumbers, MaximumChannelConnections
 await _entitlements.EnsureFeatureAsync(clientId, EntitlementKeys.Campaigns, ct);      // throws EntitlementDeniedException (422)
-await _entitlements.EnsureWithinLimitAsync(clientId, EntitlementKeys.MaxAgents, newCount, ct);
+await _entitlements.EnsureWithinLimitAsync(clientId, EntitlementKeys.MaxUsers, newCount, ct);
 ```
 
 Keys live in `Common/Statics/EntitlementKeys.cs`: features take `true`/`false`, limits a number or `unlimited`. A key a plan doesn't
-list is off / 0. Wired today: sending (subscription active), campaigns, the AI bot (`ai_agent`: AI trigger, conversation
+list is off / 0. Wired today: sending (subscription active), campaigns, the AI bot (`ai_assistant`: AI trigger, conversation
 routing and Return to AI, see `InboxSettingsService`), channel connects
-(`max_channel_connections`, `max_whatsapp_numbers`). `max_agents`, `api_access` and `advanced_reporting` are defined but
+(`max_channel_connections`, `max_whatsapp_numbers`) and seats (`max_users`: active client and member users, checked when
+the client user adds or reactivates a member, see `MemberService`). `api_access` and `advanced_reporting` are defined but
 nothing checks them yet.
 
 ## 2. Provider billing responsibility
@@ -177,7 +178,7 @@ settle or release. A failure to record *uncharged* usage is logged and never blo
 POST /api/platform-admin/billing/plans
 X-Platform-Admin-Key: …
 { "code": "growth", "name": "Growth", "price": 99, "billingPeriod": "month", "includedUsageCredit": 25,
-  "rateCardCode": null, "entitlements": { "campaigns": "true", "ai_agent": "true", "max_agents": "5",
+  "rateCardCode": null, "entitlements": { "campaigns": "true", "ai_assistant": "true", "max_users": "5",
   "max_whatsapp_numbers": "1", "max_channel_connections": "3" } }
 ```
 

@@ -10,7 +10,7 @@ namespace Omni.App.Entities.Dtos.Clients;
 
 /// <summary>Success carries the new user + client (so the caller can sign the user in); failure carries
 /// messages that are safe to show on the Register page.</summary>
-public record ClientRegistrationResult(bool Succeeded, IdentityUser? User, Client? Client, IReadOnlyList<string> Errors)
+public record ClientRegistrationResult(bool Succeeded, AppUser? User, Client? Client, IReadOnlyList<string> Errors)
 {
     public static ClientRegistrationResult Fail(params string[] errors) => new(false, null, null, errors);
     public static ClientRegistrationResult Fail(IEnumerable<string> errors) => new(false, null, null, errors.ToList());

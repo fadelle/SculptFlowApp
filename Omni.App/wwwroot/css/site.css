@@ -58,7 +58,7 @@
   --alert-warning-border: color-mix(in srgb, var(--au-warning) 35%, transparent);
   --alert-info-border: color-mix(in srgb, var(--au-info) 30%, transparent);
 
-  /* Who wrote a message: AI (violet) vs staff from the WhatsApp phone app (amber) */
+  /* Who wrote a message: AI (violet) vs members from the WhatsApp phone app (amber) */
   --ai: var(--tone-violet);
   --ai-soft: color-mix(in srgb, var(--violet) 9%, var(--au-paper));
   --human: var(--tone-warning);
@@ -1225,19 +1225,19 @@ td .cell-sub { white-space: nowrap; }
 .inbox-msg-tick { font-size: 0.72rem; letter-spacing: -1px; }
 .inbox-msg-tick-read { color: var(--tick-read); opacity: 1; }
 .inbox-msg-tick-failed { color: var(--tone-error); opacity: 1; }
-.inbox-msg-staff .inbox-msg-tick-read { color: var(--au-on-primary); }
+.inbox-msg-member .inbox-msg-tick-read { color: var(--au-on-primary); }
 .inbox-msg-failure { margin-top: 0.2rem; color: var(--tone-error); font-size: 0.75rem; }
 /* Customer (inbound) — plain surface, left-aligned */
 .inbox-msg-customer { border: 1px solid var(--border); background: var(--au-paper); color: var(--text); }
-/* AI — soft violet, so it never looks like a staff reply */
+/* AI — soft violet, so it never looks like a member reply */
 .inbox-msg-ai { border: 1px solid color-mix(in srgb, var(--violet) 20%, transparent); background: var(--ai-soft); color: var(--text); }
 .inbox-msg-ai .inbox-msg-source { color: var(--ai); opacity: 1; }
-/* Staff from the dashboard — the brand colour, filled (like primary buttons) */
-.inbox-msg-staff { background-color: var(--au-primary); background-image: var(--au-gradient); color: var(--au-on-primary); }
-.inbox-msg-staff .inbox-msg-failure { color: inherit; font-weight: 600; }
-/* Staff from the WhatsApp Business phone app — amber, so it reads apart from a dashboard reply */
-.inbox-msg-staff-app { border: 1px solid color-mix(in srgb, var(--au-warning) 28%, transparent); background: var(--human-soft); color: var(--text); }
-.inbox-msg-staff-app .inbox-msg-source { color: var(--human); opacity: 1; }
+/* A member from the dashboard — the brand colour, filled (like primary buttons) */
+.inbox-msg-member { background-color: var(--au-primary); background-image: var(--au-gradient); color: var(--au-on-primary); }
+.inbox-msg-member .inbox-msg-failure { color: inherit; font-weight: 600; }
+/* A member from the WhatsApp Business phone app — amber, so it reads apart from a dashboard reply */
+.inbox-msg-member-app { border: 1px solid color-mix(in srgb, var(--au-warning) 28%, transparent); background: var(--human-soft); color: var(--text); }
+.inbox-msg-member-app .inbox-msg-source { color: var(--human); opacity: 1; }
 /* System — muted grey */
 .inbox-msg-system { background: var(--badge-gray-bg); color: var(--badge-gray-text); }
 /* --- Composer --- */

@@ -5,7 +5,7 @@ namespace Omni.App.Entities.Responses.KnowledgeBenchmark;
 public record BenchmarkGenerationSummary(
     Guid Id,
     /// <summary>pending | completed | failed | cancelled (a pending generation with no callback after 30 minutes becomes failed;
-    /// cancelled = stopped by staff).</summary>
+    /// cancelled = stopped by a member).</summary>
     string Status,
     DateTimeOffset RequestedAt,
     DateTimeOffset? CompletedAt,

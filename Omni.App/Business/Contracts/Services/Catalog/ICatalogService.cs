@@ -7,7 +7,7 @@ namespace Omni.App.Business.Contracts.Services.Catalog;
 /// A client's service catalog — structured business data (name, code, booking duration, a short
 /// description, active flag), NOT medical knowledge: detailed pricing/recovery/preparation content
 /// belongs in the Knowledge Base. Services are never hard-deleted through this service, because
-/// contacts, bookings and orders reference them; staff deactivate instead. Everything is
+/// contacts, bookings and orders reference them; members deactivate instead. Everything is
 /// scoped by clientId (resolved from the logged-in user by the callers).
 /// </summary>
 public interface ICatalogService

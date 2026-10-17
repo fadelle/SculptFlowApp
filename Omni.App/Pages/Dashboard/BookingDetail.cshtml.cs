@@ -9,7 +9,7 @@ using Omni.App.Entities.Responses.Bookings;
 namespace Omni.App.Pages.Dashboard;
 
 /// <summary>
-/// Staff-facing edit page for Booking Status — posts through the same
+/// client-facing edit page for Booking Status — posts through the same
 /// IBookingService.UpdateStatusAsync the existing PATCH /api/bookings/{id}/status endpoint
 /// already uses, so nothing here duplicates that logic. Matters most for "Old contacts who never
 /// booked": marking a booking Booked/Confirmed/Attended here makes the contact stop matching the

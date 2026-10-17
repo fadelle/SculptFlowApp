@@ -1,5 +1,8 @@
 using System.Security.Claims;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -40,20 +43,67 @@ public class ClientContextTests
     {
         Assert.Null(await new CurrentClientContext(_clients.Object, Accessor(null)).GetClientIdAsync());
         Assert.Null(await new CurrentClientContext(_clients.Object, Accessor(new ClaimsPrincipal(new ClaimsIdentity()))).GetClientAsync());
-        Assert.Null(await new CurrentClientContext(_clients.Object, Accessor(new ClaimsPrincipal(new ClaimsIdentity([], "test")))).GetClientIdAsync()); // authenticated, no id claim
-        _clients.Verify(c => c.GetClientIdOfActiveMemberAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        Assert.Null(await new CurrentClientContext(_clients.Object, Accessor(new ClaimsPrincipal(new ClaimsIdentity([], "test")))).GetAccessAsync()); // authenticated, no id claim
+        _clients.Verify(c => c.GetUserAccessAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
-    public async Task Signed_in_users_resolve_through_their_active_membership()
+    public async Task Signed_in_users_resolve_through_their_access_once_per_request()
     {
-        var id = Guid.NewGuid();
-        var client = new Client { Id = id };
-        _clients.Setup(c => c.GetClientIdOfActiveMemberAsync("u1", It.IsAny<CancellationToken>())).ReturnsAsync(id);
-        _clients.Setup(c => c.GetClientOfActiveMemberAsync("u1", It.IsAny<CancellationToken>())).ReturnsAsync(client);
+        var client = new Client { Id = Guid.NewGuid() };
+        var access = new UserAccess("u1", client.Id, UserRole.Member, "fr", "Una", "stamp");
+        _clients.Setup(c => c.GetUserAccessAsync("u1", It.IsAny<CancellationToken>())).ReturnsAsync(access);
+        _clients.Setup(c => c.GetReadOnlyAsync(client.Id, It.IsAny<CancellationToken>())).ReturnsAsync(client);
         var ctx = new CurrentClientContext(_clients.Object, Accessor(SignedIn("u1")));
-        Assert.Equal(id, await ctx.GetClientIdAsync());
+        Assert.Same(access, await ctx.GetAccessAsync());
+        Assert.Equal(client.Id, await ctx.GetClientIdAsync());
         Assert.Same(client, await ctx.GetClientAsync());
+        _clients.Verify(c => c.GetUserAccessAsync("u1", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task A_user_without_access_has_no_client()
+    {
+        // An admin, a deactivated user or a removed member: the repository answers no access.
+        _clients.Setup(c => c.GetUserAccessAsync("admin-1", It.IsAny<CancellationToken>())).ReturnsAsync((UserAccess?)null);
+        var ctx = new CurrentClientContext(_clients.Object, Accessor(SignedIn("admin-1")));
+        Assert.Null(await ctx.GetClientAsync());
+        Assert.Null(await ctx.GetClientIdAsync());
+        _clients.Verify(c => c.GetReadOnlyAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Theory]
+    [InlineData(true, "stamp", "stamp", true)]    // still allowed, same stamp
+    [InlineData(true, null, "stamp", true)]       // a cookie without a stamp claim
+    [InlineData(true, "old", "stamp", false)]     // password changed or locked since: signed out
+    [InlineData(false, "stamp", "stamp", false)]  // no access any more (admin, deactivated, membership gone)
+    public void The_cookie_stands_only_while_the_user_still_has_access(bool hasAccess, string? cookieStamp, string currentStamp, bool expected)
+    {
+        var claims = new List<Claim> { new(ClaimTypes.NameIdentifier, "u1") };
+        if (cookieStamp is not null) claims.Add(new Claim(new IdentityOptions().ClaimsIdentity.SecurityStampClaimType, cookieStamp));
+        var principal = new ClaimsPrincipal(new ClaimsIdentity(claims, "test"));
+        var access = hasAccess ? new UserAccess("u1", Guid.NewGuid(), UserRole.Client, null, null, currentStamp) : null;
+        Assert.Equal(expected, CurrentClientContext.StillAllowed(access, principal));
+    }
+
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public async Task Every_request_rechecks_access_and_signs_out_a_user_who_lost_it(bool hasAccess, bool rejected)
+    {
+        var access = hasAccess ? new UserAccess("u1", Guid.NewGuid(), UserRole.Member, null, null, null) : null;
+        _clients.Setup(c => c.GetUserAccessAsync("u1", It.IsAny<CancellationToken>())).ReturnsAsync(access);
+        var auth = new Mock<IAuthenticationService>();
+        var services = new ServiceCollection().AddSingleton(_clients.Object).AddSingleton(auth.Object).BuildServiceProvider();
+        var http = new DefaultHttpContext { RequestServices = services };
+        var scheme = new AuthenticationScheme(IdentityConstants.ApplicationScheme, null, typeof(CookieAuthenticationHandler));
+        var ticket = new AuthenticationTicket(SignedIn("u1"), IdentityConstants.ApplicationScheme);
+        var context = new CookieValidatePrincipalContext(http, scheme, new CookieAuthenticationOptions(), ticket);
+
+        await CurrentClientContext.ValidatePrincipalAsync(context);
+
+        Assert.Equal(rejected, context.Principal is null);
+        auth.Verify(a => a.SignOutAsync(http, IdentityConstants.ApplicationScheme, It.IsAny<AuthenticationProperties?>()), rejected ? Times.Once() : Times.Never());
     }
 
     [Fact]

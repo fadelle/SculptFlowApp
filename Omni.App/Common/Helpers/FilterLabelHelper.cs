@@ -5,7 +5,7 @@ namespace Omni.App.Common.Helpers;
 /// Contact stages are not here: their labels come from the client's business type (StageDisplay); a stage key the type
 /// doesn't know falls back to the mechanical label below. Purely presentational — the
 /// underlying stored/backend values (Database/schema.sql's check constraints, the *Status static
-/// classes in Data/Entities) are unchanged; this only controls what client staff read on screen.
+/// classes in Data/Entities) are unchanged; this only controls what client members read on screen.
 /// </summary>
 public static class FilterLabelHelper
 {

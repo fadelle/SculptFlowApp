@@ -271,7 +271,7 @@ public class UserSettingsAndEventRepositoryTests(PostgresFixture fixture) : Repo
     [PostgresFact]
     public async Task Users_can_be_read_by_id_and_deleted()
     {
-        IdentityUser Make(string email) => new() { Id = Guid.NewGuid().ToString(), UserName = email, NormalizedUserName = email.ToUpperInvariant(), Email = email, NormalizedEmail = email.ToUpperInvariant() };
+        AppUser Make(string email) => new() { Role = UserRole.Client, Id = Guid.NewGuid().ToString(), UserName = email, NormalizedUserName = email.ToUpperInvariant(), Email = email, NormalizedEmail = email.ToUpperInvariant() };
         var u1 = Make($"a-{Guid.NewGuid():N}@x.com"); var u2 = Make($"b-{Guid.NewGuid():N}@x.com"); var u3 = Make($"c-{Guid.NewGuid():N}@x.com");
         await SeedAsync(u1, u2, u3);
 

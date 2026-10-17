@@ -93,7 +93,7 @@ public class CalendarIntegrationService : ICalendarIntegrationService
             CreatedAt = DateTimeOffset.UtcNow
         }).ToList());
         // A previously selected calendar may no longer be in the refreshed list (reconnecting a different
-        // account entirely, say) — clear it rather than silently keep pointing at a calendar staff can't see anymore.
+        // account entirely, say) — clear it rather than silently keep pointing at a calendar members can't see anymore.
         if (row.SelectedCalendarId is not null && calendars.All(c => c.ExternalCalendarId != row.SelectedCalendarId))
         {
             row.SelectedCalendarId = null;

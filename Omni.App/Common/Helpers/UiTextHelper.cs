@@ -33,14 +33,14 @@ public static class UiTextHelper
     }
 
     /// <summary>
-    /// Splits an error message into the plain sentence staff read and the technical part shown under "Technical
+    /// Splits an error message into the plain sentence members read and the technical part shown under "Technical
     /// details". Messages are built as "Could not connect Telegram: &lt;provider's reason&gt;", so the split is the first
     /// ": " when the text before it reads as one short sentence. Anything else stays whole, with no details.
     /// </summary>
     public static (string Summary, string? Details) SplitError(string? message)
     {
         if (string.IsNullOrWhiteSpace(message)) return ("", null);
-        // ArgumentException appends " (Parameter 'request')" to its message: a code detail, not something staff can act on.
+        // ArgumentException appends " (Parameter 'request')" to its message: a code detail, not something members can act on.
         var text = System.Text.RegularExpressions.Regex.Replace(message.Trim(), @"\s*\(Parameter '[^']*'\)$", "");
         var colon = text.IndexOf(": ", StringComparison.Ordinal);
         if (colon < 12 || colon > 140 || text[..colon].Contains(". ", StringComparison.Ordinal)) return (text, null);

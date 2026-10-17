@@ -96,17 +96,17 @@ public class ConversationsController : ControllerBase
 
     /// <summary>Two callers share this one route (see SendMessageRequest's doc comment) — deliberately
     /// [AllowAnonymous] at the attribute level, with each branch enforcing its own trust model:
-    ///   - Staff from the Inbox (Sender omitted): requires a logged-in session (checked manually
+    ///   - A member from the Inbox (Sender omitted): requires a logged-in session (checked manually
     ///     below, since the action itself can't be blanket [Authorize]d) and resolves clientId via
     ///     ICurrentClientContext. Goes through WhatsAppService and flips the conversation to human
     ///     mode. See MessageService.SendAsync.
-    ///   - The AI agent via n8n (Sender = "ai"): requires the trusted X-Ingest-Key header instead,
+    ///   - The AI assistant via n8n (Sender = "ai"): requires the trusted X-Ingest-Key header instead,
     ///     takes clientId explicitly from the query string (trusted via that header, same pattern as
     ///     AiController), then re-checks conversation.mode == ai immediately before sending (a human
     ///     may have taken over while the AI was generating its reply) and never flips mode. See
     ///     MessageService.SendAiReplyAsync. Returns 409 conversation_in_human_mode if the mode check
     ///     fails — this is the mandatory second mode check the AI send flow requires.
-    /// Fails with 409 (staff path) if the 24-hour WhatsApp customer service window is closed — the
+    /// Fails with 409 (member path) if the 24-hour WhatsApp customer service window is closed — the
     /// client should offer SendTemplate instead.</summary>
     [AllowAnonymous]
     [HttpPost("{id:guid}/messages/send")]
@@ -137,7 +137,7 @@ public class ConversationsController : ControllerBase
             }
         }
 
-        // Staff path: manual auth check, since this action as a whole is [AllowAnonymous] for the
+        // Members path: manual auth check, since this action as a whole is [AllowAnonymous] for the
         // AI branch above.
         if (User.Identity?.IsAuthenticated != true)
         {
@@ -151,7 +151,7 @@ public class ConversationsController : ControllerBase
         return message is null ? NotFound() : Ok(message);
     }
 
-    /// <summary>Staff sends an approved WhatsApp template — usable any time, and the only option
+    /// <summary>A member sends an approved WhatsApp template — usable any time, and the only option
     /// once the service window is closed. See MessageService.SendTemplateAsync.</summary>
     [Authorize]
     [HttpPost("{id:guid}/messages/send-template")]
@@ -164,7 +164,7 @@ public class ConversationsController : ControllerBase
         return message is null ? NotFound() : Ok(message);
     }
 
-    /// <summary>Staff opened the conversation — clears its unread marker.</summary>
+    /// <summary>A member opened the conversation — clears its unread marker.</summary>
     [Authorize]
     [HttpPost("{id:guid}/read")]
     public async Task<IActionResult> MarkRead(Guid id, CancellationToken ct)
@@ -208,7 +208,7 @@ public class ConversationsController : ControllerBase
         return conversation is null ? NotFound() : Ok(conversation);
     }
 
-    /// <summary>Staff brings a closed conversation back into the working list (a contact's next message does the
+    /// <summary>A member brings a closed conversation back into the working list (a contact's next message does the
     /// same automatically).</summary>
     [Authorize]
     [HttpPost("{id:guid}/reopen")]

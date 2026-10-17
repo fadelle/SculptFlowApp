@@ -1,6 +1,8 @@
 using System.Runtime.CompilerServices;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Omni.App.Controllers.Client;
+using Omni.App.Controllers.Filters;
 
 namespace Omni.App.Tests.Controllers;
 
@@ -191,13 +193,42 @@ public class SmallClientControllerTests : ClientControllerTestBase
         _billing.Verify();
     }
 
-    // ---- staff ------------------------------------------------------------------------------------------------
+    // ---- members-----------------------------------------------------------------------------------------------
 
     [Fact]
-    public async Task Staff_list_is_scoped_to_the_client()
+    public async Task Member_list_is_scoped_to_the_client()
     {
-        var staff = new Mock<IStaffService>();
-        staff.Setup(s => s.ListAsync(ClientId, It.IsAny<CancellationToken>())).ReturnsAsync(new List<StaffMemberResponse>());
-        Assert.IsType<OkObjectResult>((await new StaffController(staff.Object, Client.Object).With().List(default)).Result);
+        var members = new Mock<IMemberService>();
+        members.Setup(s => s.ListAsync(ClientId, It.IsAny<CancellationToken>())).ReturnsAsync(new List<MemberResponse>());
+        Assert.IsType<OkObjectResult>((await new MembersController(members.Object, Client.Object).With().List(default)).Result);
+    }
+
+    [Fact]
+    public async Task Member_changes_pass_the_callers_access_to_the_rules()
+    {
+        var access = new UserAccess("owner", ClientId, UserRole.Client, null, null, null);
+        Client.Setup(c => c.GetAccessAsync(It.IsAny<CancellationToken>())).ReturnsAsync(access);
+        var members = new Mock<IMemberService>();
+        var request = new AddMemberRequest("Ann", "ann@x.com", "Passw0rd");
+        members.Setup(s => s.AddAsync(access, request, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new MemberResponse("m1", "Ann", "ann@x.com", UserRole.Member, true, DateTimeOffset.UtcNow, null));
+        var sut = new MembersController(members.Object, Client.Object).With();
+
+        var created = Assert.IsType<ObjectResult>((await sut.Add(request, default)).Result);
+        Assert.Equal(StatusCodes.Status201Created, created.StatusCode);
+        Assert.IsType<NoContentResult>(await sut.Deactivate("m1", default));
+        Assert.IsType<NoContentResult>(await sut.Reactivate("m1", default));
+        members.Verify(s => s.SetActiveAsync(access, "m1", false, It.IsAny<CancellationToken>()), Times.Once);
+        members.Verify(s => s.SetActiveAsync(access, "m1", true, It.IsAny<CancellationToken>()), Times.Once);
+
+        Client.Setup(c => c.GetAccessAsync(It.IsAny<CancellationToken>())).ReturnsAsync((UserAccess?)null);
+        IsForbid(await sut.Add(request, default));
+        Assert.IsType<ForbidResult>(await sut.Deactivate("m1", default));
+    }
+
+    [Fact]
+    public void A_role_refusal_answers_403()
+    {
+        Assert.Equal(StatusCodes.Status403Forbidden, ApiErrorsAttribute.StatusFor(new UnauthorizedAccessException("members.errors.clientOnly")));
     }
 }

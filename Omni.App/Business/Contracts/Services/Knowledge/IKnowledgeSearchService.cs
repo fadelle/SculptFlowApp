@@ -5,7 +5,7 @@ namespace Omni.App.Business.Contracts.Services.Knowledge;
 
 /// <summary>
 /// Semantic search over ONE client's Knowledge Base. Returns relevant chunks only — it never
-/// composes an answer (that's the AI agent's job) and never returns another client's knowledge.
+/// composes an answer (that's the AI assistant's job) and never returns another client's knowledge.
 /// </summary>
 public interface IKnowledgeSearchService
 {

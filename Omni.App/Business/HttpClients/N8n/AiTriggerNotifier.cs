@@ -50,13 +50,13 @@ public class AiTriggerNotifier : IAiTriggerNotifier
         var started = Stopwatch.GetTimestamp();
         try
         {
-            // The AI agent is a plan feature (automation). Without it the message just waits in the Inbox for staff.
+            // The AI assistant is a plan feature (automation). Without it the message just waits in the Inbox for members.
             var entitlements = await _entitlements.GetAsync(payload.ClientId, ct);
-            if (!entitlements.CanUseAiAgent)
+            if (!entitlements.CanUseAiAssistant)
             {
-                _logger.LogInformation("AI trigger skipped for conversation {ConversationId}: the client's plan doesn't include the AI agent (status {Status}).",
+                _logger.LogInformation("AI trigger skipped for conversation {ConversationId}: the client's plan doesn't include the AI assistant (status {Status}).",
                     payload.ConversationId, entitlements.SubscriptionStatus ?? "none");
-                _tracer.Step(TraceSteps.BotSkipped, TraceOutcomes.Skipped, ids, detail: new { reason = "plan_without_ai_agent" });
+                _tracer.Step(TraceSteps.BotSkipped, TraceOutcomes.Skipped, ids, detail: new { reason = "plan_without_ai_assistant" });
                 return;
             }
 

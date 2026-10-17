@@ -108,16 +108,6 @@ public class ContactRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixt
 
 public class ClientRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixture)
 {
-    private async Task<IdentityUser> SeedUserAsync(string email, string? fullName = null)
-    {
-        var user = new IdentityUser { Id = Guid.NewGuid().ToString(), UserName = email, NormalizedUserName = email.ToUpperInvariant(), Email = email, NormalizedEmail = email.ToUpperInvariant() };
-        await using var db = NewContext();
-        db.Users.Add(user);
-        if (fullName is not null) db.UserClaims.Add(new IdentityUserClaim<string> { UserId = user.Id, ClaimType = "full_name", ClaimValue = fullName });
-        await db.SaveChangesAsync();
-        return user;
-    }
-
     [PostgresFact]
     public async Task Clients_can_be_read_added_and_deleted()
     {
@@ -145,36 +135,70 @@ public class ClientRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixtu
     }
 
     [PostgresFact]
-    public async Task Membership_lookups_only_see_active_memberships()
+    public async Task Access_needs_an_active_client_or_member_user_with_an_active_membership()
     {
         var active = MakeClient(); var inactive = MakeClient();
-        await SeedAsync(active, inactive);
-        var u1 = await SeedUserAsync($"u1-{Guid.NewGuid():N}@x.com", "Una One");
-        var u2 = await SeedUserAsync($"u2-{Guid.NewGuid():N}@x.com");
-        var u3 = await SeedUserAsync($"u3-{Guid.NewGuid():N}@x.com");
+        var u1 = MakeUser(fullName: "Una One");                        // client user, active membership
+        var u2 = MakeUser(role: UserRole.Member);                       // inactive membership
+        var u3 = MakeUser(role: UserRole.Member);                       // member, active membership, no name
+        var admin = MakeUser(role: UserRole.Admin);                     // an admin linked by mistake still gets nothing
+        var off = MakeUser(role: UserRole.Member, active: false);       // deactivated user
+        await SeedAsync(active, inactive, u1, u2, u3, admin, off);
 
         await using (var db = NewContext())
         {
             var repo = new ClientRepository(db);
             repo.AddMembership(new ClientUser { Id = Guid.NewGuid(), ClientId = active.Id, UserId = u1.Id, IsActive = true, CreatedAt = Now, UpdatedAt = Now });
             repo.AddMembership(new ClientUser { Id = Guid.NewGuid(), ClientId = inactive.Id, UserId = u2.Id, IsActive = false, CreatedAt = Now, UpdatedAt = Now });
-            repo.AddMembership(new ClientUser { Id = Guid.NewGuid(), ClientId = active.Id, UserId = u3.Id, IsActive = true, CreatedAt = Now, UpdatedAt = Now });
+            repo.AddMembership(new ClientUser { Id = Guid.NewGuid(), ClientId = active.Id, UserId = u3.Id, IsActive = true, CreatedAt = Now.AddMinutes(1), UpdatedAt = Now });
+            repo.AddMembership(new ClientUser { Id = Guid.NewGuid(), ClientId = active.Id, UserId = admin.Id, IsActive = true, CreatedAt = Now, UpdatedAt = Now });
+            repo.AddMembership(new ClientUser { Id = Guid.NewGuid(), ClientId = active.Id, UserId = off.Id, IsActive = true, CreatedAt = Now, UpdatedAt = Now });
             await db.SaveChangesAsync();
         }
 
         await using var read = NewContext();
         var r = new ClientRepository(read);
-        Assert.Equal(active.Id, (await r.GetClientOfActiveMemberAsync(u1.Id))!.Id);
-        Assert.Null(await r.GetClientOfActiveMemberAsync(u2.Id));
-        Assert.Equal(active.Id, await r.GetClientIdOfActiveMemberAsync(u1.Id));
-        Assert.Null(await r.GetClientIdOfActiveMemberAsync(u2.Id));
-        Assert.Null(await r.GetClientIdOfActiveMemberAsync("nobody"));
+        Assert.Equal(new UserAccess(u1.Id, active.Id, UserRole.Client, null, "Una One", u1.SecurityStamp), await r.GetUserAccessAsync(u1.Id));
+        Assert.Equal((active.Id, UserRole.Member), ((await r.GetUserAccessAsync(u3.Id))!.ClientId, (await r.GetUserAccessAsync(u3.Id))!.Role));
+        Assert.Null(await r.GetUserAccessAsync(u2.Id));
+        Assert.Null(await r.GetUserAccessAsync(admin.Id));
+        Assert.Null(await r.GetUserAccessAsync(off.Id));
+        Assert.Null(await r.GetUserAccessAsync("nobody"));
 
-        var staff = await r.ListStaffAsync(active.Id, "full_name");
-        Assert.Equal(2, staff.Count);
-        Assert.Equal("Una One", staff.Single(s => s.UserId == u1.Id).FullName);
-        Assert.Null(staff.Single(s => s.UserId == u3.Id).FullName);
+        // Seats: active memberships of active client/member users only (not the admin, not the deactivated user).
+        Assert.Equal(2, await r.CountSeatsInUseAsync(active.Id));
+        Assert.Equal(0, await r.CountSeatsInUseAsync(inactive.Id));
+
+        var members = await r.ListMembersAsync(active.Id);
+        Assert.Equal(4, members.Count);
+        Assert.Equal(("Una One", UserRole.Client, true), (members.Single(s => s.UserId == u1.Id).FullName, members.Single(s => s.UserId == u1.Id).Role, members.Single(s => s.UserId == u1.Id).IsActive));
+        Assert.False(members.Single(s => s.UserId == off.Id).IsActive); // an active membership of a deactivated user reads inactive
+        Assert.Null(members.Single(s => s.UserId == u3.Id).FullName);
         Assert.Equal([u2.Id], await r.ListMemberUserIdsAsync(inactive.Id));
+
+        Assert.NotNull(await r.GetMembershipAsync(inactive.Id, u2.Id));
+        Assert.Null(await r.GetMembershipAsync(active.Id, u2.Id));
+    }
+
+    [PostgresFact]
+    public async Task One_active_membership_per_user_is_a_rule_in_code_not_an_index()
+    {
+        var a = MakeClient(); var b = MakeClient();
+        var user = MakeUser(role: UserRole.Member);
+        await SeedAsync(a, b, user);
+        var first = new ClientUser { Id = Guid.NewGuid(), ClientId = a.Id, UserId = user.Id, IsActive = true, CreatedAt = Now, UpdatedAt = Now };
+        var second = new ClientUser { Id = Guid.NewGuid(), ClientId = b.Id, UserId = user.Id, IsActive = false, CreatedAt = Now, UpdatedAt = Now };
+        await SeedAsync(first, second);
+
+        await using var db = NewContext();
+        var r = new ClientRepository(db);
+        Assert.True(await r.HasOtherActiveMembershipAsync(user.Id, second.Id));
+        Assert.False(await r.HasOtherActiveMembershipAsync(user.Id, first.Id));
+
+        // The database itself no longer refuses a second active row (agencies later); MemberService does.
+        (await db.ClientUsers.SingleAsync(m => m.Id == second.Id)).IsActive = true;
+        await db.SaveChangesAsync();
+        Assert.Equal(2, await db.ClientUsers.CountAsync(m => m.UserId == user.Id && m.IsActive));
     }
 }
 

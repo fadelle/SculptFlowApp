@@ -18,17 +18,19 @@ namespace Omni.App.Tests.Controllers;
 /// </summary>
 public class GoogleAuthControllerTests
 {
-    private readonly Mock<UserManager<IdentityUser>> _users;
-    private readonly Mock<SignInManager<IdentityUser>> _signIn;
+    private readonly Mock<UserManager<AppUser>> _users;
+    private readonly Mock<SignInManager<AppUser>> _signIn;
     private readonly Mock<IAuthenticationService> _auth = new();
     private readonly Mock<IUrlHelper> _url = new();
 
     public GoogleAuthControllerTests()
     {
-        _users = new Mock<UserManager<IdentityUser>>(Mock.Of<IUserStore<IdentityUser>>(), null!, null!, null!, null!, null!, null!, null!, null!);
-        _signIn = new Mock<SignInManager<IdentityUser>>(_users.Object, Mock.Of<IHttpContextAccessor>(), Mock.Of<IUserClaimsPrincipalFactory<IdentityUser>>(),
+        _users = new Mock<UserManager<AppUser>>(Mock.Of<IUserStore<AppUser>>(), null!, null!, null!, null!, null!, null!, null!, null!);
+        _signIn = new Mock<SignInManager<AppUser>>(_users.Object, Mock.Of<IHttpContextAccessor>(), Mock.Of<IUserClaimsPrincipalFactory<AppUser>>(),
             null!, null!, null!, null!);
         _url.Setup(u => u.IsLocalUrl(It.IsAny<string?>())).Returns<string?>(s => s is not null && s.StartsWith('/') && !s.StartsWith("//"));
+        // Client and member users may sign in; the tests below that refuse someone say so.
+        _signIn.Setup(s => s.CanSignInAsync(It.IsAny<AppUser>())).ReturnsAsync(true);
     }
 
     private GoogleAuthController Sut(params (string Key, string? Value)[] config)
@@ -110,7 +112,7 @@ public class GoogleAuthControllerTests
         _signIn.Setup(s => s.GetExternalLoginInfoAsync(null)).ReturnsAsync(Info(email, verified));
         LinkedLoginFails();
         Assert.Equal("/Account/Login?externalError=unverified", RedirectTarget(await Sut().Callback(null)));
-        _users.Verify(u => u.AddLoginAsync(It.IsAny<IdentityUser>(), It.IsAny<UserLoginInfo>()), Times.Never);
+        _users.Verify(u => u.AddLoginAsync(It.IsAny<AppUser>(), It.IsAny<UserLoginInfo>()), Times.Never);
     }
 
     [Fact]
@@ -118,7 +120,7 @@ public class GoogleAuthControllerTests
     {
         _signIn.Setup(s => s.GetExternalLoginInfoAsync(null)).ReturnsAsync(Info("new@x.com", true));
         LinkedLoginFails();
-        _users.Setup(u => u.FindByEmailAsync("new@x.com")).ReturnsAsync((IdentityUser?)null);
+        _users.Setup(u => u.FindByEmailAsync("new@x.com")).ReturnsAsync((AppUser?)null);
         var target = RedirectTarget(await Sut().Callback("/a b"));
         Assert.Equal("/Account/CompleteGoogleSignup?returnUrl=%2Fa%20b", target);
     }
@@ -126,7 +128,7 @@ public class GoogleAuthControllerTests
     [Fact]
     public async Task A_locked_out_existing_user_is_refused()
     {
-        var user = new IdentityUser { Email = "a@x.com" };
+        var user = new AppUser { Email = "a@x.com" };
         _signIn.Setup(s => s.GetExternalLoginInfoAsync(null)).ReturnsAsync(Info("a@x.com", true));
         LinkedLoginFails();
         _users.Setup(u => u.FindByEmailAsync("a@x.com")).ReturnsAsync(user);
@@ -135,34 +137,57 @@ public class GoogleAuthControllerTests
     }
 
     [Fact]
+    public async Task A_linked_google_login_the_main_app_refuses_gets_the_generic_failure()
+    {
+        // An admin (or a deactivated user, or a removed member) whose Google login is already linked.
+        _signIn.Setup(s => s.GetExternalLoginInfoAsync(null)).ReturnsAsync(Info("ada@x.com", true));
+        _signIn.Setup(s => s.ExternalLoginSignInAsync("Google", "key-1", true, true)).ReturnsAsync(SignInResult.NotAllowed);
+        Assert.Equal("/Account/Login?externalError=failed", RedirectTarget(await Sut().Callback(null)));
+        _users.Verify(u => u.FindByEmailAsync(It.IsAny<string>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Google_is_never_linked_to_an_account_the_main_app_refuses()
+    {
+        var admin = new AppUser { Email = "ada@x.com", Role = UserRole.Admin, EmailConfirmed = true };
+        _signIn.Setup(s => s.GetExternalLoginInfoAsync(null)).ReturnsAsync(Info("ada@x.com", true));
+        LinkedLoginFails();
+        _users.Setup(u => u.FindByEmailAsync("ada@x.com")).ReturnsAsync(admin);
+        _signIn.Setup(s => s.CanSignInAsync(admin)).ReturnsAsync(false);
+        Assert.Equal("/Account/Login?externalError=failed", RedirectTarget(await Sut().Callback(null)));
+        _users.Verify(u => u.AddLoginAsync(It.IsAny<AppUser>(), It.IsAny<UserLoginInfo>()), Times.Never);
+        _signIn.Verify(s => s.SignInAsync(It.IsAny<AppUser>(), It.IsAny<bool>(), It.IsAny<string?>()), Times.Never);
+    }
+
+    [Fact]
     public async Task A_failed_link_is_reported_and_nobody_is_signed_in()
     {
-        var user = new IdentityUser { Email = "a@x.com" };
+        var user = new AppUser { Email = "a@x.com" };
         _signIn.Setup(s => s.GetExternalLoginInfoAsync(null)).ReturnsAsync(Info("a@x.com", true));
         LinkedLoginFails();
         _users.Setup(u => u.FindByEmailAsync("a@x.com")).ReturnsAsync(user);
         _users.Setup(u => u.AddLoginAsync(user, It.IsAny<UserLoginInfo>())).ReturnsAsync(IdentityResult.Failed(new IdentityError { Description = "dup" }));
         Assert.Equal("/Account/Login?externalError=failed", RedirectTarget(await Sut().Callback(null)));
-        _signIn.Verify(s => s.SignInAsync(It.IsAny<IdentityUser>(), It.IsAny<bool>(), It.IsAny<string?>()), Times.Never);
+        _signIn.Verify(s => s.SignInAsync(It.IsAny<AppUser>(), It.IsAny<bool>(), It.IsAny<string?>()), Times.Never);
     }
 
     [Fact]
     public async Task A_confirmed_user_is_linked_and_signed_in_with_the_password_kept()
     {
-        var user = new IdentityUser { Email = "a@x.com", EmailConfirmed = true };
+        var user = new AppUser { Email = "a@x.com", EmailConfirmed = true };
         _signIn.Setup(s => s.GetExternalLoginInfoAsync(null)).ReturnsAsync(Info("a@x.com", true));
         LinkedLoginFails();
         _users.Setup(u => u.FindByEmailAsync("a@x.com")).ReturnsAsync(user);
         _users.Setup(u => u.AddLoginAsync(user, It.IsAny<UserLoginInfo>())).ReturnsAsync(IdentityResult.Success);
         Assert.Equal("/contacts", RedirectTarget(await Sut().Callback("/contacts")));
-        _users.Verify(u => u.RemovePasswordAsync(It.IsAny<IdentityUser>()), Times.Never);
+        _users.Verify(u => u.RemovePasswordAsync(It.IsAny<AppUser>()), Times.Never);
         _signIn.Verify(s => s.SignInAsync(user, true, "Google"), Times.Once);
     }
 
     [Fact]
     public async Task Linking_an_unconfirmed_account_confirms_the_email_and_drops_the_old_password()
     {
-        var user = new IdentityUser { Email = "a@x.com", EmailConfirmed = false };
+        var user = new AppUser { Email = "a@x.com", EmailConfirmed = false };
         _signIn.Setup(s => s.GetExternalLoginInfoAsync(null)).ReturnsAsync(Info("a@x.com", true));
         LinkedLoginFails();
         _users.Setup(u => u.FindByEmailAsync("a@x.com")).ReturnsAsync(user);
@@ -181,7 +206,7 @@ public class GoogleAuthControllerTests
     [Fact]
     public async Task An_unconfirmed_account_without_a_password_is_confirmed_without_a_password_removal()
     {
-        var user = new IdentityUser { Email = "a@x.com", EmailConfirmed = false };
+        var user = new AppUser { Email = "a@x.com", EmailConfirmed = false };
         _signIn.Setup(s => s.GetExternalLoginInfoAsync(null)).ReturnsAsync(Info("a@x.com", true));
         LinkedLoginFails();
         _users.Setup(u => u.FindByEmailAsync("a@x.com")).ReturnsAsync(user);
@@ -189,6 +214,6 @@ public class GoogleAuthControllerTests
         _users.Setup(u => u.HasPasswordAsync(user)).ReturnsAsync(false);
         await Sut().Callback(null);
         Assert.True(user.EmailConfirmed);
-        _users.Verify(u => u.RemovePasswordAsync(It.IsAny<IdentityUser>()), Times.Never);
+        _users.Verify(u => u.RemovePasswordAsync(It.IsAny<AppUser>()), Times.Never);
     }
 }

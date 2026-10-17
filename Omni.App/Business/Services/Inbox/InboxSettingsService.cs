@@ -32,7 +32,7 @@ public class InboxSettingsService : IInboxSettingsService
         _ = await _clients.GetReadOnlyAsync(clientId, ct) ?? throw new KeyNotFoundException("Client not found.");
         var row = await _settings.GetForClientReadOnlyAsync(clientId, ct) ?? new InboxSettings();
         var entitlements = await _entitlements.GetAsync(clientId, ct);
-        return new InboxSettingsDto(entitlements.CanUseAiAgent, row.AiBotNewConversations, row.AiBotReopenedConversations);
+        return new InboxSettingsDto(entitlements.CanUseAiAssistant, row.AiBotNewConversations, row.AiBotReopenedConversations);
     }
 
     public async Task<string> InitialModeAsync(Guid clientId, CancellationToken ct = default) =>

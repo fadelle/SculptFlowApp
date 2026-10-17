@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Identity;
+using Omni.App.Entities.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 
@@ -6,9 +7,9 @@ namespace Omni.App.Pages.Account;
 
 public class LoginModel : PageModel
 {
-    private readonly SignInManager<IdentityUser> _signInManager;
+    private readonly SignInManager<AppUser> _signInManager;
 
-    public LoginModel(SignInManager<IdentityUser> signInManager)
+    public LoginModel(SignInManager<AppUser> signInManager)
     {
         _signInManager = signInManager;
     }

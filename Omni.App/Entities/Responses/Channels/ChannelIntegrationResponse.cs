@@ -19,7 +19,7 @@ public record ChannelIntegrationResponse(
     DateTimeOffset UpdatedAt,
     /// <summary>WhatsApp only — the two-step-verification PIN registered with Meta for this phone
     /// number. Not a bearer credential, so unlike AccessToken it's shown directly rather than
-    /// hidden — staff may need it for WhatsApp Business App coexistence login.</summary>
+    /// hidden — members may need it for WhatsApp Business App coexistence login.</summary>
     string? Pin = null,
     /// <summary>Telegram only. The bot token and webhook secret are NEVER part of any response —
     /// HasAccessToken / HasWebhookVerifyToken are the only trace of them.</summary>

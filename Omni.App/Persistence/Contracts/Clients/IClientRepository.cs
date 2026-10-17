@@ -3,7 +3,7 @@ using Omni.App.Entities.Models;
 
 namespace Omni.App.Persistence.Contracts.Clients;
 
-/// <summary>Clients and their staff memberships (client_users).</summary>
+/// <summary>Clients and their memberships (client_users).</summary>
 public interface IClientRepository
 {
     /// <summary>Tracked, so changes are written on the next save.</summary>
@@ -17,13 +17,21 @@ public interface IClientRepository
 
     void AddMembership(ClientUser membership);
 
-    /// <summary>The client of the user's active membership, or null. Read-only copy (cached).</summary>
-    Task<Client?> GetClientOfActiveMemberAsync(string userId, CancellationToken ct = default);
+    /// <summary>What the user may use in the main app now (an active client/member user with an active membership), or
+    /// null. Cached per user (Cache:MembershipsMinutes); saving the user or a membership clears it.</summary>
+    Task<UserAccess?> GetUserAccessAsync(string userId, CancellationToken ct = default);
 
-    Task<Guid?> GetClientIdOfActiveMemberAsync(string userId, CancellationToken ct = default);
+    /// <summary>Every membership of the client with its user's email, name, role and last sign-in.</summary>
+    Task<IReadOnlyList<ClientMemberRow>> ListMembersAsync(Guid clientId, CancellationToken ct = default);
 
-    /// <summary>Every membership of the client with the user's email and full-name claim.</summary>
-    Task<IReadOnlyList<StaffMemberRow>> ListStaffAsync(Guid clientId, string fullNameClaimType, CancellationToken ct = default);
+    /// <summary>Tracked: the user's membership of this client, or null.</summary>
+    Task<ClientUser?> GetMembershipAsync(Guid clientId, string userId, CancellationToken ct = default);
+
+    /// <summary>Whether the user has an active membership other than this one (a user may have one active membership).</summary>
+    Task<bool> HasOtherActiveMembershipAsync(string userId, Guid exceptMembershipId, CancellationToken ct = default);
+
+    /// <summary>Seats in use: active memberships of active client and member users (the max_users entitlement).</summary>
+    Task<int> CountSeatsInUseAsync(Guid clientId, CancellationToken ct = default);
 
     Task<IReadOnlyList<ClientSummaryRow>> ListByNamePrefixAsync(string namePrefix, CancellationToken ct = default);
 

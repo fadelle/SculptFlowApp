@@ -359,7 +359,7 @@ public sealed class WebsiteScrapeProcessor : IWebsiteScrapeProcessor
 
             if (UrlNormalizer.IsDocumentUrl(norm))
             {
-                // PDFs/Office files: not crawled here (Upload Document handles them) — but tell staff they exist.
+                // PDFs/Office files: not crawled here (Upload Document handles them) — but tell the user they exist.
                 if (documentLinks < 20 && seen.Add(norm))
                 {
                     documentLinks++;
@@ -833,7 +833,7 @@ public sealed class WebsiteScrapeProcessor : IWebsiteScrapeProcessor
             counters.Indexed++;
             if (changed) counters.Changed++; else counters.New++;
 
-            // A document deactivated because the page vanished comes back with the page — but a document staff
+            // A document deactivated because the page vanished comes back with the page — but a document members
             // deactivated by hand stays as they left it.
             if (wasRemoved && source.IsActive && !doc.IsActive) await _knowledge.SetActiveAsync(source.ClientId, doc.Id, true, ct);
         }

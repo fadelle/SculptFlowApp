@@ -63,7 +63,7 @@ else
     </div>
 
     <h2 class="section-title">Needs your attention</h2>
-    @if (attention.ConversationsNeedingStaff + attention.OverdueFollowups + attention.BookingsNeedingOutcome == 0)
+    @if (attention.ConversationsNeedingHuman + attention.OverdueFollowups + attention.BookingsNeedingOutcome == 0)
     {
         <div class="au-alert au-alert--success" role="status">
             <span class="au-icon au-alert__icon" aria-hidden="true">check_circle</span>
@@ -73,11 +73,11 @@ else
     else
     {
         <div class="au-grid au-grid--3">
-            @if (attention.ConversationsNeedingStaff > 0)
+            @if (attention.ConversationsNeedingHuman > 0)
             {
                 <a class="au-action-card" href="/inbox?filter=needs">
                     <span class="au-icon-tile" style="--tile: var(--au-warning)"><span class="au-icon" aria-hidden="true">forum</span></span>
-                    <span><span class="au-action-card__title">@attention.ConversationsNeedingStaff @(attention.ConversationsNeedingStaff == 1 ? "conversation is" : "conversations are") waiting for you</span>
+                    <span><span class="au-action-card__title">@attention.ConversationsNeedingHuman @(attention.ConversationsNeedingHuman == 1 ? "conversation is" : "conversations are") waiting for you</span>
                         <span class="au-action-card__text">Reply in the Inbox.</span></span>
                     <span class="au-icon au-action-card__arrow" aria-hidden="true">arrow_forward</span>
                 </a>

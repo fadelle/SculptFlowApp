@@ -30,7 +30,7 @@ public class Contact
     public string? DesiredTimeline { get; set; }
     public string? Notes { get; set; }
 
-    public Guid? AssignedStaffId { get; set; }
+    public string? AssignedUserId { get; set; }
 
     public bool MarketingOptIn { get; set; } = true;
     public DateTimeOffset? OptedOutAt { get; set; }

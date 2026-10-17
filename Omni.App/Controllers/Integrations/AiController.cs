@@ -25,7 +25,7 @@ using Omni.App.Entities.Responses.Catalog;
 namespace Omni.App.Controllers.Integrations;
 
 /// <summary>
-/// The AI agent's (n8n) tool surface — one trusted entry point per tool the AI can call, all
+/// The AI assistant's (n8n) tool surface — one trusted entry point per tool the AI can call, all
 /// delegating to the same services the dashboard/API already use (no duplicated business logic).
 /// Protected the same way as /api/messages/ingest (RequireIngestKey): this is server-to-server
 /// traffic from n8n, not something the browser should be able to call directly. Every action still
@@ -33,11 +33,11 @@ namespace Omni.App.Controllers.Integrations;
 ///
 /// Deliberately narrower than the dashboard's own endpoints where it matters: update_contact can't
 /// touch identity fields (name/phone/email), and reschedule/cancel/handoff each log a dedicated
-/// event with the AI as the source so staff can see what the AI did and why (see EventTypes).
+/// event with the AI as the source so members can see what the AI did and why (see EventTypes).
 ///
 /// Knowledge search (search_knowledge) is POST /api/ai/knowledge/search — see
 /// IKnowledgeSearchService. It returns relevant chunks of the client's approved Knowledge Base only;
-/// the AI agent composes the answer.
+/// the AI assistant composes the answer.
 ///
 /// WHICH TOOL FOR WHAT — rule of thumb: the Knowledge Base is for INFORMATION; the structured tools
 /// are for LIVE DATA and ACTIONS. The Knowledge Base is never the source of truth for contact data,
@@ -302,7 +302,7 @@ public class AiController : ControllerBase
             o.Code == "CANCELED", o.Operation, o.Code, o.Message, instruction, o.Booking, o.Existing));
     }
 
-    /// <summary>handoff_to_human — medical question, contact requests staff, AI uncertain, upset
+    /// <summary>handoff_to_human — medical question, contact requests members, AI uncertain, upset
     /// customer, etc. Flips the conversation to human mode, same as the dashboard's Take Over, but
     /// attributed to the AI with the reason recorded on the event.</summary>
     [HttpPost("conversations/{id:guid}/handoff")]

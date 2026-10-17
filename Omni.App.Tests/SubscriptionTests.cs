@@ -18,8 +18,8 @@ public class SubscriptionTests
     private static readonly Dictionary<string, string> GrowthEntitlements = new()
     {
         [EntitlementKeys.Campaigns] = "true",
-        [EntitlementKeys.AiAgent] = "true",
-        [EntitlementKeys.MaxAgents] = "5",
+        [EntitlementKeys.AiAssistant] = "true",
+        [EntitlementKeys.MaxUsers] = "5",
         [EntitlementKeys.MaxWhatsAppNumbers] = "1",
         [EntitlementKeys.MaxChannelConnections] = "2",
     };
@@ -147,7 +147,7 @@ public class SubscriptionTests
         Assert.Equal(SubscriptionStatus.Expired, expired.SubscriptionStatus);
         Assert.False(expired.CanSendMessages);
         Assert.False(expired.CanUseCampaigns);
-        Assert.False(expired.CanUseAiAgent);
+        Assert.False(expired.CanUseAiAssistant);
         await Assert.ThrowsAsync<EntitlementDeniedException>(() => h.Entitlements().EnsureCanSendMessagesAsync(client));
         // History stays readable.
         Assert.NotEmpty((await h.Queries.GetSummaryAsync(client)).RecentTransactions);
@@ -220,7 +220,7 @@ public class SubscriptionTests
         await h.Subscriptions.StartAsync(Start(client, growth));
         var e = await h.Entitlements().GetAsync(client);
         Assert.True(e.CanUseCampaigns);
-        Assert.Equal(5, e.MaximumAgents);
+        Assert.Equal(5, e.MaximumUsers);
         Assert.Equal(25m, (await h.AccountAsync(client)).IncludedCreditBalance);
         await using (var db = h.Db())
         {
@@ -244,8 +244,8 @@ public class SubscriptionTests
         var plan = await h.CreatePlanAsync(price: 0m, credit: 0m, GrowthEntitlements);
         await h.Subscriptions.StartAsync(Start(client, plan));
         var entitlements = h.Entitlements();
-        await entitlements.EnsureWithinLimitAsync(client, EntitlementKeys.MaxAgents, 5);
-        await Assert.ThrowsAsync<EntitlementDeniedException>(() => entitlements.EnsureWithinLimitAsync(client, EntitlementKeys.MaxAgents, 6));
+        await entitlements.EnsureWithinLimitAsync(client, EntitlementKeys.MaxUsers, 5);
+        await Assert.ThrowsAsync<EntitlementDeniedException>(() => entitlements.EnsureWithinLimitAsync(client, EntitlementKeys.MaxUsers, 6));
 
         // max_channel_connections = 2: WhatsApp + Telegram fit, a third (Facebook) doesn't; reconnecting doesn't double count.
         await using (var db = h.Db())

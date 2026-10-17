@@ -7,7 +7,7 @@ namespace Omni.App.Business.Contracts.Services.WhatsApp;
 /// Owns a client's WhatsApp account/phone-number health — the current state (on ChannelIntegration,
 /// which doubles as "the client's WhatsApp connection") plus the append-only history behind it
 /// (WhatsAppHealthEvent). Simplifies Meta's raw status vocabulary into a small HealthLevel the
-/// dashboard can show without exposing webhook internals to client staff.
+/// dashboard can show without exposing webhook internals to client members.
 /// </summary>
 public interface IWhatsAppHealthService
 {

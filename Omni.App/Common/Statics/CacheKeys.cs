@@ -42,9 +42,9 @@ public static class CacheKeys
     public const string ServicesPrefix = "core:services:";
     public static string Services(Guid clientId) => ServicesPrefix + clientId.ToString("N");
 
-    // ---- Identity: which client a signed-in user is an active member of (read on every signed-in request). Short
-    // lifetime (Cache:StaffLookupMinutes) because a removed staff member must lose access quickly even if a removal were
-    // ever missed.
+    // ---- Identity: what a signed-in main-app user may use (client, role, language, security stamp; UserAccess), read on
+    // every signed-in request. Saving the user or one of their memberships clears it; the lifetime
+    // (Cache:MembershipsMinutes) is short anyway, so a deactivated user loses access quickly even if a clear were missed.
     public const string MembershipPrefix = "identity:membership:";
     public static string Membership(string userId) => MembershipPrefix + userId;
 
@@ -101,6 +101,9 @@ public static class CacheKeys
                 break;
             case ClientUser m:
                 yield return CacheEviction.Key(Membership(m.UserId));
+                break;
+            case AppUser u:
+                yield return CacheEviction.Key(Membership(u.Id));
                 break;
             case Service p:
                 yield return CacheEviction.Key(Services(p.ClientId));

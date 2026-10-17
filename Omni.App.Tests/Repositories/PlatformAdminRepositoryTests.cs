@@ -97,34 +97,55 @@ public class PlatformAdminRepositoryTests(PostgresFixture fixture) : RepoTestBas
         Assert.NotNull(await repo.GetTikTokAsync(tiktok.Id));
     }
 
-    // ---- staff ------------------------------------------------------------------------------------------------
+    // ---- members-----------------------------------------------------------------------------------------------
 
     [PostgresFact]
-    public async Task Staff_are_listed_with_membership_and_name()
+    public async Task Members_are_listed_with_membership_and_name_and_admins_are_not()
     {
         var w = await SeedWorldAsync();
-        var email = $"staff-{Guid.NewGuid():N}@x.com";
-        var user = new IdentityUser { Id = Guid.NewGuid().ToString(), UserName = email, NormalizedUserName = email.ToUpperInvariant(), Email = email, NormalizedEmail = email.ToUpperInvariant() };
-        var noMembership = new IdentityUser { Id = Guid.NewGuid().ToString(), UserName = "lonely-" + email, NormalizedUserName = ("LONELY-" + email).ToUpperInvariant(), Email = "lonely-" + email, NormalizedEmail = ("LONELY-" + email).ToUpperInvariant() };
+        var email = $"member-{Guid.NewGuid():N}@x.com";
+        var user = MakeUser(email, UserRole.Member, "Sam Member");
+        var noMembership = MakeUser("lonely-" + email);
+        var admin = MakeUser("admin-" + email, UserRole.Admin, "Ada Admin");
         var membership = new ClientUser { Id = Guid.NewGuid(), ClientId = w.Client.Id, UserId = user.Id, IsActive = true, CreatedAt = Now, UpdatedAt = Now };
-        await SeedAsync(user, noMembership, membership);
-        await SeedAsync(new IdentityUserClaim<string> { UserId = user.Id, ClaimType = "full_name", ClaimValue = "Sam Staff" });
+        await SeedAsync(user, noMembership, admin, membership);
 
         await using var db = NewContext();
-        var repo = new StaffAdminRepository(db);
+        var repo = new MemberAdminRepository(db);
         var byClient = await repo.ListAsync(w.Client.Id, null, 1);
         var row = Assert.Single(byClient.Items);
-        Assert.Equal((user.Id, "Sam Staff", true), (row.UserId, row.FullName, row.MembershipActive));
+        Assert.Equal((user.Id, "Sam Member", true, UserRole.Member, true), (row.UserId, row.FullName, row.MembershipActive, row.Role, row.UserActive));
         Assert.Contains(await repo.ListAsync(null, email, 1) is { } found ? found.Items : [], r => r.UserId == user.Id);
+        Assert.Contains((await repo.ListAsync(null, "Sam Mem", 1)).Items, r => r.UserId == user.Id);  // by name too
         Assert.Contains((await repo.ListAsync(null, "lonely-" + email, 1)).Items, r => r.UserId == noMembership.Id);
+        Assert.Empty((await repo.ListAsync(null, "admin-" + email, 1)).Items);                         // admins live under /admins
 
         Assert.Equal(w.Client.Id, (await repo.GetAsync(user.Id))!.ClientId);
         Assert.Null(await repo.GetAsync("nobody"));
+        Assert.Null(await repo.GetAsync(admin.Id));
         Assert.Equal(w.Client.Id, await repo.ClientOfAsync(user.Id));
         Assert.Null(await repo.ClientOfAsync(noMembership.Id));
         Assert.Equal(membership.Id, (await repo.GetLatestMembershipAsync(user.Id))!.Id);
-        Assert.False(await repo.HasOtherActiveMembershipAsync(user.Id, membership.Id));
-        Assert.True(await repo.HasOtherActiveMembershipAsync(user.Id, Guid.NewGuid()));
+    }
+
+    [PostgresFact]
+    public async Task Admins_are_listed_and_counted_apart_from_client_users()
+    {
+        var active = MakeUser($"a-{Guid.NewGuid():N}@x.com", UserRole.Admin, "Ada");
+        var off = MakeUser($"b-{Guid.NewGuid():N}@x.com", UserRole.Admin, "Bo", active: false);
+        var client = MakeUser();
+        await SeedAsync(active, off, client);
+
+        await using var db = NewContext();
+        var repo = new AdminUserRepository(db);
+        var before = await repo.CountActiveAsync();
+        var list = await repo.ListAsync();
+        Assert.Contains(list, a => a.Id == active.Id && a.IsActive && a.FullName == "Ada");
+        Assert.Contains(list, a => a.Id == off.Id && !a.IsActive);
+        Assert.DoesNotContain(list, a => a.Id == client.Id);
+        var ids = list.Select(a => a.Id).ToList();
+        Assert.True(ids.IndexOf(active.Id) < ids.IndexOf(off.Id)); // active first
+        Assert.Equal(list.Count(a => a.IsActive), before);
     }
 
     // ---- contacts, conversations, messages, bookings -----------------------------------------------------------

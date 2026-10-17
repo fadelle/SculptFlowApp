@@ -5,7 +5,7 @@ using Omni.App.Entities.Responses.WhatsApp;
 
 namespace Omni.App.Pages.WhatsApp.Health;
 
-/// <summary>WhatsApp account/phone-number health — a simplified, staff-facing view over
+/// <summary>WhatsApp account/phone-number health — a simplified, client-facing view over
 /// ChannelIntegration's health fields (populated by Meta webhooks via n8n). See WhatsAppHealthService.</summary>
 public class IndexModel : PageModel
 {

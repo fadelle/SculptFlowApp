@@ -9,11 +9,11 @@ namespace Omni.App.Common.Statics;
 public static class EntitlementKeys
 {
     public const string Campaigns = "campaigns";
-    /// <summary>Automation: the AI agent answers conversations (n8n trigger).</summary>
-    public const string AiAgent = "ai_agent";
+    /// <summary>Automation: the AI assistant answers conversations (n8n trigger).</summary>
+    public const string AiAssistant = "ai_assistant";
     public const string ApiAccess = "api_access";
     public const string AdvancedReporting = "advanced_reporting";
-    public const string MaxAgents = "max_agents";
+    public const string MaxUsers = "max_users";
     public const string MaxWhatsAppNumbers = "max_whatsapp_numbers";
     public const string MaxChannelConnections = "max_channel_connections";
 }

@@ -140,7 +140,7 @@ public class CampaignServiceTests
         _conversations.Setup(x => x.GetOrCreateForContactAsync(_clientId, It.IsAny<Guid>(), ConversationChannel.WhatsApp, It.IsAny<CancellationToken>())).ReturnsAsync(conv);
         var msgId = Guid.NewGuid();
         _messages.Setup(m => m.SendCampaignTemplateAsync(_clientId, conv.Id, _template.Id, It.IsAny<IReadOnlyList<string>>(), c.Id, It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((Guid _, Guid _, Guid _, IReadOnlyList<string> _, Guid _, Guid _, CancellationToken _) => new MessageResponse(msgId, conv.Id, conv.ContactId, "outbound", "staff", "campaign", "whatsapp", "template", "x", null, false, null, null, null, null, DateTimeOffset.UtcNow, null, null, null, null, null, null, null));
+            .ReturnsAsync((Guid _, Guid _, Guid _, IReadOnlyList<string> _, Guid _, Guid _, CancellationToken _) => new MessageResponse(msgId, conv.Id, conv.ContactId, "outbound", "member", "campaign", "whatsapp", "template", "x", null, false, null, null, null, null, DateTimeOffset.UtcNow, null, null, null, null, null, null, null));
         _messageRows.Setup(m => m.GetExternalIdAsync(msgId, It.IsAny<CancellationToken>())).ReturnsAsync("wamid.1");
         _campaigns.SetupSequence(x => x.CountRecipientsInStatusAsync(c.Id, CampaignRecipientStatus.Queued, It.IsAny<CancellationToken>())).ReturnsAsync(0);
 
@@ -356,7 +356,7 @@ public class CampaignServiceTests
         _campaigns.Setup(x => x.ListQueuedBatchAsync(c.Id, 20, It.IsAny<CancellationToken>())).ReturnsAsync(new List<CampaignRecipient> { first, second });
         _campaigns.Setup(x => x.CountRecipientsInStatusAsync(c.Id, CampaignRecipientStatus.Queued, It.IsAny<CancellationToken>())).ReturnsAsync(1);
         SendsSucceed();
-        // Staff press Stop while the first message is going out.
+        // A member press Stop while the first message is going out.
         _messages.Setup(m => m.SendCampaignTemplateAsync(_clientId, It.IsAny<Guid>(), _template.Id, It.IsAny<IReadOnlyList<string>>(), c.Id, first.Id, It.IsAny<CancellationToken>()))
             .Callback(() => c.Status = CampaignStatus.Paused)
             .ReturnsAsync((MessageResponse?)null);

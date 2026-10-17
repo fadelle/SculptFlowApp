@@ -17,7 +17,7 @@ public class Booking
     public string? LocationName { get; set; }
     public string? ExternalCalendarId { get; set; }
     public string? ExternalEventId { get; set; }
-    public Guid? AssignedStaffId { get; set; }
+    public string? AssignedUserId { get; set; }
     public string? Notes { get; set; }
 
     public DateTimeOffset CreatedAt { get; set; }

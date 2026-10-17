@@ -8,7 +8,7 @@ namespace Omni.App.Business.Contracts.Services.Notifications;
 ///   NEW_CONTACT               — MessageService.IngestAsync, a genuinely new contact's first inbound customer message
 ///                             (ContactService.GetOrCreateByPhoneAsync/GetOrCreateByExternalIdAsync's WasCreated).
 ///   HANDOFF                 — ConversationService.HandoffToHumanAsync, after the mode is actually saved as human
-///                             (not staff Take Over — that's the staff's own action, they already know).
+///                             (not member Take Over — that's the member's own action, they already know).
 ///   BOOKING_CREATED/RESCHEDULED/CANCELED
 ///                            — BookingService, after the booking row is actually committed.
 ///   CAMPAIGN_REPLY           — MessageService.IngestAsync, the first inbound customer message after a

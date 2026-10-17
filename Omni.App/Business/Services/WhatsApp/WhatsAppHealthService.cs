@@ -166,7 +166,7 @@ public class WhatsAppHealthService : IWhatsAppHealthService
         return ToHealthResponse(integration);
     }
 
-    /// <summary>Derives a simplified, staff-facing health state from the raw fields Meta's webhooks
+    /// <summary>Derives a simplified, client-facing health state from the raw fields Meta's webhooks
     /// populate. Tolerant by design: an unrecognized status value doesn't count as a problem, it
     /// just doesn't trip any of the known-bad checks below — matches "normalize carefully while
     /// keeping raw metadata" (the raw value is still stored, just not force-mapped to a severity).</summary>

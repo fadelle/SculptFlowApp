@@ -3,7 +3,7 @@ using Omni.App.Entities.Models;
 namespace Omni.App.Common.Exceptions;
 
 /// <summary>Thrown by SendAiReplyAsync when the conversation is no longer in AI mode at send time
-/// (staff took over after the webhook that triggered this reply, but before the AI finished) —
+/// (members took over after the webhook that triggered this reply, but before the AI finished) —
 /// callers map this to HTTP 409 conversation_in_human_mode rather than sending anyway.</summary>
 public class ConversationNotInAiModeException : Exception
 {

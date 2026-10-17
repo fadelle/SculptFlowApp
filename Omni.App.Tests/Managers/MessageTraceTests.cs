@@ -264,7 +264,7 @@ public class BotTraceTests
         _entitlements.Setup(e => e.GetAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ClientEntitlements(true, true, "active", "basic", "Basic", null, new Dictionary<string, string>()));
         await Notifier().NotifyAsync(Payload());
-        Assert.Contains("plan_without_ai_agent", _steps[^1].Detail);
+        Assert.Contains("plan_without_ai_assistant", _steps[^1].Detail);
 
         _settings.Remove("N8n:AiWebhookUrl");
         await Notifier().NotifyAsync(Payload());
@@ -454,7 +454,7 @@ public class MessageTraceAdminTests
         var id = Guid.NewGuid();
         var entries = MessageTraceMapper.Timeline([],
             [new TraceMessageRow(id, _clientId, _conversationId, "inbound", "contact", "o", "telegram", "text", null, "read", T0, null, T0, T0, null, null, null, Trace),
-             new TraceMessageRow(Guid.NewGuid(), _clientId, _conversationId, "outbound", "staff", "o", "telegram", "text", null, "read", T0, T0, null, T0.AddSeconds(5), null, null, null, Trace)],
+             new TraceMessageRow(Guid.NewGuid(), _clientId, _conversationId, "outbound", "member", "o", "telegram", "text", null, "read", T0, T0, null, T0.AddSeconds(5), null, null, null, Trace)],
             [new TraceBillingRow(id, ChargeStatus.Settled, 0.1m, "USD", T0, T0, T0.AddSeconds(1), null, null, null),
              new TraceBillingRow(id, ChargeStatus.Failed, null, "USD", T0, null, null, null, null, "insufficient_funds"),
              new TraceBillingRow(id, ChargeStatus.NotCharged, null, "USD", T0, null, null, null, null, null)],

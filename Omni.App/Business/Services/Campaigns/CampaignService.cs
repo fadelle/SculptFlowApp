@@ -282,7 +282,7 @@ public class CampaignService : ICampaignService
 
         var remainingQueued = await _campaigns.CountRecipientsInStatusAsync(id, CampaignRecipientStatus.Queued, ct);
 
-        // Only a campaign that is still running completes: a stopped or cancelled one keeps the status staff gave it.
+        // Only a campaign that is still running completes: a stopped or cancelled one keeps the status members gave it.
         var completed = remainingQueued == 0 && stillRunning
                         && await _campaigns.GetStatusReadOnlyAsync(id, ct) == CampaignStatus.Running;
         if (completed)
@@ -306,7 +306,7 @@ public class CampaignService : ICampaignService
 
         if (campaign.Status == CampaignStatus.Scheduled)
         {
-            // Re-checked here (the list can be a minute old): never start one before its time, or one staff stopped.
+            // Re-checked here (the list can be a minute old): never start one before its time, or one members stopped.
             if (campaign.ScheduledAt is null || campaign.ScheduledAt > DateTimeOffset.UtcNow) return null;
             await _entitlements.EnsureFeatureAsync(clientId, EntitlementKeys.Campaigns, ct);
             await StartAsync(campaign, ct);

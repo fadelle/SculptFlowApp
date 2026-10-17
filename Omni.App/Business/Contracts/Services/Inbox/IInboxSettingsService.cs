@@ -4,7 +4,7 @@ using Omni.App.Entities.Requests.Inbox;
 namespace Omni.App.Business.Contracts.Services.Inbox;
 
 /// <summary>A client's Inbox settings (crm.inbox_settings, client-wide row) together with what its plan allows. Today: whether
-/// the AI bot or staff answers new and reopened conversations. When the bot doesn't answer, the conversation is in human
+/// the AI bot or members answers new and reopened conversations. When the bot doesn't answer, the conversation is in human
 /// mode (same state as a handoff), so n8n is never called and nothing AI is charged.</summary>
 public interface IInboxSettingsService
 {

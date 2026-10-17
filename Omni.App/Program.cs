@@ -44,7 +44,7 @@ using Omni.App.Business.Contracts.Services.Contacts;
 using Omni.App.Business.Contracts.Services.Notifications;
 using Omni.App.Business.Contracts.Services.Catalog;
 using Omni.App.Business.Contracts.Services.Orders;
-using Omni.App.Business.Contracts.Services.Staff;
+using Omni.App.Business.Contracts.Services.Members;
 using Omni.App.Business.Contracts.Services.TikTok;
 using Omni.App.Business.Contracts.Services.WhatsApp;
 using Omni.App.Business.Engines.Knowledge;
@@ -78,9 +78,10 @@ using Omni.App.Business.Services.Contacts;
 using Omni.App.Business.Services.Notifications;
 using Omni.App.Business.Services.Catalog;
 using Omni.App.Business.Services.Orders;
-using Omni.App.Business.Services.Staff;
+using Omni.App.Business.Services.Members;
 using Omni.App.Business.Services.TikTok;
 using Omni.App.Business.Services.WhatsApp;
+using Omni.App.Business.Engines.Admins;
 using Omni.App.Common.Configs;
 using Omni.App.Common.Extensions;
 using Omni.App.Hubs;
@@ -111,23 +112,17 @@ builder.Services.AddDbContext<ApplicationDbContext>((services, options) => optio
 builder.Services.AddPersistence();
 
 // ---------------------------------------------------------------------
-// Authentication — ASP.NET Core Identity, authentication only. No roles, no permissions matrix:
-// this MVP deliberately ignores owner/manager/receptionist/specialist distinctions (see ClientUser's
-// doc comment) — every logged-in user linked to a client has full access to that client's data.
-// AddIdentityCore (not the full AddIdentity<TUser,TRole>) keeps roles out entirely; cookie auth is
-// wired up explicitly below rather than via AddIdentity's built-in scheme registration, for the
-// same reason. See Business/Contracts/Managers/ICurrentClientContext.cs for how a logged-in user resolves to a client.
+// Authentication — ASP.NET Core Identity over identity.users (AppUser). One users table for everyone; users.role
+// (UserRole) decides the app: client and member users use this dashboard, admin users only the admin portal (which
+// signs them in through POST /api/platform-admin/auth/login). AppSignInManager refuses anyone else at sign-in and
+// CurrentClientContext.ValidatePrincipalAsync re-checks role, active user and active membership on every request.
+// AddIdentityCore (not AddIdentity<TUser,TRole>) keeps Identity's role tables out: the role is a column. Cookie auth is
+// wired up explicitly below. See Business/Contracts/Managers/ICurrentClientContext.cs for how a user resolves to a client.
 // ---------------------------------------------------------------------
 builder.Services.AddHttpContextAccessor();
 
-builder.Services.AddIdentityCore<IdentityUser>(options =>
-{
-    options.SignIn.RequireConfirmedAccount = false;
-    options.Password.RequireNonAlphanumeric = false;
-})
-    .AddEntityFrameworkStores<ApplicationDbContext>()
-    .AddSignInManager()
-    .AddDefaultTokenProviders();
+// Password rules, lockout (5 failed sign-ins lock for 15 minutes, the admin portal's old rule), AppSignInManager.
+builder.Services.AddOmniIdentity();
 
 var authentication = builder.Services.AddAuthentication(IdentityConstants.ApplicationScheme)
     .AddCookie(IdentityConstants.ApplicationScheme, options =>
@@ -135,6 +130,8 @@ var authentication = builder.Services.AddAuthentication(IdentityConstants.Applic
         options.Cookie.Name = "omni.auth";
         options.LoginPath = "/Account/Login";
         options.AccessDeniedPath = "/Account/Login";
+        // Role, active user and active membership on every request (an admin or a removed member is signed out).
+        options.Events.OnValidatePrincipal = CurrentClientContext.ValidatePrincipalAsync;
     })
     // Holds the Google identity for the few minutes between "Google said who this is" and "we signed them in
     // (or collected their client name first)" — AddIdentityCore doesn't register this scheme itself.
@@ -200,7 +197,7 @@ builder.Services.AddScoped<IStringLocalizer, JsonStringLocalizer>();
 builder.Services.AddScoped(typeof(IStringLocalizer<>), typeof(JsonStringLocalizer<>));
 builder.Services.AddScoped<IClientProfileService, ClientProfileService>();
 builder.Services.AddScoped<IInboxSettingsService, InboxSettingsService>();
-builder.Services.AddScoped<IStaffService, StaffService>();
+builder.Services.AddScoped<IMemberService, MemberService>();
 builder.Services.AddScoped<IAutomationCleanupService, AutomationCleanupService>();
 builder.Services.AddScoped<ISettingsService, SettingsService>();
 // Settings by section + key: config.settings, else the constant default in Common/Statics/ConfigDefaults.
@@ -211,10 +208,11 @@ builder.Services.AddHostedService<ConfigRefreshJob>();
 builder.Services.AddSingleton<ICacheAdapter, MemoryCacheAdapter>();
 builder.Services.AddSingleton<ICacheManager, CacheManager>();
 builder.Services.AddScoped<ICacheAdminService, CacheAdminService>();
-// Platform admin: the cross-client APIs the admin portal calls (/api/platform-admin/{clients,channels,staff,contacts,content,overview}).
+// Platform admin: the cross-client APIs the admin portal calls (/api/platform-admin/{auth,admins,clients,channels,members,contacts,content,overview}).
 builder.Services.AddScoped<IClientAdminService, ClientAdminService>();
 builder.Services.AddScoped<IChannelAdminService, ChannelAdminService>();
-builder.Services.AddScoped<IStaffAdminService, StaffAdminService>();
+builder.Services.AddScoped<IMemberAdminService, MemberAdminService>();
+builder.Services.AddScoped<IAdminAccountService, AdminAccountService>();
 builder.Services.AddScoped<IContactAdminService, ContactAdminService>();
 builder.Services.AddScoped<IContentAdminService, ContentAdminService>();
 builder.Services.AddScoped<IKnowledgeBenchmarkAdminService, KnowledgeBenchmarkAdminService>();
@@ -402,6 +400,14 @@ builder.Services.AddSwaggerGen(options =>
 });
 
 var app = builder.Build();
+
+// `dotnet run -- create-admin <email> "<full name>"` creates an admin user (role admin; password from ADMIN_PASSWORD or
+// typed in) and exits. The only way to make the first admin for the admin portal; later ones come from its Admins page.
+if (args.Length > 0 && args[0] == AdminCli.CreateAdminCommand)
+{
+    await AdminCli.CreateAdminAsync(app.Services, args);
+    return;
+}
 
 app.UseForwardedHeaders();
 

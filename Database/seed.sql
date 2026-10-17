@@ -73,8 +73,8 @@ begin
   insert into activity.events (client_id, contact_id, event_type, source, metadata)
   values
     (v_client_id, v_contact_sarah, 'contact_created', 'instagram', '{}'::jsonb),
-    (v_client_id, v_contact_sarah, 'booking_attended', 'staff', '{}'::jsonb),
-    (v_client_id, v_contact_sarah, 'order_confirmed', 'staff', '{"amount": 5000}'::jsonb);
+    (v_client_id, v_contact_sarah, 'booking_attended', 'member',     '{}'::jsonb),
+    (v_client_id, v_contact_sarah, 'order_confirmed', 'member',     '{"amount": 5000}'::jsonb);
 
   -- Contact 2: Omar — booked, upcoming booking
   insert into crm.contacts (client_id, service_id, full_name, first_name, last_name, phone, source,

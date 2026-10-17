@@ -13,7 +13,7 @@ using Omni.App.Entities.Responses.Contacts;
 namespace Omni.App.Pages.Dashboard;
 
 /// <summary>
-/// Staff-facing edit page for the three contact classification fields (stage, qualification, source) — the
+/// client-facing edit page for the three contact classification fields (stage, qualification, source) — the
 /// ones Campaign audiences (ICampaignAudienceService) filter on. Posts through the same
 /// IContactService.UpdateStageAsync the existing POST /api/contacts/{id}/stage endpoint
 /// already uses (UpdateContactStageRequest just gained an optional Source field for this — see its
@@ -59,7 +59,7 @@ public class ContactDetailModel : PageModel
     [BindProperty]
     public string SourceChoice { get; set; } = string.Empty;
 
-    /// <summary>Used only when SourceChoice == "other" — lets staff enter a source not already in
+    /// <summary>Used only when SourceChoice == "other" — lets members enter a source not already in
     /// SourceOptions instead of being blocked by a fixed list.</summary>
     [BindProperty]
     public string? CustomSource { get; set; }

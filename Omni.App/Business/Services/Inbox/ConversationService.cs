@@ -44,7 +44,7 @@ public class ConversationService : IConversationService
         _notifications = notifications;
     }
 
-    /// <summary>Staff opening a conversation: the contact must be one of this client's (404 otherwise, never a foreign-key 500
+    /// <summary>A member opening a conversation: the contact must be one of this client's (404 otherwise, never a foreign-key 500
     /// or a conversation tied to another client's contact).</summary>
     public async Task<ConversationResponse> CreateAsync(CreateConversationRequest request, CancellationToken ct = default)
     {
@@ -153,7 +153,7 @@ public class ConversationService : IConversationService
         {
             throw new ArgumentException($"Invalid message direction '{request.Direction}'.", nameof(request));
         }
-        if (request.SenderType is not (MessageSenderType.Contact or MessageSenderType.Ai or MessageSenderType.Staff or MessageSenderType.System))
+        if (request.SenderType is not (MessageSenderType.Contact or MessageSenderType.Ai or MessageSenderType.Member or MessageSenderType.System))
         {
             throw new ArgumentException($"Invalid sender type '{request.SenderType}'.", nameof(request));
         }
@@ -197,10 +197,10 @@ public class ConversationService : IConversationService
             _events.Log(clientId, EventTypes.ConversationReopened, conversationId: conversationId, source: message.Origin);
         }
 
-        // Same reopen routing as MessageService.IngestAsync: the client (or its plan) may send reopened conversations to staff.
-        var handedToStaff = reopened && conversation.Mode == ConversationMode.Ai
+        // Same reopen routing as MessageService.IngestAsync: the client (or its plan) may send reopened conversations to members.
+        var handedToHuman = reopened && conversation.Mode == ConversationMode.Ai
             && !(await _inboxSettings.GetAsync(clientId, ct)).AiBotAnswersReopened;
-        if (handedToStaff)
+        if (handedToHuman)
         {
             ConversationModeSync.Apply(conversation, ConversationMode.Human, now);
         }
@@ -221,7 +221,7 @@ public class ConversationService : IConversationService
 
         await _unitOfWork.SaveChangesAsync(ct);
         if (reopened) await _notifier.ConversationUpdatedAsync(clientId, conversationId, ct);
-        if (handedToStaff) await _notifier.ConversationModeChangedAsync(clientId, conversationId, ConversationMode.Human, ct);
+        if (handedToHuman) await _notifier.ConversationModeChangedAsync(clientId, conversationId, ConversationMode.Human, ct);
         return InboxMapper.ToResponse(message);
     }
 
@@ -248,7 +248,7 @@ public class ConversationService : IConversationService
         var rows = await _conversations.MarkReadAsync(clientId, conversationId, now, ct);
         if (rows == 0) return false;
 
-        // Other staff with the Inbox open should drop the unread marker too.
+        // Other members with the Inbox open should drop the unread marker too.
         await _notifier.ConversationUpdatedAsync(clientId, conversationId, ct);
         return true;
     }
@@ -258,10 +258,10 @@ public class ConversationService : IConversationService
 
     public async Task<ConversationResponse?> ReturnToAiAsync(Guid clientId, Guid conversationId, CancellationToken ct = default)
     {
-        // Without the AI agent in the plan nothing would answer, so the conversation must stay with staff.
+        // Without the AI assistant in the plan nothing would answer, so the conversation must stay with members.
         if (!(await _inboxSettings.GetAsync(clientId, ct)).PlanIncludesAiBot)
         {
-            throw new EntitlementDeniedException(EntitlementKeys.AiAgent, "Your plan doesn't include the AI agent.");
+            throw new EntitlementDeniedException(EntitlementKeys.AiAssistant, "Your plan doesn't include the AI assistant.");
         }
         return await SetModeAsync(clientId, conversationId, ConversationMode.Ai, EventTypes.ReturnedToAi, "dashboard", "{}", ct);
     }
@@ -290,9 +290,9 @@ public class ConversationService : IConversationService
         {
             var contactName = await _contacts.GetFullNameAsync(result.ContactId, ct);
             await _notifications.CreateAsync(clientId, NotificationType.Handoff,
-                "AI handed off to staff",
+                "AI handed off to your team",
                 (string.IsNullOrWhiteSpace(contactName) ? "A conversation" : contactName) +
-                (string.IsNullOrWhiteSpace(reason) ? " needs staff attention." : $" needs staff attention: {reason}"),
+                (string.IsNullOrWhiteSpace(reason) ? " needs your team's attention." : $" needs your team's attention: {reason}"),
                 contactId: result.ContactId, conversationId: conversationId,
                 link: $"/inbox?conversationId={conversationId}", ct: ct);
         }
@@ -355,7 +355,7 @@ public class ConversationService : IConversationService
     private static string InferOrigin(string direction, string senderType, string channel)
     {
         if (senderType == MessageSenderType.Ai) return MessageOrigin.Ai;
-        if (senderType == MessageSenderType.Staff) return MessageOrigin.Dashboard;
+        if (senderType == MessageSenderType.Member) return MessageOrigin.Dashboard;
         if (senderType == MessageSenderType.Contact && channel == ConversationChannel.WhatsApp) return MessageOrigin.WhatsAppCustomer;
         if (senderType == MessageSenderType.Contact && channel == ConversationChannel.Telegram) return MessageOrigin.TelegramCustomer;
         return MessageOrigin.System;

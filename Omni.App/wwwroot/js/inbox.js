@@ -98,7 +98,7 @@
     whatsapp_customer: 'Customer',
     telegram_customer: 'Customer',
     whatsapp_business_app: 'WhatsApp Business App',
-    dashboard: 'Staff',
+    dashboard: 'Team',
     ai: 'AI',
     system: 'System'
   };
@@ -110,8 +110,8 @@
   function originBubbleClass(origin, direction) {
     if (origin === 'whatsapp_customer' || origin === 'telegram_customer') return 'inbox-msg-customer';
     if (origin === 'ai') return 'inbox-msg-ai';
-    if (origin === 'dashboard') return 'inbox-msg-staff';
-    if (origin === 'whatsapp_business_app') return 'inbox-msg-staff-app';
+    if (origin === 'dashboard') return 'inbox-msg-member';
+    if (origin === 'whatsapp_business_app') return 'inbox-msg-member-app';
     return 'inbox-msg-system';
   }
 
@@ -158,7 +158,7 @@
   }
 
   function modeLabel(mode) {
-    return { ai: 'AI', human: 'Staff', approval: 'Approval' }[mode] || mode;
+    return { ai: 'AI', human: 'Team', approval: 'Approval' }[mode] || mode;
   }
 
   // ---------------------------------------------------------------------
@@ -211,7 +211,7 @@
   });
 
   // Browser-tab title shows how many customer messages are waiting, e.g. "(3) Inbox - Omni",
-  // so staff working in another tab notice new messages too.
+  // so members working in another tab notice new messages too.
   var baseTitle = document.title;
   function updateTabTitle(totalUnread) {
     document.title = totalUnread > 0 ? '(' + totalUnread + ') ' + baseTitle : baseTitle;
@@ -231,7 +231,7 @@
     }
     items.forEach(function (c) {
       var div = document.createElement('div');
-      // Unread = customer messages staff haven't opened yet. The conversation being viewed right now
+      // Unread = customer messages members haven't opened yet. The conversation being viewed right now
       // counts as read (it is marked read on the server as soon as it's opened / a message arrives in it).
       var unreadCount = c.id === currentConversationId ? 0 : (c.unreadCount || 0);
       totalUnread += unreadCount;
@@ -245,11 +245,11 @@
       div.setAttribute('data-closed', closed ? 'true' : 'false');
       div.setAttribute('data-search', ((c.contactFullName || '') + ' ' + (c.contactPhone || '') + ' ' + (c.serviceName || '')).toLowerCase());
 
-      // "Needs Human" means AI is paused, the customer spoke last, AND staff haven't opened it yet
-      // — not just "mode is human". Staff sending from the dashboard also sets mode to human, but
-      // that's a conversation actively being handled, and once staff open a conversation they're on it.
+      // "Needs Human" means AI is paused, the customer spoke last, AND members haven't opened it yet
+      // — not just "mode is human". Members sending from the dashboard also sets mode to human, but
+      // that's a conversation actively being handled, and once members open a conversation they're on it.
       var needsHuman = c.mode === 'human' && c.lastMessageDirection === 'inbound' && unreadCount > 0;
-      // The "Needs you" tab is broader: anything AI isn't handling on its own (staff mode or awaiting approval).
+      // The "Needs you" tab is broader: anything AI isn't handling on its own (human mode or awaiting approval).
       div.setAttribute('data-needs', (c.mode === 'human' || c.mode === 'approval') ? 'true' : 'false');
 
       var modePill = closed
@@ -283,7 +283,7 @@
     updateTabTitle(totalUnread);
   }
 
-  // Tells the server staff have seen this conversation (clears its unread count). The server then
+  // Tells the server members have seen this conversation (clears its unread count). The server then
   // notifies every open Inbox, which re-fetches the list — so this can't loop back into itself.
   function markRead(id) {
     return apiPost(withClient('/api/conversations/' + id + '/read')).catch(function () { /* non-critical */ });
@@ -359,7 +359,7 @@
   }
 
   // Only senders that aren't obvious from the bubble's side and colour get a label: the customer
-  // (left) and staff replies from the dashboard (right, accent) go unlabelled.
+  // (left) and member replies from the dashboard (right, accent) go unlabelled.
   function bubbleLabel(origin) {
     if (origin === 'whatsapp_customer' || origin === 'telegram_customer' || origin === 'dashboard') return '';
     return '<div class="inbox-msg-source">' + escapeHtml(originLabel(origin)) + '</div>';
@@ -414,19 +414,19 @@
     threadAvatarEl.textContent = initials(contactName);
     var service = (listItem && listItem.getAttribute('data-service-name')) || '';
     serviceEl.textContent = [service, channelLabel(conversation.channel)].filter(Boolean).join(' · ');
-    modeEl.textContent = conversation.mode === 'ai' ? 'AI is replying' : (conversation.mode === 'human' ? 'Staff is replying' : 'Awaiting approval');
+    modeEl.textContent = conversation.mode === 'ai' ? 'AI is replying' : (conversation.mode === 'human' ? 'Team is replying' : 'Awaiting approval');
     modeEl.className = 'inbox-mode inbox-mode-' + conversation.mode;
     // Only offer the switch that makes sense for the current mode.
     btnTakeover.hidden = conversation.mode === 'human';
-    // Without the AI agent in the plan nothing would answer, so the conversation stays with staff.
-    btnReturnAi.hidden = conversation.mode === 'ai' || cfg.aiAgentAvailable === false;
+    // Without the AI assistant in the plan nothing would answer, so the conversation stays with members.
+    btnReturnAi.hidden = conversation.mode === 'ai' || cfg.aiAssistantAvailable === false;
     var closed = conversation.status === 'closed' || conversation.status === 'archived';
     btnMore.hidden = closed; // "⋯" only holds Close conversation for now
     btnReopen.hidden = !closed; // a closed conversation offers Reopen instead
     setMoreMenu(false);
 
     // Backend is authoritative for this (see MessageService.SendAsync's ServiceWindowClosedException)
-    // — this just mirrors it in the UI so staff aren't surprised by a rejected send.
+    // — this just mirrors it in the UI so members aren't surprised by a rejected send.
     // The 24h customer-service window (and message templates) are WhatsApp-only — a Telegram
     // conversation can always be replied to, so its composer is never disabled and has no template button.
     var isWhatsApp = conversation.channel === 'whatsapp';
@@ -563,7 +563,7 @@
     row.className = 'inbox-msg-row outbound';
     row.setAttribute('data-optimistic', 'true');
     var bubble = document.createElement('div');
-    bubble.className = 'inbox-msg-bubble inbox-msg-staff';
+    bubble.className = 'inbox-msg-bubble inbox-msg-member';
     bubble.innerHTML =
       '<div class="inbox-msg-content">' + escapeHtml(content) + '</div>' +
       '<div class="inbox-msg-time">Sending…</div>';
@@ -787,7 +787,7 @@
       var inOpenConversation = payload && payload.conversationId === currentConversationId;
       if (inOpenConversation) {
         refreshCurrentConversation();
-        // A customer message arriving in the conversation staff are looking at is seen immediately.
+        // A customer message arriving in the conversation members are looking at is seen immediately.
         if (payload.direction === 'inbound') markRead(currentConversationId);
       }
       // Any other conversation: the refreshed list shows it as unread (badge + bold + tab title).

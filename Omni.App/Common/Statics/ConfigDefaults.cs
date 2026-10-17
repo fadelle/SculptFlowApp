@@ -134,8 +134,8 @@ public static class ConfigDefaults
         "Contacts per page on the dashboard.", 5, 200);
     public static readonly ConfigDefinition CacheClientsMinutes = new("Cache", "ClientsMinutes", "60", ConfigValueType.Int,
         "Minutes a cached copy is kept: Client rows (signed-in client, the bot's client info). Changes clear it at once; this is only how long an untouched copy lives.", 1, 1440);
-    public static readonly ConfigDefinition CacheStaffLookupMinutes = new("Cache", "StaffLookupMinutes", "10", ConfigValueType.Int,
-        "Minutes a cached copy is kept: Which client a signed-in user belongs to. Keep it short: it is how long a removed staff member could keep access if a removal were ever missed. Changes clear it at once; this is only how long an untouched copy lives.", 1, 1440);
+    public static readonly ConfigDefinition CacheMembershipsMinutes = new("Cache", "MembershipsMinutes", "10", ConfigValueType.Int,
+        "Minutes a cached copy is kept: Which client a signed-in user belongs to. Keep it short: it is how long a removed member could keep access if a removal were ever missed. Changes clear it at once; this is only how long an untouched copy lives.", 1, 1440);
     public static readonly ConfigDefinition CacheServicesMinutes = new("Cache", "ServicesMinutes", "60", ConfigValueType.Int,
         "Minutes a cached copy is kept: A client's services. Changes clear it at once; this is only how long an untouched copy lives.", 1, 1440);
     public static readonly ConfigDefinition CacheSchedulingMinutes = new("Cache", "SchedulingMinutes", "60", ConfigValueType.Int,
@@ -249,7 +249,7 @@ public static class ConfigDefaults
         DashboardContactsPageSize,
 
         CacheClientsMinutes,
-        CacheStaffLookupMinutes,
+        CacheMembershipsMinutes,
         CacheServicesMinutes,
         CacheSchedulingMinutes,
         CacheChannelsMinutes,

@@ -114,7 +114,7 @@ public class ConversationModeSyncTests
         Assert.True(c.HumanTakeover);
         Assert.False(c.AiEnabled);
         var note = Assert.Single(c.Messages);
-        Assert.Equal("Handed from AI to staff", note.Content);
+        Assert.Equal("Handed from AI to your team", note.Content);
         Assert.Equal(at.AddMilliseconds(-1), note.CreatedAt);
         Assert.Equal(c.Id, note.ConversationId);
     }

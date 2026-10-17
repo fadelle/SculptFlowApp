@@ -12,7 +12,7 @@ namespace Omni.App.Pages
 
         public bool ShowRequestId => !string.IsNullOrEmpty(RequestId);
 
-        /// <summary>The short code staff quote to support ("8F2C-1A90").</summary>
+        /// <summary>The short code members quote to support ("8F2C-1A90").</summary>
         public string Reference => Omni.App.Common.Helpers.UiTextHelper.ShortReference(RequestId);
 
         public void OnGet()

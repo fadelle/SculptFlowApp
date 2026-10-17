@@ -292,12 +292,47 @@ public class IngestAndAdminControllerTests
         Assert.IsType<NoContentResult>(await ac.DeleteClient(id, default));
         await ac.ListClients(default);
 
-        var staff = new Mock<IStaffAdminService>();
-        var st = new StaffAdminController(staff.Object).With();
+        var members = new Mock<IMemberAdminService>();
+        var st = new MembersAdminController(members.Object).With();
         Assert.IsType<NotFoundResult>(await st.Get("u1", default));
         await st.List(null, null, 1, default); await st.SetMembershipActive("u1", new ActiveBody(true), default); await st.SetLocked("u1", new FlagBody(true), default);
         await st.SetPassword("u1", new PasswordBody("pw"), default); await st.SetEmailConfirmed("u1", new FlagBody(true), default);
-        staff.Verify(s => s.SetPasswordAsync("u1", "pw", It.IsAny<CancellationToken>()), Times.Once);
+        members.Verify(s => s.SetPasswordAsync("u1", "pw", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Admin_sign_in_answers_one_generic_401_and_the_per_request_check_404s_a_lost_admin()
+    {
+        var admins = new Mock<IAdminAccountService>();
+        var me = new AdminIdentity("a1", "Ada", "ada@x.com");
+        admins.Setup(a => a.SignInAsync("ada@x.com", "right", It.IsAny<CancellationToken>())).ReturnsAsync(me);
+        admins.Setup(a => a.GetActiveAsync("a1", It.IsAny<CancellationToken>())).ReturnsAsync(me);
+        var auth = new AuthAdminController(admins.Object).With();
+
+        Assert.Same(me, Assert.IsType<OkObjectResult>(await auth.Login(new AdminLoginRequest("ada@x.com", "right"), default)).Value);
+        var refused = Assert.IsType<UnauthorizedObjectResult>(await auth.Login(new AdminLoginRequest("ada@x.com", "wrong"), default));
+        Assert.Contains(AuthAdminController.SignInFailed, System.Text.Json.JsonSerializer.Serialize(refused.Value));
+        Assert.IsType<UnauthorizedObjectResult>(await auth.Login(new AdminLoginRequest("nobody@x.com", "right"), default));
+        Assert.Same(me, Assert.IsType<OkObjectResult>(await auth.GetActiveAdmin("a1", default)).Value);
+        Assert.IsType<NotFoundResult>(await auth.GetActiveAdmin("gone", default));
+    }
+
+    [Fact]
+    public async Task Admins_controller_delegates_every_change()
+    {
+        var admins = new Mock<IAdminAccountService>();
+        var row = new AdminRow("a2", "bo@x.com", "Bo", true, false, null, DateTimeOffset.UtcNow);
+        admins.Setup(a => a.CreateAsync("bo@x.com", "Bo", "Long-enough-1", It.IsAny<CancellationToken>())).ReturnsAsync(row);
+        var sut = new AdminsAdminController(admins.Object).With();
+
+        await sut.List(default);
+        var created = Assert.IsType<ObjectResult>(await sut.Create(new CreateAdminRequest("bo@x.com", "Bo", "Long-enough-1"), default));
+        Assert.Equal((StatusCodes.Status201Created, (object?)row), (created.StatusCode, created.Value));
+        await sut.SetActive("a2", new AdminActiveBody(false, "a1"), default);
+        await sut.SetPassword("a2", new PasswordBody("Another-long-1"), default);
+        admins.Verify(a => a.ListAsync(It.IsAny<CancellationToken>()), Times.Once);
+        admins.Verify(a => a.SetActiveAsync("a2", false, "a1", It.IsAny<CancellationToken>()), Times.Once);
+        admins.Verify(a => a.SetPasswordAsync("a2", "Another-long-1", It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

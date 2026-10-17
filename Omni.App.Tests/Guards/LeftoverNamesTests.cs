@@ -11,9 +11,7 @@ public class LeftoverNamesTests
     /// <summary>Word × path glob still waiting for its rename session (see milestone-a-plan.md, section 5).</summary>
     public static readonly (string Word, string Glob, string ClosedBy)[] PendingScopes =
     [
-        ("staff", "**", "S7"),
-        ("ai_agent", "**", "S7"),
-        ("max_agents", "**", "S7"),
+        // Empty since S7: every old word is strict everywhere (allowlist and line markers aside).
     ];
 
     private static readonly Lazy<(List<LeftoverNameScanner.Hit> Hits, LeftoverNameScanner.Allowlist Allowlist)> Scan = new(() =>

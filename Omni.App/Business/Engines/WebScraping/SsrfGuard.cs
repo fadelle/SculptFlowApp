@@ -6,7 +6,7 @@ using Omni.App.Common.Exceptions;
 namespace Omni.App.Business.Engines.WebScraping;
 
 /// <summary>
-/// SSRF protection for the crawler — staff supply a URL and the SERVER fetches it, so this is what stops
+/// SSRF protection for the crawler — members supply a URL and the SERVER fetches it, so this is what stops
 /// someone pointing Omni at its own internal network or a cloud metadata endpoint.
 ///
 /// Two layers, both always on:

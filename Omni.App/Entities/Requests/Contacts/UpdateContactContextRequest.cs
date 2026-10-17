@@ -1,6 +1,6 @@
 namespace Omni.App.Entities.Requests.Contacts;
 
-/// <summary>Body for the AI agent's update_contact tool (POST /api/ai/contacts/{id}) — deliberately
+/// <summary>Body for the AI assistant's update_contact tool (POST /api/ai/contacts/{id}) — deliberately
 /// narrower than UpdateContactRequest: it excludes identity fields (FullName/Phone/Email), which come
 /// from the contact's actual source (webhook/intake), not the AI's judgment. Only null fields are left
 /// unchanged — same partial-update semantics as UpdateContactRequest. Stage is a stage key of the client's business type

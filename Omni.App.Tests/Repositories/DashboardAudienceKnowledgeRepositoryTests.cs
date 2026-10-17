@@ -121,7 +121,7 @@ public class DashboardRepositoryTests(PostgresFixture fixture) : RepoTestBase(fi
 
         await using var db = NewContext();
         var counts = await new DashboardRepository(db).GetAttentionCountsAsync(c.Id, Now);
-        Assert.Equal((2, 1, 1), (counts.ConversationsNeedingStaff, counts.OverdueFollowups, counts.BookingsNeedingOutcome));
+        Assert.Equal((2, 1, 1), (counts.ConversationsNeedingHuman, counts.OverdueFollowups, counts.BookingsNeedingOutcome));
     }
 }
 

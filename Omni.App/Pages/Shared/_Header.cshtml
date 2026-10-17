@@ -5,7 +5,7 @@
 @{
     var signedIn = User.Identity?.IsAuthenticated == true;
     var email = User.Identity?.Name ?? "";
-    var fullName = User.FindFirst(StaffClaims.FullName)?.Value;
+    var fullName = User.FindFirst(MemberClaims.FullName)?.Value;
     var displayName = string.IsNullOrWhiteSpace(fullName) ? email : fullName;
 }
 <div class="au-header__bar header-bar">

@@ -42,7 +42,7 @@ public class CachingRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixt
 
         Assert.Equal(TimeSpan.FromHours(4), configured.LifetimeOf(CacheArea.Channels));
         Assert.Equal(TimeSpan.FromMinutes(60), _cache.LifetimeOf(CacheArea.Clients));
-        Assert.Equal(TimeSpan.FromMinutes(10), _cache.LifetimeOf(CacheArea.StaffLookup));
+        Assert.Equal(TimeSpan.FromMinutes(10), _cache.LifetimeOf(CacheArea.Memberships));
     }
 
     [PostgresFact]
@@ -159,14 +159,14 @@ public class CachingRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixt
         var c = MakeClient();
         await SeedAsync(c);
         var email = $"m-{Guid.NewGuid():N}@x.com";
-        var user = new IdentityUser { Id = Guid.NewGuid().ToString(), UserName = email, NormalizedUserName = email.ToUpperInvariant(), Email = email, NormalizedEmail = email.ToUpperInvariant() };
+        var user = new AppUser { Role = UserRole.Client, Id = Guid.NewGuid().ToString(), UserName = email, NormalizedUserName = email.ToUpperInvariant(), Email = email, NormalizedEmail = email.ToUpperInvariant() };
         await SeedAsync(user);
         var membership = new ClientUser { Id = Guid.NewGuid(), ClientId = c.Id, UserId = user.Id, IsActive = true, CreatedAt = Now, UpdatedAt = Now };
         await SeedAsync(membership);
 
         await using (var db = CachedContext())
         {
-            Assert.Equal(c.Id, (await new ClientRepository(db, _cache).GetClientOfActiveMemberAsync(user.Id))!.Id);
+            Assert.Equal(c.Id, (await new ClientRepository(db, _cache).GetUserAccessAsync(user.Id))!.ClientId);
         }
         Assert.NotNull(await _cache.GetRawAsync(CacheKeys.Membership(user.Id)));
 
@@ -177,7 +177,35 @@ public class CachingRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixt
         }
 
         await using var read = CachedContext();
-        Assert.Null(await new ClientRepository(read, _cache).GetClientIdOfActiveMemberAsync(user.Id));
+        Assert.Null(await new ClientRepository(read, _cache).GetUserAccessAsync(user.Id));
+    }
+
+    [PostgresFact]
+    public async Task Deactivating_a_user_or_changing_their_stamp_clears_the_signed_in_access()
+    {
+        var c = MakeClient();
+        var user = MakeUser(role: UserRole.Member);
+        await SeedAsync(c, user);
+        await SeedAsync(new ClientUser { Id = Guid.NewGuid(), ClientId = c.Id, UserId = user.Id, IsActive = true, CreatedAt = Now, UpdatedAt = Now });
+
+        await using (var db = CachedContext())
+            Assert.Equal(user.SecurityStamp, (await new ClientRepository(db, _cache).GetUserAccessAsync(user.Id))!.SecurityStamp);
+
+        await using (var db = CachedContext())
+        {
+            (await db.Users.SingleAsync(u => u.Id == user.Id)).SecurityStamp = "renewed";
+            await db.SaveChangesAsync();
+        }
+        await using (var db = CachedContext())
+            Assert.Equal("renewed", (await new ClientRepository(db, _cache).GetUserAccessAsync(user.Id))!.SecurityStamp);
+
+        await using (var db = CachedContext())
+        {
+            (await db.Users.SingleAsync(u => u.Id == user.Id)).IsActive = false;
+            await db.SaveChangesAsync();
+        }
+        await using var read = CachedContext();
+        Assert.Null(await new ClientRepository(read, _cache).GetUserAccessAsync(user.Id));
     }
 
     [PostgresFact]

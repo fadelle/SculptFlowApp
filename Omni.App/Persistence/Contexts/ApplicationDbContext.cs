@@ -12,13 +12,12 @@ namespace Omni.App.Persistence.Contexts;
 /// the plan's "use SQL migrations" principle. Every mapping below must
 /// stay in sync with schema.sql by hand.
 ///
-/// Inherits IdentityUserContext&lt;IdentityUser&gt; (not the full IdentityDbContext, which also adds
-/// AspNetRoles/AspNetUserRoles/AspNetRoleClaims) — this MVP ignores roles completely (see
-/// ClientUser's doc comment), so there's no reason to carry role tables that will never be used.
-/// Identity's own tables are remapped to snake_case below to match this schema's convention rather
-/// than keeping EF's default PascalCase "AspNetUsers" etc.
+/// Inherits IdentityUserContext&lt;AppUser&gt; (not the full IdentityDbContext, which also adds
+/// AspNetRoles/AspNetUserRoles/AspNetRoleClaims): a user's role is the users.role column (UserRole), so there
+/// are no role tables. Identity's own tables are remapped to identity.users / user_claims / user_logins /
+/// user_tokens in snake_case below rather than EF's default PascalCase "AspNetUsers" etc.
 /// </summary>
-public class ApplicationDbContext : IdentityUserContext<IdentityUser>
+public class ApplicationDbContext : IdentityUserContext<AppUser>
 {
     public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options) : base(options)
     {
@@ -75,7 +74,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        // Lets IdentityUserContext configure its own entities first (IdentityUser, IdentityUserClaim,
+        // Lets IdentityUserContext configure its own entities first (AppUser, IdentityUserClaim,
         // IdentityUserLogin, IdentityUserToken) before we remap their table/column names below.
         base.OnModelCreating(modelBuilder);
 
@@ -83,10 +82,17 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
         // Identity tables — remapped from EF's default PascalCase ("AspNetUsers" etc.) to this
         // schema's snake_case convention. See Database/schema.sql for the matching DDL.
         // ---------------------------------------------------------------
-        modelBuilder.Entity<IdentityUser>(e =>
+        modelBuilder.Entity<AppUser>(e =>
         {
-            e.ToTable("identity_users", "identity");
+            e.ToTable("users", "identity");
             e.Property(u => u.Id).HasColumnName("id");
+            e.Property(u => u.Role).HasColumnName("role").HasMaxLength(20).IsRequired();
+            e.Property(u => u.FullName).HasColumnName("full_name");
+            e.Property(u => u.Language).HasColumnName("language").HasMaxLength(5);
+            e.Property(u => u.IsActive).HasColumnName("is_active");
+            e.Property(u => u.LastLoginAt).HasColumnName("last_login_at");
+            e.Property(u => u.CreatedAt).HasColumnName("created_at");
+            e.Property(u => u.UpdatedAt).HasColumnName("updated_at");
             e.Property(u => u.UserName).HasColumnName("user_name").HasMaxLength(256);
             e.Property(u => u.NormalizedUserName).HasColumnName("normalized_user_name").HasMaxLength(256);
             e.Property(u => u.Email).HasColumnName("email").HasMaxLength(256);
@@ -105,7 +111,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
 
         modelBuilder.Entity<IdentityUserClaim<string>>(e =>
         {
-            e.ToTable("identity_user_claims", "identity");
+            e.ToTable("user_claims", "identity");
             e.Property(c => c.Id).HasColumnName("id");
             e.Property(c => c.UserId).HasColumnName("user_id");
             e.Property(c => c.ClaimType).HasColumnName("claim_type");
@@ -114,7 +120,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
 
         modelBuilder.Entity<IdentityUserLogin<string>>(e =>
         {
-            e.ToTable("identity_user_logins", "identity");
+            e.ToTable("user_logins", "identity");
             e.Property(l => l.LoginProvider).HasColumnName("login_provider");
             e.Property(l => l.ProviderKey).HasColumnName("provider_key");
             e.Property(l => l.ProviderDisplayName).HasColumnName("provider_display_name");
@@ -123,7 +129,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
 
         modelBuilder.Entity<IdentityUserToken<string>>(e =>
         {
-            e.ToTable("identity_user_tokens", "identity");
+            e.ToTable("user_tokens", "identity");
             e.Property(t => t.UserId).HasColumnName("user_id");
             e.Property(t => t.LoginProvider).HasColumnName("login_provider");
             e.Property(t => t.Name).HasColumnName("name");
@@ -237,7 +243,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.Property(x => x.City).HasColumnName("city").HasMaxLength(100);
             e.Property(x => x.DesiredTimeline).HasColumnName("desired_timeline").HasMaxLength(100);
             e.Property(x => x.Notes).HasColumnName("notes");
-            e.Property(x => x.AssignedStaffId).HasColumnName("assigned_staff_id");
+            e.Property(x => x.AssignedUserId).HasColumnName("assigned_user_id");
             e.Property(x => x.MarketingOptIn).HasColumnName("marketing_opt_in");
             e.Property(x => x.OptedOutAt).HasColumnName("opted_out_at");
             e.Property(x => x.LastContactAt).HasColumnName("last_contact_at");
@@ -366,7 +372,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
             e.Property(x => x.LocationName).HasColumnName("location_name").HasMaxLength(200);
             e.Property(x => x.ExternalCalendarId).HasColumnName("external_calendar_id").HasMaxLength(200);
             e.Property(x => x.ExternalEventId).HasColumnName("external_event_id").HasMaxLength(200);
-            e.Property(x => x.AssignedStaffId).HasColumnName("assigned_staff_id");
+            e.Property(x => x.AssignedUserId).HasColumnName("assigned_user_id");
             e.Property(x => x.Notes).HasColumnName("notes");
             e.Property(x => x.CreatedAt).HasColumnName("created_at");
             e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
@@ -741,8 +747,9 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
         });
 
         // ---------------------------------------------------------------
-        // client_users — links a logged-in Identity user to their client. See ClientUser's doc
-        // comment and Business/Contracts/Managers/ICurrentClientContext.cs, the one place that reads this table.
+        // client_users — links a client or member user to their client. One ACTIVE row per user is a rule in
+        // code (MemberService / MemberAdminService), not an index. CurrentClientContext resolves the current client
+        // from it on every request.
         // ---------------------------------------------------------------
         modelBuilder.Entity<ClientUser>(e =>
         {
@@ -757,22 +764,14 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
 
             e.HasOne(x => x.Client).WithMany()
                 .HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Cascade);
-            // No CLR nav property to IdentityUser (matches this schema's minimalist pattern for
-            // scalar FK columns elsewhere, e.g. Contact.AssignedStaffId) — still a real FK constraint.
-            e.HasOne<IdentityUser>().WithMany()
+            // No CLR nav property to AppUser (scalar FK, like the rest of this schema) — still a real FK constraint.
+            e.HasOne<AppUser>().WithMany()
                 .HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
 
             e.HasIndex(x => new { x.ClientId, x.UserId })
                 .IsUnique()
                 .HasDatabaseName("ux_client_users_client_user");
-            // Enforces the MVP assumption CurrentClientContext relies on (first active row wins) —
-            // a user can have historical/inactive membership rows, but only one active one at a
-            // time, so that lookup can never actually be ambiguous. Filtered so multiple inactive
-            // rows for the same user don't collide.
-            e.HasIndex(x => x.UserId)
-                .IsUnique()
-                .HasFilter("is_active = true")
-                .HasDatabaseName("ux_client_users_user_active");
+            e.HasIndex(x => x.UserId).HasDatabaseName("ix_client_users_user_id");
         });
 
         // ---------------------------------------------------------------
@@ -798,7 +797,7 @@ public class ApplicationDbContext : IdentityUserContext<IdentityUser>
 
             e.HasOne<Client>().WithMany().HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Cascade);
             // Contact/Conversation/Booking/ChannelIntegration are all "set null" on delete in the DB — no CLR
-            // navigation to any of them (matches Contact.AssignedStaffId's scalar-FK-only pattern); a notification
+            // navigation to any of them (matches Contact.AssignedUserId's scalar-FK-only pattern); a notification
             // outliving the row it points at just shows a dead link, never blocks the delete.
 
             e.HasIndex(x => new { x.ClientId, x.CreatedAt }).HasDatabaseName("ix_notifications_client_created");

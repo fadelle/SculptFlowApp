@@ -23,7 +23,7 @@ public interface IClientAdminService
 
     Task<PlatformAdminChange> SetActiveAsync(Guid id, bool active, CancellationToken ct);
 
-    /// <summary>The client's AI bot switches and whether its plan includes the AI agent. Throws KeyNotFoundException.</summary>
+    /// <summary>The client's AI bot switches and whether its plan includes the AI assistant. Throws KeyNotFoundException.</summary>
     Task<InboxSettingsDto> GetInboxSettingsAsync(Guid id, CancellationToken ct);
 
     /// <summary>Saves the client's AI bot switches through IInboxSettingsService. Throws KeyNotFoundException.</summary>

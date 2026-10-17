@@ -87,15 +87,15 @@ public static class MessageTraceMapper
             TraceSteps.MessageSaved => $"Saved to the inbox: {D("sender")} {D("type")} ({D("direction")})",
             TraceSteps.MessageDeduplicated => "Duplicate delivery; the message was already saved",
             TraceSteps.ConversationReopened => "Closed conversation reopened by the contact",
-            TraceSteps.ConversationModeChanged => $"Conversation moved to staff: {D("reason")}",
-            TraceSteps.InboxNotified => "Inbox updated for staff (live)",
+            TraceSteps.ConversationModeChanged => $"Conversation moved to the team: {D("reason")}",
+            TraceSteps.InboxNotified => "Inbox updated for members (live)",
             TraceSteps.BotSkipped => $"Bot not asked: {D("reason")}",
             TraceSteps.BotTriggered => $"Bot (n8n) asked to reply (answered {D("status")})",
             TraceSteps.BotTriggerFailed => "Bot (n8n) call failed: " + (D("error") ?? $"answered {D("status")}"),
             TraceSteps.BotToolCalled => $"Bot used tool {D("tool")} (answered {D("status")})",
             TraceSteps.SendRequested => $"Send requested: {D("kind")}" + (D("template") is { } template ? $" template {template}" : ""),
             TraceSteps.SendBlocked => $"Send blocked before it went out: {D("error")}",
-            TraceSteps.SendRejectedMode => $"AI reply not sent: conversation is with staff ({D("mode")})",
+            TraceSteps.SendRejectedMode => $"AI reply not sent: conversation is with the team ({D("mode")})",
             TraceSteps.SendProviderAccepted => $"Accepted by {channel ?? "the provider"}",
             TraceSteps.SendProviderFailed => $"{channel ?? "Provider"} refused the send: {D("error")}",
             _ => step
@@ -110,7 +110,7 @@ public static class MessageTraceMapper
     {
         MessageSenderType.Contact => "Contact",
         MessageSenderType.Ai => "AI",
-        MessageSenderType.Staff => "Staff",
+        MessageSenderType.Member => "Member",
         _ => "System"
     };
 

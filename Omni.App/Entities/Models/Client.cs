@@ -11,7 +11,7 @@ public class Client
     public string? CountryCode { get; set; }
     public string Timezone { get; set; } = "UTC";
 
-    /// <summary>Free-text fields the AI agent's get_client_info tool reads to answer general
+    /// <summary>Free-text fields the AI assistant's get_client_info tool reads to answer general
     /// questions (location, hours, booking policy) — plain text, not a structured schedule,
     /// matching this MVP's level of the rest of Client. Edited under Settings → Business Info.</summary>
     public string? Address { get; set; }

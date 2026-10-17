@@ -4,9 +4,9 @@ using Omni.App.Entities.Models;
 namespace Omni.App.Common.Helpers;
 
 /// <summary>Single place that brings a closed conversation back to active. A conversation is one per contact per
-/// channel and is never recreated, so without this a contact writing again into a conversation staff had closed
+/// channel and is never recreated, so without this a contact writing again into a conversation members had closed
 /// would stay filed under "Closed" (and drop out of the dashboard's needs-attention count). Used by
-/// ConversationService (staff Reopen, and the older generic add-message path) and MessageService (a contact
+/// ConversationService (member Reopen, and the older generic add-message path) and MessageService (a contact
 /// message arriving from any channel).</summary>
 public static class ConversationStatusSync
 {

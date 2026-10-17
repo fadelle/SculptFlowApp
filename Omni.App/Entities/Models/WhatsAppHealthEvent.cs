@@ -5,7 +5,7 @@ namespace Omni.App.Entities.Models;
 /// account_review_update, phone_number_quality_update, phone_number_name_update, etc.) — see
 /// WhatsAppHealthService.ApplyHealthEventAsync. ChannelIntegration holds only the *current* state;
 /// this table is the append-only trail behind it, kept even after ChannelIntegration moves on, so
-/// staff can see "what changed and when" on /WhatsApp/Health.
+/// members can see "what changed and when" on /WhatsApp/Health.
 /// </summary>
 public class WhatsAppHealthEvent
 {

@@ -1,6 +1,6 @@
 @model IReadOnlyList<Omni.App.Entities.Dtos.BusinessTypes.PipelineStageOption>
 @* Reusable "what do these mean?" reference — included on the Contact edit page and the Campaign creation page (the two
-   places staff pick stages, qualifications and sources). The stage list is the client's own pipeline (the model), each
+   places members pick stages, qualifications and sources). The stage list is the client's own pipeline (the model), each
    explained by its category; the other sections are static. *@
 @{
     var categoryHelp = new Dictionary<string, string>
@@ -34,13 +34,13 @@
 
         <section class="status-help-section">
             <h4>Qualification status</h4>
-            <p class="text-subtle">How promising this contact looks — set by the AI during conversation, or by staff directly.</p>
+            <p class="text-subtle">How promising this contact looks — set by the AI during conversation, or by members directly.</p>
             <dl>
                 <dt>Unknown</dt><dd>Not yet assessed.</dd>
                 <dt>Hot</dt><dd>High intent — likely to book soon.</dd>
                 <dt>Warm</dt><dd>Interested, but not urgent.</dd>
                 <dt>Cold</dt><dd>Low intent — unlikely to convert soon.</dd>
-                <dt>Needs human review</dt><dd>The AI couldn't confidently qualify this contact — flagged for staff.</dd>
+                <dt>Needs human review</dt><dd>The AI couldn't confidently qualify this contact — flagged for members.</dd>
                 <dt>Spam</dt><dd>Not a genuine contact.</dd>
             </dl>
         </section>

@@ -1,5 +1,5 @@
 /* Bookings — month calendar. Reads/writes the existing /api/bookings, /api/contacts and /api/services APIs
-   (the same bookings table used by AI bookings, staff edits and everything else — this page owns no data of
+   (the same bookings table used by AI bookings, member edits and everything else — this page owns no data of
    its own). Every value from the server is written with textContent (never innerHTML), so a contact/service name
    can't inject markup. */
 (function () {
@@ -64,7 +64,7 @@
         box.appendChild(el('div', { class: 'alert ' + (kind === 'error' ? 'alert-warning' : 'alert-info') + ' mb-3' }, [text]));
     }
 
-    /** Past bookings still booked/confirmed have no recorded outcome — staff open each one and set attended / no-show / canceled. */
+    /** Past bookings still booked/confirmed have no recorded outcome — members open each one and set attended / no-show / canceled. */
     function renderOutcomeNotice(count) {
         var box = $('cal-outcome');
         box.textContent = '';
@@ -402,7 +402,7 @@
                     ])
                 ]));
             });
-        }).catch(function () { /* transient — staff can retype */ });
+        }).catch(function () { /* transient — members can retype */ });
     }
 
     /** Picked contact shows as a chip (with × to change); their contact's service pre-fills the Service field. */
@@ -474,7 +474,7 @@
     // ---------------------------------------------------------------- wiring
 
     /** Live updates: the server sends "BookingChanged" (over the same client-scoped SignalR hub the Inbox uses) after a booking is
-        created, rescheduled, canceled or has its status changed — by staff, the AI, or another tab. We just re-fetch the visible month from the
+        created, rescheduled, canceled or has its status changed — by members, the AI, or another tab. We just re-fetch the visible month from the
         API (the database stays the source of truth); the open drawer and New Booking form are left alone. */
     function connectLive() {
         if (!window.signalR) return;

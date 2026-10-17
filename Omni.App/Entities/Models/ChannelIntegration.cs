@@ -39,7 +39,7 @@ public class ChannelIntegration
     /// phone number for Cloud API use (POST /{phone-number-id}/register). Auto-generated the first
     /// time a number is connected via Embedded Signup — see ChannelIntegrationService.ConnectWhatsAppAsync.
     /// Not a bearer credential (can't authenticate API calls on its own), so it's shown in the
-    /// dashboard rather than hidden like AccessToken — staff may need it for WhatsApp Business App
+    /// dashboard rather than hidden like AccessToken — members may need it for WhatsApp Business App
     /// coexistence login.</summary>
     public string? Pin { get; set; }
 
@@ -79,7 +79,7 @@ public class ChannelIntegration
 
     public bool IsHealthy { get; set; } = true;
     /// <summary>One of WhatsAppHealthLevel — the simplified state the dashboard actually shows;
-    /// derived from the raw fields above rather than shown directly to staff.</summary>
+    /// derived from the raw fields above rather than shown directly to members.</summary>
     public string? HealthLevel { get; set; }
 
     public string? LastProblemCode { get; set; }

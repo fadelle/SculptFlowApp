@@ -13,7 +13,7 @@ public class InboxSettingsServiceTests
     public InboxSettingsServiceTests()
     {
         _clients.Setup(r => r.GetReadOnlyAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(new Client { Id = _clientId, Name = "Glow" });
-        Plan(aiAgent: true);
+        Plan(aiAssistant: true);
     }
 
     private InboxSettingsService Sut() => new(_settings.Object, _clients.Object, _entitlements.Object, _uow.Object);
@@ -26,10 +26,10 @@ public class InboxSettingsServiceTests
         return row;
     }
 
-    private void Plan(bool aiAgent) =>
+    private void Plan(bool aiAssistant) =>
         _entitlements.Setup(e => e.GetAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(new ClientEntitlements(true, true,
             SubscriptionStatus.Active, "basic", "Basic", null,
-            new Dictionary<string, string> { [EntitlementKeys.AiAgent] = aiAgent ? "true" : "false" }));
+            new Dictionary<string, string> { [EntitlementKeys.AiAssistant] = aiAssistant ? "true" : "false" }));
 
     [Fact]
     public async Task A_client_without_a_row_gets_the_defaults_with_the_bot_on()
@@ -42,7 +42,7 @@ public class InboxSettingsServiceTests
     [InlineData(true, true, true, true, true)]
     [InlineData(true, false, true, false, true)]
     [InlineData(true, true, false, true, false)]
-    [InlineData(false, true, true, false, false)]   // a plan without the AI agent overrides the client's switches
+    [InlineData(false, true, true, false, false)]   // a plan without the AI assistant overrides the client's switches
     public async Task The_plan_and_the_client_switches_decide_who_answers(bool plan, bool newOn, bool reopenedOn, bool botNew, bool botReopened)
     {
         Row(newOn, reopenedOn);

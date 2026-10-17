@@ -19,6 +19,6 @@ namespace Omni.App.Business.Contracts.Engines.Knowledge;
 public interface IDocumentTextExtractor
 {
     /// <summary>Extracts and normalizes the text of a PDF/DOCX/TXT. Throws <see cref="InvalidDocumentException"/>
-    /// (an ArgumentException) with a message safe to show to staff for every user-fixable problem.</summary>
+    /// (an ArgumentException) with a message safe to show to members for every user-fixable problem.</summary>
     Task<string> ExtractAsync(Stream content, string fileName, CancellationToken ct = default);
 }

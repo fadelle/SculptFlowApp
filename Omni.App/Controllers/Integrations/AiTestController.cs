@@ -9,7 +9,7 @@ namespace Omni.App.Controllers.Integrations;
 
 /// <summary>
 /// TEST-ONLY: deterministic canned responses for every schedule_booking/cancel_booking outcome, so an n8n workflow can
-/// be pointed at these instead of the real tools and the AI agent's reaction to each code can be watched without having to set up
+/// be pointed at these instead of the real tools and the AI assistant's reaction to each code can be watched without having to set up
 /// the exact booking state (existing bookings, closed days, race conditions...) that would otherwise be needed to trigger it.
 ///
 /// NEVER touches the database and NEVER takes clientId/contactId — it can't, since nothing here is real. The response shapes and

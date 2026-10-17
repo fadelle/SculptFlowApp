@@ -4,7 +4,6 @@ using Omni.App.Business.Services.Caching;
 using Omni.App.Business.Services.Clients;
 using Omni.App.Business.Services.Configuration;
 using Omni.App.Business.Services.Dashboard;
-using Omni.App.Business.Services.Staff;
 
 namespace Omni.App.Tests.Services;
 
@@ -165,10 +164,10 @@ public class EntitlementServiceTests
     [Fact]
     public async Task Active_plan_grants_listed_features_only()
     {
-        Subscribe(SubscriptionStatus.Active, null, (EntitlementKeys.Campaigns, "true"), (EntitlementKeys.AiAgent, "false"));
+        Subscribe(SubscriptionStatus.Active, null, (EntitlementKeys.Campaigns, "true"), (EntitlementKeys.AiAssistant, "false"));
         var sut = Sut();
         await sut.EnsureFeatureAsync(_clientId, EntitlementKeys.Campaigns);
-        var ex = await Assert.ThrowsAsync<EntitlementDeniedException>(() => sut.EnsureFeatureAsync(_clientId, EntitlementKeys.AiAgent));
+        var ex = await Assert.ThrowsAsync<EntitlementDeniedException>(() => sut.EnsureFeatureAsync(_clientId, EntitlementKeys.AiAssistant));
         Assert.Contains("isn't included in your plan", ex.Message);
         var e = await sut.GetAsync(_clientId);
         Assert.Equal(("pro", "Pro"), (e.PlanCode, e.PlanName));
@@ -193,11 +192,11 @@ public class EntitlementServiceTests
     [Fact]
     public async Task Limits_allow_up_to_the_cap_and_unlimited_is_open()
     {
-        Subscribe(SubscriptionStatus.Active, null, (EntitlementKeys.MaxAgents, "3"), (EntitlementKeys.MaxChannelConnections, EntitlementCatalog.Unlimited));
+        Subscribe(SubscriptionStatus.Active, null, (EntitlementKeys.MaxUsers, "3"), (EntitlementKeys.MaxChannelConnections, EntitlementCatalog.Unlimited));
         var sut = Sut();
-        await sut.EnsureWithinLimitAsync(_clientId, EntitlementKeys.MaxAgents, 3);
-        var ex = await Assert.ThrowsAsync<EntitlementDeniedException>(() => sut.EnsureWithinLimitAsync(_clientId, EntitlementKeys.MaxAgents, 4));
-        Assert.Contains("allows 3 staff seats", ex.Message);
+        await sut.EnsureWithinLimitAsync(_clientId, EntitlementKeys.MaxUsers, 3);
+        var ex = await Assert.ThrowsAsync<EntitlementDeniedException>(() => sut.EnsureWithinLimitAsync(_clientId, EntitlementKeys.MaxUsers, 4));
+        Assert.Contains("allows 3 seats", ex.Message);
         await sut.EnsureWithinLimitAsync(_clientId, EntitlementKeys.MaxChannelConnections, 1000);
         await Assert.ThrowsAsync<EntitlementDeniedException>(() => sut.EnsureWithinLimitAsync(_clientId, EntitlementKeys.MaxWhatsAppNumbers, 1)); // missing key = 0
     }
@@ -239,23 +238,24 @@ public class EntitlementServiceTests
     }
 }
 
-public class StaffDashboardClientProfileTests
+public class MemberDashboardClientProfileTests
 {
     private readonly Guid _clientId = Guid.NewGuid();
 
     [Fact]
-    public async Task Staff_are_listed_active_first_then_by_name_or_email()
+    public async Task Members_are_listed_active_first_then_by_name_or_email()
     {
         var clients = new Mock<IClientRepository>();
-        clients.Setup(c => c.ListStaffAsync(_clientId, It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(new List<StaffMemberRow>
+        clients.Setup(c => c.ListMembersAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(new List<ClientMemberRow>
         {
-            new("1", "z@x.com", false, DateTimeOffset.UtcNow, "Alice"),
-            new("2", "b@x.com", true, DateTimeOffset.UtcNow, null),
-            new("3", "a@x.com", true, DateTimeOffset.UtcNow, "carol"),
-            new("4", "d@x.com", true, DateTimeOffset.UtcNow, "Bob")
+            new("1", "z@x.com", "Alice", UserRole.Member, false, DateTimeOffset.UtcNow, null),
+            new("2", "b@x.com", null, UserRole.Member, true, DateTimeOffset.UtcNow, null),
+            new("3", "a@x.com", "carol", UserRole.Member, true, DateTimeOffset.UtcNow, null),
+            new("4", "d@x.com", "Bob", UserRole.Client, true, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow)
         });
-        var list = await new StaffService(clients.Object).ListAsync(_clientId);
+        var list = await MemberServiceTests.Sut(clients.Object).ListAsync(_clientId);
         Assert.Equal(["2", "4", "3", "1"], list.Select(s => s.UserId));
+        Assert.Equal(UserRole.Client, list.Single(m => m.UserId == "4").Role);
     }
 
     [Fact]
@@ -270,7 +270,7 @@ public class StaffDashboardClientProfileTests
         var s = await sut.GetSummaryAsync(_clientId);
         Assert.Equal((10, 5, 4, 2, 1500m, 0), (s.NewInterestedPeople, s.BookingsMade, s.BookingsAttended, s.OrdersMade, s.Revenue, s.OldContactsRecovered));
         var a = await sut.GetAttentionAsync(_clientId);
-        Assert.Equal((3, 2, 1), (a.ConversationsNeedingStaff, a.OverdueFollowups, a.BookingsNeedingOutcome));
+        Assert.Equal((3, 2, 1), (a.ConversationsNeedingHuman, a.OverdueFollowups, a.BookingsNeedingOutcome));
         await sut.GetContactsAsync(_clientId, "new", "q", "src", 0, 10);
         await sut.GetBookingsAsync(_clientId, "booked", "q", 0, 10);
         await sut.GetServiceStatsAsync(_clientId);

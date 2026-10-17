@@ -185,7 +185,7 @@ public class ContactService : IContactService
     }
 
     /// <summary>Moves the contact to <paramref name="stageKey"/> (already checked against <paramref name="pipeline"/>). Only a
-    /// real stage change counts as "contact": a staff correction to qualification/source alone (stage resubmitted unchanged)
+    /// real stage change counts as "contact": a member correction to qualification/source alone (stage resubmitted unchanged)
     /// must not reset LastContactAt, since the reactivation audience (CampaignAudienceService) uses it as the inactivity
     /// clock. The event follows the new stage's category, so it reads the same for every business type.</summary>
     private void ChangeStage(Contact contact, ClientPipeline pipeline, string stageKey)

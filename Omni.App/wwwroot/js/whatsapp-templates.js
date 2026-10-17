@@ -75,7 +75,7 @@
         if (qualityEl) qualityEl.innerHTML = qualityHtml(t.qualityRating);
       });
 
-    // Flash the row so staff notice the change even without watching closely.
+    // Flash the row so members notice the change even without watching closely.
     row.style.transition = 'background-color 0.2s';
     row.style.backgroundColor = 'var(--surface-subtle)';
     setTimeout(function () { row.style.backgroundColor = ''; }, 1200);

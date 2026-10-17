@@ -12,10 +12,10 @@ public static class EntitlementCatalog
     public static readonly IReadOnlyList<EntitlementDefinition> All = new[]
     {
         new EntitlementDefinition(EntitlementKeys.Campaigns, EntitlementKind.Feature, "Campaigns"),
-        new EntitlementDefinition(EntitlementKeys.AiAgent, EntitlementKind.Feature, "AI agent"),
+        new EntitlementDefinition(EntitlementKeys.AiAssistant, EntitlementKind.Feature, "AI assistant"),
         new EntitlementDefinition(EntitlementKeys.ApiAccess, EntitlementKind.Feature, "API access"),
         new EntitlementDefinition(EntitlementKeys.AdvancedReporting, EntitlementKind.Feature, "Advanced reporting"),
-        new EntitlementDefinition(EntitlementKeys.MaxAgents, EntitlementKind.Limit, "Staff seats"),
+        new EntitlementDefinition(EntitlementKeys.MaxUsers, EntitlementKind.Limit, "Seats"),
         new EntitlementDefinition(EntitlementKeys.MaxWhatsAppNumbers, EntitlementKind.Limit, "WhatsApp numbers"),
         new EntitlementDefinition(EntitlementKeys.MaxChannelConnections, EntitlementKind.Limit, "Connected channels"),
     };

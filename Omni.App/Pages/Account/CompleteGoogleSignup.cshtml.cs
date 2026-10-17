@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Identity;
+using Omni.App.Entities.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.Extensions.Localization;
@@ -17,12 +18,12 @@ namespace Omni.App.Pages.Account;
 /// and defaults are created by the same transaction as a normal registration (IClientRegistrationService).</summary>
 public class CompleteGoogleSignupModel : PageModel
 {
-    private readonly SignInManager<IdentityUser> _signIn;
+    private readonly SignInManager<AppUser> _signIn;
     private readonly IClientRegistrationService _registration;
     private readonly IBusinessTypeService _businessTypes;
     private readonly IStringLocalizer _text;
 
-    public CompleteGoogleSignupModel(SignInManager<IdentityUser> signIn, IClientRegistrationService registration, IBusinessTypeService businessTypes,
+    public CompleteGoogleSignupModel(SignInManager<AppUser> signIn, IClientRegistrationService registration, IBusinessTypeService businessTypes,
         IStringLocalizer text)
     {
         _signIn = signIn;

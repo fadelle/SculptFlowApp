@@ -280,7 +280,7 @@ public class WhatsAppHealthServiceTests
     }
 
     [Fact]
-    public async Task Staff_are_notified_only_when_the_connection_turns_unhealthy()
+    public async Task Members_are_notified_only_when_the_connection_turns_unhealthy()
     {
         await Sut().ApplyHealthEventAsync(Req(WhatsAppHealthEventType.AccountUpdate, "DISABLED", message: "Account disabled by Meta"));
         _notifications.Verify(n => n.CreateAsync(_clientId, NotificationType.IntegrationUnhealthy, "WhatsApp connection needs attention", It.IsAny<string?>(), null, null, null, _integration.Id, "/WhatsApp/Health", It.IsAny<CancellationToken>()), Times.Once);

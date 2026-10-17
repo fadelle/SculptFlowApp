@@ -34,8 +34,8 @@ public class IndexModel : PageModel
     public Guid ClientId { get; private set; }
     public IReadOnlyList<ConversationListRow> Conversations { get; private set; } = Array.Empty<ConversationListRow>();
 
-    /// <summary>The plan includes the AI agent; without it inbox.js hides Return to AI (the API refuses it too).</summary>
-    public bool AiAgentAvailable { get; private set; }
+    /// <summary>The plan includes the AI assistant; without it inbox.js hides Return to AI (the API refuses it too).</summary>
+    public bool AiAssistantAvailable { get; private set; }
 
     /// <summary>The client's pipeline (contact panel: stage badge and journey).</summary>
     public ClientPipeline Pipeline { get; private set; } = ClientPipeline.Empty;
@@ -58,7 +58,7 @@ public class IndexModel : PageModel
 
         ClientConfigured = true;
         ClientId = client.Id;
-        AiAgentAvailable = (await _inboxSettings.GetAsync(client.Id, ct)).PlanIncludesAiBot;
+        AiAssistantAvailable = (await _inboxSettings.GetAsync(client.Id, ct)).PlanIncludesAiBot;
         Pipeline = await _businessTypes.GetPipelineAsync(client.Id, ct);
 
         var (items, _) = await _conversations.ListAsync(client.Id, skip: 0, take: 50, ct);

@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Identity;
+using Omni.App.Entities.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.Extensions.Localization;
@@ -12,17 +13,17 @@ namespace Omni.App.Pages.Account;
 /// <summary>
 /// Registration always creates a NEW client for the new user (see IClientRegistrationService) — it can
 /// never attach an account to an existing client. Joining an existing client will be a separate
-/// invitation/staff flow. The page only collects the form and signs the user in; the client, membership
+/// invitation/members flow. The page only collects the form and signs the user in; the client, membership
 /// and default settings are created atomically by the service.
 /// </summary>
 public class RegisterModel : PageModel
 {
     private readonly IClientRegistrationService _registration;
-    private readonly SignInManager<IdentityUser> _signInManager;
+    private readonly SignInManager<AppUser> _signInManager;
     private readonly IBusinessTypeService _businessTypes;
     private readonly IStringLocalizer _text;
 
-    public RegisterModel(IClientRegistrationService registration, SignInManager<IdentityUser> signInManager, IBusinessTypeService businessTypes,
+    public RegisterModel(IClientRegistrationService registration, SignInManager<AppUser> signInManager, IBusinessTypeService businessTypes,
         IStringLocalizer text)
     {
         _registration = registration;
