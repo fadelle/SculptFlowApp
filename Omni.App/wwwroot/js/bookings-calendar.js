@@ -13,9 +13,6 @@
         selectedContact: null           // { id, label } chosen in the New Booking form
     };
 
-    var WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    var MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-
     function $(id) { return document.getElementById(id); }
 
     function el(tag, attrs, kids) {
@@ -49,7 +46,7 @@
                 var data = null;
                 try { data = text ? JSON.parse(text) : null; } catch (e) { /* not JSON */ }
                 if (!res.ok) {
-                    var msg = (data && (data.error || data.title)) || ('Request failed (' + res.status + ').');
+                    var msg = (data && (data.error || data.title)) || omniText.t('common.errors.requestFailed', [res.status]);
                     throw new Error(msg);
                 }
                 return data;
@@ -70,8 +67,8 @@
         box.textContent = '';
         if (!count) return;
         box.appendChild(el('div', { class: 'alert alert-warning mb-3' }, [
-            count + (count === 1 ? ' past booking needs an outcome' : ' past bookings need an outcome') +
-            ' - open it and mark attended, no-show or canceled.'
+            (count === 1 ? omniText.t('dashboard.attention.outcomesOne') : omniText.t('dashboard.attention.outcomesOther', [count])) +
+            ' ' + omniText.t('bookings.outcome.text')
         ]));
     }
 
@@ -79,7 +76,7 @@
 
     function loadMonth(year, month) {
         state.year = year; state.month = month;
-        $('cal-title').textContent = MONTH_NAMES[month - 1] + ' ' + year;
+        $('cal-title').textContent = new Date(year, month - 1, 1).toLocaleDateString(window.omniText.lang, { month: 'long', year: 'numeric' });
         return api('GET', '/api/bookings/calendar?year=' + year + '&month=' + month + '&view=' + currentView()).then(function (data) {
             state.monthData = data;
             renderOutcomeNotice(data.needsOutcomeCount);
@@ -148,16 +145,16 @@
         var shown = items.slice(0, 3);
         shown.forEach(function (a) {
             // Chip shows just the time (bold) and a short name; the service is in the tooltip and the day drawer.
-            var title = a.localTime + ' ' + (a.contactFullName || 'Unknown') + (a.serviceName ? ' - ' + a.serviceName : '') + ' (' + statusLabel(a.status) + ')';
+            var title = a.localTime + ' ' + (a.contactFullName || omniText.t('bookings.unknownContact')) + (a.serviceName ? ' - ' + a.serviceName : '') + ' (' + statusLabel(a.status) + ')';
             kids.push(el('div', { class: 'cal-chip status-' + a.status, title: title, onclick: function (e) { e.stopPropagation(); openBooking(a); } }, [
                 el('b', { text: a.localTime }), ' ' + shortName(a.contactFullName)
             ]));
         });
         if (items.length > shown.length) {
-            kids.push(el('div', { class: 'cal-more', text: '+' + (items.length - shown.length) + ' more' }));
+            kids.push(el('div', { class: 'cal-more', text: omniText.t('bookings.calendar.more', [items.length - shown.length]) }));
         }
         kids.push(el('button', {
-            type: 'button', class: 'cal-day-add', title: 'New booking on ' + dateIso, 'aria-label': 'New booking',
+            type: 'button', class: 'cal-day-add', title: omniText.t('bookings.calendar.newOn', [dateIso]), 'aria-label': omniText.t('bookings.new.title'),
             onclick: function (e) { e.stopPropagation(); openNewBooking(dateIso); }
         }, ['+']));
 
@@ -165,7 +162,7 @@
     }
 
     function shortName(fullName) {
-        if (!fullName) return 'Unknown';
+        if (!fullName) return omniText.t('bookings.unknownContact');
         var parts = fullName.trim().split(/\s+/);
         return parts.length < 2 ? parts[0] : parts[0] + ' ' + parts[1][0] + '.';
     }
@@ -185,15 +182,13 @@
         var next = todays.filter(function (a) { return a.localTime >= nowTime; })[0];
 
         box.textContent = '';
-        box.appendChild(el('strong', { text: 'Today:' }));
-        box.appendChild(document.createTextNode(' ' + (todays.length === 0 ? 'no bookings'
-            : todays.length + (todays.length === 1 ? ' booking' : ' bookings'))));
+        box.appendChild(el('strong', { text: omniText.t('bookings.today.label') }));
+        box.appendChild(document.createTextNode(' ' + (todays.length === 0 ? omniText.t('bookings.today.none')
+            : todays.length === 1 ? omniText.t('bookings.today.one') : omniText.t('bookings.today.other', [todays.length]))));
         if (next) {
-            box.appendChild(document.createTextNode(' · next at '));
-            box.appendChild(el('strong', { text: next.localTime }));
-            box.appendChild(document.createTextNode(' with ' + shortName(next.contactFullName)));
+            box.appendChild(document.createTextNode(' · ' + omniText.t('bookings.today.next', [next.localTime, shortName(next.contactFullName)])));
         } else if (todays.length) {
-            box.appendChild(document.createTextNode(' · none left for today'));
+            box.appendChild(document.createTextNode(' · ' + omniText.t('bookings.today.noneLeft')));
         }
         box.hidden = false;
     }
@@ -212,21 +207,21 @@
             .forEach(function (a) { (byDate[a.localDate] = byDate[a.localDate] || []).push(a); });
         var dates = Object.keys(byDate).sort();
         if (!dates.length) {
-            box.appendChild(el('div', { class: 'agenda-empty', text: 'No bookings this month.' }));
+            box.appendChild(el('div', { class: 'agenda-empty', text: omniText.t('bookings.agenda.empty') }));
             return;
         }
         dates.forEach(function (dateIso) {
             var d = new Date(dateIso + 'T00:00:00');
-            var label = d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
-            box.appendChild(el('div', { class: 'agenda-day' + (dateIso < today ? ' past' : ''), text: (dateIso === today ? 'Today · ' : '') + label }));
+            var label = d.toLocaleDateString(window.omniText.lang, { weekday: 'short', month: 'short', day: 'numeric' });
+            box.appendChild(el('div', { class: 'agenda-day' + (dateIso < today ? ' past' : ''), text: dateIso === today ? omniText.t('bookings.agenda.today', [label]) : label }));
             byDate[dateIso]
                 .sort(function (a, b) { return a.localTime < b.localTime ? -1 : 1; })
                 .forEach(function (a) {
                     box.appendChild(el('a', { class: 'agenda-row' + (dateIso < today ? ' past' : ''), href: '/dashboard/bookings/' + a.id, onclick: function (e) { e.preventDefault(); openBooking(a); } }, [
                         el('span', { class: 'cal-appt-time', text: a.localTime }),
                         el('div', { class: 'agenda-row-main' }, [
-                            el('div', { class: 'cal-appt-name', text: a.contactFullName || 'Unknown contact' }),
-                            el('div', { class: 'cal-appt-service', text: a.serviceName || 'No service on file' })
+                            el('div', { class: 'cal-appt-name', text: a.contactFullName || omniText.t('bookings.unknownContact') }),
+                            el('div', { class: 'cal-appt-service', text: a.serviceName || omniText.t('contactDetail.noService') })
                         ]),
                         el('span', { class: 'badge ' + badgeClass(a.status), text: statusLabel(a.status) })
                     ]));
@@ -251,14 +246,14 @@
 
     function renderDrawer(dateIso) {
         var d = new Date(dateIso + 'T00:00:00');
-        $('cal-drawer-title').textContent = d.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+        $('cal-drawer-title').textContent = d.toLocaleDateString(window.omniText.lang, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
 
         var body = $('cal-drawer-body');
         body.textContent = '';
         var items = ((state.monthData && state.monthData.items) || []).filter(function (a) { return a.localDate === dateIso; });
 
         if (!items.length) {
-            body.appendChild(el('div', { class: 'text-subtle', style: 'padding:1rem 0.25rem', text: 'No bookings scheduled for this day.' }));
+            body.appendChild(el('div', { class: 'text-subtle', style: 'padding:1rem 0.25rem', text: omniText.t('bookings.drawer.empty') }));
             return;
         }
 
@@ -268,20 +263,23 @@
                     el('span', { class: 'cal-appt-time', text: a.localTime }),
                     el('span', { class: 'badge ' + badgeClass(a.status), text: statusLabel(a.status) })
                 ]),
-                el('div', { class: 'cal-appt-name', text: a.contactFullName || 'Unknown contact' }),
-                el('div', { class: 'cal-appt-service', text: a.serviceName || 'No service on file' })
+                el('div', { class: 'cal-appt-name', text: a.contactFullName || omniText.t('bookings.unknownContact') }),
+                el('div', { class: 'cal-appt-service', text: a.serviceName || omniText.t('contactDetail.noService') })
             ]));
         });
     }
 
     var BADGE_CLASS = { booked: 'badge-amber', confirmed: 'badge-blue', attended: 'badge-green', canceled: 'badge-gray', no_show: 'badge-red', rescheduled: 'badge-purple' };
-    var STATUS_LABEL = { booked: 'Booked', confirmed: 'Confirmed', attended: 'Attended', canceled: 'Canceled', no_show: 'No-show', rescheduled: 'Rescheduled' };
+    var STATUS_LABEL = {
+        booked: omniText.t('values.booked'), confirmed: omniText.t('values.confirmed'), attended: omniText.t('values.attended'),
+        canceled: omniText.t('values.canceled'), no_show: omniText.t('values.noShow'), rescheduled: omniText.t('values.rescheduled')
+    };
     function badgeClass(status) { return BADGE_CLASS[status] || 'badge-gray'; }
     function statusLabel(status) { return STATUS_LABEL[status] || status; }
 
     // ---------------------------------------------------------------- booking details popup
 
-    var LOCATION_LABEL = { in_person: 'In person', video: 'Video call', phone: 'Phone' };
+    var LOCATION_LABEL = { in_person: omniText.t('bookings.location.inPerson'), video: omniText.t('bookings.location.video'), phone: omniText.t('bookings.location.phone') };
     function locationLabel(value) { return value ? (LOCATION_LABEL[value] || value) : '—'; }
 
     function initialOf(name) { return (name || '?').trim().charAt(0).toUpperCase() || '?'; }
@@ -292,9 +290,9 @@
         state.openBooking = a;
         var d = new Date(a.localDate + 'T00:00:00');
         $('cal-appt-avatar').textContent = initialOf(a.contactFullName);
-        $('cal-appt-name').textContent = a.contactFullName || 'Unknown contact';
-        $('cal-appt-when').textContent = d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }) + ' · ' + a.localTime;
-        $('cal-appt-service').textContent = a.serviceName || 'No service on file';
+        $('cal-appt-name').textContent = a.contactFullName || omniText.t('bookings.unknownContact');
+        $('cal-appt-when').textContent = d.toLocaleDateString(window.omniText.lang, { weekday: 'short', month: 'short', day: 'numeric' }) + ' · ' + a.localTime;
+        $('cal-appt-service').textContent = a.serviceName || omniText.t('contactDetail.noService');
         $('cal-appt-location').textContent = '…';
         $('cal-appt-notes').textContent = '…';
         $('cal-appt-notes-row').hidden = false;
@@ -334,7 +332,7 @@
         api('PATCH', '/api/bookings/' + a.id + '/status', { status: status }).then(function () {
             btn.disabled = false;
             closeBooking();
-            showMessage('Saved.');
+            showMessage(omniText.t('bookingDetail.saved'));
             return loadMonth(state.year, state.month);
         }).catch(function (e) {
             btn.disabled = false;
@@ -357,7 +355,7 @@
         $('cal-new-date').value = prefillDateIso || state.drawerDate || todayIso();
         $('cal-new-time').value = '09:00';
         var tz = gridTimeZone();
-        $('cal-new-tz-hint').textContent = tz ? (currentView() === 'mine' ? 'your time' : 'client time') + ' (' + tz + ')' : '';
+        $('cal-new-tz-hint').textContent = tz ? (currentView() === 'mine' ? omniText.t('bookings.new.tzMine', [tz]) : omniText.t('bookings.new.tzClient', [tz])) : '';
         $('cal-new-duration').value = '30';
         $('cal-new-location').value = '';
         $('cal-new-notes').value = '';
@@ -380,7 +378,7 @@
         var sel = $('cal-new-service');
         api('GET', '/api/services').then(function (services) {
             sel.textContent = '';
-            sel.appendChild(el('option', { value: '', text: 'No service' }));
+            sel.appendChild(el('option', { value: '', text: omniText.t('bookings.new.noService') }));
             services.forEach(function (p) { sel.appendChild(el('option', { value: p.id, text: p.name })); });
         }).catch(function (e) { showMessage(e.message, 'error'); });
     }
@@ -392,12 +390,12 @@
             box.textContent = '';
             box.hidden = false;
             var items = (res && res.items) || [];
-            if (!items.length) { box.appendChild(el('div', { class: 'picker-empty', text: 'No matching contacts.' })); return; }
+            if (!items.length) { box.appendChild(el('div', { class: 'picker-empty', text: omniText.t('bookings.new.noMatches') })); return; }
             items.forEach(function (contact) {
                 box.appendChild(el('button', { type: 'button', class: 'picker-option', role: 'option', onclick: function () { pickContact(contact); } }, [
                     el('span', { class: 'avatar-sm', text: initialOf(contact.fullName) }),
                     el('span', { class: 'picker-option-main' }, [
-                        el('span', { class: 'picker-option-name', text: contact.fullName || 'Unnamed' }),
+                        el('span', { class: 'picker-option-name', text: contact.fullName || omniText.t('bookings.unnamed') }),
                         el('span', { class: 'picker-option-sub', text: [contact.phone, contact.serviceName].filter(Boolean).join(' · ') })
                     ])
                 ]));
@@ -407,7 +405,7 @@
 
     /** Picked contact shows as a chip (with × to change); their contact's service pre-fills the Service field. */
     function pickContact(contact) {
-        var label = (contact.fullName || 'Unnamed') + (contact.phone ? ' · ' + contact.phone : '');
+        var label = (contact.fullName || omniText.t('bookings.unnamed')) + (contact.phone ? ' · ' + contact.phone : '');
         state.selectedContact = { id: contact.id, label: label };
         $('cal-new-contact-id').value = contact.id;
         $('cal-new-contact-results').hidden = true;
@@ -438,8 +436,8 @@
         var contactId = $('cal-new-contact-id').value;
         var date = $('cal-new-date').value;
         var time = $('cal-new-time').value;
-        if (!contactId) { err.textContent = 'Search for the contact and pick one from the list.'; return; }
-        if (!date || !time) { err.textContent = 'Enter a date and time.'; return; }
+        if (!contactId) { err.textContent = omniText.t('bookings.new.pickContact'); return; }
+        if (!date || !time) { err.textContent = omniText.t('bookings.new.dateTimeRequired'); return; }
 
         var timeZone = gridTimeZone() || OmniTime.viewerTimeZone || 'UTC';
         var startIso = OmniTime.zonedToUtcIso(date, time, timeZone);
@@ -463,7 +461,7 @@
         api('POST', '/api/bookings', body).then(function () {
             btn.disabled = false;
             closeNewBooking();
-            showMessage('Booking created.');
+            showMessage(omniText.t('bookings.new.created'));
             return loadMonth(state.year, state.month);
         }).catch(function (e) {
             btn.disabled = false;

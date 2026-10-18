@@ -22,6 +22,8 @@ namespace Omni.App.Pages.Dashboard;
 /// </summary>
 public class ContactDetailModel : PageModel
 {
+    private const string SavedKey = "contactDetail.saved";
+
     private readonly ICurrentClientContext _clientContext;
     private readonly IContactService _contacts;
     private readonly IStringLocalizer _text;
@@ -98,7 +100,7 @@ public class ContactDetailModel : PageModel
                 new UpdateContactStageRequest(StageKey, Qualification, resolvedSource), ct);
             if (contact is null) return NotFound();
 
-            StatusMessage = "Saved.";
+            StatusMessage = _text[SavedKey].Value;
             return RedirectToPage(new { Id });
         }
         catch (ArgumentException ex)

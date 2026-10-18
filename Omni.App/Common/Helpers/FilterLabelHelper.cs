@@ -1,42 +1,44 @@
+using Microsoft.Extensions.Localization;
+
 namespace Omni.App.Common.Helpers;
 
 /// <summary>
-/// Maps free-text status values (qualification, booking status, campaign status…) to a client-friendly display label.
-/// Contact stages are not here: their labels come from the client's business type (StageDisplay); a stage key the type
-/// doesn't know falls back to the mechanical label below. Purely presentational — the
-/// underlying stored/backend values (Database/schema.sql's check constraints, the *Status static
-/// classes in Data/Entities) are unchanged; this only controls what client members read on screen.
+/// Turns a stored status value (qualification, booking status, campaign status, template category…) into the label people
+/// read: <c>@T.ValueLabel(contact.Qualification)</c> reads <c>values.{value in camelCase}</c> from the strings files
+/// ("needs_human" → <c>values.needsHuman</c>). A value with no key (a status added later, a free-text source) shows made
+/// readable ("some_new_status" → "Some new status"). Contact stages are not here: their labels come from the client's
+/// business type (StageDisplay). Presentational only; the stored values (Database/schema.sql's checks) are unchanged.
 /// </summary>
 public static class FilterLabelHelper
 {
-    private static readonly Dictionary<string, string> Labels = new(StringComparer.OrdinalIgnoreCase)
+    public const string KeyPrefix = "values.";
+
+    public static string ValueLabel(this IStringLocalizer text, string? value)
     {
-        // qualifications
-        ["unknown"] = "Unknown",
-        ["hot"] = "Hot",
-        ["warm"] = "Warm",
-        ["cold"] = "Cold",
-        ["needs_human"] = "Needs human review",
-        ["spam"] = "Spam",
+        if (string.IsNullOrWhiteSpace(value)) return "—";
+        var key = KeyOf(value);
+        if (key is not null)
+        {
+            var label = text[key];
+            if (!label.ResourceNotFound) return label.Value;
+        }
+        return Readable(value);
+    }
 
-        // booking statuses
-        ["booked"] = "Booked",
-        ["confirmed"] = "Confirmed",
-        ["attended"] = "Attended",
-        ["no_show"] = "No-show",
-        ["canceled"] = "Canceled",
-        ["rescheduled"] = "Rescheduled",
-    };
-
-    /// <summary>Falls back to a mechanical "replace underscores, capitalize first letter" for any
-    /// value not explicitly mapped above (e.g. a status added later and not yet given a bespoke
-    /// label) rather than showing the raw snake_case value.</summary>
-    public static string Label(string? value)
+    /// <summary>"needs_human" / "NO_SHOW" / "Needs human" → "values.needsHuman"; null when the value has no letters.</summary>
+    public static string? KeyOf(string value)
     {
-        if (string.IsNullOrEmpty(value)) return "—";
-        if (Labels.TryGetValue(value, out var label)) return label;
+        var words = value.Trim().ToLowerInvariant().Split(['_', ' ', '-'], StringSplitOptions.RemoveEmptyEntries)
+            .Select(w => new string(w.Where(char.IsAsciiLetterOrDigit).ToArray())).Where(w => w.Length > 0).ToList();
+        if (words.Count == 0 || !char.IsAsciiLetter(words[0][0])) return null;
+        return KeyPrefix + words[0] + string.Concat(words.Skip(1).Select(w => char.ToUpperInvariant(w[0]) + w[1..]));
+    }
 
-        var spaced = value.Replace('_', ' ');
+    /// <summary>The value made readable: underscores to spaces, first letter capitalized ("—" for nothing).</summary>
+    public static string Readable(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return "—";
+        var spaced = value.Trim().Replace('_', ' ');
         return char.ToUpperInvariant(spaced[0]) + spaced[1..];
     }
 }

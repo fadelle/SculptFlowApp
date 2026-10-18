@@ -49,7 +49,7 @@
   // ---------------------------------------------------------------------
   function apiGet(path) {
     return fetch(path).then(function (res) {
-      if (!res.ok) throw new Error('Request failed (' + res.status + ')');
+      if (!res.ok) throw new ErroromniText.t('common.errors.requestFailed', [res.status]);
       return res.json();
     });
   }
@@ -77,7 +77,7 @@
     }).then(function (res) {
       if (!res.ok) {
         return res.json().catch(function () { return {}; }).then(function (problem) {
-          throw new Error(problem.error || problem.detail || ('Request failed (' + res.status + ')'));
+          throw new Error(problem.error || problem.detail || omniText.t('common.errors.requestFailed', [res.status]));
         });
       }
       return res.json().catch(function () { return {}; });
@@ -95,12 +95,12 @@
   // Rendering
   // ---------------------------------------------------------------------
   var ORIGIN_LABELS = {
-    whatsapp_customer: 'Customer',
-    telegram_customer: 'Customer',
-    whatsapp_business_app: 'WhatsApp Business App',
-    dashboard: 'Team',
-    ai: 'AI',
-    system: 'System'
+    whatsapp_customer: omniText.t('inbox.origin.contact'),
+    telegram_customer: omniText.t('inbox.origin.contact'),
+    whatsapp_business_app: omniText.t('inbox.origin.businessApp'),
+    dashboard: omniText.t('inbox.mode.human'),
+    ai: omniText.t('inbox.mode.ai'),
+    system: omniText.t('inbox.origin.system')
   };
 
   function originLabel(origin) {
@@ -118,7 +118,7 @@
   function formatTime(iso) {
     try {
       var d = new Date(iso);
-      return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+      return d.toLocaleString(omniText.lang, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
     } catch (e) {
       return iso;
     }
@@ -129,18 +129,18 @@
     var d = new Date(iso);
     if (isNaN(d.getTime())) return '';
     var mins = Math.floor((Date.now() - d.getTime()) / 60000);
-    if (mins < 1) return 'now';
-    if (mins < 60) return mins + 'm';
-    if (mins < 60 * 24 && d.getDate() === new Date().getDate()) return Math.floor(mins / 60) + 'h';
+    if (mins < 1) return omniText.t('inbox.time.now');
+    if (mins < 60) return omniText.t('inbox.time.minutes', [mins]);
+    if (mins < 60 * 24 && d.getDate() === new Date().getDate()) return omniText.t('inbox.time.hours', [Math.floor(mins / 60)]);
     var yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
-    if (d.toDateString() === yesterday.toDateString()) return 'Yesterday';
-    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    if (d.toDateString() === yesterday.toDateString()) return omniText.t('inbox.time.yesterday');
+    return d.toLocaleDateString(omniText.lang, { month: 'short', day: 'numeric' });
   }
 
   function formatDate(iso) {
     if (!iso) return '—';
     var d = new Date(iso);
-    return isNaN(d.getTime()) ? '—' : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+    return isNaN(d.getTime()) ? '—' : d.toLocaleDateString(omniText.lang, { month: 'short', day: 'numeric', year: 'numeric' });
   }
 
   function renderTimestamps() {
@@ -158,7 +158,7 @@
   }
 
   function modeLabel(mode) {
-    return { ai: 'AI', human: 'Team', approval: 'Approval' }[mode] || mode;
+    return { ai: omniText.t('inbox.mode.ai'), human: omniText.t('inbox.mode.human'), approval: omniText.t('inbox.mode.approval') }[mode] || mode;
   }
 
   // ---------------------------------------------------------------------
@@ -193,7 +193,7 @@
       if (!noMatch) {
         noMatch = document.createElement('div');
         noMatch.className = 'inbox-list-message inbox-list-nomatch';
-        noMatch.textContent = 'No conversations match.';
+        noMatch.textContent = omniText.t('inbox.list.noMatch');
         listEl.appendChild(noMatch);
       }
     } else if (noMatch) {
@@ -224,7 +224,7 @@
     listEl.innerHTML = '';
     var totalUnread = 0;
     if (!items || items.length === 0) {
-      listEl.innerHTML = '<div class="inbox-list-message">No conversations yet.</div>';
+      listEl.innerHTML = '<div class="inbox-list-message">' + escapeHtml(omniText.t('inbox.list.empty')) + '</div>';
       applyListFilter();
       updateTabTitle(0);
       return;
@@ -238,7 +238,7 @@
       var closed = c.status === 'closed' || c.status === 'archived';
       div.className = 'inbox-conv-item' + (c.id === currentConversationId ? ' active' : '') + (unreadCount > 0 ? ' unread' : '') + (closed ? ' closed' : '');
       div.setAttribute('data-conversation-id', c.id);
-      div.setAttribute('data-contact-name', c.contactFullName || 'Unknown');
+      div.setAttribute('data-contact-name', c.contactFullName || omniText.t('inbox.unknownName'));
       div.setAttribute('data-service-name', c.serviceName || '');
       div.setAttribute('data-channel', c.channel || '');
       div.setAttribute('data-mode', c.mode || '');
@@ -253,9 +253,9 @@
       div.setAttribute('data-needs', (c.mode === 'human' || c.mode === 'approval') ? 'true' : 'false');
 
       var modePill = closed
-        ? '<span class="inbox-mode inbox-mode-closed">Closed</span>'
+        ? '<span class="inbox-mode inbox-mode-closed">' + escapeHtml(omniText.t('inbox.filter.closed')) + '</span>'
         : needsHuman
-          ? '<span class="inbox-mode inbox-mode-needs">Needs you</span>'
+          ? '<span class="inbox-mode inbox-mode-needs">' + escapeHtml(omniText.t('inbox.filter.needs')) + '</span>'
           : '<span class="inbox-mode inbox-mode-' + escapeHtml(c.mode) + '">' + escapeHtml(modeLabel(c.mode)) + '</span>';
 
       div.innerHTML =
@@ -264,13 +264,13 @@
         '</span>' +
         '<div class="inbox-conv-main">' +
           '<div class="inbox-conv-top">' +
-            '<span class="inbox-conv-name">' + escapeHtml(c.contactFullName || 'Unknown') + '</span>' +
-            (unreadCount > 0 ? '<span class="inbox-unread-badge" title="' + unreadCount + ' unread">' + (unreadCount > 99 ? '99+' : unreadCount) + '</span>' : '') +
+            '<span class="inbox-conv-name">' + escapeHtml(c.contactFullName || omniText.t('inbox.unknownName')) + '</span>' +
+            (unreadCount > 0 ? '<span class="inbox-unread-badge" title="' + escapeHtml(omniText.t('inbox.list.unread', [unreadCount])) + '">' + (unreadCount > 99 ? '99+' : unreadCount) + '</span>' : '') +
             '<span class="inbox-conv-time" data-timestamp="' + (c.lastMessageAt || c.createdAt) + '"></span>' +
           '</div>' +
           (c.serviceName ? '<div class="inbox-conv-service">' + escapeHtml(c.serviceName) + '</div>' : '') +
           '<div class="inbox-conv-bottom">' +
-            '<span class="inbox-conv-preview">' + escapeHtml(c.lastMessagePreview || 'No messages yet') + '</span>' +
+            '<span class="inbox-conv-preview">' + escapeHtml(c.lastMessagePreview || omniText.t('inbox.list.noMessages')) + '</span>' +
             modePill +
           '</div>' +
         '</div>';
@@ -302,7 +302,7 @@
 
   function channelInitials(channel) { return (CHANNEL_ICONS[channel] || {}).initials || '?'; }
   function channelLabel(channel) {
-    return { whatsapp: 'WhatsApp', instagram: 'Instagram', facebook: 'Facebook', telegram: 'Telegram', website: 'Website', sms: 'SMS', email: 'Email' }[channel] || channel || '';
+    return { whatsapp: 'WhatsApp', instagram: 'Instagram', facebook: 'Facebook', telegram: 'Telegram', website: omniText.t('knowledge.source.website'), sms: 'SMS', email: omniText.t('inbox.contact.email') }[channel] || channel || '';
   }
   function channelColor(channel) { return (CHANNEL_ICONS[channel] || {}).hex || '#9ca3af'; }
 
@@ -332,11 +332,11 @@
   // inbound messages (a customer's message never has a "delivery status" from our side).
   function deliveryStatusIcon(status) {
     switch (status) {
-      case 'sent': return '<span class="inbox-msg-tick" title="Sent">&#10003;</span>';
-      case 'delivered': return '<span class="inbox-msg-tick" title="Delivered">&#10003;&#10003;</span>';
-      case 'read': return '<span class="inbox-msg-tick inbox-msg-tick-read" title="Read">&#10003;&#10003;</span>';
-      case 'failed': return '<span class="inbox-msg-tick inbox-msg-tick-failed" title="Failed">&#9888;</span>';
-      case 'deleted': return '<span class="inbox-msg-tick" title="Deleted">&#128465;</span>';
+      case 'sent': return '<span class="inbox-msg-tick" title="' + escapeHtml(omniText.t('values.sent')) + '">&#10003;</span>';
+      case 'delivered': return '<span class="inbox-msg-tick" title="' + escapeHtml(omniText.t('values.delivered')) + '">&#10003;&#10003;</span>';
+      case 'read': return '<span class="inbox-msg-tick inbox-msg-tick-read" title="' + escapeHtml(omniText.t('values.read')) + '">&#10003;&#10003;</span>';
+      case 'failed': return '<span class="inbox-msg-tick inbox-msg-tick-failed" title="' + escapeHtml(omniText.t('values.failed')) + '">&#9888;</span>';
+      case 'deleted': return '<span class="inbox-msg-tick" title="' + escapeHtml(omniText.t('values.deleted')) + '">&#128465;</span>';
       default: return '';
     }
   }
@@ -344,7 +344,7 @@
   // "09:40" — the day is shown once by the day divider above, not on every bubble.
   function formatClock(iso) {
     var d = new Date(iso);
-    return isNaN(d.getTime()) ? '' : d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+    return isNaN(d.getTime()) ? '' : d.toLocaleTimeString(omniText.lang, { hour: '2-digit', minute: '2-digit' });
   }
 
   // Day divider text: "Today", "Yesterday", or e.g. "Mon, Sep 22".
@@ -353,9 +353,9 @@
     if (isNaN(d.getTime())) return '';
     var today = new Date();
     var yesterday = new Date(); yesterday.setDate(today.getDate() - 1);
-    if (d.toDateString() === today.toDateString()) return 'Today';
-    if (d.toDateString() === yesterday.toDateString()) return 'Yesterday';
-    return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+    if (d.toDateString() === today.toDateString()) return omniText.t('bookings.calendar.today');
+    if (d.toDateString() === yesterday.toDateString()) return omniText.t('inbox.time.yesterday');
+    return d.toLocaleDateString(omniText.lang, { weekday: 'short', month: 'short', day: 'numeric' });
   }
 
   // Only senders that aren't obvious from the bubble's side and colour get a label: the customer
@@ -409,12 +409,13 @@
   // data attributes, so read it from there instead of adding it to the conversation DTO.
   function renderConversationHeader(conversation) {
     var listItem = document.querySelector('.inbox-conv-item[data-conversation-id="' + conversation.id + '"]');
-    var contactName = (listItem && listItem.getAttribute('data-contact-name')) || 'Unknown';
+    var contactName = (listItem && listItem.getAttribute('data-contact-name')) || omniText.t('inbox.unknownName');
     nameEl.textContent = contactName;
     threadAvatarEl.textContent = initials(contactName);
     var service = (listItem && listItem.getAttribute('data-service-name')) || '';
     serviceEl.textContent = [service, channelLabel(conversation.channel)].filter(Boolean).join(' · ');
-    modeEl.textContent = conversation.mode === 'ai' ? 'AI is replying' : (conversation.mode === 'human' ? 'Team is replying' : 'Awaiting approval');
+    modeEl.textContent = conversation.mode === 'ai' ? omniText.t('inbox.thread.aiReplying')
+      : conversation.mode === 'human' ? omniText.t('inbox.thread.teamReplying') : omniText.t('inbox.thread.awaitingApproval');
     modeEl.className = 'inbox-mode inbox-mode-' + conversation.mode;
     // Only offer the switch that makes sense for the current mode.
     btnTakeover.hidden = conversation.mode === 'human';
@@ -485,7 +486,7 @@
   function loadContactInfo(contactId) {
     var cached = contactInfoCache[contactId];
     var render = function (contact) {
-      var name = contact.fullName || nameEl.textContent || 'Unknown';
+      var name = contact.fullName || nameEl.textContent || omniText.t('inbox.unknownName');
       document.getElementById('inbox-contact-name').textContent = name;
       document.getElementById('inbox-contact-avatar').textContent = initials(name);
       var stage = STAGES[contact.stageKey];
@@ -566,7 +567,7 @@
     bubble.className = 'inbox-msg-bubble inbox-msg-member';
     bubble.innerHTML =
       '<div class="inbox-msg-content">' + escapeHtml(content) + '</div>' +
-      '<div class="inbox-msg-time">Sending…</div>';
+      '<div class="inbox-msg-time">' + escapeHtml(omniText.t('inbox.composer.sending')) + '</div>';
     row.appendChild(bubble);
     messagesEl.appendChild(row);
     messagesEl.scrollTop = messagesEl.scrollHeight;
@@ -594,7 +595,7 @@
       .catch(function (err) {
         removeOptimisticMessage();
         composerInputEl.value = content; // give the text back so they can retry
-        showError('Could not send: ' + err.message);
+        showError(omniText.t('inbox.composer.sendFailed', [err.message]));
       })
       .then(function () { composerSendEl.disabled = false; });
   });
@@ -619,7 +620,7 @@
       var input = document.createElement('input');
       input.type = 'text';
       input.className = 'text-input mb-1';
-      input.placeholder = '{{' + i + '}} value';
+      input.placeholder = omniText.t('inbox.template.valueFor', ['{{' + i + '}}']);
       input.setAttribute('data-var-index', i);
       input.addEventListener('input', updateTemplatePreview);
       templateVariablesEl.appendChild(input);
@@ -651,7 +652,7 @@
     loadApprovedTemplates().then(function (templates) {
       templateSelectEl.innerHTML = '';
       if (templates.length === 0) {
-        templateSelectEl.innerHTML = '<option value="">No approved templates yet</option>';
+        templateSelectEl.innerHTML = '<option value="">' + escapeHtml(omniText.t('inbox.template.none')) + '</option>';
       } else {
         templates.forEach(function (t) {
           var opt = document.createElement('option');
@@ -695,7 +696,7 @@
         return Promise.all([refreshCurrentConversation(), loadConversationList()]);
       })
       .catch(function (err) {
-        showError('Could not send template: ' + err.message);
+        showError(omniText.t('inbox.template.sendFailed', [err.message]));
       })
       .then(function () { sendBtn.disabled = false; });
   });
@@ -738,7 +739,7 @@
     setMoreMenu(false);
     if (!currentConversationId) return;
     var id = currentConversationId;
-    ask('Close conversation', 'Close this conversation?', 'Close conversation').then(function (ok) {
+    ask(omniText.t('inbox.thread.close'), omniText.t('inbox.thread.closeConfirm'), omniText.t('inbox.thread.close')).then(function (ok) {
       if (!ok) return;
       apiPost(withClient('/api/conversations/' + id + '/close'))
         .then(function () { return Promise.all([refreshCurrentConversation(), loadConversationList()]); });

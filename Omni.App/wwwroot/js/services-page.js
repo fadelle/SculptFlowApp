@@ -50,7 +50,7 @@
   var desc = document.getElementById('svc-desc');
   var count = document.getElementById('svc-desc-count');
   if (desc && count) {
-    var update = function () { count.textContent = desc.value.length + ' / 500'; };
+    var update = function () { count.textContent = omniText.t('common.counter', [desc.value.length, 500]); };
     desc.addEventListener('input', update);
     update();
   }

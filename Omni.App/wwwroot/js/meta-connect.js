@@ -36,7 +36,7 @@
     }).then(function (res) {
       if (!res.ok) {
         return res.json().catch(function () { return {}; }).then(function (problem) {
-          throw new Error(problem.detail || ('Request failed (' + res.status + ')'));
+          throw new Error(problem.detail || omniText.t('common.errors.requestFailed', [res.status]));
         });
       }
       return res.json();
@@ -63,7 +63,7 @@
 
   window.psConnectWhatsApp = function () {
     if (!cfg.whatsappConfigId) {
-      setStatus('whatsapp', 'WhatsApp Login Configuration ID is not set yet.', true);
+      setStatus('whatsapp', omniText.t('integrations.meta.noConfigId'), true);
       return;
     }
     var authUrl = 'https://www.facebook.com/' + cfg.version + '/dialog/oauth'
@@ -86,14 +86,14 @@
       window.history.replaceState({}, document.title, window.location.pathname);
     }
     if (oauthError) {
-      setStatus('whatsapp', 'Facebook returned an error: ' + oauthError, true);
+      setStatus('whatsapp', omniText.t('integrations.meta.facebookError', [oauthError]), true);
       return;
     }
     if (!code) {
       return;
     }
 
-    setStatus('whatsapp', 'Finishing connection…', false);
+    setStatus('whatsapp', omniText.t('integrations.meta.finishing'), false);
     postConnect('/api/channel-integrations/whatsapp/connect', {
       code: code,
       redirectUri: WHATSAPP_REDIRECT_URI
@@ -108,15 +108,15 @@
   // one isn't affected by the WhatsApp issue above because it uses the implicit token flow
   // (no code, no server-side exchange, no redirect_uri to match).
   window.psFacebookOnLogin = function () {
-    setStatus('facebook', 'Checking login status…', false);
+    setStatus('facebook', omniText.t('integrations.meta.checking'), false);
 
     FB.getLoginStatus(function (response) {
       if (response.status !== 'connected' || !response.authResponse || !response.authResponse.accessToken) {
-        setStatus('facebook', 'Login was cancelled or did not complete.', true);
+        setStatus('facebook', omniText.t('integrations.meta.cancelled'), true);
         return;
       }
 
-      setStatus('facebook', 'Finishing connection…', false);
+      setStatus('facebook', omniText.t('integrations.meta.finishing'), false);
       postConnect('/api/channel-integrations/facebook/connect', {
         accessToken: response.authResponse.accessToken
       })

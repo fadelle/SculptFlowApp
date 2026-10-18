@@ -57,14 +57,14 @@
   var body = document.getElementById('kb-body');
   var count = document.getElementById('kb-body-count');
   if (body && count) {
-    var update = function () { count.textContent = body.value.length.toLocaleString() + ' characters'; };
+    var update = function () { count.textContent = omniText.t('knowledge.edit.characters', [body.value.length.toLocaleString(omniText.lang)]); };
     body.addEventListener('input', update);
     update();
     var qa = document.getElementById('kb-add-qa');
     if (qa) {
       qa.addEventListener('click', function () {
         var prefix = body.value && !/\n\n$/.test(body.value) ? (/\n$/.test(body.value) ? '\n' : '\n\n') : '';
-        body.value += prefix + 'Q: \nA: ';
+        body.value += prefix + omniText.t('knowledge.edit.qaQuestion') + ' \n' + omniText.t('knowledge.edit.qaAnswer') + ' ';
         var caret = body.value.length - 4; // right after "Q: "
         body.focus();
         body.setSelectionRange(caret, caret);
@@ -82,7 +82,9 @@
     var sub = document.getElementById('kb-drop-sub');
     var icon = document.getElementById('kb-drop-icon');
     var defaults = { title: title.textContent, sub: sub.textContent };
-    var size = function (b) { return b < 1024 * 1024 ? Math.max(1, Math.round(b / 1024)) + ' KB' : (b / 1024 / 1024).toFixed(1) + ' MB'; };
+    var size = function (b) {
+      return b < 1024 * 1024 ? omniText.t('common.sizeKb', [Math.max(1, Math.round(b / 1024))]) : omniText.t('common.sizeMb', [(b / 1024 / 1024).toFixed(1)]);
+    };
     var show = function () {
       var f = file.files && file.files[0];
       zone.classList.toggle('has-file', !!f);
@@ -91,14 +93,14 @@
       if (!f) { title.textContent = defaults.title; sub.textContent = defaults.sub; icon.textContent = '⇪'; return; }
       icon.textContent = '📄';
       title.textContent = f.name;
-      sub.textContent = size(f.size) + ' · ' + (f.name.split('.').pop() || '').toUpperCase() + ' · click to change';
+      sub.textContent = omniText.t('knowledge.upload.picked', [size(f.size), (f.name.split('.').pop() || '').toUpperCase()]);
       if (!/\.(pdf|docx|txt)$/i.test(f.name)) {
         zone.classList.add('is-error');
-        sub.textContent = 'Only PDF, DOCX or TXT files can be used.';
+        sub.textContent = omniText.t('knowledge.upload.wrongType');
         file.setCustomValidity(sub.textContent);
       } else if (max && f.size > max) {
         zone.classList.add('is-error');
-        sub.textContent = 'This file is ' + size(f.size) + '. The limit is ' + size(max) + '.';
+        sub.textContent = omniText.t('knowledge.upload.tooBig', [size(f.size), size(max)]);
         file.setCustomValidity(sub.textContent);
       }
     };

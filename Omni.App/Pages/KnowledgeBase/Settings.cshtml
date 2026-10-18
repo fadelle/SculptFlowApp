@@ -2,7 +2,7 @@
 @model Omni.App.Pages.KnowledgeBase.SettingsModel
 @inject Omni.App.Business.Contracts.Managers.IConfigManager Settings
 @{
-    ViewData["Title"] = "Knowledge Base Settings";
+    ViewData["Title"] = T["knowledgeSettings.title"].Value;
 }
 
 @if (!Model.ClientConfigured)
@@ -12,12 +12,12 @@
 else
 {
     <div class="au-back-header">
-        <a class="au-icon-btn au-icon-btn--bordered" href="/KnowledgeBase" aria-label="Back to Knowledge Base" title="Back to Knowledge Base">
+        <a class="au-icon-btn au-icon-btn--bordered" href="/KnowledgeBase" aria-label="@T["knowledge.edit.back", T["knowledge.edit.backKnowledge"].Value]" title="@T["knowledge.edit.back", T["knowledge.edit.backKnowledge"].Value]">
             <span class="au-icon" aria-hidden="true">arrow_back</span>
         </a>
         <div class="min-w-0">
-            <h2 class="au-back-header__title">Search tuning</h2>
-            <span class="au-back-header__sub">How the AI assistant finds answers in your Knowledge Base.</span>
+            <h2 class="au-back-header__title">@T["knowledgeSettings.heading"]</h2>
+            <span class="au-back-header__sub">@T["knowledgeSettings.sub"]</span>
         </div>
     </div>
 
@@ -25,60 +25,60 @@ else
 
     <section class="au-panel au-panel--round au-panel--pad mw-640">
         <form method="post">
-            <p class="au-help m-0">Changes apply to entries saved from now on. Re-save an entry to use the new values.</p>
+            <p class="au-help m-0">@T["knowledgeSettings.note"]</p>
 
             <label class="set-row">
                 <div>
-                    <strong>How much text per piece</strong>
-                    <div class="cell-sub">Chunk size · tokens, @Settings.KnowledgeMinChunkSizeTokens–@Settings.KnowledgeMaxChunkSizeTokens</div>
-                    <div class="cell-sub">About 4 characters per token.</div>
+                    <strong>@T["knowledgeSettings.chunkSize.title"]</strong>
+                    <div class="cell-sub">@T["knowledgeSettings.chunkSize.range", Settings.KnowledgeMinChunkSizeTokens, Settings.KnowledgeMaxChunkSizeTokens]</div>
+                    <div class="cell-sub">@T["knowledgeSettings.chunkSize.help"]</div>
                 </div>
                 <input type="number" name="ChunkSizeTokens" value="@Model.ChunkSizeTokens" class="au-input set-input" min="@Settings.KnowledgeMinChunkSizeTokens" max="@Settings.KnowledgeMaxChunkSizeTokens" required />
             </label>
 
             <label class="set-row">
                 <div>
-                    <strong>Overlap between pieces</strong>
-                    <div class="cell-sub">Chunk overlap · tokens</div>
-                    <div class="cell-sub">So nothing is cut in half. Up to half the piece size.</div>
+                    <strong>@T["knowledgeSettings.overlap.title"]</strong>
+                    <div class="cell-sub">@T["knowledgeSettings.overlap.range"]</div>
+                    <div class="cell-sub">@T["knowledgeSettings.overlap.help"]</div>
                 </div>
                 <input type="number" name="ChunkOverlapTokens" value="@Model.ChunkOverlapTokens" class="au-input set-input" min="0" max="500" required />
             </label>
 
             <label class="set-row">
                 <div>
-                    <strong>Results per question</strong>
-                    <div class="cell-sub">Top K · @Settings.KnowledgeMinTopK–@Settings.KnowledgeMaxTopK</div>
-                    <div class="cell-sub">The most pieces the AI gets back for one question.</div>
+                    <strong>@T["knowledgeSettings.topK.title"]</strong>
+                    <div class="cell-sub">@T["knowledgeSettings.topK.range", Settings.KnowledgeMinTopK, Settings.KnowledgeMaxTopK]</div>
+                    <div class="cell-sub">@T["knowledgeSettings.topK.help"]</div>
                 </div>
                 <input type="number" name="TopK" value="@Model.TopK" class="au-input set-input" min="@Settings.KnowledgeMinTopK" max="@Settings.KnowledgeMaxTopK" required />
             </label>
 
             <label class="set-row">
                 <div>
-                    <strong>Minimum match</strong>
-                    <div class="cell-sub">Minimum similarity · 0–1</div>
-                    <div class="cell-sub">Higher is stricter. Unrelated questions return nothing.</div>
+                    <strong>@T["knowledgeSettings.similarity.title"]</strong>
+                    <div class="cell-sub">@T["knowledgeSettings.similarity.range"]</div>
+                    <div class="cell-sub">@T["knowledgeSettings.similarity.help"]</div>
                 </div>
                 <input type="text" inputmode="decimal" name="MinimumSimilarity" value="@Model.MinimumSimilarity" class="au-input set-input" required />
             </label>
 
             <div class="au-form-actions">
-                <a href="/KnowledgeBase" class="au-btn au-btn--text">Cancel</a>
-                <button type="submit" class="au-btn au-btn--primary">Save settings</button>
+                <a href="/KnowledgeBase" class="au-btn au-btn--text">@T["common.cancel"]</a>
+                <button type="submit" class="au-btn au-btn--primary">@T["knowledgeSettings.save"]</button>
             </div>
         </form>
     </section>
 
     <details class="au-panel au-panel--round tech mw-640 mt-3">
-        <summary>Technical setup (read-only)</summary>
-        <div class="inbox-contact-info-row"><span>Embedding model</span><strong>@Model.Current.EmbeddingModel</strong></div>
-        <div class="inbox-contact-info-row"><span>Vector dimension</span><strong>@Model.Current.VectorDimension</strong></div>
-        <div class="inbox-contact-info-row"><span>Similarity method</span><strong>@KnowledgeSimilarityMethod.Label(Model.Current.SimilarityMethod)</strong></div>
-        <div class="inbox-contact-info-row"><span>Vector index type</span><strong>@KnowledgeVectorIndexType.Label(Model.Current.VectorIndexType)</strong></div>
+        <summary>@T["knowledgeSettings.tech.title"]</summary>
+        <div class="inbox-contact-info-row"><span>@T["knowledgeSettings.tech.model"]</span><strong>@Model.Current.EmbeddingModel</strong></div>
+        <div class="inbox-contact-info-row"><span>@T["knowledgeSettings.tech.dimension"]</span><strong>@Model.Current.VectorDimension</strong></div>
+        <div class="inbox-contact-info-row"><span>@T["knowledgeSettings.tech.method"]</span><strong>@KnowledgeSimilarityMethod.Label(Model.Current.SimilarityMethod)</strong></div>
+        <div class="inbox-contact-info-row"><span>@T["knowledgeSettings.tech.index"]</span><strong>@KnowledgeVectorIndexType.Label(Model.Current.VectorIndexType)</strong></div>
         <div class="cell-sub mt-1">
-            Changing this means re-processing every entry. Contact support if you need a different setup.
-            Last updated @LocalTimeHelper.Time(Model.Current.UpdatedAt, "datetime-year").
+            @T["knowledgeSettings.tech.help"]
+            @T.Html("knowledgeSettings.tech.lastUpdated", LocalTimeHelper.Time(Model.Current.UpdatedAt, "datetime-year"))
         </div>
     </details>
 }

@@ -1,8 +1,10 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.Extensions.Localization;
 using Omni.App.Business.Contracts.Managers;
 using Omni.App.Business.Contracts.Services.Knowledge;
 using Omni.App.Common.Enums;
+using Omni.App.Common.Helpers;
 using Omni.App.Entities.Dtos.Knowledge;
 
 namespace Omni.App.Pages.KnowledgeBase;
@@ -19,8 +21,20 @@ public class IndexModel : PageModel
     private readonly IKnowledgeService _knowledge;
     private readonly IWebsiteSourceService _websites;
 
-    public IndexModel(ICurrentClientContext clientContext, IKnowledgeService knowledge, IWebsiteSourceService websites)
+    private const string ActivatedKey = "knowledge.entry.activated";
+    private const string DeactivatedKey = "knowledge.entry.deactivated";
+    private const string EntryNotFoundKey = "knowledge.entry.notFound";
+    private const string DeletedKey = "knowledge.entry.deleted";
+    private const string WebsiteNotFoundKey = "knowledge.website.notFound";
+    private const string WebsiteActivatedKey = "knowledge.website.activated";
+    private const string WebsiteDeactivatedKey = "knowledge.website.deactivated";
+    private const string WebsiteDeletedKey = "knowledge.website.deleted";
+
+    private readonly IStringLocalizer _text;
+
+    public IndexModel(ICurrentClientContext clientContext, IKnowledgeService knowledge, IWebsiteSourceService websites, IStringLocalizer text)
     {
+        _text = text;
         _clientContext = clientContext;
         _knowledge = knowledge;
         _websites = websites;
@@ -59,8 +73,8 @@ public class IndexModel : PageModel
         if (client is null) return RedirectToPage();
 
         var doc = await _knowledge.SetActiveAsync(client.Id, id, active, ct);
-        StatusMessage = doc is null ? null : (active ? "Activated — the AI can use it again." : "Deactivated — the AI will no longer use it.");
-        if (doc is null) ErrorMessage = "Entry not found.";
+        StatusMessage = doc is null ? null : _text[active ? ActivatedKey : DeactivatedKey].Value;
+        if (doc is null) ErrorMessage = _text[EntryNotFoundKey].Value;
         return RedirectToPage();
     }
 
@@ -69,8 +83,8 @@ public class IndexModel : PageModel
         var client = await _clientContext.GetClientAsync(ct);
         if (client is null) return RedirectToPage();
 
-        if (await _knowledge.DeleteAsync(client.Id, id, ct)) StatusMessage = "Deleted.";
-        else ErrorMessage = "Entry not found.";
+        if (await _knowledge.DeleteAsync(client.Id, id, ct)) StatusMessage = _text[DeletedKey].Value;
+        else ErrorMessage = _text[EntryNotFoundKey].Value;
         return RedirectToPage();
     }
 
@@ -80,10 +94,8 @@ public class IndexModel : PageModel
         var client = await _clientContext.GetClientAsync(ct);
         if (client is null) return RedirectToPage();
 
-        if (await _websites.SetActiveAsync(client.Id, id, active, ct) is null) ErrorMessage = "Website not found.";
-        else StatusMessage = active
-            ? "Website activated — its pages can be used by the AI again."
-            : "Website deactivated — its pages are hidden from the AI.";
+        if (await _websites.SetActiveAsync(client.Id, id, active, ct) is null) ErrorMessage = _text[WebsiteNotFoundKey].Value;
+        else StatusMessage = _text[active ? WebsiteActivatedKey : WebsiteDeactivatedKey].Value;
         return RedirectToPage();
     }
 
@@ -95,12 +107,12 @@ public class IndexModel : PageModel
 
         try
         {
-            if (await _websites.DeleteAsync(client.Id, id, ct)) StatusMessage = "Website and its imported pages deleted.";
-            else ErrorMessage = "Website not found.";
+            if (await _websites.DeleteAsync(client.Id, id, ct)) StatusMessage = _text[WebsiteDeletedKey].Value;
+            else ErrorMessage = _text[WebsiteNotFoundKey].Value;
         }
         catch (ArgumentException ex)
         {
-            ErrorMessage = ex.Message;
+            ErrorMessage = _text.Localize(ex);
         }
         return RedirectToPage();
     }

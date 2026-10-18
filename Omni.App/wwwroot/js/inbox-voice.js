@@ -25,7 +25,7 @@
       : '';
     // preload="none": nothing is downloaded from the provider until someone presses play.
     return '<div class="inbox-voice">' +
-      '<audio controls preload="none" aria-label="Voice message" src="/api/messages/' + encodeURIComponent(message.id) + '/media"></audio>' +
+      '<audio controls preload="none" aria-label="' + escapeHtml(omniText.t('inbox.voice.label')) + '" src="/api/messages/' + encodeURIComponent(message.id) + '/media"></audio>' +
       caption +
       '</div>';
   }
@@ -37,7 +37,7 @@
     if (!el || el.tagName !== 'AUDIO' || !el.closest || !el.closest('.inbox-voice')) return;
     var note = document.createElement('div');
     note.className = 'inbox-voice-error';
-    note.textContent = 'This voice note can’t be played here.';
+    note.textContent = omniText.t('inbox.voice.unplayable');
     el.replaceWith(note);
   }, true);
 

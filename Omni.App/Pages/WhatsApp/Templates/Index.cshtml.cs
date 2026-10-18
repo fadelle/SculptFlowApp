@@ -1,9 +1,11 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.Extensions.Localization;
 using Omni.App.Business.Contracts.Managers;
 using Omni.App.Business.Contracts.Services.WhatsApp;
 using Omni.App.Common.Enums;
 using Omni.App.Common.Exceptions;
+using Omni.App.Common.Helpers;
 using Omni.App.Entities.Requests.WhatsApp;
 using Omni.App.Entities.Responses.WhatsApp;
 
@@ -14,13 +16,22 @@ namespace Omni.App.Pages.WhatsApp.Templates;
 /// the form and reports back whatever the service (and, through it, Meta) returned.</summary>
 public class IndexModel : PageModel
 {
+    private const string SavedKey = "templates.saved";
+    private const string SubmitFailedKey = "templates.submitFailed";
+    private const string DuplicateKey = "templates.errors.duplicate";
+    private const string RefreshedKey = "templates.refreshed";
+    private const string RetryRejectedKey = "templates.retryRejected";
+    private const string RetrySentKey = "templates.retrySent";
+
     private readonly ICurrentClientContext _clientContext;
     private readonly IWhatsAppTemplateService _templates;
+    private readonly IStringLocalizer _text;
 
-    public IndexModel(ICurrentClientContext clientContext, IWhatsAppTemplateService templates)
+    public IndexModel(ICurrentClientContext clientContext, IWhatsAppTemplateService templates, IStringLocalizer text)
     {
         _clientContext = clientContext;
         _templates = templates;
+        _text = text;
     }
 
     public bool ClientConfigured { get; private set; }
@@ -79,9 +90,9 @@ public class IndexModel : PageModel
 
             StatusMessage = template.Status == WhatsAppTemplateStatus.Rejected
                 ? null
-                : $"Template '{template.Name}' saved — status: {template.Status}.";
+                : _text[SavedKey, template.Name, _text.TemplateStatusLabel(template.Status)].Value;
             ErrorMessage = template.Status == WhatsAppTemplateStatus.Rejected
-                ? $"Template '{template.Name}' was saved as a draft, but Meta submission failed: {template.RejectionReason}"
+                ? _text[SubmitFailedKey, template.Name, template.RejectionReason ?? string.Empty].Value
                 : null;
         }
         catch (Exception ex) when (ex is ArgumentException or DuplicateRecordException)
@@ -89,8 +100,8 @@ public class IndexModel : PageModel
             // Nothing was saved: show the form again with what was typed, instead of redirecting it away. A duplicate is the
             // unique (client, name, language) index: the client already has a template with this name.
             ErrorMessage = ex is DuplicateRecordException
-                ? $"You already have a template called '{Name}' in this language. Choose another name."
-                : ex.Message;
+                ? _text[DuplicateKey, Name].Value
+                : _text.Localize(ex);
             ReopenNewTemplate = true;
             await LoadAsync(ct);
             return Page();
@@ -107,15 +118,15 @@ public class IndexModel : PageModel
         try
         {
             var template = await _templates.SyncStatusAsync(client.Id, id, ct);
-            StatusMessage = template is null ? null : $"'{template.Name}' status refreshed: {template.Status}.";
+            StatusMessage = template is null ? null : _text[RefreshedKey, template.Name, _text.TemplateStatusLabel(template.Status)].Value;
         }
         catch (InvalidOperationException ex)
         {
-            ErrorMessage = ex.Message;
+            ErrorMessage = _text.Localize(ex);
         }
         catch (MetaGraphApiException ex)
         {
-            ErrorMessage = ex.Message;
+            ErrorMessage = _text.Localize(ex);
         }
 
         return RedirectToPage();
@@ -132,14 +143,14 @@ public class IndexModel : PageModel
             if (template is not null)
             {
                 if (template.Status == WhatsAppTemplateStatus.Rejected)
-                    ErrorMessage = $"Meta still didn't accept '{template.Name}': {template.RejectionReason}";
+                    ErrorMessage = _text[RetryRejectedKey, template.Name, template.RejectionReason ?? string.Empty].Value;
                 else
-                    StatusMessage = $"'{template.Name}' was sent to Meta for review. It will update here by itself.";
+                    StatusMessage = _text[RetrySentKey, template.Name].Value;
             }
         }
         catch (InvalidOperationException ex)
         {
-            ErrorMessage = ex.Message;
+            ErrorMessage = _text.Localize(ex);
         }
 
         return RedirectToPage();

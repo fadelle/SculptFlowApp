@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.Extensions.Localization;
 using Omni.App.Business.Contracts.Managers;
 using Omni.App.Business.Contracts.Services.Campaigns;
 using Omni.App.Business.Contracts.Services.Contacts;
@@ -45,19 +46,28 @@ public class CreateModel : PageModel
     private static readonly Regex PlaceholderPattern = new(@"\{\{(\d+)\}\}", RegexOptions.Compiled);
     private static readonly JsonSerializerOptions AudienceFiltersJsonOptions = new(JsonSerializerDefaults.Web);
 
+    private const string NameAndTemplateKey = "campaigns.create.errors.nameAndTemplate";
+    private const string PickSomeoneKey = "campaigns.create.errors.pickSomeone";
+    private const string BlanksNeedManualKey = "campaigns.create.errors.blanksNeedManual";
+    private const string ScheduleMissingKey = "campaigns.create.errors.scheduleMissing";
+    private const string SchedulePastKey = "campaigns.create.errors.schedulePast";
+
     private readonly ICurrentClientContext _clientContext;
     private readonly IWhatsAppTemplateService _templates;
     private readonly IContactService _contacts;
     private readonly ICatalogService _services;
     private readonly ICampaignService _campaigns;
+    private readonly IStringLocalizer _text;
 
-    public CreateModel(ICurrentClientContext clientContext, IWhatsAppTemplateService templates, IContactService contacts, ICatalogService services, ICampaignService campaigns)
+    public CreateModel(ICurrentClientContext clientContext, IWhatsAppTemplateService templates, IContactService contacts, ICatalogService services,
+        ICampaignService campaigns, IStringLocalizer text)
     {
         _clientContext = clientContext;
         _templates = templates;
         _contacts = contacts;
         _services = services;
         _campaigns = campaigns;
+        _text = text;
     }
 
     public bool ClientConfigured { get; private set; }
@@ -184,13 +194,13 @@ public class CreateModel : PageModel
 
         if (WhatsAppTemplateId is null || string.IsNullOrWhiteSpace(Name))
         {
-            ErrorMessage = "Give the campaign a name and choose a template.";
+            ErrorMessage = _text[NameAndTemplateKey].Value;
             await LoadAsync(ct);
             return Page();
         }
         if (isManualSelection && ContactIds.Count == 0)
         {
-            ErrorMessage = "Tick at least one person in the list, or choose one of the other audiences.";
+            ErrorMessage = _text[PickSomeoneKey].Value;
             await LoadAsync(ct);
             return Page();
         }
@@ -199,7 +209,7 @@ public class CreateModel : PageModel
             // {ContactFullName}/{ContactFirstName}/{ContactPhone} tokens need the contact list up front to
             // resolve per-recipient — for a filter-resolved audience there's no contact list here yet
             // (it's only resolved inside CampaignService.CreateAsync).
-            ErrorMessage = "This template has blanks to fill, which only works when you pick people manually. Choose \"Pick people manually\", or a template without blanks.";
+            ErrorMessage = _text[BlanksNeedManualKey].Value;
             await LoadAsync(ct);
             return Page();
         }
@@ -244,14 +254,14 @@ public class CreateModel : PageModel
             {
                 if (ScheduleDate is null || ScheduleTime is null)
                 {
-                    ErrorMessage = "Pick the date and time to send, or choose \"Send now\".";
+                    ErrorMessage = _text[ScheduleMissingKey].Value;
                     await LoadAsync(ct);
                     return Page();
                 }
                 scheduledAt = ViewerTimeZone.ToUtc(ScheduleDate.Value.ToDateTime(ScheduleTime.Value), ViewerTimeZone.Resolve(Request, client.Timezone));
                 if (scheduledAt <= DateTimeOffset.UtcNow)
                 {
-                    ErrorMessage = "That date and time has already passed. Pick a time in the future, or choose \"Send now\".";
+                    ErrorMessage = _text[SchedulePastKey].Value;
                     await LoadAsync(ct);
                     return Page();
                 }
@@ -274,7 +284,7 @@ public class CreateModel : PageModel
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
         {
-            ErrorMessage = ex.Message;
+            ErrorMessage = _text.Localize(ex);
             await LoadAsync(ct);
             return Page();
         }

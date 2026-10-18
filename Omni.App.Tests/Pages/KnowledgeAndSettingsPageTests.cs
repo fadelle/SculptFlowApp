@@ -16,7 +16,7 @@ public class KnowledgeIndexPageTests
     private static readonly Client Glow = SomeClient();
     private readonly Mock<IKnowledgeService> _knowledge = new();
     private readonly Mock<IWebsiteSourceService> _websites = new();
-    private KbIndex Sut(Client? client = null) => new KbIndex(ClientContext(client ?? Glow).Object, _knowledge.Object, _websites.Object).Attach();
+    private KbIndex Sut(Client? client = null) => new KbIndex(ClientContext(client ?? Glow).Object, _knowledge.Object, _websites.Object, TextKit.Localizer()).Attach();
 
     private static KnowledgeDocumentResponse Doc(string title, string sourceType, DateTimeOffset updated) =>
         Blank<KnowledgeDocumentResponse>() with { Title = title, SourceType = sourceType, UpdatedAt = updated };
@@ -50,7 +50,7 @@ public class KnowledgeIndexPageTests
     public async Task Without_a_client_the_list_is_empty()
     {
         var model = Sut(client: null!);
-        var none = new KbIndex(ClientContext(null).Object, _knowledge.Object, _websites.Object).Attach();
+        var none = new KbIndex(ClientContext(null).Object, _knowledge.Object, _websites.Object, TextKit.Localizer()).Attach();
         await none.OnGetAsync(default);
         Assert.False(none.ClientConfigured);
         Assert.Empty(none.Rows);
@@ -110,7 +110,7 @@ public class KnowledgeIndexPageTests
     [Fact]
     public async Task Every_post_without_a_client_just_redirects()
     {
-        var model = new KbIndex(ClientContext(null).Object, _knowledge.Object, _websites.Object).Attach();
+        var model = new KbIndex(ClientContext(null).Object, _knowledge.Object, _websites.Object, TextKit.Localizer()).Attach();
         var id = Guid.NewGuid();
         Assert.IsType<RedirectToPageResult>(await model.OnPostToggleAsync(id, true, default));
         Assert.IsType<RedirectToPageResult>(await model.OnPostDeleteAsync(id, default));
@@ -126,7 +126,7 @@ public class KnowledgeEditPageTests
     private readonly Mock<IKnowledgeService> _knowledge = new();
     private readonly Mock<IWebsiteSourceService> _websites = new();
     private KbEdit Sut(Client? client = null, bool noClient = false) =>
-        new KbEdit(ClientContext(noClient ? null : client ?? Glow).Object, _knowledge.Object, _websites.Object).Attach();
+        new KbEdit(ClientContext(noClient ? null : client ?? Glow).Object, _knowledge.Object, _websites.Object, TextKit.Localizer()).Attach();
 
     private static KnowledgeDocumentResponse Existing(string sourceType = "manual") => Blank<KnowledgeDocumentResponse>() with
     {
@@ -190,7 +190,7 @@ public class KnowledgeEditPageTests
         var standard = model.CategoryOptions.Count;
         model.Category = "custom-cat";
         Assert.Equal(standard + 1, model.CategoryOptions.Count);       // an unknown category is kept so it isn't lost on save
-        model.Category = KnowledgeCategory.All[0].Value;
+        model.Category = KnowledgeCategory.All[0];
         Assert.Equal(standard, model.CategoryOptions.Count);
     }
 
@@ -322,11 +322,11 @@ public class KnowledgeSettingsAndWebsitePageTests
     {
         var service = new Mock<IKnowledgeSettingsService>();
         service.Setup(s => s.GetAsync(Glow.Id, It.IsAny<CancellationToken>())).ReturnsAsync(Settings());
-        var model = new KbSettings(ClientContext(Glow).Object, service.Object).Attach();
+        var model = new KbSettings(ClientContext(Glow).Object, service.Object, TextKit.Localizer()).Attach();
         Assert.IsType<PageResult>(await model.OnGetAsync(default));
         Assert.Equal((500, 50, 5, "0.3"), (model.ChunkSizeTokens, model.ChunkOverlapTokens, model.TopK, model.MinimumSimilarity));
 
-        var none = new KbSettings(ClientContext(null).Object, service.Object).Attach();
+        var none = new KbSettings(ClientContext(null).Object, service.Object, TextKit.Localizer()).Attach();
         Assert.IsType<PageResult>(await none.OnGetAsync(default));
         Assert.False(none.ClientConfigured);
     }
@@ -338,7 +338,7 @@ public class KnowledgeSettingsAndWebsitePageTests
     {
         var service = new Mock<IKnowledgeSettingsService>();
         service.Setup(s => s.UpdateAsync(Glow.Id, It.IsAny<UpdateKnowledgeSettingsRequest>(), It.IsAny<CancellationToken>())).ReturnsAsync(Settings());
-        var model = new KbSettings(ClientContext(Glow).Object, service.Object) { ChunkSizeTokens = 400, ChunkOverlapTokens = 40, TopK = 3, MinimumSimilarity = text }.Attach();
+        var model = new KbSettings(ClientContext(Glow).Object, service.Object, TextKit.Localizer()) { ChunkSizeTokens = 400, ChunkOverlapTokens = 40, TopK = 3, MinimumSimilarity = text }.Attach();
         Assert.IsType<RedirectToPageResult>(await model.OnPostAsync(default));
         service.Verify(s => s.UpdateAsync(Glow.Id, new UpdateKnowledgeSettingsRequest(400, 40, 3, parsed), It.IsAny<CancellationToken>()), Times.Once);
         Assert.Equal("Settings saved.", model.StatusMessage);
@@ -349,7 +349,7 @@ public class KnowledgeSettingsAndWebsitePageTests
     {
         var service = new Mock<IKnowledgeSettingsService>();
         service.Setup(s => s.GetAsync(Glow.Id, It.IsAny<CancellationToken>())).ReturnsAsync(Settings());
-        var model = new KbSettings(ClientContext(Glow).Object, service.Object) { MinimumSimilarity = "abc" }.Attach();
+        var model = new KbSettings(ClientContext(Glow).Object, service.Object, TextKit.Localizer()) { MinimumSimilarity = "abc" }.Attach();
         Assert.IsType<PageResult>(await model.OnPostAsync(default));
         Assert.Contains("must be a number", model.ErrorMessage);
         service.Verify(s => s.UpdateAsync(It.IsAny<Guid>(), It.IsAny<UpdateKnowledgeSettingsRequest>(), It.IsAny<CancellationToken>()), Times.Never);
@@ -360,7 +360,7 @@ public class KnowledgeSettingsAndWebsitePageTests
         Assert.Equal("Overlap too big.", model.ErrorMessage);
         Assert.NotNull(model.Current);
 
-        var none = new KbSettings(ClientContext(null).Object, service.Object).Attach();
+        var none = new KbSettings(ClientContext(null).Object, service.Object, TextKit.Localizer()).Attach();
         Assert.IsType<RedirectToPageResult>(await none.OnPostAsync(default));
     }
 
@@ -376,17 +376,17 @@ public class KnowledgeSettingsAndWebsitePageTests
         sites.Setup(w => w.ListPagesAsync(Glow.Id, id, WebsitePageStatus.Indexed, 0, 300, It.IsAny<CancellationToken>())).ReturnsAsync(new List<WebsitePageResponse> { Blank<WebsitePageResponse>() });
         sites.Setup(w => w.ListPagesAsync(Glow.Id, id, WebsitePageStatus.Unchanged, 0, 300, It.IsAny<CancellationToken>())).ReturnsAsync(new List<WebsitePageResponse> { Blank<WebsitePageResponse>(), Blank<WebsitePageResponse>() });
 
-        var failed = new SiteDetails(ClientContext(Glow).Object, sites.Object) { Id = id, Status = "failed" }.Attach();
+        var failed = new SiteDetails(ClientContext(Glow).Object, sites.Object, TextKit.Localizer()) { Id = id, Status = "failed" }.Attach();
         Assert.IsType<PageResult>(await failed.OnGetAsync(default));
         Assert.Single(failed.Pages);
 
-        var inKb = new SiteDetails(ClientContext(Glow).Object, sites.Object) { Id = id, Status = "in_kb" }.Attach();
+        var inKb = new SiteDetails(ClientContext(Glow).Object, sites.Object, TextKit.Localizer()) { Id = id, Status = "in_kb" }.Attach();
         await inKb.OnGetAsync(default);
         Assert.Equal(3, inKb.Pages.Count);
 
-        var missing = new SiteDetails(ClientContext(Glow).Object, sites.Object) { Id = Guid.NewGuid() }.Attach();
+        var missing = new SiteDetails(ClientContext(Glow).Object, sites.Object, TextKit.Localizer()) { Id = Guid.NewGuid() }.Attach();
         Assert.IsType<NotFoundResult>(await missing.OnGetAsync(default));
-        var none = new SiteDetails(ClientContext(null).Object, sites.Object).Attach();
+        var none = new SiteDetails(ClientContext(null).Object, sites.Object, TextKit.Localizer()).Attach();
         Assert.IsType<PageResult>(await none.OnGetAsync(default));
     }
 
@@ -395,7 +395,7 @@ public class KnowledgeSettingsAndWebsitePageTests
     {
         var id = Guid.NewGuid();
         var sites = new Mock<IWebsiteSourceService>();
-        var model = new SiteDetails(ClientContext(Glow).Object, sites.Object) { Id = id }.Attach();
+        var model = new SiteDetails(ClientContext(Glow).Object, sites.Object, TextKit.Localizer()) { Id = id }.Attach();
 
         Assert.IsType<NotFoundResult>(await model.OnPostRescrapeAsync(default));
         Assert.IsType<NotFoundResult>(await model.OnPostToggleAsync(true, default));
@@ -421,14 +421,14 @@ public class KnowledgeSettingsAndWebsitePageTests
         var sites = new Mock<IWebsiteSourceService>();
         sites.Setup(w => w.RescrapeAsync(Glow.Id, id, It.IsAny<CancellationToken>())).ThrowsAsync(new ArgumentException("Already running."));
         sites.Setup(w => w.DeleteAsync(Glow.Id, id, It.IsAny<CancellationToken>())).ThrowsAsync(new ArgumentException("In use."));
-        var model = new SiteDetails(ClientContext(Glow).Object, sites.Object) { Id = id }.Attach();
+        var model = new SiteDetails(ClientContext(Glow).Object, sites.Object, TextKit.Localizer()) { Id = id }.Attach();
 
         Assert.IsType<RedirectToPageResult>(await model.OnPostRescrapeAsync(default));
         Assert.Equal("Already running.", model.ErrorMessage);
         Assert.IsType<RedirectToPageResult>(await model.OnPostDeleteAsync(default));
         Assert.Equal("In use.", model.ErrorMessage);
 
-        var none = new SiteDetails(ClientContext(null).Object, sites.Object) { Id = id }.Attach();
+        var none = new SiteDetails(ClientContext(null).Object, sites.Object, TextKit.Localizer()) { Id = id }.Attach();
         Assert.Equal("page:/KnowledgeBase/Index", RedirectTarget(await none.OnPostRescrapeAsync(default)));
         Assert.Equal("page:/KnowledgeBase/Index", RedirectTarget(await none.OnPostToggleAsync(true, default)));
         Assert.Equal("page:/KnowledgeBase/Index", RedirectTarget(await none.OnPostDeleteAsync(default)));

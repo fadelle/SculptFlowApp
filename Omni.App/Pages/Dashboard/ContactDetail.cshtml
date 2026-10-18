@@ -1,7 +1,7 @@
 @page "/dashboard/contacts/{id:guid}"
 @model Omni.App.Pages.Dashboard.ContactDetailModel
 @{
-    ViewData["Title"] = "Contact";
+    ViewData["Title"] = T["contactDetail.title"].Value;
 }
 
 @if (!Model.ClientConfigured)
@@ -10,8 +10,8 @@
 }
 else if (Model.Contact is null)
 {
-    var missing = new EmptyStateModel(Icon: "person_off", Title: "This person isn't in your list",
-        ActionLabel: "Back to Interested People", ActionHref: "/dashboard/contacts", ActionIcon: "arrow_back");
+    var missing = new EmptyStateModel(Icon: "person_off", Title: T["contactDetail.missing"].Value,
+        ActionLabel: T["contactDetail.back"].Value, ActionHref: "/dashboard/contacts", ActionIcon: "arrow_back");
     <div class="au-panel au-panel--round"><partial name="_EmptyState" model="missing" /></div>
 }
 else
@@ -22,21 +22,21 @@ else
     var inboxSearch = !string.IsNullOrWhiteSpace(contact.Phone) ? contact.Phone : contact.FullName;
 
     <div class="au-back-header">
-        <a class="au-icon-btn au-icon-btn--bordered" href="/dashboard/contacts" aria-label="Back to Interested People" title="Back to Interested People">
+        <a class="au-icon-btn au-icon-btn--bordered" href="/dashboard/contacts" aria-label="@T["contactDetail.back"]" title="@T["contactDetail.back"]">
             <span class="au-icon" aria-hidden="true">arrow_back</span>
         </a>
         <span class="avatar-md" aria-hidden="true">@(string.IsNullOrWhiteSpace(contact.FullName) ? "?" : contact.FullName.Trim()[..1])</span>
         <div class="min-w-0">
             <h2 class="au-back-header__title">@(contact.FullName ?? "—")</h2>
-            <span class="au-back-header__sub">@(contact.Phone ?? "No phone") · @(contact.ServiceName ?? "No service on file")</span>
+            <span class="au-back-header__sub">@(contact.Phone ?? T["contactDetail.noPhone"].Value) · @(contact.ServiceName ?? T["contactDetail.noService"].Value)</span>
         </div>
     </div>
     <div class="detail-chips">
         <span class="badge @StageDisplay.CssClass(Model.Stages, contact.StageKey)">@StageDisplay.Label(Model.Stages, contact.StageKey)</span>
-        <span class="badge @StatusBadgeHelper.CssClass(contact.Qualification)">@FilterLabelHelper.Label(contact.Qualification)</span>
+        <span class="badge @StatusBadgeHelper.CssClass(contact.Qualification)">@T.ValueLabel(contact.Qualification)</span>
         @if (!string.IsNullOrWhiteSpace(inboxSearch))
         {
-            <a class="au-btn au-btn--outlined au-btn--sm" href="/inbox?search=@Uri.EscapeDataString(inboxSearch)"><span class="au-icon" aria-hidden="true">chat</span>Open in Inbox</a>
+            <a class="au-btn au-btn--outlined au-btn--sm" href="/inbox?search=@Uri.EscapeDataString(inboxSearch)"><span class="au-icon" aria-hidden="true">chat</span>@T["contactDetail.openInInbox"]</a>
         }
     </div>
 
@@ -44,21 +44,21 @@ else
 
     <div class="contact-grid">
         <section class="au-panel au-panel--round au-panel--pad" aria-labelledby="contact-details-title">
-            <div class="au-panel__head"><h3 class="au-panel__title" id="contact-details-title">Details</h3></div>
+            <div class="au-panel__head"><h3 class="au-panel__title" id="contact-details-title">@T["contactDetail.details.title"]</h3></div>
             <dl class="au-detail-rows">
-                <div class="au-detail-row"><dt>Phone</dt><dd>@(contact.Phone ?? "—")</dd></div>
-                <div class="au-detail-row"><dt>Email</dt><dd>@(contact.Email ?? "—")</dd></div>
-                <div class="au-detail-row"><dt>Service</dt><dd>@(contact.ServiceName ?? "—")</dd></div>
-                <div class="au-detail-row"><dt>City</dt><dd>@(contact.City ?? "—")</dd></div>
-                <div class="au-detail-row"><dt>Timeline</dt><dd>@(contact.DesiredTimeline ?? "—")</dd></div>
-                <div class="au-detail-row"><dt>Last contact</dt><dd>@LocalTimeHelper.Time(contact.LastContactAt)</dd></div>
-                <div class="au-detail-row"><dt>Next follow-up</dt><dd class="@(followupOverdue ? "overdue" : "")">@LocalTimeHelper.Time(contact.NextFollowupAt)@(followupOverdue ? " · overdue" : "")</dd></div>
-                <div class="au-detail-row"><dt>Contact since</dt><dd>@LocalTimeHelper.Time(contact.CreatedAt, "date")</dd></div>
+                <div class="au-detail-row"><dt>@T["contacts.table.phone"]</dt><dd>@(contact.Phone ?? "—")</dd></div>
+                <div class="au-detail-row"><dt>@T["contactDetail.details.email"]</dt><dd>@(contact.Email ?? "—")</dd></div>
+                <div class="au-detail-row"><dt>@T["contacts.table.service"]</dt><dd>@(contact.ServiceName ?? "—")</dd></div>
+                <div class="au-detail-row"><dt>@T["contactDetail.details.city"]</dt><dd>@(contact.City ?? "—")</dd></div>
+                <div class="au-detail-row"><dt>@T["contactDetail.details.timeline"]</dt><dd>@(contact.DesiredTimeline ?? "—")</dd></div>
+                <div class="au-detail-row"><dt>@T["contacts.table.lastContact"]</dt><dd>@LocalTimeHelper.Time(contact.LastContactAt)</dd></div>
+                <div class="au-detail-row"><dt>@T["contacts.table.nextFollowUp"]</dt><dd class="@(followupOverdue ? "overdue" : "")">@(followupOverdue ? T.Html("contacts.followUp.overdue", LocalTimeHelper.Time(contact.NextFollowupAt)) : LocalTimeHelper.Time(contact.NextFollowupAt))</dd></div>
+                <div class="au-detail-row"><dt>@T["contactDetail.details.since"]</dt><dd>@LocalTimeHelper.Time(contact.CreatedAt, "date")</dd></div>
             </dl>
             @if (!string.IsNullOrWhiteSpace(contact.Notes))
             {
                 <div class="contact-notes">
-                    <span class="au-eyebrow">Notes</span>
+                    <span class="au-eyebrow">@T["contactDetail.details.notes"]</span>
                     <p>@contact.Notes</p>
                 </div>
             }
@@ -66,12 +66,12 @@ else
 
         <section class="au-panel au-panel--round au-panel--pad" aria-labelledby="contact-update-title">
             <div class="au-panel__head">
-                <h3 class="au-panel__title" id="contact-update-title">Update this person</h3>
-                <button type="button" class="status-help-trigger" data-status-help-trigger title="What do these mean?" aria-label="What do these statuses mean?">?</button>
+                <h3 class="au-panel__title" id="contact-update-title">@T["contactDetail.update.title"]</h3>
+                <button type="button" class="status-help-trigger" data-status-help-trigger title="@T["statusHelp.trigger.title"]" aria-label="@T["statusHelp.trigger.label"]">?</button>
             </div>
             <form method="post" class="au-stack">
                 <div class="au-form-field">
-                    <label class="au-form-label" for="contact-stage">Stage</label>
+                    <label class="au-form-label" for="contact-stage">@T["contacts.table.stage"]</label>
                     <select name="StageKey" id="contact-stage" class="au-select">
                         @foreach (var stage in Model.Stages)
                         {
@@ -85,33 +85,33 @@ else
                 </div>
 
                 <div class="au-form-field">
-                    <label class="au-form-label" for="contact-qualification">Qualification</label>
+                    <label class="au-form-label" for="contact-qualification">@T["contacts.table.qualification"]</label>
                     <select name="Qualification" id="contact-qualification" class="au-select">
                         @foreach (var s in Model.QualificationOptions)
                         {
-                            <option value="@s" selected="@(s == Model.Qualification)">@FilterLabelHelper.Label(s)</option>
+                            <option value="@s" selected="@(s == Model.Qualification)">@T.ValueLabel(s)</option>
                         }
                     </select>
                 </div>
 
                 <div class="au-form-field">
-                    <label class="au-form-label" for="source-choice">Where they came from</label>
+                    <label class="au-form-label" for="source-choice">@T["contactDetail.update.source"]</label>
                     <select name="SourceChoice" id="source-choice" class="au-select" onchange="document.getElementById('custom-source-field').style.display = this.value === 'other' ? '' : 'none';">
                         @foreach (var s in Model.SourceOptions)
                         {
                             <option value="@s" selected="@(s == Model.SourceChoice)">@s</option>
                         }
-                        <option value="other" selected="@(Model.SourceChoice == "other")">Other…</option>
+                        <option value="other" selected="@(Model.SourceChoice == "other")">@T["contactDetail.update.otherSource"]</option>
                     </select>
                 </div>
 
                 <div class="au-form-field" id="custom-source-field" style="display:@(Model.SourceChoice == "other" ? "" : "none")">
-                    <label class="au-form-label" for="custom-source">Other source</label>
-                    <input type="text" name="CustomSource" id="custom-source" value="@Model.CustomSource" class="au-input" placeholder="e.g. trade show" />
+                    <label class="au-form-label" for="custom-source">@T["contactDetail.update.customSource"]</label>
+                    <input type="text" name="CustomSource" id="custom-source" value="@Model.CustomSource" class="au-input" placeholder="@T["contactDetail.update.customSourcePlaceholder"]" />
                 </div>
 
                 <div class="au-form-actions">
-                    <button type="submit" class="au-btn au-btn--primary">Save changes</button>
+                    <button type="submit" class="au-btn au-btn--primary">@T["common.saveChanges"]</button>
                 </div>
             </form>
         </section>

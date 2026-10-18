@@ -435,17 +435,17 @@ public class DashboardPageTests
         var id = Guid.NewGuid();
         var bookings = new Mock<IBookingService>();
         bookings.Setup(a => a.GetByIdAsync(Glow.Id, id, It.IsAny<CancellationToken>())).ReturnsAsync(Blank<BookingResponse>() with { Status = BookingStatus.Confirmed });
-        var model = new Omni.App.Pages.Dashboard.BookingDetailModel(ClientContext(SomeClient(timezone: "Asia/Beirut")).Object, bookings.Object) { Id = id }.Attach();
+        var model = new Omni.App.Pages.Dashboard.BookingDetailModel(ClientContext(SomeClient(timezone: "Asia/Beirut")).Object, bookings.Object, TextKit.Localizer()) { Id = id }.Attach();
         // the mock is keyed to Glow; use a client context returning the same client instead
         var client = SomeClient(timezone: "Asia/Beirut");
         bookings.Setup(a => a.GetByIdAsync(client.Id, id, It.IsAny<CancellationToken>())).ReturnsAsync(Blank<BookingResponse>() with { Status = BookingStatus.Confirmed });
-        model = new Omni.App.Pages.Dashboard.BookingDetailModel(ClientContext(client).Object, bookings.Object) { Id = id }.Attach();
+        model = new Omni.App.Pages.Dashboard.BookingDetailModel(ClientContext(client).Object, bookings.Object, TextKit.Localizer()) { Id = id }.Attach();
         Assert.IsType<PageResult>(await model.OnGetAsync(default));
         Assert.Equal((BookingStatus.Confirmed, "Asia/Beirut"), (model.Status, model.ClientTimezone));
 
-        var missing = new Omni.App.Pages.Dashboard.BookingDetailModel(ClientContext(client).Object, bookings.Object) { Id = Guid.NewGuid() }.Attach();
+        var missing = new Omni.App.Pages.Dashboard.BookingDetailModel(ClientContext(client).Object, bookings.Object, TextKit.Localizer()) { Id = Guid.NewGuid() }.Attach();
         Assert.IsType<NotFoundResult>(await missing.OnGetAsync(default));
-        var none = new Omni.App.Pages.Dashboard.BookingDetailModel(ClientContext(null).Object, bookings.Object).Attach();
+        var none = new Omni.App.Pages.Dashboard.BookingDetailModel(ClientContext(null).Object, bookings.Object, TextKit.Localizer()).Attach();
         Assert.IsType<PageResult>(await none.OnGetAsync(default));
     }
 
@@ -455,7 +455,7 @@ public class DashboardPageTests
         var id = Guid.NewGuid();
         var client = SomeClient();
         var bookings = new Mock<IBookingService>();
-        var model = new Omni.App.Pages.Dashboard.BookingDetailModel(ClientContext(client).Object, bookings.Object) { Id = id, Status = "attended" }.Attach();
+        var model = new Omni.App.Pages.Dashboard.BookingDetailModel(ClientContext(client).Object, bookings.Object, TextKit.Localizer()) { Id = id, Status = "attended" }.Attach();
 
         Assert.IsType<NotFoundResult>(await model.OnPostAsync(default));
         bookings.Setup(a => a.UpdateStatusAsync(client.Id, id, "attended", It.IsAny<CancellationToken>())).ReturnsAsync(Blank<BookingResponse>());
@@ -466,7 +466,7 @@ public class DashboardPageTests
         Assert.IsType<PageResult>(await model.OnPostAsync(default));
         Assert.Equal("Bad status.", model.ErrorMessage);
 
-        var none = new Omni.App.Pages.Dashboard.BookingDetailModel(ClientContext(null).Object, bookings.Object).Attach();
+        var none = new Omni.App.Pages.Dashboard.BookingDetailModel(ClientContext(null).Object, bookings.Object, TextKit.Localizer()).Attach();
         Assert.IsType<RedirectToPageResult>(await none.OnPostAsync(default));
     }
 }
@@ -485,7 +485,7 @@ public class ServicePageTests
             .ReturnsAsync((ServiceResponse?)null)
             .ReturnsAsync(Blank<ServiceResponse>() with { Name = "Botox" })
             .ReturnsAsync(Blank<ServiceResponse>() with { Name = "Botox" });
-        var model = new ServiceIndex(ClientContext(Glow).Object, services.Object).Attach();
+        var model = new ServiceIndex(ClientContext(Glow).Object, services.Object, TextKit.Localizer()).Attach();
 
         await model.OnGetAsync(default);
         Assert.True(model.ClientConfigured);
@@ -497,7 +497,7 @@ public class ServicePageTests
         await model.OnPostToggleAsync(id, true, default);
         Assert.Equal("Botox is active again.", model.StatusMessage);
 
-        var none = new ServiceIndex(ClientContext(null).Object, services.Object).Attach();
+        var none = new ServiceIndex(ClientContext(null).Object, services.Object, TextKit.Localizer()).Attach();
         await none.OnGetAsync(default);
         Assert.False(none.ClientConfigured);
         Assert.IsType<RedirectToPageResult>(await none.OnPostToggleAsync(id, true, default));
@@ -510,17 +510,17 @@ public class ServicePageTests
         var services = new Mock<ICatalogService>();
         services.Setup(p => p.GetByIdAsync(Glow.Id, id, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Blank<ServiceResponse>() with { Name = "Facelift", Code = "FL", BookingDuration = 45, Description = "d" });
-        var edit = new ServiceEdit(ClientContext(Glow).Object, services.Object) { Id = id }.Attach();
+        var edit = new ServiceEdit(ClientContext(Glow).Object, services.Object, TextKit.Localizer()) { Id = id }.Attach();
         Assert.IsType<PageResult>(await edit.OnGetAsync(default));
         Assert.Equal(("Facelift", "FL", 45, "d", false), (edit.Name, edit.Code, edit.DurationMinutes, edit.Description, edit.IsNew));
 
-        var fresh = new ServiceEdit(ClientContext(Glow).Object, services.Object).Attach();
+        var fresh = new ServiceEdit(ClientContext(Glow).Object, services.Object, TextKit.Localizer()).Attach();
         Assert.IsType<PageResult>(await fresh.OnGetAsync(default));
         Assert.True(fresh.IsNew);
 
-        var missing = new ServiceEdit(ClientContext(Glow).Object, services.Object) { Id = Guid.NewGuid() }.Attach();
+        var missing = new ServiceEdit(ClientContext(Glow).Object, services.Object, TextKit.Localizer()) { Id = Guid.NewGuid() }.Attach();
         Assert.IsType<NotFoundResult>(await missing.OnGetAsync(default));
-        var none = new ServiceEdit(ClientContext(null).Object, services.Object).Attach();
+        var none = new ServiceEdit(ClientContext(null).Object, services.Object, TextKit.Localizer()).Attach();
         Assert.IsType<PageResult>(await none.OnGetAsync(default));
         Assert.False(none.ClientConfigured);
     }
@@ -530,12 +530,12 @@ public class ServicePageTests
     {
         var id = Guid.NewGuid();
         var services = new Mock<ICatalogService>();
-        var create = new ServiceEdit(ClientContext(Glow).Object, services.Object) { Name = "Botox", Code = "B", Description = "d", DurationMinutes = 20 }.Attach();
+        var create = new ServiceEdit(ClientContext(Glow).Object, services.Object, TextKit.Localizer()) { Name = "Botox", Code = "B", Description = "d", DurationMinutes = 20 }.Attach();
         Assert.Equal("page:/Services/Index", RedirectTarget(await create.OnPostAsync(default)));
         services.Verify(p => p.CreateAsync(new CreateServiceRequest(Glow.Id, "Botox", "B", "d", 20), It.IsAny<CancellationToken>()), Times.Once);
         Assert.Equal("Saved.", create.TempData["StatusMessage"]);
 
-        var update = new ServiceEdit(ClientContext(Glow).Object, services.Object) { Id = id, Name = "Botox" }.Attach();
+        var update = new ServiceEdit(ClientContext(Glow).Object, services.Object, TextKit.Localizer()) { Id = id, Name = "Botox" }.Attach();
         Assert.IsType<NotFoundResult>(await update.OnPostAsync(default));          // UpdateAsync returns null
 
         services.Setup(p => p.UpdateAsync(Glow.Id, id, It.IsAny<UpdateServiceRequest>(), It.IsAny<CancellationToken>())).ReturnsAsync(Blank<ServiceResponse>());
@@ -545,7 +545,7 @@ public class ServicePageTests
         Assert.IsType<PageResult>(await update.OnPostAsync(default));
         Assert.Equal("Name taken.", update.ErrorMessage);
 
-        var none = new ServiceEdit(ClientContext(null).Object, services.Object).Attach();
+        var none = new ServiceEdit(ClientContext(null).Object, services.Object, TextKit.Localizer()).Attach();
         Assert.Equal("page:/Services/Index", RedirectTarget(await none.OnPostAsync(default)));
     }
 }
@@ -559,14 +559,14 @@ public class CampaignDetailsPageTests
     {
         var id = Guid.NewGuid();
         var campaigns = new Mock<ICampaignService>();
-        var model = new CampaignDetails(ClientContext(Glow).Object, campaigns.Object).Attach();
+        var model = new CampaignDetails(ClientContext(Glow).Object, campaigns.Object, TextKit.Localizer()).Attach();
         Assert.IsType<NotFoundResult>(await model.OnGetAsync(id, default));
 
         campaigns.Setup(c => c.GetByIdAsync(Glow.Id, id, It.IsAny<CancellationToken>())).ReturnsAsync(Blank<CampaignDetailsResponse>());
         Assert.IsType<PageResult>(await model.OnGetAsync(id, default));
         Assert.NotNull(model.Details);
 
-        var none = new CampaignDetails(ClientContext(null).Object, campaigns.Object).Attach();
+        var none = new CampaignDetails(ClientContext(null).Object, campaigns.Object, TextKit.Localizer()).Attach();
         Assert.IsType<PageResult>(await none.OnGetAsync(id, default));
         Assert.False(none.ClientConfigured);
     }
@@ -581,7 +581,7 @@ public class CampaignDetailsPageTests
             .ReturnsAsync(Blank<ProcessCampaignBatchResult>() with { Processed = 5, Succeeded = 5, Failed = 0, RemainingQueued = 0, CampaignCompleted = true })
             .ReturnsAsync((ProcessCampaignBatchResult?)null)
             .ThrowsAsync(new InvalidOperationException("Not approved yet."));
-        var model = new CampaignDetails(ClientContext(Glow).Object, campaigns.Object).Attach();
+        var model = new CampaignDetails(ClientContext(Glow).Object, campaigns.Object, TextKit.Localizer()).Attach();
 
         Assert.IsType<RedirectToPageResult>(await model.OnPostSendAsync(id, default));
         Assert.Contains("18 sent so far, 2 failed; the other 5 go out automatically", model.StatusMessage);
@@ -592,7 +592,7 @@ public class CampaignDetailsPageTests
         await model.OnPostSendAsync(id, default);
         Assert.Equal("Not approved yet.", model.ErrorMessage);
 
-        var none = new CampaignDetails(ClientContext(null).Object, campaigns.Object).Attach();
+        var none = new CampaignDetails(ClientContext(null).Object, campaigns.Object, TextKit.Localizer()).Attach();
         Assert.IsType<RedirectToPageResult>(await none.OnPostSendAsync(id, default));
     }
 
@@ -601,7 +601,7 @@ public class CampaignDetailsPageTests
     {
         var id = Guid.NewGuid();
         var campaigns = new Mock<ICampaignService>();
-        var model = new CampaignDetails(ClientContext(Glow).Object, campaigns.Object).Attach();
+        var model = new CampaignDetails(ClientContext(Glow).Object, campaigns.Object, TextKit.Localizer()).Attach();
         await model.OnPostCancelAsync(id, default);
         Assert.Equal("Campaign cancelled.", model.StatusMessage);
 
@@ -609,7 +609,7 @@ public class CampaignDetailsPageTests
         await model.OnPostCancelAsync(id, default);
         Assert.Equal("Already sent.", model.ErrorMessage);
 
-        var none = new CampaignDetails(ClientContext(null).Object, campaigns.Object).Attach();
+        var none = new CampaignDetails(ClientContext(null).Object, campaigns.Object, TextKit.Localizer()).Attach();
         Assert.IsType<RedirectToPageResult>(await none.OnPostCancelAsync(id, default));
     }
 
@@ -618,7 +618,7 @@ public class CampaignDetailsPageTests
     {
         var id = Guid.NewGuid();
         var campaigns = new Mock<ICampaignService>();
-        var model = new CampaignDetails(ClientContext(Glow).Object, campaigns.Object).Attach();
+        var model = new CampaignDetails(ClientContext(Glow).Object, campaigns.Object, TextKit.Localizer()).Attach();
         Assert.IsType<RedirectToPageResult>(await model.OnPostStopAsync(id, default));
         Assert.Contains("Campaign stopped", model.StatusMessage);
         campaigns.Verify(c => c.StopAsync(Glow.Id, id, It.IsAny<CancellationToken>()), Times.Once);
@@ -627,7 +627,7 @@ public class CampaignDetailsPageTests
         await model.OnPostStopAsync(id, default);
         Assert.Equal("Only a scheduled or sending campaign can be stopped.", model.ErrorMessage);
 
-        var none = new CampaignDetails(ClientContext(null).Object, campaigns.Object).Attach();
+        var none = new CampaignDetails(ClientContext(null).Object, campaigns.Object, TextKit.Localizer()).Attach();
         Assert.IsType<RedirectToPageResult>(await none.OnPostStopAsync(id, default));
         campaigns.Verify(c => c.StopAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
     }
@@ -637,5 +637,5 @@ public class CampaignDetailsPageTests
     [InlineData("running", "Running")]
     [InlineData("scheduled", "Scheduled")]
     public void Campaign_status_labels_call_a_stopped_campaign_stopped(string status, string label) =>
-        Assert.Equal(label, StatusBadgeHelper.CampaignStatusLabel(status));
+        Assert.Equal(label, TextKit.Localizer().CampaignStatusLabel(status));
 }

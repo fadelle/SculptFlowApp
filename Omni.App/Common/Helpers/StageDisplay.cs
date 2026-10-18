@@ -22,7 +22,7 @@ public static class StageDisplay
     };
 
     public static string Label(IReadOnlyList<PipelineStageOption> stages, string? key) =>
-        Find(stages, key)?.Label ?? FilterLabelHelper.Label(key);
+        Find(stages, key)?.Label ?? FilterLabelHelper.Readable(key);
 
     public static string CssClass(IReadOnlyList<PipelineStageOption> stages, string? key) =>
         Find(stages, key) is { } stage ? CategoryColors.GetValueOrDefault(stage.Category, "badge-gray") : "badge-gray";

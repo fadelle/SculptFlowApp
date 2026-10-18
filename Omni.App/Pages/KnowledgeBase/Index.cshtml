@@ -1,9 +1,9 @@
 @page "/KnowledgeBase"
 @model Omni.App.Pages.KnowledgeBase.IndexModel
 @{
-    ViewData["Title"] = "Knowledge Base";
-    static Microsoft.AspNetCore.Html.IHtmlContent Ago(DateTimeOffset when) =>
-        LocalTimeHelper.Ago(when, dayCutoff: 30, fallbackFormat: when.Year == DateTimeOffset.UtcNow.Year ? "month-day" : "date");
+    ViewData["Title"] = T["nav.knowledgeBase"].Value;
+    Microsoft.AspNetCore.Html.IHtmlContent Ago(DateTimeOffset when) =>
+        LocalTimeHelper.Ago(T, when, dayCutoff: 30, fallbackFormat: when.Year == DateTimeOffset.UtcNow.Year ? "month-day" : "date");
 }
 
 @if (!Model.ClientConfigured)
@@ -17,17 +17,16 @@ else
     <div class="au-page-head">
         <div class="mw-640">
             <p class="au-page-head__sub">
-                What your AI assistant is allowed to tell contacts. Only active entries are used.
-                <button type="button" class="link-btn" data-toggle-target="kb-how" aria-expanded="false" aria-controls="kb-how">How it works</button>
+                @T["knowledge.intro"]
+                <button type="button" class="link-btn" data-toggle-target="kb-how" aria-expanded="false" aria-controls="kb-how">@T["services.how.button"]</button>
             </p>
             <p class="au-help mt-1 mb-0" id="kb-how" hidden>
-                Add FAQs, policies, doctors, pricing, preparation and recovery information. The AI looks things up here when
-                contacts ask about your client. A website you import shows as one entry; open it to see every page that was read.
+                @T["knowledge.how"]
             </p>
         </div>
         <div class="au-page-head__actions">
-            <a href="/KnowledgeBase/Settings" class="au-btn au-btn--outlined"><span class="au-icon" aria-hidden="true">tune</span>Settings</a>
-            <a href="/KnowledgeBase/Edit" class="au-btn au-btn--primary"><span class="au-icon" aria-hidden="true">add</span>Add knowledge</a>
+            <a href="/KnowledgeBase/Settings" class="au-btn au-btn--outlined"><span class="au-icon" aria-hidden="true">tune</span>@T["knowledge.settings"]</a>
+            <a href="/KnowledgeBase/Edit" class="au-btn au-btn--primary"><span class="au-icon" aria-hidden="true">add</span>@T["knowledge.add"]</a>
         </div>
     </div>
 
@@ -36,12 +35,12 @@ else
         <div class="au-panel au-panel--round">
             <div class="au-empty">
                 <span class="au-empty__icon"><span class="au-icon" aria-hidden="true">menu_book</span></span>
-                <div class="empty-title">Teach your AI assistant about your client</div>
-                <p class="empty-text">Start with one of these. You can add more any time.</p>
+                <div class="empty-title">@T["knowledge.empty.title"]</div>
+                <p class="empty-text">@T["knowledge.empty.text"]</p>
                 <div class="kb-choices kb-choices-center">
-                    <a href="/KnowledgeBase/Edit" class="kb-choice"><span class="kb-choice-icon au-icon" aria-hidden="true">edit_note</span><strong>Write it</strong><small>FAQs, policies, anything.</small></a>
-                    <a href="/KnowledgeBase/Edit?mode=upload" class="kb-choice"><span class="kb-choice-icon au-icon" aria-hidden="true">upload_file</span><strong>Upload a document</strong><small>PDF, Word or text file.</small></a>
-                    <a href="/KnowledgeBase/Edit?mode=website" class="kb-choice"><span class="kb-choice-icon au-icon" aria-hidden="true">language</span><strong>Import your website</strong><small>We read the pages for you.</small></a>
+                    <a href="/KnowledgeBase/Edit" class="kb-choice"><span class="kb-choice-icon au-icon" aria-hidden="true">edit_note</span><strong>@T["knowledge.choice.write"]</strong><small>@T["knowledge.choice.writeHelp"]</small></a>
+                    <a href="/KnowledgeBase/Edit?mode=upload" class="kb-choice"><span class="kb-choice-icon au-icon" aria-hidden="true">upload_file</span><strong>@T["knowledge.choice.upload"]</strong><small>@T["knowledge.choice.uploadHelp"]</small></a>
+                    <a href="/KnowledgeBase/Edit?mode=website" class="kb-choice"><span class="kb-choice-icon au-icon" aria-hidden="true">language</span><strong>@T["knowledge.choice.website"]</strong><small>@T["knowledge.choice.websiteHelp"]</small></a>
                 </div>
             </div>
         </div>
@@ -52,16 +51,16 @@ else
            knowledge-page.js. *@
         <div class="au-toolbar">
             <div class="au-toolbar__filters">
-                <input type="search" id="kb-search" class="au-input search-input" placeholder="Search knowledge" aria-label="Search knowledge" />
-                <select id="kb-cat" class="au-select" aria-label="Filter by category">
-                    <option value="">All categories</option>
-                    @foreach (var (value, label) in KnowledgeCategory.All)
+                <input type="search" id="kb-search" class="au-input search-input" placeholder="@T["knowledge.search"]" aria-label="@T["knowledge.search"]" />
+                <select id="kb-cat" class="au-select" aria-label="@T["knowledge.filterCategory"]">
+                    <option value="">@T["knowledge.allCategories"]</option>
+                    @foreach (var value in KnowledgeCategory.All)
                     {
-                        <option value="@value">@label</option>
+                        <option value="@value">@T.CategoryLabel(value)</option>
                     }
                 </select>
             </div>
-            <span class="au-toolbar__meta">@Model.Rows.Count @(Model.Rows.Count == 1 ? "entry" : "entries")</span>
+            <span class="au-toolbar__meta">@(Model.Rows.Count == 1 ? T["knowledge.count.one"] : T["knowledge.count.other", Model.Rows.Count])</span>
         </div>
 
         <div class="au-table-card">
@@ -69,11 +68,11 @@ else
                 <table class="au-table au-table--stack" id="kb-table">
                     <thead>
                         <tr>
-                            <th>Entry</th>
-                            <th>Category</th>
-                            <th>Status</th>
-                            <th>Updated</th>
-                            <th><span class="au-sr-only">Actions</span></th>
+                            <th>@T["knowledge.table.entry"]</th>
+                            <th>@T["knowledge.table.category"]</th>
+                            <th>@T["services.table.status"]</th>
+                            <th>@T["knowledge.table.updated"]</th>
+                            <th><span class="au-sr-only">@T["services.table.actions"]</span></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -85,50 +84,50 @@ else
                                 var when = w.LastScrapedAt ?? w.CreatedAt;
                                 var run = w.LatestRun;
                                 <tr class="row-link @(w.IsActive ? "" : "row-dim")" data-href="/KnowledgeBase/Websites/@w.Id" data-cat="@w.Category"
-                                    data-search="@($"{url} website {KnowledgeCategory.Label(w.Category)}".ToLowerInvariant())">
-                                    <td data-label="Entry">
+                                    data-search="@($"{url} {T["knowledge.source.website"]} {T.CategoryLabel(w.Category)}".ToLowerInvariant())">
+                                    <td data-label="@T["knowledge.table.entry"]">
                                         <div class="kb-title">
-                                            <span class="src-icon src-web" title="Website"><span class="au-icon au-icon--sm" aria-hidden="true">language</span></span>
+                                            <span class="src-icon src-web" title="@T["knowledge.source.website"]"><span class="au-icon au-icon--sm" aria-hidden="true">language</span></span>
                                             <div class="min-w-0">
                                                 <a href="/KnowledgeBase/Websites/@w.Id" class="row-title clip-1" title="@url">@url</a>
                                                 <div class="cell-sub">
-                                                    Website · @(w.CrawlMode == WebsiteCrawlMode.SinglePage ? "Single page" : "Whole website")
-                                                    · @w.IndexedPages page@(w.IndexedPages == 1 ? "" : "s")
+                                                    @T["knowledge.source.website"] · @(w.CrawlMode == WebsiteCrawlMode.SinglePage ? T["knowledge.crawl.single"] : T["knowledge.crawl.whole"])
+                                                    · @(w.IndexedPages == 1 ? T["knowledge.pages.one"] : T["knowledge.pages.other", w.IndexedPages])
                                                 </div>
                                             </div>
                                         </div>
                                     </td>
-                                    <td data-label="Category"><span class="cat-tag">@KnowledgeCategory.Label(w.Category)</span></td>
-                                    <td data-label="Status" class="au-wrap">
+                                    <td data-label="@T["knowledge.table.category"]"><span class="cat-tag">@T.CategoryLabel(w.Category)</span></td>
+                                    <td data-label="@T["services.table.status"]" class="au-wrap">
                                         <div>
-                                            <span class="badge @(w.IsActive ? "badge-green" : "badge-gray")">@(w.IsActive ? "Active" : "Inactive")</span>
+                                            <span class="badge @(w.IsActive ? "badge-green" : "badge-gray")">@(w.IsActive ? T["services.active"] : T["services.inactive"])</span>
                                             @if (w.InProgress)
                                             {
-                                                <div class="cell-sub"><span class="spin"></span>@(run is { PagesDiscovered: > 0 } ? $"Importing {run.PagesProcessed} of {run.PagesDiscovered}" : "Waiting to start")</div>
+                                                <div class="cell-sub"><span class="spin"></span>@(run is { PagesDiscovered: > 0 } ? T["knowledge.import.progress", run.PagesProcessed, run.PagesDiscovered] : T["knowledge.import.waiting"])</div>
                                             }
                                             else if (w.Status == WebsiteScrapeStatus.Failed)
                                             {
-                                                <div class="cell-err">Import failed</div>
+                                                <div class="cell-err">@T["knowledge.import.failed"]</div>
                                             }
                                             else if (w.Status == WebsiteScrapeStatus.CompletedWithErrors)
                                             {
-                                                <div class="cell-sub text-warn-soft">Imported with problems</div>
+                                                <div class="cell-sub text-warn-soft">@T["knowledge.import.withProblems"]</div>
                                             }
                                         </div>
                                     </td>
-                                    <td data-label="Updated" class="cell-sub" @LocalTimeHelper.Title(when)>@Ago(when)</td>
+                                    <td data-label="@T["knowledge.table.updated"]" class="cell-sub" @LocalTimeHelper.Title(when)>@Ago(when)</td>
                                     <td class="row-actions">
-                                        <a href="/KnowledgeBase/Websites/@w.Id" class="au-btn au-btn--outlined au-btn--sm">Open</a>
+                                        <a href="/KnowledgeBase/Websites/@w.Id" class="au-btn au-btn--outlined au-btn--sm">@T["knowledge.open"]</a>
                                         <form method="post" asp-page-handler="ToggleWebsite" class="inline-form">
                                             <input type="hidden" name="id" value="@w.Id" />
                                             <input type="hidden" name="active" value="@((!w.IsActive).ToString().ToLowerInvariant())" />
-                                            <button type="submit" class="au-btn au-btn--text au-btn--sm">@(w.IsActive ? "Deactivate" : "Activate")</button>
+                                            <button type="submit" class="au-btn au-btn--text au-btn--sm">@(w.IsActive ? T["services.deactivate"] : T["services.activate"])</button>
                                         </form>
                                         <form method="post" asp-page-handler="DeleteWebsite" class="inline-form"
-                                              data-au-confirm="Delete this website and all the Knowledge Base pages imported from it? Written entries and uploaded documents stay."
-                                              data-au-confirm-title="Delete website" data-au-confirm-label="Delete website" data-au-confirm-tone="danger">
+                                              data-au-confirm="@T["knowledge.website.deleteConfirm"]"
+                                              data-au-confirm-title="@T["knowledge.website.delete"]" data-au-confirm-label="@T["knowledge.website.delete"]" data-au-confirm-tone="danger">
                                             <input type="hidden" name="id" value="@w.Id" />
-                                            <button type="submit" class="au-btn au-btn--text au-btn--sm btn-danger-text" disabled="@w.InProgress">Delete</button>
+                                            <button type="submit" class="au-btn au-btn--text au-btn--sm btn-danger-text" disabled="@w.InProgress">@T["common.delete"]</button>
                                         </form>
                                     </td>
                                 </tr>
@@ -137,44 +136,44 @@ else
                             {
                                 var isUpload = d.SourceType == KnowledgeSourceType.Upload;
                                 <tr class="row-link @(d.IsActive ? "" : "row-dim")" data-href="/KnowledgeBase/Edit/@d.Id" data-cat="@d.Category"
-                                    data-search="@($"{d.Title} {d.OriginalFileName} {KnowledgeCategory.Label(d.Category)}".ToLowerInvariant())">
-                                    <td data-label="Entry">
+                                    data-search="@($"{d.Title} {d.OriginalFileName} {T.CategoryLabel(d.Category)}".ToLowerInvariant())">
+                                    <td data-label="@T["knowledge.table.entry"]">
                                         <div class="kb-title">
                                             @if (isUpload)
                                             {
-                                                <span class="src-icon src-up" title="Document"><span class="au-icon au-icon--sm" aria-hidden="true">description</span></span>
+                                                <span class="src-icon src-up" title="@T["knowledge.source.document"]"><span class="au-icon au-icon--sm" aria-hidden="true">description</span></span>
                                             }
                                             else
                                             {
-                                                <span class="src-icon src-doc" title="Written"><span class="au-icon au-icon--sm" aria-hidden="true">edit_note</span></span>
+                                                <span class="src-icon src-doc" title="@T["knowledge.source.written"]"><span class="au-icon au-icon--sm" aria-hidden="true">edit_note</span></span>
                                             }
                                             <div class="min-w-0">
                                                 <a href="/KnowledgeBase/Edit/@d.Id" class="row-title">@d.Title</a>
-                                                <div class="cell-sub">@(isUpload ? "Document · " + d.OriginalFileName : "Written")</div>
+                                                <div class="cell-sub">@(isUpload ? T["knowledge.source.documentFile", d.OriginalFileName ?? ""] : T["knowledge.source.written"])</div>
                                             </div>
                                         </div>
                                     </td>
-                                    <td data-label="Category"><span class="cat-tag">@KnowledgeCategory.Label(d.Category)</span></td>
-                                    <td data-label="Status"><span class="badge @(d.IsActive ? "badge-green" : "badge-gray")">@(d.IsActive ? "Active" : "Inactive")</span></td>
-                                    <td data-label="Updated" class="cell-sub" @LocalTimeHelper.Title(d.UpdatedAt)>@Ago(d.UpdatedAt)</td>
+                                    <td data-label="@T["knowledge.table.category"]"><span class="cat-tag">@T.CategoryLabel(d.Category)</span></td>
+                                    <td data-label="@T["services.table.status"]"><span class="badge @(d.IsActive ? "badge-green" : "badge-gray")">@(d.IsActive ? T["services.active"] : T["services.inactive"])</span></td>
+                                    <td data-label="@T["knowledge.table.updated"]" class="cell-sub" @LocalTimeHelper.Title(d.UpdatedAt)>@Ago(d.UpdatedAt)</td>
                                     <td class="row-actions">
-                                        <a href="/KnowledgeBase/Edit/@d.Id" class="au-btn au-btn--outlined au-btn--sm">Edit</a>
+                                        <a href="/KnowledgeBase/Edit/@d.Id" class="au-btn au-btn--outlined au-btn--sm">@T["common.edit"]</a>
                                         <form method="post" asp-page-handler="Toggle" class="inline-form">
                                             <input type="hidden" name="id" value="@d.Id" />
                                             <input type="hidden" name="active" value="@((!d.IsActive).ToString().ToLowerInvariant())" />
-                                            <button type="submit" class="au-btn au-btn--text au-btn--sm">@(d.IsActive ? "Deactivate" : "Activate")</button>
+                                            <button type="submit" class="au-btn au-btn--text au-btn--sm">@(d.IsActive ? T["services.deactivate"] : T["services.activate"])</button>
                                         </form>
                                         <form method="post" asp-page-handler="Delete" class="inline-form"
-                                              data-au-confirm="Delete “@d.Title” permanently? The AI assistant will no longer use it."
-                                              data-au-confirm-title="Delete entry" data-au-confirm-label="Delete" data-au-confirm-tone="danger">
+                                              data-au-confirm="@T["knowledge.entry.deleteConfirm", d.Title]"
+                                              data-au-confirm-title="@T["knowledge.entry.delete"]" data-au-confirm-label="@T["common.delete"]" data-au-confirm-tone="danger">
                                             <input type="hidden" name="id" value="@d.Id" />
-                                            <button type="submit" class="au-btn au-btn--text au-btn--sm btn-danger-text">Delete</button>
+                                            <button type="submit" class="au-btn au-btn--text au-btn--sm btn-danger-text">@T["common.delete"]</button>
                                         </form>
                                     </td>
                                 </tr>
                             }
                         }
-                        <tr class="empty-row" id="kb-no-match" hidden><td colspan="5">Nothing matches your search.</td></tr>
+                        <tr class="empty-row" id="kb-no-match" hidden><td colspan="5">@T["knowledge.noMatch"]</td></tr>
                     </tbody>
                 </table>
             </div>

@@ -19,7 +19,7 @@
 
   function api(method, path) {
     return fetch(path, { method: method, headers: { 'Content-Type': 'application/json' } }).then(function (r) {
-      if (!r.ok) throw new Error('Request failed: ' + r.status);
+      if (!r.ok) throw new Error(omniText.t('common.errors.requestFailed', [r.status]));
       return r.status === 204 ? null : r.json();
     });
   }
@@ -45,17 +45,17 @@
   function timeAgo(iso) {
     var diffMs = Date.now() - new Date(iso).getTime();
     var mins = Math.round(diffMs / 60000);
-    if (mins < 1) return 'just now';
-    if (mins < 60) return mins + 'm ago';
+    if (mins < 1) return omniText.t('notifications.time.justNow');
+    if (mins < 60) return omniText.t('notifications.time.minutes', [mins]);
     var hours = Math.round(mins / 60);
-    if (hours < 24) return hours + 'h ago';
-    return Math.round(hours / 24) + 'd ago';
+    if (hours < 24) return omniText.t('notifications.time.hours', [hours]);
+    return omniText.t('notifications.time.days', [Math.round(hours / 24)]);
   }
 
   function render(items) {
     body.innerHTML = '';
     if (!items.length) {
-      body.appendChild(el('div', { class: 'notif-empty' }, ['No notifications yet.']));
+      body.appendChild(el('div', { class: 'notif-empty' }, [omniText.t('header.notifications.empty')]));
       return;
     }
     items.forEach(function (n) {
@@ -81,7 +81,7 @@
 
   function renderLoading() {
     body.innerHTML = '';
-    body.appendChild(el('div', { class: 'notif-empty' }, ['Loading…']));
+    body.appendChild(el('div', { class: 'notif-empty' }, [omniText.t('common.loading')]));
   }
 
   function el(tag, attrs, kids) {
@@ -103,7 +103,7 @@
     }).catch(function () {
       if (open && !cachedItems) {
         body.innerHTML = '';
-        body.appendChild(el('div', { class: 'notif-empty' }, ['Could not load notifications.']));
+        body.appendChild(el('div', { class: 'notif-empty' }, [omniText.t('notifications.loadFailed')]));
       }
     });
   }

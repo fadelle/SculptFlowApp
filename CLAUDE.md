@@ -137,6 +137,9 @@ Full detail and the declared-settings table: `docs/configuration.md`.
   Razor `@T["key"]` (`@T.Html("key", args)` when an argument is HTML, e.g. a `LocalTimeHelper.Time` tag), page models an
   injected `IStringLocalizer` with `…Key` constants, JS `omniText.t('key', [args])`, server messages `throw new ArgumentException("key").WithArgs(...)`
   (`[ApiErrors]` and `TextError.Localize` turn keys into text; a plain message still shows as written).
+- A stored value shown as a label goes through `T.ValueLabel(value)` (key `values.{value in camelCase}`; also
+  `T.CampaignStatusLabel`, `T.TemplateStatusLabel`, `T.CategoryLabel`), never an English map in code; JS keeps
+  `omniText.t('key')` literal (the guard only sees literal keys) and formats dates with `omniText.lang`.
 - Placeholders: `{0}`… for arguments; `{contact}` `{contacts}` `{Contact}` `{Contacts}` (same for member, service, booking,
   order, client) for the client's business-type words. Never glue a word into a sentence Arabic can't follow.
   `Guards/UiTextKeysTests` fails on a missing or unused key or an unknown placeholder.

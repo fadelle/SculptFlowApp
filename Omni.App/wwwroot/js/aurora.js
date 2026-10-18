@@ -92,7 +92,7 @@
   };
   function syncThemeToggle(btn) {
     var dark = theme.get() === 'dark';
-    var label = dark ? 'Switch to light mode' : 'Switch to dark mode';
+    var label = dark ? omniText.t('aurora.theme.toLight') : omniText.t('aurora.theme.toDark');
     btn.setAttribute('aria-label', label);
     if (btn.hasAttribute('data-au-tip')) btn.setAttribute('data-au-tip', label);
     var glyph = btn.querySelector('.au-icon');
@@ -144,7 +144,7 @@
       '<div class="au-toast__msg">' +
       esc(text) +
       '</div>' +
-      '<button type="button" class="au-icon-btn au-icon-btn--sm" aria-label="Dismiss">' +
+      '<button type="button" class="au-icon-btn au-icon-btn--sm" aria-label="' + esc(omniText.t('aurora.toast.dismiss')) + '">' +
       icon('close') +
       '</button>';
     var dismiss = function () {
@@ -220,8 +220,8 @@
         '<h2 class="au-dialog__title" id="au-confirm-title"></h2>' +
         '<div class="au-dialog__content"><div class="au-dialog__text"></div></div>' +
         '<div class="au-dialog__actions">' +
-        '<button type="button" class="au-btn" data-au-cancel>Cancel</button>' +
-        '<button type="button" class="au-btn" data-au-ok>Confirm</button>' +
+        '<button type="button" class="au-btn" data-au-cancel>' + esc(omniText.t('common.cancel')) + '</button>' +
+        '<button type="button" class="au-btn" data-au-ok>' + esc(omniText.t('aurora.dialog.confirm')) + '</button>' +
         '</div>';
       document.body.appendChild(confirmEl);
       confirmEl.addEventListener('click', function (e) {
@@ -235,7 +235,7 @@
     else text.textContent = opts.message || '';
     var ok = confirmEl.querySelector('[data-au-ok]');
     ok.className = 'au-btn au-btn--' + tone;
-    ok.textContent = opts.confirmLabel || 'Confirm';
+    ok.textContent = opts.confirmLabel || omniText.t('aurora.dialog.confirm');
     confirmEl.querySelector('[data-au-cancel]').textContent = opts.cancelLabel || 'Cancel';
     return new Promise(function (resolve) {
       function done(result) {
@@ -347,7 +347,7 @@
       });
       if (empty) {
         empty.hidden = !(now && shown === 0);
-        empty.textContent = 'No pages match “' + raw + '”.';
+        empty.textContent = omniText.t('aurora.nav.noMatchFor', [raw]);
       }
     }
     input.addEventListener('input', apply);
@@ -382,8 +382,8 @@
         b.classList.toggle('is-on', on);
         b.setAttribute('aria-pressed', on ? 'true' : 'false');
         var label = b.getAttribute('data-label') || '';
-        b.setAttribute('aria-label', (on ? 'Unpin ' : 'Pin ') + label);
-        b.title = on ? 'Unpin from favorites' : 'Pin to favorites';
+        b.setAttribute('aria-label', on ? omniText.t('aurora.nav.unpin', [label]) : omniText.t('aurora.nav.pin', [label]));
+        b.title = on ? omniText.t('aurora.nav.unpinHelp') : omniText.t('aurora.nav.pinHelp');
       });
       if (!host) return;
       var rows = favs
@@ -401,7 +401,7 @@
       if (!rows.length) return;
       var label = document.createElement('div');
       label.className = 'au-side-section';
-      label.innerHTML = icon('star', 'au-icon--fill') + 'Favorites';
+      label.innerHTML = icon('star', 'au-icon--fill') + esc(omniText.t('aurora.nav.favorites'));
       host.appendChild(label);
       rows.forEach(function (r) {
         host.appendChild(r);
@@ -470,13 +470,13 @@
         var recent = readJson(KEY.recent, []).map(function (r) {
           return byPath(r.path);
         }).filter(Boolean);
-        if (favs.length) groups.push({ title: 'Favorites', items: favs });
-        if (recent.length) groups.push({ title: 'Recent', items: recent.slice(0, 6) });
-        groups.push({ title: 'All pages', items: pages });
+        if (favs.length) groups.push({ title: omniText.t('aurora.nav.favorites'), items: favs });
+        if (recent.length) groups.push({ title: omniText.t('aurora.nav.recent'), items: recent.slice(0, 6) });
+        groups.push({ title: omniText.t('aurora.nav.allPages'), items: pages });
       } else {
         var terms = q.split(/\s+/);
         groups.push({
-          title: 'Pages',
+          title: omniText.t('website.pages.title'),
           items: pages
             .filter(function (p) {
               var hay = ((p.trail || []).join(' ') + ' ' + p.label).toLowerCase();
@@ -515,7 +515,7 @@
             '</span></li>';
         });
       });
-      if (!results.length) html = '<li class="au-palette__group">No pages match.</li>';
+      if (!results.length) html = '<li class="au-palette__group">' + esc(omniText.t('aurora.nav.noMatch')) + '</li>';
       list.innerHTML = html;
       var sel = list.querySelector('[aria-selected="true"]');
       if (sel) sel.scrollIntoView({ block: 'nearest' });
@@ -578,7 +578,7 @@
       if (!input || !list) return;
       var endpoint = host.getAttribute('data-endpoint');
       var param = host.getAttribute('data-param') || 'scope';
-      var allLabel = host.getAttribute('data-all-label') || 'All';
+      var allLabel = host.getAttribute('data-all-label') || omniText.t('campaigns.tabs.all');
       var currentId = host.getAttribute('data-current-id') || '';
       var currentName = host.getAttribute('data-current-name') || '';
       var resetParams = (host.getAttribute('data-reset-params') || 'page').split(',');
@@ -609,8 +609,8 @@
             var cls = 'au-combobox__opt' + (o.all ? ' au-combobox__opt--all' : '') + (o.id === currentId ? ' is-current' : '');
             return (
               '<li class="' + cls + '" role="option" id="' + list.id + '-' + i + '" data-i="' + i + '" aria-selected="' + (i === active) + '">' +
-              '<span class="au-combobox__opt-name"><span>' + esc(o.name || 'Unnamed') + '</span>' +
-              (!o.all && o.isActive === false ? '<span class="au-chip au-chip--outlined" style="height:18px;font-size:10px">inactive</span>' : '') +
+              '<span class="au-combobox__opt-name"><span>' + esc(o.name || omniText.t('bookings.unnamed')) + '</span>' +
+              (!o.all && o.isActive === false ? '<span class="au-chip au-chip--outlined" style="height:18px;font-size:10px">' + esc(omniText.t('aurora.combobox.inactive')) + '</span>' : '') +
               '</span>' +
               (o.sub ? '<span class="au-combobox__opt-sub">' + esc(o.sub) + '</span>' : '') +
               '</li>'
@@ -629,7 +629,7 @@
         }
         loading = true;
         var my = ++seq;
-        render('Loading…');
+        render(omniText.t('common.loading'));
         var url = endpoint + (endpoint.indexOf('?') === -1 ? '?' : '&') + 'q=' + encodeURIComponent(q) + '&skip=' + items.length + '&take=' + PAGE;
         fetch(url, { headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' }, credentials: 'same-origin' })
           .then(function (r) {
@@ -641,12 +641,12 @@
             items = items.concat(data.items || []);
             hasMore = !!data.hasMore;
             loading = false;
-            render(items.length ? null : q ? 'No matches' : null);
+            render(items.length ? null : q ? omniText.t('aurora.combobox.noMatches') : null);
           })
           .catch(function (err) {
             if (my !== seq) return;
             loading = false;
-            render('Could not load the list (' + err.message + ')');
+            render(omniText.t('aurora.combobox.loadFailed', [err.message]));
           });
       }
       function openList() {
@@ -821,10 +821,10 @@
         }
         copy(value || '', copyBtn.closest('dialog') || undefined).then(
           function () {
-            toast.success(copyBtn.getAttribute('data-au-copy-message') || 'Copied');
+            toast.success(copyBtn.getAttribute('data-au-copy-message') || omniText.t('aurora.copy.done'));
           },
           function () {
-            toast.error('Could not copy to clipboard');
+            toast.error(omniText.t('aurora.copy.failed'));
           }
         );
         return;
@@ -913,8 +913,8 @@
       .catch(function (err) {
         body.innerHTML =
           '<div class="au-alert au-alert--error">' + icon('error', 'au-alert__icon') +
-          '<div class="au-alert__body"><div class="au-alert__title">Could not load the details</div>' +
-          esc(err && err.status ? 'The server answered HTTP ' + err.status + ' for ' + url : 'The request did not reach the server: ' + url) +
+          '<div class="au-alert__body"><div class="au-alert__title">' + esc(omniText.t('aurora.drawer.loadFailed')) + '</div>' +
+          esc(err && err.status ? omniText.t('aurora.drawer.httpError', [err.status, url]) : omniText.t('aurora.drawer.unreachable', [url])) +
           '</div></div>';
       });
   }

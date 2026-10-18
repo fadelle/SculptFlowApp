@@ -1,10 +1,12 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.Extensions.Localization;
 using Omni.App.Business.Contracts.Managers;
 using Omni.App.Business.Contracts.Services.Knowledge;
 using Omni.App.Business.Engines.Knowledge;
 using Omni.App.Common.Enums;
 using Omni.App.Common.Exceptions;
+using Omni.App.Common.Helpers;
 using Omni.App.Entities.Requests.Knowledge;
 
 namespace Omni.App.Pages.KnowledgeBase;
@@ -15,15 +17,24 @@ namespace Omni.App.Pages.KnowledgeBase;
 /// Saving re-chunks and re-embeds the text; the client always comes from the logged-in user.</summary>
 public class EditModel : PageModel
 {
+    private const string WebsiteAddedKey = "knowledge.website.added";
+    private const string UploadedOneKey = "knowledge.upload.doneOne";
+    private const string UploadedOtherKey = "knowledge.upload.doneOther";
+    private const string UploadIndexFailedKey = "knowledge.upload.indexFailed";
+    private const string SavedKey = "knowledge.entry.saved";
+    private const string EntryIndexFailedKey = "knowledge.entry.indexFailed";
+
     private readonly ICurrentClientContext _clientContext;
     private readonly IKnowledgeService _knowledge;
     private readonly IWebsiteSourceService _websites;
+    private readonly IStringLocalizer _text;
 
-    public EditModel(ICurrentClientContext clientContext, IKnowledgeService knowledge, IWebsiteSourceService websites)
+    public EditModel(ICurrentClientContext clientContext, IKnowledgeService knowledge, IWebsiteSourceService websites, IStringLocalizer text)
     {
         _clientContext = clientContext;
         _knowledge = knowledge;
         _websites = websites;
+        _text = text;
     }
 
     /// <summary>Route value — null when adding a new entry.</summary>
@@ -89,10 +100,10 @@ public class EditModel : PageModel
             : "/KnowledgeBase";
 
     /// <summary>The standard categories, plus the entry's own if it was saved with a custom one.</summary>
-    public IReadOnlyList<(string Value, string Label)> CategoryOptions =>
-        KnowledgeCategory.All.Any(c => c.Value == Category) || string.IsNullOrWhiteSpace(Category)
+    public IReadOnlyList<string> CategoryOptions =>
+        KnowledgeCategory.All.Contains(Category) || string.IsNullOrWhiteSpace(Category)
             ? KnowledgeCategory.All
-            : KnowledgeCategory.All.Append((Category, KnowledgeCategory.Label(Category))).ToList();
+            : KnowledgeCategory.All.Append(Category).ToList();
 
     public async Task<IActionResult> OnGetAsync(CancellationToken ct)
     {
@@ -135,12 +146,12 @@ public class EditModel : PageModel
         try
         {
             var source = await _websites.CreateAsync(client.Id, new CreateWebsiteSourceRequest(WebsiteUrl, WebsiteMode, Category, IsActive), ct);
-            TempData["StatusMessage"] = "Website added — the crawl has started. This page updates as it runs.";
+            TempData["StatusMessage"] = _text[WebsiteAddedKey].Value;
             return Redirect($"/KnowledgeBase/Websites/{source.Id}");
         }
         catch (ArgumentException ex)
         {
-            ErrorMessage = ex.Message;
+            ErrorMessage = _text.Localize(ex);
         }
         return Page();
     }
@@ -160,7 +171,9 @@ public class EditModel : PageModel
         {
             if (UploadFile is null || UploadFile.Length == 0)
             {
-                throw new InvalidDocumentException(UploadFile is null ? "Choose a file to upload." : "The file is empty.");
+                throw UploadFile is null
+                    ? new InvalidDocumentException("knowledge.upload.errors.noFile")
+                    : new InvalidDocumentException("knowledge.upload.errors.emptyFile");
             }
 
             await using var stream = UploadFile.OpenReadStream();
@@ -168,16 +181,16 @@ public class EditModel : PageModel
                 client.Id, new UploadKnowledgeRequest(Title, Category, IsActive),
                 UploadFile.FileName, stream, UploadFile.Length, ct);
 
-            TempData["StatusMessage"] = $"Uploaded \"{doc.Title}\" — {doc.ChunkCount} searchable piece{(doc.ChunkCount == 1 ? "" : "s")} created.";
+            TempData["StatusMessage"] = doc.ChunkCount == 1 ? _text[UploadedOneKey, doc.Title].Value : _text[UploadedOtherKey, doc.Title, doc.ChunkCount].Value;
             return RedirectToPage("/KnowledgeBase/Index");
         }
         catch (ArgumentException ex)
         {
-            ErrorMessage = ex.Message;
+            ErrorMessage = _text.Localize(ex);
         }
         catch (InvalidOperationException ex)
         {
-            ErrorMessage = $"Couldn't index this document for AI search: {ex.Message}";
+            ErrorMessage = _text[UploadIndexFailedKey, _text.Localize(ex)].Value;
         }
         return Page();
     }
@@ -213,16 +226,16 @@ public class EditModel : PageModel
                 return NotFound();
             }
 
-            TempData["StatusMessage"] = "Saved.";
+            TempData["StatusMessage"] = _text[SavedKey].Value;
             return LocalRedirect(BackUrl); // back to where the user came from (the main list, or a website's page)
         }
         catch (ArgumentException ex)
         {
-            ErrorMessage = ex.Message;
+            ErrorMessage = _text.Localize(ex);
         }
         catch (InvalidOperationException ex)
         {
-            ErrorMessage = $"Couldn't index this entry for AI search: {ex.Message}";
+            ErrorMessage = _text[EntryIndexFailedKey, _text.Localize(ex)].Value;
         }
         return Page();
     }

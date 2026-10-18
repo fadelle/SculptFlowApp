@@ -1,7 +1,7 @@
 @page "/Services/Edit/{id:guid?}"
 @model Omni.App.Pages.Services.EditModel
 @{
-    ViewData["Title"] = Model.IsNew ? "Add Service" : "Edit Service";
+    ViewData["Title"] = Model.IsNew ? T["services.edit.addTitle"].Value : T["services.edit.editTitle"].Value;
 }
 
 @if (!Model.ClientConfigured)
@@ -11,12 +11,12 @@
 else
 {
     <div class="au-back-header">
-        <a class="au-icon-btn au-icon-btn--bordered" href="/Services" aria-label="Back to Services" title="Back to Services">
+        <a class="au-icon-btn au-icon-btn--bordered" href="/Services" aria-label="@T["services.back"]" title="@T["services.back"]">
             <span class="au-icon" aria-hidden="true">arrow_back</span>
         </a>
         <div class="min-w-0">
-            <h2 class="au-back-header__title">@(Model.IsNew ? "Add a service" : Model.Name)</h2>
-            <span class="au-back-header__sub">@(Model.IsNew ? "A treatment your client offers." : "Edit this service.")</span>
+            <h2 class="au-back-header__title">@(Model.IsNew ? T["services.edit.addHeading"].Value : Model.Name)</h2>
+            <span class="au-back-header__sub">@(Model.IsNew ? T["services.edit.addSub"] : T["services.edit.editSub"])</span>
         </div>
     </div>
 
@@ -27,33 +27,33 @@ else
         <form method="post">
             <div class="au-form-grid">
                 <div class="au-form-field">
-                    <label class="au-form-label" for="svc-name">Name<span class="au-required">*</span></label>
-                    <input type="text" name="Name" id="svc-name" value="@Model.Name" class="au-input" maxlength="200" required placeholder="e.g. Rhinoplasty" />
+                    <label class="au-form-label" for="svc-name">@T["services.edit.name"]<span class="au-required">*</span></label>
+                    <input type="text" name="Name" id="svc-name" value="@Model.Name" class="au-input" maxlength="200" required placeholder="@T["services.edit.namePlaceholder"]" />
                 </div>
                 <div class="au-form-field">
-                    <label class="au-form-label" for="svc-code">Short code <span class="opt">optional</span></label>
-                    <input type="text" name="Code" id="svc-code" value="@Model.Code" class="au-input" maxlength="100" placeholder="e.g. RHINO" />
-                    <span class="au-help">Suggested from the name. Used in reports.</span>
+                    <label class="au-form-label" for="svc-code">@T["services.edit.code"] <span class="opt">@T["common.optional"]</span></label>
+                    <input type="text" name="Code" id="svc-code" value="@Model.Code" class="au-input" maxlength="100" placeholder="@T["services.edit.codePlaceholder"]" />
+                    <span class="au-help">@T["services.edit.codeHelp"]</span>
                 </div>
                 <div class="au-form-field">
-                    <label class="au-form-label" for="svc-duration">Booking length (minutes)</label>
-                    <input type="number" name="DurationMinutes" id="svc-duration" value="@Model.DurationMinutes" class="au-input" min="1" max="480" placeholder="e.g. 30" />
+                    <label class="au-form-label" for="svc-duration">@T["services.edit.duration"]</label>
+                    <input type="number" name="DurationMinutes" id="svc-duration" value="@Model.DurationMinutes" class="au-input" min="1" max="480" placeholder="@T["services.edit.durationPlaceholder"]" />
                 </div>
                 <div class="au-form-field au-span-2">
-                    <label class="au-form-label" for="svc-desc">Short description <span class="opt">optional</span></label>
-                    <textarea name="Description" id="svc-desc" rows="3" class="au-textarea" maxlength="500" placeholder="One or two sentences contacts would understand.">@Model.Description</textarea>
-                    <span class="au-help counter" id="svc-desc-count">0 / 500</span>
+                    <label class="au-form-label" for="svc-desc">@T["services.edit.description"] <span class="opt">@T["common.optional"]</span></label>
+                    <textarea name="Description" id="svc-desc" rows="3" class="au-textarea" maxlength="500" placeholder="@T["services.edit.descriptionPlaceholder"]">@Model.Description</textarea>
+                    <span class="au-help counter" id="svc-desc-count">@T["common.counter", 0, 500]</span>
                 </div>
             </div>
 
             <div class="au-alert" role="note">
                 <span class="au-icon au-alert__icon" aria-hidden="true">lightbulb</span>
-                <div class="au-alert__body">Prices, preparation and recovery go in the <a class="au-link" href="/KnowledgeBase">Knowledge Base</a>, so the AI assistant can answer contacts with them.</div>
+                <div class="au-alert__body">@T.Html("services.edit.knowledgeTip", new Microsoft.AspNetCore.Html.HtmlString($"<a class=\"au-link\" href=\"/KnowledgeBase\">{System.Net.WebUtility.HtmlEncode(T["nav.knowledgeBase"].Value)}</a>"))</div>
             </div>
 
             <div class="au-form-actions">
-                <a href="/Services" class="au-btn au-btn--text">Cancel</a>
-                <button type="submit" class="au-btn au-btn--primary">@(Model.IsNew ? "Add service" : "Save changes")</button>
+                <a href="/Services" class="au-btn au-btn--text">@T["common.cancel"]</a>
+                <button type="submit" class="au-btn au-btn--primary">@(Model.IsNew ? T["services.add"] : T["common.saveChanges"])</button>
             </div>
         </form>
     </section>

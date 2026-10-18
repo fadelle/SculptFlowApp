@@ -1,9 +1,9 @@
 @page "/Campaigns/{id:guid}"
 @model Omni.App.Pages.Campaigns.DetailsModel
 @{
-    ViewData["Title"] = Model.Details?.Campaign.Name ?? "Campaign";
+    ViewData["Title"] = Model.Details?.Campaign.Name ?? T["campaigns.details.title"].Value;
 
-    static string Pct(int part, int whole) => whole > 0 ? $"{Math.Round(part * 100.0 / whole)}% of previous" : "";
+    string Pct(int part, int whole) => whole > 0 ? T["campaigns.funnel.ofPrevious", Math.Round(part * 100.0 / whole)].Value : "";
     static string Width(int part, int whole) => whole > 0 ? (part * 100.0 / whole).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture) : "0";
     // Which recipient tab a row belongs to (client-side filter below).
     static string Group(string status) => status switch
@@ -25,16 +25,23 @@ else if (Model.Details is not null)
     var c = d.Campaign;
     var st = d.Stats;
     var isManual = c.AudienceType == CampaignAudienceType.Custom && string.IsNullOrWhiteSpace(c.AudienceFilters);
-    var audience = isManual ? "Picked manually" : c.AudienceType switch
+    var audience = isManual ? T["campaigns.audience.manual"].Value : c.AudienceType switch
     {
-        CampaignAudienceType.ReactivationNoBooking => "Old contacts who never booked",
-        CampaignAudienceType.AllEligible => "All reachable contacts",
-        _ => "Custom audience"
+        CampaignAudienceType.ReactivationNoBooking => T["campaigns.audience.reactivation"].Value,
+        CampaignAudienceType.AllEligible => T["campaigns.audience.allEligible"].Value,
+        _ => T["campaigns.audience.custom"].Value
     };
-    var (whenLabel, whenAt) = c.Status == CampaignStatus.Scheduled && c.ScheduledAt is not null ? ("Scheduled for", c.ScheduledAt)
-        : c.CompletedAt is not null ? ("Finished", c.CompletedAt)
-        : c.StartedAt is not null ? ("Started", c.StartedAt)
-        : ("Created", (DateTimeOffset?)c.CreatedAt);
+    var (whenKey, whenAt) = c.Status == CampaignStatus.Scheduled && c.ScheduledAt is not null ? ("scheduled", c.ScheduledAt)
+        : c.CompletedAt is not null ? ("finished", c.CompletedAt)
+        : c.StartedAt is not null ? ("started", c.StartedAt)
+        : ("created", (DateTimeOffset?)c.CreatedAt);
+    var whenText = whenKey switch
+    {
+        "scheduled" => T.Html("campaigns.when.scheduledFor", LocalTimeHelper.Time(whenAt)),
+        "finished" => T.Html("campaigns.when.finishedAt", LocalTimeHelper.Time(whenAt)),
+        "started" => T.Html("campaigns.when.startedAt", LocalTimeHelper.Time(whenAt)),
+        _ => T.Html("campaigns.when.createdAt", LocalTimeHelper.Time(whenAt))
+    };
     // Draft: Send now. Scheduled: Stop (hold it) or Send now. Running: Stop (the background sender keeps sending
     // otherwise). Paused ("Stopped"): Resume. Cancel ends any of them for good.
     var canCancel = c.Status is CampaignStatus.Draft or CampaignStatus.Scheduled or CampaignStatus.Running or CampaignStatus.Paused;
@@ -42,47 +49,46 @@ else if (Model.Details is not null)
     var canSend = c.Status is CampaignStatus.Draft or CampaignStatus.Scheduled or CampaignStatus.Paused;
     var sendCount = st.TotalRecipients - st.Skipped;
     var waitingCount = st.Pending + st.Queued;
-    var sendLabel = c.Status == CampaignStatus.Paused ? "Resume sending" : $"Send now to {sendCount} {(sendCount == 1 ? "contact" : "contacts")}";
+    var sendLabel = c.Status == CampaignStatus.Paused ? T["campaigns.send.resume"].Value
+        : sendCount == 1 ? T["campaigns.send.nowOne"].Value : T["campaigns.send.nowOther", sendCount].Value;
     // Sending can't be undone, so the button asks first (the kit's styled confirm).
     var sendConfirm = c.Status == CampaignStatus.Paused
-        ? $"Resume this campaign? The {waitingCount} {(waitingCount == 1 ? "person" : "people")} not messaged yet will get it, starting straight away. WhatsApp messages can't be called back."
-        : $"Send this campaign now to {sendCount} {(sendCount == 1 ? "person" : "people")}? The WhatsApp messages go out straight away and can't be called back.";
-    var stopConfirm = c.Status == CampaignStatus.Scheduled
-        ? "Stop this scheduled campaign? It won't go out at its scheduled time. You can resume or cancel it later."
-        : "Stop sending this campaign? Nobody else will be messaged until you resume it. Messages already sent can't be called back.";
+        ? (waitingCount == 1 ? T["campaigns.send.resumeConfirmOne"].Value : T["campaigns.send.resumeConfirmOther", waitingCount].Value)
+        : (sendCount == 1 ? T["campaigns.send.confirmOne"].Value : T["campaigns.send.confirmOther", sendCount].Value);
+    var stopConfirm = c.Status == CampaignStatus.Scheduled ? T["campaigns.stop.confirmScheduled"].Value : T["campaigns.stop.confirmRunning"].Value;
     var groups = d.Recipients.GroupBy(r => Group(r.Status)).ToDictionary(g => g.Key, g => g.Count());
 
     <div class="au-back-header">
-        <a class="au-icon-btn au-icon-btn--bordered" href="/Campaigns" aria-label="Back to Campaigns" title="Back to Campaigns">
+        <a class="au-icon-btn au-icon-btn--bordered" href="/Campaigns" aria-label="@T["campaigns.back"]" title="@T["campaigns.back"]">
             <span class="au-icon" aria-hidden="true">arrow_back</span>
         </a>
         <div class="min-w-0">
             <h2 class="au-back-header__title">@c.Name</h2>
-            <span class="au-back-header__sub">Template @(c.TemplateName ?? "—") · @audience · @whenLabel @LocalTimeHelper.Time(whenAt)</span>
+            <span class="au-back-header__sub">@T["campaigns.details.template", c.TemplateName ?? "—"] · @audience · @whenText</span>
         </div>
     </div>
     <div class="detail-chips">
-        <span class="badge @StatusBadgeHelper.CssClass(c.Status)">@StatusBadgeHelper.CampaignStatusLabel(c.Status)</span>
+        <span class="badge @StatusBadgeHelper.CssClass(c.Status)">@T.CampaignStatusLabel(c.Status)</span>
         @if (canCancel)
         {
             <span class="au-spacer"></span>
             <form method="post" asp-page-handler="Cancel"
-                  data-au-confirm="Cancel this campaign? People who haven't been messaged yet won't be."
-                  data-au-confirm-title="Cancel campaign" data-au-confirm-label="Cancel campaign" data-au-confirm-tone="danger">
-                <button type="submit" class="au-btn au-btn--danger-outlined au-btn--sm">Cancel campaign</button>
+                  data-au-confirm="@T["campaigns.cancel.confirm"]"
+                  data-au-confirm-title="@T["campaigns.cancel.button"]" data-au-confirm-label="@T["campaigns.cancel.button"]" data-au-confirm-tone="danger">
+                <button type="submit" class="au-btn au-btn--danger-outlined au-btn--sm">@T["campaigns.cancel.button"]</button>
             </form>
         }
         @if (canStop)
         {
             <form method="post" asp-page-handler="Stop"
-                  data-au-confirm="@stopConfirm" data-au-confirm-title="Stop campaign" data-au-confirm-label="Stop campaign">
-                <button type="submit" class="au-btn au-btn--outlined au-btn--sm"><span class="au-icon" aria-hidden="true">pause</span>Stop campaign</button>
+                  data-au-confirm="@stopConfirm" data-au-confirm-title="@T["campaigns.stop.button"]" data-au-confirm-label="@T["campaigns.stop.button"]">
+                <button type="submit" class="au-btn au-btn--outlined au-btn--sm"><span class="au-icon" aria-hidden="true">pause</span>@T["campaigns.stop.button"]</button>
             </form>
         }
         @if (canSend)
         {
             <form method="post" asp-page-handler="Send"
-                  data-au-confirm="@sendConfirm" data-au-confirm-title="@(c.Status == CampaignStatus.Paused ? "Resume campaign" : "Send campaign")" data-au-confirm-label="@sendLabel">
+                  data-au-confirm="@sendConfirm" data-au-confirm-title="@(c.Status == CampaignStatus.Paused ? T["campaigns.send.resumeTitle"] : T["campaigns.send.title"])" data-au-confirm-label="@sendLabel">
                 <button type="submit" class="au-btn au-btn--primary au-btn--sm"><span class="au-icon" aria-hidden="true">@(c.Status == CampaignStatus.Paused ? "play_arrow" : "send")</span>@sendLabel</button>
             </form>
         }
@@ -92,7 +98,7 @@ else if (Model.Details is not null)
 
     @if (st.TotalRecipients > 0)
     {
-        <div class="prog prog-lg" title="@($"{st.TotalRecipients} recipients · {st.Sent} sent · {st.Delivered} delivered · {st.Read} read · {st.Failed} failed")">
+        <div class="prog prog-lg" title="@T["campaigns.progress.summary", st.TotalRecipients, st.Sent, st.Delivered, st.Read, st.Failed]">
             <div class="prog-bar">
                 <i class="p-read" style="width:@Width(st.Read, st.TotalRecipients)%"></i><i class="p-deliv" style="width:@Width(Math.Max(st.Delivered - st.Read, 0), st.TotalRecipients)%"></i><i class="p-sent" style="width:@Width(Math.Max(st.Sent - st.Delivered, 0), st.TotalRecipients)%"></i><i class="p-fail" style="width:@Width(st.Failed, st.TotalRecipients)%"></i>
             </div>
@@ -103,12 +109,12 @@ else if (Model.Details is not null)
         @{
             var steps = new (string Label, int Value, string Hint)[]
             {
-                ("Recipients", st.TotalRecipients, ""),
-                ("Sent", st.Sent, Pct(st.Sent, st.TotalRecipients)),
-                ("Delivered", st.Delivered, Pct(st.Delivered, st.Sent)),
-                ("Read", st.Read, Pct(st.Read, st.Delivered)),
-                ("Replied", st.Replied, Pct(st.Replied, st.Delivered)),
-                ("Booked", st.Booked, Pct(st.Booked, st.Replied)),
+                (T["campaigns.funnel.recipients"].Value, st.TotalRecipients, ""),
+                (T["values.sent"].Value, st.Sent, Pct(st.Sent, st.TotalRecipients)),
+                (T["values.delivered"].Value, st.Delivered, Pct(st.Delivered, st.Sent)),
+                (T["values.read"].Value, st.Read, Pct(st.Read, st.Delivered)),
+                (T["values.replied"].Value, st.Replied, Pct(st.Replied, st.Delivered)),
+                (T["values.booked"].Value, st.Booked, Pct(st.Booked, st.Replied)),
             };
         }
         @for (var i = 0; i < steps.Length; i++)
@@ -122,72 +128,72 @@ else if (Model.Details is not null)
         }
     </div>
     <div class="side-stats">
-        Also:
-        <span class="badge badge-gray">@st.Pending pending</span>
-        <span class="badge badge-amber">@st.Queued queued</span>
-        <span class="badge badge-red">@st.Failed failed</span>
-        <span class="badge badge-gray" title="In the audience but not messaged, e.g. opted out or no phone">@st.Skipped skipped</span>
+        @T["campaigns.stats.also"]
+        <span class="badge badge-gray">@T["campaigns.stats.pending", st.Pending]</span>
+        <span class="badge badge-amber">@T["campaigns.stats.queued", st.Queued]</span>
+        <span class="badge badge-red">@T["campaigns.stats.failed", st.Failed]</span>
+        <span class="badge badge-gray" title="@T["campaigns.stats.skippedHelp"]">@T["campaigns.stats.skipped", st.Skipped]</span>
     </div>
 
     @if (!string.IsNullOrWhiteSpace(d.TemplateBody))
     {
         <details class="au-panel au-panel--round tpl-card mt-3">
-            <summary>Message sent</summary>
+            <summary>@T["campaigns.details.messageSent"]</summary>
             <div class="wa-preview"><div class="wa-bubble">@d.TemplateBody<span class="wa-time">&nbsp;</span></div></div>
-            <div class="text-subtle text-xs mt-1">Blanks like {{1}} were filled in for each person.</div>
+            <div class="text-subtle text-xs mt-1">@T["campaigns.details.blanksFilled", "{{1}}"]</div>
         </details>
     }
 
-    <h2 class="section-title">Recipients</h2>
+    <h2 class="section-title">@T["campaigns.funnel.recipients"]</h2>
     @if (d.Recipients.Count == 0)
     {
-        var empty = new EmptyStateModel(Icon: "group_off", Title: "Nobody was added to this campaign",
-            Text: "Its audience matched no one when it was created. Start a new campaign with a different audience.",
-            ActionLabel: "New campaign", ActionHref: "/Campaigns/Create");
+        var empty = new EmptyStateModel(Icon: "group_off", Title: T["campaigns.details.emptyTitle"].Value,
+            Text: T["campaigns.details.emptyText"].Value,
+            ActionLabel: T["campaigns.new"].Value, ActionHref: "/Campaigns/Create");
         <div class="au-panel au-panel--round"><partial name="_EmptyState" model="empty" /></div>
     }
     else
     {
         @* #recipient-tabs, tr[data-group] and #recipient-tab-empty are read by the script at the bottom. *@
-        <div class="inbox-filters mb-2" id="recipient-tabs" role="tablist" aria-label="Show recipients">
-            <button type="button" class="inbox-filter active" data-tab="all">All <span class="inbox-filter-count">@d.Recipients.Count</span></button>
-            <button type="button" class="inbox-filter" data-tab="read">Read <span class="inbox-filter-count">@(groups.GetValueOrDefault("read"))</span></button>
-            <button type="button" class="inbox-filter" data-tab="problem">Not delivered <span class="inbox-filter-count">@(groups.GetValueOrDefault("problem"))</span></button>
-            <button type="button" class="inbox-filter" data-tab="waiting">Waiting <span class="inbox-filter-count">@(groups.GetValueOrDefault("waiting"))</span></button>
+        <div class="inbox-filters mb-2" id="recipient-tabs" role="tablist" aria-label="@T["campaigns.recipients.tabsLabel"]">
+            <button type="button" class="inbox-filter active" data-tab="all">@T["campaigns.tabs.all"] <span class="inbox-filter-count">@d.Recipients.Count</span></button>
+            <button type="button" class="inbox-filter" data-tab="read">@T["values.read"] <span class="inbox-filter-count">@(groups.GetValueOrDefault("read"))</span></button>
+            <button type="button" class="inbox-filter" data-tab="problem">@T["campaigns.recipients.notDelivered"] <span class="inbox-filter-count">@(groups.GetValueOrDefault("problem"))</span></button>
+            <button type="button" class="inbox-filter" data-tab="waiting">@T["campaigns.recipients.waiting"] <span class="inbox-filter-count">@(groups.GetValueOrDefault("waiting"))</span></button>
         </div>
 
         <div class="au-table-card">
             <div class="au-table-scroll">
                 <table class="au-table au-table--stack">
                     <thead>
-                        <tr><th>Contact</th><th>Phone</th><th>Status</th><th>Last update</th></tr>
+                        <tr><th>@T["campaigns.recipients.contact"]</th><th>@T["contacts.table.phone"]</th><th>@T["campaigns.table.status"]</th><th>@T["campaigns.recipients.lastUpdate"]</th></tr>
                     </thead>
                     <tbody>
                         @foreach (var r in d.Recipients)
                         {
-                            var (lastLabel, lastAt) = r.ReadAt is not null ? ("Read", r.ReadAt)
-                                : r.DeliveredAt is not null ? ("Delivered", r.DeliveredAt)
-                                : r.SentAt is not null ? ("Sent", r.SentAt)
-                                : r.FailedAt is not null ? ("Failed", r.FailedAt)
-                                : r.QueuedAt is not null ? ("Queued", r.QueuedAt)
+                            var (lastLabel, lastAt) = r.ReadAt is not null ? (T["values.read"].Value, r.ReadAt)
+                                : r.DeliveredAt is not null ? (T["values.delivered"].Value, r.DeliveredAt)
+                                : r.SentAt is not null ? (T["values.sent"].Value, r.SentAt)
+                                : r.FailedAt is not null ? (T["values.failed"].Value, r.FailedAt)
+                                : r.QueuedAt is not null ? (T["values.queued"].Value, r.QueuedAt)
                                 : ("", (DateTimeOffset?)null);
                             var problem = r.SkipReason ?? r.FailureReason;
                             <tr class="row-link" data-href="/dashboard/contacts/@r.ContactId" data-group="@Group(r.Status)">
-                                <td data-label="Contact"><a class="cell-person" href="/dashboard/contacts/@r.ContactId"><span class="avatar-sm">@(string.IsNullOrWhiteSpace(r.ContactFullName) ? "?" : r.ContactFullName.Trim()[..1])</span>@(r.ContactFullName ?? "—")</a></td>
-                                <td data-label="Phone">@r.PhoneNumber</td>
-                                <td data-label="Status" class="au-wrap">
+                                <td data-label="@T["campaigns.recipients.contact"]"><a class="cell-person" href="/dashboard/contacts/@r.ContactId"><span class="avatar-sm">@(string.IsNullOrWhiteSpace(r.ContactFullName) ? "?" : r.ContactFullName.Trim()[..1])</span>@(r.ContactFullName ?? "—")</a></td>
+                                <td data-label="@T["contacts.table.phone"]">@r.PhoneNumber</td>
+                                <td data-label="@T["campaigns.table.status"]" class="au-wrap">
                                     <div>
-                                        <span class="badge @StatusBadgeHelper.CssClass(r.Status)">@FilterLabelHelper.Label(r.Status)</span>
+                                        <span class="badge @StatusBadgeHelper.CssClass(r.Status)">@T.ValueLabel(r.Status)</span>
                                         @if (!string.IsNullOrWhiteSpace(problem))
                                         {
                                             <div class="cell-err">@problem</div>
                                         }
                                     </div>
                                 </td>
-                                <td data-label="Last update" class="cell-sub">@lastLabel @LocalTimeHelper.Time(lastAt)</td>
+                                <td data-label="@T["campaigns.recipients.lastUpdate"]" class="cell-sub">@lastLabel @LocalTimeHelper.Time(lastAt)</td>
                             </tr>
                         }
-                        <tr class="empty-row" id="recipient-tab-empty" hidden><td colspan="4">No one in this tab.</td></tr>
+                        <tr class="empty-row" id="recipient-tab-empty" hidden><td colspan="4">@T["campaigns.recipients.tabEmpty"]</td></tr>
                     </tbody>
                 </table>
             </div>

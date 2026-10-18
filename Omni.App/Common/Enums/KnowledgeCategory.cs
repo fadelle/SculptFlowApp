@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Localization;
 using Omni.App.Entities.Models;
 
 namespace Omni.App.Common.Enums;
@@ -15,28 +16,17 @@ public static class KnowledgeCategory
     public const string Preparation = "preparation";
     public const string Recovery = "recovery";
 
-    private static readonly (string Value, string Label)[] Options =
-    {
-        (General, "General Information"),
-        (Faq, "FAQ"),
-        (Policy, "Policy"),
-        (Doctor, "Doctor"),
-        (Service, "Service Information"),
-        (Pricing, "Pricing"),
-        (Booking, "Booking"),
-        (Payment, "Payment / Financing"),
-        (Preparation, "Preparation"),
-        (Recovery, "Recovery"),
-    };
+    /// <summary>Each category's label is the UI string <c>knowledge.category.{value}</c> (Resources/i18n).</summary>
+    public const string LabelKeyPrefix = "knowledge.category.";
 
-    public static IReadOnlyList<(string Value, string Label)> All => Options;
+    public static IReadOnlyList<string> All { get; } =
+        [General, Faq, Policy, Doctor, Service, Pricing, Booking, Payment, Preparation, Recovery];
 
-    public static string Label(string? value)
+    /// <summary>The category's label in the request's language; a custom category shows as stored.</summary>
+    public static string CategoryLabel(this IStringLocalizer text, string? value)
     {
-        foreach (var (v, label) in Options)
-        {
-            if (string.Equals(v, value, StringComparison.OrdinalIgnoreCase)) return label;
-        }
+        var known = All.FirstOrDefault(v => string.Equals(v, value, StringComparison.OrdinalIgnoreCase));
+        if (known is not null) return text[LabelKeyPrefix + known].Value;
         return string.IsNullOrWhiteSpace(value) ? "—" : value!;
     }
 }

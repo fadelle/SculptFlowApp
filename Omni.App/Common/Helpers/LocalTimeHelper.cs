@@ -1,5 +1,6 @@
 using System.Globalization;
 using Microsoft.AspNetCore.Html;
+using Microsoft.Extensions.Localization;
 
 namespace Omni.App.Common.Helpers;
 
@@ -46,16 +47,25 @@ public static class LocalTimeHelper
     /// relative text itself needs no timezone rewriting (it's a plain duration, not a wall-clock time).
     /// <paramref name="dayCutoff"/> and <paramref name="fallbackFormat"/> are tunable per page; the tiers
     /// below them are shared so the wording itself stays consistent everywhere.</summary>
-    public static IHtmlContent Ago(DateTimeOffset when, int dayCutoff = 7, string fallbackFormat = "month-day")
+    public static IHtmlContent Ago(IStringLocalizer text, DateTimeOffset when, int dayCutoff = 7, string fallbackFormat = "month-day")
     {
         var span = DateTimeOffset.UtcNow - when;
-        if (span.TotalMinutes < 1) return new HtmlString("just now");
-        if (span.TotalMinutes < 60) return new HtmlString($"{(int)span.TotalMinutes} min ago");
-        if (span.TotalHours < 24) return new HtmlString($"{(int)span.TotalHours} {((int)span.TotalHours == 1 ? "hour" : "hours")} ago");
-        if (span.TotalDays < 2) return new HtmlString("yesterday");
-        if (span.TotalDays < dayCutoff) return new HtmlString($"{(int)span.TotalDays} days ago");
+        if (span.TotalMinutes < 1) return Encoded(text[JustNowKey]);
+        if (span.TotalMinutes < 60) return Encoded(text[MinutesKey, (int)span.TotalMinutes]);
+        if (span.TotalHours < 24) return Encoded((int)span.TotalHours == 1 ? text[HourKey] : text[HoursKey, (int)span.TotalHours]);
+        if (span.TotalDays < 2) return Encoded(text[YesterdayKey]);
+        if (span.TotalDays < dayCutoff) return Encoded(text[DaysKey, (int)span.TotalDays]);
         return Time(when, fallbackFormat);
     }
+
+    private const string JustNowKey = "time.ago.justNow";
+    private const string MinutesKey = "time.ago.minutes";
+    private const string HourKey = "time.ago.hour";
+    private const string HoursKey = "time.ago.hours";
+    private const string YesterdayKey = "time.ago.yesterday";
+    private const string DaysKey = "time.ago.days";
+
+    private static HtmlString Encoded(LocalizedString value) => new(System.Net.WebUtility.HtmlEncode(value.Value));
 
     public static string Iso(DateTimeOffset value) =>
         value.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture);

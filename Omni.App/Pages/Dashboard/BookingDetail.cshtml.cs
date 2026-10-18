@@ -1,8 +1,10 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.Extensions.Localization;
 using Omni.App.Business.Contracts.Managers;
 using Omni.App.Business.Contracts.Services.Bookings;
 using Omni.App.Common.Enums;
+using Omni.App.Common.Helpers;
 using Omni.App.Entities.Models;
 using Omni.App.Entities.Responses.Bookings;
 
@@ -18,13 +20,17 @@ namespace Omni.App.Pages.Dashboard;
 /// </summary>
 public class BookingDetailModel : PageModel
 {
+    private const string SavedKey = "bookingDetail.saved";
+
     private readonly ICurrentClientContext _clientContext;
     private readonly IBookingService _bookings;
+    private readonly IStringLocalizer _text;
 
-    public BookingDetailModel(ICurrentClientContext clientContext, IBookingService bookings)
+    public BookingDetailModel(ICurrentClientContext clientContext, IBookingService bookings, IStringLocalizer text)
     {
         _clientContext = clientContext;
         _bookings = bookings;
+        _text = text;
     }
 
     [BindProperty(SupportsGet = true)]
@@ -64,12 +70,12 @@ public class BookingDetailModel : PageModel
             var booking = await _bookings.UpdateStatusAsync(client.Id, Id, Status, ct);
             if (booking is null) return NotFound();
 
-            StatusMessage = "Saved.";
+            StatusMessage = _text[SavedKey].Value;
             return RedirectToPage(new { Id });
         }
         catch (ArgumentException ex)
         {
-            ErrorMessage = ex.Message;
+            ErrorMessage = _text.Localize(ex);
             await LoadAsync(ct);
             return Page();
         }

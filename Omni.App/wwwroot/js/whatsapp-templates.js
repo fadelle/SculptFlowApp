@@ -6,12 +6,14 @@
   var tbody = document.getElementById('templates-tbody');
   if (!tbody || !window.signalR) return;
 
-  var KNOWN_STATUSES = ['draft', 'pending', 'approved', 'rejected', 'paused', 'disabled'];
+  var STATUS_LABEL = {
+    draft: omniText.t('values.draft'), pending: omniText.t('values.pending'), approved: omniText.t('values.approved'),
+    rejected: omniText.t('values.rejected'), paused: omniText.t('values.paused'), disabled: omniText.t('values.disabled')
+  };
 
   function statusLabel(status) {
-    if (!status) return 'Unknown';
-    if (KNOWN_STATUSES.indexOf(status) !== -1) return status.charAt(0).toUpperCase() + status.slice(1);
-    return 'Problem';
+    if (!status) return omniText.t('values.unknown');
+    return STATUS_LABEL[status] || omniText.t('values.problem');
   }
 
   function statusBadgeClass(status) {
@@ -30,13 +32,15 @@
   // Same wording as the page: a coloured dot + High / Medium / Low.
   function qualityHtml(rating) {
     var r = (rating || '').toUpperCase();
-    var q = r === 'GREEN' || r === 'HIGH' ? ['High', 'q-green'] : r === 'YELLOW' || r === 'MEDIUM' ? ['Medium', 'q-yellow'] : r === 'RED' || r === 'LOW' ? ['Low', 'q-red'] : null;
+    var q = r === 'GREEN' || r === 'HIGH' ? [omniText.t('whatsAppHealth.quality.high'), 'q-green']
+      : r === 'YELLOW' || r === 'MEDIUM' ? [omniText.t('whatsAppHealth.quality.medium'), 'q-yellow']
+      : r === 'RED' || r === 'LOW' ? [omniText.t('whatsAppHealth.quality.low'), 'q-red'] : null;
     return q ? '<span class="q-dot ' + q[1] + '"></span>' + q[0] : '<span class="text-subtle">—</span>';
   }
 
   function formatTime(iso) {
     try {
-      return new Date(iso).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+      return new Date(iso).toLocaleString(omniText.lang, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
     } catch (e) {
       return iso;
     }

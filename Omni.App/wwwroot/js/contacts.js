@@ -1,4 +1,4 @@
-// Interested People list (Pages/Dashboard/Contacts.cshtml):
+// Contacts list (Pages/Dashboard/Contacts.cshtml):
 //  - search updates as you type, and the Stage/Source filters apply on change. It asks the server
 //    for the same page with the new query string and swaps in just the results, so the search box
 //    keeps focus. The filtering itself is still the page's normal server-side query.

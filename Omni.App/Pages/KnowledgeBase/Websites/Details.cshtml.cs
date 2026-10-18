@@ -1,7 +1,9 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.Extensions.Localization;
 using Omni.App.Business.Contracts.Managers;
 using Omni.App.Business.Contracts.Services.Knowledge;
+using Omni.App.Common.Helpers;
 using Omni.App.Entities.Responses.Knowledge;
 
 namespace Omni.App.Pages.KnowledgeBase.Websites;
@@ -10,13 +12,20 @@ namespace Omni.App.Pages.KnowledgeBase.Websites;
 /// actions Re-scrape / Activate-Deactivate / Delete. The client always comes from the logged-in user.</summary>
 public class DetailsModel : PageModel
 {
+    private const string RescrapeStartedKey = "website.rescrapeStarted";
+    private const string ActivatedKey = "knowledge.website.activated";
+    private const string DeactivatedKey = "knowledge.website.deactivated";
+    private const string DeletedKey = "knowledge.website.deleted";
+
     private readonly ICurrentClientContext _clientContext;
     private readonly IWebsiteSourceService _websites;
+    private readonly IStringLocalizer _text;
 
-    public DetailsModel(ICurrentClientContext clientContext, IWebsiteSourceService websites)
+    public DetailsModel(ICurrentClientContext clientContext, IWebsiteSourceService websites, IStringLocalizer text)
     {
         _clientContext = clientContext;
         _websites = websites;
+        _text = text;
     }
 
     [BindProperty(SupportsGet = true)]
@@ -59,11 +68,11 @@ public class DetailsModel : PageModel
         try
         {
             if (await _websites.RescrapeAsync(client.Id, Id, ct) is null) return NotFound();
-            StatusMessage = "Re-scrape started. This page updates as it runs.";
+            StatusMessage = _text[RescrapeStartedKey].Value;
         }
         catch (ArgumentException ex)
         {
-            ErrorMessage = ex.Message;
+            ErrorMessage = _text.Localize(ex);
         }
         return RedirectToPage(new { id = Id });
     }
@@ -73,9 +82,7 @@ public class DetailsModel : PageModel
         var client = await _clientContext.GetClientAsync(ct);
         if (client is null) return RedirectToPage("/KnowledgeBase/Index");
         if (await _websites.SetActiveAsync(client.Id, Id, active, ct) is null) return NotFound();
-        StatusMessage = active
-            ? "Website activated — its pages can be used by the AI again."
-            : "Website deactivated — its pages are hidden from the AI.";
+        StatusMessage = _text[active ? ActivatedKey : DeactivatedKey].Value;
         return RedirectToPage(new { id = Id });
     }
 
@@ -86,12 +93,12 @@ public class DetailsModel : PageModel
         try
         {
             if (!await _websites.DeleteAsync(client.Id, Id, ct)) return NotFound();
-            TempData["StatusMessage"] = "Website and its imported pages deleted.";
+            TempData["StatusMessage"] = _text[DeletedKey].Value;
             return Redirect("/KnowledgeBase");
         }
         catch (ArgumentException ex)
         {
-            ErrorMessage = ex.Message;
+            ErrorMessage = _text.Localize(ex);
             return RedirectToPage(new { id = Id });
         }
     }

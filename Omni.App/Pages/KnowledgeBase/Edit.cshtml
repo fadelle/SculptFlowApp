@@ -1,22 +1,23 @@
 @page "/KnowledgeBase/Edit/{id:guid?}"
 @model Omni.App.Pages.KnowledgeBase.EditModel
 @{
-    ViewData["Title"] = Model.IsNew ? "Add Knowledge" : "Edit Knowledge";
+    ViewData["Title"] = Model.IsNew ? T["knowledge.add"].Value : T["knowledge.edit.title"].Value;
     var maxMb = Model.MaxUploadBytes / 1024.0 / 1024.0;
-    var backLabel = Model.BackUrl.StartsWith("/KnowledgeBase/Websites", StringComparison.OrdinalIgnoreCase) ? "Website" : "Knowledge Base";
+    var backLabel = Model.BackUrl.StartsWith("/KnowledgeBase/Websites", StringComparison.OrdinalIgnoreCase) ? T["knowledge.edit.backWebsite"].Value : T["knowledge.edit.backKnowledge"].Value;
     var activeMode = Model.ShowUploadTab ? "upload" : Model.ShowWebsiteTab ? "website" : "manual";
 }
 
 @functions {
     // Active on/off switch: a real checkbox (name=IsActive, value=true) styled as a switch.
-    private Microsoft.AspNetCore.Html.IHtmlContent ActiveSwitch(bool isChecked, string what) => new Microsoft.AspNetCore.Html.HtmlString(
-        $"<label class=\"switch-row\"><input type=\"checkbox\" name=\"IsActive\" value=\"true\" class=\"switch-input\"{(isChecked ? " checked" : "")} /><span class=\"switch\" aria-hidden=\"true\"></span> Active <span class=\"text-subtle\">— the AI can use {what}</span></label>");
+    private Microsoft.AspNetCore.Html.IHtmlContent ActiveSwitch(bool isChecked, string help) => new Microsoft.AspNetCore.Html.HtmlString(
+        $"<label class=\"switch-row\"><input type=\"checkbox\" name=\"IsActive\" value=\"true\" class=\"switch-input\"{(isChecked ? " checked" : "")} /><span class=\"switch\" aria-hidden=\"true\"></span> {System.Net.WebUtility.HtmlEncode(T["services.active"].Value)} <span class=\"text-subtle\">{System.Net.WebUtility.HtmlEncode(help)}</span></label>");
 
     private Microsoft.AspNetCore.Html.IHtmlContent CategorySelect(string selected)
     {
         var sb = new System.Text.StringBuilder("<select name=\"Category\" class=\"au-select\">");
-        foreach (var (value, label) in Model.CategoryOptions)
+        foreach (var value in Model.CategoryOptions)
         {
+            var label = T.CategoryLabel(value);
             sb.Append("<option value=\"").Append(System.Net.WebUtility.HtmlEncode(value)).Append('"')
               .Append(value == selected ? " selected" : "").Append('>').Append(System.Net.WebUtility.HtmlEncode(label)).Append("</option>");
         }
@@ -31,12 +32,12 @@
 else
 {
     <div class="au-back-header">
-        <a class="au-icon-btn au-icon-btn--bordered" href="@Model.BackUrl" aria-label="Back to @backLabel" title="Back to @backLabel">
+        <a class="au-icon-btn au-icon-btn--bordered" href="@Model.BackUrl" aria-label="@T["knowledge.edit.back", backLabel]" title="@T["knowledge.edit.back", backLabel]">
             <span class="au-icon" aria-hidden="true">arrow_back</span>
         </a>
         <div class="min-w-0">
-            <h2 class="au-back-header__title">@(Model.IsNew ? "Add knowledge" : Model.Title)</h2>
-            <span class="au-back-header__sub">@(Model.IsNew ? "Write it, upload a document, or import your website." : "What your AI assistant may tell contacts.")</span>
+            <h2 class="au-back-header__title">@(Model.IsNew ? T["knowledge.add"].Value : Model.Title)</h2>
+            <span class="au-back-header__sub">@(Model.IsNew ? T["knowledge.edit.newSub"] : T["knowledge.edit.editSub"])</span>
         </div>
     </div>
 
@@ -48,10 +49,10 @@ else
 
         @if (Model.IsNew)
         {
-            <div class="kb-choices" role="radiogroup" aria-label="How to add knowledge">
-                <label class="kb-choice @(activeMode == "manual" ? "on" : "")"><input type="radio" name="kb-mode" value="manual" data-kb-tab="manual" checked="@(activeMode == "manual")" /><span class="kb-choice-icon au-icon" aria-hidden="true">edit_note</span><strong>Write it</strong><small>Type FAQs, policies or any text.</small></label>
-                <label class="kb-choice @(activeMode == "upload" ? "on" : "")"><input type="radio" name="kb-mode" value="upload" data-kb-tab="upload" checked="@(activeMode == "upload")" /><span class="kb-choice-icon au-icon" aria-hidden="true">upload_file</span><strong>Upload a document</strong><small>PDF, Word or text file.</small></label>
-                <label class="kb-choice @(activeMode == "website" ? "on" : "")"><input type="radio" name="kb-mode" value="website" data-kb-tab="website" checked="@(activeMode == "website")" /><span class="kb-choice-icon au-icon" aria-hidden="true">language</span><strong>Import a website</strong><small>Read pages from your site.</small></label>
+            <div class="kb-choices" role="radiogroup" aria-label="@T["knowledge.edit.howToAdd"]">
+                <label class="kb-choice @(activeMode == "manual" ? "on" : "")"><input type="radio" name="kb-mode" value="manual" data-kb-tab="manual" checked="@(activeMode == "manual")" /><span class="kb-choice-icon au-icon" aria-hidden="true">edit_note</span><strong>@T["knowledge.choice.write"]</strong><small>@T["knowledge.edit.writeHelp"]</small></label>
+                <label class="kb-choice @(activeMode == "upload" ? "on" : "")"><input type="radio" name="kb-mode" value="upload" data-kb-tab="upload" checked="@(activeMode == "upload")" /><span class="kb-choice-icon au-icon" aria-hidden="true">upload_file</span><strong>@T["knowledge.choice.upload"]</strong><small>@T["knowledge.choice.uploadHelp"]</small></label>
+                <label class="kb-choice @(activeMode == "website" ? "on" : "")"><input type="radio" name="kb-mode" value="website" data-kb-tab="website" checked="@(activeMode == "website")" /><span class="kb-choice-icon au-icon" aria-hidden="true">language</span><strong>@T["knowledge.edit.importWebsite"]</strong><small>@T["knowledge.edit.importWebsiteHelp"]</small></label>
             </div>
         }
 
@@ -65,14 +66,14 @@ else
                         <div class="flex-1 min-w-0">
                             @if (Model.IsWebsite)
                             {
-                                <text>From the page </text><a href="@Model.SourceUrl" target="_blank" rel="noopener noreferrer" class="au-link break-all">@Omni.App.Common.Helpers.UrlDisplayHelper.Readable(Model.SourceUrl ?? "")</a>
-                                <div class="cell-sub">The text updates when the website is imported again. Title, category and Active can be changed here.</div>
+                                @T.Html("knowledge.edit.fromPage", new Microsoft.AspNetCore.Html.HtmlString($"<a href=\"{System.Net.WebUtility.HtmlEncode(Model.SourceUrl)}\" target=\"_blank\" rel=\"noopener noreferrer\" class=\"au-link break-all\">{System.Net.WebUtility.HtmlEncode(Omni.App.Common.Helpers.UrlDisplayHelper.Readable(Model.SourceUrl ?? ""))}</a>"))
+                                <div class="cell-sub">@T["knowledge.edit.fromPageHelp"]</div>
                             }
                             else
                             {
-                                <text>From </text><strong>@Model.OriginalFileName</strong>
-                                @if (Model.FileSizeBytes.HasValue) { <text> (@((Model.FileSizeBytes.Value / 1024.0).ToString("0")) KB)</text> }
-                                <div class="cell-sub">To change the text, upload the document again.</div>
+                                @T.Html("knowledge.edit.fromFile", new Microsoft.AspNetCore.Html.HtmlString($"<strong>{System.Net.WebUtility.HtmlEncode(Model.OriginalFileName)}</strong>"))
+                                @if (Model.FileSizeBytes.HasValue) { <text> @T["knowledge.edit.fileSize", (Model.FileSizeBytes.Value / 1024.0).ToString("0")]</text> }
+                                <div class="cell-sub">@T["knowledge.edit.fromFileHelp"]</div>
                             }
                         </div>
                     </div>
@@ -80,11 +81,11 @@ else
 
                 <div class="au-form-grid">
                     <div class="au-form-field">
-                        <label class="au-form-label" for="kb-title">Title<span class="au-required">*</span></label>
-                        <input type="text" name="Title" id="kb-title" value="@Model.Title" class="au-input" maxlength="200" required placeholder="e.g. Rhinoplasty recovery" />
+                        <label class="au-form-label" for="kb-title">@T["knowledge.edit.titleLabel"]<span class="au-required">*</span></label>
+                        <input type="text" name="Title" id="kb-title" value="@Model.Title" class="au-input" maxlength="200" required placeholder="@T["knowledge.edit.titlePlaceholder"]" />
                     </div>
                     <label class="au-form-field">
-                        <span class="au-form-label">Category</span>
+                        <span class="au-form-label">@T["knowledge.table.category"]</span>
                         @CategorySelect(Model.Category)
                     </label>
                 </div>
@@ -92,7 +93,7 @@ else
                 @if (Model.IsWebsite || Model.IsUpload)
                 {
                     <div class="au-form-field">
-                        <span class="au-form-label">Text the AI reads</span>
+                        <span class="au-form-label">@T["knowledge.edit.textAiReads"]</span>
                         <div class="readonly-text" dir="auto">@Model.Body</div>
                     </div>
                 }
@@ -100,21 +101,21 @@ else
                 {
                     <div class="au-form-field">
                         <div class="flex items-center justify-between">
-                            <label class="au-form-label" for="kb-body">Content<span class="au-required">*</span></label>
-                            <button type="button" class="au-btn au-btn--text au-btn--sm" id="kb-add-qa"><span class="au-icon" aria-hidden="true">add</span>Add Q&amp;A</button>
+                            <label class="au-form-label" for="kb-body">@T["knowledge.edit.content"]<span class="au-required">*</span></label>
+                            <button type="button" class="au-btn au-btn--text au-btn--sm" id="kb-add-qa"><span class="au-icon" aria-hidden="true">add</span>@T["knowledge.edit.addQa"]</button>
                         </div>
                         <textarea name="Body" id="kb-body" rows="12" class="au-textarea" required dir="auto"
-                                  placeholder="Write the approved information the AI is allowed to share.&#10;&#10;For FAQs you can write:&#10;Q: Do I stay overnight after rhinoplasty?&#10;A: No, it's a day-case service.">@Model.Body</textarea>
+                                  placeholder="@T["knowledge.edit.contentPlaceholder"]">@Model.Body</textarea>
                         <span class="au-help counter" id="kb-body-count"></span>
                     </div>
                 }
 
-                @ActiveSwitch(Model.IsActive, "this entry")
+                @ActiveSwitch(Model.IsActive, T["knowledge.edit.activeEntry"].Value)
 
                 <div class="au-form-actions">
-                    <span class="au-help form-actions-note">Takes a few seconds to prepare for AI search.</span>
-                    <a href="@Model.BackUrl" class="au-btn au-btn--text">Cancel</a>
-                    <button type="submit" class="au-btn au-btn--primary">@(Model.IsNew ? "Add to Knowledge Base" : "Save changes")</button>
+                    <span class="au-help form-actions-note">@T["knowledge.edit.prepareNote"]</span>
+                    <a href="@Model.BackUrl" class="au-btn au-btn--text">@T["common.cancel"]</a>
+                    <button type="submit" class="au-btn au-btn--primary">@(Model.IsNew ? T["knowledge.edit.addSubmit"] : T["common.saveChanges"])</button>
                 </div>
             </form>
         </div>
@@ -128,28 +129,28 @@ else
                         <input type="file" name="UploadFile" id="kb-file" accept=".pdf,.docx,.txt" required class="dropzone-input" />
                         <span class="kb-choice-icon" id="kb-drop-icon">⇪</span>
                         <div class="flex-1 min-w-0">
-                            <strong id="kb-drop-title">Drop a file here or click to choose</strong>
-                            <div class="cell-sub" id="kb-drop-sub">PDF, DOCX or TXT, up to @maxMb.ToString("0.#") MB. Scanned images can't be read.</div>
+                            <strong id="kb-drop-title">@T["knowledge.upload.dropTitle"]</strong>
+                            <div class="cell-sub" id="kb-drop-sub">@T["knowledge.upload.dropSub", maxMb.ToString("0.#")]</div>
                         </div>
                     </label>
 
                     <div class="au-form-grid">
                         <div class="au-form-field">
-                            <label class="au-form-label" for="kb-upload-title">Title <span class="opt">optional</span></label>
-                            <input type="text" name="Title" id="kb-upload-title" value="@Model.Title" class="au-input" maxlength="200" placeholder="Uses the file name" />
+                            <label class="au-form-label" for="kb-upload-title">@T["knowledge.edit.titleLabel"] <span class="opt">@T["common.optional"]</span></label>
+                            <input type="text" name="Title" id="kb-upload-title" value="@Model.Title" class="au-input" maxlength="200" placeholder="@T["knowledge.upload.titlePlaceholder"]" />
                         </div>
                         <label class="au-form-field">
-                            <span class="au-form-label">Category</span>
+                            <span class="au-form-label">@T["knowledge.table.category"]</span>
                             @CategorySelect(Model.Category)
                         </label>
                     </div>
 
-                    @ActiveSwitch(Model.ErrorMessage is null || Model.IsActive, "this document")
+                    @ActiveSwitch(Model.ErrorMessage is null || Model.IsActive, T["knowledge.edit.activeDocument"].Value)
 
                     <div class="au-form-actions">
-                        <span class="au-help form-actions-note">Only the text is kept, not the file.</span>
-                        <a href="@Model.BackUrl" class="au-btn au-btn--text">Cancel</a>
-                        <button type="submit" class="au-btn au-btn--primary"><span class="au-icon" aria-hidden="true">upload</span>Upload</button>
+                        <span class="au-help form-actions-note">@T["knowledge.upload.note"]</span>
+                        <a href="@Model.BackUrl" class="au-btn au-btn--text">@T["common.cancel"]</a>
+                        <button type="submit" class="au-btn au-btn--primary"><span class="au-icon" aria-hidden="true">upload</span>@T["knowledge.upload.submit"]</button>
                     </div>
                 </form>
             </div>
@@ -158,44 +159,42 @@ else
             <div id="kb-panel-website" hidden="@(activeMode != "website")">
                 <form method="post" asp-page-handler="Website" class="au-stack">
                     <div class="au-form-field">
-                        <label class="au-form-label" for="kb-website-url">Website address<span class="au-required">*</span></label>
+                        <label class="au-form-label" for="kb-website-url">@T["knowledge.website.address"]<span class="au-required">*</span></label>
                         <input type="text" name="WebsiteUrl" id="kb-website-url" value="@Model.WebsiteUrl" class="au-input" maxlength="2000" required
                                placeholder="https://www.yourbusiness.com" inputmode="url" autocomplete="off" />
                     </div>
 
                     <div class="au-form-field">
-                        <span class="au-form-label">What to import</span>
+                        <span class="au-form-label">@T["knowledge.website.whatToImport"]</span>
                         <div class="seg-cards">
                             <label class="cat-card @(Model.WebsiteMode != "single_page" ? "on" : "")">
                                 <input type="radio" name="WebsiteMode" value="crawl_site" checked="@(Model.WebsiteMode != "single_page")" />
-                                <strong>Whole website</strong><small>Follows links on the same site.</small>
+                                <strong>@T["knowledge.crawl.whole"]</strong><small>@T["knowledge.website.wholeHelp"]</small>
                             </label>
                             <label class="cat-card @(Model.WebsiteMode == "single_page" ? "on" : "")">
                                 <input type="radio" name="WebsiteMode" value="single_page" checked="@(Model.WebsiteMode == "single_page")" />
-                                <strong>Just this page</strong><small>Only the address above.</small>
+                                <strong>@T["knowledge.website.justThisPage"]</strong><small>@T["knowledge.website.justThisPageHelp"]</small>
                             </label>
                         </div>
                     </div>
 
                     <label class="au-form-field">
-                        <span class="au-form-label">Category</span>
+                        <span class="au-form-label">@T["knowledge.table.category"]</span>
                         @CategorySelect(Model.Category)
                     </label>
 
-                    @ActiveSwitch(Model.ErrorMessage is null || Model.IsActive, "these pages")
+                    @ActiveSwitch(Model.ErrorMessage is null || Model.IsActive, T["knowledge.edit.activePages"].Value)
 
                     <details class="kb-more">
-                        <summary>What gets imported?</summary>
+                        <summary>@T["knowledge.website.whatGetsImported"]</summary>
                         <p class="au-help mt-1">
-                            Only the text of public pages on this website. No images, videos or files, and links to other websites
-                            aren't followed. The site's <code>robots.txt</code> is respected, and pages built entirely with JavaScript can't be read.
-                            It runs in the background, so you can leave this page; progress shows on the website's page.
+                            @T.Html("knowledge.website.whatGetsImportedText", new Microsoft.AspNetCore.Html.HtmlString("<code>robots.txt</code>"))
                         </p>
                     </details>
 
                     <div class="au-form-actions">
-                        <a href="@Model.BackUrl" class="au-btn au-btn--text">Cancel</a>
-                        <button type="submit" class="au-btn au-btn--primary"><span class="au-icon" aria-hidden="true">language</span>Import website</button>
+                        <a href="@Model.BackUrl" class="au-btn au-btn--text">@T["common.cancel"]</a>
+                        <button type="submit" class="au-btn au-btn--primary"><span class="au-icon" aria-hidden="true">language</span>@T["knowledge.website.import"]</button>
                     </div>
                 </form>
             </div>

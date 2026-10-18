@@ -1,7 +1,7 @@
 @page "/Campaigns/Create"
 @model Omni.App.Pages.Campaigns.CreateModel
 @{
-    ViewData["Title"] = "New Campaign";
+    ViewData["Title"] = T["campaigns.new"].Value;
     var hasTemplate = Model.SelectedTemplate is not null;
     var hasBlanks = Model.PlaceholderNumbers.Count > 0;
 }
@@ -13,12 +13,12 @@
 else
 {
     <div class="au-back-header">
-        <a class="au-icon-btn au-icon-btn--bordered" href="/Campaigns" aria-label="Back to Campaigns" title="Back to Campaigns">
+        <a class="au-icon-btn au-icon-btn--bordered" href="/Campaigns" aria-label="@T["campaigns.back"]" title="@T["campaigns.back"]">
             <span class="au-icon" aria-hidden="true">arrow_back</span>
         </a>
         <div class="min-w-0">
-            <h2 class="au-back-header__title">New campaign</h2>
-            <span class="au-back-header__sub">Three steps: the message, who gets it, and when.</span>
+            <h2 class="au-back-header__title">@T["campaigns.new"]</h2>
+            <span class="au-back-header__sub">@T["campaigns.create.sub"]</span>
         </div>
     </div>
 
@@ -26,9 +26,9 @@ else
 
     @if (Model.ApprovedTemplates.Count == 0)
     {
-        var empty = new EmptyStateModel(Icon: "description", Title: "You need an approved template first",
-            Text: "WhatsApp only allows approved templates in campaigns. Create one and wait for Meta to approve it.",
-            ActionLabel: "Go to WhatsApp Templates", ActionHref: "/WhatsApp/Templates", ActionIcon: "arrow_forward");
+        var empty = new EmptyStateModel(Icon: "description", Title: T["campaigns.create.noTemplateTitle"].Value,
+            Text: T["campaigns.create.noTemplateText"].Value,
+            ActionLabel: T["campaigns.create.noTemplateAction"].Value, ActionHref: "/WhatsApp/Templates", ActionIcon: "arrow_forward");
         <div class="au-panel au-panel--round"><partial name="_EmptyState" model="empty" /></div>
     }
     else
@@ -38,18 +38,18 @@ else
 
             @* ---------------- 1. Message ---------------- *@
             <section class="step au-panel au-panel--round">
-                <div class="step-head"><span class="step-num">1</span><h3>Message</h3></div>
+                <div class="step-head"><span class="step-num">1</span><h3>@T["campaigns.create.step.message"]</h3></div>
                 <div class="msg-grid">
                     <div>
                         <label class="field">
-                            <span>Campaign name</span>
-                            <input type="text" name="Name" id="campaign-name" value="@Model.Name" class="text-input" placeholder="e.g. October reactivation" required />
+                            <span>@T["campaigns.create.name"]</span>
+                            <input type="text" name="Name" id="campaign-name" value="@Model.Name" class="text-input" placeholder="@T["campaigns.create.namePlaceholder"]" required />
                         </label>
                         <label class="field mt-2">
-                            <span>WhatsApp template</span>
+                            <span>@T["campaigns.create.template"]</span>
                             @* Picking a template reloads the page with it (keeping the name typed so far) — see campaign-create.js. *@
                             <select id="template-select" class="select">
-                                <option value="">Choose an approved template…</option>
+                                <option value="">@T["campaigns.create.templatePlaceholder"]</option>
                                 @foreach (var t in Model.ApprovedTemplates)
                                 {
                                     <option value="@t.Id" selected="@(t.Id == Model.WhatsAppTemplateId)">@t.Name (@t.Language)</option>
@@ -60,24 +60,23 @@ else
                         @if (hasTemplate && hasBlanks)
                         {
                             <div class="alert alert-warning mt-2 text-sm" id="blanks-warning" hidden>
-                                This template has blanks (@string.Join(", ", Model.PlaceholderNumbers.Select(n => "{{" + n + "}}"))).
-                                Blanks can only be filled when you <strong>pick people manually</strong> in step 2, or choose a template without blanks.
+                                @T.Html("campaigns.create.blanksWarning", string.Join(", ", Model.PlaceholderNumbers.Select(n => "{{" + n + "}}")), new Microsoft.AspNetCore.Html.HtmlString($"<strong>{System.Net.WebUtility.HtmlEncode(T["campaigns.create.blanksWarningManual"].Value)}</strong>"))
                             </div>
                             <div class="field mt-2" id="blanks-fields">
-                                <span>Fill in the blanks</span>
+                                <span>@T["campaigns.create.fillBlanks"]</span>
                                 @foreach (var n in Model.PlaceholderNumbers)
                                 {
                                     var current = Model.Variables.GetValueOrDefault(n) ?? "{ContactFirstName}";
                                     var isToken = current is "{ContactFirstName}" or "{ContactFullName}" or "{ContactPhone}";
                                     <div class="var-row" data-var="@n">
                                         <span class="var-tag">{{@n}}</span>
-                                        <select class="select var-mode" aria-label="Value for {{@n}}">
-                                            <option value="{ContactFirstName}" selected="@(current == "{ContactFirstName}")">Contact's first name</option>
-                                            <option value="{ContactFullName}" selected="@(current == "{ContactFullName}")">Contact's full name</option>
-                                            <option value="{ContactPhone}" selected="@(current == "{ContactPhone}")">Contact's phone</option>
-                                            <option value="__text" selected="@(!isToken)">Same text for everyone…</option>
+                                        <select class="select var-mode" aria-label="@T["campaigns.create.valueFor", "{{" + n + "}}"]">
+                                            <option value="{ContactFirstName}" selected="@(current == "{ContactFirstName}")">@T["campaigns.create.var.firstName"]</option>
+                                            <option value="{ContactFullName}" selected="@(current == "{ContactFullName}")">@T["campaigns.create.var.fullName"]</option>
+                                            <option value="{ContactPhone}" selected="@(current == "{ContactPhone}")">@T["campaigns.create.var.phone"]</option>
+                                            <option value="__text" selected="@(!isToken)">@T["campaigns.create.var.sameText"]</option>
                                         </select>
-                                        <input type="text" class="text-input var-text" placeholder="Text for {{@n}}" value="@(isToken ? "" : current)" hidden="@isToken" />
+                                        <input type="text" class="text-input var-text" placeholder="@T["campaigns.create.textFor", "{{" + n + "}}"]" value="@(isToken ? "" : current)" hidden="@isToken" />
                                         <input type="hidden" name="Variables[@n]" class="var-value" value="@current" />
                                     </div>
                                 }
@@ -85,14 +84,14 @@ else
                         }
                     </div>
                     <div>
-                        <span class="eyebrow">Preview</span>
+                        <span class="eyebrow">@T["campaigns.create.preview"]</span>
                         @if (hasTemplate)
                         {
                             <div class="wa-preview"><div class="wa-bubble" id="wa-bubble" data-body="@Model.SelectedTemplate!.Body">@Model.SelectedTemplate.Body<span class="wa-time">09:00</span></div></div>
                         }
                         else
                         {
-                            <div class="wa-preview wa-empty">Pick a template to see the message here.</div>
+                            <div class="wa-preview wa-empty">@T["campaigns.create.previewEmpty"]</div>
                         }
                     </div>
                 </div>
@@ -100,16 +99,16 @@ else
 
             @if (!hasTemplate)
             {
-                <section class="step au-panel au-panel--round"><div class="step-head"><span class="step-num">2</span><h3>Audience</h3></div><div class="text-subtle text-sm">Choose a template first.</div></section>
-                <section class="step au-panel au-panel--round"><div class="step-head"><span class="step-num">3</span><h3>When</h3></div><div class="text-subtle text-sm">Choose a template first.</div></section>
+                <section class="step au-panel au-panel--round"><div class="step-head"><span class="step-num">2</span><h3>@T["campaigns.create.step.audience"]</h3></div><div class="text-subtle text-sm">@T["campaigns.create.templateFirst"]</div></section>
+                <section class="step au-panel au-panel--round"><div class="step-head"><span class="step-num">3</span><h3>@T["campaigns.create.step.when"]</h3></div><div class="text-subtle text-sm">@T["campaigns.create.templateFirst"]</div></section>
             }
             else
             {
                 @* ---------------- 2. Audience ---------------- *@
                 <section class="step au-panel au-panel--round">
                     <div class="step-head">
-                        <span class="step-num">2</span><h3>Audience</h3>
-                        <button type="button" class="status-help-trigger" data-status-help-trigger title="What do these statuses mean?" aria-label="What do these statuses mean?">?</button>
+                        <span class="step-num">2</span><h3>@T["campaigns.create.step.audience"]</h3>
+                        <button type="button" class="status-help-trigger" data-status-help-trigger title="@T["statusHelp.trigger.label"]" aria-label="@T["statusHelp.trigger.label"]">?</button>
                     </div>
 
                     @* These four radios are UI-only (not bound) — campaign-audience.js maps them onto the two hidden
@@ -117,23 +116,23 @@ else
                     <div class="aud-grid">
                         <label class="aud-card">
                             <input type="radio" name="AudienceChoice" value="reactivation_no_booking" data-audience-choice checked="@(Model.AudienceChoice == "reactivation_no_booking")" />
-                            <span class="aud-title">Old contacts who never booked <span class="badge badge-green">Recommended</span></span>
-                            <span class="aud-desc">Re-engage people who showed interest but never booked.</span>
+                            <span class="aud-title">@T["campaigns.audience.reactivation"] <span class="badge badge-green">@T["campaigns.create.recommended"]</span></span>
+                            <span class="aud-desc">@T["campaigns.create.reactivationDesc"]</span>
                         </label>
                         <label class="aud-card">
                             <input type="radio" name="AudienceChoice" value="all_eligible" data-audience-choice checked="@(Model.AudienceChoice == "all_eligible")" />
-                            <span class="aud-title">All reachable contacts</span>
-                            <span class="aud-desc">Everyone you're allowed to message.</span>
+                            <span class="aud-title">@T["campaigns.audience.allEligible"]</span>
+                            <span class="aud-desc">@T["campaigns.create.allEligibleDesc"]</span>
                         </label>
                         <label class="aud-card">
                             <input type="radio" name="AudienceChoice" value="custom" data-audience-choice checked="@(Model.AudienceChoice == "custom")" />
-                            <span class="aud-title">Custom audience</span>
-                            <span class="aud-desc">Filter by service, status, source, dates…</span>
+                            <span class="aud-title">@T["campaigns.audience.custom"]</span>
+                            <span class="aud-desc">@T["campaigns.create.customDesc"]</span>
                         </label>
                         <label class="aud-card">
                             <input type="radio" name="AudienceChoice" value="manual" data-audience-choice checked="@(Model.AudienceChoice == "manual")" />
-                            <span class="aud-title">Pick people manually</span>
-                            <span class="aud-desc">Choose specific contacts from your list.</span>
+                            <span class="aud-title">@T["campaigns.create.manualTitle"]</span>
+                            <span class="aud-desc">@T["campaigns.create.manualDesc"]</span>
                         </label>
                     </div>
 
@@ -144,17 +143,17 @@ else
                     <div id="reactivation-panel" class="aud-panel" hidden>
                         <div class="filter-row">
                             <label class="field">
-                                <span>Inactive for</span>
+                                <span>@T["campaigns.create.inactiveFor"]</span>
                                 <select name="InactiveDays" id="inactive-days" class="select">
-                                    <option value="30" selected="@(Model.InactiveDays == 30)">30 days</option>
-                                    <option value="60" selected="@(Model.InactiveDays == 60)">60 days</option>
-                                    <option value="90" selected="@(Model.InactiveDays == 90)">90 days</option>
+                                    <option value="30" selected="@(Model.InactiveDays == 30)">@T["campaigns.create.days", 30]</option>
+                                    <option value="60" selected="@(Model.InactiveDays == 60)">@T["campaigns.create.days", 60]</option>
+                                    <option value="90" selected="@(Model.InactiveDays == 90)">@T["campaigns.create.days", 90]</option>
                                 </select>
                             </label>
                             <label class="field">
-                                <span>Service</span>
+                                <span>@T["contacts.table.service"]</span>
                                 <select name="ReactivationServiceId" id="reactivation-service" class="select">
-                                    <option value="">All services</option>
+                                    <option value="">@T["campaigns.create.allServices"]</option>
                                     @foreach (var p in Model.Services)
                                     {
                                         <option value="@p.Id" selected="@(p.Id == Model.ReactivationServiceId)">@p.Name</option>
@@ -164,30 +163,30 @@ else
                             @if (Model.ContactSources.Count > 0)
                             {
                                 <label class="field">
-                                    <span>Contact source</span>
+                                    <span>@T["campaigns.create.contactSource"]</span>
                                     <select name="ReactivationSource" id="reactivation-source" class="select">
-                                        <option value="">Any source</option>
+                                        <option value="">@T["campaigns.create.anySource"]</option>
                                         @foreach (var s in Model.ContactSources)
                                         {
-                                            <option value="@s" selected="@(s == Model.ReactivationSource)">@Omni.App.Common.Helpers.FilterLabelHelper.Label(s)</option>
+                                            <option value="@s" selected="@(s == Model.ReactivationSource)">@T.ValueLabel(s)</option>
                                         }
                                     </select>
                                 </label>
                             }
                         </div>
                         <div class="count-box">
-                            <div><span class="count-num" id="reactivation-match-count">—</span> <span class="text-muted">contacts ready for reactivation</span></div>
-                            <button type="button" class="au-btn au-btn--outlined au-btn--sm" data-preview-btn data-preview-audience="reactivation_no_booking" data-preview-target="reactivation-preview-list">Preview contacts</button>
+                            <div><span class="count-num" id="reactivation-match-count">—</span> <span class="text-muted">@T["campaigns.create.count.reactivation"]</span></div>
+                            <button type="button" class="au-btn au-btn--outlined au-btn--sm" data-preview-btn data-preview-audience="reactivation_no_booking" data-preview-target="reactivation-preview-list">@T["campaigns.create.previewContacts"]</button>
                         </div>
                         <div id="reactivation-preview-list" class="preview-contacts-list" style="display:none"></div>
                     </div>
 
                     @* All reachable contacts *@
                     <div id="all-eligible-panel" class="aud-panel" hidden>
-                        <div class="text-subtle text-sm mt-2">Leaves out anyone without a phone number, who opted out, or who can't be messaged.</div>
+                        <div class="text-subtle text-sm mt-2">@T["campaigns.create.allEligibleHelp"]</div>
                         <div class="count-box">
-                            <div><span class="count-num" id="all-eligible-match-count">—</span> <span class="text-muted">reachable contacts</span></div>
-                            <button type="button" class="au-btn au-btn--outlined au-btn--sm" data-preview-btn data-preview-audience="all_eligible" data-preview-target="all-eligible-preview-list">Preview contacts</button>
+                            <div><span class="count-num" id="all-eligible-match-count">—</span> <span class="text-muted">@T["campaigns.create.count.reachable"]</span></div>
+                            <button type="button" class="au-btn au-btn--outlined au-btn--sm" data-preview-btn data-preview-audience="all_eligible" data-preview-target="all-eligible-preview-list">@T["campaigns.create.previewContacts"]</button>
                         </div>
                         <div id="all-eligible-preview-list" class="preview-contacts-list" style="display:none"></div>
                     </div>
@@ -196,9 +195,9 @@ else
                     <div id="custom-panel" class="aud-panel" hidden>
                         <div class="filter-grid" id="advanced-filters">
                             <label class="field">
-                                <span>Service</span>
+                                <span>@T["contacts.table.service"]</span>
                                 <select name="CustomServiceId" id="custom-service" class="select">
-                                    <option value="">All services</option>
+                                    <option value="">@T["campaigns.create.allServices"]</option>
                                     @foreach (var p in Model.Services)
                                     {
                                         <option value="@p.Id" selected="@(p.Id == Model.CustomServiceId)">@p.Name</option>
@@ -206,48 +205,48 @@ else
                                 </select>
                             </label>
                             <label class="field">
-                                <span>Inactive for</span>
+                                <span>@T["campaigns.create.inactiveFor"]</span>
                                 <select name="CustomInactiveDays" id="custom-inactive-days" class="select">
-                                    <option value="" selected="@(Model.CustomInactiveDays is null)">Any time</option>
-                                    <option value="30" selected="@(Model.CustomInactiveDays == 30)">30+ days</option>
-                                    <option value="60" selected="@(Model.CustomInactiveDays == 60)">60+ days</option>
-                                    <option value="90" selected="@(Model.CustomInactiveDays == 90)">90+ days</option>
+                                    <option value="" selected="@(Model.CustomInactiveDays is null)">@T["campaigns.create.anyTime"]</option>
+                                    <option value="30" selected="@(Model.CustomInactiveDays == 30)">@T["campaigns.create.daysPlus", 30]</option>
+                                    <option value="60" selected="@(Model.CustomInactiveDays == 60)">@T["campaigns.create.daysPlus", 60]</option>
+                                    <option value="90" selected="@(Model.CustomInactiveDays == 90)">@T["campaigns.create.daysPlus", 90]</option>
                                 </select>
                             </label>
-                            <div class="field"><span>Stage</span>@{ await RenderMultiSelect("CustomStageKeys", "Any stage", Model.Stages.Select(s => s.Key).ToList(), Model.CustomStageKeys, key => StageDisplay.Label(Model.Stages, key)); }</div>
-                            <div class="field"><span>Qualification</span>@{ await RenderMultiSelect("CustomQualifications", "Any", Model.QualificationOptions, Model.CustomQualifications); }</div>
+                            <div class="field"><span>@T["contacts.table.stage"]</span>@{ await RenderMultiSelect("CustomStageKeys", T["campaigns.create.anyStage"].Value, Model.Stages.Select(s => s.Key).ToList(), Model.CustomStageKeys, key => StageDisplay.Label(Model.Stages, key)); }</div>
+                            <div class="field"><span>@T["contacts.table.qualification"]</span>@{ await RenderMultiSelect("CustomQualifications", T["campaigns.create.any"].Value, Model.QualificationOptions, Model.CustomQualifications); }</div>
                             @if (Model.ContactSources.Count > 0)
                             {
-                                <div class="field"><span>Contact source</span>@{ await RenderMultiSelect("CustomSources", "Any source", Model.ContactSources, Model.CustomSources); }</div>
+                                <div class="field"><span>@T["campaigns.create.contactSource"]</span>@{ await RenderMultiSelect("CustomSources", T["campaigns.create.anySource"].Value, Model.ContactSources, Model.CustomSources); }</div>
                             }
-                            <div class="field"><span>Booking status</span>@{ await RenderMultiSelect("CustomBookingStatuses", "Any", Model.BookingStatusOptions, Model.CustomBookingStatuses); }</div>
+                            <div class="field"><span>@T["campaigns.create.bookingStatus"]</span>@{ await RenderMultiSelect("CustomBookingStatuses", T["campaigns.create.any"].Value, Model.BookingStatusOptions, Model.CustomBookingStatuses); }</div>
                             <div class="field date-pair">
-                                <span>Created (from – to)</span>
+                                <span>@T["campaigns.create.created"]</span>
                                 <div class="flex gap-1">
-                                    <input type="date" name="CustomCreatedAfter" id="custom-created-after" class="text-input" value="@(Model.CustomCreatedAfter?.ToString("yyyy-MM-dd"))" aria-label="Created after" />
-                                    <input type="date" name="CustomCreatedBefore" id="custom-created-before" class="text-input" value="@(Model.CustomCreatedBefore?.ToString("yyyy-MM-dd"))" aria-label="Created before" />
+                                    <input type="date" name="CustomCreatedAfter" id="custom-created-after" class="text-input" value="@(Model.CustomCreatedAfter?.ToString("yyyy-MM-dd"))" aria-label="@T["campaigns.create.createdAfter"]" />
+                                    <input type="date" name="CustomCreatedBefore" id="custom-created-before" class="text-input" value="@(Model.CustomCreatedBefore?.ToString("yyyy-MM-dd"))" aria-label="@T["campaigns.create.createdBefore"]" />
                                 </div>
                             </div>
                             <div class="field date-pair">
-                                <span>Last contacted (from – to)</span>
+                                <span>@T["campaigns.create.lastContacted"]</span>
                                 <div class="flex gap-1">
-                                    <input type="date" name="CustomLastContactedAfter" id="custom-last-contacted-after" class="text-input" value="@(Model.CustomLastContactedAfter?.ToString("yyyy-MM-dd"))" aria-label="Last contacted after" />
-                                    <input type="date" name="CustomLastContactedBefore" id="custom-last-contacted-before" class="text-input" value="@(Model.CustomLastContactedBefore?.ToString("yyyy-MM-dd"))" aria-label="Last contacted before" />
+                                    <input type="date" name="CustomLastContactedAfter" id="custom-last-contacted-after" class="text-input" value="@(Model.CustomLastContactedAfter?.ToString("yyyy-MM-dd"))" aria-label="@T["campaigns.create.lastContactedAfter"]" />
+                                    <input type="date" name="CustomLastContactedBefore" id="custom-last-contacted-before" class="text-input" value="@(Model.CustomLastContactedBefore?.ToString("yyyy-MM-dd"))" aria-label="@T["campaigns.create.lastContactedBefore"]" />
                                 </div>
                             </div>
                             <label class="field">
-                                <span>Country</span>
-                                <input type="text" name="CustomCountry" id="custom-country" class="text-input" value="@Model.CustomCountry" placeholder="e.g. LB" />
+                                <span>@T["campaigns.create.country"]</span>
+                                <input type="text" name="CustomCountry" id="custom-country" class="text-input" value="@Model.CustomCountry" placeholder="@T["campaigns.create.countryPlaceholder"]" />
                             </label>
                             <label class="field">
-                                <span>City</span>
-                                <input type="text" name="CustomCity" id="custom-city" class="text-input" value="@Model.CustomCity" placeholder="e.g. Beirut" />
+                                <span>@T["contactDetail.details.city"]</span>
+                                <input type="text" name="CustomCity" id="custom-city" class="text-input" value="@Model.CustomCity" placeholder="@T["campaigns.create.cityPlaceholder"]" />
                             </label>
                         </div>
                         <div class="active-filters" id="custom-active-filters" hidden></div>
                         <div class="count-box">
-                            <div><span class="count-num" id="custom-match-count">—</span> <span class="text-muted">matching contacts</span></div>
-                            <button type="button" class="au-btn au-btn--outlined au-btn--sm" data-preview-btn data-preview-audience="custom" data-preview-target="custom-preview-list">Preview contacts</button>
+                            <div><span class="count-num" id="custom-match-count">—</span> <span class="text-muted">@T["campaigns.create.count.matching"]</span></div>
+                            <button type="button" class="au-btn au-btn--outlined au-btn--sm" data-preview-btn data-preview-audience="custom" data-preview-target="custom-preview-list">@T["campaigns.create.previewContacts"]</button>
                         </div>
                         <div id="custom-preview-list" class="preview-contacts-list" style="display:none"></div>
                     </div>
@@ -255,16 +254,16 @@ else
                     @* Pick people manually *@
                     <div id="manual-recipients" class="aud-panel" hidden>
                         <div class="flex items-center gap-2 mt-2 flex-wrap">
-                            <input type="search" id="contact-search-input" value="@Model.Search" class="text-input search-input manual-search" placeholder="Search by name or phone…" autocomplete="off" />
+                            <input type="search" id="contact-search-input" value="@Model.Search" class="text-input search-input manual-search" placeholder="@T["contacts.search.placeholder"]" autocomplete="off" />
                             <span class="text-subtle text-sm" id="manual-search-hint">
-                                @(Model.Contacts.Count >= 200 ? "Showing the first 200 contacts. Press Enter to search all of them." : "Filters as you type.")
+                                @(Model.Contacts.Count >= 200 ? T["campaigns.create.manual.first200", 200] : T["campaigns.create.manual.filtersAsYouType"])
                             </span>
-                            <span class="sel-count" id="manual-selected-count">0 selected</span>
+                            <span class="sel-count" id="manual-selected-count">@T["campaigns.create.manual.selected", 0]</span>
                         </div>
                         <div class="au-table-card mt-2 manual-table">
                             <div class="au-table-scroll" style="--au-table-max-h: 360px">
                             <table class="au-table">
-                                <thead><tr><th class="au-shrink"><input type="checkbox" id="manual-select-all" title="Select all shown" aria-label="Select all shown" /></th><th>Name</th><th>Phone</th><th>Status</th></tr></thead>
+                                <thead><tr><th class="au-shrink"><input type="checkbox" id="manual-select-all" title="@T["campaigns.create.manual.selectAll"]" aria-label="@T["campaigns.create.manual.selectAll"]" /></th><th>@T["contacts.table.name"]</th><th>@T["contacts.table.phone"]</th><th>@T["contacts.table.stage"]</th></tr></thead>
                                 <tbody>
                                     @foreach (var contact in Model.Contacts)
                                     {
@@ -275,7 +274,7 @@ else
                                             <td><span class="badge @StageDisplay.CssClass(Model.Stages, contact.StageKey)">@StageDisplay.Label(Model.Stages, contact.StageKey)</span></td>
                                         </tr>
                                     }
-                                    <tr class="empty-row" id="manual-empty" hidden="@(Model.Contacts.Count > 0)"><td colspan="4">No contacts match this search.</td></tr>
+                                    <tr class="empty-row" id="manual-empty" hidden="@(Model.Contacts.Count > 0)"><td colspan="4">@T["campaigns.create.manual.noMatch"]</td></tr>
                                 </tbody>
                             </table>
                             </div>
@@ -285,24 +284,24 @@ else
 
                 @* ---------------- 3. When ---------------- *@
                 <section class="step au-panel au-panel--round">
-                    <div class="step-head"><span class="step-num">3</span><h3>When</h3></div>
-                    <div class="seg" role="radiogroup" aria-label="When to send">
-                        <label class="seg-opt"><input type="radio" name="SendOption" value="now" checked="@(Model.SendOption != "later")" /><span>Send now</span></label>
-                        <label class="seg-opt"><input type="radio" name="SendOption" value="later" checked="@(Model.SendOption == "later")" /><span>Schedule</span></label>
+                    <div class="step-head"><span class="step-num">3</span><h3>@T["campaigns.create.step.when"]</h3></div>
+                    <div class="seg" role="radiogroup" aria-label="@T["campaigns.create.whenLabel"]">
+                        <label class="seg-opt"><input type="radio" name="SendOption" value="now" checked="@(Model.SendOption != "later")" /><span>@T["campaigns.create.sendNow"]</span></label>
+                        <label class="seg-opt"><input type="radio" name="SendOption" value="later" checked="@(Model.SendOption == "later")" /><span>@T["campaigns.create.schedule"]</span></label>
                     </div>
-                    <div class="text-subtle text-sm mt-2" id="send-now-hint">Messages start going out as soon as you create the campaign.</div>
+                    <div class="text-subtle text-sm mt-2" id="send-now-hint">@T["campaigns.create.sendNowHint"]</div>
                     <div class="flex items-center gap-2 mt-2 flex-wrap" id="schedule-fields" hidden>
-                        <input type="date" name="ScheduleDate" class="text-input w-auto" value="@Model.ScheduleDate?.ToString("yyyy-MM-dd")" aria-label="Date" />
-                        <input type="time" name="ScheduleTime" class="text-input w-auto" value="@(Model.ScheduleTime?.ToString("HH:mm") ?? "09:00")" aria-label="Time" />
-                        <span class="text-subtle text-sm">your time (<span data-viewer-tz>@Model.ViewerTimezone</span>)</span>
+                        <input type="date" name="ScheduleDate" class="text-input w-auto" value="@Model.ScheduleDate?.ToString("yyyy-MM-dd")" aria-label="@T["bookings.new.date"]" />
+                        <input type="time" name="ScheduleTime" class="text-input w-auto" value="@(Model.ScheduleTime?.ToString("HH:mm") ?? "09:00")" aria-label="@T["bookings.new.time"]" />
+                        <span class="text-subtle text-sm">@T.Html("campaigns.create.yourTime", new Microsoft.AspNetCore.Html.HtmlString($"<span data-viewer-tz>{System.Net.WebUtility.HtmlEncode(Model.ViewerTimezone)}</span>"))</span>
                     </div>
                 </section>
 
                 <div class="summary-bar">
-                    <div id="summary-text"><strong>Ready:</strong> @Model.SelectedTemplate!.Name</div>
+                    <div id="summary-text"><strong>@T["campaigns.create.summary.ready"]</strong> @Model.SelectedTemplate!.Name</div>
                     <div class="flex gap-2">
-                        <a href="/Campaigns" class="au-btn au-btn--text">Cancel</a>
-                        <button type="submit" class="au-btn au-btn--primary" id="create-btn"><span class="au-icon" aria-hidden="true">send</span>Create campaign</button>
+                        <a href="/Campaigns" class="au-btn au-btn--text">@T["common.cancel"]</a>
+                        <button type="submit" class="au-btn au-btn--primary" id="create-btn"><span class="au-icon" aria-hidden="true">send</span>@T["campaigns.create.submit"]</button>
                     </div>
                 </div>
             }
@@ -331,17 +330,17 @@ else
             </button>
             <div class="ms-chips"></div>
             <div class="ms-panel" hidden>
-                <input type="text" class="ms-search text-input" placeholder="Search…" />
+                <input type="text" class="ms-search text-input" placeholder="@T["common.searchPlaceholder"]" />
                 <div class="ms-options">
                     @foreach (var value in options)
                     {
                         <label class="ms-option">
                             <input type="checkbox" name="@name" value="@value" checked="@selected.Contains(value)" />
-                            <span>@(labelOf?.Invoke(value) ?? Omni.App.Common.Helpers.FilterLabelHelper.Label(value))</span>
+                            <span>@(labelOf?.Invoke(value) ?? T.ValueLabel(value))</span>
                         </label>
                     }
                 </div>
-                <button type="button" class="au-btn au-btn--outlined au-btn--sm ms-clear-btn">Clear</button>
+                <button type="button" class="au-btn au-btn--outlined au-btn--sm ms-clear-btn">@T["common.clear"]</button>
             </div>
         </div>
         await Task.CompletedTask;

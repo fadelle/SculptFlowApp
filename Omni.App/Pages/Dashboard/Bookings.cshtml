@@ -1,7 +1,7 @@
 @page "/dashboard/bookings"
 @model Omni.App.Pages.Dashboard.BookingsModel
 @{
-    ViewData["Title"] = "Bookings";
+    ViewData["Title"] = T["bookings.title"].Value;
     ViewData["SignalRFirst"] = true; // the layout loads the SignalR client before this page's scripts
 }
 
@@ -19,32 +19,32 @@ else
 
     <div class="cal-header">
         <div class="cal-nav">
-            <button type="button" class="au-icon-btn au-icon-btn--bordered" id="cal-prev" title="Previous month" aria-label="Previous month"><span class="au-icon" aria-hidden="true">chevron_left</span></button>
+            <button type="button" class="au-icon-btn au-icon-btn--bordered" id="cal-prev" title="@T["bookings.calendar.previousMonth"]" aria-label="@T["bookings.calendar.previousMonth"]"><span class="au-icon" aria-hidden="true">chevron_left</span></button>
             <div class="cal-title" id="cal-title" aria-live="polite">&nbsp;</div>
-            <button type="button" class="au-icon-btn au-icon-btn--bordered" id="cal-next" title="Next month" aria-label="Next month"><span class="au-icon" aria-hidden="true">chevron_right</span></button>
-            <button type="button" class="au-btn au-btn--outlined au-btn--sm" id="cal-today">Today</button>
+            <button type="button" class="au-icon-btn au-icon-btn--bordered" id="cal-next" title="@T["bookings.calendar.nextMonth"]" aria-label="@T["bookings.calendar.nextMonth"]"><span class="au-icon" aria-hidden="true">chevron_right</span></button>
+            <button type="button" class="au-btn au-btn--outlined au-btn--sm" id="cal-today">@T["bookings.calendar.today"]</button>
         </div>
         <div class="cal-header__actions">
             <partial name="_TimeViewSwitch" model="Model.ClientTimezone" />
-            <button type="button" class="au-btn au-btn--primary" id="cal-new"><span class="au-icon" aria-hidden="true">add</span>New booking</button>
+            <button type="button" class="au-btn au-btn--primary" id="cal-new"><span class="au-icon" aria-hidden="true">add</span>@T["bookings.new.title"]</button>
         </div>
     </div>
 
     <div class="cal-weekdays">
-        <div class="cal-weekday">Sun</div><div class="cal-weekday">Mon</div><div class="cal-weekday">Tue</div>
-        <div class="cal-weekday">Wed</div><div class="cal-weekday">Thu</div><div class="cal-weekday">Fri</div>
-        <div class="cal-weekday">Sat</div>
+        <div class="cal-weekday">@T["days.short.sunday"]</div><div class="cal-weekday">@T["days.short.monday"]</div><div class="cal-weekday">@T["days.short.tuesday"]</div>
+        <div class="cal-weekday">@T["days.short.wednesday"]</div><div class="cal-weekday">@T["days.short.thursday"]</div><div class="cal-weekday">@T["days.short.friday"]</div>
+        <div class="cal-weekday">@T["days.short.saturday"]</div>
     </div>
     <div class="cal-grid" id="cal-grid"></div>
     <div class="cal-agenda" id="cal-agenda"></div>
 
-    <div class="cal-legend" aria-label="Status colours">
-        <span class="legend-item"><i class="legend-swatch status-booked"></i>Booked</span>
-        <span class="legend-item"><i class="legend-swatch status-confirmed"></i>Confirmed</span>
-        <span class="legend-item"><i class="legend-swatch status-attended"></i>Attended</span>
-        <span class="legend-item"><i class="legend-swatch status-no_show"></i>No-show</span>
-        <span class="legend-item"><i class="legend-swatch status-canceled"></i>Canceled</span>
-        <span class="legend-item"><i class="legend-swatch status-rescheduled"></i>Rescheduled</span>
+    <div class="cal-legend" aria-label="@T["bookings.calendar.legend"]">
+        <span class="legend-item"><i class="legend-swatch status-booked"></i>@T["values.booked"]</span>
+        <span class="legend-item"><i class="legend-swatch status-confirmed"></i>@T["values.confirmed"]</span>
+        <span class="legend-item"><i class="legend-swatch status-attended"></i>@T["values.attended"]</span>
+        <span class="legend-item"><i class="legend-swatch status-no_show"></i>@T["values.noShow"]</span>
+        <span class="legend-item"><i class="legend-swatch status-canceled"></i>@T["values.canceled"]</span>
+        <span class="legend-item"><i class="legend-swatch status-rescheduled"></i>@T["values.rescheduled"]</span>
     </div>
 
     @* ---------- Day drawer: every booking for the clicked day ---------- *@
@@ -53,8 +53,8 @@ else
         <div class="cal-drawer-header">
             <h3 class="cal-drawer-title" id="cal-drawer-title">&nbsp;</h3>
             <div class="flex items-center gap-2">
-                <button type="button" class="au-btn au-btn--outlined au-btn--sm" id="cal-drawer-add"><span class="au-icon" aria-hidden="true">add</span>New</button>
-                <button type="button" class="au-icon-btn" id="cal-drawer-close" aria-label="Close" title="Close"><span class="au-icon" aria-hidden="true">close</span></button>
+                <button type="button" class="au-btn au-btn--outlined au-btn--sm" id="cal-drawer-add"><span class="au-icon" aria-hidden="true">add</span>@T["bookings.drawer.new"]</button>
+                <button type="button" class="au-icon-btn" id="cal-drawer-close" aria-label="@T["common.close"]" title="@T["common.close"]"><span class="au-icon" aria-hidden="true">close</span></button>
             </div>
         </div>
         <div class="cal-drawer-body" id="cal-drawer-body"></div>
@@ -64,40 +64,40 @@ else
     <div class="bm-overlay" id="cal-new-overlay" hidden>
         <div class="card cal-modal" role="dialog" aria-modal="true" aria-labelledby="cal-new-title">
             <div class="modal-head">
-                <h3 id="cal-new-title" class="card-title">New booking</h3>
-                <button type="button" class="au-icon-btn" id="cal-new-close" aria-label="Close" title="Close"><span class="au-icon" aria-hidden="true">close</span></button>
+                <h3 id="cal-new-title" class="card-title">@T["bookings.new.title"]</h3>
+                <button type="button" class="au-icon-btn" id="cal-new-close" aria-label="@T["common.close"]" title="@T["common.close"]"><span class="au-icon" aria-hidden="true">close</span></button>
             </div>
             <div id="cal-new-error" class="connect-error modal-error" role="alert"></div>
             <div class="au-stack">
                 <div class="au-form-field">
-                    <label class="au-form-label" for="cal-new-contact-search">Contact<span class="au-required">*</span></label>
+                    <label class="au-form-label" for="cal-new-contact-search">@T["bookings.new.contact"]<span class="au-required">*</span></label>
                     <div class="picker" id="cal-new-contact-picker">
-                        <input type="text" id="cal-new-contact-search" class="au-input search-input" placeholder="Search by name or phone…" autocomplete="off" />
+                        <input type="text" id="cal-new-contact-search" class="au-input search-input" placeholder="@T["contacts.search.placeholder"]" autocomplete="off" />
                         <div class="picker-chip" id="cal-new-contact-chip" hidden>
                             <span class="avatar-sm" id="cal-new-contact-chip-avatar"></span>
                             <span class="picker-chip-label" id="cal-new-contact-chip-label"></span>
-                            <button type="button" class="picker-chip-x" id="cal-new-contact-clear" aria-label="Change contact">&times;</button>
+                            <button type="button" class="picker-chip-x" id="cal-new-contact-clear" aria-label="@T["bookings.new.changeContact"]">&times;</button>
                         </div>
                         <div class="picker-results" id="cal-new-contact-results" role="listbox" hidden></div>
                     </div>
                     <input type="hidden" id="cal-new-contact-id" />
                 </div>
                 <div class="au-form-field">
-                    <label class="au-form-label" for="cal-new-service">Service <span class="opt">optional</span></label>
-                    <select id="cal-new-service" class="au-select"><option value="">Loading…</option></select>
+                    <label class="au-form-label" for="cal-new-service">@T["contacts.table.service"] <span class="opt">@T["common.optional"]</span></label>
+                    <select id="cal-new-service" class="au-select"><option value="">@T["common.loading"]</option></select>
                 </div>
                 <div class="au-form-grid cal-when">
                     <div class="au-form-field">
-                        <label class="au-form-label" for="cal-new-date">Date<span class="au-required">*</span></label>
+                        <label class="au-form-label" for="cal-new-date">@T["bookings.new.date"]<span class="au-required">*</span></label>
                         <input type="date" id="cal-new-date" class="au-input" required />
                     </div>
                     <div class="au-form-field">
-                        <label class="au-form-label" for="cal-new-time">Time<span class="au-required">*</span></label>
+                        <label class="au-form-label" for="cal-new-time">@T["bookings.new.time"]<span class="au-required">*</span></label>
                         <input type="time" id="cal-new-time" class="au-input" value="09:00" required />
                         <span class="au-help" id="cal-new-tz-hint"></span>
                     </div>
                     <div class="au-form-field au-span-2">
-                        <label class="au-form-label" for="cal-new-duration">Length (minutes)</label>
+                        <label class="au-form-label" for="cal-new-duration">@T["bookings.new.duration"]</label>
                         <input type="number" id="cal-new-duration" class="au-input" value="30" min="5" max="1440" step="5" list="cal-duration-options" />
                         <datalist id="cal-duration-options">
                             <option value="15"></option><option value="30"></option><option value="45"></option><option value="60"></option>
@@ -107,21 +107,21 @@ else
                     </div>
                 </div>
                 <div class="au-form-field">
-                    <label class="au-form-label" for="cal-new-location">Where <span class="opt">optional</span></label>
+                    <label class="au-form-label" for="cal-new-location">@T["bookings.where"] <span class="opt">@T["common.optional"]</span></label>
                     <select id="cal-new-location" class="au-select">
-                        <option value="">Not set</option>
-                        <option value="in_person">In person</option>
-                        <option value="video">Video call</option>
-                        <option value="phone">Phone</option>
+                        <option value="">@T["bookings.location.notSet"]</option>
+                        <option value="in_person">@T["bookings.location.inPerson"]</option>
+                        <option value="video">@T["bookings.location.video"]</option>
+                        <option value="phone">@T["bookings.location.phone"]</option>
                     </select>
                 </div>
                 <div class="au-form-field">
-                    <label class="au-form-label" for="cal-new-notes">Notes <span class="opt">optional</span></label>
+                    <label class="au-form-label" for="cal-new-notes">@T["bookings.notes"] <span class="opt">@T["common.optional"]</span></label>
                     <textarea id="cal-new-notes" class="au-textarea" rows="2"></textarea>
                 </div>
                 <div class="au-form-actions">
-                    <button type="button" class="au-btn au-btn--text" id="cal-new-cancel">Cancel</button>
-                    <button type="button" class="au-btn au-btn--primary" id="cal-new-save">Create booking</button>
+                    <button type="button" class="au-btn au-btn--text" id="cal-new-cancel">@T["common.cancel"]</button>
+                    <button type="button" class="au-btn au-btn--primary" id="cal-new-save">@T["bookings.new.create"]</button>
                 </div>
             </div>
         </div>
@@ -138,32 +138,32 @@ else
                         <div class="text-muted text-sm" id="cal-appt-when"></div>
                     </div>
                 </div>
-                <button type="button" class="au-icon-btn" id="cal-appt-close" aria-label="Close" title="Close"><span class="au-icon" aria-hidden="true">close</span></button>
+                <button type="button" class="au-icon-btn" id="cal-appt-close" aria-label="@T["common.close"]" title="@T["common.close"]"><span class="au-icon" aria-hidden="true">close</span></button>
             </div>
             <div id="cal-appt-error" class="connect-error modal-error" role="alert"></div>
             <div class="mb-2">
-                <div class="inbox-contact-info-row"><span>Service</span><strong id="cal-appt-service">—</strong></div>
-                <div class="inbox-contact-info-row"><span>Where</span><strong id="cal-appt-location">—</strong></div>
-                <div class="inbox-contact-info-row" id="cal-appt-notes-row"><span>Notes</span><strong id="cal-appt-notes">—</strong></div>
+                <div class="inbox-contact-info-row"><span>@T["contacts.table.service"]</span><strong id="cal-appt-service">—</strong></div>
+                <div class="inbox-contact-info-row"><span>@T["bookings.where"]</span><strong id="cal-appt-location">—</strong></div>
+                <div class="inbox-contact-info-row" id="cal-appt-notes-row"><span>@T["bookings.notes"]</span><strong id="cal-appt-notes">—</strong></div>
             </div>
             <div class="au-form-field">
-                <label class="au-form-label" for="cal-appt-status">Status</label>
+                <label class="au-form-label" for="cal-appt-status">@T["bookings.status"]</label>
                 <select id="cal-appt-status" class="au-select">
-                    <option value="booked">Booked</option>
-                    <option value="confirmed">Confirmed</option>
-                    <option value="attended">Attended</option>
-                    <option value="no_show">No-show</option>
-                    <option value="canceled">Canceled</option>
-                    <option value="rescheduled">Rescheduled</option>
+                    <option value="booked">@T["values.booked"]</option>
+                    <option value="confirmed">@T["values.confirmed"]</option>
+                    <option value="attended">@T["values.attended"]</option>
+                    <option value="no_show">@T["values.noShow"]</option>
+                    <option value="canceled">@T["values.canceled"]</option>
+                    <option value="rescheduled">@T["values.rescheduled"]</option>
                 </select>
             </div>
             <div class="cal-appt-links">
-                <a class="au-link" id="cal-appt-contact" href="#">Open contact</a>
-                <a class="au-link" id="cal-appt-full" href="#">Open full page</a>
+                <a class="au-link" id="cal-appt-contact" href="#">@T["bookings.openContact"]</a>
+                <a class="au-link" id="cal-appt-full" href="#">@T["bookings.openFullPage"]</a>
             </div>
             <div class="au-form-actions">
-                <button type="button" class="au-btn au-btn--text" id="cal-appt-cancel">Cancel</button>
-                <button type="button" class="au-btn au-btn--primary" id="cal-appt-save">Save</button>
+                <button type="button" class="au-btn au-btn--text" id="cal-appt-cancel">@T["common.cancel"]</button>
+                <button type="button" class="au-btn au-btn--primary" id="cal-appt-save">@T["common.save"]</button>
             </div>
         </div>
     </div>

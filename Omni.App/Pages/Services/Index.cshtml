@@ -1,7 +1,7 @@
 @page "/Services"
 @model Omni.App.Pages.Services.IndexModel
 @{
-    ViewData["Title"] = "Services";
+    ViewData["Title"] = T["services.title"].Value;
 }
 
 @if (!Model.ClientConfigured)
@@ -15,25 +15,23 @@ else
     <div class="au-page-head">
         <div class="mw-640">
             <p class="au-page-head__sub">
-                Treatments your client offers. Contacts, bookings, campaigns and the AI assistant use this list.
-                <button type="button" class="link-btn" id="svc-how-btn" aria-expanded="false" aria-controls="svc-how">How it works</button>
+                @T["services.intro"]
+                <button type="button" class="link-btn" id="svc-how-btn" aria-expanded="false" aria-controls="svc-how">@T["services.how.button"]</button>
             </p>
             <p class="au-help mt-1 mb-0" id="svc-how" hidden>
-                Services can't be deleted. Deactivate one to stop using it for new bookings while keeping past contacts
-                and bookings intact. Put detailed information (pricing, recovery, preparation) in the
-                <a href="/KnowledgeBase">Knowledge Base</a>.
+                @T.Html("services.how.text", new Microsoft.AspNetCore.Html.HtmlString($"<a href=\"/KnowledgeBase\">{System.Net.WebUtility.HtmlEncode(T["nav.knowledgeBase"].Value)}</a>"))
             </p>
         </div>
         <div class="au-page-head__actions">
-            <a href="/Services/Edit" class="au-btn au-btn--primary"><span class="au-icon" aria-hidden="true">add</span>Add service</a>
+            <a href="/Services/Edit" class="au-btn au-btn--primary"><span class="au-icon" aria-hidden="true">add</span>@T["services.add"]</a>
         </div>
     </div>
 
     @if (Model.Services.Count == 0)
     {
-        var empty = new EmptyStateModel(Icon: "medical_services", Title: "Add your first service",
-            Text: "Contacts, bookings and the AI assistant need to know what your client offers.",
-            ActionLabel: "Add service", ActionHref: "/Services/Edit");
+        var empty = new EmptyStateModel(Icon: "medical_services", Title: T["services.empty.title"].Value,
+            Text: T["services.empty.text"].Value,
+            ActionLabel: T["services.add"].Value, ActionHref: "/Services/Edit");
         <div class="au-panel au-panel--round"><partial name="_EmptyState" model="empty" /></div>
     }
     else
@@ -41,27 +39,27 @@ else
         @* #svc-search, #svc-table tbody tr[data-search], tr[data-href] and #svc-no-match are read by services-page.js. *@
         <div class="au-toolbar">
             <div class="au-toolbar__filters">
-                <input type="search" id="svc-search" class="au-input search-input" placeholder="Search services" aria-label="Search services" />
+                <input type="search" id="svc-search" class="au-input search-input" placeholder="@T["services.search"]" aria-label="@T["services.search"]" />
             </div>
-            <span class="au-toolbar__meta">@Model.Services.Count @(Model.Services.Count == 1 ? "service" : "services")</span>
+            <span class="au-toolbar__meta">@(Model.Services.Count == 1 ? T["services.count.one"] : T["services.count.other", Model.Services.Count])</span>
         </div>
         <div class="au-table-card">
             <div class="au-table-scroll">
                 <table class="au-table au-table--stack" id="svc-table">
                     <thead>
                         <tr>
-                            <th>Service</th>
-                            <th>Code</th>
-                            <th>Booking</th>
-                            <th>Status</th>
-                            <th><span class="au-sr-only">Actions</span></th>
+                            <th>@T["services.table.service"]</th>
+                            <th>@T["services.table.code"]</th>
+                            <th>@T["services.table.booking"]</th>
+                            <th>@T["services.table.status"]</th>
+                            <th><span class="au-sr-only">@T["services.table.actions"]</span></th>
                         </tr>
                     </thead>
                     <tbody>
                         @foreach (var p in Model.Services)
                         {
                             <tr class="row-link @(p.IsActive ? "" : "row-dim")" data-href="/Services/Edit/@p.Id" data-search="@($"{p.Name} {p.Code} {p.Description}".ToLowerInvariant())">
-                                <td data-label="Service">
+                                <td data-label="@T["services.table.service"]">
                                     <div class="min-w-0">
                                         <a href="/Services/Edit/@p.Id" class="row-title">@p.Name</a>
                                         @if (!string.IsNullOrWhiteSpace(p.Description))
@@ -70,7 +68,7 @@ else
                                         }
                                     </div>
                                 </td>
-                                <td data-label="Code">
+                                <td data-label="@T["services.table.code"]">
                                     @if (!string.IsNullOrEmpty(p.Code))
                                     {
                                         <span class="code-chip">@p.Code</span>
@@ -80,28 +78,28 @@ else
                                         <span class="text-subtle">—</span>
                                     }
                                 </td>
-                                <td data-label="Booking">
+                                <td data-label="@T["services.table.booking"]">
                                     @if (p.BookingDuration is { } d)
                                     {
-                                        @($"{d} min")
+                                        @T["services.minutes", d]
                                     }
                                     else
                                     {
-                                        <span class="text-warn-soft">Not set</span>
+                                        <span class="text-warn-soft">@T["services.notSet"]</span>
                                     }
                                 </td>
-                                <td data-label="Status"><span class="badge @(p.IsActive ? "badge-green" : "badge-gray")">@(p.IsActive ? "Active" : "Inactive")</span></td>
+                                <td data-label="@T["services.table.status"]"><span class="badge @(p.IsActive ? "badge-green" : "badge-gray")">@(p.IsActive ? T["services.active"] : T["services.inactive"])</span></td>
                                 <td class="row-actions">
-                                    <a href="/Services/Edit/@p.Id" class="au-btn au-btn--outlined au-btn--sm">Edit</a>
+                                    <a href="/Services/Edit/@p.Id" class="au-btn au-btn--outlined au-btn--sm">@T["common.edit"]</a>
                                     <form method="post" asp-page-handler="Toggle" class="inline-form">
                                         <input type="hidden" name="id" value="@p.Id" />
                                         <input type="hidden" name="active" value="@((!p.IsActive).ToString().ToLowerInvariant())" />
-                                        <button type="submit" class="au-btn au-btn--text au-btn--sm">@(p.IsActive ? "Deactivate" : "Activate")</button>
+                                        <button type="submit" class="au-btn au-btn--text au-btn--sm">@(p.IsActive ? T["services.deactivate"] : T["services.activate"])</button>
                                     </form>
                                 </td>
                             </tr>
                         }
-                        <tr class="empty-row" id="svc-no-match" hidden><td colspan="5">No services match your search.</td></tr>
+                        <tr class="empty-row" id="svc-no-match" hidden><td colspan="5">@T["services.noMatch"]</td></tr>
                     </tbody>
                 </table>
             </div>

@@ -17,33 +17,39 @@
     }
   }
 
-  function capitalize(s) {
-    return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
-  }
 
   // Full Health page: the banner, cards and activity are worded server-side, so on a change we note WHAT
   // changed ("quality changed from High to Medium"), reload to get the fresh page, and show the note there.
   var NOTE_KEY = 'sf-health-note';
-  var QUALITY = { GREEN: 'High', YELLOW: 'Medium', RED: 'Low', HIGH: 'High', MEDIUM: 'Medium', LOW: 'Low' };
-  var LEVEL = { healthy: 'All good', warning: 'Needs attention', problem: 'Sending may be limited', disconnected: 'Not connected' };
-  function q(v) { return v ? (QUALITY[String(v).toUpperCase()] || v) : 'none'; }
+  var high = omniText.t('whatsAppHealth.quality.high');
+  var medium = omniText.t('whatsAppHealth.quality.medium');
+  var low = omniText.t('whatsAppHealth.quality.low');
+  var QUALITY = { GREEN: high, YELLOW: medium, RED: low, HIGH: high, MEDIUM: medium, LOW: low };
+  var LEVEL = {
+    healthy: omniText.t('whatsAppHealth.hero.healthyTitle'),
+    warning: omniText.t('whatsAppHealth.hero.warningTitle'),
+    problem: omniText.t('whatsAppHealth.hero.problemTitle'),
+    disconnected: omniText.t('dashboard.whatsApp.notConnected')
+  };
+  function q(v) { return v ? (QUALITY[String(v).toUpperCase()] || v) : omniText.t('whatsAppHealth.live.none'); }
+  function status(v) { return v ? String(v).toLowerCase() : omniText.t('values.unknown'); }
 
   function describeChange(card, payload) {
     var changes = [];
     if ((card.dataset.quality || '').toUpperCase() !== (payload.phoneQualityRating || '').toUpperCase()) {
-      changes.push('quality changed from ' + q(card.dataset.quality) + ' to ' + q(payload.phoneQualityRating));
+      changes.push(omniText.t('whatsAppHealth.live.quality', [q(card.dataset.quality), q(payload.phoneQualityRating)]));
     }
     if ((card.dataset.account || '').toLowerCase() !== (payload.accountStatus || '').toLowerCase()) {
-      changes.push('account is now ' + (payload.accountStatus || 'unknown').toLowerCase());
+      changes.push(omniText.t('whatsAppHealth.live.account', [status(payload.accountStatus)]));
     }
     if ((card.dataset.review || '').toLowerCase() !== (payload.accountReviewStatus || '').toLowerCase()) {
-      changes.push('Meta review is now ' + (payload.accountReviewStatus || 'unknown').toLowerCase());
+      changes.push(omniText.t('whatsAppHealth.live.review', [status(payload.accountReviewStatus)]));
     }
     if (!changes.length && card.dataset.level !== payload.healthLevel) {
-      changes.push('status is now "' + (LEVEL[payload.healthLevel] || capitalize(payload.healthLevel)) + '"');
+      changes.push(omniText.t('whatsAppHealth.live.level', [LEVEL[payload.healthLevel] || payload.healthLevel]));
     }
     if (!changes.length && payload.problemMessage) changes.push(payload.problemMessage);
-    return changes.length ? changes.join('; ') : 'new information from Meta';
+    return changes.length ? changes.join('; ') : omniText.t('whatsAppHealth.live.newInfo');
   }
 
   function applyToFullPage(payload) {
@@ -59,8 +65,11 @@
     var note = null;
     try { note = sessionStorage.getItem(NOTE_KEY); sessionStorage.removeItem(NOTE_KEY); } catch (e) { /* ignore */ }
     if (!note) return;
-    box.innerHTML = '<strong>Updated just now:</strong> ';
-    box.appendChild(document.createTextNode(note.charAt(0).toUpperCase() + note.slice(1) + '.'));
+    box.textContent = '';
+    var title = document.createElement('strong');
+    title.textContent = omniText.t('whatsAppHealth.live.updated');
+    box.appendChild(title);
+    box.appendChild(document.createTextNode(' ' + note.charAt(0).toUpperCase() + note.slice(1) + '.'));
     box.hidden = false;
   })();
 
@@ -68,7 +77,7 @@
     var dot = document.getElementById('dashboard-whatsapp-health-dot');
     var label = document.getElementById('dashboard-whatsapp-health-label');
     if (dot) dot.className = 'health-dot ' + badgeClass(payload.healthLevel);
-    if (label) label.textContent = payload.healthLevel === 'healthy' ? 'Healthy' : 'Attention Required';
+    if (label) label.textContent = payload.healthLevel === 'healthy' ? omniText.t('dashboard.whatsApp.healthy') : omniText.t('dashboard.whatsApp.attention');
   }
 
   var connection = new signalR.HubConnectionBuilder()

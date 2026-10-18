@@ -13,7 +13,7 @@
     var refresh = function () {
       dirty = snapshot() !== initial;
       bar.classList.toggle('is-idle', !dirty);
-      text.textContent = dirty ? '● You have unsaved changes' : 'All changes saved';
+      text.textContent = dirty ? omniText.t('businessInfo.save.unsaved') : omniText.t('businessInfo.save.allSaved');
       discard.hidden = !dirty;
     };
     form.addEventListener('input', refresh);
@@ -41,7 +41,7 @@
       var open = row.querySelector('[data-day-open]').checked;
       var s = row.querySelector('[data-day-start]'), e = row.querySelector('[data-day-end]');
       var bad = open && s.value && e.value && e.value <= s.value;
-      [s, e].forEach(function (el) { el.classList.toggle('input-error', !!bad); el.setCustomValidity(bad ? 'Must end after it starts' : ''); });
+      [s, e].forEach(function (el) { el.classList.toggle('input-error', !!bad); el.setCustomValidity(bad ? omniText.t('businessInfo.hours.endAfterStart') : ''); });
       row.querySelector('[data-day-err]').hidden = !bad;
     };
     var syncRow = function (row) {
@@ -54,7 +54,8 @@
     };
     var syncCount = function () {
       var n = rows.filter(function (r) { return r.querySelector('[data-day-open]').checked; }).length;
-      countEl.textContent = n ? n + (n === 1 ? ' day open' : ' days open') : 'All days closed';
+      countEl.textContent = !n ? omniText.t('businessInfo.hours.allClosed')
+        : n === 1 ? omniText.t('businessInfo.hours.openOne') : omniText.t('businessInfo.hours.openOther', [n]);
     };
     rows.forEach(function (row) {
       row.querySelector('[data-day-open]').addEventListener('change', function () { syncRow(row); syncCount(); });
@@ -77,12 +78,14 @@
     // Rules summary
     var summary = document.getElementById('avail-summary');
     var val = function (k) { var el = document.querySelector('[data-rule=' + k + ']'); return el ? el.value : ''; };
-    var plural = function (n, one, many) { return n + ' ' + (String(n) === '1' ? one : many); };
     var syncSummary = function () {
       var d = val('duration'), b = val('buffer'), n = val('notice'), a = val('advance');
-      summary.textContent = 'Contacts can book ' + (d || '?') + '-minute bookings, from '
-        + (n === '0' ? 'right away' : plural(n || '?', 'hour', 'hours')) + ' to ' + plural(a || '?', 'day', 'days') + ' ahead'
-        + (b && b !== '0' ? ', with ' + b + ' minutes between bookings.' : ', back to back.');
+      var from = n === '0' ? omniText.t('businessInfo.summary.rightAway')
+        : n === '1' ? omniText.t('businessInfo.summary.hoursOne') : omniText.t('businessInfo.summary.hoursOther', [n || '?']);
+      var to = a === '1' ? omniText.t('businessInfo.summary.daysOne') : omniText.t('businessInfo.summary.daysOther', [a || '?']);
+      summary.textContent = b && b !== '0'
+        ? omniText.t('businessInfo.summary.withGap', [d || '?', from, to, b])
+        : omniText.t('businessInfo.summary.backToBack', [d || '?', from, to]);
     };
     document.querySelectorAll('[data-rule]').forEach(function (el) { el.addEventListener('input', syncSummary); });
     syncSummary();
@@ -92,7 +95,7 @@
     var now = document.getElementById('avail-tz-now');
     var syncNow = function () {
       try {
-        now.textContent = 'Now ' + new Intl.DateTimeFormat('en-GB', { timeZone: tz.value, hour: '2-digit', minute: '2-digit', weekday: 'short' }).format(new Date()) + ' there';
+        now.textContent = omniText.t('businessInfo.timezone.now', [new Intl.DateTimeFormat(omniText.lang, { timeZone: tz.value, hour: '2-digit', minute: '2-digit', hourCycle: 'h23', weekday: 'short' }).format(new Date())]);
       } catch (e) { now.textContent = ''; }
     };
     tz.addEventListener('change', syncNow);
@@ -118,7 +121,7 @@
     });
     var checkExc = function () {
       var bad = closed.value === 'false' && start.value && end.value && end.value <= start.value;
-      end.setCustomValidity(bad ? 'Must end after it starts' : '');
+      end.setCustomValidity(bad ? omniText.t('businessInfo.hours.endAfterStart') : '');
       end.classList.toggle('input-error', !!bad);
     };
     start.addEventListener('input', checkExc);

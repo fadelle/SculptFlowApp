@@ -99,7 +99,7 @@ else
                                 @(info.SyncEnabled ? T["calendars.syncOn"] : T["calendars.syncOff"])
                                 @if (info.LastSyncedAt is { } s)
                                 {
-                                    <span class="cell-sub"> · @LocalTimeHelper.Ago(s)</span>
+                                    <span class="cell-sub"> · @LocalTimeHelper.Ago(T, s)</span>
                                 }
                             }
                         </span>

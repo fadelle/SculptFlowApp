@@ -185,7 +185,7 @@
       if (target.style.display !== 'none') { target.style.display = 'none'; return; }
 
       target.style.display = 'block';
-      target.innerHTML = '<div class="text-subtle">Loading…</div>';
+      target.innerHTML = '<div class="text-subtle">' + omniText.t('common.loading') + '</div>';
 
       var type = CHOICE_TO_TYPE[choice];
       var filters = filtersFor(choice);
@@ -195,18 +195,18 @@
       fetch(url)
         .then(function (res) { return res.ok ? res.json() : null; })
         .then(function (data) {
-          if (!data || data.contacts.length === 0) { target.innerHTML = '<div class="text-subtle">No contacts to show.</div>'; return; }
+          if (!data || data.contacts.length === 0) { target.innerHTML = '<div class="text-subtle">' + omniText.t('campaigns.create.previewNone') + '</div>'; return; }
           var html = data.contacts.map(function (l) {
-            var name = l.fullName ? l.fullName.replace(/</g, '&lt;') : 'Unnamed contact';
+            var name = l.fullName ? l.fullName.replace(/</g, '&lt;') : omniText.t('campaigns.create.unnamedContact');
             var phone = l.phone ? l.phone.replace(/</g, '&lt;') : '—';
             return '<div class="preview-contact-row"><span>' + name + '</span><span class="text-subtle">' + phone + '</span></div>';
           }).join('');
           if (data.matchingContacts > data.contacts.length) {
-            html += '<div class="preview-more">+' + (data.matchingContacts - data.contacts.length) + ' more</div>';
+            html += '<div class="preview-more">' + omniText.t('bookings.calendar.more', [data.matchingContacts - data.contacts.length]) + '</div>';
           }
           target.innerHTML = html;
         })
-        .catch(function () { target.innerHTML = '<div class="text-subtle">Couldn\'t load preview.</div>'; });
+        .catch(function () { target.innerHTML = '<div class="text-subtle">' + omniText.t('campaigns.create.previewFailed') + '</div>'; });
     });
   });
 

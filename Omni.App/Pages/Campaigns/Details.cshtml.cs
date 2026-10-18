@@ -1,20 +1,29 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.Extensions.Localization;
 using Omni.App.Business.Contracts.Managers;
 using Omni.App.Business.Contracts.Services.Campaigns;
+using Omni.App.Common.Helpers;
 using Omni.App.Entities.Responses.Campaigns;
 
 namespace Omni.App.Pages.Campaigns;
 
 public class DetailsModel : PageModel
 {
+    private const string CompletedKey = "campaigns.send.completed";
+    private const string SendingKey = "campaigns.send.sending";
+    private const string StoppedKey = "campaigns.stop.done";
+    private const string CancelledKey = "campaigns.cancel.done";
+
     private readonly ICurrentClientContext _clientContext;
     private readonly ICampaignService _campaigns;
+    private readonly IStringLocalizer _text;
 
-    public DetailsModel(ICurrentClientContext clientContext, ICampaignService campaigns)
+    public DetailsModel(ICurrentClientContext clientContext, ICampaignService campaigns, IStringLocalizer text)
     {
         _clientContext = clientContext;
         _campaigns = campaigns;
+        _text = text;
     }
 
     public bool ClientConfigured { get; private set; }
@@ -51,12 +60,12 @@ public class DetailsModel : PageModel
             StatusMessage = result is null
                 ? null
                 : result.CampaignCompleted
-                    ? $"Campaign completed: {result.Succeeded} sent, {result.Failed} failed."
-                    : $"Sending. {result.Succeeded} sent so far, {result.Failed} failed; the other {result.RemainingQueued} go out automatically in the background. Refresh to see progress.";
+                    ? _text[CompletedKey, result.Succeeded, result.Failed].Value
+                    : _text[SendingKey, result.Succeeded, result.Failed, result.RemainingQueued].Value;
         }
         catch (InvalidOperationException ex)
         {
-            ErrorMessage = ex.Message;
+            ErrorMessage = _text.Localize(ex);
         }
 
         return RedirectToPage(new { id });
@@ -70,11 +79,11 @@ public class DetailsModel : PageModel
         try
         {
             await _campaigns.StopAsync(client.Id, id, ct);
-            StatusMessage = "Campaign stopped. Nobody else will be messaged until you resume it.";
+            StatusMessage = _text[StoppedKey].Value;
         }
         catch (InvalidOperationException ex)
         {
-            ErrorMessage = ex.Message;
+            ErrorMessage = _text.Localize(ex);
         }
 
         return RedirectToPage(new { id });
@@ -88,11 +97,11 @@ public class DetailsModel : PageModel
         try
         {
             await _campaigns.CancelAsync(client.Id, id, ct);
-            StatusMessage = "Campaign cancelled.";
+            StatusMessage = _text[CancelledKey].Value;
         }
         catch (InvalidOperationException ex)
         {
-            ErrorMessage = ex.Message;
+            ErrorMessage = _text.Localize(ex);
         }
 
         return RedirectToPage(new { id });

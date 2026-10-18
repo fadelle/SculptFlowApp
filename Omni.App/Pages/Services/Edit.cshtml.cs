@@ -1,7 +1,9 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.Extensions.Localization;
 using Omni.App.Business.Contracts.Managers;
 using Omni.App.Business.Contracts.Services.Catalog;
+using Omni.App.Common.Helpers;
 using Omni.App.Entities.Requests.Catalog;
 
 namespace Omni.App.Pages.Services;
@@ -11,13 +13,17 @@ namespace Omni.App.Pages.Services;
 /// the logged-in user.</summary>
 public class EditModel : PageModel
 {
+    private const string SavedKey = "services.saved";
+
     private readonly ICurrentClientContext _clientContext;
     private readonly ICatalogService _services;
+    private readonly IStringLocalizer _text;
 
-    public EditModel(ICurrentClientContext clientContext, ICatalogService services)
+    public EditModel(ICurrentClientContext clientContext, ICatalogService services, IStringLocalizer text)
     {
         _clientContext = clientContext;
         _services = services;
+        _text = text;
     }
 
     /// <summary>Route value — null when adding a new service.</summary>
@@ -76,12 +82,12 @@ public class EditModel : PageModel
                 return NotFound();
             }
 
-            TempData["StatusMessage"] = "Saved.";
+            TempData["StatusMessage"] = _text[SavedKey].Value;
             return RedirectToPage("/Services/Index");
         }
         catch (ArgumentException ex)
         {
-            ErrorMessage = ex.Message;
+            ErrorMessage = _text.Localize(ex);
             return Page();
         }
     }

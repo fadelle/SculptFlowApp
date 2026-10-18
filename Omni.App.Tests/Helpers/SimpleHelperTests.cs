@@ -213,8 +213,18 @@ public class LabelAndBadgeTests
     [InlineData("", "—")]
     [InlineData("needs_human", "Needs human review")]
     [InlineData("NO_SHOW", "No-show")]
+    [InlineData("Needs human", "Needs human review")]
     [InlineData("some_new_status", "Some new status")]
-    public void FilterLabel(string? v, string expected) => Assert.Equal(expected, FilterLabelHelper.Label(v));
+    [InlineData("12", "12")]
+    public void FilterLabel(string? v, string expected) => Assert.Equal(expected, TextKit.Localizer().ValueLabel(v));
+
+    [Theory]
+    [InlineData("needs_human", "values.needsHuman")]
+    [InlineData("NO_SHOW", "values.noShow")]
+    [InlineData("in-person call", "values.inPersonCall")]
+    [InlineData("12", null)]
+    [InlineData("__", null)]
+    public void FilterLabel_key(string v, string? key) => Assert.Equal(key, FilterLabelHelper.KeyOf(v));
 
     [Theory]
     [InlineData("hot", "badge-red")]
@@ -229,13 +239,13 @@ public class LabelAndBadgeTests
     [InlineData(null, "Unknown", "badge-red")]
     public void TemplateStatus(string? v, string label, string css)
     {
-        Assert.Equal(label, StatusBadgeHelper.TemplateStatusLabel(v));
+        Assert.Equal(label, TextKit.Localizer().TemplateStatusLabel(v));
         Assert.Equal(css, StatusBadgeHelper.TemplateStatusCssClass(v));
     }
 
     [Fact]
     public void TemplateStatus_label_is_case_insensitive() =>
-        Assert.Equal("Pending", StatusBadgeHelper.TemplateStatusLabel("PENDING"));
+        Assert.Equal("Pending", TextKit.Localizer().TemplateStatusLabel("PENDING"));
 
     [Theory]
     [InlineData("whatsapp", "WA", "#25D366")]
@@ -315,12 +325,12 @@ public class LocalTimeHelperTests
     public void Ago_buckets()
     {
         var now = DateTimeOffset.UtcNow;
-        Assert.Equal("just now", LocalTimeHelper.Ago(now.AddSeconds(-10)).ToString());
-        Assert.Equal("5 min ago", LocalTimeHelper.Ago(now.AddMinutes(-5).AddSeconds(-1)).ToString());
-        Assert.Equal("1 hour ago", LocalTimeHelper.Ago(now.AddHours(-1).AddMinutes(-1)).ToString());
-        Assert.Equal("3 hours ago", LocalTimeHelper.Ago(now.AddHours(-3).AddMinutes(-1)).ToString());
-        Assert.Equal("yesterday", LocalTimeHelper.Ago(now.AddHours(-30)).ToString());
-        Assert.Equal("3 days ago", LocalTimeHelper.Ago(now.AddDays(-3).AddMinutes(-1)).ToString());
-        Assert.Contains("<time", LocalTimeHelper.Ago(now.AddDays(-30)).ToString());
+        Assert.Equal("just now", LocalTimeHelper.Ago(TextKit.Localizer(), now.AddSeconds(-10)).ToString());
+        Assert.Equal("5 min ago", LocalTimeHelper.Ago(TextKit.Localizer(), now.AddMinutes(-5).AddSeconds(-1)).ToString());
+        Assert.Equal("1 hour ago", LocalTimeHelper.Ago(TextKit.Localizer(), now.AddHours(-1).AddMinutes(-1)).ToString());
+        Assert.Equal("3 hours ago", LocalTimeHelper.Ago(TextKit.Localizer(), now.AddHours(-3).AddMinutes(-1)).ToString());
+        Assert.Equal("yesterday", LocalTimeHelper.Ago(TextKit.Localizer(), now.AddHours(-30)).ToString());
+        Assert.Equal("3 days ago", LocalTimeHelper.Ago(TextKit.Localizer(), now.AddDays(-3).AddMinutes(-1)).ToString());
+        Assert.Contains("<time", LocalTimeHelper.Ago(TextKit.Localizer(), now.AddDays(-30)).ToString());
     }
 }

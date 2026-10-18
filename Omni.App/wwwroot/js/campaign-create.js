@@ -27,7 +27,11 @@
 
   // ---------------------------------------------------------------- blanks + preview
   var bubble = $('wa-bubble');
-  var SAMPLE = { '{ContactFirstName}': "contact's first name", '{ContactFullName}': "contact's full name", '{ContactPhone}': "contact's phone" };
+  var SAMPLE = {
+    '{ContactFirstName}': omniText.t('campaigns.create.var.firstName'),
+    '{ContactFullName}': omniText.t('campaigns.create.var.fullName'),
+    '{ContactPhone}': omniText.t('campaigns.create.var.phone')
+  };
   var varRows = document.querySelectorAll('.var-row');
 
   function syncVar(row) {
@@ -102,8 +106,8 @@
       if (i.value && !i.closest('.ms')) chips.push((i.getAttribute('aria-label') || i.name.replace('Custom', '')) + ': ' + i.value);
     });
     box.hidden = chips.length === 0;
-    box.innerHTML = 'Filters: ' + chips.map(function (c) { return '<span class="ms-chip">' + esc(c) + '</span>'; }).join('') +
-      ' <button type="button" class="link-btn" id="custom-clear-all">Clear all</button>';
+    box.innerHTML = esc(omniText.t('campaigns.create.filters')) + ' ' + chips.map(function (c) { return '<span class="ms-chip">' + esc(c) + '</span>'; }).join('') +
+      ' <button type="button" class="link-btn" id="custom-clear-all">' + esc(omniText.t('campaigns.create.clearAll')) + '</button>';
     $('custom-clear-all').addEventListener('click', function () {
       customPanel.querySelectorAll('select').forEach(function (s) { s.selectedIndex = 0; });
       customPanel.querySelectorAll('input[type=date], input[type=text]:not(.ms-search)').forEach(function (i) { i.value = ''; });
@@ -130,7 +134,7 @@
   function syncManual() {
     manualRows.forEach(function (r) { r.classList.toggle('row-selected', r.querySelector('input').checked); });
     var n = selectedCount();
-    if ($('manual-selected-count')) $('manual-selected-count').textContent = n + ' selected';
+    if ($('manual-selected-count')) $('manual-selected-count').textContent = omniText.t('campaigns.create.manual.selected', [n]);
     var visible = manualRows.filter(function (r) { return !r.hidden; });
     if (selectAll) selectAll.checked = visible.length > 0 && visible.every(function (r) { return r.querySelector('input').checked; });
     updateSummary();
@@ -197,16 +201,21 @@
     later = later && later.value === 'later';
     var date = form.querySelector('input[name="ScheduleDate"]');
     var time = form.querySelector('input[name="ScheduleTime"]');
-    var when = later ? (date && date.value ? 'on ' + date.value + (time && time.value ? ' at ' + time.value : '') : 'at a time you pick') : 'now';
+    var when = !later ? omniText.t('campaigns.create.when.now')
+      : !(date && date.value) ? omniText.t('campaigns.create.when.pick')
+      : time && time.value ? omniText.t('campaigns.create.when.onAt', [date.value, time.value])
+      : omniText.t('campaigns.create.when.on', [date.value]);
     var template = templateSelect && templateSelect.selectedIndex > 0 ? templateSelect.options[templateSelect.selectedIndex].text : '';
 
-    var problem = blanksBlocked() ? 'This template has blanks: pick people manually, or choose another template.'
-      : n === 0 ? (choice() === 'manual' ? 'Tick at least one person.' : 'This audience matches nobody right now.')
+    var problem = blanksBlocked() ? omniText.t('campaigns.create.problem.blanks')
+      : n === 0 ? (choice() === 'manual' ? omniText.t('campaigns.create.problem.pickSomeone') : omniText.t('campaigns.create.problem.nobody'))
       : null;
     btn.disabled = !!problem;
+    var count = n == null ? '…' : n === 1 ? omniText.t('campaigns.create.summary.one') : omniText.t('campaigns.create.summary.other', [n]);
     box.innerHTML = problem
       ? '<span class="summary-problem">' + esc(problem) + '</span>'
-      : '<strong>Ready:</strong> ' + esc(template) + ' to <strong>' + (n == null ? '…' : n) + (n === 1 ? ' contact' : ' contacts') + '</strong> · ' + esc(when);
+      : '<strong>' + esc(omniText.t('campaigns.create.summary.ready')) + '</strong> ' +
+        esc(omniText.t('campaigns.create.summary.to', [template, count, when])).replace(esc(count), '<strong>' + esc(count) + '</strong>');
   }
 
   document.addEventListener('campaign:count', updateSummary);

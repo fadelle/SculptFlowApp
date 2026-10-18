@@ -1,23 +1,23 @@
 @page
 @model ErrorModel
 @{
-    ViewData["Title"] = "Something went wrong";
+    ViewData["Title"] = T["status.other.title"].Value;
     // Always the plain layout: the shell reads the client from the database, which may be what just failed.
     Layout = "_AuthLayout";
     var signedIn = User.Identity?.IsAuthenticated == true;
 }
 <div class="au-fullpage-msg">
     <div class="au-fullpage-msg__inner">
-        <div class="au-fullpage-msg__code">Oops</div>
-        <h2 class="au-h3 m-0">Something went wrong on our side</h2>
-        <p class="au-muted m-0">Please try again in a moment. If it keeps happening, contact Omni support and quote the reference below.</p>
+        <div class="au-fullpage-msg__code">@T["error.code"]</div>
+        <h2 class="au-h3 m-0">@T["error.title"]</h2>
+        <p class="au-muted m-0">@T["error.text"]</p>
         @if (Model.ShowRequestId)
         {
-            <span class="au-copy" title="Reference for support">Reference <span class="au-mono">@Model.Reference</span></span>
+            <span class="au-copy" title="@T["error.referenceHelp"]">@T.Html("error.reference", new Microsoft.AspNetCore.Html.HtmlString($"<span class=\"au-mono\">{System.Net.WebUtility.HtmlEncode(Model.Reference)}</span>"))</span>
         }
         <div class="au-row au-row--wrap fullpage-actions">
-            <button type="button" class="au-btn au-btn--outlined" onclick="history.back()"><span class="au-icon" aria-hidden="true">arrow_back</span>Go back</button>
-            <a class="au-btn au-btn--primary" href="@(signedIn ? "/dashboard" : "/Account/Login")"><span class="au-icon" aria-hidden="true">space_dashboard</span>Back to the dashboard</a>
+            <button type="button" class="au-btn au-btn--outlined" onclick="history.back()"><span class="au-icon" aria-hidden="true">arrow_back</span>@T["status.goBack"]</button>
+            <a class="au-btn au-btn--primary" href="@(signedIn ? "/dashboard" : "/Account/Login")"><span class="au-icon" aria-hidden="true">space_dashboard</span>@T["status.backToDashboard"]</a>
         </div>
     </div>
 </div>

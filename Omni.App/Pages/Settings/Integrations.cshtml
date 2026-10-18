@@ -311,7 +311,7 @@ else
                     <div>
                         <span class="cell-sub">@T["integrations.telegram.lastMessage"]</span>
                         <span class="int-val" title="@(info.LastWebhookAt?.ToString("MMM d, HH:mm") + " UTC")">
-                            @if (info.LastWebhookAt is { } last) { @LocalTimeHelper.Ago(last) } else { <text>@T["integrations.telegram.noMessage"]</text> }
+                            @if (info.LastWebhookAt is { } last) { @LocalTimeHelper.Ago(T, last) } else { <text>@T["integrations.telegram.noMessage"]</text> }
                         </span>
                     </div>
                 </div>

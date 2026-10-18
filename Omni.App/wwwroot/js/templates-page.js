@@ -42,7 +42,7 @@
     $('tpl-side-bubble').innerHTML = bubbleHtml(row.getAttribute('data-header'), body, row.getAttribute('data-footer'));
     $('tpl-side-status').innerHTML = row.querySelector('[data-role="status"]').outerHTML;
     $('tpl-side-quality').innerHTML = row.querySelector('[data-role="quality"]').innerHTML;
-    $('tpl-side-blanks').textContent = blanks.length ? blanks.join(', ') : 'None';
+    $('tpl-side-blanks').textContent = blanks.length ? blanks.join(', ') : omniText.t('whatsAppHealth.tech.none');
     $('tpl-side-updated').textContent = row.querySelector('[data-role="updated"]').textContent;
     var actions = $('tpl-side-actions');
     actions.innerHTML = '';
@@ -130,10 +130,10 @@
     syncCards();
     form.querySelectorAll('[data-counter-for]').forEach(function (c) {
       var el = $(c.getAttribute('data-counter-for'));
-      var text = el.value.length + ' / ' + c.getAttribute('data-max');
+      var text = omniText.t('common.counter', [el.value.length, c.getAttribute('data-max')]);
       if (el === bodyEl) {
         var n = (bodyEl.value.match(/\{\{\d+\}\}/g) || []).filter(function (v, i, a) { return a.indexOf(v) === i; }).length;
-        if (n) text += ' · ' + n + (n === 1 ? ' blank' : ' blanks');
+        if (n) text += ' · ' + (n === 1 ? omniText.t('templates.form.blanksOne') : omniText.t('templates.form.blanksOther', [n]));
       }
       c.textContent = text;
     });
@@ -141,7 +141,7 @@
     var preview = $('tpl-preview');
     preview.innerHTML = bodyEl.value || header || footerEl.value
       ? bubbleHtml(header, bodyEl.value, footerEl.value)
-      : '<span class="text-subtle">Your message will appear here.</span>';
+      : '<span class="text-subtle">' + esc(omniText.t('templates.form.previewEmpty')) + '</span>';
   }
   form.addEventListener('input', refresh);
   form.addEventListener('change', refresh);

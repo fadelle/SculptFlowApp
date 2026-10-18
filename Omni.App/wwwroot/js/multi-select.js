@@ -25,7 +25,7 @@
       var remove = document.createElement('button');
       remove.type = 'button';
       remove.className = 'ms-chip-x';
-      remove.setAttribute('aria-label', 'Remove');
+      remove.setAttribute('aria-label', omniText.t('common.remove'));
       remove.textContent = '×';
       remove.addEventListener('click', function (e) {
         e.stopPropagation();
@@ -38,7 +38,7 @@
       chipsEl.appendChild(chip);
     });
 
-    triggerText.textContent = checked.length > 0 ? checked.length + ' selected' : label;
+    triggerText.textContent = checked.length > 0 ? omniText.t('campaigns.create.manual.selected', [checked.length]) : label;
     container.classList.toggle('ms-has-selection', checked.length > 0);
   }
 

@@ -17,8 +17,11 @@ public partial class UiTextKeysTests
     private static Dictionary<string, string> Strings(string language) =>
         JsonSerializer.Deserialize<Dictionary<string, string>>(File.ReadAllText(Path.Combine(AppRoot, "Resources", "i18n", language + ".json")))!;
 
-    /// <summary>Keys read by building their name in code (Terminology reads terms.{term}.one/other).</summary>
-    private static bool ReadDynamically(string key) => key.StartsWith("terms.", StringComparison.Ordinal);
+    /// <summary>Keys read by building their name in code (Terminology reads terms.{term}.one/other, FilterLabelHelper
+    /// values.{stored value}, KnowledgeCategory knowledge.category.{category}).</summary>
+    private static bool ReadDynamically(string key) =>
+        key.StartsWith("terms.", StringComparison.Ordinal) || key.StartsWith(FilterLabelHelper.KeyPrefix, StringComparison.Ordinal)
+        || key.StartsWith(KnowledgeCategory.LabelKeyPrefix, StringComparison.Ordinal);
 
     private static IEnumerable<string> SourceFiles() =>
         Directory.EnumerateFiles(AppRoot, "*.*", SearchOption.AllDirectories)

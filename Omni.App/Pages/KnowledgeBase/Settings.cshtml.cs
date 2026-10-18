@@ -1,8 +1,10 @@
 using System.Globalization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.Extensions.Localization;
 using Omni.App.Business.Contracts.Managers;
 using Omni.App.Business.Contracts.Services.Knowledge;
+using Omni.App.Common.Helpers;
 using Omni.App.Entities.Requests.Knowledge;
 using Omni.App.Entities.Responses.Knowledge;
 
@@ -13,13 +15,17 @@ namespace Omni.App.Pages.KnowledgeBase;
 /// read-only — see IKnowledgeSettingsService).</summary>
 public class SettingsModel : PageModel
 {
+    private const string SavedKey = "knowledgeSettings.saved";
+
     private readonly ICurrentClientContext _clientContext;
     private readonly IKnowledgeSettingsService _settings;
+    private readonly IStringLocalizer _text;
 
-    public SettingsModel(ICurrentClientContext clientContext, IKnowledgeSettingsService settings)
+    public SettingsModel(ICurrentClientContext clientContext, IKnowledgeSettingsService settings, IStringLocalizer text)
     {
         _clientContext = clientContext;
         _settings = settings;
+        _text = text;
     }
 
     public bool ClientConfigured { get; private set; }
@@ -67,17 +73,17 @@ public class SettingsModel : PageModel
         {
             if (!double.TryParse(MinimumSimilarity?.Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out var minSimilarity))
             {
-                throw new ArgumentException("Minimum similarity must be a number between 0 and 1.");
+                throw new ArgumentException("knowledgeSettings.errors.similarity");
             }
 
             await _settings.UpdateAsync(client.Id,
                 new UpdateKnowledgeSettingsRequest(ChunkSizeTokens, ChunkOverlapTokens, TopK, minSimilarity), ct);
-            StatusMessage = "Settings saved.";
+            StatusMessage = _text[SavedKey].Value;
             return RedirectToPage();
         }
         catch (ArgumentException ex)
         {
-            ErrorMessage = ex.Message;
+            ErrorMessage = _text.Localize(ex);
         }
 
         // Redisplay with the read-only values from the database and the user's attempted edits.

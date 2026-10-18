@@ -30,7 +30,7 @@ public class CampaignCreatePageTests
     }
 
     private CampaignCreate Sut(Client? client = null, bool none = false) =>
-        new CampaignCreate(ClientContext(none ? null : client ?? Glow).Object, _templates.Object, _contacts.Object, _services.Object, _campaigns.Object).Attach();
+        new CampaignCreate(ClientContext(none ? null : client ?? Glow).Object, _templates.Object, _contacts.Object, _services.Object, _campaigns.Object, TextKit.Localizer()).Attach();
 
     private static WhatsAppTemplateResponse Template(Guid id, string status = WhatsAppTemplateStatus.Approved, string body = "Hello {{1}}, see you {{2}} {{1}}") =>
         Blank<WhatsAppTemplateResponse>() with { Id = id, Status = status, Body = body };
@@ -226,7 +226,7 @@ public class WhatsAppTemplatePageTests
 {
     private static readonly Client Glow = SomeClient();
     private readonly Mock<IWhatsAppTemplateService> _templates = new();
-    private TemplateIndex Sut(bool none = false) => new TemplateIndex(ClientContext(none ? null : Glow).Object, _templates.Object).Attach();
+    private TemplateIndex Sut(bool none = false) => new TemplateIndex(ClientContext(none ? null : Glow).Object, _templates.Object, TextKit.Localizer()).Attach();
 
     private static WhatsAppTemplateResponse Template(string status, string name = "promo", string? rejection = null) =>
         Blank<WhatsAppTemplateResponse>() with { Name = name, Status = status, RejectionReason = rejection };
@@ -254,7 +254,7 @@ public class WhatsAppTemplatePageTests
         model.Name = "promo"; model.Body = "hi"; model.HeaderType = WhatsAppTemplateHeaderType.None;
 
         Assert.IsType<RedirectToPageResult>(await model.OnPostCreateAsync(default));
-        Assert.Equal("Template 'promo' saved — status: pending.", model.StatusMessage);
+        Assert.Equal("Template 'promo' saved — status: Pending.", model.StatusMessage);
         Assert.Null(model.ErrorMessage);
 
         await model.OnPostCreateAsync(default);
@@ -290,7 +290,7 @@ public class WhatsAppTemplatePageTests
             .ThrowsAsync(new InvalidOperationException("Not connected.")).ThrowsAsync(new MetaGraphApiException("Meta is down."));
         var model = Sut();
         await model.OnPostSyncAsync(id, default);
-        Assert.Equal("'promo' status refreshed: approved.", model.StatusMessage);
+        Assert.Equal("'promo' status refreshed: Approved.", model.StatusMessage);
         await model.OnPostSyncAsync(id, default);
         Assert.Null(model.StatusMessage);
         await model.OnPostSyncAsync(id, default);

@@ -1,7 +1,7 @@
 @page "/dashboard/contacts"
 @model Omni.App.Pages.Dashboard.ContactsModel
 @{
-    ViewData["Title"] = "Interested People";
+    ViewData["Title"] = T["contacts.title"].Value;
     var now = DateTimeOffset.UtcNow;
     var filtered = !string.IsNullOrWhiteSpace(Model.Search) || !string.IsNullOrWhiteSpace(Model.Stage) || !string.IsNullOrWhiteSpace(Model.Source);
 
@@ -31,34 +31,34 @@
 else
 {
     <div class="au-page-head">
-        <p class="au-page-head__sub">Everyone who has shown interest in your client. Open a person to update their stage.</p>
+        <p class="au-page-head__sub">@T["contacts.intro"]</p>
     </div>
 
     @* #contacts-filters and #contacts-results are read by wwwroot/js/contacts.js (live search swaps the results in place). *@
     <form method="get" class="au-toolbar" id="contacts-filters">
         <div class="au-toolbar__filters">
-            <input type="search" name="Search" value="@Model.Search" placeholder="Search by name or phone…" class="au-input search-input contacts-search" aria-label="Search contacts" autocomplete="off" />
-            <select name="Stage" class="au-select" aria-label="Stage" onchange="this.form.requestSubmit()">
-                <option value="">All stages</option>
+            <input type="search" name="Search" value="@Model.Search" placeholder="@T["contacts.search.placeholder"]" class="au-input search-input contacts-search" aria-label="@T["contacts.search.label"]" autocomplete="off" />
+            <select name="Stage" class="au-select" aria-label="@T["contacts.filter.stage"]" onchange="this.form.requestSubmit()">
+                <option value="">@T["contacts.filter.allStages"]</option>
                 @foreach (var stage in Model.Stages)
                 {
                     <option value="@stage.Key" selected="@(stage.Key == Model.Stage)">@stage.Label</option>
                 }
             </select>
-            <select name="Source" class="au-select" aria-label="Source" onchange="this.form.requestSubmit()">
-                <option value="">All sources</option>
+            <select name="Source" class="au-select" aria-label="@T["contacts.filter.source"]" onchange="this.form.requestSubmit()">
+                <option value="">@T["contacts.filter.allSources"]</option>
                 @foreach (var source in Model.AllSources)
                 {
-                    <option value="@source" selected="@(string.Equals(source, Model.Source, StringComparison.OrdinalIgnoreCase))">@FilterLabelHelper.Label(source)</option>
+                    <option value="@source" selected="@(string.Equals(source, Model.Source, StringComparison.OrdinalIgnoreCase))">@T.ValueLabel(source)</option>
                 }
             </select>
         </div>
         <div class="au-toolbar__actions">
             @if (filtered)
             {
-                <a class="au-btn au-btn--text" href="/dashboard/contacts">Clear</a>
+                <a class="au-btn au-btn--text" href="/dashboard/contacts">@T["common.clear"]</a>
             }
-            <button type="submit" class="au-btn au-btn--outlined"><span class="au-icon" aria-hidden="true">search</span>Search</button>
+            <button type="submit" class="au-btn au-btn--outlined"><span class="au-icon" aria-hidden="true">search</span>@T["common.search"]</button>
         </div>
     </form>
 
@@ -67,11 +67,11 @@ else
             @if (Model.Contacts.Count == 0)
             {
                 var empty = filtered
-                    ? new EmptyStateModel(Icon: "search_off", Title: "No one matches these filters",
-                        Text: "Try a different name, phone, stage or source.", ActionLabel: "Clear filters", ActionHref: "/dashboard/contacts", ActionIcon: "filter_alt_off")
-                    : new EmptyStateModel(Icon: "group", Title: "No interested people yet",
-                        Text: "People who message your client or fill in one of your forms show up here.",
-                        ActionLabel: "Connect a messaging channel", ActionHref: "/settings/integrations", ActionIcon: "hub");
+                    ? new EmptyStateModel(Icon: "search_off", Title: T["contacts.empty.filteredTitle"].Value,
+                        Text: T["contacts.empty.filteredText"].Value, ActionLabel: T["common.clearFilters"].Value, ActionHref: "/dashboard/contacts", ActionIcon: "filter_alt_off")
+                    : new EmptyStateModel(Icon: "group", Title: T["contacts.empty.title"].Value,
+                        Text: T["contacts.empty.text"].Value,
+                        ActionLabel: T["contacts.empty.action"].Value, ActionHref: "/settings/integrations", ActionIcon: "hub");
                 <partial name="_EmptyState" model="empty" />
             }
             else
@@ -80,14 +80,14 @@ else
                     <table class="au-table au-table--stack">
                         <thead>
                             <tr>
-                                <th>Name</th>
-                                <th>Phone</th>
-                                <th>Service</th>
-                                <th>Source</th>
-                                <th>Stage</th>
-                                <th>Qualification</th>
-                                <th>Last contact</th>
-                                <th>Next follow-up</th>
+                                <th>@T["contacts.table.name"]</th>
+                                <th>@T["contacts.table.phone"]</th>
+                                <th>@T["contacts.table.service"]</th>
+                                <th>@T["contacts.table.source"]</th>
+                                <th>@T["contacts.table.stage"]</th>
+                                <th>@T["contacts.table.qualification"]</th>
+                                <th>@T["contacts.table.lastContact"]</th>
+                                <th>@T["contacts.table.nextFollowUp"]</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -96,29 +96,29 @@ else
                                 var channel = SourceChannel(contact.Source);
                                 var overdue = contact.NextFollowupAt is not null && contact.NextFollowupAt < now;
                                 <tr class="row-link" data-href="/dashboard/contacts/@contact.Id">
-                                    <td data-label="Name"><a class="cell-person" href="/dashboard/contacts/@contact.Id"><span class="avatar-sm">@(string.IsNullOrWhiteSpace(contact.FullName) ? "?" : contact.FullName.Trim()[..1])</span>@(contact.FullName ?? "—")</a></td>
-                                    <td data-label="Phone">@(contact.Phone ?? "—")</td>
-                                    <td data-label="Service">@(contact.ServiceName ?? "—")</td>
-                                    <td data-label="Source">
+                                    <td data-label="@T["contacts.table.name"]"><a class="cell-person" href="/dashboard/contacts/@contact.Id"><span class="avatar-sm">@(string.IsNullOrWhiteSpace(contact.FullName) ? "?" : contact.FullName.Trim()[..1])</span>@(contact.FullName ?? "—")</a></td>
+                                    <td data-label="@T["contacts.table.phone"]">@(contact.Phone ?? "—")</td>
+                                    <td data-label="@T["contacts.table.service"]">@(contact.ServiceName ?? "—")</td>
+                                    <td data-label="@T["contacts.table.source"]">
                                         @if (channel is null)
                                         {
-                                            @(string.IsNullOrWhiteSpace(contact.Source) ? "—" : FilterLabelHelper.Label(contact.Source))
+                                            @(string.IsNullOrWhiteSpace(contact.Source) ? "—" : T.ValueLabel(contact.Source))
                                         }
                                         else
                                         {
                                             var svg = ChannelIconHelper.Svg(channel);
-                                            <span class="source-icon" style="background:@(channel == "google" ? "#4285F4" : ChannelIconHelper.Hex(channel))" title="@FilterLabelHelper.Label(contact.Source)" aria-label="@FilterLabelHelper.Label(contact.Source)">
+                                            <span class="source-icon" style="background:@(channel == "google" ? "#4285F4" : ChannelIconHelper.Hex(channel))" title="@T.ValueLabel(contact.Source)" aria-label="@T.ValueLabel(contact.Source)">
                                                 @if (svg is not null) { @Html.Raw(svg) } else { @(channel == "google" ? "G" : ChannelIconHelper.Initials(channel)) }
                                             </span>
                                         }
                                     </td>
-                                    <td data-label="Stage"><span class="badge @StageDisplay.CssClass(Model.Stages, contact.StageKey)">@StageDisplay.Label(Model.Stages, contact.StageKey)</span></td>
-                                    <td data-label="Qualification"><span class="badge @StatusBadgeHelper.CssClass(contact.Qualification)">@FilterLabelHelper.Label(contact.Qualification)</span></td>
-                                    <td data-label="Last contact">@LocalTimeHelper.Time(contact.LastContactAt)</td>
-                                    <td data-label="Next follow-up">
+                                    <td data-label="@T["contacts.table.stage"]"><span class="badge @StageDisplay.CssClass(Model.Stages, contact.StageKey)">@StageDisplay.Label(Model.Stages, contact.StageKey)</span></td>
+                                    <td data-label="@T["contacts.table.qualification"]"><span class="badge @StatusBadgeHelper.CssClass(contact.Qualification)">@T.ValueLabel(contact.Qualification)</span></td>
+                                    <td data-label="@T["contacts.table.lastContact"]">@LocalTimeHelper.Time(contact.LastContactAt)</td>
+                                    <td data-label="@T["contacts.table.nextFollowUp"]">
                                         @if (overdue)
                                         {
-                                            <span class="overdue" title="This follow-up date has passed">@LocalTimeHelper.Time(contact.NextFollowupAt) · overdue</span>
+                                            <span class="overdue" title="@T["contacts.followUp.overdueHelp"]">@T.Html("contacts.followUp.overdue", LocalTimeHelper.Time(contact.NextFollowupAt))</span>
                                         }
                                         else
                                         {
@@ -134,10 +134,10 @@ else
             @if (Model.TotalCount > 0)
             {
                 <div class="au-pager">
-                    <span class="au-pager__count"><strong>@Model.TotalCount</strong> @(Model.TotalCount == 1 ? "person" : "people")</span>
+                    <span class="au-pager__count">@{ var countHtml = new Microsoft.AspNetCore.Html.HtmlString($"<strong>{Model.TotalCount}</strong>"); }@(Model.TotalCount == 1 ? T.Html("contacts.count.one", countHtml) : T.Html("contacts.count.other", countHtml))</span>
                     @if (Model.TotalPages > 1)
                     {
-                        <ul class="pagination" aria-label="Pages">
+                        <ul class="pagination" aria-label="@T["common.pages"]">
                             @for (var p = 1; p <= Model.TotalPages; p++)
                             {
                                 <li class="@(p == Model.PageNumber ? "active" : "")">

@@ -1,7 +1,7 @@
 @page "/KnowledgeBase/Websites/{id:guid}"
 @model Omni.App.Pages.KnowledgeBase.Websites.DetailsModel
 @{
-    ViewData["Title"] = "Website";
+    ViewData["Title"] = T["knowledge.source.website"].Value;
     string RunBadge(string s) => s switch
     {
         WebsiteScrapeStatus.Completed => "badge-green",
@@ -12,11 +12,11 @@
     };
     string RunLabel(WebsiteRunResponse r) => r.Status switch
     {
-        WebsiteScrapeStatus.Completed => "Completed",
-        WebsiteScrapeStatus.CompletedWithErrors => $"{r.PagesFailed} problem{(r.PagesFailed == 1 ? "" : "s")}",
-        WebsiteScrapeStatus.Failed => "Failed",
-        WebsiteScrapeStatus.Crawling => "Importing",
-        WebsiteScrapeStatus.Pending => "Waiting",
+        WebsiteScrapeStatus.Completed => T["values.completed"].Value,
+        WebsiteScrapeStatus.CompletedWithErrors => r.PagesFailed == 1 ? T["website.problems.one"].Value : T["website.problems.other", r.PagesFailed].Value,
+        WebsiteScrapeStatus.Failed => T["values.failed"].Value,
+        WebsiteScrapeStatus.Crawling => T["website.run.importing"].Value,
+        WebsiteScrapeStatus.Pending => T["campaigns.recipients.waiting"].Value,
         _ => r.Status
     };
     string PageBadge(string s) => s switch
@@ -28,15 +28,15 @@
     };
     string PageLabel(string s) => s switch
     {
-        WebsitePageStatus.Indexed or WebsitePageStatus.Unchanged => "In Knowledge Base",
-        WebsitePageStatus.Failed => "Failed",
-        WebsitePageStatus.Removed => "Removed",
-        WebsitePageStatus.Skipped => "Skipped",
-        WebsitePageStatus.Duplicate => "Duplicate",
-        _ => "Checking…"
+        WebsitePageStatus.Indexed or WebsitePageStatus.Unchanged => T["website.page.inKnowledge"].Value,
+        WebsitePageStatus.Failed => T["values.failed"].Value,
+        WebsitePageStatus.Removed => T["values.removed"].Value,
+        WebsitePageStatus.Skipped => T["values.skipped"].Value,
+        WebsitePageStatus.Duplicate => T["values.duplicate"].Value,
+        _ => T["website.page.checking"].Value
     };
-    static Microsoft.AspNetCore.Html.IHtmlContent Ago(DateTimeOffset when) =>
-        LocalTimeHelper.Ago(when, dayCutoff: 2, fallbackFormat: "date");
+    Microsoft.AspNetCore.Html.IHtmlContent Ago(DateTimeOffset when) =>
+        LocalTimeHelper.Ago(T, when, dayCutoff: 2, fallbackFormat: "date");
     var d = Model.Detail;
     // "View text" remembers this exact page (including the filter) so Cancel/Save on the entry return here.
     var backToThisPage = "/KnowledgeBase/Websites/" + Model.Id + (string.IsNullOrEmpty(Model.Status) ? "" : "?status=" + Uri.EscapeDataString(Model.Status));
@@ -54,35 +54,35 @@ else
     var inKb = Count(WebsitePageStatus.Indexed, WebsitePageStatus.Unchanged);
 
     <div class="au-back-header">
-        <a class="au-icon-btn au-icon-btn--bordered" href="/KnowledgeBase" aria-label="Back to Knowledge Base" title="Back to Knowledge Base">
+        <a class="au-icon-btn au-icon-btn--bordered" href="/KnowledgeBase" aria-label="@T["knowledge.edit.back", T["knowledge.edit.backKnowledge"].Value]" title="@T["knowledge.edit.back", T["knowledge.edit.backKnowledge"].Value]">
             <span class="au-icon" aria-hidden="true">arrow_back</span>
         </a>
         <span class="src-icon src-web big" aria-hidden="true"><span class="au-icon">language</span></span>
         <div class="min-w-0">
-            <h2 class="au-back-header__title"><a href="@s.StartUrl" target="_blank" rel="noopener noreferrer" title="Open the website">@UrlDisplayHelper.Readable(s.StartUrl)</a></h2>
+            <h2 class="au-back-header__title"><a href="@s.StartUrl" target="_blank" rel="noopener noreferrer" title="@T["website.open"]">@UrlDisplayHelper.Readable(s.StartUrl)</a></h2>
             <span class="au-back-header__sub">
-                @(s.CrawlMode == WebsiteCrawlMode.SinglePage ? "Single page" : "Whole website")
-                · @KnowledgeCategory.Label(s.Category)
-                · @if (s.LastScrapedAt is { } last) { <text>imported @Ago(last)</text> } else { <text>not imported yet</text> }
+                @(s.CrawlMode == WebsiteCrawlMode.SinglePage ? T["knowledge.crawl.single"] : T["knowledge.crawl.whole"])
+                · @T.CategoryLabel(s.Category)
+                · @if (s.LastScrapedAt is { } last) { @T.Html("website.importedAgo", Ago(last)) } else { @T["website.notImported"] }
             </span>
         </div>
     </div>
     <div class="detail-chips">
-        <span class="badge @(s.IsActive ? "badge-green" : "badge-gray")">@(s.IsActive ? "Active" : "Inactive")</span>
+        <span class="badge @(s.IsActive ? "badge-green" : "badge-gray")">@(s.IsActive ? T["services.active"] : T["services.inactive"])</span>
         <span class="au-spacer"></span>
         <form method="post" asp-page-handler="Delete" class="inline-form"
-              data-au-confirm="Delete this website and all the Knowledge Base pages imported from it? Written entries and uploaded documents stay."
-              data-au-confirm-title="Delete website" data-au-confirm-label="Delete website" data-au-confirm-tone="danger">
-            <button type="submit" class="au-btn au-btn--text au-btn--sm btn-danger-text" disabled="@s.InProgress">Delete</button>
+              data-au-confirm="@T["knowledge.website.deleteConfirm"]"
+              data-au-confirm-title="@T["knowledge.website.delete"]" data-au-confirm-label="@T["knowledge.website.delete"]" data-au-confirm-tone="danger">
+            <button type="submit" class="au-btn au-btn--text au-btn--sm btn-danger-text" disabled="@s.InProgress">@T["common.delete"]</button>
         </form>
         <form method="post" asp-page-handler="Toggle" class="inline-form">
             <input type="hidden" name="active" value="@((!s.IsActive).ToString().ToLowerInvariant())" />
-            <button type="submit" class="au-btn au-btn--outlined au-btn--sm">@(s.IsActive ? "Deactivate" : "Activate")</button>
+            <button type="submit" class="au-btn au-btn--outlined au-btn--sm">@(s.IsActive ? T["services.deactivate"] : T["services.activate"])</button>
         </form>
         @if (s.IsActive)
         {
             <form method="post" asp-page-handler="Rescrape" class="inline-form">
-                <button type="submit" class="au-btn au-btn--primary au-btn--sm" disabled="@s.InProgress"><span class="au-icon" aria-hidden="true">sync</span>Import again</button>
+                <button type="submit" class="au-btn au-btn--primary au-btn--sm" disabled="@s.InProgress"><span class="au-icon" aria-hidden="true">sync</span>@T["website.importAgain"]</button>
             </form>
         }
     </div>
@@ -96,8 +96,8 @@ else
             <div class="progress"><div style="width:@(pct)%"></div></div>
             <div class="cell-sub mt-1">
                 <span class="spin"></span>
-                @(run is { PagesDiscovered: > 0 } ? $"Importing… {run.PagesProcessed} of {run.PagesDiscovered} pages checked." : "Starting the import…")
-                You can leave this page.
+                @(run is { PagesDiscovered: > 0 } ? T["website.progress.checked", run.PagesProcessed, run.PagesDiscovered] : T["website.progress.starting"])
+                @T["website.progress.canLeave"]
             </div>
         </div>
     }
@@ -106,9 +106,9 @@ else
         <div class="au-alert au-alert--error" role="alert">
             <span class="au-icon au-alert__icon" aria-hidden="true">error</span>
             <div class="au-alert__body">
-                <div class="au-alert__title">The import failed</div>
-                @(string.IsNullOrWhiteSpace(run.ErrorSummary) ? "The website couldn't be read." : run.ErrorSummary)
-                Check the address and try "Import again".
+                <div class="au-alert__title">@T["website.failed.title"]</div>
+                @(string.IsNullOrWhiteSpace(run.ErrorSummary) ? T["website.failed.unreadable"].Value : run.ErrorSummary)
+                @T["website.failed.tryAgain"]
             </div>
         </div>
     }
@@ -117,11 +117,11 @@ else
         <div class="au-alert au-alert--warning" role="status">
             <span class="au-icon au-alert__icon" aria-hidden="true">warning</span>
             <div class="au-alert__body">
-                <div class="au-alert__title">Imported with @run.PagesFailed problem@(run.PagesFailed == 1 ? "" : "s")</div>
-                Most pages are fine; see <a class="au-link" href="/KnowledgeBase/Websites/@s.Id?status=@WebsitePageStatus.Failed">Failed</a> below.
+                <div class="au-alert__title">@(run.PagesFailed == 1 ? T["website.withProblems.one"] : T["website.withProblems.other", run.PagesFailed])</div>
+                @T.Html("website.withProblems.text", new Microsoft.AspNetCore.Html.HtmlString($"<a class=\"au-link\" href=\"/KnowledgeBase/Websites/{s.Id}?status={WebsitePageStatus.Failed}\">{System.Net.WebUtility.HtmlEncode(T["values.failed"].Value)}</a>"))
                 @if (!string.IsNullOrWhiteSpace(run.ErrorSummary))
                 {
-                    <details class="alert-details"><summary>Technical details</summary><div>@run.ErrorSummary</div></details>
+                    <details class="alert-details"><summary>@T["messages.error.details"]</summary><div>@run.ErrorSummary</div></details>
                 }
             </div>
         </div>
@@ -130,26 +130,26 @@ else
     @if (run is not null)
     {
         <div class="facts mb-3">
-            <div class="fact au-panel au-panel--round"><div class="eyebrow">Pages found</div><div class="fact-main">@run.PagesDiscovered</div></div>
-            <div class="fact au-panel au-panel--round"><div class="eyebrow">In Knowledge Base</div><div class="fact-main">@s.IndexedPages</div></div>
-            <div class="fact au-panel au-panel--round"><div class="eyebrow">Skipped</div><div class="fact-main">@(run.PagesSkipped + run.PagesDuplicate)</div></div>
-            <div class="fact au-panel au-panel--round"><div class="eyebrow">Failed</div><div class="fact-main">@run.PagesFailed</div></div>
+            <div class="fact au-panel au-panel--round"><div class="eyebrow">@T["website.facts.found"]</div><div class="fact-main">@run.PagesDiscovered</div></div>
+            <div class="fact au-panel au-panel--round"><div class="eyebrow">@T["website.page.inKnowledge"]</div><div class="fact-main">@s.IndexedPages</div></div>
+            <div class="fact au-panel au-panel--round"><div class="eyebrow">@T["values.skipped"]</div><div class="fact-main">@(run.PagesSkipped + run.PagesDuplicate)</div></div>
+            <div class="fact au-panel au-panel--round"><div class="eyebrow">@T["values.failed"]</div><div class="fact-main">@run.PagesFailed</div></div>
         </div>
         <details class="au-panel au-panel--round tech mb-3">
-            <summary>All import numbers</summary>
+            <summary>@T["website.numbers.title"]</summary>
             <div class="kb-nums mt-2">
                 @foreach (var (label, value, hint) in new[]
                 {
-                    ("Discovered", run.PagesDiscovered, "URLs found on the site"),
-                    ("Processed", run.PagesProcessed, "URLs fetched and examined"),
-                    ("Indexed", run.PagesIndexed, "New + changed pages added to the Knowledge Base"),
-                    ("New", run.PagesNew, "Pages added for the first time"),
-                    ("Changed", run.PagesChanged, "Pages whose text changed and were re-indexed"),
-                    ("Unchanged", run.PagesUnchanged, "Same content as last time — left alone"),
-                    ("Skipped", run.PagesSkipped, "Not imported (robots.txt, not HTML, too little text, …)"),
-                    ("Duplicate", run.PagesDuplicate, "Same page/content as another page"),
-                    ("Failed", run.PagesFailed, "Could not be fetched or indexed"),
-                    ("Removed", run.PagesRemoved, "No longer on the website — hidden from the AI")
+                    (T["website.numbers.discovered"].Value, run.PagesDiscovered, T["website.numbers.discoveredHelp"].Value),
+                    (T["website.numbers.processed"].Value, run.PagesProcessed, T["website.numbers.processedHelp"].Value),
+                    (T["website.numbers.indexed"].Value, run.PagesIndexed, T["website.numbers.indexedHelp"].Value),
+                    (T["website.numbers.new"].Value, run.PagesNew, T["website.numbers.newHelp"].Value),
+                    (T["website.numbers.changed"].Value, run.PagesChanged, T["website.numbers.changedHelp"].Value),
+                    (T["website.numbers.unchanged"].Value, run.PagesUnchanged, T["website.numbers.unchangedHelp"].Value),
+                    (T["values.skipped"].Value, run.PagesSkipped, T["website.numbers.skippedHelp"].Value),
+                    (T["values.duplicate"].Value, run.PagesDuplicate, T["website.numbers.duplicateHelp"].Value),
+                    (T["values.failed"].Value, run.PagesFailed, T["website.numbers.failedHelp"].Value),
+                    (T["values.removed"].Value, run.PagesRemoved, T["website.numbers.removedHelp"].Value)
                 })
                 {
                     <span title="@hint">@label <strong>@value</strong></span>
@@ -158,31 +158,31 @@ else
             <div class="cell-sub mt-1">
                 @if (run.StartedAt is null)
                 {
-                    <text>Waiting to start</text>
+                    @T["knowledge.import.waiting"]
                 }
                 else
                 {
-                    <text>Started @LocalTimeHelper.Time(run.StartedAt)</text>
+                    @T.Html("campaigns.when.startedAt", LocalTimeHelper.Time(run.StartedAt))
                 }
                 @if (run.CompletedAt is not null)
                 {
-                    <text>· finished @LocalTimeHelper.Time(run.CompletedAt, "time")</text>
+                    <text>· </text>@T.Html("website.finishedAt", LocalTimeHelper.Time(run.CompletedAt, "time"))
                 }
             </div>
         </details>
     }
 
     <div class="section-head">
-        <h2 class="section-title">Pages</h2>
-        <div class="inbox-filters" aria-label="Show pages">
+        <h2 class="section-title">@T["website.pages.title"]</h2>
+        <div class="inbox-filters" aria-label="@T["website.pages.show"]">
             @foreach (var (value, label, count) in new[]
             {
-                ("", "All", d.PageStatusCounts.Values.Sum()),
-                ("in_kb", "In Knowledge Base", inKb),
-                (WebsitePageStatus.Failed, "Failed", Count(WebsitePageStatus.Failed)),
-                (WebsitePageStatus.Skipped, "Skipped", Count(WebsitePageStatus.Skipped)),
-                (WebsitePageStatus.Duplicate, "Duplicate", Count(WebsitePageStatus.Duplicate)),
-                (WebsitePageStatus.Removed, "Removed", Count(WebsitePageStatus.Removed))
+                ("", T["campaigns.tabs.all"].Value, d.PageStatusCounts.Values.Sum()),
+                ("in_kb", T["website.page.inKnowledge"].Value, inKb),
+                (WebsitePageStatus.Failed, T["values.failed"].Value, Count(WebsitePageStatus.Failed)),
+                (WebsitePageStatus.Skipped, T["values.skipped"].Value, Count(WebsitePageStatus.Skipped)),
+                (WebsitePageStatus.Duplicate, T["values.duplicate"].Value, Count(WebsitePageStatus.Duplicate)),
+                (WebsitePageStatus.Removed, T["values.removed"].Value, Count(WebsitePageStatus.Removed))
             })
             {
                 <a href="/KnowledgeBase/Websites/@s.Id@(value == "" ? "" : "?status=" + value)"
@@ -194,9 +194,9 @@ else
     @if (Model.Pages.Count == 0)
     {
         var noPages = new EmptyStateModel(Icon: s.InProgress ? "hourglass_top" : "web_asset_off",
-            Title: s.InProgress ? "Reading the website…" : "No pages here",
-            Text: s.InProgress ? "Pages appear here as they are checked." : string.IsNullOrEmpty(Model.Status) ? "Pages appear here once the website can be read." : "No pages with this status.",
-            ActionLabel: string.IsNullOrEmpty(Model.Status) ? null : "Show all pages", ActionHref: $"/KnowledgeBase/Websites/{s.Id}", ActionIcon: "list");
+            Title: s.InProgress ? T["website.pages.readingTitle"].Value : T["website.pages.emptyTitle"].Value,
+            Text: s.InProgress ? T["website.pages.readingText"].Value : string.IsNullOrEmpty(Model.Status) ? T["website.pages.emptyText"].Value : T["website.pages.emptyFiltered"].Value,
+            ActionLabel: string.IsNullOrEmpty(Model.Status) ? null : T["website.pages.showAll"].Value, ActionHref: $"/KnowledgeBase/Websites/{s.Id}", ActionIcon: "list");
         @* icon:hourglass_top *@ @* icon:web_asset_off *@
         <div class="au-panel au-panel--round"><partial name="_EmptyState" model="noPages" /></div>
     }
@@ -207,8 +207,8 @@ else
             <table class="au-table au-table--stack">
                 <thead>
                     <tr>
-                        <th>Page</th>
-                        <th>Status</th>
+                        <th>@T["website.pages.page"]</th>
+                        <th>@T["services.table.status"]</th>
                         <th></th>
                     </tr>
                 </thead>
@@ -217,7 +217,7 @@ else
                     {
                         var readable = UrlDisplayHelper.Readable(p.Url);
                         <tr>
-                            <td data-label="Page">
+                            <td data-label="@T["website.pages.page"]">
                                 <div class="min-w-0">
                                     <a href="@p.Url" target="_blank" rel="noopener noreferrer" class="row-title clip-1" title="@readable">@(string.IsNullOrEmpty(p.Title) ? readable : p.Title)</a>
                                     @if (!string.IsNullOrEmpty(p.Title))
@@ -226,19 +226,19 @@ else
                                     }
                                 </div>
                             </td>
-                            <td data-label="Status" class="au-wrap">
+                            <td data-label="@T["services.table.status"]" class="au-wrap">
                                 <div>
                                     <span class="badge @PageBadge(p.Status)">@PageLabel(p.Status)</span>
                                     @if (!string.IsNullOrEmpty(p.FailureReason) || p.HttpStatus >= 400)
                                     {
-                                        <div class="cell-sub break-word">@p.FailureReason@(p.HttpStatus >= 400 ? $" (error {p.HttpStatus})" : "")</div>
+                                        <div class="cell-sub break-word">@p.FailureReason@(p.HttpStatus >= 400 ? " " + T["website.pages.httpError", p.HttpStatus].Value : "")</div>
                                     }
                                 </div>
                             </td>
                             <td class="row-actions">
                                 @if (p.KnowledgeDocumentId is { } docId)
                                 {
-                                    <a href="/KnowledgeBase/Edit/@docId?returnUrl=@Uri.EscapeDataString(backToThisPage)" class="au-btn au-btn--outlined au-btn--sm">View text</a>
+                                    <a href="/KnowledgeBase/Edit/@docId?returnUrl=@Uri.EscapeDataString(backToThisPage)" class="au-btn au-btn--outlined au-btn--sm">@T["website.pages.viewText"]</a>
                                 }
                             </td>
                         </tr>
@@ -252,7 +252,7 @@ else
     @if (d.RecentRuns.Count > 1)
     {
         <details class="au-panel au-panel--round tech mt-3">
-            <summary>Import history (@d.RecentRuns.Count)</summary>
+            <summary>@T["website.history.title", d.RecentRuns.Count]</summary>
             <div class="timeline">
                 @foreach (var r in d.RecentRuns)
                 {
@@ -260,9 +260,9 @@ else
                         <span class="badge @RunBadge(r.Status)">@RunLabel(r)</span>
                         <div class="flex-1 cell-sub">
                             @LocalTimeHelper.Time(r.StartedAt ?? r.CreatedAt, "datetime-year")
-                            · @r.PagesDiscovered found · @r.PagesNew new · @r.PagesChanged changed · @r.PagesUnchanged unchanged
-                            @if (r.PagesFailed > 0) { <text>· @r.PagesFailed failed</text> }
-                            @if (r.PagesRemoved > 0) { <text>· @r.PagesRemoved removed</text> }
+                            · @T["website.history.counts", r.PagesDiscovered, r.PagesNew, r.PagesChanged, r.PagesUnchanged]
+                            @if (r.PagesFailed > 0) { <text>· @T["campaigns.progress.failed", r.PagesFailed]</text> }
+                            @if (r.PagesRemoved > 0) { <text>· @T["website.history.removed", r.PagesRemoved]</text> }
                         </div>
                     </div>
                 }

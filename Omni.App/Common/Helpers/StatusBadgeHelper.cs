@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Localization;
+
 namespace Omni.App.Common.Helpers;
 
 /// <summary>
@@ -78,11 +80,10 @@ public static class StatusBadgeHelper
     /// one of our known six (e.g. "flagged", "in_appeal", a status Meta introduces later) is shown
     /// as "Problem" rather than the raw Meta term, per "translate events into simple human-readable
     /// states, don't expose raw Meta complexity to members".</summary>
-    public static string TemplateStatusLabel(string? status)
+    public static string TemplateStatusLabel(this IStringLocalizer text, string? status)
     {
-        if (status is null) return "Unknown";
-        if (KnownTemplateStatuses.Contains(status)) return Capitalize(status.ToLowerInvariant());
-        return "Problem";
+        if (status is null) return text[UnknownKey].Value;
+        return KnownTemplateStatuses.Contains(status) ? text.ValueLabel(status) : text[ProblemKey].Value;
     }
 
     /// <summary>Badge color for a WhatsApp template status — mirrors TemplateStatusLabel's bucketing
@@ -93,8 +94,10 @@ public static class StatusBadgeHelper
 
     /// <summary>Label for a campaign status. Stored "paused" is what the Stop button sets, so members read it as "Stopped";
     /// every other status uses the shared FilterLabelHelper wording.</summary>
-    public static string CampaignStatusLabel(string? status) =>
-        string.Equals(status, "paused", StringComparison.OrdinalIgnoreCase) ? "Stopped" : FilterLabelHelper.Label(status);
+    public static string CampaignStatusLabel(this IStringLocalizer text, string? status) =>
+        string.Equals(status, "paused", StringComparison.OrdinalIgnoreCase) ? text[StoppedKey].Value : text.ValueLabel(status);
 
-    private static string Capitalize(string s) => s.Length == 0 ? s : char.ToUpperInvariant(s[0]) + s[1..];
+    private const string UnknownKey = "values.unknown";
+    private const string ProblemKey = "values.problem";
+    private const string StoppedKey = "campaigns.status.stopped";
 }
