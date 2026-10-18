@@ -3,6 +3,7 @@ using Omni.App.Business.Contracts.Managers;
 using Omni.App.Business.Contracts.Services.Knowledge;
 using Omni.App.Entities.Requests.Knowledge;
 using Omni.App.Entities.Responses.Knowledge;
+using Omni.App.Controllers.Filters;
 
 namespace Omni.App.Controllers.Client;
 
@@ -73,7 +74,7 @@ public class WebsiteSourcesController : DashboardApiController
         }
         catch (ArgumentException ex)
         {
-            return Conflict(new { error = ex.Message });
+            return Conflict(new { error = ApiErrorsAttribute.Localize(HttpContext, ex) });
         }
     }
 
@@ -98,7 +99,7 @@ public class WebsiteSourcesController : DashboardApiController
         }
         catch (ArgumentException ex)
         {
-            return Conflict(new { error = ex.Message });
+            return Conflict(new { error = ApiErrorsAttribute.Localize(HttpContext, ex) });
         }
     }
 }

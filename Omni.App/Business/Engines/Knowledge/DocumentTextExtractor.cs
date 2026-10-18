@@ -8,6 +8,7 @@ using Omni.App.Business.Contracts.Engines.Knowledge;
 using Omni.App.Business.Contracts.Managers;
 using Omni.App.Common.Exceptions;
 using Omni.App.Common.Helpers;
+using Omni.App.Entities.Dtos.Ui;
 
 namespace Omni.App.Business.Engines.Knowledge;
 
@@ -44,8 +45,8 @@ public class DocumentTextExtractor : IDocumentTextExtractor
         var extension = Path.GetExtension(fileName).ToLowerInvariant();
         if (!SupportedExtensions.Contains(extension))
         {
-            var shown = string.IsNullOrEmpty(extension) ? "(no extension)" : extension;
-            throw new InvalidDocumentException($"Unsupported file type {shown}. Upload a PDF, DOCX or TXT file.");
+            object shown = string.IsNullOrEmpty(extension) ? TextArg.Of("knowledge.documents.errors.noExtension") : extension;
+            throw new InvalidDocumentException("knowledge.documents.errors.unsupportedType").WithArgs(shown);
         }
 
         // Parsers want a seekable stream, and the size is already capped by the caller.
@@ -53,7 +54,7 @@ public class DocumentTextExtractor : IDocumentTextExtractor
         content.CopyTo(buffer);
         if (buffer.Length == 0)
         {
-            throw new InvalidDocumentException("The file is empty.");
+            throw new InvalidDocumentException("knowledge.documents.errors.empty");
         }
         var bytes = buffer.GetBuffer().AsSpan(0, (int)buffer.Length);
 
@@ -67,17 +68,16 @@ public class DocumentTextExtractor : IDocumentTextExtractor
         var text = KnowledgeTextNormalizer.Normalize(raw);
         if (text.Length == 0)
         {
-            throw new InvalidDocumentException(extension switch
+            throw extension switch
             {
-                ".pdf" => "This PDF does not contain readable text. Scanned documents are not supported yet.",
-                ".docx" => "This document does not contain any readable text.",
-                _ => "The file is empty."
-            });
+                ".pdf" => new InvalidDocumentException("knowledge.documents.errors.pdfNoText"),
+                ".docx" => new InvalidDocumentException("knowledge.documents.errors.docxNoText"),
+                _ => new InvalidDocumentException("knowledge.documents.errors.empty")
+            };
         }
         if (text.Length > _maxChars)
         {
-            throw new InvalidDocumentException(
-                $"This document has too much text ({text.Length:N0} characters; the limit is {_maxChars:N0}). Split it into smaller documents.");
+            throw new InvalidDocumentException("knowledge.documents.errors.tooMuchText").WithArgs($"{text.Length:N0}", $"{_maxChars:N0}");
         }
         return text;
     }
@@ -88,7 +88,7 @@ public class DocumentTextExtractor : IDocumentTextExtractor
         var head = Encoding.Latin1.GetString(bytes[..Math.Min(bytes.Length, 1024)]);
         if (!head.Contains("%PDF-", StringComparison.Ordinal))
         {
-            throw new InvalidDocumentException("This file isn't a valid PDF (its contents don't match the .pdf extension).");
+            throw new InvalidDocumentException("knowledge.documents.errors.notPdf");
         }
 
         var sb = new StringBuilder();
@@ -110,7 +110,7 @@ public class DocumentTextExtractor : IDocumentTextExtractor
         }
         catch (Exception)
         {
-            throw new InvalidDocumentException("Couldn't read this PDF. It may be corrupted or password-protected.");
+            throw new InvalidDocumentException("knowledge.documents.errors.pdfUnreadable");
         }
         return sb.ToString();
     }
@@ -120,7 +120,7 @@ public class DocumentTextExtractor : IDocumentTextExtractor
         // A .docx is a zip archive: "PK\x03\x04".
         if (bytes.Length < 4 || bytes[0] != 0x50 || bytes[1] != 0x4B || bytes[2] != 0x03 || bytes[3] != 0x04)
         {
-            throw new InvalidDocumentException("This file isn't a valid DOCX (its contents don't match the .docx extension). Legacy .doc files aren't supported.");
+            throw new InvalidDocumentException("knowledge.documents.errors.notDocx");
         }
 
         var sb = new StringBuilder();
@@ -155,7 +155,7 @@ public class DocumentTextExtractor : IDocumentTextExtractor
         }
         catch (Exception)
         {
-            throw new InvalidDocumentException("Couldn't read this DOCX. It may be corrupted or password-protected.");
+            throw new InvalidDocumentException("knowledge.documents.errors.docxUnreadable");
         }
         return sb.ToString();
     }
@@ -167,7 +167,7 @@ public class DocumentTextExtractor : IDocumentTextExtractor
         var isUtf16Be = bytes.Length >= 2 && bytes[0] == 0xFE && bytes[1] == 0xFF;
         if (!isUtf16Le && !isUtf16Be && bytes.IndexOf((byte)0) >= 0)
         {
-            throw new InvalidDocumentException("This file doesn't look like plain text.");
+            throw new InvalidDocumentException("knowledge.documents.errors.notText");
         }
 
         if (isUtf16Le) return Encoding.Unicode.GetString(bytes);

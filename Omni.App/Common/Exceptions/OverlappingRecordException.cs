@@ -4,8 +4,11 @@ namespace Omni.App.Common.Exceptions;
 /// overlap). Thrown by the billing unit of work so callers never need to know the database's error codes.</summary>
 public class OverlappingRecordException : Exception
 {
+    /// <summary>Strings-file key of the message.</summary>
+    public const string DefaultKey = "common.errors.overlap";
+
     public OverlappingRecordException(Exception innerException)
-        : base("The record overlaps an existing one.", innerException)
+        : base(DefaultKey, innerException)
     {
     }
 }

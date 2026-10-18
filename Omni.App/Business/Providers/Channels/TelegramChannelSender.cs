@@ -34,7 +34,7 @@ public class TelegramChannelSender : IChannelSender
     {
         if (string.IsNullOrWhiteSpace(conversation.ExternalThreadId))
         {
-            throw new InvalidOperationException("This Telegram conversation has no chat id on file — can't send.");
+            throw new InvalidOperationException("inbox.errors.telegramNoChat");
         }
 
         // Client-scoped lookup: the token used is always the one belonging to the conversation's own client.
@@ -42,8 +42,7 @@ public class TelegramChannelSender : IChannelSender
 
         if (integration is null || integration.Status != ChannelIntegrationStatus.Connected || string.IsNullOrEmpty(integration.AccessToken))
         {
-            throw new InvalidOperationException(
-                "This client doesn't have a connected Telegram bot — reconnect it in Settings → Messaging Integrations.");
+            throw new InvalidOperationException("channels.telegram.errors.notConnected");
         }
 
         var messageId = await _client.SendMessageAsync(integration.AccessToken, conversation.ExternalThreadId, text, ct);

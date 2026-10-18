@@ -10,6 +10,7 @@ using Omni.App.Business.Contracts.Services.Clients;
 using Omni.App.Common.Configs;
 using Omni.App.Entities.Dtos.BusinessTypes;
 using Omni.App.Entities.Requests.Clients;
+using Omni.App.Business.Services.Clients;
 
 namespace Omni.App.Pages.Account;
 
@@ -72,7 +73,7 @@ public class CompleteGoogleSignupModel : PageModel
             FullName, ClientName, Email, info.LoginProvider, info.ProviderKey, info.ProviderDisplayName, BusinessTypeCode), ct);
         if (!result.Succeeded)
         {
-            ErrorMessage = string.Join(" ", result.Errors.Select(e => _text[e].Value));
+            ErrorMessage = string.Join(" ", result.Errors.Select(e => _text[e, ClientRegistrationService.MaxNameLength].Value));
             BusinessTypes = await _businessTypes.ListOptionsAsync(ct);
             return Page();
         }

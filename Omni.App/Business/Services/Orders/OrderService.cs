@@ -11,6 +11,7 @@ using Omni.App.Entities.Responses.Orders;
 using Omni.App.Persistence.Contracts;
 using Omni.App.Persistence.Contracts.Contacts;
 using Omni.App.Persistence.Contracts.Orders;
+using Omni.App.Common.Helpers;
 
 namespace Omni.App.Business.Services.Orders;
 
@@ -40,7 +41,7 @@ public class OrderService : IOrderService
         await _services.EnsureUsableAsync(request.ClientId, request.ServiceId, ct);
         if (!await _contacts.ExistsAsync(request.ClientId, request.ContactId, ct))
         {
-            throw new ArgumentException("Contact not found for this client.");
+            throw new ArgumentException("contacts.errors.notFound");
         }
 
         var order = new Order
@@ -74,7 +75,7 @@ public class OrderService : IOrderService
         {
             if (!OrderStatus.All.Contains(request.Status))
             {
-                throw new ArgumentException($"Invalid order status '{request.Status}'.", nameof(request));
+                throw new ArgumentException("orders.errors.invalidStatus").WithArgs(request.Status);
             }
             order.Status = request.Status;
         }

@@ -8,6 +8,7 @@ using Omni.App.Entities.Models;
 using Omni.App.Entities.Responses.TikTok;
 using Omni.App.Persistence.Contracts;
 using Omni.App.Persistence.Contracts.TikTok;
+using Omni.App.Entities.Dtos.Notifications;
 
 namespace Omni.App.Business.Services.TikTok;
 
@@ -183,7 +184,7 @@ public class TikTokIntegrationService : ITikTokIntegrationService
         if (problem is not null && wasHealthy)
         {
             await _notifications.CreateAsync(row.ClientId, NotificationType.IntegrationUnhealthy,
-                "TikTok connection needs attention", problem, link: "/settings/integrations", ct: ct);
+                NotificationText.Of("notifications.tikTok.title", "notifications.problem.text", problem), link: "/settings/integrations", ct: ct);
         }
     }
 

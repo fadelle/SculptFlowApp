@@ -1666,8 +1666,11 @@ create table if not exists activity.notifications (
   type                    varchar(40) not null
     check (type in ('NEW_CONTACT','HANDOFF','BOOKING_CREATED','BOOKING_RESCHEDULED','BOOKING_CANCELED',
                      'CAMPAIGN_REPLY','OUTBOUND_MESSAGE_FAILED','INTEGRATION_UNHEALTHY')),
+  -- title/message hold strings-file keys (Resources/i18n/en.json); text_args their arguments, so each viewer reads the
+  -- notification in their own language and business-type words. Rows written before keys hold plain text.
   title                   varchar(200) not null,
   message                 text,
+  text_args               text[] not null default '{}',
   contact_id                 uuid references crm.contacts(id) on delete set null,
   conversation_id         uuid references crm.conversations(id) on delete set null,
   booking_id          uuid references scheduling.bookings(id) on delete set null,
@@ -1679,6 +1682,7 @@ create table if not exists activity.notifications (
   read_at                 timestamptz,
   created_at              timestamptz not null default now()
 );
+alter table activity.notifications add column if not exists text_args text[] not null default '{}';
 create index if not exists ix_notifications_client_created on activity.notifications(client_id, created_at desc);
 create index if not exists ix_notifications_client_unread on activity.notifications(client_id) where is_read = false;
 

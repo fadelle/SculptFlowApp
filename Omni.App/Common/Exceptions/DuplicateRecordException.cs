@@ -6,8 +6,11 @@ namespace Omni.App.Common.Exceptions;
 /// </summary>
 public class DuplicateRecordException : Exception
 {
+    /// <summary>Strings-file key of the message when the database refused the save.</summary>
+    public const string DefaultKey = "common.errors.duplicate";
+
     public DuplicateRecordException(Exception innerException)
-        : base("The record already exists.", innerException)
+        : base(DefaultKey, innerException)
     {
     }
 

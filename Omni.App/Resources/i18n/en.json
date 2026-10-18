@@ -1390,5 +1390,272 @@
   "time.ago.hour": "1 hour ago",
   "time.ago.hours": "{0} hours ago",
   "time.ago.yesterday": "yesterday",
-  "time.ago.days": "{0} days ago"
+  "time.ago.days": "{0} days ago",
+
+  "knowledge.documents.errors.unsupportedType": "Unsupported file type {0}. Upload a PDF, DOCX or TXT file.",
+  "knowledge.documents.errors.noExtension": "(no extension)",
+  "knowledge.documents.errors.empty": "The file is empty.",
+  "knowledge.documents.errors.notPdf": "This file isn't a valid PDF (its contents don't match the .pdf extension).",
+  "knowledge.documents.errors.pdfUnreadable": "Couldn't read this PDF. It may be corrupted or password-protected.",
+  "knowledge.documents.errors.notDocx": "This file isn't a valid DOCX (its contents don't match the .docx extension). Legacy .doc files aren't supported.",
+  "knowledge.documents.errors.docxUnreadable": "Couldn't read this DOCX. It may be corrupted or password-protected.",
+  "knowledge.documents.errors.notText": "This file doesn't look like plain text.",
+
+  "inbox.errors.telegramNoChat": "This Telegram conversation has no chat id on file, so the message can't be sent.",
+  "inbox.errors.noPhone": "This {contact} has no phone number on file, so a WhatsApp message can't be sent.",
+  "inbox.errors.voiceTooLarge": "This voice note is larger than the size the Inbox can play.",
+
+  "availability.errors.unknownTimeZone": "Unknown time zone.",
+  "availability.errors.durationRange": "The default {booking} length must be between 5 and 480 minutes.",
+  "availability.errors.bufferRange": "The buffer must be between 0 and 240 minutes.",
+  "availability.errors.noticeRange": "Minimum notice must be between 0 and 720 hours.",
+  "availability.errors.advanceRange": "How far ahead people can book must be between 1 and 365 days.",
+  "availability.errors.invalidDay": "That isn't a day of the week.",
+  "availability.errors.dayTimesRequired": "{0}: enter a start and end time.",
+  "availability.errors.dayEndBeforeStart": "{0}: the end time must be after the start time.",
+  "availability.errors.duplicateDay": "A day is listed twice in the weekly schedule.",
+  "availability.errors.dateTimesRequired": "Enter a start and end time, or mark the day closed.",
+  "availability.errors.endBeforeStart": "The end time must be after the start time.",
+  "availability.errors.reasonTooLong": "The reason must be 200 characters or fewer.",
+
+  "services.errors.inactiveForBooking": "The {service} '{0}' is inactive and can't be booked.",
+
+  "contacts.errors.notFound": "{Contact} not found.",
+
+  "bookings.errors.invalidStatus": "'{0}' isn't a {booking} status.",
+  "bookings.errors.cantReschedule": "This {booking} can't be rescheduled because it is {0}.",
+  "bookings.errors.pastReschedule": "This {booking} is already in the past and can't be rescheduled. Make a new one instead.",
+  "bookings.errors.cantCancel": "This {booking} can't be canceled because it is {0}.",
+
+  "calendars.errors.notConnectedYet": "{0} isn't connected yet.",
+  "calendars.errors.refreshFailed": "Couldn't refresh your {0} calendars: {1}",
+  "calendars.errors.notConnected": "{0} isn't connected.",
+  "calendars.errors.notListed": "That calendar isn't in this account's list. Refresh calendars and try again.",
+  "calendars.errors.chooseCalendar": "Choose a calendar before turning sync on.",
+  "calendars.errors.unknownProvider": "'{0}' isn't a calendar provider Omni supports.",
+
+  "campaigns.errors.nameRequired": "Give the campaign a name.",
+
+  "templates.errors.notFound": "Template not found.",
+
+  "campaigns.errors.unknownAudience": "'{0}' isn't an audience type.",
+  "campaigns.errors.recipientRequired": "Add at least one recipient.",
+  "campaigns.errors.scheduleNotDraft": "Only a draft campaign can be scheduled. This one is {0}.",
+  "campaigns.errors.cantSend": "This campaign can't be sent while it is {0}.",
+  "campaigns.errors.cantStop": "Only a scheduled or sending campaign can be stopped. This one is {0}.",
+  "campaigns.errors.changedBeforeStop": "The campaign finished or changed before it could be stopped. Refresh the page to see where it is.",
+  "campaigns.errors.notFound": "Campaign not found.",
+  "campaigns.errors.noTemplate": "This campaign has no WhatsApp template to send.",
+  "campaigns.errors.alreadyInStatus": "This campaign is already {0}.",
+  "campaigns.errors.audienceInvalid": "The audience filters aren't valid.",
+
+  "services.errors.inactive": "The {service} '{0}' is inactive and can't be used for anything new.",
+  "services.errors.nameTaken": "A {service} named '{0}' already exists.",
+  "services.errors.nameRequired": "Enter a name.",
+  "services.errors.nameTooLong": "The name must be {0} characters or fewer.",
+  "services.errors.codeTooLong": "The code must be {0} characters or fewer.",
+  "services.errors.descriptionTooLong": "The description must be {0} characters or fewer. Put detailed information in the Knowledge Base.",
+  "services.errors.durationRange": "The {booking} length must be between 1 and {0} minutes.",
+
+  "channels.errors.unknown": "'{0}' isn't a channel Omni supports.",
+  "channels.errors.telegramUseBotToken": "Telegram is connected with a bot token (Connect Telegram), not the manual form.",
+  "channels.errors.codeOrTokenRequired": "Meta didn't send back a sign-in code or access token. Try connecting again.",
+
+  "channels.telegram.errors.invalidToken": "That doesn't look like a Telegram bot token. Copy it exactly from @BotFather: it looks like 123456789:AA… (no spaces or quotes).",
+  "channels.telegram.errors.botTaken": "This bot is already connected to another {client}. Create a separate bot for each {client} with @BotFather.",
+
+  "clients.errors.nameRequired": "Enter the {client} name.",
+  "clients.errors.nameTooLong": "The {client} name must be {0} characters or fewer.",
+
+  "contacts.errors.identityRequired": "A {contact} needs a name, phone or email.",
+  "contacts.errors.invalidQualification": "'{0}' isn't a qualification status.",
+
+  "inbox.errors.invalidChannel": "'{0}' isn't a channel.",
+  "inbox.errors.invalidDirection": "'{0}' isn't a message direction.",
+  "inbox.errors.invalidSenderType": "'{0}' isn't a sender type.",
+  "inbox.errors.messageNotFound": "Message not found.",
+  "inbox.errors.noAudio": "This message has no audio.",
+  "inbox.errors.voiceUnsupported": "Playing voice notes isn't supported for {0} conversations yet.",
+  "inbox.errors.audioGone": "The audio of this voice note is no longer available.",
+  "inbox.errors.contentRequired": "Write a message first.",
+  "inbox.errors.invalidEventType": "'{0}' isn't an event type.",
+  "inbox.errors.unsupportedEventType": "The event type '{0}' can't create a message.",
+  "inbox.errors.externalIdRequired": "A status update needs the provider's message id (externalMessageId).",
+
+  "knowledge.errors.contentRequired": "Enter the content.",
+  "knowledge.errors.titleRequired": "Enter a title.",
+  "knowledge.errors.titleTooLong": "The title must be {0} characters or fewer.",
+  "knowledge.errors.categoryTooLong": "The category must be {0} characters or fewer.",
+
+  "knowledgeSettings.errors.chunkSizeRange": "Chunk size must be between {0} and {1} tokens.",
+  "knowledgeSettings.errors.overlapRange": "Chunk overlap must be between 0 and half the chunk size.",
+  "knowledgeSettings.errors.topKRange": "Top K must be between {0} and {1}.",
+  "knowledgeSettings.errors.similarityRange": "Minimum similarity must be between 0 and 1.",
+
+  "knowledge.websites.errors.urlRequired": "Enter the website address to import.",
+  "knowledge.websites.errors.urlInvalid": "That doesn't look like a valid web address. Use a full http:// or https:// URL.",
+  "knowledge.websites.errors.modeInvalid": "Choose either \"Single page only\" or \"Crawl website\".",
+  "knowledge.websites.errors.categoryTooLong": "The category must be 50 characters or fewer.",
+  "knowledge.websites.errors.tooMany": "You can add up to {0} websites. Delete one you no longer need first.",
+  "knowledge.websites.errors.alreadyAddedRescrape": "This website address has already been added. Open it and use \"Re-scrape\" to refresh it.",
+  "knowledge.websites.errors.alreadyAdded": "This website address has already been added.",
+  "knowledge.websites.errors.crawlRunning": "A crawl of this website is already running.",
+  "knowledge.websites.errors.activateFirst": "Activate this website before re-scraping it.",
+  "knowledge.websites.errors.crawlRunningDelete": "A crawl of this website is still running. Wait for it to finish, then delete it.",
+
+  "orders.errors.invalidStatus": "'{0}' isn't an {order} status.",
+
+  "templates.errors.invalidCategory": "'{0}' isn't a template category.",
+  "templates.errors.nameBodyRequired": "Enter a name and the message text.",
+  "templates.errors.nameInvalid": "Template names may only use lower-case letters, numbers and underscores (e.g. booking_reminder).",
+  "templates.errors.alreadyAtMeta": "This template already reached Meta. Use Sync to refresh its status, or create a new template to change it.",
+  "templates.errors.connectFirst": "Connect your WhatsApp number (Settings → Integrations) before sending templates to Meta.",
+  "templates.errors.noNumber": "There's no connected WhatsApp number to sync templates from.",
+
+  "billing.errors.inactiveSend": "Your subscription isn't active, so messages can't be sent. See Settings → Billing.",
+  "billing.errors.notIncluded": "{0} isn't included in your plan. See Settings → Billing.",
+  "billing.errors.inactiveFeature": "Your subscription isn't active, so you can't use {0}. See Settings → Billing.",
+  "billing.errors.limitReached": "You've reached your plan's limit for {0} ({1}). See Settings → Billing.",
+  "billing.errors.inactive": "Your subscription isn't active. See Settings → Billing.",
+
+  "common.errors.duplicate": "This already exists. Refresh the page to see it.",
+  "common.errors.overlap": "This overlaps one that already exists.",
+
+  "billing.feature.campaigns": "Campaigns",
+  "billing.feature.aiAssistant": "AI assistant",
+  "billing.feature.apiAccess": "API access",
+  "billing.feature.advancedReporting": "Advanced reporting",
+  "billing.feature.maxUsers": "Seats",
+  "billing.feature.maxWhatsappNumbers": "WhatsApp numbers",
+  "billing.feature.maxChannelConnections": "Connected channels",
+
+  "billing.eventType.whatsappMarketingMessage": "WhatsApp marketing message",
+  "billing.eventType.whatsappUtilityMessage": "WhatsApp utility message",
+  "billing.eventType.whatsappAuthenticationMessage": "WhatsApp authentication message",
+  "billing.eventType.whatsappServiceMessage": "WhatsApp service message",
+  "billing.eventType.telegramMessage": "Telegram message",
+  "billing.eventType.smsSegment": "SMS segment",
+  "billing.eventType.viberTransactionalMessage": "Viber transactional message",
+  "billing.eventType.viberPromotionalMessage": "Viber promotional message",
+  "billing.eventType.emailRecipient": "Email recipient",
+  "billing.eventType.rcsMessage": "RCS message",
+  "billing.eventType.voiceMinute": "Voice minute",
+  "billing.eventType.aiToken": "AI token",
+  "billing.eventType.whatsappNumberMonth": "WhatsApp number (monthly)",
+  "billing.eventType.agentSeatMonth": "Seat (monthly)",
+
+  "billing.ledger.walletTopUp": "Balance top-up",
+  "billing.ledger.usageDebit": "Usage (wallet)",
+  "billing.ledger.includedCreditConsumption": "Usage (included credit)",
+  "billing.ledger.usageRefund": "Usage refund",
+  "billing.ledger.subscriptionCharge": "Subscription",
+  "billing.ledger.includedCreditGrant": "Included credit added",
+  "billing.ledger.includedCreditExpiry": "Included credit expired",
+  "billing.ledger.manualAdjustment": "Adjustment",
+
+  "billing.paidBy.platformCharged": "Billed by Omni",
+  "billing.paidBy.platformCovered": "Covered by Omni",
+  "billing.paidBy.youToMeta": "Paid by you directly to Meta",
+  "billing.paidBy.youToProvider": "Paid by you directly to the provider",
+  "billing.paidBy.yourProvider": "Paid by you to your messaging provider",
+  "billing.paidBy.noFee": "No per-message charge",
+  "billing.paidBy.plusFee": "{0} · plus an Omni usage fee",
+
+  "notifications.anyone.contact": "A {contact}",
+  "notifications.anyone.newContact": "A new {contact}",
+  "notifications.anyone.conversation": "A conversation",
+  "notifications.anyone.slot": "a slot",
+
+  "notifications.booking.created.title": "{Booking} made",
+  "notifications.booking.created.message": "{0} — {1} booked {2}.",
+  "notifications.booking.rescheduled.title": "{Booking} rescheduled",
+  "notifications.booking.rescheduled.message": "{0} — {1} moved to {2}.",
+  "notifications.booking.canceled.title": "{Booking} canceled",
+  "notifications.booking.canceled.message": "{0} — {1} canceled for {2}.",
+
+  "notifications.calendar.title": "{0} calendar sync needs attention",
+  "notifications.calendar.problem": "{1}",
+  "notifications.calendar.failed": "A calendar sync failed.",
+
+  "notifications.handoff.title": "AI handed off to your team",
+  "notifications.handoff.message": "{0} needs your team's attention.",
+  "notifications.handoff.messageReason": "{0} needs your team's attention: {1}",
+
+  "notifications.newContact.title": "New {contact}",
+  "notifications.newContact.message": "{0} sent their first message.",
+
+  "notifications.campaignReply.title": "Campaign reply",
+  "notifications.campaignReply.message": "{0} replied.",
+  "notifications.campaignReply.messageNamed": "{0} replied to \"{1}\".",
+
+  "notifications.sendFailed.title": "Message failed to send",
+  "notifications.sendFailed.message": "Message failed to send to {0}.",
+  "notifications.sendFailed.messageNoName": "A message failed to send to a {contact}.",
+
+  "notifications.problem.text": "{0}",
+
+  "notifications.tikTok.title": "TikTok connection needs attention",
+
+  "notifications.whatsApp.title": "WhatsApp connection needs attention",
+  "notifications.whatsApp.problem": "Your WhatsApp connection is no longer working normally.",
+
+  "signup.errors.closed": "New sign-ups are closed right now. Contact Omni to get an account.",
+  "signup.errors.fullNameRequired": "Enter your full name.",
+  "signup.errors.clientNameRequired": "Enter the {client} name.",
+  "signup.errors.fullNameTooLong": "Your full name must be {0} characters or fewer.",
+  "signup.errors.clientNameTooLong": "The {client} name must be {0} characters or fewer.",
+  "signup.errors.emailInvalid": "Enter a valid email address.",
+  "signup.errors.passwordRequired": "Enter a password.",
+  "signup.errors.passwordMismatch": "The passwords don't match.",
+  "signup.errors.failedNothingSaved": "We couldn't finish creating your account. Nothing was saved, so please try again.",
+  "signup.errors.failed": "We couldn't finish creating your account. Please try again.",
+
+  "identity.errors.default": "Something went wrong. Please try again.",
+  "identity.errors.concurrency": "Someone else changed this account at the same time. Please try again.",
+  "identity.errors.passwordMismatch": "The current password is wrong.",
+  "identity.errors.invalidToken": "This link is invalid or has expired.",
+  "identity.errors.loginTaken": "This sign-in is already linked to another account.",
+  "identity.errors.invalidUserName": "'{0}' can't be used to sign in. Use a valid email address.",
+  "identity.errors.invalidEmail": "'{0}' isn't a valid email address.",
+  "identity.errors.emailTaken": "Someone already signs in with {0}.",
+  "identity.errors.hasPassword": "This account already has a password.",
+  "identity.errors.passwordTooShort": "Use at least {0} characters for the password.",
+  "identity.errors.passwordUniqueChars": "The password needs at least {0} different characters.",
+  "identity.errors.passwordSymbol": "The password needs at least one symbol.",
+  "identity.errors.passwordDigit": "The password needs at least one digit (0-9).",
+  "identity.errors.passwordLower": "The password needs at least one lower-case letter (a-z).",
+  "identity.errors.passwordUpper": "The password needs at least one upper-case letter (A-Z).",
+
+  "knowledge.documents.errors.pdfNoText": "This PDF doesn't contain readable text. Scanned documents aren't supported yet.",
+  "knowledge.documents.errors.docxNoText": "This document doesn't contain any readable text.",
+  "knowledge.documents.errors.tooMuchText": "This document has too much text ({0} characters; the limit is {1}). Split it into smaller documents.",
+  "knowledge.documents.errors.fileRequired": "Choose a file to upload.",
+  "knowledge.documents.errors.tooLarge": "This file is {0} MB. The maximum upload size is {1} MB.",
+
+  "channels.telegram.errors.notConnected": "There's no connected Telegram bot. Reconnect it in Settings → Messaging Integrations.",
+
+  "inbox.errors.windowClosed": "The 24-hour WhatsApp customer service window is closed for this conversation. Send an approved template instead.",
+
+  "channels.whatsApp.errors.notConnected": "There's no connected WhatsApp number yet. See Settings → Messaging Integrations.",
+
+  "channels.errors.noWaba": "No WhatsApp Business Account was found for this login. Make sure one was selected during sign-up.",
+  "channels.errors.noPhoneNumber": "No phone number was found under the WhatsApp Business Account '{0}' ({1}).",
+  "channels.errors.noPage": "No Facebook Page was found for this account. The person signing in must be an admin of at least one Page.",
+
+  "inbox.errors.sendUnsupported": "Sending is only available for WhatsApp and Telegram conversations right now (this one is on {0}).",
+
+  "templates.errors.whatsAppOnly": "Templates are for WhatsApp only. This conversation is on {0}.",
+  "templates.errors.notApproved": "The template '{0}' isn't approved yet (status: {1}). Meta only allows sending approved templates.",
+
+  "oauth.errors.notSetUp": "{0} isn't set up yet on this server: {1}",
+  "oauth.errors.expired": "The connection attempt expired or was invalid. Please try again.",
+  "oauth.errors.noCode": "{0} didn't return an authorization code.",
+  "oauth.errors.connectFailed": "Couldn't finish connecting: {0}",
+
+  "oauth.connected": "{0} connected.",
+
+  "knowledgeSettings.tech.indexNone": "None (exact scan)",
+
+  "channels.errors.whatsAppConnectFailed": "Couldn't complete the WhatsApp connection.",
+  "channels.errors.facebookConnectFailed": "Couldn't complete the Facebook connection."
 }

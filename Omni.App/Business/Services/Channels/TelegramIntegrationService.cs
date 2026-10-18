@@ -46,7 +46,7 @@ public class TelegramIntegrationService : ITelegramIntegrationService
         var token = (botToken ?? string.Empty).Trim();
         if (!TokenPattern.IsMatch(token))
         {
-            throw new ArgumentException("That doesn't look like a Telegram bot token. Copy it exactly from @BotFather — it looks like 123456789:AA… (no spaces or quotes).");
+            throw new ArgumentException("channels.telegram.errors.invalidToken");
         }
         await _entitlements.EnsureCanConnectChannelAsync(clientId, ChannelType.Telegram, ct);
 
@@ -60,7 +60,7 @@ public class TelegramIntegrationService : ITelegramIntegrationService
         var usedElsewhere = await _integrations.IsTelegramBotConnectedElsewhereAsync(botId, clientId, ct);
         if (usedElsewhere)
         {
-            throw new InvalidOperationException("This bot is already connected to another client. Create a separate bot for each client with @BotFather.");
+            throw new InvalidOperationException("channels.telegram.errors.botTaken");
         }
 
         var row = await _integrations.GetAsync(clientId, ChannelType.Telegram, ct);
@@ -204,7 +204,7 @@ public class TelegramIntegrationService : ITelegramIntegrationService
         {
             if (!Uri.TryCreate(configured, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps)
             {
-                throw new InvalidOperationException("App:PublicBaseUrl must be a full https:// URL (Telegram only delivers webhooks over HTTPS).");
+                throw new InvalidOperationException("App:PublicBaseUrl must be a full https:// URL (Telegram only delivers webhooks over HTTPS)."); // text-ok: setup error
             }
             return configured;
         }
@@ -222,7 +222,7 @@ public class TelegramIntegrationService : ITelegramIntegrationService
         }
 
         throw new InvalidOperationException(
-            "Telegram needs a public HTTPS address to send messages to. Set App:PublicBaseUrl (e.g. https://your-app.onrender.com, or an https tunnel URL when testing locally).");
+            "Telegram needs a public HTTPS address to send messages to. Set App:PublicBaseUrl (e.g. https://your-app.onrender.com, or an https tunnel URL when testing locally)."); // text-ok: setup error
     }
 
     /// <summary>Never includes the token, webhook secret or any other credential.</summary>

@@ -10,6 +10,7 @@ using Omni.App.Entities.Requests.Channels;
 using Omni.App.Entities.Responses.Channels;
 using Omni.App.Persistence.Contracts;
 using Omni.App.Persistence.Contracts.Channels;
+using Omni.App.Common.Helpers;
 
 namespace Omni.App.Business.Services.Channels;
 
@@ -52,7 +53,7 @@ public class ChannelIntegrationService : IChannelIntegrationService
     {
         if (!ChannelType.All.Contains(request.Channel))
         {
-            throw new ArgumentException($"Unknown channel '{request.Channel}'.", nameof(request));
+            throw new ArgumentException("channels.errors.unknown").WithArgs(request.Channel);
         }
 
         if (request.Channel == ChannelType.Telegram)
@@ -60,7 +61,7 @@ public class ChannelIntegrationService : IChannelIntegrationService
             // A Telegram connection isn't "save some fields": it needs getMe + setWebhook, which only
             // ITelegramIntegrationService.ConnectAsync does. Saving raw fields would produce a
             // "connected" row with no webhook.
-            throw new ArgumentException("Telegram is connected with a bot token (Connect Telegram), not the manual form.", nameof(request));
+            throw new ArgumentException("channels.errors.telegramUseBotToken");
         }
 
         var row = await _integrations.GetAsync(request.ClientId, request.Channel, ct);
@@ -123,7 +124,7 @@ public class ChannelIntegrationService : IChannelIntegrationService
     {
         if (!ChannelType.All.Contains(channel))
         {
-            throw new ArgumentException($"Unknown channel '{channel}'.", nameof(channel));
+            throw new ArgumentException("channels.errors.unknown").WithArgs(channel);
         }
 
         if (channel == ChannelType.Telegram)
@@ -158,7 +159,7 @@ public class ChannelIntegrationService : IChannelIntegrationService
             ? request.AccessToken
             : !string.IsNullOrWhiteSpace(request.Code)
                 ? await _graph.ExchangeCodeForTokenAsync(request.Code, request.RedirectUri, ct)
-                : throw new InvalidOperationException("Either AccessToken or Code must be provided.");
+                : throw new InvalidOperationException("channels.errors.codeOrTokenRequired");
 
         var wabaId = request.WabaId;
         var phoneNumberId = request.PhoneNumberId;
@@ -170,14 +171,12 @@ public class ChannelIntegrationService : IChannelIntegrationService
             // which phone number is registered under it.
             var wabas = await _graph.GetClientWhatsAppBusinessAccountsAsync(token, ct);
             var waba = wabas.FirstOrDefault()
-                ?? throw new InvalidOperationException(
-                    "No WhatsApp Business Account was found for this login — make sure a WABA was selected during signup.");
+                ?? throw new InvalidOperationException("channels.errors.noWaba");
             wabaId = waba.WabaId;
 
             var phones = await _graph.GetPhoneNumbersForWabaAsync(wabaId, token, ct);
             var phone = phones.FirstOrDefault()
-                ?? throw new InvalidOperationException(
-                    $"No phone number was found under WhatsApp Business Account '{waba.WabaName}' ({wabaId}).");
+                ?? throw new InvalidOperationException("channels.errors.noPhoneNumber").WithArgs(waba.WabaName, wabaId);
             phoneNumberId = phone.PhoneNumberId;
         }
 
@@ -210,13 +209,12 @@ public class ChannelIntegrationService : IChannelIntegrationService
             ? await _graph.ExchangeCodeForTokenAsync(request.Code, ct: ct)
             : !string.IsNullOrWhiteSpace(request.AccessToken)
                 ? request.AccessToken
-                : throw new InvalidOperationException("Either Code or AccessToken must be provided.");
+                : throw new InvalidOperationException("channels.errors.codeOrTokenRequired");
 
         var longLivedToken = await _graph.GetLongLivedTokenAsync(shortLivedToken, ct);
 
         var page = await _graph.GetFirstManagedPageAsync(longLivedToken, ct)
-            ?? throw new InvalidOperationException(
-                "No Facebook Page found for this account — the logged-in user must be an admin on at least one Page.");
+            ?? throw new InvalidOperationException("channels.errors.noPage");
 
         return await SaveAsync(new SaveChannelIntegrationRequest(
             request.ClientId,

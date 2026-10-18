@@ -10,6 +10,8 @@ using Omni.App.Entities.Responses.WhatsApp;
 using Omni.App.Persistence.Contracts;
 using Omni.App.Persistence.Contracts.Channels;
 using Omni.App.Persistence.Contracts.WhatsApp;
+using Omni.App.Entities.Dtos.Notifications;
+using Omni.App.Entities.Dtos.Ui;
 
 namespace Omni.App.Business.Services.WhatsApp;
 
@@ -57,7 +59,7 @@ public class WhatsAppHealthService : IWhatsAppHealthService
         if (integration is null)
         {
             throw new InvalidOperationException(
-                $"Client {request.ClientId} has no WhatsApp connection on file — connect one under Settings → Messaging Integrations first.");
+                $"Client {request.ClientId} has no WhatsApp connection on file — connect one under Settings → Messaging Integrations first."); // text-ok: n8n ingest contract
         }
 
         // Don't trust ClientId blindly — cross-check whichever identifier the event carries
@@ -66,13 +68,13 @@ public class WhatsAppHealthService : IWhatsAppHealthService
             && !string.Equals(integration.WhatsAppBusinessId, request.WabaId, StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidOperationException(
-                $"WabaId '{request.WabaId}' does not match client {request.ClientId}'s stored WhatsApp connection.");
+                $"WabaId '{request.WabaId}' does not match client {request.ClientId}'s stored WhatsApp connection."); // text-ok: n8n ingest contract
         }
         if (!string.IsNullOrWhiteSpace(request.PhoneNumberId)
             && !string.Equals(integration.PhoneNumberId, request.PhoneNumberId, StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidOperationException(
-                $"PhoneNumberId '{request.PhoneNumberId}' does not match client {request.ClientId}'s stored WhatsApp connection.");
+                $"PhoneNumberId '{request.PhoneNumberId}' does not match client {request.ClientId}'s stored WhatsApp connection."); // text-ok: n8n ingest contract
         }
 
         var occurredAt = request.OccurredAt ?? DateTimeOffset.UtcNow;
@@ -158,8 +160,8 @@ public class WhatsAppHealthService : IWhatsAppHealthService
         if (IsUnhealthy(healthLevel) && !IsUnhealthy(previousLevel))
         {
             await _notifications.CreateAsync(request.ClientId, NotificationType.IntegrationUnhealthy,
-                "WhatsApp connection needs attention",
-                integration.LastProblemMessage ?? "The client's WhatsApp connection is no longer working normally.",
+                NotificationText.Of("notifications.whatsApp.title", "notifications.problem.text",
+                    integration.LastProblemMessage ?? (object)TextArg.Of("notifications.whatsApp.problem")),
                 channelIntegrationId: integration.Id, link: "/WhatsApp/Health", ct: ct);
         }
 

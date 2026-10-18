@@ -44,7 +44,7 @@ public class ClientRegistrationServiceTests
         var normal = await Sut().RegisterAsync(Req());
         var google = await Sut().RegisterExternalAsync(new RegisterExternalClientRequest("Gina", "Glow", "g@x.com", "Google", "key-1", "Google", TextKit.Clinic));
 
-        Assert.All(new[] { normal, google }, r => Assert.Equal(ClientRegistrationService.SignupClosedMessage, Assert.Single(r.Errors)));
+        Assert.All(new[] { normal, google }, r => Assert.Equal(ClientRegistrationService.SignupClosedKey, Assert.Single(r.Errors)));
         _uow.Verify(u => u.BeginTransactionAsync(It.IsAny<CancellationToken>()), Times.Never);
         _users.Verify(u => u.CreateAsync(It.IsAny<AppUser>()), Times.Never);
         _users.Verify(u => u.CreateAsync(It.IsAny<AppUser>(), It.IsAny<string>()), Times.Never);
@@ -57,16 +57,16 @@ public class ClientRegistrationServiceTests
         new(name, client, email, pw, confirm, TextKit.Clinic);
 
     [Theory]
-    [InlineData(" ", "Glow", "a@x.com", "p", "p", "Full name")]
-    [InlineData("Ann", " ", "a@x.com", "p", "p", "Client name")]
-    [InlineData("Ann", "Glow", "not-an-email", "p", "p", "valid email")]
-    [InlineData("Ann", "Glow", "a@x.com", "", "", "Password is required")]
-    [InlineData("Ann", "Glow", "a@x.com", "p1", "p2", "don't match")]
-    public async Task Invalid_input_is_rejected_before_touching_the_database(string name, string client, string email, string pw, string confirm, string message)
+    [InlineData(" ", "Glow", "a@x.com", "p", "p", "fullNameRequired")]
+    [InlineData("Ann", " ", "a@x.com", "p", "p", "clientNameRequired")]
+    [InlineData("Ann", "Glow", "not-an-email", "p", "p", "emailInvalid")]
+    [InlineData("Ann", "Glow", "a@x.com", "", "", "passwordRequired")]
+    [InlineData("Ann", "Glow", "a@x.com", "p1", "p2", "passwordMismatch")]
+    public async Task Invalid_input_is_rejected_before_touching_the_database(string name, string client, string email, string pw, string confirm, string errorKey)
     {
         var r = await Sut().RegisterAsync(new RegisterClientRequest(name, client, email, pw, confirm));
         Assert.False(r.Succeeded);
-        Assert.Contains(message, Assert.Single(r.Errors));
+        Assert.Equal("signup.errors." + errorKey, Assert.Single(r.Errors));
         _uow.Verify(u => u.BeginTransactionAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -145,6 +145,7 @@ public class ClientRegistrationServiceTests
         _users.Setup(u => u.CreateAsync(It.IsAny<AppUser>(), It.IsAny<string>())).ReturnsAsync(IdentityResult.Failed(new IdentityError { Description = "Password too weak" }));
         var r = await Sut().RegisterAsync(Req());
         Assert.Equal("Password too weak", Assert.Single(r.Errors));
+        Assert.False(r.EmailTaken);
         _tx.Verify(t => t.RollbackAsync(It.IsAny<CancellationToken>()), Times.Once);
         _uow.Verify(u => u.DiscardChanges(), Times.Once);
         _clients.Verify(c => c.Add(It.IsAny<Client>()), Times.Never);
@@ -157,7 +158,7 @@ public class ClientRegistrationServiceTests
         _uow.Setup(u => u.SaveChangesAsync(It.IsAny<CancellationToken>())).ThrowsAsync(new InvalidOperationException("db down"));
         var r = await Sut().RegisterAsync(Req());
         Assert.False(r.Succeeded);
-        Assert.Contains("Nothing was saved", r.Errors[0]);
+        Assert.Equal("signup.errors.failedNothingSaved", r.Errors[0]);
         _tx.Verify(t => t.RollbackAsync(It.IsAny<CancellationToken>()), Times.Once);
         Assert.DoesNotContain("db down", r.Errors[0]);
     }
@@ -179,7 +180,7 @@ public class ClientRegistrationServiceTests
         _uow.Setup(u => u.SaveChangesAsync(It.IsAny<CancellationToken>())).ThrowsAsync(new InvalidOperationException("dup"));
         var failed = await Sut().RegisterAsync(Req());
         Assert.False(failed.Succeeded);
-        Assert.Contains("try again", failed.Errors[0]);
+        Assert.Equal("signup.errors.failed", failed.Errors[0]);
     }
 
     [Fact]
@@ -296,9 +297,9 @@ public class TikTokIntegrationServiceTests
         await Sut().GetAsync(_clientId);
         Assert.False(_row!.IsHealthy);
         Assert.NotNull(_row.LastProblemMessage);
-        _notifications.Verify(n => n.CreateAsync(_clientId, NotificationType.IntegrationUnhealthy, "TikTok connection needs attention", It.IsAny<string?>(), null, null, null, null, "/settings/integrations", It.IsAny<CancellationToken>()), Times.Once);
+        _notifications.Verify(n => n.CreateAsync(_clientId, NotificationType.IntegrationUnhealthy, It.Is<NotificationText>(t => TextKit.English(t).Title == "TikTok connection needs attention"), null, null, null, null, "/settings/integrations", It.IsAny<CancellationToken>()), Times.Once);
         await Sut().GetAsync(_clientId);
-        _notifications.Verify(n => n.CreateAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
+        _notifications.Verify(n => n.CreateAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<NotificationText>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

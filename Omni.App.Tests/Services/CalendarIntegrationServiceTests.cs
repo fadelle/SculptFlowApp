@@ -132,7 +132,7 @@ public class CalendarIntegrationServiceTests
         Connected();
         _google.Setup(g => g.ListCalendarsAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ThrowsAsync(new HttpRequestException("boom"));
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => Sut().RequestRefreshCalendarsAsync(_clientId, CalendarProvider.Google));
-        Assert.Contains("boom", ex.Message);
+        Assert.Contains("boom", TextKit.English(ex));
         Assert.False(_row!.IsHealthy);
         Assert.Equal("boom", _row.LastProblemMessage);
     }
@@ -228,11 +228,11 @@ public class CalendarIntegrationServiceTests
 
         await Sut().ApplySyncCallbackAsync(request);
         Assert.Equal((BookingCalendarSyncStatus.Failed, "quota", false), (sync.Status, sync.LastError, integ.IsHealthy));
-        _notifications.Verify(n => n.CreateAsync(_clientId, NotificationType.IntegrationUnhealthy, "Google Calendar calendar sync needs attention", "quota",
+        _notifications.Verify(n => n.CreateAsync(_clientId, NotificationType.IntegrationUnhealthy, It.Is<NotificationText>(t => TextKit.Reads(t, "Google Calendar calendar sync needs attention", "quota")),
             null, null, null, null, "/settings/calendar-integrations", It.IsAny<CancellationToken>()), Times.Once);
 
         await Sut().ApplySyncCallbackAsync(request); // already unhealthy: no second notification
-        _notifications.Verify(n => n.CreateAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
+        _notifications.Verify(n => n.CreateAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<NotificationText>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

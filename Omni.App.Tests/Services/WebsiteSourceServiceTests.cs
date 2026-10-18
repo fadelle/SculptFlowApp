@@ -82,7 +82,7 @@ public class WebsiteSourceServiceTests
 
         _websites.Setup(w => w.CountSourcesAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(3);
         var ex = await Assert.ThrowsAsync<ArgumentException>(() => Sut().CreateAsync(_clientId, new CreateWebsiteSourceRequest("https://8.8.8.8", null, null)));
-        Assert.Contains("up to 3 websites", ex.Message);
+        Assert.Contains("up to 3 websites", TextKit.English(ex));
 
         _websites.Setup(w => w.CountSourcesAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(0);
         _websites.Setup(w => w.SourceUrlExistsAsync(_clientId, "https://8.8.8.8/", It.IsAny<CancellationToken>())).ReturnsAsync(true);

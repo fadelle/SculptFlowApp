@@ -332,7 +332,7 @@ public class AiControllerTests
 
         _bookings.Setup(a => a.BookAvailableSlotAsync(It.IsAny<CreateBookingRequest>(), It.IsAny<CancellationToken>())).ThrowsAsync(new SlotUnavailableException("taken"));
         Assert.Equal("SLOT_UNAVAILABLE", Result(Sut().BookSlot(_clientId, request, default)).Code);
-        _bookings.Setup(a => a.BookAvailableSlotAsync(It.IsAny<CreateBookingRequest>(), It.IsAny<CancellationToken>())).ThrowsAsync(new ArgumentException("Contact not found for this client."));
+        _bookings.Setup(a => a.BookAvailableSlotAsync(It.IsAny<CreateBookingRequest>(), It.IsAny<CancellationToken>())).ThrowsAsync(new ArgumentException("contacts.errors.notFound"));
         Assert.Equal("CONTACT_NOT_FOUND", Result(Sut().BookSlot(_clientId, request, default)).Code);
         _bookings.Setup(a => a.BookAvailableSlotAsync(It.IsAny<CreateBookingRequest>(), It.IsAny<CancellationToken>())).ThrowsAsync(new ArgumentException("Service inactive"));
         Assert.Equal("INVALID_REQUEST", Result(Sut().BookSlot(_clientId, request, default)).Code);

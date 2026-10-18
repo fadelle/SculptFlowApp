@@ -5,6 +5,7 @@ using Omni.App.Entities.Requests.Catalog;
 using Omni.App.Entities.Responses.Catalog;
 using Omni.App.Persistence.Contracts;
 using Omni.App.Persistence.Contracts.Catalog;
+using Omni.App.Common.Helpers;
 
 namespace Omni.App.Business.Services.Catalog;
 
@@ -94,11 +95,11 @@ public class CatalogService : ICatalogService
 
         if (service is null)
         {
-            throw new ArgumentException("Service not found for this client.");
+            throw new ArgumentException("services.errors.notFound");
         }
         if (!service.IsActive)
         {
-            throw new ArgumentException($"Service '{service.Name}' is inactive and can't be used for new activity.");
+            throw new ArgumentException("services.errors.inactive").WithArgs(service.Name);
         }
     }
 
@@ -106,7 +107,7 @@ public class CatalogService : ICatalogService
     {
         if (await _services.NameExistsAsync(clientId, name, exceptId, ct))
         {
-            throw new ArgumentException($"A service named '{name}' already exists.");
+            throw new ArgumentException("services.errors.nameTaken").WithArgs(name);
         }
     }
 
@@ -117,16 +118,16 @@ public class CatalogService : ICatalogService
         var trimmedCode = string.IsNullOrWhiteSpace(code) ? null : code.Trim();
         var trimmedDescription = string.IsNullOrWhiteSpace(description) ? null : description.Trim();
 
-        if (trimmedName.Length == 0) throw new ArgumentException("Name is required.");
-        if (trimmedName.Length > MaxNameLength) throw new ArgumentException($"Name must be {MaxNameLength} characters or fewer.");
-        if (trimmedCode is { Length: > MaxCodeLength }) throw new ArgumentException($"Code must be {MaxCodeLength} characters or fewer.");
+        if (trimmedName.Length == 0) throw new ArgumentException("services.errors.nameRequired");
+        if (trimmedName.Length > MaxNameLength) throw new ArgumentException("services.errors.nameTooLong").WithArgs(MaxNameLength);
+        if (trimmedCode is { Length: > MaxCodeLength }) throw new ArgumentException("services.errors.codeTooLong").WithArgs(MaxCodeLength);
         if (trimmedDescription is { Length: > MaxDescriptionLength })
         {
-            throw new ArgumentException($"Description must be {MaxDescriptionLength} characters or fewer — put detailed information in the Knowledge Base.");
+            throw new ArgumentException("services.errors.descriptionTooLong").WithArgs(MaxDescriptionLength);
         }
         if (bookingDuration is < 1 or > MaxDurationMinutes)
         {
-            throw new ArgumentException($"Booking duration must be between 1 and {MaxDurationMinutes} minutes.");
+            throw new ArgumentException("services.errors.durationRange").WithArgs(MaxDurationMinutes);
         }
 
         return (trimmedName, trimmedCode, trimmedDescription);

@@ -129,7 +129,7 @@ public class ChannelIntegrationServiceTests
         _graph.Setup(g => g.GetClientWhatsAppBusinessAccountsAsync("tok", It.IsAny<CancellationToken>())).ReturnsAsync(new List<ClientWabaInfo> { new("b", "Biz", "W1", "WABA", "o") });
         _graph.Setup(g => g.GetPhoneNumbersForWabaAsync("W1", "tok", It.IsAny<CancellationToken>())).ReturnsAsync(new List<WabaPhoneNumberInfo>());
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => Sut().ConnectWhatsAppAsync(new ConnectWhatsAppRequest(_clientId, AccessToken: "tok")));
-        Assert.Contains("WABA", ex.Message);
+        Assert.Contains("WABA", TextKit.English(ex));
         _entitlements.Setup(e => e.EnsureCanConnectChannelAsync(_clientId, ChannelType.WhatsApp, It.IsAny<CancellationToken>())).ThrowsAsync(new EntitlementDeniedException("x", "limit"));
         await Assert.ThrowsAsync<EntitlementDeniedException>(() => Sut().ConnectWhatsAppAsync(new ConnectWhatsAppRequest(_clientId, AccessToken: "tok")));
     }
@@ -213,7 +213,7 @@ public class TelegramIntegrationServiceTests
     {
         _repo.Setup(r => r.IsTelegramBotConnectedElsewhereAsync("555", _clientId, It.IsAny<CancellationToken>())).ReturnsAsync(true);
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => Sut().ConnectAsync(_clientId, GoodToken));
-        Assert.Contains("another client", ex.Message);
+        Assert.Contains("another business", TextKit.English(ex));
         _client.Verify(c => c.SetWebhookAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
 
         _configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["App:PublicBaseUrl"] = "http://insecure.example.com" }).Build();

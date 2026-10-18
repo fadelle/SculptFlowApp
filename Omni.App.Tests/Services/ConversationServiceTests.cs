@@ -262,13 +262,13 @@ public class ConversationServiceTests
         var c = Conv();
         _contacts.Setup(l => l.GetFullNameAsync(_contactId, It.IsAny<CancellationToken>())).ReturnsAsync("Ann Lee");
         await Sut().HandoffToHumanAsync(_clientId, c.Id, "wants a price");
-        _notifications.Verify(n => n.CreateAsync(_clientId, NotificationType.Handoff, "AI handed off to your team", "Ann Lee needs your team's attention: wants a price",
+        _notifications.Verify(n => n.CreateAsync(_clientId, NotificationType.Handoff, It.Is<NotificationText>(t => TextKit.Reads(t, "AI handed off to your team", "Ann Lee needs your team's attention: wants a price")),
             _contactId, c.Id, null, null, $"/inbox?conversationId={c.Id}", It.IsAny<CancellationToken>()), Times.Once);
         _events.Verify(e => e.Log(_clientId, EventTypes.HumanHandoff, null, c.Id, null, MessageOrigin.Ai, "{\"reason\":\"wants a price\"}"), Times.Once);
 
         _conversations.Setup(r => r.IsInHumanModeAsync(_clientId, c.Id, It.IsAny<CancellationToken>())).ReturnsAsync(true);
         await Sut().HandoffToHumanAsync(_clientId, c.Id, null);
-        _notifications.Verify(n => n.CreateAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
+        _notifications.Verify(n => n.CreateAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<NotificationText>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Theory]
@@ -299,7 +299,7 @@ public class ConversationServiceTests
     {
         var c = Conv();
         await Sut().HandoffToHumanAsync(_clientId, c.Id, " ");
-        _notifications.Verify(n => n.CreateAsync(_clientId, NotificationType.Handoff, It.IsAny<string>(), "A conversation needs your team's attention.", It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
+        _notifications.Verify(n => n.CreateAsync(_clientId, NotificationType.Handoff, It.Is<NotificationText>(t => TextKit.Reads(t, null, "A conversation needs your team's attention.")), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
         Assert.Null(await Sut().HandoffToHumanAsync(_clientId, Guid.NewGuid(), "x"));
     }
 

@@ -4,6 +4,7 @@ using Omni.App.Business.Contracts.Services.Channels;
 using Omni.App.Common.Exceptions;
 using Omni.App.Entities.Requests.Channels;
 using Omni.App.Entities.Responses.Channels;
+using Omni.App.Controllers.Filters;
 
 namespace Omni.App.Controllers.Client;
 
@@ -16,6 +17,9 @@ namespace Omni.App.Controllers.Client;
 [Route("api/channel-integrations")]
 public class ChannelIntegrationsController : DashboardApiController
 {
+    private const string WhatsAppConnectFailedKey = "channels.errors.whatsAppConnectFailed";
+    private const string FacebookConnectFailedKey = "channels.errors.facebookConnectFailed";
+
     private readonly IChannelIntegrationService _integrations;
     private readonly ITelegramIntegrationService _telegram;
 
@@ -63,11 +67,11 @@ public class ChannelIntegrationsController : DashboardApiController
         }
         catch (Exception ex) when (ex is ArgumentException or TelegramApiException)
         {
-            return BadRequest(new { error = ex.Message });
+            return BadRequest(new { error = ApiErrorsAttribute.Localize(HttpContext, ex) });
         }
         catch (InvalidOperationException ex)
         {
-            return Conflict(new { error = ex.Message });
+            return Conflict(new { error = ApiErrorsAttribute.Localize(HttpContext, ex) });
         }
     }
 
@@ -105,8 +109,8 @@ public class ChannelIntegrationsController : DashboardApiController
         }
         catch (Exception ex) when (ex is MetaGraphApiException or InvalidOperationException)
         {
-            return Problem(detail: ex.Message, statusCode: StatusCodes.Status502BadGateway,
-                title: "Could not complete WhatsApp connection.");
+            return Problem(detail: ApiErrorsAttribute.Localize(HttpContext, ex), statusCode: StatusCodes.Status502BadGateway,
+                title: ApiErrorsAttribute.Text(HttpContext, WhatsAppConnectFailedKey));
         }
     }
 
@@ -124,8 +128,8 @@ public class ChannelIntegrationsController : DashboardApiController
         }
         catch (Exception ex) when (ex is MetaGraphApiException or InvalidOperationException)
         {
-            return Problem(detail: ex.Message, statusCode: StatusCodes.Status502BadGateway,
-                title: "Could not complete Facebook connection.");
+            return Problem(detail: ApiErrorsAttribute.Localize(HttpContext, ex), statusCode: StatusCodes.Status502BadGateway,
+                title: ApiErrorsAttribute.Text(HttpContext, FacebookConnectFailedKey));
         }
     }
 }

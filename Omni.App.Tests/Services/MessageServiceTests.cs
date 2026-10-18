@@ -103,7 +103,7 @@ public class MessageServiceTests
         _billing.Verify(b => b.SendFailedAsync(_hold, It.IsAny<CancellationToken>()), Times.Once);
         _billing.Verify(b => b.SentAsync(It.IsAny<MessageBillingHold?>(), It.IsAny<CancellationToken>()), Times.Never);
         _messages.Verify(m => m.Add(It.IsAny<Message>()), Times.Never);
-        _notifications.Verify(n => n.CreateAsync(_clientId, NotificationType.OutboundMessageFailed, It.IsAny<string>(), "Message failed to send to Ann Lee.", _contactId, c.Id, null, null, It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
+        _notifications.Verify(n => n.CreateAsync(_clientId, NotificationType.OutboundMessageFailed, It.Is<NotificationText>(t => TextKit.Reads(t, null, "Message failed to send to Ann Lee.")), _contactId, c.Id, null, null, It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -154,7 +154,7 @@ public class MessageServiceTests
         _sender.Setup(s => s.SendTextAsync(It.IsAny<Conversation>(), It.IsAny<string>(), It.IsAny<CancellationToken>())).ThrowsAsync(new ChannelSendException("x"));
         await Assert.ThrowsAsync<ChannelSendException>(() => Sut().SendAiReplyAsync(_clientId, c.Id, "hi"));
         _billing.Verify(b => b.SendFailedAsync(_hold, It.IsAny<CancellationToken>()), Times.Once);
-        _notifications.Verify(n => n.CreateAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+        _notifications.Verify(n => n.CreateAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<NotificationText>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     // ---------------------------------------------------------------- templates
@@ -220,13 +220,13 @@ public class MessageServiceTests
         var pending = Template(WhatsAppTemplateStatus.Pending);
         Setup(pending);
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => Sut().SendTemplateAsync(_clientId, c.Id, new SendTemplateMessageRequest(pending.Id, null)));
-        Assert.Contains("isn't approved", ex.Message);
+        Assert.Contains("isn't approved", TextKit.English(ex));
 
         _contact.Phone = null;
         var ok = Template();
         Setup(ok);
         var ex3 = await Assert.ThrowsAsync<InvalidOperationException>(() => Sut().SendTemplateAsync(_clientId, c.Id, new SendTemplateMessageRequest(ok.Id, null)));
-        Assert.Contains("no phone number", ex3.Message);
+        Assert.Contains("no phone number", TextKit.English(ex3));
         _billing.Verify(b => b.ReserveOutboundAsync(It.IsAny<OutboundMessageBillingContext>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -240,7 +240,7 @@ public class MessageServiceTests
             .ThrowsAsync(new ChannelSendException("rejected"));
         await Assert.ThrowsAsync<ChannelSendException>(() => Sut().SendTemplateAsync(_clientId, c.Id, new SendTemplateMessageRequest(t.Id, null)));
         _billing.Verify(b => b.SendFailedAsync(_hold, It.IsAny<CancellationToken>()), Times.Once);
-        _notifications.Verify(n => n.CreateAsync(_clientId, NotificationType.OutboundMessageFailed, It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
+        _notifications.Verify(n => n.CreateAsync(_clientId, NotificationType.OutboundMessageFailed, It.IsAny<NotificationText>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -431,8 +431,8 @@ public class MessageServiceTests
         await Sut().IngestAsync(Ingest(c.Id, IngestEventType.CustomerMessage, newContact: true));
 
         Assert.NotNull(recipient.RepliedAt);
-        _notifications.Verify(n => n.CreateAsync(_clientId, NotificationType.NewContact, "New contact", "Ann Lee sent their first message.", _contactId, c.Id, null, null, It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
-        _notifications.Verify(n => n.CreateAsync(_clientId, NotificationType.CampaignReply, "Campaign reply", "Ann Lee replied to \"Spring\".", _contactId, c.Id, null, null, It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
+        _notifications.Verify(n => n.CreateAsync(_clientId, NotificationType.NewContact, It.Is<NotificationText>(t => TextKit.Reads(t, "New contact", "Ann Lee sent their first message.")), _contactId, c.Id, null, null, It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
+        _notifications.Verify(n => n.CreateAsync(_clientId, NotificationType.CampaignReply, It.Is<NotificationText>(t => TextKit.Reads(t, "Campaign reply", "Ann Lee replied to \"Spring\".")), _contactId, c.Id, null, null, It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // ---------------------------------------------------------------- status updates
@@ -501,12 +501,12 @@ public class MessageServiceTests
         await Sut().IngestAsync(Status("failed", "131026", "Undeliverable"));
         Assert.Equal(("failed", "131026", "Undeliverable"), (m.DeliveryStatus, m.FailureCode, m.FailureReason));
         Assert.NotNull(m.FailedAt);
-        _notifications.Verify(n => n.CreateAsync(_clientId, NotificationType.OutboundMessageFailed, "Message failed to send", "Message failed to send to Ann Lee.", _contactId, m.ConversationId, null, null, It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
+        _notifications.Verify(n => n.CreateAsync(_clientId, NotificationType.OutboundMessageFailed, It.Is<NotificationText>(t => TextKit.Reads(t, "Message failed to send", "Message failed to send to Ann Lee.")), _contactId, m.ConversationId, null, null, It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
 
         await Sut().IngestAsync(Status("sent")); // not a repeat of failed; but a second failure must not notify again
         m.DeliveryStatus = "sent";
         await Sut().IngestAsync(Status("failed"));
-        _notifications.Verify(n => n.CreateAsync(_clientId, NotificationType.OutboundMessageFailed, It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
+        _notifications.Verify(n => n.CreateAsync(_clientId, NotificationType.OutboundMessageFailed, It.IsAny<NotificationText>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

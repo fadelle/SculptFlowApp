@@ -5,6 +5,8 @@ using Microsoft.AspNetCore.Mvc;
 using Omni.App.Business.Contracts.HttpClients.TikTok;
 using Omni.App.Business.Contracts.Managers;
 using Omni.App.Business.Contracts.Services.TikTok;
+using Microsoft.Extensions.Localization;
+using Omni.App.Common.Helpers;
 
 namespace Omni.App.Controllers.Integrations;
 
@@ -29,12 +31,15 @@ public class TikTokOAuthController : Controller
     private readonly ITimeLimitedDataProtector _stateProtector;
     private readonly ILogger<TikTokOAuthController> _logger;
     private readonly IConfigManager _config;
+    private readonly IStringLocalizer _text;
 
     public TikTokOAuthController(
         ICurrentClientContext clientContext, ITikTokIntegrationService tiktok, ITikTokProviderClient provider,
-        IConfiguration configuration, IDataProtectionProvider dataProtection, ILogger<TikTokOAuthController> logger, IConfigManager config)
+        IConfiguration configuration, IDataProtectionProvider dataProtection, ILogger<TikTokOAuthController> logger, IConfigManager config,
+        IStringLocalizer text)
     {
         _config = config;
+        _text = text;
         _clientContext = clientContext;
         _tiktok = tiktok;
         _provider = provider;
@@ -66,7 +71,7 @@ public class TikTokOAuthController : Controller
             // Missing ClientKey/ClientSecret (not configured yet) or a bad App:PublicBaseUrl — an
             // operator/config problem, not something retrying will fix, so don't mark the row Pending for it.
             _logger.LogError(ex, "TikTok OAuth connect could not start.");
-            return RedirectWithError($"TikTok isn't set up yet on this server: {ex.Message}");
+            return RedirectWithError(_text["oauth.errors.notSetUp", TikTokName, _text.Localize(ex)].Value);
         }
     }
 
@@ -94,8 +99,9 @@ public class TikTokOAuthController : Controller
 
         if (oauthState is null || oauthState.ClientId != clientId.Value)
         {
-            await _tiktok.FailConnectAsync(clientId.Value, "The connection attempt expired or was invalid — please try again.", ct);
-            return RedirectWithError("The connection attempt expired or was invalid — please try again.");
+            var expired = _text["oauth.errors.expired"].Value;
+            await _tiktok.FailConnectAsync(clientId.Value, expired, ct);
+            return RedirectWithError(expired);
         }
 
         if (!string.IsNullOrEmpty(error))
@@ -107,8 +113,9 @@ public class TikTokOAuthController : Controller
 
         if (string.IsNullOrEmpty(code))
         {
-            await _tiktok.FailConnectAsync(clientId.Value, "TikTok did not return an authorization code.", ct);
-            return RedirectWithError("TikTok did not return an authorization code.");
+            var noCode = _text["oauth.errors.noCode", TikTokName].Value;
+            await _tiktok.FailConnectAsync(clientId.Value, noCode, ct);
+            return RedirectWithError(noCode);
         }
 
         try
@@ -121,13 +128,16 @@ public class TikTokOAuthController : Controller
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "TikTok OAuth code exchange failed.");
-            await _tiktok.FailConnectAsync(clientId.Value, $"Couldn't finish connecting: {ex.Message}", ct);
-            return RedirectWithError($"Couldn't finish connecting: {ex.Message}");
+            var failed = _text["oauth.errors.connectFailed", _text.Localize(ex)].Value;
+            await _tiktok.FailConnectAsync(clientId.Value, failed, ct);
+            return RedirectWithError(failed);
         }
 
-        TempData["StatusMessage"] = "TikTok connected.";
+        TempData["StatusMessage"] = _text["oauth.connected", TikTokName].Value;
         return Redirect(SettingsPagePath);
     }
+
+    private const string TikTokName = "TikTok";
 
     private IActionResult RedirectWithError(string message)
     {

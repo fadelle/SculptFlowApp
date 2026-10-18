@@ -75,7 +75,7 @@ else
         <div class="inbox-contact-info-row"><span>@T["knowledgeSettings.tech.model"]</span><strong>@Model.Current.EmbeddingModel</strong></div>
         <div class="inbox-contact-info-row"><span>@T["knowledgeSettings.tech.dimension"]</span><strong>@Model.Current.VectorDimension</strong></div>
         <div class="inbox-contact-info-row"><span>@T["knowledgeSettings.tech.method"]</span><strong>@KnowledgeSimilarityMethod.Label(Model.Current.SimilarityMethod)</strong></div>
-        <div class="inbox-contact-info-row"><span>@T["knowledgeSettings.tech.index"]</span><strong>@KnowledgeVectorIndexType.Label(Model.Current.VectorIndexType)</strong></div>
+        <div class="inbox-contact-info-row"><span>@T["knowledgeSettings.tech.index"]</span><strong>@(string.Equals(Model.Current.VectorIndexType, KnowledgeVectorIndexType.None, StringComparison.OrdinalIgnoreCase) ? T["knowledgeSettings.tech.indexNone"].Value : KnowledgeVectorIndexType.Label(Model.Current.VectorIndexType))</strong></div>
         <div class="cell-sub mt-1">
             @T["knowledgeSettings.tech.help"]
             @T.Html("knowledgeSettings.tech.lastUpdated", LocalTimeHelper.Time(Model.Current.UpdatedAt, "datetime-year"))

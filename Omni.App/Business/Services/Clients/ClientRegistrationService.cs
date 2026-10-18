@@ -22,7 +22,8 @@ namespace Omni.App.Business.Services.Clients;
 
 public partial class ClientRegistrationService : IClientRegistrationService
 {
-    private const int MaxNameLength = 200;
+    /// <summary>Longest full or client name; the only argument of the name-length error keys.</summary>
+    public const int MaxNameLength = 200;
     private const int MaxSlugLength = 60;
     private const int MaxSlugAttempts = 3;
 
@@ -54,8 +55,19 @@ public partial class ClientRegistrationService : IClientRegistrationService
         _subscriptions = subscriptions;
     }
 
-    /// <summary>What a refused signup says while Accounts:SignupEnabled is off.</summary>
-    public const string SignupClosedMessage = "New client sign-ups are closed right now. Contact Omni to get an account.";
+    /// <summary>Strings-file key of what a refused signup says while Accounts:SignupEnabled is off.</summary>
+    public const string SignupClosedKey = "signup.errors.closed";
+
+    // Strings-file keys of the other refusals (the pages localize them, with MaxNameLength as {0}).
+    private const string FullNameRequiredKey = "signup.errors.fullNameRequired";
+    private const string ClientNameRequiredKey = "signup.errors.clientNameRequired";
+    private const string FullNameTooLongKey = "signup.errors.fullNameTooLong";
+    private const string ClientNameTooLongKey = "signup.errors.clientNameTooLong";
+    private const string EmailInvalidKey = "signup.errors.emailInvalid";
+    private const string PasswordRequiredKey = "signup.errors.passwordRequired";
+    private const string PasswordMismatchKey = "signup.errors.passwordMismatch";
+    private const string FailedNothingSavedKey = "signup.errors.failedNothingSaved";
+    private const string FailedKey = "signup.errors.failed";
 
     public bool IsSignupOpen => _config.AccountsSignupEnabled;
 
@@ -64,22 +76,22 @@ public partial class ClientRegistrationService : IClientRegistrationService
 
     public async Task<ClientRegistrationResult> RegisterAsync(RegisterClientRequest request, CancellationToken ct = default)
     {
-        if (!IsSignupOpen) return ClientRegistrationResult.Fail(SignupClosedMessage);
+        if (!IsSignupOpen) return ClientRegistrationResult.Fail(SignupClosedKey);
 
         var fullName = (request.FullName ?? string.Empty).Trim();
         var clientName = (request.ClientName ?? string.Empty).Trim();
         var email = (request.Email ?? string.Empty).Trim();
         var password = request.Password ?? string.Empty;
 
-        if (fullName.Length == 0) return ClientRegistrationResult.Fail("Full name is required.");
-        if (clientName.Length == 0) return ClientRegistrationResult.Fail("Client name is required.");
-        if (fullName.Length > MaxNameLength) return ClientRegistrationResult.Fail($"Full name must be {MaxNameLength} characters or fewer.");
-        if (clientName.Length > MaxNameLength) return ClientRegistrationResult.Fail($"Client name must be {MaxNameLength} characters or fewer.");
-        if (!EmailAddress.IsValid(email)) return ClientRegistrationResult.Fail("Enter a valid email address.");
-        if (password.Length == 0) return ClientRegistrationResult.Fail("Password is required.");
+        if (fullName.Length == 0) return ClientRegistrationResult.Fail(FullNameRequiredKey);
+        if (clientName.Length == 0) return ClientRegistrationResult.Fail(ClientNameRequiredKey);
+        if (fullName.Length > MaxNameLength) return ClientRegistrationResult.Fail(FullNameTooLongKey);
+        if (clientName.Length > MaxNameLength) return ClientRegistrationResult.Fail(ClientNameTooLongKey);
+        if (!EmailAddress.IsValid(email)) return ClientRegistrationResult.Fail(EmailInvalidKey);
+        if (password.Length == 0) return ClientRegistrationResult.Fail(PasswordRequiredKey);
         if (!string.Equals(password, request.ConfirmPassword, StringComparison.Ordinal))
         {
-            return ClientRegistrationResult.Fail("The passwords don't match.");
+            return ClientRegistrationResult.Fail(PasswordMismatchKey);
         }
         if (!await _businessTypes.IsActiveAsync(request.BusinessTypeCode, ct)) return ClientRegistrationResult.Fail(BusinessTypeRequiredKey);
 
@@ -88,17 +100,17 @@ public partial class ClientRegistrationService : IClientRegistrationService
 
     public async Task<ClientRegistrationResult> RegisterExternalAsync(RegisterExternalClientRequest request, CancellationToken ct = default)
     {
-        if (!IsSignupOpen) return ClientRegistrationResult.Fail(SignupClosedMessage);
+        if (!IsSignupOpen) return ClientRegistrationResult.Fail(SignupClosedKey);
 
         var fullName = (request.FullName ?? string.Empty).Trim();
         var clientName = (request.ClientName ?? string.Empty).Trim();
         var email = (request.Email ?? string.Empty).Trim();
 
         if (fullName.Length == 0) fullName = email; // a provider that sends no name: fall back to the email
-        if (clientName.Length == 0) return ClientRegistrationResult.Fail("Client name is required.");
+        if (clientName.Length == 0) return ClientRegistrationResult.Fail(ClientNameRequiredKey);
         if (fullName.Length > MaxNameLength) fullName = fullName[..MaxNameLength];
-        if (clientName.Length > MaxNameLength) return ClientRegistrationResult.Fail($"Client name must be {MaxNameLength} characters or fewer.");
-        if (!EmailAddress.IsValid(email)) return ClientRegistrationResult.Fail("Enter a valid email address.");
+        if (clientName.Length > MaxNameLength) return ClientRegistrationResult.Fail(ClientNameTooLongKey);
+        if (!EmailAddress.IsValid(email)) return ClientRegistrationResult.Fail(EmailInvalidKey);
         if (!await _businessTypes.IsActiveAsync(request.BusinessTypeCode, ct)) return ClientRegistrationResult.Fail(BusinessTypeRequiredKey);
 
         return await CreateAccountAsync(fullName, clientName, email, request.BusinessTypeCode!.Trim(), async user =>
@@ -132,7 +144,12 @@ public partial class ClientRegistrationService : IClientRegistrationService
                 if (!created.Succeeded)
                 {
                     await RollbackAsync(tx, ct);
-                    return ClientRegistrationResult.Fail(created.Errors.Select(e => e.Description));
+                    // Identity's descriptions are already in the request's language (LocalizedIdentityErrorDescriber).
+                    return ClientRegistrationResult.Fail(created.Errors.Select(e => e.Description)) with
+                    {
+                        EmailTaken = created.Errors.Any(e => e.Code is nameof(IdentityErrorDescriber.DuplicateEmail)
+                            or nameof(IdentityErrorDescriber.DuplicateUserName))
+                    };
                 }
 
                 var client = new Client
@@ -192,11 +209,11 @@ public partial class ClientRegistrationService : IClientRegistrationService
                 // account/client exists — tell the user to retry instead of showing an error page.
                 await RollbackAsync(tx, ct);
                 _logger.LogError(ex, "Client registration failed and was rolled back.");
-                return ClientRegistrationResult.Fail("We couldn't finish creating your account. Nothing was saved — please try again.");
+                return ClientRegistrationResult.Fail(FailedNothingSavedKey);
             }
         }
 
-        return ClientRegistrationResult.Fail("We couldn't finish creating your account. Please try again.");
+        return ClientRegistrationResult.Fail(FailedKey);
     }
 
     /// <summary>With billing on and Billing:SignupPlanCode set, a new client starts on that plan with its first period

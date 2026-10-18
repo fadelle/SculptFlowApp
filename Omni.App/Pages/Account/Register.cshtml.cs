@@ -7,6 +7,7 @@ using Omni.App.Business.Contracts.Services.BusinessTypes;
 using Omni.App.Business.Contracts.Services.Clients;
 using Omni.App.Entities.Dtos.BusinessTypes;
 using Omni.App.Entities.Requests.Clients;
+using Omni.App.Business.Services.Clients;
 
 namespace Omni.App.Pages.Account;
 
@@ -60,6 +61,9 @@ public class RegisterModel : PageModel
 
     public string? ErrorMessage { get; set; }
 
+    /// <summary>The email already has an account: the page offers to sign in instead.</summary>
+    public bool EmailTaken { get; private set; }
+
     /// <summary>False while Accounts:SignupEnabled is off: the page then explains that and shows no form.</summary>
     public bool SignupOpen => _registration.IsSignupOpen;
 
@@ -75,7 +79,8 @@ public class RegisterModel : PageModel
 
         if (!result.Succeeded)
         {
-            ErrorMessage = string.Join(" ", result.Errors.Select(e => _text[e].Value));
+            EmailTaken = result.EmailTaken;
+            ErrorMessage = string.Join(" ", result.Errors.Select(e => _text[e, ClientRegistrationService.MaxNameLength].Value));
             BusinessTypes = await _businessTypes.ListOptionsAsync(ct);
             return Page();
         }

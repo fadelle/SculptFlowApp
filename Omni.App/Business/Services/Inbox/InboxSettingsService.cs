@@ -29,7 +29,7 @@ public class InboxSettingsService : IInboxSettingsService
     public async Task<InboxSettingsDto> GetAsync(Guid clientId, CancellationToken ct = default)
     {
         // All three reads are cached (inbox settings and client table caches, entitlements), so this is cheap per message.
-        _ = await _clients.GetReadOnlyAsync(clientId, ct) ?? throw new KeyNotFoundException("Client not found.");
+        _ = await _clients.GetReadOnlyAsync(clientId, ct) ?? throw new KeyNotFoundException("clients.errors.notFound");
         var row = await _settings.GetForClientReadOnlyAsync(clientId, ct) ?? new InboxSettings();
         var entitlements = await _entitlements.GetAsync(clientId, ct);
         return new InboxSettingsDto(entitlements.CanUseAiAssistant, row.AiBotNewConversations, row.AiBotReopenedConversations);
@@ -41,7 +41,7 @@ public class InboxSettingsService : IInboxSettingsService
     public async Task UpdateAsync(Guid clientId, UpdateInboxSettingsRequest request, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(request);
-        _ = await _clients.GetReadOnlyAsync(clientId, ct) ?? throw new KeyNotFoundException("Client not found.");
+        _ = await _clients.GetReadOnlyAsync(clientId, ct) ?? throw new KeyNotFoundException("clients.errors.notFound");
 
         var now = DateTimeOffset.UtcNow;
         var row = await _settings.GetForClientAsync(clientId, ct);

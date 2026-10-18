@@ -246,7 +246,7 @@ public class NotificationServiceTests
     private readonly Mock<IUnitOfWork> _uow = new();
     private readonly Mock<IInboxNotifier> _notifier = new();
 
-    private NotificationService Sut() => new(_repo.Object, _uow.Object, _notifier.Object);
+    private NotificationService Sut(IStringLocalizer? text = null) => new(_repo.Object, _uow.Object, _notifier.Object, text ?? TextKit.Localizer());
 
     [Fact]
     public async Task Create_saves_and_pushes_live()
@@ -254,8 +254,12 @@ public class NotificationServiceTests
         Notification? added = null;
         _repo.Setup(r => r.Add(It.IsAny<Notification>())).Callback<Notification>(n => added = n);
         var contact = Guid.NewGuid();
-        await Sut().CreateAsync(_clientId, NotificationType.NewContact, "New contact", "msg", contactId: contact, link: "/x");
-        Assert.Equal((NotificationType.NewContact, "New contact", contact, false, "/x"), (added!.Type, added.Title, added.ContactId, added.IsRead, added.Link));
+        await Sut().CreateAsync(_clientId, NotificationType.NewContact,
+            NotificationText.Of("notifications.newContact.title", "notifications.newContact.message", TextArg.Of("notifications.anyone.newContact")),
+            contactId: contact, link: "/x");
+        Assert.Equal((NotificationType.NewContact, "notifications.newContact.title", "notifications.newContact.message", contact, false, "/x"),
+            (added!.Type, added.Title, added.Message, added.ContactId, added.IsRead, added.Link));
+        Assert.Equal(["[[key:notifications.anyone.newContact]]"], added.TextArgs);
         _notifier.Verify(n => n.NotificationCreatedAsync(_clientId, It.Is<NotificationResponse>(r => r.Id == added.Id), It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -263,12 +267,12 @@ public class NotificationServiceTests
     public async Task Create_never_throws_even_when_saving_or_pushing_fails()
     {
         _uow.Setup(u => u.SaveChangesAsync(It.IsAny<CancellationToken>())).ThrowsAsync(new InvalidOperationException("db"));
-        await Sut().CreateAsync(_clientId, "t", "title", null);
+        await Sut().CreateAsync(_clientId, "t", NotificationText.Of("title", null));
         _notifier.Verify(n => n.NotificationCreatedAsync(It.IsAny<Guid>(), It.IsAny<NotificationResponse>(), It.IsAny<CancellationToken>()), Times.Never);
 
         _uow.Setup(u => u.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
         _notifier.Setup(n => n.NotificationCreatedAsync(It.IsAny<Guid>(), It.IsAny<NotificationResponse>(), It.IsAny<CancellationToken>())).ThrowsAsync(new InvalidOperationException("hub"));
-        await Sut().CreateAsync(_clientId, "t", "title", null);
+        await Sut().CreateAsync(_clientId, "t", NotificationText.Of("title", null));
     }
 
     [Fact]
@@ -280,6 +284,28 @@ public class NotificationServiceTests
         Assert.Equal((1, 3, 7), (r.Items.Count, r.UnreadCount, r.TotalCount));
         _repo.Setup(x => x.CountUnreadAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(4);
         Assert.Equal(4, await Sut().GetUnreadCountAsync(_clientId));
+    }
+
+    [Fact]
+    public async Task List_shows_each_notification_in_the_readers_language_and_words()
+    {
+        var keyed = new Notification
+        {
+            Id = Guid.NewGuid(), Title = "notifications.booking.created.title", Message = "notifications.booking.created.message",
+            TextArgs = ["[[key:notifications.anyone.contact]]", "Facelift", "[[time:2026-10-18T10:00:00Z]]"] // leftover-ok: sample service name
+        };
+        var old = new Notification { Id = Guid.NewGuid(), Title = "Booking made", Message = "Ann — Facelift booked." }; // leftover-ok: sample service name
+        _repo.Setup(r => r.ListAsync(_clientId, 0, 10, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((new List<Notification> { keyed, old } as IReadOnlyList<Notification>, 2, 2));
+        var words = TermPlaceholders.Build(new Dictionary<string, TermForms>(TextKit.DefaultTerms())
+        {
+            [TermName.Contact] = new("patient", "patients"), [TermName.Booking] = new("consultation", "consultations") // leftover-ok: clinic words
+        });
+
+        var items = (await Sut(TextKit.Localizer(terms: words)).ListAsync(_clientId, 0, 10)).Items;
+
+        Assert.Equal(("Consultation made", "A patient — Facelift booked [[time:2026-10-18T10:00:00Z]]."), (items[0].Title, items[0].Message)); // leftover-ok: clinic words
+        Assert.Equal(("Booking made", "Ann — Facelift booked."), (items[1].Title, items[1].Message)); // written before keys: as stored
     }
 
     [Fact]

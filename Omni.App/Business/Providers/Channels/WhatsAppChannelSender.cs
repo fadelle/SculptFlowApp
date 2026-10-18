@@ -27,12 +27,11 @@ public class WhatsAppChannelSender : IChannelSender
         // direct API call, or a race with the window expiring must all be caught too).
         if (!conversation.IsServiceWindowOpen(DateTimeOffset.UtcNow))
         {
-            throw new ServiceWindowClosedException(
-                "The 24-hour WhatsApp customer service window is closed for this conversation — send an approved template instead.");
+            throw new ServiceWindowClosedException("inbox.errors.windowClosed");
         }
 
         var toPhone = conversation.Contact?.Phone
-            ?? throw new InvalidOperationException("This contact has no phone number on file — can't send a WhatsApp message.");
+            ?? throw new InvalidOperationException("inbox.errors.noPhone");
 
         return await _whatsApp.SendTextMessageAsync(conversation.ClientId, toPhone, text, ct);
     }

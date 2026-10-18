@@ -48,6 +48,11 @@ public sealed class ApiErrorsAttribute : ExceptionFilterAttribute
     public static string Localize(HttpContext http, Exception exception) =>
         http.RequestServices?.GetService<IStringLocalizer>().Localize(exception) ?? exception.Message;
 
+    /// <summary>A strings-file key's text in the request's language, for a controller that writes its own error body
+    /// (the key itself when there is no localizer).</summary>
+    public static string Text(HttpContext http, string key, params object[] args) =>
+        http.RequestServices?.GetService<IStringLocalizer>()?[key, args].Value ?? key;
+
     /// <summary>The HTTP status for an exception, or null to let it become a 500. Order matters: specific types first,
     /// because some of them derive from InvalidOperationException.</summary>
     public static int? StatusFor(Exception exception) => exception switch

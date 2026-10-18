@@ -8,6 +8,8 @@ using Omni.App.Persistence.Contracts;
 using Omni.App.Persistence.Contracts.Bookings;
 using Omni.App.Persistence.Contracts.Clients;
 using Omni.App.Persistence.Contracts.Catalog;
+using Omni.App.Entities.Dtos.Ui;
+using Omni.App.Common.Helpers;
 
 namespace Omni.App.Business.Services.Bookings;
 
@@ -172,7 +174,7 @@ public class AvailabilityService : IAvailabilityService
     public async Task<AvailabilitySettingsDto> GetSettingsAsync(Guid clientId, CancellationToken ct = default)
     {
         var ctx = await LoadAsync(clientId, ct)
-                  ?? throw new ArgumentException("Client not found.");
+                  ?? throw new ArgumentException("clients.errors.notFound");
         var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, ctx.Tz).DateTime);
 
         var days = Enumerable.Range(0, 7).Select(dow =>
@@ -200,28 +202,28 @@ public class AvailabilityService : IAvailabilityService
         Guid clientId, string timezone, IReadOnlyList<DayRuleDto> days, BookingRulesDto bookingRules, CancellationToken ct = default)
     {
         var client = await _clients.GetAsync(clientId, ct)
-                     ?? throw new ArgumentException("Client not found.");
+                     ?? throw new ArgumentException("clients.errors.notFound");
 
         timezone = (timezone ?? string.Empty).Trim();
         try { TimeZoneInfo.FindSystemTimeZoneById(timezone); }
-        catch { throw new ArgumentException("Unknown timezone."); }
+        catch { throw new ArgumentException("availability.errors.unknownTimeZone"); }
 
-        if (bookingRules.DefaultDurationMinutes is < 5 or > 480) throw new ArgumentException("Default booking duration must be between 5 and 480 minutes.");
-        if (bookingRules.BufferMinutes is < 0 or > 240) throw new ArgumentException("Buffer must be between 0 and 240 minutes.");
-        if (bookingRules.MinimumNoticeMinutes is < 0 or > 60 * 24 * 30) throw new ArgumentException("Minimum notice must be between 0 and 720 hours.");
-        if (bookingRules.MaxAdvanceDays is < 1 or > 365) throw new ArgumentException("Maximum advance booking must be between 1 and 365 days.");
+        if (bookingRules.DefaultDurationMinutes is < 5 or > 480) throw new ArgumentException("availability.errors.durationRange");
+        if (bookingRules.BufferMinutes is < 0 or > 240) throw new ArgumentException("availability.errors.bufferRange");
+        if (bookingRules.MinimumNoticeMinutes is < 0 or > 60 * 24 * 30) throw new ArgumentException("availability.errors.noticeRange");
+        if (bookingRules.MaxAdvanceDays is < 1 or > 365) throw new ArgumentException("availability.errors.advanceRange");
 
         var parsed = new List<(int Dow, bool Open, TimeOnly Start, TimeOnly End)>();
         foreach (var d in days)
         {
-            if (d.DayOfWeek is < 0 or > 6) throw new ArgumentException("Invalid day of week.");
+            if (d.DayOfWeek is < 0 or > 6) throw new ArgumentException("availability.errors.invalidDay");
             var okStart = TimeOnly.TryParse(d.Start, out var s);
             var okEnd = TimeOnly.TryParse(d.End, out var e);
             if (d.IsOpen)
             {
-                var name = ((DayOfWeek)d.DayOfWeek).ToString();
-                if (!okStart || !okEnd) throw new ArgumentException($"{name}: enter a start and end time.");
-                if (e <= s) throw new ArgumentException($"{name}: the end time must be after the start time.");
+                var name = TextArg.Of("days." + ((DayOfWeek)d.DayOfWeek).ToString().ToLowerInvariant());
+                if (!okStart || !okEnd) throw new ArgumentException("availability.errors.dayTimesRequired").WithArgs(name);
+                if (e <= s) throw new ArgumentException("availability.errors.dayEndBeforeStart").WithArgs(name);
             }
             else if (!okStart || !okEnd || e <= s)
             {
@@ -229,7 +231,7 @@ public class AvailabilityService : IAvailabilityService
             }
             parsed.Add((d.DayOfWeek, d.IsOpen, s, e));
         }
-        if (parsed.Select(p => p.Dow).Distinct().Count() != parsed.Count) throw new ArgumentException("Duplicate day in the weekly schedule.");
+        if (parsed.Select(p => p.Dow).Distinct().Count() != parsed.Count) throw new ArgumentException("availability.errors.duplicateDay");
 
         var now = DateTimeOffset.UtcNow;
         var rules = await _availability.ListRulesAsync(clientId, ct);
@@ -275,13 +277,13 @@ public class AvailabilityService : IAvailabilityService
         if (!isClosed)
         {
             if (!TimeOnly.TryParse(start, out var ps) || !TimeOnly.TryParse(end, out var pe))
-                throw new ArgumentException("Enter a start and end time, or mark the day closed.");
-            if (pe <= ps) throw new ArgumentException("The end time must be after the start time.");
+                throw new ArgumentException("availability.errors.dateTimesRequired");
+            if (pe <= ps) throw new ArgumentException("availability.errors.endBeforeStart");
             s = ps; e = pe;
         }
 
         reason = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim();
-        if (reason is { Length: > 200 }) throw new ArgumentException("The reason must be 200 characters or fewer.");
+        if (reason is { Length: > 200 }) throw new ArgumentException("availability.errors.reasonTooLong");
 
         var now = DateTimeOffset.UtcNow;
         var existing = await _availability.GetExceptionByDateAsync(clientId, date, ct);
@@ -321,8 +323,8 @@ public class AvailabilityService : IAvailabilityService
 
         var service = await _services.GetReadOnlyAsync(clientId, serviceId.Value, ct);
 
-        if (service is null) throw new ArgumentException("Service not found for this client.");
-        if (!service.IsActive) throw new ArgumentException($"Service '{service.Name}' is inactive and can't be newly booked.");
+        if (service is null) throw new ArgumentException("services.errors.notFound");
+        if (!service.IsActive) throw new ArgumentException("services.errors.inactiveForBooking").WithArgs(service.Name);
 
         return service.BookingDuration is > 0 ? service.BookingDuration.Value : clientDefault;
     }

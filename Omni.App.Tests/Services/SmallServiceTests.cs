@@ -158,7 +158,7 @@ public class EntitlementServiceTests
         Assert.False(e.HasAccess);
         await Assert.ThrowsAsync<EntitlementDeniedException>(() => Sut().EnsureCanSendMessagesAsync(_clientId));
         var ex = await Assert.ThrowsAsync<EntitlementDeniedException>(() => Sut().EnsureFeatureAsync(_clientId, EntitlementKeys.Campaigns));
-        Assert.Contains("subscription isn't active", ex.Message);
+        Assert.Contains("subscription isn't active", TextKit.English(ex));
     }
 
     [Fact]
@@ -168,7 +168,7 @@ public class EntitlementServiceTests
         var sut = Sut();
         await sut.EnsureFeatureAsync(_clientId, EntitlementKeys.Campaigns);
         var ex = await Assert.ThrowsAsync<EntitlementDeniedException>(() => sut.EnsureFeatureAsync(_clientId, EntitlementKeys.AiAssistant));
-        Assert.Contains("isn't included in your plan", ex.Message);
+        Assert.Contains("isn't included in your plan", TextKit.English(ex));
         var e = await sut.GetAsync(_clientId);
         Assert.Equal(("pro", "Pro"), (e.PlanCode, e.PlanName));
         Assert.True(e.CanUseCampaigns);
@@ -196,7 +196,7 @@ public class EntitlementServiceTests
         var sut = Sut();
         await sut.EnsureWithinLimitAsync(_clientId, EntitlementKeys.MaxUsers, 3);
         var ex = await Assert.ThrowsAsync<EntitlementDeniedException>(() => sut.EnsureWithinLimitAsync(_clientId, EntitlementKeys.MaxUsers, 4));
-        Assert.Contains("allows 3 seats", ex.Message);
+        Assert.Contains("limit for Seats (3)", TextKit.English(ex));
         await sut.EnsureWithinLimitAsync(_clientId, EntitlementKeys.MaxChannelConnections, 1000);
         await Assert.ThrowsAsync<EntitlementDeniedException>(() => sut.EnsureWithinLimitAsync(_clientId, EntitlementKeys.MaxWhatsAppNumbers, 1)); // missing key = 0
     }

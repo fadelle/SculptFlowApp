@@ -11,6 +11,7 @@ using Omni.App.Entities.Requests.Knowledge;
 using Omni.App.Entities.Responses.Knowledge;
 using Omni.App.Persistence.Contracts;
 using Omni.App.Persistence.Contracts.Knowledge;
+using Omni.App.Common.Helpers;
 
 namespace Omni.App.Business.Services.Knowledge;
 
@@ -67,12 +68,14 @@ public class KnowledgeService : IKnowledgeService
         fileName = Path.GetFileName(fileName ?? string.Empty).Trim();
         if (fileName.Length == 0 || length <= 0)
         {
-            throw new InvalidDocumentException(length == 0 && fileName.Length > 0 ? "The file is empty." : "Choose a file to upload.");
+            throw length == 0 && fileName.Length > 0
+                ? new InvalidDocumentException("knowledge.documents.errors.empty")
+                : new InvalidDocumentException("knowledge.documents.errors.fileRequired");
         }
         if (length > MaxUploadBytes)
         {
-            throw new InvalidDocumentException(
-                $"This file is {length / 1024.0 / 1024.0:0.#} MB — the maximum upload size is {MaxUploadBytes / 1024.0 / 1024.0:0.#} MB.");
+            throw new InvalidDocumentException("knowledge.documents.errors.tooLarge")
+                .WithArgs($"{length / 1024.0 / 1024.0:0.#}", $"{MaxUploadBytes / 1024.0 / 1024.0:0.#}");
         }
 
         // Extraction validates the type (extension + contents) and throws a user-readable message for
@@ -216,7 +219,7 @@ public class KnowledgeService : IKnowledgeService
         var settings = await _settings.GetAsync(clientId, ct);
 
         var pieces = _chunking.Chunk(content, settings.ChunkSizeTokens, settings.ChunkOverlapTokens);
-        if (pieces.Count == 0) throw new ArgumentException("Content is required.");
+        if (pieces.Count == 0) throw new ArgumentException("knowledge.errors.contentRequired");
 
         // The title is part of what gets embedded so a chunk like "Yes, you stay overnight" still
         // carries which service/topic it's about; the stored (and returned) chunk text stays plain.
@@ -235,10 +238,10 @@ public class KnowledgeService : IKnowledgeService
         var content = (request.Content ?? string.Empty).Trim();
         var category = string.IsNullOrWhiteSpace(request.Category) ? KnowledgeCategory.General : request.Category.Trim().ToLowerInvariant();
 
-        if (title.Length == 0) throw new ArgumentException("Title is required.");
-        if (title.Length > MaxTitleLength) throw new ArgumentException($"Title must be {MaxTitleLength} characters or fewer.");
-        if (category.Length > MaxCategoryLength) throw new ArgumentException($"Category must be {MaxCategoryLength} characters or fewer.");
-        if (content.Length == 0) throw new ArgumentException("Content is required.");
+        if (title.Length == 0) throw new ArgumentException("knowledge.errors.titleRequired");
+        if (title.Length > MaxTitleLength) throw new ArgumentException("knowledge.errors.titleTooLong").WithArgs(MaxTitleLength);
+        if (category.Length > MaxCategoryLength) throw new ArgumentException("knowledge.errors.categoryTooLong").WithArgs(MaxCategoryLength);
+        if (content.Length == 0) throw new ArgumentException("knowledge.errors.contentRequired");
         return (title, category, content);
     }
 

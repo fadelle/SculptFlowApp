@@ -12,6 +12,9 @@ using Omni.App.Entities.Responses.Calendars;
 using Omni.App.Persistence.Contracts;
 using Omni.App.Persistence.Contracts.Calendars;
 using Omni.App.Persistence.Contracts.Clients;
+using Omni.App.Common.Helpers;
+using Omni.App.Entities.Dtos.Notifications;
+using Omni.App.Entities.Dtos.Ui;
 
 namespace Omni.App.Business.Services.Calendars;
 
@@ -122,7 +125,7 @@ public class CalendarIntegrationService : ICalendarIntegrationService
         var row = await _calendars.GetWithCalendarsAsync(clientId, provider, ct);
         if (row is null || row.Status != CalendarIntegrationStatus.Connected)
         {
-            throw new ArgumentException($"{provider} is not connected for this client yet.");
+            throw new ArgumentException("calendars.errors.notConnectedYet").WithArgs(ProviderLabel(provider));
         }
 
         var client = ResolveProviderClient(provider);
@@ -154,7 +157,7 @@ public class CalendarIntegrationService : ICalendarIntegrationService
             row.LastProblemMessage = ex.Message;
             row.UpdatedAt = DateTimeOffset.UtcNow;
             await _unitOfWork.SaveChangesAsync(ct);
-            throw new InvalidOperationException($"Couldn't refresh {provider} calendars: {ex.Message}", ex);
+            throw new InvalidOperationException("calendars.errors.refreshFailed").WithArgs(ProviderLabel(provider), ex.Message);
         }
     }
 
@@ -163,12 +166,12 @@ public class CalendarIntegrationService : ICalendarIntegrationService
     {
         EnsureKnownProvider(provider);
         var row = await _calendars.GetWithCalendarsAsync(clientId, provider, ct);
-        if (row is null) throw new ArgumentException($"{provider} is not connected for this client.");
+        if (row is null) throw new ArgumentException("calendars.errors.notConnected").WithArgs(ProviderLabel(provider));
 
         var calendar = row.Calendars.FirstOrDefault(c => c.ExternalCalendarId == externalCalendarId);
         if (calendar is null)
         {
-            throw new ArgumentException("That calendar is not in this account's list — refresh calendars and try again.");
+            throw new ArgumentException("calendars.errors.notListed");
         }
 
         row.SelectedCalendarId = calendar.ExternalCalendarId;
@@ -183,10 +186,10 @@ public class CalendarIntegrationService : ICalendarIntegrationService
     {
         EnsureKnownProvider(provider);
         var row = await _calendars.GetWithCalendarsAsync(clientId, provider, ct);
-        if (row is null) throw new ArgumentException($"{provider} is not connected for this client.");
+        if (row is null) throw new ArgumentException("calendars.errors.notConnected").WithArgs(ProviderLabel(provider));
         if (enabled && string.IsNullOrWhiteSpace(row.SelectedCalendarId))
         {
-            throw new ArgumentException("Choose a calendar before turning sync on.");
+            throw new ArgumentException("calendars.errors.chooseCalendar");
         }
 
         row.SyncEnabled = enabled;
@@ -259,8 +262,8 @@ public class CalendarIntegrationService : ICalendarIntegrationService
         if (!request.Success && wasHealthy)
         {
             await _notifications.CreateAsync(integration.ClientId, NotificationType.IntegrationUnhealthy,
-                $"{ProviderLabel(integration.Provider)} calendar sync needs attention",
-                integration.LastProblemMessage ?? "A calendar sync failed.",
+                NotificationText.Of("notifications.calendar.title", "notifications.calendar.problem", ProviderLabel(integration.Provider),
+                    integration.LastProblemMessage ?? (object)TextArg.Of("notifications.calendar.failed")),
                 link: "/settings/calendar-integrations", ct: ct);
         }
     }
@@ -351,12 +354,12 @@ public class CalendarIntegrationService : ICalendarIntegrationService
 
     private static void EnsureKnownProvider(string provider)
     {
-        if (!CalendarProvider.All.Contains(provider)) throw new ArgumentException($"Unknown calendar provider '{provider}'.");
+        if (!CalendarProvider.All.Contains(provider)) throw new ArgumentException("calendars.errors.unknownProvider").WithArgs(provider);
     }
 
     private ICalendarProviderClient ResolveProviderClient(string provider) =>
         _providerClients.FirstOrDefault(c => c.Provider == provider)
-        ?? throw new InvalidOperationException($"No calendar provider client registered for '{provider}'.");
+        ?? throw new InvalidOperationException($"No calendar provider client registered for '{provider}'."); // text-ok: setup error
 
     /// <summary>Refreshes and persists a new access token when the stored one is missing/near expiry, using the
     /// stored refresh token. Marks the integration unhealthy and rethrows if there is no refresh token to use or the

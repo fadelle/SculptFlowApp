@@ -24,7 +24,7 @@ namespace Omni.App.Business.Contracts.Services.Clients;
 public interface IClientRegistrationService
 {
     /// <summary>Whether self-signup is allowed right now (setting Accounts:SignupEnabled). When it isn't, both Register
-    /// methods refuse with <c>SignupClosedMessage</c> before creating anything.</summary>
+    /// methods refuse with <c>SignupClosedKey</c> before creating anything.</summary>
     bool IsSignupOpen { get; }
 
     Task<ClientRegistrationResult> RegisterAsync(RegisterClientRequest request, CancellationToken ct = default);

@@ -126,7 +126,7 @@ public class KnowledgeServiceTests
     public async Task Upload_rejects_bad_files(string name, long length, string message)
     {
         var ex = await Assert.ThrowsAsync<InvalidDocumentException>(() => Sut().CreateFromUploadAsync(_clientId, new UploadKnowledgeRequest(null, "faq"), name, new MemoryStream(), length));
-        Assert.Contains(message, ex.Message);
+        Assert.Contains(message, TextKit.English(ex));
     }
 
     [Fact]

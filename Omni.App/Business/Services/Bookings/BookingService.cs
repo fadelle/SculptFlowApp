@@ -20,6 +20,10 @@ using Omni.App.Persistence.Contracts.Campaigns;
 using Omni.App.Persistence.Contracts.Clients;
 using Omni.App.Persistence.Contracts.Contacts;
 using Omni.App.Persistence.Contracts.Catalog;
+using Omni.App.Entities.Dtos.Ui;
+using Omni.App.Common.Helpers;
+using Omni.App.Entities.Dtos.Notifications;
+using Microsoft.Extensions.Localization;
 
 namespace Omni.App.Business.Services.Bookings;
 
@@ -40,12 +44,14 @@ public class BookingService : IBookingService
     private readonly ICampaignRepository _campaigns;
     private readonly IConfigManager _config;
     private readonly IBusinessTypeService _businessTypes;
+    private readonly IStringLocalizer _text;
 
     public BookingService(
         IBookingRepository bookings, IContactRepository contacts, IClientRepository clients, IServiceRepository serviceRows, IUnitOfWork unitOfWork, IEventLogger events, ICatalogService services, IAvailabilityService availability,
         IInboxNotifier notifier, INotificationService notifications, ICalendarIntegrationService calendarSync,
-        ICampaignRepository campaigns, IConfigManager config, IBusinessTypeService businessTypes)
+        ICampaignRepository campaigns, IConfigManager config, IBusinessTypeService businessTypes, IStringLocalizer text)
     {
+        _text = text;
         _campaigns = campaigns;
         _config = config;
         _businessTypes = businessTypes;
@@ -88,7 +94,7 @@ public class BookingService : IBookingService
         // The contact must be one of THIS client's (a wrong or foreign id must not create a booking).
         if (!await _contacts.ExistsAsync(request.ClientId, request.ContactId, ct))
         {
-            throw new ArgumentException("Contact not found for this client.");
+            throw new ArgumentException("contacts.errors.notFound");
         }
 
         // One upcoming booking per contact: a second booking is refused, and the reply describes the existing one so the AI can
@@ -118,23 +124,23 @@ public class BookingService : IBookingService
         // never throws, so a calendar problem can never affect the booking operation that already succeeded.
         await _calendarSync.TriggerBookingSyncAsync(clientId, booking, change, ct);
 
-        var (type, title) = change switch
+        // A [[time:…]] marker, not text: notifications.js shows it in each viewer's own timezone (OmniTime.expand).
+        var whenLabel = $"[[time:{booking.ScheduledStart.ToUniversalTime():yyyy-MM-dd'T'HH:mm:ss'Z'}]]";
+        object who = string.IsNullOrWhiteSpace(booking.ContactFullName) ? TextArg.Of("notifications.anyone.contact") : booking.ContactFullName!;
+        object what = string.IsNullOrWhiteSpace(booking.ServiceName) ? TextArg.Of("notifications.anyone.slot") : booking.ServiceName!;
+        var (type, text) = change switch
         {
-            "created" => (NotificationType.BookingCreated, "Booking made"),
-            "rescheduled" => (NotificationType.BookingRescheduled, "Booking rescheduled"),
-            "canceled" => (NotificationType.BookingCanceled, "Booking canceled"),
+            "created" => (NotificationType.BookingCreated,
+                NotificationText.Of("notifications.booking.created.title", "notifications.booking.created.message", who, what, whenLabel)),
+            "rescheduled" => (NotificationType.BookingRescheduled,
+                NotificationText.Of("notifications.booking.rescheduled.title", "notifications.booking.rescheduled.message", who, what, whenLabel)),
+            "canceled" => (NotificationType.BookingCanceled,
+                NotificationText.Of("notifications.booking.canceled.title", "notifications.booking.canceled.message", who, what, whenLabel)),
             _ => (null, null)
         };
         if (type is null) return;
 
-        // A [[time:…]] marker, not text: notifications.js shows it in each viewer's own timezone (OmniTime.expand).
-        var whenLabel = $"[[time:{booking.ScheduledStart.ToUniversalTime():yyyy-MM-dd'T'HH:mm:ss'Z'}]]";
-        var who = string.IsNullOrWhiteSpace(booking.ContactFullName) ? "A contact" : booking.ContactFullName!;
-        var what = string.IsNullOrWhiteSpace(booking.ServiceName) ? "a slot" : booking.ServiceName!;
-        var verb = change switch { "created" => "booked", "rescheduled" => "moved to", _ => "canceled for" };
-
-        await _notifications.CreateAsync(clientId, type, title!,
-            $"{who} — {what} {verb} {whenLabel}.",
+        await _notifications.CreateAsync(clientId, type, text!,
             contactId: booking.ContactId, bookingId: booking.Id,
             link: $"/dashboard/bookings/{booking.Id}", ct: ct);
     }
@@ -143,7 +149,7 @@ public class BookingService : IBookingService
     {
         if (!await _contacts.ExistsAsync(request.ClientId, request.ContactId, ct))
         {
-            throw new ArgumentException("Contact not found for this client.");
+            throw new ArgumentException("contacts.errors.notFound");
         }
         var booking = await CreateCoreAsync(request, ct);
         await NotifyChangedAsync(request.ClientId, booking, "created", ct);
@@ -214,7 +220,7 @@ public class BookingService : IBookingService
     {
         if (!BookingStatus.All.Contains(status))
         {
-            throw new ArgumentException($"Invalid booking status '{status}'.", nameof(status));
+            throw new ArgumentException("bookings.errors.invalidStatus").WithArgs(status);
         }
 
         var booking = await _bookings.GetAsync(clientId, id, ct);
@@ -260,11 +266,11 @@ public class BookingService : IBookingService
 
         if (booking.Status != BookingStatus.Booked && booking.Status != BookingStatus.Confirmed)
         {
-            throw new ArgumentException($"This booking is {booking.Status} and can't be rescheduled.");
+            throw new ArgumentException("bookings.errors.cantReschedule").WithArgs(TextArg.Value(booking.Status));
         }
         if (booking.ScheduledStart <= DateTimeOffset.UtcNow)
         {
-            throw new ArgumentException("This booking is already in the past and can't be rescheduled. Book a new one instead.");
+            throw new ArgumentException("bookings.errors.pastReschedule");
         }
 
         // A service that was deactivated since booking can't be newly booked, but must not trap the contact in an old time:
@@ -302,7 +308,7 @@ public class BookingService : IBookingService
 
         if (booking.Status != BookingStatus.Booked && booking.Status != BookingStatus.Confirmed)
         {
-            throw new ArgumentException($"This booking is {booking.Status} and can't be canceled.");
+            throw new ArgumentException("bookings.errors.cantCancel").WithArgs(TextArg.Value(booking.Status));
         }
 
         booking.Status = BookingStatus.Canceled;
@@ -413,7 +419,8 @@ public class BookingService : IBookingService
         }
         catch (ArgumentException ex)
         {
-            return new ScheduleOutcome("none", "INVALID_REQUEST", ex.Message, RequestedLabel: requestedLabel);
+            // The AI reads this: a keyed refusal is worded in the request's language (English for n8n).
+            return new ScheduleOutcome("none", "INVALID_REQUEST", _text.Localize(ex), RequestedLabel: requestedLabel);
         }
     }
 
@@ -470,7 +477,7 @@ public class BookingService : IBookingService
             // CancelAsync returns the stored (UTC) booking; report it the way the contact should hear it — client-local.
             var tz = await GetTimeZoneAsync(clientId, ct);
             var entity = await _bookings.GetWithServiceReadOnlyAsync(canceled.Id, ct)
-                ?? throw new InvalidOperationException("Canceled booking not found.");
+                ?? throw new InvalidOperationException("Canceled booking not found."); // text-ok: internal invariant
             return new CancelOutcome("canceled", "CANCELED", "Booking canceled.", Booking: ToUpcoming(entity, tz));
         }
         catch (MultipleUpcomingBookingsException ex)
@@ -479,7 +486,7 @@ public class BookingService : IBookingService
         }
         catch (ArgumentException ex)
         {
-            return new CancelOutcome("none", "INVALID_REQUEST", ex.Message);
+            return new CancelOutcome("none", "INVALID_REQUEST", _text.Localize(ex));
         }
     }
 

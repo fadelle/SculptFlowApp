@@ -50,7 +50,7 @@ public class BookingServiceTests
 
     private BookingService Sut() => new(_bookings.Object, _contacts.Object, _clients.Object, _serviceRows.Object, _uow.Object,
         _events.Object, _services.Object, _availability.Object, _notifier.Object, _notifications.Object, _calendar.Object,
-        _campaignRepo.Object, _config.Object, _businessTypes.Object);
+        _campaignRepo.Object, _config.Object, _businessTypes.Object, TextKit.Localizer());
 
     [Fact]
     public async Task A_booking_is_credited_to_the_campaign_the_contact_replied_to()
@@ -122,8 +122,8 @@ public class BookingServiceTests
         _tx.Verify(t => t.CommitAsync(It.IsAny<CancellationToken>()), Times.Once);
         _notifier.Verify(n => n.BookingChangedAsync(_clientId, saved.Id, "created", It.IsAny<CancellationToken>()), Times.Once);
         _calendar.Verify(c => c.TriggerBookingSyncAsync(_clientId, It.IsAny<BookingResponse>(), "created", It.IsAny<CancellationToken>()), Times.Once);
-        _notifications.Verify(n => n.CreateAsync(_clientId, NotificationType.BookingCreated, "Booking made",
-            It.Is<string?>(m => m!.StartsWith("Ann Lee — a slot booked [[time:")), _contactId, null, saved.Id, null, It.Is<string?>(l => l!.EndsWith(saved.Id.ToString())), It.IsAny<CancellationToken>()), Times.Once);
+        _notifications.Verify(n => n.CreateAsync(_clientId, NotificationType.BookingCreated,
+            It.Is<NotificationText>(t => TextKit.English(t).Title == "Booking made" && TextKit.English(t).Message!.StartsWith("Ann Lee — a slot booked [[time:")), _contactId, null, saved.Id, null, It.Is<string?>(l => l!.EndsWith(saved.Id.ToString())), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -153,7 +153,7 @@ public class BookingServiceTests
         var r = await Sut().CreateAsync(Req());
         Assert.Equal(BookingStatus.Booked, r.Status);
         _availability.Verify(a => a.CheckSlotAsync(It.IsAny<Guid>(), It.IsAny<Guid?>(), It.IsAny<DateTimeOffset>(), It.IsAny<DateTimeOffset?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()), Times.Never);
-        _notifications.Verify(n => n.CreateAsync(_clientId, NotificationType.BookingCreated, It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
+        _notifications.Verify(n => n.CreateAsync(_clientId, NotificationType.BookingCreated, It.IsAny<NotificationText>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -197,7 +197,7 @@ public class BookingServiceTests
         var a = MakeBooking();
         Setup(a);
         await Sut().UpdateStatusAsync(_clientId, a.Id, BookingStatus.Attended);
-        _notifications.Verify(n => n.CreateAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+        _notifications.Verify(n => n.CreateAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<NotificationText>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     // ---------------------------------------------------------------- reschedule / cancel
@@ -246,7 +246,7 @@ public class BookingServiceTests
         var past = MakeBooking(daysAhead: -2);
         Setup(past);
         var ex = await Assert.ThrowsAsync<ArgumentException>(() => Sut().RescheduleAsync(_clientId, _contactId, past.Id, DateTimeOffset.UtcNow.AddDays(5), null, null));
-        Assert.Contains("in the past", ex.Message);
+        Assert.Contains("in the past", TextKit.English(ex));
 
         var ok = MakeBooking();
         Setup(ok);

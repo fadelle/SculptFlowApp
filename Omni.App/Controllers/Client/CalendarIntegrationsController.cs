@@ -3,6 +3,7 @@ using Omni.App.Business.Contracts.Managers;
 using Omni.App.Business.Contracts.Services.Calendars;
 using Omni.App.Entities.Requests.Calendars;
 using Omni.App.Entities.Responses.Calendars;
+using Omni.App.Controllers.Filters;
 
 namespace Omni.App.Controllers.Client;
 
@@ -37,7 +38,7 @@ public class CalendarIntegrationsController : DashboardApiController
         if (clientId is null) return Forbid();
         try { await _calendar.RequestRefreshCalendarsAsync(clientId.Value, provider, ct); return NoContent(); }
         // 400 for both here (not the usual 422): a refresh the provider can't do yet is the caller's to fix.
-        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException) { return BadRequest(new { error = ex.Message }); }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException) { return BadRequest(new { error = ApiErrorsAttribute.Localize(HttpContext, ex) }); }
     }
 
     [HttpPost("{provider}/select-calendar")]

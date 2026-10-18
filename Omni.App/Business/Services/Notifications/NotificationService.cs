@@ -1,6 +1,9 @@
+using Microsoft.Extensions.Localization;
 using Omni.App.Business.Contracts.Managers;
 using Omni.App.Business.Contracts.Services.Notifications;
 using Omni.App.Business.Mappers.Notifications;
+using Omni.App.Entities.Dtos.Notifications;
+using Omni.App.Entities.Dtos.Ui;
 using Omni.App.Entities.Models;
 using Omni.App.Entities.Responses.Notifications;
 using Omni.App.Persistence.Contracts;
@@ -13,16 +16,18 @@ public class NotificationService : INotificationService
     private readonly INotificationRepository _notifications;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IInboxNotifier _notifier;
+    private readonly IStringLocalizer _text;
 
-    public NotificationService(INotificationRepository notifications, IUnitOfWork unitOfWork, IInboxNotifier notifier)
+    public NotificationService(INotificationRepository notifications, IUnitOfWork unitOfWork, IInboxNotifier notifier, IStringLocalizer text)
     {
         _notifications = notifications;
         _unitOfWork = unitOfWork;
         _notifier = notifier;
+        _text = text;
     }
 
     public async Task CreateAsync(
-        Guid clientId, string type, string title, string? message,
+        Guid clientId, string type, NotificationText text,
         Guid? contactId = null, Guid? conversationId = null, Guid? bookingId = null, Guid? channelIntegrationId = null,
         string? link = null, CancellationToken ct = default)
     {
@@ -33,8 +38,9 @@ public class NotificationService : INotificationService
                 Id = Guid.NewGuid(),
                 ClientId = clientId,
                 Type = type,
-                Title = title,
-                Message = message,
+                Title = text.TitleKey,
+                Message = text.MessageKey,
+                TextArgs = text.Args.Select(TextArg.Encode).ToArray(),
                 ContactId = contactId,
                 ConversationId = conversationId,
                 BookingId = bookingId,
@@ -46,7 +52,9 @@ public class NotificationService : INotificationService
             _notifications.Add(notification);
             await _unitOfWork.SaveChangesAsync(ct);
 
-            await _notifier.NotificationCreatedAsync(clientId, NotificationMapper.ToResponse(notification), ct);
+            // Its text is only a preview (often written outside a request, so English): every open bell re-reads the
+            // list, in its own language, when this arrives.
+            await _notifier.NotificationCreatedAsync(clientId, NotificationMapper.ToResponse(notification, _text), ct);
         }
         catch
         {
@@ -58,7 +66,7 @@ public class NotificationService : INotificationService
     public async Task<NotificationListResponse> ListAsync(Guid clientId, int skip, int take, CancellationToken ct = default)
     {
         var (items, totalCount, unreadCount) = await _notifications.ListAsync(clientId, skip, take, ct);
-        return new NotificationListResponse(items.Select(NotificationMapper.ToResponse).ToList(), unreadCount, totalCount);
+        return new NotificationListResponse(items.Select(n => NotificationMapper.ToResponse(n, _text)).ToList(), unreadCount, totalCount);
     }
 
     public Task<int> GetUnreadCountAsync(Guid clientId, CancellationToken ct = default) =>

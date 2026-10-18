@@ -22,6 +22,8 @@ using Omni.App.Persistence.Contracts.Campaigns;
 using Omni.App.Persistence.Contracts.Inbox;
 using Omni.App.Persistence.Contracts.Contacts;
 using Omni.App.Persistence.Contracts.WhatsApp;
+using Omni.App.Entities.Dtos.Notifications;
+using Omni.App.Entities.Dtos.Ui;
 
 namespace Omni.App.Business.Services.Inbox;
 
@@ -121,14 +123,13 @@ public class MessageService : IMessageService
     /// <summary>Picks the outbound adapter for a conversation's channel (WhatsApp, Telegram, ...).</summary>
     private IChannelSender ResolveSender(string channel) =>
         _senders.FirstOrDefault(s => s.Channel == channel)
-        ?? throw new InvalidOperationException(
-            $"Sending is only implemented for WhatsApp and Telegram conversations right now (this one is '{channel}').");
+        ?? throw new InvalidOperationException("inbox.errors.sendUnsupported").WithArgs(channel);
 
     public async Task<MessageResponse?> SendAsync(Guid clientId, Guid conversationId, SendMessageRequest request, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(request.Content))
         {
-            throw new ArgumentException("Content is required.", nameof(request));
+            throw new ArgumentException("inbox.errors.contentRequired");
         }
 
         var conversation = await _conversations.GetWithContactAsync(clientId, conversationId, ct);
@@ -211,7 +212,7 @@ public class MessageService : IMessageService
     {
         if (string.IsNullOrWhiteSpace(content))
         {
-            throw new ArgumentException("Content is required.", nameof(content));
+            throw new ArgumentException("inbox.errors.contentRequired");
         }
 
         var conversation = await _conversations.GetWithContactAsync(clientId, conversationId, ct);
@@ -309,23 +310,21 @@ public class MessageService : IMessageService
 
         if (conversation.Channel != ConversationChannel.WhatsApp)
         {
-            throw new InvalidOperationException(
-                $"Templates are WhatsApp-only — this conversation is on '{conversation.Channel}'.");
+            throw new InvalidOperationException("templates.errors.whatsAppOnly").WithArgs(conversation.Channel);
         }
 
         var template = await _templates.GetReadOnlyAsync(clientId, whatsAppTemplateId, ct);
         if (template is null)
         {
-            throw new ArgumentException("Template not found for this client.", nameof(whatsAppTemplateId));
+            throw new ArgumentException("templates.errors.notFound");
         }
         if (template.Status != WhatsAppTemplateStatus.Approved)
         {
-            throw new InvalidOperationException(
-                $"Template '{template.Name}' isn't approved yet (status: {template.Status}) — Meta only allows sending approved templates.");
+            throw new InvalidOperationException("templates.errors.notApproved").WithArgs(template.Name, TextArg.Value(template.Status));
         }
 
         var toPhone = conversation.Contact?.Phone
-            ?? throw new InvalidOperationException("This contact has no phone number on file — can't send a WhatsApp message.");
+            ?? throw new InvalidOperationException("inbox.errors.noPhone");
 
         // Meta may re-categorize an approved template (CurrentCategory, from its webhook); it's billed as what it is now.
         var messageId = Guid.NewGuid();
@@ -418,7 +417,7 @@ public class MessageService : IMessageService
     {
         if (!IngestEventType.All.Contains(request.EventType))
         {
-            throw new ArgumentException($"Invalid eventType '{request.EventType}'.", nameof(request));
+            throw new ArgumentException("inbox.errors.invalidEventType").WithArgs(request.EventType);
         }
 
         if (request.EventType == IngestEventType.StatusUpdate)
@@ -463,7 +462,7 @@ public class MessageService : IMessageService
                 MessageDirection.Outbound, MessageSenderType.Ai, MessageOrigin.Ai,
                 true, false, EventTypes.AiMessageSent),
 
-            _ => throw new ArgumentException($"Unsupported eventType '{request.EventType}' for message creation.", nameof(request))
+            _ => throw new ArgumentException("inbox.errors.unsupportedEventType").WithArgs(request.EventType)
         };
 
         var now = DateTimeOffset.UtcNow;
@@ -591,8 +590,8 @@ public class MessageService : IMessageService
         if (request.ContactWasNewlyCreated)
         {
             await _notifications.CreateAsync(request.ClientId, NotificationType.NewContact,
-                "New contact",
-                (string.IsNullOrWhiteSpace(contact?.FullName) ? "A new contact" : contact!.FullName) + " sent their first message.",
+                NotificationText.Of("notifications.newContact.title", "notifications.newContact.message",
+                    string.IsNullOrWhiteSpace(contact?.FullName) ? TextArg.Of("notifications.anyone.newContact") : contact!.FullName),
                 contactId: request.ContactId, conversationId: request.ConversationId,
                 link: $"/inbox?conversationId={request.ConversationId}", ct: ct);
         }
@@ -600,10 +599,11 @@ public class MessageService : IMessageService
         if (repliedCampaignRecipient is not null)
         {
             var campaignName = repliedCampaignRecipient.Campaign?.Name;
+            object who = string.IsNullOrWhiteSpace(contact?.FullName) ? TextArg.Of("notifications.anyone.contact") : contact!.FullName;
             await _notifications.CreateAsync(request.ClientId, NotificationType.CampaignReply,
-                "Campaign reply",
-                (string.IsNullOrWhiteSpace(contact?.FullName) ? "A contact" : contact!.FullName) +
-                " replied" + (string.IsNullOrWhiteSpace(campaignName) ? "." : $" to \"{campaignName}\"."),
+                string.IsNullOrWhiteSpace(campaignName)
+                    ? NotificationText.Of("notifications.campaignReply.title", "notifications.campaignReply.message", who)
+                    : NotificationText.Of("notifications.campaignReply.title", "notifications.campaignReply.messageNamed", who, campaignName),
                 contactId: request.ContactId, conversationId: request.ConversationId,
                 link: $"/inbox?conversationId={request.ConversationId}", ct: ct);
         }
@@ -636,7 +636,7 @@ public class MessageService : IMessageService
     {
         if (string.IsNullOrWhiteSpace(request.ExternalMessageId))
         {
-            throw new ArgumentException("ExternalMessageId is required for a status_update.", nameof(request));
+            throw new ArgumentException("inbox.errors.externalIdRequired");
         }
 
         var message = await _messages.FindByExternalIdAsync(request.ClientId, request.Channel, request.ExternalMessageId, ct);
@@ -715,9 +715,7 @@ public class MessageService : IMessageService
         if (justFailed)
         {
             var contactName = await _contacts.GetFullNameAsync(message.ContactId, ct);
-            await _notifications.CreateAsync(request.ClientId, NotificationType.OutboundMessageFailed,
-                "Message failed to send",
-                string.IsNullOrWhiteSpace(contactName) ? "A message failed to send to a contact." : $"Message failed to send to {contactName}.",
+            await _notifications.CreateAsync(request.ClientId, NotificationType.OutboundMessageFailed, SendFailedText(contactName),
                 contactId: message.ContactId, conversationId: message.ConversationId,
                 link: $"/inbox?conversationId={message.ConversationId}", ct: ct);
         }
@@ -768,10 +766,12 @@ public class MessageService : IMessageService
     private Task NotifyOutboundFailureAsync(Guid clientId, Conversation conversation, CancellationToken ct)
     {
         var who = conversation.Contact?.FullName;
-        return _notifications.CreateAsync(clientId, NotificationType.OutboundMessageFailed,
-            "Message failed to send",
-            string.IsNullOrWhiteSpace(who) ? "A message failed to send to a contact." : $"Message failed to send to {who}.",
+        return _notifications.CreateAsync(clientId, NotificationType.OutboundMessageFailed, SendFailedText(who),
             contactId: conversation.ContactId, conversationId: conversation.Id,
             link: $"/inbox?conversationId={conversation.Id}", ct: ct);
     }
+
+    private static NotificationText SendFailedText(string? contactName) => string.IsNullOrWhiteSpace(contactName)
+        ? NotificationText.Of("notifications.sendFailed.title", "notifications.sendFailed.messageNoName")
+        : NotificationText.Of("notifications.sendFailed.title", "notifications.sendFailed.message", contactName);
 }

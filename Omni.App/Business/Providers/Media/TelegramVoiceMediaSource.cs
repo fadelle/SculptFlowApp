@@ -39,15 +39,14 @@ public class TelegramVoiceMediaSource : IVoiceMediaSource
         var integration = await _integrations.GetReadOnlyAsync(message.ClientId, ChannelType.Telegram, ct);
         if (integration is null || integration.Status != ChannelIntegrationStatus.Connected || string.IsNullOrEmpty(integration.AccessToken))
         {
-            throw new InvalidOperationException(
-                "This client doesn't have a connected Telegram bot — reconnect it in Settings → Messaging Integrations.");
+            throw new InvalidOperationException("channels.telegram.errors.notConnected");
         }
 
         var maxBytes = _config.VoiceMaxBytes;
         var file = await _client.GetFileAsync(integration.AccessToken, fileId, ct);
         if (file.FileSize is { } size && size > maxBytes)
         {
-            throw new InvalidOperationException("This voice note is larger than the size the Inbox can play.");
+            throw new InvalidOperationException("inbox.errors.voiceTooLarge");
         }
 
         var bytes = await _client.DownloadFileAsync(integration.AccessToken, file.FilePath, maxBytes, ct);

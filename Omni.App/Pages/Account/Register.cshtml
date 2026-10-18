@@ -4,8 +4,8 @@
     ViewData["Title"] = T["register.title"].Value;
     Layout = "_AuthLayout";
     var loginUrl = "/Account/Login" + (string.IsNullOrEmpty(Model.ReturnUrl) ? "" : "?ReturnUrl=" + Uri.EscapeDataString(Model.ReturnUrl));
-    // Identity reports a used email as "... is already taken." — offer to sign in instead.
-    var emailTaken = Model.ErrorMessage?.Contains("already taken", StringComparison.OrdinalIgnoreCase) == true;
+    // The email already has an account: offer to sign in instead.
+    var emailTaken = Model.EmailTaken;
 }
 @* auth.js reads [data-auth-form], [data-busy-label], [data-pw*] and [data-caps]; it rewrites the class of [data-pw-rule] and
    [data-pw-match], so those keep plain classes. *@

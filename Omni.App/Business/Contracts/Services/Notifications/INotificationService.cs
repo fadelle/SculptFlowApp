@@ -1,3 +1,4 @@
+using Omni.App.Entities.Dtos.Notifications;
 using Omni.App.Entities.Responses.Notifications;
 
 namespace Omni.App.Business.Contracts.Services.Notifications;
@@ -18,6 +19,9 @@ namespace Omni.App.Business.Contracts.Services.Notifications;
 ///   INTEGRATION_UNHEALTHY    — WhatsAppHealthService.ApplyHealthEventAsync, on the transition INTO
 ///                             Problem/Disconnected (not repeated while it stays unhealthy).
 ///
+/// The text is stored as strings-file keys with arguments (NotificationText), and ListAsync puts it into the reader's
+/// language and business-type words.
+///
 /// CreateAsync never throws — a notification failing to save must never fail the real operation it's attached
 /// to (see its doc comment). Broadcasting the new notification over SignalR reuses the existing client-scoped
 /// hub (IInboxNotifier.NotificationCreatedAsync) — no second realtime channel.
@@ -28,7 +32,7 @@ public interface INotificationService
     /// without throwing — the caller's own operation has already succeeded by the time this is called and must
     /// not be undone or interrupted by a notification-only problem.</summary>
     Task CreateAsync(
-        Guid clientId, string type, string title, string? message,
+        Guid clientId, string type, NotificationText text,
         Guid? contactId = null, Guid? conversationId = null, Guid? bookingId = null, Guid? channelIntegrationId = null,
         string? link = null, CancellationToken ct = default);
 

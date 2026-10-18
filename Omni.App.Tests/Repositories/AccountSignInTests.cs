@@ -33,6 +33,7 @@ public class AccountSignInTests(PostgresFixture fixture) : RepoTestBase(fixture)
         services.AddScoped<IAdminUserRepository, AdminUserRepository>();
         services.AddScoped<IAdminAccountService, AdminAccountService>();
         services.AddAuthentication();
+        services.AddScoped(_ => TextKit.Localizer());
         services.AddOmniIdentity();
         services.AddSingleton((auth ?? new Mock<IAuthenticationService>()).Object);
         return services.BuildServiceProvider();

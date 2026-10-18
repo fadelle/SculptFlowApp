@@ -200,13 +200,13 @@ public class BillingQueryService : IBillingQueryService
         var uncharged = await unit.Usage.GroupUnchargedAsync(clientId, since, ct);
         var providerDirect = uncharged.OrderByDescending(u => u.Count)
             .Select(u => new ProviderDirectUsageRow(u.EventType, BillableEventTypes.Label(u.EventType),
-                ClientPaidByLabel(u.ProviderBilling, u.Channel, charged: false), u.Count, u.Quantity))
+                ClientPaidByLabel(u.ProviderBilling, u.Channel, charged: false), u.Count, u.Quantity, u.ProviderBilling, u.Channel))
             .ToList();
 
         var channelAccounts = (await _providerBilling.ListAccountsAsync(clientId, ct))
             .Where(a => a.Status == ChannelIntegrationStatus.Connected)
             .Select(a => new ClientChannelBillingRow(a.Channel, ChannelLabel(a.Channel), a.DisplayName,
-                ClientPaidByLabel(a.ProviderBilling, a.Channel, a.OmniUsageBilling), a.OmniUsageBilling))
+                ClientPaidByLabel(a.ProviderBilling, a.Channel, a.OmniUsageBilling), a.OmniUsageBilling, a.ProviderBilling))
             .ToList();
 
         var (recent, _) = await unit.Ledger.ListAsync(clientId, 0, _config.BillingRecentTransactions, ct);
@@ -227,8 +227,9 @@ public class BillingQueryService : IBillingQueryService
             channelAccounts, providerDirect);
     }
 
-    /// <summary>Who pays for usage, in client-facing words. Never names Omni's own provider (white-label); the
-    /// client's own Meta account may be named because it's theirs.</summary>
+    /// <summary>Who pays for usage, in client-facing English words (the admin portal; the client's Billing page uses
+    /// BillingTextHelper.PaidByLabel). Never names Omni's own provider (white-label); the client's own Meta account may be
+    /// named because it's theirs.</summary>
     public static string ClientPaidByLabel(string providerBilling, string channel, bool charged)
     {
         var label = providerBilling switch

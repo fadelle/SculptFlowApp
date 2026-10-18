@@ -26,12 +26,15 @@ public static class FilterLabelHelper
     }
 
     /// <summary>"needs_human" / "NO_SHOW" / "Needs human" → "values.needsHuman"; null when the value has no letters.</summary>
-    public static string? KeyOf(string value)
+    public static string? KeyOf(string value) => KeyPart(value) is { } part ? KeyPrefix + part : null;
+
+    /// <summary>A stored value as one key segment: "needs_human" → "needsHuman"; null when the value has no letters.</summary>
+    public static string? KeyPart(string value)
     {
         var words = value.Trim().ToLowerInvariant().Split(['_', ' ', '-'], StringSplitOptions.RemoveEmptyEntries)
             .Select(w => new string(w.Where(char.IsAsciiLetterOrDigit).ToArray())).Where(w => w.Length > 0).ToList();
         if (words.Count == 0 || !char.IsAsciiLetter(words[0][0])) return null;
-        return KeyPrefix + words[0] + string.Concat(words.Skip(1).Select(w => char.ToUpperInvariant(w[0]) + w[1..]));
+        return words[0] + string.Concat(words.Skip(1).Select(w => char.ToUpperInvariant(w[0]) + w[1..]));
     }
 
     /// <summary>The value made readable: underscores to spaces, first letter capitalized ("—" for nothing).</summary>

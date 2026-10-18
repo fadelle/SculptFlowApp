@@ -136,7 +136,10 @@ Full detail and the declared-settings table: `docs/configuration.md`.
 - Every UI string a change writes or edits goes into `Omni.App/Resources/i18n/en.json` (flat keys `area.element.state`):
   Razor `@T["key"]` (`@T.Html("key", args)` when an argument is HTML, e.g. a `LocalTimeHelper.Time` tag), page models an
   injected `IStringLocalizer` with `…Key` constants, JS `omniText.t('key', [args])`, server messages `throw new ArgumentException("key").WithArgs(...)`
-  (`[ApiErrors]` and `TextError.Localize` turn keys into text; a plain message still shows as written).
+  (`[ApiErrors]` and `TextError.Localize` turn keys into text; a plain message still shows as written). An argument that is
+  itself text is a `TextArg` (`TextArg.Of("key")`, `TextArg.Value(storedValue)`). Notifications take a `NotificationText`
+  (keys + args, worded per reader). A message only n8n or an operator reads may stay English with `// text-ok: <reason>`
+  on its line (`Guards/ServerMessageKeysTests`); text stored outside a request is worded with the localizer before saving.
 - A stored value shown as a label goes through `T.ValueLabel(value)` (key `values.{value in camelCase}`; also
   `T.CampaignStatusLabel`, `T.TemplateStatusLabel`, `T.CategoryLabel`), never an English map in code; JS keeps
   `omniText.t('key')` literal (the guard only sees literal keys) and formats dates with `omniText.lang`.

@@ -11,7 +11,8 @@ public static class IdentityModule
     /// <summary>
     /// ASP.NET Core Identity over identity.users (AppUser): password rules, the lockout (AccountRules: 5 failed sign-ins
     /// lock for 15 minutes, for every role), the main app's sign-in rules (AppSignInManager: client and member only) and
-    /// the cookie's claims (AppUserClaimsPrincipalFactory). AddIdentityCore, not AddIdentity: the role is a column, so
+    /// the cookie's claims (AppUserClaimsPrincipalFactory) and Identity's errors in the request's language
+    /// (LocalizedIdentityErrorDescriber). AddIdentityCore, not AddIdentity: the role is a column, so
     /// there are no role tables. The cookie schemes are added by the caller.
     /// </summary>
     public static IdentityBuilder AddOmniIdentity(this IServiceCollection services) =>
@@ -25,6 +26,7 @@ public static class IdentityModule
             })
             .AddEntityFrameworkStores<ApplicationDbContext>()
             .AddSignInManager<AppSignInManager>()
+            .AddErrorDescriber<LocalizedIdentityErrorDescriber>()
             .AddClaimsPrincipalFactory<AppUserClaimsPrincipalFactory>()
             .AddDefaultTokenProviders();
 }

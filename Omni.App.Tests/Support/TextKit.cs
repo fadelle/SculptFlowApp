@@ -25,6 +25,25 @@ internal static class TextKit
     public static IStringLocalizer Localizer(string language = AppLanguage.English, IReadOnlyDictionary<string, string>? terms = null) =>
         new JsonStringLocalizer(Catalog, Context(language, terms));
 
+    /// <summary>A notification's title and message as an English reader sees them (default words), after the trip through
+    /// the database (TextArg encoding).</summary>
+    public static (string Title, string? Message) English(NotificationText text)
+    {
+        var localizer = Localizer();
+        var args = text.Args.Select(TextArg.Encode).Select(TextArg.Decode).ToArray();
+        return (localizer[text.TitleKey, args].Value, text.MessageKey is null ? null : localizer[text.MessageKey, args].Value);
+    }
+
+    /// <summary>The notification reads this title (null: any) and message in English.</summary>
+    public static bool Reads(NotificationText text, string? title, string? message)
+    {
+        var (t, m) = English(text);
+        return (title is null || t == title) && m == message;
+    }
+
+    /// <summary>An exception's message as an English reader sees it (a key with its arguments, or plain text).</summary>
+    public static string English(Exception exception) => Localizer().Localize(exception);
+
     /// <summary>The English default words from en.json (terms.*).</summary>
     public static IReadOnlyDictionary<string, TermForms> DefaultTerms() =>
         TermName.All.ToDictionary(t => t, t => new TermForms(Catalog.Find("en", $"terms.{t}.one")!, Catalog.Find("en", $"terms.{t}.other")!));

@@ -2,6 +2,7 @@ using Omni.App.Business.Contracts.Providers.Media;
 using Omni.App.Business.Contracts.Services.Inbox;
 using Omni.App.Entities.Dtos.Voice;
 using Omni.App.Persistence.Contracts.Inbox;
+using Omni.App.Common.Helpers;
 
 namespace Omni.App.Business.Services.Inbox;
 
@@ -26,17 +27,17 @@ public class MessageMediaService : IMessageMediaService
     public async Task<VoiceAudio> GetAudioAsync(Guid clientId, Guid messageId, CancellationToken ct = default)
     {
         var message = await _messages.GetForClientReadOnlyAsync(clientId, messageId, ct)
-            ?? throw new KeyNotFoundException("Message not found.");
+            ?? throw new KeyNotFoundException("inbox.errors.messageNotFound");
 
         if (!string.Equals(message.MessageType, AudioMessageType, StringComparison.OrdinalIgnoreCase))
         {
-            throw new ArgumentException("This message has no audio.");
+            throw new ArgumentException("inbox.errors.noAudio");
         }
 
         var source = _sources.FirstOrDefault(s => s.Channel == message.Channel)
-            ?? throw new InvalidOperationException($"Playing voice notes isn't supported for '{message.Channel}' conversations yet.");
+            ?? throw new InvalidOperationException("inbox.errors.voiceUnsupported").WithArgs(message.Channel);
 
         return await source.DownloadAsync(message, ct)
-            ?? throw new KeyNotFoundException("The audio of this voice note is no longer available.");
+            ?? throw new KeyNotFoundException("inbox.errors.audioGone");
     }
 }

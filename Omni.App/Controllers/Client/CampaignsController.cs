@@ -5,6 +5,7 @@ using Omni.App.Common.Enums;
 using Omni.App.Entities.Dtos.Campaigns;
 using Omni.App.Entities.Requests.Campaigns;
 using Omni.App.Entities.Responses.Campaigns;
+using Omni.App.Controllers.Filters;
 
 namespace Omni.App.Controllers.Client;
 
@@ -12,6 +13,8 @@ namespace Omni.App.Controllers.Client;
 [Route("api/campaigns")]
 public class CampaignsController : DashboardApiController
 {
+    private const string UnknownAudienceKey = "campaigns.errors.unknownAudience";
+
     private readonly ICampaignService _campaigns;
     private readonly ICampaignAudienceService _audience;
 
@@ -32,7 +35,7 @@ public class CampaignsController : DashboardApiController
 
         if (!CampaignAudienceType.All.Contains(audienceType))
         {
-            return BadRequest(new { error = $"Unknown audience type '{audienceType}'." });
+            return BadRequest(new { error = ApiErrorsAttribute.Text(HttpContext, UnknownAudienceKey, audienceType) });
         }
 
         var count = await _audience.GetMatchingCountAsync(clientId.Value, audienceType, filters, ct);
@@ -51,7 +54,7 @@ public class CampaignsController : DashboardApiController
 
         if (!CampaignAudienceType.All.Contains(audienceType))
         {
-            return BadRequest(new { error = $"Unknown audience type '{audienceType}'." });
+            return BadRequest(new { error = ApiErrorsAttribute.Text(HttpContext, UnknownAudienceKey, audienceType) });
         }
 
         var cappedLimit = limit is > 0 and <= 50 ? limit : 10;

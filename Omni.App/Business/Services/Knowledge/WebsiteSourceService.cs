@@ -36,18 +36,18 @@ public sealed class WebsiteSourceService : IWebsiteSourceService
     public async Task<WebsiteSourceResponse> CreateAsync(Guid clientId, CreateWebsiteSourceRequest request, CancellationToken ct = default)
     {
         var raw = (request.Url ?? string.Empty).Trim();
-        if (raw.Length == 0) throw new ArgumentException("Enter the website address to import.");
+        if (raw.Length == 0) throw new ArgumentException("knowledge.websites.errors.urlRequired");
         // Be forgiving: "client.com" → https://client.com
         if (!raw.Contains("://", StringComparison.Ordinal)) raw = "https://" + raw;
 
         if (!UrlNormalizer.TryNormalize(raw, null, out var normalized))
         {
-            throw new ArgumentException("That doesn't look like a valid web address. Use a full http:// or https:// URL.");
+            throw new ArgumentException("knowledge.websites.errors.urlInvalid");
         }
 
         if (!Uri.TryCreate(normalized, UriKind.Absolute, out var uri))
         {
-            throw new ArgumentException("That doesn't look like a valid web address. Use a full http:// or https:// URL.");
+            throw new ArgumentException("knowledge.websites.errors.urlInvalid");
         }
         try
         {
@@ -60,18 +60,18 @@ public sealed class WebsiteSourceService : IWebsiteSourceService
         }
 
         var mode = string.IsNullOrWhiteSpace(request.CrawlMode) ? WebsiteCrawlMode.CrawlSite : request.CrawlMode.Trim().ToLowerInvariant();
-        if (!WebsiteCrawlMode.IsValid(mode)) throw new ArgumentException("Choose either \"Single page only\" or \"Crawl website\".");
+        if (!WebsiteCrawlMode.IsValid(mode)) throw new ArgumentException("knowledge.websites.errors.modeInvalid");
 
         var category = string.IsNullOrWhiteSpace(request.Category) ? KnowledgeCategory.General : request.Category.Trim().ToLowerInvariant();
-        if (category.Length > 50) throw new ArgumentException("Category must be 50 characters or fewer.");
+        if (category.Length > 50) throw new ArgumentException("knowledge.websites.errors.categoryTooLong");
 
         if (await _websites.CountSourcesAsync(clientId, ct) >= _config.WebScrapingMaxSourcesPerClient)
         {
-            throw new ArgumentException($"You can add up to {_config.WebScrapingMaxSourcesPerClient} websites. Delete one you no longer need first.");
+            throw new ArgumentException("knowledge.websites.errors.tooMany").WithArgs(_config.WebScrapingMaxSourcesPerClient);
         }
         if (await _websites.SourceUrlExistsAsync(clientId, normalized, ct))
         {
-            throw new ArgumentException("This website address has already been added. Open it and use \"Re-scrape\" to refresh it.");
+            throw new ArgumentException("knowledge.websites.errors.alreadyAddedRescrape");
         }
 
         var now = DateTimeOffset.UtcNow;
@@ -98,7 +98,7 @@ public sealed class WebsiteSourceService : IWebsiteSourceService
         }
         catch (DuplicateRecordException)
         {
-            throw new ArgumentException("This website address has already been added.");
+            throw new ArgumentException("knowledge.websites.errors.alreadyAdded");
         }
 
         _queue.Enqueue(run.Id); // after the commit, so the worker can always find the run
@@ -148,9 +148,9 @@ public sealed class WebsiteSourceService : IWebsiteSourceService
         if (WebsiteScrapeStatus.IsInProgress(source.Status)
             || await _websites.HasRunInProgressAsync(sourceId, ct))
         {
-            throw new ArgumentException("A crawl of this website is already running.");
+            throw new ArgumentException("knowledge.websites.errors.crawlRunning");
         }
-        if (!source.IsActive) throw new ArgumentException("Activate this website before re-scraping it.");
+        if (!source.IsActive) throw new ArgumentException("knowledge.websites.errors.activateFirst");
 
         var run = NewRun(source);
         source.Status = WebsiteScrapeStatus.Pending;
@@ -187,7 +187,7 @@ public sealed class WebsiteSourceService : IWebsiteSourceService
 
         if (await _websites.HasRunInProgressAsync(sourceId, ct))
         {
-            throw new ArgumentException("A crawl of this website is still running. Wait for it to finish, then delete it.");
+            throw new ArgumentException("knowledge.websites.errors.crawlRunningDelete");
         }
 
         // The knowledge documents this crawl created (and their chunks) go with it — only those, only this client.

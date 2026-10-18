@@ -3,6 +3,7 @@ using Omni.App.Entities.Models;
 using Omni.App.Entities.Requests.Clients;
 using Omni.App.Persistence.Contracts;
 using Omni.App.Persistence.Contracts.Clients;
+using Omni.App.Common.Helpers;
 
 namespace Omni.App.Business.Services.Clients;
 
@@ -22,10 +23,10 @@ public class ClientProfileService : IClientProfileService
     public async Task UpdateDetailsAsync(Guid clientId, UpdateClientDetailsRequest request, CancellationToken ct = default)
     {
         var name = (request.Name ?? string.Empty).Trim();
-        if (name.Length == 0) throw new ArgumentException("Client name is required.");
-        if (name.Length > MaxNameLength) throw new ArgumentException($"Client name must be {MaxNameLength} characters or fewer.");
+        if (name.Length == 0) throw new ArgumentException("clients.errors.nameRequired");
+        if (name.Length > MaxNameLength) throw new ArgumentException("clients.errors.nameTooLong").WithArgs(MaxNameLength);
 
-        var client = await _clients.GetAsync(clientId, ct) ?? throw new ArgumentException("Client not found.");
+        var client = await _clients.GetAsync(clientId, ct) ?? throw new ArgumentException("clients.errors.notFound");
         client.Name = name;
         client.Phone = request.Phone;
         client.Email = request.Email;

@@ -6,6 +6,8 @@ using Omni.App.Business.Contracts.HttpClients.Calendars;
 using Omni.App.Business.Contracts.Managers;
 using Omni.App.Business.Contracts.Services.Calendars;
 using Omni.App.Common.Enums;
+using Microsoft.Extensions.Localization;
+using Omni.App.Common.Helpers;
 
 namespace Omni.App.Controllers.Integrations;
 
@@ -31,13 +33,15 @@ public class CalendarOAuthController : Controller
     private readonly ITimeLimitedDataProtector _stateProtector;
     private readonly ILogger<CalendarOAuthController> _logger;
     private readonly IConfigManager _config;
+    private readonly IStringLocalizer _text;
 
     public CalendarOAuthController(
         ICalendarIntegrationService calendar, ICurrentClientContext clientContext,
         IEnumerable<ICalendarProviderClient> providerClients, IConfiguration configuration,
-        IDataProtectionProvider dataProtection, ILogger<CalendarOAuthController> logger, IConfigManager config)
+        IDataProtectionProvider dataProtection, ILogger<CalendarOAuthController> logger, IConfigManager config, IStringLocalizer text)
     {
         _config = config;
+        _text = text;
         _clientContext = clientContext;
         _calendar = calendar;
         _providerClients = providerClients;
@@ -52,7 +56,7 @@ public class CalendarOAuthController : Controller
     [HttpGet("{provider}/connect")]
     public async Task<IActionResult> Connect(string provider, CancellationToken ct)
     {
-        if (!CalendarProvider.All.Contains(provider)) return RedirectWithError("Unknown calendar provider.");
+        if (!CalendarProvider.All.Contains(provider)) return RedirectWithError(_text["calendars.errors.unknownProvider", provider].Value);
 
         var clientId = await GetClientIdAsync(ct);
         if (clientId is null) return Forbid();
@@ -72,7 +76,7 @@ public class CalendarOAuthController : Controller
             // Missing ClientId/ClientSecret (not configured yet) or a bad App:PublicBaseUrl — an operator/config
             // problem, not something retrying will fix, so don't mark the row Pending for it.
             _logger.LogError(ex, "Calendar OAuth connect for {Provider} could not start.", provider);
-            return RedirectWithError($"{ProviderLabel(provider)} isn't set up yet on this server: {ex.Message}");
+            return RedirectWithError(_text["oauth.errors.notSetUp", ProviderLabel(provider), _text.Localize(ex)].Value);
         }
     }
 
@@ -82,7 +86,7 @@ public class CalendarOAuthController : Controller
         string provider, [FromQuery] string? code, [FromQuery] string? state,
         [FromQuery] string? error, [FromQuery(Name = "error_description")] string? errorDescription, CancellationToken ct)
     {
-        if (!CalendarProvider.All.Contains(provider)) return RedirectWithError("Unknown calendar provider.");
+        if (!CalendarProvider.All.Contains(provider)) return RedirectWithError(_text["calendars.errors.unknownProvider", provider].Value);
 
         var clientId = await GetClientIdAsync(ct);
         if (clientId is null) return Forbid();
@@ -102,8 +106,9 @@ public class CalendarOAuthController : Controller
 
         if (oauthState is null || oauthState.ClientId != clientId.Value || oauthState.Provider != provider)
         {
-            await _calendar.FailConnectAsync(clientId.Value, provider, "The connection attempt expired or was invalid — please try again.", ct);
-            return RedirectWithError("The connection attempt expired or was invalid — please try again.");
+            var expired = _text["oauth.errors.expired"].Value;
+            await _calendar.FailConnectAsync(clientId.Value, provider, expired, ct);
+            return RedirectWithError(expired);
         }
 
         if (!string.IsNullOrEmpty(error))
@@ -115,8 +120,9 @@ public class CalendarOAuthController : Controller
 
         if (string.IsNullOrEmpty(code))
         {
-            await _calendar.FailConnectAsync(clientId.Value, provider, "The provider did not return an authorization code.", ct);
-            return RedirectWithError("The provider did not return an authorization code.");
+            var noCode = _text["oauth.errors.noCode", ProviderLabel(provider)].Value;
+            await _calendar.FailConnectAsync(clientId.Value, provider, noCode, ct);
+            return RedirectWithError(noCode);
         }
 
         try
@@ -130,11 +136,12 @@ public class CalendarOAuthController : Controller
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Calendar OAuth code exchange failed for {Provider}.", provider);
-            await _calendar.FailConnectAsync(clientId.Value, provider, $"Couldn't finish connecting: {ex.Message}", ct);
-            return RedirectWithError($"Couldn't finish connecting: {ex.Message}");
+            var failed = _text["oauth.errors.connectFailed", _text.Localize(ex)].Value;
+            await _calendar.FailConnectAsync(clientId.Value, provider, failed, ct);
+            return RedirectWithError(failed);
         }
 
-        TempData["StatusMessage"] = $"{ProviderLabel(provider)} connected.";
+        TempData["StatusMessage"] = _text["oauth.connected", ProviderLabel(provider)].Value;
         return Redirect(SettingsPagePath);
     }
 

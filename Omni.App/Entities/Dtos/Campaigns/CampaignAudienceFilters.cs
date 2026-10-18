@@ -36,11 +36,11 @@ public record CampaignAudienceFilters(
         try
         {
             if (JsonSerializer.Deserialize<CampaignAudienceFilters>(json, Options) is null)
-                throw new ArgumentException("The audience filters are not valid.");
+                throw new ArgumentException("campaigns.errors.audienceInvalid");
         }
         catch (JsonException)
         {
-            throw new ArgumentException("The audience filters are not valid.");
+            throw new ArgumentException("campaigns.errors.audienceInvalid");
         }
     }
 

@@ -8,6 +8,7 @@ using Omni.App.Entities.Requests.Knowledge;
 using Omni.App.Entities.Responses.Knowledge;
 using Omni.App.Persistence.Contracts;
 using Omni.App.Persistence.Contracts.Knowledge;
+using Omni.App.Common.Helpers;
 
 namespace Omni.App.Business.Services.Knowledge;
 
@@ -66,7 +67,7 @@ public class KnowledgeSettingsService : IKnowledgeSettingsService
             // Another request created this client's row first (unique client_id) — use theirs.
             _settings.Detach(created);
             var existing = await _settings.GetReadOnlyAsync(clientId, ct);
-            return existing is null ? throw new InvalidOperationException("Couldn't create Knowledge Base settings.") : ToResponse(existing);
+            return existing is null ? throw new InvalidOperationException("Couldn't create Knowledge Base settings.") : ToResponse(existing); // text-ok: internal invariant
         }
     }
 
@@ -76,7 +77,7 @@ public class KnowledgeSettingsService : IKnowledgeSettingsService
         await GetAsync(clientId, ct); // make sure the row exists
 
         var row = await _settings.GetAsync(clientId, ct)
-                  ?? throw new InvalidOperationException("Couldn't load Knowledge Base settings.");
+                  ?? throw new InvalidOperationException("Couldn't load Knowledge Base settings."); // text-ok: internal invariant
         row.ChunkSizeTokens = request.ChunkSizeTokens;
         row.ChunkOverlapTokens = request.ChunkOverlapTokens;
         row.TopK = request.TopK;
@@ -90,19 +91,19 @@ public class KnowledgeSettingsService : IKnowledgeSettingsService
     {
         if (r.ChunkSizeTokens < MinChunkSizeTokens || r.ChunkSizeTokens > MaxChunkSizeTokens)
         {
-            throw new ArgumentException($"Chunk size must be between {MinChunkSizeTokens} and {MaxChunkSizeTokens} tokens.");
+            throw new ArgumentException("knowledgeSettings.errors.chunkSizeRange").WithArgs(MinChunkSizeTokens, MaxChunkSizeTokens);
         }
         if (r.ChunkOverlapTokens < 0 || r.ChunkOverlapTokens > r.ChunkSizeTokens / 2)
         {
-            throw new ArgumentException("Chunk overlap must be between 0 and half the chunk size.");
+            throw new ArgumentException("knowledgeSettings.errors.overlapRange");
         }
         if (r.TopK < MinTopK || r.TopK > MaxTopK)
         {
-            throw new ArgumentException($"Top K must be between {MinTopK} and {MaxTopK}.");
+            throw new ArgumentException("knowledgeSettings.errors.topKRange").WithArgs(MinTopK, MaxTopK);
         }
         if (double.IsNaN(r.MinimumSimilarity) || r.MinimumSimilarity is < 0 or > 1)
         {
-            throw new ArgumentException("Minimum similarity must be between 0 and 1.");
+            throw new ArgumentException("knowledgeSettings.errors.similarityRange");
         }
     }
 

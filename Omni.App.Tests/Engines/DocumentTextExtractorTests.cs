@@ -68,7 +68,7 @@ public class DocumentTextExtractorTests
     public async Task Binary_content_with_a_txt_name_is_rejected()
     {
         var ex = await Assert.ThrowsAsync<InvalidDocumentException>(() => Extract(new byte[] { 1, 2, 0, 3 }, "a.txt"));
-        Assert.Contains("plain text", ex.Message);
+        Assert.Contains("plain text", TextKit.English(ex));
     }
 
     [Theory]
@@ -83,14 +83,14 @@ public class DocumentTextExtractorTests
     {
         await Assert.ThrowsAsync<InvalidDocumentException>(() => Extract([], "a.txt"));
         var ex = await Assert.ThrowsAsync<InvalidDocumentException>(() => Extract(Encoding.UTF8.GetBytes("  \n\t "), "a.txt"));
-        Assert.Contains("empty", ex.Message);
+        Assert.Contains("empty", TextKit.English(ex));
     }
 
     [Fact]
     public async Task Too_much_text_is_rejected_with_the_limit_in_the_message()
     {
         var ex = await Assert.ThrowsAsync<InvalidDocumentException>(() => Extract(Encoding.UTF8.GetBytes(new string('x', 5001)), "a.txt"));
-        Assert.Contains("too much text", ex.Message);
+        Assert.Contains("too much text", TextKit.English(ex));
         Assert.Equal(5000, (await Extract(Encoding.UTF8.GetBytes(new string('x', 5000)), "a.txt")).Length);
     }
 
@@ -104,11 +104,11 @@ public class DocumentTextExtractorTests
     public async Task Docx_rejects_fake_corrupt_and_textless_files()
     {
         var fake = await Assert.ThrowsAsync<InvalidDocumentException>(() => Extract(Encoding.UTF8.GetBytes("not a zip"), "a.docx"));
-        Assert.Contains("valid DOCX", fake.Message);
+        Assert.Contains("valid DOCX", TextKit.English(fake));
         var corrupt = await Assert.ThrowsAsync<InvalidDocumentException>(() => Extract([0x50, 0x4B, 0x03, 0x04, 1, 2, 3], "a.docx"));
-        Assert.Contains("Couldn't read", corrupt.Message);
+        Assert.Contains("Couldn't read", TextKit.English(corrupt));
         var empty = await Assert.ThrowsAsync<InvalidDocumentException>(() => Extract(Docx(""), "a.docx"));
-        Assert.Contains("readable text", empty.Message);
+        Assert.Contains("readable text", TextKit.English(empty));
     }
 
     [Fact]
@@ -123,11 +123,11 @@ public class DocumentTextExtractorTests
     public async Task Pdf_rejects_fake_corrupt_and_textless_files()
     {
         var fake = await Assert.ThrowsAsync<InvalidDocumentException>(() => Extract(Encoding.UTF8.GetBytes("plain"), "a.pdf"));
-        Assert.Contains("valid PDF", fake.Message);
+        Assert.Contains("valid PDF", TextKit.English(fake));
         var corrupt = await Assert.ThrowsAsync<InvalidDocumentException>(() => Extract(Encoding.ASCII.GetBytes("%PDF-1.4 garbage"), "a.pdf"));
-        Assert.Contains("Couldn't read", corrupt.Message);
+        Assert.Contains("Couldn't read", TextKit.English(corrupt));
         var blank = await Assert.ThrowsAsync<InvalidDocumentException>(() => Extract(Pdf(" "), "a.pdf"));
-        Assert.Contains("readable text", blank.Message);
+        Assert.Contains("readable text", TextKit.English(blank));
     }
 
     [Fact]

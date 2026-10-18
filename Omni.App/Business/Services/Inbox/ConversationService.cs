@@ -14,6 +14,8 @@ using Omni.App.Entities.Responses.Inbox;
 using Omni.App.Persistence.Contracts;
 using Omni.App.Persistence.Contracts.Inbox;
 using Omni.App.Persistence.Contracts.Contacts;
+using Omni.App.Entities.Dtos.Notifications;
+using Omni.App.Entities.Dtos.Ui;
 
 namespace Omni.App.Business.Services.Inbox;
 
@@ -50,11 +52,11 @@ public class ConversationService : IConversationService
     {
         if (!ConversationChannel.All.Contains(request.Channel))
         {
-            throw new ArgumentException($"Invalid channel '{request.Channel}'.", nameof(request));
+            throw new ArgumentException("inbox.errors.invalidChannel").WithArgs(request.Channel);
         }
         if (await _contacts.GetAsync(request.ClientId, request.ContactId, ct) is null)
         {
-            throw new KeyNotFoundException("Contact not found.");
+            throw new KeyNotFoundException("contacts.errors.notFound");
         }
 
         return await CreateCoreAsync(request, ct);
@@ -65,7 +67,7 @@ public class ConversationService : IConversationService
     {
         if (!ConversationChannel.All.Contains(request.Channel))
         {
-            throw new ArgumentException($"Invalid channel '{request.Channel}'.", nameof(request));
+            throw new ArgumentException("inbox.errors.invalidChannel").WithArgs(request.Channel);
         }
 
         var conversation = AddNew(request, await _inboxSettings.InitialModeAsync(request.ClientId, ct));
@@ -120,7 +122,7 @@ public class ConversationService : IConversationService
 
         if (!ConversationChannel.All.Contains(channel))
         {
-            throw new ArgumentException($"Invalid channel '{channel}'.", nameof(channel));
+            throw new ArgumentException("inbox.errors.invalidChannel").WithArgs(channel);
         }
         var created = AddNew(new CreateConversationRequest(clientId, contactId, channel, externalThreadId),
             await _inboxSettings.InitialModeAsync(clientId, ct));
@@ -131,7 +133,7 @@ public class ConversationService : IConversationService
 
         // A concurrent delivery created the same thread first — our pending row was dropped; use theirs.
         var winner = await _conversations.FindByExternalThreadAsync(clientId, channel, externalThreadId, ct)
-            ?? throw new InvalidOperationException("Conversation conflict reported but the existing conversation was not found.");
+            ?? throw new InvalidOperationException("Conversation conflict reported but the existing conversation was not found."); // text-ok: internal invariant
         return InboxMapper.ToResponse(winner);
     }
 
@@ -151,11 +153,11 @@ public class ConversationService : IConversationService
     {
         if (!MessageDirection.Inbound.Equals(request.Direction) && !MessageDirection.Outbound.Equals(request.Direction))
         {
-            throw new ArgumentException($"Invalid message direction '{request.Direction}'.", nameof(request));
+            throw new ArgumentException("inbox.errors.invalidDirection").WithArgs(request.Direction);
         }
         if (request.SenderType is not (MessageSenderType.Contact or MessageSenderType.Ai or MessageSenderType.Member or MessageSenderType.System))
         {
-            throw new ArgumentException($"Invalid sender type '{request.SenderType}'.", nameof(request));
+            throw new ArgumentException("inbox.errors.invalidSenderType").WithArgs(request.SenderType);
         }
 
         var conversation = await _conversations.GetAsync(clientId, conversationId, ct);
@@ -261,7 +263,8 @@ public class ConversationService : IConversationService
         // Without the AI assistant in the plan nothing would answer, so the conversation must stay with members.
         if (!(await _inboxSettings.GetAsync(clientId, ct)).PlanIncludesAiBot)
         {
-            throw new EntitlementDeniedException(EntitlementKeys.AiAssistant, "Your plan doesn't include the AI assistant.");
+            throw new EntitlementDeniedException(EntitlementKeys.AiAssistant, EntitlementDeniedException.NotIncludedKey)
+                .WithArgs(BillingTextHelper.EntitlementArg(EntitlementKeys.AiAssistant));
         }
         return await SetModeAsync(clientId, conversationId, ConversationMode.Ai, EventTypes.ReturnedToAi, "dashboard", "{}", ct);
     }
@@ -289,10 +292,11 @@ public class ConversationService : IConversationService
         if (result is not null && !wasAlreadyHuman)
         {
             var contactName = await _contacts.GetFullNameAsync(result.ContactId, ct);
+            object who = string.IsNullOrWhiteSpace(contactName) ? TextArg.Of("notifications.anyone.conversation") : contactName;
             await _notifications.CreateAsync(clientId, NotificationType.Handoff,
-                "AI handed off to your team",
-                (string.IsNullOrWhiteSpace(contactName) ? "A conversation" : contactName) +
-                (string.IsNullOrWhiteSpace(reason) ? " needs your team's attention." : $" needs your team's attention: {reason}"),
+                string.IsNullOrWhiteSpace(reason)
+                    ? NotificationText.Of("notifications.handoff.title", "notifications.handoff.message", who)
+                    : NotificationText.Of("notifications.handoff.title", "notifications.handoff.messageReason", who, reason),
                 contactId: result.ContactId, conversationId: conversationId,
                 link: $"/inbox?conversationId={conversationId}", ct: ct);
         }

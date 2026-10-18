@@ -7,6 +7,7 @@ using Omni.App.Common.Statics;
 using Omni.App.Entities.Dtos.Billing;
 using Omni.App.Persistence.Contracts.Billing;
 using Omni.App.Persistence.Contracts.Channels;
+using Omni.App.Common.Helpers;
 
 namespace Omni.App.Business.Services.Billing;
 
@@ -58,20 +59,18 @@ public class EntitlementService : IEntitlementService
         var entitlements = await GetAsync(clientId, ct);
         if (entitlements.CanSendMessages) return;
         _logger.LogInformation("Billing: client {ClientId} blocked from sending — subscription {Status}.", clientId, entitlements.SubscriptionStatus ?? "none");
-        throw new EntitlementDeniedException("subscription",
-            "Your subscription isn't active, so messages can't be sent. See Settings → Billing.");
+        throw new EntitlementDeniedException("subscription", EntitlementDeniedException.InactiveSendKey); // text-ok: "subscription" names what was checked
     }
 
     public async Task EnsureFeatureAsync(Guid clientId, string featureKey, CancellationToken ct = default)
     {
         var entitlements = await GetAsync(clientId, ct);
         if (entitlements.IsEnabled(featureKey)) return;
-        var label = EntitlementCatalog.Find(featureKey)?.Label ?? featureKey;
+        var label = BillingTextHelper.EntitlementArg(featureKey);
         _logger.LogInformation("Billing: client {ClientId} blocked from {Feature} (plan {Plan}, status {Status}).",
             clientId, featureKey, entitlements.PlanCode ?? "none", entitlements.SubscriptionStatus ?? "none");
-        throw new EntitlementDeniedException(featureKey, entitlements.HasAccess
-            ? $"{label} isn't included in your plan. See Settings → Billing."
-            : $"Your subscription isn't active, so {label.ToLowerInvariant()} can't be used. See Settings → Billing.");
+        throw new EntitlementDeniedException(featureKey, entitlements.HasAccess ? EntitlementDeniedException.NotIncludedKey : EntitlementDeniedException.InactiveFeatureKey)
+            .WithArgs(label);
     }
 
     public async Task EnsureWithinLimitAsync(Guid clientId, string limitKey, int countAfterChange, CancellationToken ct = default)
@@ -79,11 +78,10 @@ public class EntitlementService : IEntitlementService
         var entitlements = await GetAsync(clientId, ct);
         var limit = entitlements.Limit(limitKey);
         if (limit is null || countAfterChange <= limit) return;
-        var label = EntitlementCatalog.Find(limitKey)?.Label ?? limitKey;
+        var label = BillingTextHelper.EntitlementArg(limitKey);
         _logger.LogInformation("Billing: client {ClientId} reached its {Limit} limit ({Max}).", clientId, limitKey, limit);
-        throw new EntitlementDeniedException(limitKey, entitlements.HasAccess
-            ? $"Your plan allows {limit} {label.ToLowerInvariant()}. See Settings → Billing."
-            : "Your subscription isn't active. See Settings → Billing.");
+        throw new EntitlementDeniedException(limitKey, entitlements.HasAccess ? EntitlementDeniedException.LimitReachedKey : EntitlementDeniedException.InactiveKey)
+            .WithArgs(label, limit);
     }
 
     public async Task EnsureCanConnectChannelAsync(Guid clientId, string channel, CancellationToken ct = default)

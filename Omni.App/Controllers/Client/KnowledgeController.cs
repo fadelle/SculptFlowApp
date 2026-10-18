@@ -3,6 +3,7 @@ using Omni.App.Business.Contracts.Managers;
 using Omni.App.Business.Contracts.Services.Knowledge;
 using Omni.App.Entities.Requests.Knowledge;
 using Omni.App.Entities.Responses.Knowledge;
+using Omni.App.Controllers.Filters;
 
 namespace Omni.App.Controllers.Client;
 
@@ -12,6 +13,8 @@ namespace Omni.App.Controllers.Client;
 [Route("api/knowledge")]
 public class KnowledgeController : DashboardApiController
 {
+    private const string FileRequiredKey = "knowledge.documents.errors.fileRequired";
+
     private readonly IKnowledgeService _knowledge;
     private readonly IKnowledgeSettingsService _settings;
 
@@ -72,7 +75,7 @@ public class KnowledgeController : DashboardApiController
         }
         catch (InvalidOperationException ex)
         {
-            return StatusCode(StatusCodes.Status503ServiceUnavailable, new { error = ex.Message });
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new { error = ApiErrorsAttribute.Localize(HttpContext, ex) });
         }
     }
 
@@ -85,7 +88,7 @@ public class KnowledgeController : DashboardApiController
         var clientId = await GetClientIdAsync(ct);
         if (clientId is null) return Forbid();
 
-        if (form.File is null) return BadRequest(new { error = "Choose a file to upload." });
+        if (form.File is null) return BadRequest(new { error = ApiErrorsAttribute.Text(HttpContext, FileRequiredKey) });
 
         try
         {
@@ -98,7 +101,7 @@ public class KnowledgeController : DashboardApiController
         }
         catch (InvalidOperationException ex)
         {
-            return StatusCode(StatusCodes.Status503ServiceUnavailable, new { error = ex.Message });
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new { error = ApiErrorsAttribute.Localize(HttpContext, ex) });
         }
     }
 
@@ -115,7 +118,7 @@ public class KnowledgeController : DashboardApiController
         }
         catch (InvalidOperationException ex)
         {
-            return StatusCode(StatusCodes.Status503ServiceUnavailable, new { error = ex.Message });
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new { error = ApiErrorsAttribute.Localize(HttpContext, ex) });
         }
     }
 

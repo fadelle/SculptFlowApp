@@ -68,6 +68,9 @@ namespace Omni.App.Controllers.Integrations;
 [TraceBotTool]
 public class AiController : ControllerBase
 {
+    /// <summary>The key BookingService refuses with when the contact isn't the client's (book_slot answers CONTACT_NOT_FOUND).</summary>
+    private const string ContactNotFoundKey = "contacts.errors.notFound";
+
     private readonly IClientContext _clientContext;
     private readonly ICatalogService _services;
     private readonly IContactService _contacts;
@@ -244,8 +247,8 @@ public class AiController : ControllerBase
         }
         catch (ArgumentException ex)
         {
-            var contactMissing = ex.Message.StartsWith("Contact not found", StringComparison.OrdinalIgnoreCase);
-            return Ok(new BookSlotResult(false, contactMissing ? "CONTACT_NOT_FOUND" : "INVALID_REQUEST", ex.Message,
+            var contactMissing = ex.Message == ContactNotFoundKey;
+            return Ok(new BookSlotResult(false, contactMissing ? "CONTACT_NOT_FOUND" : "INVALID_REQUEST", ApiErrorsAttribute.Localize(HttpContext, ex),
                 NotBooked + "Tell the contact you couldn't complete the booking and that a team member will confirm it shortly."));
         }
     }

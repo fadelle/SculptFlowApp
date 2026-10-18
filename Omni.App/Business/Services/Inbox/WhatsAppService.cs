@@ -41,8 +41,7 @@ public class WhatsAppService : IWhatsAppService
         var integration = await _integrations.GetReadOnlyAsync(clientId, ChannelType.WhatsApp, ct);
         if (integration is null || integration.Status != ChannelIntegrationStatus.Connected || !_provider.IsReady(integration))
         {
-            throw new WhatsAppSendException(
-                "This client doesn't have a connected WhatsApp number yet — see Settings → Messaging Integrations.");
+            throw new WhatsAppSendException("channels.whatsApp.errors.notConnected");
         }
         return integration;
     }

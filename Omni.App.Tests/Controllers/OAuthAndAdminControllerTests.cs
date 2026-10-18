@@ -30,7 +30,7 @@ public class CalendarOAuthControllerTests
 
     private CalendarOAuthController Sut(Action<HttpContext>? configure = null)
     {
-        var c = new CalendarOAuthController(_calendar.Object, _client.Object, [_google.Object], ControllerTestKit.Config(("App:PublicBaseUrl", _baseUrl)), _dp, NullLogger<CalendarOAuthController>.Instance, _config.Object);
+        var c = new CalendarOAuthController(_calendar.Object, _client.Object, [_google.Object], ControllerTestKit.Config(("App:PublicBaseUrl", _baseUrl)), _dp, NullLogger<CalendarOAuthController>.Instance, _config.Object, TextKit.Localizer());
         c.ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() };
         c.TempData = new TempDataDictionary(c.HttpContext, Mock.Of<ITempDataProvider>());
         configure?.Invoke(c.HttpContext);
@@ -121,7 +121,7 @@ public class CalendarOAuthControllerTests
 
         var nocode = Sut();
         await nocode.Callback(CalendarProvider.Google, null, state, null, null, default);
-        Assert.Contains("did not return", nocode.TempData["ErrorMessage"]!.ToString());
+        Assert.Contains("didn't return", nocode.TempData["ErrorMessage"]!.ToString());
 
         _google.Setup(g => g.ExchangeCodeAsync("bad", It.IsAny<string>(), It.IsAny<CancellationToken>())).ThrowsAsync(new InvalidOperationException("invalid_grant"));
         var failed = Sut();
@@ -157,7 +157,7 @@ public class TikTokOAuthControllerTests
 
     private TikTokOAuthController Sut()
     {
-        var c = new TikTokOAuthController(_client.Object, _tiktok.Object, _provider.Object, ControllerTestKit.Config(("App:PublicBaseUrl", "https://app.example.com")), _dp, NullLogger<TikTokOAuthController>.Instance, _config.Object);
+        var c = new TikTokOAuthController(_client.Object, _tiktok.Object, _provider.Object, ControllerTestKit.Config(("App:PublicBaseUrl", "https://app.example.com")), _dp, NullLogger<TikTokOAuthController>.Instance, _config.Object, TextKit.Localizer());
         c.ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() };
         c.TempData = new TempDataDictionary(c.HttpContext, Mock.Of<ITempDataProvider>());
         return c;

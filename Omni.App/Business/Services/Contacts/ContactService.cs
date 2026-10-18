@@ -43,7 +43,7 @@ public class ContactService : IContactService
     {
         if (await _clients.GetReadOnlyAsync(request.ClientId, ct) is null)
         {
-            throw new KeyNotFoundException("Client not found.");
+            throw new KeyNotFoundException("clients.errors.notFound");
         }
 
         if (!string.IsNullOrWhiteSpace(request.ExternalContactId))
@@ -58,7 +58,7 @@ public class ContactService : IContactService
 
         if (new[] { request.FullName, request.FirstName, request.LastName, request.Phone, request.Email }.All(string.IsNullOrWhiteSpace))
         {
-            throw new ArgumentException("A contact needs a name, phone or email.");
+            throw new ArgumentException("contacts.errors.identityRequired");
         }
 
         var pipeline = await _businessTypes.GetPipelineAsync(request.ClientId, ct);
@@ -161,7 +161,7 @@ public class ContactService : IContactService
 
         if (request.Qualification is not null && !ContactQualification.All.Contains(request.Qualification))
         {
-            throw new ArgumentException($"Invalid qualification status '{request.Qualification}'.", nameof(request));
+            throw new ArgumentException("contacts.errors.invalidQualification").WithArgs(request.Qualification);
         }
 
         var contact = await _contacts.GetAsync(clientId, id, ct);
@@ -214,7 +214,7 @@ public class ContactService : IContactService
     {
         if (request.Qualification is not null && !ContactQualification.All.Contains(request.Qualification))
         {
-            throw new ArgumentException($"Invalid qualification status '{request.Qualification}'.", nameof(request));
+            throw new ArgumentException("contacts.errors.invalidQualification").WithArgs(request.Qualification);
         }
 
         var pipeline = ClientPipeline.Empty;
@@ -317,7 +317,7 @@ public class ContactService : IContactService
         {
             // A concurrent delivery created the same contact first — our pending contact/event were dropped; use theirs.
             var winner = await _contacts.FindByExternalIdAsync(clientId, externalContactId, ct)
-                ?? throw new InvalidOperationException("Contact conflict reported but the existing contact was not found.");
+                ?? throw new InvalidOperationException("Contact conflict reported but the existing contact was not found."); // text-ok: internal invariant
             return (ContactMapper.ToResponse(winner), false); // a concurrent delivery created it first — not "our" new contact
         }
 

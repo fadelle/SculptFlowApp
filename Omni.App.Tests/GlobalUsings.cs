@@ -119,6 +119,8 @@ global using Microsoft.Extensions.Localization;
 global using Omni.App.Business.Contracts.Services.BusinessTypes;
 global using Omni.App.Persistence.Contracts.BusinessTypes;
 global using Omni.App.Entities.Dtos.BusinessTypes;
+global using Omni.App.Entities.Dtos.Notifications;
+global using Omni.App.Entities.Dtos.Ui;
 global using Omni.App.Entities.Requests.BusinessTypes;
 global using Omni.App.Entities.Responses.BusinessTypes;
 global using Omni.App.Tests.Support;

@@ -11,6 +11,7 @@ using Omni.App.Entities.Responses.WhatsApp;
 using Omni.App.Persistence.Contracts;
 using Omni.App.Persistence.Contracts.Channels;
 using Omni.App.Persistence.Contracts.WhatsApp;
+using Omni.App.Common.Helpers;
 
 namespace Omni.App.Business.Services.WhatsApp;
 
@@ -60,16 +61,16 @@ public class WhatsAppTemplateService : IWhatsAppTemplateService
     {
         if (!WhatsAppTemplateCategory.All.Contains(request.Category))
         {
-            throw new ArgumentException($"Invalid category '{request.Category}'.", nameof(request));
+            throw new ArgumentException("templates.errors.invalidCategory").WithArgs(request.Category);
         }
         if (string.IsNullOrWhiteSpace(request.Name) || string.IsNullOrWhiteSpace(request.Body))
         {
-            throw new ArgumentException("Name and Body are required.", nameof(request));
+            throw new ArgumentException("templates.errors.nameBodyRequired");
         }
         // Meta only accepts lower-case letters, digits and underscores (max 512); catch it here rather than at submission.
         if (request.Name.Length > 512 || !request.Name.All(c => c is (>= 'a' and <= 'z') or (>= '0' and <= '9') or '_'))
         {
-            throw new ArgumentException("Template names may only use lower-case letters, numbers and underscores (e.g. booking_reminder).", nameof(request));
+            throw new ArgumentException("templates.errors.nameInvalid");
         }
 
         var now = DateTimeOffset.UtcNow;
@@ -104,13 +105,13 @@ public class WhatsAppTemplateService : IWhatsAppTemplateService
         if (template is null) return null;
         if (!string.IsNullOrEmpty(template.MetaTemplateId))
         {
-            throw new InvalidOperationException("This template already reached Meta. Use Sync to refresh its status, or create a new template to change it.");
+            throw new InvalidOperationException("templates.errors.alreadyAtMeta");
         }
 
         var submitted = await SubmitForReviewAsync(template, ct);
         if (!submitted)
         {
-            throw new InvalidOperationException("Connect your WhatsApp number (Settings → Integrations) before sending templates to Meta.");
+            throw new InvalidOperationException("templates.errors.connectFirst");
         }
         return ToResponse(template);
     }
@@ -157,7 +158,7 @@ public class WhatsAppTemplateService : IWhatsAppTemplateService
         }
 
         var integration = await ReadyIntegrationAsync(clientId, ct)
-            ?? throw new InvalidOperationException("This client doesn't have a connected WhatsApp number to sync against.");
+            ?? throw new InvalidOperationException("templates.errors.noNumber");
 
         var result = await _provider.GetStatusAsync(integration, template, ct);
         template.Status = MapMetaStatus(result.Status);
@@ -173,7 +174,7 @@ public class WhatsAppTemplateService : IWhatsAppTemplateService
     {
         if (string.IsNullOrWhiteSpace(request.Name))
         {
-            throw new ArgumentException("Name is required (used as the upsert fallback key when MetaTemplateId is absent).", nameof(request));
+            throw new ArgumentException("Name is required (used as the upsert fallback key when MetaTemplateId is absent).", nameof(request)); // text-ok: n8n sync contract
         }
 
         // Don't trust ClientId blindly — if the event carries a WabaId, it must match this
@@ -186,7 +187,7 @@ public class WhatsAppTemplateService : IWhatsAppTemplateService
             if (integration is not null && !string.Equals(integration.WhatsAppBusinessId, request.WabaId, StringComparison.OrdinalIgnoreCase))
             {
                 throw new InvalidOperationException(
-                    $"WabaId '{request.WabaId}' does not match client {request.ClientId}'s stored WhatsApp connection.");
+                    $"WabaId '{request.WabaId}' does not match client {request.ClientId}'s stored WhatsApp connection."); // text-ok: n8n sync contract
             }
         }
         integration ??= await _integrations.GetAsync(request.ClientId, ChannelType.WhatsApp, ct);

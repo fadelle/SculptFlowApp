@@ -15,6 +15,8 @@ using Omni.App.Persistence.Contracts.Campaigns;
 using Omni.App.Persistence.Contracts.Inbox;
 using Omni.App.Persistence.Contracts.Contacts;
 using Omni.App.Persistence.Contracts.WhatsApp;
+using Omni.App.Entities.Dtos.Ui;
+using Microsoft.Extensions.Localization;
 
 namespace Omni.App.Business.Services.Campaigns;
 
@@ -30,10 +32,13 @@ public class CampaignService : ICampaignService
     private readonly ICampaignAudienceService _audience;
     private readonly IEntitlementService _entitlements;
 
+    private readonly IStringLocalizer _text;
+
     public CampaignService(ICampaignRepository campaigns, IWhatsAppTemplateRepository templates, IContactRepository contacts,
         IMessageRepository messageRows, IUnitOfWork unitOfWork, IConversationService conversations, IMessageService messages, ICampaignAudienceService audience,
-        IEntitlementService entitlements)
+        IEntitlementService entitlements, IStringLocalizer text)
     {
+        _text = text;
         _campaigns = campaigns;
         _templates = templates;
         _contacts = contacts;
@@ -93,20 +98,20 @@ public class CampaignService : ICampaignService
     {
         if (string.IsNullOrWhiteSpace(request.Name))
         {
-            throw new ArgumentException("Name is required.", nameof(request));
+            throw new ArgumentException("campaigns.errors.nameRequired");
         }
         await _entitlements.EnsureFeatureAsync(request.ClientId, EntitlementKeys.Campaigns, ct);
 
         var template = await _templates.GetReadOnlyAsync(request.ClientId, request.WhatsAppTemplateId, ct);
         if (template is null)
         {
-            throw new ArgumentException("Template not found for this client.", nameof(request));
+            throw new ArgumentException("templates.errors.notFound");
         }
 
         var audienceType = string.IsNullOrWhiteSpace(request.AudienceType) ? CampaignAudienceType.Custom : request.AudienceType;
         if (!CampaignAudienceType.All.Contains(audienceType))
         {
-            throw new ArgumentException($"Unknown audience type '{audienceType}'.", nameof(request));
+            throw new ArgumentException("campaigns.errors.unknownAudience").WithArgs(audienceType);
         }
 
         CampaignAudienceFilters.Validate(request.AudienceFilters);
@@ -131,7 +136,7 @@ public class CampaignService : ICampaignService
 
         if (contacts.Count == 0)
         {
-            throw new ArgumentException("At least one recipient is required.", nameof(request));
+            throw new ArgumentException("campaigns.errors.recipientRequired");
         }
 
         var now = DateTimeOffset.UtcNow;
@@ -189,7 +194,7 @@ public class CampaignService : ICampaignService
         if (campaign is null) return null;
         if (campaign.Status != CampaignStatus.Draft)
         {
-            throw new InvalidOperationException($"Only a draft campaign can be scheduled (this one is '{campaign.Status}').");
+            throw new InvalidOperationException("campaigns.errors.scheduleNotDraft").WithArgs(TextArg.Value(campaign.Status));
         }
         await _entitlements.EnsureFeatureAsync(clientId, EntitlementKeys.Campaigns, ct);
 
@@ -213,7 +218,7 @@ public class CampaignService : ICampaignService
         }
         else if (campaign.Status != CampaignStatus.Running)
         {
-            throw new InvalidOperationException($"Campaign can't be sent from status '{campaign.Status}'.");
+            throw new InvalidOperationException("campaigns.errors.cantSend").WithArgs(TextArg.Value(campaign.Status));
         }
 
         return await ProcessBatchAsync(clientId, id, batchSize, ct);
@@ -325,7 +330,7 @@ public class CampaignService : ICampaignService
         if (campaign is null) return null;
         if (campaign.Status is not (CampaignStatus.Scheduled or CampaignStatus.Running))
         {
-            throw new InvalidOperationException($"Only a scheduled or sending campaign can be stopped (this one is '{campaign.Status}').");
+            throw new InvalidOperationException("campaigns.errors.cantStop").WithArgs(TextArg.Value(campaign.Status));
         }
 
         // Set-based and conditional: the sender may be finishing it right now, and a finished campaign must stay finished.
@@ -334,7 +339,7 @@ public class CampaignService : ICampaignService
             new[] { CampaignStatus.Scheduled, CampaignStatus.Running }, CampaignStatus.Paused, now, ct);
         if (!stopped)
         {
-            throw new InvalidOperationException("The campaign finished or changed before it could be stopped. Refresh the page to see where it is.");
+            throw new InvalidOperationException("campaigns.errors.changedBeforeStop");
         }
 
         campaign.Status = CampaignStatus.Paused;
@@ -353,10 +358,10 @@ public class CampaignService : ICampaignService
         try
         {
             var campaign = await _campaigns.GetByIdAsync(recipient.CampaignId, ct)
-                ?? throw new InvalidOperationException("Campaign not found.");
+                ?? throw new InvalidOperationException("campaigns.errors.notFound");
             if (campaign.WhatsAppTemplateId is null)
             {
-                throw new InvalidOperationException("Campaign has no WhatsApp template to send.");
+                throw new InvalidOperationException("campaigns.errors.noTemplate");
             }
             var conversation = await _conversations.GetOrCreateForContactAsync(clientId, recipient.ContactId, ConversationChannel.WhatsApp, ct);
 
@@ -387,7 +392,8 @@ public class CampaignService : ICampaignService
         {
             var now = DateTimeOffset.UtcNow;
             recipient.Status = CampaignRecipientStatus.Failed;
-            recipient.FailureReason = ex.Message;
+            // Stored text (the campaign page shows it as written): a keyed refusal is worded now, outside a request in English.
+            recipient.FailureReason = _text.Localize(ex);
             recipient.FailedAt = now;
             recipient.UpdatedAt = now;
             await _unitOfWork.SaveChangesAsync(ct);
@@ -401,7 +407,7 @@ public class CampaignService : ICampaignService
         if (campaign is null) return null;
         if (campaign.Status is CampaignStatus.Completed or CampaignStatus.Cancelled)
         {
-            throw new InvalidOperationException($"Campaign is already '{campaign.Status}'.");
+            throw new InvalidOperationException("campaigns.errors.alreadyInStatus").WithArgs(TextArg.Value(campaign.Status));
         }
 
         var now = DateTimeOffset.UtcNow;

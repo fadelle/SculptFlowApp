@@ -11,6 +11,10 @@ public class Notification
     public string Type { get; set; } = string.Empty;
     public string Title { get; set; } = string.Empty;
     public string? Message { get; set; }
+
+    /// <summary>Title and Message are strings-file keys (rows from before keys hold the text itself, shown as written);
+    /// these are their arguments, TextArg-encoded (see NotificationText).</summary>
+    public string[] TextArgs { get; set; } = [];
     public Guid? ContactId { get; set; }
     public Guid? ConversationId { get; set; }
     public Guid? BookingId { get; set; }

@@ -7,7 +7,8 @@ namespace Omni.App.Tests.Guards;
 /// The UI strings files (Omni.App/Resources/i18n/*.json) and the code agree: every key the code uses exists in en.json,
 /// every en.json key is used, and every placeholder is an argument ({0}) or a business-type term ({contact}…).
 /// Keys are found where the code names them: <c>T["key"]</c> / <c>_text["key"]</c> / <c>T.Html("key")</c> (Razor and C#), an exception thrown
-/// with a key as its message, a <c>…Key = "key"</c> constant, and <c>omniText.t('key')</c> in JS.
+/// with a key as its message, a <c>…Key = "key"</c> constant, <c>TextArg.Of("key")</c> / <c>NotificationText.Of("key", "key")</c>, and
+/// <c>omniText.t('key')</c> in JS.
 /// </summary>
 public partial class UiTextKeysTests
 {
@@ -18,10 +19,13 @@ public partial class UiTextKeysTests
         JsonSerializer.Deserialize<Dictionary<string, string>>(File.ReadAllText(Path.Combine(AppRoot, "Resources", "i18n", language + ".json")))!;
 
     /// <summary>Keys read by building their name in code (Terminology reads terms.{term}.one/other, FilterLabelHelper
-    /// values.{stored value}, KnowledgeCategory knowledge.category.{category}).</summary>
+    /// values.{stored value}, KnowledgeCategory knowledge.category.{category}, BillingTextHelper billing.feature/eventType/ledger.{value}).</summary>
     private static bool ReadDynamically(string key) =>
-        key.StartsWith("terms.", StringComparison.Ordinal) || key.StartsWith(FilterLabelHelper.KeyPrefix, StringComparison.Ordinal)
-        || key.StartsWith(KnowledgeCategory.LabelKeyPrefix, StringComparison.Ordinal);
+        new[]
+        {
+            "terms.", FilterLabelHelper.KeyPrefix, KnowledgeCategory.LabelKeyPrefix,
+            BillingTextHelper.EntitlementKeyPrefix, BillingTextHelper.EventTypeKeyPrefix, BillingTextHelper.LedgerKeyPrefix
+        }.Any(prefix => key.StartsWith(prefix, StringComparison.Ordinal));
 
     private static IEnumerable<string> SourceFiles() =>
         Directory.EnumerateFiles(AppRoot, "*.*", SearchOption.AllDirectories)
@@ -35,7 +39,7 @@ public partial class UiTextKeysTests
         {
             // Comment lines may show the syntax with sample keys; only code counts.
             var text = string.Join('\n', File.ReadLines(file).Where(l => !IsComment(l.TrimStart())));
-            var patterns = file.EndsWith(".js") ? [JsKey()] : new[] { IndexerKey(), HtmlKey(), ExceptionKey(), ConstantKey() };
+            var patterns = file.EndsWith(".js") ? [JsKey()] : new[] { IndexerKey(), HtmlKey(), ExceptionKey(), ConstantKey(), TextArgKey(), NotificationTitleKey(), NotificationMessageKey() };
             foreach (var match in patterns.SelectMany(p => p.Matches(text)))
             {
                 var key = match.Groups[1].Value;
@@ -73,6 +77,21 @@ public partial class UiTextKeysTests
     }
 
     [Fact]
+    public void Every_billing_value_the_billing_page_shows_has_a_label()
+    {
+        var english = Strings("en");
+        var values = EntitlementCatalog.All.Select(d => BillingTextHelper.EntitlementKeyPrefix + FilterLabelHelper.KeyPart(d.Key))
+            .Concat(ConstantsOf(typeof(BillableEventTypes)).Select(v => BillingTextHelper.EventTypeKeyPrefix + FilterLabelHelper.KeyPart(v)))
+            .Concat(ConstantsOf(typeof(LedgerEntryType)).Select(v => BillingTextHelper.LedgerKeyPrefix + FilterLabelHelper.KeyPart(v)));
+        var missing = values.Where(k => !english.ContainsKey(k)).ToList();
+        Assert.True(missing.Count == 0, "Billing values with no label in en.json:\n  " + string.Join("\n  ", missing));
+    }
+
+    private static IEnumerable<string> ConstantsOf(Type type) =>
+        type.GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
+            .Where(f => f.IsLiteral && f.FieldType == typeof(string)).Select(f => (string)f.GetRawConstantValue()!);
+
+    [Fact]
     public void Every_term_has_a_default_word()
     {
         var english = Strings("en");
@@ -101,7 +120,7 @@ public partial class UiTextKeysTests
         }
     }
 
-    [GeneratedRegex("""\b(?:T|_text|Text|_localizer|Localizer)\[\s*"([^"]+)"\s*[,\]]""")]
+    [GeneratedRegex("""\b(?:T|text|_text|Text|_localizer|Localizer)\[\s*"([^"]+)"\s*[,\]]""")]
     private static partial Regex IndexerKey();
 
     [GeneratedRegex("""\b(?:T|_text|Text)\.Html\(\s*"([^"]+)"\s*[,)]""")]
@@ -112,6 +131,15 @@ public partial class UiTextKeysTests
 
     [GeneratedRegex("""\w*Key\s*=\s*"([a-z][A-Za-z0-9]*(?:\.[A-Za-z0-9]+)+)"\s*;""")]
     private static partial Regex ConstantKey();
+
+    [GeneratedRegex("""TextArg\.Of\(\s*"([a-z][A-Za-z0-9]*(?:\.[A-Za-z0-9]+)+)"\s*\)""")]
+    private static partial Regex TextArgKey();
+
+    [GeneratedRegex("""NotificationText\.Of\(\s*"([a-z][A-Za-z0-9]*(?:\.[A-Za-z0-9]+)+)"\s*,""")]
+    private static partial Regex NotificationTitleKey();
+
+    [GeneratedRegex("""NotificationText\.Of\(\s*"[^"]+"\s*,\s*"([a-z][A-Za-z0-9]*(?:\.[A-Za-z0-9]+)+)"\s*[,)]""")]
+    private static partial Regex NotificationMessageKey();
 
     [GeneratedRegex("""omniText\.t\(\s*['"]([^'"]+)['"]""")]
     private static partial Regex JsKey();

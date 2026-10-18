@@ -26,7 +26,7 @@ public class CampaignServiceTests
     }
 
     private CampaignService Sut() => new(_campaigns.Object, _templates.Object, _contacts.Object, _messageRows.Object, _uow.Object,
-        _conversations.Object, _messages.Object, _audience.Object, _entitlements.Object);
+        _conversations.Object, _messages.Object, _audience.Object, _entitlements.Object, TextKit.Localizer());
 
     private Campaign MakeCampaign(string status = CampaignStatus.Draft)
     {
@@ -322,7 +322,7 @@ public class CampaignServiceTests
             It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>())).ReturnsAsync(false);
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => Sut().StopAsync(_clientId, c.Id));
-        Assert.Contains("finished or changed", ex.Message);
+        Assert.Contains("finished or changed", TextKit.English(ex));
         Assert.Equal(CampaignStatus.Running, c.Status);
     }
 

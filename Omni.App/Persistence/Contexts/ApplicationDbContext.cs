@@ -786,6 +786,7 @@ public class ApplicationDbContext : IdentityUserContext<AppUser>
             e.Property(x => x.Type).HasColumnName("type").HasMaxLength(40).IsRequired();
             e.Property(x => x.Title).HasColumnName("title").HasMaxLength(200).IsRequired();
             e.Property(x => x.Message).HasColumnName("message");
+            e.Property(x => x.TextArgs).HasColumnName("text_args").IsRequired();
             e.Property(x => x.ContactId).HasColumnName("contact_id");
             e.Property(x => x.ConversationId).HasColumnName("conversation_id");
             e.Property(x => x.BookingId).HasColumnName("booking_id");

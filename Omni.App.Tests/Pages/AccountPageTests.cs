@@ -99,6 +99,20 @@ public class AccountPageTests
     }
 
     [Fact]
+    public async Task Register_offers_sign_in_for_a_taken_email_and_words_refusals_in_the_default_words()
+    {
+        var registration = new Mock<IClientRegistrationService>();
+        registration.Setup(r => r.RegisterAsync(It.IsAny<RegisterClientRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(ClientRegistrationResult.Fail("signup.errors.clientNameTooLong", "Someone already signs in with a@x.com.") with { EmailTaken = true });
+        var model = new RegisterModel(registration.Object, SignIn().Object, TextKit.PermissiveBusinessTypes().Object, TextKit.Localizer()).Attach();
+
+        Assert.IsType<PageResult>(await model.OnPostAsync(default));
+        Assert.True(model.EmailTaken);
+        Assert.Equal($"The business name must be {ClientRegistrationService.MaxNameLength} characters or fewer. Someone already signs in with a@x.com.",
+            model.ErrorMessage);
+    }
+
+    [Fact]
     public async Task Register_success_signs_the_new_user_in_and_forwards_the_form()
     {
         var user = new AppUser { Email = "a@x.com" };
