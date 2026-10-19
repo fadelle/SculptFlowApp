@@ -92,6 +92,11 @@ Every table lives in its area's Postgres schema, never `public` (only `set_updat
 - The admin portal has no copy of these tables (it reads and writes only through `/api/platform-admin`), so a table change
   only needs the main app's code, plus the platform-admin API shapes if a portal page shows that data.
 
+- `Database/migrations/2026-10-generic/copy-from-old.sql` copies the old project's data into a fresh Omni project (see
+  `docs/system-design.html` §8.5). A `schema.sql` change to a table it copies (a column, a value vocabulary, a rename) must
+  update the script, `test-copy-assert.sql` and `test-old-extras.sql` in the same change; run `test-copy.ps1`
+  (needs a local PostgreSQL install, ~1 minute) before committing it. `Guards/CopyScriptCoverageTests` catches new/removed tables.
+
 ## Configuration (standing rule, agreed 2026-10-07)
 
 Full detail and the declared-settings table: `docs/configuration.md`.
