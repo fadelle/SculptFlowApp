@@ -59,7 +59,11 @@ public class BusinessTypeRepositoryTests(PostgresFixture fixture) : RepoTestBase
             Assert.Equal(type.Stages.OrderBy(s => s.SortOrder).Select(s => s.Key), type.Stages.Select(s => s.Key));
             var terms = BusinessTypeMapper.ParseTerminology(type.TerminologyJson)["en"];
             Assert.All(TermName.All, t => Assert.False(string.IsNullOrWhiteSpace(terms[t].One + terms[t].Other)));
+            // The AI profile (the business-specific part of the n8n assistant's prompt) is filled, not the placeholder.
+            Assert.DoesNotContain("Placeholder", type.AiProfile);
+            Assert.Contains("search_knowledge", type.AiProfile);
         }
+        Assert.Contains("action=handoff", firstType.AiProfile);
         Assert.Equal("Customer", BusinessTypeMapper.LabelOf(general.Stages.Single(s => s.Key == "customer"), "fr"));
     }
 

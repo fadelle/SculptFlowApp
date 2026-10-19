@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Omni.App.Business.Contracts.HttpClients.N8n;
 using Omni.App.Business.Contracts.Managers;
+using Omni.App.Business.Contracts.Services.Ai;
 using Omni.App.Business.Contracts.Services.Billing;
 using Omni.App.Common.Helpers;
 using Omni.App.Common.Statics;
@@ -19,15 +20,17 @@ public class AiTriggerNotifier : IAiTriggerNotifier
     private readonly IConfiguration _configuration;
     private readonly ILogger<AiTriggerNotifier> _logger;
     private readonly IEntitlementService _entitlements;
+    private readonly IAiProfileService _profiles;
     private readonly IMessageTracer _tracer;
 
     public AiTriggerNotifier(HttpClient http, IConfiguration configuration, ILogger<AiTriggerNotifier> logger,
-        IEntitlementService entitlements, IMessageTracer tracer)
+        IEntitlementService entitlements, IAiProfileService profiles, IMessageTracer tracer)
     {
         _http = http;
         _configuration = configuration;
         _logger = logger;
         _entitlements = entitlements;
+        _profiles = profiles;
         _tracer = tracer;
     }
 
@@ -60,8 +63,27 @@ public class AiTriggerNotifier : IAiTriggerNotifier
                 return;
             }
 
-            using var response = await _http.PostAsJsonAsync(url, payload with { Traceparent = payload.Traceparent ?? TraceContext.CurrentTraceparent() },
-                JsonOptions, ct);
+            // The workflow's prompt is generic: the business's AI profile, words, language and timezone travel with every trigger.
+            var profile = await _profiles.GetForClientAsync(payload.ClientId, ct);
+            if (profile is null)
+            {
+                _logger.LogWarning("AI trigger skipped for conversation {ConversationId}: client {ClientId} not found.",
+                    payload.ConversationId, payload.ClientId);
+                _tracer.Step(TraceSteps.BotSkipped, TraceOutcomes.Skipped, ids, detail: new { reason = "client_not_found" });
+                return;
+            }
+
+            var trigger = payload with
+            {
+                Traceparent = payload.Traceparent ?? TraceContext.CurrentTraceparent(),
+                ClientName = profile.ClientName,
+                BusinessType = profile.BusinessType,
+                Language = profile.Language,
+                Timezone = profile.Timezone,
+                AiProfile = profile.AiProfile,
+                Terms = profile.Terms
+            };
+            using var response = await _http.PostAsJsonAsync(url, trigger, JsonOptions, ct);
             var elapsed = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
             if (!response.IsSuccessStatusCode)
             {

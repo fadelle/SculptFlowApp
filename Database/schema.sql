@@ -155,7 +155,7 @@ create trigger trg_pipeline_stages_updated_at
 
 -- The two built-in types, seeded once: a type that already exists is left exactly as the admin portal left it
 -- (re-running this file never brings back a stage or a word someone changed). Arabic and French words come in
--- Milestone B. The ai_profile texts are placeholders until the n8n workflows read them.
+-- Milestone B. The ai_profile texts are filled just below (from a placeholder, so an edited profile is never replaced).
 -- leftover-ok-begin: the built-in clinic business type (its stage keys, labels and words are clinic data)
 do $$
 begin
@@ -170,7 +170,7 @@ begin
          "booking": {"one": "consultation", "other": "consultations"},
          "order":   {"one": "procedure booking", "other": "procedure bookings"},
          "client":  {"one": "clinic", "other": "clinics"}}}',
-      'Placeholder: the clinic assistant profile moves here from the n8n workflow prompt.',
+      'Placeholder: filled by the update below.',
       10);
     insert into crm.pipeline_stages (business_type_code, key, category, labels, sort_order) values
       ('clinic', 'new',                   'open',        '{"en": "New"}',                    10),
@@ -201,7 +201,7 @@ begin
          "booking": {"one": "booking", "other": "bookings"},
          "order":   {"one": "order", "other": "orders"},
          "client":  {"one": "business", "other": "businesses"}}}',
-      'Placeholder: the general assistant profile moves here from the n8n workflow prompt.',
+      'Placeholder: filled by the update below.',
       20);
     insert into crm.pipeline_stages (business_type_code, key, category, labels, sort_order) values
       ('general', 'new',            'open',        '{"en": "New"}',            10),
@@ -216,6 +216,34 @@ begin
       ('general', 'needs_human',    'needs_human', '{"en": "Needs human"}',   100);
   end if;
 end $$;
+
+-- The AI profile of each built-in type: the business-specific part of the n8n AI assistant's system prompt (the
+-- workflow's own prompt is generic and reads this from the AI trigger, see docs/system-design.html §7). Written only
+-- over the placeholder, so a profile edited in the admin portal stays as it is.
+-- leftover-ok-begin: the built-in clinic business type's AI profile (clinic data, moved from the n8n prompt)
+update core.business_types set ai_profile =
+'You are the virtual receptionist of a plastic surgery and aesthetic clinic. The people who write to you are patients or prospective patients asking about procedures, consultations, prices, financing, preparation, recovery and the clinic itself.
+
+Clinic information:
+- Clinic facts (hours, address, parking, policies, prices, financing, doctors, procedure details, preparation, recovery and FAQs) come only from search_knowledge. Never invent clinic information.
+- Keep the qualifiers the clinic uses, such as "approximately", "starting from", "estimated", "typically" or "depending on complexity".
+
+Medical safety:
+- Do not diagnose, prescribe, determine suitability, change medication, override surgeon instructions, or give personalized clinical judgment.
+- Personalized clinical questions (for example about swelling, pain or whether a procedure suits the patient) use action=handoff, with a reason saying it is a medical question.
+- For apparent emergencies, tell the patient to seek urgent medical attention or local emergency services immediately.'
+where code = 'clinic' and ai_profile like 'Placeholder:%';
+-- leftover-ok-end
+
+update core.business_types set ai_profile =
+'You are the virtual assistant of this business. The people who write to you are customers or prospective customers asking about its services, prices, opening hours and bookings.
+
+Business information:
+- Facts about the business come only from search_knowledge. Never invent them.
+- Keep qualifiers such as "approximately", "starting from" or "depending on the case".
+
+Hand off to a team member (action=handoff) when someone asks for a person, makes a complaint, asks for a refund or an exception to a policy, or needs advice that depends on their personal situation.'
+where code = 'general' and ai_profile like 'Placeholder:%';
 
 -- ---------------------------------------------------------------------
 -- 1. clients

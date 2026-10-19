@@ -44,12 +44,7 @@ public class N8nKnowledgeBenchmarkGeneratorClient : IKnowledgeBenchmarkGenerator
                 "The benchmark question generator isn't configured — set N8n:KnowledgeBenchmarkWebhookUrl (env var N8n__KnowledgeBenchmarkWebhookUrl).");
         }
 
-        var payload = new
-        {
-            generationId,
-            clientId,
-            chunks = chunks.Select(c => new { documentId = c.DocumentId, chunkId = c.ChunkId, documentTitle = c.DocumentTitle, content = c.Content })
-        };
+        var payload = new BenchmarkGeneratorPayload(generationId, clientId, chunks);
 
         string body;
         try

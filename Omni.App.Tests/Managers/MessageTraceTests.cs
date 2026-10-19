@@ -228,6 +228,7 @@ public class BotTraceTests
 {
     private readonly FakeHttpHandler _http = new();
     private readonly Mock<IEntitlementService> _entitlements = new();
+    private readonly Mock<IAiProfileService> _profiles = AiProfileKit.Profiles();
     private readonly Mock<IMessageTracer> _tracer = new();
     private readonly List<(string Step, string Outcome, string Detail)> _steps = new();
     private readonly Dictionary<string, string?> _settings = new() { ["N8n:AiWebhookUrl"] = "https://n8n.example/webhook/ai" };
@@ -240,7 +241,7 @@ public class BotTraceTests
     }
 
     private AiTriggerNotifier Notifier() => new(_http.CreateClient(), new ConfigurationBuilder().AddInMemoryCollection(_settings).Build(),
-        NullLogger<AiTriggerNotifier>.Instance, _entitlements.Object, _tracer.Object);
+        NullLogger<AiTriggerNotifier>.Instance, _entitlements.Object, _profiles.Object, _tracer.Object);
 
     private static AiTriggerPayload Payload() => new(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "whatsapp", "text", "hi");
 
@@ -265,6 +266,11 @@ public class BotTraceTests
             .ReturnsAsync(new ClientEntitlements(true, true, "active", "basic", "Basic", null, new Dictionary<string, string>()));
         await Notifier().NotifyAsync(Payload());
         Assert.Contains("plan_without_ai_assistant", _steps[^1].Detail);
+
+        _entitlements.Setup(e => e.GetAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync(ClientEntitlements.Unrestricted);
+        _profiles.Setup(p => p.GetForClientAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync((AiClientProfile?)null);
+        await Notifier().NotifyAsync(Payload());
+        Assert.Contains("client_not_found", _steps[^1].Detail);
 
         _settings.Remove("N8n:AiWebhookUrl");
         await Notifier().NotifyAsync(Payload());

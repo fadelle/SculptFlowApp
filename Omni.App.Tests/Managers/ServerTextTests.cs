@@ -8,7 +8,7 @@ namespace Omni.App.Tests.Managers;
 /// notification text, billing labels, Identity's errors.</summary>
 public class ServerTextTests
 {
-    private static readonly IReadOnlyDictionary<string, string> ClinicWords = TermPlaceholders.Build(new Dictionary<string, TermForms>(TextKit.DefaultTerms())
+    private static readonly IReadOnlyDictionary<string, string> FirstTypeWords = TermPlaceholders.Build(new Dictionary<string, TermForms>(TextKit.DefaultTerms())
     {
         [TermName.Contact] = new("patient", "patients"), [TermName.Booking] = new("consultation", "consultations") // leftover-ok: clinic words
     });
@@ -16,7 +16,7 @@ public class ServerTextTests
     [Fact]
     public void A_text_argument_is_put_into_the_same_language_and_words()
     {
-        var text = TextKit.Localizer(terms: ClinicWords);
+        var text = TextKit.Localizer(terms: FirstTypeWords);
 
         Assert.Equal("This consultation can't be rescheduled because it is Canceled.", // leftover-ok: clinic words
             text.Localize(new ArgumentException("bookings.errors.cantReschedule").WithArgs(TextArg.Value("canceled"))));
@@ -45,7 +45,7 @@ public class ServerTextTests
         var text = NotificationText.Of("notifications.newContact.title", "notifications.newContact.message", TextArg.Of("notifications.anyone.newContact"));
         Assert.Equal(("New contact", "A new contact sent their first message."), TextKit.English(text));
 
-        var localizer = TextKit.Localizer(terms: ClinicWords);
+        var localizer = TextKit.Localizer(terms: FirstTypeWords);
         Assert.Equal("A new patient sent their first message.", // leftover-ok: clinic words
             localizer[text.MessageKey!, text.Args.Select(TextArg.Encode).Select(TextArg.Decode).ToArray()].Value);
     }

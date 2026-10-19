@@ -1,5 +1,7 @@
 using Microsoft.Extensions.Localization;
+using Omni.App.Business.Contracts.Services.Ai;
 using Omni.App.Business.Contracts.Services.BusinessTypes;
+using Omni.App.Business.Services.Ai;
 using Omni.App.Business.Services.BusinessTypes;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.HttpOverrides;
@@ -187,6 +189,8 @@ builder.Services.AddScoped<ICurrentClientContext, CurrentClientContext>();
 builder.Services.AddScoped<IClientRegistrationService, ClientRegistrationService>();
 // Business types: the words, pipeline stages and AI profile of each kind of client (core.business_types, crm.pipeline_stages).
 builder.Services.AddScoped<IBusinessTypeService, BusinessTypeService>();
+// The client facts every AI trigger carries to n8n (name, business type, AI profile, words, language, timezone).
+builder.Services.AddScoped<IAiProfileService, AiProfileService>();
 // UI text: Resources/i18n/{language}.json (embedded) through IStringLocalizer (@T["key"] in Razor, [ApiErrors] for
 // server messages) and window.omniText in the browser; RequestTextMiddleware picks each request's language and the
 // client's business-type words.

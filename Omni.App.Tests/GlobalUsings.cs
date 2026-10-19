@@ -22,6 +22,7 @@ global using Omni.App.Business.Contracts.Jobs;
 global using Omni.App.Business.Contracts.Providers.Caching;
 global using Omni.App.Business.Contracts.Providers.Channels;
 global using Omni.App.Business.Contracts.Providers.WhatsApp;
+global using Omni.App.Business.Contracts.Services.Ai;
 global using Omni.App.Business.Contracts.Services.Bookings;
 global using Omni.App.Business.Contracts.Services.Automation;
 global using Omni.App.Business.Contracts.Services.Billing;
