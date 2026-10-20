@@ -14,7 +14,8 @@ namespace Omni.App.Pages.Dashboard;
 
 /// <summary>
 /// client-facing edit page for the three contact classification fields (stage, qualification, source) — the
-/// ones Campaign audiences (ICampaignAudienceService) filter on. Posts through the same
+/// ones Campaign audiences (ICampaignAudienceService) filter on — and the language the contact writes in (the AI's
+/// fallback when a message has no language of its own; a short list plus "Other" with a two-letter code). Posts through the same
 /// IContactService.UpdateStageAsync the existing POST /api/contacts/{id}/stage endpoint
 /// already uses (UpdateContactStageRequest just gained an optional Source field for this — see its
 /// remarks), so there's no second write path and Campaign counts see the change immediately (they
@@ -66,6 +67,20 @@ public class ContactDetailModel : PageModel
     [BindProperty]
     public string? CustomSource { get; set; }
 
+    /// <summary>The languages offered by name in the language list (the dashboard's three); any other language is "other"
+    /// with its two-letter code.</summary>
+    public IReadOnlyList<string> LanguageOptions { get; } = [ContactLanguage.English, ContactLanguage.Arabic, ContactLanguage.French];
+
+    public const string OtherLanguage = "other";
+
+    /// <summary>"" (not known), one of <see cref="LanguageOptions"/>, or <see cref="OtherLanguage"/> (then
+    /// <see cref="CustomLanguage"/>).</summary>
+    [BindProperty]
+    public string LanguageChoice { get; set; } = string.Empty;
+
+    [BindProperty]
+    public string? CustomLanguage { get; set; }
+
     [TempData]
     public string? StatusMessage { get; set; }
 
@@ -83,6 +98,9 @@ public class ContactDetailModel : PageModel
             SourceChoice = !string.IsNullOrWhiteSpace(Contact.Source) && SourceOptions.Contains(Contact.Source, StringComparer.OrdinalIgnoreCase)
                 ? Contact.Source : "other";
             CustomSource = SourceChoice == "other" ? Contact.Source : null;
+            var language = Contact.PreferredLanguage;
+            LanguageChoice = string.IsNullOrEmpty(language) ? string.Empty : LanguageOptions.Contains(language) ? language : OtherLanguage;
+            CustomLanguage = LanguageChoice == OtherLanguage ? language : null;
         }
         return Page();
     }
@@ -93,11 +111,13 @@ public class ContactDetailModel : PageModel
         if (client is null) return RedirectToPage();
 
         var resolvedSource = SourceChoice == "other" ? CustomSource?.Trim() : SourceChoice;
+        // Blank clears the language; the service turns a name or code into the two-letter code or refuses it.
+        var resolvedLanguage = (LanguageChoice == OtherLanguage ? CustomLanguage : LanguageChoice)?.Trim() ?? string.Empty;
 
         try
         {
             var contact = await _contacts.UpdateStageAsync(client.Id, Id,
-                new UpdateContactStageRequest(StageKey, Qualification, resolvedSource), ct);
+                new UpdateContactStageRequest(StageKey, Qualification, resolvedSource, resolvedLanguage), ct);
             if (contact is null) return NotFound();
 
             StatusMessage = _text[SavedKey].Value;

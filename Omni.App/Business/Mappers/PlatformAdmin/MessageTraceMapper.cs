@@ -93,6 +93,7 @@ public static class MessageTraceMapper
             TraceSteps.BotTriggered => $"Bot (n8n) asked to reply (answered {D("status")})",
             TraceSteps.BotTriggerFailed => "Bot (n8n) call failed: " + (D("error") ?? $"answered {D("status")}"),
             TraceSteps.BotToolCalled => $"Bot used tool {D("tool")} (answered {D("status")})",
+            TraceSteps.ContactLanguageIgnored => $"Contact language from the bot not understood ({D("value")}); kept {D("kept") ?? "none"}",
             TraceSteps.SendRequested => $"Send requested: {D("kind")}" + (D("template") is { } template ? $" template {template}" : ""),
             TraceSteps.SendBlocked => $"Send blocked before it went out: {D("error")}",
             TraceSteps.SendRejectedMode => $"AI reply not sent: conversation is with the team ({D("mode")})",

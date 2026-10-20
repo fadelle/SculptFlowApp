@@ -36,7 +36,8 @@ public class TextTests
         Assert.True(TextKit.Catalog.Supports("en"));
         Assert.False(TextKit.Catalog.Supports("xx"));
         Assert.Equal("contacts", TextKit.Catalog.Find("en", "terms.contact.other"));
-        Assert.Null(TextKit.Catalog.Find("fr", "terms.contact.other"));
+        Assert.Equal("membres", TextKit.Catalog.Find("fr", "terms.member.other"));
+        Assert.Null(TextKit.Catalog.Find("fr", "nav.inbox"));                    // not translated yet: the caller falls back to English
         Assert.Empty(TextKit.Catalog.All("xx"));
         Assert.Equal(12, TextKit.Catalog.Version("en").Length);
     }

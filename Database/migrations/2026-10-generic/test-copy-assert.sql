@@ -29,6 +29,11 @@ select pg_temp.check('medical_question lead in a booked stage keeps its stage, q
 select pg_temp.check('other leads keep status as stage_key and qualification',
     exists (select 1 from crm.contacts where id = 'de000000-0000-4000-8000-000000000100' and stage_key = 'surgery_booked' and qualification = 'hot')
     and exists (select 1 from crm.contacts where id = 'de000000-0000-4000-8000-000000000112' and stage_key = 'new' and qualification = 'spam'));
+select pg_temp.check('contact languages become two-letter codes (names, Arabizi, tags), junk becomes null',
+    (select string_agg(coalesce(preferred_language, '-'), ',' order by id) from crm.contacts
+     where id between 'de000000-0000-4000-8000-000000000102' and 'de000000-0000-4000-8000-000000000111')
+      = 'ar,ar,en,fr,es,ar,en,-,-,it'
+    and (select count(*) from crm.contacts where preferred_language !~ '^[a-z]{2}$') = 0);
 select pg_temp.check('contact external id, service and assigned_user carried over',
     exists (select 1 from crm.contacts where external_contact_id is not null)
     and (select count(*) from crm.contacts where service_id is not null) > 0

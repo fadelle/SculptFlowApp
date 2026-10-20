@@ -90,6 +90,9 @@ public class ContactRepository : IContactRepository
     public Task<string?> GetFullNameAsync(Guid contactId, CancellationToken ct = default) =>
         _db.Contacts.Where(l => l.Id == contactId).Select(l => l.FullName).FirstOrDefaultAsync(ct);
 
+    public Task<string?> GetPreferredLanguageAsync(Guid clientId, Guid contactId, CancellationToken ct = default) =>
+        _db.Contacts.Where(l => l.Id == contactId && l.ClientId == clientId).Select(l => l.PreferredLanguage).FirstOrDefaultAsync(ct);
+
     public Task<bool> ExistsAsync(Guid clientId, Guid contactId, CancellationToken ct = default) =>
         _db.Contacts.AnyAsync(l => l.Id == contactId && l.ClientId == clientId, ct);
 }

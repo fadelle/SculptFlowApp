@@ -63,7 +63,8 @@ public class AiTriggerNotifier : IAiTriggerNotifier
                 return;
             }
 
-            // The workflow's prompt is generic: the business's AI profile, words, language and timezone travel with every trigger.
+            // The workflow's prompt is generic: the business's AI profile, words, language and timezone travel with every trigger,
+            // with the contact's own language.
             var profile = await _profiles.GetForClientAsync(payload.ClientId, ct);
             if (profile is null)
             {
@@ -79,6 +80,9 @@ public class AiTriggerNotifier : IAiTriggerNotifier
                 ClientName = profile.ClientName,
                 BusinessType = profile.BusinessType,
                 Language = profile.Language,
+                ContactLanguage = payload.ContactId is { } contactId
+                    ? await _profiles.GetContactLanguageAsync(payload.ClientId, contactId, ct)
+                    : null,
                 Timezone = profile.Timezone,
                 AiProfile = profile.AiProfile,
                 Terms = profile.Terms

@@ -12,7 +12,9 @@ namespace Omni.App.Entities.Dtos.Ai;
 /// on its callbacks (AI tools, the reply send, handoff), so the bot's steps join this message's trace.
 /// The callers fill the message fields; AiTriggerNotifier adds the client's profile (ClientName … Terms, see
 /// AiClientProfile) just before sending, so the workflow's system prompt stays generic and reads the business's AI
-/// profile, words, default language and timezone from here.</summary>
+/// profile, words, default language and timezone from here. ContactLanguage is the contact's stored language (two-letter
+/// code, null when not known yet): the AI replies in the language of the message itself and falls back to it, then to
+/// Language, when the message has none (an emoji, a photo).</summary>
 public record AiTriggerPayload(
     Guid ClientId,
     Guid ConversationId,
@@ -26,6 +28,7 @@ public record AiTriggerPayload(
     string? ClientName = null,
     string? BusinessType = null,
     string? Language = null,
+    string? ContactLanguage = null,
     string? Timezone = null,
     string? AiProfile = null,
     IReadOnlyDictionary<string, TermForms>? Terms = null

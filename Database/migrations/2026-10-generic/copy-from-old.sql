@@ -285,7 +285,8 @@ select
     o.updated_at
 from old_core.procedures o;
 
--- crm.leads -> crm.contacts
+-- crm.leads -> crm.contacts (preferred_language: the old free text becomes a two-letter code or null, the same rules as
+-- the app's ContactLanguage: "Arabic" / "Arabizi" / "ar-LB" -> ar, "Français" -> fr, anything else -> null)
 insert into crm.contacts (
     id, client_id, service_id, full_name, first_name, last_name, phone, email, source, source_detail,
     campaign_name, external_contact_id, stage_key, qualification, preferred_language, country_code, city,
@@ -299,7 +300,7 @@ select
              and exists (select 1 from crm.pipeline_stages ps where ps.business_type_code = 'clinic' and ps.key = o.status and ps.category = 'open')
         then 'medical_question' else o.status end,
     case o.qualification_status when 'medical_question' then 'needs_human' else o.qualification_status end,
-    o.preferred_language, o.country_code, o.city, o.desired_timeline, o.notes, null, o.marketing_opt_in,
+    crm.normalize_language(o.preferred_language), o.country_code, o.city, o.desired_timeline, o.notes, null, o.marketing_opt_in,
     o.opted_out_at, o.last_contact_at, o.next_followup_at, o.created_at, o.updated_at
 from old_crm.leads o;
 

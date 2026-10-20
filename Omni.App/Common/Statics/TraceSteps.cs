@@ -25,6 +25,9 @@ public static class TraceSteps
     public const string BotTriggerFailed = "bot.trigger_failed";
     public const string BotToolCalled = "bot.tool_called";
 
+    // Contacts (from the bot's tools)
+    public const string ContactLanguageIgnored = "contact.language_ignored";
+
     // Sending
     public const string SendRequested = "send.requested";
     public const string SendBlocked = "send.blocked";

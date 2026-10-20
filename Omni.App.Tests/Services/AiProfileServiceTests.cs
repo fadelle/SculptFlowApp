@@ -10,8 +10,9 @@ public class AiProfileServiceTests
     private readonly Mock<IClientRepository> _clients = new();
     private readonly Mock<IBusinessTypeRepository> _types = new();
     private readonly Mock<ICurrentClientContext> _current = new();
+    private readonly Mock<IContactRepository> _contacts = new();
 
-    private AiProfileService Sut() => new(_clients.Object, _types.Object, new Terminology(TextKit.Catalog, _types.Object, _current.Object));
+    private AiProfileService Sut() => new(_clients.Object, _types.Object, new Terminology(TextKit.Catalog, _types.Object, _current.Object), _contacts.Object);
 
     private Client AddClient(string type, string language = AppLanguage.English)
     {

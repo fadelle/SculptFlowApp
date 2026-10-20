@@ -394,11 +394,36 @@ public class DashboardPageTests
             Id = id, StageKey = "qualified", Qualification = "warm", SourceChoice = "other", CustomSource = "  podcast ",
         }.Attach();
         Assert.IsType<RedirectToPageResult>(await model.OnPostAsync(default));
-        Assert.Equal(new UpdateContactStageRequest("qualified", "warm", "podcast"), seen);
+        Assert.Equal(new UpdateContactStageRequest("qualified", "warm", "podcast", ""), seen); // no language picked: cleared
 
         model.SourceChoice = "web";
         await model.OnPostAsync(default);
         Assert.Equal("web", seen!.Source);
+
+        model.LanguageChoice = ContactLanguage.Arabic;
+        await model.OnPostAsync(default);
+        Assert.Equal("ar", seen!.PreferredLanguage);
+
+        model.LanguageChoice = Omni.App.Pages.Dashboard.ContactDetailModel.OtherLanguage;
+        model.CustomLanguage = " es ";
+        await model.OnPostAsync(default);
+        Assert.Equal("es", seen!.PreferredLanguage);
+    }
+
+    [Theory]
+    [InlineData(null, "", null)]
+    [InlineData("fr", "fr", null)]
+    [InlineData("es", "other", "es")]   // a language outside the short list shows as "Other" with its code
+    public async Task Contact_detail_preselects_the_contacts_language(string? language, string choice, string? custom)
+    {
+        var id = Guid.NewGuid();
+        var contacts = new Mock<IContactService>();
+        contacts.Setup(l => l.GetByIdAsync(Glow.Id, id, It.IsAny<CancellationToken>())).ReturnsAsync(Contact() with { PreferredLanguage = language });
+        contacts.Setup(l => l.GetDistinctSourcesAsync(Glow.Id, It.IsAny<CancellationToken>())).ReturnsAsync(new List<string>());
+        var model = new Omni.App.Pages.Dashboard.ContactDetailModel(ClientContext(Glow).Object, contacts.Object, TextKit.Localizer()) { Id = id }.Attach();
+        await model.OnGetAsync(default);
+        Assert.Equal((choice, custom), (model.LanguageChoice, model.CustomLanguage));
+        Assert.Equal(["en", "ar", "fr"], model.LanguageOptions);
     }
 
     [Fact]

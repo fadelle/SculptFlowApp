@@ -645,6 +645,16 @@
   "contactDetail.update.otherSource": "Other…",
   "contactDetail.update.customSource": "Other source",
   "contactDetail.update.customSourcePlaceholder": "e.g. trade show",
+  "contactDetail.details.language": "Language",
+  "contactDetail.language.none": "Not known yet",
+  "contactDetail.language.en": "English",
+  "contactDetail.language.ar": "Arabic",
+  "contactDetail.language.fr": "French",
+  "contactDetail.update.language": "Language they write in",
+  "contactDetail.update.languageHint": "The AI replies in each message's language and uses this one when a message has none, such as an emoji or a photo.",
+  "contactDetail.update.otherLanguage": "Other…",
+  "contactDetail.update.customLanguage": "Language code",
+  "contactDetail.update.customLanguagePlaceholder": "Two letters, e.g. es",
 
   "statusHelp.trigger.title": "What do these mean?",
   "statusHelp.trigger.label": "What do these statuses mean?",
@@ -1483,6 +1493,7 @@
 
   "contacts.errors.identityRequired": "A {contact} needs a name, phone or email.",
   "contacts.errors.invalidQualification": "'{0}' isn't a qualification status.",
+  "contacts.errors.invalidLanguage": "'{0}' isn't a language. Use a two-letter code such as es.",
 
   "inbox.errors.invalidChannel": "'{0}' isn't a channel.",
   "inbox.errors.invalidDirection": "'{0}' isn't a message direction.",

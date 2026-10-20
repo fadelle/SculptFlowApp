@@ -30,7 +30,8 @@ public class ContactStageWalkTests(PostgresFixture fixture) : RepoTestBase(fixtu
         new ContactRepository(db), new UnitOfWork(db), TextKit.Context(), TimeProvider.System);
 
     private ContactService Contacts(ApplicationDbContext db) =>
-        new(new ContactRepository(db), new UnitOfWork(db), _events.Object, _catalog.Object, new ClientRepository(db, _cache), Types(db));
+        new(new ContactRepository(db), new UnitOfWork(db), _events.Object, _catalog.Object, new ClientRepository(db, _cache), Types(db),
+            Mock.Of<IMessageTracer>());
 
     private BookingService Bookings(ApplicationDbContext db) => new(new BookingRepository(db), new ContactRepository(db),
         new ClientRepository(db, _cache), new ServiceRepository(db, _cache), new UnitOfWork(db), _events.Object, _catalog.Object,

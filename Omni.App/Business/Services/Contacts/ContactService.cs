@@ -8,6 +8,7 @@ using Omni.App.Common.Enums;
 using Omni.App.Common.Helpers;
 using Omni.App.Common.Statics;
 using Omni.App.Entities.Dtos.BusinessTypes;
+using Omni.App.Entities.Dtos.Monitoring;
 using Omni.App.Entities.Models;
 using Omni.App.Entities.Requests.Contacts;
 using Omni.App.Entities.Responses.Contacts;
@@ -25,10 +26,12 @@ public class ContactService : IContactService
     private readonly ICatalogService _services;
     private readonly IClientRepository _clients;
     private readonly IBusinessTypeService _businessTypes;
+    private readonly IMessageTracer _tracer;
 
     public ContactService(IContactRepository contacts, IUnitOfWork unitOfWork, IEventLogger events, ICatalogService services, IClientRepository clients,
-        IBusinessTypeService businessTypes)
+        IBusinessTypeService businessTypes, IMessageTracer tracer)
     {
+        _tracer = tracer;
         _businessTypes = businessTypes;
         _contacts = contacts;
         _unitOfWork = unitOfWork;
@@ -61,6 +64,7 @@ public class ContactService : IContactService
             throw new ArgumentException("contacts.errors.identityRequired");
         }
 
+        var language = LanguageOrThrow(request.PreferredLanguage);
         var pipeline = await _businessTypes.GetPipelineAsync(request.ClientId, ct);
 
         var contact = new Contact
@@ -77,7 +81,7 @@ public class ContactService : IContactService
             SourceDetail = request.SourceDetail,
             CampaignName = request.CampaignName,
             ExternalContactId = request.ExternalContactId,
-            PreferredLanguage = request.PreferredLanguage,
+            PreferredLanguage = language,
             City = request.City,
             DesiredTimeline = request.DesiredTimeline,
             Notes = request.Notes,
@@ -134,7 +138,7 @@ public class ContactService : IContactService
         if (request.LastName is not null) contact.LastName = request.LastName;
         if (request.Phone is not null) contact.Phone = request.Phone;
         if (request.Email is not null) contact.Email = request.Email;
-        if (request.PreferredLanguage is not null) contact.PreferredLanguage = request.PreferredLanguage;
+        if (request.PreferredLanguage is not null) contact.PreferredLanguage = LanguageOrThrow(request.PreferredLanguage);
         if (request.City is not null) contact.City = request.City;
         if (request.DesiredTimeline is not null) contact.DesiredTimeline = request.DesiredTimeline;
         if (request.Notes is not null) contact.Notes = request.Notes;
@@ -151,6 +155,12 @@ public class ContactService : IContactService
         return ContactMapper.ToResponse(contact);
     }
 
+    /// <summary>A language a person typed or picked in the dashboard: blank clears it, a language name or code becomes its
+    /// two-letter code (ContactLanguage), anything else is refused (400) so nobody saves text the AI can't use.</summary>
+    private static string? LanguageOrThrow(string? language) =>
+        string.IsNullOrWhiteSpace(language) ? null
+            : ContactLanguage.Normalize(language) ?? throw new ArgumentException("contacts.errors.invalidLanguage").WithArgs(language.Trim());
+
     public async Task<ContactResponse?> UpdateStageAsync(Guid clientId, Guid id, UpdateContactStageRequest request, CancellationToken ct = default)
     {
         var pipeline = await _businessTypes.GetPipelineAsync(clientId, ct);
@@ -164,11 +174,14 @@ public class ContactService : IContactService
             throw new ArgumentException("contacts.errors.invalidQualification").WithArgs(request.Qualification);
         }
 
+        var language = request.PreferredLanguage is null ? null : LanguageOrThrow(request.PreferredLanguage);
+
         var contact = await _contacts.GetAsync(clientId, id, ct);
 
         if (contact is null) return null;
 
         ChangeStage(contact, pipeline, request.StageKey);
+        if (request.PreferredLanguage is not null) contact.PreferredLanguage = language;
         if (request.Qualification is not null)
         {
             contact.Qualification = request.Qualification;
@@ -236,7 +249,7 @@ public class ContactService : IContactService
 
         if (stageKey is not null) ChangeStage(contact, pipeline, stageKey);
         if (request.ServiceId is not null) contact.ServiceId = request.ServiceId;
-        if (request.PreferredLanguage is not null) contact.PreferredLanguage = request.PreferredLanguage;
+        if (!string.IsNullOrWhiteSpace(request.PreferredLanguage)) SetLanguageFromAi(contact, request.PreferredLanguage);
         if (request.City is not null) contact.City = request.City;
         if (request.DesiredTimeline is not null) contact.DesiredTimeline = request.DesiredTimeline;
         if (request.Notes is not null) contact.Notes = request.Notes;
@@ -252,6 +265,22 @@ public class ContactService : IContactService
 
         await _unitOfWork.SaveChangesAsync(ct);
         return ContactMapper.ToResponse(contact);
+    }
+
+    /// <summary>The AI's update_contact: a language it names becomes the contact's two-letter code. Text it can't map leaves
+    /// the stored language as it was (an unclear guess must not erase a known language) and records a
+    /// contact.language_ignored step in the message trace, so the bot's mistake is visible there.</summary>
+    private void SetLanguageFromAi(Contact contact, string language)
+    {
+        if (ContactLanguage.Normalize(language) is { } code)
+        {
+            contact.PreferredLanguage = code;
+            return;
+        }
+
+        var value = language.Trim();
+        _tracer.Step(TraceSteps.ContactLanguageIgnored, TraceOutcomes.Skipped, new TraceIds(contact.ClientId),
+            detail: new { contactId = contact.Id, value = value[..Math.Min(value.Length, 20)], kept = contact.PreferredLanguage });
     }
 
     public async Task<(ContactResponse Contact, bool WasCreated)> GetOrCreateByPhoneAsync(Guid clientId, string phone, string? fullName, CancellationToken ct = default)

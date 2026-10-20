@@ -5,7 +5,8 @@ namespace Omni.App.Entities.Requests.Contacts;
 /// from the contact's actual source (webhook/intake), not the AI's judgment. Only null fields are left
 /// unchanged — same partial-update semantics as UpdateContactRequest. Stage is a stage key of the client's business type
 /// or a stage category (open, booked, attended, no_show, converted, closed_lost, needs_human; the server picks the
-/// category's stage), so the AI never needs to know one type's keys.</summary>
+/// category's stage), so the AI never needs to know one type's keys. PreferredLanguage is the language the contact writes in,
+/// ideally a two-letter code ("ar" also for Arabizi); a name is mapped (ContactLanguage), text that is no language is ignored.</summary>
 public record UpdateContactContextRequest(
     Guid? ServiceId,
     string? PreferredLanguage,

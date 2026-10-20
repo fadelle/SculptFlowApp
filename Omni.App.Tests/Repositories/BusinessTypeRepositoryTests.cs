@@ -64,7 +64,10 @@ public class BusinessTypeRepositoryTests(PostgresFixture fixture) : RepoTestBase
             Assert.Contains("search_knowledge", type.AiProfile);
         }
         Assert.Contains("action=handoff", firstType.AiProfile);
-        Assert.Equal("Customer", BusinessTypeMapper.LabelOf(general.Stages.Single(s => s.Key == "customer"), "fr"));
+        var customer = general.Stages.Single(s => s.Key == "customer");
+        Assert.Equal(("Customer", "عميل", "Client"), (BusinessTypeMapper.LabelOf(customer, "en"), BusinessTypeMapper.LabelOf(customer, "ar"),
+            BusinessTypeMapper.LabelOf(customer, "fr")));
+        Assert.Equal("Customer", BusinessTypeMapper.LabelOf(customer, "de")); // a language without a label falls back to English
     }
 
     [PostgresFact]

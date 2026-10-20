@@ -52,9 +52,10 @@ public class N8nContractTests
         var sent = FieldsOf(typeof(AiTriggerPayload));
 
         Assert.Empty(used.Except(sent));
-        // The prompt is generic: the business's profile, words, language and timezone come from the trigger.
+        // The prompt is generic: the business's profile, words, language and timezone come from the trigger, and the reply
+        // falls back to the contact's stored language when a message has none.
         Assert.Empty(new[] { "clientId", "contactId", "conversationId", "messageText", "traceparent", "clientName", "aiProfile", "terms",
-            "language", "timezone" }.Except(used));
+            "language", "contactLanguage", "timezone" }.Except(used));
     }
 
     [Fact]
@@ -111,13 +112,19 @@ public class N8nContractTests
         var workflow = Load(AiWorkflow);
         var nodes = Nodes(workflow).ToList();
 
-        Assert.Equal(["get_available_slots", "get_my_bookings", "search_knowledge"],
+        Assert.Equal(["get_available_slots", "get_my_bookings", "search_knowledge", "update_contact"],
             nodes.Where(n => n.GetProperty("type").GetString()!.EndsWith(".httpRequestTool")).Select(n => n.GetProperty("name").GetString()).Order());
         var names = nodes.Select(n => n.GetProperty("name").GetString()).ToHashSet();
         Assert.Subset(names, new HashSet<string?> { "schedule_booking", "cancel_booking", "handoff_to_human", "send_message" });
 
         var prompt = Parameters(Node(workflow, "AI Agent")).GetProperty("options").GetProperty("systemMessage").GetString()!;
-        Assert.All(new[] { "search_knowledge", "get_available_slots", "get_my_bookings", "bookingId", "serviceId" }, word => Assert.Contains(word, prompt));
+        Assert.All(new[] { "search_knowledge", "get_available_slots", "get_my_bookings", "update_contact", "bookingId", "serviceId" },
+            word => Assert.Contains(word, prompt));
+
+        // update_contact only ever sends the contact's language (the AI can't touch other fields through it).
+        var update = Parameters(Node(workflow, "update_contact"));
+        Assert.Equal("PATCH", update.GetProperty("method").GetString());
+        Assert.Equal(["preferredLanguage"], Regex.Matches(update.GetProperty("jsonBody").GetString()!, "\"([A-Za-z]+)\":").Select(m => m.Groups[1].Value));
 
         var codes = JsonSerializer.SerializeToElement(Assert.IsType<OkObjectResult>(new AiTestController().ListCodes().Result).Value);
         Assert.Equal(Strings(codes.GetProperty("schedule")).Order(), SwitchCodes(nodes, "schedule_booking").Order());

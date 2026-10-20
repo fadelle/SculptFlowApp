@@ -11,11 +11,12 @@ public class ContactServiceTests
     private readonly Mock<ICatalogService> _services = new();
     private readonly Mock<IClientRepository> _clients = new();
     private readonly Mock<IBusinessTypeService> _businessTypes = TextKit.PermissiveBusinessTypes();
+    private readonly Mock<IMessageTracer> _tracer = new();
 
     public ContactServiceTests() =>
         _clients.Setup(c => c.GetReadOnlyAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(new Client { Id = _clientId, Name = "Test" });
 
-    private ContactService Sut() => new(_contacts.Object, _uow.Object, _events.Object, _services.Object, _clients.Object, _businessTypes.Object);
+    private ContactService Sut() => new(_contacts.Object, _uow.Object, _events.Object, _services.Object, _clients.Object, _businessTypes.Object, _tracer.Object);
 
     private Contact Existing(string stage = PipelineKit.New) => new()
     {
@@ -211,6 +212,54 @@ public class ContactServiceTests
         await Assert.ThrowsAsync<ArgumentException>(() => Sut().UpdateContextAsync(_clientId, contact.Id, new UpdateContactContextRequest(null, null, null, null, null, null, "bogus")));
         Assert.Null(await Sut().UpdateContextAsync(_clientId, Guid.NewGuid(), new UpdateContactContextRequest(null, null, null, null, null, null, null)));
         Assert.Equal(PipelineKit.New, contact.StageKey); // no stage given: the stage stays
+    }
+
+    [Fact]
+    public async Task UpdateContext_stores_the_ais_language_as_a_code_and_ignores_text_that_is_no_language()
+    {
+        var contact = Found();
+        contact.PreferredLanguage = "en";
+
+        await Sut().UpdateContextAsync(_clientId, contact.Id, new UpdateContactContextRequest(null, "Lebanese", null, null, null, null, null));
+        Assert.Equal("ar", contact.PreferredLanguage);
+        _tracer.Verify(t => t.Step(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Omni.App.Entities.Dtos.Monitoring.TraceIds>(),
+            It.IsAny<double?>(), It.IsAny<object?>()), Times.Never);
+
+        await Sut().UpdateContextAsync(_clientId, contact.Id, new UpdateContactContextRequest(null, "  ", null, null, null, null, null));
+        Assert.Equal("ar", contact.PreferredLanguage);                    // blank from the AI never erases a known language
+
+        await Sut().UpdateContextAsync(_clientId, contact.Id, new UpdateContactContextRequest(null, "the contact's own dialect", null, null, null, null, null));
+        Assert.Equal("ar", contact.PreferredLanguage);
+        _tracer.Verify(t => t.Step(TraceSteps.ContactLanguageIgnored, TraceOutcomes.Skipped,
+            It.Is<Omni.App.Entities.Dtos.Monitoring.TraceIds>(i => i.ClientId == _clientId), null, It.IsAny<object?>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task The_dashboard_stores_a_language_as_its_code_clears_a_blank_and_refuses_text_that_is_no_language()
+    {
+        Contact? added = null;
+        _contacts.Setup(l => l.Add(It.IsAny<Contact>())).Callback<Contact>(l => added = l);
+        await Sut().CreateOrGetAsync(Create() with { PreferredLanguage = " French " });
+        Assert.Equal("fr", added!.PreferredLanguage);
+        var refused = await Assert.ThrowsAsync<ArgumentException>(() => Sut().CreateOrGetAsync(Create() with { PreferredLanguage = "Klingon" }));
+        Assert.Equal(("contacts.errors.invalidLanguage", "'Klingon' isn't a language. Use a two-letter code such as es."),
+            (refused.Message, TextKit.English(refused)));
+
+        var contact = Found();
+        await Sut().UpdateAsync(_clientId, contact.Id, new UpdateContactRequest(null, null, null, null, null, null, "es-MX", null, null, null, null));
+        Assert.Equal("es", contact.PreferredLanguage);
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            Sut().UpdateAsync(_clientId, contact.Id, new UpdateContactRequest(null, null, null, null, null, null, "xx", null, null, null, null)));
+        Assert.Equal("es", contact.PreferredLanguage);
+
+        await Sut().UpdateStageAsync(_clientId, contact.Id, new UpdateContactStageRequest(PipelineKit.New, null, null, "arabic"));
+        Assert.Equal("ar", contact.PreferredLanguage);
+        await Sut().UpdateStageAsync(_clientId, contact.Id, new UpdateContactStageRequest(PipelineKit.New, null));
+        Assert.Equal("ar", contact.PreferredLanguage);                    // not sent: unchanged
+        await Sut().UpdateStageAsync(_clientId, contact.Id, new UpdateContactStageRequest(PipelineKit.New, null, null, ""));
+        Assert.Null(contact.PreferredLanguage);                           // blank: cleared
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            Sut().UpdateStageAsync(_clientId, contact.Id, new UpdateContactStageRequest(PipelineKit.New, null, null, "zz")));
     }
 
     [Theory]

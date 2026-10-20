@@ -22,6 +22,14 @@ where l.id = 'de000000-0000-4000-8000-000000000100';
 -- A contact in a booked stage with a medical question (qualification becomes needs_human, the stage stays).
 update crm.leads set qualification_status = 'medical_question' where id = 'de000000-0000-4000-8000-000000000101';
 
+-- Contact languages as old free text: names, Arabizi, a tag, a code that is no language and junk (the copy keeps codes only).
+update crm.leads set preferred_language = 'Arabic'   where id = 'de000000-0000-4000-8000-000000000102';
+update crm.leads set preferred_language = 'Français' where id = 'de000000-0000-4000-8000-000000000105';
+update crm.leads set preferred_language = 'Arabizi'  where id = 'de000000-0000-4000-8000-000000000107';
+update crm.leads set preferred_language = 'EN-us'    where id = 'de000000-0000-4000-8000-000000000108';
+update crm.leads set preferred_language = 'xx'       where id = 'de000000-0000-4000-8000-000000000109';
+update crm.leads set preferred_language = '??'       where id = 'de000000-0000-4000-8000-000000000110';
+
 -- Campaign audience filters in the old JSON shape.
 update marketing.campaigns
 set audience_filters = '{"leadStatuses":["new","qualified"],"qualificationStatuses":["hot","medical_question"],"procedureId":"de000000-0000-4000-8000-0000000000f1","inactiveDays":30}'::jsonb

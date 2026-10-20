@@ -168,6 +168,9 @@ Full detail and the declared-settings table: `docs/configuration.md`.
 - Which language a request uses: `ITextContext` (`RequestTextMiddleware`): `users.language` → `clients.default_language`
   → browser for signed-in users, the `omni.lang` cookie → browser for visitors, always English for an `/api` call without
   a signed-in user (portal, n8n, webhooks); only languages in `Localization:Languages` with a strings file.
+- A contact's language (`crm.contacts.preferred_language`, the AI's fallback) is a two-letter ISO 639-1 code: store it through
+  `ContactLanguage.Normalize` (SQL twin `crm.normalize_language`; change both together, `ContactLanguageWalkTests` compares
+  them). Fixed Arabic/French vocabulary (type words, stage labels, common words): `docs/i18n/glossary.md`.
 - Business types (`core.business_types`) give each client its words, AI profile and pipeline stages
   (`crm.pipeline_stages`). Code and reports work with stage **categories** (`StageCategory`), never one type's stage keys:
   move a contact with `IBusinessTypeService.GetPipelineAsync` → `ClientPipeline` (`EntryKey`, `MoveTo(current, category)`,

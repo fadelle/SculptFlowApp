@@ -154,8 +154,8 @@ create trigger trg_pipeline_stages_updated_at
   for each row execute function set_updated_at();
 
 -- The two built-in types, seeded once: a type that already exists is left exactly as the admin portal left it
--- (re-running this file never brings back a stage or a word someone changed). Arabic and French words come in
--- Milestone B. The ai_profile texts are filled just below (from a placeholder, so an edited profile is never replaced).
+-- (re-running this file never brings back a stage or a word someone changed). The ai_profile texts are filled just below
+-- (from a placeholder, so an edited profile is never replaced), then the Arabic and French words, only where missing.
 -- leftover-ok-begin: the built-in clinic business type (its stage keys, labels and words are clinic data)
 do $$
 begin
@@ -244,6 +244,85 @@ Business information:
 
 Hand off to a team member (action=handoff) when someone asks for a person, makes a complaint, asks for a refund or an exception to a policy, or needs advice that depends on their personal situation.'
 where code = 'general' and ai_profile like 'Placeholder:%';
+
+-- Arabic and French words of the built-in types (Milestone B; the vocabulary is in docs/i18n/glossary.md). Merged so that
+-- whatever is already there wins: a name, a term or a stage label edited in the admin portal stays as it is when this
+-- file runs again; only a language (or a term) that is missing is filled in.
+-- leftover-ok-begin: the built-in clinic business type's words and stage keys (clinic data)
+with words(code, name, terms) as (values
+  ('clinic',
+   '{"ar": "عيادة", "fr": "Clinique"}'::jsonb,
+   '{"ar": {
+       "contact": {"one": "مريض", "other": "مرضى"},
+       "member":  {"one": "عضو الفريق", "other": "أعضاء الفريق"},
+       "service": {"one": "إجراء", "other": "إجراءات"},
+       "booking": {"one": "استشارة", "other": "استشارات"},
+       "order":   {"one": "حجز إجراء", "other": "حجوزات إجراءات"},
+       "client":  {"one": "عيادة", "other": "عيادات"}},
+     "fr": {
+       "contact": {"one": "patient", "other": "patients"},
+       "member":  {"one": "membre de l’équipe", "other": "membres de l’équipe"},
+       "service": {"one": "intervention", "other": "interventions"},
+       "booking": {"one": "consultation", "other": "consultations"},
+       "order":   {"one": "réservation d’intervention", "other": "réservations d’intervention"},
+       "client":  {"one": "clinique", "other": "cliniques"}}}'::jsonb),
+  ('general',
+   '{"ar": "نشاط تجاري عام", "fr": "Activité générale"}'::jsonb,
+   '{"ar": {
+       "contact": {"one": "جهة اتصال", "other": "جهات اتصال"},
+       "member":  {"one": "عضو", "other": "أعضاء"},
+       "service": {"one": "خدمة", "other": "خدمات"},
+       "booking": {"one": "حجز", "other": "حجوزات"},
+       "order":   {"one": "طلب", "other": "طلبات"},
+       "client":  {"one": "نشاط تجاري", "other": "أنشطة تجارية"}},
+     "fr": {
+       "contact": {"one": "contact", "other": "contacts"},
+       "member":  {"one": "membre", "other": "membres"},
+       "service": {"one": "service", "other": "services"},
+       "booking": {"one": "réservation", "other": "réservations"},
+       "order":   {"one": "commande", "other": "commandes"},
+       "client":  {"one": "entreprise", "other": "entreprises"}}}'::jsonb)
+),
+merged as (
+  select t.code,
+         w.name || t.name as name,
+         t.terminology || jsonb_build_object(
+           'ar', (w.terms -> 'ar') || coalesce(t.terminology -> 'ar', '{}'::jsonb),
+           'fr', (w.terms -> 'fr') || coalesce(t.terminology -> 'fr', '{}'::jsonb)) as terminology
+  from core.business_types t
+  join words w on w.code = t.code
+)
+update core.business_types t set name = m.name, terminology = m.terminology
+from merged m
+where t.code = m.code and (t.name <> m.name or t.terminology <> m.terminology);
+
+with words(business_type_code, key, labels) as (values
+  ('clinic',  'new',                   '{"ar": "جديد", "fr": "Nouveau"}'::jsonb),
+  ('clinic',  'contacted',             '{"ar": "تم التواصل", "fr": "Contacté"}'::jsonb),
+  ('clinic',  'qualified',             '{"ar": "مؤهل", "fr": "Qualifié"}'::jsonb),
+  ('clinic',  'consultation_booked',   '{"ar": "استشارة محجوزة", "fr": "Consultation réservée"}'::jsonb),
+  ('clinic',  'consultation_attended', '{"ar": "حضر الاستشارة", "fr": "Consultation effectuée"}'::jsonb),
+  ('clinic',  'no_show',               '{"ar": "لم يحضر", "fr": "Absent"}'::jsonb),
+  ('clinic',  'surgery_booked',        '{"ar": "إجراء محجوز", "fr": "Intervention réservée"}'::jsonb),
+  ('clinic',  'not_interested',        '{"ar": "غير مهتم", "fr": "Pas intéressé"}'::jsonb),
+  ('clinic',  'lost',                  '{"ar": "مفقود", "fr": "Perdu"}'::jsonb),
+  ('clinic',  'needs_human',           '{"ar": "يحتاج إلى موظف", "fr": "Humain requis"}'::jsonb),
+  ('clinic',  'medical_question',      '{"ar": "سؤال طبي", "fr": "Question médicale"}'::jsonb),
+  ('general', 'new',                   '{"ar": "جديد", "fr": "Nouveau"}'::jsonb),
+  ('general', 'contacted',             '{"ar": "تم التواصل", "fr": "Contacté"}'::jsonb),
+  ('general', 'qualified',             '{"ar": "مؤهل", "fr": "Qualifié"}'::jsonb),
+  ('general', 'booked',                '{"ar": "محجوز", "fr": "Réservé"}'::jsonb),
+  ('general', 'attended',              '{"ar": "حضر", "fr": "Présent"}'::jsonb),
+  ('general', 'no_show',               '{"ar": "لم يحضر", "fr": "Absent"}'::jsonb),
+  ('general', 'customer',              '{"ar": "عميل", "fr": "Client"}'::jsonb),
+  ('general', 'not_interested',        '{"ar": "غير مهتم", "fr": "Pas intéressé"}'::jsonb),
+  ('general', 'lost',                  '{"ar": "مفقود", "fr": "Perdu"}'::jsonb),
+  ('general', 'needs_human',           '{"ar": "يحتاج إلى موظف", "fr": "Humain requis"}'::jsonb)
+)
+update crm.pipeline_stages s set labels = w.labels || s.labels
+from words w
+where s.business_type_code = w.business_type_code and s.key = w.key and w.labels || s.labels <> s.labels;
+-- leftover-ok-end
 
 -- ---------------------------------------------------------------------
 -- 1. clients
@@ -335,7 +414,7 @@ create table if not exists crm.contacts (
   stage_key             varchar(50) not null,
   qualification         varchar(50) not null default 'unknown',
 
-  preferred_language    varchar(20),
+  preferred_language    varchar(20),   -- two-letter ISO 639-1 code (ck_contacts_preferred_language below)
   country_code          varchar(10),
   city                  varchar(100),
   desired_timeline      varchar(100),
@@ -375,6 +454,53 @@ drop trigger if exists trg_contacts_updated_at on crm.contacts;
 create trigger trg_contacts_updated_at
   before update on crm.contacts
   for each row execute function set_updated_at();
+
+-- The language a contact writes in: a two-letter ISO 639-1 code or null (Milestone B). crm.normalize_language applies the
+-- rules of Common/Helpers/ContactLanguage.cs (names such as "Arabic", "Arabizi" or "français", three-letter codes, tags
+-- such as "fr-CA"); ContactLanguageTests checks that both give the same answer. Existing free text is normalized once,
+-- before the check is added.
+create or replace function crm.normalize_language(raw text) returns varchar(2)
+language sql immutable as $$
+  with t as (
+    select lower(regexp_replace(regexp_replace(replace(coalesce(raw, ''), '_', '-'), '\s+', ' ', 'g'), '^ | $', '', 'g')) as s
+  )
+  select coalesce(
+    (select n.code from (values
+      ('arabic', 'ar'), ('arabe', 'ar'), ('ara', 'ar'), ('arabizi', 'ar'), ('arabeezi', 'ar'), ('franco', 'ar'),
+      ('franco-arabic', 'ar'), ('franco arabic', 'ar'), ('lebanese', 'ar'), ('lebanese arabic', 'ar'),
+      ('levantine', 'ar'), ('عربي', 'ar'), ('عربية', 'ar'), ('العربية', 'ar'), ('لبناني', 'ar'), ('english', 'en'),
+      ('anglais', 'en'), ('eng', 'en'), ('انجليزي', 'en'), ('إنجليزي', 'en'), ('الانجليزية', 'en'),
+      ('الإنجليزية', 'en'), ('french', 'fr'), ('français', 'fr'), ('francais', 'fr'), ('fra', 'fr'), ('fre', 'fr'),
+      ('فرنسي', 'fr'), ('الفرنسية', 'fr'), ('spanish', 'es'), ('español', 'es'), ('espanol', 'es'), ('spa', 'es'),
+      ('german', 'de'), ('deutsch', 'de'), ('deu', 'de'), ('ger', 'de'), ('italian', 'it'), ('italiano', 'it'),
+      ('ita', 'it'), ('portuguese', 'pt'), ('português', 'pt'), ('portugues', 'pt'), ('por', 'pt'),
+      ('turkish', 'tr'), ('türkçe', 'tr'), ('turkce', 'tr'), ('tur', 'tr'), ('russian', 'ru'), ('русский', 'ru'),
+      ('rus', 'ru'), ('armenian', 'hy'), ('hye', 'hy'), ('arm', 'hy'), ('persian', 'fa'), ('farsi', 'fa'),
+      ('fas', 'fa'), ('per', 'fa'), ('kurdish', 'ku'), ('kur', 'ku'), ('hebrew', 'he'), ('heb', 'he'),
+      ('greek', 'el'), ('ell', 'el'), ('gre', 'el'), ('dutch', 'nl'), ('nld', 'nl'), ('dut', 'nl'), ('urdu', 'ur'),
+      ('urd', 'ur'), ('hindi', 'hi'), ('hin', 'hi'), ('chinese', 'zh'), ('mandarin', 'zh'), ('zho', 'zh'),
+      ('chi', 'zh')
+    ) as n(name, code) where n.name = t.s),
+    case when t.s ~ '^[a-z0-9]+(-[a-z0-9]+)*$'
+          and split_part(t.s, '-', 1) = any (regexp_split_to_array(
+    'aa ab ae af ak am an ar as av ay az ba be bg bh bi bm bn bo br bs ca ce ch co cr cs cu cv cy da de dv dz ee
+    el en eo es et eu fa ff fi fj fo fr fy ga gd gl gn gu gv ha he hi ho hr ht hu hy hz ia id ie ig ii ik io is
+    it iu ja jv ka kg ki kj kk kl km kn ko kr ks ku kv kw ky la lb lg li ln lo lt lu lv mg mh mi mk ml mn mr ms
+    mt my na nb nd ne ng nl nn no nr nv ny oc oj om or os pa pi pl ps pt qu rm rn ro ru rw sa sc sd se sg si sk
+    sl sm sn so sq sr ss st su sv sw ta te tg th ti tk tl tn to tr ts tt tw ty ug uk ur uz ve vi vo wa wo xh yi
+    yo za zh zu', '\s+'))
+      then split_part(t.s, '-', 1) end)::varchar(2)
+  from t
+$$;
+
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'ck_contacts_preferred_language') then
+    update crm.contacts set preferred_language = crm.normalize_language(preferred_language)
+    where preferred_language is distinct from crm.normalize_language(preferred_language);
+    alter table crm.contacts add constraint ck_contacts_preferred_language check (preferred_language ~ '^[a-z]{2}$');
+  end if;
+end $$;
 
 -- ---------------------------------------------------------------------
 -- 4. conversations

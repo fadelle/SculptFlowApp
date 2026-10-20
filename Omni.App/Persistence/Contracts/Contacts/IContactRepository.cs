@@ -31,6 +31,9 @@ public interface IContactRepository
 
     Task<string?> GetFullNameAsync(Guid contactId, CancellationToken ct = default);
 
+    /// <summary>The contact's stored language code (crm.contacts.preferred_language), null when unknown or not the client's.</summary>
+    Task<string?> GetPreferredLanguageAsync(Guid clientId, Guid contactId, CancellationToken ct = default);
+
     Task<bool> ExistsAsync(Guid clientId, Guid contactId, CancellationToken ct = default);
 
     /// <summary>How many of the client's contacts are in each stage key; keys nobody is in are left out.</summary>

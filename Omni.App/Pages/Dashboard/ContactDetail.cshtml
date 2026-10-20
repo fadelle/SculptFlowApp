@@ -20,6 +20,13 @@ else
     var followupOverdue = contact.NextFollowupAt is not null && contact.NextFollowupAt < DateTimeOffset.UtcNow;
     // Inbox search matches name, phone or service — the phone is the most specific.
     var inboxSearch = !string.IsNullOrWhiteSpace(contact.Phone) ? contact.Phone : contact.FullName;
+    string LanguageName(string code) => code switch
+    {
+        ContactLanguage.English => T["contactDetail.language.en"].Value,
+        ContactLanguage.Arabic => T["contactDetail.language.ar"].Value,
+        ContactLanguage.French => T["contactDetail.language.fr"].Value,
+        _ => code
+    };
 
     <div class="au-back-header">
         <a class="au-icon-btn au-icon-btn--bordered" href="/dashboard/contacts" aria-label="@T["contactDetail.back"]" title="@T["contactDetail.back"]">
@@ -49,8 +56,9 @@ else
                 <div class="au-detail-row"><dt>@T["contacts.table.phone"]</dt><dd><span dir="ltr">@(contact.Phone ?? "—")</span></dd></div>
                 <div class="au-detail-row"><dt>@T["contactDetail.details.email"]</dt><dd><span dir="ltr">@(contact.Email ?? "—")</span></dd></div>
                 <div class="au-detail-row"><dt>@T["contacts.table.service"]</dt><dd>@(contact.ServiceName ?? "—")</dd></div>
-                <div class="au-detail-row"><dt>@T["contactDetail.details.city"]</dt><dd>@(contact.City ?? "—")</dd></div>
-                <div class="au-detail-row"><dt>@T["contactDetail.details.timeline"]</dt><dd>@(contact.DesiredTimeline ?? "—")</dd></div>
+                <div class="au-detail-row"><dt>@T["contactDetail.details.language"]</dt><dd>@if (string.IsNullOrEmpty(contact.PreferredLanguage)) { @T["contactDetail.language.none"] } else if (Model.LanguageOptions.Contains(contact.PreferredLanguage)) { @LanguageName(contact.PreferredLanguage) } else { <span dir="ltr">@contact.PreferredLanguage</span> }</dd></div>
+                <div class="au-detail-row"><dt>@T["contactDetail.details.city"]</dt><dd dir="auto">@(contact.City ?? "—")</dd></div>
+                <div class="au-detail-row"><dt>@T["contactDetail.details.timeline"]</dt><dd dir="auto">@(contact.DesiredTimeline ?? "—")</dd></div>
                 <div class="au-detail-row"><dt>@T["contacts.table.lastContact"]</dt><dd>@LocalTimeHelper.Time(contact.LastContactAt)</dd></div>
                 <div class="au-detail-row"><dt>@T["contacts.table.nextFollowUp"]</dt><dd class="@(followupOverdue ? "overdue" : "")">@(followupOverdue ? T.Html("contacts.followUp.overdue", LocalTimeHelper.Time(contact.NextFollowupAt)) : LocalTimeHelper.Time(contact.NextFollowupAt))</dd></div>
                 <div class="au-detail-row"><dt>@T["contactDetail.details.since"]</dt><dd>@LocalTimeHelper.Time(contact.CreatedAt, "date")</dd></div>
@@ -108,6 +116,24 @@ else
                 <div class="au-form-field" id="custom-source-field" style="display:@(Model.SourceChoice == "other" ? "" : "none")">
                     <label class="au-form-label" for="custom-source">@T["contactDetail.update.customSource"]</label>
                     <input type="text" name="CustomSource" id="custom-source" value="@Model.CustomSource" class="au-input" placeholder="@T["contactDetail.update.customSourcePlaceholder"]" />
+                </div>
+
+                <div class="au-form-field">
+                    <label class="au-form-label" for="language-choice">@T["contactDetail.update.language"]</label>
+                    <select name="LanguageChoice" id="language-choice" class="au-select" aria-describedby="language-hint" onchange="document.getElementById('custom-language-field').style.display = this.value === 'other' ? '' : 'none';">
+                        <option value="" selected="@(Model.LanguageChoice == "")">@T["contactDetail.language.none"]</option>
+                        @foreach (var code in Model.LanguageOptions)
+                        {
+                            <option value="@code" selected="@(code == Model.LanguageChoice)">@LanguageName(code)</option>
+                        }
+                        <option value="@ContactDetailModel.OtherLanguage" selected="@(Model.LanguageChoice == ContactDetailModel.OtherLanguage)">@T["contactDetail.update.otherLanguage"]</option>
+                    </select>
+                    <small class="au-help" id="language-hint">@T["contactDetail.update.languageHint"]</small>
+                </div>
+
+                <div class="au-form-field" id="custom-language-field" style="display:@(Model.LanguageChoice == ContactDetailModel.OtherLanguage ? "" : "none")">
+                    <label class="au-form-label" for="custom-language">@T["contactDetail.update.customLanguage"]</label>
+                    <input type="text" name="CustomLanguage" id="custom-language" value="@Model.CustomLanguage" class="au-input" dir="ltr" maxlength="20" autocomplete="off" placeholder="@T["contactDetail.update.customLanguagePlaceholder"]" />
                 </div>
 
                 <div class="au-form-actions">
