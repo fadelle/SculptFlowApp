@@ -59,7 +59,7 @@ else
             <span class="au-eyebrow">@T["billing.plan.current"]</span>
             <div class="au-stat__value">@(s.PlanName ?? T["billing.plan.none"].Value)</div>
             <span class="au-stat__hint"><span class="badge @badge.Css">@badge.Text</span>
-                @if (s.PlanPrice is not null) { <text>· @T["billing.plan.price", Money(s.PlanPrice.Value), s.BillingPeriod ?? ""]</text> }</span>
+                @if (s.PlanPrice is not null) { <text>· @T["billing.plan.price", Money(s.PlanPrice.Value), s.BillingPeriod == BillingPeriod.Year ? T["billing.plan.perYear"] : T["billing.plan.perMonth"]]</text> }</span>
         </div>
         <div class="au-stat">
             <span class="au-eyebrow">@(s.CancelAtPeriodEnd ? T["billing.plan.endsOn"] : T["billing.plan.renewsOn"])</span>

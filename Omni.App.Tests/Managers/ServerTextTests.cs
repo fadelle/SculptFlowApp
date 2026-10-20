@@ -97,4 +97,29 @@ public class ServerTextTests
             describer.PasswordRequiresDigit(), describer.PasswordRequiresLower(), describer.PasswordRequiresUpper()
         }, e => Assert.DoesNotContain("identity.errors.", e.Description));
     }
+
+    [Fact]
+    public void Keyed_server_errors_read_in_arabic_with_the_clients_arabic_words()
+    {
+        var words = TermPlaceholders.Build(new Dictionary<string, TermForms>(TextKit.DefaultTerms())
+        {
+            [TermName.Service] = new("إجراء", "إجراءات")
+        });
+        var text = TextKit.Localizer(AppLanguage.Arabic, words);
+
+        Assert.Equal("يوجد بالفعل إجراء باسم 'Botox'.",
+            text.Localize(new ArgumentException("services.errors.nameTaken").WithArgs("Botox")));
+        Assert.Equal("الميزة «الحملات» غير مشمولة في باقتك. راجع الإعدادات ← الفوترة.",
+            text.Localize(new EntitlementDeniedException(EntitlementKeys.Campaigns, EntitlementDeniedException.NotIncludedKey)
+                .WithArgs(BillingTextHelper.EntitlementArg(EntitlementKeys.Campaigns))));
+        Assert.Equal("لديك بالفعل قالب باسم 'reminder' بهذه اللغة. اختر اسمًا آخر.",
+            text.Localize(new ArgumentException("templates.errors.duplicate").WithArgs("reminder")));
+        Assert.Equal("لا يمكن إرسال هذه الحملة وحالتها مكتمل.",
+            text.Localize(new ArgumentException("campaigns.errors.cantSend").WithArgs(TextArg.Value("completed"))));
+        Assert.Equal(("5 صفحات", "12 صفحة"), (text.Plural("knowledge.pages", 5).Value, text.Plural("knowledge.pages", 12).Value));
+
+        var describer = new LocalizedIdentityErrorDescriber(text);
+        Assert.DoesNotMatch("[A-Za-z]{3,}", describer.PasswordTooShort(8).Description);
+        Assert.Contains("8", describer.PasswordTooShort(8).Description);
+    }
 }

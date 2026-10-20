@@ -333,6 +333,8 @@
   "billing.plan.current": "Current plan",
   "billing.plan.none": "None",
   "billing.plan.price": "{0} / {1}",
+  "billing.plan.perMonth": "month",
+  "billing.plan.perYear": "year",
   "billing.plan.endsOn": "Ends on",
   "billing.plan.renewsOn": "Renews on",
   "billing.plan.periodStarted": "Period started {0}",

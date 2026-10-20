@@ -35,3 +35,9 @@ ar services.count.one
 ar services.table.booking
 ar services.table.service
 ar services.title
+ar billing.plan.price
+ar campaigns.create.summary.one
+ar campaigns.recipients.contact
+ar knowledge.category.booking
+ar knowledgeSettings.topK.range
+ar whatsAppHealth.event.webhook

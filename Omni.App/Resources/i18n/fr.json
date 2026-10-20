@@ -21,5 +21,7 @@
   "contactDetail.update.otherLanguage": "Autre…",
   "contactDetail.update.customLanguage": "Code de langue",
   "contactDetail.update.customLanguagePlaceholder": "Deux lettres, p. ex. es",
-  "contacts.errors.invalidLanguage": "« {0} » n’est pas une langue. Utilisez un code de deux lettres comme es."
+  "contacts.errors.invalidLanguage": "« {0} » n’est pas une langue. Utilisez un code de deux lettres comme es.",
+  "billing.plan.perMonth": "mois",
+  "billing.plan.perYear": "an"
 }

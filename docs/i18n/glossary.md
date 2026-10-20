@@ -93,6 +93,15 @@ The defaults (`terms.*` in the strings files) are the `general` type's words.
 | AI assistant | المساعد الذكي | Assistant IA |
 | Language | اللغة | Langue |
 | Business default (language) | لغة النشاط الافتراضية | Langue par défaut de l’entreprise |
+| Connect / Reconnect / Disconnect | ربط / إعادة الربط / فصل | Connecter / Reconnecter / Déconnecter |
+| Connected / Not connected | مربوط / غير مربوط | Connecté / Non connecté |
+| WhatsApp Health | سلامة WhatsApp | Santé WhatsApp |
+| Blank (template variable) | فراغ | Champ à remplir |
+| Plan / Subscription | باقة / اشتراك | Forfait / Abonnement |
+| Included credit / Prepaid balance | الرصيد المشمول / الرصيد المدفوع مسبقًا | Crédit inclus / Solde prépayé |
+| Entry (Knowledge Base) | إدخال | Entrée |
+| Import a website / Crawl | استيراد موقع / قراءة | Importer un site / Exploration |
+| Settings → Billing (path arrow) | الإعدادات ← الفوترة (the arrow points left in Arabic) | Paramètres → Facturation |
 
 ## Status words (`values.*`)
 
