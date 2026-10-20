@@ -57,7 +57,7 @@
   var body = document.getElementById('kb-body');
   var count = document.getElementById('kb-body-count');
   if (body && count) {
-    var update = function () { count.textContent = omniText.t('knowledge.edit.characters', [body.value.length.toLocaleString(omniText.lang)]); };
+    var update = function () { count.textContent = omniText.t('knowledge.edit.characters', [body.value.length.toLocaleString(omniText.locale)]); };
     body.addEventListener('input', update);
     update();
     var qa = document.getElementById('kb-add-qa');

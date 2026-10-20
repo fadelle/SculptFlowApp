@@ -280,6 +280,31 @@ public class MemberDashboardClientProfileTests
     }
 
     [Fact]
+    public async Task Only_the_account_owner_or_the_platform_admin_sets_the_default_language()
+    {
+        var clients = new Mock<IClientRepository>();
+        var uow = new Mock<IUnitOfWork>();
+        var client = new Client { Id = _clientId, DefaultLanguage = "en" };
+        clients.Setup(c => c.GetAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(client);
+        var sut = new ClientProfileService(clients.Object, uow.Object);
+        var owner = new Omni.App.Entities.Dtos.Clients.UserAccess("o", _clientId, UserRole.Client, null, null, null);
+        var member = owner with { Role = UserRole.Member };
+
+        Assert.Equal("clients.errors.defaultLanguageOwnerOnly",
+            (await Assert.ThrowsAsync<UnauthorizedAccessException>(() => sut.SetDefaultLanguageAsync(member, "ar"))).Message);
+        await sut.SetDefaultLanguageAsync(owner, "AR");
+        Assert.Equal("ar", client.DefaultLanguage);
+        await Assert.ThrowsAsync<ArgumentException>(() => sut.SetDefaultLanguageAsync(owner, " "));
+        await Assert.ThrowsAsync<ArgumentException>(() => sut.SetDefaultLanguageAsync(_clientId, "es"));
+        await sut.SetDefaultLanguageAsync(_clientId, "fr");
+        Assert.Equal("fr", client.DefaultLanguage);
+        uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Exactly(2));
+
+        clients.Setup(c => c.GetAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync((Client?)null);
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => sut.SetDefaultLanguageAsync(_clientId, "en"));
+    }
+
+    [Fact]
     public async Task Client_profile_update_validates_name_and_copies_details()
     {
         var clients = new Mock<IClientRepository>();

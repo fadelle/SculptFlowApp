@@ -72,7 +72,7 @@ else
                             else
                             {
                                 @T.Html("knowledge.edit.fromFile", new Microsoft.AspNetCore.Html.HtmlString($"<strong>{System.Net.WebUtility.HtmlEncode(Model.OriginalFileName)}</strong>"))
-                                @if (Model.FileSizeBytes.HasValue) { <text> @T["knowledge.edit.fileSize", (Model.FileSizeBytes.Value / 1024.0).ToString("0")]</text> }
+                                @if (Model.FileSizeBytes.HasValue) { <text> @T["knowledge.edit.fileSize", (Model.FileSizeBytes.Value / 1024.0).Display("0")]</text> }
                                 <div class="cell-sub">@T["knowledge.edit.fromFileHelp"]</div>
                             }
                         </div>
@@ -130,7 +130,7 @@ else
                         <span class="kb-choice-icon" id="kb-drop-icon">⇪</span>
                         <div class="flex-1 min-w-0">
                             <strong id="kb-drop-title">@T["knowledge.upload.dropTitle"]</strong>
-                            <div class="cell-sub" id="kb-drop-sub">@T["knowledge.upload.dropSub", maxMb.ToString("0.#")]</div>
+                            <div class="cell-sub" id="kb-drop-sub">@T["knowledge.upload.dropSub", maxMb.Display("0.#")]</div>
                         </div>
                     </label>
 

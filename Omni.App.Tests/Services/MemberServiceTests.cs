@@ -35,6 +35,24 @@ public class MemberServiceTests
     private static AddMemberRequest Req(string? name = "Ann Lee", string? email = "ann@x.com", string? pw = "Passw0rd") => new(name, email, pw);
 
     [Fact]
+    public async Task Anyone_sets_their_own_language_and_only_dashboard_languages_are_accepted()
+    {
+        var user = new AppUser { Id = "m0" };
+        _users.Setup(u => u.FindByIdAsync("m0")).ReturnsAsync(user);
+
+        await Sut().SetOwnLanguageAsync(Member, " AR ");
+        Assert.Equal("ar", user.Language);
+        await Sut().SetOwnLanguageAsync(Member, "ar"); // no change, no save
+        _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+
+        await Sut().SetOwnLanguageAsync(Member, " "); // back to the client's default
+        Assert.Null(user.Language);
+        var unknown = await Assert.ThrowsAsync<ArgumentException>(() => Sut().SetOwnLanguageAsync(Member, "de"));
+        Assert.Equal("There is no dashboard language 'de'.", TextKit.English(unknown));
+        _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Exactly(2));
+    }
+
+    [Fact]
     public async Task Only_the_client_role_manages_members()
     {
         Assert.Equal("members.errors.clientOnly", (await Assert.ThrowsAsync<UnauthorizedAccessException>(() => Sut().AddAsync(Member, Req()))).Message);

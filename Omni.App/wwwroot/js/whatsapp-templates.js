@@ -40,7 +40,7 @@
 
   function formatTime(iso) {
     try {
-      return new Date(iso).toLocaleString(omniText.lang, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+      return new Date(iso).toLocaleString(omniText.locale, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
     } catch (e) {
       return iso;
     }

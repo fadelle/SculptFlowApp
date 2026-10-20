@@ -18,6 +18,8 @@ internal static class TextKit
         var context = new Mock<ITextContext>();
         context.SetupGet(c => c.Language).Returns(language);
         context.SetupGet(c => c.Direction).Returns(AppLanguage.Direction(language));
+        context.SetupGet(c => c.Culture).Returns(AppCulture.For(language));
+        context.SetupGet(c => c.Offered).Returns(Catalog.Languages);
         context.SetupGet(c => c.Terms).Returns(terms ?? TermPlaceholders.Build(DefaultTerms()));
         return context.Object;
     }

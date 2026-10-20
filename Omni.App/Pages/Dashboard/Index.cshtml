@@ -87,7 +87,7 @@ else
             {
                 <a class="au-action-card" href="/inbox?filter=needs">
                     <span class="au-icon-tile" style="--tile: var(--au-warning)"><span class="au-icon" aria-hidden="true">forum</span></span>
-                    <span><span class="au-action-card__title">@(attention.ConversationsNeedingHuman == 1 ? T["dashboard.attention.conversationsOne"] : T["dashboard.attention.conversationsOther", attention.ConversationsNeedingHuman])</span>
+                    <span><span class="au-action-card__title">@T.Plural("dashboard.attention.conversations", attention.ConversationsNeedingHuman)</span>
                         <span class="au-action-card__text">@T["dashboard.attention.conversationsText"]</span></span>
                     <span class="au-icon au-action-card__arrow" aria-hidden="true">arrow_forward</span>
                 </a>
@@ -96,7 +96,7 @@ else
             {
                 <a class="au-action-card" href="/dashboard/contacts">
                     <span class="au-icon-tile" style="--tile: var(--au-warning)"><span class="au-icon" aria-hidden="true">schedule</span></span>
-                    <span><span class="au-action-card__title">@(attention.OverdueFollowups == 1 ? T["dashboard.attention.followUpsOne"] : T["dashboard.attention.followUpsOther", attention.OverdueFollowups])</span>
+                    <span><span class="au-action-card__title">@T.Plural("dashboard.attention.followUps", attention.OverdueFollowups)</span>
                         <span class="au-action-card__text">@T["dashboard.attention.followUpsText"]</span></span>
                     <span class="au-icon au-action-card__arrow" aria-hidden="true">arrow_forward</span>
                 </a>
@@ -105,7 +105,7 @@ else
             {
                 <a class="au-action-card" href="/dashboard/bookings">
                     <span class="au-icon-tile" style="--tile: var(--au-warning)"><span class="au-icon" aria-hidden="true">event_note</span></span>
-                    <span><span class="au-action-card__title">@(attention.BookingsNeedingOutcome == 1 ? T["dashboard.attention.outcomesOne"] : T["dashboard.attention.outcomesOther", attention.BookingsNeedingOutcome])</span>
+                    <span><span class="au-action-card__title">@T.Plural("dashboard.attention.outcomes", attention.BookingsNeedingOutcome)</span>
                         <span class="au-action-card__text">@T["dashboard.attention.outcomesText"]</span></span>
                     <span class="au-icon au-action-card__arrow" aria-hidden="true">arrow_forward</span>
                 </a>

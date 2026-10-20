@@ -148,9 +148,21 @@ Full detail and the declared-settings table: `docs/configuration.md`.
 - A stored value shown as a label goes through `T.ValueLabel(value)` (key `values.{value in camelCase}`; also
   `T.CampaignStatusLabel`, `T.TemplateStatusLabel`, `T.CategoryLabel`), never an English map in code; JS keeps
   `omniText.t('key')` literal (the guard only sees literal keys) and formats dates with `omniText.lang`.
-- Placeholders: `{0}`… for arguments; `{contact}` `{contacts}` `{Contact}` `{Contacts}` (same for member, service, booking,
+- Placeholders: `{0}`… for arguments (`{0:N0}` formats a number in the viewer's language); `{contact}` `{contacts}` `{Contact}` `{Contacts}` (same for member, service, booking,
   order, client) for the client's business-type words. Never glue a word into a sentence Arabic can't follow.
   `Guards/UiTextKeysTests` fails on a missing or unused key or an unknown placeholder.
+- Languages (Milestone B): `ar.json` and `fr.json` have the same keys as `en.json` (a missing key shows English). Once a
+  key group is complete in a language (no longer listed in `Guards/i18n-incomplete.txt`), a new key in that group needs its
+  translation too, and a translation equal to its English must be listed in `Guards/i18n-same-as-english.txt`; a
+  translation never adds a placeholder its English lacks. Counts: plural families `key.one` / `key.other` (Arabic may add
+  `zero`, `two`, `few`, `many`) read with `T.Plural("key", n)` / `T.PluralKey` / `omniText.plural('key', n)`, never
+  `n == 1 ? … : …`; put the count in the text as `{0}`, also in the `.one` form (French uses it for 0).
+- Dates and numbers people see: `value.Display("N0")`, `TextCulture.Date(day, DateStyle.…)` (C#/Razor), `omniText.locale`
+  (JS). `CurrentCulture` is always invariant (machine values: form posts, `data-*`, URLs, JSON); the request's language is the
+  `CurrentUICulture` (`AppCulture`). `Guards/DisplayFormatTests` fails on a display pattern in Pages without a culture.
+- Which language a request uses: `ITextContext` (`RequestTextMiddleware`): `users.language` → `clients.default_language`
+  → browser for signed-in users, the `omni.lang` cookie → browser for visitors, always English for an `/api` call without
+  a signed-in user (portal, n8n, webhooks); only languages in `Localization:Languages` with a strings file.
 - Business types (`core.business_types`) give each client its words, AI profile and pipeline stages
   (`crm.pipeline_stages`). Code and reports work with stage **categories** (`StageCategory`), never one type's stage keys:
   move a contact with `IBusinessTypeService.GetPipelineAsync` → `ClientPipeline` (`EntryKey`, `MoveTo(current, category)`,

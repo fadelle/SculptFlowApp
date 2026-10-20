@@ -47,7 +47,7 @@ public class MemberAdminRepository : IMemberAdminRepository
                 x.u.PasswordHash != null,
                 _db.UserLogins.Any(l => l.UserId == x.u.Id),
                 x.m != null ? x.m.CreatedAt : null,
-                x.u.Role, x.u.IsActive, x.u.LastLoginAt))
+                x.u.Role, x.u.IsActive, x.u.LastLoginAt, x.u.Language))
             .ToPagedAsync(page, ct: ct);
     }
 
@@ -61,7 +61,7 @@ public class MemberAdminRepository : IMemberAdminRepository
         var google = await _db.UserLogins.AnyAsync(l => l.UserId == userId, ct);
         return new MemberRow(u.Id, u.Email, u.FullName, m?.Id, m?.ClientId, m?.Client?.Name, m?.IsActive == true,
             u.LockoutEnd > now, u.EmailConfirmed, u.AccessFailedCount, u.PasswordHash != null, google, m?.CreatedAt,
-            u.Role, u.IsActive, u.LastLoginAt);
+            u.Role, u.IsActive, u.LastLoginAt, u.Language);
     }
 
     public Task<Guid?> ClientOfAsync(string userId, CancellationToken ct = default) =>

@@ -24,6 +24,7 @@ public class EndpointProtectionAuditTests
         ["TikTokController.Receive"] = "TikTok webhook, no verification yet (logs only the body size)",
         ["ConversationsController.SendMessage"] = "AI sends are checked inside the action against the ingest key; member sends require sign-in",
         ["UiTextController.Strings"] = "UI strings for the browser (the sign-in pages need them); no data",
+        ["LanguageController.Set"] = "language picker of the sign-in pages too (anti-forgery token); signed in, it changes only the caller's own language",
     };
 
     private static IEnumerable<(Type Controller, MethodInfo Action)> Actions() =>

@@ -125,8 +125,9 @@ public class ClientAdminServiceTests
     private readonly Mock<IInboxSettingsService> _inboxSettings = new();
 
     private readonly Mock<IBusinessTypeService> _businessTypes = new();
+    private readonly Mock<IClientProfileService> _profile = new();
 
-    private ClientAdminService Sut() => new(_repo.Object, _uow.Object, TimeProvider.System, _inboxSettings.Object, _businessTypes.Object);
+    private ClientAdminService Sut() => new(_repo.Object, _uow.Object, TimeProvider.System, _inboxSettings.Object, _businessTypes.Object, _profile.Object);
 
     [Fact]
     public async Task Business_type_preview_and_change_go_through_the_business_type_service()
@@ -139,6 +140,14 @@ public class ClientAdminServiceTests
         Assert.Same(preview, await Sut().PreviewBusinessTypeChangeAsync(id, TextKit.General, default));
         Assert.Equal(id, (await Sut().ChangeBusinessTypeAsync(id, TextKit.General, default)).ClientId);
         _businessTypes.Verify();
+    }
+
+    [Fact]
+    public async Task The_default_language_goes_through_the_client_profile_service()
+    {
+        var id = Guid.NewGuid();
+        Assert.Equal(id, (await Sut().SetDefaultLanguageAsync(id, "ar", default)).ClientId);
+        _profile.Verify(p => p.SetDefaultLanguageAsync(id, "ar", It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

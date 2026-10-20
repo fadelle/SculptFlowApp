@@ -3,8 +3,8 @@
 @{
     ViewData["Title"] = T["billing.title"].Value;
     var s = Model.Summary;
-    string Money(decimal value) => (s?.Currency == "USD" ? "$" : "") + value.ToString("#,0.00") + (s?.Currency == "USD" ? "" : " " + s?.Currency);
-    string UnitMoney(decimal value) => value.ToString("#,0.00##");
+    string Money(decimal value) => (s?.Currency == "USD" ? "$" : "") + value.Display("#,0.00") + (s?.Currency == "USD" ? "" : " " + s?.Currency);
+    string UnitMoney(decimal value) => value.Display("#,0.00##");
     (string Css, string Text) StatusBadge(string? status) => status switch
     {
         "active" => ("badge-green", T["billing.status.active"]),

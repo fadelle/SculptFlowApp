@@ -132,6 +132,12 @@ public static class ConfigDefaults
         "Calendar and TikTok access tokens are refreshed this long before they expire.", 0, 60);
     public static readonly ConfigDefinition VoiceMaxBytes = new("Voice", "MaxBytes", "10485760", ConfigValueType.Int,
         "Largest voice note (bytes) the Inbox will download from the provider to play or forward.", 1024, 20971520);
+    public static readonly ConfigDefinition LocalizationLanguages = new("Localization", "Languages", "en,ar,fr", ConfigValueType.String,
+        "Comma-separated languages the dashboard is offered and shown in (en, ar, fr). English is always on. A user or client whose language is turned off sees the next choice (the client's default, the browser, English).", Pattern: @"^s*[a-z]{2}(s*,s*[a-z]{2})*s*$");
+    public static readonly ConfigDefinition LocalizationLanguageCookieDays = new("Localization", "LanguageCookieDays", "365", ConfigValueType.Int,
+        "How long the language a visitor picks on the sign-in pages is remembered (the omni.lang cookie).", 1, 3650);
+    public static readonly ConfigDefinition LocalizationShowTextKeys = new("Localization", "ShowTextKeys", "false", ConfigValueType.Bool,
+        "Translation review mode: when on, opening any page with ?textKeys=1 shows each text's key after it (until ?textKeys=0). Never works in Production.");
     public static readonly ConfigDefinition DashboardContactsPageSize = new("Dashboard", "ContactsPageSize", "25", ConfigValueType.Int,
         "Contacts per page on the dashboard.", 5, 200);
     public static readonly ConfigDefinition CacheClientsMinutes = new("Cache", "ClientsMinutes", "60", ConfigValueType.Int,
@@ -250,6 +256,10 @@ public static class ConfigDefaults
         VoiceMaxBytes,
 
         DashboardContactsPageSize,
+
+        LocalizationLanguages,
+        LocalizationLanguageCookieDays,
+        LocalizationShowTextKeys,
 
         CacheClientsMinutes,
         CacheMembershipsMinutes,

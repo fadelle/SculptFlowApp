@@ -21,7 +21,8 @@ public interface ITextCatalog
     /// <summary>A short hash of the language's file, for cache-busting the browser copy.</summary>
     string Version(string language);
 
-    /// <summary>The browser copy: a script that sets window.omniStrings to the language's raw texts (served at
+    /// <summary>The browser copy: a script that sets window.omniStrings to the language's raw texts, English filling the keys
+    /// a translation doesn't have yet (served at
     /// /i18n/{language}.js; wwwroot/js/omni-text.js fills the placeholders).</summary>
     string Script(string language);
 }

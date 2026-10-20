@@ -98,6 +98,17 @@ public class MemberService : IMemberService
         await SetMembershipActiveAsync(membership, active, ct);
     }
 
+    public async Task SetOwnLanguageAsync(UserAccess actor, string? language, CancellationToken ct = default)
+    {
+        var code = LanguageCode.Normalize(language);
+        var user = await _users.FindByIdAsync(actor.UserId) ?? throw new KeyNotFoundException("members.errors.notFound");
+        if (user.Language == code) return;
+        user.Language = code;
+        user.UpdatedAt = _time.GetUtcNow();
+        // Saving the user clears its cached UserAccess, so the next request already shows the new language.
+        await _unitOfWork.SaveChangesAsync(ct);
+    }
+
     public async Task SetMembershipActiveAsync(ClientUser membership, bool active, CancellationToken ct = default)
     {
         if (membership.IsActive == active) return;

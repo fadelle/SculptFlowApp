@@ -69,7 +69,7 @@ This README is only a short orientation.
    Swagger is at `/swagger` in Development only. There is no Razor runtime compilation, so `.cshtml`/`.cs` changes
    need a stop, build and run.
 
-4. **Tests.** `dotnet test Omni.App.slnx` (about 1,900 tests). The database tests need `OMNI_TEST_DB` set to a
+4. **Tests.** `dotnet test Omni.App.slnx` (about 2,000 tests). The database tests need `OMNI_TEST_DB` set to a
    throwaway local PostgreSQL server (e.g. `Host=localhost;Port=5432;Username=postgres;Password=...`); each run creates
    and drops its own database. Without it those tests are skipped. Never point it at Supabase. The data copy script has
    its own test: `Database/migrations/2026-10-generic/test-copy.ps1` (needs a local PostgreSQL install).

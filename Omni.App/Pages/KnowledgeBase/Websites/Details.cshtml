@@ -13,7 +13,7 @@
     string RunLabel(WebsiteRunResponse r) => r.Status switch
     {
         WebsiteScrapeStatus.Completed => T["values.completed"].Value,
-        WebsiteScrapeStatus.CompletedWithErrors => r.PagesFailed == 1 ? T["website.problems.one"].Value : T["website.problems.other", r.PagesFailed].Value,
+        WebsiteScrapeStatus.CompletedWithErrors => T.Plural("website.problems", r.PagesFailed).Value,
         WebsiteScrapeStatus.Failed => T["values.failed"].Value,
         WebsiteScrapeStatus.Crawling => T["website.run.importing"].Value,
         WebsiteScrapeStatus.Pending => T["campaigns.recipients.waiting"].Value,
@@ -117,7 +117,7 @@ else
         <div class="au-alert au-alert--warning" role="status">
             <span class="au-icon au-alert__icon" aria-hidden="true">warning</span>
             <div class="au-alert__body">
-                <div class="au-alert__title">@(run.PagesFailed == 1 ? T["website.withProblems.one"] : T["website.withProblems.other", run.PagesFailed])</div>
+                <div class="au-alert__title">@T.Plural("website.withProblems", run.PagesFailed)</div>
                 @T.Html("website.withProblems.text", new Microsoft.AspNetCore.Html.HtmlString($"<a class=\"au-link\" href=\"/KnowledgeBase/Websites/{s.Id}?status={WebsitePageStatus.Failed}\">{System.Net.WebUtility.HtmlEncode(T["values.failed"].Value)}</a>"))
                 @if (!string.IsNullOrWhiteSpace(run.ErrorSummary))
                 {

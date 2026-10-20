@@ -118,7 +118,7 @@
   function formatTime(iso) {
     try {
       var d = new Date(iso);
-      return d.toLocaleString(omniText.lang, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+      return d.toLocaleString(omniText.locale, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
     } catch (e) {
       return iso;
     }
@@ -134,13 +134,13 @@
     if (mins < 60 * 24 && d.getDate() === new Date().getDate()) return omniText.t('inbox.time.hours', [Math.floor(mins / 60)]);
     var yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
     if (d.toDateString() === yesterday.toDateString()) return omniText.t('inbox.time.yesterday');
-    return d.toLocaleDateString(omniText.lang, { month: 'short', day: 'numeric' });
+    return d.toLocaleDateString(omniText.locale, { month: 'short', day: 'numeric' });
   }
 
   function formatDate(iso) {
     if (!iso) return '—';
     var d = new Date(iso);
-    return isNaN(d.getTime()) ? '—' : d.toLocaleDateString(omniText.lang, { month: 'short', day: 'numeric', year: 'numeric' });
+    return isNaN(d.getTime()) ? '—' : d.toLocaleDateString(omniText.locale, { month: 'short', day: 'numeric', year: 'numeric' });
   }
 
   function renderTimestamps() {
@@ -344,7 +344,7 @@
   // "09:40" — the day is shown once by the day divider above, not on every bubble.
   function formatClock(iso) {
     var d = new Date(iso);
-    return isNaN(d.getTime()) ? '' : d.toLocaleTimeString(omniText.lang, { hour: '2-digit', minute: '2-digit' });
+    return isNaN(d.getTime()) ? '' : d.toLocaleTimeString(omniText.locale, { hour: '2-digit', minute: '2-digit' });
   }
 
   // Day divider text: "Today", "Yesterday", or e.g. "Mon, Sep 22".
@@ -355,7 +355,7 @@
     var yesterday = new Date(); yesterday.setDate(today.getDate() - 1);
     if (d.toDateString() === today.toDateString()) return omniText.t('bookings.calendar.today');
     if (d.toDateString() === yesterday.toDateString()) return omniText.t('inbox.time.yesterday');
-    return d.toLocaleDateString(omniText.lang, { weekday: 'short', month: 'short', day: 'numeric' });
+    return d.toLocaleDateString(omniText.locale, { weekday: 'short', month: 'short', day: 'numeric' });
   }
 
   // Only senders that aren't obvious from the bubble's side and colour get a label: the customer

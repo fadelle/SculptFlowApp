@@ -205,6 +205,15 @@ public interface IConfigManager
     /// <summary>Contacts per page on the dashboard. Default 25.</summary>
     int DashboardContactsPageSize { get; }
 
+    // ---- Localization
+    /// <summary>Comma-separated languages the dashboard is offered and shown in (LanguagePicker.Enabled reads it; English is
+    /// always on). Default "en,ar,fr".</summary>
+    string LocalizationLanguages { get; }
+    /// <summary>Days the visitor's language choice (omni.lang cookie) is kept. Default 365.</summary>
+    int LocalizationLanguageCookieDays { get; }
+    /// <summary>Translation review mode (?textKeys=1 shows each text's key); ignored in Production. Default false.</summary>
+    bool LocalizationShowTextKeys { get; }
+
     // ---- Cache (lifetimes of the table caches, read by CacheManager.LifetimeOf)
     /// <summary>Client rows (signed-in client, the bot's client info). Lifetime in minutes. Default 60.</summary>
     int CacheClientsMinutes { get; }

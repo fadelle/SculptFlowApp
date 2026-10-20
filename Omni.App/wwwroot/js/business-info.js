@@ -55,7 +55,7 @@
     var syncCount = function () {
       var n = rows.filter(function (r) { return r.querySelector('[data-day-open]').checked; }).length;
       countEl.textContent = !n ? omniText.t('businessInfo.hours.allClosed')
-        : n === 1 ? omniText.t('businessInfo.hours.openOne') : omniText.t('businessInfo.hours.openOther', [n]);
+        : omniText.plural('businessInfo.hours.open', n);
     };
     rows.forEach(function (row) {
       row.querySelector('[data-day-open]').addEventListener('change', function () { syncRow(row); syncCount(); });
@@ -81,8 +81,8 @@
     var syncSummary = function () {
       var d = val('duration'), b = val('buffer'), n = val('notice'), a = val('advance');
       var from = n === '0' ? omniText.t('businessInfo.summary.rightAway')
-        : n === '1' ? omniText.t('businessInfo.summary.hoursOne') : omniText.t('businessInfo.summary.hoursOther', [n || '?']);
-      var to = a === '1' ? omniText.t('businessInfo.summary.daysOne') : omniText.t('businessInfo.summary.daysOther', [a || '?']);
+        : omniText.plural('businessInfo.summary.hours', Number(n), [n || '?']);
+      var to = omniText.plural('businessInfo.summary.days', Number(a), [a || '?']);
       summary.textContent = b && b !== '0'
         ? omniText.t('businessInfo.summary.withGap', [d || '?', from, to, b])
         : omniText.t('businessInfo.summary.backToBack', [d || '?', from, to]);
@@ -95,7 +95,7 @@
     var now = document.getElementById('avail-tz-now');
     var syncNow = function () {
       try {
-        now.textContent = omniText.t('businessInfo.timezone.now', [new Intl.DateTimeFormat(omniText.lang, { timeZone: tz.value, hour: '2-digit', minute: '2-digit', hourCycle: 'h23', weekday: 'short' }).format(new Date())]);
+        now.textContent = omniText.t('businessInfo.timezone.now', [new Intl.DateTimeFormat(omniText.locale, { timeZone: tz.value, hour: '2-digit', minute: '2-digit', hourCycle: 'h23', weekday: 'short' }).format(new Date())]);
       } catch (e) { now.textContent = ''; }
     };
     tz.addEventListener('change', syncNow);

@@ -3,7 +3,9 @@ using Omni.App.Entities.Models;
 using Omni.App.Entities.Requests.Clients;
 using Omni.App.Persistence.Contracts;
 using Omni.App.Persistence.Contracts.Clients;
+using Omni.App.Common.Enums;
 using Omni.App.Common.Helpers;
+using Omni.App.Entities.Dtos.Clients;
 
 namespace Omni.App.Business.Services.Clients;
 
@@ -34,6 +36,22 @@ public class ClientProfileService : IClientProfileService
         client.Address = request.Address;
         client.OperatingHours = request.OperatingHours;
         client.BookingInfo = request.BookingInfo;
+        client.UpdatedAt = DateTimeOffset.UtcNow;
+        await _unitOfWork.SaveChangesAsync(ct);
+    }
+
+    public async Task SetDefaultLanguageAsync(UserAccess actor, string? language, CancellationToken ct = default)
+    {
+        if (actor.Role != UserRole.Client) throw new UnauthorizedAccessException("clients.errors.defaultLanguageOwnerOnly");
+        await SetDefaultLanguageAsync(actor.ClientId, language, ct);
+    }
+
+    public async Task SetDefaultLanguageAsync(Guid clientId, string? language, CancellationToken ct = default)
+    {
+        var code = LanguageCode.Normalize(language) ?? throw new ArgumentException("languages.errors.required");
+        var client = await _clients.GetAsync(clientId, ct) ?? throw new KeyNotFoundException("clients.errors.notFound");
+        if (client.DefaultLanguage == code) return;
+        client.DefaultLanguage = code;
         client.UpdatedAt = DateTimeOffset.UtcNow;
         await _unitOfWork.SaveChangesAsync(ct);
     }

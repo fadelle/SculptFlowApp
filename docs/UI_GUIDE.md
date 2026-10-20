@@ -107,7 +107,13 @@ section wins**. Copy says *contact* where the guide says *customer*: the people 
   attended green, no-show and needs-human red, converted teal, closed-lost gray).
 - **Words and languages:** new or edited copy goes into `Resources/i18n/en.json` (`@T["key"]`, `omniText.t('key')`) and
   names people and things through the business-type placeholders (`{contact}`, `{Services}`…), never a fixed word; see
-  the repo `CLAUDE.md` "UI text" rule. `<html lang dir>` follows the request language (right-to-left comes in Milestone B).
+  the repo `CLAUDE.md` "UI text" rule. `<html lang dir>` follows the request language (right-to-left layout comes in
+  Milestone B, S2). Counts use plural families (`@T.Plural("services.count", n)`, `omniText.plural('services.count', n)`),
+  never `n == 1 ? … : …`. Shown dates and numbers use the viewer's language: `@x.Display("N0")`,
+  `@TextCulture.Date(day, DateStyle.Date)` in Razor, `omniText.locale` in scripts (Arabic keeps Latin digits); values in
+  `value=`, `data-*` and URLs stay invariant (`ToString("yyyy-MM-dd")`). Language pickers: the user menu
+  (`_LanguageChoices`) and the sign-in pages' corner menu (`.au-auth-tools`, next to the theme toggle). Native `date` /
+  `time` inputs show the browser's own language, not the page's.
 - **Script hooks a restyle must keep:** every `id`, `data-*` and `name` the scripts read; classes that are hooks
   (`seg-opt`, `aud-card`, `cat-card`, `kb-choice`, `seg-cards`, `var-*`, `ms-*`, `week-row`, `inbox-filter`,
   `inbox-conv-item`, `inbox-voice` (the Inbox voice-note player), `time-view-switch`, `row-actions`); a popup's card stays the direct child of its overlay (backdrop

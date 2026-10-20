@@ -95,6 +95,12 @@ using Omni.App.Persistence.Helpers;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Every thread parses and prints machine values (form fields, data-* numbers, URLs, JSON) the same way on every server;
+// people see their language's dates and numbers through the per-request CurrentUICulture (RequestTextMiddleware,
+// Common/Helpers/TextCulture).
+System.Globalization.CultureInfo.DefaultThreadCurrentCulture = System.Globalization.CultureInfo.InvariantCulture;
+System.Globalization.CultureInfo.DefaultThreadCurrentUICulture = Omni.App.Common.Helpers.AppCulture.For(Omni.App.Common.Enums.AppLanguage.English);
+
 // ---------------------------------------------------------------------
 // Database
 // ---------------------------------------------------------------------

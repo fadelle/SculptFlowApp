@@ -1,0 +1,37 @@
+@model bool
+@inject ITextContext TextContext
+@inject ICurrentClientContext CurrentClient
+@* The language picker's choices (menu items), inside the header's user menu and the sign-in pages' language menu: one
+   form posting to POST /language (LanguageController). Signed in: the user's own language, or "the business default"
+   (empty value); the current choice is marked. Shown only when more than one language is offered. Model: true to start
+   with a separator (after other menu items). *@
+@{
+    var access = await CurrentClient.GetAccessAsync();
+    var client = access is null ? null : await CurrentClient.GetClientAsync();
+    var returnUrl = Context.Request.PathBase + Context.Request.Path + Context.Request.QueryString;
+}
+@if (TextContext.Offered.Count > 1)
+{
+    if (Model)
+    {
+        <div class="au-menu__sep"></div>
+    }
+    <form method="post" action="/language" asp-antiforgery="true" class="lang-choices">
+        <input type="hidden" name="returnUrl" value="@returnUrl" />
+        <span class="au-menu__caption">@T["header.language.title"]</span>
+        @if (access is not null && client is not null)
+        {
+            var followsDefault = access.Language is null;
+            <button type="submit" name="language" value="" class="au-menu__item" aria-current="@(followsDefault ? "true" : null)">
+                <span class="au-icon" aria-hidden="true">@(followsDefault ? "check_circle" : "language")</span>@T["header.language.businessDefault", AppLanguage.NativeName(client.DefaultLanguage)]
+            </button>
+        }
+        @foreach (var language in TextContext.Offered)
+        {
+            var current = access is null ? language == TextContext.Language : access.Language == language;
+            <button type="submit" name="language" value="@language" class="au-menu__item" aria-current="@(current ? "true" : null)">
+                <span class="au-icon" aria-hidden="true">@(current ? "check_circle" : "language")</span><bdi lang="@language">@AppLanguage.NativeName(language)</bdi>
+            </button>
+        }
+    </form>
+}

@@ -67,7 +67,7 @@
         box.textContent = '';
         if (!count) return;
         box.appendChild(el('div', { class: 'alert alert-warning mb-3' }, [
-            (count === 1 ? omniText.t('dashboard.attention.outcomesOne') : omniText.t('dashboard.attention.outcomesOther', [count])) +
+            omniText.plural('dashboard.attention.outcomes', count) +
             ' ' + omniText.t('bookings.outcome.text')
         ]));
     }
@@ -76,7 +76,7 @@
 
     function loadMonth(year, month) {
         state.year = year; state.month = month;
-        $('cal-title').textContent = new Date(year, month - 1, 1).toLocaleDateString(window.omniText.lang, { month: 'long', year: 'numeric' });
+        $('cal-title').textContent = new Date(year, month - 1, 1).toLocaleDateString(window.omniText.locale, { month: 'long', year: 'numeric' });
         return api('GET', '/api/bookings/calendar?year=' + year + '&month=' + month + '&view=' + currentView()).then(function (data) {
             state.monthData = data;
             renderOutcomeNotice(data.needsOutcomeCount);
@@ -184,7 +184,7 @@
         box.textContent = '';
         box.appendChild(el('strong', { text: omniText.t('bookings.today.label') }));
         box.appendChild(document.createTextNode(' ' + (todays.length === 0 ? omniText.t('bookings.today.none')
-            : todays.length === 1 ? omniText.t('bookings.today.one') : omniText.t('bookings.today.other', [todays.length]))));
+            : omniText.plural('bookings.today', todays.length))));
         if (next) {
             box.appendChild(document.createTextNode(' · ' + omniText.t('bookings.today.next', [next.localTime, shortName(next.contactFullName)])));
         } else if (todays.length) {
@@ -212,7 +212,7 @@
         }
         dates.forEach(function (dateIso) {
             var d = new Date(dateIso + 'T00:00:00');
-            var label = d.toLocaleDateString(window.omniText.lang, { weekday: 'short', month: 'short', day: 'numeric' });
+            var label = d.toLocaleDateString(window.omniText.locale, { weekday: 'short', month: 'short', day: 'numeric' });
             box.appendChild(el('div', { class: 'agenda-day' + (dateIso < today ? ' past' : ''), text: dateIso === today ? omniText.t('bookings.agenda.today', [label]) : label }));
             byDate[dateIso]
                 .sort(function (a, b) { return a.localTime < b.localTime ? -1 : 1; })
@@ -246,7 +246,7 @@
 
     function renderDrawer(dateIso) {
         var d = new Date(dateIso + 'T00:00:00');
-        $('cal-drawer-title').textContent = d.toLocaleDateString(window.omniText.lang, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+        $('cal-drawer-title').textContent = d.toLocaleDateString(window.omniText.locale, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
 
         var body = $('cal-drawer-body');
         body.textContent = '';
@@ -291,7 +291,7 @@
         var d = new Date(a.localDate + 'T00:00:00');
         $('cal-appt-avatar').textContent = initialOf(a.contactFullName);
         $('cal-appt-name').textContent = a.contactFullName || omniText.t('bookings.unknownContact');
-        $('cal-appt-when').textContent = d.toLocaleDateString(window.omniText.lang, { weekday: 'short', month: 'short', day: 'numeric' }) + ' · ' + a.localTime;
+        $('cal-appt-when').textContent = d.toLocaleDateString(window.omniText.locale, { weekday: 'short', month: 'short', day: 'numeric' }) + ' · ' + a.localTime;
         $('cal-appt-service').textContent = a.serviceName || omniText.t('contactDetail.noService');
         $('cal-appt-location').textContent = '…';
         $('cal-appt-notes').textContent = '…';

@@ -1,14 +1,21 @@
+using System.Globalization;
 using Microsoft.Extensions.Localization;
+using Omni.App.Business.Contracts.Managers;
+using Omni.App.Common.Helpers;
 
 namespace Omni.App.Business.Managers;
 
 /// <summary>IStringLocalizer&lt;T&gt; over the same strings files as <see cref="JsonStringLocalizer"/> (one shared set, not
 /// one per class).</summary>
-public class JsonStringLocalizer<T> : IStringLocalizer<T>
+public class JsonStringLocalizer<T> : IStringLocalizer<T>, ITextLanguage
 {
     private readonly IStringLocalizer _inner;
 
     public JsonStringLocalizer(IStringLocalizer inner) => _inner = inner;
+
+    public string Language => (_inner as ITextLanguage)?.Language ?? Common.Enums.AppLanguage.English;
+
+    public CultureInfo Culture => (_inner as ITextLanguage)?.Culture ?? TextCulture.Current;
 
     public LocalizedString this[string name] => _inner[name];
 

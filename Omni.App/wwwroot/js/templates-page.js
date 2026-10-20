@@ -133,7 +133,7 @@
       var text = omniText.t('common.counter', [el.value.length, c.getAttribute('data-max')]);
       if (el === bodyEl) {
         var n = (bodyEl.value.match(/\{\{\d+\}\}/g) || []).filter(function (v, i, a) { return a.indexOf(v) === i; }).length;
-        if (n) text += ' · ' + (n === 1 ? omniText.t('templates.form.blanksOne') : omniText.t('templates.form.blanksOther', [n]));
+        if (n) text += ' · ' + omniText.plural('templates.form.blanks', n);
       }
       c.textContent = text;
     });

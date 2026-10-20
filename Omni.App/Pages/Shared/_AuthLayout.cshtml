@@ -19,9 +19,22 @@
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
 </head>
 <body>
-    <button type="button" class="au-icon-btn au-icon-btn--bordered au-auth-theme" data-au-theme-toggle aria-label="@T["layout.theme.toggle"]">
-        <span class="au-icon" aria-hidden="true">dark_mode</span>
-    </button>
+    <div class="au-auth-tools">
+        @if (TextContext.Offered.Count > 1)
+        {
+            <details class="au-dropdown au-auth-lang">
+                <summary class="au-icon-btn au-icon-btn--bordered" aria-label="@T["header.language.title"]" title="@T["header.language.title"]">
+                    <span class="au-icon" aria-hidden="true">language</span>
+                </summary>
+                <div class="au-menu au-menu--end">
+                    <partial name="_LanguageChoices" model="false" />
+                </div>
+            </details>
+        }
+        <button type="button" class="au-icon-btn au-icon-btn--bordered" data-au-theme-toggle aria-label="@T["layout.theme.toggle"]">
+            <span class="au-icon" aria-hidden="true">dark_mode</span>
+        </button>
+    </div>
     <main class="au-auth" id="main">
         @RenderBody()
     </main>

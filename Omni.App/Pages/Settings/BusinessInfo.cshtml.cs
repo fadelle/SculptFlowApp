@@ -50,6 +50,7 @@ public class BusinessInfoModel : PageModel
     private const string HoursSavedKey = "businessInfo.done.hours";
     private const string DateSavedKey = "businessInfo.done.dateSaved";
     private const string DateRemovedKey = "businessInfo.done.dateRemoved";
+    private const string LanguageSavedKey = "businessInfo.done.language";
 
     public BusinessInfoModel(ICurrentClientContext clientContext, IClientProfileService profile, IAvailabilityService availability,
         IInboxSettingsService inboxSettings, IStringLocalizer text)
@@ -62,6 +63,13 @@ public class BusinessInfoModel : PageModel
     }
 
     public bool ClientConfigured { get; private set; }
+
+    /// <summary>The client's default dashboard language and whether this user (the account owner) may change it.</summary>
+    public string DefaultLanguage { get; private set; } = Common.Enums.AppLanguage.English;
+    public bool CanChangeLanguage { get; private set; }
+
+    [BindProperty]
+    public string? Language { get; set; }
 
     /// <summary>"general", "availability" or "ai".</summary>
     public string ActiveTab { get; private set; } = "general";
@@ -151,6 +159,8 @@ public class BusinessInfoModel : PageModel
         }
 
         ClientConfigured = true;
+        DefaultLanguage = client.DefaultLanguage;
+        CanChangeLanguage = (await _clientContext.GetAccessAsync(ct))?.Role == Common.Enums.UserRole.Client;
         Name = client.Name;
         Phone = client.Phone;
         Email = client.Email;
@@ -193,6 +203,26 @@ public class BusinessInfoModel : PageModel
         }
 
         StatusMessage = _text[DetailsSavedKey].Value;
+        return RedirectToPage();
+    }
+
+    public async Task<IActionResult> OnPostSaveLanguageAsync(CancellationToken ct)
+    {
+        var access = await _clientContext.GetAccessAsync(ct);
+        if (access is null) return RedirectToPage();
+
+        try
+        {
+            await _profile.SetDefaultLanguageAsync(access, Language, ct);
+        }
+        catch (Exception ex) when (ex is ArgumentException or UnauthorizedAccessException)
+        {
+            var page = await OnGetAsync(null, ct);
+            ErrorMessage = _text.Localize(ex);
+            return page;
+        }
+
+        StatusMessage = _text[LanguageSavedKey].Value;
         return RedirectToPage();
     }
 

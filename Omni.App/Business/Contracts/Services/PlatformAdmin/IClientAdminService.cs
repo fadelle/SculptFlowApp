@@ -29,6 +29,10 @@ public interface IClientAdminService
     /// <summary>Saves the client's AI bot switches through IInboxSettingsService. Throws KeyNotFoundException.</summary>
     Task<PlatformAdminChange> UpdateInboxSettingsAsync(Guid id, UpdateInboxSettingsRequest request, CancellationToken ct);
 
+    /// <summary>The language the client's dashboard opens in for users without their own (en, ar, fr), through
+    /// IClientProfileService. Throws KeyNotFoundException, ArgumentException for an unknown language.</summary>
+    Task<PlatformAdminChange> SetDefaultLanguageAsync(Guid id, string? language, CancellationToken ct);
+
     /// <summary>What moving the client to business type <paramref name="toCode"/> would do: contact counts per stage and
     /// where each group goes (IBusinessTypeService.PreviewClientChangeAsync).</summary>
     Task<BusinessTypeChangePreview> PreviewBusinessTypeChangeAsync(Guid id, string? toCode, CancellationToken ct);

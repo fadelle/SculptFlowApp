@@ -60,7 +60,7 @@ else
     else
     {
         <div class="section-head">
-            <h2 class="section-title">@(members.Count == 1 ? T["members.list.countOne"] : T["members.list.countOther", members.Count])</h2>
+            <h2 class="section-title">@T.Plural("members.list.count", members.Count)</h2>
             <span class="au-toolbar__meta">@(Model.SeatLimit is { } limit ? T["members.seats.limited", Model.SeatsInUse, limit] : T["members.seats.unlimited", Model.SeatsInUse])</span>
         </div>
         <div class="au-table-card">

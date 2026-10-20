@@ -57,6 +57,12 @@ public class ClientsAdminController : ControllerBase
     public async Task<IActionResult> UpdateInboxSettings(Guid id, [FromBody] UpdateInboxSettingsRequest request, CancellationToken ct) =>
         Ok(await _clients.UpdateInboxSettingsAsync(id, request, ct));
 
+    /// <summary>Body { language: "en" | "ar" | "fr" }: the language the client's dashboard opens in for users who haven't
+    /// picked their own.</summary>
+    [HttpPut("{id:guid}/default-language")]
+    public async Task<IActionResult> SetDefaultLanguage(Guid id, [FromBody] DefaultLanguageBody request, CancellationToken ct) =>
+        Ok(await _clients.SetDefaultLanguageAsync(id, request?.Language, ct));
+
     /// <summary>?to=code: { clientId, fromCode, toCode, contactCount, moves: [{ fromKey, fromLabel, category, count, toKey, toLabel }] }.
     /// Changes nothing.</summary>
     [HttpGet("{id:guid}/business-type/preview")]

@@ -77,7 +77,7 @@ public class DocumentTextExtractor : IDocumentTextExtractor
         }
         if (text.Length > _maxChars)
         {
-            throw new InvalidDocumentException("knowledge.documents.errors.tooMuchText").WithArgs($"{text.Length:N0}", $"{_maxChars:N0}");
+            throw new InvalidDocumentException("knowledge.documents.errors.tooMuchText").WithArgs(text.Length, _maxChars);
         }
         return text;
     }

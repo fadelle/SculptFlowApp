@@ -211,7 +211,7 @@
       : n === 0 ? (choice() === 'manual' ? omniText.t('campaigns.create.problem.pickSomeone') : omniText.t('campaigns.create.problem.nobody'))
       : null;
     btn.disabled = !!problem;
-    var count = n == null ? '…' : n === 1 ? omniText.t('campaigns.create.summary.one') : omniText.t('campaigns.create.summary.other', [n]);
+    var count = n == null ? '…' : omniText.plural('campaigns.create.summary', n);
     box.innerHTML = problem
       ? '<span class="summary-problem">' + esc(problem) + '</span>'
       : '<strong>' + esc(omniText.t('campaigns.create.summary.ready')) + '</strong> ' +

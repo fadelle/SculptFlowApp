@@ -27,8 +27,9 @@
     if (isNaN(d.getTime())) return '';
     var opts = Object.assign({}, FORMATS[fmt] || FORMATS['datetime']);
     if (timeZone) opts.timeZone = timeZone;
-    try { return d.toLocaleString(undefined, opts); }
-    catch (e) { delete opts.timeZone; return d.toLocaleString(undefined, opts); } // unknown zone id
+    var locale = window.omniText ? window.omniText.locale : undefined; // the page's language (Arabic keeps Latin digits)
+    try { return d.toLocaleString(locale, opts); }
+    catch (e) { delete opts.timeZone; return d.toLocaleString(locale, opts); } // unknown zone id
   }
 
   /* Server-written text (e.g. a notification) can carry a moment as [[time:ISO]]; this swaps each for local text. */

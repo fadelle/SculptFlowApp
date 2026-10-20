@@ -1,5 +1,6 @@
 @page "/settings/business-info"
 @model Omni.App.Pages.Settings.BusinessInfoModel
+@inject ITextContext TextContext
 @{
     ViewData["Title"] = T["nav.businessInfo"].Value;
     // English day names are the rows' data-day values (business-info.js finds Monday by it); people see DayLabel.
@@ -11,7 +12,7 @@
     };
     static (string Month, string Day, string Long) DateParts(string value) =>
         DateOnly.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, out var d)
-            ? (d.ToString("MMM"), d.Day.ToString(), d.ToString("ddd, MMM d, yyyy"))
+            ? (TextCulture.Date(d, DateStyle.MonthShort), d.Day.Display("0"), TextCulture.Date(d, DateStyle.WeekdayDate))
             : ("", "", value);
 }
 
@@ -106,6 +107,36 @@ else
                 </div>
             </div>
         </form>
+
+        @if (TextContext.Offered.Count > 1 || Model.DefaultLanguage != AppLanguage.English)
+        {
+            <form method="post" asp-page-handler="SaveLanguage" class="au-panel au-panel--round integration-form client-form mt-3" id="language-form">
+                <div class="set-section">
+                    <div class="set-section-head"><strong>@T["businessInfo.language.title"]</strong><div class="cell-sub">@T["businessInfo.language.help"]</div></div>
+                    <div class="set-section-body">
+                        <label class="field">
+                            <span>@T["businessInfo.language.label"]</span>
+                            <select name="Language" class="text-input" disabled="@(!Model.CanChangeLanguage)">
+                                @foreach (var language in TextContext.Offered.Contains(Model.DefaultLanguage) ? TextContext.Offered : TextContext.Offered.Append(Model.DefaultLanguage))
+                                {
+                                    <option value="@language" lang="@language" selected="@(language == Model.DefaultLanguage)">@AppLanguage.NativeName(language)</option>
+                                }
+                            </select>
+                            @if (!Model.CanChangeLanguage)
+                            {
+                                <small class="text-subtle">@T["businessInfo.language.ownerOnly"]</small>
+                            }
+                        </label>
+                    </div>
+                </div>
+                @if (Model.CanChangeLanguage)
+                {
+                    <div class="save-row">
+                        <button type="submit" class="au-btn au-btn--primary">@T["businessInfo.language.save"]</button>
+                    </div>
+                }
+            </form>
+        }
     }
     else if (Model.ActiveTab == "ai" && Model.InboxSettings is { } bot)
     {

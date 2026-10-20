@@ -39,7 +39,7 @@ else
         <strong>@T["integrations.summary", connectedCount, cards.Count]</strong>
         @if (attentionCount > 0)
         {
-            <span class="text-danger-soft"> · @(attentionCount == 1 ? T["integrations.summaryAttentionOne"] : T["integrations.summaryAttentionOther", attentionCount])</span>
+            <span class="text-danger-soft"> · @T.Plural("integrations.summaryAttention", attentionCount)</span>
         }
     </div>
 
@@ -310,7 +310,7 @@ else
                     </div>
                     <div>
                         <span class="cell-sub">@T["integrations.telegram.lastMessage"]</span>
-                        <span class="int-val" title="@(info.LastWebhookAt?.ToString("MMM d, HH:mm") + " UTC")">
+                        <span class="int-val" title="@(info.LastWebhookAt is { } lastWebhook ? TextCulture.Date(lastWebhook.UtcDateTime, DateStyle.MonthDayTime) + " UTC" : null)">
                             @if (info.LastWebhookAt is { } last) { @LocalTimeHelper.Ago(T, last) } else { <text>@T["integrations.telegram.noMessage"]</text> }
                         </span>
                     </div>

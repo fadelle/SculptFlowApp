@@ -4,6 +4,7 @@ using Microsoft.Extensions.Localization;
 using Omni.App.Business.Contracts.Managers;
 using Omni.App.Business.Contracts.Services.Dashboard;
 using Omni.App.Business.Contracts.Services.WhatsApp;
+using Omni.App.Common.Enums;
 using Omni.App.Common.Helpers;
 using Omni.App.Entities.Dtos.Dashboard;
 using Omni.App.Entities.Responses.Dashboard;
@@ -76,8 +77,8 @@ public class IndexModel : PageModel
         RangeLabel = fromDate is null || toDate is null
             ? _text[AllTimeKey].Value
             : fromDate == toDate
-                ? fromDate.Value.ToString("MMM d, yyyy")
-                : $"{fromDate.Value:MMM d} – {toDate.Value:MMM d, yyyy}";
+                ? TextCulture.Date(fromDate.Value, DateStyle.Date)
+                : $"{TextCulture.Date(fromDate.Value, DateStyle.MonthDay)} – {TextCulture.Date(toDate.Value, DateStyle.Date)}";
 
         // Viewer-local midnights -> UTC instants; the upper bound is exclusive (midnight after the last day).
         DateTimeOffset? from = fromDate is null ? null : LocalMidnightUtc(fromDate.Value, tz);

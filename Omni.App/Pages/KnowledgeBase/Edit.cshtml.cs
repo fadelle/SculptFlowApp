@@ -18,8 +18,7 @@ namespace Omni.App.Pages.KnowledgeBase;
 public class EditModel : PageModel
 {
     private const string WebsiteAddedKey = "knowledge.website.added";
-    private const string UploadedOneKey = "knowledge.upload.doneOne";
-    private const string UploadedOtherKey = "knowledge.upload.doneOther";
+    private const string UploadedPluralKey = "knowledge.upload.done";
     private const string UploadIndexFailedKey = "knowledge.upload.indexFailed";
     private const string SavedKey = "knowledge.entry.saved";
     private const string EntryIndexFailedKey = "knowledge.entry.indexFailed";
@@ -181,7 +180,7 @@ public class EditModel : PageModel
                 client.Id, new UploadKnowledgeRequest(Title, Category, IsActive),
                 UploadFile.FileName, stream, UploadFile.Length, ct);
 
-            TempData["StatusMessage"] = doc.ChunkCount == 1 ? _text[UploadedOneKey, doc.Title].Value : _text[UploadedOtherKey, doc.Title, doc.ChunkCount].Value;
+            TempData["StatusMessage"] = _text.Plural(UploadedPluralKey, doc.ChunkCount, doc.Title, doc.ChunkCount).Value;
             return RedirectToPage("/KnowledgeBase/Index");
         }
         catch (ArgumentException ex)

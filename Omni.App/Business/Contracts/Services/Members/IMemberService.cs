@@ -25,6 +25,10 @@ public interface IMemberService
     /// A deactivated member is signed out on their next request.</summary>
     Task SetActiveAsync(UserAccess actor, string userId, bool active, CancellationToken ct = default);
 
+    /// <summary>The signed-in user's own dashboard language (en, ar, fr), or null to follow the client's default. Any client
+    /// or member user may set their own; ArgumentException for an unknown language.</summary>
+    Task SetOwnLanguageAsync(UserAccess actor, string? language, CancellationToken ct = default);
+
     /// <summary>The membership rules every activation goes through (also the platform-admin members API): one active
     /// membership per user, and seats. Saves.</summary>
     Task SetMembershipActiveAsync(ClientUser membership, bool active, CancellationToken ct = default);

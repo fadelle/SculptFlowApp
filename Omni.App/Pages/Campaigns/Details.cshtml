@@ -50,11 +50,11 @@ else if (Model.Details is not null)
     var sendCount = st.TotalRecipients - st.Skipped;
     var waitingCount = st.Pending + st.Queued;
     var sendLabel = c.Status == CampaignStatus.Paused ? T["campaigns.send.resume"].Value
-        : sendCount == 1 ? T["campaigns.send.nowOne"].Value : T["campaigns.send.nowOther", sendCount].Value;
+        : T.Plural("campaigns.send.now", sendCount).Value;
     // Sending can't be undone, so the button asks first (the kit's styled confirm).
     var sendConfirm = c.Status == CampaignStatus.Paused
-        ? (waitingCount == 1 ? T["campaigns.send.resumeConfirmOne"].Value : T["campaigns.send.resumeConfirmOther", waitingCount].Value)
-        : (sendCount == 1 ? T["campaigns.send.confirmOne"].Value : T["campaigns.send.confirmOther", sendCount].Value);
+        ? T.Plural("campaigns.send.resumeConfirm", waitingCount).Value
+        : T.Plural("campaigns.send.confirm", sendCount).Value;
     var stopConfirm = c.Status == CampaignStatus.Scheduled ? T["campaigns.stop.confirmScheduled"].Value : T["campaigns.stop.confirmRunning"].Value;
     var groups = d.Recipients.GroupBy(r => Group(r.Status)).ToDictionary(g => g.Key, g => g.Count());
 

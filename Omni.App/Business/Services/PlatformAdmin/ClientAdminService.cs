@@ -1,4 +1,5 @@
 using Omni.App.Business.Contracts.Services.BusinessTypes;
+using Omni.App.Business.Contracts.Services.Clients;
 using Omni.App.Business.Contracts.Services.Inbox;
 using Omni.App.Business.Contracts.Services.PlatformAdmin;
 using Omni.App.Business.Mappers.PlatformAdmin;
@@ -20,10 +21,12 @@ public class ClientAdminService : IClientAdminService
     private readonly TimeProvider _time;
     private readonly IInboxSettingsService _inboxSettings;
     private readonly IBusinessTypeService _businessTypes;
+    private readonly IClientProfileService _profile;
 
     public ClientAdminService(IClientAdminRepository repository, IUnitOfWork unitOfWork, TimeProvider time, IInboxSettingsService inboxSettings,
-        IBusinessTypeService businessTypes)
+        IBusinessTypeService businessTypes, IClientProfileService profile)
     {
+        _profile = profile;
         _inboxSettings = inboxSettings;
         _businessTypes = businessTypes;
         _repository = repository;
@@ -78,6 +81,12 @@ public class ClientAdminService : IClientAdminService
     {
         if (request is null) throw new ArgumentException("Send newConversations and reopenedConversations.");
         await _inboxSettings.UpdateAsync(id, request, ct);
+        return new PlatformAdminChange(id);
+    }
+
+    public async Task<PlatformAdminChange> SetDefaultLanguageAsync(Guid id, string? language, CancellationToken ct)
+    {
+        await _profile.SetDefaultLanguageAsync(id, language, ct);
         return new PlatformAdminChange(id);
     }
 

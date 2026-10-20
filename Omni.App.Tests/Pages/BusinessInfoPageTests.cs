@@ -20,7 +20,8 @@ public class BusinessInfoPageTests
 
     public BusinessInfoPageTests() => InboxSettings(planIncludesBot: true);
 
-    private BusinessInfo Sut(bool none = false) => new BusinessInfo(ClientContext(none ? null : Glow).Object, _profile.Object, _availability.Object, _inboxSettings.Object, TextKit.Localizer()).Attach();
+    private BusinessInfo Sut(bool none = false, string role = UserRole.Client) =>
+        new BusinessInfo(ClientContext(none ? null : Glow, role).Object, _profile.Object, _availability.Object, _inboxSettings.Object, TextKit.Localizer()).Attach();
 
     private void InboxSettings(bool planIncludesBot) =>
         _inboxSettings.Setup(a => a.GetAsync(Glow.Id, It.IsAny<CancellationToken>())).ReturnsAsync(new InboxSettingsDto(planIncludesBot, true, false));
@@ -44,6 +45,31 @@ public class BusinessInfoPageTests
         var none = Sut(true);
         Assert.IsType<PageResult>(await none.OnGetAsync(null, default));
         Assert.False(none.ClientConfigured);
+    }
+
+    [Fact]
+    public async Task The_owner_changes_the_default_language_and_a_member_only_sees_it()
+    {
+        var owner = Sut();
+        await owner.OnGetAsync(null, default);
+        Assert.Equal(("en", true), (owner.DefaultLanguage, owner.CanChangeLanguage));
+        var member = Sut(role: UserRole.Member);
+        await member.OnGetAsync(null, default);
+        Assert.False(member.CanChangeLanguage);
+
+        owner.Language = "ar";
+        Assert.IsType<RedirectToPageResult>(await owner.OnPostSaveLanguageAsync(default));
+        Assert.Equal("Default language saved.", owner.StatusMessage);
+        _profile.Verify(p => p.SetDefaultLanguageAsync(It.Is<UserAccess>(a => a.ClientId == Glow.Id), "ar", It.IsAny<CancellationToken>()), Times.Once);
+
+        _profile.Setup(p => p.SetDefaultLanguageAsync(It.IsAny<UserAccess>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new UnauthorizedAccessException("clients.errors.defaultLanguageOwnerOnly"));
+        var refused = Sut(role: UserRole.Member);
+        Assert.IsType<PageResult>(await refused.OnPostSaveLanguageAsync(default));
+        Assert.Equal("Only the account owner can change the default language.", refused.ErrorMessage);
+        Assert.True(refused.ClientConfigured);
+
+        Assert.IsType<RedirectToPageResult>(await Sut(true).OnPostSaveLanguageAsync(default));
     }
 
     [Fact]

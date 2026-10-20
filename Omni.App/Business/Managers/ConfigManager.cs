@@ -109,6 +109,11 @@ public class ConfigManager : IConfigManager
     // ---- Dashboard
     public int DashboardContactsPageSize => GetInt(ConfigDefaults.DashboardContactsPageSize);
 
+    // ---- Localization
+    public string LocalizationLanguages => GetString(ConfigDefaults.LocalizationLanguages);
+    public int LocalizationLanguageCookieDays => GetInt(ConfigDefaults.LocalizationLanguageCookieDays);
+    public bool LocalizationShowTextKeys => GetBool(ConfigDefaults.LocalizationShowTextKeys);
+
     // ---- Cache
     public int CacheClientsMinutes => GetInt(ConfigDefaults.CacheClientsMinutes);
     public int CacheMembershipsMinutes => GetInt(ConfigDefaults.CacheMembershipsMinutes);

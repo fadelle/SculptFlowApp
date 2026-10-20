@@ -1,0 +1,2 @@
+# Keys whose translation may read exactly like the English (product names, codes, words every language borrows).
+# One per line: "<lang> <key>". Guards/UiTextKeysTests fails on any other translation equal to its English.

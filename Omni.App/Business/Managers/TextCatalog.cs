@@ -26,14 +26,19 @@ public class TextCatalog : ITextCatalog
     /// <summary>From raw JSON per language (tests). Throws when a file isn't a flat object of strings, or English is missing.</summary>
     public TextCatalog(IReadOnlyDictionary<string, string> jsonByLanguage)
     {
-        foreach (var (language, json) in jsonByLanguage)
+        foreach (var (language, json) in jsonByLanguage) _strings[language] = Parse(language, json);
+        if (!_strings.TryGetValue(AppLanguage.English, out var english)) throw new InvalidOperationException("The English strings file (en.json) is missing.");
+        foreach (var (language, strings) in _strings)
         {
-            var strings = Parse(language, json);
-            _strings[language] = strings;
-            _versions[language] = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(json)))[..12];
-            _scripts[language] = "window.omniStrings = " + JsonSerializer.Serialize(strings, ScriptJson) + ";\n";
+            // The browser copy of a translation carries English for the keys it doesn't have yet (the server falls back
+            // per key the same way), and its version covers both files.
+            var browser = language == AppLanguage.English
+                ? strings
+                : english.Concat(strings).GroupBy(p => p.Key, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.Last().Value, StringComparer.Ordinal);
+            var versionSource = language == AppLanguage.English ? jsonByLanguage[language] : jsonByLanguage[AppLanguage.English] + "\n" + jsonByLanguage[language];
+            _versions[language] = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(versionSource)))[..12];
+            _scripts[language] = "window.omniStrings = " + JsonSerializer.Serialize(browser, ScriptJson) + ";\n";
         }
-        if (!_strings.ContainsKey(AppLanguage.English)) throw new InvalidOperationException("The English strings file (en.json) is missing.");
         Languages = _strings.Keys.OrderBy(l => l == AppLanguage.English ? 0 : 1).ThenBy(l => l, StringComparer.Ordinal).ToList();
     }
 

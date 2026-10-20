@@ -132,8 +132,13 @@
   .header-bar .au-header__tools { flex-shrink: 0; gap: 6px; }
 }
 
-/* Theme toggle in the corner of the pages without the shell (_AuthLayout) */
-.au-auth-theme { position: fixed; top: 16px; right: 16px; z-index: 5; }
+/* Language menu and theme toggle in the corner of the pages without the shell (_AuthLayout) */
+.au-auth-tools { position: fixed; top: 16px; inset-inline-end: 16px; z-index: 5; display: flex; gap: 8px; align-items: flex-start; }
+.au-auth-lang > summary { list-style: none; cursor: pointer; }
+.au-auth-lang > summary::-webkit-details-marker { display: none; }
+
+/* Language choices (_LanguageChoices) in the user menu and the sign-in pages' language menu */
+.lang-choices .au-menu__item[aria-current="true"] { font-weight: 600; }
 
 /* Unread count on the Inbox row; sidebar.js / inbox.js fill #sidebar-inbox-badge. */
 .au-nav-count {

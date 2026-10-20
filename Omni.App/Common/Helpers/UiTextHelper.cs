@@ -16,10 +16,9 @@ public static class UiTextHelper
         return words.Length > 1 && at < 0 ? $"{first}{char.ToUpperInvariant(words[^1][0])}" : first.ToString();
     }
 
-    /// <summary>A whole amount with thousands separators ("12,500"), the same on every server: the production container
-    /// runs with the invariant culture, where "C0" prints the generic currency sign (¤). No symbol, because the
+    /// <summary>A whole amount with thousands separators in the request's language ("12,500", "12 500"). No symbol: the
     /// bookings behind a total can each carry their own currency.</summary>
-    public static string Amount(decimal value) => value.ToString("#,0", System.Globalization.CultureInfo.InvariantCulture);
+    public static string Amount(decimal value) => value.Display("#,0");
 
     /// <summary>A short reference for an error page ("8F2C-1A90"): the first 8 characters of the request's trace id (the
     /// W3C id "00-&lt;trace&gt;-&lt;span&gt;-00", else the raw request id), which the server logs with the error.</summary>

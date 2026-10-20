@@ -60,7 +60,7 @@ else
                     }
                 </select>
             </div>
-            <span class="au-toolbar__meta">@(Model.Rows.Count == 1 ? T["knowledge.count.one"] : T["knowledge.count.other", Model.Rows.Count])</span>
+            <span class="au-toolbar__meta">@T.Plural("knowledge.count", Model.Rows.Count)</span>
         </div>
 
         <div class="au-table-card">
@@ -92,7 +92,7 @@ else
                                                 <a href="/KnowledgeBase/Websites/@w.Id" class="row-title clip-1" title="@url">@url</a>
                                                 <div class="cell-sub">
                                                     @T["knowledge.source.website"] · @(w.CrawlMode == WebsiteCrawlMode.SinglePage ? T["knowledge.crawl.single"] : T["knowledge.crawl.whole"])
-                                                    · @(w.IndexedPages == 1 ? T["knowledge.pages.one"] : T["knowledge.pages.other", w.IndexedPages])
+                                                    · @T.Plural("knowledge.pages", w.IndexedPages)
                                                 </div>
                                             </div>
                                         </div>

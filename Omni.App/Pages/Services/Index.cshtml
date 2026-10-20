@@ -41,7 +41,7 @@ else
             <div class="au-toolbar__filters">
                 <input type="search" id="svc-search" class="au-input search-input" placeholder="@T["services.search"]" aria-label="@T["services.search"]" />
             </div>
-            <span class="au-toolbar__meta">@(Model.Services.Count == 1 ? T["services.count.one"] : T["services.count.other", Model.Services.Count])</span>
+            <span class="au-toolbar__meta">@T.Plural("services.count", Model.Services.Count)</span>
         </div>
         <div class="au-table-card">
             <div class="au-table-scroll">

@@ -134,7 +134,7 @@ else
             @if (Model.TotalCount > 0)
             {
                 <div class="au-pager">
-                    <span class="au-pager__count">@{ var countHtml = new Microsoft.AspNetCore.Html.HtmlString($"<strong>{Model.TotalCount}</strong>"); }@(Model.TotalCount == 1 ? T.Html("contacts.count.one", countHtml) : T.Html("contacts.count.other", countHtml))</span>
+                    <span class="au-pager__count">@{ var countHtml = new Microsoft.AspNetCore.Html.HtmlString($"<strong>{Model.TotalCount}</strong>"); }@T.Html(T.PluralKey("contacts.count", Model.TotalCount), countHtml)</span>
                     @if (Model.TotalPages > 1)
                     {
                         <ul class="pagination" aria-label="@T["common.pages"]">

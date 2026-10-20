@@ -33,7 +33,7 @@ public static class TextHtml
             switch (args[index])
             {
                 case IHtmlContent content: html.AppendHtml(content); break;
-                case { } value: html.Append(Convert.ToString(value, System.Globalization.CultureInfo.CurrentCulture)); break;
+                case { } value: html.Append(Convert.ToString(value, (text as Business.Contracts.Managers.ITextLanguage)?.Culture ?? TextCulture.Current)); break;
             }
             position = end + 1;
         }

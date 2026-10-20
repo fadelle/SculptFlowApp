@@ -180,8 +180,12 @@ public class TextTests
         var terms = new Mock<ITerminology>();
         terms.Setup(t => t.Defaults(It.IsAny<string>())).Returns(TextKit.DefaultTerms());
         terms.Setup(t => t.ForBusinessTypeAsync("x", It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(GuestWords);
-        var context = new TextContext(catalog ?? TextKit.Catalog, terms.Object, current.Object, new HttpContextAccessor { HttpContext = http },
-            NullLogger<TextContext>.Instance);
+        var config = new Mock<IConfigManager>();
+        config.SetupGet(c => c.LocalizationLanguages).Returns(string.Join(",", AppLanguage.All));
+        var access = client is null ? null : new UserAccess("u1", client.Id, UserRole.Client, null, null, null);
+        current.Setup(c => c.GetAccessAsync(It.IsAny<CancellationToken>())).ReturnsAsync(access);
+        var context = new TextContext(catalog ?? TextKit.Catalog, terms.Object, current.Object, config.Object,
+            Mock.Of<Microsoft.Extensions.Hosting.IHostEnvironment>(), new HttpContextAccessor { HttpContext = http }, NullLogger<TextContext>.Instance);
         return (context, terms);
     }
 
@@ -317,6 +321,7 @@ public class TextTests
     public async Task The_middleware_works_out_the_text_for_pages_and_apis_only(string path, bool initialized)
     {
         var text = new Mock<ITextContext>();
+        text.SetupGet(t => t.Culture).Returns(AppCulture.For("en"));
         var next = false;
         var middleware = new RequestTextMiddleware(_ => { next = true; return Task.CompletedTask; });
         var http = new DefaultHttpContext();
