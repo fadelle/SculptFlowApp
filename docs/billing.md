@@ -216,9 +216,11 @@ Changes apply to future usage only; recorded usage keeps its snapshot. Each chan
 
 1. Apply the billing block of `Database/schema.sql` to Supabase (creates schema `billing`; needs `btree_gist`).
 2. Set `PlatformAdmin__ApiKey` on Render (a long random secret) and the same value as `MainApp__PlatformAdminApiKey` on the admin portal.
-3. Create the default rate card and its rates, and the plans.
+3. Create the default rate card and its rates, and the plans. Give every plan a `max_users` ("Seats") value: seats are
+   enforced, so a plan without it lets a client add no members.
 4. Give every existing client a plan (and top up wallets as payments arrive); set each WhatsApp account's arrangement.
-5. Optionally `Billing__SignupPlanCode`. Then `Billing__Enabled=true` and redeploy.
+5. Optionally `Billing` / `SignupPlanCode`, then `Billing` / `Enabled` on the admin portal's Configuration page (they are
+   database settings now; the old `Billing__*` environment variables do nothing). No redeploy needed.
 
 ## Admin API (all under `/api/platform-admin/billing`, header `X-Platform-Admin-Key`, actor in `X-Admin-Actor`; normally used through the Omni.Admin portal's Billing pages)
 

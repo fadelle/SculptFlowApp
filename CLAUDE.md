@@ -178,10 +178,12 @@ portal's copy of the request/response shapes kept in step.
 
 `Omni.App.Tests/Guards/LeftoverNamesTests` fails when an old word (clinic, lead, procedure, appointment, staff, patient, <!-- leftover-ok: lists the old words -->
 consultation, ai_agent, max_agents, the old product names…) appears in a tracked file outside <!-- leftover-ok: lists the old words -->
-`Guards/leftover-names-allowlist.txt`, a `leftover-ok: <reason>` line marker, or its `PendingScopes`. New code uses the
-new names; a rename session removes its words from `PendingScopes`.
+`Guards/leftover-names-allowlist.txt`, a `leftover-ok: <reason>` line marker or a `leftover-ok-begin:` / `leftover-ok-end`
+block. `PendingScopes` is empty since Milestone A and stays empty: new code uses the new names.
 
 ## Other docs (read on demand)
 
 **Do not read `PROJECT_HANDOFF.md` unless Mohammad asks** (old Omni → new app migration notes, not being implemented).
-Others: `README.md` (setup), `docs/billing.md`, `docs/configuration.md`, `docs/system-design.html`.
+Others: `README.md` (setup), `docs/billing.md`, `docs/configuration.md`, `docs/system-design.html`,
+`docs/deploy-runbook.md` (first Omni deploy: the one order of database, Render and n8n steps for both apps; keep it in
+step with any change to that order).

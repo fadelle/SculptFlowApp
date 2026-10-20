@@ -31,7 +31,7 @@ constant default declared in `Common/Statics/ConfigDefaults`.
 from user-secrets in development and environment variables in production. This covers connection strings, API keys,
 client secrets, public URLs and provider ids. They never go in `config.settings`.
 
-## Declared settings (60)
+## Declared settings (79)
 
 Generated from `Common/Statics/ConfigDefaults`; keep this table in step when you add one.
 
@@ -150,3 +150,21 @@ default later changes in code, databases seeded earlier keep the old value until
 
 **Deploying:** environment variables for the moved keys (for example `Billing__Enabled` or `Knowledge__MinScore` on Render)
 no longer do anything. Set those values on the admin portal's Configuration page instead.
+
+## Renamed in Milestone A (generic platform)
+
+No appsettings key or environment variable changed name. Five database settings did; the data copy
+(`Database/migrations/2026-10-generic/copy-from-old.sql`) carries a value that was changed by hand over to the new key,
+and `seed-config.sql` adds the new rows with their defaults:
+
+<!-- leftover-ok-begin: old setting names -->
+| Old key | New key |
+|---|---|
+| `Cache` / `ClinicsMinutes` | `Cache` / `ClientsMinutes` |
+| `Cache` / `ProceduresMinutes` | `Cache` / `ServicesMinutes` |
+| `Cache` / `StaffLookupMinutes` | `Cache` / `MembershipsMinutes` |
+| `Dashboard` / `LeadsPageSize` | `Dashboard` / `ContactsPageSize` |
+| `WebScraping` / `MaxSourcesPerClinic` | `WebScraping` / `MaxSourcesPerClient` |
+<!-- leftover-ok-end -->
+
+New: `Cache` / `BusinessTypesMinutes`. Deploy order and Render variables: `docs/deploy-runbook.md`.

@@ -15,7 +15,11 @@ This README is only a short orientation.
   Project/assembly name is `Omni.App`; only user-visible text says Omni.
 - EF Core / Npgsql on Supabase PostgreSQL with pgvector. The schema is hand-written in `Database/schema.sql`
   (idempotent, appended blocks), not EF migrations; `ApplicationDbContext` is kept in sync by hand.
-- ASP.NET Core Identity (role-free); every user belongs to exactly one client via `client_users`.
+- ASP.NET Core Identity with one users table (`identity.users`, role `admin` / `client` / `member`): client and member
+  users belong to one client via `client_users` and use this app; admins use only the admin portal (`Omni.Admin`), which
+  signs them in through this app's `/api/platform-admin/auth/login`.
+- Business types (`core.business_types`) give each client its words, AI profile and pipeline stages; UI text lives in
+  `Omni.App/Resources/i18n/en.json`.
 - SignalR (`/hubs/inbox`) for live Inbox, calendar and notification updates; PostgreSQL stays the source of truth.
 - Hand-rolled CSS and small vanilla-JS files in `wwwroot/` (no frontend framework).
 - Deployed as a Docker image on Render (`https://sculptflowapp.onrender.com`) from `main`.
@@ -42,8 +46,10 @@ This README is only a short orientation.
    psql "<connection string>" -f Database/seed.sql   # optional demo client, services and contacts
    psql "<connection string>" -f Database/seed-demo.sql   # optional fully populated demo client (re-runnable, dummy data; sign-in and placeholder password in the file header, change it)
    ```
-   Both are idempotent. Tables live in one Postgres schema per area (`core`, `crm`, `billing`, ...); running
-   `schema.sql` on a database created before 2026-10-07 moves its tables out of `public` (back it up first).
+   All four are idempotent; `seed.sql` and `seed-demo.sql` are demo data and never belong in production. Tables live in
+   one Postgres schema per area (`core`, `crm`, `billing`, ...). The admin portal's `Database/admin-schema.sql` runs after
+   `schema.sql` on the same database. Moving an existing (pre-Omni) project: `docs/deploy-runbook.md`; never run the
+   new schema files on the old live project.
 
 2. **Secrets.** From the `Omni.App` project folder, use user-secrets (never commit real values):
    ```
@@ -63,13 +69,13 @@ This README is only a short orientation.
    Swagger is at `/swagger` in Development only. There is no Razor runtime compilation, so `.cshtml`/`.cs` changes
    need a stop, build and run.
 
-4. **Tests.** `dotnet test Omni.App.Tests`. The billing database tests need `OMNI_TEST_DB` set to a
+4. **Tests.** `dotnet test Omni.App.slnx` (about 1,900 tests). The database tests need `OMNI_TEST_DB` set to a
    throwaway local PostgreSQL server (e.g. `Host=localhost;Port=5432;Username=postgres;Password=...`); each run creates
-   and drops its own database. Without it those tests are skipped. Never point it at Supabase.
+   and drops its own database. Without it those tests are skipped. Never point it at Supabase. The data copy script has
+   its own test: `Database/migrations/2026-10-generic/test-copy.ps1` (needs a local PostgreSQL install).
 
 ## Known gaps
 
 See `PROJECT_HANDOFF.md` §17 (pending work) and §22 (TODOs). The most important: rotate the secrets that were
 once in git history, derive `clientId` server-side for the AI endpoints, verify Meta webhook signatures, add
-forwarded-headers handling and persistent DataProtection keys, and protect the anonymous `POST /api/contacts`.
-Only the billing module has automated tests so far.
+persistent DataProtection keys. The current list, from the code: `docs/system-design.html` §10.
