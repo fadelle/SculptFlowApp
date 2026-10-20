@@ -333,4 +333,17 @@ public class LocalTimeHelperTests
         Assert.Equal("3 days ago", LocalTimeHelper.Ago(TextKit.Localizer(), now.AddDays(-3).AddMinutes(-1)).ToString());
         Assert.Contains("<time", LocalTimeHelper.Ago(TextKit.Localizer(), now.AddDays(-30)).ToString());
     }
+
+    [Fact]
+    public void Ago_counts_follow_the_language_plural_rules()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var arabic = TextKit.Localizer(AppLanguage.Arabic);
+        Assert.Equal("منذ دقيقة", LocalTimeHelper.Ago(arabic, now.AddMinutes(-1).AddSeconds(-1)).ToString());
+        Assert.Equal("منذ 5 دقائق", LocalTimeHelper.Ago(arabic, now.AddMinutes(-5).AddSeconds(-1)).ToString());
+        Assert.Equal("منذ ساعتين", LocalTimeHelper.Ago(arabic, now.AddHours(-2).AddMinutes(-1)).ToString());
+        Assert.Equal("منذ 11 ساعة", LocalTimeHelper.Ago(arabic, now.AddHours(-11).AddMinutes(-1)).ToString());
+        Assert.Equal("منذ 3 أيام", LocalTimeHelper.Ago(arabic, now.AddDays(-3).AddMinutes(-1)).ToString());
+        Assert.Equal("1 min ago", LocalTimeHelper.Ago(TextKit.Localizer(), now.AddMinutes(-1).AddSeconds(-1)).ToString());
+    }
 }

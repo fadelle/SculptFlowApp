@@ -1,6 +1,37 @@
 # Keys whose translation may read exactly like the English (product names, codes, words every language borrows).
+# Arabic term-only labels ("{Contacts}") and "{0} {contact}" counts read the same once the word is filled in.
 # One per line: "<lang> <key>". Guards/UiTextKeysTests fails on any other translation equal to its English.
 fr terms.contact.one
 fr terms.contact.other
 fr terms.service.one
 fr terms.service.other
+ar auth.emailPlaceholder
+ar bookingDetail.title
+ar bookings.new.contact
+ar bookings.title
+ar bookings.today.one
+ar businessInfo.details.client
+ar businessInfo.details.emailPlaceholder
+ar businessInfo.details.websitePlaceholder
+ar common.counter
+ar common.percent
+ar contactDetail.title
+ar contacts.count.one
+ar contacts.table.service
+ar contacts.title
+ar dashboard.services.orders
+ar dashboard.services.service
+ar inbox.contact.service
+ar inbox.origin.contact
+ar members.role.member
+ar members.title
+ar nav.bookings
+ar nav.contacts
+ar nav.members
+ar nav.services
+ar notifications.calendar.problem
+ar notifications.problem.text
+ar services.count.one
+ar services.table.booking
+ar services.table.service
+ar services.title

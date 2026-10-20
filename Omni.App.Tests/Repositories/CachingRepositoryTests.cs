@@ -3,10 +3,12 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Omni.App.Business.Managers;
 using Omni.App.Business.Providers.Caching;
+using Omni.App.Business.Services.Clients;
 using Omni.App.Business.Services.Inbox;
 using Omni.App.Persistence.Repositories.Inbox;
 using Omni.App.Persistence.Contexts;
 using Omni.App.Persistence.Helpers;
+using Omni.App.Persistence.Repositories;
 using Omni.App.Persistence.Repositories.Bookings;
 using Omni.App.Persistence.Repositories.Clients;
 using Omni.App.Persistence.Repositories.Catalog;
@@ -70,6 +72,26 @@ public class CachingRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixt
 
         await using var read = CachedContext();
         Assert.Equal("Saved", (await new ClientRepository(read, _cache).GetReadOnlyAsync(c.Id))!.Name);
+    }
+
+    [PostgresFact]
+    public async Task A_new_default_language_reaches_the_next_cached_client_read()
+    {
+        // Business info and the platform-admin endpoint (ClientAdminService) both save through ClientProfileService.
+        var c = MakeClient("Language");
+        await SeedAsync(c);
+        await using (var db = CachedContext())
+        {
+            Assert.Equal("en", (await new ClientRepository(db, _cache).GetReadOnlyAsync(c.Id))!.DefaultLanguage);
+        }
+
+        await using (var db = CachedContext())
+        {
+            await new ClientProfileService(new ClientRepository(db, _cache), new UnitOfWork(db)).SetDefaultLanguageAsync(c.Id, "ar");
+        }
+
+        await using var read = CachedContext();
+        Assert.Equal("ar", (await new ClientRepository(read, _cache).GetReadOnlyAsync(c.Id))!.DefaultLanguage);
     }
 
     [PostgresFact]

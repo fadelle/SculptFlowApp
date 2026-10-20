@@ -17,6 +17,11 @@ before `: ; ! ?` and inside « », typographic apostrophe (’).
   - Arabic: use a verbal noun for actions so no verb agrees with the word's gender: «إضافة {contact}», «حذف {service}».
     For counts, put the word as a label: «{contacts}: {0}», since Arabic nouns change after numbers (3-10 plural,
     11+ singular).
+  - Arabic: the words arrive without «ال» and some are two words («جهة اتصال», «نشاط تجاري»), so never write «ال{contact}»,
+    a definite adjective after a word («{orders} المكتملة») or «هؤلاء {contacts}». Use an indefinite form («{orders}
+    مكتملة»), a label, or leave the word out where the sentence is about people in general («من يتواصل معك», «ما تقدمه»).
+    Avoid adjectives and verbs that must agree with the word's gender («{contact} جديد»); a verbal noun or a passive
+    («تمّ إنشاء {booking}», «لم يُعثر على {contact}») works for every type.
   - French: the word's gender is unknown (une consultation, un patient), so avoid articles and adjectives that agree
     with it: « Ajouter : {contact} » or « Nouveau {contact} » only where both genders read well; prefer a colon or a
     verb in the infinitive.

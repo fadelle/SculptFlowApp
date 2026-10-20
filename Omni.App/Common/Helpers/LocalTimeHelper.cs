@@ -51,16 +51,15 @@ public static class LocalTimeHelper
     {
         var span = DateTimeOffset.UtcNow - when;
         if (span.TotalMinutes < 1) return Encoded(text[JustNowKey]);
-        if (span.TotalMinutes < 60) return Encoded(text[MinutesKey, (int)span.TotalMinutes]);
-        if (span.TotalHours < 24) return Encoded((int)span.TotalHours == 1 ? text[HourKey] : text[HoursKey, (int)span.TotalHours]);
+        if (span.TotalMinutes < 60) return Encoded(text.Plural(MinutesKey, (int)span.TotalMinutes));
+        if (span.TotalHours < 24) return Encoded(text.Plural(HoursKey, (int)span.TotalHours));
         if (span.TotalDays < 2) return Encoded(text[YesterdayKey]);
-        if (span.TotalDays < dayCutoff) return Encoded(text[DaysKey, (int)span.TotalDays]);
+        if (span.TotalDays < dayCutoff) return Encoded(text.Plural(DaysKey, (int)span.TotalDays));
         return Time(when, fallbackFormat);
     }
 
     private const string JustNowKey = "time.ago.justNow";
     private const string MinutesKey = "time.ago.minutes";
-    private const string HourKey = "time.ago.hour";
     private const string HoursKey = "time.ago.hours";
     private const string YesterdayKey = "time.ago.yesterday";
     private const string DaysKey = "time.ago.days";

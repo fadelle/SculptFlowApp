@@ -74,7 +74,7 @@ public class BuiltInTypeWordsTests(PostgresFixture fixture) : RepoTestBase(fixtu
         var terminology = new Terminology(TextKit.Catalog, types, Mock.Of<ICurrentClientContext>());
         var words = await terminology.ForBusinessTypeAsync(code, language);
         var englishWords = await terminology.ForBusinessTypeAsync(code, AppLanguage.English);
-        Assert.NotEqual(englishWords[TermName.Member], words[TermName.Member]); // (French shares some words, e.g. "consultation")
+        Assert.NotEqual(englishWords[TermName.Member], words[TermName.Member]); // (French shares some words, e.g. "consultation") leftover-ok: a French word
         Assert.NotEqual(englishWords[TermName.Client], words[TermName.Client]);
     }
 }

@@ -1407,11 +1407,13 @@
   "notifications.loadFailed": "Could not load notifications.",
 
   "time.ago.justNow": "just now",
-  "time.ago.minutes": "{0} min ago",
-  "time.ago.hour": "1 hour ago",
-  "time.ago.hours": "{0} hours ago",
+  "time.ago.minutes.one": "{0} min ago",
+  "time.ago.minutes.other": "{0} min ago",
+  "time.ago.hours.one": "{0} hour ago",
+  "time.ago.hours.other": "{0} hours ago",
   "time.ago.yesterday": "yesterday",
-  "time.ago.days": "{0} days ago",
+  "time.ago.days.one": "{0} day ago",
+  "time.ago.days.other": "{0} days ago",
 
   "knowledge.documents.errors.unsupportedType": "Unsupported file type {0}. Upload a PDF, DOCX or TXT file.",
   "knowledge.documents.errors.noExtension": "(no extension)",
