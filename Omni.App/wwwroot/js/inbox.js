@@ -264,13 +264,13 @@
         '</span>' +
         '<div class="inbox-conv-main">' +
           '<div class="inbox-conv-top">' +
-            '<span class="inbox-conv-name">' + escapeHtml(c.contactFullName || omniText.t('inbox.unknownName')) + '</span>' +
+            '<span class="inbox-conv-name" dir="auto">' + escapeHtml(c.contactFullName || omniText.t('inbox.unknownName')) + '</span>' +
             (unreadCount > 0 ? '<span class="inbox-unread-badge" title="' + escapeHtml(omniText.t('inbox.list.unread', [unreadCount])) + '">' + (unreadCount > 99 ? '99+' : unreadCount) + '</span>' : '') +
             '<span class="inbox-conv-time" data-timestamp="' + (c.lastMessageAt || c.createdAt) + '"></span>' +
           '</div>' +
           (c.serviceName ? '<div class="inbox-conv-service">' + escapeHtml(c.serviceName) + '</div>' : '') +
           '<div class="inbox-conv-bottom">' +
-            '<span class="inbox-conv-preview">' + escapeHtml(c.lastMessagePreview || omniText.t('inbox.list.noMessages')) + '</span>' +
+            '<span class="inbox-conv-preview" dir="auto">' + escapeHtml(c.lastMessagePreview || omniText.t('inbox.list.noMessages')) + '</span>' +
             modePill +
           '</div>' +
         '</div>';
@@ -394,7 +394,7 @@
         ? '<div class="inbox-msg-failure">' + escapeHtml(m.failureReason) + '</div>' : '';
       bubble.innerHTML =
         bubbleLabel(m.origin) +
-        '<div class="inbox-msg-content">' + (window.InboxVoice && window.InboxVoice.isVoice(m) ? window.InboxVoice.html(m) : escapeHtml(m.content || '')) + '</div>' +
+        '<div class="inbox-msg-content" dir="auto">' + (window.InboxVoice && window.InboxVoice.isVoice(m) ? window.InboxVoice.html(m) : escapeHtml(m.content || '')) + '</div>' +
         failureNote +
         '<div class="inbox-msg-time" title="' + escapeHtml(formatTime(m.createdAt)) + '">' + formatClock(m.createdAt) + ' ' + tick + '</div>';
 
@@ -566,7 +566,7 @@
     var bubble = document.createElement('div');
     bubble.className = 'inbox-msg-bubble inbox-msg-member';
     bubble.innerHTML =
-      '<div class="inbox-msg-content">' + escapeHtml(content) + '</div>' +
+      '<div class="inbox-msg-content" dir="auto">' + escapeHtml(content) + '</div>' +
       '<div class="inbox-msg-time">' + escapeHtml(omniText.t('inbox.composer.sending')) + '</div>';
     row.appendChild(bubble);
     messagesEl.appendChild(row);

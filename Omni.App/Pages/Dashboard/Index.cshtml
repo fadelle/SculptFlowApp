@@ -89,7 +89,7 @@ else
                     <span class="au-icon-tile" style="--tile: var(--au-warning)"><span class="au-icon" aria-hidden="true">forum</span></span>
                     <span><span class="au-action-card__title">@T.Plural("dashboard.attention.conversations", attention.ConversationsNeedingHuman)</span>
                         <span class="au-action-card__text">@T["dashboard.attention.conversationsText"]</span></span>
-                    <span class="au-icon au-action-card__arrow" aria-hidden="true">arrow_forward</span>
+                    <span class="au-icon au-action-card__arrow au-icon--dir" aria-hidden="true">arrow_forward</span>
                 </a>
             }
             @if (attention.OverdueFollowups > 0)
@@ -98,7 +98,7 @@ else
                     <span class="au-icon-tile" style="--tile: var(--au-warning)"><span class="au-icon" aria-hidden="true">schedule</span></span>
                     <span><span class="au-action-card__title">@T.Plural("dashboard.attention.followUps", attention.OverdueFollowups)</span>
                         <span class="au-action-card__text">@T["dashboard.attention.followUpsText"]</span></span>
-                    <span class="au-icon au-action-card__arrow" aria-hidden="true">arrow_forward</span>
+                    <span class="au-icon au-action-card__arrow au-icon--dir" aria-hidden="true">arrow_forward</span>
                 </a>
             }
             @if (attention.BookingsNeedingOutcome > 0)
@@ -107,7 +107,7 @@ else
                     <span class="au-icon-tile" style="--tile: var(--au-warning)"><span class="au-icon" aria-hidden="true">event_note</span></span>
                     <span><span class="au-action-card__title">@T.Plural("dashboard.attention.outcomes", attention.BookingsNeedingOutcome)</span>
                         <span class="au-action-card__text">@T["dashboard.attention.outcomesText"]</span></span>
-                    <span class="au-icon au-action-card__arrow" aria-hidden="true">arrow_forward</span>
+                    <span class="au-icon au-action-card__arrow au-icon--dir" aria-hidden="true">arrow_forward</span>
                 </a>
             }
         </div>
@@ -184,17 +184,17 @@ else
         <a class="au-action-card" href="/inbox">
             <span class="au-icon-tile"><span class="au-icon" aria-hidden="true">chat</span></span>
             <span><span class="au-action-card__title">@T["nav.inbox"]</span><span class="au-action-card__text">@T["dashboard.jump.inbox"]</span></span>
-            <span class="au-icon au-action-card__arrow" aria-hidden="true">arrow_forward</span>
+            <span class="au-icon au-action-card__arrow au-icon--dir" aria-hidden="true">arrow_forward</span>
         </a>
         <a class="au-action-card" href="/dashboard/contacts">
             <span class="au-icon-tile"><span class="au-icon" aria-hidden="true">group</span></span>
             <span><span class="au-action-card__title">@T["nav.contacts"]</span><span class="au-action-card__text">@T["dashboard.jump.contacts"]</span></span>
-            <span class="au-icon au-action-card__arrow" aria-hidden="true">arrow_forward</span>
+            <span class="au-icon au-action-card__arrow au-icon--dir" aria-hidden="true">arrow_forward</span>
         </a>
         <a class="au-action-card" href="/dashboard/bookings">
             <span class="au-icon-tile"><span class="au-icon" aria-hidden="true">calendar_month</span></span>
             <span><span class="au-action-card__title">@T["nav.bookings"]</span><span class="au-action-card__text">@T["dashboard.jump.bookings"]</span></span>
-            <span class="au-icon au-action-card__arrow" aria-hidden="true">arrow_forward</span>
+            <span class="au-icon au-action-card__arrow au-icon--dir" aria-hidden="true">arrow_forward</span>
         </a>
     </div>
 

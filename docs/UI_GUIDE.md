@@ -107,8 +107,7 @@ section wins**. Copy says *contact* where the guide says *customer*: the people 
   attended green, no-show and needs-human red, converted teal, closed-lost gray).
 - **Words and languages:** new or edited copy goes into `Resources/i18n/en.json` (`@T["key"]`, `omniText.t('key')`) and
   names people and things through the business-type placeholders (`{contact}`, `{Services}`…), never a fixed word; see
-  the repo `CLAUDE.md` "UI text" rule. `<html lang dir>` follows the request language (right-to-left layout comes in
-  Milestone B, S2). Counts use plural families (`@T.Plural("services.count", n)`, `omniText.plural('services.count', n)`),
+  the repo `CLAUDE.md` "UI text" rule. `<html lang dir>` follows the request language (Arabic is right to left: see *Right to left* below). Counts use plural families (`@T.Plural("services.count", n)`, `omniText.plural('services.count', n)`),
   never `n == 1 ? … : …`. Shown dates and numbers use the viewer's language: `@x.Display("N0")`,
   `@TextCulture.Date(day, DateStyle.Date)` in Razor, `omniText.locale` in scripts (Arabic keeps Latin digits); values in
   `value=`, `data-*` and URLs stay invariant (`ToString("yyyy-MM-dd")`). Language pickers: the user menu
@@ -131,8 +130,37 @@ section wins**. Copy says *contact* where the guide says *customer*: the people 
   container runs with the invariant culture, and bookings can each carry their own currency).
 - **Kit fixes (same as the Admin copy):** `aurora.js` ignores `<form method="dialog">` submits; `.au-fullpage-msg` gets
   `grid-template-columns: minmax(0, 1fr)` and its `__inner` `width: 100%`.
-- **Future work:** Arabic / RTL (not needed yet; §3.2 has the steps: `lang`/`dir`, an Arabic font first in
-  `--au-font-sans`, mirror the physical-direction rules, check every screen in RTL).
+- **Right to left (Arabic, Milestone B S2).** Arabic pages get `<html lang="ar" dir="rtl">` and the whole layout mirrors:
+  sidebar on the right, back arrows pointing right, table text aligned right. Rules (enforced by
+  `Omni.App.Tests/Guards/RtlStyleTests`):
+  - **No physical sides in CSS, inline styles or scripts.** Use logical properties: `margin-inline-start/end`,
+    `padding-inline-*`, `border-inline-*`, `inset-inline-start/end` (not `left`/`right`), `text-align: start/end`,
+    `border-start-start-radius`… (not `border-top-left-radius`), and 4-value `margin`/`padding`/`inset` only when left and
+    right are equal (else the 2-value form plus `padding-inline-start`). They render exactly like the physical ones in
+    English. What logical properties can't express: horizontal `translateX()` moves and gradient angles multiply by
+    `var(--au-x)` (1 left to right, -1 right to left: `translateX(calc(24px * var(--au-x)))`); `background-position`
+    keeps its keyword with a `[dir='rtl']` override. Such a line carries `/* rtl-ok: reason */`. Never a page-specific
+    `[dir=rtl]` hack for layout: fix the rule.
+  - **Directional icons mirror:** `arrow_back`, `arrow_forward`, `chevron_left`, `chevron_right`, `send`, `login`,
+    `logout`, `undo`, `redo` carry `au-icon--dir` (`[dir='rtl'] .au-icon--dir { scale: -1 1 }`); a glyph chosen at run time
+    takes `class="@IconDirection.ClassFor(icon)"` (`Common/Helpers/IconDirection`, which holds the list; add a new
+    directional icon there). Prev/next keep their meaning: in Arabic "next month" points left. `play_arrow`, the search
+    magnifier and status icons don't mirror.
+  - **Mixed text:** phone numbers, emails, URLs, ids, codes and template names always read left to right: wrap the
+    value in `<span dir="ltr">` (or put `dir="ltr"` on its own element, `.au-ltr` where markup can't take the attribute).
+    `input[type=tel|email|url]` are left to right by CSS in an Arabic page. **User content** (contact and member names,
+    message bubbles, conversation previews, notes, knowledge titles, service and campaign names, template bodies,
+    free-text textareas) gets `dir="auto"` (or `<bdi>` inside a sentence), so an Arabic message reads right to left in an
+    English dashboard and an English name stays whole in an Arabic one. Script-built markup follows the same rule
+    (`inbox.js`, `bookings-calendar.js`, `campaign-audience.js`).
+  - **Native pickers** (`<input type="date|time">`, `<select>` popups) follow the browser's own language and direction,
+    not the page's; values stay invariant.
+  - **Font:** Arabic letters render in Noto Sans Arabic (§3.2); its `unicode-range` keeps it from loading on pages
+    without Arabic text. Check Arabic in buttons, badges and table cells keeps the line height (it does at the kit's
+    1.5 / 1.4).
+  - **Check by hand** in Arabic at desktop and 390px, light and dark: sidebar (side, border, accent bar, collapsed rail),
+    header menus and bell, toasts, calendar (day order, drawer side), inbox (bubble sides, composer, voice player),
+    stacked phone tables, Business info hours, campaign audience cards, template preview, pagers, back headers.
 
 ---
 
@@ -293,10 +321,18 @@ Symbols Outlined (`woff2`). `fonts.css`:
 Icons: `<span class="au-icon" aria-hidden="true">event</span>` (names from fonts.google.com/icons, Outlined).
 `.au-icon` is clipped to 1em, so a missing font degrades to a blank square.
 
-**Arabic / RTL (if needed):** set `<html lang="ar" dir="rtl">`, put an Arabic-capable font first in
-`--au-font-sans` (Inter has no Arabic glyphs — e.g. IBM Plex Sans Arabic or Noto Sans Arabic,
-self-hosted), and mirror the few physical-direction rules (sidebar border and accent bar, drawer
-side, toast corner, `margin-left: auto` in toolbars) under `[dir='rtl']`. Check every screen in RTL.
+**Arabic:** Inter has no Arabic letters, so `fonts.css` adds **Noto Sans Arabic** (variable, SIL OFL 1.1, the Arabic
+subset `noto-sans-arabic-wght-normal.woff2` from the `@fontsource-variable/noto-sans-arabic` package) with the Arabic
+`unicode-range`, and `--au-font-sans` lists `'Noto Sans Arabic Variable'` right after Inter. Browsers then take Latin
+letters and digits from Inter and Arabic letters from Noto, and download the Arabic file only for a page that shows
+Arabic text. Right-to-left layout: §0.4 *Right to left*.
+
+```css
+@font-face { font-family: 'Noto Sans Arabic Variable'; font-style: normal; font-weight: 100 900; font-display: swap;
+  src: url('../fonts/noto-sans-arabic-wght-normal.woff2') format('woff2');
+  unicode-range: U+0600-06FF, U+0750-077F, U+0870-088E, U+0890-0891, U+0897-08E1, U+08E3-08FF, U+200C-200E, U+2010-2011,
+    U+204F, U+2E41, U+FB50-FDFF, U+FE70-FE74, U+FE76-FEFC; }
+```
 
 ### 3.3 Template gotchas (ASP.NET Core templates)
 Remove/neutralise in `site.css`: `html { font-size: 14px }` (+ its media query — the kit assumes
@@ -546,7 +582,7 @@ them so both portals share one kit.
   color-scheme: light;
 
   /* --- type ------------------------------------------------------------- */
-  --au-font-sans: 'Inter Variable', Inter, ui-sans-serif, system-ui, -apple-system,
+  --au-font-sans: 'Inter Variable', 'Noto Sans Arabic Variable', Inter, ui-sans-serif, system-ui, -apple-system,
     BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --au-font-mono: 'JetBrains Mono Variable', 'JetBrains Mono', ui-monospace, SFMono-Regular,
     Menlo, Consolas, monospace;
@@ -643,7 +679,7 @@ them so both portals share one kit.
   --au-side-text: #8b9bb5;
   --au-side-text-strong: #eef2f9;
   --au-side-section: #5d6d89;
-  --au-side-active-bg: linear-gradient(90deg, rgba(99, 102, 241, 0.22) 0%, rgba(139, 92, 246, 0.1) 100%);
+  --au-side-active-bg: linear-gradient(calc(90deg * var(--au-x)), rgba(99, 102, 241, 0.22) 0%, rgba(139, 92, 246, 0.1) 100%);
   --au-side-active-text: #e0e7ff;
   --au-side-active-icon: #a5b4fc;
   --au-side-border: rgba(148, 163, 184, 0.1);
@@ -672,6 +708,10 @@ them so both portals share one kit.
   --au-z-header: 10;
   --au-z-sidebar: 20;
   --au-z-toast: 1400;
+
+  /* --- direction: 1 left-to-right, -1 right-to-left (set on [dir='rtl'] below). Multiplies horizontal
+     translateX() moves and gradient angles that logical properties can't express. ---------------- */
+  --au-x: 1;
 }
 
 :root[data-theme='dark'] {
@@ -765,7 +805,7 @@ them so both portals share one kit.
   --au-brand-glow: rgba(8, 145, 178, 0.5);
   --au-brand-glow-strong: rgba(8, 145, 178, 0.65);
   --au-focus-ring: 0 0 0 3px rgba(13, 148, 136, 0.16);
-  --au-side-active-bg: linear-gradient(90deg, rgba(13, 148, 136, 0.24) 0%, rgba(6, 182, 212, 0.1) 100%);
+  --au-side-active-bg: linear-gradient(calc(90deg * var(--au-x)), rgba(13, 148, 136, 0.24) 0%, rgba(6, 182, 212, 0.1) 100%);
   --au-side-active-text: #ccfbf1;
   --au-side-active-icon: #5eead4;
 }
@@ -779,6 +819,16 @@ them so both portals share one kit.
   --au-secondary-dark: #06b6d4;
   --au-gradient-soft: linear-gradient(135deg, rgba(45, 212, 191, 0.14), rgba(34, 211, 238, 0.1));
   --au-focus-ring: 0 0 0 3px rgba(45, 212, 191, 0.24);
+}
+
+/* Right-to-left (Arabic): pages set <html dir="rtl">. Layout uses logical properties (margin-inline-start,
+   inset-inline-end, text-align: start...), so it mirrors by itself; --au-x flips what they can't express. A dir="ltr"
+   island inside an Arabic page (phone numbers, codes) gets 1 back. Never write physical left/right (UI_GUIDE §0.4). */
+[dir='rtl'] {
+  --au-x: -1;
+}
+[dir='ltr'] {
+  --au-x: 1;
 }
 
 /* ==========================================================================
@@ -1048,7 +1098,7 @@ p {
   overflow: hidden;
   white-space: nowrap;
   word-wrap: normal;
-  direction: ltr;
+  /* no `direction: ltr` here: an icon's logical margins must follow the page (right to left in Arabic) */
   flex-shrink: 0;
   user-select: none;
   -webkit-font-smoothing: antialiased;
@@ -1069,6 +1119,27 @@ p {
 }
 .au-icon--lg {
   font-size: 24px;
+}
+
+/* Icons that point along the reading direction (arrow_back/forward, chevron_left/right, send, login, logout, undo,
+   redo; list in Common/Helpers/IconDirection) carry au-icon--dir and mirror in a right-to-left page. `scale` composes
+   with any transform the icon already has (hover nudges, rotations). */
+[dir='rtl'] .au-icon--dir {
+  scale: -1 1;
+}
+
+/* Mixed text (UI_GUIDE §0.4). Phone numbers, emails, URLs, ids and codes always read left to right, also inside an
+   Arabic page (dir="ltr" on the element, or this class where markup can't take the attribute); in a right-to-left
+   line they still sit at the line's start. */
+.au-ltr {
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+[dir='rtl'] input[type='tel'],
+[dir='rtl'] input[type='email'],
+[dir='rtl'] input[type='url'] {
+  direction: ltr;
+  text-align: end;
 }
 
 /* --- motion primitives --------------------------------------------------- */
@@ -1099,10 +1170,10 @@ p {
 }
 @keyframes auIndeterminate {
   0% {
-    transform: translateX(-100%);
+    transform: translateX(calc(-100% * var(--au-x)));
   }
   100% {
-    transform: translateX(320%);
+    transform: translateX(calc(320% * var(--au-x)));
   }
 }
 @keyframes auPulse {
@@ -1119,7 +1190,7 @@ p {
 @keyframes auSlideInRight {
   from {
     opacity: 0;
-    transform: translateX(24px);
+    transform: translateX(calc(24px * var(--au-x)));
   }
   to {
     opacity: 1;
@@ -1138,7 +1209,7 @@ p {
 }
 @keyframes auDrawerIn {
   from {
-    transform: translateX(100%);
+    transform: translateX(calc(100% * var(--au-x)));
   }
   to {
     transform: none;
@@ -1430,7 +1501,7 @@ p {
   width: 14px;
   height: 14px;
   border: 2px solid currentColor;
-  border-right-color: transparent;
+  border-inline-end-color: transparent;
   border-radius: 50%;
   animation: auSpin 0.75s linear infinite;
 }
@@ -1542,17 +1613,20 @@ p {
   cursor: not-allowed;
 }
 .au-select {
-  padding-right: 36px;
+  padding-inline-end: 36px;
   background-image: var(--au-select-chevron);
   background-repeat: no-repeat;
-  background-position: right 8px center;
+  background-position: right 8px center; /* rtl-ok: mirrored under [dir='rtl'] below */
   background-size: 22px;
   cursor: pointer;
+}
+[dir='rtl'] .au-select {
+  background-position: left 8px center; /* rtl-ok: background-position has no logical keywords */
 }
 .au-select[multiple],
 .au-select[size] {
   background-image: none;
-  padding-right: 14px;
+  padding-inline-end: 14px;
 }
 .au-input--sm,
 .au-select--sm {
@@ -1581,7 +1655,7 @@ p {
 }
 .au-input-icon > .au-icon {
   position: absolute;
-  left: 12px;
+  inset-inline-start: 12px;
   top: 50%;
   transform: translateY(-50%);
   color: var(--au-text-3);
@@ -1589,7 +1663,7 @@ p {
   pointer-events: none;
 }
 .au-input-icon > .au-input {
-  padding-left: 40px;
+  padding-inline-start: 40px;
 }
 
 /* Field with a NOTCHED label (the MUI outlined look). The label sits on the
@@ -1604,7 +1678,7 @@ p {
 .au-field > .au-label {
   position: absolute;
   top: 0;
-  left: 10px;
+  inset-inline-start: 10px;
   z-index: 1;
   max-width: calc(100% - 20px);
   transform: translateY(-50%);
@@ -1642,7 +1716,7 @@ p {
 }
 .au-form-label .au-required {
   color: var(--au-error);
-  margin-left: 2px;
+  margin-inline-start: 2px;
 }
 .au-help {
   font-size: 0.75rem;
@@ -1693,7 +1767,7 @@ p {
 }
 .validation-summary-errors ul {
   margin: 0;
-  padding-left: 18px;
+  padding-inline-start: 18px;
 }
 .validation-summary-valid {
   display: none;
@@ -1732,7 +1806,7 @@ p {
   content: '';
   position: absolute;
   top: 2px;
-  left: 2px;
+  inset-inline-start: 2px;
   width: 16px;
   height: 16px;
   border-radius: 50%;
@@ -1745,7 +1819,7 @@ p {
   background-image: var(--au-gradient);
 }
 .au-switch:checked::after {
-  transform: translateX(16px);
+  transform: translateX(calc(16px * var(--au-x)));
 }
 .au-switch:focus-visible {
   outline: none;
@@ -1863,7 +1937,7 @@ button.au-chip:hover {
 .au-chip__delete {
   display: inline-grid;
   place-items: center;
-  margin-right: -4px;
+  margin-inline-end: -4px;
   padding: 0;
   border: 0;
   background: none;
@@ -1923,7 +1997,7 @@ button.au-chip:hover {
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
-  margin-left: auto;
+  margin-inline-start: auto;
 }
 .au-toolbar__meta {
   font-size: 0.75rem;
@@ -1943,7 +2017,7 @@ button.au-chip:hover {
     flex-shrink: 1;
     width: 100%;
     min-width: 0;
-    margin-left: 0;
+    margin-inline-start: 0;
   }
 }
 
@@ -1997,7 +2071,7 @@ button.au-chip:hover {
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.05em;
-  text-align: left;
+  text-align: start;
   text-transform: uppercase;
   white-space: nowrap;
   vertical-align: middle;
@@ -2022,7 +2096,7 @@ button.au-chip:hover {
   word-break: break-word;
 }
 .au-table .au-right {
-  text-align: right;
+  text-align: end;
 }
 .au-table .au-center {
   text-align: center;
@@ -2116,7 +2190,7 @@ button.au-chip:hover {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-left: auto;
+  margin-inline-start: auto;
 }
 .au-pager__size {
   width: 96px;
@@ -2205,7 +2279,8 @@ button.au-chip:hover {
   display: block;
   height: 100%;
   overflow: hidden;
-  padding: 14px 14px 14px 18px;
+  padding: 14px;
+  padding-inline-start: 18px;
   color: inherit;
   text-decoration: none;
   background-color: var(--au-paper);
@@ -2218,7 +2293,7 @@ button.au-chip:hover {
 .au-status::before {
   content: '';
   position: absolute;
-  left: 0;
+  inset-inline-start: 0;
   top: 0;
   bottom: 0;
   width: 4px;
@@ -2418,8 +2493,8 @@ a.au-status:hover {
 .au-tab[aria-selected='true']::after {
   content: '';
   position: absolute;
-  left: 0;
-  right: 0;
+  inset-inline-start: 0;
+  inset-inline-end: 0;
   bottom: 0;
   height: 3px;
   border-radius: 3px;
@@ -2522,8 +2597,8 @@ a.au-status:hover {
   align-items: center;
   gap: 2px;
   padding-top: 4px;
-  margin-left: auto;
-  margin-right: -8px;
+  margin-inline-start: auto;
+  margin-inline-end: -8px;
 }
 .au-alert__actions .au-btn,
 .au-alert__actions .au-icon-btn {
@@ -2600,7 +2675,7 @@ a.au-status:hover {
 /* --- toasts (bottom-right, filled, auto-dismiss) ------------------------- */
 .au-toasts {
   position: fixed;
-  right: 24px;
+  inset-inline-end: 24px;
   bottom: 24px;
   z-index: var(--au-z-toast);
   display: flex;
@@ -2615,7 +2690,8 @@ a.au-status:hover {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 6px 8px 6px 16px;
+  padding: 6px 8px;
+  padding-inline-start: 16px;
   border-radius: var(--au-r-md);
   background: var(--c);
   color: var(--on);
@@ -2650,7 +2726,7 @@ a.au-status:hover {
 }
 .au-toast.is-leaving {
   opacity: 0;
-  transform: translateX(24px);
+  transform: translateX(calc(24px * var(--au-x)));
   transition: opacity 0.2s ease, transform 0.2s ease;
 }
 
@@ -2716,7 +2792,8 @@ dialog.au-palette::backdrop {
 /* --- drawer (right-side detail panel; native <dialog>) ------------------- */
 dialog.au-drawer {
   position: fixed;
-  inset: 0 0 0 auto;
+  inset: 0;
+  inset-inline-start: auto;
   width: 460px;
   max-width: 100%;
   height: 100%;
@@ -2724,7 +2801,7 @@ dialog.au-drawer {
   margin: 0;
   padding: 0;
   border: 0;
-  border-left: 1px solid var(--au-divider);
+  border-inline-start: 1px solid var(--au-divider);
   background: var(--au-paper);
   color: var(--au-text);
   box-shadow: var(--au-shadow-pop);
@@ -2788,7 +2865,7 @@ dialog.au-drawer[open] {
   animation: auFadeSlideIn 0.16s ease;
 }
 .au-menu--end {
-  right: 0;
+  inset-inline-end: 0;
 }
 .au-menu__caption {
   display: block;
@@ -2810,7 +2887,7 @@ dialog.au-drawer[open] {
   background: none;
   color: var(--au-text);
   font-size: 0.875rem;
-  text-align: left;
+  text-align: start;
   cursor: pointer;
 }
 .au-menu__item:hover {
@@ -2844,9 +2921,9 @@ dialog.au-drawer[open] {
   content: attr(data-au-tip);
   position: absolute;
   z-index: 50;
-  left: 50%;
+  inset-inline-start: 50%;
   top: calc(100% + 6px);
-  transform: translate(-50%, -2px);
+  transform: translate(calc(-50% * var(--au-x)), -2px);
   padding: 6px 10px;
   border-radius: var(--au-r-xs);
   background: var(--au-tooltip-bg);
@@ -2866,20 +2943,20 @@ dialog.au-drawer[open] {
 [data-au-tip]:hover::after,
 [data-au-tip]:focus-visible::after {
   opacity: 1;
-  transform: translate(-50%, 0);
+  transform: translate(calc(-50% * var(--au-x)), 0);
 }
 [data-au-tip-pos='right']::after {
-  left: calc(100% + 8px);
+  inset-inline-start: calc(100% + 8px);
   top: 50%;
-  transform: translate(-2px, -50%);
+  transform: translate(calc(-2px * var(--au-x)), -50%);
 }
 [data-au-tip-pos='right']:hover::after,
 [data-au-tip-pos='right']:focus-visible::after {
   transform: translate(0, -50%);
 }
 [data-au-tip-pos='left']::after {
-  left: auto;
-  right: 0;
+  inset-inline-start: auto;
+  inset-inline-end: 0;
   transform: translate(0, -2px);
 }
 [data-au-tip-pos='left']:hover::after {
@@ -2943,7 +3020,7 @@ dialog.au-drawer[open] {
   width: 18px;
   height: 18px;
   border: 2px solid var(--au-primary);
-  border-right-color: transparent;
+  border-inline-end-color: transparent;
   border-radius: 50%;
   animation: auSpin 0.75s linear infinite;
   vertical-align: middle;
@@ -3093,7 +3170,7 @@ dialog.au-drawer[open] {
   height: 100vh;
   overflow: hidden;
   background: var(--au-side-bg);
-  border-right: 1px solid var(--au-side-border);
+  border-inline-end: 1px solid var(--au-side-border);
   color: var(--au-side-text);
   transition: width 0.2s ease, transform 0.22s var(--au-ease-out);
 }
@@ -3217,7 +3294,8 @@ dialog.au-drawer[open] {
   display: flex;
   align-items: center;
   margin: 0 8px;
-  padding: 8.8px 32px 8.8px 10px;
+  padding: 8.8px 10px;
+  padding-inline-end: 32px;
   border-radius: var(--au-r-pill);
   color: var(--au-side-text);
   font-size: 13px;
@@ -3227,7 +3305,7 @@ dialog.au-drawer[open] {
   transition: background-color var(--au-t) ease, color var(--au-t) ease, transform var(--au-t) ease;
 }
 .au-nav-item .au-icon {
-  margin-right: 10px;
+  margin-inline-end: 10px;
   font-size: 20px;
   color: inherit;
 }
@@ -3240,7 +3318,7 @@ dialog.au-drawer[open] {
 .au-nav-item::before {
   content: '';
   position: absolute;
-  left: 0;
+  inset-inline-start: 0;
   top: 50%;
   width: 3px;
   height: 0;
@@ -3252,7 +3330,7 @@ dialog.au-drawer[open] {
 .au-nav-item:hover {
   background-color: var(--au-side-hover);
   color: var(--au-side-text-strong);
-  transform: translateX(2px);
+  transform: translateX(calc(2px * var(--au-x)));
   text-decoration: none;
 }
 .au-nav-item.is-active {
@@ -3276,7 +3354,7 @@ dialog.au-drawer[open] {
 }
 .au-nav-star {
   position: absolute;
-  right: 12px;
+  inset-inline-end: 12px;
   top: 50%;
   display: grid;
   place-items: center;
@@ -3318,7 +3396,8 @@ dialog.au-drawer[open] {
   display: flex;
   align-items: center;
   margin: 0 8px;
-  padding: 8.8px 8px 8.8px 10px;
+  padding: 8.8px 8px;
+  padding-inline-start: 10px;
   border-radius: var(--au-r-pill);
   color: var(--au-side-section);
   font-size: 11px;
@@ -3347,7 +3426,7 @@ dialog.au-drawer[open] {
   color: var(--au-side-text-strong);
 }
 .au-nav-group > summary .au-icon:first-child {
-  margin-right: 10px;
+  margin-inline-end: 10px;
   font-size: 20px;
 }
 .au-nav-group > summary .au-nav-item__label {
@@ -3361,9 +3440,10 @@ dialog.au-drawer[open] {
   transform: rotate(180deg);
 }
 .au-nav-children {
-  margin: 2px 0 0 18px;
-  padding-left: 2px;
-  border-left: 1px solid var(--au-side-border);
+  margin: 2px 0 0;
+  margin-inline-start: 18px;
+  padding-inline-start: 2px;
+  border-inline-start: 1px solid var(--au-side-border);
 }
 .au-nav-empty {
   padding: 16px 20px;
@@ -3466,7 +3546,7 @@ dialog.au-drawer[open] {
   }
   html.au-side-collapsed .au-nav-item .au-icon,
   html.au-side-collapsed .au-nav-group > summary .au-icon:first-child {
-    margin-right: 0;
+    margin-inline-end: 0;
   }
   html.au-side-collapsed .au-nav-group {
     margin: 0;
@@ -3520,7 +3600,7 @@ dialog.au-drawer[open] {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-left: auto;
+  margin-inline-start: auto;
 }
 /* breadcrumb: ancestors are sibling-switcher dropdowns */
 .au-crumbs {
@@ -3629,7 +3709,8 @@ span.au-crumb:hover {
 .au-combobox__input {
   width: 100%;
   min-height: 36px;
-  padding: 6px 30px 6px 36px;
+  padding: 6px 30px;
+  padding-inline-start: 36px;
   border: 0;
   border-radius: var(--au-r-pill);
   background: var(--au-paper);
@@ -3647,7 +3728,7 @@ span.au-crumb:hover {
 }
 .au-combobox > .au-icon {
   position: absolute;
-  left: 10px;
+  inset-inline-start: 10px;
   top: 50%;
   transform: translateY(-50%);
   color: var(--au-text-2);
@@ -3656,7 +3737,7 @@ span.au-crumb:hover {
 }
 .au-combobox__caret {
   position: absolute;
-  right: 6px;
+  inset-inline-end: 6px;
   top: 50%;
   transform: translateY(-50%);
   color: var(--au-text-2);
@@ -3665,8 +3746,8 @@ span.au-crumb:hover {
 .au-combobox__list {
   position: absolute;
   top: calc(100% + 8px);
-  right: 0;
-  left: 0;
+  inset-inline-end: 0;
+  inset-inline-start: 0;
   z-index: 40;
   max-height: 340px;
   min-width: 260px;
@@ -3861,7 +3942,7 @@ dialog.au-palette[open] {
   color: var(--au-primary);
 }
 .au-palette__trail {
-  margin-left: auto;
+  margin-inline-start: auto;
   color: var(--au-text-3);
   font-size: 12px;
   white-space: nowrap;
@@ -3882,10 +3963,10 @@ dialog.au-palette[open] {
 @media (max-width: 899.98px) {
   .au-sidebar {
     position: fixed;
-    left: 0;
+    inset-inline-start: 0;
     top: 0;
     width: var(--au-sidebar-w);
-    transform: translateX(-100%);
+    transform: translateX(calc(-100% * var(--au-x)));
   }
   html.au-side-open .au-sidebar {
     transform: none;
@@ -3908,7 +3989,7 @@ dialog.au-palette[open] {
   .au-header__tools:has(.au-scope) {
     order: 3;
     width: 100%;
-    margin-left: 0;
+    margin-inline-start: 0;
     gap: 8px;
     justify-content: flex-end;
   }
@@ -3990,7 +4071,8 @@ dialog.au-palette[open] {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 3px 8px 3px 3px;
+  padding: 3px;
+  padding-inline-end: 8px;
   border: 1px solid var(--au-divider);
   border-radius: 999px;
   background: var(--au-paper);
@@ -4040,8 +4122,8 @@ dialog.au-palette[open] {
   width: 560px;
   height: 560px;
   top: 50%;
-  left: 50%;
-  transform: translate(-50%, -62%);
+  inset-inline-start: 50%;
+  transform: translate(calc(-50% * var(--au-x)), -62%);
   border-radius: 50%;
   background: radial-gradient(closest-side, color-mix(in srgb, var(--au-primary) 18%, transparent), transparent);
   pointer-events: none;
@@ -4151,13 +4233,13 @@ dialog.au-palette[open] {
   font-size: 0.8125rem;
 }
 .au-action-card__arrow {
-  margin-left: auto;
+  margin-inline-start: auto;
   color: var(--au-text-3);
   transition: transform var(--au-t) ease, color var(--au-t) ease;
 }
 .au-action-card:hover .au-action-card__arrow {
   color: var(--au-primary);
-  transform: translateX(3px);
+  transform: translateX(calc(3px * var(--au-x)));
 }
 
 /* Stepper for multi-step flows: <ol class="au-steps"><li class="is-done|is-current"> */
@@ -4253,7 +4335,7 @@ dialog.au-palette[open] {
     padding: 4px 0;
     border: 0;
     white-space: normal;
-    text-align: right;
+    text-align: end;
   }
   .au-table--stack tbody td::before {
     content: attr(data-label);
@@ -4261,7 +4343,7 @@ dialog.au-palette[open] {
     font-size: 0.75rem;
     font-weight: 700;
     letter-spacing: 0.05em;
-    text-align: left;
+    text-align: start;
     text-transform: uppercase;
   }
   .au-table--stack tbody td:not([data-label])::before {

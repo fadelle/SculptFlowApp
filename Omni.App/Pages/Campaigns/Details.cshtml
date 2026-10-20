@@ -49,6 +49,7 @@ else if (Model.Details is not null)
     var canSend = c.Status is CampaignStatus.Draft or CampaignStatus.Scheduled or CampaignStatus.Paused;
     var sendCount = st.TotalRecipients - st.Skipped;
     var waitingCount = st.Pending + st.Queued;
+    var sendIcon = c.Status == CampaignStatus.Paused ? "play_arrow" : "send";
     var sendLabel = c.Status == CampaignStatus.Paused ? T["campaigns.send.resume"].Value
         : T.Plural("campaigns.send.now", sendCount).Value;
     // Sending can't be undone, so the button asks first (the kit's styled confirm).
@@ -60,10 +61,10 @@ else if (Model.Details is not null)
 
     <div class="au-back-header">
         <a class="au-icon-btn au-icon-btn--bordered" href="/Campaigns" aria-label="@T["campaigns.back"]" title="@T["campaigns.back"]">
-            <span class="au-icon" aria-hidden="true">arrow_back</span>
+            <span class="au-icon au-icon--dir" aria-hidden="true">arrow_back</span>
         </a>
         <div class="min-w-0">
-            <h2 class="au-back-header__title">@c.Name</h2>
+            <h2 class="au-back-header__title" dir="auto">@c.Name</h2>
             <span class="au-back-header__sub">@T["campaigns.details.template", c.TemplateName ?? "—"] · @audience · @whenText</span>
         </div>
     </div>
@@ -89,7 +90,7 @@ else if (Model.Details is not null)
         {
             <form method="post" asp-page-handler="Send"
                   data-au-confirm="@sendConfirm" data-au-confirm-title="@(c.Status == CampaignStatus.Paused ? T["campaigns.send.resumeTitle"] : T["campaigns.send.title"])" data-au-confirm-label="@sendLabel">
-                <button type="submit" class="au-btn au-btn--primary au-btn--sm"><span class="au-icon" aria-hidden="true">@(c.Status == CampaignStatus.Paused ? "play_arrow" : "send")</span>@sendLabel</button>
+                <button type="submit" class="au-btn au-btn--primary au-btn--sm"><span class="@IconDirection.ClassFor(sendIcon)" aria-hidden="true">@sendIcon</span>@sendLabel</button>
             </form>
         }
     </div>
@@ -179,8 +180,8 @@ else if (Model.Details is not null)
                                 : ("", (DateTimeOffset?)null);
                             var problem = r.SkipReason ?? r.FailureReason;
                             <tr class="row-link" data-href="/dashboard/contacts/@r.ContactId" data-group="@Group(r.Status)">
-                                <td data-label="@T["campaigns.recipients.contact"]"><a class="cell-person" href="/dashboard/contacts/@r.ContactId"><span class="avatar-sm">@(string.IsNullOrWhiteSpace(r.ContactFullName) ? "?" : r.ContactFullName.Trim()[..1])</span>@(r.ContactFullName ?? "—")</a></td>
-                                <td data-label="@T["contacts.table.phone"]">@r.PhoneNumber</td>
+                                <td data-label="@T["campaigns.recipients.contact"]"><a class="cell-person" href="/dashboard/contacts/@r.ContactId"><span class="avatar-sm">@(string.IsNullOrWhiteSpace(r.ContactFullName) ? "?" : r.ContactFullName.Trim()[..1])</span><span dir="auto">@(r.ContactFullName ?? "—")</span></a></td>
+                                <td data-label="@T["contacts.table.phone"]"><span dir="ltr">@r.PhoneNumber</span></td>
                                 <td data-label="@T["campaigns.table.status"]" class="au-wrap">
                                     <div>
                                         <span class="badge @StatusBadgeHelper.CssClass(r.Status)">@T.ValueLabel(r.Status)</span>

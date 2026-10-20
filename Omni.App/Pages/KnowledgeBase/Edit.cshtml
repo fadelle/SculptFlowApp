@@ -33,10 +33,10 @@ else
 {
     <div class="au-back-header">
         <a class="au-icon-btn au-icon-btn--bordered" href="@Model.BackUrl" aria-label="@T["knowledge.edit.back", backLabel]" title="@T["knowledge.edit.back", backLabel]">
-            <span class="au-icon" aria-hidden="true">arrow_back</span>
+            <span class="au-icon au-icon--dir" aria-hidden="true">arrow_back</span>
         </a>
         <div class="min-w-0">
-            <h2 class="au-back-header__title">@(Model.IsNew ? T["knowledge.add"].Value : Model.Title)</h2>
+            <h2 class="au-back-header__title" dir="auto">@(Model.IsNew ? T["knowledge.add"].Value : Model.Title)</h2>
             <span class="au-back-header__sub">@(Model.IsNew ? T["knowledge.edit.newSub"] : T["knowledge.edit.editSub"])</span>
         </div>
     </div>

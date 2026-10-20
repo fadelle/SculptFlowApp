@@ -9,6 +9,6 @@
     }
     @if (!string.IsNullOrEmpty(Model.ActionLabel) && !string.IsNullOrEmpty(Model.ActionHref))
     {
-        <a class="au-btn au-btn--primary" href="@Model.ActionHref"><span class="au-icon" aria-hidden="true">@Model.ActionIcon</span>@Model.ActionLabel</a>
+        <a class="au-btn au-btn--primary" href="@Model.ActionHref"><span class="@IconDirection.ClassFor(Model.ActionIcon)" aria-hidden="true">@Model.ActionIcon</span>@Model.ActionLabel</a>
     }
 </div>

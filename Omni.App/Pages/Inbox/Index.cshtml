@@ -54,7 +54,7 @@ else
                         </span>
                         <div class="inbox-conv-main">
                             <div class="inbox-conv-top">
-                                <span class="inbox-conv-name">@(c.ContactFullName ?? unknownName)</span>
+                                <span class="inbox-conv-name" dir="auto">@(c.ContactFullName ?? unknownName)</span>
                                 <span class="inbox-conv-time" data-timestamp="@((c.LastMessageAt ?? c.CreatedAt).ToString("O"))"></span>
                             </div>
                             @if (!string.IsNullOrEmpty(c.ServiceName))
@@ -62,7 +62,7 @@ else
                                 <div class="inbox-conv-service">@c.ServiceName</div>
                             }
                             <div class="inbox-conv-bottom">
-                                <span class="inbox-conv-preview">@(c.LastMessagePreview ?? T["inbox.list.noMessages"].Value)</span>
+                                <span class="inbox-conv-preview" dir="auto">@(c.LastMessagePreview ?? T["inbox.list.noMessages"].Value)</span>
                                 <span class="inbox-mode inbox-mode-@c.Mode">@ModeLabel(c.Mode)</span>
                             </div>
                         </div>
@@ -85,11 +85,11 @@ else
             <div class="inbox-thread-inner" id="inbox-thread-inner" hidden>
                 <div class="inbox-thread-header">
                     <button type="button" class="au-icon-btn inbox-back" id="inbox-btn-back" aria-label="@T["inbox.thread.back"]" title="@T["inbox.thread.back"]">
-                        <span class="au-icon" aria-hidden="true">arrow_back</span>
+                        <span class="au-icon au-icon--dir" aria-hidden="true">arrow_back</span>
                     </button>
                     <span class="inbox-avatar" id="inbox-thread-avatar"></span>
                     <div class="inbox-thread-who">
-                        <div class="inbox-thread-name" id="inbox-thread-name"></div>
+                        <div class="inbox-thread-name" id="inbox-thread-name" dir="auto"></div>
                         <div class="inbox-thread-service text-subtle" id="inbox-thread-service"></div>
                     </div>
                     <div class="inbox-thread-actions">
@@ -120,14 +120,14 @@ else
                 </div>
 
                 <form class="inbox-composer" id="inbox-composer">
-                    <textarea class="inbox-composer-input" id="inbox-composer-input" placeholder="@T["inbox.composer.placeholder"]" rows="2" aria-label="@T["inbox.composer.label"]"></textarea>
+                    <textarea class="inbox-composer-input" id="inbox-composer-input" dir="auto" placeholder="@T["inbox.composer.placeholder"]" rows="2" aria-label="@T["inbox.composer.label"]"></textarea>
                     <div class="inbox-composer-bar">
                         <button type="button" class="au-btn au-btn--text-primary au-btn--sm" id="inbox-btn-send-template">
                             <span class="au-icon" aria-hidden="true">description</span>@T["inbox.composer.sendTemplate"]
                         </button>
                         <span class="inbox-composer-hint">@T["inbox.composer.hint"]</span>
                         <button type="submit" class="au-btn au-btn--primary au-btn--sm" id="inbox-composer-send">
-                            <span class="au-icon" aria-hidden="true">send</span>@T["inbox.composer.send"]
+                            <span class="au-icon au-icon--dir" aria-hidden="true">send</span>@T["inbox.composer.send"]
                         </button>
                     </div>
                 </form>
@@ -136,10 +136,10 @@ else
                     <span class="eyebrow">@T["inbox.template.title"]</span>
                     <select class="select" id="inbox-template-select" aria-label="@T["inbox.template.label"]"></select>
                     <div id="inbox-template-variables"></div>
-                    <div id="inbox-template-preview" class="inbox-template-preview"></div>
+                    <div id="inbox-template-preview" class="inbox-template-preview" dir="auto"></div>
                     <div class="flex items-center gap-2">
                         <button type="submit" class="au-btn au-btn--primary au-btn--sm" id="inbox-template-send">
-                            <span class="au-icon" aria-hidden="true">send</span>@T["inbox.composer.send"]
+                            <span class="au-icon au-icon--dir" aria-hidden="true">send</span>@T["inbox.composer.send"]
                         </button>
                         <button type="button" class="au-btn au-btn--text au-btn--sm" id="inbox-template-cancel">@T["common.cancel"]</button>
                     </div>
@@ -153,7 +153,7 @@ else
                     <span class="au-icon" aria-hidden="true">close</span>
                 </button>
                 <span class="inbox-avatar inbox-avatar-lg" id="inbox-contact-avatar"></span>
-                <strong id="inbox-contact-name">—</strong>
+                <strong id="inbox-contact-name" dir="auto">—</strong>
                 <span class="badge badge-gray" id="inbox-contact-stage">—</span>
             </div>
 
@@ -165,8 +165,8 @@ else
 
             <div class="inbox-contact-section">
                 <span class="eyebrow">@T["inbox.contact.details"]</span>
-                <div class="inbox-contact-info-row"><span>@T["inbox.contact.phone"]</span><strong id="inbox-contact-phone">—</strong></div>
-                <div class="inbox-contact-info-row"><span>@T["inbox.contact.email"]</span><strong id="inbox-contact-email">—</strong></div>
+                <div class="inbox-contact-info-row"><span>@T["inbox.contact.phone"]</span><strong id="inbox-contact-phone" dir="ltr">—</strong></div>
+                <div class="inbox-contact-info-row"><span>@T["inbox.contact.email"]</span><strong id="inbox-contact-email" dir="ltr">—</strong></div>
                 <div class="inbox-contact-info-row"><span>@T["inbox.contact.service"]</span><strong id="inbox-contact-service">—</strong></div>
                 <div class="inbox-contact-info-row"><span>@T["inbox.contact.source"]</span><strong id="inbox-contact-source">—</strong></div>
                 <div class="inbox-contact-info-row"><span>@T["inbox.contact.timeline"]</span><strong id="inbox-contact-timeline">—</strong></div>

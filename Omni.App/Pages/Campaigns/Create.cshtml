@@ -14,7 +14,7 @@ else
 {
     <div class="au-back-header">
         <a class="au-icon-btn au-icon-btn--bordered" href="/Campaigns" aria-label="@T["campaigns.back"]" title="@T["campaigns.back"]">
-            <span class="au-icon" aria-hidden="true">arrow_back</span>
+            <span class="au-icon au-icon--dir" aria-hidden="true">arrow_back</span>
         </a>
         <div class="min-w-0">
             <h2 class="au-back-header__title">@T["campaigns.new"]</h2>
@@ -87,7 +87,7 @@ else
                         <span class="eyebrow">@T["campaigns.create.preview"]</span>
                         @if (hasTemplate)
                         {
-                            <div class="wa-preview"><div class="wa-bubble" id="wa-bubble" data-body="@Model.SelectedTemplate!.Body">@Model.SelectedTemplate.Body<span class="wa-time">09:00</span></div></div>
+                            <div class="wa-preview"><div class="wa-bubble" id="wa-bubble" dir="auto" data-body="@Model.SelectedTemplate!.Body">@Model.SelectedTemplate.Body<span class="wa-time">09:00</span></div></div>
                         }
                         else
                         {
@@ -269,8 +269,8 @@ else
                                     {
                                         <tr data-search="@(((contact.FullName ?? "") + " " + (contact.Phone ?? "")).ToLowerInvariant())">
                                             <td><input type="checkbox" name="ContactIds" value="@contact.Id" checked="@Model.ContactIds.Contains(contact.Id)" /></td>
-                                            <td><div class="cell-person"><span class="avatar-sm">@(string.IsNullOrWhiteSpace(contact.FullName) ? "?" : contact.FullName.Trim()[..1])</span>@(contact.FullName ?? "—")</div></td>
-                                            <td>@(contact.Phone ?? "—")</td>
+                                            <td><div class="cell-person"><span class="avatar-sm">@(string.IsNullOrWhiteSpace(contact.FullName) ? "?" : contact.FullName.Trim()[..1])</span><span dir="auto">@(contact.FullName ?? "—")</span></div></td>
+                                            <td><span dir="ltr">@(contact.Phone ?? "—")</span></td>
                                             <td><span class="badge @StageDisplay.CssClass(Model.Stages, contact.StageKey)">@StageDisplay.Label(Model.Stages, contact.StageKey)</span></td>
                                         </tr>
                                     }
@@ -298,10 +298,10 @@ else
                 </section>
 
                 <div class="summary-bar">
-                    <div id="summary-text"><strong>@T["campaigns.create.summary.ready"]</strong> @Model.SelectedTemplate!.Name</div>
+                    <div id="summary-text"><strong>@T["campaigns.create.summary.ready"]</strong> <bdi>@Model.SelectedTemplate!.Name</bdi></div>
                     <div class="flex gap-2">
                         <a href="/Campaigns" class="au-btn au-btn--text">@T["common.cancel"]</a>
-                        <button type="submit" class="au-btn au-btn--primary" id="create-btn"><span class="au-icon" aria-hidden="true">send</span>@T["campaigns.create.submit"]</button>
+                        <button type="submit" class="au-btn au-btn--primary" id="create-btn"><span class="au-icon au-icon--dir" aria-hidden="true">send</span>@T["campaigns.create.submit"]</button>
                     </div>
                 </div>
             }

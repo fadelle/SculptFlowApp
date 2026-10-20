@@ -199,7 +199,7 @@
           var html = data.contacts.map(function (l) {
             var name = l.fullName ? l.fullName.replace(/</g, '&lt;') : omniText.t('campaigns.create.unnamedContact');
             var phone = l.phone ? l.phone.replace(/</g, '&lt;') : '—';
-            return '<div class="preview-contact-row"><span>' + name + '</span><span class="text-subtle">' + phone + '</span></div>';
+            return '<div class="preview-contact-row"><span dir="auto">' + name + '</span><span class="text-subtle" dir="ltr">' + phone + '</span></div>';
           }).join('');
           if (data.matchingContacts > data.contacts.length) {
             html += '<div class="preview-more">' + omniText.t('bookings.calendar.more', [data.matchingContacts - data.contacts.length]) + '</div>';

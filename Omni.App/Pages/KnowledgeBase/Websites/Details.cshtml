@@ -55,7 +55,7 @@ else
 
     <div class="au-back-header">
         <a class="au-icon-btn au-icon-btn--bordered" href="/KnowledgeBase" aria-label="@T["knowledge.edit.back", T["knowledge.edit.backKnowledge"].Value]" title="@T["knowledge.edit.back", T["knowledge.edit.backKnowledge"].Value]">
-            <span class="au-icon" aria-hidden="true">arrow_back</span>
+            <span class="au-icon au-icon--dir" aria-hidden="true">arrow_back</span>
         </a>
         <span class="src-icon src-web big" aria-hidden="true"><span class="au-icon">language</span></span>
         <div class="min-w-0">
@@ -219,7 +219,7 @@ else
                         <tr>
                             <td data-label="@T["website.pages.page"]">
                                 <div class="min-w-0">
-                                    <a href="@p.Url" target="_blank" rel="noopener noreferrer" class="row-title clip-1" title="@readable">@(string.IsNullOrEmpty(p.Title) ? readable : p.Title)</a>
+                                    <a href="@p.Url" target="_blank" rel="noopener noreferrer" class="row-title clip-1" dir="auto" title="@readable">@(string.IsNullOrEmpty(p.Title) ? readable : p.Title)</a>
                                     @if (!string.IsNullOrEmpty(p.Title))
                                     {
                                         <div class="cell-sub clip-1" title="@readable">@readable</div>

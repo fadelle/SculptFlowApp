@@ -147,7 +147,7 @@
             // Chip shows just the time (bold) and a short name; the service is in the tooltip and the day drawer.
             var title = a.localTime + ' ' + (a.contactFullName || omniText.t('bookings.unknownContact')) + (a.serviceName ? ' - ' + a.serviceName : '') + ' (' + statusLabel(a.status) + ')';
             kids.push(el('div', { class: 'cal-chip status-' + a.status, title: title, onclick: function (e) { e.stopPropagation(); openBooking(a); } }, [
-                el('b', { text: a.localTime }), ' ' + shortName(a.contactFullName)
+                el('b', { text: a.localTime }), ' ', el('bdi', { text: shortName(a.contactFullName) })
             ]));
         });
         if (items.length > shown.length) {
@@ -220,7 +220,7 @@
                     box.appendChild(el('a', { class: 'agenda-row' + (dateIso < today ? ' past' : ''), href: '/dashboard/bookings/' + a.id, onclick: function (e) { e.preventDefault(); openBooking(a); } }, [
                         el('span', { class: 'cal-appt-time', text: a.localTime }),
                         el('div', { class: 'agenda-row-main' }, [
-                            el('div', { class: 'cal-appt-name', text: a.contactFullName || omniText.t('bookings.unknownContact') }),
+                            el('div', { class: 'cal-appt-name', dir: 'auto', text: a.contactFullName || omniText.t('bookings.unknownContact') }),
                             el('div', { class: 'cal-appt-service', text: a.serviceName || omniText.t('contactDetail.noService') })
                         ]),
                         el('span', { class: 'badge ' + badgeClass(a.status), text: statusLabel(a.status) })
@@ -263,7 +263,7 @@
                     el('span', { class: 'cal-appt-time', text: a.localTime }),
                     el('span', { class: 'badge ' + badgeClass(a.status), text: statusLabel(a.status) })
                 ]),
-                el('div', { class: 'cal-appt-name', text: a.contactFullName || omniText.t('bookings.unknownContact') }),
+                el('div', { class: 'cal-appt-name', dir: 'auto', text: a.contactFullName || omniText.t('bookings.unknownContact') }),
                 el('div', { class: 'cal-appt-service', text: a.serviceName || omniText.t('contactDetail.noService') })
             ]));
         });

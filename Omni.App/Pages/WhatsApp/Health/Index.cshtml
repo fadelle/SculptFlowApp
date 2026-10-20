@@ -90,7 +90,7 @@ else
         <div class="facts">
             <div class="fact au-panel au-panel--round">
                 <div class="eyebrow">@T["whatsAppHealth.phone.title"]</div>
-                <div class="fact-main" id="health-phone">@(h.DisplayPhoneNumber ?? "—")</div>
+                <div class="fact-main" id="health-phone"><span dir="ltr">@(h.DisplayPhoneNumber ?? "—")</span></div>
                 <div class="cell-sub">
                     @if (!string.IsNullOrWhiteSpace(h.VerifiedName))
                     {
@@ -180,7 +180,7 @@ else
 
     <details class="au-panel au-panel--round tech mt-3">
         <summary>@T["messages.error.details"]</summary>
-        <div class="inbox-contact-info-row"><span>@T["whatsAppHealth.tech.waba"]</span><strong id="health-waba">@(h.WabaId ?? "—")</strong></div>
+        <div class="inbox-contact-info-row"><span>@T["whatsAppHealth.tech.waba"]</span><strong id="health-waba" dir="ltr">@(h.WabaId ?? "—")</strong></div>
         <div class="inbox-contact-info-row"><span>@T["whatsAppHealth.tech.phoneStatus"]</span><strong>@(h.PhoneStatus ?? "—")</strong></div>
         <div class="inbox-contact-info-row"><span>@T["whatsAppHealth.tech.account"]</span><strong>@(h.AccountStatus ?? "—") / @(h.AccountReviewStatus ?? "—")</strong></div>
         <div class="inbox-contact-info-row"><span>@T["whatsAppHealth.tech.quality"]</span><strong>@(h.PhoneQualityRating ?? "—")</strong></div>

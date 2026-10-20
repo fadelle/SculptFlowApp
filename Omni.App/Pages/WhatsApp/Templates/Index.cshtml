@@ -107,7 +107,7 @@ else
                                     data-name="@t.Name" data-body="@t.Body" data-header="@(t.HeaderType == WhatsAppTemplateHeaderType.Text ? t.HeaderContent : "")"
                                     data-header-type="@(t.HeaderType ?? "none")" data-footer="@t.Footer" data-lang="@t.Language"
                                     data-meta="@(string.IsNullOrEmpty(t.MetaTemplateId) ? "" : "1")">
-                                    <td data-label="@T["templates.table.template"]"><strong>@t.Name</strong></td>
+                                    <td data-label="@T["templates.table.template"]"><strong dir="ltr">@t.Name</strong></td>
                                     <td data-label="@T["knowledge.table.category"]" class="text-md"><div>@T.ValueLabel(t.Category)<div class="cell-sub">@LanguageName(t.Language)</div></div></td>
                                     <td data-label="@T["services.table.status"]" class="au-wrap">
                                         <div>
@@ -260,7 +260,7 @@ else
                 </div>
                 <div class="au-form-actions">
                     <button type="button" class="au-btn au-btn--text" id="new-template-cancel">@T["common.cancel"]</button>
-                    <button type="submit" class="au-btn au-btn--primary"><span class="au-icon" aria-hidden="true">send</span>@T["templates.form.submit"]</button>
+                    <button type="submit" class="au-btn au-btn--primary"><span class="au-icon au-icon--dir" aria-hidden="true">send</span>@T["templates.form.submit"]</button>
                 </div>
             </form>
         </div>

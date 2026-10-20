@@ -12,10 +12,10 @@ else
 {
     <div class="au-back-header">
         <a class="au-icon-btn au-icon-btn--bordered" href="/Services" aria-label="@T["services.back"]" title="@T["services.back"]">
-            <span class="au-icon" aria-hidden="true">arrow_back</span>
+            <span class="au-icon au-icon--dir" aria-hidden="true">arrow_back</span>
         </a>
         <div class="min-w-0">
-            <h2 class="au-back-header__title">@(Model.IsNew ? T["services.edit.addHeading"].Value : Model.Name)</h2>
+            <h2 class="au-back-header__title" dir="auto">@(Model.IsNew ? T["services.edit.addHeading"].Value : Model.Name)</h2>
             <span class="au-back-header__sub">@(Model.IsNew ? T["services.edit.addSub"] : T["services.edit.editSub"])</span>
         </div>
     </div>
@@ -41,7 +41,7 @@ else
                 </div>
                 <div class="au-form-field au-span-2">
                     <label class="au-form-label" for="svc-desc">@T["services.edit.description"] <span class="opt">@T["common.optional"]</span></label>
-                    <textarea name="Description" id="svc-desc" rows="3" class="au-textarea" maxlength="500" placeholder="@T["services.edit.descriptionPlaceholder"]">@Model.Description</textarea>
+                    <textarea name="Description" id="svc-desc" rows="3" class="au-textarea" maxlength="500" dir="auto" placeholder="@T["services.edit.descriptionPlaceholder"]">@Model.Description</textarea>
                     <span class="au-help counter" id="svc-desc-count">@T["common.counter", 0, 500]</span>
                 </div>
             </div>

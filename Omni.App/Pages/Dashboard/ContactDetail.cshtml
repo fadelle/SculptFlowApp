@@ -23,12 +23,12 @@ else
 
     <div class="au-back-header">
         <a class="au-icon-btn au-icon-btn--bordered" href="/dashboard/contacts" aria-label="@T["contactDetail.back"]" title="@T["contactDetail.back"]">
-            <span class="au-icon" aria-hidden="true">arrow_back</span>
+            <span class="au-icon au-icon--dir" aria-hidden="true">arrow_back</span>
         </a>
         <span class="avatar-md" aria-hidden="true">@(string.IsNullOrWhiteSpace(contact.FullName) ? "?" : contact.FullName.Trim()[..1])</span>
         <div class="min-w-0">
-            <h2 class="au-back-header__title">@(contact.FullName ?? "—")</h2>
-            <span class="au-back-header__sub">@(contact.Phone ?? T["contactDetail.noPhone"].Value) · @(contact.ServiceName ?? T["contactDetail.noService"].Value)</span>
+            <h2 class="au-back-header__title" dir="auto">@(contact.FullName ?? "—")</h2>
+            <span class="au-back-header__sub"><span dir="ltr">@(contact.Phone ?? T["contactDetail.noPhone"].Value)</span> · @(contact.ServiceName ?? T["contactDetail.noService"].Value)</span>
         </div>
     </div>
     <div class="detail-chips">
@@ -46,8 +46,8 @@ else
         <section class="au-panel au-panel--round au-panel--pad" aria-labelledby="contact-details-title">
             <div class="au-panel__head"><h3 class="au-panel__title" id="contact-details-title">@T["contactDetail.details.title"]</h3></div>
             <dl class="au-detail-rows">
-                <div class="au-detail-row"><dt>@T["contacts.table.phone"]</dt><dd>@(contact.Phone ?? "—")</dd></div>
-                <div class="au-detail-row"><dt>@T["contactDetail.details.email"]</dt><dd>@(contact.Email ?? "—")</dd></div>
+                <div class="au-detail-row"><dt>@T["contacts.table.phone"]</dt><dd><span dir="ltr">@(contact.Phone ?? "—")</span></dd></div>
+                <div class="au-detail-row"><dt>@T["contactDetail.details.email"]</dt><dd><span dir="ltr">@(contact.Email ?? "—")</span></dd></div>
                 <div class="au-detail-row"><dt>@T["contacts.table.service"]</dt><dd>@(contact.ServiceName ?? "—")</dd></div>
                 <div class="au-detail-row"><dt>@T["contactDetail.details.city"]</dt><dd>@(contact.City ?? "—")</dd></div>
                 <div class="au-detail-row"><dt>@T["contactDetail.details.timeline"]</dt><dd>@(contact.DesiredTimeline ?? "—")</dd></div>
@@ -59,7 +59,7 @@ else
             {
                 <div class="contact-notes">
                     <span class="au-eyebrow">@T["contactDetail.details.notes"]</span>
-                    <p>@contact.Notes</p>
+                    <p dir="auto">@contact.Notes</p>
                 </div>
             }
         </section>

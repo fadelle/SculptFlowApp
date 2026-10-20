@@ -88,7 +88,7 @@ else
                                 <td data-label="@T["members.table.name"]">
                                     <div class="kb-title">
                                         <span class="avatar @(m.IsActive ? "" : "avatar-off")">@Initials(name)</span>
-                                        <span class="row-title">@name</span>
+                                        <span class="row-title" dir="auto">@name</span>
                                         @if (isMe)
                                         {
                                             <span class="badge badge-teal">@T["members.you"]</span>
@@ -96,7 +96,7 @@ else
                                     </div>
                                     <div class="cell-sub" @LocalTimeHelper.Title(m.JoinedAt, "date")>@T["members.joined"] @LocalTimeHelper.Time(m.JoinedAt, "month-year")</div>
                                 </td>
-                                <td data-label="@T["members.table.email"]">@(m.Email ?? "—")</td>
+                                <td data-label="@T["members.table.email"]"><span dir="ltr">@(m.Email ?? "—")</span></td>
                                 <td data-label="@T["members.table.role"]">@(m.Role == UserRole.Client ? T["members.role.client"] : T["members.role.member"])</td>
                                 <td data-label="@T["members.table.status"]"><span class="badge @(m.IsActive ? "badge-green" : "badge-gray")">@(m.IsActive ? T["members.status.active"] : T["members.status.inactive"])</span></td>
                                 <td data-label="@T["members.table.lastSignIn"]" class="cell-sub">@LocalTimeHelper.Time(m.LastLoginAt, "datetime", T["members.lastSignIn.never"].Value)</td>

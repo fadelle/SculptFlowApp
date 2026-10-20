@@ -15,18 +15,18 @@
 }
 <div class="au-fullpage-msg">
     <div class="au-fullpage-msg__inner">
-        <div class="au-fullpage-msg__code">@Model.Code</div>
+        <div class="au-fullpage-msg__code" dir="ltr">@Model.Code</div>
         <h2 class="au-h3 m-0">@title</h2>
         <p class="au-muted m-0">@text</p>
         <div class="au-row au-row--wrap fullpage-actions">
-            <button type="button" class="au-btn au-btn--outlined" onclick="history.back()"><span class="au-icon" aria-hidden="true">arrow_back</span>@T["status.goBack"]</button>
+            <button type="button" class="au-btn au-btn--outlined" onclick="history.back()"><span class="au-icon au-icon--dir" aria-hidden="true">arrow_back</span>@T["status.goBack"]</button>
             @if (signedIn)
             {
                 <a class="au-btn au-btn--primary" href="/dashboard"><span class="au-icon" aria-hidden="true">space_dashboard</span>@T["status.backToDashboard"]</a>
             }
             else
             {
-                <a class="au-btn au-btn--primary" href="/Account/Login"><span class="au-icon" aria-hidden="true">login</span>@T["status.signIn"]</a>
+                <a class="au-btn au-btn--primary" href="/Account/Login"><span class="au-icon au-icon--dir" aria-hidden="true">login</span>@T["status.signIn"]</a>
             }
         </div>
     </div>

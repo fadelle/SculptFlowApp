@@ -23,8 +23,8 @@
 
     <div class="auth-identity">
         @T["signup.google.identity"]
-        <strong>@(string.IsNullOrWhiteSpace(Model.FullName) ? Model.Email : Model.FullName)</strong>
-        @if (!string.IsNullOrWhiteSpace(Model.FullName)) { <span class="text-subtle"> · @Model.Email</span> }
+        <strong dir="auto">@(string.IsNullOrWhiteSpace(Model.FullName) ? Model.Email : Model.FullName)</strong>
+        @if (!string.IsNullOrWhiteSpace(Model.FullName)) { <span class="text-subtle"> · <span dir="ltr">@Model.Email</span></span> }
     </div>
 
     @* auth.js reads [data-auth-form] and [data-busy-label]. *@

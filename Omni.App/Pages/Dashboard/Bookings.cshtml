@@ -23,9 +23,9 @@ else
 
     <div class="cal-header">
         <div class="cal-nav">
-            <button type="button" class="au-icon-btn au-icon-btn--bordered" id="cal-prev" title="@T["bookings.calendar.previousMonth"]" aria-label="@T["bookings.calendar.previousMonth"]"><span class="au-icon" aria-hidden="true">chevron_left</span></button>
+            <button type="button" class="au-icon-btn au-icon-btn--bordered" id="cal-prev" title="@T["bookings.calendar.previousMonth"]" aria-label="@T["bookings.calendar.previousMonth"]"><span class="au-icon au-icon--dir" aria-hidden="true">chevron_left</span></button>
             <div class="cal-title" id="cal-title" aria-live="polite">&nbsp;</div>
-            <button type="button" class="au-icon-btn au-icon-btn--bordered" id="cal-next" title="@T["bookings.calendar.nextMonth"]" aria-label="@T["bookings.calendar.nextMonth"]"><span class="au-icon" aria-hidden="true">chevron_right</span></button>
+            <button type="button" class="au-icon-btn au-icon-btn--bordered" id="cal-next" title="@T["bookings.calendar.nextMonth"]" aria-label="@T["bookings.calendar.nextMonth"]"><span class="au-icon au-icon--dir" aria-hidden="true">chevron_right</span></button>
             <button type="button" class="au-btn au-btn--outlined au-btn--sm" id="cal-today">@T["bookings.calendar.today"]</button>
         </div>
         <div class="cal-header__actions">
@@ -138,7 +138,7 @@ else
                 <div class="flex items-center gap-2 min-w-0">
                     <span class="avatar-md" id="cal-appt-avatar"></span>
                     <div class="min-w-0">
-                        <h3 id="cal-appt-name" class="card-title"></h3>
+                        <h3 id="cal-appt-name" class="card-title" dir="auto"></h3>
                         <div class="text-muted text-sm" id="cal-appt-when"></div>
                     </div>
                 </div>
@@ -148,7 +148,7 @@ else
             <div class="mb-2">
                 <div class="inbox-contact-info-row"><span>@T["contacts.table.service"]</span><strong id="cal-appt-service">—</strong></div>
                 <div class="inbox-contact-info-row"><span>@T["bookings.where"]</span><strong id="cal-appt-location">—</strong></div>
-                <div class="inbox-contact-info-row" id="cal-appt-notes-row"><span>@T["bookings.notes"]</span><strong id="cal-appt-notes">—</strong></div>
+                <div class="inbox-contact-info-row" id="cal-appt-notes-row"><span>@T["bookings.notes"]</span><strong id="cal-appt-notes" dir="auto">—</strong></div>
             </div>
             <div class="au-form-field">
                 <label class="au-form-label" for="cal-appt-status">@T["bookings.status"]</label>

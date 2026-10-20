@@ -96,8 +96,8 @@ else
                                 var channel = SourceChannel(contact.Source);
                                 var overdue = contact.NextFollowupAt is not null && contact.NextFollowupAt < now;
                                 <tr class="row-link" data-href="/dashboard/contacts/@contact.Id">
-                                    <td data-label="@T["contacts.table.name"]"><a class="cell-person" href="/dashboard/contacts/@contact.Id"><span class="avatar-sm">@(string.IsNullOrWhiteSpace(contact.FullName) ? "?" : contact.FullName.Trim()[..1])</span>@(contact.FullName ?? "—")</a></td>
-                                    <td data-label="@T["contacts.table.phone"]">@(contact.Phone ?? "—")</td>
+                                    <td data-label="@T["contacts.table.name"]"><a class="cell-person" href="/dashboard/contacts/@contact.Id"><span class="avatar-sm">@(string.IsNullOrWhiteSpace(contact.FullName) ? "?" : contact.FullName.Trim()[..1])</span><span dir="auto">@(contact.FullName ?? "—")</span></a></td>
+                                    <td data-label="@T["contacts.table.phone"]"><span dir="ltr">@(contact.Phone ?? "—")</span></td>
                                     <td data-label="@T["contacts.table.service"]">@(contact.ServiceName ?? "—")</td>
                                     <td data-label="@T["contacts.table.source"]">
                                         @if (channel is null)

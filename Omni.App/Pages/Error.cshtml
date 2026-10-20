@@ -16,7 +16,7 @@
             <span class="au-copy" title="@T["error.referenceHelp"]">@T.Html("error.reference", new Microsoft.AspNetCore.Html.HtmlString($"<span class=\"au-mono\">{System.Net.WebUtility.HtmlEncode(Model.Reference)}</span>"))</span>
         }
         <div class="au-row au-row--wrap fullpage-actions">
-            <button type="button" class="au-btn au-btn--outlined" onclick="history.back()"><span class="au-icon" aria-hidden="true">arrow_back</span>@T["status.goBack"]</button>
+            <button type="button" class="au-btn au-btn--outlined" onclick="history.back()"><span class="au-icon au-icon--dir" aria-hidden="true">arrow_back</span>@T["status.goBack"]</button>
             <a class="au-btn au-btn--primary" href="@(signedIn ? "/dashboard" : "/Account/Login")"><span class="au-icon" aria-hidden="true">space_dashboard</span>@T["status.backToDashboard"]</a>
         </div>
     </div>

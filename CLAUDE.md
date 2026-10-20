@@ -14,6 +14,11 @@ header; add a change-log row in section 12; note any drift you find in section 1
 
 UI: follow docs/UI_GUIDE.md for every screen; keep it up to date.
 
+Right to left (Milestone B, UI_GUIDE §0.4): no physical left/right in CSS, inline styles or scripts (logical properties;
+`translateX` × `var(--au-x)`; a line that must stay physical carries `rtl-ok: <reason>`); directional icons carry
+`au-icon--dir` (`IconDirection`); phones, emails, URLs and codes `dir="ltr"`; user content (names, messages, notes,
+titles) `dir="auto"`. `Guards/RtlStyleTests` enforces the CSS and icon rules.
+
 ## Code architecture (standing rule, agreed 2026-10-06)
 
 The admin portal (`..\SculptFlowAdmin`) uses the same layout. Namespace = folder path (`Omni.App.Business.Services.Contacts`).

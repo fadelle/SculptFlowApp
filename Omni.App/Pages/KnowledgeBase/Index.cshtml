@@ -89,7 +89,7 @@ else
                                         <div class="kb-title">
                                             <span class="src-icon src-web" title="@T["knowledge.source.website"]"><span class="au-icon au-icon--sm" aria-hidden="true">language</span></span>
                                             <div class="min-w-0">
-                                                <a href="/KnowledgeBase/Websites/@w.Id" class="row-title clip-1" title="@url">@url</a>
+                                                <a href="/KnowledgeBase/Websites/@w.Id" class="row-title clip-1" dir="ltr" title="@url">@url</a>
                                                 <div class="cell-sub">
                                                     @T["knowledge.source.website"] · @(w.CrawlMode == WebsiteCrawlMode.SinglePage ? T["knowledge.crawl.single"] : T["knowledge.crawl.whole"])
                                                     · @T.Plural("knowledge.pages", w.IndexedPages)
@@ -148,7 +148,7 @@ else
                                                 <span class="src-icon src-doc" title="@T["knowledge.source.written"]"><span class="au-icon au-icon--sm" aria-hidden="true">edit_note</span></span>
                                             }
                                             <div class="min-w-0">
-                                                <a href="/KnowledgeBase/Edit/@d.Id" class="row-title">@d.Title</a>
+                                                <a href="/KnowledgeBase/Edit/@d.Id" class="row-title" dir="auto">@d.Title</a>
                                                 <div class="cell-sub">@(isUpload ? T["knowledge.source.documentFile", d.OriginalFileName ?? ""] : T["knowledge.source.written"])</div>
                                             </div>
                                         </div>

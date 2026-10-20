@@ -24,11 +24,11 @@ else
 
     <div class="au-back-header">
         <a class="au-icon-btn au-icon-btn--bordered" href="/dashboard/bookings" aria-label="@T["bookingDetail.back"]" title="@T["bookingDetail.back"]">
-            <span class="au-icon" aria-hidden="true">arrow_back</span>
+            <span class="au-icon au-icon--dir" aria-hidden="true">arrow_back</span>
         </a>
         <span class="avatar-md" aria-hidden="true">@(string.IsNullOrWhiteSpace(appt.ContactFullName) ? "?" : appt.ContactFullName.Trim()[..1])</span>
         <div class="min-w-0">
-            <h2 class="au-back-header__title">@(appt.ContactFullName ?? "—")</h2>
+            <h2 class="au-back-header__title" dir="auto">@(appt.ContactFullName ?? "—")</h2>
             <span class="au-back-header__sub">@(appt.ServiceName ?? T["contactDetail.noService"].Value) · @LocalTimeHelper.Time(appt.ScheduledStart, "datetime-year", clientTimeZone: Model.ClientTimezone)</span>
         </div>
     </div>

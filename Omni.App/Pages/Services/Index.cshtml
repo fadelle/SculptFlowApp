@@ -61,7 +61,7 @@ else
                             <tr class="row-link @(p.IsActive ? "" : "row-dim")" data-href="/Services/Edit/@p.Id" data-search="@($"{p.Name} {p.Code} {p.Description}".ToLowerInvariant())">
                                 <td data-label="@T["services.table.service"]">
                                     <div class="min-w-0">
-                                        <a href="/Services/Edit/@p.Id" class="row-title">@p.Name</a>
+                                        <a href="/Services/Edit/@p.Id" class="row-title" dir="auto">@p.Name</a>
                                         @if (!string.IsNullOrWhiteSpace(p.Description))
                                         {
                                             <div class="cell-sub clip-1" title="@p.Description">@p.Description</div>
@@ -71,7 +71,7 @@ else
                                 <td data-label="@T["services.table.code"]">
                                     @if (!string.IsNullOrEmpty(p.Code))
                                     {
-                                        <span class="code-chip">@p.Code</span>
+                                        <span class="code-chip" dir="ltr">@p.Code</span>
                                     }
                                     else
                                     {

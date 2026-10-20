@@ -93,7 +93,7 @@ else
                             : c.Status == CampaignStatus.Draft ? T["campaigns.progress.notSent"]
                             : c.Failed > 0 ? T["campaigns.progress.failed", c.Failed] : T["campaigns.progress.nothingSent"];
                         <tr class="row-link" data-href="/Campaigns/@c.Id" data-group="@Group(c.Status)">
-                            <td data-label="@T["campaigns.table.campaign"]"><div><a href="/Campaigns/@c.Id"><strong>@c.Name</strong></a><div class="cell-sub">@(c.TemplateName ?? "—")</div></div></td>
+                            <td data-label="@T["campaigns.table.campaign"]"><div><a href="/Campaigns/@c.Id"><strong dir="auto">@c.Name</strong></a><div class="cell-sub">@(c.TemplateName ?? "—")</div></div></td>
                             <td data-label="@T["campaigns.table.status"]"><span class="badge @StatusBadgeHelper.CssClass(c.Status)">@T.CampaignStatusLabel(c.Status)</span></td>
                             <td data-label="@T["campaigns.table.audience"]"><div>@c.TotalRecipients <span class="cell-sub">@T.Plural("campaigns.people", c.TotalRecipients)</span><div class="cell-sub">@AudienceLabel(c.AudienceType, c.ManuallySelected)</div></div></td>
                             <td data-label="@T["campaigns.table.progress"]" class="prog-cell">
