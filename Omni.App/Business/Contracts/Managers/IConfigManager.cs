@@ -59,6 +59,9 @@ public interface IConfigManager
     /// <summary>How many recent wallet transactions a client's billing page shows. Default 15.</summary>
     int BillingRecentTransactions { get; }
 
+    /// <summary>Charge each AI assistant reply as ai_reply usage (included credit first, then wallet). Needs an ai_reply rate; a client that can't pay gets no AI reply and the conversation goes to the team. Off = AI replies are not charged. Default true.</summary>
+    bool BillingChargeAiReplies { get; }
+
     // ---- Knowledge
     /// <summary>Minimum similarity for a search result, for new clients (each client can change its own). Default 0.30.</summary>
     decimal KnowledgeMinScore { get; }

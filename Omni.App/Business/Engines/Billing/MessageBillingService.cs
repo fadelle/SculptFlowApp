@@ -93,6 +93,51 @@ public class MessageBillingService : IMessageBillingService
         return hold;
     }
 
+    public async Task<MessageBillingHold?> ReserveAiReplyAsync(Guid clientId, Guid conversationId, Guid messageId, CancellationToken ct = default)
+    {
+        if (!_config.BillingEnabled || !_config.BillingChargeAiReplies) return null;
+
+        // No connected account: the AI provider's arrangement is the "ai" default (platform_funded unless configured).
+        var responsibility = _providerBilling.DefaultFor(MessageBillingKeys.AiChannel, null);
+        var key = MessageBillingKeys.AiReply(messageId);
+        var billableEvent = new BillableEvent
+        {
+            ClientId = clientId,
+            IdempotencyKey = key,
+            EventType = BillableEventTypes.AiReply,
+            Channel = MessageBillingKeys.AiChannel,
+            Quantity = 1,
+            Unit = "reply",
+            ProviderBilling = responsibility,
+            MessageId = messageId,
+            ConversationId = conversationId,
+            Source = BillingSource.System
+        };
+        var hold = new MessageBillingHold(clientId, key, BillingSettlementTrigger.OnProviderAccepted);
+
+        if (!billableEvent.ChargesUsage)
+        {
+            // Configured as not charged: recorded for reporting only, so a recording failure never blocks the reply.
+            try
+            {
+                await _billing.ReserveAsync(billableEvent, ct);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogError(ex, "Billing: couldn't record uncharged AI reply usage {IdempotencyKey} for client {ClientId}; the reply is sent anyway.",
+                    key, clientId);
+            }
+            return hold;
+        }
+
+        var result = await _billing.ReserveAsync(billableEvent, ct);
+        if (!result.Succeeded)
+        {
+            throw BillingDeniedException.For(result.FailureReason ?? UsageFailureReason.RateNotFound);
+        }
+        return hold;
+    }
+
     public async Task SendFailedAsync(MessageBillingHold? hold, CancellationToken ct = default)
     {
         if (hold is null) return;
@@ -173,7 +218,10 @@ public class MessageBillingService : IMessageBillingService
             Message? message = null;
             if (usage.MessageId is Guid id && messages.TryGetValue(id, out var m) && m.ClientId == usage.ClientId) message = m;
 
-            var action = PolicyFor(usage.Channel)?.ResolveStale(message) ?? DeliveryBillingAction.Release;
+            // An AI reply is billable once its message row exists (it was sent); with no row the send never happened.
+            var action = usage.Channel == MessageBillingKeys.AiChannel
+                ? (message is null ? DeliveryBillingAction.Release : DeliveryBillingAction.Settle)
+                : PolicyFor(usage.Channel)?.ResolveStale(message) ?? DeliveryBillingAction.Release;
             try
             {
                 var result = action == DeliveryBillingAction.Settle

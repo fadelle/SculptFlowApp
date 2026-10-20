@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Omni.App.Business.Contracts.Managers;
 using Omni.App.Business.Contracts.Services.Inbox;
+using Omni.App.Common.Enums;
 using Omni.App.Common.Exceptions;
 using Omni.App.Controllers.Filters;
 using Omni.App.Entities.Requests.Inbox;
@@ -134,6 +135,12 @@ public class ConversationsController : ControllerBase
             catch (ConversationNotInAiModeException ex)
             {
                 return Conflict(new { sent = false, code = "conversation_in_human_mode", conversationId = id, mode = ex.CurrentMode });
+            }
+            catch (AiReplyRefusedException ex)
+            {
+                // Billing refused the reply (no ai_reply rate / no balance); the conversation is with the team now. Same
+                // 409 shape as above so the n8n workflow stops without retrying.
+                return Conflict(new { sent = false, code = "ai_reply_refused", reason = ex.Reason, conversationId = id, mode = ConversationMode.Human });
             }
         }
 

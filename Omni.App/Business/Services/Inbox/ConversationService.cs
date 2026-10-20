@@ -269,14 +269,33 @@ public class ConversationService : IConversationService
         return await SetModeAsync(clientId, conversationId, ConversationMode.Ai, EventTypes.ReturnedToAi, "dashboard", "{}", ct);
     }
 
-    public async Task<ConversationResponse?> HandoffToHumanAsync(Guid clientId, Guid conversationId, string? reason, CancellationToken ct = default)
+    public Task<ConversationResponse?> HandoffToHumanAsync(Guid clientId, Guid conversationId, string? reason, CancellationToken ct = default) =>
+        HandOffAsync(clientId, conversationId, MessageOrigin.Ai, System.Text.Json.JsonSerializer.Serialize(new { reason }),
+            who => string.IsNullOrWhiteSpace(reason)
+                ? NotificationText.Of("notifications.handoff.title", "notifications.handoff.message", who)
+                : NotificationText.Of("notifications.handoff.title", "notifications.handoff.messageReason", who, reason), ct);
+
+    public Task<ConversationResponse?> HandOverUnpaidAiReplyAsync(Guid clientId, Guid conversationId, string failureReason, CancellationToken ct = default) =>
+        HandOffAsync(clientId, conversationId, MessageOrigin.System,
+            System.Text.Json.JsonSerializer.Serialize(new { reason = "ai_reply_" + failureReason }),
+            who => NotificationText.Of("notifications.handoff.title",
+                failureReason == UsageFailureReason.InsufficientFunds ? AiReplyNoBalanceKey : AiReplyNotPricedKey, who), ct);
+
+    // The hand-over notification's wording when billing refused an AI reply (no balance / no ai_reply rate).
+    private const string AiReplyNoBalanceKey = "notifications.handoff.messageAiNoBalance";
+    private const string AiReplyNotPricedKey = "notifications.handoff.messageAiNotPriced";
+
+    /// <summary>Hands a conversation to the team: human mode, the contact to the needs-human stage, and one Handoff
+    /// notification (worded by <paramref name="text"/> for the contact's name) on a real ai -> human change.</summary>
+    private async Task<ConversationResponse?> HandOffAsync(Guid clientId, Guid conversationId, string source, string metadataJson,
+        Func<object, NotificationText> text, CancellationToken ct)
     {
         // Read the mode BEFORE the change so a HANDOFF notification only fires on a REAL ai->human transition —
         // the AI calling this tool twice in a row (or on an already-human conversation) must not double-notify.
         var wasAlreadyHuman = await _conversations.IsInHumanModeAsync(clientId, conversationId, ct);
 
         var result = await SetModeAsync(clientId, conversationId, ConversationMode.Human, EventTypes.HumanHandoff,
-            MessageOrigin.Ai, System.Text.Json.JsonSerializer.Serialize(new { reason }), ct);
+            source, metadataJson, ct);
 
         // The contact now needs a person: move it to the needs-human stage (it stays put when its stage already has that
         // category, e.g. a second needs-human stage such as "Medical question").
@@ -293,10 +312,7 @@ public class ConversationService : IConversationService
         {
             var contactName = await _contacts.GetFullNameAsync(result.ContactId, ct);
             object who = string.IsNullOrWhiteSpace(contactName) ? TextArg.Of("notifications.anyone.conversation") : contactName;
-            await _notifications.CreateAsync(clientId, NotificationType.Handoff,
-                string.IsNullOrWhiteSpace(reason)
-                    ? NotificationText.Of("notifications.handoff.title", "notifications.handoff.message", who)
-                    : NotificationText.Of("notifications.handoff.title", "notifications.handoff.messageReason", who, reason),
+            await _notifications.CreateAsync(clientId, NotificationType.Handoff, text(who),
                 contactId: result.ContactId, conversationId: conversationId,
                 link: $"/inbox?conversationId={conversationId}", ct: ct);
         }

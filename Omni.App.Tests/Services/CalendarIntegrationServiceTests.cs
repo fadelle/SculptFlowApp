@@ -13,10 +13,12 @@ public class CalendarIntegrationServiceTests
     private readonly Mock<ICalendarProviderClient> _google = new();
     private readonly Mock<IConfigManager> _config = new();
     private CalendarIntegration? _row;
+    private readonly Mock<IEntitlementService> _entitlements = new();
 
     public CalendarIntegrationServiceTests()
     {
         _google.SetupGet(g => g.Provider).Returns(CalendarProvider.Google);
+        _entitlements.Setup(e => e.GetAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(ClientEntitlements.Unrestricted);
         _config.SetupGet(c => c.IntegrationsTokenRefreshMarginMinutes).Returns(5);
         _calendars.Setup(c => c.GetWithCalendarsAsync(_clientId, CalendarProvider.Google, It.IsAny<CancellationToken>())).ReturnsAsync(() => _row);
         _calendars.Setup(c => c.GetByIdAsync(_clientId, It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync(() => _row);
@@ -26,7 +28,7 @@ public class CalendarIntegrationServiceTests
         _clients.Setup(c => c.GetReadOnlyAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(new Client { Id = _clientId, Timezone = "Asia/Beirut" });
     }
 
-    private CalendarIntegrationService Sut() => new(_calendars.Object, _clients.Object, _uow.Object, _notifier.Object, _notifications.Object, [_google.Object], _config.Object);
+    private CalendarIntegrationService Sut() => new(_calendars.Object, _clients.Object, _uow.Object, _notifier.Object, _notifications.Object, [_google.Object], _config.Object, _entitlements.Object);
 
     private CalendarIntegration Connected(string? selected = "cal1", bool sync = true) => _row = new CalendarIntegration
     {
@@ -91,7 +93,7 @@ public class CalendarIntegrationServiceTests
     [Fact]
     public async Task CompleteConnect_without_a_registered_client_fails()
     {
-        var sut = new CalendarIntegrationService(_calendars.Object, _clients.Object, _uow.Object, _notifier.Object, _notifications.Object, [], _config.Object);
+        var sut = new CalendarIntegrationService(_calendars.Object, _clients.Object, _uow.Object, _notifier.Object, _notifications.Object, [], _config.Object, _entitlements.Object);
         await Assert.ThrowsAsync<InvalidOperationException>(() => sut.CompleteConnectAsync(_clientId, CalendarProvider.Google, new CalendarOAuthTokenResult("a", null, DateTimeOffset.UtcNow), null));
     }
 
@@ -246,6 +248,46 @@ public class CalendarIntegrationServiceTests
         await Sut().ApplySyncCallbackAsync(new CalendarSyncCallbackRequest(_clientId, apptId, integ.Id, Guid.NewGuid(), true, null, null));
         Assert.Equal(BookingCalendarSyncStatus.Pending, sync.Status);
         _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    // ---------------------------------------------------------------- bookings entitlement
+
+    private void PlanWithoutBookings()
+    {
+        var plan = EntitlementKit.Plan((EntitlementKeys.Campaigns, "true"));
+        _entitlements.Setup(e => e.GetAsync(_clientId, It.IsAny<CancellationToken>())).Returns(plan.Object.GetAsync(_clientId));
+        _entitlements.Setup(e => e.EnsureFeatureAsync(_clientId, EntitlementKeys.Bookings, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new EntitlementDeniedException(EntitlementKeys.Bookings, EntitlementDeniedException.NotIncludedKey));
+    }
+
+    [Fact]
+    public async Task Without_bookings_in_the_plan_calendar_sync_cant_be_set_up_but_can_be_turned_off()
+    {
+        Connected(selected: "cal1", sync: true);
+        PlanWithoutBookings();
+
+        await Assert.ThrowsAsync<EntitlementDeniedException>(() => Sut().RequestConnectAsync(_clientId, CalendarProvider.Google));
+        await Assert.ThrowsAsync<EntitlementDeniedException>(() => Sut().RequestRefreshCalendarsAsync(_clientId, CalendarProvider.Google));
+        await Assert.ThrowsAsync<EntitlementDeniedException>(() => Sut().SelectCalendarAsync(_clientId, CalendarProvider.Google, "cal1"));
+        await Assert.ThrowsAsync<EntitlementDeniedException>(() => Sut().SetSyncEnabledAsync(_clientId, CalendarProvider.Google, true));
+        Assert.Equal(CalendarIntegrationStatus.Connected, _row!.Status); // nothing changed
+
+        Assert.False((await Sut().SetSyncEnabledAsync(_clientId, CalendarProvider.Google, false)).SyncEnabled);
+        _calendars.Setup(c => c.ListWithCalendarsReadOnlyAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(new List<CalendarIntegration> { _row! });
+        Assert.Equal(CalendarProvider.All.Count, (await Sut().ListAsync(_clientId)).Count); // still listed
+    }
+
+    [Fact]
+    public async Task Without_bookings_in_the_plan_nothing_is_pushed_to_external_calendars()
+    {
+        var integ = Connected();
+        _calendars.Setup(c => c.ListSyncTargetsAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(new List<CalendarIntegration> { integ });
+        PlanWithoutBookings();
+
+        await Sut().TriggerBookingSyncAsync(_clientId, Appt(), "created", default);
+
+        _notifier.Verify(n => n.NotifySyncAsync(It.IsAny<CalendarSyncTriggerPayload>(), It.IsAny<CancellationToken>()), Times.Never);
+        _calendars.Verify(c => c.ListSyncTargetsAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     // ---------------------------------------------------------------- trigger

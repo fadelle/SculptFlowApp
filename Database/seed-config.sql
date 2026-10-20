@@ -27,6 +27,7 @@ insert into config.settings (section, key, value, updated_by) values
   ('Billing', 'Currency', 'USD', 'seed'),
   ('Billing', 'RateBackdateToleranceMinutes', '5', 'seed'),
   ('Billing', 'RecentTransactions', '15', 'seed'),
+  ('Billing', 'ChargeAiReplies', 'true', 'seed'),
   ('Knowledge', 'MinScore', '0.30', 'seed'),
   ('Knowledge', 'ChunkMaxChars', '1000', 'seed'),
   ('Knowledge', 'ChunkOverlapChars', '150', 'seed'),

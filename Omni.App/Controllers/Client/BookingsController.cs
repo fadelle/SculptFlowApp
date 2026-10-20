@@ -2,6 +2,8 @@ using Microsoft.AspNetCore.Mvc;
 using Omni.App.Business.Contracts.Managers;
 using Omni.App.Business.Contracts.Services.Bookings;
 using Omni.App.Common.Helpers;
+using Omni.App.Common.Statics;
+using Omni.App.Controllers.Filters;
 using Omni.App.Entities.Requests.Bookings;
 using Omni.App.Entities.Responses.Bookings;
 
@@ -9,6 +11,7 @@ namespace Omni.App.Controllers.Client;
 
 [ApiController]
 [Route("api/bookings")]
+[RequireFeature(EntitlementKeys.Bookings)]
 public class BookingsController : DashboardApiController
 {
     private readonly IBookingService _bookings;

@@ -243,6 +243,10 @@ public class ConversationsControllerTests : ClientControllerTestBase
         _messages.Setup(m => m.SendAiReplyAsync(client, id, "hi", It.IsAny<CancellationToken>())).ThrowsAsync(new ConversationNotInAiModeException("human"));
         var conflict = Assert.IsType<ConflictObjectResult>((await ai().SendMessage(id, client, request, default)).Result);
         Assert.Contains("conversation_in_human_mode", System.Text.Json.JsonSerializer.Serialize(conflict.Value));
+        _messages.Setup(m => m.SendAiReplyAsync(client, id, "hi", It.IsAny<CancellationToken>())).ThrowsAsync(new AiReplyRefusedException(UsageFailureReason.InsufficientFunds));
+        var refused = System.Text.Json.JsonSerializer.Serialize(Assert.IsType<ConflictObjectResult>((await ai().SendMessage(id, client, request, default)).Result).Value);
+        Assert.Contains("ai_reply_refused", refused);
+        Assert.Contains("insufficient_funds", refused);
         _messages.Setup(m => m.SendAiReplyAsync(client, id, "hi", It.IsAny<CancellationToken>())).ReturnsAsync((MessageResponse?)null);
         Assert.IsType<NotFoundResult>((await ai().SendMessage(id, client, request, default)).Result);
     }

@@ -46,6 +46,7 @@ public class ConfigManager : IConfigManager
     public string BillingCurrency => GetString(ConfigDefaults.BillingCurrency).Trim().ToUpperInvariant();
     public int BillingRateBackdateToleranceMinutes => GetInt(ConfigDefaults.BillingRateBackdateToleranceMinutes);
     public int BillingRecentTransactions => GetInt(ConfigDefaults.BillingRecentTransactions);
+    public bool BillingChargeAiReplies => GetBool(ConfigDefaults.BillingChargeAiReplies);
 
     // ---- Knowledge
     public decimal KnowledgeMinScore => GetDecimal(ConfigDefaults.KnowledgeMinScore);

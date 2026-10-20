@@ -44,6 +44,12 @@ public interface IConversationService
     /// by the AI assistant's handoff_to_human tool — see Controllers/Integrations/AiController.cs.</summary>
     Task<ConversationResponse?> HandoffToHumanAsync(Guid clientId, Guid conversationId, string? reason, CancellationToken ct = default);
 
+    /// <summary>The AI assistant's reply was refused by billing (<paramref name="failureReason"/>: a UsageFailureReason, e.g.
+    /// insufficient_funds): the same hand-over as HandoffToHumanAsync (human mode, needs-human stage, one Handoff notification
+    /// worded for the reason), logged as a system human_handoff with reason ai_reply_{failureReason}. Members can Return to AI
+    /// once the wallet is topped up.</summary>
+    Task<ConversationResponse?> HandOverUnpaidAiReplyAsync(Guid clientId, Guid conversationId, string failureReason, CancellationToken ct = default);
+
     /// <summary>A member hands the conversation back — AI may auto-reply again. Throws EntitlementDeniedException (422) when
     /// the client's plan doesn't include the AI assistant.</summary>
     Task<ConversationResponse?> ReturnToAiAsync(Guid clientId, Guid conversationId, CancellationToken ct = default);

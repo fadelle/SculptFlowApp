@@ -1,5 +1,6 @@
 @inject ICurrentClientContext CurrentClient
 @inject IConfigManager Settings
+@inject Omni.App.Business.Contracts.Services.Billing.IEntitlementService Entitlements
 @* The dark sidebar (docs/UI_GUIDE.md §5, §0.4): brand + client name, then the four groups of links in their old order.
    #sidebar-inbox-badge is filled by sidebar.js / inbox.js. *@
 @{
@@ -8,6 +9,9 @@
     bool IsActive(string prefix) => path.Equals(prefix, StringComparison.OrdinalIgnoreCase)
         || path.StartsWith(prefix + "/", StringComparison.OrdinalIgnoreCase);
     var dashboardActive = IsActive("/dashboard") && !IsActive("/dashboard/contacts") && !IsActive("/dashboard/bookings");
+    // Bookings and calendar sync are a plan feature (always on while billing is off); the pages say so if opened directly.
+    var clientId = await CurrentClient.GetClientIdAsync();
+    var bookingsIncluded = clientId is null || (await Entitlements.GetAsync(clientId.Value)).CanUseBookings;
 }
 @functions {
     // One nav row; the label doubles as the tooltip when the sidebar is collapsed to icons.
@@ -35,7 +39,10 @@
         @Row("/inbox", "chat", T["nav.inbox"].Value, IsActive("/inbox"),
             "<span class=\"au-nav-count sidebar-badge\" id=\"sidebar-inbox-badge\" hidden></span>") @* icon:chat *@
         @Row("/dashboard/contacts", "group", T["nav.contacts"].Value, IsActive("/dashboard/contacts")) @* icon:group *@
-        @Row("/dashboard/bookings", "calendar_month", T["nav.bookings"].Value, IsActive("/dashboard/bookings")) @* icon:calendar_month *@
+        @if (bookingsIncluded)
+        {
+            @Row("/dashboard/bookings", "calendar_month", T["nav.bookings"].Value, IsActive("/dashboard/bookings")) @* icon:calendar_month *@
+        }
 
         <div class="au-side-section">@T["nav.section.marketing"]</div>
         @Row("/Campaigns", "campaign", T["nav.campaigns"].Value, IsActive("/Campaigns")) @* icon:campaign *@
@@ -50,7 +57,10 @@
         @Row("/settings/business-info", "apartment", T["nav.businessInfo"].Value, IsActive("/settings/business-info")) @* icon:apartment *@
         @Row("/Members", "badge", T["nav.members"].Value, IsActive("/Members")) @* icon:badge *@
         @Row("/settings/integrations", "hub", T["nav.integrations"].Value, IsActive("/settings/integrations")) @* icon:hub *@
-        @Row("/settings/calendar-integrations", "event_available", T["nav.calendarIntegrations"].Value, IsActive("/settings/calendar-integrations")) @* icon:event_available *@
+        @if (bookingsIncluded)
+        {
+            @Row("/settings/calendar-integrations", "event_available", T["nav.calendarIntegrations"].Value, IsActive("/settings/calendar-integrations")) @* icon:event_available *@
+        }
         @if (Settings.BillingEnabled)
         {
             @Row("/settings/billing", "credit_card", T["nav.billing"].Value, IsActive("/settings/billing")) @* icon:credit_card *@

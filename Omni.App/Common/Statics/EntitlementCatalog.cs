@@ -12,6 +12,7 @@ public static class EntitlementCatalog
     public static readonly IReadOnlyList<EntitlementDefinition> All = new[]
     {
         new EntitlementDefinition(EntitlementKeys.Campaigns, EntitlementKind.Feature, "Campaigns"),
+        new EntitlementDefinition(EntitlementKeys.Bookings, EntitlementKind.Feature, "Bookings"),
         new EntitlementDefinition(EntitlementKeys.AiAssistant, EntitlementKind.Feature, "AI assistant"),
         new EntitlementDefinition(EntitlementKeys.ApiAccess, EntitlementKind.Feature, "API access"),
         new EntitlementDefinition(EntitlementKeys.AdvancedReporting, EntitlementKind.Feature, "Advanced reporting"),

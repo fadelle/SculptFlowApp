@@ -11,6 +11,9 @@ public static partial class BillableEventTypes
     public const string WhatsAppAuthenticationMessage = "whatsapp_authentication_message";
     public const string WhatsAppServiceMessage = "whatsapp_service_message";
     public const string TelegramMessage = "telegram_message";
+    /// <summary>One AI assistant reply sent to a contact (MessageService.SendAiReplyAsync), charged on top of the channel's
+    /// own message usage. Key ai:reply:{messageId}; see IMessageBillingService.ReserveAiReplyAsync.</summary>
+    public const string AiReply = "ai_reply";
 
     // Not produced by any channel yet — listed so future channels and rate cards use the same names.
     public const string SmsSegment = "sms_segment";
@@ -30,6 +33,7 @@ public static partial class BillableEventTypes
         [WhatsAppAuthenticationMessage] = "WhatsApp authentication message",
         [WhatsAppServiceMessage] = "WhatsApp service message",
         [TelegramMessage] = "Telegram message",
+        [AiReply] = "AI reply",
         [SmsSegment] = "SMS segment",
         [ViberTransactionalMessage] = "Viber transactional message",
         [ViberPromotionalMessage] = "Viber promotional message",

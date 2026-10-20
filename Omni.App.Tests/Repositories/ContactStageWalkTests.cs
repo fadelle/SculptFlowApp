@@ -35,7 +35,8 @@ public class ContactStageWalkTests(PostgresFixture fixture) : RepoTestBase(fixtu
     private BookingService Bookings(ApplicationDbContext db) => new(new BookingRepository(db), new ContactRepository(db),
         new ClientRepository(db, _cache), new ServiceRepository(db, _cache), new UnitOfWork(db), _events.Object, _catalog.Object,
         new Mock<IAvailabilityService>().Object, new Mock<IInboxNotifier>().Object, new Mock<INotificationService>().Object,
-        new Mock<ICalendarIntegrationService>().Object, new Mock<ICampaignRepository>().Object, new Mock<IConfigManager>().Object, Types(db), TextKit.Localizer());
+        new Mock<ICalendarIntegrationService>().Object, new Mock<ICampaignRepository>().Object, new Mock<IConfigManager>().Object, Types(db), TextKit.Localizer(),
+        new Mock<IEntitlementService>().Object);
 
     private OrderService Orders(ApplicationDbContext db) =>
         new(new OrderRepository(db), new ContactRepository(db), new UnitOfWork(db), _events.Object, _catalog.Object, Types(db));

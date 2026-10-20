@@ -1,9 +1,11 @@
 using Omni.App.Business.Contracts.HttpClients.Calendars;
 using Omni.App.Business.Contracts.HttpClients.N8n;
 using Omni.App.Business.Contracts.Managers;
+using Omni.App.Business.Contracts.Services.Billing;
 using Omni.App.Business.Contracts.Services.Calendars;
 using Omni.App.Business.Contracts.Services.Notifications;
 using Omni.App.Common.Enums;
+using Omni.App.Common.Statics;
 using Omni.App.Entities.Dtos.Calendars;
 using Omni.App.Entities.Models;
 using Omni.App.Entities.Requests.Calendars;
@@ -31,11 +33,13 @@ public class CalendarIntegrationService : ICalendarIntegrationService
     private readonly INotificationService _notifications;
     private readonly IEnumerable<ICalendarProviderClient> _providerClients;
     private readonly IConfigManager _config;
+    private readonly IEntitlementService _entitlements;
 
     public CalendarIntegrationService(
         ICalendarIntegrationRepository calendars, IClientRepository clients, IUnitOfWork unitOfWork, ICalendarSyncNotifier notifier, INotificationService notifications,
-        IEnumerable<ICalendarProviderClient> providerClients, IConfigManager config)
+        IEnumerable<ICalendarProviderClient> providerClients, IConfigManager config, IEntitlementService entitlements)
     {
+        _entitlements = entitlements;
         _config = config;
         _calendars = calendars;
         _clients = clients;
@@ -58,9 +62,15 @@ public class CalendarIntegrationService : ICalendarIntegrationService
             .ToList();
     }
 
+    /// <summary>Calendar sync belongs to the plan's bookings feature: connecting, choosing a calendar and turning sync on
+    /// need it (EntitlementDeniedException, 422); listing and disconnecting don't.</summary>
+    private Task EnsureBookingsIncludedAsync(Guid clientId, CancellationToken ct) =>
+        _entitlements.EnsureFeatureAsync(clientId, EntitlementKeys.Bookings, ct);
+
     public async Task<CalendarIntegrationResponse> RequestConnectAsync(Guid clientId, string provider, CancellationToken ct = default)
     {
         EnsureKnownProvider(provider);
+        await EnsureBookingsIncludedAsync(clientId, ct);
         var row = await GetOrCreateAsync(clientId, provider, ct);
 
         row.Status = CalendarIntegrationStatus.Pending;
@@ -122,6 +132,7 @@ public class CalendarIntegrationService : ICalendarIntegrationService
     public async Task RequestRefreshCalendarsAsync(Guid clientId, string provider, CancellationToken ct = default)
     {
         EnsureKnownProvider(provider);
+        await EnsureBookingsIncludedAsync(clientId, ct);
         var row = await _calendars.GetWithCalendarsAsync(clientId, provider, ct);
         if (row is null || row.Status != CalendarIntegrationStatus.Connected)
         {
@@ -165,6 +176,7 @@ public class CalendarIntegrationService : ICalendarIntegrationService
         Guid clientId, string provider, string externalCalendarId, CancellationToken ct = default)
     {
         EnsureKnownProvider(provider);
+        await EnsureBookingsIncludedAsync(clientId, ct);
         var row = await _calendars.GetWithCalendarsAsync(clientId, provider, ct);
         if (row is null) throw new ArgumentException("calendars.errors.notConnected").WithArgs(ProviderLabel(provider));
 
@@ -185,6 +197,7 @@ public class CalendarIntegrationService : ICalendarIntegrationService
     public async Task<CalendarIntegrationResponse> SetSyncEnabledAsync(Guid clientId, string provider, bool enabled, CancellationToken ct = default)
     {
         EnsureKnownProvider(provider);
+        if (enabled) await EnsureBookingsIncludedAsync(clientId, ct); // turning sync off is always allowed
         var row = await _calendars.GetWithCalendarsAsync(clientId, provider, ct);
         if (row is null) throw new ArgumentException("calendars.errors.notConnected").WithArgs(ProviderLabel(provider));
         if (enabled && string.IsNullOrWhiteSpace(row.SelectedCalendarId))
@@ -280,6 +293,8 @@ public class CalendarIntegrationService : ICalendarIntegrationService
                 _ => null // status_changed (attended/no_show/confirmed) — not synced
             };
             if (syncOp is null) return;
+            // A plan without bookings pushes nothing to external calendars (its booking changes are refused anyway).
+            if (!(await _entitlements.GetAsync(clientId, ct)).CanUseBookings) return;
 
             var integrations = await _calendars.ListSyncTargetsAsync(clientId, ct);
             if (integrations.Count == 0) return;

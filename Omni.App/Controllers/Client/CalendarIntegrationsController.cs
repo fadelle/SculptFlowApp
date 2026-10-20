@@ -4,6 +4,7 @@ using Omni.App.Business.Contracts.Services.Calendars;
 using Omni.App.Entities.Requests.Calendars;
 using Omni.App.Entities.Responses.Calendars;
 using Omni.App.Controllers.Filters;
+using Omni.App.Common.Statics;
 
 namespace Omni.App.Controllers.Client;
 
@@ -14,6 +15,7 @@ namespace Omni.App.Controllers.Client;
 /// controller at all (it uses its own OnPost* handlers), but it's kept as the API surface for the feature.</summary>
 [ApiController]
 [Route("api/calendar-integrations")]
+[RequireFeature(EntitlementKeys.Bookings)]
 public class CalendarIntegrationsController : DashboardApiController
 {
     private readonly ICalendarIntegrationService _calendar;

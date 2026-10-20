@@ -45,12 +45,13 @@ public class BookingServiceTests
 
     private readonly Mock<ICampaignRepository> _campaignRepo = new();
     private readonly Mock<IConfigManager> _config = new();
+    private readonly Mock<IEntitlementService> _entitlements = new();
 
     private readonly Mock<IBusinessTypeService> _businessTypes = PipelineKit.Types();
 
     private BookingService Sut() => new(_bookings.Object, _contacts.Object, _clients.Object, _serviceRows.Object, _uow.Object,
         _events.Object, _services.Object, _availability.Object, _notifier.Object, _notifications.Object, _calendar.Object,
-        _campaignRepo.Object, _config.Object, _businessTypes.Object, TextKit.Localizer());
+        _campaignRepo.Object, _config.Object, _businessTypes.Object, TextKit.Localizer(), _entitlements.Object);
 
     [Fact]
     public async Task A_booking_is_credited_to_the_campaign_the_contact_replied_to()

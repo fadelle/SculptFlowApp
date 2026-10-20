@@ -6,6 +6,7 @@ using Omni.App.Business.Contracts.HttpClients.Calendars;
 using Omni.App.Business.Contracts.Managers;
 using Omni.App.Business.Contracts.Services.Calendars;
 using Omni.App.Common.Enums;
+using Omni.App.Common.Exceptions;
 using Microsoft.Extensions.Localization;
 using Omni.App.Common.Helpers;
 
@@ -70,6 +71,11 @@ public class CalendarOAuthController : Controller
 
             await _calendar.RequestConnectAsync(clientId.Value, provider, ct);
             return Redirect(authorizationUrl);
+        }
+        catch (EntitlementDeniedException ex)
+        {
+            // The plan has no bookings (calendar sync is part of them): say so, instead of the "not set up" message below.
+            return RedirectWithError(_text.Localize(ex));
         }
         catch (InvalidOperationException ex)
         {

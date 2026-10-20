@@ -272,6 +272,34 @@ public class ConversationServiceTests
     }
 
     [Theory]
+    [InlineData(UsageFailureReason.InsufficientFunds, "Ann Lee needs your team's attention: the AI assistant didn't reply because your plan's credit and wallet can't cover it. See Settings → Billing.")]
+    [InlineData(UsageFailureReason.RateNotFound, "Ann Lee needs your team's attention: the AI assistant didn't reply because AI replies aren't priced for your account yet. Please contact support.")]
+    public async Task An_unpaid_ai_reply_hands_the_conversation_to_the_team(string reason, string message)
+    {
+        _businessTypes.Use(PipelineKit.Custom());
+        var c = Conv();
+        var contact = new Contact { Id = _contactId, StageKey = "in_touch" };
+        _contacts.Setup(l => l.GetByIdAsync(_contactId, It.IsAny<CancellationToken>())).ReturnsAsync(contact);
+        _contacts.Setup(l => l.GetFullNameAsync(_contactId, It.IsAny<CancellationToken>())).ReturnsAsync("Ann Lee");
+
+        var result = await Sut().HandOverUnpaidAiReplyAsync(_clientId, c.Id, reason);
+
+        Assert.Equal(ConversationMode.Human, result!.Mode);
+        Assert.Equal(ConversationMode.Human, c.Mode);
+        Assert.Equal("team", contact.StageKey); // needs-human stage, like the AI's own handoff
+        _events.Verify(e => e.Log(_clientId, EventTypes.HumanHandoff, null, c.Id, null, MessageOrigin.System, $"{{\"reason\":\"ai_reply_{reason}\"}}"), Times.Once);
+        _notifications.Verify(n => n.CreateAsync(_clientId, NotificationType.Handoff, It.Is<NotificationText>(t => TextKit.Reads(t, "AI handed off to your team", message)),
+            _contactId, c.Id, null, null, $"/inbox?conversationId={c.Id}", It.IsAny<CancellationToken>()), Times.Once);
+        _notifier.Verify(n => n.ConversationModeChangedAsync(_clientId, c.Id, ConversationMode.Human, It.IsAny<CancellationToken>()), Times.Once);
+
+        // A second refusal on the (now human) conversation doesn't notify again.
+        _conversations.Setup(r => r.IsInHumanModeAsync(_clientId, c.Id, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        await Sut().HandOverUnpaidAiReplyAsync(_clientId, c.Id, reason);
+        _notifications.Verify(n => n.CreateAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<NotificationText>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
+        Assert.Null(await Sut().HandOverUnpaidAiReplyAsync(_clientId, Guid.NewGuid(), reason));
+    }
+
+    [Theory]
     [InlineData("in_touch", "team")]
     [InlineData("expert", "expert")]   // already in a needs-human stage: stays there
     public async Task The_ai_handoff_moves_the_contact_to_the_needs_human_stage(string from, string expected)

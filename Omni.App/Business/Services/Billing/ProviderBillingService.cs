@@ -28,6 +28,7 @@ public class ProviderBillingService : IProviderBillingService
         ["rcs"] = ProviderBillingResponsibility.PlatformFunded,
         ["email"] = ProviderBillingResponsibility.PlatformFunded,
         ["voice"] = ProviderBillingResponsibility.PlatformFunded,
+        ["ai"] = ProviderBillingResponsibility.PlatformFunded, // ai_reply: Omni pays the AI provider and charges the client
         ["telegram"] = ProviderBillingResponsibility.NoProviderUsageFee,
         ["facebook"] = ProviderBillingResponsibility.NoProviderUsageFee,
         ["messenger"] = ProviderBillingResponsibility.NoProviderUsageFee,

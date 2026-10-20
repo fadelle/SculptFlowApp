@@ -9,6 +9,8 @@ namespace Omni.App.Common.Statics;
 public static class EntitlementKeys
 {
     public const string Campaigns = "campaigns";
+    /// <summary>Bookings: the Bookings pages and API, the AI's availability/booking tools and calendar sync.</summary>
+    public const string Bookings = "bookings";
     /// <summary>Automation: the AI assistant answers conversations (n8n trigger).</summary>
     public const string AiAssistant = "ai_assistant";
     public const string ApiAccess = "api_access";

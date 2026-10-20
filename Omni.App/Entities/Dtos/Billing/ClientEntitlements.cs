@@ -43,6 +43,7 @@ public sealed class ClientEntitlements
 
     public bool CanSendMessages => !BillingEnabled || HasAccess;
     public bool CanUseCampaigns => IsEnabled(EntitlementKeys.Campaigns);
+    public bool CanUseBookings => IsEnabled(EntitlementKeys.Bookings);
     public bool CanUseAiAssistant => IsEnabled(EntitlementKeys.AiAssistant);
     public bool CanUseApi => IsEnabled(EntitlementKeys.ApiAccess);
     public bool CanUseAdvancedReporting => IsEnabled(EntitlementKeys.AdvancedReporting);

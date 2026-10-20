@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.Extensions.Localization;
 using Omni.App.Business.Contracts.Managers;
+using Omni.App.Business.Contracts.Services.Billing;
 using Omni.App.Business.Contracts.Services.Bookings;
 using Omni.App.Common.Enums;
 using Omni.App.Common.Helpers;
@@ -25,9 +26,12 @@ public class BookingDetailModel : PageModel
     private readonly ICurrentClientContext _clientContext;
     private readonly IBookingService _bookings;
     private readonly IStringLocalizer _text;
+    private readonly IEntitlementService _entitlements;
 
-    public BookingDetailModel(ICurrentClientContext clientContext, IBookingService bookings, IStringLocalizer text)
+    public BookingDetailModel(ICurrentClientContext clientContext, IBookingService bookings, IStringLocalizer text,
+        IEntitlementService entitlements)
     {
+        _entitlements = entitlements;
         _clientContext = clientContext;
         _bookings = bookings;
         _text = text;
@@ -37,6 +41,9 @@ public class BookingDetailModel : PageModel
     public Guid Id { get; set; }
 
     public bool ClientConfigured { get; private set; }
+
+    /// <summary>False when the plan has no bookings: the page shows that instead of the booking (status changes are refused too).</summary>
+    public bool BookingsIncluded { get; private set; } = true;
     public BookingResponse? Booking { get; private set; }
 
     /// <summary>For the "Client time | My time" switch (_TimeViewSwitch); the header time defaults to client time.</summary>
@@ -55,7 +62,7 @@ public class BookingDetailModel : PageModel
     public async Task<IActionResult> OnGetAsync(CancellationToken ct)
     {
         await LoadAsync(ct);
-        if (ClientConfigured && Booking is null) return NotFound();
+        if (ClientConfigured && BookingsIncluded && Booking is null) return NotFound();
         if (Booking is not null) Status = Booking.Status;
         return Page();
     }
@@ -73,7 +80,7 @@ public class BookingDetailModel : PageModel
             StatusMessage = _text[SavedKey].Value;
             return RedirectToPage(new { Id });
         }
-        catch (ArgumentException ex)
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
         {
             ErrorMessage = _text.Localize(ex);
             await LoadAsync(ct);
@@ -92,6 +99,8 @@ public class BookingDetailModel : PageModel
 
         ClientConfigured = true;
         if (!string.IsNullOrWhiteSpace(client.Timezone)) ClientTimezone = client.Timezone;
+        BookingsIncluded = (await _entitlements.GetAsync(client.Id, ct)).CanUseBookings;
+        if (!BookingsIncluded) return;
         Booking = await _bookings.GetByIdAsync(client.Id, Id, ct);
     }
 }

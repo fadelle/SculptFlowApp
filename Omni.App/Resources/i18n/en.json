@@ -713,6 +713,9 @@
   "bookingDetail.title": "{Booking}",
   "bookingDetail.saved": "Saved.",
   "bookingDetail.missing": "This {booking} isn't in your calendar",
+  "bookings.notIncluded.title": "{Bookings} aren't included in your plan",
+  "bookings.notIncluded.text": "Upgrade your plan to manage {bookings}, let the AI assistant book for {contacts} and sync your calendar.",
+  "bookings.notIncluded.action": "See billing",
   "bookingDetail.back": "Back to {Bookings}",
   "bookingDetail.update.title": "Update this {booking}",
   "bookingDetail.backToCalendar": "Back to the calendar",
@@ -1522,6 +1525,7 @@
   "common.errors.overlap": "This overlaps one that already exists.",
 
   "billing.feature.campaigns": "Campaigns",
+  "billing.feature.bookings": "Bookings",
   "billing.feature.aiAssistant": "AI assistant",
   "billing.feature.apiAccess": "API access",
   "billing.feature.advancedReporting": "Advanced reporting",
@@ -1541,6 +1545,7 @@
   "billing.eventType.rcsMessage": "RCS message",
   "billing.eventType.voiceMinute": "Voice minute",
   "billing.eventType.aiToken": "AI token",
+  "billing.eventType.aiReply": "AI reply",
   "billing.eventType.whatsappNumberMonth": "WhatsApp number (monthly)",
   "billing.eventType.agentSeatMonth": "Seat (monthly)",
 
@@ -1580,6 +1585,8 @@
   "notifications.handoff.title": "AI handed off to your team",
   "notifications.handoff.message": "{0} needs your team's attention.",
   "notifications.handoff.messageReason": "{0} needs your team's attention: {1}",
+  "notifications.handoff.messageAiNoBalance": "{0} needs your team's attention: the AI assistant didn't reply because your plan's credit and wallet can't cover it. See Settings → Billing.",
+  "notifications.handoff.messageAiNotPriced": "{0} needs your team's attention: the AI assistant didn't reply because AI replies aren't priced for your account yet. Please contact support.",
 
   "notifications.newContact.title": "New {contact}",
   "notifications.newContact.message": "{0} sent their first message.",

@@ -23,6 +23,7 @@ public class MessageServiceTests
     private readonly Mock<IEntitlementService> _entitlements = new();
     private readonly Mock<IInboxSettingsService> _inboxSettings = new();
     private readonly Mock<IMessageTracer> _tracer = new();
+    private readonly Mock<IConversationService> _conversationService = new();
     private readonly MessageBillingHold _hold = new(Guid.Empty, "key", BillingSettlementTrigger.OnProviderAccepted);
     private readonly Contact _contact;
 
@@ -38,7 +39,8 @@ public class MessageServiceTests
     }
 
     private MessageService Sut() => new(_conversations.Object, _messages.Object, _contacts.Object, _templates.Object, _campaigns.Object, _uow.Object,
-        _whatsApp.Object, [_sender.Object], _notifier.Object, _events.Object, _notifications.Object, _billing.Object, _entitlements.Object, _inboxSettings.Object, _tracer.Object);
+        _whatsApp.Object, [_sender.Object], _notifier.Object, _events.Object, _notifications.Object, _billing.Object, _entitlements.Object, _inboxSettings.Object, _tracer.Object,
+        _conversationService.Object);
 
     private void InboxSettings(bool planIncludesBot, bool reopenedConversations) =>
         _inboxSettings.Setup(a => a.GetAsync(_clientId, It.IsAny<CancellationToken>()))
@@ -649,6 +651,79 @@ public class MessageServiceTests
         await Sut().IngestAsync(Ingest(Conv().Id, IngestEventType.BusinessAppEcho, externalId: "e5"));
         Assert.Contains("member_replied_from_business_app", steps.Single(s => s.Step == TraceSteps.ConversationModeChanged).Detail);
         Assert.DoesNotContain(steps, s => s.Step == TraceSteps.BotSkipped); // not a customer message
+    }
+
+    // ---------------------------------------------------------------- AI reply billing (ai_reply)
+
+    private readonly MessageBillingHold _aiHold = new(Guid.Empty, "ai:reply:x", BillingSettlementTrigger.OnProviderAccepted);
+
+    [Fact]
+    public async Task AiReply_reserves_ai_reply_before_sending_and_settles_both_after()
+    {
+        var c = Conv();
+        var order = new List<string>();
+        Guid? reservedFor = null;
+        _billing.Setup(b => b.ReserveAiReplyAsync(_clientId, c.Id, It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .Callback<Guid, Guid, Guid, CancellationToken>((_, _, id, _) => { reservedFor = id; order.Add("ai_reply"); }).ReturnsAsync(_aiHold);
+        _billing.Setup(b => b.ReserveOutboundAsync(It.IsAny<OutboundMessageBillingContext>(), It.IsAny<CancellationToken>()))
+            .Callback(() => order.Add("channel")).ReturnsAsync(_hold);
+        _sender.Setup(s => s.SendTextAsync(It.IsAny<Conversation>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Callback(() => order.Add("send")).ReturnsAsync("wamid.sent");
+
+        var sent = await Sut().SendAiReplyAsync(_clientId, c.Id, "Sure");
+
+        Assert.Equal(["ai_reply", "channel", "send"], order);
+        Assert.Equal(sent!.Id, reservedFor); // keyed on the message id it is saved under
+        _billing.Verify(b => b.SentAsync(_aiHold, It.IsAny<CancellationToken>()), Times.Once);
+        _billing.Verify(b => b.SentAsync(_hold, It.IsAny<CancellationToken>()), Times.Once);
+        _conversationService.Verify(s => s.HandOverUnpaidAiReplyAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Theory]
+    [InlineData(UsageFailureReason.InsufficientFunds)]
+    [InlineData(UsageFailureReason.RateNotFound)]
+    public async Task An_ai_reply_the_client_cant_pay_is_not_sent_and_goes_to_the_team(string reason)
+    {
+        var c = Conv();
+        var steps = RecordSteps();
+        _billing.Setup(b => b.ReserveAiReplyAsync(_clientId, c.Id, It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ThrowsAsync(BillingDeniedException.For(reason));
+
+        var ex = await Assert.ThrowsAsync<AiReplyRefusedException>(() => Sut().SendAiReplyAsync(_clientId, c.Id, "hi"));
+
+        Assert.Equal(reason, ex.Reason);
+        _conversationService.Verify(s => s.HandOverUnpaidAiReplyAsync(_clientId, c.Id, reason, It.IsAny<CancellationToken>()), Times.Once);
+        _sender.Verify(s => s.SendTextAsync(It.IsAny<Conversation>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        _billing.Verify(b => b.ReserveOutboundAsync(It.IsAny<OutboundMessageBillingContext>(), It.IsAny<CancellationToken>()), Times.Never);
+        _messages.Verify(m => m.Add(It.IsAny<Message>()), Times.Never);
+        var blocked = steps.Single(s => s.Step == TraceSteps.SendBlocked);
+        Assert.Contains(reason, blocked.Detail);
+        Assert.Contains("ai_reply_" + reason, steps.Single(s => s.Step == TraceSteps.ConversationModeChanged).Detail);
+    }
+
+    [Fact]
+    public async Task A_failed_ai_send_or_channel_refusal_returns_the_ai_reply_hold()
+    {
+        var c = Conv();
+        _billing.Setup(b => b.ReserveAiReplyAsync(_clientId, c.Id, It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync(_aiHold);
+        _sender.Setup(s => s.SendTextAsync(It.IsAny<Conversation>(), It.IsAny<string>(), It.IsAny<CancellationToken>())).ThrowsAsync(new ChannelSendException("x"));
+        await Assert.ThrowsAsync<ChannelSendException>(() => Sut().SendAiReplyAsync(_clientId, c.Id, "hi"));
+        _billing.Verify(b => b.SendFailedAsync(_aiHold, It.IsAny<CancellationToken>()), Times.Once);
+        _billing.Verify(b => b.SendFailedAsync(_hold, It.IsAny<CancellationToken>()), Times.Once);
+
+        // The channel's own message usage refused (e.g. an empty wallet for a paid channel): the ai_reply hold goes back too.
+        _billing.Setup(b => b.ReserveOutboundAsync(It.IsAny<OutboundMessageBillingContext>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(BillingDeniedException.For(UsageFailureReason.InsufficientFunds));
+        await Assert.ThrowsAsync<BillingDeniedException>(() => Sut().SendAiReplyAsync(_clientId, c.Id, "hi"));
+        _billing.Verify(b => b.SendFailedAsync(_aiHold, It.IsAny<CancellationToken>()), Times.Exactly(2));
+        _billing.Verify(b => b.SentAsync(It.IsAny<MessageBillingHold?>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task A_member_send_never_reserves_an_ai_reply()
+    {
+        var c = Conv();
+        await Sut().SendAsync(_clientId, c.Id, new SendMessageRequest("hello"));
+        _billing.Verify(b => b.ReserveAiReplyAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]

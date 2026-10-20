@@ -9,6 +9,10 @@
 {
     <partial name="_NoClient" />
 }
+else if (!Model.BookingsIncluded)
+{
+    <partial name="_BookingsNotIncluded" />
+}
 else
 {
     @* Everything below is driven by wwwroot/js/bookings-calendar.js through the cal-* ids; only the static controls

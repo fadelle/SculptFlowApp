@@ -1,0 +1,6 @@
+@* The Bookings pages and Settings → Calendar Integrations when the client's plan has no bookings (EntitlementKeys.Bookings). *@
+@{
+    var notIncluded = new EmptyStateModel(Icon: "event_busy", Title: T["bookings.notIncluded.title"].Value, Text: T["bookings.notIncluded.text"].Value,
+        ActionLabel: T["bookings.notIncluded.action"].Value, ActionHref: "/settings/billing", ActionIcon: "credit_card");
+}
+<div class="au-panel au-panel--round"><partial name="_EmptyState" model="notIncluded" /></div>

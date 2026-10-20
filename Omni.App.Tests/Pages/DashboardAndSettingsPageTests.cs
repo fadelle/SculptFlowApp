@@ -162,13 +162,13 @@ public class SimpleListPageTests
     [Fact]
     public async Task Bookings_page_only_needs_the_client()
     {
-        var bookings = new Omni.App.Pages.Dashboard.BookingsModel(ClientContext(SomeClient(timezone: "Asia/Beirut")).Object).Attach();
+        var bookings = new Omni.App.Pages.Dashboard.BookingsModel(ClientContext(SomeClient(timezone: "Asia/Beirut")).Object, EntitlementKit.All().Object).Attach();
         await bookings.OnGetAsync(default);
         Assert.Equal(("Asia/Beirut", true), (bookings.ClientTimezone, bookings.ClientConfigured));
-        var blankZone = new Omni.App.Pages.Dashboard.BookingsModel(ClientContext(SomeClient(timezone: " ")).Object).Attach();
+        var blankZone = new Omni.App.Pages.Dashboard.BookingsModel(ClientContext(SomeClient(timezone: " ")).Object, EntitlementKit.All().Object).Attach();
         await blankZone.OnGetAsync(default);
         Assert.Equal("UTC", blankZone.ClientTimezone);
-        var none = new Omni.App.Pages.Dashboard.BookingsModel(ClientContext(null).Object).Attach();
+        var none = new Omni.App.Pages.Dashboard.BookingsModel(ClientContext(null).Object, EntitlementKit.All().Object).Attach();
         await none.OnGetAsync(default);
         Assert.False(none.ClientConfigured);
     }
@@ -435,17 +435,17 @@ public class DashboardPageTests
         var id = Guid.NewGuid();
         var bookings = new Mock<IBookingService>();
         bookings.Setup(a => a.GetByIdAsync(Glow.Id, id, It.IsAny<CancellationToken>())).ReturnsAsync(Blank<BookingResponse>() with { Status = BookingStatus.Confirmed });
-        var model = new Omni.App.Pages.Dashboard.BookingDetailModel(ClientContext(SomeClient(timezone: "Asia/Beirut")).Object, bookings.Object, TextKit.Localizer()) { Id = id }.Attach();
+        var model = new Omni.App.Pages.Dashboard.BookingDetailModel(ClientContext(SomeClient(timezone: "Asia/Beirut")).Object, bookings.Object, TextKit.Localizer(), EntitlementKit.All().Object) { Id = id }.Attach();
         // the mock is keyed to Glow; use a client context returning the same client instead
         var client = SomeClient(timezone: "Asia/Beirut");
         bookings.Setup(a => a.GetByIdAsync(client.Id, id, It.IsAny<CancellationToken>())).ReturnsAsync(Blank<BookingResponse>() with { Status = BookingStatus.Confirmed });
-        model = new Omni.App.Pages.Dashboard.BookingDetailModel(ClientContext(client).Object, bookings.Object, TextKit.Localizer()) { Id = id }.Attach();
+        model = new Omni.App.Pages.Dashboard.BookingDetailModel(ClientContext(client).Object, bookings.Object, TextKit.Localizer(), EntitlementKit.All().Object) { Id = id }.Attach();
         Assert.IsType<PageResult>(await model.OnGetAsync(default));
         Assert.Equal((BookingStatus.Confirmed, "Asia/Beirut"), (model.Status, model.ClientTimezone));
 
-        var missing = new Omni.App.Pages.Dashboard.BookingDetailModel(ClientContext(client).Object, bookings.Object, TextKit.Localizer()) { Id = Guid.NewGuid() }.Attach();
+        var missing = new Omni.App.Pages.Dashboard.BookingDetailModel(ClientContext(client).Object, bookings.Object, TextKit.Localizer(), EntitlementKit.All().Object) { Id = Guid.NewGuid() }.Attach();
         Assert.IsType<NotFoundResult>(await missing.OnGetAsync(default));
-        var none = new Omni.App.Pages.Dashboard.BookingDetailModel(ClientContext(null).Object, bookings.Object, TextKit.Localizer()).Attach();
+        var none = new Omni.App.Pages.Dashboard.BookingDetailModel(ClientContext(null).Object, bookings.Object, TextKit.Localizer(), EntitlementKit.All().Object).Attach();
         Assert.IsType<PageResult>(await none.OnGetAsync(default));
     }
 
@@ -455,7 +455,7 @@ public class DashboardPageTests
         var id = Guid.NewGuid();
         var client = SomeClient();
         var bookings = new Mock<IBookingService>();
-        var model = new Omni.App.Pages.Dashboard.BookingDetailModel(ClientContext(client).Object, bookings.Object, TextKit.Localizer()) { Id = id, Status = "attended" }.Attach();
+        var model = new Omni.App.Pages.Dashboard.BookingDetailModel(ClientContext(client).Object, bookings.Object, TextKit.Localizer(), EntitlementKit.All().Object) { Id = id, Status = "attended" }.Attach();
 
         Assert.IsType<NotFoundResult>(await model.OnPostAsync(default));
         bookings.Setup(a => a.UpdateStatusAsync(client.Id, id, "attended", It.IsAny<CancellationToken>())).ReturnsAsync(Blank<BookingResponse>());
@@ -466,7 +466,7 @@ public class DashboardPageTests
         Assert.IsType<PageResult>(await model.OnPostAsync(default));
         Assert.Equal("Bad status.", model.ErrorMessage);
 
-        var none = new Omni.App.Pages.Dashboard.BookingDetailModel(ClientContext(null).Object, bookings.Object, TextKit.Localizer()).Attach();
+        var none = new Omni.App.Pages.Dashboard.BookingDetailModel(ClientContext(null).Object, bookings.Object, TextKit.Localizer(), EntitlementKit.All().Object).Attach();
         Assert.IsType<RedirectToPageResult>(await none.OnPostAsync(default));
     }
 }

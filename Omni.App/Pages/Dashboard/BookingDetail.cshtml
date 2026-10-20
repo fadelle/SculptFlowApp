@@ -8,6 +8,10 @@
 {
     <partial name="_NoClient" />
 }
+else if (!Model.BookingsIncluded)
+{
+    <partial name="_BookingsNotIncluded" />
+}
 else if (Model.Booking is null)
 {
     var missing = new EmptyStateModel(Icon: "event_busy", Title: T["bookingDetail.missing"].Value,

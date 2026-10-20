@@ -48,13 +48,16 @@ public class MessageService : IMessageService
     private readonly IEntitlementService _entitlements;
     private readonly IInboxSettingsService _inboxSettings;
     private readonly IMessageTracer _tracer;
+    private readonly IConversationService _conversationService;
 
     public MessageService(
         IConversationRepository conversations, IMessageRepository messages, IContactRepository contacts,
         IWhatsAppTemplateRepository templates, ICampaignRepository campaigns, IUnitOfWork unitOfWork, IWhatsAppService whatsApp, IEnumerable<IChannelSender> senders,
         IInboxNotifier notifier, IEventLogger events, INotificationService notifications,
-        IMessageBillingService billing, IEntitlementService entitlements, IInboxSettingsService inboxSettings, IMessageTracer tracer)
+        IMessageBillingService billing, IEntitlementService entitlements, IInboxSettingsService inboxSettings, IMessageTracer tracer,
+        IConversationService conversationService)
     {
+        _conversationService = conversationService;
         _tracer = tracer;
         _inboxSettings = inboxSettings;
         _conversations = conversations;
@@ -229,7 +232,20 @@ public class MessageService : IMessageService
 
         var messageId = Guid.NewGuid();
         _tracer.Step(TraceSteps.SendRequested, TraceOutcomes.Ok, Ids(conversation, messageId), detail: new { kind = "ai" });
-        var billingHold = await PrepareTracedBillingAsync(conversation, messageId, OutboundMessageKind.Text, null, null, ct);
+
+        // The reply itself is charged (ai_reply: included credit, then wallet) before anything is sent. A client that can't
+        // pay gets no AI reply: the refusal is recorded as failed usage and the conversation goes to the team.
+        var aiReplyHold = await ReserveAiReplyAsync(conversation, messageId, ct);
+        MessageBillingHold? billingHold;
+        try
+        {
+            billingHold = await PrepareTracedBillingAsync(conversation, messageId, OutboundMessageKind.Text, null, null, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            await _billing.SendFailedAsync(aiReplyHold, ct);
+            throw;
+        }
 
         string externalMessageId;
         try
@@ -240,6 +256,7 @@ public class MessageService : IMessageService
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             await _billing.SendFailedAsync(billingHold, ct);
+            await _billing.SendFailedAsync(aiReplyHold, ct);
             throw;
         }
 
@@ -281,11 +298,32 @@ public class MessageService : IMessageService
 
         await _unitOfWork.SaveChangesAsync(ct);
         await _billing.SentAsync(billingHold, ct);
+        await _billing.SentAsync(aiReplyHold, ct);
 
         await _notifier.NewMessageAsync(clientId, conversationId, message.Id, conversation.ContactId,
             MessageDirection.Outbound, MessageSenderType.Ai, MessageOrigin.Ai, now, ct);
 
         return InboxMapper.ToResponse(message);
+    }
+
+    /// <summary>The ai_reply reservation of an AI reply. Refused (BillingDeniedException): traced, the conversation is handed
+    /// to the team (IConversationService.HandOverUnpaidAiReplyAsync), and AiReplyRefusedException tells the caller nothing
+    /// was sent.</summary>
+    private async Task<MessageBillingHold?> ReserveAiReplyAsync(Conversation conversation, Guid messageId, CancellationToken ct)
+    {
+        try
+        {
+            return await _billing.ReserveAiReplyAsync(conversation.ClientId, conversation.Id, messageId, ct);
+        }
+        catch (BillingDeniedException ex)
+        {
+            _tracer.Step(TraceSteps.SendBlocked, TraceOutcomes.Failed, Ids(conversation, messageId),
+                detail: new { kind = "ai", billing = BillableEventTypes.AiReply, reason = ex.Reason });
+            await _conversationService.HandOverUnpaidAiReplyAsync(conversation.ClientId, conversation.Id, ex.Reason, ct);
+            _tracer.Step(TraceSteps.ConversationModeChanged, TraceOutcomes.Ok, Ids(conversation),
+                detail: new { mode = ConversationMode.Human, reason = "ai_reply_" + ex.Reason });
+            throw new AiReplyRefusedException(ex.Reason);
+        }
     }
 
     public Task<MessageResponse?> SendTemplateAsync(Guid clientId, Guid conversationId, SendTemplateMessageRequest request, CancellationToken ct = default) =>

@@ -8,6 +8,11 @@
 {
     <partial name="_NoClient" />
 }
+else if (!Model.BookingsIncluded)
+{
+    <partial name="_Messages" model="new PageMessagesModel(Model.StatusMessage, Model.ErrorMessage)" />
+    <partial name="_BookingsNotIncluded" />
+}
 else
 {
     <partial name="_Messages" model="new PageMessagesModel(Model.StatusMessage, Model.ErrorMessage)" />

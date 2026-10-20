@@ -168,6 +168,7 @@ public class AiController : ControllerBase
     /// "yyyy-MM-dd" (default today); `days` (1-14, default 1 when a date is given, else 7) searches that many days from it.
     /// Never computed by the AI. A client that hasn't configured availability returns configured=false and no slots.</summary>
     [HttpGet("bookings/available")]
+    [RequireFeature(EntitlementKeys.Bookings, AiTool = true)]
     public async Task<ActionResult<AvailabilityResponse>> GetAvailableSlots(
         [FromQuery] Guid clientId, [FromQuery] Guid? contactId, [FromQuery] Guid? serviceId, [FromQuery] DateOnly? date,
         [FromQuery] int? days, CancellationToken ct = default)
@@ -201,6 +202,7 @@ public class AiController : ControllerBase
     /// business outcomes; only Success=true with Operation created/rescheduled means the contact's booking changed.
     /// (Replaces book_slot + reschedule_booking, which remain for now but are deprecated.)</summary>
     [HttpPost("bookings/schedule")]
+    [RequireFeature(EntitlementKeys.Bookings, AiTool = true)]
     public async Task<ActionResult<ScheduleBookingResult>> ScheduleBooking(
         [FromQuery] Guid clientId, [FromQuery] Guid contactId, [FromBody] ScheduleBookingRequest request, CancellationToken ct)
     {
@@ -216,6 +218,7 @@ public class AiController : ControllerBase
 
     /// <summary>book_slot — DEPRECATED: use schedule_booking (the backend decides book vs reschedule). Kept working for now.</summary>
     [HttpPost("bookings/book")]
+    [RequireFeature(EntitlementKeys.Bookings, AiTool = true)]
     public async Task<ActionResult<BookSlotResult>> BookSlot(
         [FromQuery] Guid clientId, [FromBody] BookSlotRequest request, CancellationToken ct)
     {
@@ -258,6 +261,7 @@ public class AiController : ControllerBase
     /// wording. Use it before rescheduling/cancelling (to get the booking id) and to answer "what do I have booked?".
     /// contactId is the current conversation's contact, supplied by the workflow — not chosen by the AI.</summary>
     [HttpGet("bookings/upcoming")]
+    [RequireFeature(EntitlementKeys.Bookings, AiTool = true)]
     public async Task<ActionResult<UpcomingBookingsResponse>> GetMyBookings(
         [FromQuery] Guid clientId, [FromQuery] Guid contactId, CancellationToken ct)
     {
@@ -269,6 +273,7 @@ public class AiController : ControllerBase
     /// The new time is checked exactly like a new booking (hours, exceptions, notice, overlaps); 409 slotUnavailable means pick
     /// another time. Always scoped to contactId — the AI can only ever touch the contact it is talking to.</summary>
     [HttpPost("bookings/reschedule")]
+    [RequireFeature(EntitlementKeys.Bookings, AiTool = true)]
     public async Task<ActionResult<BookingResponse>> RescheduleBooking(
         [FromQuery] Guid clientId, [FromQuery] Guid contactId, [FromQuery] Guid? bookingId,
         [FromBody] RescheduleBookingRequest request, CancellationToken ct)
@@ -294,6 +299,7 @@ public class AiController : ControllerBase
     /// Always HTTP 200 for business outcomes; only Success=true means something was canceled. The AI must have the contact's explicit
     /// confirmation before calling it.</summary>
     [HttpPost("bookings/cancel")]
+    [RequireFeature(EntitlementKeys.Bookings, AiTool = true)]
     public async Task<ActionResult<CancelBookingResult>> CancelBooking(
         [FromQuery] Guid clientId, [FromQuery] Guid contactId, [FromQuery] Guid? bookingId,
         [FromBody] CancelBookingRequest request, CancellationToken ct)

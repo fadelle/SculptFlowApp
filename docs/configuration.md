@@ -52,6 +52,7 @@ Generated from `Common/Statics/ConfigDefaults`; keep this table in step when you
 | Billing | Currency | USD | string | The one account currency (ISO 4217, e.g. USD). Balances, plans and rates are stored in it: change it only before any money has moved. |
 | Billing | RateBackdateToleranceMinutes | 5 | int 0–1440 | How far in the past a new rate may start or an old one may end (clock skew allowance). |
 | Billing | RecentTransactions | 15 | int 1–100 | How many recent wallet transactions a client's billing page shows. |
+| Billing | ChargeAiReplies | true | bool | Charge each AI assistant reply as `ai_reply` usage (included credit first, then wallet). Needs an `ai_reply` rate; a client that can't pay gets no AI reply and the conversation goes to the team. Off = AI replies are not charged. |
 | Knowledge | MinScore | 0.30 | decimal 0–1 | Minimum similarity for a search result, for new clients (each client can change its own). |
 | Knowledge | ChunkMaxChars | 1000 | int 200–4000 | Chunk size in characters for new clients (stored per client in tokens). |
 | Knowledge | ChunkOverlapChars | 150 | int 0–1000 | Chunk overlap in characters for new clients. |

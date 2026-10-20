@@ -42,6 +42,8 @@ public static class ConfigDefaults
         "How far in the past a new rate may start or an old one may end (clock skew allowance).", 0, 1440);
     public static readonly ConfigDefinition BillingRecentTransactions = new("Billing", "RecentTransactions", "15", ConfigValueType.Int,
         "How many recent wallet transactions a client's billing page shows.", 1, 100);
+    public static readonly ConfigDefinition BillingChargeAiReplies = new("Billing", "ChargeAiReplies", "true", ConfigValueType.Bool,
+        "Charge each AI assistant reply as ai_reply usage (included credit first, then wallet). Needs an ai_reply rate; a client that can't pay gets no AI reply and the conversation goes to the team. Off = AI replies are not charged.");
     public static readonly ConfigDefinition KnowledgeMinScore = new("Knowledge", "MinScore", "0.30", ConfigValueType.Decimal,
         "Minimum similarity for a search result, for new clients (each client can change its own).", 0, 1);
     public static readonly ConfigDefinition KnowledgeChunkMaxChars = new("Knowledge", "ChunkMaxChars", "1000", ConfigValueType.Int,
@@ -194,6 +196,7 @@ public static class ConfigDefaults
         BillingCurrency,
         BillingRateBackdateToleranceMinutes,
         BillingRecentTransactions,
+        BillingChargeAiReplies,
 
         KnowledgeMinScore,
         KnowledgeChunkMaxChars,

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Omni.App.Business.Contracts.Managers;
+using Omni.App.Business.Contracts.Services.Billing;
 using Omni.App.Business.Contracts.Services.Bookings;
 using Omni.App.Business.Contracts.Services.BusinessTypes;
 using Omni.App.Business.Contracts.Services.Calendars;
@@ -45,12 +46,15 @@ public class BookingService : IBookingService
     private readonly IConfigManager _config;
     private readonly IBusinessTypeService _businessTypes;
     private readonly IStringLocalizer _text;
+    private readonly IEntitlementService _entitlements;
 
     public BookingService(
         IBookingRepository bookings, IContactRepository contacts, IClientRepository clients, IServiceRepository serviceRows, IUnitOfWork unitOfWork, IEventLogger events, ICatalogService services, IAvailabilityService availability,
         IInboxNotifier notifier, INotificationService notifications, ICalendarIntegrationService calendarSync,
-        ICampaignRepository campaigns, IConfigManager config, IBusinessTypeService businessTypes, IStringLocalizer text)
+        ICampaignRepository campaigns, IConfigManager config, IBusinessTypeService businessTypes, IStringLocalizer text,
+        IEntitlementService entitlements)
     {
+        _entitlements = entitlements;
         _text = text;
         _campaigns = campaigns;
         _config = config;
@@ -83,8 +87,14 @@ public class BookingService : IBookingService
         }
     }
 
+    /// <summary>Every booking change needs the plan's bookings feature (EntitlementDeniedException, 422, otherwise). Reads are
+    /// gated where they are served (RequireFeature on the APIs, the Bookings pages), so existing data stays readable here.</summary>
+    private Task EnsureBookingsIncludedAsync(Guid clientId, CancellationToken ct) =>
+        _entitlements.EnsureFeatureAsync(clientId, EntitlementKeys.Bookings, ct);
+
     public async Task<BookingResponse> BookAvailableSlotAsync(CreateBookingRequest request, CancellationToken ct = default)
     {
+        await EnsureBookingsIncludedAsync(request.ClientId, ct);
         await using var tx = await _unitOfWork.BeginTransactionAsync(ct);
 
         // Serialize bookings per client until commit: the second of two concurrent attempts waits here, then its check
@@ -147,6 +157,7 @@ public class BookingService : IBookingService
 
     public async Task<BookingResponse> CreateAsync(CreateBookingRequest request, CancellationToken ct = default)
     {
+        await EnsureBookingsIncludedAsync(request.ClientId, ct);
         if (!await _contacts.ExistsAsync(request.ClientId, request.ContactId, ct))
         {
             throw new ArgumentException("contacts.errors.notFound");
@@ -222,6 +233,7 @@ public class BookingService : IBookingService
         {
             throw new ArgumentException("bookings.errors.invalidStatus").WithArgs(status);
         }
+        await EnsureBookingsIncludedAsync(clientId, ct);
 
         var booking = await _bookings.GetAsync(clientId, id, ct);
         if (booking is null) return null;
@@ -255,6 +267,7 @@ public class BookingService : IBookingService
     public async Task<BookingResponse?> RescheduleAsync(
         Guid clientId, Guid contactId, Guid? id, DateTimeOffset newStart, DateTimeOffset? newEnd, string? reason, CancellationToken ct = default)
     {
+        await EnsureBookingsIncludedAsync(clientId, ct);
         await using var tx = await _unitOfWork.BeginTransactionAsync(ct);
         await LockClientAsync(clientId, ct);
 
@@ -299,6 +312,7 @@ public class BookingService : IBookingService
 
     public async Task<BookingResponse?> CancelAsync(Guid clientId, Guid contactId, Guid? id, string? reason, CancellationToken ct = default)
     {
+        await EnsureBookingsIncludedAsync(clientId, ct);
         var targetId = await ResolveTargetAsync(clientId, contactId, id, ct);
         if (targetId is null) return null;
         var booking = await _bookings.GetForContactAsync(clientId, contactId, targetId.Value, ct);
@@ -336,6 +350,7 @@ public class BookingService : IBookingService
 
     public async Task<ScheduleOutcome> ScheduleAsync(Guid clientId, Guid contactId, ScheduleBookingRequest request, CancellationToken ct = default)
     {
+        await EnsureBookingsIncludedAsync(clientId, ct);
         // The current state always comes from the database (never from what the AI remembers). Null = the contact isn't in this client.
         var context = await GetBookingContextAsync(clientId, contactId, ct);
         if (context is null) return new ScheduleOutcome("none", "CONTACT_NOT_FOUND", "Contact not found for this client.");
@@ -452,6 +467,7 @@ public class BookingService : IBookingService
 
     public async Task<CancelOutcome> CancelBookingAsync(Guid clientId, Guid contactId, Guid? id, string? reason, CancellationToken ct = default)
     {
+        await EnsureBookingsIncludedAsync(clientId, ct);
         try
         {
             // Same rule as schedule_booking: no upcoming → nothing to cancel; exactly ONE → the backend selects it and any bookingId

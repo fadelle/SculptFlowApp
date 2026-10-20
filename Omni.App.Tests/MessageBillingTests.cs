@@ -63,6 +63,7 @@ public class MessageBillingTests
     {
         public required BillingHarness H { get; init; }
         public required Guid Client { get; init; }
+        public required string Card { get; init; }
         public required Guid Contact { get; init; }
         public required Guid Conversation { get; init; }
         public required Guid MarketingTemplate { get; init; }
@@ -70,12 +71,15 @@ public class MessageBillingTests
         public required FakeWhatsApp WhatsApp { get; init; }
         public required MessageBillingService MessageBilling { get; init; }
 
+        public Mock<IConversationService> Conversations { get; } = new();
+
         public MessageService NewMessageService(ApplicationDbContext db)
         {
             return new MessageService(new ConversationRepository(db), new MessageRepository(db), new ContactRepository(db),
                 new WhatsAppTemplateRepository(db), new CampaignRepository(db), new UnitOfWork(db), WhatsApp, new IChannelSender[] { new WhatsAppChannelSender(WhatsApp) },
                 NullProxy<IInboxNotifier>.Create(), new EventLogger(new EventLogRepository(db)), NullProxy<INotificationService>.Create(),
-                MessageBilling, H.Entitlements(db), new InboxSettingsService(new InboxSettingsRepository(db), new ClientRepository(db), H.Entitlements(db), new UnitOfWork(db)), Mock.Of<IMessageTracer>());
+                MessageBilling, H.Entitlements(db), new InboxSettingsService(new InboxSettingsRepository(db), new ClientRepository(db), H.Entitlements(db), new UnitOfWork(db)), Mock.Of<IMessageTracer>(),
+                Conversations.Object);
         }
 
         public async Task<MessageResponse> SendTemplateAsync(Guid templateId)
@@ -92,6 +96,12 @@ public class MessageBillingTests
                 ConversationChannel.WhatsApp, null, external, status, null, null));
         }
 
+        public async Task<MessageResponse> SendAiReplyAsync(string text)
+        {
+            await using var db = H.Db();
+            return (await NewMessageService(db).SendAiReplyAsync(Client, Conversation, text))!;
+        }
+
         public async Task<BillingUsageRecord?> UsageForAsync(Guid messageId)
         {
             await using var db = H.Db();
@@ -100,7 +110,7 @@ public class MessageBillingTests
     }
 
     private async Task<Setup> SetupAsync(decimal wallet, bool subscribe = true, bool serviceWindowOpen = false,
-        string? providerBilling = null, bool? omniUsageBilling = null)
+        string? providerBilling = null, bool? omniUsageBilling = null, decimal planCredit = 0m, string mode = ConversationMode.Human)
     {
         var h = new BillingHarness(_db.ConnectionString);
         var client = await h.CreateClientAsync();
@@ -109,7 +119,7 @@ public class MessageBillingTests
         await h.AddRateAsync(card, BillableEventTypes.WhatsAppUtilityMessage, 0.0200m, 0.0150m);
         if (subscribe)
         {
-            var plan = await h.CreatePlanAsync(0m, 0m, new Dictionary<string, string> { [EntitlementKeys.Campaigns] = "true" });
+            var plan = await h.CreatePlanAsync(0m, planCredit, new Dictionary<string, string> { [EntitlementKeys.Campaigns] = "true" });
             await h.Subscriptions.StartAsync(new StartSubscriptionRequest(client, plan, Guid.NewGuid().ToString("N"), true, BillingSource.Admin));
         }
         if (wallet > 0) await h.TopUpAsync(client, wallet);
@@ -118,7 +128,7 @@ public class MessageBillingTests
         var contact = new Contact { Id = Guid.NewGuid(), ClientId = client, FullName = "Test contact", Phone = "9613123456", CreatedAt = now, UpdatedAt = now };
         var conversation = new Conversation
         {
-            Id = Guid.NewGuid(), ClientId = client, ContactId = contact.Id, Channel = ConversationChannel.WhatsApp, Mode = ConversationMode.Human,
+            Id = Guid.NewGuid(), ClientId = client, ContactId = contact.Id, Channel = ConversationChannel.WhatsApp, Mode = mode,
             ServiceWindowExpiresAt = serviceWindowOpen ? now.AddHours(10) : null, LastCustomerMessageAt = serviceWindowOpen ? now : null,
             CreatedAt = now, UpdatedAt = now
         };
@@ -151,7 +161,7 @@ public class MessageBillingTests
 
         return new Setup
         {
-            H = h, Client = client, Contact = contact.Id, Conversation = conversation.Id, MarketingTemplate = marketing.Id,
+            H = h, Client = client, Card = card, Contact = contact.Id, Conversation = conversation.Id, MarketingTemplate = marketing.Id,
             UtilityTemplate = utility.Id, WhatsApp = new FakeWhatsApp(), MessageBilling = messageBilling
         };
     }
@@ -186,6 +196,91 @@ public class MessageBillingTests
         Assert.Equal(0m, account.ReservedAmount);
         Assert.Single((await s.H.LedgerAsync(s.Client)), l => l.EntryType == LedgerEntryType.UsageDebit);
         await s.H.AssertReconciledAsync(s.Client);
+    }
+
+    [PostgresFact]
+    public async Task AiReplies_ArePaidFromIncludedCreditThenWallet_AndRefusedWhenNeitherCovers()
+    {
+        // AI plan: $0.05 of included credit, an ai_reply rate of $0.02 (the client's card here; normally the default card). Free-form WhatsApp replies
+        // inside the service window aren't billed by the channel, so only ai_reply is charged.
+        var s = await SetupAsync(wallet: 0m, serviceWindowOpen: true, planCredit: 0.05m, mode: ConversationMode.Ai);
+        await s.H.AddRateAsync(s.Card, BillableEventTypes.AiReply, 0.02m, 0.004m);
+
+        var first = await s.SendAiReplyAsync("Hello!");
+        var second = await s.SendAiReplyAsync("Anything else?");
+
+        foreach (var message in new[] { first, second })
+        {
+            await using var db = s.H.Db();
+            var usage = await db.BillingUsageRecords.AsNoTracking().SingleAsync(u => u.IdempotencyKey == MessageBillingKeys.AiReply(message.Id));
+            Assert.Equal((ChargeStatus.Settled, BillableEventTypes.AiReply, 0.02m, 0.02m, 0m), (usage.ChargeStatus, usage.EventType, usage.Amount, usage.CreditAmount, usage.WalletAmount));
+            Assert.Equal(message.Id, usage.MessageId);
+        }
+        var account = await s.H.AccountAsync(s.Client);
+        Assert.Equal((0.01m, 0m, 0m), (account.IncludedCreditBalance, account.WalletBalance, account.ReservedAmount));
+
+        // $0.01 of credit left, empty wallet: the third reply is refused, not sent, and the team gets the conversation.
+        var sends = s.WhatsApp.Sends;
+        var ex = await Assert.ThrowsAsync<AiReplyRefusedException>(() => s.SendAiReplyAsync("Third"));
+        Assert.Equal(UsageFailureReason.InsufficientFunds, ex.Reason);
+        Assert.Equal(sends, s.WhatsApp.Sends);
+        s.Conversations.Verify(c => c.HandOverUnpaidAiReplyAsync(s.Client, s.Conversation, UsageFailureReason.InsufficientFunds, It.IsAny<CancellationToken>()), Times.Once);
+        await using (var db = s.H.Db())
+        {
+            var refused = await db.BillingUsageRecords.AsNoTracking()
+                .Where(u => u.ClientId == s.Client && u.EventType == BillableEventTypes.AiReply && u.ChargeStatus == ChargeStatus.Failed).ToListAsync();
+            Assert.Equal(UsageFailureReason.InsufficientFunds, Assert.Single(refused).FailureReason);
+            Assert.Equal(2, await db.Messages.CountAsync(m => m.ConversationId == s.Conversation)); // no row for the refused reply
+        }
+
+        // A top-up pays the next one: credit first, the rest from the wallet.
+        await s.H.TopUpAsync(s.Client, 1m);
+        var fourth = await s.SendAiReplyAsync("Back again");
+        await using (var db = s.H.Db())
+        {
+            var aiUsage = await db.BillingUsageRecords.AsNoTracking().SingleAsync(u => u.IdempotencyKey == MessageBillingKeys.AiReply(fourth.Id));
+            Assert.Equal((0.01m, 0.01m), (aiUsage.CreditAmount, aiUsage.WalletAmount));
+        }
+        account = await s.H.AccountAsync(s.Client);
+        Assert.Equal((0m, 0.99m), (account.IncludedCreditBalance, account.WalletBalance));
+        await s.H.AssertReconciledAsync(s.Client);
+    }
+
+    [PostgresFact]
+    public async Task AnAiReply_WithNoAiReplyRate_IsRefused_AndAFailedSendReturnsTheHold()
+    {
+        var s = await SetupAsync(wallet: 1m, serviceWindowOpen: true, mode: ConversationMode.Ai);
+
+        var ex = await Assert.ThrowsAsync<AiReplyRefusedException>(() => s.SendAiReplyAsync("Hi"));
+        Assert.Equal(UsageFailureReason.RateNotFound, ex.Reason);
+        Assert.Equal(0, s.WhatsApp.Sends);
+        s.Conversations.Verify(c => c.HandOverUnpaidAiReplyAsync(s.Client, s.Conversation, UsageFailureReason.RateNotFound, It.IsAny<CancellationToken>()), Times.Once);
+
+        await s.H.AddRateAsync(s.Card, BillableEventTypes.AiReply, 0.02m);
+        s.WhatsApp.Fail = true;
+        await Assert.ThrowsAnyAsync<Exception>(() => s.SendAiReplyAsync("Hi again"));
+        await using (var db = s.H.Db())
+        {
+            var released = await db.BillingUsageRecords.AsNoTracking()
+                .SingleAsync(u => u.ClientId == s.Client && u.EventType == BillableEventTypes.AiReply && u.ChargeStatus == ChargeStatus.Released);
+            Assert.Equal((0m, 0m), (released.CreditAmount, released.WalletAmount)); // nothing paid
+        }
+        var account = await s.H.AccountAsync(s.Client);
+        Assert.Equal((1m, 0m), (account.WalletBalance, account.ReservedAmount));
+        await s.H.AssertReconciledAsync(s.Client);
+    }
+
+    [PostgresFact]
+    public async Task AiReplies_AreFreeWhileChargeAiRepliesIsOff()
+    {
+        var s = await SetupAsync(wallet: 0m, serviceWindowOpen: true, mode: ConversationMode.Ai);
+        s.H.SetSetting("Billing", "ChargeAiReplies", "false");
+
+        var message = await s.SendAiReplyAsync("Hello");
+
+        Assert.Equal(1, s.WhatsApp.Sends);
+        await using var db = s.H.Db();
+        Assert.False(await db.BillingUsageRecords.AnyAsync(u => u.IdempotencyKey == MessageBillingKeys.AiReply(message.Id)));
     }
 
     [PostgresFact]
