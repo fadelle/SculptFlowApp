@@ -486,13 +486,13 @@ begin
   --     (balances below equal the ledger sums: wallet 151.00, included credit 19.50, reserved 0.50)
   -- ---------------------------------------------------------------
   insert into billing.plans (code, name, description, price, currency, billing_period, included_usage_credit, is_active, sort_order)
-  values ('demo-growth', 'Growth (demo)', 'Demo plan: campaigns, AI assistant and reporting with $25 monthly usage credit.', 99, 'USD', 'month', 25, true, 90)
+  values ('demo-growth', 'Growth (demo)', 'Demo plan: campaigns, bookings, AI assistant and reporting with $25 monthly usage credit.', 99, 'USD', 'month', 25, true, 90)
   on conflict (code) do update set name = excluded.name, description = excluded.description, price = excluded.price,
         included_usage_credit = excluded.included_usage_credit
   returning id into v_plan;
 
   insert into billing.plan_entitlements (plan_id, entitlement_key, value) values
-    (v_plan, 'campaigns', 'true'), (v_plan, 'ai_assistant', 'true'), (v_plan, 'advanced_reporting', 'true'),
+    (v_plan, 'campaigns', 'true'), (v_plan, 'bookings', 'true'), (v_plan, 'ai_assistant', 'true'), (v_plan, 'advanced_reporting', 'true'),
     (v_plan, 'api_access', 'false'), (v_plan, 'max_users', '3'), (v_plan, 'max_whatsapp_numbers', '2'),
     (v_plan, 'max_channel_connections', '6')
   on conflict (plan_id, entitlement_key) do update set value = excluded.value;
@@ -503,7 +503,8 @@ begin
   insert into billing.rates (id, rate_card_id, event_type, provider, provider_billing, unit, provider_cost, client_rate, currency, effective_from, notes, created_by) values
     (pg_temp.did(1201), pg_temp.did(1200), 'whatsapp_marketing_message', null, null, 'message', 0.0250, 0.0500, 'USD', now() - interval '200 days', 'Demo rate', 'seed-demo'),
     (pg_temp.did(1202), pg_temp.did(1200), 'whatsapp_utility_message',   null, null, 'message', 0.0100, 0.0200, 'USD', now() - interval '200 days', 'Demo rate', 'seed-demo'),
-    (pg_temp.did(1203), pg_temp.did(1200), 'whatsapp_service_message',   null, null, 'message', 0.0000, 0.0000, 'USD', now() - interval '200 days', 'Demo rate', 'seed-demo');
+    (pg_temp.did(1203), pg_temp.did(1200), 'whatsapp_service_message',   null, null, 'message', 0.0000, 0.0000, 'USD', now() - interval '200 days', 'Demo rate', 'seed-demo'),
+    (pg_temp.did(1204), pg_temp.did(1200), 'ai_reply',                   null, null, 'reply',   0.0040, 0.0200, 'USD', now() - interval '200 days', 'Demo rate', 'seed-demo');
 
   insert into billing.accounts (id, client_id, currency, wallet_balance, included_credit_balance, reserved_amount)
   values (pg_temp.did(1210), c, 'USD', 151.000000, 19.500000, 0.500000)
