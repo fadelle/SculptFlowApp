@@ -60,6 +60,7 @@
         @if (bookingsIncluded)
         {
             @Row("/settings/calendar-integrations", "event_available", T["nav.calendarIntegrations"].Value, IsActive("/settings/calendar-integrations")) @* icon:event_available *@
+            @Row("/settings/reminders", "schedule", T["nav.reminders"].Value, IsActive("/settings/reminders")) @* icon:schedule *@
         }
         @if (Settings.BillingEnabled)
         {

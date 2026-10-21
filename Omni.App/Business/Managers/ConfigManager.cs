@@ -61,6 +61,11 @@ public class ConfigManager : IConfigManager
     public string OptOutStartKeywords => GetString(ConfigDefaults.OptOutStartKeywords);
     public bool OptOutSendConfirmation => GetBool(ConfigDefaults.OptOutSendConfirmation);
 
+    // ---- Reminders
+    public bool RemindersEnabled => GetBool(ConfigDefaults.RemindersEnabled);
+    public int RemindersIntervalSeconds => GetInt(ConfigDefaults.RemindersIntervalSeconds);
+    public int RemindersBatchSize => GetInt(ConfigDefaults.RemindersBatchSize);
+
     // ---- Knowledge
     public decimal KnowledgeMinScore => GetDecimal(ConfigDefaults.KnowledgeMinScore);
     public int KnowledgeChunkMaxChars => GetInt(ConfigDefaults.KnowledgeChunkMaxChars);

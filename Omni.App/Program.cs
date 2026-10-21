@@ -281,6 +281,9 @@ builder.Services.AddScoped<IAvailabilityService, AvailabilityService>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddScoped<ICalendarIntegrationService, CalendarIntegrationService>();
 builder.Services.AddScoped<IBookingService, BookingService>();
+// Booking reminders (Milestone C): settings per client, BookingReminderWorker sends the due ones.
+builder.Services.AddScoped<IBookingReminderService, BookingReminderService>();
+builder.Services.AddHostedService<BookingReminderWorker>();
 builder.Services.AddScoped<IConversationService, ConversationService>();
 builder.Services.AddScoped<IOrderService, OrderService>();
 builder.Services.AddScoped<IDashboardService, DashboardService>();

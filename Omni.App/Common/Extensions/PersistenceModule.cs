@@ -81,6 +81,7 @@ public static class PersistenceModule
         services.AddScoped<ICampaignAudienceRepository, CampaignAudienceRepository>();
         services.AddScoped<ITikTokIntegrationRepository, TikTokIntegrationRepository>();
         services.AddScoped<IBookingRepository, BookingRepository>();
+        services.AddScoped<IBookingReminderRepository, BookingReminderRepository>();
         services.AddScoped<IAvailabilityRepository, AvailabilityRepository>();
         services.AddScoped<ICalendarIntegrationRepository, CalendarIntegrationRepository>();
         services.AddScoped<IKnowledgeDocumentRepository, KnowledgeDocumentRepository>();

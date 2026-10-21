@@ -50,6 +50,8 @@ public class ApplicationDbContext : IdentityUserContext<AppUser>
     public DbSet<KnowledgeRetrievalBenchmarkGeneration> KnowledgeBenchmarkGenerations => Set<KnowledgeRetrievalBenchmarkGeneration>();
     public DbSet<ClientUser> ClientUsers => Set<ClientUser>();
     public DbSet<AccountToken> AccountTokens => Set<AccountToken>();
+    public DbSet<ReminderSettings> ReminderSettings => Set<ReminderSettings>();
+    public DbSet<BookingReminder> BookingReminders => Set<BookingReminder>();
     public DbSet<AvailabilityRule> AvailabilityRules => Set<AvailabilityRule>();
     public DbSet<BookingSettings> BookingSettings => Set<BookingSettings>();
     public DbSet<InboxSettings> InboxSettings => Set<InboxSettings>();
@@ -799,6 +801,46 @@ public class ApplicationDbContext : IdentityUserContext<AppUser>
             e.HasOne<Client>().WithMany().HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne<AppUser>().WithMany().HasForeignKey(x => x.CreatedByUserId).OnDelete(DeleteBehavior.SetNull);
             e.HasIndex(x => x.TokenHash).IsUnique().HasDatabaseName("ux_account_tokens_token_hash");
+        });
+
+        // ---------------------------------------------------------------
+        // reminder_settings / booking_reminders — booking reminders (BookingReminderWorker).
+        // ---------------------------------------------------------------
+        modelBuilder.Entity<ReminderSettings>(e =>
+        {
+            e.ToTable("reminder_settings", "scheduling");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.ClientId).HasColumnName("client_id");
+            e.Property(x => x.IsEnabled).HasColumnName("is_enabled");
+            e.Property(x => x.FirstHoursBefore).HasColumnName("first_hours_before");
+            e.Property(x => x.SecondHoursBefore).HasColumnName("second_hours_before");
+            e.Property(x => x.TemplatesJson).HasColumnName("templates").HasColumnType("jsonb").IsRequired();
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+            e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
+            e.HasOne<Client>().WithMany().HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(x => x.ClientId).IsUnique();
+        });
+
+        modelBuilder.Entity<BookingReminder>(e =>
+        {
+            e.ToTable("booking_reminders", "scheduling");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.ClientId).HasColumnName("client_id");
+            e.Property(x => x.BookingId).HasColumnName("booking_id");
+            e.Property(x => x.Kind).HasColumnName("kind").HasMaxLength(10).IsRequired();
+            e.Property(x => x.ScheduledStart).HasColumnName("scheduled_start");
+            e.Property(x => x.Status).HasColumnName("status").HasMaxLength(10).IsRequired();
+            e.Property(x => x.Reason).HasColumnName("reason").HasMaxLength(60);
+            e.Property(x => x.Channel).HasColumnName("channel").HasMaxLength(30);
+            e.Property(x => x.MessageId).HasColumnName("message_id");
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+            e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
+            e.HasOne<Client>().WithMany().HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<Booking>().WithMany().HasForeignKey(x => x.BookingId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<Message>().WithMany().HasForeignKey(x => x.MessageId).OnDelete(DeleteBehavior.SetNull);
+            e.HasIndex(x => new { x.BookingId, x.Kind, x.ScheduledStart }).IsUnique().HasDatabaseName("ux_booking_reminders_once");
         });
 
         // ---------------------------------------------------------------

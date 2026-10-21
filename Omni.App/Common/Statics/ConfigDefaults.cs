@@ -202,6 +202,13 @@ public static class ConfigDefaults
     public static readonly ConfigDefinition OptOutSendConfirmation = new("OptOut", "SendConfirmation", "true", ConfigValueType.Bool,
         "Reply once to a stop or start word with a short confirmation in the contact's language (a normal outbound message, billed like any other).");
 
+    public static readonly ConfigDefinition RemindersEnabled = new("Reminders", "Enabled", "true", ConfigValueType.Bool,
+        "Master switch for booking reminders. Off = the reminder worker sends nothing for any client (each client also turns its own reminders on).");
+    public static readonly ConfigDefinition RemindersIntervalSeconds = new("Reminders", "IntervalSeconds", "60", ConfigValueType.Int,
+        "How often the reminder worker looks for due booking reminders.", 15, 3600);
+    public static readonly ConfigDefinition RemindersBatchSize = new("Reminders", "BatchSize", "50", ConfigValueType.Int,
+        "Most reminders of one kind the worker handles for one client per run (the rest wait for the next run).", 1, 500);
+
     public static readonly IReadOnlyList<ConfigDefinition> All =
     [
         AccountsSignupEnabled,
@@ -233,6 +240,10 @@ public static class ConfigDefaults
         OptOutStopKeywords,
         OptOutStartKeywords,
         OptOutSendConfirmation,
+
+        RemindersEnabled,
+        RemindersIntervalSeconds,
+        RemindersBatchSize,
 
         KnowledgeMinScore,
         KnowledgeChunkMaxChars,

@@ -58,4 +58,27 @@ else
             </div>
         </form>
     </section>
+
+    @if (Model.Reminders.Count > 0)
+    {
+        <section class="au-panel au-panel--round au-panel--pad mw-480 mt-3" aria-labelledby="booking-reminders-title">
+            <div class="au-panel__head"><h3 class="au-panel__title" id="booking-reminders-title">@T["bookingDetail.reminders.title"]</h3></div>
+            <dl class="au-detail-rows">
+                @foreach (var r in Model.Reminders)
+                {
+                    <div class="au-detail-row">
+                        <dt>@(r.Kind == ReminderKind.First ? T["bookingDetail.reminders.first"] : T["bookingDetail.reminders.second"])</dt>
+                        <dd>
+                            <span class="badge @(r.Status == ReminderStatus.Sent ? "badge-green" : r.Status == ReminderStatus.Failed ? "badge-red" : "badge-gray")">@T[ReminderText.StatusKey(r.Status)]</span>
+                            @if (!string.IsNullOrEmpty(r.Reason))
+                            {
+                                <div class="cell-sub">@T[ReminderText.ReasonKey(r.Reason)]</div>
+                            }
+                            <div class="cell-sub">@LocalTimeHelper.Time(r.UpdatedAt, "datetime")</div>
+                        </dd>
+                    </div>
+                }
+            </dl>
+        </section>
+    }
 }

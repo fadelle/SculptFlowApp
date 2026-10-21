@@ -183,7 +183,7 @@ public class BookingsEntitlementTests
         Assert.False(calendarPage.BookingsIncluded);
 
         var bookings = new Mock<IBookingService>();
-        var detail = new Omni.App.Pages.Dashboard.BookingDetailModel(ClientContext(client).Object, bookings.Object, TextKit.Localizer(), without.Object) { Id = Guid.NewGuid() }.Attach();
+        var detail = new Omni.App.Pages.Dashboard.BookingDetailModel(ClientContext(client).Object, bookings.Object, TextKit.Localizer(), without.Object, Mock.Of<IBookingReminderService>()) { Id = Guid.NewGuid() }.Attach();
         Assert.IsType<PageResult>(await detail.OnGetAsync(default)); // not a 404: the page explains why
         Assert.False(detail.BookingsIncluded);
         bookings.Verify(b => b.GetByIdAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);

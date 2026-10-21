@@ -27,7 +27,8 @@ public partial class UiTextKeysTests
         new[]
         {
             "terms.", FilterLabelHelper.KeyPrefix, KnowledgeCategory.LabelKeyPrefix,
-            BillingTextHelper.EntitlementKeyPrefix, BillingTextHelper.EventTypeKeyPrefix, BillingTextHelper.LedgerKeyPrefix
+            BillingTextHelper.EntitlementKeyPrefix, BillingTextHelper.EventTypeKeyPrefix, BillingTextHelper.LedgerKeyPrefix,
+            ReminderText.StatusKeyPrefix, ReminderText.ReasonKeyPrefix
         }.Any(prefix => key.StartsWith(prefix, StringComparison.Ordinal));
 
     private static IEnumerable<string> SourceFiles() =>
@@ -101,6 +102,18 @@ public partial class UiTextKeysTests
             .Concat(ConstantsOf(typeof(LedgerEntryType)).Select(v => BillingTextHelper.LedgerKeyPrefix + FilterLabelHelper.KeyPart(v)));
         var missing = values.Where(k => !english.ContainsKey(k)).ToList();
         Assert.True(missing.Count == 0, "Billing values with no label in en.json:\n  " + string.Join("\n  ", missing));
+    }
+
+    [Fact]
+    public void Every_reminder_status_and_reason_has_a_label()
+    {
+        var english = Strings("en");
+        var keys = ConstantsOf(typeof(ReminderStatus)).Select(ReminderText.StatusKey)
+            .Concat(ReminderReason.All.Select(ReminderText.ReasonKey)).ToList();
+        var missing = keys.Where(k => !english.ContainsKey(k)).ToList();
+        Assert.True(missing.Count == 0, "Reminder values with no label in en.json:\n  " + string.Join("\n  ", missing));
+        var stray = english.Keys.Where(k => (k.StartsWith(ReminderText.StatusKeyPrefix) || k.StartsWith(ReminderText.ReasonKeyPrefix)) && !keys.Contains(k)).ToList();
+        Assert.True(stray.Count == 0, "Reminder labels for no value:\n  " + string.Join("\n  ", stray));
     }
 
     private static IEnumerable<string> ConstantsOf(Type type) =>

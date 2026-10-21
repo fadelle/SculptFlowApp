@@ -34,6 +34,12 @@ public interface IMessageService
         Guid clientId, Guid conversationId, Guid whatsAppTemplateId, IReadOnlyList<string> bodyParameters,
         Guid campaignId, Guid campaignRecipientId, CancellationToken ct = default);
 
+    /// <summary>A booking reminder through an approved WhatsApp template (sender and origin "system", shown as a bubble):
+    /// same template rules and billing as an Inbox template, refused for an opted-out contact, but it never changes the
+    /// conversation's mode. Used by IBookingReminderService.</summary>
+    Task<MessageResponse?> SendReminderTemplateAsync(Guid clientId, Guid conversationId, Guid whatsAppTemplateId, IReadOnlyList<string> bodyParameters,
+        CancellationToken ct = default);
+
     Task<IngestMessageResult> IngestAsync(IngestMessageRequest request, CancellationToken ct = default);
 
     /// <summary>The AI assistant's own send path (POST /api/conversations/{id}/messages/send with

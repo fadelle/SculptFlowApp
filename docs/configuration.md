@@ -31,7 +31,7 @@ constant default declared in `Common/Statics/ConfigDefaults`.
 from user-secrets in development and environment variables in production. This covers connection strings, API keys,
 client secrets, public URLs and provider ids. They never go in `config.settings`.
 
-## Declared settings (92)
+## Declared settings (95)
 
 Generated from `Common/Statics/ConfigDefaults`; keep this table in step when you add one.
 
@@ -62,6 +62,9 @@ Generated from `Common/Statics/ConfigDefaults`; keep this table in step when you
 | OptOut | StopKeywords | stop,stopall,unsubscribe,arret,desabonner,desinscrire,توقف,ايقاف,الغاء الاشتراك | string (comma list) | Words that opt a contact out when they are the whole message (case, accents, Arabic diacritics and end punctuation ignored). |
 | OptOut | StartKeywords | start,unstop,subscribe,demarrer,اشتراك | string (comma list) | Words that opt a contact back in when they are the whole message (same matching as StopKeywords). |
 | OptOut | SendConfirmation | true | bool | Reply once to a stop or start word with a short confirmation in the contact's language (a normal outbound message, billed like any other). |
+| Reminders | Enabled | true | bool | Master switch for booking reminders. Off = the reminder worker sends nothing for any client (each client also turns its own reminders on). |
+| Reminders | IntervalSeconds | 60 | int 15–3600 | How often the reminder worker looks for due booking reminders. |
+| Reminders | BatchSize | 50 | int 1–500 | Most reminders of one kind the worker handles for one client per run (the rest wait for the next run). |
 | Knowledge | MinScore | 0.30 | decimal 0–1 | Minimum similarity for a search result, for new clients (each client can change its own). |
 | Knowledge | ChunkMaxChars | 1000 | int 200–4000 | Chunk size in characters for new clients (stored per client in tokens). |
 | Knowledge | ChunkOverlapChars | 150 | int 0–1000 | Chunk overlap in characters for new clients. |

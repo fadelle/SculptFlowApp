@@ -91,6 +91,16 @@ public interface IConfigManager
     /// <summary>Reply to a stop/start word with a confirmation in the contact's language. Default true.</summary>
     bool OptOutSendConfirmation { get; }
 
+    // ---- Reminders
+    /// <summary>Master switch for booking reminders (each client also turns its own on). Default true.</summary>
+    bool RemindersEnabled { get; }
+
+    /// <summary>How often the reminder worker looks for due reminders (seconds). Default 60.</summary>
+    int RemindersIntervalSeconds { get; }
+
+    /// <summary>Most reminders of one kind handled for one client per run. Default 50.</summary>
+    int RemindersBatchSize { get; }
+
     // ---- Knowledge
     /// <summary>Minimum similarity for a search result, for new clients (each client can change its own). Default 0.30.</summary>
     decimal KnowledgeMinScore { get; }

@@ -1,0 +1,75 @@
+@page "/settings/reminders"
+@model Omni.App.Pages.Settings.RemindersModel
+@{
+    ViewData["Title"] = T["nav.reminders"].Value;
+}
+
+@if (!Model.ClientConfigured)
+{
+    <partial name="_NoClient" />
+}
+else if (!Model.BookingsIncluded)
+{
+    <partial name="_BookingsNotIncluded" />
+}
+else
+{
+    <partial name="_Messages" model="new PageMessagesModel(Model.StatusMessage, Model.ErrorMessage)" />
+
+    <div class="au-page-head">
+        <p class="au-page-head__sub mw-640">@T["reminders.intro"]</p>
+    </div>
+
+    <form method="post" class="au-panel au-panel--round integration-form" id="reminders-form">
+        <div class="set-section">
+            <div class="set-section-head"><strong>@T["reminders.when.title"]</strong><div class="cell-sub">@T["reminders.when.help"]</div></div>
+            <div class="set-section-body">
+                <label class="au-check">
+                    <input type="checkbox" class="au-switch" role="switch" name="Enabled" value="true" checked="@Model.Enabled" />
+                    @T["reminders.enabled"]
+                </label>
+                <div class="form-row-contact">
+                    <label class="field">
+                        <span>@T["reminders.firstHours"]</span>
+                        <input type="number" name="FirstHoursBefore" value="@Model.FirstHoursBefore" class="text-input" min="0" max="168" step="1" required dir="ltr" />
+                    </label>
+                    <label class="field">
+                        <span>@T["reminders.secondHours"]</span>
+                        <input type="number" name="SecondHoursBefore" value="@Model.SecondHoursBefore" class="text-input" min="0" max="168" step="1" required dir="ltr" />
+                    </label>
+                </div>
+                <p class="au-help">@T["reminders.hoursHelp"]</p>
+            </div>
+        </div>
+
+        <div class="set-section">
+            <div class="set-section-head"><strong>@T["reminders.templates.title"]</strong><div class="cell-sub">@T["reminders.templates.help"]</div></div>
+            <div class="set-section-body">
+                @if (Model.TemplateOptions.Count == 0)
+                {
+                    <p class="au-help">@T["reminders.templates.none"] <a class="au-link" href="/WhatsApp/Templates">@T["nav.whatsAppTemplates"]</a></p>
+                }
+                <div class="form-row-contact">
+                    @foreach (var language in Model.Languages)
+                    {
+                        var selected = Model.Templates.TryGetValue(language, out var chosen) ? chosen : null;
+                        <label class="field">
+                            <span><bdi lang="@language">@AppLanguage.NativeName(language)</bdi></span>
+                            <select name="Templates[@language]" class="au-select">
+                                <option value="">@T["reminders.templates.noneChosen"]</option>
+                                @foreach (var option in Model.TemplateOptions)
+                                {
+                                    <option value="@option.Id" selected="@(option.Id == selected)">@option.Name (@option.Language)</option>
+                                }
+                            </select>
+                        </label>
+                    }
+                </div>
+                <p class="au-help">@T["reminders.templates.values"]</p>
+                <p class="au-help">@T["reminders.telegram"]</p>
+            </div>
+        </div>
+
+        <div class="au-form-actions"><button type="submit" class="au-btn au-btn--primary">@T["common.saveChanges"]</button></div>
+    </form>
+}

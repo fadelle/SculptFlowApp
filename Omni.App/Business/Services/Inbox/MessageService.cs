@@ -342,6 +342,10 @@ public class MessageService : IMessageService
         SendTemplateCoreAsync(clientId, conversationId, whatsAppTemplateId, bodyParameters,
             MessageOrigin.Campaign, campaignId, campaignRecipientId, ct);
 
+    public Task<MessageResponse?> SendReminderTemplateAsync(Guid clientId, Guid conversationId, Guid whatsAppTemplateId,
+        IReadOnlyList<string> bodyParameters, CancellationToken ct = default) =>
+        SendTemplateCoreAsync(clientId, conversationId, whatsAppTemplateId, bodyParameters, MessageOrigin.System, campaignId: null, campaignRecipientId: null, ct);
+
     private async Task<MessageResponse?> SendTemplateCoreAsync(
         Guid clientId, Guid conversationId, Guid whatsAppTemplateId, IReadOnlyList<string> bodyParameters,
         string origin, Guid? campaignId, Guid? campaignRecipientId, CancellationToken ct)
@@ -375,7 +379,7 @@ public class MessageService : IMessageService
         // Meta may re-categorize an approved template (CurrentCategory, from its webhook); it's billed as what it is now.
         var messageId = Guid.NewGuid();
         _tracer.Step(TraceSteps.SendRequested, TraceOutcomes.Ok, Ids(conversation, messageId),
-            detail: new { kind = origin == MessageOrigin.Campaign ? "campaign" : "template", template = template.Name });
+            detail: new { kind = origin == MessageOrigin.Campaign ? "campaign" : origin == MessageOrigin.System ? "reminder" : "template", template = template.Name });
         var billingHold = await PrepareTracedBillingAsync(conversation, messageId, OutboundMessageKind.Template,
             string.IsNullOrWhiteSpace(template.CurrentCategory) ? template.Category : template.CurrentCategory, campaignId, ct);
 
@@ -400,8 +404,10 @@ public class MessageService : IMessageService
             ConversationId = conversationId,
             ContactId = conversation.ContactId,
             Direction = MessageDirection.Outbound,
-            SenderType = MessageSenderType.Member,
+            // An automatic template (a booking reminder) is Omni's, shown as a bubble (MessageMetadata.Automatic).
+            SenderType = origin == MessageOrigin.System ? MessageSenderType.System : MessageSenderType.Member,
             Origin = origin,
+            MetadataJson = origin == MessageOrigin.System ? MessageMetadata.Automatic : null,
             Channel = ConversationChannel.WhatsApp,
             MessageType = "template",
             Content = RenderTemplatePreview(template.Body, bodyParameters),
@@ -422,8 +428,10 @@ public class MessageService : IMessageService
         conversation.LastMessageDirection = MessageDirection.Outbound;
         conversation.UpdatedAt = now;
 
-        var modeChanged = conversation.Mode != ConversationMode.Human;
-        ConversationModeSync.Apply(conversation, ConversationMode.Human, now);
+        // A member or a campaign reaching out means the team handles the conversation; an automatic reminder doesn't, so the
+        // AI keeps answering a reply to it.
+        var modeChanged = origin != MessageOrigin.System && conversation.Mode != ConversationMode.Human;
+        if (origin != MessageOrigin.System) ConversationModeSync.Apply(conversation, ConversationMode.Human, now);
 
         if (conversation.Contact is not null)
         {
@@ -431,14 +439,19 @@ public class MessageService : IMessageService
             conversation.Contact.UpdatedAt = now;
         }
 
-        var eventType = origin == MessageOrigin.Campaign ? EventTypes.CampaignMessageSent : EventTypes.MemberMessageSentDashboard;
+        var eventType = origin switch
+        {
+            MessageOrigin.Campaign => EventTypes.CampaignMessageSent,
+            MessageOrigin.System => EventTypes.BookingReminderSent,
+            _ => EventTypes.MemberMessageSentDashboard
+        };
         _events.Log(clientId, eventType, contactId: conversation.ContactId, conversationId: conversationId, source: origin);
 
         await _unitOfWork.SaveChangesAsync(ct);
         await _billing.SentAsync(billingHold, ct);
 
         await _notifier.NewMessageAsync(clientId, conversationId, message.Id, conversation.ContactId,
-            MessageDirection.Outbound, MessageSenderType.Member, origin, now, ct);
+            MessageDirection.Outbound, message.SenderType, origin, now, ct);
         if (modeChanged)
         {
             await _notifier.ConversationModeChangedAsync(clientId, conversationId, ConversationMode.Human, ct);

@@ -32,6 +32,8 @@ public static class EventTypes
     public const string MemberMessageSentWhatsAppApp = "member_message_sent_whatsapp_app";
     public const string AiMessageSent = "ai_message_sent";
     public const string CampaignMessageSent = "campaign_message_sent";
+    /// <summary>A booking reminder went out (BookingReminderWorker).</summary>
+    public const string BookingReminderSent = "booking_reminder_sent";
 
     // AI assistant tool surface — see Controllers/Integrations/AiController.cs.
     public const string BookingRescheduled = "booking_rescheduled";

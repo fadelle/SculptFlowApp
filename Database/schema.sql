@@ -1842,6 +1842,49 @@ drop trigger if exists trg_availability_exceptions_updated_at on scheduling.avai
 create trigger trg_availability_exceptions_updated_at before update on scheduling.availability_exceptions
   for each row execute function set_updated_at();
 
+-- ---------------------------------------------------------------------
+-- Booking reminders (Milestone C). reminder_settings: one row per client (no row = reminders off). Two reminders, each
+-- N hours before the booking (0 = off). WhatsApp needs an approved template per language (whatsapp_templates ids by
+-- language code in templates, e.g. {"en": "<uuid>", "ar": "<uuid>"}); Telegram sends text. booking_reminders: what
+-- BookingReminderWorker did for each (booking, reminder, start time): the row is inserted before sending, so two workers
+-- never send the same reminder; a rescheduled booking gets new rows for its new start time.
+-- ---------------------------------------------------------------------
+create table if not exists scheduling.reminder_settings (
+  id                    uuid primary key default gen_random_uuid(),
+  client_id             uuid not null unique references core.clients(id) on delete cascade,
+  is_enabled            boolean not null default false,
+  first_hours_before    integer not null default 24 check (first_hours_before between 0 and 168),
+  second_hours_before   integer not null default 2 check (second_hours_before between 0 and 168),
+  templates             jsonb not null default '{}'::jsonb,
+  created_at            timestamptz not null default now(),
+  updated_at            timestamptz not null default now()
+);
+drop trigger if exists trg_reminder_settings_updated_at on scheduling.reminder_settings;
+create trigger trg_reminder_settings_updated_at before update on scheduling.reminder_settings
+  for each row execute function set_updated_at();
+
+create table if not exists scheduling.booking_reminders (
+  id                uuid primary key default gen_random_uuid(),
+  client_id         uuid not null references core.clients(id) on delete cascade,
+  booking_id        uuid not null references scheduling.bookings(id) on delete cascade,
+  kind              varchar(10) not null,
+  scheduled_start   timestamptz not null,
+  status            varchar(10) not null,
+  reason            varchar(60),
+  channel           varchar(30),
+  message_id        uuid references crm.messages(id) on delete set null,
+  created_at        timestamptz not null default now(),
+  updated_at        timestamptz not null default now(),
+
+  constraint ck_booking_reminders_kind check (kind in ('first','second')),
+  constraint ck_booking_reminders_status check (status in ('sending','sent','skipped','failed'))
+);
+create unique index if not exists ux_booking_reminders_once on scheduling.booking_reminders(booking_id, kind, scheduled_start);
+create index if not exists ix_booking_reminders_client on scheduling.booking_reminders(client_id, created_at);
+drop trigger if exists trg_booking_reminders_updated_at on scheduling.booking_reminders;
+create trigger trg_booking_reminders_updated_at before update on scheduling.booking_reminders
+  for each row execute function set_updated_at();
+
 -- =====================================================================
 -- Notifications — a simple per-client notification center for members (bell/list). Created ONLY from confirmed
 -- backend events (a message actually sent, a booking actually booked...), never from an AI intention alone.

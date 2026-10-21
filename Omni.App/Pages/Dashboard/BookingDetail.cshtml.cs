@@ -1,3 +1,4 @@
+using Omni.App.Entities.Dtos.Bookings;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.Extensions.Localization;
@@ -27,11 +28,13 @@ public class BookingDetailModel : PageModel
     private readonly IBookingService _bookings;
     private readonly IStringLocalizer _text;
     private readonly IEntitlementService _entitlements;
+    private readonly IBookingReminderService _reminders;
 
     public BookingDetailModel(ICurrentClientContext clientContext, IBookingService bookings, IStringLocalizer text,
-        IEntitlementService entitlements)
+        IEntitlementService entitlements, IBookingReminderService reminders)
     {
         _entitlements = entitlements;
+        _reminders = reminders;
         _clientContext = clientContext;
         _bookings = bookings;
         _text = text;
@@ -45,6 +48,9 @@ public class BookingDetailModel : PageModel
     /// <summary>False when the plan has no bookings: the page shows that instead of the booking (status changes are refused too).</summary>
     public bool BookingsIncluded { get; private set; } = true;
     public BookingResponse? Booking { get; private set; }
+
+    /// <summary>What happened to this booking's reminders (sent, skipped and why), newest first.</summary>
+    public IReadOnlyList<BookingReminderRow> Reminders { get; private set; } = [];
 
     /// <summary>For the "Client time | My time" switch (_TimeViewSwitch); the header time defaults to client time.</summary>
     public string ClientTimezone { get; private set; } = "UTC";
@@ -102,5 +108,6 @@ public class BookingDetailModel : PageModel
         BookingsIncluded = (await _entitlements.GetAsync(client.Id, ct)).CanUseBookings;
         if (!BookingsIncluded) return;
         Booking = await _bookings.GetByIdAsync(client.Id, Id, ct);
+        if (Booking is not null) Reminders = await _reminders.ListForBookingAsync(client.Id, Id, ct);
     }
 }
