@@ -1,4 +1,3 @@
-using System.Net;
 using System.Text;
 using Omni.App.Entities.Dtos.Ui;
 
@@ -15,7 +14,7 @@ public static class EmailLayout
         string buttonLabel, string buttonUrl, IReadOnlyList<string>? afterButton = null)
     {
         var align = text.Direction == "rtl" ? "right" : "left"; // rtl-ok: mail clients don't support logical text-align values
-        var e = (string s) => WebUtility.HtmlEncode(s);
+        var e = Encode;
         var html = new StringBuilder();
         html.Append($"<!doctype html><html lang=\"{text.Language}\" dir=\"{text.Direction}\"><head><meta charset=\"utf-8\">");
         html.Append("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">");
@@ -40,4 +39,9 @@ public static class EmailLayout
         plain.AppendLine("--").AppendLine(text["emails.common.footer"]);
         return (html.ToString(), plain.ToString());
     }
+
+    /// <summary>Escapes only what HTML needs (&amp; &lt; &gt; quotes), so accented letters stay readable in the source that
+    /// some mail clients show.</summary>
+    private static string Encode(string text) =>
+        text.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;").Replace("\"", "&quot;").Replace("'", "&#39;");
 }

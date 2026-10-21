@@ -216,6 +216,7 @@ public class MemberAdminServiceTests
     private readonly Mock<IMemberAdminRepository> _repo = new();
     private readonly Mock<IMemberService> _members = new();
     private readonly Mock<IPasswordResetService> _reset = new();
+    private readonly Mock<IInviteService> _invites = new();
     private readonly Mock<UserManager<AppUser>> _users;
     private readonly AppUser _user = new() { Id = "u1", UserName = "a@x.com", Role = UserRole.Member };
     private readonly AppUser _admin = new() { Id = "admin-1", UserName = "ad@x.com", Role = UserRole.Admin };
@@ -237,7 +238,17 @@ public class MemberAdminServiceTests
         _repo.Setup(r => r.ClientOfAsync("u1", It.IsAny<CancellationToken>())).ReturnsAsync(_clientId);
     }
 
-    private MemberAdminService Sut() => new(_repo.Object, _members.Object, _users.Object, _reset.Object);
+    private MemberAdminService Sut() => new(_repo.Object, _members.Object, _users.Object, _reset.Object, _invites.Object);
+
+    [Fact]
+    public async Task Invites_are_listed_and_cancelled_through_the_invite_rules()
+    {
+        var inviteId = Guid.NewGuid();
+        _invites.Setup(i => i.ListAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(new List<InviteResponse>());
+        _invites.Setup(i => i.RevokeAnyAsync(inviteId, It.IsAny<CancellationToken>())).ReturnsAsync(_clientId);
+        Assert.Empty(await Sut().ListInvitesAsync(_clientId, default));
+        Assert.Equal(_clientId, (await Sut().RevokeInviteAsync(inviteId, default)).ClientId);
+    }
 
     [Fact]
     public async Task A_password_reset_email_goes_through_the_reset_service_and_names_the_client()

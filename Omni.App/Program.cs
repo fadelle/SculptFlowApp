@@ -216,6 +216,8 @@ builder.Services.AddScoped(typeof(IStringLocalizer<>), typeof(JsonStringLocalize
 builder.Services.AddScoped<IClientProfileService, ClientProfileService>();
 builder.Services.AddScoped<IInboxSettingsService, InboxSettingsService>();
 builder.Services.AddScoped<IMemberService, MemberService>();
+// Member invites (Milestone C): emailed one-time links in identity.account_tokens; an open invite holds a seat.
+builder.Services.AddScoped<IInviteService, InviteService>();
 // Email (Milestone C): Brevo's transactional API when Brevo:ApiKey is set. Without a key, outside Production the email
 // (link included) is written to the log instead; in Production BrevoEmailProvider then refuses, so nothing is dropped
 // silently. Account emails are worded in the reader's language (IReaderTextFactory).
@@ -402,9 +404,9 @@ builder.Services.AddHttpClient<ICalendarSyncNotifier, CalendarSyncNotifier>();
 // ---------------------------------------------------------------------
 // Web layer
 // ---------------------------------------------------------------------
-// Every Razor Page requires login by default — the sign-in pages (Login, Register, Forgot/Reset password) and the
-// framework's own Error page are the only ones explicitly opened up, since a user obviously can't
-// log in on a page that itself requires being logged in.
+// Every Razor Page requires login by default — the sign-in pages (Login, Register, Forgot/Reset password,
+// AcceptInvite) and the framework's own Error page are the only ones explicitly opened up, since a user obviously
+// can't log in on a page that itself requires being logged in.
 builder.Services.AddRazorPages(options =>
 {
     options.Conventions.AuthorizeFolder("/");
@@ -412,6 +414,7 @@ builder.Services.AddRazorPages(options =>
     options.Conventions.AllowAnonymousToPage("/Account/Register");
     options.Conventions.AllowAnonymousToPage("/Account/ForgotPassword");
     options.Conventions.AllowAnonymousToPage("/Account/ResetPassword");
+    options.Conventions.AllowAnonymousToPage("/Account/AcceptInvite");
     // Authenticated by the short-lived Google external cookie, not yet by an app session (see GoogleAuthController).
     options.Conventions.AllowAnonymousToPage("/Account/CompleteGoogleSignup");
     options.Conventions.AllowAnonymousToPage("/Error");

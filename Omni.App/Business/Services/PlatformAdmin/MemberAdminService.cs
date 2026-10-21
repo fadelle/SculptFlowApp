@@ -6,6 +6,7 @@ using Omni.App.Common.Enums;
 using Omni.App.Entities.Models;
 using Omni.App.Entities.Dtos.PlatformAdmin;
 using Omni.App.Entities.Responses.Billing;
+using Omni.App.Entities.Responses.Members;
 using Omni.App.Persistence.Contracts.PlatformAdmin;
 
 namespace Omni.App.Business.Services.PlatformAdmin;
@@ -16,13 +17,16 @@ public class MemberAdminService : IMemberAdminService
     private readonly IMemberService _members;
     private readonly UserManager<AppUser> _users;
     private readonly IPasswordResetService _passwordReset;
+    private readonly IInviteService _invites;
 
-    public MemberAdminService(IMemberAdminRepository repository, IMemberService members, UserManager<AppUser> users, IPasswordResetService passwordReset)
+    public MemberAdminService(IMemberAdminRepository repository, IMemberService members, UserManager<AppUser> users, IPasswordResetService passwordReset,
+        IInviteService invites)
     {
         _repository = repository;
         _members = members;
         _users = users;
         _passwordReset = passwordReset;
+        _invites = invites;
     }
 
     public Task<PagedResponse<MemberRow>> ListAsync(Guid? clientId, string? search, int page, CancellationToken ct) =>
@@ -74,6 +78,11 @@ public class MemberAdminService : IMemberAdminService
         await _passwordReset.SendForUserAsync(userId, requestBaseUrl, ct);
         return new PlatformAdminChange(await _repository.ClientOfAsync(userId, ct));
     }
+
+    public Task<IReadOnlyList<InviteResponse>> ListInvitesAsync(Guid clientId, CancellationToken ct) => _invites.ListAsync(clientId, ct);
+
+    public async Task<PlatformAdminChange> RevokeInviteAsync(Guid inviteId, CancellationToken ct) =>
+        new(await _invites.RevokeAnyAsync(inviteId, ct));
 
     /// <summary>A client or member user; admins are managed through /api/platform-admin/admins instead.</summary>
     private async Task<AppUser> FindAsync(string userId) =>

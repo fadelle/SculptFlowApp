@@ -12,6 +12,7 @@ public class MemberServiceTests
     private readonly Mock<IUnitOfWorkTransaction> _tx = new();
     private readonly Mock<UserManager<AppUser>> _users = NewUserManager();
     private readonly Mock<IEntitlementService> _entitlements = new();
+    private readonly Mock<IAccountTokenRepository> _tokens = new();
 
     public MemberServiceTests()
     {
@@ -25,14 +26,12 @@ public class MemberServiceTests
 
     /// <summary>A service over these clients only (for read tests elsewhere).</summary>
     internal static MemberService Sut(IClientRepository clients) =>
-        new(clients, Mock.Of<IUnitOfWork>(), NewUserManager().Object, Mock.Of<IEntitlementService>(), TimeProvider.System);
+        new(clients, Mock.Of<IUnitOfWork>(), NewUserManager().Object, Mock.Of<IEntitlementService>(), Mock.Of<IAccountTokenRepository>(), TimeProvider.System);
 
-    private MemberService Sut() => new(_clients.Object, _uow.Object, _users.Object, _entitlements.Object, TimeProvider.System);
+    private MemberService Sut() => new(_clients.Object, _uow.Object, _users.Object, _entitlements.Object, _tokens.Object, TimeProvider.System);
 
     private UserAccess Owner => new("owner", _clientId, UserRole.Client, null, "Olga", null);
     private UserAccess Member => new("m0", _clientId, UserRole.Member, null, "Max", null);
-
-    private static AddMemberRequest Req(string? name = "Ann Lee", string? email = "ann@x.com", string? pw = "Passw0rd") => new(name, email, pw);
 
     [Fact]
     public async Task Anyone_sets_their_own_language_and_only_dashboard_languages_are_accepted()
@@ -55,67 +54,17 @@ public class MemberServiceTests
     [Fact]
     public async Task Only_the_client_role_manages_members()
     {
-        Assert.Equal("members.errors.clientOnly", (await Assert.ThrowsAsync<UnauthorizedAccessException>(() => Sut().AddAsync(Member, Req()))).Message);
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => Sut().SetActiveAsync(Member, "m1", false));
-        _users.Verify(u => u.CreateAsync(It.IsAny<AppUser>(), It.IsAny<string>()), Times.Never);
+        Assert.Equal("members.errors.clientOnly", (await Assert.ThrowsAsync<UnauthorizedAccessException>(() => Sut().SetActiveAsync(Member, "m1", false))).Message);
         _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
 
-    [Theory]
-    [InlineData(" ", "ann@x.com", "Passw0rd", "members.errors.nameRequired")]
-    [InlineData("Ann", "not-an-email", "Passw0rd", "members.errors.emailInvalid")]
-    [InlineData("Ann", "Ann <ann@x.com>", "Passw0rd", "members.errors.emailInvalid")]
-    [InlineData("Ann", "ann@x.com", "", "members.errors.passwordRequired")]
-    public async Task Adding_checks_the_input(string name, string email, string pw, string key)
-    {
-        Assert.Equal(key, (await Assert.ThrowsAsync<ArgumentException>(() => Sut().AddAsync(Owner, Req(name, email, pw)))).Message);
-        await Assert.ThrowsAsync<ArgumentException>(() => Sut().AddAsync(Owner, Req(new string('a', 201))));
-        _users.Verify(u => u.CreateAsync(It.IsAny<AppUser>(), It.IsAny<string>()), Times.Never);
-    }
-
     [Fact]
-    public async Task An_email_that_already_signs_in_is_refused()
+    public async Task Open_invites_hold_seats_when_a_member_is_reactivated()
     {
-        _users.Setup(u => u.FindByNameAsync("ann@x.com")).ReturnsAsync(new AppUser { Role = UserRole.Admin });
-        Assert.Equal("members.errors.emailTaken", (await Assert.ThrowsAsync<ArgumentException>(() => Sut().AddAsync(Owner, Req()))).Message);
-    }
-
-    [Fact]
-    public async Task Adding_beyond_the_seats_is_refused_before_anything_is_created()
-    {
-        _entitlements.Setup(e => e.EnsureWithinLimitAsync(_clientId, EntitlementKeys.MaxUsers, 3, It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new EntitlementDeniedException(EntitlementKeys.MaxUsers, "Your plan allows 2 seats."));
-        await Assert.ThrowsAsync<EntitlementDeniedException>(() => Sut().AddAsync(Owner, Req()));
-        _users.Verify(u => u.CreateAsync(It.IsAny<AppUser>(), It.IsAny<string>()), Times.Never);
-        _uow.Verify(u => u.BeginTransactionAsync(It.IsAny<CancellationToken>()), Times.Never);
-    }
-
-    [Fact]
-    public async Task Adding_creates_a_member_user_and_its_membership_in_one_transaction()
-    {
-        AppUser? created = null;
-        _users.Setup(u => u.CreateAsync(It.IsAny<AppUser>(), "Passw0rd")).Callback<AppUser, string>((u, _) => created = u).ReturnsAsync(IdentityResult.Success);
-        ClientUser? membership = null;
-        _clients.Setup(c => c.AddMembership(It.IsAny<ClientUser>())).Callback<ClientUser>(m => membership = m);
-
-        var added = await Sut().AddAsync(Owner, Req(" Ann Lee ", " ann@x.com "));
-
-        Assert.Equal((UserRole.Member, "Ann Lee", "ann@x.com", "ann@x.com", true), (created!.Role, created.FullName, created.Email, created.UserName, created.IsActive));
-        Assert.Equal((_clientId, created.Id, true), (membership!.ClientId, membership.UserId, membership.IsActive));
-        Assert.Equal((created.Id, UserRole.Member, true), (added.UserId, added.Role, added.IsActive));
-        _entitlements.Verify(e => e.EnsureWithinLimitAsync(_clientId, EntitlementKeys.MaxUsers, 3, It.IsAny<CancellationToken>()), Times.Once);
-        _tx.Verify(t => t.CommitAsync(It.IsAny<CancellationToken>()), Times.Once);
-    }
-
-    [Fact]
-    public async Task A_password_the_rules_refuse_rolls_back()
-    {
-        _users.Setup(u => u.CreateAsync(It.IsAny<AppUser>(), It.IsAny<string>()))
-            .ReturnsAsync(IdentityResult.Failed(new IdentityError { Description = "Passwords must have at least one digit ('0'-'9')." }));
-        Assert.Contains("digit", (await Assert.ThrowsAsync<ArgumentException>(() => Sut().AddAsync(Owner, Req(pw: "weak")))).Message);
-        _tx.Verify(t => t.RollbackAsync(It.IsAny<CancellationToken>()), Times.Once);
-        _uow.Verify(u => u.DiscardChanges(), Times.Once);
-        _clients.Verify(c => c.AddMembership(It.IsAny<ClientUser>()), Times.Never);
+        var m = new ClientUser { Id = Guid.NewGuid(), ClientId = _clientId, UserId = "m1", IsActive = false };
+        _tokens.Setup(t => t.CountOpenInvitesAsync(_clientId, It.IsAny<DateTimeOffset>(), null, It.IsAny<CancellationToken>())).ReturnsAsync(2);
+        await Sut().SetMembershipActiveAsync(m, true);
+        _entitlements.Verify(e => e.EnsureWithinLimitAsync(_clientId, EntitlementKeys.MaxUsers, 5, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

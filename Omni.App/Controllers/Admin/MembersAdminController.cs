@@ -29,6 +29,16 @@ public class MembersAdminController : ControllerBase
     public async Task<IActionResult> List([FromQuery] Guid? clientId, [FromQuery] string? search, [FromQuery] int page, CancellationToken ct) =>
         Ok(await _members.ListAsync(clientId, search, page, ct));
 
+    /// <summary>A client's invites that were neither accepted nor cancelled (expired ones included).</summary>
+    [HttpGet("invites")]
+    public async Task<IActionResult> ListInvites([FromQuery] Guid clientId, CancellationToken ct) =>
+        Ok(await _members.ListInvitesAsync(clientId, ct));
+
+    /// <summary>Cancels an invite (its link stops working, the seat is free). 404 unknown or already accepted.</summary>
+    [HttpDelete("invites/{inviteId:guid}")]
+    public async Task<IActionResult> RevokeInvite(Guid inviteId, CancellationToken ct) =>
+        Ok(await _members.RevokeInviteAsync(inviteId, ct));
+
     [HttpGet("{userId}")]
     public async Task<IActionResult> Get(string userId, CancellationToken ct) =>
         await _members.GetAsync(userId, ct) is { } row ? Ok(row) : NotFound();

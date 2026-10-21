@@ -27,6 +27,13 @@ public class SimpleListPageTests
         return entitlements;
     }
 
+    private static Mock<IInviteService> Invites()
+    {
+        var invites = new Mock<IInviteService>();
+        invites.Setup(s => s.ListAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync(new List<InviteResponse>());
+        return invites;
+    }
+
     private static MemberResponse Person(string id, bool active = true, string role = UserRole.Member) =>
         new(id, "Name " + id, id + "@x.com", role, active, DateTimeOffset.UtcNow, null);
 
@@ -36,13 +43,13 @@ public class SimpleListPageTests
         var members = new Mock<IMemberService>();
         members.Setup(s => s.ListAsync(Glow.Id, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<MemberResponse> { Person("user-1", role: UserRole.Client), Person("m1"), Person("m2", active: false) });
-        var model = new MembersIndex(ClientContext(Glow).Object, members.Object, Seats(5).Object, TextKit.Localizer()).Attach(UserWithId("user-1"));
+        var model = new MembersIndex(ClientContext(Glow).Object, members.Object, Invites().Object, Seats(5).Object, TextKit.Localizer()).Attach(UserWithId("user-1"));
         await model.OnGetAsync(default);
         Assert.True(model.ClientConfigured);
         Assert.Equal(("Glow Client", "user-1", true), (model.ClientName, model.CurrentUserId, model.CanManage));
         Assert.Equal((3, 2, (int?)5), (model.Members.Count, model.SeatsInUse, model.SeatLimit));
 
-        var empty = new MembersIndex(ClientContext(null).Object, members.Object, Seats(null).Object, TextKit.Localizer()).Attach();
+        var empty = new MembersIndex(ClientContext(null).Object, members.Object, Invites().Object, Seats(null).Object, TextKit.Localizer()).Attach();
         await empty.OnGetAsync(default);
         Assert.False(empty.ClientConfigured);
         Assert.Empty(empty.Members);
@@ -53,30 +60,56 @@ public class SimpleListPageTests
     {
         var members = new Mock<IMemberService>();
         members.Setup(s => s.ListAsync(Glow.Id, It.IsAny<CancellationToken>())).ReturnsAsync(new List<MemberResponse> { Person("m1") });
-        var model = new MembersIndex(ClientContext(Glow, UserRole.Member, "m1").Object, members.Object, Seats(null).Object, TextKit.Localizer()).Attach();
+        var model = new MembersIndex(ClientContext(Glow, UserRole.Member, "m1").Object, members.Object, Invites().Object, Seats(null).Object, TextKit.Localizer()).Attach();
         await model.OnGetAsync(default);
         Assert.Equal((false, (int?)null), (model.CanManage, model.SeatLimit));
     }
 
     [Fact]
-    public async Task Adding_a_member_redirects_with_a_message_and_a_refusal_stays_on_the_page()
+    public async Task Inviting_redirects_with_a_message_and_a_refusal_or_email_failure_stays_on_the_page()
     {
         var members = new Mock<IMemberService>();
         members.Setup(s => s.ListAsync(Glow.Id, It.IsAny<CancellationToken>())).ReturnsAsync(new List<MemberResponse>());
-        members.Setup(s => s.AddAsync(It.Is<UserAccess>(a => a.ClientId == Glow.Id), new AddMemberRequest("Ann Lee", "ann@x.com", "Pw-12345"), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Person("ann"));
-        var model = new MembersIndex(ClientContext(Glow).Object, members.Object, Seats(null).Object, TextKit.Localizer())
-            { FullName = "Ann Lee", Email = "ann@x.com", Password = "Pw-12345" }.Attach();
-        Assert.Equal("page:(same)", RedirectTarget(await model.OnPostAddAsync(default)));
-        Assert.Equal("Name ann can sign in now.", model.StatusMessage);
+        var invites = Invites();
+        invites.Setup(s => s.InviteAsync(It.Is<UserAccess>(a => a.ClientId == Glow.Id), new InviteMemberRequest("ann@x.com", "Ann Lee"), "https://omni.test", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new InviteResponse(Guid.NewGuid(), "ann@x.com", "Ann Lee", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddDays(7), false));
+        void Host(Microsoft.AspNetCore.Http.HttpContext h) { h.Request.Scheme = "https"; h.Request.Host = new Microsoft.AspNetCore.Http.HostString("omni.test"); }
+        var model = new MembersIndex(ClientContext(Glow).Object, members.Object, invites.Object, Seats(null).Object, TextKit.Localizer())
+            { FullName = "Ann Lee", Email = "ann@x.com" }.Attach(configure: Host);
+        Assert.Equal("page:(same)", RedirectTarget(await model.OnPostInviteAsync(default)));
+        Assert.Equal("Invite sent to ann@x.com.", model.StatusMessage);
 
-        members.Setup(s => s.AddAsync(It.IsAny<UserAccess>(), It.IsAny<AddMemberRequest>(), It.IsAny<CancellationToken>()))
+        invites.Setup(s => s.InviteAsync(It.IsAny<UserAccess>(), It.IsAny<InviteMemberRequest>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new ArgumentException("members.errors.emailTaken"));
-        var refused = new MembersIndex(ClientContext(Glow).Object, members.Object, Seats(null).Object, TextKit.Localizer())
-            { FullName = "Ann Lee", Email = "ann@x.com", Password = "Pw-12345" }.Attach();
-        Assert.IsType<PageResult>(await refused.OnPostAddAsync(default));
-        Assert.Equal(("Someone already signs in with this email.", null), (refused.ErrorMessage, refused.Password));
-        Assert.Equal("ann@x.com", refused.Email);
+        var refused = new MembersIndex(ClientContext(Glow).Object, members.Object, invites.Object, Seats(null).Object, TextKit.Localizer())
+            { FullName = "Ann Lee", Email = "ann@x.com" }.Attach(configure: Host);
+        Assert.IsType<PageResult>(await refused.OnPostInviteAsync(default));
+        Assert.Equal(("Someone already signs in with this email.", "ann@x.com"), (refused.ErrorMessage, refused.Email));
+
+        invites.Setup(s => s.InviteAsync(It.IsAny<UserAccess>(), It.IsAny<InviteMemberRequest>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new EmailSendException("Brevo said 401"));
+        Assert.IsType<PageResult>(await refused.OnPostInviteAsync(default));
+        Assert.Equal("We couldn't send the email right now. Please try again in a few minutes.", refused.ErrorMessage);
+    }
+
+    [Fact]
+    public async Task Invites_count_as_seats_and_can_be_resent_or_cancelled()
+    {
+        var members = new Mock<IMemberService>();
+        members.Setup(s => s.ListAsync(Glow.Id, It.IsAny<CancellationToken>())).ReturnsAsync(new List<MemberResponse> { Person("user-1", role: UserRole.Client) });
+        var invites = Invites();
+        var open = new InviteResponse(Guid.NewGuid(), "a@x.com", null, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddDays(3), false);
+        var expired = new InviteResponse(Guid.NewGuid(), "b@x.com", null, DateTimeOffset.UtcNow.AddDays(-9), DateTimeOffset.UtcNow.AddDays(-2), true);
+        invites.Setup(s => s.ListAsync(Glow.Id, It.IsAny<CancellationToken>())).ReturnsAsync(new List<InviteResponse> { open, expired });
+        var model = new MembersIndex(ClientContext(Glow).Object, members.Object, invites.Object, Seats(5).Object, TextKit.Localizer()).Attach();
+        await model.OnGetAsync(default);
+        Assert.Equal((2, 2), (model.Invites.Count, model.SeatsInUse));
+
+        Assert.Equal("page:(same)", RedirectTarget(await model.OnPostResendInviteAsync(expired.Id, "b@x.com", default)));
+        Assert.Equal("A new invite link was sent to b@x.com.", model.StatusMessage);
+        Assert.Equal("page:(same)", RedirectTarget(await model.OnPostRevokeInviteAsync(open.Id, "a@x.com", default)));
+        Assert.Equal("The invite to a@x.com was cancelled.", model.StatusMessage);
+        invites.Verify(s => s.RevokeAsync(It.IsAny<UserAccess>(), open.Id, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -84,18 +117,18 @@ public class SimpleListPageTests
     {
         var members = new Mock<IMemberService>();
         members.Setup(s => s.ListAsync(Glow.Id, It.IsAny<CancellationToken>())).ReturnsAsync(new List<MemberResponse>());
-        var model = new MembersIndex(ClientContext(Glow).Object, members.Object, Seats(null).Object, TextKit.Localizer()).Attach();
+        var model = new MembersIndex(ClientContext(Glow).Object, members.Object, Invites().Object, Seats(null).Object, TextKit.Localizer()).Attach();
         Assert.Equal("page:(same)", RedirectTarget(await model.OnPostDeactivateAsync("m1", "Mo", default)));
         Assert.Equal("Mo can't sign in any more.", model.StatusMessage);
         members.Verify(s => s.SetActiveAsync(It.Is<UserAccess>(a => a.Role == UserRole.Client), "m1", false, It.IsAny<CancellationToken>()), Times.Once);
 
         members.Setup(s => s.SetActiveAsync(It.IsAny<UserAccess>(), "m1", true, It.IsAny<CancellationToken>()))
             .ThrowsAsync(new EntitlementDeniedException(EntitlementKeys.MaxUsers, "Your plan allows 2 seats."));
-        var full = new MembersIndex(ClientContext(Glow).Object, members.Object, Seats(2).Object, TextKit.Localizer()).Attach();
+        var full = new MembersIndex(ClientContext(Glow).Object, members.Object, Invites().Object, Seats(2).Object, TextKit.Localizer()).Attach();
         Assert.IsType<PageResult>(await full.OnPostReactivateAsync("m1", "Mo", default));
         Assert.Equal("Your plan allows 2 seats.", full.ErrorMessage);
 
-        var nobody = new MembersIndex(ClientContext(null).Object, members.Object, Seats(null).Object, TextKit.Localizer()).Attach();
+        var nobody = new MembersIndex(ClientContext(null).Object, members.Object, Invites().Object, Seats(null).Object, TextKit.Localizer()).Attach();
         Assert.IsType<ForbidResult>(await nobody.OnPostReactivateAsync("m1", "Mo", default));
     }
 

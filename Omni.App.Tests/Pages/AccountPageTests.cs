@@ -338,4 +338,55 @@ public class AccountPageTests
         Assert.IsType<PageResult>(await model.OnPostAsync(default));
         Assert.False(model.LinkUsable);
     }
+
+    // ---- accept an invite (Milestone C S2) -----------------------------------------------------------------------
+
+    [Fact]
+    public async Task Accept_invite_shows_the_form_for_a_working_link_and_prefills_the_name()
+    {
+        var invites = new Mock<IInviteService>();
+        invites.Setup(i => i.GetLandingAsync("good", It.IsAny<CancellationToken>())).ReturnsAsync(new InviteLanding("Glow", "ann@x.com", "Ann"));
+        var model = new AcceptInviteModel(invites.Object, SignIn().Object, TextKit.Localizer()).Attach();
+
+        model.Token = "good";
+        await model.OnGetAsync(default);
+        Assert.Equal(("Glow", "Ann"), (model.Invite!.ClientName, model.FullName));
+        model.Token = "bad";
+        model.FullName = null;
+        await model.OnGetAsync(default);
+        Assert.Null(model.Invite);
+    }
+
+    [Fact]
+    public async Task Accepting_signs_the_new_member_in_or_explains_what_went_wrong()
+    {
+        var invites = new Mock<IInviteService>();
+        var user = new AppUser { Id = "m9" };
+        invites.Setup(i => i.AcceptAsync("t", "Ann", "Pw-12345", "Pw-12345", It.IsAny<CancellationToken>())).ReturnsAsync(user);
+        invites.Setup(i => i.GetLandingAsync("t", It.IsAny<CancellationToken>())).ReturnsAsync(new InviteLanding("Glow", "ann@x.com", null));
+        var signIn = SignIn();
+        var model = new AcceptInviteModel(invites.Object, signIn.Object, TextKit.Localizer()).Attach();
+        model.Token = "t";
+        model.FullName = "Ann";
+        model.Password = model.ConfirmPassword = "Pw-12345";
+
+        Assert.Equal("/dashboard", RedirectTarget(await model.OnPostAsync(default)));
+        signIn.Verify(s => s.SignInAsync(user, true, null), Times.Once);
+
+        invites.Setup(i => i.AcceptAsync("t", It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new ArgumentException("acceptInvite.errors.nameRequired"));
+        Assert.IsType<PageResult>(await model.OnPostAsync(default));
+        Assert.Equal("Enter your full name.", model.ErrorMessage);
+        Assert.NotNull(model.Invite);
+
+        invites.Setup(i => i.AcceptAsync("t", It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new EntitlementDeniedException(EntitlementKeys.MaxUsers, "Your plan allows 2 seats."));
+        Assert.IsType<PageResult>(await model.OnPostAsync(default));
+        Assert.Equal("Your plan allows 2 seats.", model.ErrorMessage);
+
+        invites.Setup(i => i.AcceptAsync("t", It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("acceptInvite.errors.linkInvalid"));
+        Assert.IsType<PageResult>(await model.OnPostAsync(default));
+        Assert.Null(model.Invite);
+    }
 }

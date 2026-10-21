@@ -196,33 +196,44 @@ public class SmallClientControllerTests : ClientControllerTestBase
     // ---- members-----------------------------------------------------------------------------------------------
 
     [Fact]
-    public async Task Member_list_is_scoped_to_the_client()
+    public async Task Member_and_invite_lists_are_scoped_to_the_client()
     {
         var members = new Mock<IMemberService>();
+        var invites = new Mock<IInviteService>();
         members.Setup(s => s.ListAsync(ClientId, It.IsAny<CancellationToken>())).ReturnsAsync(new List<MemberResponse>());
-        Assert.IsType<OkObjectResult>((await new MembersController(members.Object, Client.Object).With().List(default)).Result);
+        invites.Setup(s => s.ListAsync(ClientId, It.IsAny<CancellationToken>())).ReturnsAsync(new List<InviteResponse>());
+        var sut = new MembersController(members.Object, invites.Object, Client.Object).With();
+        Assert.IsType<OkObjectResult>((await sut.List(default)).Result);
+        Assert.IsType<OkObjectResult>((await sut.ListInvites(default)).Result);
     }
 
     [Fact]
-    public async Task Member_changes_pass_the_callers_access_to_the_rules()
+    public async Task Member_and_invite_changes_pass_the_callers_access_to_the_rules()
     {
         var access = new UserAccess("owner", ClientId, UserRole.Client, null, null, null);
         Client.Setup(c => c.GetAccessAsync(It.IsAny<CancellationToken>())).ReturnsAsync(access);
         var members = new Mock<IMemberService>();
-        var request = new AddMemberRequest("Ann", "ann@x.com", "Passw0rd");
-        members.Setup(s => s.AddAsync(access, request, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new MemberResponse("m1", "Ann", "ann@x.com", UserRole.Member, true, DateTimeOffset.UtcNow, null));
-        var sut = new MembersController(members.Object, Client.Object).With();
+        var invites = new Mock<IInviteService>();
+        var request = new InviteMemberRequest("ann@x.com", "Ann");
+        var invite = new InviteResponse(Guid.NewGuid(), "ann@x.com", "Ann", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddDays(7), false);
+        invites.Setup(s => s.InviteAsync(access, request, It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(invite);
+        invites.Setup(s => s.ResendAsync(access, invite.Id, It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(invite);
+        var sut = new MembersController(members.Object, invites.Object, Client.Object).With();
 
-        var created = Assert.IsType<ObjectResult>((await sut.Add(request, default)).Result);
+        var created = Assert.IsType<ObjectResult>((await sut.Invite(request, default)).Result);
         Assert.Equal(StatusCodes.Status201Created, created.StatusCode);
+        Assert.IsType<OkObjectResult>((await sut.ResendInvite(invite.Id, default)).Result);
+        Assert.IsType<NoContentResult>(await sut.RevokeInvite(invite.Id, default));
+        invites.Verify(s => s.RevokeAsync(access, invite.Id, It.IsAny<CancellationToken>()), Times.Once);
         Assert.IsType<NoContentResult>(await sut.Deactivate("m1", default));
         Assert.IsType<NoContentResult>(await sut.Reactivate("m1", default));
         members.Verify(s => s.SetActiveAsync(access, "m1", false, It.IsAny<CancellationToken>()), Times.Once);
         members.Verify(s => s.SetActiveAsync(access, "m1", true, It.IsAny<CancellationToken>()), Times.Once);
 
         Client.Setup(c => c.GetAccessAsync(It.IsAny<CancellationToken>())).ReturnsAsync((UserAccess?)null);
-        IsForbid(await sut.Add(request, default));
+        IsForbid(await sut.Invite(request, default));
+        IsForbid(await sut.ResendInvite(invite.Id, default));
+        Assert.IsType<ForbidResult>(await sut.RevokeInvite(invite.Id, default));
         Assert.IsType<ForbidResult>(await sut.Deactivate("m1", default));
     }
 

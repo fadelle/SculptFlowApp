@@ -396,4 +396,23 @@ public class EmailAndPasswordResetTests
         await Assert.ThrowsAsync<ArgumentException>(() => kit.Sut().ResetAsync("raw-1", "N3w-password", "N3w-password"));
         kit.Tx.Verify(t => t.CommitAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
+
+    [Fact]
+    public async Task The_invite_email_follows_the_client_language_and_names_the_inviter()
+    {
+        var (service, sent) = EmailService();
+        var client = new Client { Name = "Glow & Co", DefaultLanguage = "fr", BusinessTypeCode = TextKit.General };
+
+        await service.SendInviteAsync("ann@x.com", "Ann", "Olga", client, "ar", "https://omni.test/Account/AcceptInvite?token=t1", 7);
+        await service.SendInviteAsync("bo@x.com", null, null, new Client { Name = "Glow", DefaultLanguage = "en" }, null, "https://l", 7);
+
+        Assert.Equal(("ann@x.com", "Ann", AccountEmailService.InviteTag), (sent[0].ToEmail, sent[0].ToName, sent[0].Tag));
+        Assert.Equal("Invitation à rejoindre Glow & Co sur Omni", sent[0].Subject);
+        Assert.Contains("Olga vous invite à rejoindre l’équipe Glow &amp; Co sur Omni.", sent[0].Html);
+        Assert.Contains("7\u00a0jours", sent[0].Text);
+        Assert.Contains("https://omni.test/Account/AcceptInvite?token=t1", sent[0].Text);
+        Assert.Equal("You're invited to join Glow on Omni", sent[1].Subject);
+        Assert.Contains("You're invited to join the Glow team on Omni.", sent[1].Text);
+        Assert.Contains("Hi,", sent[1].Text);
+    }
 }

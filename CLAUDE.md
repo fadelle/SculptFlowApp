@@ -180,7 +180,8 @@ Full detail and the declared-settings table: `docs/configuration.md`.
 
 - One users table, `identity.users` (`AppUser : IdentityUser`), with `role` (`UserRole`): `admin` uses only the admin
   portal (it signs in through `/api/platform-admin/auth/login`), `client` and `member` use only this app. Only `client`
-  manages members (`MemberService`, `UnauthorizedAccessException` → 403). Seats = active client + member users (`max_users`).
+  manages members (`MemberService`, `InviteService`, `MemberRules.EnsureClientRole`, `UnauthorizedAccessException` → 403);
+  members join only through an emailed invite. Seats = active client + member users + open invites (`max_users`).
 - Access is checked on every request, never only at login: `CurrentClientContext` (`UserAccess`: role, client, language)
   and the cookie's `OnValidatePrincipal`. A rule that depends on the role takes the caller's `UserAccess`.
 - One active `client_users` row per user is a rule in code (check it before activating one), not an index.

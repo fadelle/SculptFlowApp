@@ -27,26 +27,21 @@ else
 
     @if (Model.CanManage)
     {
-        <form method="post" asp-page-handler="Add" class="au-panel au-panel--round integration-form mb-3" id="member-add-form" autocomplete="off">
+        <form method="post" asp-page-handler="Invite" class="au-panel au-panel--round integration-form mb-3" id="member-invite-form" autocomplete="off">
             <div class="set-section">
-                <div class="set-section-head"><strong>@T["members.add.title"]</strong><div class="cell-sub">@T["members.add.help"]</div></div>
+                <div class="set-section-head"><strong>@T["members.invite.title"]</strong><div class="cell-sub">@T["members.invite.help"]</div></div>
                 <div class="set-section-body">
                     <div class="form-row-contact">
                         <label class="field">
-                            <span>@T["members.add.fullName"]</span>
-                            <input type="text" name="FullName" value="@Model.FullName" class="text-input" maxlength="200" required autocomplete="off" />
+                            <span>@T["members.invite.email"]</span>
+                            <input type="email" name="Email" value="@Model.Email" class="text-input" dir="ltr" maxlength="256" required autocomplete="off" />
                         </label>
                         <label class="field">
-                            <span>@T["members.add.email"]</span>
-                            <input type="email" name="Email" value="@Model.Email" class="text-input" maxlength="256" required autocomplete="off" />
-                        </label>
-                        <label class="field">
-                            <span>@T["members.add.password"]</span>
-                            <input type="password" name="Password" class="text-input" required autocomplete="new-password" />
+                            <span>@T["members.invite.fullName"]</span>
+                            <input type="text" name="FullName" value="@Model.FullName" class="text-input" dir="auto" maxlength="200" autocomplete="off" />
                         </label>
                     </div>
-                    <p class="au-help">@T["members.add.passwordHelp"]</p>
-                    <div><button type="submit" class="au-btn au-btn--primary"><span class="au-icon" aria-hidden="true">person_add</span>@T["members.add.submit"]</button></div>
+                    <div><button type="submit" class="au-btn au-btn--primary"><span class="au-icon" aria-hidden="true">person_add</span>@T["members.invite.submit"]</button></div>
                 </div>
             </div>
         </form>
@@ -126,5 +121,72 @@ else
         {
             <p class="au-help mt-2">@T["members.readOnly"]</p>
         }
+    }
+
+    if (Model.Invites.Count > 0)
+    {
+        <div class="section-head mt-3">
+            <h2 class="section-title">@T["members.invites.title"]</h2>
+        </div>
+        <div class="au-table-card">
+            <div class="au-table-scroll">
+                <table class="au-table au-table--stack">
+                    <thead>
+                        <tr>
+                            <th>@T["members.table.email"]</th>
+                            <th>@T["members.table.name"]</th>
+                            <th>@T["members.invites.sent"]</th>
+                            <th>@T["members.table.status"]</th>
+                            @if (Model.CanManage)
+                            {
+                                <th><span class="au-sr-only">@T["members.table.actions"]</span></th>
+                            }
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var invite in Model.Invites)
+                        {
+                            <tr class="@(invite.IsExpired ? "row-dim" : "")">
+                                <td data-label="@T["members.table.email"]"><span dir="ltr">@invite.Email</span></td>
+                                <td data-label="@T["members.table.name"]"><span dir="auto">@(invite.FullName ?? "—")</span></td>
+                                <td data-label="@T["members.invites.sent"]" class="cell-sub">@LocalTimeHelper.Time(invite.CreatedAt, "datetime")</td>
+                                <td data-label="@T["members.table.status"]">
+                                    @if (invite.IsExpired)
+                                    {
+                                        <span class="badge badge-gray">@T["members.invites.expired"]</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge badge-amber">@T["members.invites.waiting"]</span>
+                                        <div class="cell-sub">@T.Html("members.invites.expires", LocalTimeHelper.Time(invite.ExpiresAt, "date"))</div>
+                                    }
+                                </td>
+                                @if (Model.CanManage)
+                                {
+                                    <td data-label="@T["members.table.actions"]">
+                                        <div class="au-row-actions">
+                                            <form method="post" asp-page-handler="ResendInvite">
+                                                <input type="hidden" name="inviteId" value="@invite.Id" />
+                                                <input type="hidden" name="email" value="@invite.Email" />
+                                                <button type="submit" class="au-btn au-btn--outlined au-btn--sm">@T["members.invites.resend"]</button>
+                                            </form>
+                                            <form method="post" asp-page-handler="RevokeInvite"
+                                                  data-au-confirm="@T["members.invites.revokeConfirm", invite.Email]"
+                                                  data-au-confirm-title="@T["members.invites.revoke"]"
+                                                  data-au-confirm-label="@T["members.invites.revoke"]" data-au-confirm-tone="danger">
+                                                <input type="hidden" name="inviteId" value="@invite.Id" />
+                                                <input type="hidden" name="email" value="@invite.Email" />
+                                                <button type="submit" class="au-btn au-btn--text au-btn--sm">@T["members.invites.revoke"]</button>
+                                            </form>
+                                        </div>
+                                    </td>
+                                }
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <p class="au-help mt-2">@T["members.invites.holdSeats"]</p>
     }
 }

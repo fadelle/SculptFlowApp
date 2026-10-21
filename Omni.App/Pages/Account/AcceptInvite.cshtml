@@ -1,0 +1,77 @@
+@page "/Account/AcceptInvite"
+@model Omni.App.Pages.Account.AcceptInviteModel
+@{
+    ViewData["Title"] = T["acceptInvite.title"].Value;
+    Layout = "_AuthLayout";
+}
+@* auth.js reads [data-auth-form], [data-busy-label], [data-pw*] and [data-caps]; it rewrites the class of [data-pw-rule] and
+   [data-pw-match], so those keep plain classes. *@
+<div class="au-auth__card">
+    <div class="au-auth__brand">
+        <span class="au-brand__mark"><img class="auth-logo" src="~/logo.svg" alt="" width="56" height="56" /></span>
+        <div>
+            @if (Model.Invite is { } invite)
+            {
+                <h1 class="au-auth__title">@T["acceptInvite.heading", invite.ClientName]</h1>
+                <p class="au-auth__sub">@T["acceptInvite.subtitle"] <bdi dir="ltr">@invite.Email</bdi></p>
+            }
+            else
+            {
+                <h1 class="au-auth__title">@T["acceptInvite.title"]</h1>
+            }
+        </div>
+    </div>
+
+    @if (Model.Invite is null)
+    {
+        <div class="au-alert au-alert--error" role="alert">
+            <span class="au-icon au-alert__icon" aria-hidden="true">link_off</span>
+            <div class="au-alert__body">@T["acceptInvite.errors.linkInvalid"]</div>
+        </div>
+    }
+    else
+    {
+        @if (!string.IsNullOrEmpty(Model.ErrorMessage))
+        {
+            <div class="au-alert au-alert--error" role="alert">
+                <span class="au-icon au-alert__icon" aria-hidden="true">error</span>
+                <div class="au-alert__body">@Model.ErrorMessage</div>
+            </div>
+        }
+
+        <form method="post" class="au-auth__form" data-auth-form data-au-no-busy>
+            <input type="hidden" name="Token" value="@Model.Token" />
+            <div class="au-form-field">
+                <label class="au-form-label" for="invite-name">@T["acceptInvite.fullName"]</label>
+                <input type="text" name="FullName" id="invite-name" value="@Model.FullName" class="au-input" dir="auto" maxlength="200" autocomplete="name" required autofocus />
+            </div>
+            <div class="au-form-field">
+                <label class="au-form-label" for="invite-password">@T["auth.password"]</label>
+                <span class="pw-wrap">
+                    <input type="password" name="Password" id="invite-password" class="au-input" autocomplete="new-password" required minlength="6" data-pw data-pw-new />
+                    <button type="button" class="pw-eye" data-pw-toggle aria-label="@T["auth.password.show"]" title="@T["auth.password.show"]">👁</button>
+                </span>
+                <small class="text-subtle" data-pw-rule>@T["register.passwordRule"]</small>
+            </div>
+            <div class="au-form-field">
+                <label class="au-form-label" for="invite-confirm">@T["register.confirmPassword"]</label>
+                <span class="pw-wrap">
+                    <input type="password" name="ConfirmPassword" id="invite-confirm" class="au-input" autocomplete="new-password" required minlength="6" data-pw data-pw-confirm />
+                    <button type="button" class="pw-eye" data-pw-toggle aria-label="@T["auth.password.show"]" title="@T["auth.password.show"]">👁</button>
+                </span>
+                <small data-pw-match hidden></small>
+            </div>
+            <div class="caps-warn" data-caps hidden>⇪ @T["auth.password.capsLock"]</div>
+
+            <button type="submit" class="au-btn au-btn--primary au-btn--lg au-btn--block" data-busy-label="@T["acceptInvite.submitBusy"]">@T["acceptInvite.submit"]</button>
+        </form>
+    }
+
+    <p class="au-auth__foot">
+        <a class="au-link" href="/Account/Login">@T["forgotPassword.backToSignIn"]</a>
+    </p>
+</div>
+
+@section Scripts {
+    <script src="~/js/auth.js" asp-append-version="true"></script>
+}

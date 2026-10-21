@@ -1,5 +1,6 @@
 using Omni.App.Entities.Dtos.PlatformAdmin;
 using Omni.App.Entities.Responses.Billing;
+using Omni.App.Entities.Responses.Members;
 
 namespace Omni.App.Business.Contracts.Services.PlatformAdmin;
 
@@ -25,4 +26,10 @@ public interface IMemberAdminService
     /// <summary>Emails the user a password reset link (IPasswordResetService.SendForUserAsync, no hourly limit). Throws
     /// KeyNotFoundException for an unknown or admin user and EmailSendException (502) when the email can't be sent.</summary>
     Task<PlatformAdminChange> SendPasswordResetEmailAsync(string userId, string requestBaseUrl, CancellationToken ct);
+
+    /// <summary>A client's invites that were neither accepted nor cancelled (IInviteService.ListAsync).</summary>
+    Task<IReadOnlyList<InviteResponse>> ListInvitesAsync(Guid clientId, CancellationToken ct);
+
+    /// <summary>Cancels any client's invite. KeyNotFoundException when unknown or already accepted.</summary>
+    Task<PlatformAdminChange> RevokeInviteAsync(Guid inviteId, CancellationToken ct);
 }
