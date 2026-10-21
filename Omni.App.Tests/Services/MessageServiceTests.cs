@@ -24,6 +24,7 @@ public class MessageServiceTests
     private readonly Mock<IInboxSettingsService> _inboxSettings = new();
     private readonly Mock<IMessageTracer> _tracer = new();
     private readonly Mock<IConversationService> _conversationService = new();
+    private readonly Mock<IOptOutService> _optOut = new();
     private readonly MessageBillingHold _hold = new(Guid.Empty, "key", BillingSettlementTrigger.OnProviderAccepted);
     private readonly Contact _contact;
 
@@ -40,7 +41,7 @@ public class MessageServiceTests
 
     private MessageService Sut() => new(_conversations.Object, _messages.Object, _contacts.Object, _templates.Object, _campaigns.Object, _uow.Object,
         _whatsApp.Object, [_sender.Object], _notifier.Object, _events.Object, _notifications.Object, _billing.Object, _entitlements.Object, _inboxSettings.Object, _tracer.Object,
-        _conversationService.Object);
+        _conversationService.Object, _optOut.Object);
 
     private void InboxSettings(bool planIncludesBot, bool reopenedConversations) =>
         _inboxSettings.Setup(a => a.GetAsync(_clientId, It.IsAny<CancellationToken>()))
@@ -736,5 +737,79 @@ public class MessageServiceTests
         await Sut().IngestAsync(Ingest(c.Id, IngestEventType.CustomerMessage));
         var step = steps.Single();
         Assert.Equal((TraceSteps.MessageDeduplicated, TraceOutcomes.Skipped, existing.Id), (step.Step, step.Outcome, step.Ids.MessageId!.Value));
+    }
+
+    // ---- opt-out (Milestone C S3) ---------------------------------------------------------------------------------
+
+    [Fact]
+    public async Task A_stop_word_opts_the_contact_out_skips_the_ai_and_sends_one_system_confirmation()
+    {
+        var c = Conv(ConversationMode.Ai);
+        _contacts.Setup(l => l.GetByIdAsync(_contactId, It.IsAny<CancellationToken>())).ReturnsAsync(_contact);
+        _optOut.Setup(o => o.MatchKeyword("STOP")).Returns(true);
+        _optOut.Setup(o => o.ConfirmationTextAsync(_clientId, _contact, true, It.IsAny<CancellationToken>())).ReturnsAsync("You're unsubscribed.");
+        var saved = new List<Message>();
+        _messages.Setup(m => m.Add(It.IsAny<Message>())).Callback<Message>(saved.Add);
+
+        var r = await Sut().IngestAsync(Ingest(c.Id, IngestEventType.CustomerMessage) with { Content = "STOP" });
+
+        Assert.False(r.AiEligible);
+        _optOut.Verify(o => o.Apply(_contact, true, MessageOrigin.WhatsAppCustomer, c.Id), Times.Once);
+        var reply = saved.Single(m => m.Direction == MessageDirection.Outbound);
+        Assert.Equal((MessageSenderType.System, MessageOrigin.System, "You're unsubscribed."), (reply.SenderType, reply.Origin, reply.Content));
+        _sender.Verify(s => s.SendTextAsync(c, "You're unsubscribed.", It.IsAny<CancellationToken>()), Times.Once);
+        Assert.Equal(ConversationMode.Ai, c.Mode); // an automatic message never takes the conversation over
+    }
+
+    [Fact]
+    public async Task A_failed_confirmation_never_fails_the_inbound_message()
+    {
+        var c = Conv(ConversationMode.Human);
+        _contacts.Setup(l => l.GetByIdAsync(_contactId, It.IsAny<CancellationToken>())).ReturnsAsync(_contact);
+        _optOut.Setup(o => o.MatchKeyword(It.IsAny<string?>())).Returns(false);
+        _optOut.Setup(o => o.ConfirmationTextAsync(_clientId, _contact, false, It.IsAny<CancellationToken>())).ReturnsAsync("Welcome back.");
+        _sender.Setup(s => s.SendTextAsync(It.IsAny<Conversation>(), "Welcome back.", It.IsAny<CancellationToken>())).ThrowsAsync(new ChannelSendException("window closed"));
+
+        var r = await Sut().IngestAsync(Ingest(c.Id, IngestEventType.CustomerMessage) with { Content = "start" });
+
+        Assert.True(r.Found);
+        _optOut.Verify(o => o.Apply(_contact, false, It.IsAny<string>(), c.Id), Times.Once);
+        _billing.Verify(b => b.SendFailedAsync(_hold, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Ordinary_messages_and_echoes_never_touch_the_opt_out()
+    {
+        var c = Conv(ConversationMode.Ai);
+        _contacts.Setup(l => l.GetByIdAsync(_contactId, It.IsAny<CancellationToken>())).ReturnsAsync(_contact);
+        var r = await Sut().IngestAsync(Ingest(c.Id, IngestEventType.CustomerMessage));
+        Assert.True(r.AiEligible);
+        await Sut().IngestAsync(Ingest(c.Id, IngestEventType.BusinessAppEcho, externalId: "ext2") with { Content = "stop" });
+        _optOut.Verify(o => o.MatchKeyword("stop"), Times.Never);
+        _optOut.Verify(o => o.Apply(It.IsAny<Contact>(), It.IsAny<bool>(), It.IsAny<string>(), It.IsAny<Guid?>()), Times.Never);
+        await Sut().IngestAsync(Ingest(c.Id, IngestEventType.CustomerMessage, externalId: "ext3", messageType: "image") with { Content = "stop" });
+        _optOut.Verify(o => o.MatchKeyword("stop"), Times.Never);
+    }
+
+    [Fact]
+    public async Task No_template_goes_to_an_opted_out_contact()
+    {
+        var c = Conv();
+        var t = Template();
+        Setup(t);
+        _contact.OptedOutAt = DateTimeOffset.UtcNow;
+        _contact.MarketingOptIn = false;
+        Assert.Equal("inbox.errors.contactOptedOut",
+            (await Assert.ThrowsAsync<InvalidOperationException>(() => Sut().SendTemplateAsync(_clientId, c.Id, new SendTemplateMessageRequest(t.Id, ["Ann", "20%"])))).Message);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => Sut().SendCampaignTemplateAsync(_clientId, c.Id, t.Id, ["Ann", "20%"], Guid.NewGuid(), Guid.NewGuid()));
+        _whatsApp.Verify(w => w.SendTemplateMessageAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IReadOnlyList<string>>(), It.IsAny<CancellationToken>()), Times.Never);
+        _billing.Verify(b => b.ReserveOutboundAsync(It.IsAny<OutboundMessageBillingContext>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task A_system_text_needs_content_and_a_conversation_of_the_client()
+    {
+        await Assert.ThrowsAsync<ArgumentException>(() => Sut().SendSystemTextAsync(_clientId, Guid.NewGuid(), " "));
+        Assert.Null(await Sut().SendSystemTextAsync(_clientId, Guid.NewGuid(), "Hi"));
     }
 }

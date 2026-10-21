@@ -271,6 +271,9 @@ builder.Services.AddScoped<IMessageTraceService, MessageTraceService>();
 builder.Services.AddScoped<IMessageTraceAdminService, MessageTraceAdminService>();
 builder.Services.AddHostedService<MessageTraceFlushJob>();
 builder.Services.AddScoped<IContactService, ContactService>();
+// Opt-out (Milestone C): stop/start words on inbound messages and the contact page switch; campaigns, reminders and
+// Inbox templates skip or refuse an opted-out contact.
+builder.Services.AddScoped<IOptOutService, OptOutService>();
 builder.Services.AddScoped<ICatalogService, CatalogService>();
 builder.Services.AddScoped<IAvailabilityService, AvailabilityService>();
 builder.Services.AddScoped<INotificationService, NotificationService>();

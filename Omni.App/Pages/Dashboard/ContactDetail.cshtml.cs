@@ -24,15 +24,19 @@ namespace Omni.App.Pages.Dashboard;
 public class ContactDetailModel : PageModel
 {
     private const string SavedKey = "contactDetail.saved";
+    private const string OptedOutKey = "contactDetail.optOut.done";
+    private const string OptedInKey = "contactDetail.optOut.undone";
 
     private readonly ICurrentClientContext _clientContext;
     private readonly IContactService _contacts;
+    private readonly IOptOutService _optOut;
     private readonly IStringLocalizer _text;
 
-    public ContactDetailModel(ICurrentClientContext clientContext, IContactService contacts, IStringLocalizer text)
+    public ContactDetailModel(ICurrentClientContext clientContext, IContactService contacts, IOptOutService optOut, IStringLocalizer text)
     {
         _clientContext = clientContext;
         _contacts = contacts;
+        _optOut = optOut;
         _text = text;
     }
 
@@ -129,6 +133,17 @@ public class ContactDetailModel : PageModel
             await LoadAsync(ct);
             return Page();
         }
+    }
+
+    /// <summary>Any member opts the contact out of business-started messages or back in (IOptOutService).</summary>
+    public async Task<IActionResult> OnPostOptOutAsync(bool optedOut, CancellationToken ct)
+    {
+        var client = await _clientContext.GetClientAsync(ct);
+        if (client is null) return RedirectToPage();
+        var contact = await _optOut.SetAsync(client.Id, Id, optedOut, ct);
+        if (contact is null) return NotFound();
+        StatusMessage = _text[optedOut ? OptedOutKey : OptedInKey].Value;
+        return RedirectToPage(new { Id });
     }
 
     private async Task LoadAsync(CancellationToken ct)

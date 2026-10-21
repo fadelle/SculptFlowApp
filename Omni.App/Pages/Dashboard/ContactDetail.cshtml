@@ -20,6 +20,7 @@ else
     var followupOverdue = contact.NextFollowupAt is not null && contact.NextFollowupAt < DateTimeOffset.UtcNow;
     // Inbox search matches name, phone or service — the phone is the most specific.
     var inboxSearch = !string.IsNullOrWhiteSpace(contact.Phone) ? contact.Phone : contact.FullName;
+    var optedOut = contact.OptedOutAt is not null || !contact.MarketingOptIn;
     string LanguageName(string code) => code switch
     {
         ContactLanguage.English => T["contactDetail.language.en"].Value,
@@ -41,6 +42,10 @@ else
     <div class="detail-chips">
         <span class="badge @StageDisplay.CssClass(Model.Stages, contact.StageKey)">@StageDisplay.Label(Model.Stages, contact.StageKey)</span>
         <span class="badge @StatusBadgeHelper.CssClass(contact.Qualification)">@T.ValueLabel(contact.Qualification)</span>
+        @if (optedOut)
+        {
+            <span class="badge badge-gray">@T["contactDetail.optOut.badge"]</span>
+        }
         @if (!string.IsNullOrWhiteSpace(inboxSearch))
         {
             <a class="au-btn au-btn--outlined au-btn--sm" href="/inbox?search=@Uri.EscapeDataString(inboxSearch)"><span class="au-icon" aria-hidden="true">chat</span>@T["contactDetail.openInInbox"]</a>
@@ -70,6 +75,17 @@ else
                     <p dir="auto">@contact.Notes</p>
                 </div>
             }
+
+            <div class="contact-notes" id="contact-opt-out">
+                <span class="au-eyebrow">@T["contactDetail.optOut.title"]</span>
+                <p>@(optedOut ? T.Html("contactDetail.optOut.optedOut", LocalTimeHelper.Time(contact.OptedOutAt ?? contact.UpdatedAt, "date")) : T["contactDetail.optOut.subscribed"])</p>
+                <form method="post" asp-page-handler="OptOut" asp-route-id="@contact.Id"
+                      data-au-confirm="@(optedOut ? T["contactDetail.optOut.optInConfirm"].Value : null)"
+                      data-au-confirm-label="@(optedOut ? T["contactDetail.optOut.optIn"].Value : null)">
+                    <input type="hidden" name="optedOut" value="@(optedOut ? "false" : "true")" />
+                    <button type="submit" class="au-btn au-btn--outlined au-btn--sm">@(optedOut ? T["contactDetail.optOut.optIn"] : T["contactDetail.optOut.optOut"])</button>
+                </form>
+            </div>
         </section>
 
         <section class="au-panel au-panel--round au-panel--pad" aria-labelledby="contact-update-title">

@@ -377,7 +377,9 @@
         divider.innerHTML = '<span>' + escapeHtml(formatDay(m.createdAt)) + '</span>';
         messagesEl.appendChild(divider);
       }
-      if (m.origin === 'system' && m.senderType === 'system') {
+      // System markers (mode changes, hand-offs) are notes for the team; an automatic message the contact received
+      // (opt-out confirmation, reminder) carries {"automatic":true} and is shown as a bubble.
+      if (m.origin === 'system' && m.senderType === 'system' && !/"automatic"\s*:\s*true/.test(m.metadataJson || '')) {
         var marker = document.createElement('div');
         marker.className = 'inbox-mode-marker';
         marker.innerHTML = '<span>' + escapeHtml(m.content || '') + ' &middot; ' + formatClock(m.createdAt) + '</span>';

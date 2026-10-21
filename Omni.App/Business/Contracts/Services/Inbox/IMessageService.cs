@@ -42,4 +42,9 @@ public interface IMessageService
     /// ConversationNotInAiModeException if not. Unlike SendAsync (members), this never flips the
     /// conversation to human mode — origin=ai, sender_type=ai throughout.</summary>
     Task<MessageResponse?> SendAiReplyAsync(Guid clientId, Guid conversationId, string content, CancellationToken ct = default);
+
+    /// <summary>An automatic text from Omni itself (sender and origin "system"): the opt-out confirmation, Telegram booking
+    /// reminders. Same billing and channel rules as a member's text (WhatsApp needs an open service window), but it never
+    /// changes the conversation's mode. Null when the conversation isn't the client's.</summary>
+    Task<MessageResponse?> SendSystemTextAsync(Guid clientId, Guid conversationId, string content, CancellationToken ct = default);
 }

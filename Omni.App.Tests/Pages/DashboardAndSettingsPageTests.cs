@@ -372,10 +372,10 @@ public class DashboardPageTests
     public async Task Contact_detail_404s_for_an_unknown_contact_and_is_empty_without_a_client()
     {
         var contacts = new Mock<IContactService>();
-        var model = new Omni.App.Pages.Dashboard.ContactDetailModel(ClientContext(Glow).Object, contacts.Object, TextKit.Localizer()) { Id = Guid.NewGuid() }.Attach();
+        var model = new Omni.App.Pages.Dashboard.ContactDetailModel(ClientContext(Glow).Object, contacts.Object, Mock.Of<IOptOutService>(), TextKit.Localizer()) { Id = Guid.NewGuid() }.Attach();
         Assert.IsType<NotFoundResult>(await model.OnGetAsync(default));
 
-        var none = new Omni.App.Pages.Dashboard.ContactDetailModel(ClientContext(null).Object, contacts.Object, TextKit.Localizer()).Attach();
+        var none = new Omni.App.Pages.Dashboard.ContactDetailModel(ClientContext(null).Object, contacts.Object, Mock.Of<IOptOutService>(), TextKit.Localizer()).Attach();
         Assert.IsType<PageResult>(await none.OnGetAsync(default));
         Assert.False(none.ClientConfigured);
     }
@@ -390,7 +390,7 @@ public class DashboardPageTests
         var contacts = new Mock<IContactService>();
         contacts.Setup(l => l.GetByIdAsync(Glow.Id, id, It.IsAny<CancellationToken>())).ReturnsAsync(Contact("contacted", source));
         contacts.Setup(l => l.GetDistinctSourcesAsync(Glow.Id, It.IsAny<CancellationToken>())).ReturnsAsync(new List<string> { "WEB" });
-        var model = new Omni.App.Pages.Dashboard.ContactDetailModel(ClientContext(Glow).Object, contacts.Object, TextKit.Localizer()) { Id = id }.Attach();
+        var model = new Omni.App.Pages.Dashboard.ContactDetailModel(ClientContext(Glow).Object, contacts.Object, Mock.Of<IOptOutService>(), TextKit.Localizer()) { Id = id }.Attach();
         IReadOnlyList<PipelineStageOption> stages = [new("contacted", StageCategory.Open, "Reached out")];
         contacts.Setup(l => l.ListStagesAsync(Glow.Id, It.IsAny<CancellationToken>())).ReturnsAsync(stages);
         Assert.IsType<PageResult>(await model.OnGetAsync(default));
@@ -408,7 +408,7 @@ public class DashboardPageTests
         var contacts = new Mock<IContactService>();
         contacts.Setup(l => l.GetByIdAsync(Glow.Id, id, It.IsAny<CancellationToken>())).ReturnsAsync(Contact(source: "tiktok"));
         contacts.Setup(l => l.GetDistinctSourcesAsync(Glow.Id, It.IsAny<CancellationToken>())).ReturnsAsync(new List<string>());
-        var model = new Omni.App.Pages.Dashboard.ContactDetailModel(ClientContext(Glow).Object, contacts.Object, TextKit.Localizer()) { Id = id }.Attach();
+        var model = new Omni.App.Pages.Dashboard.ContactDetailModel(ClientContext(Glow).Object, contacts.Object, Mock.Of<IOptOutService>(), TextKit.Localizer()) { Id = id }.Attach();
         await model.OnGetAsync(default);
         Assert.Contains("tiktok", model.SourceOptions);
     }
@@ -422,7 +422,7 @@ public class DashboardPageTests
         contacts.Setup(l => l.UpdateStageAsync(Glow.Id, id, It.IsAny<UpdateContactStageRequest>(), It.IsAny<CancellationToken>()))
             .Callback<Guid, Guid, UpdateContactStageRequest, CancellationToken>((_, _, r, _) => seen = r)
             .ReturnsAsync(Contact());
-        var model = new Omni.App.Pages.Dashboard.ContactDetailModel(ClientContext(Glow).Object, contacts.Object, TextKit.Localizer())
+        var model = new Omni.App.Pages.Dashboard.ContactDetailModel(ClientContext(Glow).Object, contacts.Object, Mock.Of<IOptOutService>(), TextKit.Localizer())
         {
             Id = id, StageKey = "qualified", Qualification = "warm", SourceChoice = "other", CustomSource = "  podcast ",
         }.Attach();
@@ -453,7 +453,7 @@ public class DashboardPageTests
         var contacts = new Mock<IContactService>();
         contacts.Setup(l => l.GetByIdAsync(Glow.Id, id, It.IsAny<CancellationToken>())).ReturnsAsync(Contact() with { PreferredLanguage = language });
         contacts.Setup(l => l.GetDistinctSourcesAsync(Glow.Id, It.IsAny<CancellationToken>())).ReturnsAsync(new List<string>());
-        var model = new Omni.App.Pages.Dashboard.ContactDetailModel(ClientContext(Glow).Object, contacts.Object, TextKit.Localizer()) { Id = id }.Attach();
+        var model = new Omni.App.Pages.Dashboard.ContactDetailModel(ClientContext(Glow).Object, contacts.Object, Mock.Of<IOptOutService>(), TextKit.Localizer()) { Id = id }.Attach();
         await model.OnGetAsync(default);
         Assert.Equal((choice, custom), (model.LanguageChoice, model.CustomLanguage));
         Assert.Equal(["en", "ar", "fr"], model.LanguageOptions);
@@ -466,7 +466,7 @@ public class DashboardPageTests
         var contacts = new Mock<IContactService>();
         contacts.Setup(l => l.GetByIdAsync(Glow.Id, id, It.IsAny<CancellationToken>())).ReturnsAsync(Contact());
         contacts.Setup(l => l.GetDistinctSourcesAsync(Glow.Id, It.IsAny<CancellationToken>())).ReturnsAsync(new List<string>());
-        var model = new Omni.App.Pages.Dashboard.ContactDetailModel(ClientContext(Glow).Object, contacts.Object, TextKit.Localizer()) { Id = id, SourceChoice = "web" }.Attach();
+        var model = new Omni.App.Pages.Dashboard.ContactDetailModel(ClientContext(Glow).Object, contacts.Object, Mock.Of<IOptOutService>(), TextKit.Localizer()) { Id = id, SourceChoice = "web" }.Attach();
 
         Assert.IsType<NotFoundResult>(await model.OnPostAsync(default));          // the service returns null
 
@@ -481,7 +481,7 @@ public class DashboardPageTests
         await model.OnPostAsync(default);
         Assert.Equal("'vip' isn't one of your contact stages.", model.ErrorMessage); // a keyed message is shown in words
 
-        var none = new Omni.App.Pages.Dashboard.ContactDetailModel(ClientContext(null).Object, contacts.Object, TextKit.Localizer()).Attach();
+        var none = new Omni.App.Pages.Dashboard.ContactDetailModel(ClientContext(null).Object, contacts.Object, Mock.Of<IOptOutService>(), TextKit.Localizer()).Attach();
         Assert.IsType<RedirectToPageResult>(await none.OnPostAsync(default));
     }
 
@@ -696,4 +696,22 @@ public class CampaignDetailsPageTests
     [InlineData("scheduled", "Scheduled")]
     public void Campaign_status_labels_call_a_stopped_campaign_stopped(string status, string label) =>
         Assert.Equal(label, TextKit.Localizer().CampaignStatusLabel(status));
+
+    [Fact]
+    public async Task A_member_opts_a_contact_out_or_back_in_from_the_contact_page()
+    {
+        var id = Guid.NewGuid();
+        var optOut = new Mock<IOptOutService>();
+        optOut.Setup(o => o.SetAsync(Glow.Id, id, It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Omni.App.Business.Mappers.Contacts.ContactMapper.ToResponse(new Contact { Id = id, ClientId = Glow.Id }));
+        var model = new Omni.App.Pages.Dashboard.ContactDetailModel(ClientContext(Glow, UserRole.Member, "m1").Object, Mock.Of<IContactService>(), optOut.Object, TextKit.Localizer()) { Id = id }.Attach();
+
+        Assert.Equal("page:(same)", RedirectTarget(await model.OnPostOptOutAsync(true, default)));
+        Assert.Equal("Opted out: no more campaigns, reminders or templates.", model.StatusMessage);
+        Assert.Equal("page:(same)", RedirectTarget(await model.OnPostOptOutAsync(false, default)));
+        Assert.Equal("Opted back in.", model.StatusMessage);
+
+        var stranger = new Omni.App.Pages.Dashboard.ContactDetailModel(ClientContext(Glow).Object, Mock.Of<IContactService>(), Mock.Of<IOptOutService>(), TextKit.Localizer()) { Id = Guid.NewGuid() }.Attach();
+        Assert.IsType<NotFoundResult>(await stranger.OnPostOptOutAsync(true, default));
+    }
 }

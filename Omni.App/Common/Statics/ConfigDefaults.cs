@@ -193,6 +193,15 @@ public static class ConfigDefaults
     public static readonly ConfigDefinition MessageTraceFailedRetentionDays = new("MessageTrace", "FailedRetentionDays", "60", ConfigValueType.Int,
         "Days a trace with at least one failed step is kept (when longer than RetentionDays).", 1, 365);
 
+    public static readonly ConfigDefinition OptOutEnabled = new("OptOut", "Enabled", "true", ConfigValueType.Bool,
+        "Whether a contact's message that is only a stop or start word opts them out of (or back into) business-started messages: campaigns, reminders and Inbox templates.");
+    public static readonly ConfigDefinition OptOutStopKeywords = new("OptOut", "StopKeywords", "stop,stopall,unsubscribe,arret,desabonner,desinscrire,توقف,ايقاف,الغاء الاشتراك", ConfigValueType.String,
+        "Words that opt a contact out when they are the whole message (case, accents, Arabic diacritics and end punctuation ignored).");
+    public static readonly ConfigDefinition OptOutStartKeywords = new("OptOut", "StartKeywords", "start,unstop,subscribe,demarrer,اشتراك", ConfigValueType.String,
+        "Words that opt a contact back in when they are the whole message (same matching as StopKeywords).");
+    public static readonly ConfigDefinition OptOutSendConfirmation = new("OptOut", "SendConfirmation", "true", ConfigValueType.Bool,
+        "Reply once to a stop or start word with a short confirmation in the contact's language (a normal outbound message, billed like any other).");
+
     public static readonly IReadOnlyList<ConfigDefinition> All =
     [
         AccountsSignupEnabled,
@@ -219,6 +228,11 @@ public static class ConfigDefaults
         BillingRateBackdateToleranceMinutes,
         BillingRecentTransactions,
         BillingChargeAiReplies,
+
+        OptOutEnabled,
+        OptOutStopKeywords,
+        OptOutStartKeywords,
+        OptOutSendConfirmation,
 
         KnowledgeMinScore,
         KnowledgeChunkMaxChars,

@@ -78,6 +78,19 @@ public interface IConfigManager
     /// <summary>Charge each AI assistant reply as ai_reply usage (included credit first, then wallet). Needs an ai_reply rate; a client that can't pay gets no AI reply and the conversation goes to the team. Off = AI replies are not charged. Default true.</summary>
     bool BillingChargeAiReplies { get; }
 
+    // ---- OptOut
+    /// <summary>A whole-message stop/start word opts the contact out of / back into business-started messages. Default true.</summary>
+    bool OptOutEnabled { get; }
+
+    /// <summary>Comma list of stop words (matched against the whole message, case/accents/punctuation ignored).</summary>
+    string OptOutStopKeywords { get; }
+
+    /// <summary>Comma list of start words (same matching as StopKeywords).</summary>
+    string OptOutStartKeywords { get; }
+
+    /// <summary>Reply to a stop/start word with a confirmation in the contact's language. Default true.</summary>
+    bool OptOutSendConfirmation { get; }
+
     // ---- Knowledge
     /// <summary>Minimum similarity for a search result, for new clients (each client can change its own). Default 0.30.</summary>
     decimal KnowledgeMinScore { get; }

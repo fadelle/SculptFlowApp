@@ -625,6 +625,15 @@
   "contacts.count.other": "{0} {contacts}",
   "contactDetail.title": "{Contact}",
   "contactDetail.saved": "Enregistré.",
+  "contactDetail.optOut.title": "Vos messages",
+  "contactDetail.optOut.badge": "Désabonné",
+  "contactDetail.optOut.subscribed": "Reçoit vos campagnes, rappels de rendez-vous et modèles. Écrire STOP le désabonne.",
+  "contactDetail.optOut.optedOut": "Désabonné le {0} : ne reçoit ni campagnes, ni rappels de rendez-vous, ni modèles. Il peut toujours vous écrire, et vous pouvez lui répondre.",
+  "contactDetail.optOut.optOut": "Désabonner",
+  "contactDetail.optOut.optIn": "Réabonner",
+  "contactDetail.optOut.optInConfirm": "Ne réabonnez quelqu’un que s’il l’a demandé.",
+  "contactDetail.optOut.done": "Désabonné : plus de campagnes, de rappels ni de modèles.",
+  "contactDetail.optOut.undone": "Réabonné.",
   "contactDetail.missing": "Ce {contact} n’est pas dans votre liste",
   "contactDetail.back": "Retour : {Contacts}",
   "contactDetail.noPhone": "Pas de téléphone",
@@ -1449,6 +1458,7 @@
   "inbox.errors.voiceUnsupported": "La lecture des messages vocaux n’est pas encore prise en charge pour les conversations {0}.",
   "inbox.errors.audioGone": "L’audio de ce message vocal n’est plus disponible.",
   "inbox.errors.contentRequired": "Écrivez d’abord un message.",
+  "inbox.errors.contactOptedOut": "Ce {contact} s’est désabonné de vos messages : aucun modèle ne peut lui être envoyé. Il peut toujours vous écrire, et vous pouvez lui répondre.",
   "inbox.errors.invalidEventType": "« {0} » n’est pas un type d’événement.",
   "inbox.errors.unsupportedEventType": "Le type d’événement « {0} » ne peut pas créer de message.",
   "inbox.errors.externalIdRequired": "Une mise à jour de statut a besoin de l’identifiant du message chez le fournisseur (externalMessageId).",
@@ -1644,5 +1654,8 @@
   "acceptInvite.submit": "Rejoindre",
   "acceptInvite.submitBusy": "Connexion…",
   "acceptInvite.errors.nameRequired": "Saisissez votre nom complet.",
-  "acceptInvite.errors.linkInvalid": "Ce lien d’invitation ne fonctionne plus : il a déjà servi, il a expiré ou l’invitation a été annulée. Demandez une nouvelle invitation au titulaire du compte."
+  "acceptInvite.errors.linkInvalid": "Ce lien d’invitation ne fonctionne plus : il a déjà servi, il a expiré ou l’invitation a été annulée. Demandez une nouvelle invitation au titulaire du compte.",
+
+  "optOut.confirmation.stopped": "Vous êtes désabonné : {0} ne vous enverra plus de messages ici. Répondez START pour vous réabonner.",
+  "optOut.confirmation.resumed": "Vous êtes de nouveau abonné aux messages de {0}."
 }

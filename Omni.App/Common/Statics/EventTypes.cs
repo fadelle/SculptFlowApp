@@ -9,6 +9,10 @@ public static class EventTypes
     /// <summary>A manual (dashboard) or AI stage change whose new stage's category has no event of its own; metadata
     /// {"from","to"} holds the stage keys.</summary>
     public const string ContactStageChanged = "contact_stage_changed";
+    /// <summary>A contact opted out of business-started messages (a stop word, or a member on the contact page).</summary>
+    public const string ContactOptedOut = "contact_opted_out";
+    /// <summary>A contact opted back in (a start word, or a member on the contact page).</summary>
+    public const string ContactOptedIn = "contact_opted_in";
     public const string BookingCreated = "booking_created";
     public const string BookingAttended = "booking_attended";
     public const string BookingNoShow = "booking_no_show";

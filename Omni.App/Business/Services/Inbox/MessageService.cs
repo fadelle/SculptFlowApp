@@ -3,6 +3,7 @@ using Omni.App.Business.Contracts.Engines.Billing;
 using Omni.App.Business.Contracts.Managers;
 using Omni.App.Business.Contracts.Providers.Channels;
 using Omni.App.Business.Contracts.Services.Billing;
+using Omni.App.Business.Contracts.Services.Contacts;
 using Omni.App.Business.Contracts.Services.Inbox;
 using Omni.App.Business.Contracts.Services.Notifications;
 using Omni.App.Business.Mappers.Inbox;
@@ -49,15 +50,17 @@ public class MessageService : IMessageService
     private readonly IInboxSettingsService _inboxSettings;
     private readonly IMessageTracer _tracer;
     private readonly IConversationService _conversationService;
+    private readonly IOptOutService _optOut;
 
     public MessageService(
         IConversationRepository conversations, IMessageRepository messages, IContactRepository contacts,
         IWhatsAppTemplateRepository templates, ICampaignRepository campaigns, IUnitOfWork unitOfWork, IWhatsAppService whatsApp, IEnumerable<IChannelSender> senders,
         IInboxNotifier notifier, IEventLogger events, INotificationService notifications,
         IMessageBillingService billing, IEntitlementService entitlements, IInboxSettingsService inboxSettings, IMessageTracer tracer,
-        IConversationService conversationService)
+        IConversationService conversationService, IOptOutService optOut)
     {
         _conversationService = conversationService;
+        _optOut = optOut;
         _tracer = tracer;
         _inboxSettings = inboxSettings;
         _conversations = conversations;
@@ -350,6 +353,11 @@ public class MessageService : IMessageService
         {
             throw new InvalidOperationException("templates.errors.whatsAppOnly").WithArgs(conversation.Channel);
         }
+        // A template is the business starting the conversation: never to a contact who opted out (stop word or a member).
+        if (conversation.Contact is { } templateContact && (templateContact.OptedOutAt is not null || !templateContact.MarketingOptIn))
+        {
+            throw new InvalidOperationException("inbox.errors.contactOptedOut");
+        }
 
         var template = await _templates.GetReadOnlyAsync(clientId, whatsAppTemplateId, ct);
         if (template is null)
@@ -581,6 +589,15 @@ public class MessageService : IMessageService
             contact.UpdatedAt = now;
         }
 
+        // A customer message that is only a stop/start word changes the contact's opt-out (and gets one confirmation below);
+        // the AI is not asked about it.
+        bool? optOutKeyword = null;
+        if (request.EventType == IngestEventType.CustomerMessage && contact is not null && OptOutMessageTypes.Contains(message.MessageType))
+        {
+            optOutKeyword = _optOut.MatchKeyword(request.Content);
+            if (optOutKeyword is { } stop) _optOut.Apply(contact, stop, origin, request.ConversationId);
+        }
+
         // CAMPAIGN_REPLY: a genuine customer reply, attributed to whichever campaign send is the most recent
         // one still awaiting a reply (RepliedAt null) for this contact. Persisting RepliedAt here (once) is what
         // makes this fire only on the FIRST reply after that send — CampaignService's own read-time stat
@@ -653,17 +670,97 @@ public class MessageService : IMessageService
         // the AI assistant gains multimodal handling.
         var aiEligible = request.EventType == IngestEventType.CustomerMessage
             && conversation.Mode == ConversationMode.Ai
-            && AiEligibleMessageTypes.Contains(message.MessageType);
+            && AiEligibleMessageTypes.Contains(message.MessageType)
+            && optOutKeyword is null;
         if (request.EventType == IngestEventType.CustomerMessage && !aiEligible)
         {
             // Why the bot won't see this message: the most specific reason first.
-            var reason = modeReason ?? (conversation.Mode != ConversationMode.Ai ? "conversation_in_human_mode" : "message_type_not_supported");
+            var reason = optOutKeyword is not null ? "opt_out_keyword"
+                : modeReason ?? (conversation.Mode != ConversationMode.Ai ? "conversation_in_human_mode" : "message_type_not_supported");
             _tracer.Step(TraceSteps.BotSkipped, TraceOutcomes.Skipped, ids, detail: new { reason, type = message.MessageType });
+        }
+
+        if (optOutKeyword is { } optedOut && contact is not null)
+        {
+            await ConfirmOptOutAsync(request.ClientId, request.ConversationId, contact, optedOut, ids, ct);
         }
 
         return new IngestMessageResult(Found: true, Deduplicated: false, InboxMapper.ToResponse(message),
             conversation.Mode, aiEligible);
     }
+
+    /// <summary>One confirmation of a stop/start word. Its failure (no balance, closed channel) is traced and logged, never
+    /// fails the inbound message, which is already saved.</summary>
+    private async Task ConfirmOptOutAsync(Guid clientId, Guid conversationId, Contact contact, bool optedOut, TraceIds ids, CancellationToken ct)
+    {
+        try
+        {
+            var text = await _optOut.ConfirmationTextAsync(clientId, contact, optedOut, ct);
+            if (text is not null) await SendSystemTextAsync(clientId, conversationId, text, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _tracer.Step(TraceSteps.SendBlocked, TraceOutcomes.Failed, ids, detail: new { kind = "opt_out_confirmation", error = TraceText.Error(ex) });
+        }
+    }
+
+    public async Task<MessageResponse?> SendSystemTextAsync(Guid clientId, Guid conversationId, string content, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(content)) throw new ArgumentException("inbox.errors.contentRequired");
+        var conversation = await _conversations.GetWithContactAsync(clientId, conversationId, ct);
+        if (conversation is null) return null;
+
+        var messageId = Guid.NewGuid();
+        _tracer.Step(TraceSteps.SendRequested, TraceOutcomes.Ok, Ids(conversation, messageId), detail: new { kind = "system" });
+        var billingHold = await PrepareTracedBillingAsync(conversation, messageId, OutboundMessageKind.Text, null, null, ct);
+        string externalMessageId;
+        try
+        {
+            externalMessageId = await SendTracedAsync(conversation, messageId,
+                () => ResolveSender(conversation.Channel).SendTextAsync(conversation, content, ct));
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            await _billing.SendFailedAsync(billingHold, ct);
+            throw;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var message = new Message
+        {
+            Id = messageId,
+            ClientId = clientId,
+            ConversationId = conversationId,
+            ContactId = conversation.ContactId,
+            Direction = MessageDirection.Outbound,
+            SenderType = MessageSenderType.System,
+            Origin = MessageOrigin.System,
+            Channel = conversation.Channel,
+            MessageType = "text",
+            Content = content,
+            ExternalMessageId = externalMessageId,
+            // Tells the Inbox this is a message the contact received, not one of the internal system markers.
+            MetadataJson = MessageMetadata.Automatic,
+            IsAiGenerated = false,
+            SentAt = now,
+            CreatedAt = now,
+            TraceId = TraceContext.CurrentTraceId()
+        };
+        _messages.Add(message);
+        // An automatic message never changes who answers the conversation (mode) and never opens a service window.
+        conversation.LastMessageAt = now;
+        conversation.LastMessageDirection = MessageDirection.Outbound;
+        conversation.UpdatedAt = now;
+
+        await _unitOfWork.SaveChangesAsync(ct);
+        await _billing.SentAsync(billingHold, ct);
+        await _notifier.NewMessageAsync(clientId, conversationId, message.Id, conversation.ContactId,
+            MessageDirection.Outbound, MessageSenderType.System, MessageOrigin.System, now, ct);
+        return InboxMapper.ToResponse(message);
+    }
+
+    /// <summary>Message types a stop/start word can arrive as (Telegram's /stop is a command).</summary>
+    private static readonly HashSet<string> OptOutMessageTypes = new(StringComparer.OrdinalIgnoreCase) { "text", "command" };
 
     /// <summary>Customer message types the AI assistant is allowed to see — see IngestMessageResult.AiEligible.</summary>
     private static readonly HashSet<string> AiEligibleMessageTypes = new(StringComparer.OrdinalIgnoreCase) { "text", "interactive" };

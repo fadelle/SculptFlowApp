@@ -31,7 +31,7 @@ constant default declared in `Common/Statics/ConfigDefaults`.
 from user-secrets in development and environment variables in production. This covers connection strings, API keys,
 client secrets, public URLs and provider ids. They never go in `config.settings`.
 
-## Declared settings (88)
+## Declared settings (92)
 
 Generated from `Common/Statics/ConfigDefaults`; keep this table in step when you add one.
 
@@ -58,6 +58,10 @@ Generated from `Common/Statics/ConfigDefaults`; keep this table in step when you
 | Billing | RateBackdateToleranceMinutes | 5 | int 0–1440 | How far in the past a new rate may start or an old one may end (clock skew allowance). |
 | Billing | RecentTransactions | 15 | int 1–100 | How many recent wallet transactions a client's billing page shows. |
 | Billing | ChargeAiReplies | true | bool | Charge each AI assistant reply as `ai_reply` usage (included credit first, then wallet). Needs an `ai_reply` rate; a client that can't pay gets no AI reply and the conversation goes to the team. Off = AI replies are not charged. |
+| OptOut | Enabled | true | bool | Whether a contact's message that is only a stop or start word opts them out of (or back into) business-started messages: campaigns, reminders and Inbox templates. |
+| OptOut | StopKeywords | stop,stopall,unsubscribe,arret,desabonner,desinscrire,توقف,ايقاف,الغاء الاشتراك | string (comma list) | Words that opt a contact out when they are the whole message (case, accents, Arabic diacritics and end punctuation ignored). |
+| OptOut | StartKeywords | start,unstop,subscribe,demarrer,اشتراك | string (comma list) | Words that opt a contact back in when they are the whole message (same matching as StopKeywords). |
+| OptOut | SendConfirmation | true | bool | Reply once to a stop or start word with a short confirmation in the contact's language (a normal outbound message, billed like any other). |
 | Knowledge | MinScore | 0.30 | decimal 0–1 | Minimum similarity for a search result, for new clients (each client can change its own). |
 | Knowledge | ChunkMaxChars | 1000 | int 200–4000 | Chunk size in characters for new clients (stored per client in tokens). |
 | Knowledge | ChunkOverlapChars | 150 | int 0–1000 | Chunk overlap in characters for new clients. |

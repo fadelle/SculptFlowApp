@@ -73,13 +73,13 @@ public class MessageBillingTests
 
         public Mock<IConversationService> Conversations { get; } = new();
 
-        public MessageService NewMessageService(ApplicationDbContext db)
+        public MessageService NewMessageService(ApplicationDbContext db, IOptOutService? optOut = null)
         {
             return new MessageService(new ConversationRepository(db), new MessageRepository(db), new ContactRepository(db),
                 new WhatsAppTemplateRepository(db), new CampaignRepository(db), new UnitOfWork(db), WhatsApp, new IChannelSender[] { new WhatsAppChannelSender(WhatsApp) },
                 NullProxy<IInboxNotifier>.Create(), new EventLogger(new EventLogRepository(db)), NullProxy<INotificationService>.Create(),
                 MessageBilling, H.Entitlements(db), new InboxSettingsService(new InboxSettingsRepository(db), new ClientRepository(db), H.Entitlements(db), new UnitOfWork(db)), Mock.Of<IMessageTracer>(),
-                Conversations.Object);
+                Conversations.Object, optOut ?? Mock.Of<IOptOutService>());
         }
 
         public async Task<MessageResponse> SendTemplateAsync(Guid templateId)
@@ -546,5 +546,42 @@ public class MessageBillingTests
         Assert.Equal("Paid by you directly to Meta", direct.PaidBy);
         var account = Assert.Single(summary.ChannelAccounts);
         Assert.False(account.ChargedByPlatform);
+    }
+
+    [PostgresFact]
+    public async Task A_stop_word_opts_the_contact_out_and_the_confirmation_is_a_billed_system_message()
+    {
+        var s = await SetupAsync(wallet: 1m, serviceWindowOpen: true);
+        var config = new Mock<IConfigManager>();
+        config.SetupGet(c => c.OptOutEnabled).Returns(true);
+        config.SetupGet(c => c.OptOutSendConfirmation).Returns(true);
+        config.SetupGet(c => c.OptOutStopKeywords).Returns("stop");
+        config.SetupGet(c => c.OptOutStartKeywords).Returns("start");
+        config.SetupGet(c => c.LocalizationLanguages).Returns("en");
+        var terminology = new Mock<ITerminology>();
+        terminology.Setup(t => t.Defaults(It.IsAny<string>())).Returns(TextKit.DefaultTerms());
+        terminology.Setup(t => t.ForBusinessTypeAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(TextKit.DefaultTerms());
+
+        IngestMessageResult result;
+        await using (var db = s.H.Db())
+        {
+            var optOut = new Omni.App.Business.Services.Contacts.OptOutService(config.Object, new ContactRepository(db), new ClientRepository(db),
+                new Omni.App.Business.Managers.ReaderTextFactory(TextKit.Catalog, terminology.Object, config.Object), new EventLogger(new EventLogRepository(db)),
+                new UnitOfWork(db), TimeProvider.System);
+            result = await s.NewMessageService(db, optOut).IngestAsync(new IngestMessageRequest(s.Client, s.Conversation, s.Contact, IngestEventType.CustomerMessage,
+                ConversationChannel.WhatsApp, "Stop!", "wamid.in-" + Guid.NewGuid().ToString("N"), null, null, null, "text", null, null, null));
+        }
+
+        Assert.False(result.AiEligible);
+        await using var check = s.H.Db();
+        var contact = await check.Contacts.SingleAsync(c => c.Id == s.Contact);
+        Assert.False(contact.MarketingOptIn);
+        Assert.NotNull(contact.OptedOutAt);
+        var reply = await check.Messages.SingleAsync(m => m.ConversationId == s.Conversation && m.Direction == MessageDirection.Outbound);
+        Assert.Equal((MessageSenderType.System, MessageOrigin.System), (reply.SenderType, reply.Origin));
+        Assert.StartsWith("You're unsubscribed", reply.Content);
+        Assert.Matches(@"""automatic""\s*:\s*true", reply.MetadataJson); // jsonb may add a space; inbox.js allows it
+        Assert.Equal(1, s.WhatsApp.Sends);
+        Assert.True(await check.Events.AnyAsync(e => e.ContactId == s.Contact && e.EventType == EventTypes.ContactOptedOut));
     }
 }

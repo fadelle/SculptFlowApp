@@ -55,6 +55,12 @@ public class ConfigManager : IConfigManager
     public int BillingRecentTransactions => GetInt(ConfigDefaults.BillingRecentTransactions);
     public bool BillingChargeAiReplies => GetBool(ConfigDefaults.BillingChargeAiReplies);
 
+    // ---- OptOut
+    public bool OptOutEnabled => GetBool(ConfigDefaults.OptOutEnabled);
+    public string OptOutStopKeywords => GetString(ConfigDefaults.OptOutStopKeywords);
+    public string OptOutStartKeywords => GetString(ConfigDefaults.OptOutStartKeywords);
+    public bool OptOutSendConfirmation => GetBool(ConfigDefaults.OptOutSendConfirmation);
+
     // ---- Knowledge
     public decimal KnowledgeMinScore => GetDecimal(ConfigDefaults.KnowledgeMinScore);
     public int KnowledgeChunkMaxChars => GetInt(ConfigDefaults.KnowledgeChunkMaxChars);

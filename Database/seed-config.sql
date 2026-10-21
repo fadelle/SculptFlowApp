@@ -1,7 +1,7 @@
 -- =====================================================================
 -- Configuration seed: one config.settings row per setting declared in
 -- Omni.App/Common/Statics/ConfigDefaults.cs, with its default value.
--- GENERATED from ConfigDefaults (88 settings); regenerate it when a setting is added.
+-- GENERATED from ConfigDefaults (92 settings); regenerate it when a setting is added.
 --
 -- Safe to re-run: a row that already exists is left alone, so values
 -- changed from the admin portal's Configuration page are never reset.
@@ -33,6 +33,10 @@ insert into config.settings (section, key, value, updated_by) values
   ('Billing', 'RateBackdateToleranceMinutes', '5', 'seed'),
   ('Billing', 'RecentTransactions', '15', 'seed'),
   ('Billing', 'ChargeAiReplies', 'true', 'seed'),
+  ('OptOut', 'Enabled', 'true', 'seed'),
+  ('OptOut', 'StopKeywords', 'stop,stopall,unsubscribe,arret,desabonner,desinscrire,توقف,ايقاف,الغاء الاشتراك', 'seed'),
+  ('OptOut', 'StartKeywords', 'start,unstop,subscribe,demarrer,اشتراك', 'seed'),
+  ('OptOut', 'SendConfirmation', 'true', 'seed'),
   ('Knowledge', 'MinScore', '0.30', 'seed'),
   ('Knowledge', 'ChunkMaxChars', '1000', 'seed'),
   ('Knowledge', 'ChunkOverlapChars', '150', 'seed'),

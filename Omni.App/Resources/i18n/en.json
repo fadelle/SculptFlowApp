@@ -642,6 +642,15 @@
 
   "contactDetail.title": "{Contact}",
   "contactDetail.saved": "Saved.",
+  "contactDetail.optOut.title": "Messages from you",
+  "contactDetail.optOut.badge": "Opted out",
+  "contactDetail.optOut.subscribed": "Gets your campaigns, booking reminders and templates. Writing STOP opts them out.",
+  "contactDetail.optOut.optedOut": "Opted out on {0}: gets no campaigns, booking reminders or templates. They can still write to you, and you can reply.",
+  "contactDetail.optOut.optOut": "Opt out",
+  "contactDetail.optOut.optIn": "Opt back in",
+  "contactDetail.optOut.optInConfirm": "Only opt someone back in when they asked for it.",
+  "contactDetail.optOut.done": "Opted out: no more campaigns, reminders or templates.",
+  "contactDetail.optOut.undone": "Opted back in.",
   "contactDetail.missing": "This {contact} isn't in your list",
   "contactDetail.back": "Back to {Contacts}",
   "contactDetail.noPhone": "No phone",
@@ -1518,6 +1527,7 @@
   "inbox.errors.voiceUnsupported": "Playing voice notes isn't supported for {0} conversations yet.",
   "inbox.errors.audioGone": "The audio of this voice note is no longer available.",
   "inbox.errors.contentRequired": "Write a message first.",
+  "inbox.errors.contactOptedOut": "This {contact} opted out of your messages, so no template can be sent. They can still write to you, and you can reply.",
   "inbox.errors.invalidEventType": "'{0}' isn't an event type.",
   "inbox.errors.unsupportedEventType": "The event type '{0}' can't create a message.",
   "inbox.errors.externalIdRequired": "A status update needs the provider's message id (externalMessageId).",
@@ -1747,5 +1757,8 @@
   "acceptInvite.submit": "Join",
   "acceptInvite.submitBusy": "Joining…",
   "acceptInvite.errors.nameRequired": "Enter your full name.",
-  "acceptInvite.errors.linkInvalid": "This invite link no longer works: it was already used, it expired or it was cancelled. Ask the account owner for a new invite."
+  "acceptInvite.errors.linkInvalid": "This invite link no longer works: it was already used, it expired or it was cancelled. Ask the account owner for a new invite.",
+
+  "optOut.confirmation.stopped": "You're unsubscribed: {0} won't send you messages here any more. Reply START to subscribe again.",
+  "optOut.confirmation.resumed": "You're subscribed again to messages from {0}."
 }

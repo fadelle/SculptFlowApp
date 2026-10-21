@@ -452,6 +452,15 @@
   "contacts.count.other": "{contacts}: {0}",
   "contactDetail.title": "{Contact}",
   "contactDetail.saved": "تم الحفظ.",
+  "contactDetail.optOut.title": "رسائلك إليه",
+  "contactDetail.optOut.badge": "ألغى الاشتراك",
+  "contactDetail.optOut.subscribed": "تصله حملاتك وتذكيرات المواعيد والقوالب. إرسال كلمة STOP يلغي اشتراكه.",
+  "contactDetail.optOut.optedOut": "ألغى الاشتراك في {0}: لا تصله حملات ولا تذكيرات مواعيد ولا قوالب. لا يزال بإمكانه مراسلتك، ويمكنك الرد عليه.",
+  "contactDetail.optOut.optOut": "إلغاء الاشتراك",
+  "contactDetail.optOut.optIn": "إعادة الاشتراك",
+  "contactDetail.optOut.optInConfirm": "لا تُعِد اشتراك أحد إلا إذا طلب ذلك.",
+  "contactDetail.optOut.done": "تم إلغاء الاشتراك: لا مزيد من الحملات أو التذكيرات أو القوالب.",
+  "contactDetail.optOut.undone": "تمت إعادة الاشتراك.",
   "contactDetail.missing": "هذا الشخص غير موجود في قائمتك",
   "contactDetail.back": "العودة إلى {Contacts}",
   "contactDetail.noPhone": "لا يوجد هاتف",
@@ -783,6 +792,7 @@
   "inbox.errors.voiceUnsupported": "تشغيل الرسائل الصوتية غير مدعوم بعد في محادثات {0}.",
   "inbox.errors.audioGone": "لم يعد صوت هذه الرسالة الصوتية متاحًا.",
   "inbox.errors.contentRequired": "اكتب رسالة أولًا.",
+  "inbox.errors.contactOptedOut": "ألغت جهة الاتصال هذه اشتراكها في رسائلك، لذا لا يمكن إرسال أي قالب إليها. لا يزال بإمكانها مراسلتك، ويمكنك الرد عليها.",
   "inbox.errors.invalidEventType": "«{0}» ليس نوع حدث.",
   "inbox.errors.unsupportedEventType": "لا يمكن لنوع الحدث «{0}» إنشاء رسالة.",
   "inbox.errors.externalIdRequired": "يحتاج تحديث الحالة إلى معرّف رسالة المزوّد (externalMessageId).",
@@ -1702,5 +1712,8 @@
   "acceptInvite.submit": "انضمام",
   "acceptInvite.submitBusy": "جارٍ الانضمام…",
   "acceptInvite.errors.nameRequired": "أدخل اسمك الكامل.",
-  "acceptInvite.errors.linkInvalid": "رابط الدعوة هذا لم يعد صالحًا: إمّا أنه استُخدم من قبل، أو انتهت صلاحيته، أو أُلغيت الدعوة. اطلب دعوة جديدة من مالك الحساب."
+  "acceptInvite.errors.linkInvalid": "رابط الدعوة هذا لم يعد صالحًا: إمّا أنه استُخدم من قبل، أو انتهت صلاحيته، أو أُلغيت الدعوة. اطلب دعوة جديدة من مالك الحساب.",
+
+  "optOut.confirmation.stopped": "تم إلغاء اشتراكك: لن تصلك رسائل من {0} هنا بعد الآن. أرسل START أو «اشتراك» لإعادة الاشتراك.",
+  "optOut.confirmation.resumed": "تمت إعادة اشتراكك في رسائل {0}."
 }
