@@ -28,6 +28,10 @@ public class ContactsModel : PageModel
     [BindProperty(SupportsGet = true)]
     public string? Stage { get; set; }
 
+    /// <summary>Set by the contact page after a privacy delete.</summary>
+    [TempData]
+    public string? StatusMessage { get; set; }
+
     [BindProperty(SupportsGet = true)]
     public string? Search { get; set; }
 

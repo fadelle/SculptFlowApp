@@ -1,3 +1,4 @@
+using Omni.App.Entities.Dtos.Contacts;
 using Omni.App.Entities.Dtos.PlatformAdmin;
 using Omni.App.Entities.Requests.PlatformAdmin;
 using Omni.App.Entities.Responses.Billing;
@@ -10,6 +11,12 @@ public interface IContactAdminService
     Task<PagedResponse<ContactRow>> ListContactsAsync(Guid? clientId, string? stage, string? search, int page, CancellationToken ct);
 
     Task<ContactDetail?> GetContactAsync(Guid id, CancellationToken ct);
+
+    /// <summary>Everything Omni holds about the contact (IContactDataService.ExportAnyAsync); null when unknown.</summary>
+    Task<ContactExport?> ExportContactAsync(Guid id, CancellationToken ct);
+
+    /// <summary>Deletes the contact and its data for good; null when unknown.</summary>
+    Task<PlatformAdminChange?> DeleteContactAsync(Guid id, CancellationToken ct);
 
     Task<List<ContactEventRow>> ContactEventsAsync(Guid contactId, CancellationToken ct);
 

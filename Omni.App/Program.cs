@@ -274,6 +274,8 @@ builder.Services.AddScoped<IContactService, ContactService>();
 // Opt-out (Milestone C): stop/start words on inbound messages and the contact page switch; campaigns, reminders and
 // Inbox templates skip or refuse an opted-out contact.
 builder.Services.AddScoped<IOptOutService, OptOutService>();
+// Privacy requests (Milestone C): export a contact's data as JSON, or delete it for good (account owner or the portal).
+builder.Services.AddScoped<IContactDataService, ContactDataService>();
 builder.Services.AddScoped<ICatalogService, CatalogService>();
 builder.Services.AddScoped<IAvailabilityService, AvailabilityService>();
 builder.Services.AddScoped<INotificationService, NotificationService>();

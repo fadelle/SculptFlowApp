@@ -33,6 +33,16 @@ public class ContactsAdminController : ControllerBase
     public async Task<IActionResult> Get(Guid id, CancellationToken ct) =>
         await _contacts.GetContactAsync(id, ct) is { } contact ? Ok(contact) : NotFound();
 
+    /// <summary>Everything Omni holds about the contact (privacy request), as JSON. 404 when unknown.</summary>
+    [HttpGet("{id:guid}/export")]
+    public async Task<IActionResult> Export(Guid id, CancellationToken ct) =>
+        await _contacts.ExportContactAsync(id, ct) is { } export ? Ok(export) : NotFound();
+
+    /// <summary>Deletes the contact and its data for good (privacy request). 404 when unknown.</summary>
+    [HttpDelete("{id:guid}")]
+    public async Task<IActionResult> Delete(Guid id, CancellationToken ct) =>
+        await _contacts.DeleteContactAsync(id, ct) is { } change ? Ok(change) : NotFound();
+
     [HttpGet("{id:guid}/events")]
     public async Task<IActionResult> Events(Guid id, CancellationToken ct) => Ok(await _contacts.ContactEventsAsync(id, ct));
 

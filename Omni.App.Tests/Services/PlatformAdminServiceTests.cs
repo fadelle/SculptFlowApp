@@ -16,7 +16,20 @@ public class ContactAdminServiceTests
 
     private readonly Mock<IBusinessTypeService> _businessTypes = TextKit.PermissiveBusinessTypes();
 
-    private ContactAdminService Sut() => new(_repo.Object, _uow.Object, _conversations.Object, _bookings.Object, _time, _businessTypes.Object);
+    private readonly Mock<IContactDataService> _contactData = new();
+    private ContactAdminService Sut() => new(_repo.Object, _uow.Object, _conversations.Object, _bookings.Object, _time, _businessTypes.Object, _contactData.Object);
+
+    [Fact]
+    public async Task Contact_export_and_delete_go_through_the_privacy_rules()
+    {
+        var id = Guid.NewGuid();
+        var clientId = Guid.NewGuid();
+        _contactData.Setup(d => d.DeleteAnyAsync(id, It.IsAny<CancellationToken>())).ReturnsAsync(clientId);
+        Assert.Equal(clientId, (await Sut().DeleteContactAsync(id, default))!.ClientId);
+        Assert.Null(await Sut().DeleteContactAsync(Guid.NewGuid(), default));
+        Assert.Null(await Sut().ExportContactAsync(Guid.NewGuid(), default));
+        _contactData.Verify(d => d.ExportAnyAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
 
     [Fact]
     public async Task Contact_update_validates_values_and_tracks_opt_out_transitions()

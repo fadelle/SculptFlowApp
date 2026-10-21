@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Omni.App.Business.Contracts.Managers;
 using Omni.App.Business.Contracts.Services.Contacts;
+using Omni.App.Common.Helpers;
 using Omni.App.Controllers.Filters;
 using Omni.App.Entities.Requests.Contacts;
 using Omni.App.Entities.Responses.Contacts;
@@ -19,10 +20,12 @@ namespace Omni.App.Controllers.Client;
 public class ContactsController : DashboardApiController
 {
     private readonly IContactService _contacts;
+    private readonly IContactDataService _data;
 
-    public ContactsController(IContactService contacts, ICurrentClientContext clientContext) : base(clientContext)
+    public ContactsController(IContactService contacts, IContactDataService data, ICurrentClientContext clientContext) : base(clientContext)
     {
         _contacts = contacts;
+        _data = data;
     }
 
     /// <summary>Creates a contact, or returns the existing one if ExternalContactId was already seen for
@@ -66,6 +69,27 @@ public class ContactsController : DashboardApiController
 
         var contact = await _contacts.GetByIdAsync(clientId.Value, id, ct);
         return contact is null ? NotFound() : Ok(contact);
+    }
+
+    /// <summary>Everything Omni holds about the contact, as a JSON file (privacy request). Account owner only (403);
+    /// 404 when the contact isn't the client's.</summary>
+    [HttpGet("{id:guid}/export")]
+    public async Task<IActionResult> Export(Guid id, CancellationToken ct)
+    {
+        var access = await GetAccessAsync(ct);
+        if (access is null) return Forbid();
+        var export = await _data.ExportAsync(access, id, ct);
+        return export is null ? NotFound() : File(ContactExportFile.Bytes(export), ContactExportFile.ContentType, ContactExportFile.Name(export));
+    }
+
+    /// <summary>Deletes the contact and its data for good (privacy request). Account owner only (403); 400 when the typed
+    /// confirmation isn't the contact's name (else phone, else email); 404 when the contact isn't the client's.</summary>
+    [HttpDelete("{id:guid}")]
+    public async Task<IActionResult> Delete(Guid id, [FromBody] DeleteContactRequest request, CancellationToken ct)
+    {
+        var access = await GetAccessAsync(ct);
+        if (access is null) return Forbid();
+        return await _data.DeleteAsync(access, id, request.Confirmation, ct) ? NoContent() : NotFound();
     }
 
     [HttpPatch("{id:guid}")]

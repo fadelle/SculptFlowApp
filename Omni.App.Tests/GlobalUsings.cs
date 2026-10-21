@@ -133,3 +133,4 @@ global using Omni.App.Business.Contracts.Services.Accounts;
 global using Omni.App.Business.Contracts.Services.Email;
 global using Omni.App.Entities.Dtos.Email;
 global using Omni.App.Entities.Dtos.Members;
+global using Omni.App.Entities.Dtos.Contacts;

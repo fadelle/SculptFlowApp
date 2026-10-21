@@ -159,6 +159,29 @@ else
         </section>
     </div>
 
+    @if (Model.CanManageData)
+    {
+        <section class="au-panel au-panel--round au-panel--pad mt-3" aria-labelledby="contact-data-title" id="contact-data">
+            <div class="au-panel__head"><h3 class="au-panel__title" id="contact-data-title">@T["contactDetail.data.title"]</h3></div>
+            <p class="au-help">@T["contactDetail.data.help"]</p>
+            <div class="au-form-actions">
+                <a class="au-btn au-btn--outlined" href="/dashboard/contacts/@contact.Id?handler=Export"><span class="au-icon" aria-hidden="true">description</span>@T["contactDetail.data.export"]</a>
+            </div>
+            <details class="contact-delete">
+                <summary class="au-btn au-btn--danger-outlined">@T["contactDetail.data.delete"]</summary>
+                <form method="post" asp-page-handler="Delete" asp-route-id="@contact.Id" class="au-stack mt-2" autocomplete="off">
+                    <p><strong>@T["contactDetail.data.deleteTitle"]</strong></p>
+                    <p class="au-help">@T["contactDetail.data.deleteHelp"]</p>
+                    <div class="au-form-field">
+                        <label class="au-form-label" for="delete-confirmation">@T["contactDetail.data.confirmLabel"] <strong><bdi dir="auto">@Model.DeleteConfirmation</bdi></strong></label>
+                        <input type="text" name="confirmation" id="delete-confirmation" class="au-input" dir="auto" required autocomplete="off" />
+                    </div>
+                    <div><button type="submit" class="au-btn au-btn--danger">@T["contactDetail.data.deleteSubmit"]</button></div>
+                </form>
+            </details>
+        </section>
+    }
+
     <partial name="_StatusHelp" model="Model.Stages" />
     <script src="~/js/status-help.js" asp-append-version="true"></script>
 }

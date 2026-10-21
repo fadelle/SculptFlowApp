@@ -30,7 +30,31 @@ public class ContactsAndBookingsControllerTests : ClientControllerTestBase
     private readonly Mock<IBookingService> _bookings = new();
     private readonly Mock<IAvailabilityService> _availability = new();
 
-    private ContactsController Contacts() => new ContactsController(_contacts.Object, Client.Object).With();
+    private readonly Mock<IContactDataService> _contactData = new();
+    private ContactsController Contacts() => new ContactsController(_contacts.Object, _contactData.Object, Client.Object).With();
+
+    [Fact]
+    public async Task Contact_export_and_delete_pass_the_callers_access_and_answer_404_for_strangers()
+    {
+        var access = new UserAccess("owner", ClientId, UserRole.Client, null, null, null);
+        Client.Setup(c => c.GetAccessAsync(It.IsAny<CancellationToken>())).ReturnsAsync(access);
+        var id = Guid.NewGuid();
+        var export = new ContactExport(DateTimeOffset.UtcNow, "Glow", Omni.App.Business.Mappers.Contacts.ContactMapper.ToResponse(new Contact { Id = id }), [], [], [], [], []);
+        _contactData.Setup(d => d.ExportAsync(access, id, It.IsAny<CancellationToken>())).ReturnsAsync(export);
+        _contactData.Setup(d => d.DeleteAsync(access, id, "Ann", It.IsAny<CancellationToken>())).ReturnsAsync(true);
+
+        var file = Assert.IsType<FileContentResult>(await Contacts().Export(id, default));
+        Assert.Equal("application/json", file.ContentType);
+        Assert.StartsWith("contact-", file.FileDownloadName);
+        Assert.Contains("\"clientName\": \"Glow\"", System.Text.Encoding.UTF8.GetString(file.FileContents));
+        Assert.IsType<NotFoundResult>(await Contacts().Export(Guid.NewGuid(), default));
+        Assert.IsType<NoContentResult>(await Contacts().Delete(id, new DeleteContactRequest("Ann"), default));
+        Assert.IsType<NotFoundResult>(await Contacts().Delete(Guid.NewGuid(), new DeleteContactRequest("x"), default));
+
+        Client.Setup(c => c.GetAccessAsync(It.IsAny<CancellationToken>())).ReturnsAsync((UserAccess?)null);
+        Assert.IsType<ForbidResult>(await Contacts().Export(id, default));
+        Assert.IsType<ForbidResult>(await Contacts().Delete(id, new DeleteContactRequest("Ann"), default));
+    }
     private BookingsController Appts() => new BookingsController(_bookings.Object, _availability.Object, Client.Object).With();
 
     private ContactResponse Contact() => new(Guid.NewGuid(), ClientId, null, null, "Ann", null, null, null, null, "web", null, null, null, "new", "unknown", null, null, null, null, true, null, null, null, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow);

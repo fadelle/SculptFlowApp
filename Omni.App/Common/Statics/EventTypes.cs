@@ -13,6 +13,8 @@ public static class EventTypes
     public const string ContactOptedOut = "contact_opted_out";
     /// <summary>A contact opted back in (a start word, or a member on the contact page).</summary>
     public const string ContactOptedIn = "contact_opted_in";
+    /// <summary>A contact and its data were deleted for a privacy request (the event keeps no link to the contact).</summary>
+    public const string ContactDeleted = "contact_deleted";
     public const string BookingCreated = "booking_created";
     public const string BookingAttended = "booking_attended";
     public const string BookingNoShow = "booking_no_show";

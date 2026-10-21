@@ -1,3 +1,5 @@
+using Omni.App.Business.Contracts.Services.Contacts;
+using Omni.App.Entities.Dtos.Contacts;
 using Omni.App.Business.Contracts.Services.Bookings;
 using Omni.App.Business.Contracts.Services.BusinessTypes;
 using Omni.App.Business.Contracts.Services.Inbox;
@@ -22,9 +24,12 @@ public class ContactAdminService : IContactAdminService
     private readonly TimeProvider _time;
     private readonly IBusinessTypeService _businessTypes;
 
+    private readonly IContactDataService _contactData;
+
     public ContactAdminService(IContactAdminRepository repository, IUnitOfWork unitOfWork, IConversationService conversations,
-        IBookingService bookings, TimeProvider time, IBusinessTypeService businessTypes)
+        IBookingService bookings, TimeProvider time, IBusinessTypeService businessTypes, IContactDataService contactData)
     {
+        _contactData = contactData;
         _businessTypes = businessTypes;
         _repository = repository;
         _unitOfWork = unitOfWork;
@@ -32,6 +37,11 @@ public class ContactAdminService : IContactAdminService
         _bookings = bookings;
         _time = time;
     }
+
+    public Task<ContactExport?> ExportContactAsync(Guid id, CancellationToken ct) => _contactData.ExportAnyAsync(id, ct);
+
+    public async Task<PlatformAdminChange?> DeleteContactAsync(Guid id, CancellationToken ct) =>
+        await _contactData.DeleteAnyAsync(id, ct) is { } clientId ? new PlatformAdminChange(clientId) : null;
 
     public Task<PagedResponse<ContactRow>> ListContactsAsync(Guid? clientId, string? stage, string? search, int page, CancellationToken ct) =>
         _repository.ListContactsAsync(clientId, stage, search, page, ct);

@@ -26,19 +26,29 @@ public class ContactDetailModel : PageModel
     private const string SavedKey = "contactDetail.saved";
     private const string OptedOutKey = "contactDetail.optOut.done";
     private const string OptedInKey = "contactDetail.optOut.undone";
+    private const string DeletedKey = "contactDetail.data.deleted";
 
     private readonly ICurrentClientContext _clientContext;
     private readonly IContactService _contacts;
     private readonly IOptOutService _optOut;
+    private readonly IContactDataService _data;
     private readonly IStringLocalizer _text;
 
-    public ContactDetailModel(ICurrentClientContext clientContext, IContactService contacts, IOptOutService optOut, IStringLocalizer text)
+    public ContactDetailModel(ICurrentClientContext clientContext, IContactService contacts, IOptOutService optOut, IContactDataService data,
+        IStringLocalizer text)
     {
         _clientContext = clientContext;
         _contacts = contacts;
         _optOut = optOut;
+        _data = data;
         _text = text;
     }
+
+    /// <summary>The signed-in user is the account owner: the privacy panel (export, delete) is shown.</summary>
+    public bool CanManageData { get; private set; }
+
+    /// <summary>What the owner types to confirm a delete (the contact's name, else phone, else email).</summary>
+    public string DeleteConfirmation { get; private set; } = string.Empty;
 
     [BindProperty(SupportsGet = true)]
     public Guid Id { get; set; }
@@ -146,6 +156,40 @@ public class ContactDetailModel : PageModel
         return RedirectToPage(new { Id });
     }
 
+    /// <summary>Account owner only: everything about the contact as a JSON file.</summary>
+    public async Task<IActionResult> OnGetExportAsync(CancellationToken ct)
+    {
+        var access = await _clientContext.GetAccessAsync(ct);
+        if (access is null) return Forbid();
+        try
+        {
+            var export = await _data.ExportAsync(access, Id, ct);
+            return export is null ? NotFound() : File(ContactExportFile.Bytes(export), ContactExportFile.ContentType, ContactExportFile.Name(export));
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Forbid();
+        }
+    }
+
+    /// <summary>Account owner only: deletes the contact and its data for good, then goes back to the list.</summary>
+    public async Task<IActionResult> OnPostDeleteAsync(string? confirmation, CancellationToken ct)
+    {
+        var access = await _clientContext.GetAccessAsync(ct);
+        if (access is null) return Forbid();
+        try
+        {
+            if (!await _data.DeleteAsync(access, Id, confirmation, ct)) return NotFound();
+            StatusMessage = _text[DeletedKey].Value;
+            return LocalRedirect("/dashboard/contacts");
+        }
+        catch (Exception ex) when (ex is ArgumentException or UnauthorizedAccessException)
+        {
+            ErrorMessage = _text.Localize(ex);
+            return RedirectToPage(new { Id });
+        }
+    }
+
     private async Task LoadAsync(CancellationToken ct)
     {
         var client = await _clientContext.GetClientAsync(ct);
@@ -159,6 +203,8 @@ public class ContactDetailModel : PageModel
 
         Contact = await _contacts.GetByIdAsync(client.Id, Id, ct);
         if (Contact is null) return;
+        CanManageData = (await _clientContext.GetAccessAsync(ct))?.Role == UserRole.Client;
+        DeleteConfirmation = ContactDataRules.ConfirmationText(Contact.FullName, Contact.Phone, Contact.Email);
         Stages = await _contacts.ListStagesAsync(client.Id, ct);
 
         var distinctSources = await _contacts.GetDistinctSourcesAsync(client.Id, ct);

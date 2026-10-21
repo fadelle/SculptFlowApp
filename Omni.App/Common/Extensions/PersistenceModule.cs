@@ -66,6 +66,7 @@ public static class PersistenceModule
         services.AddScoped<IMessageTraceStepRepository, MessageTraceStepRepository>();
         services.AddScoped<IMessageTraceAdminRepository, MessageTraceAdminRepository>();
         services.AddScoped<IContactRepository, ContactRepository>();
+        services.AddScoped<IContactDataRepository, ContactDataRepository>();
         services.AddScoped<IServiceRepository, ServiceRepository>();
         services.AddScoped<IOrderRepository, OrderRepository>();
         services.AddScoped<INotificationRepository, NotificationRepository>();

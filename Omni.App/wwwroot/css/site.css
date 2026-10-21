@@ -1542,6 +1542,10 @@ td .cell-sub { white-space: nowrap; }
 
 /* ---- Sign in / Register / finish Google sign-up (Pages/Account/*, auth.js) ---- */
 .auth-logo { display: block; width: 56px; height: 56px; border-radius: 16px; }
+/* Contact page: "Delete for good" opens its confirmation form in place (Pages/Dashboard/ContactDetail) */
+.contact-delete { margin-top: 12px; }
+.contact-delete > summary { list-style: none; display: inline-flex; cursor: pointer; }
+.contact-delete > summary::-webkit-details-marker { display: none; }
 .auth-card-wide { max-width: 460px; }
 /* "Forgot password?" under the password field (Login) */
 .auth-forgot { margin: -8px 0 0; font-size: 0.8125rem; text-align: end; }
