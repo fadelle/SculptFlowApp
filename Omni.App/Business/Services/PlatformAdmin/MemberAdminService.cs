@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Identity;
+using Omni.App.Business.Contracts.Services.Accounts;
 using Omni.App.Business.Contracts.Services.Members;
 using Omni.App.Business.Contracts.Services.PlatformAdmin;
 using Omni.App.Common.Enums;
@@ -14,12 +15,14 @@ public class MemberAdminService : IMemberAdminService
     private readonly IMemberAdminRepository _repository;
     private readonly IMemberService _members;
     private readonly UserManager<AppUser> _users;
+    private readonly IPasswordResetService _passwordReset;
 
-    public MemberAdminService(IMemberAdminRepository repository, IMemberService members, UserManager<AppUser> users)
+    public MemberAdminService(IMemberAdminRepository repository, IMemberService members, UserManager<AppUser> users, IPasswordResetService passwordReset)
     {
         _repository = repository;
         _members = members;
         _users = users;
+        _passwordReset = passwordReset;
     }
 
     public Task<PagedResponse<MemberRow>> ListAsync(Guid? clientId, string? search, int page, CancellationToken ct) =>
@@ -63,6 +66,12 @@ public class MemberAdminService : IMemberAdminService
         var user = await FindAsync(userId);
         user.EmailConfirmed = confirmed;
         Check(await _users.UpdateAsync(user));
+        return new PlatformAdminChange(await _repository.ClientOfAsync(userId, ct));
+    }
+
+    public async Task<PlatformAdminChange> SendPasswordResetEmailAsync(string userId, string requestBaseUrl, CancellationToken ct)
+    {
+        await _passwordReset.SendForUserAsync(userId, requestBaseUrl, ct);
         return new PlatformAdminChange(await _repository.ClientOfAsync(userId, ct));
     }
 

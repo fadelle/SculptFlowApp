@@ -269,4 +269,73 @@ public class AccountPageTests
         Assert.True(model.ShowRequestId);
         Assert.False(new Omni.App.Pages.ErrorModel().ShowRequestId);
     }
+
+    // ---- forgot / reset password (Milestone C S1) ------------------------------------------------------------
+
+    [Fact]
+    public void Login_says_so_after_a_password_reset()
+    {
+        var model = new LoginModel(SignIn().Object, TextKit.Localizer()).Attach();
+        model.OnGet(null, "done");
+        Assert.True(model.PasswordChanged);
+        model.OnGet(null, "other");
+        Assert.False(model.PasswordChanged);
+    }
+
+    [Fact]
+    public async Task Forgot_password_needs_an_email_then_always_answers_the_same()
+    {
+        var reset = new Mock<IPasswordResetService>();
+        var model = new ForgotPasswordModel(reset.Object, TextKit.Context("fr"), TextKit.Localizer()).Attach(configure: h =>
+        {
+            h.Request.Scheme = "https";
+            h.Request.Host = new Microsoft.AspNetCore.Http.HostString("omni.test");
+        });
+        model.OnGet();
+
+        model.Email = " ";
+        Assert.IsType<PageResult>(await model.OnPostAsync(default));
+        Assert.Equal("Enter your email.", model.ErrorMessage);
+        Assert.False(model.Sent);
+
+        model.Email = "nobody@x.com";
+        Assert.IsType<PageResult>(await model.OnPostAsync(default));
+        Assert.True(model.Sent);
+        reset.Verify(r => r.RequestAsync("nobody@x.com", "https://omni.test", "fr", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Reset_password_shows_the_form_only_for_a_usable_link()
+    {
+        var reset = new Mock<IPasswordResetService>();
+        reset.Setup(r => r.IsUsableAsync("good", It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        var model = new ResetPasswordModel(reset.Object, TextKit.Localizer()).Attach();
+
+        model.Token = "good";
+        await model.OnGetAsync(default);
+        Assert.True(model.LinkUsable);
+        model.Token = "bad";
+        await model.OnGetAsync(default);
+        Assert.False(model.LinkUsable);
+    }
+
+    [Fact]
+    public async Task Reset_password_posts_go_to_sign_in_or_explain_what_went_wrong()
+    {
+        var reset = new Mock<IPasswordResetService>();
+        var model = new ResetPasswordModel(reset.Object, TextKit.Localizer()).Attach();
+        model.Token = "t";
+        model.Password = model.ConfirmPassword = "N3w-password";
+        Assert.Equal("/Account/Login?reset=done", RedirectTarget(await model.OnPostAsync(default)));
+
+        reset.Setup(r => r.ResetAsync("t", It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new ArgumentException("resetPassword.errors.mismatch"));
+        Assert.IsType<PageResult>(await model.OnPostAsync(default));
+        Assert.Equal(("The two passwords don't match.", true), (model.ErrorMessage, model.LinkUsable));
+
+        reset.Setup(r => r.ResetAsync("t", It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("resetPassword.errors.linkInvalid"));
+        Assert.IsType<PageResult>(await model.OnPostAsync(default));
+        Assert.False(model.LinkUsable);
+    }
 }

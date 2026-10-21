@@ -1543,6 +1543,8 @@ td .cell-sub { white-space: nowrap; }
 /* ---- Sign in / Register / finish Google sign-up (Pages/Account/*, auth.js) ---- */
 .auth-logo { display: block; width: 56px; height: 56px; border-radius: 16px; }
 .auth-card-wide { max-width: 460px; }
+/* "Forgot password?" under the password field (Login) */
+.auth-forgot { margin: -8px 0 0; font-size: 0.8125rem; text-align: end; }
 .au-auth__card > .au-alert { margin-top: 0; margin-bottom: 16px; }
 /* Show-password button sits inside the input (auth.js swaps its glyph) */
 .pw-wrap { position: relative; display: block; }

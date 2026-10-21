@@ -1,7 +1,7 @@
 -- =====================================================================
 -- Configuration seed: one config.settings row per setting declared in
 -- Omni.App/Common/Statics/ConfigDefaults.cs, with its default value.
--- GENERATED from ConfigDefaults (61 settings); regenerate it when a setting is added.
+-- GENERATED from ConfigDefaults (88 settings); regenerate it when a setting is added.
 --
 -- Safe to re-run: a row that already exists is left alone, so values
 -- changed from the admin portal's Configuration page are never reset.
@@ -14,6 +14,11 @@
 insert into config.settings (section, key, value, updated_by) values
   ('Accounts', 'SignupEnabled', 'true', 'seed'),
   ('Accounts', 'SignupsPerIpPerHour', '20', 'seed'),
+  ('Accounts', 'ResetLinkMinutes', '60', 'seed'),
+  ('Accounts', 'ResetEmailsPerHour', '3', 'seed'),
+  ('Accounts', 'InviteDays', '7', 'seed'),
+  ('Email', 'FromAddress', '', 'seed'),
+  ('Email', 'FromName', 'Omni', 'seed'),
   ('Availability', 'DefaultDurationMinutes', '30', 'seed'),
   ('Availability', 'DefaultBufferMinutes', '0', 'seed'),
   ('Availability', 'DefaultNoticeMinutes', '240', 'seed'),

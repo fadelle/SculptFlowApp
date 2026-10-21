@@ -31,7 +31,7 @@ constant default declared in `Common/Statics/ConfigDefaults`.
 from user-secrets in development and environment variables in production. This covers connection strings, API keys,
 client secrets, public URLs and provider ids. They never go in `config.settings`.
 
-## Declared settings (83)
+## Declared settings (88)
 
 Generated from `Common/Statics/ConfigDefaults`; keep this table in step when you add one.
 
@@ -39,6 +39,11 @@ Generated from `Common/Statics/ConfigDefaults`; keep this table in step when you
 |---|---|---|---|---|
 | Accounts | SignupEnabled | true | bool | Whether anyone can create a new client from the Register page or "Continue with Google". Off = only existing accounts can sign in. |
 | Accounts | SignupsPerIpPerHour | 20 | int 1–1000 | Most sign-up attempts one IP address may make per hour (Register and the Google client-name step). |
+| Accounts | ResetLinkMinutes | 60 | int 10–1440 | How long a password reset link works (minutes). Each link works once. |
+| Accounts | ResetEmailsPerHour | 3 | int 1–20 | Most password reset emails one account gets per hour; further requests get the same answer but send nothing. |
+| Accounts | InviteDays | 7 | int 1–30 | How long a member invite link works (days). |
+| Email | FromAddress | (empty) | string | Sender address of every email (password resets, invites). It must belong to a domain verified in Brevo. Empty = emails can't be sent through Brevo. |
+| Email | FromName | Omni | string | Sender name people see on Omni's emails. |
 | Availability | DefaultDurationMinutes | 30 | int 5–480 | Booking length (minutes) for clients that haven't set their own booking settings. |
 | Availability | DefaultBufferMinutes | 0 | int 0–240 | Gap (minutes) between bookings for clients that haven't set their own booking settings. |
 | Availability | DefaultNoticeMinutes | 240 | int 0–10080 | Minimum notice (minutes) before a bookable slot, for clients that haven't set their own. |
@@ -129,7 +134,7 @@ used, so a change applies at once.
 ## What stays outside the configuration manager
 
 - **Secrets** (user-secrets / environment variables): `ConnectionStrings:Postgres`, `PlatformAdmin:ApiKey`,
-  `N8n:IngestApiKey`, `Meta:AppSecret`, `Meta:WebhookVerifyToken`, every
+  `N8n:IngestApiKey`, `Meta:AppSecret`, `Meta:WebhookVerifyToken`, `Brevo:ApiKey` (email; Milestone C), every
   `ClientSecret`. The one exception is the embeddings API key, which Mohammad moved into the configuration manager as a
   **secret setting** (`IsSecret` in `ConfigDefaults`): it is stored in `config.settings` like the others, but the settings
   API and the Configuration page only say whether it is set, the admin audit log never records it, and the manager never

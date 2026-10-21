@@ -33,8 +33,12 @@ public class LoginModel : PageModel
 
     public string? ErrorMessage { get; set; }
 
-    public void OnGet(string? externalError)
+    /// <summary>Arrived from a successful password reset (?reset=done).</summary>
+    public bool PasswordChanged { get; private set; }
+
+    public void OnGet(string? externalError, string? reset = null)
     {
+        PasswordChanged = reset == "done";
         // Set by GoogleAuthController / the Google handler as a fixed code; only known codes become text.
         ErrorMessage = GoogleLoginSettings.ErrorKey(externalError) is { } key ? _text[key].Value : null;
     }

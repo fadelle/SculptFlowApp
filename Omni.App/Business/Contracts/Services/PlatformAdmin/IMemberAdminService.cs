@@ -21,4 +21,8 @@ public interface IMemberAdminService
     Task<PlatformAdminChange> SetPasswordAsync(string userId, string password, CancellationToken ct);
 
     Task<PlatformAdminChange> SetEmailConfirmedAsync(string userId, bool confirmed, CancellationToken ct);
+
+    /// <summary>Emails the user a password reset link (IPasswordResetService.SendForUserAsync, no hourly limit). Throws
+    /// KeyNotFoundException for an unknown or admin user and EmailSendException (502) when the email can't be sent.</summary>
+    Task<PlatformAdminChange> SendPasswordResetEmailAsync(string userId, string requestBaseUrl, CancellationToken ct);
 }

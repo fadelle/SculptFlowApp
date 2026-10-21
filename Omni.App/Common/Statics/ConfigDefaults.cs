@@ -16,6 +16,16 @@ public static class ConfigDefaults
         "Whether anyone can create a new client from the Register page or \"Continue with Google\". Off = only existing accounts can sign in.");
     public static readonly ConfigDefinition AccountsSignupsPerIpPerHour = new("Accounts", "SignupsPerIpPerHour", "20", ConfigValueType.Int,
         "Most sign-up attempts one IP address may make per hour (Register and the Google client-name step).", 1, 1000);
+    public static readonly ConfigDefinition AccountsResetLinkMinutes = new("Accounts", "ResetLinkMinutes", "60", ConfigValueType.Int,
+        "How long a password reset link works (minutes). Each link works once.", 10, 1440);
+    public static readonly ConfigDefinition AccountsResetEmailsPerHour = new("Accounts", "ResetEmailsPerHour", "3", ConfigValueType.Int,
+        "Most password reset emails one account gets per hour; further requests get the same answer but send nothing.", 1, 20);
+    public static readonly ConfigDefinition AccountsInviteDays = new("Accounts", "InviteDays", "7", ConfigValueType.Int,
+        "How long a member invite link works (days).", 1, 30);
+    public static readonly ConfigDefinition EmailFromAddress = new("Email", "FromAddress", "", ConfigValueType.String,
+        "Sender address of every email (password resets, invites). It must belong to a domain verified in Brevo. Empty = emails can't be sent through Brevo.");
+    public static readonly ConfigDefinition EmailFromName = new("Email", "FromName", "Omni", ConfigValueType.String,
+        "Sender name people see on Omni's emails.");
     public static readonly ConfigDefinition AvailabilityDefaultDurationMinutes = new("Availability", "DefaultDurationMinutes", "30", ConfigValueType.Int,
         "Booking length (minutes) for clients that haven't set their own booking settings.", 5, 480);
     public static readonly ConfigDefinition AvailabilityDefaultBufferMinutes = new("Availability", "DefaultBufferMinutes", "0", ConfigValueType.Int,
@@ -187,6 +197,12 @@ public static class ConfigDefaults
     [
         AccountsSignupEnabled,
         AccountsSignupsPerIpPerHour,
+        AccountsResetLinkMinutes,
+        AccountsResetEmailsPerHour,
+        AccountsInviteDays,
+
+        EmailFromAddress,
+        EmailFromName,
 
         AvailabilityDefaultDurationMinutes,
         AvailabilityDefaultBufferMinutes,

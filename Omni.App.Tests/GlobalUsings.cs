@@ -127,3 +127,8 @@ global using Omni.App.Entities.Responses.BusinessTypes;
 global using Omni.App.Tests.Support;
 global using Omni.App.Entities.Requests.Members;
 global using Omni.App.Business.Services.Members;
+global using Omni.App.Business.Contracts.HttpClients.Brevo;
+global using Omni.App.Business.Contracts.Providers.Email;
+global using Omni.App.Business.Contracts.Services.Accounts;
+global using Omni.App.Business.Contracts.Services.Email;
+global using Omni.App.Entities.Dtos.Email;

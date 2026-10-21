@@ -18,6 +18,22 @@ public interface IConfigManager
     /// <summary>Most sign-up attempts one IP address may make per hour. Default 20.</summary>
     int AccountsSignupsPerIpPerHour { get; }
 
+    /// <summary>How long a password reset link works (minutes). Default 60.</summary>
+    int AccountsResetLinkMinutes { get; }
+
+    /// <summary>Most password reset emails one account gets per hour. Default 3.</summary>
+    int AccountsResetEmailsPerHour { get; }
+
+    /// <summary>How long a member invite link works (days). Default 7.</summary>
+    int AccountsInviteDays { get; }
+
+    // ---- Email
+    /// <summary>Sender address of every email; must be on a domain verified in Brevo. Default empty (can't send).</summary>
+    string EmailFromAddress { get; }
+
+    /// <summary>Sender name of every email. Default Omni.</summary>
+    string EmailFromName { get; }
+
     // ---- Availability
     /// <summary>Booking length (minutes) for clients that haven't set their own booking settings. Default 30.</summary>
     int AvailabilityDefaultDurationMinutes { get; }

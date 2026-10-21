@@ -13,6 +13,8 @@ public class CopyScriptCoverageTests
     private static readonly string[] SeededBySchema = ["core.business_types", "crm.pipeline_stages"];
     // The script creates this one itself (it belongs to the admin portal's schema file, not schema.sql).
     private static readonly string[] CreatedByScript = ["admin.admin_audit_log"];
+    // New in Milestone C: the old project has nothing to copy into them.
+    private static readonly string[] NotInOldProject = ["identity.account_tokens"];
 
     private static string Root => LeftoverNameScanner.FindRepoRoot();
 
@@ -32,7 +34,7 @@ public class CopyScriptCoverageTests
         filled.Add("config.settings"); // updated in place (the seeded defaults are overwritten by hand-changed values)
         Assert.Contains("update config.settings t", script);
 
-        var expected = created.Except(SeededBySchema).Concat(CreatedByScript).ToHashSet();
+        var expected = created.Except(SeededBySchema).Except(NotInOldProject).Concat(CreatedByScript).ToHashSet();
         Assert.True(expected.SetEquals(filled),
             "Tables missing from copy-from-old.sql: [" + string.Join(", ", expected.Except(filled).OrderBy(x => x)) +
             "]; tables it fills that schema.sql does not create: [" + string.Join(", ", filled.Except(expected).OrderBy(x => x)) +

@@ -1153,6 +1153,38 @@ create trigger trg_client_users_updated_at
   before update on identity.client_users
   for each row execute function set_updated_at();
 
+-- ---------------------------------------------------------------------
+-- account_tokens: one-time links sent by email (Milestone C). purpose 'password_reset' (user_id set, from "Forgot
+-- password?" or the admin portal) or 'invite' (a client user invites a member: client_id, email and the name the
+-- inviter typed; user_id stays empty until the invite is accepted). Only the SHA-256 hash of the link's token is
+-- stored, so a database copy can't be used to reset a password. A link works once (used_at), until expires_at, and not
+-- after revoked_at (a newer link for the same person, or the inviter took it back). Kept in the database rather than
+-- ASP.NET's token providers so links survive a deploy.
+-- ---------------------------------------------------------------------
+create table if not exists identity.account_tokens (
+  id                   uuid primary key default gen_random_uuid(),
+  purpose              varchar(20) not null,
+  user_id              text references identity.users(id) on delete cascade,
+  client_id            uuid references core.clients(id) on delete cascade,
+  email                varchar(256) not null,
+  full_name            text,
+  token_hash           char(64) not null,
+  created_by_user_id   text references identity.users(id) on delete set null,
+  expires_at           timestamptz not null,
+  used_at              timestamptz,
+  revoked_at           timestamptz,
+  created_at           timestamptz not null default now(),
+
+  constraint ck_account_tokens_purpose check (purpose in ('invite','password_reset')),
+  constraint ck_account_tokens_reset_user check (purpose <> 'password_reset' or user_id is not null),
+  constraint ck_account_tokens_invite_client check (purpose <> 'invite' or client_id is not null)
+);
+
+create unique index if not exists ux_account_tokens_token_hash on identity.account_tokens(token_hash);
+create index if not exists ix_account_tokens_user_id on identity.account_tokens(user_id);
+create index if not exists ix_account_tokens_client_id on identity.account_tokens(client_id);
+create index if not exists ix_account_tokens_email on identity.account_tokens(lower(email));
+
 -- =====================================================================
 -- Campaigns + Old Contact Reactivation — data model
 -- campaigns/campaign_recipients already existed (WhatsApp Templates & Campaigns, above). This adds

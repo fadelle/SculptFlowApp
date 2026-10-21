@@ -184,6 +184,10 @@ Full detail and the declared-settings table: `docs/configuration.md`.
 - Access is checked on every request, never only at login: `CurrentClientContext` (`UserAccess`: role, client, language)
   and the cookie's `OnValidatePrincipal`. A rule that depends on the role takes the caller's `UserAccess`.
 - One active `client_users` row per user is a rule in code (check it before activating one), not an index.
+- Emails (Milestone C): built by a service in `Business/Services/Email` with `EmailLayout`, sent through `IEmailProvider`
+  (Brevo, or the log without `Brevo:ApiKey` outside Production). Text for someone other than the request's user (an
+  email's reader, a contact) comes from `IReaderTextFactory` (`text["key", args]`). Emailed links are one-time
+  `identity.account_tokens` rows holding only the token's hash (`AccountTokenCodec`), with `AccountLinks.Origin`.
 
 ## Platform-admin APIs (standing rule, agreed 2026-10-07)
 

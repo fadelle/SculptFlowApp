@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Abstractions;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.DependencyInjection;
 using Omni.App.Common.Exceptions;
 using Omni.App.Controllers.Filters;
 
@@ -21,6 +22,7 @@ public class ApiErrorsTests
         { new DuplicateRecordException(new Exception()), 409 },
         { new BenchmarkGeneratorNotConfiguredException("off"), 503 },
         { new ChannelSendException("down"), 502 },
+        { new EmailSendException("Brevo refused"), 502 },
         { new NullReferenceException(), null }
     };
 
@@ -43,6 +45,26 @@ public class ApiErrorsTests
         var result = Assert.IsType<ObjectResult>(context.Result);
         Assert.Equal(422, result.StatusCode);
         Assert.Equal("Your plan doesn't include campaigns.", result.Value!.GetType().GetProperty("error")!.GetValue(result.Value));
+    }
+
+    [Fact]
+    public void An_email_failure_answers_a_fixed_text_never_the_providers_reason()
+    {
+        var http = new DefaultHttpContext
+        {
+            RequestServices = new ServiceCollection()
+                .AddSingleton(TextKit.Localizer()).BuildServiceProvider()
+        };
+        var context = new ExceptionContext(new ActionContext(http, new RouteData(), new ActionDescriptor()), [])
+        {
+            Exception = new EmailSendException("Brevo refused the email (HTTP 401): unauthorized: Key not found")
+        };
+
+        new ApiErrorsAttribute().OnException(context);
+
+        var result = Assert.IsType<ObjectResult>(context.Result);
+        Assert.Equal(502, result.StatusCode);
+        Assert.Equal("We couldn't send the email right now. Please try again in a few minutes.", result.Value!.GetType().GetProperty("error")!.GetValue(result.Value));
     }
 
     [Fact]

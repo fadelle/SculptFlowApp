@@ -45,6 +45,11 @@ public class MembersAdminController : ControllerBase
     public async Task<IActionResult> SetPassword(string userId, [FromBody] PasswordBody request, CancellationToken ct) =>
         Ok(await _members.SetPasswordAsync(userId, request.Password, ct));
 
+    /// <summary>Emails the user a password reset link. 404 unknown or admin user, 502 the email couldn't be sent.</summary>
+    [HttpPost("{userId}/password-reset-email")]
+    public async Task<IActionResult> SendPasswordResetEmail(string userId, CancellationToken ct) =>
+        Ok(await _members.SendPasswordResetEmailAsync(userId, $"{Request.Scheme}://{Request.Host}", ct));
+
     [HttpPut("{userId}/email-confirmed")]
     public async Task<IActionResult> SetEmailConfirmed(string userId, [FromBody] FlagBody request, CancellationToken ct) =>
         Ok(await _members.SetEmailConfirmedAsync(userId, request.Value, ct));

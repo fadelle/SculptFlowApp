@@ -16,6 +16,14 @@
         </div>
     </div>
 
+    @if (Model.PasswordChanged)
+    {
+        <div class="au-alert au-alert--success" role="status">
+            <span class="au-icon au-alert__icon" aria-hidden="true">check_circle</span>
+            <div class="au-alert__body">@T["login.passwordChanged"]</div>
+        </div>
+    }
+
     @if (!string.IsNullOrEmpty(Model.ErrorMessage))
     {
         <div class="au-alert au-alert--error" role="alert">
@@ -39,6 +47,7 @@
             </span>
         </div>
         <div class="caps-warn" data-caps hidden>⇪ @T["auth.password.capsLock"]</div>
+        <p class="auth-forgot"><a class="au-link" href="/Account/ForgotPassword">@T["login.forgotPassword"]</a></p>
 
         <button type="submit" class="au-btn au-btn--primary au-btn--lg au-btn--block" data-busy-label="@T["login.submitBusy"]">@T["login.submit"]</button>
     </form>

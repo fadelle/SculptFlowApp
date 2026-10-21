@@ -49,6 +49,7 @@ public class ApplicationDbContext : IdentityUserContext<AppUser>
     public DbSet<KnowledgeRetrievalBenchmarkResult> KnowledgeBenchmarkResults => Set<KnowledgeRetrievalBenchmarkResult>();
     public DbSet<KnowledgeRetrievalBenchmarkGeneration> KnowledgeBenchmarkGenerations => Set<KnowledgeRetrievalBenchmarkGeneration>();
     public DbSet<ClientUser> ClientUsers => Set<ClientUser>();
+    public DbSet<AccountToken> AccountTokens => Set<AccountToken>();
     public DbSet<AvailabilityRule> AvailabilityRules => Set<AvailabilityRule>();
     public DbSet<BookingSettings> BookingSettings => Set<BookingSettings>();
     public DbSet<InboxSettings> InboxSettings => Set<InboxSettings>();
@@ -772,6 +773,32 @@ public class ApplicationDbContext : IdentityUserContext<AppUser>
                 .IsUnique()
                 .HasDatabaseName("ux_client_users_client_user");
             e.HasIndex(x => x.UserId).HasDatabaseName("ix_client_users_user_id");
+        });
+
+        // ---------------------------------------------------------------
+        // account_tokens — one-time emailed links (password reset, member invite); only the token's hash is stored.
+        // ---------------------------------------------------------------
+        modelBuilder.Entity<AccountToken>(e =>
+        {
+            e.ToTable("account_tokens", "identity");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.Purpose).HasColumnName("purpose").HasMaxLength(20).IsRequired();
+            e.Property(x => x.UserId).HasColumnName("user_id");
+            e.Property(x => x.ClientId).HasColumnName("client_id");
+            e.Property(x => x.Email).HasColumnName("email").HasMaxLength(256).IsRequired();
+            e.Property(x => x.FullName).HasColumnName("full_name");
+            e.Property(x => x.TokenHash).HasColumnName("token_hash").HasMaxLength(64).IsFixedLength().IsRequired();
+            e.Property(x => x.CreatedByUserId).HasColumnName("created_by_user_id");
+            e.Property(x => x.ExpiresAt).HasColumnName("expires_at");
+            e.Property(x => x.UsedAt).HasColumnName("used_at");
+            e.Property(x => x.RevokedAt).HasColumnName("revoked_at");
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+
+            e.HasOne<AppUser>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<Client>().WithMany().HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<AppUser>().WithMany().HasForeignKey(x => x.CreatedByUserId).OnDelete(DeleteBehavior.SetNull);
+            e.HasIndex(x => x.TokenHash).IsUnique().HasDatabaseName("ux_account_tokens_token_hash");
         });
 
         // ---------------------------------------------------------------

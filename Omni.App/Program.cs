@@ -1,3 +1,11 @@
+using Omni.App.Business.Contracts.HttpClients.Brevo;
+using Omni.App.Business.Contracts.Providers.Email;
+using Omni.App.Business.Contracts.Services.Accounts;
+using Omni.App.Business.Contracts.Services.Email;
+using Omni.App.Business.HttpClients.Brevo;
+using Omni.App.Business.Providers.Email;
+using Omni.App.Business.Services.Accounts;
+using Omni.App.Business.Services.Email;
 using Microsoft.Extensions.Localization;
 using Omni.App.Business.Contracts.Services.Ai;
 using Omni.App.Business.Contracts.Services.BusinessTypes;
@@ -208,6 +216,20 @@ builder.Services.AddScoped(typeof(IStringLocalizer<>), typeof(JsonStringLocalize
 builder.Services.AddScoped<IClientProfileService, ClientProfileService>();
 builder.Services.AddScoped<IInboxSettingsService, InboxSettingsService>();
 builder.Services.AddScoped<IMemberService, MemberService>();
+// Email (Milestone C): Brevo's transactional API when Brevo:ApiKey is set. Without a key, outside Production the email
+// (link included) is written to the log instead; in Production BrevoEmailProvider then refuses, so nothing is dropped
+// silently. Account emails are worded in the reader's language (IReaderTextFactory).
+builder.Services.AddHttpClient<IBrevoApiClient, BrevoApiClient>();
+builder.Services.AddScoped<BrevoEmailProvider>();
+builder.Services.AddScoped<LogEmailProvider>();
+builder.Services.AddScoped<IEmailProvider>(sp =>
+    sp.GetRequiredService<IBrevoApiClient>().IsConfigured || sp.GetRequiredService<IWebHostEnvironment>().IsProduction()
+        ? sp.GetRequiredService<BrevoEmailProvider>()
+        : sp.GetRequiredService<LogEmailProvider>());
+builder.Services.AddScoped<IReaderTextFactory, ReaderTextFactory>();
+builder.Services.AddScoped<IAccountEmailService, AccountEmailService>();
+// "Forgot password?" (one-time links in identity.account_tokens).
+builder.Services.AddScoped<IPasswordResetService, PasswordResetService>();
 builder.Services.AddScoped<IAutomationCleanupService, AutomationCleanupService>();
 builder.Services.AddScoped<ISettingsService, SettingsService>();
 // Settings by section + key: config.settings, else the constant default in Common/Statics/ConfigDefaults.
@@ -380,14 +402,16 @@ builder.Services.AddHttpClient<ICalendarSyncNotifier, CalendarSyncNotifier>();
 // ---------------------------------------------------------------------
 // Web layer
 // ---------------------------------------------------------------------
-// Every Razor Page requires login by default — Account/Login and Account/Register (and the
-// framework's own Error page) are the only ones explicitly opened up, since a user obviously can't
+// Every Razor Page requires login by default — the sign-in pages (Login, Register, Forgot/Reset password) and the
+// framework's own Error page are the only ones explicitly opened up, since a user obviously can't
 // log in on a page that itself requires being logged in.
 builder.Services.AddRazorPages(options =>
 {
     options.Conventions.AuthorizeFolder("/");
     options.Conventions.AllowAnonymousToPage("/Account/Login");
     options.Conventions.AllowAnonymousToPage("/Account/Register");
+    options.Conventions.AllowAnonymousToPage("/Account/ForgotPassword");
+    options.Conventions.AllowAnonymousToPage("/Account/ResetPassword");
     // Authenticated by the short-lived Google external cookie, not yet by an app session (see GoogleAuthController).
     options.Conventions.AllowAnonymousToPage("/Account/CompleteGoogleSignup");
     options.Conventions.AllowAnonymousToPage("/Error");

@@ -215,6 +215,7 @@ public class MemberAdminServiceTests
 {
     private readonly Mock<IMemberAdminRepository> _repo = new();
     private readonly Mock<IMemberService> _members = new();
+    private readonly Mock<IPasswordResetService> _reset = new();
     private readonly Mock<UserManager<AppUser>> _users;
     private readonly AppUser _user = new() { Id = "u1", UserName = "a@x.com", Role = UserRole.Member };
     private readonly AppUser _admin = new() { Id = "admin-1", UserName = "ad@x.com", Role = UserRole.Admin };
@@ -236,7 +237,18 @@ public class MemberAdminServiceTests
         _repo.Setup(r => r.ClientOfAsync("u1", It.IsAny<CancellationToken>())).ReturnsAsync(_clientId);
     }
 
-    private MemberAdminService Sut() => new(_repo.Object, _members.Object, _users.Object);
+    private MemberAdminService Sut() => new(_repo.Object, _members.Object, _users.Object, _reset.Object);
+
+    [Fact]
+    public async Task A_password_reset_email_goes_through_the_reset_service_and_names_the_client()
+    {
+        var change = await Sut().SendPasswordResetEmailAsync("u1", "https://omni.test", default);
+        Assert.Equal(_clientId, change.ClientId);
+        _reset.Verify(r => r.SendForUserAsync("u1", "https://omni.test", It.IsAny<CancellationToken>()), Times.Once);
+
+        _reset.Setup(r => r.SendForUserAsync("admin-1", It.IsAny<string>(), It.IsAny<CancellationToken>())).ThrowsAsync(new KeyNotFoundException());
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => Sut().SendPasswordResetEmailAsync("admin-1", "https://omni.test", default));
+    }
 
     [Fact]
     public async Task Membership_toggle_goes_through_the_member_rules()

@@ -16,7 +16,8 @@ namespace Omni.App.Controllers.Filters;
 /// <item>409: a duplicate or overlapping record, the WhatsApp 24-hour window is closed, a benchmark run or question
 /// generation is already in progress.</item>
 /// <item>422: <see cref="InvalidOperationException"/> (a business rule says no: plan limit, wallet empty, wrong state).</item>
-/// <item>502: the provider refused or failed (channel send, Meta Graph API, benchmark question generator).</item>
+/// <item>502: the provider refused or failed (channel send, Meta Graph API, benchmark question generator, email). An email
+/// failure answers a fixed "couldn't send the email" text; the provider's reason only goes to the error log.</item>
 /// <item>503: the benchmark question generator isn't configured.</item>
 /// </list>
 /// Anything else stays a 500. The message is put into the request's language: a service throws with a strings-file key
@@ -40,7 +41,10 @@ public sealed class ApiErrorsAttribute : ExceptionFilterAttribute
                 .LogError(context.Exception, "{Action} answered {StatusCode}: {Error}",
                     context.ActionDescriptor.DisplayName, status, context.Exception.Message);
         }
-        context.Result = new ObjectResult(new { error = Localize(context.HttpContext, context.Exception) }) { StatusCode = status };
+        var error = context.Exception is EmailSendException
+            ? Text(context.HttpContext, EmailSendException.TextKey)
+            : Localize(context.HttpContext, context.Exception);
+        context.Result = new ObjectResult(new { error }) { StatusCode = status };
         context.ExceptionHandled = true;
     }
 
@@ -60,7 +64,7 @@ public sealed class ApiErrorsAttribute : ExceptionFilterAttribute
         BenchmarkRunInProgressException or BenchmarkGenerationInProgressException => StatusCodes.Status409Conflict,
         ServiceWindowClosedException or DuplicateRecordException or OverlappingRecordException => StatusCodes.Status409Conflict,
         BenchmarkGeneratorNotConfiguredException => StatusCodes.Status503ServiceUnavailable,
-        ChannelSendException or MetaGraphApiException or BenchmarkGenerationException => StatusCodes.Status502BadGateway,
+        ChannelSendException or MetaGraphApiException or BenchmarkGenerationException or EmailSendException => StatusCodes.Status502BadGateway,
         UnauthorizedAccessException => StatusCodes.Status403Forbidden,
         KeyNotFoundException => StatusCodes.Status404NotFound,
         ArgumentException => StatusCodes.Status400BadRequest,
