@@ -1,7 +1,8 @@
-# Deploy runbook: moving to Omni (Milestone A)
+# Deploy runbook: moving to Omni (Milestones A and B)
 
 One order for every step of the first Omni deploy, covering this app (`Omni.App`) and the admin portal (`Omni.Admin`,
-its own repo). Both live on the branch `refactor/generic-platform` until the cutover. The database changes are not an
+its own repo). Both live on the branch `refactor/generic-platform` until the cutover; Milestone A (generic business types)
+and Milestone B (English, Arabic and French dashboard) ship together in this one deploy. The database changes are not an
 in-place upgrade: a **new** Supabase project is filled from the old one by a copy script, so the live old project keeps
 running untouched until the cutover.
 
@@ -28,7 +29,9 @@ Background: `docs/system-design.html` §2.4 (deploy), §7.4 (n8n import), §8.5 
 | The main app's public URL | main app `App__PublicBaseUrl`, portal `MainApp__PublicBaseUrl`, n8n base URL | the portal's `appsettings.json` points at the live URL, so staging must override it |
 
 No other environment variable changed name in Milestone A. Five database settings did (`docs/configuration.md`); the copy
-moves them.
+moves them. Milestone B adds three database settings, created by `seed-config.sql`: `Localization:Languages` (`en,ar,fr`:
+the languages people can pick; English is always on), `Localization:LanguageCookieDays` (365) and
+`Localization:ShowTextKeys` (off; the review mode is refused in Production whatever the value). No environment variable.
 
 ## Phase 1: build the new database (no downtime)
 
@@ -74,7 +77,8 @@ moves them.
    `MainApp__PlatformAdminApiKey` = the staging main app's `PlatformAdmin__ApiKey`.
 8. n8n: import `docs/n8n/omni-ai-assistant.json`, `omni-calendar-sync.json`, `omni-retrieval-benchmark.json` (they import
    as new, inactive workflows next to the old ones). Create the Header Auth credential **Omni ingest key** (name
-   `X-Ingest-Key`, value = the new key) and pick it on each HTTP node if n8n didn't; attach the OpenAI credential; replace
+   `X-Ingest-Key`, value = the new key) and pick it on each HTTP node if n8n didn't (including the AI workflow's
+   `update_contact` tool, which stores the contact's language); attach the OpenAI credential; replace
    `https://sculptflowapp.onrender.com` in the HTTP nodes with the staging URL; activate; copy the three production
    webhook URLs into the staging service's `N8n__AiWebhookUrl`, `N8n__CalendarSyncWebhookUrl`,
    `N8n__KnowledgeBenchmarkWebhookUrl`. Leave the old workflows on: production still uses them.
@@ -82,10 +86,14 @@ moves them.
    - Portal: sign in with your existing admin email and password (migrated hash). Admins, Clients, Business types,
      Billing → Plans: every plan needs a `max_users` (Seats) value, or its clients can't add members.
    - Dashboard: sign in as a migrated client user (their old password works) and a member; open Inbox, Contacts,
-     Bookings, Services, Campaigns, Knowledge Base, Business info, Members, Billing.
+     Bookings, Services, Campaigns, Knowledge Base, Business info, Members, Billing. Switch the language in the account
+     menu to العربية (pages turn right to left) and Français, and back to the business default.
+   - Portal: change a client's Dashboard language on its details page; that client's Business info shows it.
    - AI: Meta's webhook still points at production, so test through a Telegram bot connected on staging (or the old
-     production number only after the cutover). Run a short conversation in English, Arabic and French (ask, book,
-     reschedule, cancel, hand-off): replies come in the contact's language and the stages move.
+     production number only after the cutover). Run a short conversation in English, Arabic (Arabic script and Arabizi)
+     and French (ask, book, reschedule, cancel, hand-off, then an emoji-only message): replies come in the language of the
+     contact's latest message (the emoji gets the stored language), the contact page shows the language the AI stored, and
+     the stages move.
 
 ## Phase 3: cutover (short downtime)
 
@@ -108,16 +116,19 @@ moves them.
 15. Resume (deploy) both production services. Everyone is signed out once (new cookie names `omni.auth`, `omni.admin`).
 16. Smoke test production: portal sign-in, a client sign-in, a WhatsApp message to a real number gets an AI reply, a
     booking appears in the calendar and syncs.
+17. Languages: `Localization:Languages` stays `en,ar,fr` (portal Configuration page) unless you want to hold a language
+    back; `Localization:ShowTextKeys` stays off. Set the default language of any client that should open in Arabic or
+    French (portal → client → Dashboard language); everyone else keeps English until they pick a language themselves.
 
 ## Phase 4: after the cutover
 
-17. Delete the old n8n workflow exports in the workspace root's `docs/n8n/` folder (they hold the old ingest key) and the
+18. Delete the old n8n workflow exports in the workspace root's `docs/n8n/` folder (they hold the old ingest key) and the
     old workflows in n8n once the new ones have run cleanly.
-18. Suspend or delete the two staging services.
-19. Keep the old Supabase project paused for a while, then retire it and rotate its keys.
-20. The automation tester was not updated in Milestone A: it still calls the old routes, so don't run it against the new app
+19. Suspend or delete the two staging services.
+20. Keep the old Supabase project paused for a while, then retire it and rotate its keys.
+21. The automation tester was not updated in Milestone A: it still calls the old routes, so don't run it against the new app
     until it is.
-21. Later, if you rename the GitHub repos, Render services or the public domain: update `App__PublicBaseUrl`, the portal's
+22. Later, if you rename the GitHub repos, Render services or the public domain: update `App__PublicBaseUrl`, the portal's
     `MainApp__PublicBaseUrl`, the n8n base URL, the Google sign-in and calendar OAuth redirect URIs, the Outlook and TikTok
     redirect URIs, the Meta webhook URL, and reconnect Telegram bots (their webhooks are registered on the public URL). Then
     have the old Render host token removed from the old-names guard allowlists in both repos.

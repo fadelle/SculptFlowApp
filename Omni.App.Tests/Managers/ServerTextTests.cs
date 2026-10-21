@@ -107,12 +107,12 @@ public class ServerTextTests
         });
         var text = TextKit.Localizer(AppLanguage.Arabic, words);
 
-        Assert.Equal("يوجد بالفعل إجراء باسم 'Botox'.",
+        Assert.Equal("يوجد بالفعل إجراء باسم «Botox».",
             text.Localize(new ArgumentException("services.errors.nameTaken").WithArgs("Botox")));
         Assert.Equal("الميزة «الحملات» غير مشمولة في باقتك. راجع الإعدادات ← الفوترة.",
             text.Localize(new EntitlementDeniedException(EntitlementKeys.Campaigns, EntitlementDeniedException.NotIncludedKey)
                 .WithArgs(BillingTextHelper.EntitlementArg(EntitlementKeys.Campaigns))));
-        Assert.Equal("لديك بالفعل قالب باسم 'reminder' بهذه اللغة. اختر اسمًا آخر.",
+        Assert.Equal("لديك بالفعل قالب باسم «reminder» بهذه اللغة. اختر اسمًا آخر.",
             text.Localize(new ArgumentException("templates.errors.duplicate").WithArgs("reminder")));
         Assert.Equal("لا يمكن إرسال هذه الحملة وحالتها مكتمل.",
             text.Localize(new ArgumentException("campaigns.errors.cantSend").WithArgs(TextArg.Value("completed"))));

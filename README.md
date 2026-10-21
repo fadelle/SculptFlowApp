@@ -19,7 +19,8 @@ This README is only a short orientation.
   users belong to one client via `client_users` and use this app; admins use only the admin portal (`Omni.Admin`), which
   signs them in through this app's `/api/platform-admin/auth/login`.
 - Business types (`core.business_types`) give each client its words, AI profile and pipeline stages; UI text lives in
-  `Omni.App/Resources/i18n/en.json`.
+  `Omni.App/Resources/i18n/en.json`, with Arabic (`ar.json`, right to left) and French (`fr.json`) beside it: each person
+  picks a language in the account menu, otherwise the client default applies (fixed words: `docs/i18n/glossary.md`).
 - SignalR (`/hubs/inbox`) for live Inbox, calendar and notification updates; PostgreSQL stays the source of truth.
 - Hand-rolled CSS and small vanilla-JS files in `wwwroot/` (no frontend framework).
 - Deployed as a Docker image on Render (`https://sculptflowapp.onrender.com`) from `main`.

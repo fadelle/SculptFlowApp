@@ -355,7 +355,7 @@ begin
                                              original_file_name, mime_type, file_size_bytes, source_url, created_at) values
     (pg_temp.did(500), c, 'About Aurora Aesthetic Clinic', 'general',
       'Aurora Aesthetic Clinic is a boutique plastic surgery practice led by Dr. Amelia Hart, board-certified, with over 15 years of experience. We offer surgical and non-surgical aesthetic treatments in a private, comfortable setting.', true, 'manual', null, null, null, null, now() - interval '100 days'),
-    (pg_temp.did(501), c, 'Consultation: what to expect', 'consultation',
+    (pg_temp.did(501), c, 'Consultation: what to expect', 'booking',
       'A consultation lasts 30-45 minutes and costs $75, which is credited toward your procedure. Dr. Hart reviews your goals and medical history, examines the area, explains options and risks, and gives a personalised quote. Please bring a photo ID and a list of medications.', true, 'manual', null, null, null, null, now() - interval '100 days'),
     (pg_temp.did(502), c, 'Pricing guide', 'pricing',
       'Typical starting prices: Rhinoplasty from $6,000; Liposuction from $4,500; Facelift from $12,000; Breast augmentation from $6,500; Tummy tuck from $7,500; Botox from $12 per unit. Final quotes depend on the extent of the procedure and are given after a consultation.', true, 'manual', null, null, null, null, now() - interval '90 days'),

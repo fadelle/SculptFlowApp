@@ -98,7 +98,7 @@ Generated from `Common/Statics/ConfigDefaults`; keep this table in step when you
 | Integrations | TokenRefreshMarginMinutes | 5 | int 0–60 | Calendar and TikTok access tokens are refreshed this long before they expire. |
 | Voice | MaxBytes | 10485760 | int 1024–20971520 | Largest voice note (bytes) the Inbox will download from the provider to play or forward. |
 | Dashboard | ContactsPageSize | 25 | int 5–200 | Contacts per page on the dashboard. |
-| Localization | Languages | en,ar,fr | string (comma-separated two-letter codes) | Languages the dashboard is offered and shown in. English is always on; a language must also have a strings file (`Resources/i18n/{code}.json`). A user or client whose language is turned off sees the next choice (client default, browser, English). Keep production on `en` until the native review is applied. |
+| Localization | Languages | en,ar,fr | string (comma-separated two-letter codes) | Languages the dashboard is offered and shown in. English is always on; a language must also have a strings file (`Resources/i18n/{code}.json`). A user or client whose language is turned off sees the next choice (client default, browser, English). Remove a language here to hold it back. |
 | Localization | LanguageCookieDays | 365 | int 1–3650 | How long a visitor's language choice on the sign-in pages is remembered (`omni.lang` cookie). |
 | Localization | ShowTextKeys | false | bool | Translation review mode: when on, `?textKeys=1` on any page shows each text's key after it (`?textKeys=0` stops). Never works in Production. |
 | Cache | ClientsMinutes | 60 | int 1–1440 | Client rows (signed-in client, the bot's client info). Saving a change clears the cached copy at once; this is only how long an untouched copy lives. |

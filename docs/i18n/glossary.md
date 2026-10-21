@@ -1,8 +1,8 @@
 # Glossary: fixed words in Arabic and French
 
-One vocabulary for the dashboard's translations (`Omni.App/Resources/i18n/ar.json`, `fr.json`), the built-in business
-types (`Database/schema.sql`) and the native reviewers. Drafts until the native review (Milestone B, plan D6); a reviewer's
-correction changes this file and every string that uses the word.
+One vocabulary for the dashboard's translations (`Omni.App/Resources/i18n/ar.json`, `fr.json`) and the built-in business
+types (`Database/schema.sql`). Reviewed in Milestone B S7 (changes by key, with reasons, in the workspace `docs/i18n-review-changes.csv`,
+next to the reviewer sheets); a later correction changes this file and every string that uses the word.
 
 Style: **Modern Standard Arabic**, Gregorian months (يناير، فبراير…), Latin digits 0-9. French: *vous*, no-break space
 before `: ; ! ?` and inside « », typographic apostrophe (’).
@@ -31,6 +31,12 @@ before `: ; ! ?` and inside « », typographic apostrophe (’).
   - French: a translation may use only the placeholder forms its English has (`{Booking}` is not `{booking}`), so where
     the English capitalizes the word, the French puts it first and adds a colon («{Booking} : règles»); «Pas de {contacts}»
     replaces «Aucun {contact}» when the English only has the plural.
+  - Arabic: a name or value quoted in a message goes in «» («يوجد بالفعل إجراء باسم «{0}».»), never straight quotes. A number
+    that comes from code or a setting is never glued to a counted noun outside a plural family: write the count as a
+    label («الحد الأقصى لعدد المواقع: {0}», «يجب ألا يتجاوز عدد أحرف الاسم {0}»).
+  - French: `{client}` is feminine in both built-in types, so «le nom de la {client}» and «heure de la {client}» are fine;
+    a service name in `{0}` has unknown gender, so status words about it are either neutral («n’est plus disponible») or
+    agree with «élément».
 - **Plurals**: Arabic may add `.zero`, `.two`, `.few`, `.many` to a plural family; French uses `.one` for 0 and 1.
 - **Never translate**: Omni, WhatsApp, Instagram, Facebook, Messenger, Telegram, TikTok, Google, Meta, n8n, codes
   (E.164, ISO), file types (PDF, CSV). List one in `Guards/i18n-same-as-english.txt` when the translation equals the
@@ -100,7 +106,7 @@ The defaults (`terms.*` in the strings files) are the `general` type's words.
 | Language | اللغة | Langue |
 | Business default (language) | لغة النشاط الافتراضية | Langue par défaut de l’entreprise |
 | Connect / Reconnect / Disconnect | ربط / إعادة الربط / فصل | Connecter / Reconnecter / Déconnecter |
-| Connected / Not connected | مربوط / غير مربوط | Connecté / Non connecté |
+| Connected / Not connected | متصل / غير متصل | Connecté / Non connecté |
 | WhatsApp Health | سلامة WhatsApp | Santé WhatsApp |
 | Blank (template variable) | فراغ | Champ à remplir |
 | Plan / Subscription | باقة / اشتراك | Forfait / Abonnement |
