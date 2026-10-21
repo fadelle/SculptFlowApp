@@ -122,4 +122,27 @@ public class ServerTextTests
         Assert.DoesNotMatch("[A-Za-z]{3,}", describer.PasswordTooShort(8).Description);
         Assert.Contains("8", describer.PasswordTooShort(8).Description);
     }
+
+    [Fact]
+    public void Keyed_server_errors_read_in_french_with_the_clients_french_words()
+    {
+        var words = TermPlaceholders.Build(new Dictionary<string, TermForms>(TextKit.DefaultTerms())
+        {
+            [TermName.Service] = new("intervention", "interventions")
+        });
+        var text = TextKit.Localizer(AppLanguage.French, words);
+
+        Assert.Equal("« Botox » existe déjà (intervention).",
+            text.Localize(new ArgumentException("services.errors.nameTaken").WithArgs("Botox")));
+        Assert.Equal("« Campagnes » n’est pas inclus dans votre forfait. Voir Paramètres → Facturation.",
+            text.Localize(new EntitlementDeniedException(EntitlementKeys.Campaigns, EntitlementDeniedException.NotIncludedKey)
+                .WithArgs(BillingTextHelper.EntitlementArg(EntitlementKeys.Campaigns))));
+        Assert.Equal("Cette campagne ne peut pas être envoyée avec le statut : Terminé.",
+            text.Localize(new ArgumentException("campaigns.errors.cantSend").WithArgs(TextArg.Value("completed"))));
+        Assert.Equal(("0 page", "1 page", "2 pages"),
+            (text.Plural("knowledge.pages", 0).Value, text.Plural("knowledge.pages", 1).Value, text.Plural("knowledge.pages", 2).Value));
+
+        var describer = new LocalizedIdentityErrorDescriber(text);
+        Assert.Equal("Utilisez au moins 8 caractères pour le mot de passe.", describer.PasswordTooShort(8).Description);
+    }
 }

@@ -410,6 +410,8 @@ table.data-table {
   text-transform: capitalize;
   vertical-align: middle;
 }
+/* Labels arrive translated and already capitalized; Title Case only suits English ("Par L’équipe" in French). */
+html:not([lang='en']) .badge { text-transform: none; }
 .badge-gray   { background: var(--badge-gray-bg);   color: var(--badge-gray-text); }
 .badge-blue   { background: var(--badge-blue-bg);   color: var(--badge-blue-text); }
 .badge-amber  { background: var(--badge-amber-bg);  color: var(--badge-amber-text); }

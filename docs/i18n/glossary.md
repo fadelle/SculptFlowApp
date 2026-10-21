@@ -24,7 +24,13 @@ before `: ; ! ?` and inside « », typographic apostrophe (’).
     («تمّ إنشاء {booking}», «لم يُعثر على {contact}») works for every type.
   - French: the word's gender is unknown (une consultation, un patient), so avoid articles and adjectives that agree
     with it: « Ajouter : {contact} » or « Nouveau {contact} » only where both genders read well; prefer a colon or a
-    verb in the infinitive.
+    verb in the infinitive. In both built-in types `{booking}`, `{order}` and `{client}` are feminine and `{contact}`,
+    `{member}` masculine, so S6 lets a past participle agree with them («{Bookings} prises», «aucune {client}»); `{service}`
+    differs (une intervention, un service), so it only appears after a colon or in parentheses («{Service} : statut»,
+    «Non renseigné ({service})»). A portal-made type with other genders reads slightly off there; the reviewer may flag it.
+  - French: a translation may use only the placeholder forms its English has (`{Booking}` is not `{booking}`), so where
+    the English capitalizes the word, the French puts it first and adds a colon («{Booking} : règles»); «Pas de {contacts}»
+    replaces «Aucun {contact}» when the English only has the plural.
 - **Plurals**: Arabic may add `.zero`, `.two`, `.few`, `.many` to a plural family; French uses `.one` for 0 and 1.
 - **Never translate**: Omni, WhatsApp, Instagram, Facebook, Messenger, Telegram, TikTok, Google, Meta, n8n, codes
   (E.164, ISO), file types (PDF, CSV). List one in `Guards/i18n-same-as-english.txt` when the translation equals the

@@ -5,7 +5,8 @@
     ViewData["SignalRFirst"] = true; // the layout loads the SignalR client before this page's scripts
 
     // Presentation only: "36% of new contacts" under a funnel card ("—" when there's nothing to compare to).
-    static string Rate(int part, int whole) => whole > 0 ? $"{Math.Round(part * 100.0 / whole)}%" : "—";
+    // The percent sign follows the language ("36 %" in French) through common.percent.
+    string Rate(int part, int whole) => whole > 0 ? T["common.percent", Math.Round(part * 100.0 / whole)].Value : "—";
     string PeriodLabel(string period) => period switch
     {
         "this_week" => T["dashboard.period.thisWeek"],

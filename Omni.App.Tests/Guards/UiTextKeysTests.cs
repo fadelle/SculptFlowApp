@@ -207,6 +207,21 @@ public partial class UiTextKeysTests
         Assert.True(same.Count == 0, "Translations equal to their English (translate them, or list them in i18n-same-as-english.txt):\n  " + string.Join("\n  ", same));
     }
 
+    /// <summary>French typography (glossary): a no-break space (U+00A0) before <c>: ; ! ?</c> and inside « », and the typographic
+    /// apostrophe, so a line never wraps before the punctuation. Placeholders like {0:N0} and URLs have no space before the colon.</summary>
+    [Fact]
+    public void French_texts_use_no_break_spaces_and_typographic_apostrophes()
+    {
+        var wrong = Strings("fr")
+            .Where(p => FrenchSpacing().IsMatch(p.Value) || p.Value.Contains('\'') || p.Value.Contains("«") && !p.Value.Contains("« "))
+            .Select(p => $"{p.Key}: {p.Value}")
+            .ToList();
+        Assert.True(wrong.Count == 0, "French texts with a plain space before : ; ! ? » or after «, or a straight apostrophe:\n  " + string.Join("\n  ", wrong));
+    }
+
+    [GeneratedRegex("""(?:[  ][:;!?»]|«[  ]|\S[;!?»]|[^\s \d{}/]:(?![/\d]))""")]
+    private static partial Regex FrenchSpacing();
+
     [GeneratedRegex("""\b(?:T|text|_text|Text|_localizer|Localizer)\[\s*"([^"]+)"\s*[,\]]""")]
     private static partial Regex IndexerKey();
 

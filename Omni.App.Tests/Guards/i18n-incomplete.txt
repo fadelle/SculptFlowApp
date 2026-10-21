@@ -1,4 +1,3 @@
 # Key groups (the first part of a key) each translation still lacks, one line per language: "<lang>: group group ...".
 # Guards/UiTextKeysTests fails on a missing key outside these groups, and on a listed group that is already complete,
 # so a translation session deletes each group here once it is done. Empty at the end of Milestone B.
-fr: signup contacts stages clients nav members businessTypes common layout header auth messages noClient timeView statusHelp login register dashboard inbox billing integrations calendars days businessInfo contactDetail values bookings bookingDetail services campaigns knowledge knowledgeSettings website whatsAppHealth templates status error aurora notifications time availability channels languages orders identity oauth
