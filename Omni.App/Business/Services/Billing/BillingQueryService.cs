@@ -274,6 +274,7 @@ public class BillingQueryService : IBillingQueryService
         LedgerEntryType.IncludedCreditConsumption => "Usage (included credit)",
         LedgerEntryType.UsageRefund => "Usage refund",
         LedgerEntryType.SubscriptionCharge => "Subscription",
+        LedgerEntryType.AddonCharge => "Add-ons",
         LedgerEntryType.IncludedCreditGrant => "Included credit added",
         LedgerEntryType.IncludedCreditExpiry => "Included credit expired",
         LedgerEntryType.ManualAdjustment => "Adjustment",

@@ -19,7 +19,7 @@
 insert into billing.plans (code, name, description, price, currency, billing_period, included_usage_credit, trial_days, is_active, sort_order) values
   ('trial',          'Free Trial', 'Explore Omni for 7 days: 1 user, 1 channel, the inbox and contacts.', 0, 'USD', 'month', 0, 7, true, 10),
   ('inbox',          'Inbox',      'Never miss a customer conversation.', 39, 'USD', 'month', 0, null, true, 20),
-  ('inbox-bookings', '+ Bookings', 'Turn conversations into confirmed appointments.', 59, 'USD', 'month', 0, null, true, 30),
+  ('inbox-bookings', '+ Bookings', 'Turn conversations into confirmed bookings.', 59, 'USD', 'month', 0, null, true, 30),
   ('growth',         'Growth',     'Reach more customers: campaigns and $10 of monthly usage credit.', 99, 'USD', 'month', 10, null, true, 40),
   ('ai-pro',         'AI Pro',     'The AI assistant on your channels, advanced reporting and $20 of monthly usage credit.', 169, 'USD', 'month', 20, null, true, 50),
   ('business',       'Business',   'Communication and automation at scale, API access and $40 of monthly usage credit.', 299, 'USD', 'month', 40, null, true, 60)
