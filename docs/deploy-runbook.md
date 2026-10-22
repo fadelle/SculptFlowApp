@@ -1,4 +1,4 @@
-# Deploy runbook: moving to Omni (Milestones A and B)
+# Deploy runbook: moving to Omni (Milestones A and B, then C)
 
 One order for every step of the first Omni deploy, covering this app (`Omni.App`) and the admin portal (`Omni.Admin`,
 its own repo). Both live on the branch `refactor/generic-platform` until the cutover; Milestone A (generic business types)
@@ -132,6 +132,53 @@ the languages people can pick; English is always on), `Localization:LanguageCook
     `MainApp__PublicBaseUrl`, the n8n base URL, the Google sign-in and calendar OAuth redirect URIs, the Outlook and TikTok
     redirect URIs, the Meta webhook URL, and reconnect Telegram bots (their webhooks are registered on the public URL). Then
     have the old Render host token removed from the old-names guard allowlists in both repos.
+
+## Milestone C: go-live features (branch `feature/go-live`)
+
+Milestone C (emails, invites, STOP opt-out, contact export and delete, booking reminders, the new plans with a free
+trial, add-ons and AI bots) lives on `feature/go-live` in both repos, on top of `refactor/generic-platform`. Either merge
+it into `refactor/generic-platform` before Phase 1 and do the steps below inside Phases 1 and 2, or deploy A+B first and
+then do them as an upgrade of the new project (merge `feature/go-live` into `main` in both repos, push, then these steps).
+Every database step below is re-runnable and keeps existing rows.
+
+C1. **Brevo:** create the account, verify the sending domain (SPF, DKIM, DMARC records at your DNS host; without them
+    resets and invites land in spam), make an API key and set it as `Brevo__ApiKey` on the main app's Render service
+    (secret: never a database setting). In Production without the key every email fails ("couldn't send"); outside
+    Production the emails are written to the log instead.
+C2. **Sender and links:** on the portal's Configuration page set `Email:FromAddress` (an address on the verified domain)
+    and, if you like, `Email:FromName` (default "Omni"). `App__PublicBaseUrl` must be the URL people open: reset and
+    invite links are built from it.
+C3. **Database**, from this repo's root:
+
+    ```
+    psql "<connection string>" -f Database/schema.sql
+    psql "<connection string>" -f Database/seed-config.sql
+    psql "<connection string>" -f Database/seed-billing.sql
+    ```
+
+    `schema.sql` adds `identity.account_tokens`, `scheduling.reminder_settings`, `scheduling.booking_reminders`,
+    `billing.addons`, `billing.client_addons`, `billing.plans.trial_days` and the ledger type `addon_charge`.
+    `seed-config.sql` adds the new settings (`Accounts`, `Email`, `OptOut`, `Reminders`). `seed-billing.sql` adds the six
+    launch plans (`trial`, `inbox`, `inbox-bookings`, `growth`, `ai-pro`, `business`), the four add-ons (extra user $8,
+    channel $5, AI bot $15, WhatsApp number $10 per month) and an `ai_reply` rate of $0.02 on the default rate card; it never
+    changes rows that exist, so prices edited in the portal survive a re-run.
+C4. **Signup plan:** `seed-config.sql` only inserts `Billing:SignupPlanCode = trial` where no row exists, and the copy
+    brought the old value over. If new signups should start on the 7-day Free Trial, set it to `trial` on the
+    Configuration page (with `Billing:Enabled` on). A trial ends instead of renewing; move the client to a paid plan in the
+    portal (Billing → client → Change plan).
+C5. **Existing clients:** plans made before Milestone C have no `max_ai_bots`, so their clients keep the AI on every
+    channel. Move them to the new plans when you are ready; on the new plans the AI answers only on as many connected
+    channels as the plan's AI bots (plus add-ons), in connection order. Check the add-on prices on Billing → Add-ons.
+C6. **WhatsApp Manager:** create a utility template for booking reminders in English, Arabic and French, with three body
+    values: {{1}} the contact's name, {{2}} the date and time, {{3}} the business name. Once approved, each client picks
+    them in Settings → Booking reminders and turns reminders on (they are off by default). Until then WhatsApp reminders
+    are skipped and the booking page says why.
+C7. **n8n:** nothing to import for Milestone C (the AI is simply not called for a STOP or START message).
+C8. **Check on staging:** "Forgot password?" sends an email whose link works once; an owner invites a member, who accepts
+    and signs in; a phone that sends STOP gets one confirmation and is then refused campaigns and Inbox templates (START
+    undoes it); export and delete a test contact from the dashboard and from the portal; with reminders on, a booking 25
+    hours ahead gets both reminders (or a reason on its booking page); Settings → Billing shows the trial's days left and
+    any add-ons; the portal's Add-ons page and a client's "Change add-ons" work.
 
 ## First admin on a project without old data
 
