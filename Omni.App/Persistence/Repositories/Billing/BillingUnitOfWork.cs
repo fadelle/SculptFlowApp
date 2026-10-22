@@ -30,6 +30,7 @@ public sealed class BillingUnitOfWork : IBillingUnitOfWork
         Usage = new BillingUsageRepository(db);
         Ledger = new BillingLedgerRepository(db);
         Plans = new BillingPlanRepository(db);
+        Addons = new BillingAddonRepository(db);
         RateCards = new BillingRateCardRepository(db, cache);
         Subscriptions = new ClientSubscriptionRepository(db);
         ChannelBilling = new ChannelAccountBillingRepository(db, cache);
@@ -43,6 +44,7 @@ public sealed class BillingUnitOfWork : IBillingUnitOfWork
     public IBillingUsageRepository Usage { get; }
     public IBillingLedgerRepository Ledger { get; }
     public IBillingPlanRepository Plans { get; }
+    public IBillingAddonRepository Addons { get; }
     public IBillingRateCardRepository RateCards { get; }
     public IClientSubscriptionRepository Subscriptions { get; }
     public IChannelAccountBillingRepository ChannelBilling { get; }

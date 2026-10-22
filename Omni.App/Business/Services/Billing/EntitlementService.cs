@@ -14,15 +14,17 @@ namespace Omni.App.Business.Services.Billing;
 public class EntitlementService : IEntitlementService
 {
     private readonly IClientSubscriptionRepository _subscriptions;
+    private readonly IBillingAddonRepository _addons;
     private readonly IChannelIntegrationRepository _integrations;
     private readonly TimeProvider _time;
     private readonly ILogger<EntitlementService> _logger;
     private readonly IConfigManager _config;
     private readonly ICacheManager _cacheManager;
 
-    public EntitlementService(IClientSubscriptionRepository subscriptions, IChannelIntegrationRepository integrations, TimeProvider time, ILogger<EntitlementService> logger, IConfigManager config,
-        ICacheManager cacheManager)
+    public EntitlementService(IClientSubscriptionRepository subscriptions, IBillingAddonRepository addons, IChannelIntegrationRepository integrations,
+        TimeProvider time, ILogger<EntitlementService> logger, IConfigManager config, ICacheManager cacheManager)
     {
+        _addons = addons;
         _config = config;
         _cacheManager = cacheManager;
         _subscriptions = subscriptions;
@@ -102,7 +104,10 @@ public class EntitlementService : IEntitlementService
     {
         var subscription = await _subscriptions.GetWithEntitlementsReadOnlyAsync(clientId, ct);
         if (subscription?.Plan is null) return new SubscriptionSnapshot(null, null, null, null, null, new Dictionary<string, string>());
+        // Paid add-ons raise the plan's limits (AddonLimits).
+        var values = AddonLimits.Merge(subscription.Plan.Entitlements.ToDictionary(x => x.EntitlementKey, x => x.Value),
+            await _addons.ListForClientReadOnlyAsync(clientId, ct));
         return new SubscriptionSnapshot(subscription.Status, subscription.PastDueSince, subscription.Plan.Code, subscription.Plan.Name,
-            subscription.CurrentPeriodEnd, subscription.Plan.Entitlements.ToDictionary(x => x.EntitlementKey, x => x.Value));
+            subscription.CurrentPeriodEnd, values);
     }
 }

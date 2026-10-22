@@ -13,5 +13,7 @@ public static class BillingEventTypes
     public const string SubscriptionCancelled = "subscription_cancelled";
     public const string SubscriptionCancelScheduled = "subscription_cancel_scheduled";
     public const string SubscriptionResumed = "subscription_resumed";
+    /// <summary>A client's paid add-on units changed (platform admin).</summary>
+    public const string AddonChanged = "billing_addon_changed";
     public const string ProviderBillingChanged = "provider_billing_changed";
 }

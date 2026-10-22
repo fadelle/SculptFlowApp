@@ -70,13 +70,13 @@ public class ConversationService : IConversationService
             throw new ArgumentException("inbox.errors.invalidChannel").WithArgs(request.Channel);
         }
 
-        var conversation = AddNew(request, await _inboxSettings.InitialModeAsync(request.ClientId, ct));
+        var conversation = AddNew(request, await _inboxSettings.InitialModeAsync(request.ClientId, request.Channel, ct));
         await _unitOfWork.SaveChangesAsync(ct);
         return InboxMapper.ToResponse(conversation);
     }
 
     /// <summary><paramref name="mode"/> comes from IInboxSettingsService.InitialModeAsync: human when the plan lacks the AI
-    /// agent or the client turned the bot off for new conversations.</summary>
+    /// agent, the client turned the bot off for new conversations, or the channel is beyond the AI bot limit.</summary>
     private Conversation AddNew(CreateConversationRequest request, string mode)
     {
         var conversation = new Conversation
@@ -125,7 +125,7 @@ public class ConversationService : IConversationService
             throw new ArgumentException("inbox.errors.invalidChannel").WithArgs(channel);
         }
         var created = AddNew(new CreateConversationRequest(clientId, contactId, channel, externalThreadId),
-            await _inboxSettings.InitialModeAsync(clientId, ct));
+            await _inboxSettings.InitialModeAsync(clientId, channel, ct));
         if (await _unitOfWork.TrySaveChangesAsync(ct))
         {
             return InboxMapper.ToResponse(created);
@@ -261,10 +261,18 @@ public class ConversationService : IConversationService
     public async Task<ConversationResponse?> ReturnToAiAsync(Guid clientId, Guid conversationId, CancellationToken ct = default)
     {
         // Without the AI assistant in the plan nothing would answer, so the conversation must stay with members.
-        if (!(await _inboxSettings.GetAsync(clientId, ct)).PlanIncludesAiBot)
+        var settings = await _inboxSettings.GetAsync(clientId, ct);
+        if (!settings.PlanIncludesAiBot)
         {
             throw new EntitlementDeniedException(EntitlementKeys.AiAssistant, EntitlementDeniedException.NotIncludedKey)
                 .WithArgs(BillingTextHelper.EntitlementArg(EntitlementKeys.AiAssistant));
+        }
+        // Nor on a channel beyond the AI bot limit.
+        var channel = (await _conversations.GetAsync(clientId, conversationId, ct))?.Channel;
+        if (channel is not null && !settings.AiBotAnswersOn(channel))
+        {
+            throw new EntitlementDeniedException(EntitlementKeys.MaxAiBots, EntitlementDeniedException.LimitReachedKey)
+                .WithArgs(BillingTextHelper.EntitlementArg(EntitlementKeys.MaxAiBots), settings.AiBotLimit ?? 0);
         }
         return await SetModeAsync(clientId, conversationId, ConversationMode.Ai, EventTypes.ReturnedToAi, "dashboard", "{}", ct);
     }

@@ -96,7 +96,7 @@ public sealed class BillingHarness
         Entitlements(Db());
 
     public EntitlementService Entitlements(ApplicationDbContext db) =>
-        new(new ClientSubscriptionRepository(db), new ChannelIntegrationRepository(db), Time, NullLogger<EntitlementService>.Instance, Config, Cache);
+        new(new ClientSubscriptionRepository(db), new BillingAddonRepository(db), new ChannelIntegrationRepository(db), Time, NullLogger<EntitlementService>.Instance, Config, Cache);
 
     public static string Unique(string prefix) => $"{prefix}_{Guid.NewGuid():N}"[..Math.Min(prefix.Length + 13, 50)];
 

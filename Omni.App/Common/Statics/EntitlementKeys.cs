@@ -18,4 +18,7 @@ public static class EntitlementKeys
     public const string MaxUsers = "max_users";
     public const string MaxWhatsAppNumbers = "max_whatsapp_numbers";
     public const string MaxChannelConnections = "max_channel_connections";
+    /// <summary>AI bots: how many connected channels the AI assistant answers on (in connection order; the others go to the
+    /// team). Only matters while ai_assistant is on.</summary>
+    public const string MaxAiBots = "max_ai_bots";
 }

@@ -21,7 +21,8 @@ public partial class ServerMessageKeysTests
         "Business/Services/PlatformAdmin/", "Business/Services/Caching/", "Business/Services/Configuration/",
         "Business/Services/Billing/BillingService.cs", "Business/Services/Billing/PlanService.cs",
         "Business/Services/Billing/RateCardService.cs", "Business/Services/Billing/ProviderBillingService.cs",
-        "Business/Services/Billing/SubscriptionService.cs", "Business/Services/Knowledge/KnowledgeBenchmarkService"
+        "Business/Services/Billing/SubscriptionService.cs", "Business/Services/Billing/AddonService.cs",
+        "Business/Services/Knowledge/KnowledgeBenchmarkService"
     ];
 
     [Fact]

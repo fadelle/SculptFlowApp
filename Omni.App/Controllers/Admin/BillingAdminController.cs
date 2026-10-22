@@ -35,8 +35,9 @@ public class BillingAdminController : ControllerBase
     private readonly IProviderBillingService _providerBilling;
 
     public BillingAdminController(IPlanService plans, IRateCardService rateCards, ISubscriptionService subscriptions,
-        IBillingService billing, IBillingQueryService queries, IProviderBillingService providerBilling)
+        IBillingService billing, IBillingQueryService queries, IProviderBillingService providerBilling, IAddonService addons)
     {
+        _addons = addons;
         _plans = plans;
         _rateCards = rateCards;
         _subscriptions = subscriptions;
@@ -44,6 +45,8 @@ public class BillingAdminController : ControllerBase
         _queries = queries;
         _providerBilling = providerBilling;
     }
+
+    private readonly IAddonService _addons;
 
     private string Actor => RequirePlatformAdminKeyAttribute.Actor(Request);
 
@@ -77,6 +80,27 @@ public class BillingAdminController : ControllerBase
         Ok(EntitlementCatalog.All.Select(d => new { d.Key, Kind = d.Kind.ToString().ToLowerInvariant(), d.Label }));
 
     // ---- rate cards & rates -----------------------------------------------------------------------------------
+
+    /// <summary>The add-on catalog (extra users, channels, AI bots, WhatsApp numbers) with how many clients have each.</summary>
+    [HttpGet("addons")]
+    public async Task<IActionResult> ListAddons(CancellationToken ct) => Ok(await _addons.ListCatalogAsync(ct));
+
+    /// <summary>Creates or changes a catalog add-on (name, entitlement on create, unit price per period, active).</summary>
+    [HttpPut("addons/{code}")]
+    public async Task<IActionResult> SaveAddon(string code, [FromBody] AddonRequest request, CancellationToken ct) =>
+        Ok(await _addons.SaveAsync(code, request, ct));
+
+    [HttpGet("clients/{clientId:guid}/addons")]
+    public async Task<IActionResult> ClientAddons(Guid clientId, CancellationToken ct) => Ok(await _addons.ListForClientAsync(clientId, ct));
+
+    /// <summary>Sets the client's units of an add-on (0 removes it); added units are charged from the wallet now. Requires
+    /// Idempotency-Key. 402-like refusals answer 422 (wallet can't pay, no active subscription).</summary>
+    [HttpPut("clients/{clientId:guid}/addons/{code}")]
+    public async Task<IActionResult> SetClientAddon(Guid clientId, string code, [FromBody] SetClientAddonRequest request, CancellationToken ct)
+    {
+        if (IdempotencyKey is not { } key) return MissingIdempotencyKey();
+        return Ok(await _addons.SetQuantityAsync(clientId, code, request.Quantity, key, BillingSource.Admin, Actor, ct));
+    }
 
     [HttpGet("rate-cards")]
     public async Task<IActionResult> ListRateCards(CancellationToken ct) => Ok(await _rateCards.ListAsync(ct));

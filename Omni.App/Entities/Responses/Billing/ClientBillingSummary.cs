@@ -27,4 +27,6 @@ public record ClientBillingSummary(
     decimal UsageTotal,
     IReadOnlyList<BillingTransactionRow> RecentTransactions,
     IReadOnlyList<ClientChannelBillingRow> ChannelAccounts,
-    IReadOnlyList<ProviderDirectUsageRow> ProviderDirectUsage);
+    IReadOnlyList<ProviderDirectUsageRow> ProviderDirectUsage,
+    int? TrialDays = null,
+    IReadOnlyList<ClientAddonRow>? Addons = null);

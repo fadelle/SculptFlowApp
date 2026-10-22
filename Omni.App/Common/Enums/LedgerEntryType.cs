@@ -13,4 +13,6 @@ public static class LedgerEntryType
     public const string IncludedCreditGrant = "included_credit_grant";
     public const string IncludedCreditExpiry = "included_credit_expiry";
     public const string ManualAdjustment = "manual_adjustment";
+    /// <summary>A paid add-on's price (wallet, never positive): when units are added and at every period start.</summary>
+    public const string AddonCharge = "addon_charge";
 }

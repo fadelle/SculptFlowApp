@@ -1,3 +1,4 @@
+using Omni.App.Common.Helpers;
 using Omni.App.Business.Contracts.Managers;
 using Omni.App.Business.Contracts.Services.Billing;
 using Omni.App.Business.Engines.Billing;
@@ -185,7 +186,9 @@ public class BillingQueryService : IBillingQueryService
         var hasAccess = subscription is not null && (subscription.Status == SubscriptionStatus.Active
                                                      || (subscription.Status == SubscriptionStatus.PastDue && now < graceEnds));
 
-        var values = plan?.Entitlements.ToDictionary(e => e.EntitlementKey, e => e.Value) ?? new Dictionary<string, string>();
+        // Limits include the client's paid add-ons (AddonLimits).
+        var addons = await unit.Addons.ListForClientReadOnlyAsync(clientId, ct);
+        var values = AddonLimits.Merge(plan?.Entitlements.ToDictionary(e => e.EntitlementKey, e => e.Value) ?? new Dictionary<string, string>(), addons);
         var entitlements = EntitlementCatalog.All.Select(d => new BillingEntitlementRow(d.Key, d.Label, d.Kind.ToString().ToLowerInvariant(),
             values.TryGetValue(d.Key, out var v) ? v : d.Kind == EntitlementKind.Feature ? "false" : "0")).ToList();
 
@@ -205,7 +208,7 @@ public class BillingQueryService : IBillingQueryService
 
         var channelAccounts = (await _providerBilling.ListAccountsAsync(clientId, ct))
             .Where(a => a.Status == ChannelIntegrationStatus.Connected)
-            .Select(a => new ClientChannelBillingRow(a.Channel, ChannelLabel(a.Channel), a.DisplayName,
+            .Select(a => new ClientChannelBillingRow(a.Channel, ChannelNames.Brand(a.Channel), a.DisplayName,
                 ClientPaidByLabel(a.ProviderBilling, a.Channel, a.OmniUsageBilling), a.OmniUsageBilling, a.ProviderBilling))
             .ToList();
 
@@ -224,7 +227,10 @@ public class BillingQueryService : IBillingQueryService
             plan?.IncludedUsageCredit ?? 0, credit, wallet, reserved, wallet + credit - reserved,
             entitlements, since, usageRows, usageRows.Sum(r => r.Amount),
             recent.Select(ToTransaction).ToList(),
-            channelAccounts, providerDirect);
+            channelAccounts, providerDirect,
+            plan?.TrialDays,
+            addons.Where(a => a.Addon is not null).Select(a => new ClientAddonRow(a.Addon!.Code, a.Addon.Name, a.Addon.EntitlementKey, a.Quantity,
+                a.Addon.UnitPrice, a.Addon.Currency.Trim(), a.Quantity * a.Addon.UnitPrice)).ToList());
     }
 
     /// <summary>Who pays for usage, in client-facing English words (the admin portal; the client's Billing page uses
@@ -243,15 +249,6 @@ public class BillingQueryService : IBillingQueryService
         };
         return charged && providerBilling != ProviderBillingResponsibility.PlatformFunded ? label + " · plus an Omni usage fee" : label;
     }
-
-    private static string ChannelLabel(string channel) => channel switch
-    {
-        ChannelType.WhatsApp => "WhatsApp",
-        ChannelType.Telegram => "Telegram",
-        ChannelType.Facebook => "Facebook",
-        ChannelType.Instagram => "Instagram",
-        _ => channel.Length == 0 ? channel : char.ToUpperInvariant(channel[0]) + channel[1..]
-    };
 
     private static async Task<ReconciliationResponse> ReconcileCoreAsync(IBillingUnitOfWork unit, Guid clientId, CancellationToken ct)
     {

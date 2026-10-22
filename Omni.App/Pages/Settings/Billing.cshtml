@@ -25,6 +25,9 @@
 else
 {
     var badge = StatusBadge(s.SubscriptionStatus);
+    // A trial ends instead of renewing: show the days left (whole days, rounded up).
+    var onTrial = s.TrialDays is not null && s.SubscriptionStatus == "active" && s.CurrentPeriodEnd is not null;
+    var trialDaysLeft = onTrial ? Math.Max(0, (int)Math.Ceiling((s.CurrentPeriodEnd!.Value - DateTimeOffset.UtcNow).TotalDays)) : 0;
     <div class="au-page-head">
         <p class="au-page-head__sub mw-720">@T["billing.intro"]</p>
     </div>
@@ -59,12 +62,17 @@ else
             <span class="au-eyebrow">@T["billing.plan.current"]</span>
             <div class="au-stat__value">@(s.PlanName ?? T["billing.plan.none"].Value)</div>
             <span class="au-stat__hint"><span class="badge @badge.Css">@badge.Text</span>
-                @if (s.PlanPrice is not null) { <text>· @T["billing.plan.price", Money(s.PlanPrice.Value), s.BillingPeriod == BillingPeriod.Year ? T["billing.plan.perYear"] : T["billing.plan.perMonth"]]</text> }</span>
+                @if (onTrial) { <text>· @T["billing.trial.badge"]</text> }
+                else if (s.PlanPrice is not null) { <text>· @T["billing.plan.price", Money(s.PlanPrice.Value), s.BillingPeriod == BillingPeriod.Year ? T["billing.plan.perYear"] : T["billing.plan.perMonth"]]</text> }</span>
         </div>
         <div class="au-stat">
-            <span class="au-eyebrow">@(s.CancelAtPeriodEnd ? T["billing.plan.endsOn"] : T["billing.plan.renewsOn"])</span>
+            <span class="au-eyebrow">@(onTrial ? T["billing.trial.endsOn"] : s.CancelAtPeriodEnd ? T["billing.plan.endsOn"] : T["billing.plan.renewsOn"])</span>
             <div class="au-stat__value">@LocalTimeHelper.Time(s.CurrentPeriodEnd, "date")</div>
-            @if (s.CurrentPeriodStart is not null)
+            @if (onTrial)
+            {
+                <span class="au-stat__hint">@T.Plural("billing.trial.daysLeft", trialDaysLeft)</span>
+            }
+            else if (s.CurrentPeriodStart is not null)
             {
                 <span class="au-stat__hint">@T.Html("billing.plan.periodStarted", LocalTimeHelper.Time(s.CurrentPeriodStart.Value, "date"))</span>
             }
@@ -99,6 +107,25 @@ else
         </div>
     </div>
 
+    <h2 class="section-title">@T["billing.addons.title"]</h2>
+    @if (s.Addons is { Count: > 0 } addons)
+    {
+        <div class="au-table-card">
+            <div class="au-table-scroll">
+                <table class="au-table au-table--stack">
+                    <thead><tr><th>@T["billing.addons.limit"]</th><th class="au-right">@T["billing.addons.units"]</th><th class="au-right">@T["billing.addons.cost"]</th></tr></thead>
+                    <tbody>
+                        @foreach (var a in addons)
+                        {
+                            <tr><td data-label="@T["billing.addons.limit"]">@T.EntitlementLabel(a.EntitlementKey, a.Name)</td><td data-label="@T["billing.addons.units"]" class="au-right"><span dir="ltr">+@a.Quantity.Display("N0")</span></td><td data-label="@T["billing.addons.cost"]" class="au-right">@Money(a.PeriodPrice)</td></tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+    <p class="text-subtle mt-2">@T["billing.addons.ask"]</p>
+
     @if (s.ChannelAccounts.Count > 0)
     {
         <h2 class="section-title">@T["billing.accounts.title"]</h2>
@@ -109,7 +136,7 @@ else
                     <tbody>
                         @foreach (var a in s.ChannelAccounts)
                         {
-                            <tr><td data-label="@T["billing.accounts.channel"]">@a.ChannelLabel</td><td data-label="@T["billing.accounts.account"]">@(a.DisplayName ?? "—")</td><td data-label="@T["billing.accounts.costs"]">@T.PaidByLabel(a.ProviderBilling, a.Channel, a.ChargedByPlatform)</td></tr>
+                            <tr><td data-label="@T["billing.accounts.channel"]">@a.ChannelLabel</td><td data-label="@T["billing.accounts.account"]"><span dir="auto">@(a.DisplayName ?? "—")</span></td><td data-label="@T["billing.accounts.costs"]">@T.PaidByLabel(a.ProviderBilling, a.Channel, a.ChargedByPlatform)</td></tr>
                         }
                     </tbody>
                 </table>

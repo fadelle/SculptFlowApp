@@ -19,6 +19,7 @@ public static class EntitlementCatalog
         new EntitlementDefinition(EntitlementKeys.MaxUsers, EntitlementKind.Limit, "Seats"),
         new EntitlementDefinition(EntitlementKeys.MaxWhatsAppNumbers, EntitlementKind.Limit, "WhatsApp numbers"),
         new EntitlementDefinition(EntitlementKeys.MaxChannelConnections, EntitlementKind.Limit, "Connected channels"),
+        new EntitlementDefinition(EntitlementKeys.MaxAiBots, EntitlementKind.Limit, "AI bots"),
     };
 
     public static EntitlementDefinition? Find(string key) => All.FirstOrDefault(d => d.Key == key);

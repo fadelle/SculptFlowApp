@@ -27,8 +27,17 @@ worker idles. Plans, rate cards, wallets and account arrangements can be prepare
 - Start / change plan (`POST /api/platform-admin/billing/clients/{id}/subscription`, or `Billing:SignupPlanCode` at signup):
   new period from now; wallet pays the price (unless `chargeFirstPeriod=false`); old credit expires; plan credit granted.
   No proration.
-- Renewal (`BillingMaintenanceWorker`, every few minutes): next contiguous period, same charges. Can't pay → `past_due`;
-  every run retries, so a top-up renews it.
+- Renewal (`BillingMaintenanceWorker`, every few minutes): next contiguous period, same charges (plan + add-ons). Can't
+  pay → `past_due`; every run retries, so a top-up renews it.
+- Trials: a plan with `trial_days` (1–90, price 0) is a free trial. Its period lasts that many days and it never renews:
+  at the end the subscription expires (event `subscription_expired` with `trialEnded`), the credit expires, and an admin
+  moves the client to a paid plan. `Billing:SignupPlanCode` defaults to `trial`, the seeded Free Trial.
+- Add-ons (`billing.addons` catalog, `billing.client_addons` per client, `IAddonService`): extra units of a limit
+  (`extra-user` $8, `extra-channel` $5, `extra-ai-bot` $15, `extra-whatsapp-number` $10 per month in the seed). The
+  client's limit is the plan's value + its units (`AddonLimits`; `unlimited` stays unlimited). Added units are charged
+  from the wallet at once (`addon_charge`, no proration, refused when the wallet can't pay or there is no active
+  subscription); every period start charges the plan and the add-ons together (one `addon_charge` row); removing units
+  refunds nothing. Set from the admin portal: `PUT clients/{id}/addons/{code}` `{ "quantity": 2 }` + `Idempotency-Key`.
 - Expired / cancelled / no plan: the client signs in and sees all its data, but can't send messages, run campaigns,
   use the AI assistant or connect channels.
 
@@ -39,7 +48,7 @@ Ask `IEntitlementService`, never compare plan names:
 ```csharp
 var e = await _entitlements.GetAsync(clientId, ct);
 if (e.CanUseCampaigns) ...            // also CanUseBookings, CanUseAiAssistant, CanUseApi, CanUseAdvancedReporting, CanSendMessages
-var max = e.MaximumUsers;            // null = unlimited; also MaximumWhatsAppNumbers, MaximumChannelConnections
+var max = e.MaximumUsers;            // null = unlimited; also MaximumWhatsAppNumbers, MaximumChannelConnections, MaximumAiBots
 await _entitlements.EnsureFeatureAsync(clientId, EntitlementKeys.Campaigns, ct);      // throws EntitlementDeniedException (422)
 await _entitlements.EnsureWithinLimitAsync(clientId, EntitlementKeys.MaxUsers, newCount, ct);
 ```
@@ -47,7 +56,9 @@ await _entitlements.EnsureWithinLimitAsync(clientId, EntitlementKeys.MaxUsers, n
 Keys live in `Common/Statics/EntitlementKeys.cs`: features take `true`/`false`, limits a number or `unlimited`. A key a plan doesn't
 list is off / 0. Wired today: sending (subscription active), campaigns, bookings (`bookings`, below), the AI bot (`ai_assistant`: AI trigger, conversation
 routing and Return to AI, see `InboxSettingsService`), channel connects
-(`max_channel_connections`, `max_whatsapp_numbers`) and seats (`max_users`: active client and member users, checked when
+(`max_channel_connections`, `max_whatsapp_numbers`), AI bots (`max_ai_bots`: the first that many connected channels, in
+connection order, get the AI; on the others conversations go to the team with reason `ai_bot_limit` and Return to AI is
+refused; a plan without the key has no AI bot limit, see `InboxSettingsService`) and seats (`max_users`: active client and member users, checked when
 the client user adds or reactivates a member, see `MemberService`). `api_access` and `advanced_reporting` are defined but
 nothing checks them yet.
 
@@ -205,6 +216,9 @@ rate**: with billing on and no rate, every AI reply is refused and goes to the t
 
 ## How to add a new plan
 
+The launch plans, add-ons and the `ai_reply` rate are in `Database/seed-billing.sql` (re-runnable; it never changes rows
+that exist). Run it once per database after `schema.sql`.
+
 ```
 POST /api/platform-admin/billing/plans
 X-Platform-Admin-Key: …
@@ -259,7 +273,8 @@ Changes apply to future usage only; recorded usage keeps its snapshot. Each chan
 
 1. Apply the billing block of `Database/schema.sql` to Supabase (creates schema `billing`; needs `btree_gist`).
 2. Set `PlatformAdmin__ApiKey` on Render (a long random secret) and the same value as `MainApp__PlatformAdminApiKey` on the admin portal.
-3. Create the default rate card and its rates (including `ai_reply`: without it every AI reply is refused), and the plans.
+3. Run `Database/seed-billing.sql` (plans, add-ons, the default rate card and its `ai_reply` rate), then add the other
+   rates (without `ai_reply` every AI reply is refused).
    Give every plan a `max_users` ("Seats") value: seats are enforced, so a plan without it lets a client add no members.
    Set `bookings` = true on every plan that includes bookings: a plan without it gets no Bookings pages, AI booking tools
    or calendar sync.
@@ -270,6 +285,7 @@ Changes apply to future usage only; recorded usage keeps its snapshot. Each chan
 ## Admin API (all under `/api/platform-admin/billing`, header `X-Platform-Admin-Key`, actor in `X-Admin-Actor`; normally used through the Omni.Admin portal's Billing pages)
 
 Plans: `GET/POST plans`, `GET/PUT plans/{code}`, `PUT plans/{code}/entitlements`, `GET entitlements` ·
+Add-ons: `GET addons`, `PUT addons/{code}`, `GET clients/{id}/addons`, `PUT clients/{id}/addons/{code}` ·
 Rate cards: `GET/POST rate-cards`, `PUT rate-cards/{code}`, `GET/POST rate-cards/{code}/rates`, `POST rates/{id}/close` ·
 Provider billing: `GET provider-billing`, `GET clients/{id}/channel-accounts`, `PUT channel-accounts/{id}/provider-billing`,
 `POST channel-accounts/{id}/provider-billing/reset` ·
@@ -285,7 +301,7 @@ apart from provider-direct usage) and `GET /api/billing/summary|usage|transactio
 Postpaid / credit limits (would add `credit_limit` to the spendable formula), invoicing, tax, automatic payments / a payment
 gateway, multiple currencies (columns exist; one currency is enforced), reseller billing, proration, partial refunds,
 markup-percentage pricing (rates hold an independent client rate today; a `pricing_mode` column would be the place),
-recurring per-number / per-seat charges, and the SMS / Viber / email / RCS / voice /
+and the SMS / Viber / email / RCS / voice /
 AI channels themselves.
 
 ## Tests

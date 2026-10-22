@@ -28,7 +28,7 @@ insert into config.settings (section, key, value, updated_by) values
   ('Billing', 'GracePeriodDays', '7', 'seed'),
   ('Billing', 'ReservationTimeoutHours', '72', 'seed'),
   ('Billing', 'MaintenanceIntervalMinutes', '5', 'seed'),
-  ('Billing', 'SignupPlanCode', '', 'seed'),
+  ('Billing', 'SignupPlanCode', 'trial', 'seed'),
   ('Billing', 'Currency', 'USD', 'seed'),
   ('Billing', 'RateBackdateToleranceMinutes', '5', 'seed'),
   ('Billing', 'RecentTransactions', '15', 'seed'),

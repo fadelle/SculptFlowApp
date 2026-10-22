@@ -12,4 +12,5 @@ public record PlanRequest(
     string? RateCardCode,
     bool IsActive = true,
     int SortOrder = 0,
-    Dictionary<string, string>? Entitlements = null);
+    Dictionary<string, string>? Entitlements = null,
+    int? TrialDays = null);

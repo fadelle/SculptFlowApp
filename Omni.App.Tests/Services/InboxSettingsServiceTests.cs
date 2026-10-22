@@ -1,3 +1,4 @@
+using Omni.App.Persistence.Contracts.Channels;
 using Omni.App.Business.Services.Inbox;
 
 namespace Omni.App.Tests.Services;
@@ -9,6 +10,7 @@ public class InboxSettingsServiceTests
     private readonly Mock<IClientRepository> _clients = new();
     private readonly Mock<IEntitlementService> _entitlements = new();
     private readonly Mock<IUnitOfWork> _uow = new();
+    private readonly Mock<IChannelIntegrationRepository> _channels = new();
 
     public InboxSettingsServiceTests()
     {
@@ -16,7 +18,7 @@ public class InboxSettingsServiceTests
         Plan(aiAssistant: true);
     }
 
-    private InboxSettingsService Sut() => new(_settings.Object, _clients.Object, _entitlements.Object, _uow.Object);
+    private InboxSettingsService Sut() => new(_settings.Object, _clients.Object, _entitlements.Object, _channels.Object, _uow.Object);
 
     private InboxSettings Row(bool newOn, bool reopenedOn)
     {
@@ -98,5 +100,64 @@ public class InboxSettingsServiceTests
         Assert.True(row.UpdatedAt > DateTimeOffset.UtcNow.AddMinutes(-1));
         _settings.Verify(r => r.Add(It.IsAny<InboxSettings>()), Times.Never);
         _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    private void BotPlan(string? maxAiBots, params (string Channel, int MinutesAgo, string Status)[] channels)
+    {
+        var values = new Dictionary<string, string> { [EntitlementKeys.AiAssistant] = "true" };
+        if (maxAiBots is not null) values[EntitlementKeys.MaxAiBots] = maxAiBots;
+        _entitlements.Setup(e => e.GetAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(new ClientEntitlements(true, true,
+            SubscriptionStatus.Active, "ai-pro", "AI Pro", null, values));
+        _channels.Setup(r => r.ListForClientReadOnlyAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(channels
+            .Select(c => new ChannelIntegration { Id = Guid.NewGuid(), ClientId = _clientId, Channel = c.Channel, Status = c.Status,
+                CreatedAt = DateTimeOffset.UtcNow.AddMinutes(-c.MinutesAgo) })
+            .ToList());
+    }
+
+    [Fact]
+    public async Task Connected_channels_beyond_the_ai_bot_limit_go_to_the_team_in_connection_order()
+    {
+        // WhatsApp connected first, Telegram second; a disconnected channel doesn't use a bot.
+        BotPlan("1", (ConversationChannel.Telegram, 10, ChannelIntegrationStatus.Connected),
+            (ConversationChannel.WhatsApp, 60, ChannelIntegrationStatus.Connected),
+            (ConversationChannel.Facebook, 90, ChannelIntegrationStatus.Disconnected));
+
+        var settings = await Sut().GetAsync(_clientId);
+
+        Assert.Equal([ConversationChannel.Telegram], settings.ChannelsWithoutAiBot!.ToArray());
+        Assert.Equal(1, settings.AiBotLimit);
+        Assert.True(settings.AiBotAnswersOn(ConversationChannel.WhatsApp));
+        Assert.False(settings.AiBotAnswersOn(ConversationChannel.Telegram));
+        Assert.True(settings.AiBotAnswersOn(ConversationChannel.Facebook)); // not connected: no bot used yet
+        Assert.Equal(ConversationMode.Ai, await Sut().InitialModeAsync(_clientId, ConversationChannel.WhatsApp));
+        Assert.Equal(ConversationMode.Human, await Sut().InitialModeAsync(_clientId, ConversationChannel.Telegram));
+    }
+
+    [Theory]
+    [InlineData(null)]        // a plan made before AI bots were counted: no limit
+    [InlineData("unlimited")]
+    [InlineData("4")]          // more bots than connected channels
+    public async Task Without_a_reached_ai_bot_limit_the_bot_answers_on_every_channel(string? maxAiBots)
+    {
+        BotPlan(maxAiBots, (ConversationChannel.Telegram, 10, ChannelIntegrationStatus.Connected),
+            (ConversationChannel.WhatsApp, 60, ChannelIntegrationStatus.Connected));
+
+        var settings = await Sut().GetAsync(_clientId);
+
+        Assert.Empty(settings.ChannelsWithoutAiBot ?? new HashSet<string>());
+        Assert.Equal(ConversationMode.Ai, await Sut().InitialModeAsync(_clientId, ConversationChannel.Telegram));
+        if (maxAiBots is null or "unlimited")
+        {
+            _channels.Verify(r => r.ListForClientReadOnlyAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+        }
+    }
+
+    [Fact]
+    public async Task A_plan_with_no_ai_bots_keeps_every_connected_channel_with_the_team()
+    {
+        BotPlan("0", (ConversationChannel.WhatsApp, 60, ChannelIntegrationStatus.Connected));
+        var settings = await Sut().GetAsync(_clientId);
+        Assert.False(settings.AiBotAnswersOn(ConversationChannel.WhatsApp));
+        Assert.Equal(ConversationMode.Human, await Sut().InitialModeAsync(_clientId, ConversationChannel.WhatsApp));
     }
 }

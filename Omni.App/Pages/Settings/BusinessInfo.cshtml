@@ -141,6 +141,13 @@ else
     else if (Model.ActiveTab == "ai" && Model.InboxSettings is { } bot)
     {
         <p class="au-page-head__sub mb-3">@T["businessInfo.ai.intro"]</p>
+        @if (bot.ChannelsWithoutAiBot is { Count: > 0 } withoutBot)
+        {
+            <div class="au-alert au-alert--warning mb-3" role="status">
+                <span class="au-icon au-alert__icon" aria-hidden="true">warning</span>
+                <div class="au-alert__body">@T["businessInfo.ai.botLimit", (bot.AiBotLimit ?? 0).Display("N0"), string.Join(", ", withoutBot.Select(ChannelNames.Brand))]</div>
+            </div>
+        }
 
         <form method="post" asp-page-handler="SaveAiBot" class="au-panel au-panel--round integration-form client-form" id="inbox-settings-form">
             <div class="set-section">

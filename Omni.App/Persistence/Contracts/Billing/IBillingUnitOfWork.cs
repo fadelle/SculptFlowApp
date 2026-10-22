@@ -20,6 +20,7 @@ public interface IBillingUnitOfWork : IAsyncDisposable
     IBillingUsageRepository Usage { get; }
     IBillingLedgerRepository Ledger { get; }
     IBillingPlanRepository Plans { get; }
+    IBillingAddonRepository Addons { get; }
     IBillingRateCardRepository RateCards { get; }
     IClientSubscriptionRepository Subscriptions { get; }
     IChannelAccountBillingRepository ChannelBilling { get; }

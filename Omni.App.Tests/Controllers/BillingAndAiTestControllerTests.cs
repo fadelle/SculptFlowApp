@@ -18,10 +18,11 @@ public class BillingAdminControllerTests
     private readonly Mock<IBillingService> _billing = new();
     private readonly Mock<IBillingQueryService> _queries = new();
     private readonly Mock<IProviderBillingService> _providerBilling = new();
+    private readonly Mock<IAddonService> _addons = new();
     private static readonly Guid Client = Guid.NewGuid();
 
     private BillingAdminController Sut(string? idempotencyKey = null, string? actor = null) =>
-        new BillingAdminController(_plans.Object, _rateCards.Object, _subscriptions.Object, _billing.Object, _queries.Object, _providerBilling.Object)
+        new BillingAdminController(_plans.Object, _rateCards.Object, _subscriptions.Object, _billing.Object, _queries.Object, _providerBilling.Object, _addons.Object)
             .With(ctx =>
             {
                 if (idempotencyKey is not null) ctx.Request.Headers["Idempotency-Key"] = idempotencyKey;
@@ -29,6 +30,19 @@ public class BillingAdminControllerTests
             });
 
     private static T Blank<T>() where T : class => (T)RuntimeHelpers.GetUninitializedObject(typeof(T));
+
+    [Fact]
+    public async Task Setting_a_clients_add_on_needs_an_idempotency_key_and_records_the_admin()
+    {
+        Assert.IsType<BadRequestObjectResult>(await Sut().SetClientAddon(Client, "extra-user", new SetClientAddonRequest(2), default));
+        _addons.Verify(a => a.SetQuantityAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(),
+            It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+
+        _addons.Setup(a => a.SetQuantityAsync(Client, "extra-user", 2, "k1", BillingSource.Admin, "ops@omni", It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new ClientAddonRow("extra-user", "Extra user", EntitlementKeys.MaxUsers, 2, 8m, "USD", 16m)]);
+        var ok = Assert.IsType<OkObjectResult>(await Sut("k1", "ops@omni").SetClientAddon(Client, "extra-user", new SetClientAddonRequest(2), default));
+        Assert.Equal(16m, Assert.Single((IReadOnlyList<ClientAddonRow>)ok.Value!).PeriodPrice);
+    }
 
     [Fact]
     public async Task Missing_plan_is_404()

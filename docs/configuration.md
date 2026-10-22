@@ -53,7 +53,7 @@ Generated from `Common/Statics/ConfigDefaults`; keep this table in step when you
 | Billing | GracePeriodDays | 7 | int 0–60 | How long a past-due subscription keeps working before it expires. |
 | Billing | ReservationTimeoutHours | 72 | int 1–720 | A message charge still waiting for its delivery outcome is settled or released after this long. |
 | Billing | MaintenanceIntervalMinutes | 5 | int 1–60 | How often the billing worker renews due subscriptions and resolves stale reservations. |
-| Billing | SignupPlanCode | (empty) | string | Plan code a newly registered client starts on (first period free). Empty = no plan until an admin assigns one. |
+| Billing | SignupPlanCode | trial | string | Plan code a newly registered client starts on (first period free; the seeded Free Trial from `Database/seed-billing.sql` is `trial`, and it ends after its trial days). Empty = no plan until an admin assigns one. |
 | Billing | Currency | USD | string | The one account currency (ISO 4217, e.g. USD). Balances, plans and rates are stored in it: change it only before any money has moved. |
 | Billing | RateBackdateToleranceMinutes | 5 | int 0–1440 | How far in the past a new rate may start or an old one may end (clock skew allowance). |
 | Billing | RecentTransactions | 15 | int 1–100 | How many recent wallet transactions a client's billing page shows. |

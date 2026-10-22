@@ -129,7 +129,14 @@ public class EntitlementServiceTests
             .Returns((string _, TimeSpan _, Func<CancellationToken, Task<SubscriptionSnapshot?>> f, CancellationToken ct) => f(ct));
     }
 
-    private EntitlementService Sut() => new(_subscriptions.Object, _integrations.Object, _time, NullLogger<EntitlementService>.Instance, _config.Object, _cache.Object);
+    private static IBillingAddonRepository NoAddons()
+    {
+        var addons = new Mock<IBillingAddonRepository>();
+        addons.Setup(a => a.ListForClientReadOnlyAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync(new List<ClientAddon>());
+        return addons.Object;
+    }
+
+    private EntitlementService Sut() => new(_subscriptions.Object, NoAddons(), _integrations.Object, _time, NullLogger<EntitlementService>.Instance, _config.Object, _cache.Object);
 
     private void Subscribe(string status, DateTimeOffset? pastDueSince = null, params (string Key, string Value)[] entitlements)
     {

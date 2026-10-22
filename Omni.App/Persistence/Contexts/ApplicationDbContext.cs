@@ -52,6 +52,8 @@ public class ApplicationDbContext : IdentityUserContext<AppUser>
     public DbSet<AccountToken> AccountTokens => Set<AccountToken>();
     public DbSet<ReminderSettings> ReminderSettings => Set<ReminderSettings>();
     public DbSet<BookingReminder> BookingReminders => Set<BookingReminder>();
+    public DbSet<Addon> Addons => Set<Addon>();
+    public DbSet<ClientAddon> ClientAddons => Set<ClientAddon>();
     public DbSet<AvailabilityRule> AvailabilityRules => Set<AvailabilityRule>();
     public DbSet<BookingSettings> BookingSettings => Set<BookingSettings>();
     public DbSet<InboxSettings> InboxSettings => Set<InboxSettings>();
@@ -844,6 +846,42 @@ public class ApplicationDbContext : IdentityUserContext<AppUser>
         });
 
         // ---------------------------------------------------------------
+        // addons / client_addons — paid add-ons (Milestone C).
+        // ---------------------------------------------------------------
+        modelBuilder.Entity<Addon>(e =>
+        {
+            e.ToTable("addons", "billing");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.Code).HasColumnName("code").HasMaxLength(50).IsRequired();
+            e.Property(x => x.EntitlementKey).HasColumnName("entitlement_key").HasMaxLength(60).IsRequired();
+            e.Property(x => x.Name).HasColumnName("name").HasMaxLength(100).IsRequired();
+            e.Property(x => x.UnitPrice).HasColumnName("unit_price").HasPrecision(18, 2);
+            e.Property(x => x.Currency).HasColumnName("currency").HasMaxLength(3).IsFixedLength();
+            e.Property(x => x.IsActive).HasColumnName("is_active");
+            e.Property(x => x.SortOrder).HasColumnName("sort_order");
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+            e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
+            e.HasIndex(x => x.Code).IsUnique();
+            e.HasIndex(x => x.EntitlementKey).IsUnique();
+        });
+
+        modelBuilder.Entity<ClientAddon>(e =>
+        {
+            e.ToTable("client_addons", "billing");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.ClientId).HasColumnName("client_id");
+            e.Property(x => x.AddonId).HasColumnName("addon_id");
+            e.Property(x => x.Quantity).HasColumnName("quantity");
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+            e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
+            e.HasOne<Client>().WithMany().HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.Addon).WithMany().HasForeignKey(x => x.AddonId).OnDelete(DeleteBehavior.Restrict);
+            e.HasIndex(x => new { x.ClientId, x.AddonId }).IsUnique().HasDatabaseName("ux_client_addons_client_addon");
+        });
+
+        // ---------------------------------------------------------------
         // notifications — the client's notification bell. See Business/Contracts/Services/Notifications/INotificationService.cs.
         // ---------------------------------------------------------------
         modelBuilder.Entity<Notification>(e =>
@@ -1386,6 +1424,7 @@ public class ApplicationDbContext : IdentityUserContext<AppUser>
             e.Property(x => x.Currency).HasColumnName("currency").HasMaxLength(3).IsFixedLength().IsRequired();
             e.Property(x => x.BillingPeriod).HasColumnName("billing_period").HasMaxLength(10).IsRequired();
             e.Property(x => x.IncludedUsageCredit).HasColumnName("included_usage_credit").HasPrecision(18, 2);
+            e.Property(x => x.TrialDays).HasColumnName("trial_days");
             e.Property(x => x.RateCardId).HasColumnName("rate_card_id");
             e.Property(x => x.IsActive).HasColumnName("is_active");
             e.Property(x => x.SortOrder).HasColumnName("sort_order");

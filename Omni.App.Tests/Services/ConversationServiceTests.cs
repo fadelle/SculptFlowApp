@@ -20,12 +20,16 @@ public class ConversationServiceTests
 
     private ConversationService Sut() => new(_conversations.Object, _messages.Object, _contacts.Object, _uow.Object, _notifier.Object, _events.Object, _notifications.Object, _inboxSettings.Object, _businessTypes.Object);
 
-    private void InboxSettings(bool planIncludesBot, bool newConversations, bool reopenedConversations)
+    private void InboxSettings(bool planIncludesBot, bool newConversations, bool reopenedConversations, params string[] withoutBot)
     {
-        var settings = new InboxSettingsDto(planIncludesBot, newConversations, reopenedConversations);
+        var settings = new InboxSettingsDto(planIncludesBot, newConversations, reopenedConversations,
+            withoutBot.Length > 0 ? withoutBot.ToHashSet() : null, withoutBot.Length > 0 ? 1 : null);
         _inboxSettings.Setup(a => a.GetAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(settings);
         _inboxSettings.Setup(a => a.InitialModeAsync(_clientId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(settings.AiBotAnswersNew ? ConversationMode.Ai : ConversationMode.Human);
+        _inboxSettings.Setup(a => a.InitialModeAsync(_clientId, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Guid _, string channel, CancellationToken _) =>
+                settings.AiBotAnswersNew && settings.AiBotAnswersOn(channel) ? ConversationMode.Ai : ConversationMode.Human);
     }
 
     private Conversation Conv(string mode = ConversationMode.Ai, string? externalThread = null)
@@ -407,6 +411,33 @@ public class ConversationServiceTests
         _uow.Setup(u => u.TrySaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(true);
         await Sut().GetOrCreateForContactAsync(_clientId, _contactId, "telegram", "chat-9");
         Assert.Equal(expected, added!.Mode);
+    }
+
+    [Fact]
+    public async Task A_new_conversation_on_a_channel_beyond_the_ai_bot_limit_starts_with_the_team()
+    {
+        InboxSettings(planIncludesBot: true, newConversations: true, reopenedConversations: true, ConversationChannel.Telegram);
+        _contacts.Setup(l => l.GetAsync(_clientId, _contactId, It.IsAny<CancellationToken>())).ReturnsAsync(new Contact { Id = _contactId, ClientId = _clientId });
+        Conversation? added = null;
+        _conversations.Setup(r => r.Add(It.IsAny<Conversation>())).Callback<Conversation>(c => added = c);
+
+        await Sut().CreateAsync(new CreateConversationRequest(_clientId, _contactId, ConversationChannel.Telegram, null));
+        Assert.Equal((ConversationMode.Human, true), (added!.Mode, added.HumanTakeover));
+
+        await Sut().CreateAsync(new CreateConversationRequest(_clientId, _contactId, ConversationChannel.WhatsApp, null));
+        Assert.Equal(ConversationMode.Ai, added!.Mode);
+    }
+
+    [Fact]
+    public async Task Return_to_ai_is_refused_on_a_channel_beyond_the_ai_bot_limit()
+    {
+        InboxSettings(planIncludesBot: true, newConversations: true, reopenedConversations: true, ConversationChannel.WhatsApp);
+        var c = Conv(ConversationMode.Human);
+
+        var ex = await Assert.ThrowsAsync<EntitlementDeniedException>(() => Sut().ReturnToAiAsync(_clientId, c.Id));
+        Assert.Equal(EntitlementKeys.MaxAiBots, ex.Entitlement);
+        Assert.Equal(ConversationMode.Human, c.Mode);
+        _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]

@@ -12,6 +12,7 @@ using Omni.App.Persistence.Repositories;
 using Omni.App.Persistence.Repositories.Bookings;
 using Omni.App.Persistence.Repositories.Clients;
 using Omni.App.Persistence.Repositories.Catalog;
+using Omni.App.Persistence.Repositories.Channels;
 
 namespace Omni.App.Tests.Repositories;
 
@@ -102,7 +103,7 @@ public class CachingRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixt
         var entitlements = new Mock<IEntitlementService>();
         entitlements.Setup(e => e.GetAsync(c.Id, It.IsAny<CancellationToken>())).ReturnsAsync(ClientEntitlements.Unrestricted);
         InboxSettingsService Service(ApplicationDbContext db) => new(new InboxSettingsRepository(db, _cache), new ClientRepository(db, _cache),
-            entitlements.Object, new Omni.App.Persistence.Repositories.UnitOfWork(db));
+            entitlements.Object, new ChannelIntegrationRepository(db, _cache), new Omni.App.Persistence.Repositories.UnitOfWork(db));
 
         // No row yet: the defaults (an existing client keeps the bot on), and "no row" is cached.
         await using (var db = CachedContext())

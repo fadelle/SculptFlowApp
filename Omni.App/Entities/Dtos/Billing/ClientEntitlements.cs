@@ -50,6 +50,7 @@ public sealed class ClientEntitlements
     public int? MaximumUsers => Limit(EntitlementKeys.MaxUsers);
     public int? MaximumWhatsAppNumbers => Limit(EntitlementKeys.MaxWhatsAppNumbers);
     public int? MaximumChannelConnections => Limit(EntitlementKeys.MaxChannelConnections);
+    public int? MaximumAiBots => Limit(EntitlementKeys.MaxAiBots);
 
     public bool IsEnabled(string featureKey) =>
         !BillingEnabled || (HasAccess && _values.TryGetValue(featureKey, out var v) && v == "true");

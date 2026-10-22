@@ -348,6 +348,22 @@ public class MessageServiceTests
     }
 
     [Fact]
+    public async Task A_customer_message_on_a_channel_beyond_the_ai_bot_limit_goes_to_human()
+    {
+        _inboxSettings.Setup(a => a.GetAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(
+            new InboxSettingsDto(true, true, true, new HashSet<string> { ConversationChannel.Telegram }, 1));
+        var telegram = Conv(channel: ConversationChannel.Telegram);
+        var whatsApp = Conv();
+
+        var r = await Sut().IngestAsync(Ingest(telegram.Id, IngestEventType.CustomerMessage));
+        Assert.Equal((ConversationMode.Human, false), (telegram.Mode, r.AiEligible));
+        _events.Verify(e => e.Log(_clientId, EventTypes.HumanHandoff, _contactId, telegram.Id, null, MessageOrigin.System, "{\"reason\":\"ai_bot_limit\"}"), Times.Once);
+
+        var w = await Sut().IngestAsync(Ingest(whatsApp.Id, IngestEventType.CustomerMessage, externalId: "e2"));
+        Assert.Equal((ConversationMode.Ai, true), (whatsApp.Mode, w.AiEligible));
+    }
+
+    [Fact]
     public async Task A_customer_message_in_an_ai_conversation_goes_to_human_when_the_plan_lost_the_ai_assistant()
     {
         InboxSettings(planIncludesBot: false, reopenedConversations: true);

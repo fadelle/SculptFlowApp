@@ -44,8 +44,8 @@ public static class ConfigDefaults
         "A message charge still waiting for its delivery outcome is settled or released after this long.", 1, 720);
     public static readonly ConfigDefinition BillingMaintenanceIntervalMinutes = new("Billing", "MaintenanceIntervalMinutes", "5", ConfigValueType.Int,
         "How often the billing worker renews due subscriptions and resolves stale reservations.", 1, 60);
-    public static readonly ConfigDefinition BillingSignupPlanCode = new("Billing", "SignupPlanCode", "", ConfigValueType.String,
-        "Plan code a newly registered client starts on (first period free). Empty = no plan until an admin assigns one.");
+    public static readonly ConfigDefinition BillingSignupPlanCode = new("Billing", "SignupPlanCode", "trial", ConfigValueType.String,
+        "Plan code a newly registered client starts on (first period free; the seeded Free Trial is \"trial\"). Empty = no plan until an admin assigns one.");
     public static readonly ConfigDefinition BillingCurrency = new("Billing", "Currency", "USD", ConfigValueType.String,
         "The one account currency (ISO 4217, e.g. USD). Balances, plans and rates are stored in it: change it only before any money has moved.", Pattern: @"^[A-Za-z]{3}$");
     public static readonly ConfigDefinition BillingRateBackdateToleranceMinutes = new("Billing", "RateBackdateToleranceMinutes", "5", ConfigValueType.Int,

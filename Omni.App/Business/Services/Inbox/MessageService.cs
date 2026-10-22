@@ -583,15 +583,20 @@ public class MessageService : IMessageService
             // The bot can't answer when the plan no longer includes the AI assistant, and the client may send conversations a
             // contact reopens straight to members. Either way the conversation goes to human mode (same state as a handoff),
             // so it lands in the team's needs-attention list and n8n is never called (see aiEligible below).
+            // A channel beyond the plan's AI bot limit goes to members the same way.
             var inboxSettings = await _inboxSettings.GetAsync(request.ClientId, ct);
-            if (!inboxSettings.PlanIncludesAiBot || (reopened && !inboxSettings.AiBotAnswersReopened))
+            var reason = !inboxSettings.PlanIncludesAiBot ? "plan_without_ai_assistant"
+                : !inboxSettings.AiBotAnswersOn(conversation.Channel) ? "ai_bot_limit"
+                : reopened && !inboxSettings.AiBotAnswersReopened ? "reopened_to_human"
+                : null;
+            if (reason is not null)
             {
                 ConversationModeSync.Apply(conversation, ConversationMode.Human, now);
                 modeChanged = true;
-                modeReason = inboxSettings.PlanIncludesAiBot ? "reopened_to_human" : "plan_without_ai_assistant";
+                modeReason = reason;
                 _events.Log(request.ClientId, EventTypes.HumanHandoff, contactId: request.ContactId,
                     conversationId: request.ConversationId, source: MessageOrigin.System,
-                    metadataJson: inboxSettings.PlanIncludesAiBot ? "{\"reason\":\"reopened_to_human\"}" : "{\"reason\":\"plan_without_ai_assistant\"}");
+                    metadataJson: System.Text.Json.JsonSerializer.Serialize(new { reason }));
             }
         }
 

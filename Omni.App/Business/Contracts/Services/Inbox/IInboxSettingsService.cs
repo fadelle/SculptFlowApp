@@ -15,6 +15,10 @@ public interface IInboxSettingsService
     /// <summary>The mode a brand-new conversation starts in: ConversationMode.Ai or ConversationMode.Human.</summary>
     Task<string> InitialModeAsync(Guid clientId, CancellationToken ct = default);
 
+    /// <summary>The mode a brand-new conversation on <paramref name="channel"/> starts in: human also when the channel is
+    /// beyond the client's AI bot limit.</summary>
+    Task<string> InitialModeAsync(Guid clientId, string channel, CancellationToken ct = default);
+
     /// <summary>Saves the client-wide row, creating it on first save (also when the plan lacks the AI bot, so the choice
     /// applies once it has it). Throws KeyNotFoundException when the client doesn't exist.</summary>
     Task UpdateAsync(Guid clientId, UpdateInboxSettingsRequest request, CancellationToken ct = default);

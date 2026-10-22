@@ -19,6 +19,10 @@ public class SubscriptionPlan
     public string BillingPeriod { get; set; } = Common.Enums.BillingPeriod.Month;
     /// <summary>Monetary credit granted at each period start, spent before the wallet. Unused credit expires at renewal.</summary>
     public decimal IncludedUsageCredit { get; set; }
+
+    /// <summary>Set = a trial plan: one period of this many days at price 0, then the subscription ends (expired) instead
+    /// of renewing. Null = a normal plan renewing every BillingPeriod.</summary>
+    public int? TrialDays { get; set; }
     /// <summary>Optional plan price list; rating falls back to the default rate card when it has no matching rate.</summary>
     public Guid? RateCardId { get; set; }
     public bool IsActive { get; set; } = true;

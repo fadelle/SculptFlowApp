@@ -3,6 +3,7 @@ using Omni.App.Business.Contracts.Services.Billing;
 using Omni.App.Business.Engines.Billing;
 using Omni.App.Common.Enums;
 using Omni.App.Common.Exceptions;
+using Omni.App.Common.Helpers;
 using Omni.App.Common.Statics;
 using Omni.App.Entities.Dtos.Billing;
 using Omni.App.Entities.Models;
@@ -66,7 +67,9 @@ public class SubscriptionService : ISubscriptionService
         }
 
         var price = request.ChargeFirstPeriod ? plan.Price : 0m;
-        if (!CanPay(account, price, plan.IncludedUsageCredit))
+        // Add-ons are charged with the plan from each period start (none for a free first period).
+        var addonsPrice = request.ChargeFirstPeriod ? PlanPeriod.AddonsTotal(await unit.Addons.ListForClientReadOnlyAsync(request.ClientId, ct)) : 0m;
+        if (!CanPay(account, price + addonsPrice, plan.IncludedUsageCredit))
         {
             _logger.LogWarning("Billing: can't start plan {Plan} for client {ClientId}: price {Price} {Currency}, wallet {Wallet}, spendable {Spendable}.",
                 plan.Code, request.ClientId, price, account.Currency, account.WalletBalance, account.Spendable);
@@ -84,7 +87,7 @@ public class SubscriptionService : ISubscriptionService
         subscription.PlanId = plan.Id;
         subscription.Status = SubscriptionStatus.Active;
         subscription.CurrentPeriodStart = now;
-        subscription.CurrentPeriodEnd = BillingPeriod.Advance(now, plan.BillingPeriod);
+        subscription.CurrentPeriodEnd = PlanPeriod.End(plan, now);
         subscription.CancelAtPeriodEnd = false;
         subscription.PastDueSince = null;
         subscription.EndedAt = null;
@@ -92,7 +95,7 @@ public class SubscriptionService : ISubscriptionService
 
         var context = new LedgerContext(request.Source, request.Actor, request.Reason ?? (isNew ? "Subscription started" : "Plan changed"),
             SubscriptionId: subscription.Id, PlanId: plan.Id, CorrelationId: request.IdempotencyKey);
-        await StartPeriodAsync(unit, account, plan, price, $"subscription-start:{request.IdempotencyKey}", context, now, ct);
+        await StartPeriodAsync(unit, account, plan, price, addonsPrice, $"subscription-start:{request.IdempotencyKey}", context, now, ct);
 
         BillingLedger.LogEvent(unit, request.ClientId, isNew ? BillingEventTypes.SubscriptionStarted : BillingEventTypes.SubscriptionPlanChanged,
             request.Source, new
@@ -140,7 +143,18 @@ public class SubscriptionService : ISubscriptionService
         var periodEnd = subscription.CurrentPeriodEnd;
         RenewalOutcome outcome;
 
-        if (subscription.CancelAtPeriodEnd)
+        if (plan.TrialDays is not null)
+        {
+            // A trial never renews: it ends, and the admin moves the client to a paid plan.
+            await ExpireCreditAsync(unit, account, $"subscription:{subscription.Id}:trial-ended:{Stamp(periodEnd)}:credit-expiry",
+                new LedgerContext(BillingSource.Worker, Reason: "Trial ended", SubscriptionId: subscription.Id, PlanId: plan.Id), now, ct);
+            subscription.Status = SubscriptionStatus.Expired;
+            subscription.EndedAt = periodEnd;
+            BillingLedger.LogEvent(unit, clientId, BillingEventTypes.SubscriptionExpired, BillingSource.Worker,
+                new { plan = plan.Code, endedAt = periodEnd, trialEnded = true }, now);
+            outcome = RenewalOutcome.Expired;
+        }
+        else if (subscription.CancelAtPeriodEnd)
         {
             await ExpireCreditAsync(unit, account, $"subscription:{subscription.Id}:cancelled-at-end:{Stamp(periodEnd)}:credit-expiry",
                 new LedgerContext(BillingSource.Worker, Reason: "Subscription cancelled at period end", SubscriptionId: subscription.Id, PlanId: plan.Id), now, ct);
@@ -154,16 +168,17 @@ public class SubscriptionService : ISubscriptionService
         {
             var newStart = periodEnd;
             var keyBase = $"subscription:{subscription.Id}:period:{Stamp(newStart)}";
-            if (CanPay(account, plan.Price, plan.IncludedUsageCredit))
+            var addonsPrice = PlanPeriod.AddonsTotal(await unit.Addons.ListForClientReadOnlyAsync(clientId, ct));
+            if (CanPay(account, plan.Price + addonsPrice, plan.IncludedUsageCredit))
             {
-                await StartPeriodAsync(unit, account, plan, plan.Price, keyBase,
+                await StartPeriodAsync(unit, account, plan, plan.Price, addonsPrice, keyBase,
                     new LedgerContext(BillingSource.Worker, Reason: "Subscription renewal", SubscriptionId: subscription.Id, PlanId: plan.Id), now, ct);
                 subscription.CurrentPeriodStart = newStart;
-                subscription.CurrentPeriodEnd = BillingPeriod.Advance(newStart, plan.BillingPeriod);
+                subscription.CurrentPeriodEnd = PlanPeriod.End(plan, newStart);
                 subscription.Status = SubscriptionStatus.Active;
                 subscription.PastDueSince = null;
                 BillingLedger.LogEvent(unit, clientId, BillingEventTypes.SubscriptionRenewed, BillingSource.Worker,
-                    new { plan = plan.Code, charged = plan.Price, currency = account.Currency, periodEnd = subscription.CurrentPeriodEnd }, now);
+                    new { plan = plan.Code, charged = plan.Price, addons = addonsPrice, currency = account.Currency, periodEnd = subscription.CurrentPeriodEnd }, now);
                 outcome = RenewalOutcome.Renewed;
             }
             else if (subscription.Status == SubscriptionStatus.Active)
@@ -174,7 +189,7 @@ public class SubscriptionService : ISubscriptionService
                 subscription.Status = SubscriptionStatus.PastDue;
                 subscription.PastDueSince = now;
                 BillingLedger.LogEvent(unit, clientId, BillingEventTypes.SubscriptionPastDue, BillingSource.Worker,
-                    new { plan = plan.Code, due = plan.Price, currency = account.Currency, wallet = account.WalletBalance, graceDays = _config.BillingGracePeriodDays }, now);
+                    new { plan = plan.Code, due = plan.Price + addonsPrice, currency = account.Currency, wallet = account.WalletBalance, graceDays = _config.BillingGracePeriodDays }, now);
                 outcome = RenewalOutcome.PastDue;
             }
             else if (now >= (subscription.PastDueSince ?? now).AddDays(_config.BillingGracePeriodDays))
@@ -306,9 +321,9 @@ public class SubscriptionService : ISubscriptionService
 
     /// <summary>Starts a paid period: old credit expires, the plan's credit is granted, the price is charged (a 0
     /// charge row is still written so every period start has exactly one charge row, and it carries the
-    /// operation's idempotency key).</summary>
+    /// operation's idempotency key), and the client's add-ons are charged in one addon_charge row when they cost anything.</summary>
     private static async Task StartPeriodAsync(IBillingUnitOfWork unit, BillingAccount account, SubscriptionPlan plan, decimal price,
-        string keyBase, LedgerContext context, DateTimeOffset now, CancellationToken ct)
+        decimal addonsPrice, string keyBase, LedgerContext context, DateTimeOffset now, CancellationToken ct)
     {
         await ExpireCreditAsync(unit, account, $"{keyBase}:credit-expiry", context, now, ct);
         if (plan.IncludedUsageCredit > 0)
@@ -318,6 +333,11 @@ public class SubscriptionService : ISubscriptionService
         }
         await BillingLedger.PostAsync(unit, account, LedgerEntryType.SubscriptionCharge, LedgerBalanceType.Wallet,
             -price, $"{keyBase}:charge", context, now, ct);
+        if (addonsPrice > 0)
+        {
+            await BillingLedger.PostAsync(unit, account, LedgerEntryType.AddonCharge, LedgerBalanceType.Wallet,
+                -addonsPrice, $"{keyBase}:addons", context with { Reason = "Add-ons" }, now, ct);
+        }
     }
 
     private static async Task ExpireCreditAsync(IBillingUnitOfWork unit, BillingAccount account, string key, LedgerContext context, DateTimeOffset now,

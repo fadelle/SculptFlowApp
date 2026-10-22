@@ -2121,6 +2121,49 @@ drop trigger if exists trg_plan_entitlements_updated_at on billing.plan_entitlem
 create trigger trg_plan_entitlements_updated_at before update on billing.plan_entitlements
   for each row execute function public.set_updated_at();
 
+-- Trial plans (Milestone C): trial_days set = the plan runs one period of that many days at price 0 and then ends
+-- (expired) instead of renewing; the admin moves the client to a paid plan. Null = a normal monthly/yearly plan.
+alter table billing.plans add column if not exists trial_days integer;
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'ck_plans_trial_days') then
+    alter table billing.plans add constraint ck_plans_trial_days check (trial_days is null or (trial_days between 1 and 90 and price = 0));
+  end if;
+end $$;
+
+-- Paid add-ons (Milestone C): the catalog (one add-on per limit entitlement, priced per unit per period) and what each
+-- client has. A client's limit = its plan's value + the add-on quantity (an unlimited plan value stays unlimited).
+-- Adding units charges their price from the wallet at once (ledger entry addon_charge); every period start charges the
+-- plan and the add-ons together. Removing units refunds nothing.
+create table if not exists billing.addons (
+  id               uuid primary key default gen_random_uuid(),
+  code             varchar(50) not null unique check (code ~ '^[a-z0-9_-]+$'),
+  entitlement_key  varchar(60) not null unique check (entitlement_key ~ '^[a-z0-9_]+$'),
+  name             varchar(100) not null,
+  unit_price       numeric(18,2) not null check (unit_price >= 0),
+  currency         char(3) not null default 'USD' check (currency ~ '^[A-Z]{3}$'),
+  is_active        boolean not null default true,
+  sort_order       integer not null default 0,
+  created_at       timestamptz not null default now(),
+  updated_at       timestamptz not null default now()
+);
+drop trigger if exists trg_addons_updated_at on billing.addons;
+create trigger trg_addons_updated_at before update on billing.addons
+  for each row execute function public.set_updated_at();
+
+create table if not exists billing.client_addons (
+  id          uuid primary key default gen_random_uuid(),
+  client_id   uuid not null references core.clients(id) on delete cascade,
+  addon_id    uuid not null references billing.addons(id) on delete restrict,
+  quantity    integer not null check (quantity > 0),
+  created_at  timestamptz not null default now(),
+  updated_at  timestamptz not null default now()
+);
+create unique index if not exists ux_client_addons_client_addon on billing.client_addons(client_id, addon_id);
+drop trigger if exists trg_client_addons_updated_at on billing.client_addons;
+create trigger trg_client_addons_updated_at before update on billing.client_addons
+  for each row execute function public.set_updated_at();
+
 -- Rate cards: named price lists. Lookup order for a billable event: the client's own card (client_id set,
 -- custom pricing) -> the plan's card -> the default card. The first card with a matching rate wins.
 create table if not exists billing.rate_cards (
@@ -2372,7 +2415,7 @@ create table if not exists billing.ledger_entries (
   billing_account_id  uuid not null references billing.accounts(id) on delete cascade,
   entry_type          varchar(40) not null check (entry_type in ('wallet_top_up','usage_debit',
                         'included_credit_consumption','usage_refund','subscription_charge','included_credit_grant',
-                        'included_credit_expiry','manual_adjustment')),
+                        'included_credit_expiry','manual_adjustment','addon_charge')),
   balance_type        varchar(20) not null check (balance_type in ('wallet','included_credit')),
   amount              numeric(18,6) not null,
   balance_after       numeric(18,6) not null,
@@ -2390,15 +2433,41 @@ create table if not exists billing.ledger_entries (
   constraint ck_ledger_entries_sign check (
        (entry_type in ('wallet_top_up','usage_refund','included_credit_grant') and amount > 0)
     or (entry_type in ('usage_debit','included_credit_consumption','included_credit_expiry') and amount < 0)
-    or (entry_type = 'subscription_charge' and amount <= 0)
+    or (entry_type in ('subscription_charge','addon_charge') and amount <= 0)
     or (entry_type = 'manual_adjustment' and amount <> 0)),
   constraint ck_ledger_entries_balance_type check (
-       (entry_type in ('wallet_top_up','usage_debit','subscription_charge') and balance_type = 'wallet')
+       (entry_type in ('wallet_top_up','usage_debit','subscription_charge','addon_charge') and balance_type = 'wallet')
     or (entry_type in ('included_credit_consumption','included_credit_grant','included_credit_expiry')
         and balance_type = 'included_credit')
     or entry_type in ('usage_refund','manual_adjustment'))
 );
 create unique index if not exists ux_ledger_entries_key on billing.ledger_entries(client_id, idempotency_key);
+-- Milestone C added addon_charge: a database made before it gets the three checks again with the new value.
+do $$
+begin
+  if exists (select 1 from pg_constraint where conname = 'ledger_entries_entry_type_check'
+             and pg_get_constraintdef(oid) not like '%addon_charge%') then
+    alter table billing.ledger_entries drop constraint ledger_entries_entry_type_check;
+    alter table billing.ledger_entries add constraint ledger_entries_entry_type_check check (entry_type in ('wallet_top_up','usage_debit',
+      'included_credit_consumption','usage_refund','subscription_charge','included_credit_grant','included_credit_expiry','manual_adjustment',
+      'addon_charge'));
+  end if;
+  if exists (select 1 from pg_constraint where conname = 'ck_ledger_entries_sign' and pg_get_constraintdef(oid) not like '%addon_charge%') then
+    alter table billing.ledger_entries drop constraint ck_ledger_entries_sign;
+    alter table billing.ledger_entries add constraint ck_ledger_entries_sign check (
+         (entry_type in ('wallet_top_up','usage_refund','included_credit_grant') and amount > 0)
+      or (entry_type in ('usage_debit','included_credit_consumption','included_credit_expiry') and amount < 0)
+      or (entry_type in ('subscription_charge','addon_charge') and amount <= 0)
+      or (entry_type = 'manual_adjustment' and amount <> 0));
+  end if;
+  if exists (select 1 from pg_constraint where conname = 'ck_ledger_entries_balance_type' and pg_get_constraintdef(oid) not like '%addon_charge%') then
+    alter table billing.ledger_entries drop constraint ck_ledger_entries_balance_type;
+    alter table billing.ledger_entries add constraint ck_ledger_entries_balance_type check (
+         (entry_type in ('wallet_top_up','usage_debit','subscription_charge','addon_charge') and balance_type = 'wallet')
+      or (entry_type in ('included_credit_consumption','included_credit_grant','included_credit_expiry') and balance_type = 'included_credit')
+      or entry_type in ('usage_refund','manual_adjustment'));
+  end if;
+end $$;
 create index if not exists ix_ledger_entries_client_seq on billing.ledger_entries(client_id, seq desc);
 create index if not exists ix_ledger_entries_usage on billing.ledger_entries(usage_record_id)
   where usage_record_id is not null;

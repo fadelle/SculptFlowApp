@@ -102,6 +102,8 @@ public partial class PlanService : IPlanService
         }
         var period = (request.BillingPeriod ?? string.Empty).Trim().ToLowerInvariant();
         if (!BillingPeriod.IsValid(period)) throw new ArgumentException("Billing period must be 'month' or 'year'.");
+        if (request.TrialDays is int trialDays && (trialDays is < 1 or > 90 || request.Price != 0))
+            throw new ArgumentException("A trial lasts 1 to 90 days and its price is 0.");
 
         Guid? rateCardId = null;
         if (!string.IsNullOrWhiteSpace(request.RateCardCode))
@@ -118,6 +120,7 @@ public partial class PlanService : IPlanService
         plan.Price = request.Price;
         plan.BillingPeriod = period;
         plan.IncludedUsageCredit = request.IncludedUsageCredit;
+        plan.TrialDays = request.TrialDays;
         plan.RateCardId = rateCardId;
         plan.IsActive = request.IsActive;
         plan.SortOrder = request.SortOrder;
@@ -163,7 +166,7 @@ public partial class PlanService : IPlanService
             p.RateCardId is Guid id && cardCodes.TryGetValue(id, out var code) ? code : null,
             p.IsActive, p.SortOrder,
             p.Entitlements.OrderBy(e => e.EntitlementKey).ToDictionary(e => e.EntitlementKey, e => e.Value),
-            subscribers.TryGetValue(p.Id, out var n) ? n : 0);
+            subscribers.TryGetValue(p.Id, out var n) ? n : 0, p.TrialDays);
 
     private static string Normalize(string? code) => (code ?? string.Empty).Trim().ToLowerInvariant();
 
