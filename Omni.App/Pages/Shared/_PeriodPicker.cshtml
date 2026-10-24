@@ -1,0 +1,47 @@
+@model PeriodPickerModel
+@* The period dropdown on the Dashboard and Reports pages (ReportPeriod): presets apply at once, "Custom range…" shows two
+   dates and Apply. The page binds Period, From and To from the query string. *@
+@{
+    var custom = Model.Period == ReportPeriod.Custom;
+    string PeriodLabel(string period) => period switch
+    {
+        ReportPeriod.ThisWeek => T["dashboard.period.thisWeek"],
+        ReportPeriod.LastWeek => T["dashboard.period.lastWeek"],
+        ReportPeriod.ThisMonth => T["dashboard.period.thisMonth"],
+        ReportPeriod.LastMonth => T["dashboard.period.lastMonth"],
+        ReportPeriod.Last7Days => T["dashboard.period.last7Days"],
+        ReportPeriod.Last30Days => T["dashboard.period.last30Days"],
+        ReportPeriod.AllTime => T["dashboard.period.all"],
+        _ => T["dashboard.period.custom"],
+    };
+}
+<form method="get" class="period-form" id="period-form">
+    <select name="Period" class="select" id="period-select" aria-label="@T["dashboard.period.label"]">
+        @foreach (var value in ReportPeriod.All)
+        {
+            <option value="@value" selected="@(value == Model.Period)">@PeriodLabel(value)</option>
+        }
+    </select>
+    <span class="period-custom" id="period-custom" hidden="@(!custom)">
+        <input type="date" name="From" class="text-input" value="@Model.From?.ToString("yyyy-MM-dd")" aria-label="@T["dashboard.period.from"]" />
+        <span class="text-subtle">–</span>
+        <input type="date" name="To" class="text-input" value="@Model.To?.ToString("yyyy-MM-dd")" aria-label="@T["dashboard.period.to"]" />
+        <button type="submit" class="au-btn au-btn--outlined">@T["dashboard.period.apply"]</button>
+    </span>
+</form>
+<script>
+    // Period dropdown: presets apply immediately; "Custom range…" reveals the two dates + Apply.
+    (function () {
+        var form = document.getElementById('period-form');
+        var select = document.getElementById('period-select');
+        var custom = document.getElementById('period-custom');
+        select.addEventListener('change', function () {
+            var isCustom = select.value === 'custom';
+            custom.hidden = !isCustom;
+            if (!isCustom) {
+                custom.querySelectorAll('input').forEach(function (i) { i.disabled = true; }); // keep the URL clean
+                form.submit();
+            }
+        });
+    })();
+</script>

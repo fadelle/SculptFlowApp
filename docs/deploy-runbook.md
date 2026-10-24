@@ -161,7 +161,8 @@ C3. **Database**, from this repo's root:
     `seed-config.sql` adds the new settings (`Accounts`, `Email`, `OptOut`, `Reminders`). `seed-billing.sql` adds the six
     launch plans (`trial`, `inbox`, `inbox-bookings`, `growth`, `ai-pro`, `business`), the four add-ons (extra user $8,
     channel $5, AI bot $15, WhatsApp number $10 per month) and an `ai_reply` rate of $0.02 on the default rate card; it never
-    changes rows that exist, so prices edited in the portal survive a re-run.
+    changes rows that exist, so prices edited in the portal survive a re-run. A re-run still adds plan features a plan
+    lacks, such as `reporting` (on for Growth, AI Pro and Business; off for the others).
 C4. **Signup plan:** `seed-config.sql` only inserts `Billing:SignupPlanCode = trial` where no row exists, and the copy
     brought the old value over. If new signups should start on the 7-day Free Trial, set it to `trial` on the
     Configuration page (with `Billing:Enabled` on). A trial ends instead of renewing; move the client to a paid plan in the

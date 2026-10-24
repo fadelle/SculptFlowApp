@@ -492,7 +492,7 @@ begin
   returning id into v_plan;
 
   insert into billing.plan_entitlements (plan_id, entitlement_key, value) values
-    (v_plan, 'campaigns', 'true'), (v_plan, 'bookings', 'true'), (v_plan, 'ai_assistant', 'true'), (v_plan, 'advanced_reporting', 'true'),
+    (v_plan, 'campaigns', 'true'), (v_plan, 'bookings', 'true'), (v_plan, 'ai_assistant', 'true'), (v_plan, 'reporting', 'true'), (v_plan, 'advanced_reporting', 'true'),
     (v_plan, 'api_access', 'false'), (v_plan, 'max_users', '3'), (v_plan, 'max_whatsapp_numbers', '2'),
     (v_plan, 'max_channel_connections', '6')
   on conflict (plan_id, entitlement_key) do update set value = excluded.value;

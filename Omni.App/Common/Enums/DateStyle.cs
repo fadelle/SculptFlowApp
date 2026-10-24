@@ -12,5 +12,7 @@ public enum DateStyle
     /// <summary>"May 5, 14:30" / "5 mai 14:30" (24-hour).</summary>
     MonthDayTime,
     /// <summary>"May" / "mai".</summary>
-    MonthShort
+    MonthShort,
+    /// <summary>"May 2026" / "mai 2026" (the Reports page's monthly activity).</summary>
+    MonthYear
 }

@@ -46,6 +46,7 @@ public sealed class ClientEntitlements
     public bool CanUseBookings => IsEnabled(EntitlementKeys.Bookings);
     public bool CanUseAiAssistant => IsEnabled(EntitlementKeys.AiAssistant);
     public bool CanUseApi => IsEnabled(EntitlementKeys.ApiAccess);
+    public bool CanUseReporting => IsEnabled(EntitlementKeys.Reporting);
     public bool CanUseAdvancedReporting => IsEnabled(EntitlementKeys.AdvancedReporting);
     public int? MaximumUsers => Limit(EntitlementKeys.MaxUsers);
     public int? MaximumWhatsAppNumbers => Limit(EntitlementKeys.MaxWhatsAppNumbers);

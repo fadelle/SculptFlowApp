@@ -1,9 +1,9 @@
-using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using Omni.App.Common.Enums;
 using Omni.App.Entities.Dtos.Dashboard;
 using Omni.App.Persistence.Contexts;
 using Omni.App.Persistence.Contracts.Dashboard;
+using Omni.App.Persistence.Helpers;
 
 namespace Omni.App.Persistence.Repositories.Dashboard;
 
@@ -22,17 +22,17 @@ public class DashboardRepository : IDashboardRepository
         var bookings = _db.Bookings.Where(a => a.ClientId == clientId);
         var orders = _db.Orders.Where(b => b.ClientId == clientId);
 
-        var newInterestedPeople = await InRange(_db.Contacts.Where(l => l.ClientId == clientId), l => l.CreatedAt, from, to).CountAsync(ct);
+        var newInterestedPeople = await QueryDateRange.InRange(_db.Contacts.Where(l => l.ClientId == clientId), l => l.CreatedAt, from, to).CountAsync(ct);
 
-        var bookingsMade = await InRange(bookings, a => a.CreatedAt, from, to).CountAsync(ct);
+        var bookingsMade = await QueryDateRange.InRange(bookings, a => a.CreatedAt, from, to).CountAsync(ct);
 
-        var bookingsAttended = await InRange(bookings.Where(a => a.Status == BookingStatus.Attended), a => a.ScheduledStart, from, to)
+        var bookingsAttended = await QueryDateRange.InRange(bookings.Where(a => a.Status == BookingStatus.Attended), a => a.ScheduledStart, from, to)
             .CountAsync(ct);
 
-        var ordersMade = await InRange(orders, b => b.CreatedAt, from, to).CountAsync(ct);
+        var ordersMade = await QueryDateRange.InRange(orders, b => b.CreatedAt, from, to).CountAsync(ct);
 
         // Revenue lands on the service date (falling back to when the order was last updated, i.e. marked completed).
-        var revenue = await InRange(orders.Where(b => b.Status == OrderStatus.Completed), b => b.ServiceDate ?? b.UpdatedAt, from, to)
+        var revenue = await QueryDateRange.InRange(orders.Where(b => b.Status == OrderStatus.Completed), b => b.ServiceDate ?? b.UpdatedAt, from, to)
             .SumAsync(b => (decimal?)b.FinalAmount, ct) ?? 0m;
 
         return new DashboardSummaryCounts(newInterestedPeople, bookingsMade, bookingsAttended, ordersMade, revenue);
@@ -99,9 +99,9 @@ public class DashboardRepository : IDashboardRepository
     public async Task<IReadOnlyList<DashboardServiceRow>> GetServiceStatsAsync(Guid clientId, DateTimeOffset? from,
         DateTimeOffset? to, CancellationToken ct = default)
     {
-        var contacts = InRange(_db.Contacts.Where(l => l.ClientId == clientId), l => l.CreatedAt, from, to);
-        var orders = InRange(_db.Orders.Where(b => b.ClientId == clientId), b => b.CreatedAt, from, to);
-        var completed = InRange(
+        var contacts = QueryDateRange.InRange(_db.Contacts.Where(l => l.ClientId == clientId), l => l.CreatedAt, from, to);
+        var orders = QueryDateRange.InRange(_db.Orders.Where(b => b.ClientId == clientId), b => b.CreatedAt, from, to);
+        var completed = QueryDateRange.InRange(
             _db.Orders.Where(b => b.ClientId == clientId && b.Status == OrderStatus.Completed),
             b => b.ServiceDate ?? b.UpdatedAt, from, to);
 
@@ -141,23 +141,5 @@ public class DashboardRepository : IDashboardRepository
             && (a.Status == BookingStatus.Booked || a.Status == BookingStatus.Confirmed), ct);
 
         return new DashboardAttentionCounts(conversations, overdueFollowups, needsOutcome);
-    }
-
-    /// <summary>Filters to rows whose date falls in [from, to); either bound may be open (null). Bounds are
-    /// compared in UTC (Npgsql timestamptz parameters must be UTC).</summary>
-    private static IQueryable<T> InRange<T>(IQueryable<T> query, Expression<Func<T, DateTimeOffset>> date, DateTimeOffset? from, DateTimeOffset? to)
-    {
-        var row = date.Parameters[0];
-        if (from is not null)
-        {
-            query = query.Where(Expression.Lambda<Func<T, bool>>(
-                Expression.GreaterThanOrEqual(date.Body, Expression.Constant(from.Value.ToUniversalTime())), row));
-        }
-        if (to is not null)
-        {
-            query = query.Where(Expression.Lambda<Func<T, bool>>(
-                Expression.LessThan(date.Body, Expression.Constant(to.Value.ToUniversalTime())), row));
-        }
-        return query;
     }
 }

@@ -21,7 +21,6 @@ public class IndexModel : PageModel
 {
     private readonly ICurrentClientContext _clientContext;
     private readonly IDashboardService _dashboard;
-    private const string AllTimeKey = "dashboard.period.all";
 
     private readonly IWhatsAppHealthService _whatsAppHealth;
     private readonly IStringLocalizer _text;
@@ -35,7 +34,7 @@ public class IndexModel : PageModel
     }
 
     /// <summary>The period dropdown's choices, in display order (the page names each one).</summary>
-    public static readonly IReadOnlyList<string> Periods = ["this_week", "last_week", "this_month", "last_month", "7d", "30d", "all", "custom"];
+    public static IReadOnlyList<string> Periods => ReportPeriod.All;
 
     [BindProperty(SupportsGet = true)]
     public string Period { get; set; } = "this_month";
@@ -73,54 +72,16 @@ public class IndexModel : PageModel
         ClientName = client.Name;
 
         var tz = ViewerTimeZone.Resolve(Request, client.Timezone);
-        var (fromDate, toDate) = ResolveRange(TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, tz).Date);
-        RangeLabel = fromDate is null || toDate is null
-            ? _text[AllTimeKey].Value
-            : fromDate == toDate
-                ? TextCulture.Date(fromDate.Value, DateStyle.Date)
-                : $"{TextCulture.Date(fromDate.Value, DateStyle.MonthDay)} – {TextCulture.Date(toDate.Value, DateStyle.Date)}";
+        var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, tz).Date);
+        (Period, var fromDate, var toDate) = ReportPeriod.Resolve(Period, From, To, today);
+        RangeLabel = ReportPeriod.Label(_text, fromDate, toDate);
 
         // Viewer-local midnights -> UTC instants; the upper bound is exclusive (midnight after the last day).
-        DateTimeOffset? from = fromDate is null ? null : LocalMidnightUtc(fromDate.Value, tz);
-        DateTimeOffset? to = toDate is null ? null : LocalMidnightUtc(toDate.Value.AddDays(1), tz);
+        var (from, to) = ReportPeriod.ToUtcRange(fromDate, toDate, tz);
 
         Summary = await _dashboard.GetSummaryAsync(client.Id, from, to, ct);
         Services = await _dashboard.GetServiceStatsAsync(client.Id, from, to, ct);
         Attention = await _dashboard.GetAttentionAsync(client.Id, ct);
         WhatsAppHealth = await _whatsAppHealth.GetHealthAsync(client.Id, ct);
-    }
-
-    /// <summary>Inclusive viewer-local start/end dates for the selected period (nulls = all time). Weeks start on Monday.</summary>
-    private (DateOnly? From, DateOnly? To) ResolveRange(DateTime todayLocal)
-    {
-        var today = DateOnly.FromDateTime(todayLocal);
-        var mondayOffset = ((int)today.DayOfWeek + 6) % 7; // Monday = 0 … Sunday = 6
-        var thisMonday = today.AddDays(-mondayOffset);
-        var firstOfMonth = new DateOnly(today.Year, today.Month, 1);
-
-        switch (Period)
-        {
-            case "this_week": return (thisMonday, today);
-            case "last_week": return (thisMonday.AddDays(-7), thisMonday.AddDays(-1));
-            case "this_month": return (firstOfMonth, today);
-            case "last_month": return (firstOfMonth.AddMonths(-1), firstOfMonth.AddDays(-1));
-            case "7d": return (today.AddDays(-6), today);
-            case "30d": return (today.AddDays(-29), today);
-            case "all": return (null, null);
-            case "custom":
-                if (From is null && To is null) return (null, null);
-                var start = From ?? To!.Value;
-                var end = To ?? today;
-                return start <= end ? (start, end) : (end, start);
-            default:
-                Period = "this_month";
-                return (firstOfMonth, today);
-        }
-    }
-
-    private static DateTimeOffset LocalMidnightUtc(DateOnly date, TimeZoneInfo tz)
-    {
-        var local = date.ToDateTime(TimeOnly.MinValue);
-        return new DateTimeOffset(local, tz.GetUtcOffset(local)).ToUniversalTime();
     }
 }

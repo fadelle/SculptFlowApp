@@ -11,7 +11,10 @@
     var dashboardActive = IsActive("/dashboard") && !IsActive("/dashboard/contacts") && !IsActive("/dashboard/bookings");
     // Bookings and calendar sync are a plan feature (always on while billing is off); the pages say so if opened directly.
     var clientId = await CurrentClient.GetClientIdAsync();
-    var bookingsIncluded = clientId is null || (await Entitlements.GetAsync(clientId.Value)).CanUseBookings;
+    var plan = clientId is null ? null : await Entitlements.GetAsync(clientId.Value);
+    var bookingsIncluded = plan is null || plan.CanUseBookings;
+    // Reports need the plan's reporting feature (Growth and up); without it the link is hidden.
+    var reportsIncluded = plan is null || plan.CanUseReporting;
 }
 @functions {
     // One nav row; the label doubles as the tooltip when the sidebar is collapsed to icons.
@@ -42,6 +45,10 @@
         @if (bookingsIncluded)
         {
             @Row("/dashboard/bookings", "calendar_month", T["nav.bookings"].Value, IsActive("/dashboard/bookings")) @* icon:calendar_month *@
+        }
+        @if (reportsIncluded)
+        {
+            @Row("/reports", "insights", T["nav.reports"].Value, IsActive("/reports")) @* icon:insights *@
         }
 
         <div class="au-side-section">@T["nav.section.marketing"]</div>

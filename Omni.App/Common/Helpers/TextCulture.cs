@@ -41,6 +41,7 @@ public static class TextCulture
             DateStyle.WeekdayDate => monthFirst ? "ddd, MMM d, yyyy" : "ddd d MMM yyyy",
             DateStyle.MonthDayTime => monthFirst ? "MMM d, HH:mm" : "d MMM HH:mm",
             DateStyle.MonthShort => "MMM",
+            DateStyle.MonthYear => "MMM yyyy",
             _ => "d"
         };
     }

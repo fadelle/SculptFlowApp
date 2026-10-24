@@ -1,0 +1,313 @@
+@page "/reports"
+@model Omni.App.Pages.Reports.IndexModel
+@{
+    ViewData["Title"] = T["reports.title"].Value;
+
+    // Presentation only: a share of a whole ("—" when there's nothing to compare to); a wait in the largest units that fit.
+    string Rate(int part, int whole) => whole > 0 ? T["common.percent", Math.Round(part * 100.0 / whole)].Value : "—";
+    string Duration(TimeSpan? value)
+    {
+        if (value is not { } t) return "—";
+        if (t.TotalMinutes < 1) return T["reports.duration.seconds", (int)Math.Round(t.TotalSeconds)].Value;
+        if (t.TotalHours < 1) return T["reports.duration.minutes", (int)t.TotalMinutes].Value;
+        if (t.TotalDays < 1) return T["reports.duration.hours", (int)t.TotalHours, t.Minutes].Value;
+        return T["reports.duration.days", (int)t.TotalDays, t.Hours].Value;
+    }
+    string Count(int value) => value.Display("N0");
+    string Money(decimal value, string currency) => (currency == "USD" ? "$" : "") + value.Display("#,0.00") + (currency == "USD" ? "" : " " + currency);
+}
+
+@if (!Model.ClientConfigured)
+{
+    <div class="au-alert au-alert--warning" role="status">
+        <span class="au-icon au-alert__icon" aria-hidden="true">warning</span>
+        <div class="au-alert__body">
+            <div class="au-alert__title">@T["noClient.title"]</div>
+            @T["dashboard.noClient.text"]
+        </div>
+    </div>
+}
+else if (!Model.ReportingIncluded)
+{
+    var notIncluded = new EmptyStateModel(Icon: "insights", Title: T["reports.notIncluded.title"].Value, Text: T["reports.notIncluded.text"].Value,
+        ActionLabel: T["bookings.notIncluded.action"].Value, ActionHref: "/settings/billing", ActionIcon: "credit_card");
+    <div class="au-panel au-panel--round"><partial name="_EmptyState" model="notIncluded" /></div>
+}
+else
+{
+    var b = Model.Basic!;
+    var a = Model.Advanced;
+
+    <div class="au-page-head">
+        <p class="au-page-head__sub">@T["reports.intro"]</p>
+        <div class="au-page-head__actions">
+            <partial name="_PeriodPicker" model="new PeriodPickerModel(Model.Period, Model.From, Model.To)" />
+        </div>
+    </div>
+
+    <h2 class="section-title">@T["reports.conversations.title"] <span class="section-title__sub">@Model.RangeLabel</span></h2>
+    <div class="au-grid au-grid--3">
+        <div class="au-stat stat-accent">
+            <span class="au-eyebrow">@T["reports.conversations.new"]</span>
+            <div class="au-stat__value" id="report-new-conversations">@Count(b.NewConversations)</div>
+        </div>
+        <div class="au-stat">
+            <span class="au-eyebrow">@T["reports.conversations.received"]</span>
+            <div class="au-stat__value">@Count(b.MessagesReceived)</div>
+        </div>
+        <div class="au-stat">
+            <span class="au-eyebrow">@T["reports.conversations.sent"]</span>
+            <div class="au-stat__value">@Count(b.MessagesSent)</div>
+        </div>
+    </div>
+    @if (b.Channels.Count > 0)
+    {
+        <div class="au-table-card report-card">
+            <div class="au-table-scroll">
+                <table class="au-table au-table--stack">
+                    <thead>
+                        <tr><th>@T["reports.channels.channel"]</th><th class="au-right">@T["reports.conversations.new"]</th><th class="au-right">@T["reports.conversations.received"]</th><th class="au-right">@T["reports.conversations.sent"]</th></tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var c in b.Channels)
+                        {
+                            <tr>
+                                <td data-label="@T["reports.channels.channel"]"><strong>@T.ValueLabel(c.Channel)</strong></td>
+                                <td data-label="@T["reports.conversations.new"]" class="au-right">@Count(c.NewConversations)</td>
+                                <td data-label="@T["reports.conversations.received"]" class="au-right">@Count(c.Received)</td>
+                                <td data-label="@T["reports.conversations.sent"]" class="au-right">@Count(c.Sent)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+
+    <h2 class="section-title">@T["reports.contacts.title"]</h2>
+    <div class="au-grid au-grid--3">
+        <div class="au-stat stat-accent">
+            <span class="au-eyebrow">@T["dashboard.funnel.newContacts"]</span>
+            <div class="au-stat__value" id="report-new-contacts">@Count(b.NewContacts)</div>
+            <span class="au-stat__hint">@T["reports.contacts.newHint"]</span>
+        </div>
+    </div>
+    @if (b.NewContacts > 0)
+    {
+        <div class="au-grid au-grid--2 report-card">
+            <div class="au-table-card">
+                <table class="au-table">
+                    <thead><tr><th>@T["reports.contacts.source"]</th><th class="au-right">@T["reports.contacts.count"]</th></tr></thead>
+                    <tbody>
+                        @foreach (var s in b.ContactsBySource)
+                        {
+                            <tr>
+                                <td dir="auto">@(string.IsNullOrWhiteSpace(s.Key) ? T["reports.contacts.noSource"].Value : T.ValueLabel(s.Key))</td>
+                                <td class="au-right">@Count(s.Count) <span class="text-muted">@Rate(s.Count, b.NewContacts)</span></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <div class="au-table-card">
+                <table class="au-table">
+                    <thead><tr><th>@T["reports.contacts.stage"]</th><th class="au-right">@T["reports.contacts.count"]</th></tr></thead>
+                    <tbody>
+                        @foreach (var s in b.ContactsByStage)
+                        {
+                            <tr>
+                                <td><span class="badge @StageDisplay.CssClass(Model.Stages, s.Key)">@StageDisplay.Label(Model.Stages, s.Key)</span></td>
+                                <td class="au-right">@Count(s.Count) <span class="text-muted">@Rate(s.Count, b.NewContacts)</span></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+
+    @if (b.Bookings is { } bookings)
+    {
+        <h2 class="section-title">@T["reports.bookings.title"]</h2>
+        <div class="au-grid au-grid--4">
+            <div class="au-stat">
+                <span class="au-eyebrow">@T["dashboard.funnel.bookingsMade"]</span>
+                <div class="au-stat__value" id="report-bookings-made">@Count(bookings.Made)</div>
+                <span class="au-stat__hint">@T["reports.bookings.madeHint"]</span>
+            </div>
+            <div class="au-stat">
+                <span class="au-eyebrow">@T["values.attended"]</span>
+                <div class="au-stat__value">@Count(bookings.Attended)</div>
+                <span class="au-stat__hint">@T["reports.bookings.outcomeHint"]</span>
+            </div>
+            <div class="au-stat">
+                <span class="au-eyebrow">@T["values.noShow"]</span>
+                <div class="au-stat__value">@Count(bookings.NoShow)</div>
+                <span class="au-stat__hint">@T["reports.bookings.outcomeHint"]</span>
+            </div>
+            <div class="au-stat">
+                <span class="au-eyebrow">@T["values.canceled"]</span>
+                <div class="au-stat__value">@Count(bookings.Canceled)</div>
+                <span class="au-stat__hint">@T["reports.bookings.outcomeHint"]</span>
+            </div>
+        </div>
+    }
+
+    @if (b.Campaigns is { } campaigns)
+    {
+        <h2 class="section-title">@T["reports.campaigns.title"]</h2>
+        <div class="au-table-card" id="report-campaigns">
+            @if (campaigns.Count == 0)
+            {
+                var empty = new EmptyStateModel(Icon: "campaign", Title: T["reports.campaigns.emptyTitle"].Value, Text: T["reports.campaigns.emptyText"].Value);
+                <partial name="_EmptyState" model="empty" />
+            }
+            else
+            {
+                <div class="au-table-scroll">
+                    <table class="au-table au-table--stack">
+                        <thead>
+                            <tr><th>@T["reports.campaigns.campaign"]</th><th>@T["reports.campaigns.started"]</th><th class="au-right">@T["reports.campaigns.recipients"]</th><th class="au-right">@T["values.sent"]</th><th class="au-right">@T["values.delivered"]</th><th class="au-right">@T["values.read"]</th><th class="au-right">@T["values.replied"]</th><th class="au-right">@T["values.failed"]</th></tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var c in campaigns)
+                            {
+                                <tr>
+                                    <td data-label="@T["reports.campaigns.campaign"]"><a href="/Campaigns/@c.Id" dir="auto"><strong>@c.Name</strong></a></td>
+                                    <td data-label="@T["reports.campaigns.started"]">@LocalTimeHelper.Time(c.StartedAt)</td>
+                                    <td data-label="@T["reports.campaigns.recipients"]" class="au-right">@Count(c.Recipients)</td>
+                                    <td data-label="@T["values.sent"]" class="au-right">@Count(c.Sent)</td>
+                                    <td data-label="@T["values.delivered"]" class="au-right">@Count(c.Delivered) <span class="text-muted">@Rate(c.Delivered, c.Sent)</span></td>
+                                    <td data-label="@T["values.read"]" class="au-right">@Count(c.Read) <span class="text-muted">@Rate(c.Read, c.Sent)</span></td>
+                                    <td data-label="@T["values.replied"]" class="au-right">@Count(c.Replied) <span class="text-muted">@Rate(c.Replied, c.Sent)</span></td>
+                                    <td data-label="@T["values.failed"]" class="au-right">@Count(c.Failed)</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    }
+
+    @if (a is not null)
+    {
+        var rt = a.ResponseTimes;
+        var r = a.Replies;
+
+        <h2 class="section-title" id="report-advanced">@T["reports.responseTimes.title"]</h2>
+        <div class="au-grid au-grid--4">
+            <div class="au-stat stat-accent">
+                <span class="au-eyebrow">@T["reports.responseTimes.median"]</span>
+                <div class="au-stat__value" id="report-median-reply">@Duration(rt.Median)</div>
+                <span class="au-stat__hint">@T["reports.responseTimes.medianHint"]</span>
+            </div>
+            <div class="au-stat">
+                <span class="au-eyebrow">@T["reports.responseTimes.average"]</span>
+                <div class="au-stat__value">@Duration(rt.Average)</div>
+            </div>
+            <div class="au-stat">
+                <span class="au-eyebrow">@T["reports.responseTimes.fast", Omni.App.Common.Statics.ReportLimits.FastReplyMinutes]</span>
+                <div class="au-stat__value">@Rate(rt.WithinFiveMinutes, rt.Answered)</div>
+                <span class="au-stat__hint">@T["reports.responseTimes.answered", Count(rt.Answered)]</span>
+            </div>
+            <div class="au-stat">
+                <span class="au-eyebrow">@T["reports.responseTimes.unanswered"]</span>
+                <div class="au-stat__value">@Count(rt.Unanswered)</div>
+                <span class="au-stat__hint">@T["reports.responseTimes.unansweredHint"]</span>
+            </div>
+        </div>
+        @if (rt.AiMedian is not null || rt.TeamMedian is not null)
+        {
+            <p class="text-muted report-note">@T["reports.responseTimes.byWho", Duration(rt.AiMedian), Duration(rt.TeamMedian)]</p>
+        }
+
+        <h2 class="section-title">@T["reports.ai.title"]</h2>
+        <div class="au-grid au-grid--4">
+            <div class="au-stat">
+                <span class="au-eyebrow">@T["reports.ai.aiReplies"]</span>
+                <div class="au-stat__value" id="report-ai-replies">@Count(r.AiReplies)</div>
+                <span class="au-stat__hint">@T["reports.ai.share", Rate(r.AiReplies, r.AiReplies + r.TeamReplies)]</span>
+            </div>
+            <div class="au-stat">
+                <span class="au-eyebrow">@T["reports.ai.teamReplies"]</span>
+                <div class="au-stat__value">@Count(r.TeamReplies)</div>
+            </div>
+            <div class="au-stat">
+                <span class="au-eyebrow">@T["reports.ai.conversations"]</span>
+                <div class="au-stat__value">@Count(r.AiConversations)</div>
+            </div>
+            <div class="au-stat">
+                <span class="au-eyebrow">@T["reports.ai.aiOnly"]</span>
+                <div class="au-stat__value">@Count(r.AiOnlyConversations)</div>
+                <span class="au-stat__hint">@T["reports.ai.aiOnlyHint", Rate(r.AiOnlyConversations, r.AiConversations)]</span>
+            </div>
+        </div>
+
+        <h2 class="section-title">@(a.ActivityByMonth ? T["reports.activity.titleByMonth"] : T["reports.activity.titleByDay"])</h2>
+        <div class="au-table-card" id="report-activity">
+            @if (a.Activity.Count == 0)
+            {
+                var empty = new EmptyStateModel(Icon: "forum", Title: T["reports.activity.emptyTitle"].Value, Text: T["reports.activity.emptyText"].Value);
+                <partial name="_EmptyState" model="empty" />
+            }
+            else
+            {
+                var max = Math.Max(1, a.Activity.Max(x => Math.Max(x.Received, x.Sent)));
+                <div class="au-table-scroll">
+                    <table class="au-table au-table--stack report-activity">
+                        <thead>
+                            <tr><th>@(a.ActivityByMonth ? T["reports.activity.month"] : T["reports.activity.day"])</th><th>@T["reports.conversations.received"]</th><th>@T["reports.conversations.sent"]</th></tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var row in a.Activity)
+                            {
+                                <tr>
+                                    <td data-label="@(a.ActivityByMonth ? T["reports.activity.month"] : T["reports.activity.day"])">@TextCulture.Date(row.Start, a.ActivityByMonth ? DateStyle.MonthYear : DateStyle.WeekdayDate)</td>
+                                    <td data-label="@T["reports.conversations.received"]">
+                                        <div class="report-bar"><span class="report-bar__count">@Count(row.Received)</span><div class="au-meter"><div class="au-meter__fill" style="--value: @((row.Received * 100.0 / max).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture))%"></div></div></div>
+                                    </td>
+                                    <td data-label="@T["reports.conversations.sent"]">
+                                        <div class="report-bar"><span class="report-bar__count">@Count(row.Sent)</span><div class="au-meter au-meter--success"><div class="au-meter__fill" style="--value: @((row.Sent * 100.0 / max).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture))%"></div></div></div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+
+        @if (Model.ShowUsage)
+        {
+            <h2 class="section-title">@T["reports.usage.title"]</h2>
+            <div class="au-table-card" id="report-usage">
+                @if (a.Usage.Count == 0)
+                {
+                    var empty = new EmptyStateModel(Icon: "receipt_long", Title: T["reports.usage.emptyTitle"].Value, Text: T["reports.usage.emptyText"].Value);
+                    <partial name="_EmptyState" model="empty" />
+                }
+                else
+                {
+                    <table class="au-table">
+                        <thead><tr><th>@T["billing.usage.type"]</th><th class="au-right">@T["billing.usage.count"]</th><th class="au-right">@T["billing.usage.charged"]</th></tr></thead>
+                        <tbody>
+                            @foreach (var u in a.Usage)
+                            {
+                                <tr>
+                                    <td>@T.EventTypeLabel(u.EventType)</td>
+                                    <td class="au-right">@Count(u.Count)</td>
+                                    <td class="au-right">@Money(u.Amount, u.Currency)</td>
+                                </tr>
+                            }
+                        </tbody>
+                        @if (a.Usage.Select(u => u.Currency).Distinct().Count() == 1)
+                        {
+                            <tfoot><tr><th>@T["billing.usage.total"]</th><th class="au-right">@Count(a.Usage.Sum(u => u.Count))</th><th class="au-right">@Money(a.Usage.Sum(u => u.Amount), a.Usage[0].Currency)</th></tr></tfoot>
+                        }
+                    </table>
+                }
+            </div>
+        }
+    }
+}

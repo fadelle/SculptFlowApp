@@ -1565,3 +1565,10 @@ td .cell-sub { white-space: nowrap; }
 /* ---- Status (404/400) and Error pages ---- */
 .fullpage-actions { justify-content: center; margin-top: 4px; }
 .au-auth > .au-fullpage-msg { padding-block: 32px; }
+
+/* ---- Reports ---- */
+.report-card { margin-top: 12px; }
+.report-note { margin: 10px 0 0; font-size: 0.8125rem; }
+.report-bar { display: flex; align-items: center; gap: 0.6rem; min-width: 140px; }
+.report-bar__count { min-width: 3ch; font-variant-numeric: tabular-nums; text-align: end; }
+.report-bar .au-meter { flex: 1; }

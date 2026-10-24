@@ -15,6 +15,7 @@ public static class EntitlementCatalog
         new EntitlementDefinition(EntitlementKeys.Bookings, EntitlementKind.Feature, "Bookings"),
         new EntitlementDefinition(EntitlementKeys.AiAssistant, EntitlementKind.Feature, "AI assistant"),
         new EntitlementDefinition(EntitlementKeys.ApiAccess, EntitlementKind.Feature, "API access"),
+        new EntitlementDefinition(EntitlementKeys.Reporting, EntitlementKind.Feature, "Reporting"),
         new EntitlementDefinition(EntitlementKeys.AdvancedReporting, EntitlementKind.Feature, "Advanced reporting"),
         new EntitlementDefinition(EntitlementKeys.MaxUsers, EntitlementKind.Limit, "Seats"),
         new EntitlementDefinition(EntitlementKeys.MaxWhatsAppNumbers, EntitlementKind.Limit, "WhatsApp numbers"),

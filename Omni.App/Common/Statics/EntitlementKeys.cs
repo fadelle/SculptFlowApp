@@ -14,6 +14,9 @@ public static class EntitlementKeys
     /// <summary>Automation: the AI assistant answers conversations (n8n trigger).</summary>
     public const string AiAssistant = "ai_assistant";
     public const string ApiAccess = "api_access";
+    /// <summary>Reports: the Reports page's basic sections (conversations, contacts, bookings, campaigns).</summary>
+    public const string Reporting = "reporting";
+    /// <summary>Advanced reports: response times, AI replies, daily activity and usage on the Reports page.</summary>
     public const string AdvancedReporting = "advanced_reporting";
     public const string MaxUsers = "max_users";
     public const string MaxWhatsAppNumbers = "max_whatsapp_numbers";

@@ -35,6 +35,7 @@ help
 hourglass_top
 hub
 info
+insights
 language
 light_mode
 lightbulb

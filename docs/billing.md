@@ -47,7 +47,7 @@ Ask `IEntitlementService`, never compare plan names:
 
 ```csharp
 var e = await _entitlements.GetAsync(clientId, ct);
-if (e.CanUseCampaigns) ...            // also CanUseBookings, CanUseAiAssistant, CanUseApi, CanUseAdvancedReporting, CanSendMessages
+if (e.CanUseCampaigns) ...            // also CanUseBookings, CanUseAiAssistant, CanUseApi, CanUseReporting, CanUseAdvancedReporting, CanSendMessages
 var max = e.MaximumUsers;            // null = unlimited; also MaximumWhatsAppNumbers, MaximumChannelConnections, MaximumAiBots
 await _entitlements.EnsureFeatureAsync(clientId, EntitlementKeys.Campaigns, ct);      // throws EntitlementDeniedException (422)
 await _entitlements.EnsureWithinLimitAsync(clientId, EntitlementKeys.MaxUsers, newCount, ct);
@@ -59,8 +59,8 @@ routing and Return to AI, see `InboxSettingsService`), channel connects
 (`max_channel_connections`, `max_whatsapp_numbers`), AI bots (`max_ai_bots`: the first that many connected channels, in
 connection order, get the AI; on the others conversations go to the team with reason `ai_bot_limit` and Return to AI is
 refused; a plan without the key has no AI bot limit, see `InboxSettingsService`) and seats (`max_users`: active client and member users, checked when
-the client user adds or reactivates a member, see `MemberService`). `api_access` and `advanced_reporting` are defined but
-nothing checks them yet.
+the client user adds or reactivates a member, see `MemberService`). Reports too: `reporting` gates the Reports page and its sidebar link, `advanced_reporting`
+its response-time, AI-reply, activity and usage sections (see `ReportService`). `api_access` is defined but nothing checks it yet.
 
 **`bookings`** (an Inbox-only plan leaves it off): `[RequireFeature(EntitlementKeys.Bookings)]` (`Controllers/Filters`) on
 `/api/bookings` and `/api/calendar-integrations` (422 like any `EnsureFeatureAsync` refusal) and on the AI booking tools

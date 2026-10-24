@@ -7,17 +7,6 @@
     // Presentation only: "36% of new contacts" under a funnel card ("—" when there's nothing to compare to).
     // The percent sign follows the language ("36 %" in French) through common.percent.
     string Rate(int part, int whole) => whole > 0 ? T["common.percent", Math.Round(part * 100.0 / whole)].Value : "—";
-    string PeriodLabel(string period) => period switch
-    {
-        "this_week" => T["dashboard.period.thisWeek"],
-        "last_week" => T["dashboard.period.lastWeek"],
-        "this_month" => T["dashboard.period.thisMonth"],
-        "last_month" => T["dashboard.period.lastMonth"],
-        "7d" => T["dashboard.period.last7Days"],
-        "30d" => T["dashboard.period.last30Days"],
-        "all" => T["dashboard.period.all"],
-        _ => T["dashboard.period.custom"],
-    };
 }
 
 @if (!Model.ClientConfigured)
@@ -34,7 +23,6 @@ else
 {
     var s = Model.Summary!;
     var attention = Model.Attention!;
-    var custom = Model.Period == "custom";
 
     var whatsAppLevel = Model.WhatsAppHealth?.HealthLevel ?? "unknown";
     var whatsAppDotClass = whatsAppLevel switch
@@ -51,20 +39,7 @@ else
     <div class="au-page-head">
         <p class="au-page-head__sub">@T["dashboard.intro", Model.ClientName ?? ""]</p>
         <div class="au-page-head__actions">
-            <form method="get" class="period-form" id="period-form">
-                <select name="Period" class="select" id="period-select" aria-label="@T["dashboard.period.label"]">
-                    @foreach (var value in Omni.App.Pages.Dashboard.IndexModel.Periods)
-                    {
-                        <option value="@value" selected="@(value == Model.Period)">@PeriodLabel(value)</option>
-                    }
-                </select>
-                <span class="period-custom" id="period-custom" hidden="@(!custom)">
-                    <input type="date" name="From" class="text-input" value="@Model.From?.ToString("yyyy-MM-dd")" aria-label="@T["dashboard.period.from"]" />
-                    <span class="text-subtle">–</span>
-                    <input type="date" name="To" class="text-input" value="@Model.To?.ToString("yyyy-MM-dd")" aria-label="@T["dashboard.period.to"]" />
-                    <button type="submit" class="au-btn au-btn--outlined">@T["dashboard.period.apply"]</button>
-                </span>
-            </form>
+            <partial name="_PeriodPicker" model="new PeriodPickerModel(Model.Period, Model.From, Model.To)" />
             <a href="/WhatsApp/Health" class="health-pill" title="@T["dashboard.whatsApp.title"]">
                 <span id="dashboard-whatsapp-health-dot" class="health-dot @whatsAppDotClass"></span>
                 <span class="text-muted">WhatsApp</span>
@@ -198,23 +173,6 @@ else
             <span class="au-icon au-action-card__arrow au-icon--dir" aria-hidden="true">arrow_forward</span>
         </a>
     </div>
-
-    <script>
-        // Period dropdown: presets apply immediately; "Custom range…" reveals the two dates + Apply.
-        (function () {
-            var form = document.getElementById('period-form');
-            var select = document.getElementById('period-select');
-            var custom = document.getElementById('period-custom');
-            select.addEventListener('change', function () {
-                var isCustom = select.value === 'custom';
-                custom.hidden = !isCustom;
-                if (!isCustom) {
-                    custom.querySelectorAll('input').forEach(function (i) { i.disabled = true; }); // keep the URL clean
-                    form.submit();
-                }
-            });
-        })();
-    </script>
 
     <script>
         window.PS_DASHBOARD_CONFIG = {

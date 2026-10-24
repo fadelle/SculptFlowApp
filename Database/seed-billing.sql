@@ -4,9 +4,9 @@
 --   Free Trial  $0 / 7 days  1 user,  1 channel,  inbox only
 --   Inbox       $39 / month  2 users, 2 channels
 --   + Bookings  $59 / month  3 users, 3 channels, bookings
---   Growth      $99 / month  5 users, 4 channels, bookings, campaigns, $10 credit
---   AI Pro     $169 / month  5 users, 4 channels, 2 WhatsApp numbers, 2 AI bots, AI assistant, advanced reporting, $20 credit
---   Business   $299 / month  12 users, unlimited channels, 5 WhatsApp numbers, 5 AI bots, API access, $40 credit
+--   Growth      $99 / month  5 users, 4 channels, bookings, campaigns, reporting, $10 credit
+--   AI Pro     $169 / month  5 users, 4 channels, 2 WhatsApp numbers, 2 AI bots, AI assistant, reporting + advanced reporting, $20 credit
+--   Business   $299 / month  12 users, unlimited channels, 5 WhatsApp numbers, 5 AI bots, reporting + advanced reporting, API access, $40 credit
 --   AI reply   $0.02 (rate on the default rate card)
 --   Add-ons    extra user $8, extra channel $5, extra AI bot $15, extra WhatsApp number $10 (per month)
 --
@@ -29,28 +29,28 @@ insert into billing.plan_entitlements (plan_id, entitlement_key, value)
 select p.id, e.entitlement_key, e.value
 from (values
   ('trial', 'max_users', '1'), ('trial', 'max_channel_connections', '1'), ('trial', 'max_whatsapp_numbers', '1'), ('trial', 'max_ai_bots', '0'),
-  ('trial', 'bookings', 'false'), ('trial', 'campaigns', 'false'), ('trial', 'ai_assistant', 'false'), ('trial', 'advanced_reporting', 'false'),
+  ('trial', 'bookings', 'false'), ('trial', 'campaigns', 'false'), ('trial', 'ai_assistant', 'false'), ('trial', 'reporting', 'false'), ('trial', 'advanced_reporting', 'false'),
   ('trial', 'api_access', 'false'),
 
   ('inbox', 'max_users', '2'), ('inbox', 'max_channel_connections', '2'), ('inbox', 'max_whatsapp_numbers', '1'), ('inbox', 'max_ai_bots', '0'),
-  ('inbox', 'bookings', 'false'), ('inbox', 'campaigns', 'false'), ('inbox', 'ai_assistant', 'false'), ('inbox', 'advanced_reporting', 'false'),
+  ('inbox', 'bookings', 'false'), ('inbox', 'campaigns', 'false'), ('inbox', 'ai_assistant', 'false'), ('inbox', 'reporting', 'false'), ('inbox', 'advanced_reporting', 'false'),
   ('inbox', 'api_access', 'false'),
 
   ('inbox-bookings', 'max_users', '3'), ('inbox-bookings', 'max_channel_connections', '3'), ('inbox-bookings', 'max_whatsapp_numbers', '1'),
   ('inbox-bookings', 'max_ai_bots', '0'), ('inbox-bookings', 'bookings', 'true'), ('inbox-bookings', 'campaigns', 'false'),
-  ('inbox-bookings', 'ai_assistant', 'false'), ('inbox-bookings', 'advanced_reporting', 'false'), ('inbox-bookings', 'api_access', 'false'),
+  ('inbox-bookings', 'ai_assistant', 'false'), ('inbox-bookings', 'reporting', 'false'), ('inbox-bookings', 'advanced_reporting', 'false'), ('inbox-bookings', 'api_access', 'false'),
 
   ('growth', 'max_users', '5'), ('growth', 'max_channel_connections', '4'), ('growth', 'max_whatsapp_numbers', '1'), ('growth', 'max_ai_bots', '0'),
-  ('growth', 'bookings', 'true'), ('growth', 'campaigns', 'true'), ('growth', 'ai_assistant', 'false'), ('growth', 'advanced_reporting', 'false'),
+  ('growth', 'bookings', 'true'), ('growth', 'campaigns', 'true'), ('growth', 'ai_assistant', 'false'), ('growth', 'reporting', 'true'), ('growth', 'advanced_reporting', 'false'),
   ('growth', 'api_access', 'false'),
 
   ('ai-pro', 'max_users', '5'), ('ai-pro', 'max_channel_connections', '4'), ('ai-pro', 'max_whatsapp_numbers', '2'), ('ai-pro', 'max_ai_bots', '2'),
-  ('ai-pro', 'bookings', 'true'), ('ai-pro', 'campaigns', 'true'), ('ai-pro', 'ai_assistant', 'true'), ('ai-pro', 'advanced_reporting', 'true'),
+  ('ai-pro', 'bookings', 'true'), ('ai-pro', 'campaigns', 'true'), ('ai-pro', 'ai_assistant', 'true'), ('ai-pro', 'reporting', 'true'), ('ai-pro', 'advanced_reporting', 'true'),
   ('ai-pro', 'api_access', 'false'),
 
   ('business', 'max_users', '12'), ('business', 'max_channel_connections', 'unlimited'), ('business', 'max_whatsapp_numbers', '5'),
   ('business', 'max_ai_bots', '5'), ('business', 'bookings', 'true'), ('business', 'campaigns', 'true'), ('business', 'ai_assistant', 'true'),
-  ('business', 'advanced_reporting', 'true'), ('business', 'api_access', 'true')
+  ('business', 'reporting', 'true'), ('business', 'advanced_reporting', 'true'), ('business', 'api_access', 'true')
 ) as e(plan_code, entitlement_key, value)
 join billing.plans p on p.code = e.plan_code
 on conflict (plan_id, entitlement_key) do nothing;

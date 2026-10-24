@@ -42,6 +42,8 @@ using Omni.App.Persistence.Contracts.PlatformAdmin;
 using Omni.App.Persistence.Repositories.PlatformAdmin;
 using Omni.App.Persistence.Contracts.Monitoring;
 using Omni.App.Persistence.Repositories.Monitoring;
+using Omni.App.Persistence.Contracts.Reports;
+using Omni.App.Persistence.Repositories.Reports;
 
 namespace Omni.App.Common.Extensions;
 
@@ -103,6 +105,7 @@ public static class PersistenceModule
         services.AddScoped<IContactAdminRepository, ContactAdminRepository>();
         services.AddScoped<IContentAdminRepository, ContentAdminRepository>();
         services.AddScoped<IOverviewAdminRepository, OverviewAdminRepository>();
+        services.AddScoped<IReportRepository, ReportRepository>();
 
         return services;
     }
