@@ -80,7 +80,15 @@ public class MessageBillingTests
                 new WhatsAppTemplateRepository(db), new CampaignRepository(db), new UnitOfWork(db), WhatsApp, new IChannelSender[] { new WhatsAppChannelSender(WhatsApp) },
                 NullProxy<IInboxNotifier>.Create(), new EventLogger(new EventLogRepository(db)), NullProxy<INotificationService>.Create(),
                 MessageBilling, H.Entitlements(db), new InboxSettingsService(new InboxSettingsRepository(db), new ClientRepository(db), H.Entitlements(db), new ChannelIntegrationRepository(db), new UnitOfWork(db)), Mock.Of<IMessageTracer>(),
-                Conversations.Object, optOut ?? Mock.Of<IOptOutService>());
+                Conversations.Object, optOut ?? Mock.Of<IOptOutService>(), NoAutoReplies());
+        }
+
+        private static IAutoReplyService NoAutoReplies()
+        {
+            var autoReplies = new Mock<IAutoReplyService>();
+            autoReplies.Setup(a => a.ChooseAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(AutoReplyChoice.Skip(AutoReplyRules.SkipOff));
+            return autoReplies.Object;
         }
 
         public async Task<MessageResponse> SendTemplateAsync(Guid templateId)

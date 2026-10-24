@@ -51,14 +51,16 @@ public class MessageService : IMessageService
     private readonly IMessageTracer _tracer;
     private readonly IConversationService _conversationService;
     private readonly IOptOutService _optOut;
+    private readonly IAutoReplyService _autoReplies;
 
     public MessageService(
         IConversationRepository conversations, IMessageRepository messages, IContactRepository contacts,
         IWhatsAppTemplateRepository templates, ICampaignRepository campaigns, IUnitOfWork unitOfWork, IWhatsAppService whatsApp, IEnumerable<IChannelSender> senders,
         IInboxNotifier notifier, IEventLogger events, INotificationService notifications,
         IMessageBillingService billing, IEntitlementService entitlements, IInboxSettingsService inboxSettings, IMessageTracer tracer,
-        IConversationService conversationService, IOptOutService optOut)
+        IConversationService conversationService, IOptOutService optOut, IAutoReplyService autoReplies)
     {
+        _autoReplies = autoReplies;
         _conversationService = conversationService;
         _optOut = optOut;
         _tracer = tracer;
@@ -556,6 +558,9 @@ public class MessageService : IMessageService
         // business_app_echo, ai_message (and elsewhere: dashboard, campaign sends) must NOT touch
         // this, or member/AI could keep a window open indefinitely just by replying to themselves.
         var reopened = false;
+        // The contact's first message in this conversation (it may have been started by a campaign or reminder): it gets the
+        // channel's new-conversation auto-reply.
+        var firstContactMessage = request.EventType == IngestEventType.CustomerMessage && conversation.LastCustomerMessageAt is null;
         if (request.EventType == IngestEventType.CustomerMessage)
         {
             conversation.LastCustomerMessageAt = now;
@@ -702,6 +707,11 @@ public class MessageService : IMessageService
         {
             await ConfirmOptOutAsync(request.ClientId, request.ConversationId, contact, optedOut, ids, ct);
         }
+        else if (firstContactMessage || reopened)
+        {
+            await SendAutoReplyAsync(request.ClientId, conversation.Id, conversation.Channel,
+                firstContactMessage ? AutoReplyTrigger.NewConversation : AutoReplyTrigger.Reopened, aiEligible, ids, ct);
+        }
 
         return new IngestMessageResult(Found: true, Deduplicated: false, InboxMapper.ToResponse(message),
             conversation.Mode, aiEligible);
@@ -722,14 +732,45 @@ public class MessageService : IMessageService
         }
     }
 
-    public async Task<MessageResponse?> SendSystemTextAsync(Guid clientId, Guid conversationId, string content, CancellationToken ct = default)
+    /// <summary>The channel's auto-reply to a new or reopened conversation (IAutoReplyService), sent as an automatic message.
+    /// Like the opt-out confirmation, a failure (no balance, provider refused) is traced and never fails the inbound
+    /// message, which is already saved.</summary>
+    private async Task SendAutoReplyAsync(Guid clientId, Guid conversationId, string channel, string trigger, bool aiAnswers,
+        TraceIds ids, CancellationToken ct)
+    {
+        try
+        {
+            var choice = await _autoReplies.ChooseAsync(clientId, channel, trigger, aiAnswers, ct);
+            if (choice.Text is null)
+            {
+                // A channel without an auto-reply is the usual case: only a reply that was held back is worth a trace step.
+                if (choice.SkipReason == AutoReplyRules.SkipOff) return;
+                _tracer.Step(TraceSteps.AutoReplySkipped, TraceOutcomes.Skipped, ids, detail: new { trigger, reason = choice.SkipReason });
+                return;
+            }
+            await SendAutomaticTextAsync(clientId, conversationId, choice.Text, "auto_reply", EventTypes.AutoReplySent,
+                System.Text.Json.JsonSerializer.Serialize(new { trigger }), ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _tracer.Step(TraceSteps.SendBlocked, TraceOutcomes.Failed, ids, detail: new { kind = "auto_reply", error = TraceText.Error(ex) });
+        }
+    }
+
+    public Task<MessageResponse?> SendSystemTextAsync(Guid clientId, Guid conversationId, string content, CancellationToken ct = default) =>
+        SendAutomaticTextAsync(clientId, conversationId, content, "system", null, null, ct);
+
+    /// <summary>Plain text the contact receives from Omni itself (sender and origin system, MessageMetadata.Automatic),
+    /// optionally logging <paramref name="eventType"/> in the same save.</summary>
+    private async Task<MessageResponse?> SendAutomaticTextAsync(Guid clientId, Guid conversationId, string content, string kind,
+        string? eventType, string? eventMetadataJson, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(content)) throw new ArgumentException("inbox.errors.contentRequired");
         var conversation = await _conversations.GetWithContactAsync(clientId, conversationId, ct);
         if (conversation is null) return null;
 
         var messageId = Guid.NewGuid();
-        _tracer.Step(TraceSteps.SendRequested, TraceOutcomes.Ok, Ids(conversation, messageId), detail: new { kind = "system" });
+        _tracer.Step(TraceSteps.SendRequested, TraceOutcomes.Ok, Ids(conversation, messageId), detail: new { kind });
         var billingHold = await PrepareTracedBillingAsync(conversation, messageId, OutboundMessageKind.Text, null, null, ct);
         string externalMessageId;
         try
@@ -769,6 +810,11 @@ public class MessageService : IMessageService
         conversation.LastMessageAt = now;
         conversation.LastMessageDirection = MessageDirection.Outbound;
         conversation.UpdatedAt = now;
+        if (eventType is not null)
+        {
+            _events.Log(clientId, eventType, contactId: conversation.ContactId, conversationId: conversationId,
+                source: MessageOrigin.System, metadataJson: eventMetadataJson ?? "{}");
+        }
 
         await _unitOfWork.SaveChangesAsync(ct);
         await _billing.SentAsync(billingHold, ct);

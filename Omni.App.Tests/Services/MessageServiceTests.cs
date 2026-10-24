@@ -25,12 +25,14 @@ public class MessageServiceTests
     private readonly Mock<IMessageTracer> _tracer = new();
     private readonly Mock<IConversationService> _conversationService = new();
     private readonly Mock<IOptOutService> _optOut = new();
+    private readonly Mock<IAutoReplyService> _autoReplies = new();
     private readonly MessageBillingHold _hold = new(Guid.Empty, "key", BillingSettlementTrigger.OnProviderAccepted);
     private readonly Contact _contact;
 
     public MessageServiceTests()
     {
         InboxSettings(planIncludesBot: true, reopenedConversations: true);
+        AutoReply(AutoReplyChoice.Skip(AutoReplyRules.SkipOff));
         _contact = new Contact { Id = _contactId, ClientId = _clientId, FullName = "Ann Lee", Phone = "96170123456" };
         _sender.SetupGet(s => s.Channel).Returns(ConversationChannel.WhatsApp);
         _sender.Setup(s => s.SendTextAsync(It.IsAny<Conversation>(), It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync("wamid.sent");
@@ -41,7 +43,11 @@ public class MessageServiceTests
 
     private MessageService Sut() => new(_conversations.Object, _messages.Object, _contacts.Object, _templates.Object, _campaigns.Object, _uow.Object,
         _whatsApp.Object, [_sender.Object], _notifier.Object, _events.Object, _notifications.Object, _billing.Object, _entitlements.Object, _inboxSettings.Object, _tracer.Object,
-        _conversationService.Object, _optOut.Object);
+        _conversationService.Object, _optOut.Object, _autoReplies.Object);
+
+    private void AutoReply(AutoReplyChoice choice) =>
+        _autoReplies.Setup(a => a.ChooseAsync(_clientId, It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(choice);
 
     private void InboxSettings(bool planIncludesBot, bool reopenedConversations) =>
         _inboxSettings.Setup(a => a.GetAsync(_clientId, It.IsAny<CancellationToken>()))
@@ -827,5 +833,115 @@ public class MessageServiceTests
     {
         await Assert.ThrowsAsync<ArgumentException>(() => Sut().SendSystemTextAsync(_clientId, Guid.NewGuid(), " "));
         Assert.Null(await Sut().SendSystemTextAsync(_clientId, Guid.NewGuid(), "Hi"));
+    }
+
+    // ---------------------------------------------------------------- auto-replies
+
+    private void VerifyChoose(string trigger, bool aiAnswers, Func<Times> times) =>
+        _autoReplies.Verify(a => a.ChooseAsync(_clientId, ConversationChannel.WhatsApp, trigger, aiAnswers, It.IsAny<CancellationToken>()), times);
+
+    [Fact]
+    public async Task A_contacts_first_message_gets_the_new_conversation_auto_reply_as_an_automatic_message()
+    {
+        var c = Conv(ConversationMode.Human);
+        AutoReply(AutoReplyChoice.Send("Thanks, we'll answer soon."));
+        var saved = new List<Message>();
+        _messages.Setup(m => m.Add(It.IsAny<Message>())).Callback<Message>(saved.Add);
+
+        var r = await Sut().IngestAsync(Ingest(c.Id, IngestEventType.CustomerMessage));
+
+        Assert.True(r.Found);
+        VerifyChoose(AutoReplyTrigger.NewConversation, false, Times.Once);
+        _sender.Verify(s => s.SendTextAsync(c, "Thanks, we'll answer soon.", It.IsAny<CancellationToken>()), Times.Once);
+        var reply = Assert.Single(saved, m => m.Direction == MessageDirection.Outbound);
+        Assert.Equal((MessageSenderType.System, MessageOrigin.System, MessageMetadata.Automatic), (reply.SenderType, reply.Origin, reply.MetadataJson));
+        Assert.Equal(ConversationMode.Human, c.Mode);
+        _events.Verify(e => e.Log(_clientId, EventTypes.AutoReplySent, _contactId, c.Id, null, MessageOrigin.System, "{\"trigger\":\"new\"}"), Times.Once);
+        _billing.Verify(b => b.SentAsync(_hold, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task The_auto_reply_is_told_when_the_ai_bot_answers_the_message()
+    {
+        var c = Conv(ConversationMode.Ai);
+        AutoReply(AutoReplyChoice.Skip(AutoReplyRules.SkipAiAnswers));
+
+        var r = await Sut().IngestAsync(Ingest(c.Id, IngestEventType.CustomerMessage));
+
+        Assert.True(r.AiEligible);
+        VerifyChoose(AutoReplyTrigger.NewConversation, true, Times.Once);
+        _sender.Verify(s => s.SendTextAsync(It.IsAny<Conversation>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        _tracer.Verify(t => t.Step(TraceSteps.AutoReplySkipped, TraceOutcomes.Skipped, It.IsAny<TraceIds>(), It.IsAny<double?>(), It.IsAny<object?>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task A_message_that_reopens_a_closed_conversation_gets_the_reopened_auto_reply()
+    {
+        var c = Conv(ConversationMode.Human);
+        c.LastCustomerMessageAt = DateTimeOffset.UtcNow.AddDays(-3);
+        c.Status = ConversationStatus.Closed;
+        AutoReply(AutoReplyChoice.Send("Welcome back!"));
+
+        await Sut().IngestAsync(Ingest(c.Id, IngestEventType.CustomerMessage));
+
+        VerifyChoose(AutoReplyTrigger.Reopened, false, Times.Once);
+        VerifyChoose(AutoReplyTrigger.NewConversation, false, Times.Never);
+        _sender.Verify(s => s.SendTextAsync(c, "Welcome back!", It.IsAny<CancellationToken>()), Times.Once);
+        _events.Verify(e => e.Log(_clientId, EventTypes.AutoReplySent, _contactId, c.Id, null, MessageOrigin.System, "{\"trigger\":\"reopened\"}"), Times.Once);
+    }
+
+    [Fact]
+    public async Task A_later_message_in_an_open_conversation_gets_no_auto_reply()
+    {
+        var c = Conv(ConversationMode.Human);
+        c.LastCustomerMessageAt = DateTimeOffset.UtcNow.AddMinutes(-5);
+        AutoReply(AutoReplyChoice.Send("Hi"));
+
+        await Sut().IngestAsync(Ingest(c.Id, IngestEventType.CustomerMessage));
+
+        _autoReplies.Verify(a => a.ChooseAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Never);
+        _sender.Verify(s => s.SendTextAsync(It.IsAny<Conversation>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Theory]
+    [InlineData(IngestEventType.BusinessAppEcho)]
+    [InlineData(IngestEventType.AiMessage)]
+    public async Task Only_a_contacts_message_can_trigger_an_auto_reply(string eventType)
+    {
+        var c = Conv(ConversationMode.Human);
+        c.Status = ConversationStatus.Closed;
+        AutoReply(AutoReplyChoice.Send("Hi"));
+
+        await Sut().IngestAsync(Ingest(c.Id, eventType));
+
+        _autoReplies.Verify(a => a.ChooseAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task A_stop_word_gets_its_confirmation_and_no_auto_reply()
+    {
+        var c = Conv(ConversationMode.Human);
+        _contacts.Setup(l => l.GetByIdAsync(_contactId, It.IsAny<CancellationToken>())).ReturnsAsync(_contact);
+        _optOut.Setup(o => o.MatchKeyword(It.IsAny<string?>())).Returns(true);
+        AutoReply(AutoReplyChoice.Send("Hi"));
+
+        await Sut().IngestAsync(Ingest(c.Id, IngestEventType.CustomerMessage));
+
+        _autoReplies.Verify(a => a.ChooseAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task An_auto_reply_that_cannot_be_sent_never_fails_the_saved_message()
+    {
+        var c = Conv(ConversationMode.Human);
+        AutoReply(AutoReplyChoice.Send("Hi"));
+        _sender.Setup(s => s.SendTextAsync(It.IsAny<Conversation>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("refused"));
+
+        var r = await Sut().IngestAsync(Ingest(c.Id, IngestEventType.CustomerMessage));
+
+        Assert.True(r.Found);
+        _billing.Verify(b => b.SendFailedAsync(_hold, It.IsAny<CancellationToken>()), Times.Once);
+        _tracer.Verify(t => t.Step(TraceSteps.SendBlocked, TraceOutcomes.Failed, It.IsAny<TraceIds>(), It.IsAny<double?>(), It.IsAny<object?>()), Times.Once);
     }
 }

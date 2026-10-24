@@ -61,6 +61,10 @@ public class ConfigManager : IConfigManager
     public string OptOutStartKeywords => GetString(ConfigDefaults.OptOutStartKeywords);
     public bool OptOutSendConfirmation => GetBool(ConfigDefaults.OptOutSendConfirmation);
 
+    // ---- AutoReply
+    public bool AutoReplyEnabled => GetBool(ConfigDefaults.AutoReplyEnabled);
+    public int AutoReplyMaxLength => GetInt(ConfigDefaults.AutoReplyMaxLength);
+
     // ---- Reminders
     public bool RemindersEnabled => GetBool(ConfigDefaults.RemindersEnabled);
     public int RemindersIntervalSeconds => GetInt(ConfigDefaults.RemindersIntervalSeconds);

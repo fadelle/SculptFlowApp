@@ -18,6 +18,7 @@ public static class TraceSteps
     public const string ConversationReopened = "conversation.reopened";
     public const string ConversationModeChanged = "conversation.mode_changed";
     public const string InboxNotified = "inbox.notified";
+    public const string AutoReplySkipped = "inbox.auto_reply_skipped";
 
     // Bot (n8n)
     public const string BotSkipped = "bot.skipped";

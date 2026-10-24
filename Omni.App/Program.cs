@@ -215,6 +215,7 @@ builder.Services.AddScoped<IStringLocalizer, JsonStringLocalizer>();
 builder.Services.AddScoped(typeof(IStringLocalizer<>), typeof(JsonStringLocalizer<>));
 builder.Services.AddScoped<IClientProfileService, ClientProfileService>();
 builder.Services.AddScoped<IInboxSettingsService, InboxSettingsService>();
+builder.Services.AddScoped<IAutoReplyService, AutoReplyService>();
 builder.Services.AddScoped<IMemberService, MemberService>();
 // Member invites (Milestone C): emailed one-time links in identity.account_tokens; an open invite holds a seat.
 builder.Services.AddScoped<IInviteService, InviteService>();

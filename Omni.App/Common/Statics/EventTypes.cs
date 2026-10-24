@@ -34,6 +34,8 @@ public static class EventTypes
     public const string CampaignMessageSent = "campaign_message_sent";
     /// <summary>A booking reminder went out (BookingReminderWorker).</summary>
     public const string BookingReminderSent = "booking_reminder_sent";
+    /// <summary>A channel's automatic reply went out; metadata {"trigger": "new" | "reopened"} (AutoReplyTrigger).</summary>
+    public const string AutoReplySent = "auto_reply_sent";
 
     // AI assistant tool surface — see Controllers/Integrations/AiController.cs.
     public const string BookingRescheduled = "booking_rescheduled";

@@ -91,6 +91,13 @@ public interface IConfigManager
     /// <summary>Reply to a stop/start word with a confirmation in the contact's language. Default true.</summary>
     bool OptOutSendConfirmation { get; }
 
+    // ---- AutoReply
+    /// <summary>Master switch for automatic replies (each client also sets its own per channel). Default true.</summary>
+    bool AutoReplyEnabled { get; }
+
+    /// <summary>Longest automatic reply a client may save (characters). Default 1000.</summary>
+    int AutoReplyMaxLength { get; }
+
     // ---- Reminders
     /// <summary>Master switch for booking reminders (each client also turns its own on). Default true.</summary>
     bool RemindersEnabled { get; }

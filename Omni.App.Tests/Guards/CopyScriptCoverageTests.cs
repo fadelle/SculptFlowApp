@@ -15,7 +15,8 @@ public class CopyScriptCoverageTests
     private static readonly string[] CreatedByScript = ["admin.admin_audit_log"];
     // New in Milestone C: the old project has nothing to copy into them.
     private static readonly string[] NotInOldProject =
-        ["identity.account_tokens", "scheduling.reminder_settings", "scheduling.booking_reminders", "billing.addons", "billing.client_addons"];
+        ["identity.account_tokens", "scheduling.reminder_settings", "scheduling.booking_reminders", "billing.addons", "billing.client_addons",
+         "crm.auto_replies"];
 
     private static string Root => LeftoverNameScanner.FindRepoRoot();
 

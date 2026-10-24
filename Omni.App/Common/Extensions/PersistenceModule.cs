@@ -73,6 +73,7 @@ public static class PersistenceModule
         services.AddScoped<IDashboardRepository, DashboardRepository>();
         services.AddScoped<IConversationRepository, ConversationRepository>();
         services.AddScoped<IInboxSettingsRepository, InboxSettingsRepository>();
+        services.AddScoped<IAutoReplyRepository, AutoReplyRepository>();
         services.AddScoped<IMessageRepository, MessageRepository>();
         services.AddScoped<IChannelIntegrationRepository, ChannelIntegrationRepository>();
         services.AddScoped<IWhatsAppTemplateRepository, WhatsAppTemplateRepository>();

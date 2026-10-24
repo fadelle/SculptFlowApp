@@ -37,6 +37,8 @@ insert into config.settings (section, key, value, updated_by) values
   ('OptOut', 'StopKeywords', 'stop,stopall,unsubscribe,arret,desabonner,desinscrire,توقف,ايقاف,الغاء الاشتراك', 'seed'),
   ('OptOut', 'StartKeywords', 'start,unstop,subscribe,demarrer,اشتراك', 'seed'),
   ('OptOut', 'SendConfirmation', 'true', 'seed'),
+  ('AutoReply', 'Enabled', 'true', 'seed'),
+  ('AutoReply', 'MaxLength', '1000', 'seed'),
   ('Reminders', 'Enabled', 'true', 'seed'),
   ('Reminders', 'IntervalSeconds', '60', 'seed'),
   ('Reminders', 'BatchSize', '50', 'seed'),

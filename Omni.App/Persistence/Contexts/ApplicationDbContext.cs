@@ -57,6 +57,7 @@ public class ApplicationDbContext : IdentityUserContext<AppUser>
     public DbSet<AvailabilityRule> AvailabilityRules => Set<AvailabilityRule>();
     public DbSet<BookingSettings> BookingSettings => Set<BookingSettings>();
     public DbSet<InboxSettings> InboxSettings => Set<InboxSettings>();
+    public DbSet<AutoReply> AutoReplies => Set<AutoReply>();
     public DbSet<AvailabilityException> AvailabilityExceptions => Set<AvailabilityException>();
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<CalendarIntegration> CalendarIntegrations => Set<CalendarIntegration>();
@@ -733,6 +734,25 @@ public class ApplicationDbContext : IdentityUserContext<AppUser>
             e.HasOne<ChannelIntegration>().WithMany().HasForeignKey(x => x.ChannelIntegrationId).OnDelete(DeleteBehavior.Cascade);
             e.HasIndex(x => x.ClientId).IsUnique().HasFilter("channel_integration_id is null");
             e.HasIndex(x => x.ChannelIntegrationId).IsUnique().HasFilter("channel_integration_id is not null");
+        });
+
+        // auto_replies — automatic reply per client and channel (AutoReplyService; sent by MessageService.IngestAsync).
+        modelBuilder.Entity<AutoReply>(e =>
+        {
+            e.ToTable("auto_replies", "crm");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.ClientId).HasColumnName("client_id");
+            e.Property(x => x.Channel).HasColumnName("channel").HasMaxLength(30).IsRequired();
+            e.Property(x => x.NewConversationEnabled).HasColumnName("new_conversation_enabled");
+            e.Property(x => x.NewConversationMessage).HasColumnName("new_conversation_message");
+            e.Property(x => x.ReopenedMode).HasColumnName("reopened_mode").HasMaxLength(10).IsRequired();
+            e.Property(x => x.ReopenedMessage).HasColumnName("reopened_message");
+            e.Property(x => x.SendWhenAiAnswers).HasColumnName("send_when_ai_answers");
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+            e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
+            e.HasOne<Client>().WithMany().HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(x => new { x.ClientId, x.Channel }).IsUnique().HasDatabaseName("ux_auto_replies_client_channel");
         });
 
         modelBuilder.Entity<AvailabilityException>(e =>

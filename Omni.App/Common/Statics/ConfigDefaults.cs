@@ -202,6 +202,11 @@ public static class ConfigDefaults
     public static readonly ConfigDefinition OptOutSendConfirmation = new("OptOut", "SendConfirmation", "true", ConfigValueType.Bool,
         "Reply once to a stop or start word with a short confirmation in the contact's language (a normal outbound message, billed like any other).");
 
+    public static readonly ConfigDefinition AutoReplyEnabled = new("AutoReply", "Enabled", "true", ConfigValueType.Bool,
+        "Master switch for automatic replies to new and reopened conversations. Off = none is sent for any client (each client also sets its own per channel).");
+    public static readonly ConfigDefinition AutoReplyMaxLength = new("AutoReply", "MaxLength", "1000", ConfigValueType.Int,
+        "Longest automatic reply a client may save, in characters.", 1, 4096);
+
     public static readonly ConfigDefinition RemindersEnabled = new("Reminders", "Enabled", "true", ConfigValueType.Bool,
         "Master switch for booking reminders. Off = the reminder worker sends nothing for any client (each client also turns its own reminders on).");
     public static readonly ConfigDefinition RemindersIntervalSeconds = new("Reminders", "IntervalSeconds", "60", ConfigValueType.Int,
@@ -240,6 +245,9 @@ public static class ConfigDefaults
         OptOutStopKeywords,
         OptOutStartKeywords,
         OptOutSendConfirmation,
+
+        AutoReplyEnabled,
+        AutoReplyMaxLength,
 
         RemindersEnabled,
         RemindersIntervalSeconds,

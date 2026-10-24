@@ -1,0 +1,83 @@
+@page "/settings/auto-respond"
+@model Omni.App.Pages.Settings.AutoRespondModel
+@{
+    ViewData["Title"] = T["nav.autoRespond"].Value;
+}
+
+@if (!Model.ClientConfigured)
+{
+    <partial name="_NoClient" />
+}
+else
+{
+    <partial name="_Messages" model="new PageMessagesModel(Model.StatusMessage, Model.ErrorMessage)" />
+
+    <div class="au-page-head">
+        <p class="au-page-head__sub mw-640">@T["autoReply.intro"]</p>
+    </div>
+
+    @if (Model.DisabledByAdmin)
+    {
+        <div class="au-alert au-alert--warning" role="status"><div class="au-alert__body">@T["autoReply.disabledByAdmin"]</div></div>
+    }
+
+    @foreach (var channel in Model.Channels)
+    {
+        var values = Model.FormValues(channel);
+        var name = ChannelNames.Brand(values.Channel);
+        var idPrefix = "auto-reply-" + values.Channel;
+        <form method="post" class="au-panel au-panel--round integration-form" id="@(idPrefix)-form">
+            <input type="hidden" name="Channel" value="@values.Channel" />
+            <div class="set-section">
+                <div class="set-section-head">
+                    <strong>@name</strong>
+                    @if (!channel.Connected)
+                    {
+                        <span class="badge badge-gray">@T["autoReply.notConnected"]</span>
+                    }
+                    <div class="cell-sub">@T["autoReply.channelHelp"]</div>
+                </div>
+                <div class="set-section-body">
+                    <label class="au-check">
+                        <input type="checkbox" class="au-switch" role="switch" name="NewConversationEnabled" value="true" checked="@values.NewConversationEnabled" />
+                        @T["autoReply.new.switch"]
+                    </label>
+                    <label class="field">
+                        <span>@T["autoReply.new.message"]</span>
+                        <textarea name="NewConversationMessage" id="@(idPrefix)-new" class="au-textarea" rows="3" maxlength="@Model.MaxLength" dir="auto">@values.NewConversationMessage</textarea>
+                    </label>
+                    @if (channel.AiBotAnswersNew)
+                    {
+                        <p class="au-help">@T["autoReply.new.aiBot"]</p>
+                    }
+
+                    <div class="field">
+                        <span>@T["autoReply.reopened.title"]</span>
+                        <div class="seg" role="radiogroup" aria-label="@T["autoReply.reopened.title"]">
+                            <label class="seg-opt"><input type="radio" name="ReopenedMode" value="@AutoReplyReopenedMode.Off" checked="@(values.ReopenedMode == AutoReplyReopenedMode.Off)" /><span>@T["autoReply.reopened.off"]</span></label>
+                            <label class="seg-opt"><input type="radio" name="ReopenedMode" value="@AutoReplyReopenedMode.Same" checked="@(values.ReopenedMode == AutoReplyReopenedMode.Same)" /><span>@T["autoReply.reopened.same"]</span></label>
+                            <label class="seg-opt"><input type="radio" name="ReopenedMode" value="@AutoReplyReopenedMode.Custom" checked="@(values.ReopenedMode == AutoReplyReopenedMode.Custom)" /><span>@T["autoReply.reopened.custom"]</span></label>
+                        </div>
+                    </div>
+                    <label class="field">
+                        <span>@T["autoReply.reopened.message"]</span>
+                        <textarea name="ReopenedMessage" id="@(idPrefix)-reopened" class="au-textarea" rows="3" maxlength="@Model.MaxLength" dir="auto">@values.ReopenedMessage</textarea>
+                    </label>
+                    <p class="au-help">@T["autoReply.reopened.help"]</p>
+                    @if (channel.AiBotAnswersReopened)
+                    {
+                        <p class="au-help">@T["autoReply.reopened.aiBot"]</p>
+                    }
+
+                    <label class="au-check">
+                        <input type="checkbox" class="au-switch" role="switch" name="SendWhenAiAnswers" value="true" checked="@values.SendWhenAiAnswers" />
+                        @T["autoReply.sendWhenAi"]
+                    </label>
+                    <small class="text-subtle">@T["autoReply.sendWhenAiHelp"]</small>
+                </div>
+            </div>
+            <div class="au-form-actions"><button type="submit" class="au-btn au-btn--primary">@T["autoReply.save", name]</button></div>
+        </form>
+    }
+    <p class="au-help">@T["autoReply.billing"]</p>
+}

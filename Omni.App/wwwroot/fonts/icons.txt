@@ -27,7 +27,6 @@ event_available
 event_busy
 event_note
 expand_more
-fact_check
 filter_alt_off
 forum
 group
@@ -52,16 +51,19 @@ more_horiz
 notifications
 notifications_none
 open_in_new
+pause
 person
 person_add
 person_off
 phone_iphone
+quickreply
 receipt_long
 refresh
 schedule
 search
 search_off
 send
+smart_toy
 space_dashboard
 star
 sync

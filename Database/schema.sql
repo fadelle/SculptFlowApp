@@ -2648,6 +2648,33 @@ create trigger trg_inbox_settings_updated_at
   before update on crm.inbox_settings
   for each row execute function public.set_updated_at();
 
+-- ---------------------------------------------------------------------
+-- Automatic replies: crm.auto_replies (Milestone C, Business/Services/Inbox/AutoReplyService). One row per client and
+-- channel (no row = off). new_conversation_*: the reply to a contact's first message in a conversation; reopened_mode
+-- 'off' | 'same' (the new-conversation message text) | 'custom' (reopened_message): the reply to a message that
+-- reopens a closed conversation. Sent only while the team answers the conversation, unless send_when_ai_answers.
+-- ---------------------------------------------------------------------
+create table if not exists crm.auto_replies (
+  id                         uuid primary key default gen_random_uuid(),
+  client_id                  uuid not null references core.clients(id) on delete cascade,
+  channel                    varchar(30) not null,
+  new_conversation_enabled   boolean not null default false,
+  new_conversation_message   text,
+  reopened_mode              varchar(10) not null default 'off',
+  reopened_message           text,
+  send_when_ai_answers       boolean not null default false,
+  created_at                 timestamptz not null default now(),
+  updated_at                 timestamptz not null default now(),
+
+  constraint ck_auto_replies_reopened_mode check (reopened_mode in ('off','same','custom'))
+);
+create unique index if not exists ux_auto_replies_client_channel on crm.auto_replies(client_id, channel);
+
+drop trigger if exists trg_auto_replies_updated_at on crm.auto_replies;
+create trigger trg_auto_replies_updated_at
+  before update on crm.auto_replies
+  for each row execute function public.set_updated_at();
+
 -- UTC guard: every moment in time is stored as timestamptz (UTC); only the client-local availability columns
 -- (availability_rules/exceptions start_time/end_time/date, read together with clients.timezone) are
 -- zone-less on purpose. If any other column ever drifts to `timestamp without time zone`, convert it here,
