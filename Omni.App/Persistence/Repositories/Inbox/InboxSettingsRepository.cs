@@ -20,14 +20,17 @@ public class InboxSettingsRepository : IInboxSettingsRepository
         _cache = cache;
     }
 
-    public Task<InboxSettings?> GetForClientAsync(Guid clientId, CancellationToken ct = default) =>
-        _db.InboxSettings.FirstOrDefaultAsync(s => s.ClientId == clientId && s.ChannelIntegrationId == null, ct);
+    // Read on every incoming contact message, so the client's rows (or none) are cached.
+    public async Task<IReadOnlyList<InboxSettings>> ListForClientReadOnlyAsync(Guid clientId, CancellationToken ct = default) =>
+        (await _cache.ReadThroughAsync(CacheKeys.InboxSettings(clientId), CacheArea.Clients,
+            async token => await _db.InboxSettings.AsNoTracking().Where(s => s.ClientId == clientId)
+                .OrderBy(s => s.CreatedAt).ToListAsync(token), ct))!;
 
-    // Read on every incoming contact message, so the client-wide row (or its absence) is cached.
-    public Task<InboxSettings?> GetForClientReadOnlyAsync(Guid clientId, CancellationToken ct = default) =>
-        _cache.ReadThroughValueAsync(CacheKeys.InboxSettings(clientId), CacheArea.Clients,
-            token => _db.InboxSettings.AsNoTracking()
-                .FirstOrDefaultAsync(s => s.ClientId == clientId && s.ChannelIntegrationId == null, token), ct);
+    public Task<InboxSettings?> GetForAccountAsync(Guid clientId, Guid channelIntegrationId, CancellationToken ct = default) =>
+        _db.InboxSettings.FirstOrDefaultAsync(s => s.ClientId == clientId && s.ChannelIntegrationId == channelIntegrationId, ct);
+
+    public async Task<IReadOnlyList<InboxSettings>> ListForBotAsync(Guid clientId, Guid botId, CancellationToken ct = default) =>
+        await _db.InboxSettings.Where(s => s.ClientId == clientId && s.BotId == botId).ToListAsync(ct);
 
     public void Add(InboxSettings settings) => _db.InboxSettings.Add(settings);
 }

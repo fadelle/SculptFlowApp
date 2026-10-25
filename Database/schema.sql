@@ -2619,29 +2619,124 @@ alter table crm.messages add column if not exists trace_id varchar(32);
 create index if not exists ix_messages_trace_id on crm.messages(trace_id) where trace_id is not null;
 
 -- =====================================================================
+-- AI bots: crm.bots, crm.bot_knowledge_sources (Business/Services/Ai/BotService)
+--
+-- A bot is how the AI behaves; crm.inbox_settings says where and when it answers. template 'support' | 'booking' |
+-- 'sales' runs that template's locked instructions and actions (Common/Statics/BotTemplates); 'custom' runs its own
+-- instructions and capabilities (Omni AI tools it may use: knowledge, services, availability, bookings, contact_update,
+-- pipeline; checked by Omni on every tool call). knowledge_scope 'selected' limits search_knowledge to the rows of
+-- crm.bot_knowledge_sources (a document or a whole website source). language null = reply in the contact's language.
+-- Only an active bot answers; the plan's max_ai_bots limits how many bots are active at once.
+-- =====================================================================
+create table if not exists crm.bots (
+  id               uuid primary key default gen_random_uuid(),
+  client_id        uuid not null references core.clients(id) on delete cascade,
+  name             varchar(100) not null,
+  description      varchar(500),
+  template         varchar(20) not null default 'custom',
+  instructions     text,
+  capabilities     text[] not null default '{}',
+  knowledge_scope  varchar(10) not null default 'all',
+  language         varchar(10),
+  handoff_policy   varchar(30) not null default 'on_request_or_unsure',
+  handoff_message  text,
+  status           varchar(10) not null default 'draft',
+  created_at       timestamptz not null default now(),
+  updated_at       timestamptz not null default now(),
+
+  constraint ck_bots_template check (template in ('support','booking','sales','custom')),
+  constraint ck_bots_knowledge_scope check (knowledge_scope in ('all','selected')),
+  constraint ck_bots_handoff_policy check (handoff_policy in ('on_request','on_request_or_unsure')),
+  constraint ck_bots_status check (status in ('draft','active','inactive'))
+);
+create index if not exists ix_bots_client_id on crm.bots(client_id);
+
+drop trigger if exists trg_bots_updated_at on crm.bots;
+create trigger trg_bots_updated_at
+  before update on crm.bots
+  for each row execute function public.set_updated_at();
+
+create table if not exists crm.bot_knowledge_sources (
+  id                     uuid primary key default gen_random_uuid(),
+  bot_id                 uuid not null references crm.bots(id) on delete cascade,
+  knowledge_document_id  uuid references knowledge.knowledge_documents(id) on delete cascade,
+  website_source_id      uuid references knowledge.knowledge_website_sources(id) on delete cascade,
+
+  constraint ck_bot_knowledge_sources_one check ((knowledge_document_id is null) <> (website_source_id is null))
+);
+create index if not exists ix_bot_knowledge_sources_bot on crm.bot_knowledge_sources(bot_id);
+create unique index if not exists ux_bot_knowledge_sources_document on crm.bot_knowledge_sources(bot_id, knowledge_document_id)
+  where knowledge_document_id is not null;
+create unique index if not exists ux_bot_knowledge_sources_website on crm.bot_knowledge_sources(bot_id, website_source_id)
+  where website_source_id is not null;
+
+-- Bot test conversations (Business/Services/Ai/BotTestService): the bot editor's test panel runs the real n8n workflow,
+-- but write actions are simulated; the test contact's one simulated booking lives on the session. Sessions older than
+-- Bots:TestSessionHours are deleted when a new one starts.
+create table if not exists crm.bot_test_sessions (
+  id                       uuid primary key default gen_random_uuid(),
+  client_id                uuid not null references core.clients(id) on delete cascade,
+  bot_id                   uuid not null references crm.bots(id) on delete cascade,
+  handed_off               boolean not null default false,
+  simulated_booking_start  timestamptz,
+  simulated_booking_end    timestamptz,
+  simulated_service_id     uuid,
+  created_at               timestamptz not null default now(),
+  updated_at               timestamptz not null default now()
+);
+create index if not exists ix_bot_test_sessions_bot on crm.bot_test_sessions(bot_id);
+create index if not exists ix_bot_test_sessions_updated_at on crm.bot_test_sessions(updated_at);
+
+drop trigger if exists trg_bot_test_sessions_updated_at on crm.bot_test_sessions;
+create trigger trg_bot_test_sessions_updated_at
+  before update on crm.bot_test_sessions
+  for each row execute function public.set_updated_at();
+
+create table if not exists crm.bot_test_messages (
+  id          uuid primary key default gen_random_uuid(),
+  session_id  uuid not null references crm.bot_test_sessions(id) on delete cascade,
+  client_id   uuid not null references core.clients(id) on delete cascade,
+  role        varchar(20) not null,
+  content     text not null,
+  created_at  timestamptz not null default now(),
+
+  constraint ck_bot_test_messages_role check (role in ('contact','bot','automatic','note'))
+);
+create index if not exists ix_bot_test_messages_session on crm.bot_test_messages(session_id, created_at);
+
+-- =====================================================================
 -- Inbox settings: crm.inbox_settings
 --
--- How a client's Inbox handles conversations (Business/Services/Inbox/InboxSettingsService). One column per setting, so
--- a new setting is a new column here. Today: whether the AI bot answers new conversations and conversations a contact
--- reopens (off = they start with / move to members, human mode); they only take effect while the plan includes the
--- ai_assistant entitlement. A client without a row uses the column defaults, so existing clients keep the bot on.
--- channel_integration_id null = the client-wide row (the only kind used today); a row per channel connection can be
--- added later to override the client-wide one for that channel.
+-- How the Inbox handles conversations on one connected account (Business/Services/Inbox/InboxSettingsService), one row
+-- per channel connection: ai_enabled + bot_id (the account's one bot; a bot may serve several accounts) and whether that
+-- bot answers new conversations and conversations a contact reopens (off = they start with / move to the team, human
+-- mode). An account without a row, with AI off, without a bot or with an inactive bot is answered by the team; the plan's
+-- ai_assistant entitlement still decides whether the client may use AI at all.
 -- =====================================================================
 create table if not exists crm.inbox_settings (
   id                             uuid primary key default gen_random_uuid(),
   client_id                      uuid not null references core.clients(id) on delete cascade,
-  channel_integration_id         uuid references channels.channel_integrations(id) on delete cascade,
+  channel_integration_id         uuid not null references channels.channel_integrations(id) on delete cascade,
+  ai_enabled                     boolean not null default false,
+  bot_id                         uuid references crm.bots(id) on delete set null,
   ai_bot_new_conversations       boolean not null default true,
   ai_bot_reopened_conversations  boolean not null default true,
   created_at                     timestamptz not null default now(),
   updated_at                     timestamptz not null default now()
 );
 
-create unique index if not exists ux_inbox_settings_client_wide on crm.inbox_settings(client_id)
-  where channel_integration_id is null;
-create unique index if not exists ux_inbox_settings_channel on crm.inbox_settings(channel_integration_id)
-  where channel_integration_id is not null;
+-- Before AI bots (2026-10-24) the table held one client-wide row per client (channel_integration_id null). Those rows have
+-- no account to apply to, so they go; the new columns arrive on an existing table.
+drop index if exists crm.ux_inbox_settings_client_wide;
+alter table crm.inbox_settings add column if not exists ai_enabled boolean not null default false;
+alter table crm.inbox_settings add column if not exists bot_id uuid references crm.bots(id) on delete set null;
+delete from crm.inbox_settings where channel_integration_id is null;
+alter table crm.inbox_settings alter column channel_integration_id set not null;
+
+-- (an older database keeps the same index with "where channel_integration_id is not null", which now covers every row)
+create unique index if not exists ux_inbox_settings_channel on crm.inbox_settings(channel_integration_id);
+create index if not exists ix_inbox_settings_client on crm.inbox_settings(client_id);
+create index if not exists ix_inbox_settings_bot on crm.inbox_settings(bot_id) where bot_id is not null;
 
 drop trigger if exists trg_inbox_settings_updated_at on crm.inbox_settings;
 create trigger trg_inbox_settings_updated_at

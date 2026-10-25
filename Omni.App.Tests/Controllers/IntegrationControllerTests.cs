@@ -10,6 +10,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Omni.App.Controllers.Filters;
+using Omni.App.Business.Services.Ai;
 using Omni.App.Controllers.Integrations;
 
 namespace Omni.App.Tests.Controllers;
@@ -247,21 +248,36 @@ public class AiControllerTests
     private readonly Mock<IContactService> _contacts = new();
     private readonly Mock<IBookingService> _bookings = new();
     private readonly Mock<IAvailabilityService> _availability = new();
-    private readonly Mock<IConversationService> _conversations = new();
     private readonly Mock<IKnowledgeSearchService> _search = new();
+    private readonly Mock<IBotTestService> _tests = new();
+    private readonly Mock<IBotConversationService> _botConversations = new();
+    private BotRunContext _run;
 
-    private AiController Sut() => new AiController(_clients.Object, _services.Object, _contacts.Object, _bookings.Object, _availability.Object, _conversations.Object, _search.Object).With();
+    public AiControllerTests()
+    {
+        _run = Run(BotCapability.All.ToArray());
+    }
+
+    private BotRunContext Run(string[] capabilities, Guid? testSession = null, KnowledgeSourceFilter? filter = null) =>
+        new(_clientId, Guid.NewGuid(), capabilities.ToHashSet(), filter, "Moved to the team.", testSession);
+
+    // The run BotToolAttribute would have put on the request.
+    private AiController Sut() => new AiController(_clients.Object, _services.Object, _contacts.Object, _bookings.Object, _availability.Object,
+        _search.Object, new BotRuntimeService(Mock.Of<IBotRepository>(), Mock.Of<IBotTestRepository>(), Mock.Of<IEntitlementService>()),
+        _tests.Object, _botConversations.Object).With(h => h.Items[BotRunContext.ItemKey] = _run);
 
     private static UpcomingBookingResponse Upcoming(Guid? id = null) => new(id ?? Guid.NewGuid(), "booked", "standard", null, null, DateTimeOffset.UtcNow, null, "2026-01-01", "10:00", "Thursday, Jan 1 at 10:00 AM");
 
     [Fact]
-    public async Task Knowledge_search_validates_input_and_reports_provider_outages_as_503()
+    public async Task Knowledge_search_validates_input_uses_the_bots_sources_and_reports_provider_outages_as_503()
     {
+        var filter = new KnowledgeSourceFilter([Guid.NewGuid()], []);
+        _run = Run([BotCapability.Knowledge], filter: filter);
         Assert.IsType<BadRequestObjectResult>((await Sut().SearchKnowledge(new KnowledgeSearchRequest(Guid.Empty, "q"), default)).Result);
         Assert.IsType<BadRequestObjectResult>((await Sut().SearchKnowledge(new KnowledgeSearchRequest(_clientId, " "), default)).Result);
-        _search.Setup(s => s.SearchAsync(_clientId, "price", 3, It.IsAny<CancellationToken>())).ReturnsAsync(new KnowledgeSearchResponse([]));
+        _search.Setup(s => s.SearchAsync(_clientId, "price", 3, filter, It.IsAny<CancellationToken>())).ReturnsAsync(new KnowledgeSearchResponse([]));
         Assert.IsType<OkObjectResult>((await Sut().SearchKnowledge(new KnowledgeSearchRequest(_clientId, "price", 3), default)).Result);
-        _search.Setup(s => s.SearchAsync(_clientId, "down", null, It.IsAny<CancellationToken>())).ThrowsAsync(new InvalidOperationException("embeddings down"));
+        _search.Setup(s => s.SearchAsync(_clientId, "down", null, filter, It.IsAny<CancellationToken>())).ThrowsAsync(new InvalidOperationException("embeddings down"));
         Assert.Equal(503, Assert.IsType<ObjectResult>((await Sut().SearchKnowledge(new KnowledgeSearchRequest(_clientId, "down"), default)).Result).StatusCode);
     }
 
@@ -277,7 +293,30 @@ public class AiControllerTests
         _services.Verify(p => p.ListAsync(_clientId, true, It.IsAny<CancellationToken>()), Times.Once);
 
         Assert.IsType<NotFoundResult>((await Sut().GetContactContext(_contactId, _clientId, default)).Result);
-        Assert.IsType<NotFoundResult>((await Sut().UpdateContact(_contactId, _clientId, new UpdateContactContextRequest(null, null, null, null, null, null, null), default)).Result);
+        Assert.IsType<NotFoundResult>((await Sut().UpdateContact(_contactId, _clientId, new UpdateContactContextRequest(null, "ar", null, null, null, null, null), default)).Result);
+    }
+
+    [Fact]
+    public async Task Contact_updates_need_the_capability_of_each_field_and_the_language_is_always_allowed()
+    {
+        _run = Run([]);
+        var language = new UpdateContactContextRequest(null, "ar", null, null, null, null, null);
+        _contacts.Setup(c => c.UpdateContextAsync(_clientId, _contactId, It.IsAny<UpdateContactContextRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ContactResponse?)null);
+        Assert.IsType<NotFoundResult>((await Sut().UpdateContact(_contactId, _clientId, language, default)).Result);
+
+        // Notes need contact_update and the stage needs pipeline: refused as a business outcome, nothing changes.
+        foreach (var request in new[] { language with { Notes = "wants a quote" }, language with { Stage = "booked" } })
+        {
+            var refused = JsonSerializer.Serialize(Assert.IsType<OkObjectResult>((await Sut().UpdateContact(_contactId, _clientId, request, default)).Result).Value);
+            Assert.Contains(BotToolAttribute.NotAllowedCode, refused);
+        }
+        _contacts.Verify(c => c.UpdateContextAsync(_clientId, _contactId, It.Is<UpdateContactContextRequest>(r => r.Notes != null || r.Stage != null), It.IsAny<CancellationToken>()), Times.Never);
+
+        // Blank fields count as not sent (the workflow's optional fields arrive as "").
+        _run = Run([BotCapability.Pipeline]);
+        await Sut().UpdateContact(_contactId, _clientId, language with { Notes = " ", Stage = "booked" }, default);
+        _contacts.Verify(c => c.UpdateContextAsync(_clientId, _contactId, It.Is<UpdateContactContextRequest>(r => r.Notes == null && r.Stage == "booked"), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -313,48 +352,6 @@ public class AiControllerTests
     }
 
     [Fact]
-    public async Task Book_maps_every_domain_failure_to_an_instruction_for_the_ai_and_never_says_booked()
-    {
-        var request = new BookSlotRequest(_contactId, null, null, DateTimeOffset.UtcNow.AddDays(2), null, null, null, null);
-        BookSlotResult Result(Task<ActionResult<BookSlotResult>> t) => (BookSlotResult)Assert.IsType<OkObjectResult>(t.Result.Result).Value!;
-
-        var appt = new BookingResponse(Guid.NewGuid(), _clientId, _contactId, "Ann", null, null, "standard", "booked", DateTimeOffset.UtcNow, null, null, null, null, DateTimeOffset.UtcNow);
-        _bookings.Setup(a => a.BookAvailableSlotAsync(It.IsAny<CreateBookingRequest>(), It.IsAny<CancellationToken>())).ReturnsAsync(appt);
-        var local = Upcoming(appt.Id);
-        _bookings.Setup(a => a.GetUpcomingForContactAsync(_clientId, _contactId, It.IsAny<CancellationToken>())).ReturnsAsync(new UpcomingBookingsResponse("UTC", [local]));
-        var ok = Result(Sut().BookSlot(_clientId, request, default));
-        Assert.Equal((true, "BOOKED", local), (ok.Success, ok.Code, ok.Booking));
-
-        _bookings.Setup(a => a.BookAvailableSlotAsync(It.IsAny<CreateBookingRequest>(), It.IsAny<CancellationToken>())).ThrowsAsync(new ContactAlreadyBookedException(Upcoming()));
-        var dup = Result(Sut().BookSlot(_clientId, request, default));
-        Assert.Equal(("EXISTING_UPCOMING_BOOKING", false), (dup.Code, dup.Success));
-        Assert.StartsWith("Nothing was booked", dup.Instruction);
-
-        _bookings.Setup(a => a.BookAvailableSlotAsync(It.IsAny<CreateBookingRequest>(), It.IsAny<CancellationToken>())).ThrowsAsync(new SlotUnavailableException("taken"));
-        Assert.Equal("SLOT_UNAVAILABLE", Result(Sut().BookSlot(_clientId, request, default)).Code);
-        _bookings.Setup(a => a.BookAvailableSlotAsync(It.IsAny<CreateBookingRequest>(), It.IsAny<CancellationToken>())).ThrowsAsync(new ArgumentException("contacts.errors.notFound"));
-        Assert.Equal("CONTACT_NOT_FOUND", Result(Sut().BookSlot(_clientId, request, default)).Code);
-        _bookings.Setup(a => a.BookAvailableSlotAsync(It.IsAny<CreateBookingRequest>(), It.IsAny<CancellationToken>())).ThrowsAsync(new ArgumentException("Service inactive"));
-        Assert.Equal("INVALID_REQUEST", Result(Sut().BookSlot(_clientId, request, default)).Code);
-    }
-
-    [Fact]
-    public async Task Reschedule_returns_404_for_nothing_to_move_and_409_with_hints_for_conflicts()
-    {
-        var request = new RescheduleBookingRequest(DateTimeOffset.UtcNow.AddDays(3), null, "r");
-        Assert.IsType<NotFoundObjectResult>((await Sut().RescheduleBooking(_clientId, _contactId, null, request, default)).Result);
-
-        _bookings.Setup(a => a.RescheduleAsync(_clientId, _contactId, null, request.ScheduledStart, null, "r", It.IsAny<CancellationToken>())).ThrowsAsync(new MultipleUpcomingBookingsException([Upcoming(), Upcoming()]));
-        Assert.Equal(409, Assert.IsType<ConflictObjectResult>((await Sut().RescheduleBooking(_clientId, _contactId, null, request, default)).Result).StatusCode);
-        _bookings.Setup(a => a.RescheduleAsync(_clientId, _contactId, null, request.ScheduledStart, null, "r", It.IsAny<CancellationToken>())).ThrowsAsync(new SlotUnavailableException("busy"));
-        Assert.IsType<ConflictObjectResult>((await Sut().RescheduleBooking(_clientId, _contactId, null, request, default)).Result);
-
-        var appt = new BookingResponse(Guid.NewGuid(), _clientId, _contactId, null, null, null, "standard", "booked", DateTimeOffset.UtcNow, null, null, null, null, DateTimeOffset.UtcNow);
-        _bookings.Setup(a => a.RescheduleAsync(_clientId, _contactId, appt.Id, request.ScheduledStart, null, "r", It.IsAny<CancellationToken>())).ReturnsAsync(appt);
-        Assert.IsType<OkObjectResult>((await Sut().RescheduleBooking(_clientId, _contactId, appt.Id, request, default)).Result);
-    }
-
-    [Fact]
     public async Task Cancel_upcoming_and_handoff()
     {
         _bookings.Setup(a => a.CancelBookingAsync(_clientId, _contactId, null, "r", It.IsAny<CancellationToken>())).ReturnsAsync(new CancelOutcome("canceled", "CANCELED", "ok", Upcoming()));
@@ -364,8 +361,54 @@ public class AiControllerTests
         Assert.IsType<OkObjectResult>((await Sut().GetMyBookings(_clientId, _contactId, default)).Result);
 
         var convo = Guid.NewGuid();
+        _botConversations.Setup(b => b.HandOffAsync(_run, convo, "why", It.IsAny<CancellationToken>())).ReturnsAsync((bool?)null);
         Assert.IsType<NotFoundResult>((await Sut().HandoffToHuman(convo, _clientId, new HandoffToHumanRequest("why"), default)).Result);
-        _conversations.Setup(c => c.HandoffToHumanAsync(_clientId, convo, "why", It.IsAny<CancellationToken>())).ReturnsAsync(new ConversationResponse(convo, _clientId, _contactId, "whatsapp", "active", "human", false, true, null, null, null, false, DateTimeOffset.UtcNow));
-        Assert.IsType<OkObjectResult>((await Sut().HandoffToHuman(convo, _clientId, new HandoffToHumanRequest("why"), default)).Result);
+        _botConversations.Setup(b => b.HandOffAsync(_run, convo, "why", It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        Assert.Contains("true", JsonSerializer.Serialize(Assert.IsType<OkObjectResult>((await Sut().HandoffToHuman(convo, _clientId, new HandoffToHumanRequest("why"), default)).Result).Value));
+    }
+
+    [Fact]
+    public async Task Reply_sends_and_maps_a_taken_over_or_unpaid_conversation_to_409()
+    {
+        var convo = Guid.NewGuid();
+        var request = new AiReplyRequest("hi");
+        _botConversations.Setup(b => b.ReplyAsync(_run, convo, "hi", It.IsAny<CancellationToken>())).ReturnsAsync(new BotReplyOutcome(Guid.NewGuid(), false));
+        Assert.IsType<OkObjectResult>((await Sut().Reply(convo, _clientId, request, default)).Result);
+        _botConversations.Setup(b => b.ReplyAsync(_run, convo, "hi", It.IsAny<CancellationToken>())).ReturnsAsync((BotReplyOutcome?)null);
+        Assert.IsType<NotFoundResult>((await Sut().Reply(convo, _clientId, request, default)).Result);
+        _botConversations.Setup(b => b.ReplyAsync(_run, convo, "hi", It.IsAny<CancellationToken>())).ThrowsAsync(new ConversationNotInAiModeException("human"));
+        Assert.Contains("conversation_in_human_mode", JsonSerializer.Serialize(Assert.IsType<ConflictObjectResult>((await Sut().Reply(convo, _clientId, request, default)).Result).Value));
+        _botConversations.Setup(b => b.ReplyAsync(_run, convo, "hi", It.IsAny<CancellationToken>())).ThrowsAsync(new AiReplyRefusedException(UsageFailureReason.InsufficientFunds));
+        var refused = JsonSerializer.Serialize(Assert.IsType<ConflictObjectResult>((await Sut().Reply(convo, _clientId, request, default)).Result).Value);
+        Assert.Contains("ai_reply_refused", refused);
+        Assert.Contains("insufficient_funds", refused);
+    }
+
+    [Fact]
+    public async Task A_test_run_simulates_every_write_and_reads_the_test_contacts_bookings()
+    {
+        _run = Run(BotCapability.All.ToArray(), testSession: Guid.NewGuid());
+        var request = new ScheduleBookingRequest(DateTimeOffset.UtcNow.AddDays(1));
+        var simulated = new ScheduleBookingResult(true, "created", "BOOKED", "Booking made.");
+        _tests.Setup(t => t.ScheduleAsync(_run, request, It.IsAny<CancellationToken>())).ReturnsAsync(simulated);
+        Assert.Same(simulated, Assert.IsType<OkObjectResult>((await Sut().ScheduleBooking(_clientId, _contactId, request, default)).Result).Value);
+
+        _tests.Setup(t => t.CancelAsync(_run, It.IsAny<CancellationToken>())).ReturnsAsync(new CancelBookingResult(false, "none", "NO_UPCOMING_BOOKING", "none"));
+        await Sut().CancelBooking(_clientId, _contactId, null, new CancelBookingRequest(null), default);
+        _tests.Setup(t => t.GetUpcomingAsync(_run, It.IsAny<CancellationToken>())).ReturnsAsync(new UpcomingBookingsResponse("UTC", []));
+        await Sut().GetMyBookings(_clientId, _contactId, default);
+        _tests.Setup(t => t.GetBookingContextAsync(_run, It.IsAny<CancellationToken>())).ReturnsAsync(new ContactBookingContext(false, true, null, []));
+        _availability.Setup(a => a.GetSlotsAsync(_clientId, null, null, 7, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AvailabilityResponse(true, "UTC", "2026-01-01", 30, "2026-01-01", "2026-01-07", null, []));
+        var slots = (AvailabilityResponse)Assert.IsType<OkObjectResult>((await Sut().GetAvailableSlots(_clientId, _contactId, null, null, null, default)).Result).Value!;
+        Assert.True(slots.CanCreateNewBooking);
+        await Sut().UpdateContact(_contactId, _clientId, new UpdateContactContextRequest(null, null, "Beirut", null, null, null, null), default);
+        Assert.IsType<OkObjectResult>((await Sut().GetContactContext(_contactId, _clientId, default)).Result);
+
+        _tests.VerifyAll();
+        _tests.Verify(t => t.NoteContactUpdateAsync(_run, It.Is<UpdateContactContextRequest>(r => r.City == "Beirut"), It.IsAny<CancellationToken>()), Times.Once);
+        _bookings.Verify(b => b.ScheduleAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<ScheduleBookingRequest>(), It.IsAny<CancellationToken>()), Times.Never);
+        _bookings.Verify(b => b.CancelBookingAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<Guid?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+        _contacts.Verify(c => c.UpdateContextAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<UpdateContactContextRequest>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 }

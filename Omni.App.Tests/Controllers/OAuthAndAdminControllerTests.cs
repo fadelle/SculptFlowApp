@@ -263,10 +263,13 @@ public class IngestAndAdminControllerTests
         await c.List("q", true, 1, default); await c.Options(default); await c.Counts(id, default);
         await c.SetActive(id, new ActiveBody(false), default);
         clients.Verify(s => s.SetActiveAsync(id, false, It.IsAny<CancellationToken>()), Times.Once);
-        clients.Setup(s => s.GetInboxSettingsAsync(id, It.IsAny<CancellationToken>())).ReturnsAsync(new InboxSettingsDto(true, false, true));
-        Assert.Equal(new InboxSettingsDto(true, false, true), Assert.IsType<OkObjectResult>(await c.GetInboxSettings(id, default)).Value);
-        await c.UpdateInboxSettings(id, new UpdateInboxSettingsRequest(false, false), default);
-        clients.Verify(s => s.UpdateInboxSettingsAsync(id, new UpdateInboxSettingsRequest(false, false), It.IsAny<CancellationToken>()), Times.Once);
+        var inbox = new InboxSettingsDto(true, 2, [], []);
+        clients.Setup(s => s.GetInboxSettingsAsync(id, It.IsAny<CancellationToken>())).ReturnsAsync(inbox);
+        Assert.Same(inbox, Assert.IsType<OkObjectResult>(await c.GetInboxSettings(id, default)).Value);
+        var account = Guid.NewGuid();
+        var accountAi = new UpdateAccountAiRequest(true, Guid.NewGuid(), true, false);
+        await c.UpdateAccountAi(id, account, accountAi, default);
+        clients.Verify(s => s.UpdateAccountAiAsync(id, account, accountAi, It.IsAny<CancellationToken>()), Times.Once);
 
         var settings = new Mock<ISettingsService>();
         var sc = new SettingsAdminController(settings.Object).With(h => h.Request.Headers[RequirePlatformAdminKeyAttribute.ActorHeaderName] = "ops");

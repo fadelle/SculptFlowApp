@@ -5,6 +5,7 @@ using Omni.App.Business.Contracts.HttpClients.N8n;
 using Omni.App.Business.Contracts.Managers;
 using Omni.App.Business.Contracts.Services.Ai;
 using Omni.App.Business.Contracts.Services.Billing;
+using Omni.App.Business.Contracts.Services.Inbox;
 using Omni.App.Common.Helpers;
 using Omni.App.Common.Statics;
 using Omni.App.Entities.Dtos.Ai;
@@ -21,16 +22,21 @@ public class AiTriggerNotifier : IAiTriggerNotifier
     private readonly ILogger<AiTriggerNotifier> _logger;
     private readonly IEntitlementService _entitlements;
     private readonly IAiProfileService _profiles;
+    private readonly IInboxSettingsService _inboxSettings;
+    private readonly IBotRuntimeService _bots;
     private readonly IMessageTracer _tracer;
 
     public AiTriggerNotifier(HttpClient http, IConfiguration configuration, ILogger<AiTriggerNotifier> logger,
-        IEntitlementService entitlements, IAiProfileService profiles, IMessageTracer tracer)
+        IEntitlementService entitlements, IAiProfileService profiles, IInboxSettingsService inboxSettings, IBotRuntimeService bots,
+        IMessageTracer tracer)
     {
         _http = http;
         _configuration = configuration;
         _logger = logger;
         _entitlements = entitlements;
         _profiles = profiles;
+        _inboxSettings = inboxSettings;
+        _bots = bots;
         _tracer = tracer;
     }
 
@@ -42,15 +48,6 @@ public class AiTriggerNotifier : IAiTriggerNotifier
     public async Task NotifyAsync(AiTriggerPayload payload, CancellationToken ct = default)
     {
         var ids = new TraceIds(payload.ClientId, payload.ConversationId, payload.MessageId, payload.Channel);
-        var url = _configuration["N8n:AiWebhookUrl"];
-        if (string.IsNullOrWhiteSpace(url))
-        {
-            _logger.LogWarning("N8n:AiWebhookUrl is not configured — skipping AI trigger for conversation {ConversationId}.", payload.ConversationId);
-            _tracer.Step(TraceSteps.BotSkipped, TraceOutcomes.Skipped, ids, detail: new { reason = "n8n_not_configured" });
-            return;
-        }
-
-        var started = Stopwatch.GetTimestamp();
         try
         {
             // The AI assistant is a plan feature (automation). Without it the message just waits in the Inbox for members.
@@ -63,30 +60,77 @@ public class AiTriggerNotifier : IAiTriggerNotifier
                 return;
             }
 
-            // The workflow's prompt is generic: the business's AI profile, words, language and timezone travel with every trigger,
-            // with the contact's own language.
-            var profile = await _profiles.GetForClientAsync(payload.ClientId, ct);
-            if (profile is null)
+            // The bot of the account behind the conversation's channel answers; the workflow runs that bot's configuration.
+            var decision = await _inboxSettings.ResolveAsync(payload.ClientId, payload.Channel, ct);
+            var bot = decision is { BotAnswers: true, BotId: { } botId } ? await _bots.ConfigAsync(payload.ClientId, botId, ct) : null;
+            if (bot is null)
             {
-                _logger.LogWarning("AI trigger skipped for conversation {ConversationId}: client {ClientId} not found.",
-                    payload.ConversationId, payload.ClientId);
-                _tracer.Step(TraceSteps.BotSkipped, TraceOutcomes.Skipped, ids, detail: new { reason = "client_not_found" });
+                _tracer.Step(TraceSteps.BotSkipped, TraceOutcomes.Skipped, ids, detail: new { reason = decision.BlockReason ?? "no_bot" });
                 return;
             }
 
-            var trigger = payload with
-            {
-                Traceparent = payload.Traceparent ?? TraceContext.CurrentTraceparent(),
-                ClientName = profile.ClientName,
-                BusinessType = profile.BusinessType,
-                Language = profile.Language,
-                ContactLanguage = payload.ContactId is { } contactId
-                    ? await _profiles.GetContactLanguageAsync(payload.ClientId, contactId, ct)
-                    : null,
-                Timezone = profile.Timezone,
-                AiProfile = profile.AiProfile,
-                Terms = profile.Terms
-            };
+            await PostAsync(payload with { Bot = bot }, ids, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to prepare the n8n AI trigger for conversation {ConversationId}.", payload.ConversationId);
+            _tracer.Step(TraceSteps.BotTriggerFailed, TraceOutcomes.Failed, ids, detail: new { error = TraceText.Error(ex) });
+        }
+    }
+
+    public async Task<bool> NotifyTestAsync(AiTriggerPayload payload, CancellationToken ct = default)
+    {
+        var ids = new TraceIds(payload.ClientId, Channel: payload.Channel);
+        try
+        {
+            return await PostAsync(payload, ids, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to prepare the n8n AI trigger for bot test session {SessionId}.", payload.TestSessionId);
+            return false;
+        }
+    }
+
+    /// <summary>Adds the client's profile and posts to N8n:AiWebhookUrl. Logs and traces every outcome; true when n8n accepted.</summary>
+    private async Task<bool> PostAsync(AiTriggerPayload payload, TraceIds ids, CancellationToken ct)
+    {
+        var url = _configuration["N8n:AiWebhookUrl"];
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            _logger.LogWarning("N8n:AiWebhookUrl is not configured — skipping AI trigger for conversation {ConversationId}.", payload.ConversationId);
+            _tracer.Step(TraceSteps.BotSkipped, TraceOutcomes.Skipped, ids, detail: new { reason = "n8n_not_configured" });
+            return false;
+        }
+
+        // The workflow's prompt is generic: the business's AI profile, words, language and timezone travel with every trigger,
+        // with the contact's own language and the bot's configuration.
+        var profile = await _profiles.GetForClientAsync(payload.ClientId, ct);
+        if (profile is null)
+        {
+            _logger.LogWarning("AI trigger skipped for conversation {ConversationId}: client {ClientId} not found.",
+                payload.ConversationId, payload.ClientId);
+            _tracer.Step(TraceSteps.BotSkipped, TraceOutcomes.Skipped, ids, detail: new { reason = "client_not_found" });
+            return false;
+        }
+
+        var trigger = payload with
+        {
+            Traceparent = payload.Traceparent ?? TraceContext.CurrentTraceparent(),
+            ClientName = profile.ClientName,
+            BusinessType = profile.BusinessType,
+            Language = profile.Language,
+            ContactLanguage = payload.ContactId is { } contactId && payload.TestSessionId is null
+                ? await _profiles.GetContactLanguageAsync(payload.ClientId, contactId, ct)
+                : null,
+            Timezone = profile.Timezone,
+            AiProfile = profile.AiProfile,
+            Terms = profile.Terms
+        };
+
+        var started = Stopwatch.GetTimestamp();
+        try
+        {
             using var response = await _http.PostAsJsonAsync(url, trigger, JsonOptions, ct);
             var elapsed = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
             if (!response.IsSuccessStatusCode)
@@ -95,15 +139,17 @@ public class AiTriggerNotifier : IAiTriggerNotifier
                 _logger.LogWarning("n8n AI webhook returned {StatusCode} for conversation {ConversationId}: {Body}",
                     (int)response.StatusCode, payload.ConversationId, body);
                 _tracer.Step(TraceSteps.BotTriggerFailed, TraceOutcomes.Failed, ids, elapsed, new { status = (int)response.StatusCode });
-                return;
+                return false;
             }
-            _tracer.Step(TraceSteps.BotTriggered, TraceOutcomes.Ok, ids, elapsed, new { status = (int)response.StatusCode });
+            _tracer.Step(TraceSteps.BotTriggered, TraceOutcomes.Ok, ids, elapsed, new { status = (int)response.StatusCode, botId = trigger.Bot?.Id });
+            return true;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
             _logger.LogWarning(ex, "Failed to call n8n AI webhook for conversation {ConversationId}.", payload.ConversationId);
             _tracer.Step(TraceSteps.BotTriggerFailed, TraceOutcomes.Failed, ids, Stopwatch.GetElapsedTime(started).TotalMilliseconds,
                 new { error = TraceText.Error(ex) });
+            return false;
         }
     }
 }

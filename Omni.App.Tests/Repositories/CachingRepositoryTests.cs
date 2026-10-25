@@ -4,7 +4,9 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Omni.App.Business.Managers;
 using Omni.App.Business.Providers.Caching;
 using Omni.App.Business.Services.Clients;
+using Omni.App.Business.Services.Ai;
 using Omni.App.Business.Services.Inbox;
+using Omni.App.Persistence.Repositories.Ai;
 using Omni.App.Persistence.Repositories.Inbox;
 using Omni.App.Persistence.Contexts;
 using Omni.App.Persistence.Helpers;
@@ -96,48 +98,77 @@ public class CachingRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixt
     }
 
     [PostgresFact]
-    public async Task Inbox_settings_default_to_the_bot_on_and_each_save_reaches_the_next_cached_read()
+    public async Task Account_ai_settings_and_bots_reach_the_next_cached_read()
     {
         var c = MakeClient("Inbox");
-        await SeedAsync(c);
+        var now = DateTimeOffset.UtcNow;
+        var whatsApp = new ChannelIntegration { Id = Guid.NewGuid(), ClientId = c.Id, Channel = ChannelType.WhatsApp, Status = ChannelIntegrationStatus.Connected, CreatedAt = now, UpdatedAt = now };
+        var telegram = new ChannelIntegration { Id = Guid.NewGuid(), ClientId = c.Id, Channel = ChannelType.Telegram, Status = ChannelIntegrationStatus.Connected, CreatedAt = now.AddMinutes(1), UpdatedAt = now };
+        await SeedAsync(c, whatsApp, telegram);
         var entitlements = new Mock<IEntitlementService>();
         entitlements.Setup(e => e.GetAsync(c.Id, It.IsAny<CancellationToken>())).ReturnsAsync(ClientEntitlements.Unrestricted);
-        InboxSettingsService Service(ApplicationDbContext db) => new(new InboxSettingsRepository(db, _cache), new ClientRepository(db, _cache),
-            entitlements.Object, new ChannelIntegrationRepository(db, _cache), new Omni.App.Persistence.Repositories.UnitOfWork(db));
+        InboxSettingsService Inbox(ApplicationDbContext db) => new(new InboxSettingsRepository(db, _cache), new BotRepository(db, _cache),
+            new ClientRepository(db, _cache), entitlements.Object, new ChannelIntegrationRepository(db, _cache),
+            [Mock.Of<IChannelSender>(s => s.Channel == ChannelType.WhatsApp), Mock.Of<IChannelSender>(s => s.Channel == ChannelType.Telegram)],
+            new Omni.App.Persistence.Repositories.UnitOfWork(db));
+        BotService Bots(ApplicationDbContext db) => new(new BotRepository(db, _cache), new InboxSettingsRepository(db, _cache), new ClientRepository(db, _cache),
+            entitlements.Object, Mock.Of<IKnowledgeService>(), Mock.Of<IWebsiteSourceService>(), Mock.Of<IConfigManager>(), new Omni.App.Persistence.Repositories.UnitOfWork(db));
 
-        // No row yet: the defaults (an existing client keeps the bot on), and "no row" is cached.
+        // No rows yet: AI is off on both accounts (cached "no rows").
         await using (var db = CachedContext())
         {
-            Assert.Equal(new InboxSettingsDto(true, true, true), await Service(db).GetAsync(c.Id));
-        }
-
-        // The first save creates the client-wide row and clears the cached "no row".
-        await using (var db = CachedContext())
-        {
-            await Service(db).UpdateAsync(c.Id, new UpdateInboxSettingsRequest(false, true));
-        }
-        await using (var db = CachedContext())
-        {
-            var after = await Service(db).GetAsync(c.Id);
-            Assert.Equal((false, true, ConversationMode.Human),
-                (after.AiBotNewConversations, after.AiBotReopenedConversations, await Service(db).InitialModeAsync(c.Id)));
+            var before = await Inbox(db).GetAsync(c.Id);
+            Assert.All(before.Accounts, a => Assert.Equal(AiBotBlockReason.AiDisabled, a.BlockReason));
+            Assert.Equal(ConversationMode.Human, await Inbox(db).InitialModeAsync(c.Id, ChannelType.WhatsApp));
         }
 
-        // A later save updates the same row.
+        // A support bot, activated: its save clears the cached bots.
+        Guid botId;
         await using (var db = CachedContext())
         {
-            await Service(db).UpdateAsync(c.Id, new UpdateInboxSettingsRequest(true, false));
+            botId = (await Bots(db).CreateAsync(c.Id, BotTemplate.Support, "Front desk")).Id;
+            await Bots(db).SetStatusAsync(c.Id, botId, BotStatus.Active);
+        }
+
+        // AI on for WhatsApp only: Telegram keeps going to the team.
+        await using (var db = CachedContext())
+        {
+            await Inbox(db).UpdateAccountAsync(c.Id, whatsApp.Id, new UpdateAccountAiRequest(true, botId, true, false));
         }
         await using (var db = CachedContext())
         {
-            Assert.Equal(new InboxSettingsDto(true, true, false), await Service(db).GetAsync(c.Id));
+            var wa = await Inbox(db).ResolveAsync(c.Id, ChannelType.WhatsApp);
+            Assert.Equal((true, true, false, botId), (wa.BotAnswers, wa.AnswersNew, wa.AnswersReopened, wa.BotId!.Value));
+            Assert.Equal(AiBotBlockReason.AiDisabled, (await Inbox(db).ResolveAsync(c.Id, ChannelType.Telegram)).BlockReason);
+            Assert.Equal(1, (await Bots(db).GetAsync(c.Id, botId))!.AccountCount);
+        }
+
+        // Deactivating the bot sends WhatsApp to the team too, without touching its settings.
+        await using (var db = CachedContext())
+        {
+            await Bots(db).SetStatusAsync(c.Id, botId, BotStatus.Inactive);
+        }
+        await using (var db = CachedContext())
+        {
+            Assert.Equal(AiBotBlockReason.BotInactive, (await Inbox(db).ResolveAsync(c.Id, ChannelType.WhatsApp)).BlockReason);
+        }
+
+        // Deleting it clears the assignment (AI stays on, no bot).
+        await using (var db = CachedContext())
+        {
+            await Bots(db).DeleteAsync(c.Id, botId);
+        }
+        await using (var db = CachedContext())
+        {
+            var account = (await Inbox(db).GetAsync(c.Id)).Accounts.Single(a => a.ChannelIntegrationId == whatsApp.Id);
+            Assert.Equal((true, (Guid?)null, AiBotBlockReason.NoBot), (account.AiEnabled, account.BotId, account.BlockReason));
             Assert.Equal(1, await db.InboxSettings.CountAsync(s => s.ClientId == c.Id));
         }
 
-        // Only one client-wide row per client.
+        // One row per account.
         await using (var db = NewContext())
         {
-            db.InboxSettings.Add(new InboxSettings { Id = Guid.NewGuid(), ClientId = c.Id, CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow });
+            db.InboxSettings.Add(new InboxSettings { Id = Guid.NewGuid(), ClientId = c.Id, ChannelIntegrationId = whatsApp.Id, CreatedAt = now, UpdatedAt = now });
             await Assert.ThrowsAsync<DuplicateRecordException>(() => new Omni.App.Persistence.Repositories.UnitOfWork(db).SaveChangesAsync());
         }
     }

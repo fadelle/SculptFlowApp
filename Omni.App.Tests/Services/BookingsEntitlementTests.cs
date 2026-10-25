@@ -110,9 +110,7 @@ public class BookingsEntitlementTests
     [InlineData(typeof(Omni.App.Controllers.Client.CalendarIntegrationsController), null)]
     [InlineData(typeof(Omni.App.Controllers.Integrations.AiController), "GetAvailableSlots")]
     [InlineData(typeof(Omni.App.Controllers.Integrations.AiController), "ScheduleBooking")]
-    [InlineData(typeof(Omni.App.Controllers.Integrations.AiController), "BookSlot")]
     [InlineData(typeof(Omni.App.Controllers.Integrations.AiController), "GetMyBookings")]
-    [InlineData(typeof(Omni.App.Controllers.Integrations.AiController), "RescheduleBooking")]
     [InlineData(typeof(Omni.App.Controllers.Integrations.AiController), "CancelBooking")]
     public void Every_bookings_endpoint_requires_the_feature(Type controller, string? action)
     {

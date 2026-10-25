@@ -49,9 +49,13 @@ public class MessageServiceTests
         _autoReplies.Setup(a => a.ChooseAsync(_clientId, It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(choice);
 
-    private void InboxSettings(bool planIncludesBot, bool reopenedConversations) =>
-        _inboxSettings.Setup(a => a.GetAsync(_clientId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new InboxSettingsDto(planIncludesBot, AiBotNewConversations: true, reopenedConversations));
+    /// <summary>The account behind every channel has an answering bot, unless the plan lacks the AI assistant or the channel
+    /// is in <paramref name="inactiveBotOn"/>.</summary>
+    private void InboxSettings(bool planIncludesBot, bool reopenedConversations, params string[] inactiveBotOn) =>
+        _inboxSettings.Setup(a => a.ResolveAsync(_clientId, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Guid _, string channel, CancellationToken _) => new AccountAiDecision(Guid.NewGuid(), Guid.NewGuid(),
+                !planIncludesBot ? AiBotBlockReason.PlanWithoutAi : inactiveBotOn.Contains(channel) ? AiBotBlockReason.BotInactive : null,
+                true, reopenedConversations));
 
     private Conversation Conv(string mode = ConversationMode.Ai, string channel = ConversationChannel.WhatsApp, bool windowOpen = true)
     {
@@ -354,19 +358,56 @@ public class MessageServiceTests
     }
 
     [Fact]
-    public async Task A_customer_message_on_a_channel_beyond_the_ai_bot_limit_goes_to_human()
+    public async Task A_customer_message_on_an_account_whose_bot_is_inactive_goes_to_human_without_touching_other_accounts()
     {
-        _inboxSettings.Setup(a => a.GetAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(
-            new InboxSettingsDto(true, true, true, new HashSet<string> { ConversationChannel.Telegram }, 1));
+        InboxSettings(planIncludesBot: true, reopenedConversations: true, ConversationChannel.Telegram);
         var telegram = Conv(channel: ConversationChannel.Telegram);
         var whatsApp = Conv();
 
         var r = await Sut().IngestAsync(Ingest(telegram.Id, IngestEventType.CustomerMessage));
         Assert.Equal((ConversationMode.Human, false), (telegram.Mode, r.AiEligible));
-        _events.Verify(e => e.Log(_clientId, EventTypes.HumanHandoff, _contactId, telegram.Id, null, MessageOrigin.System, "{\"reason\":\"ai_bot_limit\"}"), Times.Once);
+        _events.Verify(e => e.Log(_clientId, EventTypes.HumanHandoff, _contactId, telegram.Id, null, MessageOrigin.System, "{\"reason\":\"bot_inactive\"}"), Times.Once);
 
         var w = await Sut().IngestAsync(Ingest(whatsApp.Id, IngestEventType.CustomerMessage, externalId: "e2"));
         Assert.Equal((ConversationMode.Ai, true), (whatsApp.Mode, w.AiEligible));
+    }
+
+    // ---------------------------------------------------------------- the bot's handoff message
+
+    [Fact]
+    public async Task The_handoff_message_goes_out_as_an_automatic_message_without_changing_the_mode()
+    {
+        var c = Conv(ConversationMode.Human);
+        Message? saved = null;
+        _messages.Setup(m => m.Add(It.IsAny<Message>())).Callback<Message>(m => saved = m);
+        var bot = Guid.NewGuid();
+
+        var r = await Sut().SendHandoffMessageAsync(_clientId, c.Id, bot, "Someone will contact you shortly.");
+
+        Assert.Equal((MessageSenderType.System, MessageOrigin.System, "Someone will contact you shortly.", ConversationMode.Human),
+            (saved!.SenderType, saved.Origin, saved.Content, c.Mode));
+        Assert.Equal(saved.Id, r!.Id);
+        _events.Verify(e => e.Log(_clientId, EventTypes.HandoffMessageSent, _contactId, c.Id, null, MessageOrigin.System, $"{{\"botId\":\"{bot}\"}}"), Times.Once);
+        _billing.Verify(b => b.SentAsync(_hold, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task The_handoff_message_respects_the_whatsapp_window_and_never_fails_the_handoff()
+    {
+        var closed = Conv(ConversationMode.Human, windowOpen: false);
+        Assert.Null(await Sut().SendHandoffMessageAsync(_clientId, closed.Id, Guid.NewGuid(), "Bye"));
+        _sender.Verify(s => s.SendTextAsync(It.IsAny<Conversation>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        _tracer.Verify(t => t.Step(TraceSteps.HandoffMessageSkipped, TraceOutcomes.Skipped, It.IsAny<TraceIds>(), It.IsAny<double?>(), It.IsAny<object?>()), Times.Once);
+
+        // Telegram has no window; a provider failure is traced and swallowed.
+        var telegram = Conv(ConversationMode.Human, channel: ConversationChannel.Telegram, windowOpen: false);
+        _sender.SetupGet(s => s.Channel).Returns(ConversationChannel.Telegram);
+        _sender.Setup(s => s.SendTextAsync(It.IsAny<Conversation>(), It.IsAny<string>(), It.IsAny<CancellationToken>())).ThrowsAsync(new ChannelSendException("blocked"));
+        Assert.Null(await Sut().SendHandoffMessageAsync(_clientId, telegram.Id, Guid.NewGuid(), "Bye"));
+        _billing.Verify(b => b.SendFailedAsync(_hold, It.IsAny<CancellationToken>()), Times.Once);
+        _tracer.Verify(t => t.Step(TraceSteps.SendBlocked, TraceOutcomes.Failed, It.IsAny<TraceIds>(), It.IsAny<double?>(), It.IsAny<object?>()), Times.Once);
+
+        Assert.Null(await Sut().SendHandoffMessageAsync(_clientId, Guid.NewGuid(), Guid.NewGuid(), "Bye"));
     }
 
     [Fact]
@@ -687,7 +728,7 @@ public class MessageServiceTests
         var order = new List<string>();
         Guid? reservedFor = null;
         _billing.Setup(b => b.ReserveAiReplyAsync(_clientId, c.Id, It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
-            .Callback<Guid, Guid, Guid, CancellationToken>((_, _, id, _) => { reservedFor = id; order.Add("ai_reply"); }).ReturnsAsync(_aiHold);
+            .Callback<Guid, Guid?, Guid, CancellationToken>((_, _, id, _) => { reservedFor = id; order.Add("ai_reply"); }).ReturnsAsync(_aiHold);
         _billing.Setup(b => b.ReserveOutboundAsync(It.IsAny<OutboundMessageBillingContext>(), It.IsAny<CancellationToken>()))
             .Callback(() => order.Add("channel")).ReturnsAsync(_hold);
         _sender.Setup(s => s.SendTextAsync(It.IsAny<Conversation>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))

@@ -93,7 +93,7 @@ public class MessageBillingService : IMessageBillingService
         return hold;
     }
 
-    public async Task<MessageBillingHold?> ReserveAiReplyAsync(Guid clientId, Guid conversationId, Guid messageId, CancellationToken ct = default)
+    public async Task<MessageBillingHold?> ReserveAiReplyAsync(Guid clientId, Guid? conversationId, Guid messageId, CancellationToken ct = default)
     {
         if (!_config.BillingEnabled || !_config.BillingChargeAiReplies) return null;
 

@@ -78,7 +78,7 @@ the languages people can pick; English is always on), `Localization:LanguageCook
 8. n8n: import `docs/n8n/omni-ai-assistant.json`, `omni-calendar-sync.json`, `omni-retrieval-benchmark.json` (they import
    as new, inactive workflows next to the old ones). Create the Header Auth credential **Omni ingest key** (name
    `X-Ingest-Key`, value = the new key) and pick it on each HTTP node if n8n didn't (including the AI workflow's
-   `update_contact` tool, which stores the contact's language); attach the OpenAI credential; replace
+   `update_contact`, `update_contact_details`, `update_stage` and `get_services` tools); attach the OpenAI credential; replace
    `https://sculptflowapp.onrender.com` in the HTTP nodes with the staging URL; activate; copy the three production
    webhook URLs into the staging service's `N8n__AiWebhookUrl`, `N8n__CalendarSyncWebhookUrl`,
    `N8n__KnowledgeBenchmarkWebhookUrl`. Leave the old workflows on: production still uses them.

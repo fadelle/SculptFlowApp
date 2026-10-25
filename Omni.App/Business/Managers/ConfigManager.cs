@@ -65,6 +65,12 @@ public class ConfigManager : IConfigManager
     public bool AutoReplyEnabled => GetBool(ConfigDefaults.AutoReplyEnabled);
     public int AutoReplyMaxLength => GetInt(ConfigDefaults.AutoReplyMaxLength);
 
+    // ---- Bots
+    public int BotsInstructionsMaxLength => GetInt(ConfigDefaults.BotsInstructionsMaxLength);
+    public int BotsHandoffMessageMaxLength => GetInt(ConfigDefaults.BotsHandoffMessageMaxLength);
+    public int BotsTestMessageMaxLength => GetInt(ConfigDefaults.BotsTestMessageMaxLength);
+    public int BotsTestSessionHours => GetInt(ConfigDefaults.BotsTestSessionHours);
+
     // ---- Reminders
     public bool RemindersEnabled => GetBool(ConfigDefaults.RemindersEnabled);
     public int RemindersIntervalSeconds => GetInt(ConfigDefaults.RemindersIntervalSeconds);

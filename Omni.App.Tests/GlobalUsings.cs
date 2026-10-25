@@ -54,6 +54,7 @@ global using Omni.App.Persistence.Contracts.Configuration;
 global using Omni.App.Persistence.Contracts.Dashboard;
 global using Omni.App.Persistence.Contracts.Events;
 global using Omni.App.Persistence.Contracts.Inbox;
+global using Omni.App.Persistence.Contracts.Ai;
 global using Omni.App.Persistence.Contracts.Knowledge;
 global using Omni.App.Persistence.Contracts.Contacts;
 global using Omni.App.Persistence.Contracts.Notifications;

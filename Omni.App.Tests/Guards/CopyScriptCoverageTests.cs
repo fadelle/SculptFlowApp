@@ -17,6 +17,10 @@ public class CopyScriptCoverageTests
     private static readonly string[] NotInOldProject =
         ["identity.account_tokens", "scheduling.reminder_settings", "scheduling.booking_reminders", "billing.addons", "billing.client_addons",
          "crm.auto_replies"];
+    // AI bots (2026-10-24): new tables, and Inbox settings that now belong to an account and a bot (the old client-wide row
+    // has nothing to apply to, so copied clients start with AI off).
+    private static readonly string[] NotCopied =
+        ["crm.bots", "crm.bot_knowledge_sources", "crm.bot_test_sessions", "crm.bot_test_messages", "crm.inbox_settings"];
 
     private static string Root => LeftoverNameScanner.FindRepoRoot();
 
@@ -36,7 +40,7 @@ public class CopyScriptCoverageTests
         filled.Add("config.settings"); // updated in place (the seeded defaults are overwritten by hand-changed values)
         Assert.Contains("update config.settings t", script);
 
-        var expected = created.Except(SeededBySchema).Except(NotInOldProject).Concat(CreatedByScript).ToHashSet();
+        var expected = created.Except(SeededBySchema).Except(NotInOldProject).Except(NotCopied).Concat(CreatedByScript).ToHashSet();
         Assert.True(expected.SetEquals(filled),
             "Tables missing from copy-from-old.sql: [" + string.Join(", ", expected.Except(filled).OrderBy(x => x)) +
             "]; tables it fills that schema.sql does not create: [" + string.Join(", ", filled.Except(expected).OrderBy(x => x)) +

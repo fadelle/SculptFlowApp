@@ -48,14 +48,16 @@ public class ClientsAdminController : ControllerBase
     public async Task<IActionResult> SetActive(Guid id, [FromBody] ActiveBody request, CancellationToken ct) =>
         Ok(await _clients.SetActiveAsync(id, request.Active, ct));
 
-    /// <summary>{ planIncludesBot, newConversations, reopenedConversations, botAnswersNew, botAnswersReopened }.</summary>
+    /// <summary>InboxSettingsDto: { planIncludesAiBot, activeBotLimit, accounts: [{ channelIntegrationId, channel, displayName,
+    /// aiEnabled, botId, aiBotNewConversations, aiBotReopenedConversations, botName, botStatus, blockReason, botAnswers }],
+    /// bots: [{ id, name, status }] }.</summary>
     [HttpGet("{id:guid}/inbox-settings")]
     public async Task<IActionResult> GetInboxSettings(Guid id, CancellationToken ct) => Ok(await _clients.GetInboxSettingsAsync(id, ct));
 
-    /// <summary>Body { newConversations, reopenedConversations }: whether the AI bot answers new / reopened conversations.</summary>
-    [HttpPut("{id:guid}/inbox-settings")]
-    public async Task<IActionResult> UpdateInboxSettings(Guid id, [FromBody] UpdateInboxSettingsRequest request, CancellationToken ct) =>
-        Ok(await _clients.UpdateInboxSettingsAsync(id, request, ct));
+    /// <summary>Body { aiEnabled, botId, aiBotNewConversations, aiBotReopenedConversations }: one connected account's AI.</summary>
+    [HttpPut("{id:guid}/inbox-settings/{channelIntegrationId:guid}")]
+    public async Task<IActionResult> UpdateAccountAi(Guid id, Guid channelIntegrationId, [FromBody] UpdateAccountAiRequest request, CancellationToken ct) =>
+        Ok(await _clients.UpdateAccountAiAsync(id, channelIntegrationId, request, ct));
 
     /// <summary>Body { language: "en" | "ar" | "fr" }: the language the client's dashboard opens in for users who haven't
     /// picked their own.</summary>

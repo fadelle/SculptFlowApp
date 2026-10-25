@@ -10,6 +10,10 @@ public interface IConversationRepository
 
     Task<Conversation?> GetAsync(Guid clientId, Guid conversationId, CancellationToken ct = default);
 
+    /// <summary>Locks the conversation row FOR UPDATE until the transaction ends and returns it tracked (so two hand-overs of
+    /// the same conversation can't both see it still with the AI).</summary>
+    Task<Conversation?> GetForUpdateAsync(Guid clientId, Guid conversationId, CancellationToken ct = default);
+
     /// <summary>With Contact loaded (sends need its phone and update its last-contact time).</summary>
     Task<Conversation?> GetWithContactAsync(Guid clientId, Guid conversationId, CancellationToken ct = default);
 

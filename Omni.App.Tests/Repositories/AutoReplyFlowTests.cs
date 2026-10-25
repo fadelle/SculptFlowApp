@@ -17,7 +17,8 @@ public class AutoReplyFlowTests(PostgresFixture fixture) : RepoTestBase(fixture)
         config.SetupGet(c => c.AutoReplyEnabled).Returns(true);
         config.SetupGet(c => c.AutoReplyMaxLength).Returns(1000);
         var inbox = new Mock<IInboxSettingsService>();
-        inbox.Setup(s => s.GetAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync(new InboxSettingsDto(false, true, true));
+        inbox.Setup(s => s.ResolveAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AccountAiDecision(null, null, AiBotBlockReason.PlanWithoutAi, true, true));
         var channels = new Mock<Omni.App.Persistence.Contracts.Channels.IChannelIntegrationRepository>();
         channels.Setup(c => c.ListForClientReadOnlyAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync([]);
         return new AutoReplyService(new AutoReplyRepository(db), new ClientRepository(db), channels.Object, inbox.Object,

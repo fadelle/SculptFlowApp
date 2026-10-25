@@ -21,13 +21,16 @@ public class AutoReplyServiceTests
             [new ChannelIntegration { ClientId = _clientId, Channel = ConversationChannel.WhatsApp, Status = ChannelIntegrationStatus.Connected }]);
         _autoReplies.Setup(r => r.ListForClientReadOnlyAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync([]);
         _autoReplies.Setup(r => r.Add(It.IsAny<AutoReply>())).Callback<AutoReply>(_added.Add);
-        Inbox(new InboxSettingsDto(true, true, false));
+        Inbox(newConversations: true, reopenedConversations: false);
         _config.SetupGet(c => c.AutoReplyEnabled).Returns(true);
         _config.SetupGet(c => c.AutoReplyMaxLength).Returns(20);
     }
 
-    private void Inbox(InboxSettingsDto settings) =>
-        _inboxSettings.Setup(s => s.GetAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(settings);
+    /// <summary>A bot answers every account (with these switches), except on the channels in <paramref name="teamOnly"/>.</summary>
+    private void Inbox(bool newConversations, bool reopenedConversations, params string[] teamOnly) =>
+        _inboxSettings.Setup(s => s.ResolveAsync(_clientId, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Guid _, string channel, CancellationToken _) => new AccountAiDecision(Guid.NewGuid(), Guid.NewGuid(),
+                teamOnly.Contains(channel) ? AiBotBlockReason.AiDisabled : null, newConversations, reopenedConversations));
 
     private static IChannelSender Sender(string channel) => Mock.Of<IChannelSender>(s => s.Channel == channel);
 
@@ -51,9 +54,9 @@ public class AutoReplyServiceTests
     }
 
     [Fact]
-    public async Task A_channel_beyond_the_ai_bot_limit_is_listed_as_answered_by_the_team()
+    public async Task A_channel_whose_account_has_ai_off_is_listed_as_answered_by_the_team()
     {
-        Inbox(new InboxSettingsDto(true, true, true, new HashSet<string> { ConversationChannel.Telegram }, 1));
+        Inbox(true, true, ConversationChannel.Telegram);
         _autoReplies.Setup(r => r.ListForClientReadOnlyAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(
             [new AutoReply { ClientId = _clientId, Channel = ConversationChannel.Telegram, NewConversationEnabled = true, NewConversationMessage = "Yo" }]);
 

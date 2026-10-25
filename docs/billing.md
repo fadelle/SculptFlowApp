@@ -56,9 +56,9 @@ await _entitlements.EnsureWithinLimitAsync(clientId, EntitlementKeys.MaxUsers, n
 Keys live in `Common/Statics/EntitlementKeys.cs`: features take `true`/`false`, limits a number or `unlimited`. A key a plan doesn't
 list is off / 0. Wired today: sending (subscription active), campaigns, bookings (`bookings`, below), the AI bot (`ai_assistant`: AI trigger, conversation
 routing and Return to AI, see `InboxSettingsService`), channel connects
-(`max_channel_connections`, `max_whatsapp_numbers`), AI bots (`max_ai_bots`: the first that many connected channels, in
-connection order, get the AI; on the others conversations go to the team with reason `ai_bot_limit` and Return to AI is
-refused; a plan without the key has no AI bot limit, see `InboxSettingsService`) and seats (`max_users`: active client and member users, checked when
+(`max_channel_connections`, `max_whatsapp_numbers`), AI bots (`max_ai_bots`, with add-ons: how many bots may be active at
+once, checked when a bot is activated (`BotService`); after a downgrade the newest active bots beyond it answer nobody and
+their accounts go to the team with reason `ai_bot_limit`, see `InboxSettingsService`) and seats (`max_users`: active client and member users, checked when
 the client user adds or reactivates a member, see `MemberService`). Reports too: `reporting` gates the Reports page and its sidebar link, `advanced_reporting`
 its response-time, AI-reply, activity and usage sections (see `ReportService`). `api_access` is defined but nothing checks it yet.
 

@@ -585,15 +585,13 @@ public class MessageService : IMessageService
         }
         else if (request.EventType == IngestEventType.CustomerMessage && conversation.Mode == ConversationMode.Ai)
         {
-            // The bot can't answer when the plan no longer includes the AI assistant, and the client may send conversations a
-            // contact reopens straight to members. Either way the conversation goes to human mode (same state as a handoff),
-            // so it lands in the team's needs-attention list and n8n is never called (see aiEligible below).
-            // A channel beyond the plan's AI bot limit goes to members the same way.
-            var inboxSettings = await _inboxSettings.GetAsync(request.ClientId, ct);
-            var reason = !inboxSettings.PlanIncludesAiBot ? "plan_without_ai_assistant"
-                : !inboxSettings.AiBotAnswersOn(conversation.Channel) ? "ai_bot_limit"
-                : reopened && !inboxSettings.AiBotAnswersReopened ? "reopened_to_human"
-                : null;
+            // No bot answers when the plan no longer includes the AI assistant, or the conversation's account has AI off, no
+            // bot, an inactive bot or one beyond the plan's AI bots; and the account may send conversations a contact reopens
+            // straight to members. Either way the conversation goes to human mode (same state as a handoff), so it lands in the
+            // team's needs-attention list and n8n is never called (see aiEligible below).
+            var decision = await _inboxSettings.ResolveAsync(request.ClientId, conversation.Channel, ct);
+            var reason = decision.BlockReason
+                ?? (reopened && !decision.AnswersReopened ? AiBotBlockReason.ReopenedToHuman : null);
             if (reason is not null)
             {
                 ConversationModeSync.Apply(conversation, ConversationMode.Human, now);
@@ -759,6 +757,31 @@ public class MessageService : IMessageService
 
     public Task<MessageResponse?> SendSystemTextAsync(Guid clientId, Guid conversationId, string content, CancellationToken ct = default) =>
         SendAutomaticTextAsync(clientId, conversationId, content, "system", null, null, ct);
+
+    public async Task<MessageResponse?> SendHandoffMessageAsync(Guid clientId, Guid conversationId, Guid botId, string content, CancellationToken ct = default)
+    {
+        var conversation = await _conversations.GetAsync(clientId, conversationId, ct);
+        if (conversation is null) return null;
+        var ids = Ids(conversation);
+        // WhatsApp only lets the business write freely inside the contact's 24-hour window; outside it the message is skipped
+        // (a template would be needed), never forced.
+        if (conversation.Channel == ConversationChannel.WhatsApp && !conversation.IsServiceWindowOpen(DateTimeOffset.UtcNow))
+        {
+            _tracer.Step(TraceSteps.HandoffMessageSkipped, TraceOutcomes.Skipped, ids, detail: new { reason = "service_window_closed", botId });
+            return null;
+        }
+        try
+        {
+            return await SendAutomaticTextAsync(clientId, conversationId, content, "handoff_message", EventTypes.HandoffMessageSent,
+                System.Text.Json.JsonSerializer.Serialize(new { botId }), ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Like the auto-reply: a failure (no balance, provider refused) is traced and never undoes the handoff.
+            _tracer.Step(TraceSteps.SendBlocked, TraceOutcomes.Failed, ids, detail: new { kind = "handoff_message", error = TraceText.Error(ex) });
+            return null;
+        }
+    }
 
     /// <summary>Plain text the contact receives from Omni itself (sender and origin system, MessageMetadata.Automatic),
     /// optionally logging <paramref name="eventType"/> in the same save.</summary>

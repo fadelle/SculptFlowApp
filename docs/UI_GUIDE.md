@@ -124,7 +124,8 @@ section wins**. Copy says *contact* where the guide says *customer*: the people 
   with `.au-table--stack` and `data-label`s, or `_EmptyState`); *detail* `Dashboard/ContactDetail` (`.au-back-header` →
   `.detail-chips` → panels with `.au-detail-rows`); *form* `Services/Edit` (stacked `.au-form-field`s in a panel,
   `.au-form-actions`); *settings with sections* `Settings/BusinessInfo`; *popup* `WhatsApp/Templates` (`.bm-overlay >
-  .card`); *sign-in* `Account/Login` (`.au-auth__card`). Multi-part table cells wrap their content in one `<div>` so the
+  .card`); *sign-in* `Account/Login` (`.au-auth__card`); *editor with a live side panel* `Bots/Edit` (`.bot-editor`: the form panel
+  and a sticky `.bot-test` panel, one column below 1000px). Multi-part table cells wrap their content in one `<div>` so the
   stacked phone layout keeps label and value side by side.
 - **Money:** Billing shows its currency; Dashboard revenue uses `UiTextHelper.Amount` (no symbol: the production
   container runs with the invariant culture, and bookings can each carry their own currency).

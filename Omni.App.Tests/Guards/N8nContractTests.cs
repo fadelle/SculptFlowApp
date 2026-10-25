@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Routing;
+using Omni.App.Controllers.Filters;
 using Omni.App.Controllers.Integrations;
 
 namespace Omni.App.Tests.Guards;
@@ -55,7 +56,32 @@ public class N8nContractTests
         // The prompt is generic: the business's profile, words, language and timezone come from the trigger, and the reply
         // falls back to the contact's stored language when a message has none.
         Assert.Empty(new[] { "clientId", "contactId", "conversationId", "messageText", "traceparent", "clientName", "aiProfile", "terms",
-            "language", "contactLanguage", "timezone" }.Except(used));
+            "language", "contactLanguage", "timezone", "bot", "testSessionId" }.Except(used));
+    }
+
+    [Fact]
+    public void The_ai_workflow_runs_the_triggers_bot_and_names_it_on_every_call_back_into_the_app()
+    {
+        var workflow = Load(AiWorkflow);
+        // The prompt is the bot's own instructions inside the generic contract, never one hard-coded assistant.
+        var prompt = Parameters(Node(workflow, "AI Agent")).GetProperty("options").GetProperty("systemMessage").GetString()!;
+        Assert.Contains("$('user_message').item.json.body.bot.instructions", prompt);
+        Assert.Contains("YOUR BOT", prompt);
+
+        // Omni checks the bot's allowed actions on every tool call, so every call names the bot and the test session.
+        var calls = Nodes(workflow).Where(n => Parameters(n).TryGetProperty("url", out var url) && url.GetString()!.Contains(AppHost)).ToList();
+        Assert.All(calls, node =>
+        {
+            var headers = Parameters(node).GetProperty("headerParameters").GetProperty("parameters").EnumerateArray()
+                .ToDictionary(h => h.GetProperty("name").GetString()!, h => h.GetProperty("value").GetString()!);
+            Assert.Equal("={{ $('user_message').item.json.body.bot.id }}", headers[BotToolAttribute.BotHeader]);
+            Assert.Equal("={{ $('user_message').item.json.body.testSessionId || '' }}", headers[BotToolAttribute.TestSessionHeader]);
+        });
+
+        // The reply goes to the bot's own endpoint (live or test), with the text only.
+        var send = Parameters(Node(workflow, "send_message"));
+        Assert.EndsWith("/reply", send.GetProperty("url").GetString());
+        Assert.Equal(["content"], Regex.Matches(send.GetProperty("jsonBody").GetString()!, "\"([A-Za-z]+)\":").Select(m => m.Groups[1].Value));
     }
 
     [Fact]
@@ -112,19 +138,24 @@ public class N8nContractTests
         var workflow = Load(AiWorkflow);
         var nodes = Nodes(workflow).ToList();
 
-        Assert.Equal(["get_available_slots", "get_my_bookings", "search_knowledge", "update_contact"],
+        Assert.Equal(["get_available_slots", "get_my_bookings", "get_services", "search_knowledge", "update_contact", "update_contact_details", "update_stage"],
             nodes.Where(n => n.GetProperty("type").GetString()!.EndsWith(".httpRequestTool")).Select(n => n.GetProperty("name").GetString()).Order());
         var names = nodes.Select(n => n.GetProperty("name").GetString()).ToHashSet();
         Assert.Subset(names, new HashSet<string?> { "schedule_booking", "cancel_booking", "handoff_to_human", "send_message" });
 
         var prompt = Parameters(Node(workflow, "AI Agent")).GetProperty("options").GetProperty("systemMessage").GetString()!;
-        Assert.All(new[] { "search_knowledge", "get_available_slots", "get_my_bookings", "update_contact", "bookingId", "serviceId" },
+        Assert.All(new[] { "search_knowledge", "get_available_slots", "get_my_bookings", "get_services", "update_contact", "update_contact_details", "update_stage", "bookingId", "serviceId" },
             word => Assert.Contains(word, prompt));
 
         // update_contact only ever sends the contact's language (the AI can't touch other fields through it).
         var update = Parameters(Node(workflow, "update_contact"));
         Assert.Equal("PATCH", update.GetProperty("method").GetString());
         Assert.Equal(["preferredLanguage"], Regex.Matches(update.GetProperty("jsonBody").GetString()!, "\"([A-Za-z]+)\":").Select(m => m.Groups[1].Value));
+        // The details and stage tools never send identity fields, and each sends only its own fields.
+        Assert.Equal(["city", "desiredTimeline", "notes", "qualification"],
+            Regex.Matches(Parameters(Node(workflow, "update_contact_details")).GetProperty("jsonBody").GetString()!, "\"([A-Za-z]+)\":").Select(m => m.Groups[1].Value));
+        Assert.Equal(["stage"],
+            Regex.Matches(Parameters(Node(workflow, "update_stage")).GetProperty("jsonBody").GetString()!, "\"([A-Za-z]+)\":").Select(m => m.Groups[1].Value));
 
         var codes = JsonSerializer.SerializeToElement(Assert.IsType<OkObjectResult>(new AiTestController().ListCodes().Result).Value);
         Assert.Equal(Strings(codes.GetProperty("schedule")).Order(), SwitchCodes(nodes, "schedule_booking").Order());

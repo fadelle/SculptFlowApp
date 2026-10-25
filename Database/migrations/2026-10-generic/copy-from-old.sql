@@ -184,7 +184,6 @@ insert into copy_targets values ('activity.api_route_stats'),
     ('core.services'),
     ('crm.contacts'),
     ('crm.conversations'),
-    ('crm.inbox_settings'),
     ('crm.messages'),
     ('crm.orders'),
     ('identity.client_users'),
@@ -565,15 +564,9 @@ select m.section, m.old_key as key, m.value from settings_mapped m
 where not exists (select 1 from settings_to_copy c where c.section = m.section and c.old_key = m.old_key)
 order by 1, 2;
 
--- crm.inbox_settings -> crm.inbox_settings
-insert into crm.inbox_settings (
-    id, client_id, channel_integration_id, ai_bot_new_conversations, ai_bot_reopened_conversations, created_at,
-    updated_at
-)
-select
-    o.id, o.clinic_id, o.channel_integration_id, o.ai_bot_new_conversations, o.ai_bot_reopened_conversations,
-    o.created_at, o.updated_at
-from old_crm.inbox_settings o;
+-- crm.inbox_settings is not copied: the old project kept one client-wide row, while each row now belongs to a connected
+-- account and names a bot (crm.bots, which the old project doesn't have). Copied clients start with AI off on every
+-- account until they make a bot and turn it on in Inbox settings.
 
 -- marketing.campaigns -> marketing.campaigns
 insert into marketing.campaigns (
@@ -930,7 +923,6 @@ insert into copy_report values ('channels.tiktok_integrations', (select count(*)
 insert into copy_report values ('channels.whatsapp_health_events', (select count(*) from old_channels.whatsapp_health_events), (select count(*) from old_channels.whatsapp_health_events), (select count(*) from channels.whatsapp_health_events));
 insert into copy_report values ('channels.whatsapp_templates', (select count(*) from old_channels.whatsapp_templates), (select count(*) from old_channels.whatsapp_templates), (select count(*) from channels.whatsapp_templates));
 insert into copy_report values ('config.settings', (select count(*) from old_config.settings), (select count(*) from pg_temp.settings_to_copy), (select count(*) from config.settings s join pg_temp.settings_to_copy c on c.section = s.section and c.new_key = s.key and s.value = c.value));
-insert into copy_report values ('crm.inbox_settings', (select count(*) from old_crm.inbox_settings), (select count(*) from old_crm.inbox_settings), (select count(*) from crm.inbox_settings));
 insert into copy_report values ('marketing.campaigns', (select count(*) from old_marketing.campaigns), (select count(*) from old_marketing.campaigns), (select count(*) from marketing.campaigns));
 insert into copy_report values ('crm.messages', (select count(*) from old_crm.messages), (select count(*) from old_crm.messages), (select count(*) from crm.messages));
 insert into copy_report values ('crm.orders', (select count(*) from old_scheduling.procedure_bookings), (select count(*) from old_scheduling.procedure_bookings), (select count(*) from crm.orders));

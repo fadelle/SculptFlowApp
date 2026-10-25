@@ -459,11 +459,7 @@ public class BookingService : IBookingService
         return a is null ? null : ToUpcoming(a, tz);
     }
 
-    private static string LabelFor(DateTimeOffset local)
-    {
-        var inv = System.Globalization.CultureInfo.InvariantCulture;
-        return $"{local.DayOfWeek}, {local.ToString("MMM d", inv)} at {local.ToString("h:mm tt", inv)}";
-    }
+    private static string LabelFor(DateTimeOffset local) => BookingLabels.For(local);
 
     public async Task<CancelOutcome> CancelBookingAsync(Guid clientId, Guid contactId, Guid? id, string? reason, CancellationToken ct = default)
     {

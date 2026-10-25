@@ -1,23 +1,21 @@
 using Microsoft.AspNetCore.Mvc;
 using Omni.App.Business.Contracts.Managers;
+using Omni.App.Business.Contracts.Services.Ai;
 using Omni.App.Business.Contracts.Services.Bookings;
-using Omni.App.Business.Contracts.Services.Inbox;
 using Omni.App.Business.Contracts.Services.Knowledge;
 using Omni.App.Business.Contracts.Services.Contacts;
 using Omni.App.Business.Contracts.Services.Catalog;
+using Omni.App.Common.Enums;
 using Omni.App.Common.Exceptions;
 using Omni.App.Common.Statics;
 using Omni.App.Controllers.Filters;
 using Omni.App.Entities.Dtos.Ai;
 using Omni.App.Entities.Dtos.Bookings;
-using Omni.App.Entities.Models;
 using Omni.App.Entities.Requests.Ai;
-using Omni.App.Entities.Requests.Bookings;
 using Omni.App.Entities.Requests.Knowledge;
 using Omni.App.Entities.Requests.Contacts;
 using Omni.App.Entities.Responses.Ai;
 using Omni.App.Entities.Responses.Bookings;
-using Omni.App.Entities.Responses.Inbox;
 using Omni.App.Entities.Responses.Knowledge;
 using Omni.App.Entities.Responses.Contacts;
 using Omni.App.Entities.Responses.Catalog;
@@ -25,41 +23,34 @@ using Omni.App.Entities.Responses.Catalog;
 namespace Omni.App.Controllers.Integrations;
 
 /// <summary>
-/// The AI assistant's (n8n) tool surface — one trusted entry point per tool the AI can call, all
+/// The AI bot's (n8n) tool surface — one trusted entry point per tool the AI can call, all
 /// delegating to the same services the dashboard/API already use (no duplicated business logic).
 /// Protected the same way as /api/messages/ingest (RequireIngestKey): this is server-to-server
 /// traffic from n8n, not something the browser should be able to call directly. Every action still
 /// takes clientId explicitly and scopes through it — same multi-client rule as the rest of the API.
 ///
-/// Deliberately narrower than the dashboard's own endpoints where it matters: update_contact can't
-/// touch identity fields (name/phone/email), and reschedule/cancel/handoff each log a dedicated
-/// event with the AI as the source so members can see what the AI did and why (see EventTypes).
+/// Every action is a [BotTool]: the call names its bot (X-Omni-Bot-Id, from the AI trigger) and Omni allows only that bot's
+/// actions (BotCapability) on its own client's data, whatever the prompt said; a refused call answers success = false,
+/// code TOOL_NOT_ALLOWED. A call from a bot test conversation (X-Omni-Test-Session) reads real data but simulates every
+/// write (IBotTestService): no booking, contact change, handoff or provider message is real.
 ///
-/// Knowledge search (search_knowledge) is POST /api/ai/knowledge/search — see
-/// IKnowledgeSearchService. It returns relevant chunks of the client's approved Knowledge Base only;
-/// the AI assistant composes the answer.
+/// Deliberately narrower than the dashboard's own endpoints where it matters: update_contact can't
+/// touch identity fields (name/phone/email), and schedule/cancel/handoff each log a dedicated
+/// event with the AI as the source so members can see what the AI did and why (see EventTypes).
 ///
 /// WHICH TOOL FOR WHAT — rule of thumb: the Knowledge Base is for INFORMATION; the structured tools
 /// are for LIVE DATA and ACTIONS. The Knowledge Base is never the source of truth for contact data,
 /// booking availability, bookings, conversation state or handoff.
 ///
-///   search_knowledge   → client-approved informational content: hours, address, parking,
-///                               policies, booking info, pricing, payment/financing, doctors,
-///                               service explanations, preparation, recovery, FAQs.
-///                               ("Where is the client?", "What happens at a rhinoplasty booking?")
-///   get_contact_context          → what is currently known about THIS contact.
-///   update_contact               → write real contact/business data (interest, language, qualification...).
-///   get_available_slots       → LIVE booking availability.
-///   book_slot         → perform an actual booking (also reschedule_ / cancel_booking).
-///   handoff_to_human          → switch the conversation to human handling.
-///
-/// Overlap that is deliberate for now (nothing removed yet):
-///   get_client_info  — hours/address/booking rules also belong in the Knowledge Base, so this
-///                      may become redundant. Kept working until the Knowledge Base is proven; then
-///                      decide whether it is still needed.
-///   get_services   — stays. The Knowledge Base EXPLAINS services in prose; get_services returns
-///                      the authoritative structured records (service id, name, active flag,
-///                      booking duration) that booking and business logic depend on.
+///   search_knowledge       → client-approved informational content (only the bot's sources): hours, address, policies,
+///                            pricing, services, preparation, recovery, FAQs. (knowledge)
+///   get_services           → the authoritative structured service records. (services)
+///   get_contact_context    → what is currently known about THIS contact. (every bot)
+///   update_contact         → the contact's language (every bot); update_contact_details → city, timeline, notes,
+///                            follow-up, qualification (contact_update); update_stage → the pipeline stage (pipeline).
+///   get_available_slots    → LIVE booking availability. (availability)
+///   get_my_bookings, schedule_booking, cancel_booking → the contact's own bookings. (bookings)
+///   reply, handoff_to_human → send the bot's reply / switch the conversation to the team. (every bot)
 /// </summary>
 [ApiController]
 [Route("api/ai")]
@@ -68,37 +59,41 @@ namespace Omni.App.Controllers.Integrations;
 [TraceBotTool]
 public class AiController : ControllerBase
 {
-    /// <summary>The key BookingService refuses with when the contact isn't the client's (book_slot answers CONTACT_NOT_FOUND).</summary>
-    private const string ContactNotFoundKey = "contacts.errors.notFound";
-
     private readonly IClientContext _clientContext;
     private readonly ICatalogService _services;
     private readonly IContactService _contacts;
     private readonly IBookingService _bookings;
     private readonly IAvailabilityService _availability;
-    private readonly IConversationService _conversations;
     private readonly IKnowledgeSearchService _knowledgeSearch;
+    private readonly IBotRuntimeService _runtime;
+    private readonly IBotTestService _tests;
+    private readonly IBotConversationService _botConversations;
 
     public AiController(
         IClientContext clientContext, ICatalogService services, IContactService contacts,
-        IBookingService bookings, IAvailabilityService availability, IConversationService conversations,
-        IKnowledgeSearchService knowledgeSearch)
+        IBookingService bookings, IAvailabilityService availability, IKnowledgeSearchService knowledgeSearch,
+        IBotRuntimeService runtime, IBotTestService tests, IBotConversationService botConversations)
     {
         _clientContext = clientContext;
         _services = services;
         _contacts = contacts;
         _bookings = bookings;
         _availability = availability;
-        _conversations = conversations;
         _knowledgeSearch = knowledgeSearch;
+        _runtime = runtime;
+        _tests = tests;
+        _botConversations = botConversations;
     }
 
-    /// <summary>search_knowledge — semantic search over the client's approved Knowledge Base.
+    private BotRunContext Run => BotToolAttribute.RunOf(HttpContext);
+
+    /// <summary>search_knowledge — semantic search over the client's approved Knowledge Base, limited to the bot's sources.
     /// For INFORMATION questions only (hours, address, policies, pricing, doctors, service
     /// explanations, recovery, FAQs) — not contact data, availability, bookings or handoff. clientId is the
     /// one n8n already has in context; the AI supplies only the query text. Returns relevant chunks
     /// (possibly none) — never a composed answer.</summary>
     [HttpPost("knowledge/search")]
+    [BotTool(BotCapability.Knowledge)]
     public async Task<ActionResult<KnowledgeSearchResponse>> SearchKnowledge([FromBody] KnowledgeSearchRequest request, CancellationToken ct)
     {
         if (request.ClientId == Guid.Empty || string.IsNullOrWhiteSpace(request.Query))
@@ -108,7 +103,7 @@ public class AiController : ControllerBase
 
         try
         {
-            return Ok(await _knowledgeSearch.SearchAsync(request.ClientId, request.Query, request.Limit, ct));
+            return Ok(await _knowledgeSearch.SearchAsync(request.ClientId, request.Query, request.Limit, Run.KnowledgeFilter, ct));
         }
         catch (InvalidOperationException ex)
         {
@@ -120,6 +115,7 @@ public class AiController : ControllerBase
     /// Knowledge Base (search_knowledge), which is now the preferred place for this kind of
     /// information; kept working for now and may be retired later.</summary>
     [HttpGet("client-info")]
+    [BotTool(BotCapability.Knowledge)]
     public async Task<ActionResult<ClientInfoResponse>> GetClientInfo([FromQuery] Guid clientId, CancellationToken ct)
     {
         var client = await _clientContext.GetByIdAsync(clientId, ct);
@@ -134,6 +130,7 @@ public class AiController : ControllerBase
     /// booking duration) needed for booking. Use search_knowledge to EXPLAIN a service;
     /// use this when an actual service id/record is needed.</summary>
     [HttpGet("services")]
+    [BotTool(BotCapability.Services)]
     public async Task<ActionResult<IReadOnlyList<ServiceResponse>>> GetServices(
         [FromQuery] Guid clientId, CancellationToken ct = default)
     {
@@ -145,21 +142,33 @@ public class AiController : ControllerBase
         return Ok(services);
     }
 
-    /// <summary>get_contact_context — what's already known about the person the AI is talking to.</summary>
+    /// <summary>get_contact_context — what's already known about the person the AI is talking to. A test run has no real
+    /// contact.</summary>
     [HttpGet("contacts/{contactId:guid}")]
+    [BotTool]
     public async Task<ActionResult<ContactResponse>> GetContactContext(Guid contactId, [FromQuery] Guid clientId, CancellationToken ct)
     {
+        if (Run.IsTest) return Ok(new { id = contactId, simulated = true, fullName = "Test contact" }); // text-ok: read by the AI only
         var contact = await _contacts.GetByIdAsync(clientId, contactId, ct);
         return contact is null ? NotFound() : Ok(contact);
     }
 
-    /// <summary>update_contact — service interest, language, timeline, notes, follow-up, qualification.
+    /// <summary>update_contact (language), update_contact_details (service interest, city, timeline, notes, follow-up,
+    /// qualification) and update_stage share this route; each needs its own capability (IBotRuntimeService.CheckContactUpdate).
     /// Cannot change identity fields (name/phone/email) — those come from the contact's actual source.</summary>
     [HttpPatch("contacts/{contactId:guid}")]
+    [BotTool]
     public async Task<ActionResult<ContactResponse>> UpdateContact(
         Guid contactId, [FromQuery] Guid clientId, [FromBody] UpdateContactContextRequest request, CancellationToken ct)
     {
-        var contact = await _contacts.UpdateContextAsync(clientId, contactId, request, ct);
+        var (clean, missing) = _runtime.CheckContactUpdate(Run, request);
+        if (missing is not null) return Ok(BotToolAttribute.NotAllowed(BotToolCheck.NotAllowed));
+        if (Run.IsTest)
+        {
+            await _tests.NoteContactUpdateAsync(Run, clean, ct);
+            return Ok(new { success = true, simulated = true });
+        }
+        var contact = await _contacts.UpdateContextAsync(clientId, contactId, clean, ct);
         return contact is null ? NotFound() : Ok(contact);
     }
 
@@ -168,6 +177,7 @@ public class AiController : ControllerBase
     /// "yyyy-MM-dd" (default today); `days` (1-14, default 1 when a date is given, else 7) searches that many days from it.
     /// Never computed by the AI. A client that hasn't configured availability returns configured=false and no slots.</summary>
     [HttpGet("bookings/available")]
+    [BotTool(BotCapability.Availability)]
     [RequireFeature(EntitlementKeys.Bookings, AiTool = true)]
     public async Task<ActionResult<AvailabilityResponse>> GetAvailableSlots(
         [FromQuery] Guid clientId, [FromQuery] Guid? contactId, [FromQuery] Guid? serviceId, [FromQuery] DateOnly? date,
@@ -175,9 +185,13 @@ public class AiController : ControllerBase
     {
         // With contactId (always passed by the n8n workflow, never chosen by the AI) the reply also carries the contact's own
         // upcoming bookings and the backend's canCreateNewBooking decision — kept separate from the requested date and slots.
-        // Read-only: this endpoint never books, reschedules or cancels.
+        // Read-only: this endpoint never books, reschedules or cancels. A test run's contact is the test session's.
         ContactBookingContext? context = null;
-        if (contactId is { } contact)
+        if (Run.IsTest)
+        {
+            context = await _tests.GetBookingContextAsync(Run, ct);
+        }
+        else if (contactId is { } contact)
         {
             context = await _bookings.GetBookingContextAsync(clientId, contact, ct);
             if (context is null) return NotFound(new { error = "Contact not found for this client." });
@@ -199,13 +213,15 @@ public class AiController : ControllerBase
     /// <summary>schedule_booking — the ONE tool the AI uses to book or move a booking. The BACKEND decides which from the real
     /// booking state: none upcoming → book; one upcoming AND confirmReplaceExisting=true → reschedule it; upcoming without consent →
     /// nothing changes and CONFIRMATION_REQUIRED comes back. clientId/contactId are workflow values, never AI-chosen. Always HTTP 200 for
-    /// business outcomes; only Success=true with Operation created/rescheduled means the contact's booking changed.
-    /// (Replaces book_slot + reschedule_booking, which remain for now but are deprecated.)</summary>
+    /// business outcomes; only Success=true with Operation created/rescheduled means the contact's booking changed.</summary>
     [HttpPost("bookings/schedule")]
+    [BotTool(BotCapability.Bookings)]
     [RequireFeature(EntitlementKeys.Bookings, AiTool = true)]
     public async Task<ActionResult<ScheduleBookingResult>> ScheduleBooking(
         [FromQuery] Guid clientId, [FromQuery] Guid contactId, [FromBody] ScheduleBookingRequest request, CancellationToken ct)
     {
+        if (Run.IsTest) return Ok(await _tests.ScheduleAsync(Run, request, ct));
+
         var o = await _bookings.ScheduleAsync(clientId, contactId, request, ct);
         var instruction = AiResultInstructions.ForSchedule(o.Code, o.Existing?.FirstOrDefault()?.Label, o.RequestedLabel);
 
@@ -216,94 +232,31 @@ public class AiController : ControllerBase
             o.Code is "BOOKED" or "RESCHEDULED" ? null : o.RequestedLabel));
     }
 
-    /// <summary>book_slot — DEPRECATED: use schedule_booking (the backend decides book vs reschedule). Kept working for now.</summary>
-    [HttpPost("bookings/book")]
-    [RequireFeature(EntitlementKeys.Bookings, AiTool = true)]
-    public async Task<ActionResult<BookSlotResult>> BookSlot(
-        [FromQuery] Guid clientId, [FromBody] BookSlotRequest request, CancellationToken ct)
-    {
-        const string NotBooked = "Nothing was booked. Do NOT tell the contact a booking is booked or confirmed. ";
-
-        try
-        {
-            var booking = await _bookings.BookAvailableSlotAsync(new CreateBookingRequest(
-                clientId, request.ContactId, request.ServiceId,
-                string.IsNullOrWhiteSpace(request.BookingType) ? "standard" : request.BookingType,
-                request.ScheduledStart, request.ScheduledEnd, request.LocationType, request.LocationName, request.Notes), ct);
-            // Report the booking in the CLIENT's local time (like get_available_slots), never the stored UTC value the AI
-            // could read out to the contact as the wrong hour.
-            var upcoming = await _bookings.GetUpcomingForContactAsync(clientId, request.ContactId, ct);
-            var local = upcoming.Bookings.FirstOrDefault(a => a.Id == booking.Id);
-            return Ok(new BookSlotResult(true, "BOOKED", "Booking made.", Booking: local));
-        }
-        catch (ContactAlreadyBookedException ex)
-        {
-            return Ok(new BookSlotResult(false, "EXISTING_UPCOMING_BOOKING",
-                "Contact already has an upcoming booking.",
-                NotBooked + $"Tell the contact they already have a booking on {ex.Existing.Label}, and offer to reschedule or cancel it instead of booking another.",
-                ExistingBooking: ex.Existing));
-        }
-        catch (SlotUnavailableException ex)
-        {
-            return Ok(new BookSlotResult(false, "SLOT_UNAVAILABLE", ex.Message,
-                NotBooked + "Apologise briefly, call get_available_slots again, and offer the contact other times. Do not retry the same time."));
-        }
-        catch (ArgumentException ex)
-        {
-            var contactMissing = ex.Message == ContactNotFoundKey;
-            return Ok(new BookSlotResult(false, contactMissing ? "CONTACT_NOT_FOUND" : "INVALID_REQUEST", ApiErrorsAttribute.Localize(HttpContext, ex),
-                NotBooked + "Tell the contact you couldn't complete the booking and that a team member will confirm it shortly."));
-        }
-    }
-
-
     /// <summary>get_my_bookings — this contact's upcoming booked/confirmed bookings (soonest first), in client-local
     /// wording. Use it before rescheduling/cancelling (to get the booking id) and to answer "what do I have booked?".
     /// contactId is the current conversation's contact, supplied by the workflow — not chosen by the AI.</summary>
     [HttpGet("bookings/upcoming")]
+    [BotTool(BotCapability.Bookings)]
     [RequireFeature(EntitlementKeys.Bookings, AiTool = true)]
     public async Task<ActionResult<UpcomingBookingsResponse>> GetMyBookings(
         [FromQuery] Guid clientId, [FromQuery] Guid contactId, CancellationToken ct)
     {
+        if (Run.IsTest) return Ok(await _tests.GetUpcomingAsync(Run, ct));
         return Ok(await _bookings.GetUpcomingForContactAsync(clientId, contactId, ct));
     }
 
-    /// <summary>reschedule_booking — DEPRECATED: use schedule_booking. Contact wants to move THEIR upcoming booking. No booking id is needed: the server
-    /// uses this contact's single upcoming booking (bookingId is only for the rare contact with several — 409 then lists them).
-    /// The new time is checked exactly like a new booking (hours, exceptions, notice, overlaps); 409 slotUnavailable means pick
-    /// another time. Always scoped to contactId — the AI can only ever touch the contact it is talking to.</summary>
-    [HttpPost("bookings/reschedule")]
-    [RequireFeature(EntitlementKeys.Bookings, AiTool = true)]
-    public async Task<ActionResult<BookingResponse>> RescheduleBooking(
-        [FromQuery] Guid clientId, [FromQuery] Guid contactId, [FromQuery] Guid? bookingId,
-        [FromBody] RescheduleBookingRequest request, CancellationToken ct)
-    {
-        try
-        {
-            var booking = await _bookings.RescheduleAsync(clientId, contactId, bookingId, request.ScheduledStart, request.ScheduledEnd, request.Reason, ct);
-            return booking is null
-                ? NotFound(new { error = "This contact has no upcoming booking to reschedule. Book a new one instead." })
-                : Ok(booking);
-        }
-        catch (MultipleUpcomingBookingsException ex)
-        {
-            return Conflict(new { error = ex.Message, multipleUpcoming = true, bookings = ex.Bookings });
-        }
-        catch (SlotUnavailableException ex)
-        {
-            return Conflict(new { error = ex.Message, slotUnavailable = true });
-        }
-    }
-
-    /// <summary>cancel_booking — contact asks to cancel THEIR upcoming booking. No booking id is needed (see reschedule).
-    /// Always HTTP 200 for business outcomes; only Success=true means something was canceled. The AI must have the contact's explicit
-    /// confirmation before calling it.</summary>
+    /// <summary>cancel_booking — contact asks to cancel THEIR upcoming booking. No booking id is needed for a contact with one
+    /// upcoming booking. Always HTTP 200 for business outcomes; only Success=true means something was canceled. The AI must have
+    /// the contact's explicit confirmation before calling it.</summary>
     [HttpPost("bookings/cancel")]
+    [BotTool(BotCapability.Bookings)]
     [RequireFeature(EntitlementKeys.Bookings, AiTool = true)]
     public async Task<ActionResult<CancelBookingResult>> CancelBooking(
         [FromQuery] Guid clientId, [FromQuery] Guid contactId, [FromQuery] Guid? bookingId,
         [FromBody] CancelBookingRequest request, CancellationToken ct)
     {
+        if (Run.IsTest) return Ok(await _tests.CancelAsync(Run, ct));
+
         var o = await _bookings.CancelBookingAsync(clientId, contactId, bookingId, request.Reason, ct);
         var instruction = AiResultInstructions.ForCancel(o.Code);
 
@@ -311,14 +264,38 @@ public class AiController : ControllerBase
             o.Code == "CANCELED", o.Operation, o.Code, o.Message, instruction, o.Booking, o.Existing));
     }
 
-    /// <summary>handoff_to_human — medical question, contact requests members, AI uncertain, upset
-    /// customer, etc. Flips the conversation to human mode, same as the dashboard's Take Over, but
-    /// attributed to the AI with the reason recorded on the event.</summary>
+    /// <summary>reply — the bot's message to the contact. The conversation must still be in AI mode (a member may have taken
+    /// over while the AI was thinking): 409 conversation_in_human_mode otherwise; 409 ai_reply_refused when billing refused
+    /// the reply (the conversation is with the team then). Never changes the mode.</summary>
+    [HttpPost("conversations/{id:guid}/reply")]
+    [BotTool]
+    public async Task<ActionResult<BotReplyOutcome>> Reply(Guid id, [FromQuery] Guid clientId, [FromBody] AiReplyRequest request, CancellationToken ct)
+    {
+        // Caught here: the workflow needs these two outcomes as 409s with a code (it stops without retrying), not as 422s.
+        try
+        {
+            var outcome = await _botConversations.ReplyAsync(Run, id, request.Content, ct);
+            return outcome is null ? NotFound() : Ok(outcome);
+        }
+        catch (ConversationNotInAiModeException ex)
+        {
+            return Conflict(new { sent = false, code = "conversation_in_human_mode", conversationId = id, mode = ex.CurrentMode });
+        }
+        catch (AiReplyRefusedException ex)
+        {
+            return Conflict(new { sent = false, code = "ai_reply_refused", reason = ex.Reason, conversationId = id, mode = ConversationMode.Human });
+        }
+    }
+
+    /// <summary>handoff_to_human — the contact asks for a person, the bot can't help, an upset customer, etc. Flips the
+    /// conversation to human mode, same as the dashboard's Take Over, but attributed to the AI with the reason recorded on the
+    /// event, and sends the bot's handoff message once (only on the real change).</summary>
     [HttpPost("conversations/{id:guid}/handoff")]
-    public async Task<ActionResult<ConversationResponse>> HandoffToHuman(
+    [BotTool]
+    public async Task<ActionResult<object>> HandoffToHuman(
         Guid id, [FromQuery] Guid clientId, [FromBody] HandoffToHumanRequest request, CancellationToken ct)
     {
-        var conversation = await _conversations.HandoffToHumanAsync(clientId, id, request.Reason, ct);
-        return conversation is null ? NotFound() : Ok(conversation);
+        var handedOff = await _botConversations.HandOffAsync(Run, id, request.Reason, ct);
+        return handedOff is null ? NotFound() : Ok(new { handedOff });
     }
 }

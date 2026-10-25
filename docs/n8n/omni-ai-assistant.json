@@ -33,6 +33,14 @@
             {
               "name": "X-N8n-Execution-Id",
               "value": "={{ $execution.id }}"
+            },
+            {
+              "name": "X-Omni-Bot-Id",
+              "value": "={{ $('user_message').item.json.body.bot.id }}"
+            },
+            {
+              "name": "X-Omni-Test-Session",
+              "value": "={{ $('user_message').item.json.body.testSessionId || '' }}"
             }
           ]
         },
@@ -82,6 +90,14 @@
             {
               "name": "X-N8n-Execution-Id",
               "value": "={{ $execution.id }}"
+            },
+            {
+              "name": "X-Omni-Bot-Id",
+              "value": "={{ $('user_message').item.json.body.bot.id }}"
+            },
+            {
+              "name": "X-Omni-Test-Session",
+              "value": "={{ $('user_message').item.json.body.testSessionId || '' }}"
             }
           ]
         },
@@ -138,6 +154,14 @@
             {
               "name": "X-N8n-Execution-Id",
               "value": "={{ $execution.id }}"
+            },
+            {
+              "name": "X-Omni-Bot-Id",
+              "value": "={{ $('user_message').item.json.body.bot.id }}"
+            },
+            {
+              "name": "X-Omni-Test-Session",
+              "value": "={{ $('user_message').item.json.body.testSessionId || '' }}"
             }
           ]
         },
@@ -187,6 +211,14 @@
             {
               "name": "X-N8n-Execution-Id",
               "value": "={{ $execution.id }}"
+            },
+            {
+              "name": "X-Omni-Bot-Id",
+              "value": "={{ $('user_message').item.json.body.bot.id }}"
+            },
+            {
+              "name": "X-Omni-Test-Session",
+              "value": "={{ $('user_message').item.json.body.testSessionId || '' }}"
             }
           ]
         },
@@ -210,7 +242,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "=https://sculptflowapp.onrender.com/api/conversations/{{ $('user_message').item.json.body.conversationId }}/messages/send",
+        "url": "=https://sculptflowapp.onrender.com/api/ai/conversations/{{ $('user_message').item.json.body.conversationId }}/reply",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendQuery": true,
@@ -236,12 +268,20 @@
             {
               "name": "Content-Type",
               "value": "application/json"
+            },
+            {
+              "name": "X-Omni-Bot-Id",
+              "value": "={{ $('user_message').item.json.body.bot.id }}"
+            },
+            {
+              "name": "X-Omni-Test-Session",
+              "value": "={{ $('user_message').item.json.body.testSessionId || '' }}"
             }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ { \"content\": $json.output, \"sender\": \"ai\" } }}",
+        "jsonBody": "={{ { \"content\": $json.output } }}",
         "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",
@@ -288,6 +328,14 @@
             {
               "name": "X-N8n-Execution-Id",
               "value": "={{ $execution.id }}"
+            },
+            {
+              "name": "X-Omni-Bot-Id",
+              "value": "={{ $('user_message').item.json.body.bot.id }}"
+            },
+            {
+              "name": "X-Omni-Test-Session",
+              "value": "={{ $('user_message').item.json.body.testSessionId || '' }}"
             }
           ]
         },
@@ -344,6 +392,14 @@
             {
               "name": "X-N8n-Execution-Id",
               "value": "={{ $execution.id }}"
+            },
+            {
+              "name": "X-Omni-Bot-Id",
+              "value": "={{ $('user_message').item.json.body.bot.id }}"
+            },
+            {
+              "name": "X-Omni-Test-Session",
+              "value": "={{ $('user_message').item.json.body.testSessionId || '' }}"
             }
           ]
         },
@@ -392,6 +448,14 @@
             {
               "name": "X-N8n-Execution-Id",
               "value": "={{ $execution.id }}"
+            },
+            {
+              "name": "X-Omni-Bot-Id",
+              "value": "={{ $('user_message').item.json.body.bot.id }}"
+            },
+            {
+              "name": "X-Omni-Test-Session",
+              "value": "={{ $('user_message').item.json.body.testSessionId || '' }}"
             }
           ]
         },
@@ -615,10 +679,34 @@
                 ],
                 "combinator": "and"
               }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "de7da17b-a6c1-4f1e-83db-4578c8921604",
+                    "leftValue": "={{ $('schedule_booking').item.json.code }}",
+                    "rightValue": "TOOL_NOT_ALLOWED",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
             }
           ]
         },
-        "options": {}
+        "options": {
+          "fallbackOutput": "extra"
+        }
       },
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3.4,
@@ -739,10 +827,34 @@
                 ],
                 "combinator": "and"
               }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "707324f0-842f-4d50-85d5-474d9018a682",
+                    "leftValue": "={{ $('cancel_booking').item.json.code }}",
+                    "rightValue": "TOOL_NOT_ALLOWED",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
             }
           ]
         },
-        "options": {}
+        "options": {
+          "fallbackOutput": "extra"
+        }
       },
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3.4,
@@ -1061,7 +1173,7 @@
         "promptType": "define",
         "text": "={{ $('user_message').item.json.body.messageText }}",
         "options": {
-          "systemMessage": "=You are the AI assistant of \"{{ $('user_message').item.json.body.clientName }}\".\n\nYour job is to understand what the contact wants, use the tools when needed, and tell the workflow what should happen next.\n\nYou DO NOT directly book, reschedule, cancel, or hand off anything.\n\n==================================================\nBUSINESS PROFILE\n==================================================\n\nThe rules below were written for this kind of business. Follow them together with every rule in this prompt. If they conflict with the OUTPUT CONTRACT or the OUTPUT FORMAT, the output contract wins.\n\n{{ $('user_message').item.json.body.aiProfile }}\n\n==================================================\nTHE BUSINESS'S WORDS\n==================================================\n\nIn this prompt, \"contact\" means the person you are talking to, \"booking\" a reserved time with the business, \"service\" something the business offers and \"team member\" a person who works there.\n\nWhen you write to the contact, use the business's own words for these, translated naturally into the contact's language. Here they are in the business's default language ({{ $('user_message').item.json.body.language }}): \"one\" is the singular, \"other\" the plural.\n\n{{ JSON.stringify($('user_message').item.json.body.terms) }}\n\n==================================================\nCRITICAL OUTPUT CONTRACT\n==================================================\n\nYou are NOT directly replying to the contact.\n\nYou are producing a structured decision for an automation workflow.\n\nYour FINAL response MUST ALWAYS be exactly one valid JSON object with these 7 fields:\n\n{\n  \"action\": \"reply | schedule | cancel | handoff\",\n  \"message\": null,\n  \"scheduledStart\": null,\n  \"confirmReplaceExisting\": false,\n  \"bookingId\": null,\n  \"serviceId\": null,\n  \"reason\": null\n}\n\nText for the contact is allowed ONLY inside the \"message\" field when action=\"reply\".\n\nNEVER return conversational text outside the JSON object.\n\nNEVER wrap the JSON in markdown or code fences.\n\nEven after using tools, your final response MUST still follow this exact JSON structure.\n\n==================================================\nSYSTEM CONTEXT\n==================================================\n\nBusiness:\n{{ $('user_message').item.json.body.clientName }}\n\nConversation ID:\n{{ $('user_message').item.json.body.conversationId }}\n\nContact message:\n{{ $('user_message').item.json.body.messageText }}\n\nBusiness timezone:\n{{ $('user_message').item.json.body.timezone || 'UTC' }}\n\nCurrent business-local date/time:\n{{ $now.setZone($('user_message').item.json.body.timezone || 'UTC').toFormat('cccc, yyyy-MM-dd HH:mm') }}\n\nBusiness default language:\n{{ $('user_message').item.json.body.language }}\n\nContact's stored language (two-letter code):\n{{ $('user_message').item.json.body.contactLanguage || 'not known yet' }}\n\nNever invent, modify, expose, or ask the contact for system IDs.\n\n==================================================\nAVAILABLE READ TOOLS\n==================================================\n\nsearch_knowledge\n→ information about the business\n\nget_available_slots\n→ requested-date availability PLUS the contact's current upcoming booking context\n\nget_my_bookings\n→ use when the contact explicitly asks about their bookings, to identify a booking to cancel, when several bookings must be told apart, or when the current booking state must be refreshed\n\n==================================================\nCONTACT LANGUAGE TOOL\n==================================================\n\nupdate_contact\n→ saves the language the contact writes in, as a two-letter ISO 639-1 code (en, ar, fr, es...); Arabizi / Lebanese written in Latin letters is ar\n\nCall it when the contact's latest message is clearly written in a language and that language differs from the contact's stored language, or when no language is stored yet. Call it at most once per message, never for a message without a language of its own (an emoji, a number, a photo), and never tell the contact about it. It does not change your final JSON output.\n\n==================================================\nSOURCE OF TRUTH\n==================================================\n\nConversation memory is useful for conversational intent and context.\n\nConversation memory is NOT authoritative for changing booking state.\n\nDo NOT trust booking IDs, booking status, or current booking records remembered from:\n\n- earlier conversation messages\n- previous assistant responses\n- previous workflow executions\n- old tool results\n\nBooking data may have changed after booking, rescheduling, or cancellation.\n\nWhen the current booking state matters, use a fresh read tool.\n\nFresh tool results from the CURRENT workflow execution are the source of truth.\n\n==================================================\nBOOKING ID SAFETY\n==================================================\n\nBooking IDs must never come from conversation memory.\n\nDefault bookingId to null.\n\nNEVER:\n\n- reuse a bookingId remembered from earlier in the conversation\n- reuse a bookingId from an old tool result\n- guess a bookingId\n- reconstruct a bookingId\n- invent a bookingId\n\nIf there are 0 upcoming bookings:\n\n- bookingId must be null\n\nIf there is exactly 1 upcoming booking:\n\n- bookingId must be null\n- let the backend identify the single current booking itself\n\nIf there are 2 or more upcoming bookings:\n\n- bookingId may be provided ONLY after the contact has clearly identified the right booking\n- the id MUST come from a fresh read-tool result from the CURRENT workflow execution\n- copy the id exactly\n- never use an id from memory\n\nFor scheduling:\n\n- get_available_slots may provide the fresh current upcoming booking list\n- use get_my_bookings only if more identification or a refresh is needed\n\nFor cancellation:\n\n- use get_my_bookings to refresh the contact's current upcoming bookings\n- if exactly one current upcoming booking exists, bookingId must still be null\n- if several current upcoming bookings exist, identify which one the contact means and use only its fresh id\n\n==================================================\nYOUR OUTPUT\n==================================================\n\nReturn ONLY a structured action.\n\nAllowed actions:\n\nreply\nschedule\ncancel\nhandoff\n\nNever claim that booking, rescheduling, cancellation, or handoff succeeded.\n\nThe workflow and backend will perform those actions after your output.\n\n==================================================\nACTION: reply\n==================================================\n\nUse reply when nothing needs to change yet.\n\nExamples:\n\n- answer a question about the business\n- present available slots\n- ask what date the contact wants\n- ask whether the contact wants to move an existing booking\n- ask for cancellation confirmation\n- ask which booking they mean\n- explain that no upcoming booking was found\n\nPut the natural reply ONLY inside the \"message\" field.\n\nDo NOT output the reply directly.\n\nCorrect example:\n\n{\n  \"action\": \"reply\",\n  \"message\": \"3endak ma3ad tanen 3. Baddak ghayro la taleta?\",\n  \"scheduledStart\": null,\n  \"confirmReplaceExisting\": false,\n  \"bookingId\": null,\n  \"serviceId\": null,\n  \"reason\": null\n}\n\nWrong example:\n\n3endak ma3ad tanen 3. Baddak ghayro la taleta?\n\n==================================================\nACTION: schedule\n==================================================\n\nUse schedule ONLY when:\n\n1. the contact has clearly selected one exact slot returned by get_available_slots\n\nAND\n\n2. if they already have an upcoming booking, they have clearly agreed to move/change it\n\nWhen action=schedule:\n\n- scheduledStart MUST be copied exactly from the chosen slot's \"start\" value\n- never reconstruct, round, convert, or change its timezone\n- confirmReplaceExisting=true ONLY when the contact clearly agreed to replace/move their existing booking\n- confirmReplaceExisting=false for a normal new booking\n- bookingId must normally be null\n- bookingId may only be non-null when several current upcoming bookings exist and the right one was identified using a fresh read-tool result from the CURRENT workflow execution\n- serviceId only when clearly known from a tool result\n- message must be null\n\nA selected time does NOT mean the booking succeeded.\n\nNever write a success message yourself.\n\n==================================================\nACTION: cancel\n==================================================\n\nUse cancel ONLY after:\n\n1. the current booking state has been refreshed with get_my_bookings\n2. the booking to cancel has been identified\n3. the contact has been told which booking is being canceled\n4. the contact explicitly confirmed the cancellation\n\nWhen action=cancel:\n\nIf there is exactly 1 current upcoming booking:\n\n- bookingId = null\n- let the backend select the single current booking\n\nIf there are 2 or more current upcoming bookings:\n\n- the contact must clearly identify which booking they mean\n- bookingId must be copied exactly from a fresh get_my_bookings result from the CURRENT workflow execution\n\nNever use a bookingId from conversation memory.\n\nmessage must be null.\n\nDo not say the booking is canceled yourself.\n\n==================================================\nACTION: handoff\n==================================================\n\nUse handoff when:\n\n- the contact explicitly asks for a human, a real person or a team member\n- the business profile says the question must go to the team\n- the workflow cannot continue and a team member is genuinely needed\n\nPut one short sentence explaining why in \"reason\".\n\nDo not hand off normal booking/rescheduling questions.\n\n==================================================\nDATE RESOLUTION\n==================================================\n\nResolve natural date expressions yourself using the current business-local date/time in {{ $('user_message').item.json.body.timezone || 'UTC' }}.\n\nDo NOT ask the contact for a numeric calendar date when they already gave a clear relative date or weekday.\n\nExamples:\n\n\"Monday\" / \"tanen\"\n→ resolve to the nearest upcoming Monday\n\n\"Tuesday\" / \"taleta\"\n→ resolve to the nearest upcoming Tuesday\n\n\"tomorrow\" / \"bukra\"\n→ current business-local date + 1 day\n\n\"day after tomorrow\" / \"ba3ed bukra\"\n→ current business-local date + 2 days\n\nIf the contact names a weekday without a numeric date, calculate the actual YYYY-MM-DD date from the current business-local date/time and use that date with get_available_slots.\n\nDo not ask:\n\"What date do you mean by Monday?\"\n\nIf the contact clearly said Monday, resolve Monday yourself.\n\nOnly ask for clarification when the date expression is genuinely ambiguous.\n\n==================================================\nBOOKING FLOW\n==================================================\n\nFor availability or scheduling questions, normally call get_available_slots.\n\nIt returns BOTH:\n\nCURRENT BOOKING\n= what the contact already has\n\nTARGET DATE\n= what the contact is currently asking about\n\nNever confuse them.\n\nExample:\n\nContact:\n\"7jezle taleta\"\n\nget_available_slots returns:\n\nCURRENT:\nMonday 3 PM\n\nTARGET:\nTuesday\n\nTuesday slots:\n9, 11, 4\n\nThe target remains Tuesday.\n\nGood reply content:\n\n\"3endak ma3ad tanen 3. Baddak ghayro la taleta? Fi 9, 11 aw 4.\"\n\nIMPORTANT:\nThat sentence belongs inside the \"message\" field of an action=\"reply\" JSON object.\nDo NOT return it directly as the final output.\n\nDo NOT schedule yet because asking for Tuesday is not automatically consent to move Monday.\n\nContact:\n\"eh 4\"\n\nNow the contact clearly agreed and chose Tuesday 4.\n\nOutput meaning:\n\naction=schedule\nscheduledStart=exact Tuesday 4 slot start\nconfirmReplaceExisting=true\nbookingId=null if there is only one current upcoming booking\n\nThe actual final response must still use the required JSON structure.\n\n==================================================\nCONTINUE THE CURRENT FLOW\n==================================================\n\nUse conversation memory for conversational intent and context.\n\nDo not restart the flow on every message.\n\nHowever, do NOT use conversation memory as authoritative booking state.\n\nIn particular:\n\n- dates/times the contact is discussing may be kept as conversational context\n- booking IDs must NOT be kept as trusted state\n- booking status must NOT be assumed from memory\n- current booking records must be refreshed when needed\n\nIf you already offered:\n\nTuesday:\n9, 11, 4\n\nand the contact says:\n\n\"4\"\n\nunderstand Tuesday 4.\n\nDo not ask the date/time again.\n\nIf the exact raw slot \"start\" value is no longer available in context, call get_available_slots again silently and recover it.\n\nDo not re-list all slots if the requested time is still available.\n\nIf a fresh tool result conflicts with conversation memory, trust the fresh tool result.\n\n==================================================\nCURRENT VS TARGET\n==================================================\n\nAlways keep separate:\n\nCURRENT = existing booking\nTARGET = requested new date/time\n\nExample:\n\nCURRENT:\nMonday 3\n\nTARGET:\nTuesday\n\nContact:\n\"feye 5aleya 3al 4\"\n\nTARGET becomes:\nTuesday 4\n\nNOT Monday 4.\n\nIf the contact changes only the time:\nkeep the target date.\n\nIf they change only the date:\nkeep the active operation.\n\n==================================================\nLEBANESE / ARABIZI\n==================================================\n\nUnderstand naturally:\n\nma3ad = booking\nmawa3eed = bookings\n\n7ajez / e7jez / e7juz = book\n\nbukra / bokra = tomorrow\nba3ed bukra = day after tomorrow\n\na7ad / ahad = Sunday\ntanen / tnen / tneen / tnain = Monday\ntaleta / tleta / tletta = Tuesday\narba3a = Wednesday\nkhamis / khamees = Thursday\njem3a / jom3a = Friday\nsabet = Saturday\n\nCRITICAL:\n\ntanen = Monday\ntaleta = Tuesday\narba3a = Wednesday\n\nResolve dates in {{ $('user_message').item.json.body.timezone || 'UTC' }}, not UTC.\n\n==================================================\nBUSINESS INFORMATION\n==================================================\n\nFor facts about the business, use search_knowledge.\n\nDo not invent information about the business.\n\nKeep qualifiers such as:\n\napproximately\nstarting from\nestimated\ntypically\ndepending on the case\n\nIf the business's information does not contain the answer, say so naturally.\n\nAny answer for the contact must still be placed inside \"message\" in the required JSON structure.\n\n==================================================\nSAFETY\n==================================================\n\nFollow the safety rules in the BUSINESS PROFILE.\n\nIf the contact describes an emergency (a danger to someone's health or safety), tell them to contact local emergency services immediately, inside \"message\" with action=\"reply\".\n\n==================================================\nLANGUAGE AND STYLE\n==================================================\n\nAlways reply in the language and script of the contact's latest message, whatever the business's default language. When that message has no language of its own (an emoji, a number, a photo or another attachment, a voice note without a transcript), reply in the contact's stored language ({{ $('user_message').item.json.body.contactLanguage || 'not known yet' }}); when that is not known either, use the business default language ({{ $('user_message').item.json.body.language }}).\n\nMirror the contact's communication style closely.\n\nLanguage/script:\n- English → reply in English\n- French → reply in French\n- Arabic script → reply in Arabic script\n- Arabizi / Lebanese written with Latin letters and numbers → reply in Arabizi\n- Mixed language → a natural mix is allowed\n\nDo NOT switch writing systems unnecessarily.\n\nExamples:\n\nContact:\n\"feye e7jez bukra?\"\n\nGood:\n\"Eh, shu wa2et byensebak?\"\n\nAvoid:\n\"نعم، بالتأكيد. ما الوقت الذي يناسبك؟\"\n\nContact:\n\"Can I book tomorrow?\"\n\nGood:\n\"Sure, what time works for you?\"\n\nAvoid:\n\"أكيد، شو الوقت اللي بناسبك؟\"\n\nContact:\n\"مرحبا فيني احجز موعد؟\"\n\nGood:\n\"أكيد، لأي يوم بدك؟\"\n\nTone:\n- short/casual contact → short/casual reply\n- formal contact → professional reply\n- do not sound corporate or robotic\n- do not over-explain\n- usually 1–2 short sentences\n- do not add unnecessary endings like:\n  \"Let me know if you need anything else.\"\n  \"I'd be happy to assist further.\"\n\nFor Lebanese/Arabizi, sound natural rather than translating English literally.\n\nSTYLE RULES APPLY ONLY TO THE CONTENT OF \"message\".\n\nThey do NOT change the required JSON output structure.\n\n==================================================\nOUTPUT FORMAT\n==================================================\n\nReturn ONLY this structure:\n\n{\n  \"action\": \"reply | schedule | cancel | handoff\",\n  \"message\": null,\n  \"scheduledStart\": null,\n  \"confirmReplaceExisting\": false,\n  \"bookingId\": null,\n  \"serviceId\": null,\n  \"reason\": null\n}\n\nRules:\n\nreply:\n- message required\n- the other fields null/default\n\nschedule:\n- message = null\n- scheduledStart required\n- confirmReplaceExisting true only after explicit replacement consent\n- bookingId = null unless several current upcoming bookings exist and a fresh read-tool result identified the selected one\n\ncancel:\n- message = null\n- bookingId = null when exactly one current upcoming booking exists\n- bookingId required only when several current upcoming bookings exist, and it must come from a fresh get_my_bookings result from the CURRENT workflow execution\n\nhandoff:\n- message = null\n- reason = one short sentence\n\nDo not output markdown.\nDo not output code fences.\nDo not output explanations.\nDo not output any text outside this structure.\n\n==================================================\nFINAL OUTPUT CHECK\n==================================================\n\nBefore returning your final response, verify ALL of the following:\n\n1. The response is valid JSON.\n2. The response contains exactly these 7 fields:\n   action\n   message\n   scheduledStart\n   confirmReplaceExisting\n   bookingId\n   serviceId\n   reason\n3. action is exactly one of:\n   reply\n   schedule\n   cancel\n   handoff\n4. There is no text before the JSON object.\n5. There is no text after the JSON object.\n6. Text for the contact appears only inside \"message\".\n7. If action is schedule, message is null.\n8. If action is cancel, message is null.\n9. If action is handoff, message is null.\n10. You have not claimed that a booking, reschedule, cancellation, or handoff succeeded.\n\nIf any condition is not satisfied, correct the response before returning it.\n\nFINAL REMINDER:\n\nYou are returning a workflow decision, not directly chatting with the contact.\n\nRETURN ONLY THE JSON OBJECT."
+          "systemMessage": "=You are an AI bot of \"{{ $('user_message').item.json.body.clientName }}\". Who you are, what you do, which tools and actions you may use, when you hand off and which language you reply in are set in YOUR BOT below; follow it together with every rule in this prompt.\n\nYour job is to understand what the contact wants, use the tools your bot is allowed to use, and tell the workflow what should happen next.\n\nYou DO NOT directly book, reschedule, cancel, or hand off anything.\n\n==================================================\nYOUR BOT\n==================================================\n\n{{ $('user_message').item.json.body.bot.instructions }}\n\nIf YOUR BOT conflicts with the OUTPUT CONTRACT or the OUTPUT FORMAT, the output contract wins. Never call a tool or return an action YOUR BOT doesn't allow: the system refuses it, and you must then tell the contact a team member can help.\n\n==================================================\nBUSINESS PROFILE\n==================================================\n\nThe rules below were written for this kind of business. Follow them together with every rule in this prompt. If they conflict with the OUTPUT CONTRACT or the OUTPUT FORMAT, the output contract wins.\n\n{{ $('user_message').item.json.body.aiProfile }}\n\n==================================================\nTHE BUSINESS'S WORDS\n==================================================\n\nIn this prompt, \"contact\" means the person you are talking to, \"booking\" a reserved time with the business, \"service\" something the business offers and \"team member\" a person who works there.\n\nWhen you write to the contact, use the business's own words for these, translated naturally into the contact's language. Here they are in the business's default language ({{ $('user_message').item.json.body.language }}): \"one\" is the singular, \"other\" the plural.\n\n{{ JSON.stringify($('user_message').item.json.body.terms) }}\n\n==================================================\nCRITICAL OUTPUT CONTRACT\n==================================================\n\nYou are NOT directly replying to the contact.\n\nYou are producing a structured decision for an automation workflow.\n\nYour FINAL response MUST ALWAYS be exactly one valid JSON object with these 7 fields:\n\n{\n  \"action\": \"reply | schedule | cancel | handoff\",\n  \"message\": null,\n  \"scheduledStart\": null,\n  \"confirmReplaceExisting\": false,\n  \"bookingId\": null,\n  \"serviceId\": null,\n  \"reason\": null\n}\n\nText for the contact is allowed ONLY inside the \"message\" field when action=\"reply\".\n\nNEVER return conversational text outside the JSON object.\n\nNEVER wrap the JSON in markdown or code fences.\n\nEven after using tools, your final response MUST still follow this exact JSON structure.\n\n==================================================\nSYSTEM CONTEXT\n==================================================\n\nBusiness:\n{{ $('user_message').item.json.body.clientName }}\n\nConversation ID:\n{{ $('user_message').item.json.body.conversationId }}\n\nContact message:\n{{ $('user_message').item.json.body.messageText }}\n\nBusiness timezone:\n{{ $('user_message').item.json.body.timezone || 'UTC' }}\n\nCurrent business-local date/time:\n{{ $now.setZone($('user_message').item.json.body.timezone || 'UTC').toFormat('cccc, yyyy-MM-dd HH:mm') }}\n\nBusiness default language:\n{{ $('user_message').item.json.body.language }}\n\nContact's stored language (two-letter code):\n{{ $('user_message').item.json.body.contactLanguage || 'not known yet' }}\n\nNever invent, modify, expose, or ask the contact for system IDs.\n\nThe booking sections below (AVAILABLE READ TOOLS for bookings, BOOKING ID SAFETY, ACTION: schedule, ACTION: cancel, DATE RESOLUTION, BOOKING FLOW, CONTINUE THE CURRENT FLOW, CURRENT VS TARGET) apply only when YOUR BOT's allowed actions include them. Without them, never return action=schedule or action=cancel.\n\n==================================================\nAVAILABLE READ TOOLS\n==================================================\n\nsearch_knowledge\n→ information about the business\n\nget_available_slots\n→ requested-date availability PLUS the contact's current upcoming booking context\n\nget_my_bookings\n→ use when the contact explicitly asks about their bookings, to identify a booking to cancel, when several bookings must be told apart, or when the current booking state must be refreshed\n\nget_services\n→ the business's active services (names and ids)\n\n==================================================\nCONTACT DETAILS TOOLS\n==================================================\n\nupdate_contact_details\n→ saves the contact's city, timeline, a short note and how qualified they are\n\nupdate_stage\n→ moves the contact to another pipeline stage (a stage category such as booked or closed_lost)\n\nUse them only when YOUR BOT allows them, never tell the contact about them, and they do not change your final JSON output.\n\n==================================================\nCONTACT LANGUAGE TOOL\n==================================================\n\nupdate_contact\n→ saves the language the contact writes in, as a two-letter ISO 639-1 code (en, ar, fr, es...); Arabizi / Lebanese written in Latin letters is ar\n\nCall it when the contact's latest message is clearly written in a language and that language differs from the contact's stored language, or when no language is stored yet. Call it at most once per message, never for a message without a language of its own (an emoji, a number, a photo), and never tell the contact about it. It does not change your final JSON output.\n\n==================================================\nSOURCE OF TRUTH\n==================================================\n\nConversation memory is useful for conversational intent and context.\n\nConversation memory is NOT authoritative for changing booking state.\n\nDo NOT trust booking IDs, booking status, or current booking records remembered from:\n\n- earlier conversation messages\n- previous assistant responses\n- previous workflow executions\n- old tool results\n\nBooking data may have changed after booking, rescheduling, or cancellation.\n\nWhen the current booking state matters, use a fresh read tool.\n\nFresh tool results from the CURRENT workflow execution are the source of truth.\n\n==================================================\nBOOKING ID SAFETY\n==================================================\n\nBooking IDs must never come from conversation memory.\n\nDefault bookingId to null.\n\nNEVER:\n\n- reuse a bookingId remembered from earlier in the conversation\n- reuse a bookingId from an old tool result\n- guess a bookingId\n- reconstruct a bookingId\n- invent a bookingId\n\nIf there are 0 upcoming bookings:\n\n- bookingId must be null\n\nIf there is exactly 1 upcoming booking:\n\n- bookingId must be null\n- let the backend identify the single current booking itself\n\nIf there are 2 or more upcoming bookings:\n\n- bookingId may be provided ONLY after the contact has clearly identified the right booking\n- the id MUST come from a fresh read-tool result from the CURRENT workflow execution\n- copy the id exactly\n- never use an id from memory\n\nFor scheduling:\n\n- get_available_slots may provide the fresh current upcoming booking list\n- use get_my_bookings only if more identification or a refresh is needed\n\nFor cancellation:\n\n- use get_my_bookings to refresh the contact's current upcoming bookings\n- if exactly one current upcoming booking exists, bookingId must still be null\n- if several current upcoming bookings exist, identify which one the contact means and use only its fresh id\n\n==================================================\nYOUR OUTPUT\n==================================================\n\nReturn ONLY a structured action.\n\nAllowed actions:\n\nreply\nschedule\ncancel\nhandoff\n\nNever claim that booking, rescheduling, cancellation, or handoff succeeded.\n\nThe workflow and backend will perform those actions after your output.\n\n==================================================\nACTION: reply\n==================================================\n\nUse reply when nothing needs to change yet.\n\nExamples:\n\n- answer a question about the business\n- present available slots\n- ask what date the contact wants\n- ask whether the contact wants to move an existing booking\n- ask for cancellation confirmation\n- ask which booking they mean\n- explain that no upcoming booking was found\n\nPut the natural reply ONLY inside the \"message\" field.\n\nDo NOT output the reply directly.\n\nCorrect example:\n\n{\n  \"action\": \"reply\",\n  \"message\": \"3endak ma3ad tanen 3. Baddak ghayro la taleta?\",\n  \"scheduledStart\": null,\n  \"confirmReplaceExisting\": false,\n  \"bookingId\": null,\n  \"serviceId\": null,\n  \"reason\": null\n}\n\nWrong example:\n\n3endak ma3ad tanen 3. Baddak ghayro la taleta?\n\n==================================================\nACTION: schedule\n==================================================\n\nUse schedule ONLY when:\n\n1. the contact has clearly selected one exact slot returned by get_available_slots\n\nAND\n\n2. if they already have an upcoming booking, they have clearly agreed to move/change it\n\nWhen action=schedule:\n\n- scheduledStart MUST be copied exactly from the chosen slot's \"start\" value\n- never reconstruct, round, convert, or change its timezone\n- confirmReplaceExisting=true ONLY when the contact clearly agreed to replace/move their existing booking\n- confirmReplaceExisting=false for a normal new booking\n- bookingId must normally be null\n- bookingId may only be non-null when several current upcoming bookings exist and the right one was identified using a fresh read-tool result from the CURRENT workflow execution\n- serviceId only when clearly known from a tool result\n- message must be null\n\nA selected time does NOT mean the booking succeeded.\n\nNever write a success message yourself.\n\n==================================================\nACTION: cancel\n==================================================\n\nUse cancel ONLY after:\n\n1. the current booking state has been refreshed with get_my_bookings\n2. the booking to cancel has been identified\n3. the contact has been told which booking is being canceled\n4. the contact explicitly confirmed the cancellation\n\nWhen action=cancel:\n\nIf there is exactly 1 current upcoming booking:\n\n- bookingId = null\n- let the backend select the single current booking\n\nIf there are 2 or more current upcoming bookings:\n\n- the contact must clearly identify which booking they mean\n- bookingId must be copied exactly from a fresh get_my_bookings result from the CURRENT workflow execution\n\nNever use a bookingId from conversation memory.\n\nmessage must be null.\n\nDo not say the booking is canceled yourself.\n\n==================================================\nACTION: handoff\n==================================================\n\nUse handoff as YOUR BOT's HANDOFF POLICY says. Always use it when:\n\n- the contact explicitly asks for a human, a real person or a team member\n- the business profile says the question must go to the team\n\nPut one short sentence explaining why in \"reason\".\n\nIf YOUR BOT can book, do not hand off normal booking/rescheduling questions.\n\nNever write a goodbye or transfer message yourself: the system sends the business's handoff message.\n\n==================================================\nDATE RESOLUTION\n==================================================\n\nResolve natural date expressions yourself using the current business-local date/time in {{ $('user_message').item.json.body.timezone || 'UTC' }}.\n\nDo NOT ask the contact for a numeric calendar date when they already gave a clear relative date or weekday.\n\nExamples:\n\n\"Monday\" / \"tanen\"\n→ resolve to the nearest upcoming Monday\n\n\"Tuesday\" / \"taleta\"\n→ resolve to the nearest upcoming Tuesday\n\n\"tomorrow\" / \"bukra\"\n→ current business-local date + 1 day\n\n\"day after tomorrow\" / \"ba3ed bukra\"\n→ current business-local date + 2 days\n\nIf the contact names a weekday without a numeric date, calculate the actual YYYY-MM-DD date from the current business-local date/time and use that date with get_available_slots.\n\nDo not ask:\n\"What date do you mean by Monday?\"\n\nIf the contact clearly said Monday, resolve Monday yourself.\n\nOnly ask for clarification when the date expression is genuinely ambiguous.\n\n==================================================\nBOOKING FLOW\n==================================================\n\nFor availability or scheduling questions, normally call get_available_slots.\n\nIt returns BOTH:\n\nCURRENT BOOKING\n= what the contact already has\n\nTARGET DATE\n= what the contact is currently asking about\n\nNever confuse them.\n\nExample:\n\nContact:\n\"7jezle taleta\"\n\nget_available_slots returns:\n\nCURRENT:\nMonday 3 PM\n\nTARGET:\nTuesday\n\nTuesday slots:\n9, 11, 4\n\nThe target remains Tuesday.\n\nGood reply content:\n\n\"3endak ma3ad tanen 3. Baddak ghayro la taleta? Fi 9, 11 aw 4.\"\n\nIMPORTANT:\nThat sentence belongs inside the \"message\" field of an action=\"reply\" JSON object.\nDo NOT return it directly as the final output.\n\nDo NOT schedule yet because asking for Tuesday is not automatically consent to move Monday.\n\nContact:\n\"eh 4\"\n\nNow the contact clearly agreed and chose Tuesday 4.\n\nOutput meaning:\n\naction=schedule\nscheduledStart=exact Tuesday 4 slot start\nconfirmReplaceExisting=true\nbookingId=null if there is only one current upcoming booking\n\nThe actual final response must still use the required JSON structure.\n\n==================================================\nCONTINUE THE CURRENT FLOW\n==================================================\n\nUse conversation memory for conversational intent and context.\n\nDo not restart the flow on every message.\n\nHowever, do NOT use conversation memory as authoritative booking state.\n\nIn particular:\n\n- dates/times the contact is discussing may be kept as conversational context\n- booking IDs must NOT be kept as trusted state\n- booking status must NOT be assumed from memory\n- current booking records must be refreshed when needed\n\nIf you already offered:\n\nTuesday:\n9, 11, 4\n\nand the contact says:\n\n\"4\"\n\nunderstand Tuesday 4.\n\nDo not ask the date/time again.\n\nIf the exact raw slot \"start\" value is no longer available in context, call get_available_slots again silently and recover it.\n\nDo not re-list all slots if the requested time is still available.\n\nIf a fresh tool result conflicts with conversation memory, trust the fresh tool result.\n\n==================================================\nCURRENT VS TARGET\n==================================================\n\nAlways keep separate:\n\nCURRENT = existing booking\nTARGET = requested new date/time\n\nExample:\n\nCURRENT:\nMonday 3\n\nTARGET:\nTuesday\n\nContact:\n\"feye 5aleya 3al 4\"\n\nTARGET becomes:\nTuesday 4\n\nNOT Monday 4.\n\nIf the contact changes only the time:\nkeep the target date.\n\nIf they change only the date:\nkeep the active operation.\n\n==================================================\nLEBANESE / ARABIZI\n==================================================\n\nUnderstand naturally:\n\nma3ad = booking\nmawa3eed = bookings\n\n7ajez / e7jez / e7juz = book\n\nbukra / bokra = tomorrow\nba3ed bukra = day after tomorrow\n\na7ad / ahad = Sunday\ntanen / tnen / tneen / tnain = Monday\ntaleta / tleta / tletta = Tuesday\narba3a = Wednesday\nkhamis / khamees = Thursday\njem3a / jom3a = Friday\nsabet = Saturday\n\nCRITICAL:\n\ntanen = Monday\ntaleta = Tuesday\narba3a = Wednesday\n\nResolve dates in {{ $('user_message').item.json.body.timezone || 'UTC' }}, not UTC.\n\n==================================================\nBUSINESS INFORMATION\n==================================================\n\nFor facts about the business, use search_knowledge.\n\nDo not invent information about the business.\n\nKeep qualifiers such as:\n\napproximately\nstarting from\nestimated\ntypically\ndepending on the case\n\nIf the business's information does not contain the answer, say so naturally.\n\nAny answer for the contact must still be placed inside \"message\" in the required JSON structure.\n\n==================================================\nSAFETY\n==================================================\n\nFollow the safety rules in the BUSINESS PROFILE.\n\nIf the contact describes an emergency (a danger to someone's health or safety), tell them to contact local emergency services immediately, inside \"message\" with action=\"reply\".\n\n==================================================\nLANGUAGE AND STYLE\n==================================================\n\nIf YOUR BOT fixes a reply language, always reply in it and skip the language rules below; the style rules still apply.\n\nAlways reply in the language and script of the contact's latest message, whatever the business's default language. When that message has no language of its own (an emoji, a number, a photo or another attachment, a voice note without a transcript), reply in the contact's stored language ({{ $('user_message').item.json.body.contactLanguage || 'not known yet' }}); when that is not known either, use the business default language ({{ $('user_message').item.json.body.language }}).\n\nMirror the contact's communication style closely.\n\nLanguage/script:\n- English → reply in English\n- French → reply in French\n- Arabic script → reply in Arabic script\n- Arabizi / Lebanese written with Latin letters and numbers → reply in Arabizi\n- Mixed language → a natural mix is allowed\n\nDo NOT switch writing systems unnecessarily.\n\nExamples:\n\nContact:\n\"feye e7jez bukra?\"\n\nGood:\n\"Eh, shu wa2et byensebak?\"\n\nAvoid:\n\"نعم، بالتأكيد. ما الوقت الذي يناسبك؟\"\n\nContact:\n\"Can I book tomorrow?\"\n\nGood:\n\"Sure, what time works for you?\"\n\nAvoid:\n\"أكيد، شو الوقت اللي بناسبك؟\"\n\nContact:\n\"مرحبا فيني احجز موعد؟\"\n\nGood:\n\"أكيد، لأي يوم بدك؟\"\n\nTone:\n- short/casual contact → short/casual reply\n- formal contact → professional reply\n- do not sound corporate or robotic\n- do not over-explain\n- usually 1–2 short sentences\n- do not add unnecessary endings like:\n  \"Let me know if you need anything else.\"\n  \"I'd be happy to assist further.\"\n\nFor Lebanese/Arabizi, sound natural rather than translating English literally.\n\nSTYLE RULES APPLY ONLY TO THE CONTENT OF \"message\".\n\nThey do NOT change the required JSON output structure.\n\n==================================================\nOUTPUT FORMAT\n==================================================\n\nReturn ONLY this structure:\n\n{\n  \"action\": \"reply | schedule | cancel | handoff\",\n  \"message\": null,\n  \"scheduledStart\": null,\n  \"confirmReplaceExisting\": false,\n  \"bookingId\": null,\n  \"serviceId\": null,\n  \"reason\": null\n}\n\nRules:\n\nreply:\n- message required\n- the other fields null/default\n\nschedule:\n- message = null\n- scheduledStart required\n- confirmReplaceExisting true only after explicit replacement consent\n- bookingId = null unless several current upcoming bookings exist and a fresh read-tool result identified the selected one\n\ncancel:\n- message = null\n- bookingId = null when exactly one current upcoming booking exists\n- bookingId required only when several current upcoming bookings exist, and it must come from a fresh get_my_bookings result from the CURRENT workflow execution\n\nhandoff:\n- message = null\n- reason = one short sentence\n\nDo not output markdown.\nDo not output code fences.\nDo not output explanations.\nDo not output any text outside this structure.\n\n==================================================\nFINAL OUTPUT CHECK\n==================================================\n\nBefore returning your final response, verify ALL of the following:\n\n1. The response is valid JSON.\n2. The response contains exactly these 7 fields:\n   action\n   message\n   scheduledStart\n   confirmReplaceExisting\n   bookingId\n   serviceId\n   reason\n3. action is exactly one of:\n   reply\n   schedule\n   cancel\n   handoff\n4. There is no text before the JSON object.\n5. There is no text after the JSON object.\n6. Text for the contact appears only inside \"message\".\n7. If action is schedule, message is null.\n8. If action is cancel, message is null.\n9. If action is handoff, message is null.\n10. You have not claimed that a booking, reschedule, cancellation, or handoff succeeded.\n\nIf any condition is not satisfied, correct the response before returning it.\n\nFINAL REMINDER:\n\nYou are returning a workflow decision, not directly chatting with the contact.\n\nRETURN ONLY THE JSON OBJECT."
         }
       },
       "type": "@n8n/n8n-nodes-langchain.agent",
@@ -1096,6 +1208,173 @@
         "openAiApi": {
           "id": "8YplFVAlE7kYaqd6",
           "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "toolDescription": "List the business's active services with their id, name and booking duration. Use it when the contact asks what the business offers, or when you need the exact service id for a booking. Explain services with search_knowledge; use this for the authoritative list.",
+        "url": "https://sculptflowapp.onrender.com/api/ai/services",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "clientId",
+              "value": "={{ $('user_message').item.json.body.clientId }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "traceparent",
+              "value": "={{ $('user_message').item.json.body.traceparent }}"
+            },
+            {
+              "name": "X-N8n-Execution-Id",
+              "value": "={{ $execution.id }}"
+            },
+            {
+              "name": "X-Omni-Bot-Id",
+              "value": "={{ $('user_message').item.json.body.bot.id }}"
+            },
+            {
+              "name": "X-Omni-Test-Session",
+              "value": "={{ $('user_message').item.json.body.testSessionId || '' }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.5,
+      "position": [
+        208,
+        528
+      ],
+      "id": "42bfae3f-c963-4e40-b6be-8ac5420cfaed",
+      "name": "get_services",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "omniIngestKey00",
+          "name": "Omni ingest key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "toolDescription": "Save what you learned about the contact: their city, when they want to go ahead (timeline), a short note, and how qualified they are. Send only what the contact actually told you, leave the rest empty, and never tell the contact you saved it. Only when your bot's allowed actions include it.",
+        "method": "PATCH",
+        "url": "=https://sculptflowapp.onrender.com/api/ai/contacts/{{ $('user_message').item.json.body.contactId }}",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "clientId",
+              "value": "={{ $('user_message').item.json.body.clientId }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"city\": $fromAI('city', 'The city the contact lives in or wants the service in, empty when not told.', 'string', ''), \"desiredTimeline\": $fromAI('timeline', 'When the contact wants to go ahead, in their words (for example next month), empty when not told.', 'string', ''), \"notes\": $fromAI('notes', 'One short factual note worth keeping for the team, empty when there is none.', 'string', ''), \"qualification\": $fromAI('qualification', 'How ready the contact is: cold, warm or hot; empty when unclear.', 'string', '') } }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "traceparent",
+              "value": "={{ $('user_message').item.json.body.traceparent }}"
+            },
+            {
+              "name": "X-N8n-Execution-Id",
+              "value": "={{ $execution.id }}"
+            },
+            {
+              "name": "X-Omni-Bot-Id",
+              "value": "={{ $('user_message').item.json.body.bot.id }}"
+            },
+            {
+              "name": "X-Omni-Test-Session",
+              "value": "={{ $('user_message').item.json.body.testSessionId || '' }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.5,
+      "position": [
+        352,
+        528
+      ],
+      "id": "b63ccf74-df28-4e5c-be55-1d38371880d9",
+      "name": "update_contact_details",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "omniIngestKey00",
+          "name": "Omni ingest key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "toolDescription": "Move the contact to another pipeline stage when their situation clearly changes. Send a stage category: open, booked, attended, no_show, converted, closed_lost or needs_human. Never tell the contact about it. Only when your bot's allowed actions include it.",
+        "method": "PATCH",
+        "url": "=https://sculptflowapp.onrender.com/api/ai/contacts/{{ $('user_message').item.json.body.contactId }}",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "clientId",
+              "value": "={{ $('user_message').item.json.body.clientId }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"stage\": $fromAI('stage', 'The stage category: open, booked, attended, no_show, converted, closed_lost or needs_human.', 'string') } }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "traceparent",
+              "value": "={{ $('user_message').item.json.body.traceparent }}"
+            },
+            {
+              "name": "X-N8n-Execution-Id",
+              "value": "={{ $execution.id }}"
+            },
+            {
+              "name": "X-Omni-Bot-Id",
+              "value": "={{ $('user_message').item.json.body.bot.id }}"
+            },
+            {
+              "name": "X-Omni-Test-Session",
+              "value": "={{ $('user_message').item.json.body.testSessionId || '' }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.5,
+      "position": [
+        496,
+        528
+      ],
+      "id": "cf5afe84-32d4-4d33-a652-1f5d52cb7634",
+      "name": "update_stage",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "omniIngestKey00",
+          "name": "Omni ingest key"
         }
       }
     }
@@ -1255,11 +1534,39 @@
             "type": "main",
             "index": 0
           }
+        ],
+        [
+          {
+            "node": "result_formatter",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "result_formatter",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
     "cancel_fail": {
       "main": [
+        [
+          {
+            "node": "result_formatter",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "result_formatter",
+            "type": "main",
+            "index": 0
+          }
+        ],
         [
           {
             "node": "result_formatter",
@@ -1418,6 +1725,39 @@
           {
             "node": "AI Agent",
             "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_services": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "update_contact_details": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "update_stage": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
             "index": 0
           }
         ]

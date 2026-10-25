@@ -27,10 +27,6 @@ else
     <nav class="au-tabs page-tabs" aria-label="@T["businessInfo.tabs.label"]">
         <a asp-page="/Settings/BusinessInfo" class="au-tab @(Model.ActiveTab == "general" ? "is-active" : "")" aria-current="@(Model.ActiveTab == "general" ? "page" : null)"><span class="au-icon" aria-hidden="true">apartment</span>@T["businessInfo.tabs.details"]</a>
         <a asp-page="/Settings/BusinessInfo" asp-route-tab="availability" class="au-tab @(Model.ActiveTab == "availability" ? "is-active" : "")" aria-current="@(Model.ActiveTab == "availability" ? "page" : null)"><span class="au-icon" aria-hidden="true">schedule</span>@T["businessInfo.tabs.hours"]</a>
-        @if (Model.InboxSettings?.PlanIncludesAiBot == true)
-        {
-            <a asp-page="/Settings/BusinessInfo" asp-route-tab="ai" class="au-tab @(Model.ActiveTab == "ai" ? "is-active" : "")" aria-current="@(Model.ActiveTab == "ai" ? "page" : null)"><span class="au-icon" aria-hidden="true">smart_toy</span>@T["businessInfo.tabs.ai"]</a>
-        }
     </nav>
 
     @* business-info.js reads [data-dirty-form], [data-save-bar], [data-save-text], [data-discard], #client-website(-open), the
@@ -137,45 +133,6 @@ else
                 }
             </form>
         }
-    }
-    else if (Model.ActiveTab == "ai" && Model.InboxSettings is { } bot)
-    {
-        <p class="au-page-head__sub mb-3">@T["businessInfo.ai.intro"]</p>
-        @if (bot.ChannelsWithoutAiBot is { Count: > 0 } withoutBot)
-        {
-            <div class="au-alert au-alert--warning mb-3" role="status">
-                <span class="au-icon au-alert__icon" aria-hidden="true">warning</span>
-                <div class="au-alert__body">@T["businessInfo.ai.botLimit", (bot.AiBotLimit ?? 0).Display("N0"), string.Join(", ", withoutBot.Select(ChannelNames.Brand))]</div>
-            </div>
-        }
-
-        <form method="post" asp-page-handler="SaveAiBot" class="au-panel au-panel--round integration-form client-form" id="inbox-settings-form">
-            <div class="set-section">
-                <div class="set-section-head"><strong>@T["businessInfo.ai.new"]</strong><div class="cell-sub">@T["businessInfo.ai.newHelp"]</div></div>
-                <div class="set-section-body">
-                    <label class="au-check">
-                        <input type="checkbox" class="au-switch" role="switch" name="AiBotNewConversations" value="true" checked="@bot.AiBotNewConversations" />
-                        @T["businessInfo.ai.newSwitch"]
-                    </label>
-                    <small class="text-subtle">@T["businessInfo.ai.newOff"]</small>
-                </div>
-            </div>
-
-            <div class="set-section">
-                <div class="set-section-head"><strong>@T["businessInfo.ai.reopened"]</strong><div class="cell-sub">@T["businessInfo.ai.reopenedHelp"]</div></div>
-                <div class="set-section-body">
-                    <label class="au-check">
-                        <input type="checkbox" class="au-switch" role="switch" name="AiBotReopenedConversations" value="true" checked="@bot.AiBotReopenedConversations" />
-                        @T["businessInfo.ai.reopenedSwitch"]
-                    </label>
-                    <small class="text-subtle">@T["businessInfo.ai.reopenedOff"]</small>
-                </div>
-            </div>
-
-            <div class="save-row">
-                <button type="submit" class="au-btn au-btn--primary">@T["businessInfo.ai.save"]</button>
-            </div>
-        </form>
     }
     else if (Model.Availability is { } av)
     {

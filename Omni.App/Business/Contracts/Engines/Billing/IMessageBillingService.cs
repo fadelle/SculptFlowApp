@@ -24,8 +24,8 @@ public interface IMessageBillingService
     /// message usage. Who pays the AI provider: Billing:ProviderBilling:Defaults:ai, built-in platform_funded (charged).
     /// Null when billing or Billing:ChargeAiReplies is off. Throws BillingDeniedException (the refusal is recorded as a
     /// failed usage row) when there's no rate or the included credit + wallet can't cover it. Settle with SentAsync,
-    /// release with SendFailedAsync.</summary>
-    Task<MessageBillingHold?> ReserveAiReplyAsync(Guid clientId, Guid conversationId, Guid messageId, CancellationToken ct = default);
+    /// release with SendFailedAsync. A reply in a bot test conversation (IBotTestService) has no conversation: null.</summary>
+    Task<MessageBillingHold?> ReserveAiReplyAsync(Guid clientId, Guid? conversationId, Guid messageId, CancellationToken ct = default);
     Task SendFailedAsync(MessageBillingHold? hold, CancellationToken ct = default);
     Task SentAsync(MessageBillingHold? hold, CancellationToken ct = default);
     Task DeliveryStatusChangedAsync(Message message, string? status, CancellationToken ct = default);

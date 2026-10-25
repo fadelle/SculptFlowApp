@@ -59,11 +59,13 @@
         <div class="au-side-section">@T["nav.section.setup"]</div>
         @Row("/Services", "medical_services", T["nav.services"].Value, IsActive("/Services")) @* icon:medical_services *@
         @Row("/KnowledgeBase", "menu_book", T["nav.knowledgeBase"].Value, IsActive("/KnowledgeBase")) @* icon:menu_book *@
+        @Row("/Bots", "smart_toy", T["nav.bots"].Value, IsActive("/Bots")) @* icon:smart_toy *@
 
         <div class="au-side-section">@T["nav.section.settings"]</div>
         @Row("/settings/business-info", "apartment", T["nav.businessInfo"].Value, IsActive("/settings/business-info")) @* icon:apartment *@
         @Row("/Members", "badge", T["nav.members"].Value, IsActive("/Members")) @* icon:badge *@
         @Row("/settings/integrations", "hub", T["nav.integrations"].Value, IsActive("/settings/integrations")) @* icon:hub *@
+        @Row("/settings/inbox", "tune", T["nav.inboxSettings"].Value, IsActive("/settings/inbox")) @* icon:tune *@
         @Row("/settings/auto-respond", "quickreply", T["nav.autoRespond"].Value, IsActive("/settings/auto-respond")) @* icon:quickreply *@
         @if (bookingsIncluded)
         {

@@ -1,0 +1,140 @@
+@page "/Bots"
+@model Omni.App.Pages.Bots.IndexModel
+@{
+    ViewData["Title"] = T["nav.bots"].Value;
+}
+
+@if (!Model.ClientConfigured || Model.List is not { } list)
+{
+    <partial name="_NoClient" />
+}
+else
+{
+    <partial name="_Messages" model="new PageMessagesModel(Model.StatusMessage, Model.ErrorMessage)" />
+
+    <div class="au-page-head">
+        <p class="au-page-head__sub mw-640">@T.Html("bots.intro", new Microsoft.AspNetCore.Html.HtmlString($"<a href=\"/settings/inbox\">{System.Net.WebUtility.HtmlEncode(T["nav.inboxSettings"].Value)}</a>"))</p>
+        <div class="au-page-head__actions">
+            <button type="button" class="au-btn au-btn--primary" id="new-bot-btn"><span class="au-icon" aria-hidden="true">add</span>@T["bots.new"]</button>
+        </div>
+    </div>
+
+    @if (!list.PlanIncludesAi)
+    {
+        <div class="au-alert au-alert--warning" role="status"><div class="au-alert__body">@T["bots.noPlan"]</div></div>
+    }
+    else if (list.ActiveBotLimit is int limit)
+    {
+        <p class="au-help">@T["bots.limit", list.ActiveBotCount.Display("N0"), limit.Display("N0")]</p>
+    }
+    @if (list.OverLimitBotIds.Count > 0)
+    {
+        <div class="au-alert au-alert--warning" role="status"><div class="au-alert__body">@T["bots.overLimit"]</div></div>
+    }
+
+    @if (list.Bots.Count == 0)
+    {
+        var empty = new EmptyStateModel(Icon: "smart_toy", Title: T["bots.empty.title"].Value, Text: T["bots.empty.text"].Value);
+        <div class="au-panel au-panel--round"><partial name="_EmptyState" model="empty" /></div>
+    }
+    else
+    {
+        <div class="au-table-card">
+            <div class="au-table-scroll">
+                <table class="au-table au-table--stack">
+                    <thead>
+                        <tr>
+                            <th>@T["bots.table.bot"]</th>
+                            <th>@T["bots.table.type"]</th>
+                            <th>@T["bots.table.accounts"]</th>
+                            <th>@T["bots.table.status"]</th>
+                            <th><span class="au-sr-only">@T["bots.table.actions"]</span></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var bot in list.Bots)
+                        {
+                            <tr>
+                                <td data-label="@T["bots.table.bot"]">
+                                    <div class="min-w-0">
+                                        <a href="/Bots/Edit/@bot.Id" class="row-title" dir="auto">@bot.Name</a>
+                                        @if (!string.IsNullOrWhiteSpace(bot.Description))
+                                        {
+                                            <div class="cell-sub clip-1" title="@bot.Description" dir="auto">@bot.Description</div>
+                                        }
+                                    </div>
+                                </td>
+                                <td data-label="@T["bots.table.type"]">@T[BotTextKeys.TemplateName(bot.Template)]</td>
+                                <td data-label="@T["bots.table.accounts"]">@T.Plural("bots.accounts", bot.AccountCount)</td>
+                                <td data-label="@T["bots.table.status"]">
+                                    <div>
+                                        <span class="badge @BotTextKeys.StatusBadge(bot.Status)">@T[BotTextKeys.Status(bot.Status)]</span>
+                                        @if (list.OverLimitBotIds.Contains(bot.Id))
+                                        {
+                                            <div class="cell-sub">@T["bots.overLimitBot"]</div>
+                                        }
+                                    </div>
+                                </td>
+                                <td class="row-actions">
+                                    <a href="/Bots/Edit/@bot.Id" class="au-btn au-btn--outlined au-btn--sm">@T["common.edit"]</a>
+                                    <form method="post" asp-page-handler="Status" class="inline-form">
+                                        <input type="hidden" name="id" value="@bot.Id" />
+                                        @if (bot.Status == BotStatus.Active)
+                                        {
+                                            <input type="hidden" name="status" value="@BotStatus.Inactive" />
+                                            <button type="submit" class="au-btn au-btn--text au-btn--sm">@T["bots.deactivate"]</button>
+                                        }
+                                        else
+                                        {
+                                            <input type="hidden" name="status" value="@BotStatus.Active" />
+                                            <button type="submit" class="au-btn au-btn--text au-btn--sm" disabled="@(!list.PlanIncludesAi)">@T["bots.activate"]</button>
+                                        }
+                                    </form>
+                                    @if (bot.IsTemplate)
+                                    {
+                                        <form method="post" asp-page-handler="Duplicate" class="inline-form">
+                                            <input type="hidden" name="id" value="@bot.Id" />
+                                            <button type="submit" class="au-btn au-btn--text au-btn--sm">@T["bots.useAsCustom"]</button>
+                                        </form>
+                                    }
+                                    <form method="post" asp-page-handler="Delete" class="inline-form"
+                                          data-au-confirm="@T["bots.delete.confirm", bot.Name]" data-au-confirm-title="@T["bots.delete.title"]"
+                                          data-au-confirm-label="@T["common.delete"]" data-au-confirm-tone="danger">
+                                        <input type="hidden" name="id" value="@bot.Id" />
+                                        <button type="submit" class="au-btn au-btn--text au-btn--sm">@T["common.delete"]</button>
+                                    </form>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+
+    @* ---------- New bot (popup; ids read by bots-page.js) ---------- *@
+    <div class="bm-overlay" id="new-bot-overlay" hidden>
+        <div class="card bot-modal" role="dialog" aria-modal="true" aria-labelledby="new-bot-title">
+            <div class="modal-head">
+                <h3 id="new-bot-title" class="card-title">@T["bots.new"]</h3>
+                <button type="button" class="au-icon-btn" id="new-bot-close" aria-label="@T["common.close"]" title="@T["common.close"]"><span class="au-icon" aria-hidden="true">close</span></button>
+            </div>
+            <p class="au-help">@T["bots.newHelp"]</p>
+            <div class="bot-choices">
+                @foreach (var template in BotTemplate.All)
+                {
+                    <form method="post" asp-page-handler="Create">
+                        <input type="hidden" name="template" value="@template" />
+                        <button type="submit" class="kb-choice bot-choice">
+                            <span class="kb-choice-icon au-icon" aria-hidden="true">@(template == BotTemplate.Custom ? "tune" : "smart_toy")</span>
+                            <strong>@T[BotTextKeys.TemplateName(template)]</strong>
+                            <small>@T[BotTextKeys.TemplateText(template)]</small>
+                        </button>
+                    </form>
+                }
+            </div>
+        </div>
+    </div>
+
+    <script src="~/js/bots-page.js" asp-append-version="true"></script>
+}

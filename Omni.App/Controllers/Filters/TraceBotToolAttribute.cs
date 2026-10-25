@@ -15,8 +15,11 @@ namespace Omni.App.Controllers.Filters;
 /// A 4xx/5xx answer is a failed step (the bot asked for something it couldn't get). Never changes the response.
 /// </summary>
 [AttributeUsage(AttributeTargets.Class)]
-public sealed class TraceBotToolAttribute : Attribute, IAsyncActionFilter
+public sealed class TraceBotToolAttribute : Attribute, IAsyncActionFilter, IOrderedFilter
 {
+    // Outermost, so calls BotTool or RequireFeature refuse are traced too.
+    public int Order => -20;
+
     public async Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
     {
         var started = Stopwatch.GetTimestamp();

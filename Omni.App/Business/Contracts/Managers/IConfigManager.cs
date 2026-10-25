@@ -98,6 +98,19 @@ public interface IConfigManager
     /// <summary>Longest automatic reply a client may save (characters). Default 1000.</summary>
     int AutoReplyMaxLength { get; }
 
+    // ---- Bots
+    /// <summary>Longest instructions a custom AI bot may have (characters). Default 4000.</summary>
+    int BotsInstructionsMaxLength { get; }
+
+    /// <summary>Longest handoff message an AI bot may send (characters). Default 500.</summary>
+    int BotsHandoffMessageMaxLength { get; }
+
+    /// <summary>Longest message sent to a bot in its test conversation (characters). Default 1000.</summary>
+    int BotsTestMessageMaxLength { get; }
+
+    /// <summary>Bot test conversations untouched this long (hours) are deleted when a new one starts. Default 24.</summary>
+    int BotsTestSessionHours { get; }
+
     // ---- Reminders
     /// <summary>Master switch for booking reminders (each client also turns its own on). Default true.</summary>
     bool RemindersEnabled { get; }

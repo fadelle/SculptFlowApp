@@ -58,6 +58,10 @@ public class ApplicationDbContext : IdentityUserContext<AppUser>
     public DbSet<BookingSettings> BookingSettings => Set<BookingSettings>();
     public DbSet<InboxSettings> InboxSettings => Set<InboxSettings>();
     public DbSet<AutoReply> AutoReplies => Set<AutoReply>();
+    public DbSet<Bot> Bots => Set<Bot>();
+    public DbSet<BotKnowledgeSource> BotKnowledgeSources => Set<BotKnowledgeSource>();
+    public DbSet<BotTestSession> BotTestSessions => Set<BotTestSession>();
+    public DbSet<BotTestMessage> BotTestMessages => Set<BotTestMessage>();
     public DbSet<AvailabilityException> AvailabilityExceptions => Set<AvailabilityException>();
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<CalendarIntegration> CalendarIntegrations => Set<CalendarIntegration>();
@@ -726,14 +730,83 @@ public class ApplicationDbContext : IdentityUserContext<AppUser>
             e.Property(x => x.Id).HasColumnName("id");
             e.Property(x => x.ClientId).HasColumnName("client_id");
             e.Property(x => x.ChannelIntegrationId).HasColumnName("channel_integration_id");
+            e.Property(x => x.AiEnabled).HasColumnName("ai_enabled");
+            e.Property(x => x.BotId).HasColumnName("bot_id");
             e.Property(x => x.AiBotNewConversations).HasColumnName("ai_bot_new_conversations");
             e.Property(x => x.AiBotReopenedConversations).HasColumnName("ai_bot_reopened_conversations");
             e.Property(x => x.CreatedAt).HasColumnName("created_at");
             e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
             e.HasOne<Client>().WithMany().HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne<ChannelIntegration>().WithMany().HasForeignKey(x => x.ChannelIntegrationId).OnDelete(DeleteBehavior.Cascade);
-            e.HasIndex(x => x.ClientId).IsUnique().HasFilter("channel_integration_id is null");
-            e.HasIndex(x => x.ChannelIntegrationId).IsUnique().HasFilter("channel_integration_id is not null");
+            e.HasOne<Bot>().WithMany().HasForeignKey(x => x.BotId).OnDelete(DeleteBehavior.SetNull);
+            e.HasIndex(x => x.ChannelIntegrationId).IsUnique().HasDatabaseName("ux_inbox_settings_channel");
+        });
+
+        // bots — AI bots (BotService); bot_knowledge_sources — the sources a bot with knowledge_scope "selected" searches.
+        modelBuilder.Entity<Bot>(e =>
+        {
+            e.ToTable("bots", "crm");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.ClientId).HasColumnName("client_id");
+            e.Property(x => x.Name).HasColumnName("name").HasMaxLength(100).IsRequired();
+            e.Property(x => x.Description).HasColumnName("description").HasMaxLength(500);
+            e.Property(x => x.Template).HasColumnName("template").HasMaxLength(20).IsRequired();
+            e.Property(x => x.Instructions).HasColumnName("instructions");
+            e.Property(x => x.Capabilities).HasColumnName("capabilities");
+            e.Property(x => x.KnowledgeScope).HasColumnName("knowledge_scope").HasMaxLength(10).IsRequired();
+            e.Property(x => x.Language).HasColumnName("language").HasMaxLength(10);
+            e.Property(x => x.HandoffPolicy).HasColumnName("handoff_policy").HasMaxLength(30).IsRequired();
+            e.Property(x => x.HandoffMessage).HasColumnName("handoff_message");
+            e.Property(x => x.Status).HasColumnName("status").HasMaxLength(10).IsRequired();
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+            e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
+            e.HasOne<Client>().WithMany().HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Cascade);
+            e.HasMany(x => x.KnowledgeSources).WithOne().HasForeignKey(x => x.BotId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<BotKnowledgeSource>(e =>
+        {
+            e.ToTable("bot_knowledge_sources", "crm");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.BotId).HasColumnName("bot_id");
+            e.Property(x => x.KnowledgeDocumentId).HasColumnName("knowledge_document_id");
+            e.Property(x => x.WebsiteSourceId).HasColumnName("website_source_id");
+            e.HasOne<KnowledgeDocument>().WithMany().HasForeignKey(x => x.KnowledgeDocumentId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<KnowledgeWebsiteSource>().WithMany().HasForeignKey(x => x.WebsiteSourceId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // bot_test_sessions / bot_test_messages — test conversations on the bot editor (BotTestService).
+        modelBuilder.Entity<BotTestSession>(e =>
+        {
+            e.ToTable("bot_test_sessions", "crm");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.ClientId).HasColumnName("client_id");
+            e.Property(x => x.BotId).HasColumnName("bot_id");
+            e.Property(x => x.HandedOff).HasColumnName("handed_off");
+            e.Property(x => x.SimulatedBookingStart).HasColumnName("simulated_booking_start");
+            e.Property(x => x.SimulatedBookingEnd).HasColumnName("simulated_booking_end");
+            e.Property(x => x.SimulatedServiceId).HasColumnName("simulated_service_id");
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+            e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
+            e.HasOne<Client>().WithMany().HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<Bot>().WithMany().HasForeignKey(x => x.BotId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<BotTestMessage>(e =>
+        {
+            e.ToTable("bot_test_messages", "crm");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.SessionId).HasColumnName("session_id");
+            e.Property(x => x.ClientId).HasColumnName("client_id");
+            e.Property(x => x.Role).HasColumnName("role").HasMaxLength(20).IsRequired();
+            e.Property(x => x.Content).HasColumnName("content").IsRequired();
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+            e.HasOne<BotTestSession>().WithMany().HasForeignKey(x => x.SessionId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<Client>().WithMany().HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Cascade);
         });
 
         // auto_replies — automatic reply per client and channel (AutoReplyService; sent by MessageService.IngestAsync).

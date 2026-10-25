@@ -241,7 +241,7 @@ public class BotTraceTests
     }
 
     private AiTriggerNotifier Notifier() => new(_http.CreateClient(), new ConfigurationBuilder().AddInMemoryCollection(_settings).Build(),
-        NullLogger<AiTriggerNotifier>.Instance, _entitlements.Object, _profiles.Object, _tracer.Object);
+        NullLogger<AiTriggerNotifier>.Instance, _entitlements.Object, _profiles.Object, BotKit.Inbox().Object, BotKit.Runtime().Object, _tracer.Object);
 
     private static AiTriggerPayload Payload() => new(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "whatsapp", "text", "hi");
 

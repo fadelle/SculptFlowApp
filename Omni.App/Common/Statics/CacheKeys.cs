@@ -48,10 +48,13 @@ public static class CacheKeys
     public const string MembershipPrefix = "identity:membership:";
     public static string Membership(string userId) => MembershipPrefix + userId;
 
-    // ---- Crm: a client's client-wide Inbox settings row, or none (InboxSettingsRepository.GetForClientReadOnlyAsync; read
-    // on every incoming contact message to decide whether the AI bot answers).
+    // ---- Crm: a client's Inbox settings rows, one per connected account (InboxSettingsRepository.ListForClientReadOnlyAsync),
+    // and its AI bots with their Knowledge Base sources (BotRepository.ListForClientReadOnlyAsync). Both are read on every
+    // incoming contact message and every AI tool call to decide which bot answers and what it may do.
     public const string InboxSettingsPrefix = "crm:inbox-settings:";
     public static string InboxSettings(Guid clientId) => InboxSettingsPrefix + clientId.ToString("N");
+    public const string BotsPrefix = "crm:bots:";
+    public static string Bots(Guid clientId) => BotsPrefix + clientId.ToString("N");
 
     // ---- Scheduling: weekly rules, booking settings and date exceptions (every free-slot search reads all three).
     public const string AvailabilityPrefix = "scheduling:availability:";
@@ -117,6 +120,13 @@ public static class CacheKeys
             case Models.InboxSettings i:
                 yield return CacheEviction.Key(InboxSettings(i.ClientId));
                 break;
+            case Bot bot:
+                yield return CacheEviction.Key(Bots(bot.ClientId));
+                break;
+            case BotKnowledgeSource:
+                // The row doesn't carry its client; BotService saves the bot itself with it, which clears the exact key.
+                yield return CacheEviction.Prefix(BotsPrefix);
+                break;
             case AvailabilityException e:
                 yield return CacheEviction.Key(AvailabilityExceptions(e.ClientId));
                 break;
@@ -166,6 +176,7 @@ public static class CacheKeys
         CacheEviction.Key(AvailabilityRules(clientId)),
         CacheEviction.Key(BookingSettings(clientId)),
         CacheEviction.Key(InboxSettings(clientId)),
+        CacheEviction.Key(Bots(clientId)),
         CacheEviction.Key(AvailabilityExceptions(clientId)),
         CacheEviction.Key(Calendars(clientId)),
         CacheEviction.Key(ChannelIntegrations(clientId)),

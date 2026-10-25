@@ -21,6 +21,11 @@ public class ConversationRepository : IConversationRepository
     public Task<Conversation?> GetAsync(Guid clientId, Guid conversationId, CancellationToken ct = default) =>
         _db.Conversations.FirstOrDefaultAsync(c => c.ClientId == clientId && c.Id == conversationId, ct);
 
+    public Task<Conversation?> GetForUpdateAsync(Guid clientId, Guid conversationId, CancellationToken ct = default) =>
+        _db.Conversations
+            .FromSqlInterpolated($"select * from crm.conversations where id = {conversationId} and client_id = {clientId} for update")
+            .FirstOrDefaultAsync(ct);
+
     public Task<Conversation?> GetWithContactAsync(Guid clientId, Guid conversationId, CancellationToken ct = default) =>
         _db.Conversations.Include(c => c.Contact).FirstOrDefaultAsync(c => c.ClientId == clientId && c.Id == conversationId, ct);
 

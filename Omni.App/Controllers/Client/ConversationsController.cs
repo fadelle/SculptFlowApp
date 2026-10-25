@@ -11,11 +11,8 @@ using Omni.App.Entities.Responses.Inbox;
 namespace Omni.App.Controllers.Client;
 
 /// <summary>
-/// Doesn't inherit DashboardApiController like the other dashboard controllers — SendMessage
-/// specifically has to serve two different callers with two different trust models on one route
-/// (see its own doc comment), so a blanket class-level [Authorize] would break the AI/n8n path.
-/// Every other action is individually [Authorize]d and resolves clientId via ICurrentClientContext,
-/// same as everywhere else.
+/// The Inbox's conversation APIs. Every action is individually [Authorize]d and resolves clientId via
+/// ICurrentClientContext, same as everywhere else (the AI bot's sends go through AiController).
 /// </summary>
 [ApiController]
 [Route("api/conversations")]
@@ -24,15 +21,13 @@ public class ConversationsController : ControllerBase
 {
     private readonly IConversationService _conversations;
     private readonly IMessageService _messages;
-    private readonly IConfiguration _configuration;
     private readonly ICurrentClientContext _clientContext;
 
     public ConversationsController(
-        IConversationService conversations, IMessageService messages, IConfiguration configuration, ICurrentClientContext clientContext)
+        IConversationService conversations, IMessageService messages, ICurrentClientContext clientContext)
     {
         _conversations = conversations;
         _messages = messages;
-        _configuration = configuration;
         _clientContext = clientContext;
     }
 
@@ -95,66 +90,17 @@ public class ConversationsController : ControllerBase
         return message is null ? NotFound() : Ok(message);
     }
 
-    /// <summary>Two callers share this one route (see SendMessageRequest's doc comment) — deliberately
-    /// [AllowAnonymous] at the attribute level, with each branch enforcing its own trust model:
-    ///   - A member from the Inbox (Sender omitted): requires a logged-in session (checked manually
-    ///     below, since the action itself can't be blanket [Authorize]d) and resolves clientId via
-    ///     ICurrentClientContext. Goes through WhatsAppService and flips the conversation to human
-    ///     mode. See MessageService.SendAsync.
-    ///   - The AI assistant via n8n (Sender = "ai"): requires the trusted X-Ingest-Key header instead,
-    ///     takes clientId explicitly from the query string (trusted via that header, same pattern as
-    ///     AiController), then re-checks conversation.mode == ai immediately before sending (a human
-    ///     may have taken over while the AI was generating its reply) and never flips mode. See
-    ///     MessageService.SendAiReplyAsync. Returns 409 conversation_in_human_mode if the mode check
-    ///     fails — this is the mandatory second mode check the AI send flow requires.
-    /// Fails with 409 (member path) if the 24-hour WhatsApp customer service window is closed — the
-    /// client should offer SendTemplate instead.</summary>
-    [AllowAnonymous]
+    /// <summary>A member replies from the Inbox (MessageService.SendAsync): flips the conversation to human mode. Fails with
+    /// 409 (via [ApiErrors]) if the 24-hour WhatsApp customer service window is closed — the client should offer SendTemplate
+    /// instead. The AI bot replies through POST /api/ai/conversations/{id}/reply instead.</summary>
+    [Authorize]
     [HttpPost("{id:guid}/messages/send")]
-    public async Task<ActionResult<MessageResponse>> SendMessage(
-        Guid id, [FromQuery] Guid? clientId, [FromBody] SendMessageRequest request, CancellationToken ct)
+    public async Task<ActionResult<MessageResponse>> SendMessage(Guid id, [FromBody] SendMessageRequest request, CancellationToken ct)
     {
-        if (string.Equals(request.Sender, "ai", StringComparison.OrdinalIgnoreCase))
-        {
-            var expectedKey = _configuration["N8n:IngestApiKey"];
-            var providedKey = Request.Headers[RequireIngestKeyAttribute.HeaderName].FirstOrDefault();
-            if (string.IsNullOrEmpty(expectedKey) || string.IsNullOrEmpty(providedKey) || providedKey != expectedKey)
-            {
-                return Unauthorized(new { error = $"AI-origin sends require a valid {RequireIngestKeyAttribute.HeaderName} header." });
-            }
-            if (clientId is null)
-            {
-                return BadRequest(new { error = "clientId is required for an AI-origin send." });
-            }
+        var clientId = await _clientContext.GetClientIdAsync(ct);
+        if (clientId is null) return Forbid();
 
-            try
-            {
-                var aiMessage = await _messages.SendAiReplyAsync(clientId.Value, id, request.Content, ct);
-                return aiMessage is null ? NotFound() : Ok(aiMessage);
-            }
-            catch (ConversationNotInAiModeException ex)
-            {
-                return Conflict(new { sent = false, code = "conversation_in_human_mode", conversationId = id, mode = ex.CurrentMode });
-            }
-            catch (AiReplyRefusedException ex)
-            {
-                // Billing refused the reply (no ai_reply rate / no balance); the conversation is with the team now. Same
-                // 409 shape as above so the n8n workflow stops without retrying.
-                return Conflict(new { sent = false, code = "ai_reply_refused", reason = ex.Reason, conversationId = id, mode = ConversationMode.Human });
-            }
-        }
-
-        // Members path: manual auth check, since this action as a whole is [AllowAnonymous] for the
-        // AI branch above.
-        if (User.Identity?.IsAuthenticated != true)
-        {
-            return Challenge();
-        }
-
-        var resolvedClientId = await _clientContext.GetClientIdAsync(ct);
-        if (resolvedClientId is null) return Forbid();
-
-        var message = await _messages.SendAsync(resolvedClientId.Value, id, request, ct);
+        var message = await _messages.SendAsync(clientId.Value, id, request, ct);
         return message is null ? NotFound() : Ok(message);
     }
 

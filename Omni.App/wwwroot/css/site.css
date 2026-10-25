@@ -1572,3 +1572,24 @@ td .cell-sub { white-space: nowrap; }
 .report-bar { display: flex; align-items: center; gap: 0.6rem; min-width: 140px; }
 .report-bar__count { min-width: 3ch; font-variant-numeric: tabular-nums; text-align: end; }
 .report-bar .au-meter { flex: 1; }
+
+/* ---- AI bots (Pages/Bots) and Inbox settings ---- */
+.bot-modal { width: 100%; max-width: 680px; padding: 1.4rem; }
+.bot-choices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.6rem; }
+.bot-choices form { margin: 0; }
+.bot-choice { width: 100%; height: 100%; font: inherit; }
+.bot-editor { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 380px); gap: 16px; align-items: start; }
+.bot-locked { margin: 0 0 0.6rem; padding: 0.75rem 0.9rem; border-inline-start: 3px solid var(--au-primary); border-radius: var(--au-r-sm); background: var(--surface-subtle); color: var(--text-muted); font-size: 0.875rem; white-space: pre-line; }
+.bot-sources { display: grid; gap: 0.35rem; margin-top: 0.6rem; max-height: 260px; overflow-y: auto; }
+.bot-test { position: sticky; top: 16px; display: flex; flex-direction: column; gap: 0.6rem; }
+.bot-test-log { display: flex; flex-direction: column; gap: 0.45rem; min-height: 220px; max-height: 52vh; overflow-y: auto; padding: 0.6rem; border: 1px solid var(--au-divider); border-radius: var(--au-r-md); background: var(--surface-subtle); }
+.bot-test-line { max-width: 85%; padding: 0.45rem 0.7rem; border-radius: var(--au-r-md); font-size: 0.875rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+.bot-test-line--contact { align-self: flex-end; background: var(--au-primary); color: var(--au-on-primary); }
+.bot-test-line--bot, .bot-test-line--automatic { align-self: flex-start; background: var(--au-paper); border: 1px solid var(--au-divider); }
+.bot-test-line--automatic { border-style: dashed; }
+.bot-test-line--note { align-self: center; max-width: 100%; padding: 0.2rem 0.6rem; background: none; color: var(--text-muted); font-size: 0.75rem; text-align: center; }
+.bot-test-form { display: flex; gap: 0.5rem; }
+.bot-test-form .au-input { flex: 1; min-width: 0; }
+.account-ai-grid { display: grid; gap: 0.6rem; }
+@media (max-width: 1000px) { .bot-editor { grid-template-columns: minmax(0, 1fr); } .bot-test { position: static; } }
+@media (max-width: 800px) { .bot-choices { grid-template-columns: 1fr; } }

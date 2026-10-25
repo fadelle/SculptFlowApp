@@ -90,6 +90,7 @@ public static class MessageTraceMapper
             TraceSteps.ConversationModeChanged => $"Conversation moved to the team: {D("reason")}",
             TraceSteps.InboxNotified => "Inbox updated for members (live)",
             TraceSteps.AutoReplySkipped => $"No auto-reply to the {D("trigger")} conversation: {D("reason")}",
+            TraceSteps.HandoffMessageSkipped => $"No handoff message: {D("reason")}",
             TraceSteps.BotSkipped => $"Bot not asked: {D("reason")}",
             TraceSteps.BotTriggered => $"Bot (n8n) asked to reply (answered {D("status")})",
             TraceSteps.BotTriggerFailed => "Bot (n8n) call failed: " + (D("error") ?? $"answered {D("status")}"),

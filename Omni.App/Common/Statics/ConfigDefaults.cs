@@ -207,6 +207,15 @@ public static class ConfigDefaults
     public static readonly ConfigDefinition AutoReplyMaxLength = new("AutoReply", "MaxLength", "1000", ConfigValueType.Int,
         "Longest automatic reply a client may save, in characters.", 1, 4096);
 
+    public static readonly ConfigDefinition BotsInstructionsMaxLength = new("Bots", "InstructionsMaxLength", "4000", ConfigValueType.Int,
+        "Longest instructions a custom AI bot may have, in characters.", 100, 20000);
+    public static readonly ConfigDefinition BotsHandoffMessageMaxLength = new("Bots", "HandoffMessageMaxLength", "500", ConfigValueType.Int,
+        "Longest handoff message an AI bot may send when it hands a conversation to the team, in characters.", 1, 4096);
+    public static readonly ConfigDefinition BotsTestMessageMaxLength = new("Bots", "TestMessageMaxLength", "1000", ConfigValueType.Int,
+        "Longest message a member may send a bot in its test conversation, in characters.", 1, 4096);
+    public static readonly ConfigDefinition BotsTestSessionHours = new("Bots", "TestSessionHours", "24", ConfigValueType.Int,
+        "Bot test conversations untouched for this many hours are deleted when a new one starts.", 1, 720);
+
     public static readonly ConfigDefinition RemindersEnabled = new("Reminders", "Enabled", "true", ConfigValueType.Bool,
         "Master switch for booking reminders. Off = the reminder worker sends nothing for any client (each client also turns its own reminders on).");
     public static readonly ConfigDefinition RemindersIntervalSeconds = new("Reminders", "IntervalSeconds", "60", ConfigValueType.Int,
@@ -248,6 +257,11 @@ public static class ConfigDefaults
 
         AutoReplyEnabled,
         AutoReplyMaxLength,
+
+        BotsInstructionsMaxLength,
+        BotsHandoffMessageMaxLength,
+        BotsTestMessageMaxLength,
+        BotsTestSessionHours,
 
         RemindersEnabled,
         RemindersIntervalSeconds,

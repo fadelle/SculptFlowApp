@@ -16,20 +16,25 @@ public class ConversationServiceTests
     private readonly Mock<IInboxSettingsService> _inboxSettings = new();
     private readonly Mock<IBusinessTypeService> _businessTypes = PipelineKit.Types();
 
-    public ConversationServiceTests() => InboxSettings(planIncludesBot: true, newConversations: true, reopenedConversations: true);
+    public ConversationServiceTests()
+    {
+        InboxSettings(planIncludesBot: true, newConversations: true, reopenedConversations: true);
+        _uow.Setup(u => u.BeginTransactionAsync(It.IsAny<CancellationToken>())).ReturnsAsync(Mock.Of<IUnitOfWorkTransaction>());
+    }
 
     private ConversationService Sut() => new(_conversations.Object, _messages.Object, _contacts.Object, _uow.Object, _notifier.Object, _events.Object, _notifications.Object, _inboxSettings.Object, _businessTypes.Object);
 
+    /// <summary>Inbox settings where every account's bot answers, except without the plan's AI assistant or on the channels
+    /// in <paramref name="withoutBot"/> (an inactive bot there).</summary>
     private void InboxSettings(bool planIncludesBot, bool newConversations, bool reopenedConversations, params string[] withoutBot)
     {
-        var settings = new InboxSettingsDto(planIncludesBot, newConversations, reopenedConversations,
-            withoutBot.Length > 0 ? withoutBot.ToHashSet() : null, withoutBot.Length > 0 ? 1 : null);
-        _inboxSettings.Setup(a => a.GetAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(settings);
-        _inboxSettings.Setup(a => a.InitialModeAsync(_clientId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(settings.AiBotAnswersNew ? ConversationMode.Ai : ConversationMode.Human);
+        AccountAiDecision Decide(string channel) => new(Guid.NewGuid(), Guid.NewGuid(),
+            !planIncludesBot ? AiBotBlockReason.PlanWithoutAi : withoutBot.Contains(channel) ? AiBotBlockReason.BotInactive : null,
+            newConversations, reopenedConversations);
+        _inboxSettings.Setup(a => a.ResolveAsync(_clientId, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Guid _, string channel, CancellationToken _) => Decide(channel));
         _inboxSettings.Setup(a => a.InitialModeAsync(_clientId, It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((Guid _, string channel, CancellationToken _) =>
-                settings.AiBotAnswersNew && settings.AiBotAnswersOn(channel) ? ConversationMode.Ai : ConversationMode.Human);
+            .ReturnsAsync((Guid _, string channel, CancellationToken _) => Decide(channel).AnswersNew ? ConversationMode.Ai : ConversationMode.Human);
     }
 
     private Conversation Conv(string mode = ConversationMode.Ai, string? externalThread = null)
@@ -40,6 +45,7 @@ public class ConversationServiceTests
             Status = ConversationStatus.Active, AiEnabled = mode == ConversationMode.Ai, HumanTakeover = mode == ConversationMode.Human, ExternalThreadId = externalThread
         };
         _conversations.Setup(r => r.GetAsync(_clientId, c.Id, It.IsAny<CancellationToken>())).ReturnsAsync(c);
+        _conversations.Setup(r => r.GetForUpdateAsync(_clientId, c.Id, It.IsAny<CancellationToken>())).ReturnsAsync(c);
         return c;
     }
 
@@ -265,13 +271,15 @@ public class ConversationServiceTests
     {
         var c = Conv();
         _contacts.Setup(l => l.GetFullNameAsync(_contactId, It.IsAny<CancellationToken>())).ReturnsAsync("Ann Lee");
-        await Sut().HandoffToHumanAsync(_clientId, c.Id, "wants a price");
+        Assert.True((await Sut().HandoffToHumanAsync(_clientId, c.Id, "wants a price"))!.HandedOff);
         _notifications.Verify(n => n.CreateAsync(_clientId, NotificationType.Handoff, It.Is<NotificationText>(t => TextKit.Reads(t, "AI handed off to your team", "Ann Lee needs your team's attention: wants a price")),
             _contactId, c.Id, null, null, $"/inbox?conversationId={c.Id}", It.IsAny<CancellationToken>()), Times.Once);
         _events.Verify(e => e.Log(_clientId, EventTypes.HumanHandoff, null, c.Id, null, MessageOrigin.Ai, "{\"reason\":\"wants a price\"}"), Times.Once);
 
-        _conversations.Setup(r => r.IsInHumanModeAsync(_clientId, c.Id, It.IsAny<CancellationToken>())).ReturnsAsync(true);
-        await Sut().HandoffToHumanAsync(_clientId, c.Id, null);
+        // The locked row is already human: nothing changes, nothing is notified, and the caller sends no handoff message.
+        var again = await Sut().HandoffToHumanAsync(_clientId, c.Id, null);
+        Assert.Equal((false, ConversationMode.Human), (again!.HandedOff, again.Conversation.Mode));
+        _events.Verify(e => e.Log(_clientId, EventTypes.HumanHandoff, null, c.Id, null, It.IsAny<string>(), It.IsAny<string>()), Times.Once);
         _notifications.Verify(n => n.CreateAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<NotificationText>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -297,7 +305,6 @@ public class ConversationServiceTests
         _notifier.Verify(n => n.ConversationModeChangedAsync(_clientId, c.Id, ConversationMode.Human, It.IsAny<CancellationToken>()), Times.Once);
 
         // A second refusal on the (now human) conversation doesn't notify again.
-        _conversations.Setup(r => r.IsInHumanModeAsync(_clientId, c.Id, It.IsAny<CancellationToken>())).ReturnsAsync(true);
         await Sut().HandOverUnpaidAiReplyAsync(_clientId, c.Id, reason);
         _notifications.Verify(n => n.CreateAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<NotificationText>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
         Assert.Null(await Sut().HandOverUnpaidAiReplyAsync(_clientId, Guid.NewGuid(), reason));
@@ -414,7 +421,7 @@ public class ConversationServiceTests
     }
 
     [Fact]
-    public async Task A_new_conversation_on_a_channel_beyond_the_ai_bot_limit_starts_with_the_team()
+    public async Task A_new_conversation_on_an_account_without_an_answering_bot_starts_with_the_team()
     {
         InboxSettings(planIncludesBot: true, newConversations: true, reopenedConversations: true, ConversationChannel.Telegram);
         _contacts.Setup(l => l.GetAsync(_clientId, _contactId, It.IsAny<CancellationToken>())).ReturnsAsync(new Contact { Id = _contactId, ClientId = _clientId });
@@ -429,13 +436,14 @@ public class ConversationServiceTests
     }
 
     [Fact]
-    public async Task Return_to_ai_is_refused_on_a_channel_beyond_the_ai_bot_limit()
+    public async Task Return_to_ai_is_refused_on_an_account_without_an_answering_bot()
     {
         InboxSettings(planIncludesBot: true, newConversations: true, reopenedConversations: true, ConversationChannel.WhatsApp);
         var c = Conv(ConversationMode.Human);
 
-        var ex = await Assert.ThrowsAsync<EntitlementDeniedException>(() => Sut().ReturnToAiAsync(_clientId, c.Id));
-        Assert.Equal(EntitlementKeys.MaxAiBots, ex.Entitlement);
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => Sut().ReturnToAiAsync(_clientId, c.Id));
+        Assert.Equal("inbox.errors.noBotOnAccount", ex.Message);
+        Assert.Null(await Sut().ReturnToAiAsync(_clientId, Guid.NewGuid()));
         Assert.Equal(ConversationMode.Human, c.Mode);
         _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
     }

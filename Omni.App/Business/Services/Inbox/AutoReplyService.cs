@@ -44,13 +44,15 @@ public class AutoReplyService : IAutoReplyService
         var rows = (await _autoReplies.ListForClientReadOnlyAsync(clientId, ct)).ToDictionary(r => r.Channel, StringComparer.Ordinal);
         var connected = (await _channels.ListForClientReadOnlyAsync(clientId, ct))
             .Where(c => c.Status == ChannelIntegrationStatus.Connected).Select(c => c.Channel).ToHashSet(StringComparer.Ordinal);
-        var inbox = await _inboxSettings.GetAsync(clientId, ct);
-
-        return SendableChannels().Select(channel => new AutoReplyChannelDto(
-            rows.TryGetValue(channel, out var row) ? ToDto(row) : Default(channel),
-            connected.Contains(channel),
-            inbox.AiBotAnswersNew && inbox.AiBotAnswersOn(channel),
-            inbox.AiBotAnswersReopened && inbox.AiBotAnswersOn(channel))).ToList();
+        var result = new List<AutoReplyChannelDto>();
+        foreach (var channel in SendableChannels())
+        {
+            // Whether the account's AI bot answers there (Inbox settings), so the page can say the reply waits for the team.
+            var ai = await _inboxSettings.ResolveAsync(clientId, channel, ct);
+            result.Add(new AutoReplyChannelDto(rows.TryGetValue(channel, out var row) ? ToDto(row) : Default(channel),
+                connected.Contains(channel), ai.AnswersNew, ai.AnswersReopened));
+        }
+        return result;
     }
 
     public async Task SaveAsync(Guid clientId, SaveAutoReplyRequest request, CancellationToken ct = default)

@@ -45,7 +45,8 @@ public class ContactLanguageWalkTests(PostgresFixture fixture) : RepoTestBase(fi
         var profiles = new AiProfileService(new ClientRepository(db, _cache), types,
             new Terminology(TextKit.Catalog, types, Mock.Of<ICurrentClientContext>()), new ContactRepository(db));
         var settings = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["N8n:AiWebhookUrl"] = "https://n8n.example/ai" }).Build();
-        return new AiTriggerNotifier(_http.CreateClient(), settings, NullLogger<AiTriggerNotifier>.Instance, entitlements.Object, profiles, _tracer.Object);
+        return new AiTriggerNotifier(_http.CreateClient(), settings, NullLogger<AiTriggerNotifier>.Instance, entitlements.Object, profiles,
+            BotKit.Inbox().Object, BotKit.Runtime().Object, _tracer.Object);
     }
 
     [PostgresFact]

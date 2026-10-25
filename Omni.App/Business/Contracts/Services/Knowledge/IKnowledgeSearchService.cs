@@ -16,6 +16,9 @@ public interface IKnowledgeSearchService
     /// InvalidOperationException if the embedding call fails.</summary>
     Task<KnowledgeSearchResponse> SearchAsync(Guid clientId, string query, int? limit = null, CancellationToken ct = default);
 
+    /// <summary>The same search limited to <paramref name="sources"/> (null = every source): an AI bot's Knowledge Base.</summary>
+    Task<KnowledgeSearchResponse> SearchAsync(Guid clientId, string query, int? limit, KnowledgeSourceFilter? sources, CancellationToken ct = default);
+
     /// <summary>The same search, but returns every top-K candidate in rank order WITH its chunk id and whether
     /// it cleared the client's minimum similarity. <see cref="SearchAsync"/> is exactly this list filtered to
     /// the candidates that cleared it — there is one retrieval implementation, and this is its raw output.

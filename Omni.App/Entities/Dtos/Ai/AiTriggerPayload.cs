@@ -14,7 +14,11 @@ namespace Omni.App.Entities.Dtos.Ai;
 /// AiClientProfile) just before sending, so the workflow's system prompt stays generic and reads the business's AI
 /// profile, words, default language and timezone from here. ContactLanguage is the contact's stored language (two-letter
 /// code, null when not known yet): the AI replies in the language of the message itself and falls back to it, then to
-/// Language, when the message has none (an emoji, a photo).</summary>
+/// Language, when the message has none (an emoji, a photo).
+/// Bot is the AI bot that answers (its instructions, allowed actions, handoff policy and language, see AiBotConfig); n8n
+/// sends Bot.Id back as the X-Omni-Bot-Id header on every call. TestSessionId is set only for a bot test conversation (the
+/// bot editor's test panel): ConversationId and ContactId are then the test session's id (there is no real contact), and n8n sends it back as
+/// X-Omni-Test-Session so Omni simulates every write action.</summary>
 public record AiTriggerPayload(
     Guid ClientId,
     Guid ConversationId,
@@ -31,5 +35,7 @@ public record AiTriggerPayload(
     string? ContactLanguage = null,
     string? Timezone = null,
     string? AiProfile = null,
-    IReadOnlyDictionary<string, TermForms>? Terms = null
+    IReadOnlyDictionary<string, TermForms>? Terms = null,
+    AiBotConfig? Bot = null,
+    Guid? TestSessionId = null
 );

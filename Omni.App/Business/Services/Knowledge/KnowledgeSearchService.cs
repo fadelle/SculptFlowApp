@@ -19,9 +19,13 @@ public class KnowledgeSearchService : IKnowledgeSearchService
         _settings = settings;
     }
 
-    public async Task<KnowledgeSearchResponse> SearchAsync(Guid clientId, string query, int? limit = null, CancellationToken ct = default)
+    public Task<KnowledgeSearchResponse> SearchAsync(Guid clientId, string query, int? limit = null, CancellationToken ct = default) =>
+        SearchAsync(clientId, query, limit, null, ct);
+
+    public async Task<KnowledgeSearchResponse> SearchAsync(Guid clientId, string query, int? limit, KnowledgeSourceFilter? sources,
+        CancellationToken ct = default)
     {
-        var ranked = await SearchRankedAsync(clientId, query, limit, ct);
+        var ranked = await RankAsync(clientId, query, limit, sources, ct);
 
         // Chunks scoring below the client's minimum similarity are dropped, so an unrelated query yields an
         // empty list rather than the least-bad match.
@@ -33,7 +37,11 @@ public class KnowledgeSearchService : IKnowledgeSearchService
         return new KnowledgeSearchResponse(results);
     }
 
-    public async Task<IReadOnlyList<RankedKnowledgeChunk>> SearchRankedAsync(Guid clientId, string query, int? limit = null, CancellationToken ct = default)
+    public Task<IReadOnlyList<RankedKnowledgeChunk>> SearchRankedAsync(Guid clientId, string query, int? limit = null, CancellationToken ct = default) =>
+        RankAsync(clientId, query, limit, null, ct);
+
+    private async Task<IReadOnlyList<RankedKnowledgeChunk>> RankAsync(Guid clientId, string query, int? limit, KnowledgeSourceFilter? sources,
+        CancellationToken ct)
     {
         if (clientId == Guid.Empty || string.IsNullOrWhiteSpace(query))
         {
@@ -49,7 +57,9 @@ public class KnowledgeSearchService : IKnowledgeSearchService
 
         // Client isolation: the WHERE clause pins client_id on BOTH the chunk and its document, and
         // only active documents qualify — the similarity ranking only ever sees that slice.
-        var rows = await _documents.SearchChunksAsync(clientId, queryVector, take, ct);
+        var rows = sources is null
+            ? await _documents.SearchChunksAsync(clientId, queryVector, take, ct)
+            : await _documents.SearchChunksAsync(clientId, queryVector, take, sources, ct);
 
         return rows
             .Select(r => new RankedKnowledgeChunk(

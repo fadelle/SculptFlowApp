@@ -139,7 +139,7 @@ public class SimpleListPageTests
         conversations.Setup(c => c.ListAsync(Glow.Id, 0, 50, It.IsAny<CancellationToken>()))
             .ReturnsAsync((new List<ConversationListRow>() as IReadOnlyList<ConversationListRow>, 0)).Verifiable();
         var inboxSettings = new Mock<IInboxSettingsService>();
-        inboxSettings.Setup(a => a.GetAsync(Glow.Id, It.IsAny<CancellationToken>())).ReturnsAsync(new InboxSettingsDto(false, true, true));
+        inboxSettings.Setup(a => a.GetAsync(Glow.Id, It.IsAny<CancellationToken>())).ReturnsAsync(new InboxSettingsDto(false, null, [], []));
         var model = new InboxIndex(ClientContext(Glow).Object, conversations.Object, inboxSettings.Object, PipelineKit.Types().Object).Attach();
         await model.OnGetAsync(default);
         Assert.Equal((true, Glow.Id, false), (model.ClientConfigured, model.ClientId, model.AiAssistantAvailable));

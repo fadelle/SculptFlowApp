@@ -1,0 +1,100 @@
+@page "/settings/inbox"
+@model Omni.App.Pages.Settings.InboxSettingsModel
+@{
+    ViewData["Title"] = T["nav.inboxSettings"].Value;
+}
+
+@if (!Model.ClientConfigured || Model.Settings is not { } settings)
+{
+    <partial name="_NoClient" />
+}
+else
+{
+    <partial name="_Messages" model="new PageMessagesModel(Model.StatusMessage, Model.ErrorMessage)" />
+
+    <div class="au-page-head">
+        <p class="au-page-head__sub mw-640">@T.Html("inboxSettings.intro", new Microsoft.AspNetCore.Html.HtmlString($"<a href=\"/Bots\">{System.Net.WebUtility.HtmlEncode(T["nav.bots"].Value)}</a>"))</p>
+    </div>
+
+    @if (!settings.PlanIncludesAiBot)
+    {
+        <div class="au-alert au-alert--warning" role="status"><div class="au-alert__body">@T["inboxSettings.noPlan"]</div></div>
+    }
+    else if (!settings.Bots.Any(b => b.Status == BotStatus.Active))
+    {
+        <div class="au-alert" role="note">
+            <span class="au-icon au-alert__icon" aria-hidden="true">lightbulb</span>
+            <div class="au-alert__body">@T.Html("inboxSettings.noActiveBot", new Microsoft.AspNetCore.Html.HtmlString($"<a class=\"au-link\" href=\"/Bots\">{System.Net.WebUtility.HtmlEncode(T["nav.bots"].Value)}</a>"))</div>
+        </div>
+    }
+
+    @if (settings.Accounts.Count == 0)
+    {
+        var empty = new EmptyStateModel(Icon: "hub", Title: T["inboxSettings.empty.title"].Value, Text: T["inboxSettings.empty.text"].Value,
+            ActionLabel: T["nav.integrations"].Value, ActionHref: "/settings/integrations");
+        <div class="au-panel au-panel--round"><partial name="_EmptyState" model="empty" /></div>
+    }
+
+    <div class="account-ai-grid">
+        @foreach (var account in settings.Accounts)
+        {
+            var values = Model.FormValues(account);
+            var idPrefix = "account-ai-" + account.ChannelIntegrationId.ToString("N");
+            var reasonKey = BotTextKeys.BlockReason(account.BlockReason);
+            <form method="post" class="au-panel au-panel--round integration-form" id="@(idPrefix)-form">
+                <input type="hidden" name="ChannelIntegrationId" value="@account.ChannelIntegrationId" />
+                <div class="set-section">
+                    <div class="set-section-head">
+                        <strong>@ChannelNames.Brand(account.Channel)</strong>
+                        @if (!string.IsNullOrWhiteSpace(account.DisplayName))
+                        {
+                            <div class="cell-sub" dir="auto">@account.DisplayName</div>
+                        }
+                        @if (reasonKey is null)
+                        {
+                            <span class="badge badge-purple">@T["inboxSettings.botAnswers", account.BotName ?? ""]</span>
+                        }
+                        else
+                        {
+                            <span class="badge badge-gray">@T[reasonKey]</span>
+                        }
+                    </div>
+                    <div class="set-section-body">
+                        <label class="au-check">
+                            <input type="checkbox" class="au-switch" role="switch" name="AiEnabled" value="true" checked="@values.AiEnabled" disabled="@(!settings.PlanIncludesAiBot && !values.AiEnabled)" />
+                            @T["inboxSettings.aiEnabled"]
+                        </label>
+                        <div class="au-form-field">
+                            <label class="au-form-label" for="@(idPrefix)-bot">@T["inboxSettings.bot"]</label>
+                            <select name="BotId" id="@(idPrefix)-bot" class="au-select">
+                                <option value="" selected="@(values.BotId is null)">@T["inboxSettings.noBot"]</option>
+                                @foreach (var bot in settings.Bots)
+                                {
+                                    var assigned = values.BotId == bot.Id;
+                                    // Only an active bot can be picked; one that was assigned and later deactivated still shows.
+                                    if (bot.Status == BotStatus.Active || assigned)
+                                    {
+                                        <option value="@bot.Id" selected="@assigned">@bot.Name@(bot.Status == BotStatus.Active ? "" : " (" + T[BotTextKeys.Status(bot.Status)].Value + ")")</option>
+                                    }
+                                }
+                            </select>
+                            <span class="au-help">@T["inboxSettings.botHelp"]</span>
+                        </div>
+                        <label class="au-check">
+                            <input type="checkbox" class="au-switch" role="switch" name="AiBotNewConversations" value="true" checked="@values.AiBotNewConversations" />
+                            @T["inboxSettings.newConversations"]
+                        </label>
+                        <small class="text-subtle">@T["inboxSettings.newConversationsHelp"]</small>
+                        <label class="au-check">
+                            <input type="checkbox" class="au-switch" role="switch" name="AiBotReopenedConversations" value="true" checked="@values.AiBotReopenedConversations" />
+                            @T["inboxSettings.reopenedConversations"]
+                        </label>
+                        <small class="text-subtle">@T["inboxSettings.reopenedConversationsHelp"]</small>
+                    </div>
+                </div>
+                <div class="au-form-actions"><button type="submit" class="au-btn au-btn--primary">@T["inboxSettings.save"]</button></div>
+            </form>
+        }
+    </div>
+    <p class="au-help">@T["inboxSettings.humans"]</p>
+}

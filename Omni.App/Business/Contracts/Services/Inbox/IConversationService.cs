@@ -38,11 +38,12 @@ public interface IConversationService
     /// <summary>A member explicitly takes over — AI stops auto-replying.</summary>
     Task<ConversationResponse?> TakeOverAsync(Guid clientId, Guid conversationId, CancellationToken ct = default);
 
-    /// <summary>AI-agent-initiated handoff (medical question, upset customer, AI uncertain, etc.) —
-    /// same effect as TakeOverAsync (flips to human mode) but attributed to the AI as the source,
-    /// with an optional reason recorded on the event, so members can see why the AI backed off. Used
-    /// by the AI assistant's handoff_to_human tool — see Controllers/Integrations/AiController.cs.</summary>
-    Task<ConversationResponse?> HandoffToHumanAsync(Guid clientId, Guid conversationId, string? reason, CancellationToken ct = default);
+    /// <summary>The AI bot hands off (the contact asked for a person, the bot can't help, ...): same effect as TakeOverAsync
+    /// (human mode) but attributed to the AI, with the reason on the event, so members see why the bot backed off. The row is
+    /// locked while it changes, so of two concurrent hand-overs only one finds the conversation still with the AI:
+    /// HandoffResult.HandedOff is true only for that real ai -> human change (the caller sends the bot's handoff message
+    /// then). Null when the conversation isn't the client's. Used by IBotConversationService (handoff_to_human).</summary>
+    Task<HandoffResult?> HandoffToHumanAsync(Guid clientId, Guid conversationId, string? reason, CancellationToken ct = default);
 
     /// <summary>The AI assistant's reply was refused by billing (<paramref name="failureReason"/>: a UsageFailureReason, e.g.
     /// insufficient_funds): the same hand-over as HandoffToHumanAsync (human mode, needs-human stage, one Handoff notification
@@ -51,7 +52,8 @@ public interface IConversationService
     Task<ConversationResponse?> HandOverUnpaidAiReplyAsync(Guid clientId, Guid conversationId, string failureReason, CancellationToken ct = default);
 
     /// <summary>A member hands the conversation back — AI may auto-reply again. Throws EntitlementDeniedException (422) when
-    /// the client's plan doesn't include the AI assistant.</summary>
+    /// the client's plan doesn't include the AI assistant, InvalidOperationException (422) when no active bot answers on the
+    /// conversation's account (Inbox settings).</summary>
     Task<ConversationResponse?> ReturnToAiAsync(Guid clientId, Guid conversationId, CancellationToken ct = default);
 
     Task<ConversationResponse?> CloseAsync(Guid clientId, Guid conversationId, CancellationToken ct = default);

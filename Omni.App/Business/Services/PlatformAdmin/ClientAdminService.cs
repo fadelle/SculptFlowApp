@@ -77,10 +77,10 @@ public class ClientAdminService : IClientAdminService
 
     public Task<InboxSettingsDto> GetInboxSettingsAsync(Guid id, CancellationToken ct) => _inboxSettings.GetAsync(id, ct);
 
-    public async Task<PlatformAdminChange> UpdateInboxSettingsAsync(Guid id, UpdateInboxSettingsRequest request, CancellationToken ct)
+    public async Task<PlatformAdminChange> UpdateAccountAiAsync(Guid id, Guid channelIntegrationId, UpdateAccountAiRequest request, CancellationToken ct)
     {
-        if (request is null) throw new ArgumentException("Send newConversations and reopenedConversations.");
-        await _inboxSettings.UpdateAsync(id, request, ct);
+        if (request is null) throw new ArgumentException("Send aiEnabled, botId, aiBotNewConversations and aiBotReopenedConversations."); // text-ok: read by the admin portal's developer
+        await _inboxSettings.UpdateAccountAsync(id, channelIntegrationId, request, ct);
         return new PlatformAdminChange(id);
     }
 

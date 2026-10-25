@@ -167,13 +167,16 @@ public class ClientAdminServiceTests
     public async Task Ai_bot_reads_and_writes_go_through_the_client_ai_bot_service()
     {
         var id = Guid.NewGuid();
-        _inboxSettings.Setup(a => a.GetAsync(id, It.IsAny<CancellationToken>())).ReturnsAsync(new InboxSettingsDto(true, true, false));
-        Assert.False((await Sut().GetInboxSettingsAsync(id, default)).AiBotReopenedConversations);
+        var settings = new InboxSettingsDto(true, 2, [], []);
+        _inboxSettings.Setup(a => a.GetAsync(id, It.IsAny<CancellationToken>())).ReturnsAsync(settings);
+        Assert.Same(settings, await Sut().GetInboxSettingsAsync(id, default));
 
-        var change = await Sut().UpdateInboxSettingsAsync(id, new UpdateInboxSettingsRequest(false, true), default);
+        var account = Guid.NewGuid();
+        var request = new UpdateAccountAiRequest(true, Guid.NewGuid(), true, false);
+        var change = await Sut().UpdateAccountAiAsync(id, account, request, default);
         Assert.Equal(id, change.ClientId);
-        _inboxSettings.Verify(a => a.UpdateAsync(id, new UpdateInboxSettingsRequest(false, true), It.IsAny<CancellationToken>()), Times.Once);
-        await Assert.ThrowsAsync<ArgumentException>(() => Sut().UpdateInboxSettingsAsync(id, null!, default));
+        _inboxSettings.Verify(a => a.UpdateAccountAsync(id, account, request, It.IsAny<CancellationToken>()), Times.Once);
+        await Assert.ThrowsAsync<ArgumentException>(() => Sut().UpdateAccountAiAsync(id, account, null!, default));
     }
 
     private static ClientUpdate Update(string name = " Glow ", string tz = "Asia/Beirut") => new(name, " 961 ", " ", "https://x", "lb", tz, " Street ", null, "info");

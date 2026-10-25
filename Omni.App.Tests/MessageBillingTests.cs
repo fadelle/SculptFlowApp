@@ -27,6 +27,7 @@ using Omni.App.Persistence.Repositories.Campaigns;
 using Omni.App.Persistence.Repositories.Clients;
 using Omni.App.Persistence.Repositories.Events;
 using Omni.App.Persistence.Repositories.Inbox;
+using Omni.App.Persistence.Repositories.Ai;
 using Omni.App.Persistence.Repositories.Contacts;
 using Omni.App.Persistence.Repositories.WhatsApp;
 
@@ -79,7 +80,7 @@ public class MessageBillingTests
             return new MessageService(new ConversationRepository(db), new MessageRepository(db), new ContactRepository(db),
                 new WhatsAppTemplateRepository(db), new CampaignRepository(db), new UnitOfWork(db), WhatsApp, new IChannelSender[] { new WhatsAppChannelSender(WhatsApp) },
                 NullProxy<IInboxNotifier>.Create(), new EventLogger(new EventLogRepository(db)), NullProxy<INotificationService>.Create(),
-                MessageBilling, H.Entitlements(db), new InboxSettingsService(new InboxSettingsRepository(db), new ClientRepository(db), H.Entitlements(db), new ChannelIntegrationRepository(db), new UnitOfWork(db)), Mock.Of<IMessageTracer>(),
+                MessageBilling, H.Entitlements(db), new InboxSettingsService(new InboxSettingsRepository(db), new BotRepository(db), new ClientRepository(db), H.Entitlements(db), new ChannelIntegrationRepository(db), new IChannelSender[] { new WhatsAppChannelSender(WhatsApp) }, new UnitOfWork(db)), Mock.Of<IMessageTracer>(),
                 Conversations.Object, optOut ?? Mock.Of<IOptOutService>(), NoAutoReplies());
         }
 

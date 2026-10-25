@@ -13,5 +13,12 @@ namespace Omni.App.Business.Contracts.HttpClients.N8n;
 /// </summary>
 public interface IAiTriggerNotifier
 {
+    /// <summary>A contact's message: adds the bot of the account the conversation's channel belongs to
+    /// (IInboxSettingsService.ResolveAsync) and the client's profile, then posts. Skipped (traced) when no bot answers there.
+    /// Never throws.</summary>
     Task NotifyAsync(AiTriggerPayload payload, CancellationToken ct = default);
+
+    /// <summary>A bot test conversation's message (payload with Bot and TestSessionId already set): adds the client's profile
+    /// and posts. False when n8n isn't configured or didn't accept it. Never throws.</summary>
+    Task<bool> NotifyTestAsync(AiTriggerPayload payload, CancellationToken ct = default);
 }

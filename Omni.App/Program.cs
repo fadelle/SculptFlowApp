@@ -207,6 +207,10 @@ builder.Services.AddScoped<IClientRegistrationService, ClientRegistrationService
 builder.Services.AddScoped<IBusinessTypeService, BusinessTypeService>();
 // The client facts every AI trigger carries to n8n (name, business type, AI profile, words, language, timezone).
 builder.Services.AddScoped<IAiProfileService, AiProfileService>();
+builder.Services.AddScoped<IBotService, BotService>();
+builder.Services.AddScoped<IBotRuntimeService, BotRuntimeService>();
+builder.Services.AddScoped<IBotTestService, BotTestService>();
+builder.Services.AddScoped<IBotConversationService, BotConversationService>();
 // UI text: Resources/i18n/{language}.json (embedded) through IStringLocalizer (@T["key"] in Razor, [ApiErrors] for
 // server messages) and window.omniText in the browser; RequestTextMiddleware picks each request's language and the
 // client's business-type words.

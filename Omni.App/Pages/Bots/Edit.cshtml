@@ -1,0 +1,209 @@
+@page "/Bots/Edit/{id:guid}"
+@model Omni.App.Pages.Bots.EditModel
+@{
+    ViewData["Title"] = Model.Bot?.Name ?? T["nav.bots"].Value;
+}
+
+@if (!Model.ClientConfigured || Model.Bot is not { } bot)
+{
+    <partial name="_NoClient" />
+}
+else
+{
+    var custom = !bot.IsTemplate;
+    <div class="au-back-header">
+        <a class="au-icon-btn au-icon-btn--bordered" href="/Bots" aria-label="@T["bots.back"]" title="@T["bots.back"]">
+            <span class="au-icon au-icon--dir" aria-hidden="true">arrow_back</span>
+        </a>
+        <div class="min-w-0">
+            <h2 class="au-back-header__title" dir="auto">@bot.Name</h2>
+            <span class="au-back-header__sub">
+                @T[BotTextKeys.TemplateName(bot.Template)] ·
+                <span class="badge @BotTextKeys.StatusBadge(bot.Status)">@T[BotTextKeys.Status(bot.Status)]</span>
+                · @T.Plural("bots.accounts", bot.AccountCount)
+            </span>
+        </div>
+    </div>
+
+    <partial name="_Messages" model="new PageMessagesModel(Model.StatusMessage, Model.ErrorMessage)" />
+
+    <div class="bot-editor">
+        <form method="post" class="au-panel au-panel--round au-panel--pad integration-form" id="bot-form">
+            <div class="set-section">
+                <div class="set-section-head"><strong>@T["bots.edit.basics"]</strong></div>
+                <div class="set-section-body">
+                    <div class="au-form-field">
+                        <label class="au-form-label" for="bot-name">@T["bots.edit.name"]<span class="au-required">*</span></label>
+                        <input type="text" name="Name" id="bot-name" value="@Model.Name" class="au-input" maxlength="100" required dir="auto" />
+                    </div>
+                    <div class="au-form-field">
+                        <label class="au-form-label" for="bot-description">@T["bots.edit.description"] <span class="opt">@T["common.optional"]</span></label>
+                        <textarea name="Description" id="bot-description" rows="2" class="au-textarea" maxlength="500" dir="auto">@Model.Description</textarea>
+                        <span class="au-help">@T["bots.edit.descriptionHelp"]</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="set-section">
+                <div class="set-section-head">
+                    <strong>@T["bots.edit.instructions"]</strong>
+                    <div class="cell-sub">@(custom ? T["bots.edit.instructionsHelp"] : T["bots.edit.instructionsLocked"])</div>
+                </div>
+                <div class="set-section-body">
+                    @if (custom)
+                    {
+                        <div class="au-form-field">
+                            <label class="au-form-label au-sr-only" for="bot-instructions">@T["bots.edit.instructions"]</label>
+                            <textarea name="Instructions" id="bot-instructions" rows="8" class="au-textarea" maxlength="@Model.InstructionsMaxLength" required dir="auto" placeholder="@T["bots.edit.instructionsPlaceholder"]">@Model.Instructions</textarea>
+                            <span class="au-help">@T["bots.edit.instructionsLimit", Model.InstructionsMaxLength.Display("N0")]</span>
+                        </div>
+                    }
+                    else
+                    {
+                        <blockquote class="bot-locked" dir="ltr">@bot.CoreInstructions</blockquote>
+                        <button type="submit" form="bot-duplicate-form" class="au-btn au-btn--outlined au-btn--sm">@T["bots.useAsCustom"]</button>
+                        <span class="au-help">@T["bots.useAsCustomHelp"]</span>
+                    }
+                </div>
+            </div>
+
+            <div class="set-section">
+                <div class="set-section-head">
+                    <strong>@T["bots.edit.actions"]</strong>
+                    <div class="cell-sub">@T["bots.edit.actionsHelp"]</div>
+                </div>
+                <div class="set-section-body">
+                    @foreach (var capability in BotCapability.All)
+                    {
+                        <label class="au-check">
+                            <input type="checkbox" name="Capabilities" value="@capability" checked="@Model.HasCapability(capability)" disabled="@(!custom)" />
+                            @T[BotTextKeys.Capability(capability)]
+                        </label>
+                    }
+                    <small class="text-subtle">@T["bots.edit.actionsAlways"]</small>
+                </div>
+            </div>
+
+            <div class="set-section">
+                <div class="set-section-head">
+                    <strong>@T["bots.edit.knowledge"]</strong>
+                    <div class="cell-sub">@T["bots.edit.knowledgeHelp"]</div>
+                </div>
+                <div class="set-section-body">
+                    <div class="seg" role="radiogroup" aria-label="@T["bots.edit.knowledge"]">
+                        <label class="seg-opt"><input type="radio" name="KnowledgeScope" value="@BotKnowledgeScope.All" checked="@(Model.KnowledgeScope == BotKnowledgeScope.All)" data-bot-scope /><span>@T["bots.edit.knowledgeAll"]</span></label>
+                        <label class="seg-opt"><input type="radio" name="KnowledgeScope" value="@BotKnowledgeScope.Selected" checked="@(Model.KnowledgeScope == BotKnowledgeScope.Selected)" data-bot-scope /><span>@T["bots.edit.knowledgeSelected"]</span></label>
+                    </div>
+                    <div id="bot-sources" class="bot-sources" hidden="@(Model.KnowledgeScope != BotKnowledgeScope.Selected)">
+                        @if (Model.KnowledgeChoices.Count == 0)
+                        {
+                            <p class="au-help">@T.Html("bots.edit.knowledgeNone", new Microsoft.AspNetCore.Html.HtmlString($"<a href=\"/KnowledgeBase\">{System.Net.WebUtility.HtmlEncode(T["nav.knowledgeBase"].Value)}</a>"))</p>
+                        }
+                        @foreach (var source in Model.KnowledgeChoices)
+                        {
+                            var isDocument = source.Kind == Omni.App.Entities.Dtos.Ai.BotKnowledgeChoice.Document;
+                            var picked = isDocument ? Model.KnowledgeDocumentIds.Contains(source.Id) : Model.WebsiteSourceIds.Contains(source.Id);
+                            <label class="au-check">
+                                <input type="checkbox" name="@(isDocument ? "KnowledgeDocumentIds" : "WebsiteSourceIds")" value="@source.Id" checked="@picked" />
+                                <span class="au-icon" aria-hidden="true">@(isDocument ? "description" : "language")</span>
+                                <span dir="@(isDocument ? "auto" : "ltr")">@source.Title</span>
+                                @if (!source.IsActive)
+                                {
+                                    <span class="badge badge-gray">@T["bots.edit.sourceInactive"]</span>
+                                }
+                            </label>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <div class="set-section">
+                <div class="set-section-head"><strong>@T["bots.edit.language"]</strong><div class="cell-sub">@T["bots.edit.languageHelp"]</div></div>
+                <div class="set-section-body">
+                    <select name="Language" id="bot-language" class="au-select" aria-label="@T["bots.edit.language"]">
+                        <option value="" selected="@string.IsNullOrEmpty(Model.Language)">@T["bots.edit.languageAuto"]</option>
+                        @foreach (var code in Model.Languages)
+                        {
+                            <option value="@code" selected="@(Model.Language == code)">@T[BotTextKeys.Language(code)]</option>
+                        }
+                    </select>
+                </div>
+            </div>
+
+            <div class="set-section">
+                <div class="set-section-head"><strong>@T["bots.edit.handoff"]</strong><div class="cell-sub">@T["bots.edit.handoffHelp"]</div></div>
+                <div class="set-section-body">
+                    @foreach (var policy in BotHandoffPolicy.All)
+                    {
+                        <label class="au-check">
+                            <input type="radio" name="HandoffPolicy" value="@policy" checked="@(Model.HandoffPolicy == policy)" />
+                            @T[BotTextKeys.HandoffPolicy(policy)]
+                        </label>
+                    }
+                    <div class="au-form-field">
+                        <label class="au-form-label" for="bot-handoff-message">@T["bots.edit.handoffMessage"] <span class="opt">@T["common.optional"]</span></label>
+                        <textarea name="HandoffMessage" id="bot-handoff-message" rows="2" class="au-textarea" maxlength="@Model.HandoffMessageMaxLength" dir="auto" placeholder="@T["bots.edit.handoffMessagePlaceholder"]">@Model.HandoffMessage</textarea>
+                        <span class="au-help">@T["bots.edit.handoffMessageHelp"]</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="set-section">
+                <div class="set-section-head"><strong>@T["bots.edit.status"]</strong><div class="cell-sub">@T["bots.edit.statusHelp"]</div></div>
+                <div class="set-section-body">
+                    <div class="seg" role="radiogroup" aria-label="@T["bots.edit.status"]">
+                        @foreach (var status in BotStatus.All)
+                        {
+                            <label class="seg-opt"><input type="radio" name="Status" value="@status" checked="@(Model.Status == status)" disabled="@(status == BotStatus.Active && !Model.PlanIncludesAi && Model.Status != BotStatus.Active)" /><span>@T[BotTextKeys.Status(status)]</span></label>
+                        }
+                    </div>
+                    @if (!Model.PlanIncludesAi)
+                    {
+                        <small class="text-subtle">@T["bots.noPlan"]</small>
+                    }
+                </div>
+            </div>
+
+            <div class="au-form-actions">
+                <button type="submit" form="bot-delete-form" class="au-btn au-btn--danger-outlined au-btn--sm">@T["common.delete"]</button>
+                <a href="/Bots" class="au-btn au-btn--text">@T["common.cancel"]</a>
+                <button type="submit" class="au-btn au-btn--primary">@T["common.saveChanges"]</button>
+            </div>
+        </form>
+
+        @* bot-test.js reads #bot-test (data-bot-id, data-max), #bot-test-log, #bot-test-form, #bot-test-input, #bot-test-reset,
+           #bot-test-status. *@
+        <aside class="au-panel au-panel--round au-panel--pad bot-test" id="bot-test" data-bot-id="@bot.Id" data-max="@Model.TestMessageMaxLength">
+            <div class="modal-head">
+                <h3 class="card-title">@T["bots.test.title"]</h3>
+                <button type="button" class="au-btn au-btn--text au-btn--sm" id="bot-test-reset"><span class="au-icon" aria-hidden="true">refresh</span>@T["bots.test.reset"]</button>
+            </div>
+            <p class="au-help">@T["bots.test.help"]</p>
+            @if (!Model.PlanIncludesAi)
+            {
+                <div class="au-alert au-alert--warning" role="status"><div class="au-alert__body">@T["bots.noPlan"]</div></div>
+            }
+            else if (Model.NotReadyKey is { } notReady)
+            {
+                <div class="au-alert au-alert--warning" role="status"><div class="au-alert__body">@T[notReady]</div></div>
+            }
+            <div class="bot-test-log" id="bot-test-log" aria-live="polite"></div>
+            <p class="au-help" id="bot-test-status" hidden></p>
+            <form id="bot-test-form" class="bot-test-form">
+                <label class="au-sr-only" for="bot-test-input">@T["bots.test.placeholder"]</label>
+                <input type="text" id="bot-test-input" class="au-input" maxlength="@Model.TestMessageMaxLength" autocomplete="off" dir="auto"
+                       placeholder="@T["bots.test.placeholder"]" disabled="@(!Model.PlanIncludesAi || Model.NotReadyKey is not null)" />
+                <button type="submit" class="au-icon-btn au-icon-btn--bordered" aria-label="@T["bots.test.send"]" title="@T["bots.test.send"]"
+                        disabled="@(!Model.PlanIncludesAi || Model.NotReadyKey is not null)"><span class="au-icon au-icon--dir" aria-hidden="true">send</span></button>
+            </form>
+            <small class="text-subtle">@T["bots.test.billing"]</small>
+        </aside>
+    </div>
+
+    <form method="post" asp-page-handler="Duplicate" id="bot-duplicate-form" hidden></form>
+    <form method="post" asp-page-handler="Delete" id="bot-delete-form" hidden
+          data-au-confirm="@T["bots.delete.confirm", bot.Name]" data-au-confirm-title="@T["bots.delete.title"]"
+          data-au-confirm-label="@T["common.delete"]" data-au-confirm-tone="danger"></form>
+
+    <script src="~/js/bot-test.js" asp-append-version="true"></script>
+}

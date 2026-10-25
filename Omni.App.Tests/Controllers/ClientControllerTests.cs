@@ -162,10 +162,9 @@ public class ConversationsControllerTests : ClientControllerTestBase
 {
     private readonly Mock<IConversationService> _conversations = new();
     private readonly Mock<IMessageService> _messages = new();
-    private string? _ingestKey = "ingest-secret";
 
     private ConversationsController Sut(Action<HttpContext>? configure = null) =>
-        new ConversationsController(_conversations.Object, _messages.Object, ControllerTestKit.Config(("N8n:IngestApiKey", _ingestKey)), Client.Object).With(configure);
+        new ConversationsController(_conversations.Object, _messages.Object, Client.Object).With(configure);
 
     private static MessageResponse Msg() => new(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "outbound", "member", "dashboard", "whatsapp", "text", "hi", null, false, null, null, null, null, DateTimeOffset.UtcNow, null, null, null, null, null, null, null);
 
@@ -231,51 +230,18 @@ public class ConversationsControllerTests : ClientControllerTestBase
     }
 
     [Fact]
-    public async Task A_member_send_needs_a_signed_in_user_with_a_client()
+    public async Task A_member_send_uses_the_signed_in_client()
     {
         var id = Guid.NewGuid();
         var request = new SendMessageRequest("hello");
-        Assert.IsType<ChallengeResult>((await Sut().SendMessage(id, null, request, default)).Result); // anonymous, not the AI
-
-        var signedIn = Sut(h => h.User = new System.Security.Claims.ClaimsPrincipal(new System.Security.Claims.ClaimsIdentity([new System.Security.Claims.Claim("sub", "u1")], "test")));
         _messages.Setup(m => m.SendAsync(ClientId, id, request, It.IsAny<CancellationToken>())).ReturnsAsync(Msg());
-        Assert.IsType<OkObjectResult>((await signedIn.SendMessage(id, Guid.NewGuid(), request, default)).Result); // client id in the query is ignored
+        Assert.IsType<OkObjectResult>((await Sut().SendMessage(id, request, default)).Result);
         NoClient();
-        IsForbid(await signedIn.SendMessage(id, null, request, default));
+        IsForbid(await Sut().SendMessage(id, request, default));
         SignedIn();
         _messages.Setup(m => m.SendAsync(ClientId, id, request, It.IsAny<CancellationToken>())).ReturnsAsync((MessageResponse?)null);
-        Assert.IsType<NotFoundResult>((await signedIn.SendMessage(id, null, request, default)).Result);
+        Assert.IsType<NotFoundResult>((await Sut().SendMessage(id, request, default)).Result);
     }
-
-    [Fact]
-    public async Task An_ai_send_requires_the_ingest_key_and_a_client_id_and_maps_human_mode_to_409()
-    {
-        var id = Guid.NewGuid(); var client = Guid.NewGuid();
-        var request = new SendMessageRequest("hi", Sender: "AI");
-
-        Assert.IsType<UnauthorizedObjectResult>((await Sut().SendMessage(id, client, request, default)).Result);
-        Assert.IsType<UnauthorizedObjectResult>((await Sut(h => h.Request.Headers[RequireIngestKeyAttributeName] = "wrong").SendMessage(id, client, request, default)).Result);
-        _ingestKey = null;
-        Assert.IsType<UnauthorizedObjectResult>((await Sut(h => h.Request.Headers[RequireIngestKeyAttributeName] = "ingest-secret").SendMessage(id, client, request, default)).Result);
-        _ingestKey = "ingest-secret";
-
-        SendAs ai = () => Sut(h => h.Request.Headers[RequireIngestKeyAttributeName] = "ingest-secret");
-        Assert.IsType<BadRequestObjectResult>((await ai().SendMessage(id, null, request, default)).Result);
-
-        _messages.Setup(m => m.SendAiReplyAsync(client, id, "hi", It.IsAny<CancellationToken>())).ReturnsAsync(Msg());
-        Assert.IsType<OkObjectResult>((await ai().SendMessage(id, client, request, default)).Result);
-        _messages.Setup(m => m.SendAiReplyAsync(client, id, "hi", It.IsAny<CancellationToken>())).ThrowsAsync(new ConversationNotInAiModeException("human"));
-        var conflict = Assert.IsType<ConflictObjectResult>((await ai().SendMessage(id, client, request, default)).Result);
-        Assert.Contains("conversation_in_human_mode", System.Text.Json.JsonSerializer.Serialize(conflict.Value));
-        _messages.Setup(m => m.SendAiReplyAsync(client, id, "hi", It.IsAny<CancellationToken>())).ThrowsAsync(new AiReplyRefusedException(UsageFailureReason.InsufficientFunds));
-        var refused = System.Text.Json.JsonSerializer.Serialize(Assert.IsType<ConflictObjectResult>((await ai().SendMessage(id, client, request, default)).Result).Value);
-        Assert.Contains("ai_reply_refused", refused);
-        Assert.Contains("insufficient_funds", refused);
-        _messages.Setup(m => m.SendAiReplyAsync(client, id, "hi", It.IsAny<CancellationToken>())).ReturnsAsync((MessageResponse?)null);
-        Assert.IsType<NotFoundResult>((await ai().SendMessage(id, client, request, default)).Result);
-    }
-
-    private delegate ConversationsController SendAs();
 
     private const string RequireIngestKeyAttributeName = "X-Ingest-Key";
 }

@@ -160,6 +160,13 @@ begin
   values (pg_temp.did(24), c, 'connected', 'demo-tiktok-open-id', '@aurora.aesthetic.demo', null, 'DEMO-NOT-A-REAL-TOKEN', 'DEMO-NOT-A-REAL-TOKEN',
           now() + interval '20 hours', now() + interval '300 days', true);
 
+  -- AI bot: an active booking bot answers the WhatsApp number (Inbox settings); the other accounts go to the team.
+  insert into crm.bots (id, client_id, name, description, template, knowledge_scope, handoff_policy, handoff_message, status, created_at)
+  values (pg_temp.did(1300), c, 'Front desk', 'Answers questions and takes bookings on WhatsApp.', 'booking', 'all',
+          'on_request_or_unsure', 'You''ve been transferred to our team. Someone will contact you shortly.', 'active', now() - interval '90 days');
+  insert into crm.inbox_settings (id, client_id, channel_integration_id, ai_enabled, bot_id, ai_bot_new_conversations, ai_bot_reopened_conversations)
+  values (pg_temp.did(1301), c, pg_temp.did(20), true, pg_temp.did(1300), true, true);
+
   -- ---------------------------------------------------------------
   -- 6. WhatsApp templates
   -- ---------------------------------------------------------------
@@ -494,7 +501,7 @@ begin
   insert into billing.plan_entitlements (plan_id, entitlement_key, value) values
     (v_plan, 'campaigns', 'true'), (v_plan, 'bookings', 'true'), (v_plan, 'ai_assistant', 'true'), (v_plan, 'reporting', 'true'), (v_plan, 'advanced_reporting', 'true'),
     (v_plan, 'api_access', 'false'), (v_plan, 'max_users', '3'), (v_plan, 'max_whatsapp_numbers', '2'),
-    (v_plan, 'max_channel_connections', '6')
+    (v_plan, 'max_channel_connections', '6'), (v_plan, 'max_ai_bots', '2')
   on conflict (plan_id, entitlement_key) do update set value = excluded.value;
 
   insert into billing.rate_cards (id, code, name, description, client_id, is_default, is_active)

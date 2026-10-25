@@ -32,8 +32,8 @@ public class AiTestController : ControllerBase
     [HttpGet("codes")]
     public ActionResult<object> ListCodes() => Ok(new
     {
-        schedule = new[] { "BOOKED", "RESCHEDULED", "CONFIRMATION_REQUIRED", "MULTIPLE_UPCOMING_BOOKINGS", "SLOT_UNAVAILABLE", "CONTACT_NOT_FOUND", "INVALID_REQUEST" },
-        cancel = new[] { "CANCELED", "NO_UPCOMING_BOOKING", "MULTIPLE_UPCOMING_BOOKINGS", "INVALID_REQUEST" },
+        schedule = new[] { "BOOKED", "RESCHEDULED", "CONFIRMATION_REQUIRED", "MULTIPLE_UPCOMING_BOOKINGS", "SLOT_UNAVAILABLE", "CONTACT_NOT_FOUND", "INVALID_REQUEST", BotToolAttribute.NotAllowedCode },
+        cancel = new[] { "CANCELED", "NO_UPCOMING_BOOKING", "MULTIPLE_UPCOMING_BOOKINGS", "INVALID_REQUEST", BotToolAttribute.NotAllowedCode },
         usage = "POST /api/ai/test/schedule?code=<one of the schedule codes> or /api/ai/test/cancel?code=<one of the cancel codes>. " +
                 "Same request body/headers as the real tool; clientId/contactId in the URL are ignored. The response is exactly what " +
                 "schedule_booking/cancel_booking would return for that code — point the n8n tool at this URL temporarily to test the AI's reaction."
@@ -42,8 +42,10 @@ public class AiTestController : ControllerBase
     /// <summary>POST /api/ai/test/schedule?code=CODE — returns the canned ScheduleBookingResult for CODE. Body/other query
     /// params are accepted (so the same n8n tool node works unmodified) but ignored. Unknown/missing code → 400 listing the valid ones.</summary>
     [HttpPost("schedule")]
-    public ActionResult<ScheduleBookingResult> Schedule([FromQuery] string? code)
+    public ActionResult<object> Schedule([FromQuery] string? code)
     {
+        // The refusal a bot without the bookings action gets (BotToolAttribute), byte for byte.
+        if (string.Equals(code, BotToolAttribute.NotAllowedCode, StringComparison.OrdinalIgnoreCase)) return Ok(BotToolAttribute.NotAllowed(BotToolCheck.NotAllowed));
         var target = Existing("Monday, Sep 28 at 3:00 PM", "2026-09-28", "15:00");
         var requestedLabel = "Tuesday, Sep 29 at 4:00 PM";
 
@@ -82,8 +84,9 @@ public class AiTestController : ControllerBase
 
     /// <summary>POST /api/ai/test/cancel?code=CODE — returns the canned CancelBookingResult for CODE. Same convention as /schedule.</summary>
     [HttpPost("cancel")]
-    public ActionResult<CancelBookingResult> Cancel([FromQuery] string? code)
+    public ActionResult<object> Cancel([FromQuery] string? code)
     {
+        if (string.Equals(code, BotToolAttribute.NotAllowedCode, StringComparison.OrdinalIgnoreCase)) return Ok(BotToolAttribute.NotAllowed(BotToolCheck.NotAllowed));
         var target = Existing("Monday, Sep 28 at 11:00 AM", "2026-09-28", "11:00");
 
         CancelBookingResult result;

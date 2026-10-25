@@ -1,3 +1,5 @@
+using Omni.App.Persistence.Contracts.Ai;
+using Omni.App.Persistence.Repositories.Ai;
 using Omni.App.Persistence.Contracts;
 using Omni.App.Persistence.Contracts.Bookings;
 using Omni.App.Persistence.Contracts.Billing;
@@ -76,6 +78,8 @@ public static class PersistenceModule
         services.AddScoped<IConversationRepository, ConversationRepository>();
         services.AddScoped<IInboxSettingsRepository, InboxSettingsRepository>();
         services.AddScoped<IAutoReplyRepository, AutoReplyRepository>();
+        services.AddScoped<IBotRepository, BotRepository>();
+        services.AddScoped<IBotTestRepository, BotTestRepository>();
         services.AddScoped<IMessageRepository, MessageRepository>();
         services.AddScoped<IChannelIntegrationRepository, ChannelIntegrationRepository>();
         services.AddScoped<IWhatsAppTemplateRepository, WhatsAppTemplateRepository>();

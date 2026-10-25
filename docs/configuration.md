@@ -64,6 +64,10 @@ Generated from `Common/Statics/ConfigDefaults`; keep this table in step when you
 | OptOut | SendConfirmation | true | bool | Reply once to a stop or start word with a short confirmation in the contact's language (a normal outbound message, billed like any other). |
 | AutoReply | Enabled | true | bool | Master switch for automatic replies to new and reopened conversations. Off = none is sent for any client (each client also sets its own per channel on the Auto-respond page). |
 | AutoReply | MaxLength | 1000 | int (1–4096) | Longest automatic reply a client may save, in characters. |
+| Bots | InstructionsMaxLength | 4000 | int (100–20000) | Longest instructions a custom AI bot may have, in characters. |
+| Bots | HandoffMessageMaxLength | 500 | int (1–4096) | Longest handoff message an AI bot may send when it hands a conversation to the team, in characters. |
+| Bots | TestMessageMaxLength | 1000 | int (1–4096) | Longest message a member may send a bot in its test conversation, in characters. |
+| Bots | TestSessionHours | 24 | int (1–720) | Bot test conversations untouched for this many hours are deleted when a new one starts. |
 | Reminders | Enabled | true | bool | Master switch for booking reminders. Off = the reminder worker sends nothing for any client (each client also turns its own reminders on). |
 | Reminders | IntervalSeconds | 60 | int 15–3600 | How often the reminder worker looks for due booking reminders. |
 | Reminders | BatchSize | 50 | int 1–500 | Most reminders of one kind the worker handles for one client per run (the rest wait for the next run). |

@@ -89,19 +89,29 @@ public class KnowledgeDocumentRepository : IKnowledgeDocumentRepository
         }
     }
 
+    public Task<IReadOnlyList<KnowledgeChunkMatch>> SearchChunksAsync(Guid clientId, float[] queryVector, int take,
+        CancellationToken ct = default) => SearchChunksAsync(clientId, queryVector, take, null, ct);
+
     public async Task<IReadOnlyList<KnowledgeChunkMatch>> SearchChunksAsync(Guid clientId, float[] queryVector, int take,
-        CancellationToken ct = default)
+        KnowledgeSourceFilter? sources, CancellationToken ct = default)
     {
+        // A bot limited to some sources sees only those documents and the documents its website sources' pages produced.
         var rows = await _db.Database.SqlQueryRaw<SearchRow>(
             @"select c.id as ""ChunkId"", d.id as ""DocumentId"", d.title as ""Title"", d.category as ""Category"", c.content as ""Content"",
                      (1 - (c.embedding <=> @q::vector))::double precision as ""Score""
               from knowledge.knowledge_chunks c
               join knowledge.knowledge_documents d on d.id = c.knowledge_document_id
               where c.client_id = @client and d.client_id = @client and d.is_active = true
+                and (@all or d.id = any(@docs) or exists (
+                      select 1 from knowledge.knowledge_website_pages p
+                      where p.knowledge_document_id = d.id and p.client_id = @client and p.website_source_id = any(@sites)))
               order by c.embedding <=> @q::vector
               limit @lim",
             new NpgsqlParameter("q", VectorLiteral.From(queryVector)),
             new NpgsqlParameter("client", clientId),
+            new NpgsqlParameter("all", sources is null),
+            new NpgsqlParameter("docs", (sources?.DocumentIds ?? []).ToArray()),
+            new NpgsqlParameter("sites", (sources?.WebsiteSourceIds ?? []).ToArray()),
             new NpgsqlParameter("lim", take))
             .ToListAsync(ct);
 

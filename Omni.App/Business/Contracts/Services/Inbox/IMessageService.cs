@@ -49,6 +49,12 @@ public interface IMessageService
     /// conversation to human mode — origin=ai, sender_type=ai throughout.</summary>
     Task<MessageResponse?> SendAiReplyAsync(Guid clientId, Guid conversationId, string content, CancellationToken ct = default);
 
+    /// <summary>The AI bot's handoff message, right after the bot handed the conversation to the team (once per real handoff,
+    /// IBotConversationService): an automatic message (billed like any text, never changes the mode), event
+    /// handoff_message_sent. Skipped (traced) outside WhatsApp's 24-hour window; a failed send is traced, never thrown. Null
+    /// when nothing was sent.</summary>
+    Task<MessageResponse?> SendHandoffMessageAsync(Guid clientId, Guid conversationId, Guid botId, string content, CancellationToken ct = default);
+
     /// <summary>An automatic text from Omni itself (sender and origin "system"): the opt-out confirmation, Telegram booking
     /// reminders. Same billing and channel rules as a member's text (WhatsApp needs an open service window), but it never
     /// changes the conversation's mode. Null when the conversation isn't the client's.</summary>

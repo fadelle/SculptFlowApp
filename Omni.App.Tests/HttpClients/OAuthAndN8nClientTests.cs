@@ -221,7 +221,12 @@ public class N8nNotifierTests
     private readonly Mock<IAiProfileService> _profiles = AiProfileKit.Profiles();
     private Dictionary<string, string?> _settings = new() { ["N8n:AiWebhookUrl"] = "https://n8n.example/webhook/ai", ["N8n:CalendarSyncWebhookUrl"] = "https://n8n.example/webhook/cal", ["N8n:KnowledgeBenchmarkWebhookUrl"] = "https://n8n.example/webhook/bench" };
 
+    private Mock<IInboxSettingsService> _inbox = BotKit.Inbox();
+
     private IConfiguration Cfg() => new ConfigurationBuilder().AddInMemoryCollection(_settings).Build();
+
+    private AiTriggerNotifier Notifier() => new(_http.CreateClient(), Cfg(), NullLogger<AiTriggerNotifier>.Instance, _entitlements.Object, _profiles.Object,
+        _inbox.Object, BotKit.Runtime().Object, Mock.Of<IMessageTracer>());
 
     private static AiTriggerPayload Payload() => new(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "whatsapp", "text", "hi", "btn");
 
@@ -235,7 +240,7 @@ public class N8nNotifierTests
         AiAllowed(true);
         _http.Enqueue(HttpStatusCode.OK, "{}");
         var payload = Payload();
-        await new AiTriggerNotifier(_http.CreateClient(), Cfg(), NullLogger<AiTriggerNotifier>.Instance, _entitlements.Object, _profiles.Object, Mock.Of<IMessageTracer>()).NotifyAsync(payload);
+        await Notifier().NotifyAsync(payload);
         var req = Assert.Single(_http.Requests);
         Assert.Equal("https://n8n.example/webhook/ai", req.Uri.ToString());
         Assert.Contains($"\"conversationId\":\"{payload.ConversationId}\"", req.Body);
@@ -249,28 +254,60 @@ public class N8nNotifierTests
         Assert.Equal(AiProfileKit.Sample.AiProfile, body.GetProperty("aiProfile").GetString());
         Assert.Equal("visits", body.GetProperty("terms").GetProperty("booking").GetProperty("other").GetString());
         _profiles.Verify(p => p.GetForClientAsync(payload.ClientId, It.IsAny<CancellationToken>()), Times.Once);
+
+        // The bot of the conversation's account runs: n8n gets its configuration and sends its id back on every tool call.
+        Assert.Equal(BotKit.BotId.ToString(), body.GetProperty("bot").GetProperty("id").GetString());
+        Assert.Equal(BotKit.Config.Instructions, body.GetProperty("bot").GetProperty("instructions").GetString());
+        Assert.Equal(System.Text.Json.JsonValueKind.Null, body.GetProperty("testSessionId").ValueKind);
+        _inbox.Verify(i => i.ResolveAsync(payload.ClientId, "whatsapp", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Ai_trigger_is_skipped_when_no_bot_answers_the_account()
+    {
+        AiAllowed(true);
+        _inbox = BotKit.Inbox(AiBotBlockReason.BotInactive);
+        await Notifier().NotifyAsync(Payload());
+        Assert.Empty(_http.Requests);
+    }
+
+    [Fact]
+    public async Task A_test_trigger_posts_as_it_is_without_a_contact_language_and_says_whether_n8n_took_it()
+    {
+        var session = Guid.NewGuid();
+        var payload = new AiTriggerPayload(Guid.NewGuid(), session, session, Guid.NewGuid(), "test", "text", "hi", Bot: BotKit.Config, TestSessionId: session);
+        _http.Enqueue(HttpStatusCode.OK, "{}");
+        Assert.True(await Notifier().NotifyTestAsync(payload));
+        Assert.Contains($"\"testSessionId\":\"{session}\"", _http.Requests[0].Body);
+        _profiles.Verify(p => p.GetContactLanguageAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+        _inbox.Verify(i => i.ResolveAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+
+        _http.Enqueue(HttpStatusCode.BadGateway, "down");
+        Assert.False(await Notifier().NotifyTestAsync(payload));
+        _settings.Remove("N8n:AiWebhookUrl");
+        Assert.False(await Notifier().NotifyTestAsync(payload));
     }
 
     [Fact]
     public async Task Ai_trigger_is_skipped_without_a_url_or_without_the_ai_feature_and_never_throws()
     {
         AiAllowed(false);
-        var sut = new AiTriggerNotifier(_http.CreateClient(), Cfg(), NullLogger<AiTriggerNotifier>.Instance, _entitlements.Object, _profiles.Object, Mock.Of<IMessageTracer>());
+        var sut = Notifier();
         await sut.NotifyAsync(Payload());
         Assert.Empty(_http.Requests);
 
         _settings.Remove("N8n:AiWebhookUrl");
-        await new AiTriggerNotifier(_http.CreateClient(), Cfg(), NullLogger<AiTriggerNotifier>.Instance, _entitlements.Object, _profiles.Object, Mock.Of<IMessageTracer>()).NotifyAsync(Payload());
+        await Notifier().NotifyAsync(Payload());
         Assert.Empty(_http.Requests);
 
         _settings["N8n:AiWebhookUrl"] = "https://n8n.example/webhook/ai";
         AiAllowed(true);
         _http.Enqueue(HttpStatusCode.InternalServerError, "oops");
-        await new AiTriggerNotifier(_http.CreateClient(), Cfg(), NullLogger<AiTriggerNotifier>.Instance, _entitlements.Object, _profiles.Object, Mock.Of<IMessageTracer>()).NotifyAsync(Payload());
+        await Notifier().NotifyAsync(Payload());
         _http.EnqueueThrow(new HttpRequestException("down"));
-        await new AiTriggerNotifier(_http.CreateClient(), Cfg(), NullLogger<AiTriggerNotifier>.Instance, _entitlements.Object, _profiles.Object, Mock.Of<IMessageTracer>()).NotifyAsync(Payload());
+        await Notifier().NotifyAsync(Payload());
         _entitlements.Setup(e => e.GetAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ThrowsAsync(new InvalidOperationException("db"));
-        await new AiTriggerNotifier(_http.CreateClient(), Cfg(), NullLogger<AiTriggerNotifier>.Instance, _entitlements.Object, _profiles.Object, Mock.Of<IMessageTracer>()).NotifyAsync(Payload());
+        await Notifier().NotifyAsync(Payload());
     }
 
     [Fact]

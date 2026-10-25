@@ -6,19 +6,15 @@ using Omni.App.Business.Contracts.Services.Bookings;
 using Omni.App.Business.Contracts.Services.Clients;
 using Omni.App.Common.Helpers;
 using Omni.App.Entities.Dtos.Bookings;
-using Omni.App.Business.Contracts.Services.Inbox;
-using Omni.App.Entities.Dtos.Inbox;
 using Omni.App.Entities.Models;
 using Omni.App.Entities.Requests.Clients;
-using Omni.App.Entities.Requests.Inbox;
 
 namespace Omni.App.Pages.Settings;
 
 /// <summary>Settings → Business Info. Tabs: General (the free-text info the AI's get_client_info tool quotes),
 /// Availability (the structured weekly schedule, booking rules and date exceptions that drive real booking slots —
-/// see Business/Services/Bookings/AvailabilityService.cs) and AI assistant (whether the AI bot answers new and
-/// reopened conversations; shown only when the plan includes the AI assistant — see InboxSettingsService). The free-text
-/// Operating hours are never parsed for booking.</summary>
+/// see Business/Services/Bookings/AvailabilityService.cs). The free-text Operating hours are never parsed for booking. AI
+/// bots and where they answer live on their own pages (Bots, Settings → Inbox settings).</summary>
 public class BusinessInfoModel : PageModel
 {
     /// <summary>Common IANA timezones for the picker; the client's current value is always added if missing.</summary>
@@ -41,21 +37,17 @@ public class BusinessInfoModel : PageModel
     private readonly ICurrentClientContext _clientContext;
     private readonly IClientProfileService _profile;
     private readonly IAvailabilityService _availability;
-    private readonly IInboxSettingsService _inboxSettings;
     private readonly IStringLocalizer _text;
 
     private const string DetailsSavedKey = "businessInfo.done.details";
-    private const string NoAiKey = "businessInfo.errors.noAi";
-    private const string AiSavedKey = "businessInfo.done.ai";
     private const string HoursSavedKey = "businessInfo.done.hours";
     private const string DateSavedKey = "businessInfo.done.dateSaved";
     private const string DateRemovedKey = "businessInfo.done.dateRemoved";
     private const string LanguageSavedKey = "businessInfo.done.language";
 
     public BusinessInfoModel(ICurrentClientContext clientContext, IClientProfileService profile, IAvailabilityService availability,
-        IInboxSettingsService inboxSettings, IStringLocalizer text)
+        IStringLocalizer text)
     {
-        _inboxSettings = inboxSettings;
         _text = text;
         _clientContext = clientContext;
         _profile = profile;
@@ -71,21 +63,11 @@ public class BusinessInfoModel : PageModel
     [BindProperty]
     public string? Language { get; set; }
 
-    /// <summary>"general", "availability" or "ai".</summary>
+    /// <summary>"general" or "availability".</summary>
     public string ActiveTab { get; private set; } = "general";
 
     /// <summary>What the Availability tab renders (saved values, or the just-posted values when validation failed).</summary>
     public AvailabilitySettingsDto? Availability { get; private set; }
-
-    /// <summary>The client's AI bot switches and whether its plan includes the bot (the AI assistant tab shows only then).</summary>
-    public InboxSettingsDto? InboxSettings { get; private set; }
-
-    // ---- AI assistant tab inputs (only posted by its own form)
-    [BindProperty]
-    public bool AiBotNewConversations { get; set; }
-
-    [BindProperty]
-    public bool AiBotReopenedConversations { get; set; }
 
     /// <summary>The client's name (given at registration) — shown in the sidebar and to the AI. The URL slug is NOT
     /// changed when the name is edited.</summary>
@@ -168,16 +150,11 @@ public class BusinessInfoModel : PageModel
         Address = client.Address;
         OperatingHours = client.OperatingHours;
         BookingInfo = client.BookingInfo;
-        InboxSettings = await _inboxSettings.GetAsync(client.Id, ct);
 
         if (string.Equals(tab, "availability", StringComparison.OrdinalIgnoreCase))
         {
             ActiveTab = "availability";
             Availability = await _availability.GetSettingsAsync(client.Id, ct);
-        }
-        else if (string.Equals(tab, "ai", StringComparison.OrdinalIgnoreCase) && InboxSettings.PlanIncludesAiBot)
-        {
-            ActiveTab = "ai";
         }
         return Page();
     }
@@ -198,7 +175,6 @@ public class BusinessInfoModel : PageModel
             ClientConfigured = true;
             Name = (Name ?? string.Empty).Trim();
             ErrorMessage = _text.Localize(ex);
-            InboxSettings = await _inboxSettings.GetAsync(client.Id, ct);
             return Page();
         }
 
@@ -226,24 +202,6 @@ public class BusinessInfoModel : PageModel
         return RedirectToPage();
     }
 
-    public async Task<IActionResult> OnPostSaveAiBotAsync(CancellationToken ct)
-    {
-        var client = await _clientContext.GetClientAsync(ct);
-        if (client is null) return RedirectToPage();
-
-        // The switches are only offered while the plan includes the AI assistant; a stale form posted after a downgrade
-        // changes nothing.
-        if (!(await _inboxSettings.GetAsync(client.Id, ct)).PlanIncludesAiBot)
-        {
-            StatusMessage = _text[NoAiKey].Value;
-            return RedirectToPage();
-        }
-
-        await _inboxSettings.UpdateAsync(client.Id, new UpdateInboxSettingsRequest(AiBotNewConversations, AiBotReopenedConversations), ct);
-        StatusMessage = _text[AiSavedKey].Value;
-        return RedirectToPage(new { tab = "ai" });
-    }
-
     public async Task<IActionResult> OnPostSaveAvailabilityAsync(CancellationToken ct)
     {
         var client = await _clientContext.GetClientAsync(ct);
@@ -264,7 +222,7 @@ public class BusinessInfoModel : PageModel
             ErrorMessage = _text.Localize(ex);
             var saved = await _availability.GetSettingsAsync(client.Id, ct);
             Availability = saved with { Timezone = timezone, Days = days, Booking = booking };
-            await FillGeneralAsync(client);
+            FillGeneral(client);
             return Page();
         }
 
@@ -288,7 +246,7 @@ public class BusinessInfoModel : PageModel
             ActiveTab = "availability";
             ErrorMessage = _text.Localize(ex);
             Availability = await _availability.GetSettingsAsync(client.Id, ct);
-            await FillGeneralAsync(client);
+            FillGeneral(client);
             return Page();
         }
 
@@ -313,9 +271,8 @@ public class BusinessInfoModel : PageModel
     public IEnumerable<string> TimezoneOptions(string current) =>
         Timezones.Contains(current) ? Timezones : Timezones.Prepend(current);
 
-    private async Task FillGeneralAsync(Client client)
+    private void FillGeneral(Client client)
     {
-        InboxSettings = await _inboxSettings.GetAsync(client.Id);
         Name = client.Name;
         Phone = client.Phone;
         Email = client.Email;

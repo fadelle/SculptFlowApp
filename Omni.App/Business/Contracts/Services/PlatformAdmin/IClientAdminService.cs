@@ -23,11 +23,13 @@ public interface IClientAdminService
 
     Task<PlatformAdminChange> SetActiveAsync(Guid id, bool active, CancellationToken ct);
 
-    /// <summary>The client's AI bot switches and whether its plan includes the AI assistant. Throws KeyNotFoundException.</summary>
+    /// <summary>The client's connected accounts with their AI settings, its bots, and what its plan allows. Throws
+    /// KeyNotFoundException.</summary>
     Task<InboxSettingsDto> GetInboxSettingsAsync(Guid id, CancellationToken ct);
 
-    /// <summary>Saves the client's AI bot switches through IInboxSettingsService. Throws KeyNotFoundException.</summary>
-    Task<PlatformAdminChange> UpdateInboxSettingsAsync(Guid id, UpdateInboxSettingsRequest request, CancellationToken ct);
+    /// <summary>Saves one account's AI settings through IInboxSettingsService (its rules: an active bot of the client's, the
+    /// plan's AI assistant). Throws KeyNotFoundException for an unknown client or account.</summary>
+    Task<PlatformAdminChange> UpdateAccountAiAsync(Guid id, Guid channelIntegrationId, UpdateAccountAiRequest request, CancellationToken ct);
 
     /// <summary>The language the client's dashboard opens in for users without their own (en, ar, fr), through
     /// IClientProfileService. Throws KeyNotFoundException, ArgumentException for an unknown language.</summary>

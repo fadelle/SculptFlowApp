@@ -35,4 +35,9 @@ public interface IKnowledgeDocumentRepository
     /// isolation is pinned on both the chunk and its document.
     /// </summary>
     Task<IReadOnlyList<KnowledgeChunkMatch>> SearchChunksAsync(Guid clientId, float[] queryVector, int take, CancellationToken ct = default);
+
+    /// <summary>The same search limited to <paramref name="sources"/> (null = every source): the listed documents and the
+    /// documents that pages of the listed website sources produced.</summary>
+    Task<IReadOnlyList<KnowledgeChunkMatch>> SearchChunksAsync(Guid clientId, float[] queryVector, int take, KnowledgeSourceFilter? sources,
+        CancellationToken ct = default);
 }

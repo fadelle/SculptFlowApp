@@ -36,6 +36,8 @@ public static class EventTypes
     public const string BookingReminderSent = "booking_reminder_sent";
     /// <summary>A channel's automatic reply went out; metadata {"trigger": "new" | "reopened"} (AutoReplyTrigger).</summary>
     public const string AutoReplySent = "auto_reply_sent";
+    /// <summary>The bot's handoff message went out after it handed the conversation to the team; metadata {"botId": ...}.</summary>
+    public const string HandoffMessageSent = "handoff_message_sent";
 
     // AI assistant tool surface — see Controllers/Integrations/AiController.cs.
     public const string BookingRescheduled = "booking_rescheduled";

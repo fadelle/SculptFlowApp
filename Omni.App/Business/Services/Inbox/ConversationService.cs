@@ -201,7 +201,7 @@ public class ConversationService : IConversationService
 
         // Same reopen routing as MessageService.IngestAsync: the client (or its plan) may send reopened conversations to members.
         var handedToHuman = reopened && conversation.Mode == ConversationMode.Ai
-            && !(await _inboxSettings.GetAsync(clientId, ct)).AiBotAnswersReopened;
+            && !(await _inboxSettings.ResolveAsync(clientId, conversation.Channel, ct)).AnswersReopened;
         if (handedToHuman)
         {
             ConversationModeSync.Apply(conversation, ConversationMode.Human, now);
@@ -260,72 +260,84 @@ public class ConversationService : IConversationService
 
     public async Task<ConversationResponse?> ReturnToAiAsync(Guid clientId, Guid conversationId, CancellationToken ct = default)
     {
-        // Without the AI assistant in the plan nothing would answer, so the conversation must stay with members.
-        var settings = await _inboxSettings.GetAsync(clientId, ct);
-        if (!settings.PlanIncludesAiBot)
+        // Something must answer: the plan's AI assistant and an active bot on the conversation's account (Inbox settings).
+        var channel = (await _conversations.GetAsync(clientId, conversationId, ct))?.Channel;
+        if (channel is null) return null;
+        var decision = await _inboxSettings.ResolveAsync(clientId, channel, ct);
+        if (decision.BlockReason == AiBotBlockReason.PlanWithoutAi)
         {
             throw new EntitlementDeniedException(EntitlementKeys.AiAssistant, EntitlementDeniedException.NotIncludedKey)
                 .WithArgs(BillingTextHelper.EntitlementArg(EntitlementKeys.AiAssistant));
         }
-        // Nor on a channel beyond the AI bot limit.
-        var channel = (await _conversations.GetAsync(clientId, conversationId, ct))?.Channel;
-        if (channel is not null && !settings.AiBotAnswersOn(channel))
+        if (!decision.BotAnswers)
         {
-            throw new EntitlementDeniedException(EntitlementKeys.MaxAiBots, EntitlementDeniedException.LimitReachedKey)
-                .WithArgs(BillingTextHelper.EntitlementArg(EntitlementKeys.MaxAiBots), settings.AiBotLimit ?? 0);
+            throw new InvalidOperationException("inbox.errors.noBotOnAccount").WithArgs(ChannelNames.Brand(channel));
         }
         return await SetModeAsync(clientId, conversationId, ConversationMode.Ai, EventTypes.ReturnedToAi, "dashboard", "{}", ct);
     }
 
-    public Task<ConversationResponse?> HandoffToHumanAsync(Guid clientId, Guid conversationId, string? reason, CancellationToken ct = default) =>
+    public Task<HandoffResult?> HandoffToHumanAsync(Guid clientId, Guid conversationId, string? reason, CancellationToken ct = default) =>
         HandOffAsync(clientId, conversationId, MessageOrigin.Ai, System.Text.Json.JsonSerializer.Serialize(new { reason }),
             who => string.IsNullOrWhiteSpace(reason)
                 ? NotificationText.Of("notifications.handoff.title", "notifications.handoff.message", who)
                 : NotificationText.Of("notifications.handoff.title", "notifications.handoff.messageReason", who, reason), ct);
 
-    public Task<ConversationResponse?> HandOverUnpaidAiReplyAsync(Guid clientId, Guid conversationId, string failureReason, CancellationToken ct = default) =>
-        HandOffAsync(clientId, conversationId, MessageOrigin.System,
+    public async Task<ConversationResponse?> HandOverUnpaidAiReplyAsync(Guid clientId, Guid conversationId, string failureReason, CancellationToken ct = default) =>
+        (await HandOffAsync(clientId, conversationId, MessageOrigin.System,
             System.Text.Json.JsonSerializer.Serialize(new { reason = "ai_reply_" + failureReason }),
             who => NotificationText.Of("notifications.handoff.title",
-                failureReason == UsageFailureReason.InsufficientFunds ? AiReplyNoBalanceKey : AiReplyNotPricedKey, who), ct);
+                failureReason == UsageFailureReason.InsufficientFunds ? AiReplyNoBalanceKey : AiReplyNotPricedKey, who), ct))?.Conversation;
 
     // The hand-over notification's wording when billing refused an AI reply (no balance / no ai_reply rate).
     private const string AiReplyNoBalanceKey = "notifications.handoff.messageAiNoBalance";
     private const string AiReplyNotPricedKey = "notifications.handoff.messageAiNotPriced";
 
     /// <summary>Hands a conversation to the team: human mode, the contact to the needs-human stage, and one Handoff
-    /// notification (worded by <paramref name="text"/> for the contact's name) on a real ai -> human change.</summary>
-    private async Task<ConversationResponse?> HandOffAsync(Guid clientId, Guid conversationId, string source, string metadataJson,
+    /// notification (worded by <paramref name="text"/> for the contact's name), all only on a real ai -> human change. The
+    /// conversation row is locked meanwhile, so the AI calling this twice at once (two messages in a row, a retried
+    /// workflow) changes it, notifies and lets the caller send a handoff message exactly once.</summary>
+    private async Task<HandoffResult?> HandOffAsync(Guid clientId, Guid conversationId, string source, string metadataJson,
         Func<object, NotificationText> text, CancellationToken ct)
     {
-        // Read the mode BEFORE the change so a HANDOFF notification only fires on a REAL ai->human transition —
-        // the AI calling this tool twice in a row (or on an already-human conversation) must not double-notify.
-        var wasAlreadyHuman = await _conversations.IsInHumanModeAsync(clientId, conversationId, ct);
-
-        var result = await SetModeAsync(clientId, conversationId, ConversationMode.Human, EventTypes.HumanHandoff,
-            source, metadataJson, ct);
-
-        // The contact now needs a person: move it to the needs-human stage (it stays put when its stage already has that
-        // category, e.g. a second needs-human stage such as "Medical question").
-        if (result is not null && await _contacts.GetByIdAsync(result.ContactId, ct) is { } contact
-            && (await _businessTypes.GetPipelineAsync(clientId, ct)).MoveTo(contact.StageKey, StageCategory.NeedsHuman) is { } stage
-            && stage != contact.StageKey)
+        Conversation conversation;
+        await using (var transaction = await _unitOfWork.BeginTransactionAsync(ct))
         {
-            contact.StageKey = stage;
-            contact.UpdatedAt = DateTimeOffset.UtcNow;
+            var locked = await _conversations.GetForUpdateAsync(clientId, conversationId, ct);
+            if (locked is null) return null;
+            conversation = locked;
+            if (conversation.Mode == ConversationMode.Human)
+            {
+                await transaction.CommitAsync(ct);
+                return new HandoffResult(InboxMapper.ToResponse(conversation), HandedOff: false);
+            }
+
+            var now = DateTimeOffset.UtcNow;
+            ConversationModeSync.Apply(conversation, ConversationMode.Human, now);
+            conversation.UpdatedAt = now;
+            _events.Log(clientId, EventTypes.HumanHandoff, conversationId: conversationId, source: source, metadataJson: metadataJson);
+
+            // The contact now needs a person: move it to the needs-human stage (it stays put when its stage already has that
+            // category, e.g. a second needs-human stage such as "Medical question").
+            if (await _contacts.GetByIdAsync(conversation.ContactId, ct) is { } contact
+                && (await _businessTypes.GetPipelineAsync(clientId, ct)).MoveTo(contact.StageKey, StageCategory.NeedsHuman) is { } stage
+                && stage != contact.StageKey)
+            {
+                contact.StageKey = stage;
+                contact.UpdatedAt = now;
+            }
+
             await _unitOfWork.SaveChangesAsync(ct);
+            await transaction.CommitAsync(ct);
         }
 
-        if (result is not null && !wasAlreadyHuman)
-        {
-            var contactName = await _contacts.GetFullNameAsync(result.ContactId, ct);
-            object who = string.IsNullOrWhiteSpace(contactName) ? TextArg.Of("notifications.anyone.conversation") : contactName;
-            await _notifications.CreateAsync(clientId, NotificationType.Handoff, text(who),
-                contactId: result.ContactId, conversationId: conversationId,
-                link: $"/inbox?conversationId={conversationId}", ct: ct);
-        }
+        await _notifier.ConversationModeChangedAsync(clientId, conversationId, ConversationMode.Human, ct);
+        var contactName = await _contacts.GetFullNameAsync(conversation.ContactId, ct);
+        object who = string.IsNullOrWhiteSpace(contactName) ? TextArg.Of("notifications.anyone.conversation") : contactName;
+        await _notifications.CreateAsync(clientId, NotificationType.Handoff, text(who),
+            contactId: conversation.ContactId, conversationId: conversationId,
+            link: $"/inbox?conversationId={conversationId}", ct: ct);
 
-        return result;
+        return new HandoffResult(InboxMapper.ToResponse(conversation), HandedOff: true);
     }
 
     public async Task<ConversationResponse?> CloseAsync(Guid clientId, Guid conversationId, CancellationToken ct = default)
