@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Omni.App.Business.Contracts.Services.Ai;
+using Omni.App.Common.Statics;
 using Omni.App.Entities.Dtos.Ai;
 
 namespace Omni.App.Controllers.Filters;
@@ -19,7 +20,7 @@ public sealed class BotToolAttribute : Attribute, IAsyncActionFilter, IOrderedFi
 {
     public const string BotHeader = "X-Omni-Bot-Id";
     public const string TestSessionHeader = "X-Omni-Test-Session";
-    public const string NotAllowedCode = "TOOL_NOT_ALLOWED";
+    public const string NotAllowedCode = BotToolOutcomes.NotAllowedCode;
 
     public BotToolAttribute(string? capability = null)
     {
@@ -51,15 +52,7 @@ public sealed class BotToolAttribute : Attribute, IAsyncActionFilter, IOrderedFi
     }
 
     /// <summary>The business outcome of a refused tool call (also used by an action that checks a capability itself).</summary>
-    public static object NotAllowed(string? reason) => new
-    {
-        success = false,
-        code = NotAllowedCode,
-        reason,
-        message = "This bot isn't allowed to use this tool.", // text-ok: read by the AI (n8n), never shown to the contact
-        instruction = "Nothing was looked up, booked or changed. Don't offer or attempt this again. Tell the contact you can't " + // text-ok: AI instruction
-            "help with that here and that a team member can, following your handoff policy." // text-ok: AI instruction
-    };
+    public static object NotAllowed(string? reason) => BotToolOutcomes.NotAllowed(reason);
 
     private static Guid? GuidHeader(HttpContext context, string name) =>
         Guid.TryParse(context.Request.Headers[name].FirstOrDefault(), out var id) && id != Guid.Empty ? id : null;

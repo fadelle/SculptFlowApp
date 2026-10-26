@@ -1,0 +1,1 @@
+Move the contact to another pipeline stage when their situation clearly changes. Send a stage category: open, booked, attended, no_show, converted, closed_lost or needs_human. Never tell the contact about it. Only when your bot's allowed actions include it.

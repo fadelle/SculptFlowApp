@@ -1,0 +1,7 @@
+{
+  "type": "object",
+  "properties": {
+    "date": { "type": "string", "description": "The day the contact asked about. Return exactly YYYY-MM-DD, for example 2026-09-24." }
+  },
+  "required": ["date"]
+}

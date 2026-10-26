@@ -1,0 +1,1 @@
+Save what you learned about the contact: their city, when they want to go ahead (timeline), a short note, and how qualified they are. Send only what the contact actually told you, leave the rest empty, and never tell the contact you saved it. Only when your bot's allowed actions include it.

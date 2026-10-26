@@ -1,0 +1,10 @@
+{
+  "type": "object",
+  "properties": {
+    "city": { "type": "string", "description": "The city the contact lives in or wants the service in, empty when not told.", "default": "" },
+    "timeline": { "type": "string", "description": "When the contact wants to go ahead, in their words (for example next month), empty when not told.", "default": "" },
+    "notes": { "type": "string", "description": "One short factual note worth keeping for the team, empty when there is none.", "default": "" },
+    "qualification": { "type": "string", "description": "How ready the contact is: cold, warm or hot; empty when unclear.", "default": "" }
+  },
+  "required": []
+}

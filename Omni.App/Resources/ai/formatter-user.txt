@@ -1,0 +1,5 @@
+VERIFIED BACKEND RESULT:
+{{resultJson}}
+
+LATEST CONTACT MESSAGE:
+{{messageText}}

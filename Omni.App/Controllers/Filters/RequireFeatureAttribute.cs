@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc.Filters;
 using Omni.App.Business.Contracts.Managers;
 using Omni.App.Business.Contracts.Services.Billing;
 using Omni.App.Common.Exceptions;
+using Omni.App.Common.Statics;
 
 namespace Omni.App.Controllers.Filters;
 
@@ -21,7 +22,7 @@ namespace Omni.App.Controllers.Filters;
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method)]
 public sealed class RequireFeatureAttribute : Attribute, IAsyncActionFilter
 {
-    public const string NotIncludedCode = "FEATURE_NOT_INCLUDED";
+    public const string NotIncludedCode = BotToolOutcomes.FeatureNotIncludedCode;
 
     public RequireFeatureAttribute(string featureKey)
     {
@@ -52,15 +53,7 @@ public sealed class RequireFeatureAttribute : Attribute, IAsyncActionFilter
         }
         catch (EntitlementDeniedException) when (AiTool)
         {
-            context.Result = new OkObjectResult(new
-            {
-                success = false,
-                code = NotIncludedCode,
-                feature = FeatureKey,
-                message = $"The business's plan doesn't include {FeatureKey}.", // text-ok: read by the AI (n8n), never shown to the contact
-                instruction = "Nothing was booked, changed or looked up. Do not offer, check or confirm bookings or available times. "
-                    + "Tell the contact a team member will help them with that, and call handoff_to_human." // text-ok: AI instruction
-            });
+            context.Result = new OkObjectResult(BotToolOutcomes.FeatureNotIncluded(FeatureKey));
             return;
         }
         await next();

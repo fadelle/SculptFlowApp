@@ -262,9 +262,9 @@ public class AiControllerTests
         new(_clientId, Guid.NewGuid(), capabilities.ToHashSet(), filter, "Moved to the team.", testSession);
 
     // The run BotToolAttribute would have put on the request.
-    private AiController Sut() => new AiController(_clients.Object, _services.Object, _contacts.Object, _bookings.Object, _availability.Object,
+    private AiController Sut() => new AiController(new BotToolService(_clients.Object, _services.Object, _contacts.Object, _bookings.Object, _availability.Object,
         _search.Object, new BotRuntimeService(Mock.Of<IBotRepository>(), Mock.Of<IBotTestRepository>(), Mock.Of<IEntitlementService>()),
-        _tests.Object, _botConversations.Object).With(h => h.Items[BotRunContext.ItemKey] = _run);
+        _tests.Object, _botConversations.Object, Mock.Of<IEntitlementService>(), Mock.Of<IMessageTracer>())).With(h => h.Items[BotRunContext.ItemKey] = _run);
 
     private static UpcomingBookingResponse Upcoming(Guid? id = null) => new(id ?? Guid.NewGuid(), "booked", "standard", null, null, DateTimeOffset.UtcNow, null, "2026-01-01", "10:00", "Thursday, Jan 1 at 10:00 AM");
 

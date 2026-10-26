@@ -1,0 +1,7 @@
+{
+  "type": "object",
+  "properties": {
+    "language": { "type": "string", "description": "The two-letter ISO 639-1 code of the language the contact writes in, for example en, ar (also for Arabizi), fr or es." }
+  },
+  "required": ["language"]
+}

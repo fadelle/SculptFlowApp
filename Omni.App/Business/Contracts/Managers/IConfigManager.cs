@@ -249,6 +249,34 @@ public interface IConfigManager
     /// <summary>Texts sent to the embeddings API in one request. Default 64.</summary>
     int EmbeddingsMaxInputsPerRequest { get; }
 
+    // ---- Ai
+    /// <summary>Base URL of the OpenAI Responses API the AI bot and the benchmark question generator call. Default https://api.openai.com/v1.</summary>
+    string AiBaseUrl { get; }
+
+    /// <summary>SECRET. API key of the AI model API (bot replies, result wording, benchmark questions). Empty = the Embeddings / ApiKey is used. Never shown back: the Configuration page and API only say whether it is set. Default (empty).</summary>
+    string AiApiKey { get; }
+
+    /// <summary>Model of the AI bot's agent (reads the contact's message, calls tools, decides the action). Default gpt-6-luna.</summary>
+    string AiBotModel { get; }
+
+    /// <summary>Model that words a booking or cancellation result as the bot's reply. Default gpt-4o-mini.</summary>
+    string AiFormatterModel { get; }
+
+    /// <summary>Most rounds of tool calls the agent may make for one contact message before the run stops. Default 10.</summary>
+    int AiMaxToolIterations { get; }
+
+    /// <summary>Earlier exchanges (contact message + bot output) of the conversation the agent sees. Default 10.</summary>
+    int AiMemoryExchanges { get; }
+
+    /// <summary>Timeout of one call to the AI model API. Default 60.</summary>
+    int AiTimeoutSeconds { get; }
+
+    /// <summary>Most bot runs (different conversations) at the same time; one conversation always runs one message at a time. Default 4.</summary>
+    int AiMaxConcurrentRuns { get; }
+
+    /// <summary>Model that writes the retrieval benchmark's questions. Default gpt-4o.</summary>
+    string BenchmarkGeneratorModel { get; }
+
     // ---- Integrations
     /// <summary>How long a calendar or TikTok connect link stays valid. Default 15.</summary>
     int IntegrationsOAuthStateLifetimeMinutes { get; }

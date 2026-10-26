@@ -112,6 +112,15 @@ Generated from `Common/Statics/ConfigDefaults`; keep this table in step when you
 | Embeddings | Dimensions | 1536 | int 1–4096 | Vector size the model returns. Must equal the vector(N) size of knowledge.knowledge_chunks.embedding (1536). |
 | Embeddings | ApiKey | (empty) | string | SECRET. API key of the embeddings API. Never shown back: the Configuration page and API only say whether it is set. |
 | Embeddings | MaxInputsPerRequest | 64 | int 1–2048 | Texts sent to the embeddings API in one request. |
+| Ai | BaseUrl | https://api.openai.com/v1 | string | Base URL of the OpenAI Responses API the AI bot and the benchmark question generator call. |
+| Ai | ApiKey | (empty) | string | SECRET. API key of the AI model API (bot replies, result wording, benchmark questions). Empty = the `Embeddings` / `ApiKey` is used. Never shown back: the Configuration page and API only say whether it is set. |
+| Ai | BotModel | gpt-6-luna | string | Model of the AI bot's agent (reads the contact's message, calls tools, decides the action). |
+| Ai | FormatterModel | gpt-4o-mini | string | Model that words a booking or cancellation result as the bot's reply. |
+| Ai | MaxToolIterations | 10 | int 1–50 | Most rounds of tool calls the agent may make for one contact message before the run stops. |
+| Ai | MemoryExchanges | 10 | int 0–100 | Earlier exchanges (contact message + bot output) of the conversation the agent sees. |
+| Ai | TimeoutSeconds | 60 | int 5–600 | Timeout of one call to the AI model API. |
+| Ai | MaxConcurrentRuns | 4 | int 1–64 | Most bot runs (different conversations) at the same time; one conversation always runs one message at a time. |
+| Benchmark | GeneratorModel | gpt-4o | string | Model that writes the retrieval benchmark's questions. |
 | Integrations | OAuthStateLifetimeMinutes | 15 | int 1–120 | How long a calendar or TikTok connect link stays valid. |
 | Integrations | TokenRefreshMarginMinutes | 5 | int 0–60 | Calendar and TikTok access tokens are refreshed this long before they expire. |
 | Voice | MaxBytes | 10485760 | int 1024–20971520 | Largest voice note (bytes) the Inbox will download from the provider to play or forward. |

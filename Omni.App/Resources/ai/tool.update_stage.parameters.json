@@ -1,0 +1,7 @@
+{
+  "type": "object",
+  "properties": {
+    "stage": { "type": "string", "description": "The stage category: open, booked, attended, no_show, converted, closed_lost or needs_human." }
+  },
+  "required": ["stage"]
+}

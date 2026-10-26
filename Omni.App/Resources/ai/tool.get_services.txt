@@ -1,0 +1,1 @@
+List the business's active services with their id, name and booking duration. Use it when the contact asks what the business offers, or when you need the exact service id for a booking. Explain services with search_knowledge; use this for the authoritative list.

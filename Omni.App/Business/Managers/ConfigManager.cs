@@ -127,6 +127,17 @@ public class ConfigManager : IConfigManager
     public string EmbeddingsApiKey => GetString(ConfigDefaults.EmbeddingsApiKey);
     public int EmbeddingsMaxInputsPerRequest => GetInt(ConfigDefaults.EmbeddingsMaxInputsPerRequest);
 
+    // ---- Ai
+    public string AiBaseUrl => GetString(ConfigDefaults.AiBaseUrl);
+    public string AiApiKey => GetString(ConfigDefaults.AiApiKey);
+    public string AiBotModel => GetString(ConfigDefaults.AiBotModel);
+    public string AiFormatterModel => GetString(ConfigDefaults.AiFormatterModel);
+    public int AiMaxToolIterations => GetInt(ConfigDefaults.AiMaxToolIterations);
+    public int AiMemoryExchanges => GetInt(ConfigDefaults.AiMemoryExchanges);
+    public int AiTimeoutSeconds => GetInt(ConfigDefaults.AiTimeoutSeconds);
+    public int AiMaxConcurrentRuns => GetInt(ConfigDefaults.AiMaxConcurrentRuns);
+    public string BenchmarkGeneratorModel => GetString(ConfigDefaults.BenchmarkGeneratorModel);
+
     // ---- Integrations
     public int IntegrationsOAuthStateLifetimeMinutes => GetInt(ConfigDefaults.IntegrationsOAuthStateLifetimeMinutes);
     public int IntegrationsTokenRefreshMarginMinutes => GetInt(ConfigDefaults.IntegrationsTokenRefreshMarginMinutes);

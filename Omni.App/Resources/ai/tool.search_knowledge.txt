@@ -1,0 +1,1 @@
+Search the business's approved information: opening hours, address, parking, policies, prices, payment options, the team, service details, preparation, aftercare and FAQs. Use it before answering any factual question about the business. If it returns no results, say you don't know and offer to hand off to a team member. Never invent information about the business.

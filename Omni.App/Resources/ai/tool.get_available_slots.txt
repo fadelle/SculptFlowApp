@@ -1,0 +1,14 @@
+Get the real open booking times at this business. Call this whenever the contact asks about availability, for example "do you have anything tomorrow?", "can I come Friday?", "what's open next week?" or "anything after 3?". Never guess or invent times, and never calculate availability yourself; this tool is the only source of truth.
+
+Input:
+- date: the day to check, as YYYY-MM-DD in the business's local timezone. Work out relative words like "tomorrow" or "Friday" from today's date.
+
+Result:
+- configured=false means the business hasn't set up its schedule. Don't offer any times; tell the contact a team member will confirm a time, and hand off if appropriate.
+- slots is the list of open times. Each slot has start and end with the business's timezone offset. Present them naturally in local time, for example "2:00 PM, 3:00 PM or 4:15 PM". Don't show the raw timestamp or the offset.
+- If slots is empty, say nothing is available that day and offer to check another day. Don't invent alternatives.
+- If the contact wants a time window like "afternoon" or "after 3", filter the returned slots yourself. Don't offer times that weren't returned.
+- existingUpcomingBookings and canCreateNewBooking describe the contact's CURRENT bookings, separate from the requested date.
+The result includes today, tomorrow and their weekday names in the business's timezone. Always use those to resolve words like "tomorrow", "Friday" or "next week"; never assume the current date yourself.
+
+Only offer times from this tool. Once the contact picks one, return action=schedule.

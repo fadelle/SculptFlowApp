@@ -211,6 +211,8 @@ builder.Services.AddScoped<IBotService, BotService>();
 builder.Services.AddScoped<IBotRuntimeService, BotRuntimeService>();
 builder.Services.AddScoped<IBotTestService, BotTestService>();
 builder.Services.AddScoped<IBotConversationService, BotConversationService>();
+// The AI bot's tools (/api/ai and the bot engine): authorization, plan feature, test simulation and the trace step.
+builder.Services.AddScoped<IBotToolService, BotToolService>();
 // UI text: Resources/i18n/{language}.json (embedded) through IStringLocalizer (@T["key"] in Razor, [ApiErrors] for
 // server messages) and window.omniText in the browser; RequestTextMiddleware picks each request's language and the
 // client's business-type words.
@@ -338,6 +340,9 @@ builder.Services.AddScoped<IWhatsAppHealthService, WhatsAppHealthService>();
 builder.Services.AddScoped<IKnowledgeSettingsService, KnowledgeSettingsService>();
 builder.Services.AddScoped<IKnowledgeChunkingService, KnowledgeChunkingService>();
 builder.Services.AddHttpClient<IEmbeddingService, OpenAiEmbeddingService>();
+// The AI model (OpenAI Responses API) behind the bot engine and the benchmark question generator. Each call has its own
+// timeout (Ai / TimeoutSeconds, a setting), so the HttpClient has none.
+builder.Services.AddHttpClient<IAiModelClient, OpenAiResponsesClient>(client => client.Timeout = Timeout.InfiniteTimeSpan);
 builder.Services.AddSingleton<IDocumentTextExtractor, DocumentTextExtractor>();
 builder.Services.AddScoped<IKnowledgeService, KnowledgeService>();
 builder.Services.AddScoped<IKnowledgeSearchService, KnowledgeSearchService>();

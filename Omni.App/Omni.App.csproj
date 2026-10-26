@@ -32,6 +32,10 @@
     <!-- UI strings, one file per language, read by TextCatalog (Business/Managers) as "i18n/{language}.json". -->
     <EmbeddedResource Include="Resources\i18n\*.json" LogicalName="i18n/%(Filename)%(Extension)" />
     <Content Remove="Resources\i18n\*.json" />
+    <!-- AI prompts and tool descriptions extracted from the n8n workflows (tools/extract-n8n-prompts.ps1), read by
+         AiPromptTemplate as "ai/{file}". -->
+    <EmbeddedResource Include="Resources\ai\*" LogicalName="ai/%(Filename)%(Extension)" />
+    <Content Remove="Resources\ai\*" />
   </ItemGroup>
 
 </Project>

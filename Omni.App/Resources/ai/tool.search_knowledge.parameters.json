@@ -1,0 +1,7 @@
+{
+  "type": "object",
+  "properties": {
+    "query": { "type": "string", "description": "A short semantic search query for the business knowledge base, based on the contact question. Include the main service, topic, price, aftercare, policy, location, hours or other relevant terms. Do not include ids or internal metadata." }
+  },
+  "required": ["query"]
+}

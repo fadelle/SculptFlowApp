@@ -136,6 +136,24 @@ public static class ConfigDefaults
         "SECRET. API key of the embeddings API. Never shown back: the Configuration page and API only say whether it is set.", IsSecret: true);
     public static readonly ConfigDefinition EmbeddingsMaxInputsPerRequest = new("Embeddings", "MaxInputsPerRequest", "64", ConfigValueType.Int,
         "Texts sent to the embeddings API in one request.", 1, 2048);
+    public static readonly ConfigDefinition AiBaseUrl = new("Ai", "BaseUrl", "https://api.openai.com/v1", ConfigValueType.String,
+        "Base URL of the OpenAI Responses API the AI bot and the benchmark question generator call.", Pattern: @"^https?://\S+$");
+    public static readonly ConfigDefinition AiApiKey = new("Ai", "ApiKey", "", ConfigValueType.String,
+        "SECRET. API key of the AI model API (bot replies, result wording, benchmark questions). Empty = the Embeddings / ApiKey is used. Never shown back: the Configuration page and API only say whether it is set.", IsSecret: true);
+    public static readonly ConfigDefinition AiBotModel = new("Ai", "BotModel", "gpt-6-luna", ConfigValueType.String,
+        "Model of the AI bot's agent (reads the contact's message, calls tools, decides the action).", Pattern: @"^\S+$");
+    public static readonly ConfigDefinition AiFormatterModel = new("Ai", "FormatterModel", "gpt-4o-mini", ConfigValueType.String,
+        "Model that words a booking or cancellation result as the bot's reply.", Pattern: @"^\S+$");
+    public static readonly ConfigDefinition AiMaxToolIterations = new("Ai", "MaxToolIterations", "10", ConfigValueType.Int,
+        "Most rounds of tool calls the agent may make for one contact message before the run stops.", 1, 50);
+    public static readonly ConfigDefinition AiMemoryExchanges = new("Ai", "MemoryExchanges", "10", ConfigValueType.Int,
+        "Earlier exchanges (contact message + bot output) of the conversation the agent sees.", 0, 100);
+    public static readonly ConfigDefinition AiTimeoutSeconds = new("Ai", "TimeoutSeconds", "60", ConfigValueType.Int,
+        "Timeout of one call to the AI model API.", 5, 600);
+    public static readonly ConfigDefinition AiMaxConcurrentRuns = new("Ai", "MaxConcurrentRuns", "4", ConfigValueType.Int,
+        "Most bot runs (different conversations) at the same time; one conversation always runs one message at a time.", 1, 64);
+    public static readonly ConfigDefinition BenchmarkGeneratorModel = new("Benchmark", "GeneratorModel", "gpt-4o", ConfigValueType.String,
+        "Model that writes the retrieval benchmark's questions.", Pattern: @"^\S+$");
     public static readonly ConfigDefinition IntegrationsOAuthStateLifetimeMinutes = new("Integrations", "OAuthStateLifetimeMinutes", "15", ConfigValueType.Int,
         "How long a calendar or TikTok connect link stays valid.", 1, 120);
     public static readonly ConfigDefinition IntegrationsTokenRefreshMarginMinutes = new("Integrations", "TokenRefreshMarginMinutes", "5", ConfigValueType.Int,
@@ -312,6 +330,16 @@ public static class ConfigDefaults
         EmbeddingsDimensions,
         EmbeddingsApiKey,
         EmbeddingsMaxInputsPerRequest,
+
+        AiBaseUrl,
+        AiApiKey,
+        AiBotModel,
+        AiFormatterModel,
+        AiMaxToolIterations,
+        AiMemoryExchanges,
+        AiTimeoutSeconds,
+        AiMaxConcurrentRuns,
+        BenchmarkGeneratorModel,
 
         IntegrationsOAuthStateLifetimeMinutes,
         IntegrationsTokenRefreshMarginMinutes,

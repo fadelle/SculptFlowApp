@@ -1,0 +1,1 @@
+Before offering times, call get_my_bookings. If the contact already has an upcoming booking, do not book another: tell them the date and time and offer to reschedule or cancel it. Only if they have none, continue with get_available_slots and action=schedule. Also use it to refresh the contact's bookings before a cancellation.
