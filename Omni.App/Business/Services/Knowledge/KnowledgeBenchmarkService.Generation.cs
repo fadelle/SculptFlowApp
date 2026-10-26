@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Omni.App.Common.Enums;
 using Omni.App.Common.Exceptions;
+using Omni.App.Common.Statics;
 using Omni.App.Entities.Dtos.KnowledgeBenchmark;
 using Omni.App.Entities.Models;
 using Omni.App.Entities.Responses.KnowledgeBenchmark;
@@ -22,8 +23,11 @@ public partial class KnowledgeBenchmarkService
     {
         if (!_generator.IsConfigured)
         {
+            // Admin portal only (English): what to set depends on Benchmark / GeneratorEngine.
             throw new BenchmarkGeneratorNotConfiguredException(
-                "The benchmark question generator isn't configured — set N8n:KnowledgeBenchmarkWebhookUrl (env var N8n__KnowledgeBenchmarkWebhookUrl).");
+                string.Equals(_config.BenchmarkGeneratorEngine, WorkflowEngines.Code, StringComparison.OrdinalIgnoreCase)
+                    ? "The benchmark question generator (code) has no AI key — set Ai / ApiKey or Embeddings / ApiKey on the Configuration page."
+                    : "The benchmark question generator (n8n) isn't configured — set N8n:KnowledgeBenchmarkWebhookUrl (env var N8n__KnowledgeBenchmarkWebhookUrl), or switch Benchmark / GeneratorEngine to code.");
         }
 
         await ExpireOldGenerationsAsync(clientId, ct);

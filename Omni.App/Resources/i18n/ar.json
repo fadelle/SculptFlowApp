@@ -1960,7 +1960,7 @@
   "bots.test.notes.handedOff": "تم التحويل إلى فريقك: {0}",
   "bots.test.notes.handedOffNoReason": "تم التحويل إلى فريقك",
   "bots.test.notes.replyRefused": "لا يوجد رد: رصيد الذكاء الاصطناعي أو رصيدك لا يكفي.",
-  "bots.test.notes.notReachable": "تعذّر الوصول إلى سير عمل الذكاء الاصطناعي، لذا لم يرد الروبوت.",
+  "bots.test.notes.notReachable": "تعذّر تشغيل الروبوت، لذا لم يرد. حاول مرة أخرى بعد قليل.",
   "bots.test.errors.textRequired": "اكتب رسالة أولًا.",
   "bots.test.errors.tooLong": "يمكن أن تصل رسالة التجربة إلى {0} حرف.",
   "bots.test.errors.sessionNotFound": "انتهت هذه المحادثة التجريبية. ابدأ من جديد.",

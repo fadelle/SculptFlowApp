@@ -181,6 +181,42 @@ C8. **Check on staging:** "Forgot password?" sends an email whose link works onc
     hours ahead gets both reminders (or a reason on its booking page); Settings → Billing shows the trial's days left and
     any add-ons; the portal's Add-ons page and a client's "Change add-ons" work.
 
+## In-code workflows (n8n or code, switchable)
+
+The three n8n workflows also exist as code in the main app: the AI bot (`BotEngine`), calendar sync (`CalendarSyncClient`)
+and the benchmark question generator (`KnowledgeBenchmarkGenerator`). Each has a switch on the portal's Configuration page,
+a dropdown with `n8n` or `code`: `Ai / BotEngine`, `Calendars / SyncEngine`, `Benchmark / GeneratorEngine`. All three
+default to `n8n`, so a deploy changes nothing until you flip one; every switch is read per message, sync or generation, so a
+flip applies within a minute (the settings refresh), with no redeploy. The n8n steps above stay as they are while n8n is in use.
+
+W1. **Database**, from this repo's root (re-runnable, keeps existing rows):
+
+    ```
+    psql "<connection string>" -f Database/schema.sql
+    psql "<connection string>" -f Database/seed-config.sql
+    ```
+
+    `schema.sql` adds `crm.bot_memory` (the code bot's conversation memory); `seed-config.sql` adds the `Ai` settings,
+    `Benchmark / GeneratorModel`, `Benchmark / GeneratorEngine` and `Calendars / SyncEngine`.
+W2. **AI key:** on the Configuration page set `Ai / ApiKey` (an OpenAI key; secret, never shown back), or leave it empty to
+    use `Embeddings / ApiKey`.
+W3. **Models and limits:** check `Ai / BotModel` (gpt-6-luna, as the n8n agent), `Ai / FormatterModel` (gpt-4o-mini),
+    `Benchmark / GeneratorModel` (gpt-4o), `Ai / MaxToolIterations` (10), `Ai / MemoryExchanges` (10), `Ai / TimeoutSeconds`
+    (60) and `Ai / MaxConcurrentRuns` (4).
+W4. **Flip one switch at a time to `code` and test it before the next:**
+    - `Ai / BotEngine`: message the bot on WhatsApp and on Telegram (a question, availability, booking, rescheduling,
+      cancelling, asking for a person) and use the bot editor's test panel. The portal's message trace shows every step
+      (`bot.run_started`, `bot.model_called`, `bot.decision`, tools, `bot.action_result`). Memory starts empty for each
+      conversation on the code bot (n8n's memory lived in n8n).
+    - `Calendars / SyncEngine`: with a Google and an Outlook calendar connected, create, reschedule and cancel a booking and
+      check the event appears, moves and disappears on each. A failed call now marks the connection unhealthy (with the
+      usual notification) where n8n stayed silent.
+    - `Benchmark / GeneratorEngine`: on the portal's Search benchmark page, Generate Test Cases; it answers "pending" and the
+      questions arrive within a minute or two (a model problem fails the generation with its reason).
+W5. **Switching back:** set the switch to `n8n` again on the Configuration page. Work already queued for the code engine
+    still finishes; new messages, syncs and generations go to n8n. Keep the n8n workflows active until every switch has
+    stayed on `code` for a while.
+
 ## First admin on a project without old data
 
 The copy brings the old admins over. On an empty project (schema, seed-config, portal `admin-schema.sql`, no copy), make the

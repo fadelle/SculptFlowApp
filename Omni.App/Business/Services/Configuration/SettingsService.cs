@@ -86,7 +86,7 @@ public class SettingsService : ISettingsService
 
     private SettingResponse ToResponse(ConfigDefinition d, ConfigSetting? row) =>
         new(d.Section, d.Key, d.Type.ToString(), d.Description, d.IsSecret ? "" : d.DefaultValue, Mask(d, row?.Value),
-            Mask(d, _config.GetString(d)) ?? "", d.Min, d.Max, row?.Description, row?.UpdatedBy, row?.UpdatedAt, d.IsSecret);
+            Mask(d, _config.GetString(d)) ?? "", d.Min, d.Max, row?.Description, row?.UpdatedBy, row?.UpdatedAt, d.IsSecret, d.Choices);
 
     /// <summary>A secret is never sent back: only whether it has a value.</summary>
     private static string? Mask(ConfigDefinition d, string? value) =>

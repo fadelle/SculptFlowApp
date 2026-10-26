@@ -405,7 +405,10 @@ public class KnowledgeBenchmarkServiceTests
     public async Task Generation_needs_a_configured_generator_and_no_pending_generation()
     {
         _generator.SetupGet(g => g.IsConfigured).Returns(false);
-        await Assert.ThrowsAsync<BenchmarkGeneratorNotConfiguredException>(() => Sut().StartGenerationAsync(_clientId));
+        // The message names what to set for the engine in use (Benchmark / GeneratorEngine).
+        Assert.Contains("N8n:KnowledgeBenchmarkWebhookUrl", (await Assert.ThrowsAsync<BenchmarkGeneratorNotConfiguredException>(() => Sut().StartGenerationAsync(_clientId))).Message);
+        _config.SetupGet(c => c.BenchmarkGeneratorEngine).Returns(WorkflowEngines.Code);
+        Assert.Contains("Ai / ApiKey", (await Assert.ThrowsAsync<BenchmarkGeneratorNotConfiguredException>(() => Sut().StartGenerationAsync(_clientId))).Message);
         _generator.SetupGet(g => g.IsConfigured).Returns(true);
         _repo.Setup(r => r.GetPendingGenerationIdAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(Guid.NewGuid());
         await Assert.ThrowsAsync<BenchmarkGenerationInProgressException>(() => Sut().StartGenerationAsync(_clientId));

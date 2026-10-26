@@ -214,6 +214,20 @@ public class ConfigSettingsTests
         Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<IConfigManager>().GetInt("Nope", "Missing"));
     }
 
+    [Fact]
+    public void A_setting_whose_pattern_is_a_list_of_values_offers_them_as_choices()
+    {
+        foreach (var engine in new[] { ConfigDefaults.AiBotEngine, ConfigDefaults.CalendarsSyncEngine, ConfigDefaults.BenchmarkGeneratorEngine })
+        {
+            Assert.Equal([WorkflowEngines.N8n, WorkflowEngines.Code], engine.Choices);
+            Assert.Equal(WorkflowEngines.N8n, engine.DefaultValue);
+        }
+        Assert.Null(ConfigDefaults.AiBaseUrl.Choices); // a pattern that isn't a list
+        Assert.Null(ConfigDefaults.AiTimeoutSeconds.Choices); // no pattern
+        Assert.Equal(["a", "b-c", "d.e"], (ConfigDefaults.AiBotEngine with { Pattern = "^(a|b-c|d.e)$" }).Choices);
+        Assert.Null((ConfigDefaults.AiBotEngine with { Pattern = "^(only)$" }).Choices);
+    }
+
     // ------------------------------------------------------------------------------------------------------------
 
     private ServiceProvider Services(string? connectionString = null)

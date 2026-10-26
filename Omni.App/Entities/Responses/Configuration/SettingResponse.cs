@@ -4,7 +4,8 @@ namespace Omni.App.Entities.Responses.Configuration;
 /// One declared setting. <see cref="DefaultValue"/> is the constant default, <see cref="StoredValue"/> the
 /// config.settings row (null = none), <see cref="EffectiveValue"/> what the app uses now. <see cref="Type"/> is
 /// String, Int, Decimal or Bool; <see cref="Min"/>/<see cref="Max"/> bound numbers. For an <see cref="IsSecret"/> setting
-/// the values are never returned: StoredValue/EffectiveValue are "(set)" or null/empty.
+/// the values are never returned: StoredValue/EffectiveValue are "(set)" or null/empty. <see cref="Choices"/> lists the allowed
+/// values of a setting that is a choice (the n8n-or-code switches).
 /// </summary>
 public record SettingResponse(
     string Section,
@@ -19,4 +20,6 @@ public record SettingResponse(
     string? Note,
     string? UpdatedBy,
     DateTimeOffset? UpdatedAt,
-    bool IsSecret);
+    bool IsSecret,
+    /// <summary>The only values allowed (ConfigDefinition.Choices), for a dropdown; null = free text or a number.</summary>
+    IReadOnlyList<string>? Choices = null);

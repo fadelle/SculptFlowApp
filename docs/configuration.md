@@ -26,12 +26,16 @@ constant default declared in `Common/Statics/ConfigDefaults`.
   if it hasn't read any yet.
 - **Changing a value.** Use the admin portal's Configuration page. It calls `/api/platform-admin/settings`, and every
   change is audited.
+- **Choices.** A text setting whose pattern is a plain list (`^(n8n|code)$`) has those values as its `Choices`
+  (`ConfigDefinition.Choices`, sent by the settings API); the Configuration page shows it as a dropdown. Today these are the
+  n8n-or-code switches `Ai / BotEngine`, `Calendars / SyncEngine` and `Benchmark / GeneratorEngine` (deploy-runbook.md,
+  "In-code workflows").
 
 **Environment settings and secrets** stay in `appsettings.json`, bound to options classes in `Common/Configs`. Secrets come
 from user-secrets in development and environment variables in production. This covers connection strings, API keys,
 client secrets, public URLs and provider ids. They never go in `config.settings`.
 
-## Declared settings (95)
+## Declared settings (113)
 
 Generated from `Common/Statics/ConfigDefaults`; keep this table in step when you add one.
 

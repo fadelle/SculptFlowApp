@@ -1898,7 +1898,7 @@
   "bots.test.notes.handedOff": "Passé à votre équipe : {0}",
   "bots.test.notes.handedOffNoReason": "Passé à votre équipe",
   "bots.test.notes.replyRefused": "Pas de réponse : votre crédit IA ou votre solde ne suffit pas.",
-  "bots.test.notes.notReachable": "Le workflow IA est injoignable, le bot n’a donc pas répondu.",
+  "bots.test.notes.notReachable": "Le bot n’a pas pu démarrer, il n’a donc pas répondu. Réessayez dans un instant.",
   "bots.test.errors.textRequired": "Écrivez d’abord un message.",
   "bots.test.errors.tooLong": "Un message de test peut contenir jusqu’à {0} caractères.",
   "bots.test.errors.sessionNotFound": "Cette conversation de test est terminée. Recommencez.",

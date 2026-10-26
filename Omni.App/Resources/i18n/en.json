@@ -2001,7 +2001,7 @@
   "bots.test.notes.handedOff": "Handed off to your team: {0}",
   "bots.test.notes.handedOffNoReason": "Handed off to your team",
   "bots.test.notes.replyRefused": "No reply: your AI credit or balance can't cover it.",
-  "bots.test.notes.notReachable": "The AI workflow couldn't be reached, so the bot didn't answer.",
+  "bots.test.notes.notReachable": "The bot couldn't be started, so it didn't answer. Try again in a moment.",
   "bots.test.errors.textRequired": "Type a message first.",
   "bots.test.errors.tooLong": "A test message can be up to {0} characters.",
   "bots.test.errors.sessionNotFound": "That test conversation has ended. Start over.",

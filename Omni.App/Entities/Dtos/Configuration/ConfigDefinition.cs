@@ -18,4 +18,12 @@ public record ConfigDefinition(
     decimal? Min = null,
     decimal? Max = null,
     string? Pattern = null,
-    bool IsSecret = false);
+    bool IsSecret = false)
+{
+    /// <summary>The allowed values when <see cref="Pattern"/> is a plain list of choices (<c>^(n8n|code)$</c>), in order, so a
+    /// form can offer them (the admin portal's Configuration page shows a dropdown); null otherwise.</summary>
+    public IReadOnlyList<string>? Choices =>
+        Pattern is { } pattern && System.Text.RegularExpressions.Regex.Match(pattern, @"^\^\(([\w.-]+(?:\|[\w.-]+)+)\)\$$") is { Success: true } m
+            ? m.Groups[1].Value.Split('|')
+            : null;
+}
