@@ -106,7 +106,7 @@ public class BotTrigger : IAiTriggerNotifier
     }
 
     // Anything but "code" (the setting only allows n8n and code) keeps n8n, the default.
-    private bool UsesCode => string.Equals(_config.AiBotEngine, BotEngines.Code, StringComparison.OrdinalIgnoreCase);
+    private bool UsesCode => string.Equals(_config.AiBotEngine, WorkflowEngines.Code, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Adds the client's profile and queues the run. True when queued.</summary>
     private async Task<bool> EnqueueAsync(AiTriggerPayload payload, TraceIds ids, CancellationToken ct)
@@ -139,10 +139,10 @@ public class BotTrigger : IAiTriggerNotifier
         if (!_queue.TryEnqueue(trigger))
         {
             _logger.LogWarning("AI run not queued for conversation {ConversationId}: the bot queue is closed.", payload.ConversationId);
-            _tracer.Step(TraceSteps.BotTriggerFailed, TraceOutcomes.Failed, ids, detail: new { reason = "queue_closed", engine = BotEngines.Code });
+            _tracer.Step(TraceSteps.BotTriggerFailed, TraceOutcomes.Failed, ids, detail: new { reason = "queue_closed", engine = WorkflowEngines.Code });
             return false;
         }
-        _tracer.Step(TraceSteps.BotTriggered, TraceOutcomes.Ok, ids, detail: new { botId = trigger.Bot?.Id, engine = BotEngines.Code, queued = true });
+        _tracer.Step(TraceSteps.BotTriggered, TraceOutcomes.Ok, ids, detail: new { botId = trigger.Bot?.Id, engine = WorkflowEngines.Code, queued = true });
         return true;
     }
 }

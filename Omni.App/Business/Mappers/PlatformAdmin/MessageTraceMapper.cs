@@ -92,10 +92,10 @@ public static class MessageTraceMapper
             TraceSteps.AutoReplySkipped => $"No auto-reply to the {D("trigger")} conversation: {D("reason")}",
             TraceSteps.HandoffMessageSkipped => $"No handoff message: {D("reason")}",
             TraceSteps.BotSkipped => $"Bot not asked: {D("reason")}",
-            TraceSteps.BotTriggered => D("engine") == BotEngines.Code
+            TraceSteps.BotTriggered => D("engine") == WorkflowEngines.Code
                 ? "Bot asked to reply (queued for the app's bot engine)"
                 : $"Bot (n8n) asked to reply (answered {D("status")})",
-            TraceSteps.BotTriggerFailed => (D("engine") == BotEngines.Code ? "Bot could not be queued: " : "Bot (n8n) call failed: ")
+            TraceSteps.BotTriggerFailed => (D("engine") == WorkflowEngines.Code ? "Bot could not be queued: " : "Bot (n8n) call failed: ")
                 + (D("error") ?? D("reason") ?? $"answered {D("status")}"),
             TraceSteps.BotToolCalled => $"Bot used tool {D("tool")} (answered {D("status")})",
             TraceSteps.BotRunStarted => "Bot engine started on the message" + (D("test") == "true" ? " (test conversation)" : ""),

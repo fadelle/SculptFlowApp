@@ -33,6 +33,10 @@ public interface IKnowledgeBenchmarkService
     /// them and the live Knowledge Base. Idempotent: a second delivery is reported as already processed.</summary>
     Task<GenerationReceiveResult> ReceiveGenerationResultAsync(Guid generationId, GeneratorResponse reply, string? rawBody, bool requireEcho, CancellationToken ct = default);
 
+    /// <summary>Marks a still-pending generation failed with <paramref name="message"/> (shown on the portal), as when the question
+    /// generator can't be reached. Never overwrites a finished one; never throws.</summary>
+    Task FailGenerationAsync(Guid generationId, string message, CancellationToken ct = default);
+
     /// <summary>"Stop generating": marks THIS client's pending generation cancelled so Generate is free again and n8n's late reply is
     /// refused. It cannot halt n8n's own run. A generation that already finished is reported as such, not changed.</summary>
     Task<GenerationCancelResult> CancelGenerationAsync(Guid clientId, Guid generationId, CancellationToken ct = default);

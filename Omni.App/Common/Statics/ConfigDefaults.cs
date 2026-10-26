@@ -136,6 +136,10 @@ public static class ConfigDefaults
         "SECRET. API key of the embeddings API. Never shown back: the Configuration page and API only say whether it is set.", IsSecret: true);
     public static readonly ConfigDefinition EmbeddingsMaxInputsPerRequest = new("Embeddings", "MaxInputsPerRequest", "64", ConfigValueType.Int,
         "Texts sent to the embeddings API in one request.", 1, 2048);
+    public static readonly ConfigDefinition CalendarsSyncEngine = new("Calendars", "SyncEngine", "n8n", ConfigValueType.String,
+        "Which engine pushes booking changes to connected Google and Outlook calendars: n8n (the calendar sync workflow at N8n:CalendarSyncWebhookUrl) or code (CalendarSyncClient in the app). Read for every sync.", Pattern: @"^(n8n|code)$");
+    public static readonly ConfigDefinition BenchmarkGeneratorEngine = new("Benchmark", "GeneratorEngine", "n8n", ConfigValueType.String,
+        "Which engine writes the retrieval benchmark's questions: n8n (the workflow at N8n:KnowledgeBenchmarkWebhookUrl) or code (KnowledgeBenchmarkGenerator with Benchmark / GeneratorModel). Read for every generation.", Pattern: @"^(n8n|code)$");
     public static readonly ConfigDefinition AiBotEngine = new("Ai", "BotEngine", "n8n", ConfigValueType.String,
         "Which engine answers contacts and the bot test panel: n8n (the AI assistant workflow at N8n:AiWebhookUrl) or code (BotEngine in the app). Read for every message, so a change applies within the settings refresh.", Pattern: @"^(n8n|code)$");
     public static readonly ConfigDefinition AiBaseUrl = new("Ai", "BaseUrl", "https://api.openai.com/v1", ConfigValueType.String,
@@ -333,6 +337,8 @@ public static class ConfigDefaults
         EmbeddingsApiKey,
         EmbeddingsMaxInputsPerRequest,
 
+        CalendarsSyncEngine,
+        BenchmarkGeneratorEngine,
         AiBotEngine,
         AiBaseUrl,
         AiApiKey,

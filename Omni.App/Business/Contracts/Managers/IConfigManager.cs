@@ -249,8 +249,14 @@ public interface IConfigManager
     /// <summary>Texts sent to the embeddings API in one request. Default 64.</summary>
     int EmbeddingsMaxInputsPerRequest { get; }
 
+    /// <summary>Which engine pushes booking changes to connected Google and Outlook calendars: n8n or code (WorkflowEngines). Default n8n.</summary>
+    string CalendarsSyncEngine { get; }
+
+    /// <summary>Which engine writes the retrieval benchmark's questions: n8n or code (WorkflowEngines). Default n8n.</summary>
+    string BenchmarkGeneratorEngine { get; }
+
     // ---- Ai
-    /// <summary>Which engine answers contacts and the bot test panel: n8n or code (BotEngines). Default n8n.</summary>
+    /// <summary>Which engine answers contacts and the bot test panel: n8n or code (WorkflowEngines). Default n8n.</summary>
     string AiBotEngine { get; }
 
     /// <summary>Base URL of the OpenAI Responses API the AI bot and the benchmark question generator call. Default https://api.openai.com/v1.</summary>

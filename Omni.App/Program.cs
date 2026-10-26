@@ -60,6 +60,7 @@ using Omni.App.Business.Contracts.Services.Members;
 using Omni.App.Business.Contracts.Services.TikTok;
 using Omni.App.Business.Contracts.Services.WhatsApp;
 using Omni.App.Business.Engines.Ai;
+using Omni.App.Business.Engines.Calendars;
 using Omni.App.Business.Engines.Knowledge;
 using Omni.App.Business.Engines.KnowledgeBenchmark;
 using Omni.App.Business.Engines.Telegram;
@@ -378,11 +379,16 @@ builder.Services.AddHostedService<WebsiteScrapeWorker>();
 // RemoveAllLoggers: the n8n webhook URL acts as the credential for that endpoint, so request URIs must not be logged.
 builder.Services.AddSingleton<IKnowledgeBenchmarkScorer, KnowledgeBenchmarkScorer>();
 builder.Services.AddSingleton<IKnowledgeBenchmarkRunQueue, KnowledgeBenchmarkRunQueue>();
-builder.Services.AddHttpClient<IKnowledgeBenchmarkGeneratorClient, N8nKnowledgeBenchmarkGeneratorClient>(client =>
+// Benchmark / GeneratorEngine picks n8n (this client) or code (KnowledgeBenchmarkGenerationWorker + KnowledgeBenchmarkGenerator).
+builder.Services.AddHttpClient<N8nKnowledgeBenchmarkGeneratorClient>(client =>
     {
         client.Timeout = TimeSpan.FromMinutes(3); // the workflow answers only after an LLM has written the questions
     })
     .RemoveAllLoggers();
+builder.Services.AddScoped<IKnowledgeBenchmarkGeneratorClient, KnowledgeBenchmarkGeneratorDispatcher>();
+builder.Services.AddSingleton<IKnowledgeBenchmarkGenerationQueue, KnowledgeBenchmarkGenerationQueue>();
+builder.Services.AddScoped<IKnowledgeBenchmarkGenerator, KnowledgeBenchmarkGenerator>();
+builder.Services.AddHostedService<KnowledgeBenchmarkGenerationWorker>();
 builder.Services.AddScoped<IKnowledgeBenchmarkService, KnowledgeBenchmarkService>();
 builder.Services.AddHostedService<KnowledgeBenchmarkRunWorker>();
 
@@ -428,7 +434,13 @@ builder.Services.AddScoped<IAiTriggerNotifier, BotTrigger>();
 builder.Services.AddSingleton<IBotRunQueue, BotRunQueue>();
 builder.Services.AddScoped<IBotEngine, BotEngine>();
 builder.Services.AddHostedService<BotRunWorker>();
-builder.Services.AddHttpClient<ICalendarSyncNotifier, CalendarSyncNotifier>();
+// Calendar sync after a booking change: Calendars / SyncEngine picks n8n (CalendarSyncNotifier posts to
+// N8n:CalendarSyncWebhookUrl) or code (CalendarSyncWorker runs CalendarSyncClient, then ApplySyncCallbackAsync).
+builder.Services.AddHttpClient<CalendarSyncNotifier>();
+builder.Services.AddScoped<ICalendarSyncNotifier, CalendarSyncDispatcher>();
+builder.Services.AddHttpClient<ICalendarSyncClient, CalendarSyncClient>();
+builder.Services.AddSingleton<ICalendarSyncQueue, CalendarSyncQueue>();
+builder.Services.AddHostedService<CalendarSyncWorker>();
 
 // ---------------------------------------------------------------------
 // Web layer

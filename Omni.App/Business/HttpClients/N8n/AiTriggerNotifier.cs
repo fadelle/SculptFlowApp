@@ -141,7 +141,7 @@ public class AiTriggerNotifier : IAiTriggerNotifier
                 _tracer.Step(TraceSteps.BotTriggerFailed, TraceOutcomes.Failed, ids, elapsed, new { status = (int)response.StatusCode });
                 return false;
             }
-            _tracer.Step(TraceSteps.BotTriggered, TraceOutcomes.Ok, ids, elapsed, new { status = (int)response.StatusCode, botId = trigger.Bot?.Id, engine = BotEngines.N8n });
+            _tracer.Step(TraceSteps.BotTriggered, TraceOutcomes.Ok, ids, elapsed, new { status = (int)response.StatusCode, botId = trigger.Bot?.Id, engine = WorkflowEngines.N8n });
             return true;
         }
         catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)

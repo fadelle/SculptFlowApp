@@ -127,6 +127,8 @@ public class ConfigManager : IConfigManager
     public string EmbeddingsApiKey => GetString(ConfigDefaults.EmbeddingsApiKey);
     public int EmbeddingsMaxInputsPerRequest => GetInt(ConfigDefaults.EmbeddingsMaxInputsPerRequest);
 
+    public string CalendarsSyncEngine => GetString(ConfigDefaults.CalendarsSyncEngine);
+    public string BenchmarkGeneratorEngine => GetString(ConfigDefaults.BenchmarkGeneratorEngine);
     // ---- Ai
     public string AiBotEngine => GetString(ConfigDefaults.AiBotEngine);
     public string AiBaseUrl => GetString(ConfigDefaults.AiBaseUrl);

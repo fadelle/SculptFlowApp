@@ -283,7 +283,7 @@ public partial class KnowledgeBenchmarkService
             stopped > 0 ? GenerationCancelStatus.Cancelled : GenerationCancelStatus.NotPending, await SummaryOfAsync(current, ct));
     }
 
-    private async Task FailGenerationAsync(Guid generationId, string message)
+    public async Task FailGenerationAsync(Guid generationId, string message, CancellationToken ct = default)
     {
         // Only a still-pending generation can fail: never overwrite one that already completed.
         try

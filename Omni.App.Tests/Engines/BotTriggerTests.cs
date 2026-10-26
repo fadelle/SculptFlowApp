@@ -23,7 +23,7 @@ public class BotTriggerTests
     public BotTriggerTests()
     {
         AiAllowed(true);
-        _config.SetupGet(c => c.AiBotEngine).Returns(BotEngines.Code);
+        _config.SetupGet(c => c.AiBotEngine).Returns(WorkflowEngines.Code);
     }
 
     private BotTrigger Sut()
@@ -72,7 +72,7 @@ public class BotTriggerTests
     }
 
     [Theory]
-    [InlineData(BotEngines.N8n)]
+    [InlineData(WorkflowEngines.N8n)]
     [InlineData("")]
     public async Task On_n8n_the_message_goes_to_the_workflow_as_before_and_nothing_is_queued(string engine)
     {
