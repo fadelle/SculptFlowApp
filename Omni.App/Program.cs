@@ -15,6 +15,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Omni.App.Business.Contracts.Engines.Ai;
 using Omni.App.Business.Contracts.Engines.Knowledge;
 using Omni.App.Business.Contracts.Engines.KnowledgeBenchmark;
 using Omni.App.Business.Contracts.Engines.Telegram;
@@ -58,6 +59,7 @@ using Omni.App.Business.Contracts.Services.Orders;
 using Omni.App.Business.Contracts.Services.Members;
 using Omni.App.Business.Contracts.Services.TikTok;
 using Omni.App.Business.Contracts.Services.WhatsApp;
+using Omni.App.Business.Engines.Ai;
 using Omni.App.Business.Engines.Knowledge;
 using Omni.App.Business.Engines.KnowledgeBenchmark;
 using Omni.App.Business.Engines.Telegram;
@@ -417,9 +419,15 @@ builder.Services.AddScoped<IMessageMediaService, MessageMediaService>();
 // Billing:Enabled = true.
 Omni.App.Common.Extensions.BillingModule.AddBilling(builder.Services, builder.Configuration);
 
-// Outbound: the one call to n8n left after Meta started posting directly to us — see
-// Controllers/Integrations/WhatsAppWebhookController.cs and IAiTriggerNotifier's own doc comment.
-builder.Services.AddHttpClient<IAiTriggerNotifier, AiTriggerNotifier>();
+// The AI bot: the webhooks and the bot test panel call IAiTriggerNotifier (BotTrigger). Ai / BotEngine picks the engine per
+// message: n8n = AiTriggerNotifier posts to N8n:AiWebhookUrl (see WhatsAppWebhookController and IAiTriggerNotifier);
+// code = the same checks, then the run is queued and BotRunWorker runs BotEngine (the AI assistant workflow as code, one
+// run at a time per conversation, Ai / MaxConcurrentRuns at once).
+builder.Services.AddHttpClient<AiTriggerNotifier>();
+builder.Services.AddScoped<IAiTriggerNotifier, BotTrigger>();
+builder.Services.AddSingleton<IBotRunQueue, BotRunQueue>();
+builder.Services.AddScoped<IBotEngine, BotEngine>();
+builder.Services.AddHostedService<BotRunWorker>();
 builder.Services.AddHttpClient<ICalendarSyncNotifier, CalendarSyncNotifier>();
 
 // ---------------------------------------------------------------------

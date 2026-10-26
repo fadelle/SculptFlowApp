@@ -35,6 +35,24 @@ public static class TraceContext
         return new Scope(activity, previous);
     }
 
+    /// <summary>
+    /// Continues the trace a traceparent names ("00-{trace}-{span}-01") for work that runs later, outside the request that
+    /// started it (a queued bot run joins its message's trace). A missing or unreadable traceparent starts a new trace.
+    /// Disposing it restores the previous one.
+    /// </summary>
+    public static IDisposable Continue(string? traceparent, string name)
+    {
+        var previous = Activity.Current;
+        Activity.Current = null;
+        var activity = new Activity(name).SetIdFormat(ActivityIdFormat.W3C);
+        if (ActivityContext.TryParse(traceparent, null, out var parent))
+        {
+            activity.SetParentId(parent.TraceId, parent.SpanId, parent.TraceFlags);
+        }
+        activity.Start();
+        return new Scope(activity, previous);
+    }
+
     private sealed class Scope(Activity activity, Activity? previous) : IDisposable
     {
         public void Dispose()

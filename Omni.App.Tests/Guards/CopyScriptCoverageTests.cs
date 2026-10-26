@@ -20,7 +20,8 @@ public class CopyScriptCoverageTests
     // AI bots (2026-10-24): new tables, and Inbox settings that now belong to an account and a bot (the old client-wide row
     // has nothing to apply to, so copied clients start with AI off).
     private static readonly string[] NotCopied =
-        ["crm.bots", "crm.bot_knowledge_sources", "crm.bot_test_sessions", "crm.bot_test_messages", "crm.inbox_settings"];
+        ["crm.bots", "crm.bot_knowledge_sources", "crm.bot_test_sessions", "crm.bot_test_messages", "crm.inbox_settings",
+         "crm.bot_memory"]; // the C# bot engine's memory (2026-10-26); n8n kept its memory in its own RAM
 
     private static string Root => LeftoverNameScanner.FindRepoRoot();
 

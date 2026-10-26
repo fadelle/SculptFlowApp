@@ -136,6 +136,8 @@ public static class ConfigDefaults
         "SECRET. API key of the embeddings API. Never shown back: the Configuration page and API only say whether it is set.", IsSecret: true);
     public static readonly ConfigDefinition EmbeddingsMaxInputsPerRequest = new("Embeddings", "MaxInputsPerRequest", "64", ConfigValueType.Int,
         "Texts sent to the embeddings API in one request.", 1, 2048);
+    public static readonly ConfigDefinition AiBotEngine = new("Ai", "BotEngine", "n8n", ConfigValueType.String,
+        "Which engine answers contacts and the bot test panel: n8n (the AI assistant workflow at N8n:AiWebhookUrl) or code (BotEngine in the app). Read for every message, so a change applies within the settings refresh.", Pattern: @"^(n8n|code)$");
     public static readonly ConfigDefinition AiBaseUrl = new("Ai", "BaseUrl", "https://api.openai.com/v1", ConfigValueType.String,
         "Base URL of the OpenAI Responses API the AI bot and the benchmark question generator call.", Pattern: @"^https?://\S+$");
     public static readonly ConfigDefinition AiApiKey = new("Ai", "ApiKey", "", ConfigValueType.String,
@@ -331,6 +333,7 @@ public static class ConfigDefaults
         EmbeddingsApiKey,
         EmbeddingsMaxInputsPerRequest,
 
+        AiBotEngine,
         AiBaseUrl,
         AiApiKey,
         AiBotModel,

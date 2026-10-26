@@ -128,6 +128,7 @@ public class ConfigManager : IConfigManager
     public int EmbeddingsMaxInputsPerRequest => GetInt(ConfigDefaults.EmbeddingsMaxInputsPerRequest);
 
     // ---- Ai
+    public string AiBotEngine => GetString(ConfigDefaults.AiBotEngine);
     public string AiBaseUrl => GetString(ConfigDefaults.AiBaseUrl);
     public string AiApiKey => GetString(ConfigDefaults.AiApiKey);
     public string AiBotModel => GetString(ConfigDefaults.AiBotModel);

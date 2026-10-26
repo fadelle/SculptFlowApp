@@ -92,9 +92,21 @@ public static class MessageTraceMapper
             TraceSteps.AutoReplySkipped => $"No auto-reply to the {D("trigger")} conversation: {D("reason")}",
             TraceSteps.HandoffMessageSkipped => $"No handoff message: {D("reason")}",
             TraceSteps.BotSkipped => $"Bot not asked: {D("reason")}",
-            TraceSteps.BotTriggered => $"Bot (n8n) asked to reply (answered {D("status")})",
-            TraceSteps.BotTriggerFailed => "Bot (n8n) call failed: " + (D("error") ?? $"answered {D("status")}"),
+            TraceSteps.BotTriggered => D("engine") == BotEngines.Code
+                ? "Bot asked to reply (queued for the app's bot engine)"
+                : $"Bot (n8n) asked to reply (answered {D("status")})",
+            TraceSteps.BotTriggerFailed => (D("engine") == BotEngines.Code ? "Bot could not be queued: " : "Bot (n8n) call failed: ")
+                + (D("error") ?? D("reason") ?? $"answered {D("status")}"),
             TraceSteps.BotToolCalled => $"Bot used tool {D("tool")} (answered {D("status")})",
+            TraceSteps.BotRunStarted => "Bot engine started on the message" + (D("test") == "true" ? " (test conversation)" : ""),
+            TraceSteps.BotModelCalled => $"AI model {D("model")} called as the {D("role")} (call {D("iteration")}): "
+                + (D("error") ?? $"{D("inputTokens")} tokens in, {D("outputTokens")} out" + (D("toolCalls") is { } tools && tools != "[]" ? $", asked for {tools}" : "")),
+            TraceSteps.BotDecision => D("action") is { } action && D("reason") is null ? $"Bot decided: {action}" : $"No usable decision: {D("reason")}",
+            TraceSteps.BotActionResult => $"Bot {D("action")}: " + (D("reason") ?? (D("code") is { } code
+                ? $"{code}" + (D("success") == "true" ? " (done)" : "")
+                : $"answered {D("status")}")),
+            TraceSteps.BotReplyStopped => $"Bot reply not sent: {D("code")}",
+            TraceSteps.BotRunFailed => $"Bot engine failed: {D("error")}",
             TraceSteps.ContactLanguageIgnored => $"Contact language from the bot not understood ({D("value")}); kept {D("kept") ?? "none"}",
             TraceSteps.SendRequested => $"Send requested: {D("kind")}" + (D("template") is { } template ? $" template {template}" : ""),
             TraceSteps.SendBlocked => $"Send blocked before it went out: {D("error")}",

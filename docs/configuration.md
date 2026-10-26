@@ -112,6 +112,7 @@ Generated from `Common/Statics/ConfigDefaults`; keep this table in step when you
 | Embeddings | Dimensions | 1536 | int 1–4096 | Vector size the model returns. Must equal the vector(N) size of knowledge.knowledge_chunks.embedding (1536). |
 | Embeddings | ApiKey | (empty) | string | SECRET. API key of the embeddings API. Never shown back: the Configuration page and API only say whether it is set. |
 | Embeddings | MaxInputsPerRequest | 64 | int 1–2048 | Texts sent to the embeddings API in one request. |
+| Ai | BotEngine | n8n | string (n8n or code) | Which engine answers contacts and the bot test panel: `n8n` (the AI assistant workflow at `N8n:AiWebhookUrl`) or `code` (`BotEngine` in the app). Read for every message, so a change applies within the settings refresh. |
 | Ai | BaseUrl | https://api.openai.com/v1 | string | Base URL of the OpenAI Responses API the AI bot and the benchmark question generator call. |
 | Ai | ApiKey | (empty) | string | SECRET. API key of the AI model API (bot replies, result wording, benchmark questions). Empty = the `Embeddings` / `ApiKey` is used. Never shown back: the Configuration page and API only say whether it is set. |
 | Ai | BotModel | gpt-6-luna | string | Model of the AI bot's agent (reads the contact's message, calls tools, decides the action). |

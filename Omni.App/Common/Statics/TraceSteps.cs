@@ -21,11 +21,17 @@ public static class TraceSteps
     public const string AutoReplySkipped = "inbox.auto_reply_skipped";
     public const string HandoffMessageSkipped = "inbox.handoff_message_skipped";
 
-    // Bot (n8n)
+    // Bot (BotTrigger, BotRunWorker, BotEngine)
     public const string BotSkipped = "bot.skipped";
     public const string BotTriggered = "bot.triggered";
     public const string BotTriggerFailed = "bot.trigger_failed";
     public const string BotToolCalled = "bot.tool_called";
+    public const string BotRunStarted = "bot.run_started";
+    public const string BotModelCalled = "bot.model_called";
+    public const string BotDecision = "bot.decision";
+    public const string BotActionResult = "bot.action_result";
+    public const string BotReplyStopped = "bot.reply_stopped";
+    public const string BotRunFailed = "bot.run_failed";
 
     // Contacts (from the bot's tools)
     public const string ContactLanguageIgnored = "contact.language_ignored";

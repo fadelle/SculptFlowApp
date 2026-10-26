@@ -1,7 +1,7 @@
 -- =====================================================================
 -- Configuration seed: one config.settings row per setting declared in
 -- Omni.App/Common/Statics/ConfigDefaults.cs, with its default value.
--- GENERATED from ConfigDefaults (110 settings); regenerate it when a setting is added.
+-- GENERATED from ConfigDefaults (111 settings); regenerate it when a setting is added.
 --
 -- Safe to re-run: a row that already exists is left alone, so values
 -- changed from the admin portal's Configuration page are never reset.
@@ -87,6 +87,7 @@ insert into config.settings (section, key, value, updated_by) values
   ('Embeddings', 'Dimensions', '1536', 'seed'),
   ('Embeddings', 'ApiKey', '', 'seed'),
   ('Embeddings', 'MaxInputsPerRequest', '64', 'seed'),
+  ('Ai', 'BotEngine', 'n8n', 'seed'),
   ('Ai', 'BaseUrl', 'https://api.openai.com/v1', 'seed'),
   ('Ai', 'ApiKey', '', 'seed'),
   ('Ai', 'BotModel', 'gpt-6-luna', 'seed'),

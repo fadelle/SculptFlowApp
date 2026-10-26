@@ -2704,6 +2704,23 @@ create table if not exists crm.bot_test_messages (
 );
 create index if not exists ix_bot_test_messages_session on crm.bot_test_messages(session_id, created_at);
 
+-- The AI bot's memory of a conversation (BotEngine, like n8n's Simple Memory): one row per exchange, the contact's message
+-- and the agent's raw final output, newest kept (Ai / MemoryExchanges). Exactly one of conversation_id (a live conversation)
+-- and test_session_id (a bot test conversation) is set; the rows go with either.
+create table if not exists crm.bot_memory (
+  id               uuid primary key default gen_random_uuid(),
+  client_id        uuid not null references core.clients(id) on delete cascade,
+  conversation_id  uuid references crm.conversations(id) on delete cascade,
+  test_session_id  uuid references crm.bot_test_sessions(id) on delete cascade,
+  user_text        text not null,
+  output           text not null,
+  created_at       timestamptz not null default now(),
+
+  constraint ck_bot_memory_owner check ((conversation_id is null) <> (test_session_id is null))
+);
+create index if not exists ix_bot_memory_conversation on crm.bot_memory(conversation_id, created_at) where conversation_id is not null;
+create index if not exists ix_bot_memory_test_session on crm.bot_memory(test_session_id, created_at) where test_session_id is not null;
+
 -- =====================================================================
 -- Inbox settings: crm.inbox_settings
 --

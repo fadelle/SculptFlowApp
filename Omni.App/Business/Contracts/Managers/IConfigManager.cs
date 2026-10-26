@@ -250,6 +250,9 @@ public interface IConfigManager
     int EmbeddingsMaxInputsPerRequest { get; }
 
     // ---- Ai
+    /// <summary>Which engine answers contacts and the bot test panel: n8n or code (BotEngines). Default n8n.</summary>
+    string AiBotEngine { get; }
+
     /// <summary>Base URL of the OpenAI Responses API the AI bot and the benchmark question generator call. Default https://api.openai.com/v1.</summary>
     string AiBaseUrl { get; }
 

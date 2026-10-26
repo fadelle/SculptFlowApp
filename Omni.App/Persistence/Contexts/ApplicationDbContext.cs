@@ -62,6 +62,7 @@ public class ApplicationDbContext : IdentityUserContext<AppUser>
     public DbSet<BotKnowledgeSource> BotKnowledgeSources => Set<BotKnowledgeSource>();
     public DbSet<BotTestSession> BotTestSessions => Set<BotTestSession>();
     public DbSet<BotTestMessage> BotTestMessages => Set<BotTestMessage>();
+    public DbSet<BotMemory> BotMemory => Set<BotMemory>();
     public DbSet<AvailabilityException> AvailabilityExceptions => Set<AvailabilityException>();
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<CalendarIntegration> CalendarIntegrations => Set<CalendarIntegration>();
@@ -807,6 +808,23 @@ public class ApplicationDbContext : IdentityUserContext<AppUser>
             e.Property(x => x.CreatedAt).HasColumnName("created_at");
             e.HasOne<BotTestSession>().WithMany().HasForeignKey(x => x.SessionId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne<Client>().WithMany().HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // bot_memory — the AI bot's memory of a conversation or bot test conversation (BotEngine).
+        modelBuilder.Entity<BotMemory>(e =>
+        {
+            e.ToTable("bot_memory", "crm");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.ClientId).HasColumnName("client_id");
+            e.Property(x => x.ConversationId).HasColumnName("conversation_id");
+            e.Property(x => x.TestSessionId).HasColumnName("test_session_id");
+            e.Property(x => x.UserText).HasColumnName("user_text").IsRequired();
+            e.Property(x => x.Output).HasColumnName("output").IsRequired();
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+            e.HasOne<Client>().WithMany().HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<Conversation>().WithMany().HasForeignKey(x => x.ConversationId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<BotTestSession>().WithMany().HasForeignKey(x => x.TestSessionId).OnDelete(DeleteBehavior.Cascade);
         });
 
         // auto_replies — automatic reply per client and channel (AutoReplyService; sent by MessageService.IngestAsync).
