@@ -1,3 +1,5 @@
+using Omni.App.Controllers.Filters;
+using Omni.App.Common.Statics;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Mvc;
@@ -41,6 +43,7 @@ namespace Omni.App.Pages.Campaigns;
 /// that per-contact resolution needs to know the contact list up front, so it's only available for the
 /// manual selection (see OnPostAsync).
 /// </summary>
+[RequirePlanFeature(EntitlementKeys.Campaigns)]
 public class CreateModel : PageModel
 {
     private static readonly Regex PlaceholderPattern = new(@"\{\{(\d+)\}\}", RegexOptions.Compiled);

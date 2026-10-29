@@ -1,3 +1,4 @@
+using Omni.App.Controllers.Filters;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.Extensions.Localization;
@@ -15,6 +16,7 @@ namespace Omni.App.Pages.Bots;
 /// <summary>The bot editor (IBotService.SaveAsync): name, description, instructions and allowed actions (custom bots only; a
 /// template bot shows its locked ones), Knowledge Base sources, language, handoff policy and message, status; and a test
 /// conversation panel (wwwroot/js/bot-test.js, BotTestController) that runs the bot with simulated write actions.</summary>
+[RequirePlanFeature(EntitlementKeys.AiAssistant)]
 public class EditModel : PageModel
 {
     private const string SavedKey = "bots.done.saved";

@@ -1,0 +1,9 @@
+@page "/channel/not-connected/{channel}"
+@model Omni.App.Pages.ChannelNotConnectedModel
+@{
+    var name = ChannelNames.Brand(Model.Channel);
+    ViewData["Title"] = T["channels.notConnected.title", name].Value;
+    var notConnected = new EmptyStateModel(Icon: "hub", Title: T["channels.notConnected.title", name].Value, Text: T["channels.notConnected.text", name].Value,
+        ActionLabel: T["nav.integrations"].Value, ActionHref: "/settings/integrations", ActionIcon: "hub");
+}
+<div class="au-panel au-panel--round"><partial name="_EmptyState" model="notConnected" /></div>

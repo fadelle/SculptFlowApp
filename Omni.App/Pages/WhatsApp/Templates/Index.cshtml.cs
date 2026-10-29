@@ -1,3 +1,4 @@
+using Omni.App.Controllers.Filters;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.Extensions.Localization;
@@ -14,6 +15,7 @@ namespace Omni.App.Pages.WhatsApp.Templates;
 /// <summary>WhatsApp Templates: list existing templates (with Meta approval status) and submit new
 /// ones for review. Actual Meta API calls live in WhatsAppTemplateService — this page just collects
 /// the form and reports back whatever the service (and, through it, Meta) returned.</summary>
+[RequireConnectedChannel(ChannelType.WhatsApp)]
 public class IndexModel : PageModel
 {
     private const string SavedKey = "templates.saved";

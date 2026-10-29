@@ -40,7 +40,7 @@ else
 
     <partial name="_Messages" model="new PageMessagesModel(Model.StatusMessage, Model.ErrorMessage)" />
 
-    <section class="au-panel au-panel--round au-panel--pad mw-480" aria-labelledby="appt-update-title">
+    <section class="au-panel au-panel--round au-panel--pad" aria-labelledby="appt-update-title">
         <div class="au-panel__head"><h3 class="au-panel__title" id="appt-update-title">@T["bookingDetail.update.title"]</h3></div>
         <form method="post">
             <div class="au-form-field">
@@ -61,7 +61,7 @@ else
 
     @if (Model.Reminders.Count > 0)
     {
-        <section class="au-panel au-panel--round au-panel--pad mw-480 mt-3" aria-labelledby="booking-reminders-title">
+        <section class="au-panel au-panel--round au-panel--pad mt-3" aria-labelledby="booking-reminders-title">
             <div class="au-panel__head"><h3 class="au-panel__title" id="booking-reminders-title">@T["bookingDetail.reminders.title"]</h3></div>
             <dl class="au-detail-rows">
                 @foreach (var r in Model.Reminders)

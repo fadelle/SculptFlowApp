@@ -13,7 +13,7 @@ else
     <partial name="_Messages" model="new PageMessagesModel(Model.StatusMessage, Model.ErrorMessage)" />
 
     <div class="au-page-head">
-        <p class="au-page-head__sub mw-640">@T.Html("bots.intro", new Microsoft.AspNetCore.Html.HtmlString($"<a href=\"/settings/inbox\">{System.Net.WebUtility.HtmlEncode(T["nav.inboxSettings"].Value)}</a>"))</p>
+        <p class="au-page-head__sub">@T.Html("bots.intro", new Microsoft.AspNetCore.Html.HtmlString($"<a href=\"/settings/inbox\">{System.Net.WebUtility.HtmlEncode(T["nav.inboxSettings"].Value)}</a>"))</p>
         <div class="au-page-head__actions">
             <button type="button" class="au-btn au-btn--primary" id="new-bot-btn"><span class="au-icon" aria-hidden="true">add</span>@T["bots.new"]</button>
         </div>

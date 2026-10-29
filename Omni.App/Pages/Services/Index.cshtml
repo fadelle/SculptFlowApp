@@ -13,7 +13,7 @@ else
     <partial name="_Messages" model="new PageMessagesModel(Model.StatusMessage, Model.ErrorMessage)" />
 
     <div class="au-page-head">
-        <div class="mw-640">
+        <div class="min-w-0">
             <p class="au-page-head__sub">
                 @T["services.intro"]
                 <button type="button" class="link-btn" id="svc-how-btn" aria-expanded="false" aria-controls="svc-how">@T["services.how.button"]</button>
@@ -23,7 +23,7 @@ else
             </p>
         </div>
         <div class="au-page-head__actions">
-            <a href="/Services/Edit" class="au-btn au-btn--primary"><span class="au-icon" aria-hidden="true">add</span>@T["services.add"]</a>
+            <a href="/Services?add=true" class="au-btn au-btn--primary" data-modal-open="svc-overlay"><span class="au-icon" aria-hidden="true">add</span>@T["services.add"]</a>
         </div>
     </div>
 
@@ -31,12 +31,13 @@ else
     {
         var empty = new EmptyStateModel(Icon: "medical_services", Title: T["services.empty.title"].Value,
             Text: T["services.empty.text"].Value,
-            ActionLabel: T["services.add"].Value, ActionHref: "/Services/Edit");
+            ActionLabel: T["services.add"].Value, ActionHref: "/Services?add=true");
         <div class="au-panel au-panel--round"><partial name="_EmptyState" model="empty" /></div>
     }
     else
     {
-        @* #svc-search, #svc-table tbody tr[data-search], tr[data-href] and #svc-no-match are read by services-page.js. *@
+        @* #svc-search, #svc-table tbody tr[data-search] and #svc-no-match are read by services-page.js; a row click opens its
+           [data-svc-edit] button, whose data-svc-* fill the popup. *@
         <div class="au-toolbar">
             <div class="au-toolbar__filters">
                 <input type="search" id="svc-search" class="au-input search-input" placeholder="@T["services.search"]" aria-label="@T["services.search"]" />
@@ -58,10 +59,10 @@ else
                     <tbody>
                         @foreach (var p in Model.Services)
                         {
-                            <tr class="row-link @(p.IsActive ? "" : "row-dim")" data-href="/Services/Edit/@p.Id" data-search="@($"{p.Name} {p.Code} {p.Description}".ToLowerInvariant())">
+                            <tr class="row-link @(p.IsActive ? "" : "row-dim")" data-search="@($"{p.Name} {p.Code} {p.Description}".ToLowerInvariant())">
                                 <td data-label="@T["services.table.service"]">
                                     <div class="min-w-0">
-                                        <a href="/Services/Edit/@p.Id" class="row-title" dir="auto">@p.Name</a>
+                                        <span class="row-title" dir="auto">@p.Name</span>
                                         @if (!string.IsNullOrWhiteSpace(p.Description))
                                         {
                                             <div class="cell-sub clip-1" title="@p.Description">@p.Description</div>
@@ -90,7 +91,8 @@ else
                                 </td>
                                 <td data-label="@T["services.table.status"]"><span class="badge @(p.IsActive ? "badge-green" : "badge-gray")">@(p.IsActive ? T["services.active"] : T["services.inactive"])</span></td>
                                 <td class="row-actions">
-                                    <a href="/Services/Edit/@p.Id" class="au-btn au-btn--outlined au-btn--sm">@T["common.edit"]</a>
+                                    <a href="/Services?edit=@p.Id" class="au-btn au-btn--outlined au-btn--sm" data-modal-open="svc-overlay" data-svc-edit
+                                       data-svc-id="@p.Id" data-svc-name="@p.Name" data-svc-code="@p.Code" data-svc-duration="@p.BookingDuration" data-svc-desc="@p.Description">@T["common.edit"]</a>
                                     <form method="post" asp-page-handler="Toggle" class="inline-form">
                                         <input type="hidden" name="id" value="@p.Id" />
                                         <input type="hidden" name="active" value="@((!p.IsActive).ToString().ToLowerInvariant())" />
@@ -106,5 +108,48 @@ else
         </div>
     }
 
+    @* ---------- Add / edit (popup; modal.js opens it, services-page.js fills it from the Edit button's data-svc-*). ---------- *@
+    <div class="bm-overlay" data-modal id="svc-overlay" hidden="@(!Model.FormOpen)">
+        <div class="card form-modal" role="dialog" aria-modal="true" aria-labelledby="svc-form-title">
+            <div class="modal-head">
+                <h3 id="svc-form-title" class="card-title" data-title-add="@T["services.edit.addHeading"]" data-title-edit="@T["services.edit.editTitle"]">@(Model.Edit is null ? T["services.edit.addHeading"] : T["services.edit.editTitle"])</h3>
+                <button type="button" class="au-icon-btn" data-modal-close aria-label="@T["common.close"]" title="@T["common.close"]"><span class="au-icon" aria-hidden="true">close</span></button>
+            </div>
+            @if (Model.FormError is not null)
+            {
+                <partial name="_Messages" model="new PageMessagesModel(null, Model.FormError)" />
+            }
+            @* #svc-id, #svc-name, #svc-code, #svc-duration, #svc-desc, #svc-desc-count and #svc-submit are read by services-page.js. *@
+            <form method="post" asp-page-handler="Save" id="svc-form">
+                <input type="hidden" name="Edit" id="svc-id" value="@Model.Edit" />
+                <div class="au-form-grid">
+                    <div class="au-form-field">
+                        <label class="au-form-label" for="svc-name">@T["services.edit.name"]<span class="au-required">*</span></label>
+                        <input type="text" name="Name" id="svc-name" value="@Model.Name" class="au-input" maxlength="200" required dir="auto" placeholder="@T["services.edit.namePlaceholder"]" />
+                    </div>
+                    <div class="au-form-field">
+                        <label class="au-form-label" for="svc-duration">@T["services.edit.duration"]</label>
+                        <input type="number" name="DurationMinutes" id="svc-duration" value="@Model.DurationMinutes" class="au-input" min="1" max="480" placeholder="@T["services.edit.durationPlaceholder"]" />
+                    </div>
+                    <div class="au-form-field au-span-2">
+                        <label class="au-form-label" for="svc-desc">@T["services.edit.description"] <span class="opt">@T["common.optional"]</span></label>
+                        <textarea name="Description" id="svc-desc" rows="3" class="au-textarea" maxlength="500" dir="auto" placeholder="@T["services.edit.descriptionPlaceholder"]">@Model.Description</textarea>
+                        <span class="au-help counter" id="svc-desc-count">@T["common.counter", 0, 500]</span>
+                    </div>
+                    <div class="au-form-field au-span-2">
+                        <label class="au-form-label" for="svc-code">@T["services.edit.code"] <span class="opt">@T["common.optional"]</span></label>
+                        <input type="text" name="Code" id="svc-code" value="@Model.Code" class="au-input" maxlength="100" dir="ltr" placeholder="@T["services.edit.codePlaceholder"]" />
+                        <span class="au-help">@T["services.edit.codeHelp"]</span>
+                    </div>
+                </div>
+                <div class="au-form-actions">
+                    <button type="button" class="au-btn au-btn--text" data-modal-close>@T["common.cancel"]</button>
+                    <button type="submit" class="au-btn au-btn--primary" id="svc-submit" data-label-add="@T["services.add"]" data-label-edit="@T["common.saveChanges"]">@(Model.Edit is null ? T["services.add"] : T["common.saveChanges"])</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script src="~/js/services-page.js" asp-append-version="true"></script>
+
 }

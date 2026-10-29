@@ -22,29 +22,47 @@ else
     <partial name="_Messages" model="new PageMessagesModel(Model.StatusMessage, Model.ErrorMessage)" />
 
     <div class="au-page-head">
-        <p class="au-page-head__sub mw-640">@T["members.intro", Model.ClientName]</p>
+        <p class="au-page-head__sub">@T["members.intro", Model.ClientName]</p>
+        @if (Model.CanManage)
+        {
+            <div class="au-page-head__actions">
+                <button type="button" class="au-btn au-btn--primary" data-modal-open="member-invite-overlay"><span class="au-icon" aria-hidden="true">person_add</span>@T["members.invite.title"]</button>
+            </div>
+        }
     </div>
 
     @if (Model.CanManage)
     {
-        <form method="post" asp-page-handler="Invite" class="au-panel au-panel--round integration-form mb-3" id="member-invite-form" autocomplete="off">
-            <div class="set-section">
-                <div class="set-section-head"><strong>@T["members.invite.title"]</strong><div class="cell-sub">@T["members.invite.help"]</div></div>
-                <div class="set-section-body">
-                    <div class="form-row-contact">
-                        <label class="field">
-                            <span>@T["members.invite.email"]</span>
-                            <input type="email" name="Email" value="@Model.Email" class="text-input" dir="ltr" maxlength="256" required autocomplete="off" />
-                        </label>
-                        <label class="field">
-                            <span>@T["members.invite.fullName"]</span>
-                            <input type="text" name="FullName" value="@Model.FullName" class="text-input" dir="auto" maxlength="200" autocomplete="off" />
-                        </label>
+        @* Invite (popup; modal.js). Open again on a failed invite with what was posted. *@
+        <div class="bm-overlay" data-modal id="member-invite-overlay" hidden="@(Model.InviteError is null)">
+            <div class="card form-modal" role="dialog" aria-modal="true" aria-labelledby="member-invite-title">
+                <div class="modal-head">
+                    <div class="min-w-0">
+                        <h3 id="member-invite-title" class="card-title">@T["members.invite.title"]</h3>
+                        <span class="cell-sub">@T["members.invite.help"]</span>
                     </div>
-                    <div><button type="submit" class="au-btn au-btn--primary"><span class="au-icon" aria-hidden="true">person_add</span>@T["members.invite.submit"]</button></div>
+                    <button type="button" class="au-icon-btn" data-modal-close aria-label="@T["common.close"]" title="@T["common.close"]"><span class="au-icon" aria-hidden="true">close</span></button>
                 </div>
+                @if (Model.InviteError is not null)
+                {
+                    <partial name="_Messages" model="new PageMessagesModel(null, Model.InviteError)" />
+                }
+                <form method="post" asp-page-handler="Invite" class="au-stack" id="member-invite-form" autocomplete="off">
+                    <div class="au-form-field">
+                        <label class="au-form-label" for="invite-email">@T["members.invite.email"]<span class="au-required">*</span></label>
+                        <input type="email" name="Email" id="invite-email" value="@Model.Email" class="au-input" dir="ltr" maxlength="256" required autocomplete="off" />
+                    </div>
+                    <div class="au-form-field">
+                        <label class="au-form-label" for="invite-name">@T["members.invite.fullName"]</label>
+                        <input type="text" name="FullName" id="invite-name" value="@Model.FullName" class="au-input" dir="auto" maxlength="200" autocomplete="off" />
+                    </div>
+                    <div class="au-form-actions">
+                        <button type="button" class="au-btn au-btn--text" data-modal-close>@T["common.cancel"]</button>
+                        <button type="submit" class="au-btn au-btn--primary"><span class="au-icon" aria-hidden="true">person_add</span>@T["members.invite.submit"]</button>
+                    </div>
+                </form>
             </div>
-        </form>
+        </div>
     }
 
     if (members.Count == 0)

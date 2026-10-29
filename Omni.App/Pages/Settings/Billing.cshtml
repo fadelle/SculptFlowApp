@@ -13,9 +13,6 @@
         "cancelled" => ("badge-gray", T["billing.status.cancelled"]),
         _ => ("badge-gray", T["billing.status.none"])
     };
-    string EntitlementValue(BillingEntitlementRow e) => e.Kind == "feature"
-        ? (e.Value == "true" ? T["billing.entitlement.included"] : T["billing.entitlement.notIncluded"])
-        : e.Value == "unlimited" ? T["billing.entitlement.unlimited"] : e.Value;
 }
 
 @if (!Model.ClientConfigured || s is null)
@@ -29,7 +26,7 @@ else
     var onTrial = s.TrialDays is not null && s.SubscriptionStatus == "active" && s.CurrentPeriodEnd is not null;
     var trialDaysLeft = onTrial ? Math.Max(0, (int)Math.Ceiling((s.CurrentPeriodEnd!.Value - DateTimeOffset.UtcNow).TotalDays)) : 0;
     <div class="au-page-head">
-        <p class="au-page-head__sub mw-720">@T["billing.intro"]</p>
+        <p class="au-page-head__sub">@T["billing.intro"]</p>
     </div>
 
     @if (s.SubscriptionStatus == "past_due")
@@ -89,22 +86,66 @@ else
         </div>
     </div>
 
-    <h2 class="section-title">@T["billing.includes.title"]</h2>
-    <div class="au-table-card">
-        <div class="au-table-scroll">
-            <table class="au-table au-table--stack">
-                <thead><tr><th>@T["billing.includes.feature"]</th><th>@T["billing.includes.yourPlan"]</th></tr></thead>
-                <tbody>
-                    @foreach (var e in s.Entitlements)
+    @* Usage against the plan: each limit as "used of limit" with a bar, then this period's messages and AI replies. *@
+    if (Model.PlanUsage is { } usage)
+    {
+        <h2 class="section-title">@T["billing.quota.title"] <span class="section-title__sub">@T.Html("billing.usage.since", LocalTimeHelper.Time(s.UsageSince, "date"))</span></h2>
+        <div class="au-grid au-grid--4 quota-grid">
+            @foreach (var q in usage.Quotas)
+            {
+                var full = q.Limit is { } max && q.Used >= max;
+                <div class="au-stat">
+                    <span class="au-eyebrow">@T.EntitlementLabel(q.Key, Omni.App.Common.Statics.EntitlementCatalog.Find(q.Key)?.Label ?? q.Key)</span>
+                    <div class="au-stat__value">
+                        @if (q.Limit is 0 && q.Used == 0)
+                        {
+                            <span class="quota-off">@T["billing.entitlement.notIncluded"]</span>
+                        }
+                        else if (q.Limit is { } limit)
+                        {
+                            @T["billing.quota.of", q.Used.Display("N0"), limit.Display("N0")]
+                        }
+                        else
+                        {
+                            @q.Used.Display("N0")
+                        }
+                    </div>
+                    @if (q.Limit is { } l && l > 0)
                     {
-                        <tr>
-                            <td data-label="@T["billing.includes.feature"]">@T.EntitlementLabel(e.Key, e.Label)</td>
-                            <td data-label="@T["billing.includes.yourPlan"]">@EntitlementValue(e)</td>
-                        </tr>
+                        <div class="progress quota-bar @(full ? "is-full" : "")" role="presentation"><div style="width:@(Math.Min(100, q.Used * 100 / l))%"></div></div>
                     }
-                </tbody>
-            </table>
+                    else if (q.Limit is null)
+                    {
+                        <span class="au-stat__hint">@T["billing.entitlement.unlimited"]</span>
+                    }
+                </div>
+            }
+            <div class="au-stat">
+                <span class="au-eyebrow">@T["billing.quota.messages"]</span>
+                <div class="au-stat__value">@usage.Messages.Display("N0")</div>
+                <span class="au-stat__hint">@T["billing.quota.charged", Money(usage.MessagesCharged)]</span>
+            </div>
+            @if (usage.AiIncluded || usage.AiReplies > 0)
+            {
+                <div class="au-stat">
+                    <span class="au-eyebrow">@T["billing.quota.aiReplies"]</span>
+                    <div class="au-stat__value">@usage.AiReplies.Display("N0")</div>
+                    <span class="au-stat__hint">@T["billing.quota.charged", Money(usage.AiRepliesCharged)]</span>
+                </div>
+            }
         </div>
+    }
+
+    <h2 class="section-title">@T["billing.includes.title"]</h2>
+    <div class="feature-chips">
+        @foreach (var e in s.Entitlements.Where(e => e.Kind == "feature"))
+        {
+            var on = e.Value == "true";
+            <span class="badge @(on ? "badge-green" : "badge-gray")" title="@(on ? T["billing.entitlement.included"] : T["billing.entitlement.notIncluded"])">
+                <span class="au-icon au-icon--sm" aria-hidden="true">@(on ? "check_circle" : "block")</span>@T.EntitlementLabel(e.Key, e.Label)
+                <span class="au-sr-only">@(on ? T["billing.entitlement.included"] : T["billing.entitlement.notIncluded"])</span>
+            </span>
+        }
     </div>
 
     <h2 class="section-title">@T["billing.addons.title"]</h2>

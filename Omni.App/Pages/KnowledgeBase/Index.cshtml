@@ -15,7 +15,7 @@ else
     <partial name="_Messages" model="new PageMessagesModel(Model.StatusMessage, Model.ErrorMessage)" />
 
     <div class="au-page-head">
-        <div class="mw-640">
+        <div class="min-w-0">
             <p class="au-page-head__sub">
                 @T["knowledge.intro"]
                 <button type="button" class="link-btn" data-toggle-target="kb-how" aria-expanded="false" aria-controls="kb-how">@T["services.how.button"]</button>
@@ -26,7 +26,7 @@ else
         </div>
         <div class="au-page-head__actions">
             <a href="/KnowledgeBase/Settings" class="au-btn au-btn--outlined"><span class="au-icon" aria-hidden="true">tune</span>@T["knowledge.settings"]</a>
-            <a href="/KnowledgeBase/Edit" class="au-btn au-btn--primary"><span class="au-icon" aria-hidden="true">add</span>@T["knowledge.add"]</a>
+            <a href="/KnowledgeBase?add=manual" class="au-btn au-btn--primary" data-modal-open="kb-overlay" data-kb-mode="manual"><span class="au-icon" aria-hidden="true">add</span>@T["knowledge.add"]</a>
         </div>
     </div>
 
@@ -38,9 +38,9 @@ else
                 <div class="empty-title">@T["knowledge.empty.title"]</div>
                 <p class="empty-text">@T["knowledge.empty.text"]</p>
                 <div class="kb-choices kb-choices-center">
-                    <a href="/KnowledgeBase/Edit" class="kb-choice"><span class="kb-choice-icon au-icon" aria-hidden="true">edit_note</span><strong>@T["knowledge.choice.write"]</strong><small>@T["knowledge.choice.writeHelp"]</small></a>
-                    <a href="/KnowledgeBase/Edit?mode=upload" class="kb-choice"><span class="kb-choice-icon au-icon" aria-hidden="true">upload_file</span><strong>@T["knowledge.choice.upload"]</strong><small>@T["knowledge.choice.uploadHelp"]</small></a>
-                    <a href="/KnowledgeBase/Edit?mode=website" class="kb-choice"><span class="kb-choice-icon au-icon" aria-hidden="true">language</span><strong>@T["knowledge.choice.website"]</strong><small>@T["knowledge.choice.websiteHelp"]</small></a>
+                    <a href="/KnowledgeBase?add=manual" class="kb-choice" data-modal-open="kb-overlay" data-kb-mode="manual"><span class="kb-choice-icon au-icon" aria-hidden="true">edit_note</span><strong>@T["knowledge.choice.write"]</strong><small>@T["knowledge.choice.writeHelp"]</small></a>
+                    <a href="/KnowledgeBase?add=upload" class="kb-choice" data-modal-open="kb-overlay" data-kb-mode="upload"><span class="kb-choice-icon au-icon" aria-hidden="true">upload_file</span><strong>@T["knowledge.choice.upload"]</strong><small>@T["knowledge.choice.uploadHelp"]</small></a>
+                    <a href="/KnowledgeBase?add=website" class="kb-choice" data-modal-open="kb-overlay" data-kb-mode="website"><span class="kb-choice-icon au-icon" aria-hidden="true">language</span><strong>@T["knowledge.choice.website"]</strong><small>@T["knowledge.choice.websiteHelp"]</small></a>
                 </div>
             </div>
         </div>
@@ -135,7 +135,7 @@ else
                             else if (row.Document is { } d)
                             {
                                 var isUpload = d.SourceType == KnowledgeSourceType.Upload;
-                                <tr class="row-link @(d.IsActive ? "" : "row-dim")" data-href="/KnowledgeBase/Edit/@d.Id" data-cat="@d.Category"
+                                <tr class="row-link @(d.IsActive ? "" : "row-dim")" data-href="/KnowledgeBase?edit=@d.Id" data-cat="@d.Category"
                                     data-search="@($"{d.Title} {d.OriginalFileName} {T.CategoryLabel(d.Category)}".ToLowerInvariant())">
                                     <td data-label="@T["knowledge.table.entry"]">
                                         <div class="kb-title">
@@ -148,7 +148,7 @@ else
                                                 <span class="src-icon src-doc" title="@T["knowledge.source.written"]"><span class="au-icon au-icon--sm" aria-hidden="true">edit_note</span></span>
                                             }
                                             <div class="min-w-0">
-                                                <a href="/KnowledgeBase/Edit/@d.Id" class="row-title" dir="auto">@d.Title</a>
+                                                <a href="/KnowledgeBase?edit=@d.Id" class="row-title" dir="auto">@d.Title</a>
                                                 <div class="cell-sub">@(isUpload ? T["knowledge.source.documentFile", d.OriginalFileName ?? ""] : T["knowledge.source.written"])</div>
                                             </div>
                                         </div>
@@ -157,7 +157,7 @@ else
                                     <td data-label="@T["services.table.status"]"><span class="badge @(d.IsActive ? "badge-green" : "badge-gray")">@(d.IsActive ? T["services.active"] : T["services.inactive"])</span></td>
                                     <td data-label="@T["knowledge.table.updated"]" class="cell-sub" @LocalTimeHelper.Title(d.UpdatedAt)>@Ago(d.UpdatedAt)</td>
                                     <td class="row-actions">
-                                        <a href="/KnowledgeBase/Edit/@d.Id" class="au-btn au-btn--outlined au-btn--sm">@T["common.edit"]</a>
+                                        <a href="/KnowledgeBase?edit=@d.Id" class="au-btn au-btn--outlined au-btn--sm">@T["common.edit"]</a>
                                         <form method="post" asp-page-handler="Toggle" class="inline-form">
                                             <input type="hidden" name="id" value="@d.Id" />
                                             <input type="hidden" name="active" value="@((!d.IsActive).ToString().ToLowerInvariant())" />
@@ -180,10 +180,13 @@ else
         </div>
     }
 
+    <partial name="_KnowledgeForm" model="Model" />
+
     <script src="~/js/knowledge-page.js" asp-append-version="true"></script>
 
     @if (Model.AnyWebsiteInProgress)
     {
-        <script>setTimeout(function () { location.reload(); }, 4000);</script>
+        @* Refresh the import progress, but never under an open popup. *@
+        <script>setInterval(function () { if (!document.querySelector('[data-modal]:not([hidden])')) location.reload(); }, 4000);</script>
     }
 }

@@ -4,7 +4,6 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using static Omni.App.Tests.Pages.PageKit;
 using KbIndex = Omni.App.Pages.KnowledgeBase.IndexModel;
-using KbEdit = Omni.App.Pages.KnowledgeBase.EditModel;
 using KbSettings = Omni.App.Pages.KnowledgeBase.SettingsModel;
 using SiteDetails = Omni.App.Pages.KnowledgeBase.Websites.DetailsModel;
 using CalendarPage = Omni.App.Pages.Settings.CalendarIntegrationsModel;
@@ -120,13 +119,20 @@ public class KnowledgeIndexPageTests
     }
 }
 
-public class KnowledgeEditPageTests
+public class KnowledgePopupTests
 {
     private static readonly Client Glow = SomeClient();
     private readonly Mock<IKnowledgeService> _knowledge = new();
     private readonly Mock<IWebsiteSourceService> _websites = new();
-    private KbEdit Sut(Client? client = null, bool noClient = false) =>
-        new KbEdit(ClientContext(noClient ? null : client ?? Glow).Object, _knowledge.Object, _websites.Object, TextKit.Localizer()).Attach();
+
+    public KnowledgePopupTests()
+    {
+        _knowledge.Setup(k => k.ListAsync(Glow.Id, It.IsAny<CancellationToken>())).ReturnsAsync(new List<KnowledgeDocumentResponse>());
+        _websites.Setup(w => w.ListAsync(Glow.Id, It.IsAny<CancellationToken>())).ReturnsAsync(new List<WebsiteSourceResponse>());
+    }
+
+    private KbIndex Sut(Client? client = null, bool noClient = false) =>
+        new KbIndex(ClientContext(noClient ? null : client ?? Glow).Object, _knowledge.Object, _websites.Object, TextKit.Localizer()).Attach();
 
     private static KnowledgeDocumentResponse Existing(string sourceType = "manual") => Blank<KnowledgeDocumentResponse>() with
     {
@@ -135,13 +141,17 @@ public class KnowledgeEditPageTests
 
     // ---- get --------------------------------------------------------------------------------------------------
 
-    [Fact]
-    public async Task A_new_entry_starts_active_and_without_a_client_the_page_is_empty()
+    [Theory]
+    [InlineData(null, false, "manual")]
+    [InlineData("upload", true, "upload")]
+    [InlineData("website", true, "website")]
+    [InlineData("nonsense", false, "manual")]
+    public async Task A_link_opens_the_add_popup_on_its_way_in_and_a_new_entry_starts_active(string? add, bool open, string mode)
     {
-        var model = Sut();
+        var model = Sut(); model.Add = add;
         Assert.IsType<PageResult>(await model.OnGetAsync(default));
-        Assert.True(model.IsNew);
-        Assert.True(model.IsActive);
+        Assert.Equal((open, mode, true), (model.FormOpen, model.FormMode, model.IsActive));
+        Assert.Null(model.Edit);
 
         var none = Sut(noClient: true);
         Assert.IsType<PageResult>(await none.OnGetAsync(default));
@@ -152,32 +162,25 @@ public class KnowledgeEditPageTests
     [InlineData("manual", false, false)]
     [InlineData("upload", true, false)]
     [InlineData("website", false, true)]
-    public async Task Editing_loads_the_entry_and_its_source_kind(string sourceType, bool upload, bool website)
+    public async Task Editing_opens_the_popup_on_the_entry_and_its_source_kind(string sourceType, bool upload, bool website)
     {
         var id = Guid.NewGuid();
         _knowledge.Setup(k => k.GetByIdAsync(Glow.Id, id, It.IsAny<CancellationToken>())).ReturnsAsync(Existing(sourceType));
-        var model = Sut(); model.Id = id;
+        var model = Sut(); model.Edit = id;
         Assert.IsType<PageResult>(await model.OnGetAsync(default));
-        Assert.Equal(("Hours", "9 to 5", false, upload, website), (model.Title, model.Body, model.IsActive, model.IsUpload, model.IsWebsite));
+        Assert.Equal(("Hours", "9 to 5", false, upload, website, true), (model.Title, model.Body, model.IsActive, model.IsUpload, model.IsWebsite, model.FormOpen));
         Assert.Equal(("https://x", "f.pdf", 12L), (model.SourceUrl, model.OriginalFileName, model.FileSizeBytes));
 
-        var missing = Sut(); missing.Id = Guid.NewGuid();
+        var missing = Sut(); missing.Edit = Guid.NewGuid();
         Assert.IsType<NotFoundResult>(await missing.OnGetAsync(default));
     }
 
     [Fact]
-    public void Tabs_the_back_link_and_category_options()
+    public void The_back_link_and_category_options()
     {
         _knowledge.SetupGet(k => k.MaxUploadBytes).Returns(5_000_000);
         var model = Sut();
         Assert.Equal(5_000_000, model.MaxUploadBytes);
-        Assert.False(string.IsNullOrWhiteSpace(model.AcceptedTypes));
-
-        model.Mode = "UPLOAD";
-        Assert.True(model.ShowUploadTab);
-        model.Mode = "website";
-        Assert.True(model.ShowWebsiteTab);
-        Assert.False(model.ShowUploadTab);
 
         Assert.Equal("/KnowledgeBase", model.BackUrl);
         model.ReturnUrl = "/KnowledgeBase/Websites/1";
@@ -200,10 +203,10 @@ public class KnowledgeEditPageTests
     public async Task Saving_a_new_entry_goes_back_to_the_list()
     {
         var model = Sut(); model.Title = "FAQ"; model.Body = "text";
-        var result = await model.OnPostAsync(default);
+        var result = await model.OnPostSaveAsync(default);
         Assert.Equal("/KnowledgeBase", RedirectTarget(result));
         _knowledge.Verify(k => k.CreateAsync(Glow.Id, new SaveKnowledgeRequest("FAQ", model.Category, "text", false), It.IsAny<CancellationToken>()), Times.Once);
-        Assert.Equal("Saved.", model.TempData["StatusMessage"]);
+        Assert.Equal("Saved.", model.StatusMessage);
     }
 
     [Fact]
@@ -212,35 +215,35 @@ public class KnowledgeEditPageTests
         var id = Guid.NewGuid();
         _knowledge.Setup(k => k.GetByIdAsync(Glow.Id, id, It.IsAny<CancellationToken>())).ReturnsAsync(Existing("upload"));
         _knowledge.Setup(k => k.UpdateAsync(Glow.Id, id, It.IsAny<SaveKnowledgeRequest>(), It.IsAny<CancellationToken>())).ReturnsAsync(Existing());
-        var model = Sut(); model.Id = id; model.Title = "Hours"; model.Body = "tampered";
-        await model.OnPostAsync(default);
+        var model = Sut(); model.Edit = id; model.Title = "Hours"; model.Body = "tampered"; model.ReturnUrl = "/KnowledgeBase/Websites/1";
+        Assert.Equal("/KnowledgeBase/Websites/1", RedirectTarget(await model.OnPostSaveAsync(default)));   // back where the edit was opened
         Assert.Equal("9 to 5", model.Body);                   // an upload's text can't be edited
         Assert.True(model.IsUpload);
         _knowledge.Verify(k => k.UpdateAsync(Glow.Id, id, It.Is<SaveKnowledgeRequest>(r => r.Content == "9 to 5"), It.IsAny<CancellationToken>()), Times.Once);
 
         _knowledge.Setup(k => k.UpdateAsync(Glow.Id, id, It.IsAny<SaveKnowledgeRequest>(), It.IsAny<CancellationToken>())).ReturnsAsync((KnowledgeDocumentResponse?)null);
-        Assert.IsType<NotFoundResult>(await model.OnPostAsync(default));
+        Assert.IsType<NotFoundResult>(await model.OnPostSaveAsync(default));
 
-        var gone = Sut(); gone.Id = Guid.NewGuid();
-        Assert.IsType<NotFoundResult>(await gone.OnPostAsync(default));
+        var gone = Sut(); gone.Edit = Guid.NewGuid();
+        Assert.IsType<NotFoundResult>(await gone.OnPostSaveAsync(default));
     }
 
     [Fact]
-    public async Task Save_errors_stay_on_the_page_and_explain_indexing_failures()
+    public async Task Save_errors_reopen_the_popup_and_explain_indexing_failures()
     {
         _knowledge.SetupSequence(k => k.CreateAsync(Glow.Id, It.IsAny<SaveKnowledgeRequest>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new ArgumentException("Title is required."))
             .ThrowsAsync(new InvalidOperationException("embedding service is unavailable"));
         var model = Sut();
-        Assert.IsType<PageResult>(await model.OnPostAsync(default));
-        Assert.Equal("Title is required.", model.ErrorMessage);
-        Assert.IsType<PageResult>(await model.OnPostAsync(default));
-        Assert.StartsWith("Couldn't index this entry for AI search:", model.ErrorMessage);
+        Assert.IsType<PageResult>(await model.OnPostSaveAsync(default));
+        Assert.Equal(("Title is required.", true, "manual", true), (model.FormError, model.FormOpen, model.FormMode, model.ClientConfigured));
+        Assert.IsType<PageResult>(await model.OnPostSaveAsync(default));
+        Assert.StartsWith("Couldn't index this entry for AI search:", model.FormError);
 
-        Assert.Equal("page:/KnowledgeBase/Index", RedirectTarget(await Sut(noClient: true).OnPostAsync(default)));
+        Assert.Equal("page:(same)", RedirectTarget(await Sut(noClient: true).OnPostSaveAsync(default)));
     }
 
-    // ---- website tab ----------------------------------------------------------------------------------------------
+    // ---- website ----------------------------------------------------------------------------------------------------
 
     [Fact]
     public async Task Adding_a_website_redirects_to_its_page_and_surfaces_validation_errors()
@@ -248,37 +251,33 @@ public class KnowledgeEditPageTests
         var created = Blank<WebsiteSourceResponse>() with { Id = Guid.NewGuid() };
         _websites.SetupSequence(w => w.CreateAsync(Glow.Id, It.IsAny<CreateWebsiteSourceRequest>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(created).ThrowsAsync(new ArgumentException("Invalid URL."));
-        var model = Sut(); model.WebsiteUrl = "https://client.example";
+        var model = Sut(); model.WebsiteUrl = "https://client.example"; model.Edit = Guid.NewGuid();   // a stray edit id is ignored
 
         Assert.Equal($"/KnowledgeBase/Websites/{created.Id}", RedirectTarget(await model.OnPostWebsiteAsync(default)));
-        Assert.Equal("website", model.Mode);
         Assert.IsType<PageResult>(await model.OnPostWebsiteAsync(default));
-        Assert.Equal("Invalid URL.", model.ErrorMessage);
+        Assert.Equal(("Invalid URL.", "website", true), (model.FormError, model.FormMode, model.FormOpen));
+        Assert.Null(model.Edit);
 
-        var editing = Sut(); editing.Id = Guid.NewGuid();
-        Assert.IsType<BadRequestResult>(await editing.OnPostWebsiteAsync(default));
-        Assert.Equal("page:/KnowledgeBase/Index", RedirectTarget(await Sut(noClient: true).OnPostWebsiteAsync(default)));
+        Assert.Equal("page:(same)", RedirectTarget(await Sut(noClient: true).OnPostWebsiteAsync(default)));
     }
 
-    // ---- upload tab -------------------------------------------------------------------------------------------------
+    // ---- upload -----------------------------------------------------------------------------------------------------
 
     private static IFormFile File(string name = "faq.txt", string content = "hello") =>
         new FormFile(new MemoryStream(Encoding.UTF8.GetBytes(content)), 0, content.Length, "UploadFile", name);
 
     [Fact]
-    public async Task Uploads_need_a_non_empty_file_and_are_for_new_entries_only()
+    public async Task Uploads_need_a_non_empty_file()
     {
         var missing = Sut(); missing.Title = "t";
         Assert.IsType<PageResult>(await missing.OnPostUploadAsync(default));
-        Assert.Equal("Choose a file to upload.", missing.ErrorMessage);
+        Assert.Equal(("Choose a file to upload.", "upload"), (missing.FormError, missing.FormMode));
 
         var empty = Sut(); empty.UploadFile = File(content: "");
         Assert.IsType<PageResult>(await empty.OnPostUploadAsync(default));
-        Assert.Equal("The file is empty.", empty.ErrorMessage);
+        Assert.Equal("The file is empty.", empty.FormError);
 
-        var editing = Sut(); editing.Id = Guid.NewGuid(); editing.UploadFile = File();
-        Assert.IsType<BadRequestResult>(await editing.OnPostUploadAsync(default));
-        Assert.Equal("page:/KnowledgeBase/Index", RedirectTarget(await Sut(noClient: true).OnPostUploadAsync(default)));
+        Assert.Equal("page:(same)", RedirectTarget(await Sut(noClient: true).OnPostUploadAsync(default)));
     }
 
     [Fact]
@@ -287,27 +286,29 @@ public class KnowledgeEditPageTests
         _knowledge.Setup(k => k.CreateFromUploadAsync(Glow.Id, It.IsAny<UploadKnowledgeRequest>(), "faq.txt", It.IsAny<Stream>(), 5, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Blank<KnowledgeDocumentResponse>() with { Title = "FAQ", ChunkCount = 1 });
         var model = Sut(); model.Title = "FAQ"; model.UploadFile = File();
-        Assert.Equal("page:/KnowledgeBase/Index", RedirectTarget(await model.OnPostUploadAsync(default)));
-        Assert.Equal("Uploaded \"FAQ\" — 1 searchable piece created.", model.TempData["StatusMessage"]);
+        Assert.Equal("page:(same)", RedirectTarget(await model.OnPostUploadAsync(default)));
+        Assert.Equal("Uploaded \"FAQ\" — 1 searchable piece created.", model.StatusMessage);
 
         _knowledge.Setup(k => k.CreateFromUploadAsync(Glow.Id, It.IsAny<UploadKnowledgeRequest>(), "faq.txt", It.IsAny<Stream>(), 5, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Blank<KnowledgeDocumentResponse>() with { Title = "FAQ", ChunkCount = 3 });
+        model.UploadFile = File();
         await model.OnPostUploadAsync(default);
-        Assert.Contains("3 searchable pieces", (string)model.TempData["StatusMessage"]!);
+        Assert.Contains("3 searchable pieces", model.StatusMessage);
     }
 
     [Fact]
-    public async Task Upload_failures_are_shown_on_the_page()
+    public async Task Upload_failures_reopen_the_popup()
     {
         _knowledge.SetupSequence(k => k.CreateFromUploadAsync(Glow.Id, It.IsAny<UploadKnowledgeRequest>(), It.IsAny<string>(), It.IsAny<Stream>(), It.IsAny<long>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new ArgumentException("Unsupported file type."))
             .ThrowsAsync(new InvalidOperationException("embedding service is unavailable"));
         var model = Sut(); model.UploadFile = File();
         Assert.IsType<PageResult>(await model.OnPostUploadAsync(default));
-        Assert.Equal("Unsupported file type.", model.ErrorMessage);
+        Assert.Equal("Unsupported file type.", model.FormError);
+        model.UploadFile = File();
         Assert.IsType<PageResult>(await model.OnPostUploadAsync(default));
-        Assert.StartsWith("Couldn't index this document for AI search:", model.ErrorMessage);
-        Assert.Equal("upload", model.Mode);
+        Assert.StartsWith("Couldn't index this document for AI search:", model.FormError);
+        Assert.Equal(("upload", true), (model.FormMode, model.FormOpen));
     }
 }
 

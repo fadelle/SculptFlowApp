@@ -1,3 +1,5 @@
+using Omni.App.Controllers.Filters;
+using Omni.App.Common.Statics;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.Extensions.Localization;
@@ -13,6 +15,7 @@ namespace Omni.App.Pages.Settings;
 /// <summary>Settings → Inbox settings: per connected account (each WhatsApp number, Telegram bot, ...), whether AI answers, which
 /// bot, and whether it takes new and reopened conversations (IInboxSettingsService). One form per account; saving one never
 /// changes another. Bots themselves are made on the Bots page.</summary>
+[RequirePlanFeature(EntitlementKeys.AiAssistant)]
 public class InboxSettingsModel : PageModel
 {
     private const string SavedKey = "inboxSettings.saved";

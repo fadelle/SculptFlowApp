@@ -23,7 +23,7 @@ else
 
     <partial name="_Messages" model="new PageMessagesModel(Model.StatusMessage, Model.ErrorMessage)" />
 
-    <section class="au-panel au-panel--round au-panel--pad mw-640">
+    <section class="au-panel au-panel--round au-panel--pad">
         <form method="post">
             <p class="au-help m-0">@T["knowledgeSettings.note"]</p>
 
@@ -70,7 +70,7 @@ else
         </form>
     </section>
 
-    <details class="au-panel au-panel--round tech mw-640 mt-3">
+    <details class="au-panel au-panel--round tech mt-3">
         <summary>@T["knowledgeSettings.tech.title"]</summary>
         <div class="inbox-contact-info-row"><span>@T["knowledgeSettings.tech.model"]</span><strong>@Model.Current.EmbeddingModel</strong></div>
         <div class="inbox-contact-info-row"><span>@T["knowledgeSettings.tech.dimension"]</span><strong>@Model.Current.VectorDimension</strong></div>

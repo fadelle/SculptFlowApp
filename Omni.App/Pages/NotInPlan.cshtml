@@ -1,0 +1,8 @@
+@page "/plan/not-included/{feature}"
+@model Omni.App.Pages.NotInPlanModel
+@{
+    ViewData["Title"] = T[Model.TitleKey].Value;
+    var notIncluded = new EmptyStateModel(Icon: Model.Icon, Title: T[Model.TitleKey].Value, Text: T[Model.TextKey].Value,
+        ActionLabel: T["bookings.notIncluded.action"].Value, ActionHref: "/settings/billing", ActionIcon: "credit_card");
+}
+<div class="au-panel au-panel--round"><partial name="_EmptyState" model="notIncluded" /></div>

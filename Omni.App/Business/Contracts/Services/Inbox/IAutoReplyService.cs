@@ -17,6 +17,10 @@ public interface IAutoReplyService
     /// channel or mode, a missing or too long message; KeyNotFoundException when the client doesn't exist.</summary>
     Task SaveAsync(Guid clientId, SaveAutoReplyRequest request, CancellationToken ct = default);
 
+    /// <summary>Saves several channels at once (the Auto-respond page's one Save), all or nothing: every request is checked
+    /// first; an invalid one throws AutoReplyInvalidException naming its channel and nothing is saved.</summary>
+    Task SaveAllAsync(Guid clientId, IReadOnlyList<SaveAutoReplyRequest> requests, CancellationToken ct = default);
+
     /// <summary>The reply a contact's message on <paramref name="channel"/> gets for <paramref name="trigger"/>
     /// (AutoReplyTrigger), or why none (AutoReplyRules.Skip*).</summary>
     Task<AutoReplyChoice> ChooseAsync(Guid clientId, string channel, string trigger, bool aiAnswers, CancellationToken ct = default);

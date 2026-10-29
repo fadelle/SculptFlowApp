@@ -2,6 +2,7 @@ using Omni.App.Business.Contracts.Managers;
 using Omni.App.Business.Contracts.Providers.Channels;
 using Omni.App.Business.Contracts.Services.Inbox;
 using Omni.App.Common.Enums;
+using Omni.App.Common.Exceptions;
 using Omni.App.Common.Helpers;
 using Omni.App.Entities.Dtos.Inbox;
 using Omni.App.Entities.Models;
@@ -55,9 +56,55 @@ public class AutoReplyService : IAutoReplyService
         return result;
     }
 
-    public async Task SaveAsync(Guid clientId, SaveAutoReplyRequest request, CancellationToken ct = default)
+    public Task SaveAsync(Guid clientId, SaveAutoReplyRequest request, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(request);
+        return SaveAllAsync(clientId, [request], ct);
+    }
+
+    public async Task SaveAllAsync(Guid clientId, IReadOnlyList<SaveAutoReplyRequest> requests, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(requests);
+        // Check every channel before changing any, so a save is all or nothing.
+        var valid = new List<(SaveAutoReplyRequest Request, string? NewMessage, string? ReopenedMessage)>();
+        foreach (var request in requests)
+        {
+            ArgumentNullException.ThrowIfNull(request);
+            try
+            {
+                var (newMessage, reopenedMessage) = Validate(request);
+                valid.Add((request, newMessage, reopenedMessage));
+            }
+            catch (ArgumentException ex)
+            {
+                throw new AutoReplyInvalidException(ex, request.Channel);
+            }
+        }
+        _ = await _clients.GetReadOnlyAsync(clientId, ct) ?? throw new KeyNotFoundException("clients.errors.notFound");
+
+        var now = DateTimeOffset.UtcNow;
+        foreach (var (request, newMessage, reopenedMessage) in valid)
+        {
+            var row = await _autoReplies.GetAsync(clientId, request.Channel, ct);
+            if (row is null)
+            {
+                row = new AutoReply { Id = Guid.NewGuid(), ClientId = clientId, Channel = request.Channel, CreatedAt = now };
+                _autoReplies.Add(row);
+            }
+            row.NewConversationEnabled = request.NewConversationEnabled;
+            row.NewConversationMessage = newMessage;
+            row.ReopenedMode = request.ReopenedMode!;
+            row.ReopenedMessage = reopenedMessage;
+            row.SendWhenAiAnswers = request.SendWhenAiAnswers;
+            row.UpdatedAt = now;
+        }
+        // Two first saves racing for the same channel hit the unique index; the second surfaces as DuplicateRecordException (409).
+        await _unitOfWork.SaveChangesAsync(ct);
+    }
+
+    /// <summary>The request's cleaned messages, or ArgumentException (a text key) for what is wrong.</summary>
+    private (string? NewMessage, string? ReopenedMessage) Validate(SaveAutoReplyRequest request)
+    {
         if (!SendableChannels().Contains(request.Channel)) throw new ArgumentException("autoReply.errors.channel");
         if (!AutoReplyReopenedMode.All.Contains(request.ReopenedMode ?? "")) throw new ArgumentException("autoReply.errors.mode");
         var newMessage = Clean(request.NewConversationMessage);
@@ -70,23 +117,7 @@ public class AutoReplyService : IAutoReplyService
         var max = _config.AutoReplyMaxLength;
         if ((newMessage?.Length ?? 0) > max || (reopenedMessage?.Length ?? 0) > max)
             throw new ArgumentException("autoReply.errors.tooLong").WithArgs(max);
-        _ = await _clients.GetReadOnlyAsync(clientId, ct) ?? throw new KeyNotFoundException("clients.errors.notFound");
-
-        var now = DateTimeOffset.UtcNow;
-        var row = await _autoReplies.GetAsync(clientId, request.Channel, ct);
-        if (row is null)
-        {
-            row = new AutoReply { Id = Guid.NewGuid(), ClientId = clientId, Channel = request.Channel, CreatedAt = now };
-            _autoReplies.Add(row);
-        }
-        row.NewConversationEnabled = request.NewConversationEnabled;
-        row.NewConversationMessage = newMessage;
-        row.ReopenedMode = request.ReopenedMode!;
-        row.ReopenedMessage = reopenedMessage;
-        row.SendWhenAiAnswers = request.SendWhenAiAnswers;
-        row.UpdatedAt = now;
-        // Two first saves racing for the same channel hit the unique index; the second surfaces as DuplicateRecordException (409).
-        await _unitOfWork.SaveChangesAsync(ct);
+        return (newMessage, reopenedMessage);
     }
 
     public async Task<AutoReplyChoice> ChooseAsync(Guid clientId, string channel, string trigger, bool aiAnswers, CancellationToken ct = default)

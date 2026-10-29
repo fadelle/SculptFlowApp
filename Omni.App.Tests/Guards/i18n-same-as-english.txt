@@ -6,6 +6,7 @@ fr terms.contact.other
 fr terms.service.one
 fr terms.service.other
 fr nav.members
+fr billing.quota.messages
 fr members.title
 fr members.table.actions
 fr members.role.member

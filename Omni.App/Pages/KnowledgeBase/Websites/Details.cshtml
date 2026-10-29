@@ -238,7 +238,7 @@ else
                             <td class="row-actions">
                                 @if (p.KnowledgeDocumentId is { } docId)
                                 {
-                                    <a href="/KnowledgeBase/Edit/@docId?returnUrl=@Uri.EscapeDataString(backToThisPage)" class="au-btn au-btn--outlined au-btn--sm">@T["website.pages.viewText"]</a>
+                                    <a href="/KnowledgeBase?edit=@docId&returnUrl=@Uri.EscapeDataString(backToThisPage)" class="au-btn au-btn--outlined au-btn--sm">@T["website.pages.viewText"]</a>
                                 }
                             </td>
                         </tr>

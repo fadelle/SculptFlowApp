@@ -1,3 +1,5 @@
+using Omni.App.Controllers.Filters;
+using Omni.App.Common.Statics;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Omni.App.Business.Contracts.Managers;
 using Omni.App.Business.Contracts.Services.Campaigns;
@@ -5,6 +7,7 @@ using Omni.App.Entities.Dtos.Campaigns;
 
 namespace Omni.App.Pages.Campaigns;
 
+[RequirePlanFeature(EntitlementKeys.Campaigns)]
 public class IndexModel : PageModel
 {
     private readonly ICurrentClientContext _clientContext;

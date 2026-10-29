@@ -41,46 +41,66 @@ public class AutoRespondPageTests
     }
 
     [Fact]
-    public async Task Post_saves_one_channel_and_redirects_with_a_message()
+    public async Task The_first_tab_is_the_asked_one_else_the_first_connected_channel()
     {
         var model = Sut(_client);
-        model.Channel = ConversationChannel.Telegram;
-        model.NewConversationEnabled = true;
-        model.NewConversationMessage = "Hello";
-        model.ReopenedMode = AutoReplyReopenedMode.Custom;
-        model.ReopenedMessage = "Back";
-        model.SendWhenAiAnswers = true;
+        await model.OnGetAsync(default);
+        Assert.Equal(ConversationChannel.WhatsApp, model.ActiveChannel);
 
-        var result = await model.OnPostAsync(default);
-
-        Assert.IsType<RedirectToPageResult>(result);
-        _autoReplies.Verify(a => a.SaveAsync(_client.Id, new SaveAutoReplyRequest(ConversationChannel.Telegram, true, "Hello",
-            AutoReplyReopenedMode.Custom, "Back", true), It.IsAny<CancellationToken>()), Times.Once);
-        Assert.Contains("Telegram", model.StatusMessage);
+        model.Tab = ConversationChannel.Telegram;
+        Assert.Equal(ConversationChannel.Telegram, model.ActiveChannel);
+        model.Tab = "nonsense";
+        Assert.Equal(ConversationChannel.WhatsApp, model.ActiveChannel);
     }
 
     [Fact]
-    public async Task A_refused_save_stays_on_the_page_and_keeps_what_was_typed_for_that_channel_only()
+    public async Task One_save_stores_every_channel_and_comes_back_on_the_same_tab()
     {
-        _autoReplies.Setup(a => a.SaveAsync(_client.Id, It.IsAny<SaveAutoReplyRequest>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new ArgumentException("autoReply.errors.newMessageRequired"));
         var model = Sut(_client);
-        model.Channel = ConversationChannel.WhatsApp;
-        model.NewConversationEnabled = true;
-        model.NewConversationMessage = "";
+        model.Tab = ConversationChannel.Telegram;
+        model.Replies =
+        [
+            new AutoReplyFormRow { Channel = ConversationChannel.WhatsApp, NewConversationEnabled = true, NewConversationMessage = "Hi", ReopenedMode = AutoReplyReopenedMode.Same },
+            new AutoReplyFormRow { Channel = ConversationChannel.Telegram, ReopenedMode = AutoReplyReopenedMode.Custom, ReopenedMessage = "Back", SendWhenAiAnswers = true },
+        ];
+
+        var result = await model.OnPostAsync(default);
+
+        var redirect = Assert.IsType<RedirectToPageResult>(result);
+        Assert.Equal(ConversationChannel.Telegram, redirect.RouteValues!["tab"]);
+        _autoReplies.Verify(a => a.SaveAllAsync(_client.Id, It.Is<IReadOnlyList<SaveAutoReplyRequest>>(r => r.SequenceEqual(new[]
+        {
+            new SaveAutoReplyRequest(ConversationChannel.WhatsApp, true, "Hi", AutoReplyReopenedMode.Same, null, false),
+            new SaveAutoReplyRequest(ConversationChannel.Telegram, false, null, AutoReplyReopenedMode.Custom, "Back", true),
+        })), It.IsAny<CancellationToken>()), Times.Once);
+        Assert.Equal("Automatic replies saved.", model.StatusMessage);
+    }
+
+    [Fact]
+    public async Task A_refused_save_opens_the_failing_channel_and_keeps_what_was_typed()
+    {
+        _autoReplies.Setup(a => a.SaveAllAsync(_client.Id, It.IsAny<IReadOnlyList<SaveAutoReplyRequest>>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new AutoReplyInvalidException(new ArgumentException("autoReply.errors.reopenedMessageRequired"), ConversationChannel.Telegram));
+        var model = Sut(_client);
+        model.Replies =
+        [
+            new AutoReplyFormRow { Channel = ConversationChannel.WhatsApp, NewConversationMessage = "typed", ReopenedMode = AutoReplyReopenedMode.Off },
+            new AutoReplyFormRow { Channel = ConversationChannel.Telegram, ReopenedMode = AutoReplyReopenedMode.Custom },
+        ];
 
         var result = await model.OnPostAsync(default);
 
         Assert.IsType<PageResult>(result);
-        Assert.False(string.IsNullOrEmpty(model.ErrorMessage));
-        Assert.Equal("", model.FormValues(model.Channels[0]).NewConversationMessage);
-        Assert.Equal(model.Channels[1].Settings, model.FormValues(model.Channels[1]));
+        Assert.Equal("Write the message for a reopened conversation, or choose another option.", model.ErrorMessage);
+        Assert.Equal(ConversationChannel.Telegram, model.ActiveChannel);
+        Assert.Equal("typed", model.FormValues(model.Channels[0]).NewConversationMessage);
+        Assert.Equal(AutoReplyReopenedMode.Custom, model.FormValues(model.Channels[1]).ReopenedMode);
     }
 
     [Fact]
     public async Task Post_without_a_client_redirects()
     {
         Assert.IsType<RedirectToPageResult>(await Sut(null).OnPostAsync(default));
-        _autoReplies.Verify(a => a.SaveAsync(It.IsAny<Guid>(), It.IsAny<SaveAutoReplyRequest>(), It.IsAny<CancellationToken>()), Times.Never);
+        _autoReplies.Verify(a => a.SaveAllAsync(It.IsAny<Guid>(), It.IsAny<IReadOnlyList<SaveAutoReplyRequest>>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 }

@@ -58,6 +58,9 @@ public class IndexModel : PageModel
 
     public string? ErrorMessage { get; private set; }
 
+    /// <summary>A failed invite: the invite popup opens again with this message.</summary>
+    public string? InviteError { get; private set; }
+
     [TempData]
     public string? StatusMessage { get; set; }
 
@@ -75,7 +78,7 @@ public class IndexModel : PageModel
         }
         catch (Exception ex) when (IsRuleError(ex))
         {
-            ErrorMessage = Message(ex);
+            InviteError = Message(ex); // shown in the invite popup, which opens again on what was posted
             await LoadAsync(ct);
             return Page();
         }

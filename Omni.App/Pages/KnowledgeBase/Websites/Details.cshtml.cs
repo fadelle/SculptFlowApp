@@ -1,3 +1,5 @@
+using Omni.App.Controllers.Filters;
+using Omni.App.Common.Statics;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.Extensions.Localization;
@@ -10,6 +12,7 @@ namespace Omni.App.Pages.KnowledgeBase.Websites;
 
 /// <summary>One website source: crawl status and counts (live while it runs), page list with failures, and the
 /// actions Re-scrape / Activate-Deactivate / Delete. The client always comes from the logged-in user.</summary>
+[RequirePlanFeature(EntitlementKeys.AiAssistant)]
 public class DetailsModel : PageModel
 {
     private const string RescrapeStartedKey = "website.rescrapeStarted";

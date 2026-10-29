@@ -1,3 +1,5 @@
+using Omni.App.Controllers.Filters;
+using Omni.App.Common.Enums;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Omni.App.Business.Contracts.Managers;
 using Omni.App.Business.Contracts.Services.WhatsApp;
@@ -7,6 +9,7 @@ namespace Omni.App.Pages.WhatsApp.Health;
 
 /// <summary>WhatsApp account/phone-number health — a simplified, client-facing view over
 /// ChannelIntegration's health fields (populated by Meta webhooks via n8n). See WhatsAppHealthService.</summary>
+[RequireConnectedChannel(ChannelType.WhatsApp)]
 public class IndexModel : PageModel
 {
     private readonly ICurrentClientContext _clientContext;

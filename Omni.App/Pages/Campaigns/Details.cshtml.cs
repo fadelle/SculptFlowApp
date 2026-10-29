@@ -1,3 +1,5 @@
+using Omni.App.Controllers.Filters;
+using Omni.App.Common.Statics;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.Extensions.Localization;
@@ -8,6 +10,7 @@ using Omni.App.Entities.Responses.Campaigns;
 
 namespace Omni.App.Pages.Campaigns;
 
+[RequirePlanFeature(EntitlementKeys.Campaigns)]
 public class DetailsModel : PageModel
 {
     private const string CompletedKey = "campaigns.send.completed";

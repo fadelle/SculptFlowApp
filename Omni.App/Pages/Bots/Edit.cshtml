@@ -67,22 +67,6 @@ else
                 </div>
             </div>
 
-            <div class="set-section">
-                <div class="set-section-head">
-                    <strong>@T["bots.edit.actions"]</strong>
-                    <div class="cell-sub">@T["bots.edit.actionsHelp"]</div>
-                </div>
-                <div class="set-section-body">
-                    @foreach (var capability in BotCapability.All)
-                    {
-                        <label class="au-check">
-                            <input type="checkbox" name="Capabilities" value="@capability" checked="@Model.HasCapability(capability)" disabled="@(!custom)" />
-                            @T[BotTextKeys.Capability(capability)]
-                        </label>
-                    }
-                    <small class="text-subtle">@T["bots.edit.actionsAlways"]</small>
-                </div>
-            </div>
 
             <div class="set-section">
                 <div class="set-section-head">
@@ -118,37 +102,6 @@ else
             </div>
 
             <div class="set-section">
-                <div class="set-section-head"><strong>@T["bots.edit.language"]</strong><div class="cell-sub">@T["bots.edit.languageHelp"]</div></div>
-                <div class="set-section-body">
-                    <select name="Language" id="bot-language" class="au-select" aria-label="@T["bots.edit.language"]">
-                        <option value="" selected="@string.IsNullOrEmpty(Model.Language)">@T["bots.edit.languageAuto"]</option>
-                        @foreach (var code in Model.Languages)
-                        {
-                            <option value="@code" selected="@(Model.Language == code)">@T[BotTextKeys.Language(code)]</option>
-                        }
-                    </select>
-                </div>
-            </div>
-
-            <div class="set-section">
-                <div class="set-section-head"><strong>@T["bots.edit.handoff"]</strong><div class="cell-sub">@T["bots.edit.handoffHelp"]</div></div>
-                <div class="set-section-body">
-                    @foreach (var policy in BotHandoffPolicy.All)
-                    {
-                        <label class="au-check">
-                            <input type="radio" name="HandoffPolicy" value="@policy" checked="@(Model.HandoffPolicy == policy)" />
-                            @T[BotTextKeys.HandoffPolicy(policy)]
-                        </label>
-                    }
-                    <div class="au-form-field">
-                        <label class="au-form-label" for="bot-handoff-message">@T["bots.edit.handoffMessage"] <span class="opt">@T["common.optional"]</span></label>
-                        <textarea name="HandoffMessage" id="bot-handoff-message" rows="2" class="au-textarea" maxlength="@Model.HandoffMessageMaxLength" dir="auto" placeholder="@T["bots.edit.handoffMessagePlaceholder"]">@Model.HandoffMessage</textarea>
-                        <span class="au-help">@T["bots.edit.handoffMessageHelp"]</span>
-                    </div>
-                </div>
-            </div>
-
-            <div class="set-section">
                 <div class="set-section-head"><strong>@T["bots.edit.status"]</strong><div class="cell-sub">@T["bots.edit.statusHelp"]</div></div>
                 <div class="set-section-body">
                     <div class="seg" role="radiogroup" aria-label="@T["bots.edit.status"]">
@@ -163,6 +116,54 @@ else
                     }
                 </div>
             </div>
+            <details class="bot-more">
+                <summary>@T["bots.edit.more"]<span class="cell-sub">@T["bots.edit.moreHelp"]</span></summary>
+                <div class="set-section">
+                    <div class="set-section-head">
+                        <strong>@T["bots.edit.actions"]</strong>
+                        <div class="cell-sub">@T["bots.edit.actionsHelp"]</div>
+                    </div>
+                    <div class="set-section-body">
+                        @foreach (var capability in BotCapability.All)
+                        {
+                            <label class="au-check">
+                                <input type="checkbox" name="Capabilities" value="@capability" checked="@Model.HasCapability(capability)" disabled="@(!custom)" />
+                                @T[BotTextKeys.Capability(capability)]
+                            </label>
+                        }
+                        <small class="text-subtle">@T["bots.edit.actionsAlways"]</small>
+                    </div>
+                </div>
+                <div class="set-section">
+                    <div class="set-section-head"><strong>@T["bots.edit.language"]</strong><div class="cell-sub">@T["bots.edit.languageHelp"]</div></div>
+                    <div class="set-section-body">
+                        <select name="Language" id="bot-language" class="au-select" aria-label="@T["bots.edit.language"]">
+                            <option value="" selected="@string.IsNullOrEmpty(Model.Language)">@T["bots.edit.languageAuto"]</option>
+                            @foreach (var code in Model.Languages)
+                            {
+                                <option value="@code" selected="@(Model.Language == code)">@T[BotTextKeys.Language(code)]</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+                <div class="set-section">
+                    <div class="set-section-head"><strong>@T["bots.edit.handoff"]</strong><div class="cell-sub">@T["bots.edit.handoffHelp"]</div></div>
+                    <div class="set-section-body">
+                        @foreach (var policy in BotHandoffPolicy.All)
+                        {
+                            <label class="au-check">
+                                <input type="radio" name="HandoffPolicy" value="@policy" checked="@(Model.HandoffPolicy == policy)" />
+                                @T[BotTextKeys.HandoffPolicy(policy)]
+                            </label>
+                        }
+                        <div class="au-form-field">
+                            <label class="au-form-label" for="bot-handoff-message">@T["bots.edit.handoffMessage"] <span class="opt">@T["common.optional"]</span></label>
+                            <textarea name="HandoffMessage" id="bot-handoff-message" rows="2" class="au-textarea" maxlength="@Model.HandoffMessageMaxLength" dir="auto" placeholder="@T["bots.edit.handoffMessagePlaceholder"]">@Model.HandoffMessage</textarea>
+                            <span class="au-help">@T["bots.edit.handoffMessageHelp"]</span>
+                        </div>
+                    </div>
+                </div>
+            </details>
 
             <div class="au-form-actions">
                 <button type="submit" form="bot-delete-form" class="au-btn au-btn--danger-outlined au-btn--sm">@T["common.delete"]</button>

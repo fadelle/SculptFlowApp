@@ -39,7 +39,11 @@ else
     var a = Model.Advanced;
 
     <div class="au-page-head">
-        <p class="au-page-head__sub">@T["reports.intro"]</p>
+        <p class="au-page-head__sub">
+            @T["reports.intro"]
+            @* The plan decides the level: basic sections only, or the advanced ones too. *@
+            <span class="badge @(a is null ? "badge-gray" : "badge-teal")">@(a is null ? T["reports.level.basic"] : T["reports.level.advanced"])</span>
+        </p>
         <div class="au-page-head__actions">
             <partial name="_PeriodPicker" model="new PeriodPickerModel(Model.Period, Model.From, Model.To)" />
         </div>
@@ -309,5 +313,12 @@ else
                 }
             </div>
         }
+    }
+    else
+    {
+        <div class="au-alert mt-3" role="note">
+            <span class="au-icon au-alert__icon" aria-hidden="true">insights</span>
+            <div class="au-alert__body">@T.Html("reports.advancedLocked", new Microsoft.AspNetCore.Html.HtmlString($"<a class=\"au-link\" href=\"/settings/billing\">{System.Net.WebUtility.HtmlEncode(T["nav.billing"].Value)}</a>"))</div>
+        </div>
     }
 }

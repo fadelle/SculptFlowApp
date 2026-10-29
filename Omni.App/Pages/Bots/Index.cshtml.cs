@@ -1,3 +1,5 @@
+using Omni.App.Controllers.Filters;
+using Omni.App.Common.Statics;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.Extensions.Localization;
@@ -13,6 +15,7 @@ namespace Omni.App.Pages.Bots;
 /// <summary>Bots: the client's AI bots (IBotService). "New bot" offers the three templates and a custom bot; each is created
 /// as a draft and opened in the editor. Activate / deactivate, "Use as Custom Bot" and delete act from the list. Where a bot
 /// answers is set on Settings → Inbox settings.</summary>
+[RequirePlanFeature(EntitlementKeys.AiAssistant)]
 public class IndexModel : PageModel
 {
     private const string CopyNameKey = "bots.copyName";

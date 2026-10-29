@@ -33,6 +33,7 @@ public static class BillingModule
         services.AddScoped<IAddonService, AddonService>(); // paid add-ons (Milestone C)
         services.AddScoped<IRateCardService, RateCardService>();
         services.AddScoped<IBillingQueryService, BillingQueryService>();
+        services.AddScoped<IPlanUsageService, PlanUsageService>();
 
         // One billing policy per messaging channel (the channel's own pricing rules).
         services.AddScoped<IChannelBillingPolicy, WhatsAppBillingPolicy>();

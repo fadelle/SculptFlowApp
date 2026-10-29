@@ -171,6 +171,21 @@
   }
 }
 
+/* The plan's level on a sidebar row (Reports: Basic or Advanced); hidden while the sidebar is collapsed to icons. */
+.au-nav-tag {
+  margin-inline-start: auto;
+  padding: 0 7px;
+  border: 1px solid currentColor;
+  border-radius: 8px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  line-height: 16px;
+  opacity: 0.7;
+}
+@media (min-width: 900px) {
+  html.au-side-collapsed .au-nav-tag { display: none; }
+}
+
 /* Notification bell (notifications.js toggles `hidden` and renders the rows) */
 .notif-bell-wrap { position: relative; }
 .notif-bell { position: relative; }
@@ -552,6 +567,7 @@ textarea.text-input { min-height: 0; }
   cursor: pointer;
 }
 .seg-opt.on span,
+.seg-opt:has(input:checked) span,
 .seg > button.on {
   background: var(--au-segment-selected);
   box-shadow: var(--au-segment-shadow);
@@ -769,6 +785,9 @@ td .cell-sub { white-space: nowrap; }
 }
 .modal-x:hover { background: var(--au-hover); color: var(--text); }
 .cal-modal { width: 100%; max-width: 480px; padding: 1.5rem; }
+/* Add/edit popups ([data-modal], modal.js): one form in a card; the wide one holds the knowledge base editor. */
+.form-modal { width: 100%; max-width: 640px; padding: 1.4rem; }
+.form-modal--wide { max-width: 820px; }
 
 /* Progress bars */
 .progress { height: 8px; overflow: hidden; border-radius: 999px; background: var(--au-meter-track); }
@@ -986,7 +1005,7 @@ td .cell-sub { white-space: nowrap; }
 .profile-header-name { font-size: 1.15rem; font-weight: 700; letter-spacing: -0.01em; }
 .profile-header-name a { color: inherit; text-decoration: none; }
 .profile-header-name a:hover { color: var(--au-primary); }
-.contact-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 1rem; align-items: start; max-width: 1040px; }
+.contact-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 1rem; align-items: start; }
 .contact-notes { margin-top: 1rem; }
 .contact-notes p { margin: 0.35rem 0 0; padding: 0.6rem 0.75rem; border-radius: var(--au-r-sm); background: var(--surface-subtle); font-size: 0.875rem; white-space: pre-wrap; }
 @media (max-width: 860px) { .contact-grid { grid-template-columns: 1fr; } }
@@ -1008,7 +1027,7 @@ td .cell-sub { white-space: nowrap; }
 .tip-note { margin-top: 0.2rem; color: var(--text-muted); }
 
 /* New campaign: three numbered steps */
-.create-wrap { display: flex; flex-direction: column; gap: 1rem; max-width: 1000px; }
+.create-wrap { display: flex; flex-direction: column; gap: 1rem; }
 .step { padding: 1.1rem 1.25rem; }
 .create-wrap .au-panel + .au-panel { margin-top: 0; }
 .step-head { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.9rem; }
@@ -1394,6 +1413,14 @@ td .cell-sub { white-space: nowrap; }
 /* ---- Business Info: tabs, details form, opening hours (business-info.js) ---- */
 /* Tabs that are separate pages (Business Info) */
 .page-tabs { margin-bottom: 16px; }
+/* A grey dot after a tab label: that channel isn't connected (Settings → Auto-respond). */
+/* A channel's brand mark inside a tab label (Settings → Auto-respond). */
+.tab-channel-mark { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; margin-inline-end: 6px; border-radius: 6px; color: #fff; /* on a brand colour */ font-size: 0.55rem; font-weight: 800; vertical-align: middle; }
+.tab-channel-mark svg { width: 13px; height: 13px; }
+/* The same mark as a sidebar group's icon (a channel's pages, _Sidebar); sized like the rail icons. */
+.nav-channel-mark { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; width: 20px; height: 20px; margin-inline-end: 10px; border-radius: 6px; color: #fff; /* on a brand colour */ font-size: 0.55rem; font-weight: 800; }
+.nav-channel-mark svg { width: 13px; height: 13px; }
+.tab-dot { display: inline-block; width: 7px; height: 7px; margin-inline-start: 6px; border-radius: 50%; background: var(--text-muted); vertical-align: middle; }
 .client-tabs { display: flex; gap: 0.25rem; margin-bottom: 1rem; border-bottom: 1px solid var(--border); }
 .client-tab { margin-bottom: -1px; padding: 0.55rem 0.9rem; border-bottom: 2px solid transparent; color: var(--text-muted); font-size: 0.875rem; font-weight: 650; text-decoration: none; }
 .client-tab:hover { color: var(--text); }
@@ -1478,6 +1505,9 @@ td .cell-sub { white-space: nowrap; }
 .cat-tag { padding: 0.15rem 0.55rem; border-radius: 999px; background: var(--badge-gray-bg); color: var(--text-muted); font-size: 0.78rem; white-space: nowrap; }
 .kb-choices { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.6rem; margin-bottom: 1.1rem; }
 .kb-choices-center { width: 100%; max-width: 640px; margin: 0.75rem auto 0; }
+/* Inside the add popup the three ways in are one compact row: icon and title, no help line. */
+.kb-choices--compact .kb-choice { flex-direction: row; align-items: center; gap: 0.5rem; padding: 0.6rem 0.8rem; }
+.kb-choices--compact .kb-choice small { display: none; }
 .kb-choice { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 0.2rem; padding: 0.85rem 1rem; border: 1px solid var(--au-input-border); border-radius: var(--au-r-card); background: var(--au-paper); color: var(--text); font-weight: 400; text-align: start; text-decoration: none; cursor: pointer; }
 .kb-choice:hover { border-color: var(--au-primary); }
 .kb-choice input { position: absolute; opacity: 0; pointer-events: none; }
@@ -1497,6 +1527,11 @@ td .cell-sub { white-space: nowrap; }
 .dropzone-input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
 .seg-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; margin-top: 0.3rem; }
 .kb-more summary { color: var(--text-muted); font-size: 0.875rem; cursor: pointer; }
+/* Bot editor: the less used options (actions, language, handoff) folded under "More options". */
+.bot-more { border-bottom: 1px solid var(--border); }
+.bot-more > summary { padding: 1rem 1.25rem; font-weight: 600; cursor: pointer; }
+.bot-more[open] > summary { border-bottom: 1px solid var(--border); }
+.bot-more > summary .cell-sub { display: block; margin-top: 0.15rem; font-weight: 400; }
 .src-banner { display: flex; align-items: center; gap: 0.7rem; padding: 0.75rem 0.9rem; border: 1px solid var(--border); border-radius: var(--au-r-md); background: color-mix(in srgb, var(--au-bg) 60%, var(--au-paper)); font-size: 0.875rem; }
 .readonly-text { max-height: 320px; margin-top: 0.3rem; padding: 0.8rem 0.9rem; overflow: auto; border: 1px solid var(--border); border-radius: var(--au-r-md); background: color-mix(in srgb, var(--au-bg) 60%, var(--au-paper)); font-size: 0.875rem; font-weight: 400; white-space: pre-wrap; }
 .kb-nums { display: flex; flex-wrap: wrap; gap: 0.4rem 1rem; color: var(--text-muted); font-size: 0.875rem; }
@@ -1524,7 +1559,7 @@ td .cell-sub { white-space: nowrap; }
 .int-notch.ch-instagram { background: radial-gradient(circle at 30% 107%, #fdf497 0%, #fd5949 45%, #d6249f 60%, #285AEB 90%); }
 .int-notch.ch-google { background: #fff; box-shadow: 0 0 0 5px var(--au-bg), inset 0 0 0 1px var(--border); }
 /* Equal cards */
-.int-grid-even { align-items: stretch; max-width: 1200px; }
+.int-grid-even { align-items: stretch; }
 .int-strip { display: grid; flex: 1; grid-template-columns: 1fr 1fr; gap: 0.6rem; align-content: start; padding: 0.65rem 0.8rem; border-radius: var(--au-r-md); background: color-mix(in srgb, var(--au-bg) 70%, var(--au-paper)); }
 .int-strip > div { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
 .int-strip-note, .int-strip-problem { grid-template-columns: 1fr; }
@@ -1593,3 +1628,11 @@ td .cell-sub { white-space: nowrap; }
 .account-ai-grid { display: grid; gap: 0.6rem; }
 @media (max-width: 1000px) { .bot-editor { grid-template-columns: minmax(0, 1fr); } .bot-test { position: static; } }
 @media (max-width: 800px) { .bot-choices { grid-template-columns: 1fr; } }
+
+/* Billing → plan usage: "used of limit" cards with a bar (amber once the limit is reached), and the plan's features as chips. */
+.quota-grid .au-stat__value { font-size: 1.35rem; }
+.quota-bar { margin-top: 0.5rem; height: 6px; }
+.quota-bar.is-full > div { background: var(--au-warning); }
+.quota-off { color: var(--text-muted); font-size: 0.95rem; font-weight: 500; }
+.feature-chips { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.feature-chips .badge { display: inline-flex; align-items: center; gap: 0.3rem; }

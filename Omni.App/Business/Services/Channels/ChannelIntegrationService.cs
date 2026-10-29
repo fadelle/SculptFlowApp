@@ -49,6 +49,10 @@ public class ChannelIntegrationService : IChannelIntegrationService
             .ToList();
     }
 
+    public async Task<IReadOnlySet<string>> ListConnectedChannelsAsync(Guid clientId, CancellationToken ct = default) =>
+        (await _integrations.ListForClientReadOnlyAsync(clientId, ct))
+            .Where(c => c.Status == ChannelIntegrationStatus.Connected).Select(c => c.Channel).ToHashSet(StringComparer.Ordinal);
+
     public async Task<ChannelIntegrationResponse> SaveAsync(SaveChannelIntegrationRequest request, CancellationToken ct = default)
     {
         if (!ChannelType.All.Contains(request.Channel))

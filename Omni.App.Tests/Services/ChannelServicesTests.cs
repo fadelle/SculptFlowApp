@@ -21,6 +21,19 @@ public class ChannelIntegrationServiceTests
         new(client, channel, "Page", "pn", "waba", "page1", "ig1", token, verify, pin);
 
     [Fact]
+    public async Task Connected_channels_come_from_the_cached_read_and_skip_disconnected_ones()
+    {
+        _repo.Setup(r => r.ListForClientReadOnlyAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(new List<ChannelIntegration>
+        {
+            new() { ClientId = _clientId, Channel = ChannelType.WhatsApp, Status = ChannelIntegrationStatus.Connected },
+            new() { ClientId = _clientId, Channel = ChannelType.Telegram, Status = ChannelIntegrationStatus.Disconnected },
+        });
+
+        Assert.Equal([ChannelType.WhatsApp], await Sut().ListConnectedChannelsAsync(_clientId));
+        _repo.Verify(r => r.ListForClientAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);   // no tracked read
+    }
+
+    [Fact]
     public async Task List_returns_every_channel_with_disconnected_placeholders()
     {
         var wa = new ChannelIntegration { Id = Guid.NewGuid(), ClientId = _clientId, Channel = ChannelType.WhatsApp, Status = ChannelIntegrationStatus.Connected, AccessToken = "x" };

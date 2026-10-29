@@ -4,7 +4,6 @@ using Omni.App.Entities.Responses.Catalog;
 using static Omni.App.Tests.Pages.PageKit;
 using DashboardIndex = Omni.App.Pages.Dashboard.IndexModel;
 using ServiceIndex = Omni.App.Pages.Services.IndexModel;
-using ServiceEdit = Omni.App.Pages.Services.EditModel;
 using MembersIndex = Omni.App.Pages.Members.IndexModel;
 using InboxIndex = Omni.App.Pages.Inbox.IndexModel;
 using CampaignIndex = Omni.App.Pages.Campaigns.IndexModel;
@@ -84,12 +83,12 @@ public class SimpleListPageTests
         var refused = new MembersIndex(ClientContext(Glow).Object, members.Object, invites.Object, Seats(null).Object, TextKit.Localizer())
             { FullName = "Ann Lee", Email = "ann@x.com" }.Attach(configure: Host);
         Assert.IsType<PageResult>(await refused.OnPostInviteAsync(default));
-        Assert.Equal(("Someone already signs in with this email.", "ann@x.com"), (refused.ErrorMessage, refused.Email));
+        Assert.Equal(("Someone already signs in with this email.", "ann@x.com"), (refused.InviteError, refused.Email));
 
         invites.Setup(s => s.InviteAsync(It.IsAny<UserAccess>(), It.IsAny<InviteMemberRequest>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new EmailSendException("Brevo said 401"));
         Assert.IsType<PageResult>(await refused.OnPostInviteAsync(default));
-        Assert.Equal("We couldn't send the email right now. Please try again in a few minutes.", refused.ErrorMessage);
+        Assert.Equal("We couldn't send the email right now. Please try again in a few minutes.", refused.InviteError);
     }
 
     [Fact]
@@ -183,11 +182,15 @@ public class SimpleListPageTests
 
         var billing = new Mock<IBillingQueryService>();
         billing.Setup(b => b.GetSummaryAsync(Glow.Id, It.IsAny<CancellationToken>())).ReturnsAsync(Blank<ClientBillingSummary>());
-        var billingPage = new Omni.App.Pages.Settings.BillingModel(ClientContext(Glow).Object, billing.Object, BillingOn()).Attach();
+        var planUsage = new Mock<IPlanUsageService>();
+        var usage = new PlanUsageDto([], 0, 0, 0, 0, false);
+        planUsage.Setup(p => p.GetAsync(Glow.Id, It.IsAny<ClientBillingSummary>(), It.IsAny<CancellationToken>())).ReturnsAsync(usage);
+        var billingPage = new Omni.App.Pages.Settings.BillingModel(ClientContext(Glow).Object, billing.Object, BillingOn(), planUsage.Object).Attach();
         await billingPage.OnGetAsync(default);
         Assert.True(billingPage.ClientConfigured);
         Assert.NotNull(billingPage.Summary);
-        var noBilling = new Omni.App.Pages.Settings.BillingModel(ClientContext(null).Object, billing.Object, BillingOn()).Attach();
+        Assert.Same(usage, billingPage.PlanUsage);
+        var noBilling = new Omni.App.Pages.Settings.BillingModel(ClientContext(null).Object, billing.Object, BillingOn(), planUsage.Object).Attach();
         await noBilling.OnGetAsync(default);
         Assert.False(noBilling.ClientConfigured);
     }
@@ -562,49 +565,54 @@ public class ServicePageTests
     }
 
     [Fact]
-    public async Task Service_edit_loads_an_existing_service_or_starts_blank()
+    public async Task The_service_popup_opens_on_an_existing_service_or_blank_from_a_link()
     {
         var id = Guid.NewGuid();
         var services = new Mock<ICatalogService>();
-        services.Setup(p => p.GetByIdAsync(Glow.Id, id, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Blank<ServiceResponse>() with { Name = "Facelift", Code = "FL", BookingDuration = 45, Description = "d" });
-        var edit = new ServiceEdit(ClientContext(Glow).Object, services.Object, TextKit.Localizer()) { Id = id }.Attach();
+        services.Setup(p => p.ListAsync(Glow.Id, false, It.IsAny<CancellationToken>())).ReturnsAsync(new List<ServiceResponse>
+        {
+            Blank<ServiceResponse>() with { Id = id, Name = "Facelift", Code = "FL", BookingDuration = 45, Description = "d" }
+        });
+        var edit = new ServiceIndex(ClientContext(Glow).Object, services.Object, TextKit.Localizer()) { Edit = id }.Attach();
         Assert.IsType<PageResult>(await edit.OnGetAsync(default));
-        Assert.Equal(("Facelift", "FL", 45, "d", false), (edit.Name, edit.Code, edit.DurationMinutes, edit.Description, edit.IsNew));
+        Assert.Equal(("Facelift", "FL", 45, "d", true), (edit.Name, edit.Code, edit.DurationMinutes, edit.Description, edit.FormOpen));
 
-        var fresh = new ServiceEdit(ClientContext(Glow).Object, services.Object, TextKit.Localizer()).Attach();
+        var fresh = new ServiceIndex(ClientContext(Glow).Object, services.Object, TextKit.Localizer()) { Add = true }.Attach();
         Assert.IsType<PageResult>(await fresh.OnGetAsync(default));
-        Assert.True(fresh.IsNew);
+        Assert.Equal(("", true), (fresh.Name, fresh.FormOpen));
 
-        var missing = new ServiceEdit(ClientContext(Glow).Object, services.Object, TextKit.Localizer()) { Id = Guid.NewGuid() }.Attach();
+        var list = new ServiceIndex(ClientContext(Glow).Object, services.Object, TextKit.Localizer()).Attach();
+        await list.OnGetAsync(default);
+        Assert.False(list.FormOpen);
+
+        var missing = new ServiceIndex(ClientContext(Glow).Object, services.Object, TextKit.Localizer()) { Edit = Guid.NewGuid() }.Attach();
         Assert.IsType<NotFoundResult>(await missing.OnGetAsync(default));
-        var none = new ServiceEdit(ClientContext(null).Object, services.Object, TextKit.Localizer()).Attach();
-        Assert.IsType<PageResult>(await none.OnGetAsync(default));
-        Assert.False(none.ClientConfigured);
     }
 
     [Fact]
-    public async Task Service_edit_creates_updates_and_reports_problems()
+    public async Task The_service_popup_creates_updates_and_reopens_on_a_problem()
     {
         var id = Guid.NewGuid();
         var services = new Mock<ICatalogService>();
-        var create = new ServiceEdit(ClientContext(Glow).Object, services.Object, TextKit.Localizer()) { Name = "Botox", Code = "B", Description = "d", DurationMinutes = 20 }.Attach();
-        Assert.Equal("page:/Services/Index", RedirectTarget(await create.OnPostAsync(default)));
+        services.Setup(p => p.ListAsync(Glow.Id, false, It.IsAny<CancellationToken>())).ReturnsAsync(new List<ServiceResponse>());
+        var create = new ServiceIndex(ClientContext(Glow).Object, services.Object, TextKit.Localizer()) { Name = "Botox", Code = "B", Description = "d", DurationMinutes = 20 }.Attach();
+        Assert.Equal("page:(same)", RedirectTarget(await create.OnPostSaveAsync(default)));
         services.Verify(p => p.CreateAsync(new CreateServiceRequest(Glow.Id, "Botox", "B", "d", 20), It.IsAny<CancellationToken>()), Times.Once);
-        Assert.Equal("Saved.", create.TempData["StatusMessage"]);
+        Assert.Equal("Saved.", create.StatusMessage);
 
-        var update = new ServiceEdit(ClientContext(Glow).Object, services.Object, TextKit.Localizer()) { Id = id, Name = "Botox" }.Attach();
-        Assert.IsType<NotFoundResult>(await update.OnPostAsync(default));          // UpdateAsync returns null
+        var update = new ServiceIndex(ClientContext(Glow).Object, services.Object, TextKit.Localizer()) { Edit = id, Name = "Botox" }.Attach();
+        Assert.Equal("page:(same)", RedirectTarget(await update.OnPostSaveAsync(default)));   // UpdateAsync returns null
+        Assert.Equal("Service not found.", update.ErrorMessage);
 
         services.Setup(p => p.UpdateAsync(Glow.Id, id, It.IsAny<UpdateServiceRequest>(), It.IsAny<CancellationToken>())).ReturnsAsync(Blank<ServiceResponse>());
-        Assert.Equal("page:/Services/Index", RedirectTarget(await update.OnPostAsync(default)));
+        Assert.Equal("page:(same)", RedirectTarget(await update.OnPostSaveAsync(default)));
 
         services.Setup(p => p.UpdateAsync(Glow.Id, id, It.IsAny<UpdateServiceRequest>(), It.IsAny<CancellationToken>())).ThrowsAsync(new ArgumentException("Name taken."));
-        Assert.IsType<PageResult>(await update.OnPostAsync(default));
-        Assert.Equal("Name taken.", update.ErrorMessage);
+        Assert.IsType<PageResult>(await update.OnPostSaveAsync(default));
+        Assert.Equal(("Name taken.", true, true), (update.FormError, update.FormOpen, update.ClientConfigured));
 
-        var none = new ServiceEdit(ClientContext(null).Object, services.Object, TextKit.Localizer()).Attach();
-        Assert.Equal("page:/Services/Index", RedirectTarget(await none.OnPostAsync(default)));
+        var none = new ServiceIndex(ClientContext(null).Object, services.Object, TextKit.Localizer()).Attach();
+        Assert.Equal("page:(same)", RedirectTarget(await none.OnPostSaveAsync(default)));
     }
 }
 

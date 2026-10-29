@@ -1,3 +1,5 @@
+using Omni.App.Controllers.Filters;
+using Omni.App.Common.Statics;
 using System.Globalization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
@@ -13,6 +15,7 @@ namespace Omni.App.Pages.KnowledgeBase;
 /// <summary>Knowledge Base → Settings. Shows every persisted retrieval/embedding setting for the logged-in
 /// client; only chunk size, chunk overlap, top K and minimum similarity are editable (the rest are shown
 /// read-only — see IKnowledgeSettingsService).</summary>
+[RequirePlanFeature(EntitlementKeys.AiAssistant)]
 public class SettingsModel : PageModel
 {
     private const string SavedKey = "knowledgeSettings.saved";

@@ -1,10 +1,13 @@
-@page "/KnowledgeBase/Edit/{id:guid?}"
-@model Omni.App.Pages.KnowledgeBase.EditModel
+@model Omni.App.Pages.KnowledgeBase.IndexModel
+@* The Knowledge Base add / edit popup (Pages/KnowledgeBase/Index). modal.js opens and closes it; knowledge-page.js reads
+   [data-kb-tab], .kb-choice, #kb-panel-*, #kb-body, #kb-body-count, #kb-add-qa, the drop zone ids (#kb-dropzone, #kb-file,
+   #kb-drop-*), .seg-cards .cat-card and the opener's data-kb-mode. An edit is opened by its address (?edit=), so closing it
+   goes back to BackUrl. *@
 @{
-    ViewData["Title"] = Model.IsNew ? T["knowledge.add"].Value : T["knowledge.edit.title"].Value;
+    var isNew = Model.Edit is null;
     var maxMb = Model.MaxUploadBytes / 1024.0 / 1024.0;
-    var backLabel = Model.BackUrl.StartsWith("/KnowledgeBase/Websites", StringComparison.OrdinalIgnoreCase) ? T["knowledge.edit.backWebsite"].Value : T["knowledge.edit.backKnowledge"].Value;
-    var activeMode = Model.ShowUploadTab ? "upload" : Model.ShowWebsiteTab ? "website" : "manual";
+    var activeMode = isNew ? Model.FormMode : "manual";
+    var closeHref = isNew && Model.ReturnUrl is null ? null : Model.BackUrl;
 }
 
 @functions {
@@ -25,40 +28,35 @@
     }
 }
 
-@if (!Model.ClientConfigured)
-{
-    <partial name="_NoClient" />
-}
-else
-{
-    <div class="au-back-header">
-        <a class="au-icon-btn au-icon-btn--bordered" href="@Model.BackUrl" aria-label="@T["knowledge.edit.back", backLabel]" title="@T["knowledge.edit.back", backLabel]">
-            <span class="au-icon au-icon--dir" aria-hidden="true">arrow_back</span>
-        </a>
-        <div class="min-w-0">
-            <h2 class="au-back-header__title" dir="auto">@(Model.IsNew ? T["knowledge.add"].Value : Model.Title)</h2>
-            <span class="au-back-header__sub">@(Model.IsNew ? T["knowledge.edit.newSub"] : T["knowledge.edit.editSub"])</span>
+<div class="bm-overlay" data-modal id="kb-overlay" hidden="@(!Model.FormOpen)" data-modal-close-href="@closeHref">
+    <div class="card form-modal form-modal--wide" role="dialog" aria-modal="true" aria-labelledby="kb-form-title">
+        <div class="modal-head">
+            <div class="min-w-0">
+                <h3 id="kb-form-title" class="card-title" dir="auto">@(isNew ? T["knowledge.add"].Value : Model.Title)</h3>
+                <span class="cell-sub">@(isNew ? T["knowledge.edit.newSub"] : T["knowledge.edit.editSub"])</span>
+            </div>
+            <button type="button" class="au-icon-btn" data-modal-close aria-label="@T["common.close"]" title="@T["common.close"]"><span class="au-icon" aria-hidden="true">close</span></button>
         </div>
-    </div>
 
-    <partial name="_Messages" model="new PageMessagesModel(null, Model.ErrorMessage)" />
-
-    @* knowledge-page.js reads [data-kb-tab], .kb-choice, #kb-panel-*, #kb-body, #kb-body-count, #kb-add-qa, the drop zone
-       ids (#kb-dropzone, #kb-file, #kb-drop-*) and .seg-cards .cat-card. *@
-    <section class="au-panel au-panel--round au-panel--pad mw-720">
-
-        @if (Model.IsNew)
+        @if (Model.FormError is not null)
         {
-            <div class="kb-choices" role="radiogroup" aria-label="@T["knowledge.edit.howToAdd"]">
+            <partial name="_Messages" model="new PageMessagesModel(null, Model.FormError)" />
+        }
+
+        @if (isNew)
+        {
+            <div class="kb-choices kb-choices--compact" role="radiogroup" aria-label="@T["knowledge.edit.howToAdd"]">
                 <label class="kb-choice @(activeMode == "manual" ? "on" : "")"><input type="radio" name="kb-mode" value="manual" data-kb-tab="manual" checked="@(activeMode == "manual")" /><span class="kb-choice-icon au-icon" aria-hidden="true">edit_note</span><strong>@T["knowledge.choice.write"]</strong><small>@T["knowledge.edit.writeHelp"]</small></label>
                 <label class="kb-choice @(activeMode == "upload" ? "on" : "")"><input type="radio" name="kb-mode" value="upload" data-kb-tab="upload" checked="@(activeMode == "upload")" /><span class="kb-choice-icon au-icon" aria-hidden="true">upload_file</span><strong>@T["knowledge.choice.upload"]</strong><small>@T["knowledge.choice.uploadHelp"]</small></label>
                 <label class="kb-choice @(activeMode == "website" ? "on" : "")"><input type="radio" name="kb-mode" value="website" data-kb-tab="website" checked="@(activeMode == "website")" /><span class="kb-choice-icon au-icon" aria-hidden="true">language</span><strong>@T["knowledge.edit.importWebsite"]</strong><small>@T["knowledge.edit.importWebsiteHelp"]</small></label>
             </div>
         }
 
-        @* ---------- Manual entry / edit ---------- *@
-        <div id="kb-panel-manual" hidden="@(Model.IsNew && activeMode != "manual")">
-            <form method="post" class="au-stack">
+        @* ---------- Written entry / edit ---------- *@
+        <div id="kb-panel-manual" hidden="@(activeMode != "manual")">
+            <form method="post" asp-page-handler="Save" class="au-stack">
+                <input type="hidden" name="Edit" value="@Model.Edit" />
+                <input type="hidden" name="ReturnUrl" value="@Model.ReturnUrl" />
                 @if (Model.IsWebsite || Model.IsUpload)
                 {
                     <div class="src-banner">
@@ -82,7 +80,7 @@ else
                 <div class="au-form-grid">
                     <div class="au-form-field">
                         <label class="au-form-label" for="kb-title">@T["knowledge.edit.titleLabel"]<span class="au-required">*</span></label>
-                        <input type="text" name="Title" id="kb-title" value="@Model.Title" class="au-input" maxlength="200" required placeholder="@T["knowledge.edit.titlePlaceholder"]" />
+                        <input type="text" name="Title" id="kb-title" value="@Model.Title" class="au-input" maxlength="200" required dir="auto" placeholder="@T["knowledge.edit.titlePlaceholder"]" />
                     </div>
                     <label class="au-form-field">
                         <span class="au-form-label">@T["knowledge.table.category"]</span>
@@ -104,7 +102,7 @@ else
                             <label class="au-form-label" for="kb-body">@T["knowledge.edit.content"]<span class="au-required">*</span></label>
                             <button type="button" class="au-btn au-btn--text au-btn--sm" id="kb-add-qa"><span class="au-icon" aria-hidden="true">add</span>@T["knowledge.edit.addQa"]</button>
                         </div>
-                        <textarea name="Body" id="kb-body" rows="12" class="au-textarea" required dir="auto"
+                        <textarea name="Body" id="kb-body" rows="10" class="au-textarea" required dir="auto"
                                   placeholder="@T["knowledge.edit.contentPlaceholder"]">@Model.Body</textarea>
                         <span class="au-help counter" id="kb-body-count"></span>
                     </div>
@@ -114,15 +112,15 @@ else
 
                 <div class="au-form-actions">
                     <span class="au-help form-actions-note">@T["knowledge.edit.prepareNote"]</span>
-                    <a href="@Model.BackUrl" class="au-btn au-btn--text">@T["common.cancel"]</a>
-                    <button type="submit" class="au-btn au-btn--primary">@(Model.IsNew ? T["knowledge.edit.addSubmit"] : T["common.saveChanges"])</button>
+                    <button type="button" class="au-btn au-btn--text" data-modal-close>@T["common.cancel"]</button>
+                    <button type="submit" class="au-btn au-btn--primary">@(isNew ? T["knowledge.edit.addSubmit"] : T["common.saveChanges"])</button>
                 </div>
             </form>
         </div>
 
-        @* ---------- Upload Document (new entries only) ---------- *@
-        @if (Model.IsNew)
+        @if (isNew)
         {
+            @* ---------- Upload a document ---------- *@
             <div id="kb-panel-upload" hidden="@(activeMode != "upload")">
                 <form method="post" asp-page-handler="Upload" enctype="multipart/form-data" class="au-stack">
                     <label class="dropzone" id="kb-dropzone" data-max-bytes="@Model.MaxUploadBytes">
@@ -137,7 +135,7 @@ else
                     <div class="au-form-grid">
                         <div class="au-form-field">
                             <label class="au-form-label" for="kb-upload-title">@T["knowledge.edit.titleLabel"] <span class="opt">@T["common.optional"]</span></label>
-                            <input type="text" name="Title" id="kb-upload-title" value="@Model.Title" class="au-input" maxlength="200" placeholder="@T["knowledge.upload.titlePlaceholder"]" />
+                            <input type="text" name="Title" id="kb-upload-title" value="@Model.Title" class="au-input" maxlength="200" dir="auto" placeholder="@T["knowledge.upload.titlePlaceholder"]" />
                         </div>
                         <label class="au-form-field">
                             <span class="au-form-label">@T["knowledge.table.category"]</span>
@@ -145,22 +143,22 @@ else
                         </label>
                     </div>
 
-                    @ActiveSwitch(Model.ErrorMessage is null || Model.IsActive, T["knowledge.edit.activeDocument"].Value)
+                    @ActiveSwitch(Model.FormError is null || Model.IsActive, T["knowledge.edit.activeDocument"].Value)
 
                     <div class="au-form-actions">
                         <span class="au-help form-actions-note">@T["knowledge.upload.note"]</span>
-                        <a href="@Model.BackUrl" class="au-btn au-btn--text">@T["common.cancel"]</a>
+                        <button type="button" class="au-btn au-btn--text" data-modal-close>@T["common.cancel"]</button>
                         <button type="submit" class="au-btn au-btn--primary"><span class="au-icon" aria-hidden="true">upload</span>@T["knowledge.upload.submit"]</button>
                     </div>
                 </form>
             </div>
 
-            @* ---------- Website (new entries only) ---------- *@
+            @* ---------- Import a website ---------- *@
             <div id="kb-panel-website" hidden="@(activeMode != "website")">
                 <form method="post" asp-page-handler="Website" class="au-stack">
                     <div class="au-form-field">
                         <label class="au-form-label" for="kb-website-url">@T["knowledge.website.address"]<span class="au-required">*</span></label>
-                        <input type="text" name="WebsiteUrl" id="kb-website-url" value="@Model.WebsiteUrl" class="au-input" maxlength="2000" required
+                        <input type="text" name="WebsiteUrl" id="kb-website-url" value="@Model.WebsiteUrl" class="au-input" maxlength="2000" required dir="ltr"
                                placeholder="https://www.yourbusiness.com" inputmode="url" autocomplete="off" />
                     </div>
 
@@ -183,7 +181,7 @@ else
                         @CategorySelect(Model.Category)
                     </label>
 
-                    @ActiveSwitch(Model.ErrorMessage is null || Model.IsActive, T["knowledge.edit.activePages"].Value)
+                    @ActiveSwitch(Model.FormError is null || Model.IsActive, T["knowledge.edit.activePages"].Value)
 
                     <details class="kb-more">
                         <summary>@T["knowledge.website.whatGetsImported"]</summary>
@@ -193,13 +191,11 @@ else
                     </details>
 
                     <div class="au-form-actions">
-                        <a href="@Model.BackUrl" class="au-btn au-btn--text">@T["common.cancel"]</a>
+                        <button type="button" class="au-btn au-btn--text" data-modal-close>@T["common.cancel"]</button>
                         <button type="submit" class="au-btn au-btn--primary"><span class="au-icon" aria-hidden="true">language</span>@T["knowledge.website.import"]</button>
                     </div>
                 </form>
             </div>
         }
-    </section>
-
-    <script src="~/js/knowledge-page.js" asp-append-version="true"></script>
-}
+    </div>
+</div>

@@ -13,7 +13,7 @@ else
     <partial name="_Messages" model="new PageMessagesModel(Model.StatusMessage, Model.ErrorMessage)" />
 
     <div class="au-page-head">
-        <p class="au-page-head__sub mw-640">@T["autoReply.intro"]</p>
+        <p class="au-page-head__sub">@T["autoReply.intro"]</p>
     </div>
 
     @if (Model.DisabledByAdmin)
@@ -21,63 +21,93 @@ else
         <div class="au-alert au-alert--warning" role="status"><div class="au-alert__body">@T["autoReply.disabledByAdmin"]</div></div>
     }
 
-    @foreach (var channel in Model.Channels)
-    {
-        var values = Model.FormValues(channel);
-        var name = ChannelNames.Brand(values.Channel);
-        var idPrefix = "auto-reply-" + values.Channel;
-        <form method="post" class="au-panel au-panel--round integration-form" id="@(idPrefix)-form">
-            <input type="hidden" name="Channel" value="@values.Channel" />
-            <div class="set-section">
-                <div class="set-section-head">
-                    <strong>@name</strong>
-                    @if (!channel.Connected)
+    @* One form for every channel: a tab each (channel logo, grey dot = not connected), one Save. auto-respond.js reads
+       [data-channel-tab], [data-channel-panel], #auto-reply-tab, [data-reopened-mode] and [data-reopened-message]. *@
+    <form method="post" class="au-panel au-panel--round au-panel--pad au-stack" id="auto-reply-form">
+        <input type="hidden" name="Tab" id="auto-reply-tab" value="@Model.ActiveChannel" />
+        <div class="au-tabs page-tabs" role="tablist" aria-label="@T["nav.autoRespond"]">
+            @foreach (var c in Model.Channels)
+            {
+                var ch = c.Settings.Channel;
+                var isActive = ch == Model.ActiveChannel;
+                <a href="?tab=@ch" class="au-tab @(isActive ? "is-active" : "")" role="tab" id="tab-@ch" aria-controls="panel-@ch"
+                   aria-selected="@(isActive ? "true" : "false")" data-channel-tab="@ch">
+                    <span class="tab-channel-mark" style="background:@ChannelIconHelper.Hex(ch)" aria-hidden="true">@Html.Raw(ChannelIconHelper.BrandSvg(ch) ?? ChannelIconHelper.Initials(ch))</span>
+                    @ChannelNames.Brand(ch)
+                    @if (!c.Connected)
                     {
-                        <span class="badge badge-gray">@T["autoReply.notConnected"]</span>
+                        <span class="tab-dot" title="@T["autoReply.notConnected"]"></span><span class="au-sr-only">@T["autoReply.notConnected"]</span>
                     }
-                    <div class="cell-sub">@T["autoReply.channelHelp"]</div>
-                </div>
-                <div class="set-section-body">
-                    <label class="au-check">
-                        <input type="checkbox" class="au-switch" role="switch" name="NewConversationEnabled" value="true" checked="@values.NewConversationEnabled" />
-                        @T["autoReply.new.switch"]
-                    </label>
-                    <label class="field">
-                        <span>@T["autoReply.new.message"]</span>
-                        <textarea name="NewConversationMessage" id="@(idPrefix)-new" class="au-textarea" rows="3" maxlength="@Model.MaxLength" dir="auto">@values.NewConversationMessage</textarea>
-                    </label>
+                </a>
+            }
+        </div>
+
+        @for (var i = 0; i < Model.Channels.Count; i++)
+        {
+            var channel = Model.Channels[i];
+            var values = Model.FormValues(channel);
+            var ch = values.Channel;
+            var aiAnswers = channel.AiBotAnswersNew || channel.AiBotAnswersReopened;
+            var prefix = $"Replies[{i}].";
+            <div class="au-stack" role="tabpanel" id="panel-@ch" aria-labelledby="tab-@ch" data-channel-panel="@ch" hidden="@(ch != Model.ActiveChannel)">
+                <input type="hidden" name="@(prefix)Channel" value="@ch" />
+                @if (!channel.Connected)
+                {
+                    <div class="au-alert" role="note"><span class="au-icon au-alert__icon" aria-hidden="true">info</span><div class="au-alert__body">@T["autoReply.channelHelp"]</div></div>
+                }
+
+                <label class="au-check">
+                    <input type="checkbox" class="au-switch" role="switch" name="@(prefix)NewConversationEnabled" value="true" checked="@values.NewConversationEnabled" />
+                    @T["autoReply.new.switch"]
+                </label>
+                <div class="au-form-field">
+                    <label class="au-form-label" for="auto-reply-new-@ch">@T["autoReply.new.message"]</label>
+                    <textarea name="@(prefix)NewConversationMessage" id="auto-reply-new-@ch" class="au-textarea" rows="3" maxlength="@Model.MaxLength" dir="auto">@values.NewConversationMessage</textarea>
                     @if (channel.AiBotAnswersNew)
                     {
-                        <p class="au-help">@T["autoReply.new.aiBot"]</p>
+                        <span class="au-help">@T["autoReply.new.aiBot"]</span>
                     }
+                </div>
 
-                    <div class="field">
-                        <span>@T["autoReply.reopened.title"]</span>
-                        <div class="seg" role="radiogroup" aria-label="@T["autoReply.reopened.title"]">
-                            <label class="seg-opt"><input type="radio" name="ReopenedMode" value="@AutoReplyReopenedMode.Off" checked="@(values.ReopenedMode == AutoReplyReopenedMode.Off)" /><span>@T["autoReply.reopened.off"]</span></label>
-                            <label class="seg-opt"><input type="radio" name="ReopenedMode" value="@AutoReplyReopenedMode.Same" checked="@(values.ReopenedMode == AutoReplyReopenedMode.Same)" /><span>@T["autoReply.reopened.same"]</span></label>
-                            <label class="seg-opt"><input type="radio" name="ReopenedMode" value="@AutoReplyReopenedMode.Custom" checked="@(values.ReopenedMode == AutoReplyReopenedMode.Custom)" /><span>@T["autoReply.reopened.custom"]</span></label>
-                        </div>
+                <div class="au-form-field">
+                    <span class="au-form-label">@T["autoReply.reopened.title"]</span>
+                    <div class="seg" role="radiogroup" aria-label="@T["autoReply.reopened.title"]">
+                        <label class="seg-opt"><input type="radio" name="@(prefix)ReopenedMode" value="@AutoReplyReopenedMode.Off" checked="@(values.ReopenedMode == AutoReplyReopenedMode.Off)" data-reopened-mode /><span>@T["autoReply.reopened.off"]</span></label>
+                        <label class="seg-opt"><input type="radio" name="@(prefix)ReopenedMode" value="@AutoReplyReopenedMode.Same" checked="@(values.ReopenedMode == AutoReplyReopenedMode.Same)" data-reopened-mode /><span>@T["autoReply.reopened.same"]</span></label>
+                        <label class="seg-opt"><input type="radio" name="@(prefix)ReopenedMode" value="@AutoReplyReopenedMode.Custom" checked="@(values.ReopenedMode == AutoReplyReopenedMode.Custom)" data-reopened-mode /><span>@T["autoReply.reopened.custom"]</span></label>
                     </div>
-                    <label class="field">
-                        <span>@T["autoReply.reopened.message"]</span>
-                        <textarea name="ReopenedMessage" id="@(idPrefix)-reopened" class="au-textarea" rows="3" maxlength="@Model.MaxLength" dir="auto">@values.ReopenedMessage</textarea>
-                    </label>
-                    <p class="au-help">@T["autoReply.reopened.help"]</p>
+                    <span class="au-help">@T["autoReply.reopened.help"]</span>
                     @if (channel.AiBotAnswersReopened)
                     {
-                        <p class="au-help">@T["autoReply.reopened.aiBot"]</p>
+                        <span class="au-help">@T["autoReply.reopened.aiBot"]</span>
                     }
+                </div>
+                <div class="au-form-field" data-reopened-message hidden="@(values.ReopenedMode != AutoReplyReopenedMode.Custom)">
+                    <label class="au-form-label" for="auto-reply-reopened-@ch">@T["autoReply.reopened.message"]</label>
+                    <textarea name="@(prefix)ReopenedMessage" id="auto-reply-reopened-@ch" class="au-textarea" rows="3" maxlength="@Model.MaxLength" dir="auto">@values.ReopenedMessage</textarea>
+                </div>
 
+                @* Only where the AI bot answers this channel; elsewhere the saved choice is kept as it is. *@
+                @if (aiAnswers)
+                {
                     <label class="au-check">
-                        <input type="checkbox" class="au-switch" role="switch" name="SendWhenAiAnswers" value="true" checked="@values.SendWhenAiAnswers" />
+                        <input type="checkbox" class="au-switch" role="switch" name="@(prefix)SendWhenAiAnswers" value="true" checked="@values.SendWhenAiAnswers" />
                         @T["autoReply.sendWhenAi"]
                     </label>
                     <small class="text-subtle">@T["autoReply.sendWhenAiHelp"]</small>
-                </div>
+                }
+                else if (values.SendWhenAiAnswers)
+                {
+                    <input type="hidden" name="@(prefix)SendWhenAiAnswers" value="true" />
+                }
             </div>
-            <div class="au-form-actions"><button type="submit" class="au-btn au-btn--primary">@T["autoReply.save", name]</button></div>
-        </form>
-    }
-    <p class="au-help">@T["autoReply.billing"]</p>
+        }
+
+        <div class="au-form-actions">
+            <span class="au-help form-actions-note">@T["autoReply.billing"]</span>
+            <button type="submit" class="au-btn au-btn--primary">@T["common.save"]</button>
+        </div>
+    </form>
+
+    <script src="~/js/auto-respond.js" asp-append-version="true"></script>
 }

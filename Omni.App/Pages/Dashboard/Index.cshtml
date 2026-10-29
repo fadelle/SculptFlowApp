@@ -128,7 +128,7 @@ else
         {
             var empty = new EmptyStateModel(Icon: "medical_services", Title: T["dashboard.services.emptyTitle"].Value,
                 Text: T["dashboard.services.emptyText"].Value,
-                ActionLabel: T["dashboard.services.emptyAction"].Value, ActionHref: "/Services/Edit");
+                ActionLabel: T["dashboard.services.emptyAction"].Value, ActionHref: "/Services?add=true");
             <partial name="_EmptyState" model="empty" />
         }
         else

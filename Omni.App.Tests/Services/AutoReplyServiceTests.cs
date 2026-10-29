@@ -104,9 +104,38 @@ public class AutoReplyServiceTests
     [MemberData(nameof(Invalid))]
     public async Task Invalid_settings_are_refused_before_anything_is_saved(SaveAutoReplyRequest request, string key)
     {
-        var ex = await Assert.ThrowsAsync<ArgumentException>(() => Sut().SaveAsync(_clientId, request));
+        var ex = await Assert.ThrowsAnyAsync<ArgumentException>(() => Sut().SaveAsync(_clientId, request));
 
         Assert.StartsWith(key, ex.Message);
+        _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Saving_every_channel_at_once_is_one_save()
+    {
+        await Sut().SaveAllAsync(_clientId,
+        [
+            Request(newMessage: "Hi!"),
+            Request(newOn: false, newMessage: null, mode: AutoReplyReopenedMode.Custom, reopenedMessage: "Back?", channel: ConversationChannel.Telegram),
+        ]);
+
+        Assert.Equal([ConversationChannel.WhatsApp, ConversationChannel.Telegram], _added.Select(r => r.Channel));
+        Assert.Equal("Back?", _added[1].ReopenedMessage);
+        _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task One_invalid_channel_saves_nothing_and_names_the_channel()
+    {
+        var ex = await Assert.ThrowsAsync<AutoReplyInvalidException>(() => Sut().SaveAllAsync(_clientId,
+        [
+            Request(),
+            Request(newMessage: new string('a', 21), channel: ConversationChannel.Telegram),
+        ]));
+
+        Assert.Equal(("autoReply.errors.tooLong", ConversationChannel.Telegram), (ex.Message, ex.Channel));
+        Assert.Equal(new object?[] { 20 }, TextError.ArgsOf(ex));   // the text arguments travel with it
+        Assert.Empty(_added);
         _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
 

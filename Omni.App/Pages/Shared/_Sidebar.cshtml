@@ -1,6 +1,7 @@
 @inject ICurrentClientContext CurrentClient
 @inject IConfigManager Settings
 @inject Omni.App.Business.Contracts.Services.Billing.IEntitlementService Entitlements
+@inject Omni.App.Business.Contracts.Services.Channels.IChannelIntegrationService Channels
 @* The dark sidebar (docs/UI_GUIDE.md §5, §0.4): brand + client name, then the four groups of links in their old order.
    #sidebar-inbox-badge is filled by sidebar.js / inbox.js. *@
 @{
@@ -9,12 +10,23 @@
     bool IsActive(string prefix) => path.Equals(prefix, StringComparison.OrdinalIgnoreCase)
         || path.StartsWith(prefix + "/", StringComparison.OrdinalIgnoreCase);
     var dashboardActive = IsActive("/dashboard") && !IsActive("/dashboard/contacts") && !IsActive("/dashboard/bookings");
-    // Bookings and calendar sync are a plan feature (always on while billing is off); the pages say so if opened directly.
+    // Links follow the client's plan (every feature is on while billing is off): a module the plan doesn't include is hidden,
+    // and its pages say so if opened directly (RequirePlanFeature, _BookingsNotIncluded, the Reports page).
     var clientId = await CurrentClient.GetClientIdAsync();
     var plan = clientId is null ? null : await Entitlements.GetAsync(clientId.Value);
     var bookingsIncluded = plan is null || plan.CanUseBookings;
-    // Reports need the plan's reporting feature (Growth and up); without it the link is hidden.
+    var aiIncluded = plan is null || plan.CanUseAiAssistant;
+    var campaignsIncluded = plan is null || plan.CanUseCampaigns;
+    // Services feed bookings and the AI assistant's answers.
+    var servicesIncluded = bookingsIncluded || aiIncluded;
+    // Reports need the plan's reporting feature; the link says whether they are basic or advanced.
     var reportsIncluded = plan is null || plan.CanUseReporting;
+    // No tag while billing is off (no plans then).
+    string? reportsLevel = plan is not { BillingEnabled: true } ? null
+        : plan.CanUseAdvancedReporting ? T["nav.reportsLevel.advanced"].Value : T["nav.reportsLevel.basic"].Value;
+    // Channel pages show once that channel is connected (RequireConnectedChannel guards the pages the same way).
+    IReadOnlySet<string> connected = clientId is null ? new HashSet<string>() : await Channels.ListConnectedChannelsAsync(clientId.Value);
+    var whatsAppConnected = connected.Contains(ChannelType.WhatsApp);
 }
 @functions {
     // One nav row; the label doubles as the tooltip when the sidebar is collapsed to icons.
@@ -48,24 +60,54 @@
         }
         @if (reportsIncluded)
         {
-            @Row("/reports", "insights", T["nav.reports"].Value, IsActive("/reports")) @* icon:insights *@
+            @Row("/reports", "insights", T["nav.reports"].Value, IsActive("/reports"),
+                reportsLevel is null ? null : $"<span class=\"au-nav-tag\">{System.Text.Encodings.Web.HtmlEncoder.Default.Encode(reportsLevel)}</span>") @* icon:insights *@
         }
 
-        <div class="au-side-section">@T["nav.section.marketing"]</div>
-        @Row("/Campaigns", "campaign", T["nav.campaigns"].Value, IsActive("/Campaigns")) @* icon:campaign *@
-        @Row("/WhatsApp/Templates", "description", T["nav.whatsAppTemplates"].Value, IsActive("/WhatsApp/Templates")) @* icon:description *@
-        @Row("/WhatsApp/Health", "monitor_heart", T["nav.whatsAppHealth"].Value, IsActive("/WhatsApp/Health")) @* icon:monitor_heart *@
+        @if (campaignsIncluded)
+        {
+            <div class="au-side-section">@T["nav.section.marketing"]</div>
+            @Row("/Campaigns", "campaign", T["nav.campaigns"].Value, IsActive("/Campaigns")) @* icon:campaign *@
+        }
 
-        <div class="au-side-section">@T["nav.section.setup"]</div>
-        @Row("/Services", "medical_services", T["nav.services"].Value, IsActive("/Services")) @* icon:medical_services *@
-        @Row("/KnowledgeBase", "menu_book", T["nav.knowledgeBase"].Value, IsActive("/KnowledgeBase")) @* icon:menu_book *@
-        @Row("/Bots", "smart_toy", T["nav.bots"].Value, IsActive("/Bots")) @* icon:smart_toy *@
+        @* One expandable group per connected channel that has pages of its own (WhatsApp today); a new channel page goes in
+           its channel's group, a new channel gets a group like this one. Open while one of its pages is showing. *@
+        @if (whatsAppConnected)
+        {
+            var whatsAppOpen = IsActive("/WhatsApp");
+            <div class="au-side-section">@T["nav.section.channels"]</div>
+            <details class="au-nav-group au-nav-group--nested" open="@whatsAppOpen">
+                <summary title="@ChannelNames.Brand(ChannelType.WhatsApp)">
+                    <span class="nav-channel-mark" style="background:@ChannelIconHelper.Hex(ChannelType.WhatsApp)" aria-hidden="true">@Html.Raw(ChannelIconHelper.BrandSvg(ChannelType.WhatsApp) ?? ChannelIconHelper.Initials(ChannelType.WhatsApp))</span>
+                    <span class="au-nav-item__label">@ChannelNames.Brand(ChannelType.WhatsApp)</span>
+                    <span class="au-icon au-nav-chevron" aria-hidden="true">expand_more</span>
+                </summary>
+                <div class="au-nav-children">
+                    @Row("/WhatsApp/Templates", "description", T["nav.channel.templates"].Value, IsActive("/WhatsApp/Templates")) @* icon:description *@
+                    @Row("/WhatsApp/Health", "monitor_heart", T["nav.channel.health"].Value, IsActive("/WhatsApp/Health")) @* icon:monitor_heart *@
+                </div>
+            </details>
+        }
+
+        @if (servicesIncluded)
+        {
+            <div class="au-side-section">@T["nav.section.setup"]</div>
+            @Row("/Services", "medical_services", T["nav.services"].Value, IsActive("/Services")) @* icon:medical_services *@
+            @if (aiIncluded)
+            {
+                @Row("/KnowledgeBase", "menu_book", T["nav.knowledgeBase"].Value, IsActive("/KnowledgeBase")) @* icon:menu_book *@
+                @Row("/Bots", "smart_toy", T["nav.bots"].Value, IsActive("/Bots")) @* icon:smart_toy *@
+            }
+        }
 
         <div class="au-side-section">@T["nav.section.settings"]</div>
         @Row("/settings/business-info", "apartment", T["nav.businessInfo"].Value, IsActive("/settings/business-info")) @* icon:apartment *@
         @Row("/Members", "badge", T["nav.members"].Value, IsActive("/Members")) @* icon:badge *@
         @Row("/settings/integrations", "hub", T["nav.integrations"].Value, IsActive("/settings/integrations")) @* icon:hub *@
-        @Row("/settings/inbox", "tune", T["nav.inboxSettings"].Value, IsActive("/settings/inbox")) @* icon:tune *@
+        @if (aiIncluded)
+        {
+            @Row("/settings/inbox", "tune", T["nav.inboxSettings"].Value, IsActive("/settings/inbox")) @* icon:tune *@
+        }
         @Row("/settings/auto-respond", "quickreply", T["nav.autoRespond"].Value, IsActive("/settings/auto-respond")) @* icon:quickreply *@
         @if (bookingsIncluded)
         {

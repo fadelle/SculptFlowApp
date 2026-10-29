@@ -93,7 +93,7 @@ section wins**. Copy says *contact* where the guide says *customer*: the people 
   when the kit isn't loaded (`inbox.js`). Server toasts come from `_Messages`; client
   toasts via `Aurora.toast` (Inbox send failures). Submit busy/progress is automatic; the sign-in forms carry
   `data-au-no-busy` because `auth.js` shows its own "Signing in…". **Not used:** `data-au-href` (pages have their own
-  row-click scripts on `tr[data-href]`) and `data-au-open` dialogs (popups stay `.bm-overlay > .card`, driven by their
+  row-click scripts on `tr[data-href]`) and `data-au-open` dialogs (popups stay `.bm-overlay > .card`, driven by `modal.js` or older
   scripts).
 - **Feedback (A5, A8):** `StatusMessage` → a toast when it is 90 characters or fewer, an inline `.au-alert--success`
   otherwise (it usually says what happens next). `ErrorMessage` → `.au-alert--error` titled "That didn't go through";
@@ -122,8 +122,12 @@ section wins**. Copy says *contact* where the guide says *customer*: the people 
   plain classes; `[hidden] { display: none !important }` stays in `site.css`.
 - **Recipes as built** (copy a page of the same kind): *list* `Services/Index` (page head → toolbar → `.au-table-card`
   with `.au-table--stack` and `data-label`s, or `_EmptyState`); *detail* `Dashboard/ContactDetail` (`.au-back-header` →
-  `.detail-chips` → panels with `.au-detail-rows`); *form* `Services/Edit` (stacked `.au-form-field`s in a panel,
-  `.au-form-actions`); *settings with sections* `Settings/BusinessInfo`; *popup* `WhatsApp/Templates` (`.bm-overlay >
+  `.detail-chips` → panels with `.au-detail-rows`); *form* the Services popup (stacked `.au-form-field`s in a `.form-modal` card,
+  `.au-form-actions`). **Every add/edit form is a popup** (agreed 2026-10-26): `<div class="bm-overlay" data-modal hidden>`
+  `> .card.form-modal`, opened by `[data-modal-open="id"]` (href = no-script fallback such as `?add=true` / `?edit={id}`),
+  closed by `[data-modal-close]`, backdrop or Escape (`modal.js`); a failed save re-renders the page with the popup open;
+  one channel or account at a time goes in tabs (`Settings/AutoRespond`), rarely used options under a `<details>` fold
+  (`Bots/Edit`); *settings with sections* `Settings/BusinessInfo`; *older popup* `WhatsApp/Templates` (`.bm-overlay >
   .card`); *sign-in* `Account/Login` (`.au-auth__card`); *editor with a live side panel* `Bots/Edit` (`.bot-editor`: the form panel
   and a sticky `.bot-test` panel, one column below 1000px). Multi-part table cells wrap their content in one `<div>` so the
   stacked phone layout keeps label and value side by side.

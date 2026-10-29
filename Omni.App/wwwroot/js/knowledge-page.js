@@ -1,5 +1,5 @@
-// Knowledge Base list (search, category filter, clickable rows, "How it works") and the Add/Edit form
-// (choice cards, Q&A template, character count, upload drop zone, website mode cards).
+// Knowledge Base list (search, category filter, clickable rows, "How it works") and the Add/Edit popup
+// (_KnowledgeForm: choice cards, Q&A template, character count, upload drop zone, website mode cards).
 (function () {
   document.querySelectorAll('[data-toggle-target]').forEach(function (btn) {
     btn.addEventListener('click', function () {
@@ -45,6 +45,19 @@
       document.querySelectorAll('.kb-choice').forEach(function (c) { c.classList.toggle('on', c.contains(radio)); });
     });
   });
+
+  // ---- the popup (modal.js) opens on the way in its opener names (data-kb-mode)
+  var overlay = document.getElementById('kb-overlay');
+  if (overlay) {
+    overlay.addEventListener('modal:open', function (e) {
+      var mode = e.detail.trigger && e.detail.trigger.getAttribute('data-kb-mode');
+      var radio = mode && overlay.querySelector('[data-kb-tab="' + mode + '"]');
+      if (radio && !radio.checked) {
+        radio.checked = true;
+        radio.dispatchEvent(new Event('change'));
+      }
+    });
+  }
 
   // Radio cards (website mode): highlight the chosen one.
   document.querySelectorAll('.seg-cards').forEach(function (group) {

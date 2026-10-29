@@ -45,6 +45,11 @@ public static partial class BillableEventTypes
         [AgentSeatMonth] = "Agent seat (monthly)",
     };
 
+    /// <summary>A message sent to a contact on some channel (counted as "Messages" on the Billing page): every *_message type and
+    /// SMS segments; not AI replies, tokens, minutes or monthly fees.</summary>
+    public static bool IsMessage(string eventType) =>
+        eventType.EndsWith("_message", StringComparison.Ordinal) || eventType == SmsSegment;
+
     public static bool IsValid(string? eventType) =>
         !string.IsNullOrEmpty(eventType) && eventType.Length <= 60 && ValidPattern().IsMatch(eventType);
 

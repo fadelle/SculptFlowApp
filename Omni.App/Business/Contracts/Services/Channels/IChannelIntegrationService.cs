@@ -12,6 +12,10 @@ public interface IChannelIntegrationService
     /// </summary>
     Task<IReadOnlyList<ChannelIntegrationResponse>> ListAsync(Guid clientId, CancellationToken ct = default);
 
+    /// <summary>The channels the client has connected now (ChannelType values), from the cached read: the sidebar and the
+    /// channel pages (RequireConnectedChannel) ask it on every request.</summary>
+    Task<IReadOnlySet<string>> ListConnectedChannelsAsync(Guid clientId, CancellationToken ct = default);
+
     Task<ChannelIntegrationResponse> SaveAsync(SaveChannelIntegrationRequest request, CancellationToken ct = default);
 
     Task DisconnectAsync(Guid clientId, string channel, CancellationToken ct = default);

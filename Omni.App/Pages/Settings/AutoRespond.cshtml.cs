@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.Extensions.Localization;
 using Omni.App.Business.Contracts.Managers;
 using Omni.App.Business.Contracts.Services.Inbox;
-using Omni.App.Common.Enums;
+using Omni.App.Common.Exceptions;
 using Omni.App.Common.Helpers;
 using Omni.App.Entities.Dtos.Inbox;
 using Omni.App.Entities.Requests.Inbox;
@@ -11,10 +11,11 @@ using Omni.App.Entities.Requests.Inbox;
 namespace Omni.App.Pages.Settings;
 
 /// <summary>Settings → Auto-respond: per channel, the automatic reply to a contact's first message in a conversation and to a
-/// message that reopens a closed one (IAutoReplyService). One form per channel; any member may change them.</summary>
+/// message that reopens a closed one (IAutoReplyService). One form holds every channel, a tab each (?tab= picks the first
+/// one shown); one Save stores them all, all or nothing (SaveAllAsync). Any member may change them.</summary>
 public class AutoRespondModel : PageModel
 {
-    private const string SavedKey = "autoReply.saved";
+    private const string SavedKey = "autoReply.savedAll";
 
     private readonly ICurrentClientContext _clientContext;
     private readonly IAutoReplyService _autoReplies;
@@ -34,17 +35,21 @@ public class AutoRespondModel : PageModel
     public int MaxLength => _config.AutoReplyMaxLength;
     public bool DisabledByAdmin => !_config.AutoReplyEnabled;
 
-    [BindProperty] public string Channel { get; set; } = "";
-    [BindProperty] public bool NewConversationEnabled { get; set; }
-    [BindProperty] public string? NewConversationMessage { get; set; }
-    [BindProperty] public string ReopenedMode { get; set; } = AutoReplyReopenedMode.Off;
-    [BindProperty] public string? ReopenedMessage { get; set; }
-    [BindProperty] public bool SendWhenAiAnswers { get; set; }
+    /// <summary>Every channel's fields, posted as Replies[i].*.</summary>
+    [BindProperty] public List<AutoReplyFormRow> Replies { get; set; } = [];
 
     [TempData] public string? StatusMessage { get; set; }
     public string? ErrorMessage { get; private set; }
 
-    /// <summary>The channel whose form failed to save: it shows what was posted instead of the saved values.</summary>
+    /// <summary>?tab={channel}: the channel shown first.</summary>
+    [BindProperty(SupportsGet = true)] public string? Tab { get; set; }
+
+    /// <summary>The channel shown first: the one whose save failed, else the asked tab, else the first connected one.</summary>
+    public string? ActiveChannel =>
+        (Channels.FirstOrDefault(c => c.Settings.Channel == (FailedChannel ?? Tab))
+         ?? Channels.FirstOrDefault(c => c.Connected) ?? Channels.FirstOrDefault())?.Settings.Channel;
+
+    /// <summary>The channel a failed save stopped at; after a failed save every tab shows what was posted.</summary>
     public string? FailedChannel { get; private set; }
 
     public async Task OnGetAsync(CancellationToken ct) => await LoadAsync(ct);
@@ -55,23 +60,24 @@ public class AutoRespondModel : PageModel
         if (clientId is null) return RedirectToPage();
         try
         {
-            await _autoReplies.SaveAsync(clientId.Value, new SaveAutoReplyRequest(Channel, NewConversationEnabled, NewConversationMessage,
-                ReopenedMode, ReopenedMessage, SendWhenAiAnswers), ct);
-            StatusMessage = _text[SavedKey, ChannelNames.Brand(Channel)].Value;
-            return RedirectToPage();
+            await _autoReplies.SaveAllAsync(clientId.Value, Replies.Select(r => r.ToRequest()).ToList(), ct);
+            StatusMessage = _text[SavedKey].Value;
+            return RedirectToPage(new { tab = Tab });
         }
         catch (ArgumentException ex)
         {
             ErrorMessage = _text.Localize(ex);
-            FailedChannel = Channel;
+            FailedChannel = (ex as AutoReplyInvalidException)?.Channel ?? Tab;
             return Page();
         }
     }
 
-    /// <summary>What a channel's form shows: the posted values after a failed save, else the saved settings.</summary>
-    public AutoReplyDto FormValues(AutoReplyChannelDto channel) => FailedChannel == channel.Settings.Channel
-        ? new AutoReplyDto(Channel, NewConversationEnabled, NewConversationMessage, ReopenedMode, ReopenedMessage, SendWhenAiAnswers)
-        : channel.Settings;
+    /// <summary>What a channel's fields show: what was posted after a failed save, else the saved settings.</summary>
+    public AutoReplyDto FormValues(AutoReplyChannelDto channel) =>
+        ErrorMessage is not null && Replies.FirstOrDefault(r => r.Channel == channel.Settings.Channel) is { } posted
+            ? new AutoReplyDto(posted.Channel, posted.NewConversationEnabled, posted.NewConversationMessage, posted.ReopenedMode,
+                posted.ReopenedMessage, posted.SendWhenAiAnswers)
+            : channel.Settings;
 
     private async Task<Guid?> LoadAsync(CancellationToken ct)
     {
