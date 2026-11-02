@@ -65,11 +65,17 @@ section wins**. Copy says *contact* where the guide says *customer*: the people 
   toggle and the user menu, nothing more: no palette, scope, favourites, nav filter, section tabs or breadcrumbs (A13).
 - **No Bootstrap, jQuery or unobtrusive validation.** Appendix B is not installed. Forms post plain `name=` fields with
   HTML5 attributes; server-side rule errors come back as the page's `ErrorMessage`.
-- **Brand and look:** dark sidebar; teal brand (`data-brand="teal"` on `<html>` in both layouts); name *Omni*
-  with the client's name as the sidebar subtitle; `wwwroot/logo.svg` is the brand mark (no `_BrandMark`). The look is
-  **calm**: `site.css` section 2 switches off the ambient backdrop, the glow under buttons and the panel sheen, and sets
-  `--au-r-panel` to 18px. It also makes the teal ramp AA: primary `#0f766e` (5.5:1 on white), gradient
-  `#0f766e → #0e7490` in light and `#2dd4bf → #22d3ee` (dark text) in dark. These are the only kit tokens overridden.
+- **Brand and look:** navy brand (`data-brand="navy"` on `<html>` in both layouts, defined in `site.css` section 2);
+  name *Omni* with the client's name as the sidebar subtitle; `wwwroot/logo.svg` is the brand mark (no `_BrandMark`).
+  - **Sidebar:** navy (`#1e3a8a → #172554`, white text, white active bar) in light mode; the kit's dark sidebar in dark mode.
+  - **Fills are the same in both modes:** buttons, switches, avatars, step numbers, sent bubbles and badges use
+    `--au-gradient` (`#1e40af → #1e3a8a`, white text, 8.7:1). Fill with `background-color: var(--au-primary);
+    background-image: var(--au-gradient)`, never with `--au-primary` alone under white text.
+  - **`--au-primary` is the brand colour as text**: navy `#1e40af` on white, light blue `#93c5fd` on the dark paper.
+  - **Highlight tiles** (`.stat-accent`, `.stat-card-accent`) are soft sky blue (`--highlight-bg/-text/-border`), not a
+    navy fill.
+  - The look is **calm**: section 2 also switches off the ambient backdrop, the glow under buttons and the panel sheen,
+    and sets `--au-r-panel` to 18px. These are the only kit tokens overridden.
 - **CSS order differs from §3.1:** `fonts.css → aurora.css → site.css`. `site.css` comes last because it (1) maps the
   older token names (`--accent`, `--surface`, `--badge-*`…) onto `--au-*`, so the older classes the page scripts still
   build (`badge-*`, `alert-*`, `btn`, `card`, `data-table`, `text-input`, `stat-card`, `inbox-*`, `cal-*`…) follow the kit
@@ -363,10 +369,13 @@ action cards, toolbars** · 40 hero. Type: body 14px, inputs 16px (no iOS zoom),
 1.3rem/800, panel title 14px/700, eyebrow 12px uppercase. Spacing: 8px grid; page padding 24px (16px mobile).
 
 **Brand options.** Default is the shared indigo→violet. `<html data-brand="teal">` switches only
-the brand ramp to teal→cyan. A per-client brand colour, if ever needed, is the same mechanism:
+the brand ramp to teal→cyan; `<html data-brand="violet">` (the Admin Portal's) is a violet ramp with a violet
+sidebar in light mode. A per-client brand colour, if ever needed, is the same mechanism:
 override only `--au-primary*`, `--au-secondary*`, `--au-gradient*`, `--au-brand-glow*`,
-`--au-focus-ring` and the sidebar active tokens — and re-check AA contrast for white text on the
-gradient in both modes.
+`--au-focus-ring` and the sidebar tokens (`--au-side-*`, including `--au-side-active-bar` and
+`--au-side-scroll-thumb` for a coloured sidebar) — and re-check AA contrast for white text on the
+gradient in both modes. Fills read `--au-gradient`; text reads `--au-primary`, so a brand can keep the same
+fill in both modes and still have a light text shade in dark mode.
 
 ---
 
@@ -688,6 +697,8 @@ them so both portals share one kit.
   --au-side-active-text: #e0e7ff;
   --au-side-active-icon: #a5b4fc;
   --au-side-border: rgba(148, 163, 184, 0.1);
+  --au-side-active-bar: var(--au-gradient); /* the short bar beside the selected row */
+  --au-side-scroll-thumb: #33415a;
 
   /* --- shape ------------------------------------------------------------- */
   --au-r-xs: 8px; /* chips, menu items, toggle buttons, tooltips */
@@ -824,6 +835,56 @@ them so both portals share one kit.
   --au-secondary-dark: #06b6d4;
   --au-gradient-soft: linear-gradient(135deg, rgba(45, 212, 191, 0.14), rgba(34, 211, 238, 0.1));
   --au-focus-ring: 0 0 0 3px rgba(45, 212, 191, 0.24);
+}
+
+/* Optional alternate brand ramp (violet), used by the Admin Portal. Put data-brand="violet" on <html>.
+   Fills (buttons, switches, avatars: the gradient) are the same violet in light and dark; --au-primary is the shade that
+   reads as text in each mode. The sidebar is violet in light mode and keeps the usual dark sidebar in dark mode. */
+:root[data-brand='violet'] {
+  --au-primary: #6d28d9;
+  --au-primary-light: #a78bfa;
+  --au-primary-dark: #5b21b6;
+  --au-on-primary: #ffffff;
+  --au-secondary: #8b5cf6;
+  --au-secondary-light: #c4b5fd;
+  --au-secondary-dark: #7c3aed;
+  --au-gradient: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);
+  --au-gradient-soft: linear-gradient(135deg, rgba(124, 58, 237, 0.08), rgba(167, 139, 250, 0.08));
+  --au-brand-glow: rgba(124, 58, 237, 0.45);
+  --au-brand-glow-strong: rgba(124, 58, 237, 0.6);
+  --au-focus-ring: 0 0 0 3px rgba(124, 58, 237, 0.22);
+  --au-aurora: radial-gradient(1000px 520px at 88% -12%, rgba(124, 58, 237, 0.08), transparent 62%),
+    radial-gradient(820px 460px at -8% 28%, rgba(167, 139, 250, 0.08), transparent 60%);
+}
+:root[data-brand='violet']:not([data-theme='dark']) {
+  --au-side-bg: linear-gradient(180deg, #4c1d95 0%, #2e1065 100%);
+  --au-side-bg-solid: #4c1d95;
+  --au-side-hover: rgba(255, 255, 255, 0.1);
+  --au-side-text: rgba(255, 255, 255, 0.88);
+  --au-side-text-strong: #ffffff;
+  --au-side-section: #c4b5fd;
+  --au-side-active-bg: rgba(255, 255, 255, 0.18);
+  --au-side-active-text: #ffffff;
+  --au-side-active-icon: #ffffff;
+  --au-side-active-bar: linear-gradient(#ffffff, #ffffff);
+  --au-side-border: rgba(255, 255, 255, 0.16);
+  --au-side-scroll-thumb: rgba(255, 255, 255, 0.3);
+}
+:root[data-brand='violet'][data-theme='dark'] {
+  --au-primary: #c4b5fd;
+  --au-primary-light: #ddd6fe;
+  --au-primary-dark: #a78bfa;
+  --au-secondary: #a78bfa;
+  --au-secondary-light: #c4b5fd;
+  --au-secondary-dark: #8b5cf6;
+  --au-gradient-soft: linear-gradient(135deg, rgba(167, 139, 250, 0.14), rgba(196, 181, 253, 0.1));
+  --au-focus-ring: 0 0 0 3px rgba(196, 181, 253, 0.26);
+  --au-aurora: radial-gradient(1000px 520px at 88% -12%, rgba(124, 58, 237, 0.16), transparent 62%),
+    radial-gradient(820px 460px at -8% 28%, rgba(167, 139, 250, 0.1), transparent 60%);
+  --au-side-active-bg: linear-gradient(calc(90deg * var(--au-x)), rgba(124, 58, 237, 0.45) 0%, rgba(124, 58, 237, 0.12) 100%);
+  --au-side-active-text: #ffffff;
+  --au-side-active-icon: #c4b5fd;
+  --au-side-active-bar: linear-gradient(#c4b5fd, #c4b5fd);
 }
 
 /* Right-to-left (Arabic): pages set <html dir="rtl">. Layout uses logical properties (margin-inline-start,
@@ -3265,10 +3326,10 @@ dialog.au-drawer[open] {
   flex: 1;
   overflow-y: auto;
   padding: 4px 0 8px;
-  scrollbar-color: #33415a transparent;
+  scrollbar-color: var(--au-side-scroll-thumb) transparent;
 }
 .au-side-scroll::-webkit-scrollbar-thumb {
-  background-color: #33415a;
+  background-color: var(--au-side-scroll-thumb);
 }
 /* section divider: tiny uppercase caption + hairline */
 .au-side-section {
@@ -3328,7 +3389,7 @@ dialog.au-drawer[open] {
   width: 3px;
   height: 0;
   border-radius: 999px;
-  background-image: var(--au-gradient);
+  background-image: var(--au-side-active-bar);
   transform: translateY(-50%);
   transition: height 0.18s ease;
 }

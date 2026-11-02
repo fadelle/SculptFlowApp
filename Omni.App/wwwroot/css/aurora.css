@@ -112,6 +112,8 @@
   --au-side-active-text: #e0e7ff;
   --au-side-active-icon: #a5b4fc;
   --au-side-border: rgba(148, 163, 184, 0.1);
+  --au-side-active-bar: var(--au-gradient); /* the short bar beside the selected row */
+  --au-side-scroll-thumb: #33415a;
 
   /* --- shape ------------------------------------------------------------- */
   --au-r-xs: 8px; /* chips, menu items, toggle buttons, tooltips */
@@ -248,6 +250,56 @@
   --au-secondary-dark: #06b6d4;
   --au-gradient-soft: linear-gradient(135deg, rgba(45, 212, 191, 0.14), rgba(34, 211, 238, 0.1));
   --au-focus-ring: 0 0 0 3px rgba(45, 212, 191, 0.24);
+}
+
+/* Optional alternate brand ramp (violet), used by the Admin Portal. Put data-brand="violet" on <html>.
+   Fills (buttons, switches, avatars: the gradient) are the same violet in light and dark; --au-primary is the shade that
+   reads as text in each mode. The sidebar is violet in light mode and keeps the usual dark sidebar in dark mode. */
+:root[data-brand='violet'] {
+  --au-primary: #6d28d9;
+  --au-primary-light: #a78bfa;
+  --au-primary-dark: #5b21b6;
+  --au-on-primary: #ffffff;
+  --au-secondary: #8b5cf6;
+  --au-secondary-light: #c4b5fd;
+  --au-secondary-dark: #7c3aed;
+  --au-gradient: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);
+  --au-gradient-soft: linear-gradient(135deg, rgba(124, 58, 237, 0.08), rgba(167, 139, 250, 0.08));
+  --au-brand-glow: rgba(124, 58, 237, 0.45);
+  --au-brand-glow-strong: rgba(124, 58, 237, 0.6);
+  --au-focus-ring: 0 0 0 3px rgba(124, 58, 237, 0.22);
+  --au-aurora: radial-gradient(1000px 520px at 88% -12%, rgba(124, 58, 237, 0.08), transparent 62%),
+    radial-gradient(820px 460px at -8% 28%, rgba(167, 139, 250, 0.08), transparent 60%);
+}
+:root[data-brand='violet']:not([data-theme='dark']) {
+  --au-side-bg: linear-gradient(180deg, #4c1d95 0%, #2e1065 100%);
+  --au-side-bg-solid: #4c1d95;
+  --au-side-hover: rgba(255, 255, 255, 0.1);
+  --au-side-text: rgba(255, 255, 255, 0.88);
+  --au-side-text-strong: #ffffff;
+  --au-side-section: #c4b5fd;
+  --au-side-active-bg: rgba(255, 255, 255, 0.18);
+  --au-side-active-text: #ffffff;
+  --au-side-active-icon: #ffffff;
+  --au-side-active-bar: linear-gradient(#ffffff, #ffffff);
+  --au-side-border: rgba(255, 255, 255, 0.16);
+  --au-side-scroll-thumb: rgba(255, 255, 255, 0.3);
+}
+:root[data-brand='violet'][data-theme='dark'] {
+  --au-primary: #c4b5fd;
+  --au-primary-light: #ddd6fe;
+  --au-primary-dark: #a78bfa;
+  --au-secondary: #a78bfa;
+  --au-secondary-light: #c4b5fd;
+  --au-secondary-dark: #8b5cf6;
+  --au-gradient-soft: linear-gradient(135deg, rgba(167, 139, 250, 0.14), rgba(196, 181, 253, 0.1));
+  --au-focus-ring: 0 0 0 3px rgba(196, 181, 253, 0.26);
+  --au-aurora: radial-gradient(1000px 520px at 88% -12%, rgba(124, 58, 237, 0.16), transparent 62%),
+    radial-gradient(820px 460px at -8% 28%, rgba(167, 139, 250, 0.1), transparent 60%);
+  --au-side-active-bg: linear-gradient(calc(90deg * var(--au-x)), rgba(124, 58, 237, 0.45) 0%, rgba(124, 58, 237, 0.12) 100%);
+  --au-side-active-text: #ffffff;
+  --au-side-active-icon: #c4b5fd;
+  --au-side-active-bar: linear-gradient(#c4b5fd, #c4b5fd);
 }
 
 /* Right-to-left (Arabic): pages set <html dir="rtl">. Layout uses logical properties (margin-inline-start,
@@ -2689,10 +2741,10 @@ dialog.au-drawer[open] {
   flex: 1;
   overflow-y: auto;
   padding: 4px 0 8px;
-  scrollbar-color: #33415a transparent;
+  scrollbar-color: var(--au-side-scroll-thumb) transparent;
 }
 .au-side-scroll::-webkit-scrollbar-thumb {
-  background-color: #33415a;
+  background-color: var(--au-side-scroll-thumb);
 }
 /* section divider: tiny uppercase caption + hairline */
 .au-side-section {
@@ -2752,7 +2804,7 @@ dialog.au-drawer[open] {
   width: 3px;
   height: 0;
   border-radius: 999px;
-  background-image: var(--au-gradient);
+  background-image: var(--au-side-active-bar);
   transform: translateY(-50%);
   transition: height 0.18s ease;
 }
