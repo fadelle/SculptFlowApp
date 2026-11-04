@@ -162,8 +162,9 @@ public class ConversationService : IConversationService
 
     public async Task<IReadOnlyList<MessageResponse>> GetMessagesAsync(Guid clientId, Guid conversationId, CancellationToken ct = default)
     {
+        // Another client's (or an unknown) conversation is "not found", never an empty list (QA t1-accounts-17).
         var belongs = await _conversations.ExistsAsync(clientId, conversationId, ct);
-        if (!belongs) return Array.Empty<MessageResponse>();
+        if (!belongs) throw new KeyNotFoundException("inbox.errors.conversationNotFound");
 
         var messages = await _messages.ListForConversationAsync(conversationId, ct);
 

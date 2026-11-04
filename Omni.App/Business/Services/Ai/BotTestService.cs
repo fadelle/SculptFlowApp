@@ -105,8 +105,11 @@ public class BotTestService : IBotTestService
         return (session, await _tests.ListMessagesAsync(session.Id, ct));
     }
 
-    public async Task ResetAsync(Guid clientId, Guid sessionId, CancellationToken ct = default) =>
-        await _tests.DeleteSessionAsync(clientId, sessionId, ct);
+    public async Task ResetAsync(Guid clientId, Guid botId, Guid sessionId, CancellationToken ct = default)
+    {
+        // The session must be this bot's and this client's; anything else is "not found" (QA t1-accounts-17).
+        if (await _tests.DeleteSessionAsync(clientId, botId, sessionId, ct) == 0) throw new KeyNotFoundException("bots.test.errors.sessionNotFound");
+    }
 
     public async Task<bool> ReplyAsync(BotRunContext run, string? content, CancellationToken ct = default)
     {

@@ -85,6 +85,109 @@ public class MessageTraceRepositoryTests(PostgresFixture fixture) : RepoTestBase
     }
 
     [PostgresFact]
+    public async Task Each_trace_gets_its_outcome_and_the_list_names_its_conversation()
+    {
+        // QA t7-10: a dropped reply or a skipped photo looked successful; conversationId was always null.
+        var client = MakeClient();
+        var contact = MakeContact(client.Id);
+        var conversation = MakeConversation(client.Id, contact.Id);
+        var t = DateTimeOffset.UtcNow.AddMinutes(-30);
+        var (replied, skipped, handoff, silent, failed, recent) = (NewTrace(), NewTrace(), NewTrace(), NewTrace(), NewTrace(), NewTrace());
+        await SeedAsync(client, contact, conversation,
+            Step(replied, t, TraceSteps.WebhookReceived),
+            Step(replied, t, TraceSteps.MessageSaved, clientId: client.Id),
+            Step(replied, t.AddSeconds(1), TraceSteps.BotTriggered, clientId: client.Id, conversationId: conversation.Id),
+            Step(replied, t.AddSeconds(5), TraceSteps.SendProviderAccepted, clientId: client.Id, conversationId: conversation.Id),
+            Step(skipped, t, TraceSteps.MessageSaved, clientId: client.Id, conversationId: conversation.Id),
+            Step(skipped, t, TraceSteps.BotSkipped, TraceOutcomes.Skipped, client.Id, conversation.Id, detail: """{"reason":"message_type_not_supported","type":"image"}"""),
+            Step(handoff, t, TraceSteps.BotRunStarted, clientId: client.Id, conversationId: conversation.Id),
+            Step(handoff, t.AddSeconds(2), TraceSteps.BotActionResult, clientId: client.Id, conversationId: conversation.Id, detail: """{"action":"handoff","status":200}"""),
+            Step(silent, t, TraceSteps.MessageSaved, clientId: client.Id, conversationId: conversation.Id),
+            Step(silent, t.AddSeconds(1), TraceSteps.BotTriggered, clientId: client.Id, conversationId: conversation.Id),
+            Step(failed, t, TraceSteps.BotRunStarted, clientId: client.Id, conversationId: conversation.Id),
+            Step(failed, t.AddSeconds(3), TraceSteps.SendProviderFailed, TraceOutcomes.Failed, client.Id, conversation.Id),
+            Step(recent, DateTimeOffset.UtcNow, TraceSteps.BotTriggered, clientId: client.Id, conversationId: conversation.Id));
+
+        await using var db = NewContext();
+        var repo = new MessageTraceAdminRepository(db);
+        var outcomes = await repo.OutcomesReadOnlyAsync([replied, skipped, handoff, silent, failed, recent], DateTimeOffset.UtcNow);
+
+        Assert.Equal((TraceResults.Replied, (string?)null), outcomes[replied]);
+        Assert.Equal((TraceResults.Skipped, "message_type_not_supported"), outcomes[skipped]);
+        Assert.Equal(TraceResults.HandedOff, outcomes[handoff].Outcome);
+        Assert.Equal(TraceResults.NoReply, outcomes[silent].Outcome);
+        Assert.Equal((TraceResults.Failed, TraceSteps.SendProviderFailed), outcomes[failed]);
+        Assert.Equal(TraceResults.InProgress, outcomes[recent].Outcome);
+
+        var (rows, _) = await repo.ListReadOnlyAsync(new MessageTraceFilter(t.AddMinutes(-1), client.Id, null, false), 0, 20);
+        var row = rows.Single(r => r.TraceId == replied);
+        Assert.Equal((conversation.Id, TraceResults.Replied), (row.ConversationId!.Value, row.Outcome));   // its first named step has no conversation
+    }
+
+    [PostgresFact]
+    public async Task Conversations_left_without_an_answer_are_listed_with_what_their_last_message_came_to()
+    {
+        var client = MakeClient();
+        var (waiting, answered, fresh) = (MakeContact(client.Id), MakeContact(client.Id), MakeContact(client.Id));
+        var t = DateTimeOffset.UtcNow.AddMinutes(-40);
+        Conversation Conv(Contact contact, string direction, DateTimeOffset at)
+        {
+            var c = MakeConversation(client.Id, contact.Id);
+            c.LastMessageDirection = direction; c.LastMessageAt = at;
+            return c;
+        }
+        var c1 = Conv(waiting, MessageDirection.Inbound, t);
+        var c2 = Conv(answered, MessageDirection.Outbound, t.AddMinutes(1));
+        var c3 = Conv(fresh, MessageDirection.Inbound, DateTimeOffset.UtcNow.AddMinutes(-2));   // still inside the 15 minutes
+        var trace = NewTrace();
+        var photo = MakeMessage(c1, createdAt: t);
+        photo.MessageType = "image"; photo.TraceId = trace;
+        await SeedAsync(client, waiting, answered, fresh, c1, c2, c3, photo,
+            Step(trace, t, TraceSteps.BotSkipped, TraceOutcomes.Skipped, client.Id, c1.Id, detail: """{"reason":"message_type_not_supported"}"""));
+
+        await using var db = NewContext();
+        var (rows, total) = await new MessageTraceAdminRepository(db)
+            .ListUnansweredReadOnlyAsync(t.AddHours(-1), DateTimeOffset.UtcNow.AddMinutes(-15), client.Id, 0, 20);
+
+        Assert.Equal(1, total);
+        var row = Assert.Single(rows);
+        Assert.Equal((c1.Id, photo.Id, "image", trace, TraceResults.Skipped, "message_type_not_supported", client.Name),
+            (row.ConversationId, row.MessageId!.Value, row.MessageType, row.TraceId, row.Outcome, row.OutcomeReason, row.ClientName));
+    }
+
+    [PostgresFact]
+    public async Task Ai_usage_adds_up_runs_model_calls_and_tokens_per_client_and_the_ai_reply_revenue()
+    {
+        var client = MakeClient();
+        var account = new BillingAccount { Id = Guid.NewGuid(), ClientId = client.Id, CreatedAt = Now, UpdatedAt = Now };
+        var (run1, run2) = (NewTrace(), NewTrace());
+        var t = DateTimeOffset.UtcNow.AddHours(-1);
+        BillingUsageRecord Reply(string status, decimal amount, decimal refunded = 0) => new()
+        {
+            Id = Guid.NewGuid(), ClientId = client.Id, BillingAccountId = account.Id, IdempotencyKey = Guid.NewGuid().ToString("N"),
+            EventType = BillableEventTypes.AiReply, Channel = "whatsapp", Quantity = 1, ChargeStatus = status, ProviderOutcome = ProviderOutcome.Billable,
+            Amount = amount, RefundedAmount = refunded, WalletAmount = status == ChargeStatus.Settled ? amount : 0, Currency = "USD",
+            ProviderBilling = ProviderBillingResponsibility.PlatformFunded, OccurredAt = t, CreatedAt = t, UpdatedAt = t
+        };
+        await SeedAsync(client, account,
+            Step(run1, t, TraceSteps.BotRunStarted, clientId: client.Id),
+            Step(run1, t, TraceSteps.BotModelCalled, clientId: client.Id, detail: """{"inputTokens":1000,"outputTokens":200}"""),
+            Step(run1, t, TraceSteps.BotModelCalled, clientId: client.Id, detail: """{"inputTokens":500,"outputTokens":100}"""),
+            Step(run2, t, TraceSteps.BotRunStarted, clientId: client.Id),
+            Step(run2, t, TraceSteps.BotModelCalled, TraceOutcomes.Failed, client.Id, detail: """{"error":"timeout"}"""),
+            Step(run2, t, TraceSteps.BotRunFailed, TraceOutcomes.Failed, client.Id),
+            Reply(ChargeStatus.Settled, 0.02m), Reply(ChargeStatus.Settled, 0.02m, refunded: 0.02m), Reply(ChargeStatus.Released, 0.02m));
+
+        await using var db = NewContext();
+        var repo = new MessageTraceAdminRepository(db);
+        var usage = Assert.Single(await repo.AiUsageReadOnlyAsync(t.AddMinutes(-1), client.Id));
+        Assert.Equal((client.Name, 2L, 1L, 2L, 1500L, 300L), (usage.ClientName, usage.Runs, usage.FailedRuns, usage.ModelCalls, usage.InputTokens, usage.OutputTokens));
+        var revenue = Assert.Single(await repo.AiReplyRevenueReadOnlyAsync(t.AddMinutes(-1), client.Id));
+        Assert.Equal((0.02m, "USD"), (revenue.Amount, revenue.Currency.Trim()));
+        Assert.Empty(await repo.AiUsageReadOnlyAsync(t.AddMinutes(-1), Guid.NewGuid()));
+    }
+
+    [PostgresFact]
     public async Task The_list_summarises_traces_and_filters_by_client_conversation_and_failure()
     {
         var clientId = Guid.NewGuid();

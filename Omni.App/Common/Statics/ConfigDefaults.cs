@@ -160,6 +160,12 @@ public static class ConfigDefaults
         "Timeout of one call to the AI model API.", 5, 600);
     public static readonly ConfigDefinition AiMaxConcurrentRuns = new("Ai", "MaxConcurrentRuns", "4", ConfigValueType.Int,
         "Most bot runs (different conversations) at the same time; one conversation always runs one message at a time.", 1, 64);
+    public static readonly ConfigDefinition AiInputTokenPriceUsdPerMillion = new("Ai", "InputTokenPriceUsdPerMillion", "1.25", ConfigValueType.Decimal,
+        "What the AI model provider charges per million input tokens (USD), for the admin portal's AI usage estimate only (QA t7-10). Billing never reads it.", 0, 1000);
+    public static readonly ConfigDefinition AiOutputTokenPriceUsdPerMillion = new("Ai", "OutputTokenPriceUsdPerMillion", "10", ConfigValueType.Decimal,
+        "What the AI model provider charges per million output tokens (USD), for the admin portal's AI usage estimate only (QA t7-10). Billing never reads it.", 0, 1000);
+    public static readonly ConfigDefinition AiRetryUnansweredAfterSeconds = new("Ai", "RetryUnansweredAfterSeconds", "120", ConfigValueType.Int,
+        "A provider's repeat of a customer message the AI never answered (nothing sent after it, conversation still in AI mode) asks the AI again once the message is this old; younger repeats are ignored so a run still in progress isn't doubled (QA t10-03).", 30, 3600);
     public static readonly ConfigDefinition BenchmarkGeneratorModel = new("Benchmark", "GeneratorModel", "gpt-4o", ConfigValueType.String,
         "Model that writes the retrieval benchmark's questions.", Pattern: @"^\S+$");
     public static readonly ConfigDefinition IntegrationsOAuthStateLifetimeMinutes = new("Integrations", "OAuthStateLifetimeMinutes", "15", ConfigValueType.Int,
@@ -351,6 +357,9 @@ public static class ConfigDefaults
         AiMemoryExchanges,
         AiTimeoutSeconds,
         AiMaxConcurrentRuns,
+        AiRetryUnansweredAfterSeconds,
+        AiInputTokenPriceUsdPerMillion,
+        AiOutputTokenPriceUsdPerMillion,
         BenchmarkGeneratorModel,
 
         IntegrationsOAuthStateLifetimeMinutes,

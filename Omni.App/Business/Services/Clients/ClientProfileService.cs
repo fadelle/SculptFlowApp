@@ -28,14 +28,17 @@ public class ClientProfileService : IClientProfileService
         if (name.Length == 0) throw new ArgumentException("clients.errors.nameRequired");
         if (name.Length > MaxNameLength) throw new ArgumentException("clients.errors.nameTooLong").WithArgs(MaxNameLength);
 
+        // QA t1-accounts-12: the contact details are checked (format, length, http(s) website) before anything changes.
+        var details = ClientDetailsRules.Clean(request.Phone, request.Email, request.Website, request.Address, request.OperatingHours, request.BookingInfo);
+
         var client = await _clients.GetAsync(clientId, ct) ?? throw new ArgumentException("clients.errors.notFound");
         client.Name = name;
-        client.Phone = request.Phone;
-        client.Email = request.Email;
-        client.Website = request.Website;
-        client.Address = request.Address;
-        client.OperatingHours = request.OperatingHours;
-        client.BookingInfo = request.BookingInfo;
+        client.Phone = details.Phone;
+        client.Email = details.Email;
+        client.Website = details.Website;
+        client.Address = details.Address;
+        client.OperatingHours = details.OperatingHours;
+        client.BookingInfo = details.BookingInfo;
         client.UpdatedAt = DateTimeOffset.UtcNow;
         await _unitOfWork.SaveChangesAsync(ct);
     }

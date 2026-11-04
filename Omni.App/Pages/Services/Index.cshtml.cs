@@ -47,6 +47,9 @@ public class IndexModel : PageModel
     [BindProperty] public string Name { get; set; } = string.Empty;
     [BindProperty] public string? Code { get; set; }
     [BindProperty] public int? DurationMinutes { get; set; }
+    /// <summary>Optional price and its 3-letter currency (QA t5-ops-18).</summary>
+    [BindProperty] public decimal? Price { get; set; }
+    [BindProperty] public string? Currency { get; set; }
     [BindProperty] public string? Description { get; set; }
 
     /// <summary>The popup is open on load (a link asked for it, or a save failed and shows what was posted).</summary>
@@ -71,6 +74,7 @@ public class IndexModel : PageModel
             var service = Services.FirstOrDefault(s => s.Id == id);
             if (service is null) return NotFound();
             (Name, Code, DurationMinutes, Description) = (service.Name, service.Code, service.BookingDuration, service.Description);
+            (Price, Currency) = (service.Price, service.Currency);
             FormOpen = true;
         }
         else
@@ -89,9 +93,9 @@ public class IndexModel : PageModel
         {
             if (Edit is null)
             {
-                await _services.CreateAsync(new CreateServiceRequest(client.Id, Name, Code, Description, DurationMinutes), ct);
+                await _services.CreateAsync(new CreateServiceRequest(client.Id, Name, Code, Description, DurationMinutes, Price, Currency), ct);
             }
-            else if (await _services.UpdateAsync(client.Id, Edit.Value, new UpdateServiceRequest(Name, Code, Description, DurationMinutes), ct) is null)
+            else if (await _services.UpdateAsync(client.Id, Edit.Value, new UpdateServiceRequest(Name, Code, Description, DurationMinutes, Price, Currency), ct) is null)
             {
                 ErrorMessage = _text[NotFoundKey].Value;
                 return RedirectToPage(new { edit = (Guid?)null });

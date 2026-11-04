@@ -53,16 +53,16 @@ else
                     <div class="form-row-contact">
                         <label class="field">
                             <span>@T["businessInfo.details.phone"]</span>
-                            <input type="tel" name="Phone" value="@Model.Phone" class="text-input" placeholder="+961 1 555 123" autocomplete="off" />
+                            <input type="tel" name="Phone" value="@Model.Phone" class="text-input" placeholder="+961 1 555 123" autocomplete="off" maxlength="50" dir="ltr" />
                         </label>
                         <label class="field">
                             <span>@T["auth.email"]</span>
-                            <input type="text" inputmode="email" name="Email" value="@Model.Email" class="text-input" placeholder="@T["businessInfo.details.emailPlaceholder"]" autocomplete="off" />
+                            <input type="text" inputmode="email" name="Email" value="@Model.Email" maxlength="200" dir="ltr" class="text-input" placeholder="@T["businessInfo.details.emailPlaceholder"]" autocomplete="off" />
                         </label>
                         <label class="field">
                             <span>@T["businessInfo.details.website"]</span>
                             <span class="input-with-link">
-                                <input type="text" inputmode="url" name="Website" id="client-website" value="@Model.Website" class="text-input" placeholder="@T["businessInfo.details.websitePlaceholder"]" autocomplete="off" />
+                                <input type="text" inputmode="url" name="Website" id="client-website" value="@Model.Website" maxlength="300" dir="ltr" class="text-input" placeholder="@T["businessInfo.details.websitePlaceholder"]" autocomplete="off" />
                                 <a href="@Model.Website" id="client-website-open" class="au-icon-btn au-icon-btn--bordered" target="_blank" rel="noopener noreferrer" title="@T["businessInfo.details.openWebsite"]" aria-label="@T["businessInfo.details.openWebsite"]" hidden="@string.IsNullOrWhiteSpace(Model.Website)"><span class="au-icon" aria-hidden="true">open_in_new</span></a>
                             </span>
                         </label>
@@ -75,7 +75,7 @@ else
                 <div class="set-section-body">
                     <label class="field">
                         <span>@T["businessInfo.details.address"]</span>
-                        <textarea name="Address" rows="2" class="text-input" placeholder="@T["businessInfo.details.addressPlaceholder"]" dir="auto">@Model.Address</textarea>
+                        <textarea name="Address" rows="2" maxlength="500" class="text-input" placeholder="@T["businessInfo.details.addressPlaceholder"]" dir="auto">@Model.Address</textarea>
                     </label>
                 </div>
             </div>
@@ -85,12 +85,12 @@ else
                 <div class="set-section-body">
                     <label class="field">
                         <span>@T["businessInfo.details.hoursText"]</span>
-                        <textarea name="OperatingHours" rows="2" class="text-input" placeholder="@T["businessInfo.details.hoursTextPlaceholder"]" dir="auto">@Model.OperatingHours</textarea>
+                        <textarea name="OperatingHours" rows="2" maxlength="2000" class="text-input" placeholder="@T["businessInfo.details.hoursTextPlaceholder"]" dir="auto">@Model.OperatingHours</textarea>
                         <small class="text-subtle">@T["businessInfo.details.hoursTextHelp"] <a asp-page="/Settings/BusinessInfo" asp-route-tab="availability">@T["businessInfo.details.hoursTextLink"]</a></small>
                     </label>
                     <label class="field">
                         <span>@T["businessInfo.details.bookingInfo"]</span>
-                        <textarea name="BookingInfo" rows="3" class="text-input" placeholder="@T["businessInfo.details.bookingInfoPlaceholder"]" dir="auto">@Model.BookingInfo</textarea>
+                        <textarea name="BookingInfo" rows="3" maxlength="2000" class="text-input" placeholder="@T["businessInfo.details.bookingInfoPlaceholder"]" dir="auto">@Model.BookingInfo</textarea>
                     </label>
                 </div>
             </div>
@@ -184,7 +184,17 @@ else
                                     <input type="time" name="Days[@i].Start" value="@d.Start" class="text-input avail-time" data-day-start aria-label="@T["businessInfo.hours.opens", DayLabel(d.DayOfWeek)]" />
                                     <span class="text-subtle">@T["businessInfo.hours.to"]</span>
                                     <input type="time" name="Days[@i].End" value="@d.End" class="text-input avail-time" data-day-end aria-label="@T["businessInfo.hours.closes", DayLabel(d.DayOfWeek)]" />
+                                    @* A second window the same day, e.g. after a lunch break (QA t5-ops-18). *@
+                                    <span class="week-second" data-day-second hidden="@(d.Start2 is null)">
+                                        <span class="text-subtle">@T["businessInfo.hours.and"]</span>
+                                        <input type="time" name="Days[@i].Start2" value="@d.Start2" class="text-input avail-time" data-day-start2 aria-label="@T["businessInfo.hours.opensAgain", DayLabel(d.DayOfWeek)]" />
+                                        <span class="text-subtle">@T["businessInfo.hours.to"]</span>
+                                        <input type="time" name="Days[@i].End2" value="@d.End2" class="text-input avail-time" data-day-end2 aria-label="@T["businessInfo.hours.closesAgain", DayLabel(d.DayOfWeek)]" />
+                                        <button type="button" class="au-icon-btn au-icon-btn--xs" data-day-second-remove aria-label="@T["businessInfo.hours.removeSecond"]" title="@T["businessInfo.hours.removeSecond"]"><span class="au-icon" aria-hidden="true">close</span></button>
+                                    </span>
+                                    <button type="button" class="au-btn au-btn--text au-btn--sm" data-day-second-add hidden="@(d.Start2 is not null)"><span class="au-icon" aria-hidden="true">add</span>@T["businessInfo.hours.addSecond"]</button>
                                     <span class="field-err" data-day-err hidden>@T["businessInfo.hours.endAfterStart"]</span>
+                                    <span class="field-err" data-day-err2 hidden>@T["businessInfo.hours.secondAfterFirst"]</span>
                                 </span>
                                 <span class="text-subtle week-closed">@T["businessInfo.hours.closed"]</span>
                             </div>

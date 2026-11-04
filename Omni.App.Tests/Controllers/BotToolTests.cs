@@ -124,7 +124,7 @@ public class BotTestControllerTests
         Assert.IsType<NotFoundResult>((await Sut().Get(_botId, Guid.NewGuid(), default)).Result);
 
         Assert.IsType<NoContentResult>(await Sut().Reset(_botId, session.Id, default));
-        _tests.Verify(t => t.ResetAsync(_clientId, session.Id, It.IsAny<CancellationToken>()), Times.Once);
+        _tests.Verify(t => t.ResetAsync(_clientId, _botId, session.Id, It.IsAny<CancellationToken>()), Times.Once);
 
         _context.Setup(c => c.GetClientIdAsync(It.IsAny<CancellationToken>())).ReturnsAsync((Guid?)null);
         Assert.IsType<ForbidResult>((await Sut().Send(_botId, new SendBotTestMessageRequest(null, "Hi"), default)).Result);

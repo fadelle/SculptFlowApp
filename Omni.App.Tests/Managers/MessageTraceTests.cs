@@ -339,6 +339,37 @@ public class MessageTraceAdminTests
         return new MessageTraceAdminService(_repo.Object, _config.Object, new ManualTimeProvider(T0.AddHours(1)));
     }
 
+    [Fact]
+    public async Task Ai_usage_estimates_the_model_cost_from_the_token_prices_and_puts_the_busiest_client_first()
+    {
+        // QA t7-10: the model cost the platform pays wasn't visible anywhere.
+        var (busy, quiet) = (Guid.NewGuid(), Guid.NewGuid());
+        _config.SetupGet(c => c.AiInputTokenPriceUsdPerMillion).Returns(1.25m);
+        _config.SetupGet(c => c.AiOutputTokenPriceUsdPerMillion).Returns(10m);
+        _repo.Setup(r => r.AiUsageReadOnlyAsync(T0.AddHours(1).AddDays(-7), null, It.IsAny<CancellationToken>())).ReturnsAsync(
+        [
+            new AiUsageCounts { ClientId = quiet, ClientName = "Quiet", Runs = 1, ModelCalls = 1, InputTokens = 100, OutputTokens = 10 },
+            new AiUsageCounts { ClientId = busy, ClientName = "Busy", Runs = 2, FailedRuns = 1, ModelCalls = 3, InputTokens = 1500, OutputTokens = 300 },
+        ]);
+        _repo.Setup(r => r.AiReplyRevenueReadOnlyAsync(It.IsAny<DateTimeOffset>(), null, It.IsAny<CancellationToken>())).ReturnsAsync([new AiReplyRevenue(busy, 0.02m, "USD")]);
+
+        var report = await Sut().AiUsageAsync(7, null, default);
+
+        Assert.Equal(["Busy", "Quiet"], report.Rows.Select(r => r.ClientName));
+        Assert.Equal((0.0049m, 0.02m, "USD"), (report.Rows[0].EstimatedModelCostUsd, report.Rows[0].AiReplyRevenue, report.Rows[0].RevenueCurrency));
+        Assert.Equal((0m, (string?)null), (report.Rows[1].AiReplyRevenue, report.Rows[1].RevenueCurrency));
+        Assert.Equal((1.25m, 10m, 14), (report.InputTokenPriceUsdPerMillion, report.OutputTokenPriceUsdPerMillion, report.TraceRetentionDays));
+    }
+
+    [Fact]
+    public async Task No_answer_looks_back_the_hours_asked_and_waits_the_minutes_given()
+    {
+        _repo.Setup(r => r.ListUnansweredReadOnlyAsync(It.IsAny<DateTimeOffset>(), It.IsAny<DateTimeOffset>(), _clientId, 0, 50, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(([], 0));
+        var page = await Sut().UnansweredAsync(24, 99999, _clientId, 1, 50, default);
+        Assert.Equal((T0.AddHours(1).AddHours(-24), T0.AddHours(1).AddMinutes(-1440), 1440), (page.From, page.Before, page.MinutesWithoutAnswer));
+    }
+
     private TraceStepRow Step(int second, string step, string outcome = TraceOutcomes.Ok, Guid? messageId = null, string detail = "{}") =>
         new(second, Trace, T0.AddSeconds(second), step, outcome, null, step == TraceSteps.WebhookReceived ? null : _clientId,
             step == TraceSteps.WebhookReceived ? null : _conversationId, messageId, null, "whatsapp", null, detail);

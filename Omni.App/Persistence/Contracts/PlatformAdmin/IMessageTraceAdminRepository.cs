@@ -31,6 +31,22 @@ public interface IMessageTraceAdminRepository
     /// <summary>Matching traces, latest activity first (<paramref name="skip"/>, <paramref name="take"/>), and how many match.</summary>
     Task<(List<TraceSummaryRow> Rows, int Total)> ListReadOnlyAsync(MessageTraceFilter filter, int skip, int take, CancellationToken ct = default);
 
+    /// <summary>What each of these traces came to (TraceResults with its reason), from its steps (QA t7-10).</summary>
+    Task<Dictionary<string, (string Outcome, string? Reason)>> OutcomesReadOnlyAsync(IReadOnlyCollection<string> traceIds, DateTimeOffset now,
+        CancellationToken ct = default);
+
+    /// <summary>Conversations whose last message is the customer's, sent between <paramref name="from"/> and
+    /// <paramref name="before"/>, not closed, oldest wait first; with that message and its trace (QA t7-10).</summary>
+    Task<(List<UnansweredRow> Rows, int Total)> ListUnansweredReadOnlyAsync(DateTimeOffset from, DateTimeOffset before, Guid? clientId, int skip,
+        int take, CancellationToken ct = default);
+
+    /// <summary>Bot runs, failed runs, model calls and tokens per client from <paramref name="from"/> (the trace's bot.run_started,
+    /// bot.run_failed and bot.model_called steps).</summary>
+    Task<List<AiUsageCounts>> AiUsageReadOnlyAsync(DateTimeOffset from, Guid? clientId, CancellationToken ct = default);
+
+    /// <summary>Settled ai_reply charges after refunds per client from <paramref name="from"/>.</summary>
+    Task<List<AiReplyRevenue>> AiReplyRevenueReadOnlyAsync(DateTimeOffset from, Guid? clientId, CancellationToken ct = default);
+
     /// <summary>Traces with a step at or after <paramref name="from"/> and how many had a failed step or a saved error.</summary>
     Task<TraceCounts> CountSinceReadOnlyAsync(DateTimeOffset from, CancellationToken ct = default);
 }

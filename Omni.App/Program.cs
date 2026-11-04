@@ -524,6 +524,9 @@ app.UseRouting();
 // After routing (the matched route template names the timing), before everything that can be slow or fail.
 app.UseMiddleware<RequestTimingMiddleware>();
 
+// An unhandled error on a JSON API answers a JSON 500 with the trace id, never the HTML error page (QA t1-accounts-02).
+app.UseWhen(ctx => ctx.Request.Path.StartsWithSegments("/api"), branch => branch.UseMiddleware<ApiExceptionMiddleware>());
+
 app.UseRateLimiter();
 
 app.UseAuthentication();

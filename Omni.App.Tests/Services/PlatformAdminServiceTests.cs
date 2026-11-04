@@ -217,7 +217,7 @@ public class ClientAdminServiceTests
         await Assert.ThrowsAsync<ArgumentException>(() => Sut().UpdateAccountAiAsync(id, account, null!, default));
     }
 
-    private static ClientUpdate Update(string name = " Glow ", string tz = "Asia/Beirut") => new(name, " 961 ", " ", "https://x", "lb", tz, " Street ", null, "info");
+    private static ClientUpdate Update(string name = " Glow ", string tz = "Asia/Beirut") => new(name, " +961 1 555 123 ", " ", "https://x.lb", "lb", tz, " Street ", null, "info");
 
     [Fact]
     public async Task Update_trims_cleans_and_uppercases_the_country()
@@ -226,7 +226,7 @@ public class ClientAdminServiceTests
         _repo.Setup(r => r.GetForUpdateAsync(client.Id, It.IsAny<CancellationToken>())).ReturnsAsync(client);
         var change = await Sut().UpdateAsync(client.Id, Update(), default);
         Assert.Equal(client.Id, change.ClientId);
-        Assert.Equal(("Glow", "961", null, "LB", "Asia/Beirut", "Street"), (client.Name, client.Phone, client.Email, client.CountryCode, client.Timezone, client.Address));
+        Assert.Equal(("Glow", "+961 1 555 123", null, "LB", "Asia/Beirut", "Street"), (client.Name, client.Phone, client.Email, client.CountryCode, client.Timezone, client.Address));
         await Sut().UpdateAsync(client.Id, Update(tz: " "), default);
         Assert.Equal("UTC", client.Timezone);
     }
@@ -237,6 +237,8 @@ public class ClientAdminServiceTests
         await Assert.ThrowsAsync<ArgumentException>(() => Sut().UpdateAsync(Guid.NewGuid(), Update(name: " "), default));
         await Assert.ThrowsAsync<ArgumentException>(() => Sut().UpdateAsync(Guid.NewGuid(), Update(tz: "Mars/Base"), default));
         await Assert.ThrowsAsync<KeyNotFoundException>(() => Sut().UpdateAsync(Guid.NewGuid(), Update(), default));
+        // QA t1-accounts-12: the same contact-detail rules as the client's own Business Info page.
+        Assert.Equal("clients.errors.invalidWebsite", (await Assert.ThrowsAsync<ArgumentException>(() => Sut().UpdateAsync(Guid.NewGuid(), Update() with { Website = "javascript:alert(1)" }, default))).Message);
     }
 
     [Fact]

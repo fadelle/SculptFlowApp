@@ -52,6 +52,7 @@ else
                             <th>@T["services.table.service"]</th>
                             <th>@T["services.table.code"]</th>
                             <th>@T["services.table.booking"]</th>
+                            <th>@T["services.table.price"]</th>
                             <th>@T["services.table.status"]</th>
                             <th><span class="au-sr-only">@T["services.table.actions"]</span></th>
                         </tr>
@@ -89,10 +90,11 @@ else
                                         <span class="text-warn-soft">@T["services.notSet"]</span>
                                     }
                                 </td>
+                                <td data-label="@T["services.table.price"]" dir="ltr">@(p.Price is { } price ? price.Display("#,0.##") + " " + p.Currency : "—")</td>
                                 <td data-label="@T["services.table.status"]"><span class="badge @(p.IsActive ? "badge-green" : "badge-gray")">@(p.IsActive ? T["services.active"] : T["services.inactive"])</span></td>
                                 <td class="row-actions">
                                     <a href="/Services?edit=@p.Id" class="au-btn au-btn--outlined au-btn--sm" data-modal-open="svc-overlay" data-svc-edit
-                                       data-svc-id="@p.Id" data-svc-name="@p.Name" data-svc-code="@p.Code" data-svc-duration="@p.BookingDuration" data-svc-desc="@p.Description">@T["common.edit"]</a>
+                                       data-svc-id="@p.Id" data-svc-name="@p.Name" data-svc-code="@p.Code" data-svc-duration="@p.BookingDuration" data-svc-price="@p.Price?.ToString(System.Globalization.CultureInfo.InvariantCulture)" data-svc-currency="@p.Currency" data-svc-desc="@p.Description">@T["common.edit"]</a>
                                     <form method="post" asp-page-handler="Toggle" class="inline-form">
                                         <input type="hidden" name="id" value="@p.Id" />
                                         <input type="hidden" name="active" value="@((!p.IsActive).ToString().ToLowerInvariant())" />
@@ -101,7 +103,7 @@ else
                                 </td>
                             </tr>
                         }
-                        <tr class="empty-row" id="svc-no-match" hidden><td colspan="5">@T["services.noMatch"]</td></tr>
+                        <tr class="empty-row" id="svc-no-match" hidden><td colspan="6">@T["services.noMatch"]</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -119,7 +121,7 @@ else
             {
                 <partial name="_Messages" model="new PageMessagesModel(null, Model.FormError)" />
             }
-            @* #svc-id, #svc-name, #svc-code, #svc-duration, #svc-desc, #svc-desc-count and #svc-submit are read by services-page.js. *@
+            @* #svc-id, #svc-name, #svc-code, #svc-duration, #svc-price, #svc-currency, #svc-desc, #svc-desc-count and #svc-submit are read by services-page.js. *@
             <form method="post" asp-page-handler="Save" id="svc-form">
                 <input type="hidden" name="Edit" id="svc-id" value="@Model.Edit" />
                 <div class="au-form-grid">
@@ -130,6 +132,15 @@ else
                     <div class="au-form-field">
                         <label class="au-form-label" for="svc-duration">@T["services.edit.duration"]</label>
                         <input type="number" name="DurationMinutes" id="svc-duration" value="@Model.DurationMinutes" class="au-input" min="1" max="480" placeholder="@T["services.edit.durationPlaceholder"]" />
+                    </div>
+                    <div class="au-form-field">
+                        <label class="au-form-label" for="svc-price">@T["services.edit.price"] <span class="opt">@T["common.optional"]</span></label>
+                        <input type="number" name="Price" id="svc-price" value="@Model.Price?.ToString(System.Globalization.CultureInfo.InvariantCulture)" class="au-input" min="0" max="10000000" step="0.01" dir="ltr" />
+                        <span class="au-help">@T["services.edit.priceHelp"]</span>
+                    </div>
+                    <div class="au-form-field">
+                        <label class="au-form-label" for="svc-currency">@T["services.edit.currency"]</label>
+                        <input type="text" name="Currency" id="svc-currency" value="@Model.Currency" class="au-input" maxlength="3" dir="ltr" autocomplete="off" placeholder="USD" />
                     </div>
                     <div class="au-form-field au-span-2">
                         <label class="au-form-label" for="svc-desc">@T["services.edit.description"] <span class="opt">@T["common.optional"]</span></label>

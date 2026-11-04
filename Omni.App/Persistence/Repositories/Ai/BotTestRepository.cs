@@ -30,6 +30,6 @@ public class BotTestRepository : IBotTestRepository
     public Task<int> DeleteSessionsOlderThanAsync(DateTimeOffset before, CancellationToken ct = default) =>
         _db.BotTestSessions.Where(s => s.UpdatedAt < before).ExecuteDeleteAsync(ct);
 
-    public Task<int> DeleteSessionAsync(Guid clientId, Guid sessionId, CancellationToken ct = default) =>
-        _db.BotTestSessions.Where(s => s.ClientId == clientId && s.Id == sessionId).ExecuteDeleteAsync(ct);
+    public Task<int> DeleteSessionAsync(Guid clientId, Guid botId, Guid sessionId, CancellationToken ct = default) =>
+        _db.BotTestSessions.Where(s => s.ClientId == clientId && s.BotId == botId && s.Id == sessionId).ExecuteDeleteAsync(ct);
 }

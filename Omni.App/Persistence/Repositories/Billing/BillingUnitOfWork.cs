@@ -70,6 +70,10 @@ public sealed class BillingUnitOfWork : IBillingUnitOfWork
         {
             throw new OverlappingRecordException(ex);
         }
+        catch (DbUpdateException ex) when (DbErrors.AsInvalidRecord(ex) is { } invalid)
+        {
+            throw invalid;
+        }
     }
 
     public ValueTask DisposeAsync() => _db.DisposeAsync();

@@ -7,4 +7,7 @@ public class AvailabilityDayInput
     public bool IsOpen { get; set; }
     public string? Start { get; set; }
     public string? End { get; set; }
+    /// <summary>Optional second window of the day (QA t5-ops-18); both or neither.</summary>
+    public string? Start2 { get; set; }
+    public string? End2 { get; set; }
 }

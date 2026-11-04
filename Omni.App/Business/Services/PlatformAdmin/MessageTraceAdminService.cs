@@ -91,6 +91,40 @@ public partial class MessageTraceAdminService : IMessageTraceAdminService
         return new MessageTraceSummary(hours, from, _config.MessageTraceEnabled, counts.Traces, counts.FailedTraces, counts.LastFailedAt);
     }
 
+    public async Task<UnansweredPage> UnansweredAsync(int hours, int minutes, Guid? clientId, int page, int pageSize, CancellationToken ct)
+    {
+        hours = Math.Clamp(hours, 1, MessageTraceLimits.MaxReportHours);
+        minutes = Math.Clamp(minutes, 1, 24 * 60);
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 1, MessageTraceLimits.MaxPageSize);
+        var now = _time.GetUtcNow();
+        var from = now.AddHours(-hours);
+        var before = now.AddMinutes(-minutes);
+        var (rows, total) = await _traces.ListUnansweredReadOnlyAsync(from, before, clientId, (page - 1) * pageSize, pageSize, ct);
+        return new UnansweredPage(from, before, minutes, page, pageSize, total, rows);
+    }
+
+    public async Task<AiUsageReport> AiUsageAsync(int days, Guid? clientId, CancellationToken ct)
+    {
+        days = Math.Clamp(days, 1, 90);
+        var to = _time.GetUtcNow();
+        var from = to.AddDays(-days);
+        var inputPrice = _config.AiInputTokenPriceUsdPerMillion;
+        var outputPrice = _config.AiOutputTokenPriceUsdPerMillion;
+        var usage = await _traces.AiUsageReadOnlyAsync(from, clientId, ct);
+        var revenue = (await _traces.AiReplyRevenueReadOnlyAsync(from, clientId, ct)).GroupBy(r => r.ClientId).ToDictionary(g => g.Key, g => g.First());
+        var rows = usage.Select(u =>
+            {
+                revenue.TryGetValue(u.ClientId, out var paid);
+                var cost = Math.Round((u.InputTokens * inputPrice + u.OutputTokens * outputPrice) / 1_000_000m, 4);
+                return new AiUsageRow(u.ClientId, u.ClientName, u.Runs, u.FailedRuns, u.ModelCalls, u.InputTokens, u.OutputTokens, cost,
+                    paid?.Amount ?? 0, paid?.Currency);
+            })
+            .OrderByDescending(r => r.ModelCalls).ThenBy(r => r.ClientName)
+            .ToList();
+        return new AiUsageReport(from, to, inputPrice, outputPrice, _config.MessageTraceRetentionDays, rows);
+    }
+
     /// <summary>A trace id in its stored form (32 lower-case hex characters), or null when it isn't one.</summary>
     private static string? Normalize(string? value)
     {

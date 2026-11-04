@@ -284,6 +284,15 @@ public interface IConfigManager
     /// <summary>Most bot runs (different conversations) at the same time; one conversation always runs one message at a time. Default 4.</summary>
     int AiMaxConcurrentRuns { get; }
 
+    /// <summary>A repeated, never-answered customer message asks the AI again once it is this old (QA t10-03). Default 120.</summary>
+    int AiRetryUnansweredAfterSeconds { get; }
+
+    /// <summary>Model provider price per million input tokens (USD), for the AI usage estimate (QA t7-10). Default 1.25.</summary>
+    decimal AiInputTokenPriceUsdPerMillion { get; }
+
+    /// <summary>Model provider price per million output tokens (USD), for the AI usage estimate (QA t7-10). Default 10.</summary>
+    decimal AiOutputTokenPriceUsdPerMillion { get; }
+
     /// <summary>Model that writes the retrieval benchmark's questions. Default gpt-4o.</summary>
     string BenchmarkGeneratorModel { get; }
 

@@ -3,7 +3,9 @@ using Microsoft.AspNetCore.Mvc;
 using Omni.App.Business.Contracts.Engines.WhatsApp;
 using Omni.App.Business.Contracts.HttpClients.N8n;
 using Omni.App.Business.Contracts.Managers;
+using Omni.App.Common.Helpers;
 using Omni.App.Common.Statics;
+using Omni.App.Entities.Responses.WhatsApp;
 using Omni.App.Entities.Dtos.Monitoring;
 using Omni.App.Entities.Dtos.Ai;
 
@@ -106,17 +108,37 @@ public class WhatsAppWebhookController : ControllerBase
             return BadRequest();
         }
 
-        var results = await _webhookProcessor.ProcessAllAsync(rawBody, ct);
+        // Once the signature is valid Meta always gets its 200 (QA t10-03): a failed event is skipped and traced by the processor,
+        // and a delivery Meta retried would only fail the same way. Each saved customer message still gets its AI run.
+        IReadOnlyList<WhatsAppWebhookResponse> results;
+        try
+        {
+            results = await _webhookProcessor.ProcessAllAsync(rawBody, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogError(ex, "WhatsApp webhook: the delivery couldn't be processed.");
+            _tracer.Step(TraceSteps.WebhookEventFailed, TraceOutcomes.Failed, new TraceIds(Channel: Channel), detail: new { kind = "delivery", error = TraceText.Error(ex) });
+            return Ok();
+        }
         var aiTriggers = results
             .Where(r => r.ShouldRunAi && r.ClientId.HasValue && r.ConversationId.HasValue)
             .GroupBy(r => r.ConversationId!.Value)
             .Select(g => g.Last());
         foreach (var result in aiTriggers)
         {
-            await _aiTrigger.NotifyAsync(new AiTriggerPayload(
-                result.ClientId!.Value, result.ConversationId!.Value, result.ContactId, result.MessageId,
-                Channel: Channel, MessageType: result.MessageType, MessageText: result.Content,
-                SelectedValue: result.SelectedValue), ct);
+            try
+            {
+                await _aiTrigger.NotifyAsync(new AiTriggerPayload(
+                    result.ClientId!.Value, result.ConversationId!.Value, result.ContactId, result.MessageId,
+                    Channel: Channel, MessageType: result.MessageType, MessageText: result.Content,
+                    SelectedValue: result.SelectedValue), ct);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // One conversation's trigger failing doesn't stop the others; its message stays unanswered, so a repeat asks again.
+                _logger.LogError(ex, "WhatsApp webhook: the AI trigger for conversation {ConversationId} failed.", result.ConversationId);
+            }
         }
 
         // Meta only needs a fast 200 acknowledgement — the response body isn't inspected.

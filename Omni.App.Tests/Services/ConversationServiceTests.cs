@@ -129,9 +129,10 @@ public class ConversationServiceTests
     }
 
     [Fact]
-    public async Task GetMessages_is_empty_for_a_foreign_conversation()
+    public async Task GetMessages_of_a_foreign_conversation_is_not_found()
     {
-        Assert.Empty(await Sut().GetMessagesAsync(_clientId, Guid.NewGuid()));
+        // QA t1-accounts-17: was 200 with an empty list.
+        Assert.Equal("inbox.errors.conversationNotFound", (await Assert.ThrowsAsync<KeyNotFoundException>(() => Sut().GetMessagesAsync(_clientId, Guid.NewGuid()))).Message);
         var c = Conv();
         _conversations.Setup(r => r.ExistsAsync(_clientId, c.Id, It.IsAny<CancellationToken>())).ReturnsAsync(true);
         _messages.Setup(m => m.ListForConversationAsync(c.Id, It.IsAny<CancellationToken>())).ReturnsAsync(new List<Message> { new() { Id = Guid.NewGuid() } });

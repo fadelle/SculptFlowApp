@@ -15,6 +15,26 @@ public class TelegramUpdateParserTests
         + "\",\"first_name\":\"ChatFirst\"}" + from + "," + extra + "}}";
 
     [Fact]
+    public void Values_longer_than_their_columns_are_cut_and_unreadable_parts_are_counted()
+    {
+        // QA t10-03: a 257-character template name, a 300-character profile name or a long wa_id failed the save.
+        var json = $$$"""
+            {"entry":[1,{"id":"W1","changes":[{"field":"messages","value":{"metadata":{"phone_number_id":"P1"},
+              "contacts":[{"wa_id":"{{{new string('9', 60)}}}","profile":{"name":"{{{new string('N', 300)}}}"}}],
+              "messages":[{"from":"961","id":"{{{new string('w', 250)}}}","type":"{{{new string('x', 40)}}}"}]}},
+              {"field":"message_template_status_update","value":{"message_template_name":"{{{new string('t', 257)}}}","message_template_language":"en_US_very_long","event":"APPROVED"}}]}]}
+            """;
+
+        var events = MetaWebhookParser.Parse(JsonDocument.Parse(json).RootElement, out var unreadable);
+
+        Assert.Equal(1, unreadable);
+        var message = events.Single(e => e.Kind == ParsedMetaEventKind.CustomerMessage);
+        Assert.Equal((50, 200, 200, 30), (message.CustomerWaId!.Length, message.CustomerName!.Length, message.ExternalMessageId!.Length, message.MessageType!.Length));
+        var template = events.Single(e => e.Kind == ParsedMetaEventKind.TemplateStatus);
+        Assert.Equal((200, 10), (template.TemplateName!.Length, template.TemplateLanguage!.Length));
+    }
+
+    [Fact]
     public void Text_message_is_parsed_with_sender_details()
     {
         var u = TelegramUpdateParser.Parse(J(Msg("\"text\":\"hello\"")));

@@ -47,6 +47,8 @@
       name.value = d ? d.svcName || '' : '';
       code.value = d ? d.svcCode || '' : '';
       document.getElementById('svc-duration').value = d ? d.svcDuration || '' : '';
+      document.getElementById('svc-price').value = d ? d.svcPrice || '' : '';
+      document.getElementById('svc-currency').value = d ? d.svcCurrency || '' : '';
       desc.value = d ? d.svcDesc || '' : '';
       title.textContent = d ? title.dataset.titleEdit : title.dataset.titleAdd;
       submit.textContent = d ? submit.dataset.labelEdit : submit.dataset.labelAdd;

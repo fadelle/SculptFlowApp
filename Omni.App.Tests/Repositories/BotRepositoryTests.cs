@@ -39,6 +39,28 @@ public class BotRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixture)
             Assert.Empty(await repo.ListForClientReadOnlyAsync(other.Id));
         }
 
+        // QA t4-ai-01: a new source added to the TRACKED bot (the editor's save) is inserted, not sent as an UPDATE.
+        var second = new KnowledgeDocument { Id = Guid.NewGuid(), ClientId = c.Id, Title = "Hours", Content = "…", CreatedAt = now, UpdatedAt = now };
+        await SeedAsync(second);
+        await using (var db = NewContext())
+        {
+            var repo = new BotRepository(db);
+            var tracked = (await repo.GetAsync(c.Id, bot.Id))!;
+            var added = new BotKnowledgeSource { Id = Guid.NewGuid(), BotId = bot.Id, KnowledgeDocumentId = second.Id };
+            tracked.KnowledgeSources.Add(added);
+            repo.AddSource(added);
+            await db.SaveChangesAsync();
+        }
+        await using (var db = NewContext())
+        {
+            var read = (await new BotRepository(db).GetAsync(c.Id, bot.Id))!;
+            Assert.Equal(new[] { document.Id, second.Id }.Order(), read.KnowledgeSources.Select(s => s.KnowledgeDocumentId!.Value).Order());
+            var extra = read.KnowledgeSources.Single(s => s.KnowledgeDocumentId == second.Id);
+            read.KnowledgeSources.Remove(extra);
+            new BotRepository(db).RemoveSource(extra);
+            await db.SaveChangesAsync();
+        }
+
         // A source row must name exactly one kind of source.
         await using (var db = NewContext())
         {
@@ -99,8 +121,9 @@ public class BotRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixture)
             Assert.True((await repo.GetSessionAsync(c.Id, fresh.Id))!.HandedOff);
             Assert.True(await repo.DeleteSessionsOlderThanAsync(now.AddDays(-1)) >= 1);
             Assert.Null(await repo.GetSessionAsync(c.Id, stale.Id));
-            Assert.Equal(0, await repo.DeleteSessionAsync(Guid.NewGuid(), fresh.Id)); // another client's id deletes nothing
-            Assert.Equal(1, await repo.DeleteSessionAsync(c.Id, fresh.Id));
+            Assert.Equal(0, await repo.DeleteSessionAsync(Guid.NewGuid(), fresh.BotId, fresh.Id)); // another client's id deletes nothing
+            Assert.Equal(0, await repo.DeleteSessionAsync(c.Id, Guid.NewGuid(), fresh.Id));       // another bot's id deletes nothing (QA t1-accounts-17)
+            Assert.Equal(1, await repo.DeleteSessionAsync(c.Id, fresh.BotId, fresh.Id));
             Assert.Equal(0, await db.BotTestMessages.CountAsync(m => m.SessionId == fresh.Id)); // lines go with their session
         }
     }

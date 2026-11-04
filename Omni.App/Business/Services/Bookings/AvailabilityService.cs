@@ -1,3 +1,4 @@
+using Omni.App.Common.Enums;
 using Omni.App.Business.Contracts.Managers;
 using Omni.App.Business.Contracts.Services.Bookings;
 using Omni.App.Common.Statics;
@@ -132,17 +133,17 @@ public class AvailabilityService : IAvailabilityService
     {
         var ctx = await LoadAsync(clientId, ct);
         var fallbackEnd = end ?? start.AddMinutes(DefaultDurationMinutes);
-        if (ctx is null) return new SlotCheck("Client not found.", fallbackEnd);
-        if (!ctx.Configured) return new SlotCheck("This client hasn't set up its booking availability yet.", fallbackEnd);
+        if (ctx is null) return new SlotCheck("Client not found.", fallbackEnd, SlotCheckReason.NotConfigured);
+        if (!ctx.Configured) return new SlotCheck("This client hasn't set up its booking availability yet.", fallbackEnd, SlotCheckReason.NotConfigured);
 
         var duration = await ResolveDurationAsync(clientId, serviceId, ctx.Settings.DefaultBookingDurationMinutes, ct);
         var slotEnd = end ?? start.AddMinutes(duration);
-        if (slotEnd <= start) return new SlotCheck("The booking must end after it starts.", slotEnd);
+        if (slotEnd <= start) return new SlotCheck("The booking must end after it starts.", slotEnd, SlotCheckReason.EndBeforeStart);
 
         var nowUtc = DateTimeOffset.UtcNow;
         if (start < nowUtc.AddMinutes(ctx.Settings.MinimumBookingNoticeMinutes))
         {
-            return new SlotCheck("That time is too soon - it is inside the client's minimum booking notice.", slotEnd);
+            return new SlotCheck("That time is too soon - it is inside the client's minimum booking notice.", slotEnd, start < nowUtc ? SlotCheckReason.Past : SlotCheckReason.Notice);
         }
 
         var startLocal = TimeZoneInfo.ConvertTime(start, ctx.Tz).DateTime;
@@ -151,22 +152,33 @@ public class AvailabilityService : IAvailabilityService
         var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(nowUtc, ctx.Tz).DateTime);
         if (date > today.AddDays(ctx.Settings.MaximumAdvanceBookingDays))
         {
-            return new SlotCheck($"Bookings can only be made up to {ctx.Settings.MaximumAdvanceBookingDays} days ahead.", slotEnd);
+            return new SlotCheck($"Bookings can only be made up to {ctx.Settings.MaximumAdvanceBookingDays} days ahead.", slotEnd, SlotCheckReason.Horizon);
         }
 
         await ctx.LoadExceptionsAsync(_availability, clientId, date, date, ct);
         var inWindow = ctx.Windows(date).Any(w =>
             DateOnly.FromDateTime(endLocal) == date
             && TimeOnly.FromDateTime(startLocal) >= w.Start && TimeOnly.FromDateTime(endLocal) <= w.End);
-        if (!inWindow) return new SlotCheck("The client is not open for a booking at that time.", slotEnd);
+        if (!inWindow) return new SlotCheck("The client is not open for a booking at that time.", slotEnd, SlotCheckReason.Closed);
 
         var busy = await LoadBusyAsync(clientId, ctx, date, date, ct, excludeBookingId);
         if (IsBlocked(busy, ctx.Settings.BufferMinutes, start, slotEnd, out _))
         {
-            return new SlotCheck("That time is no longer available - it overlaps another booking.", slotEnd);
+            return new SlotCheck("That time is no longer available - it overlaps another booking.", slotEnd, SlotCheckReason.Overlap);
         }
 
         return new SlotCheck(null, slotEnd);
+    }
+
+    public async Task<bool> OverlapsBookingAsync(Guid clientId, DateTimeOffset start, DateTimeOffset end, Guid? excludeBookingId = null,
+        CancellationToken ct = default)
+    {
+        var ctx = await LoadAsync(clientId, ct);
+        var defaultMinutes = ctx?.Settings.DefaultBookingDurationMinutes ?? DefaultDurationMinutes;
+        // A booking that started up to a day before can still run into this one (a booking is at most a day long).
+        var rows = await _bookings.ListBusyAsync(clientId, start.AddDays(-1).ToUniversalTime(), end.ToUniversalTime(), excludeBookingId, ct);
+        return rows.Any(b => start < (b.ScheduledEnd ?? b.ScheduledStart.AddMinutes(b.ServiceMinutes is > 0 ? b.ServiceMinutes.Value : defaultMinutes))
+            && end > b.ScheduledStart);
     }
 
     // ------------------------------------------------------------------ settings (Business Info → Availability)
@@ -179,10 +191,12 @@ public class AvailabilityService : IAvailabilityService
 
         var days = Enumerable.Range(0, 7).Select(dow =>
         {
-            var rule = ctx.AllRules.FirstOrDefault(r => r.DayOfWeek == dow);
-            return rule is null
-                ? new DayRuleDto(dow, false, "09:00", "17:00")
-                : new DayRuleDto(dow, rule.IsOpen, Fmt(rule.StartTime), Fmt(rule.EndTime));
+            var rules = ctx.AllRules.Where(r => r.DayOfWeek == dow).OrderBy(r => r.StartTime).ToList();
+            if (rules.Count == 0) return new DayRuleDto(dow, false, "09:00", "17:00");
+            var first = rules[0];
+            var second = first.IsOpen ? rules.Skip(1).FirstOrDefault(r => r.IsOpen) : null;
+            return new DayRuleDto(dow, first.IsOpen, Fmt(first.StartTime), Fmt(first.EndTime),
+                second is null ? null : Fmt(second.StartTime), second is null ? null : Fmt(second.EndTime));
         }).ToList();
 
         var exceptions = await _availability.ListExceptionsFromAsync(clientId, today, ct);
@@ -213,23 +227,37 @@ public class AvailabilityService : IAvailabilityService
         if (bookingRules.MinimumNoticeMinutes is < 0 or > 60 * 24 * 30) throw new ArgumentException("availability.errors.noticeRange");
         if (bookingRules.MaxAdvanceDays is < 1 or > 365) throw new ArgumentException("availability.errors.advanceRange");
 
-        var parsed = new List<(int Dow, bool Open, TimeOnly Start, TimeOnly End)>();
+        // Each day: one window, or two when it has a second one after the first (QA t5-ops-18). A closed day keeps one row.
+        var parsed = new List<(int Dow, bool Open, List<(TimeOnly Start, TimeOnly End)> Windows)>();
         foreach (var d in days)
         {
             if (d.DayOfWeek is < 0 or > 6) throw new ArgumentException("availability.errors.invalidDay");
             var okStart = TimeOnly.TryParse(d.Start, out var s);
             var okEnd = TimeOnly.TryParse(d.End, out var e);
+            var windows = new List<(TimeOnly, TimeOnly)>();
             if (d.IsOpen)
             {
                 var name = TextArg.Of("days." + ((DayOfWeek)d.DayOfWeek).ToString().ToLowerInvariant());
                 if (!okStart || !okEnd) throw new ArgumentException("availability.errors.dayTimesRequired").WithArgs(name);
                 if (e <= s) throw new ArgumentException("availability.errors.dayEndBeforeStart").WithArgs(name);
+                windows.Add((s, e));
+                var hasStart2 = !string.IsNullOrWhiteSpace(d.Start2);
+                var hasEnd2 = !string.IsNullOrWhiteSpace(d.End2);
+                if (hasStart2 || hasEnd2)
+                {
+                    if (!TimeOnly.TryParse(d.Start2, out var s2) || !TimeOnly.TryParse(d.End2, out var e2))
+                        throw new ArgumentException("availability.errors.secondWindowIncomplete").WithArgs(name);
+                    if (e2 <= s2) throw new ArgumentException("availability.errors.dayEndBeforeStart").WithArgs(name);
+                    if (s2 < e) throw new ArgumentException("availability.errors.secondWindowOrder").WithArgs(name);
+                    windows.Add((s2, e2));
+                }
             }
-            else if (!okStart || !okEnd || e <= s)
+            else
             {
-                s = new TimeOnly(9, 0); e = new TimeOnly(17, 0); // a closed day still stores a valid window
+                // A closed day still stores a valid window (the times are kept for when it opens again).
+                windows.Add(okStart && okEnd && e > s ? (s, e) : (new TimeOnly(9, 0), new TimeOnly(17, 0)));
             }
-            parsed.Add((d.DayOfWeek, d.IsOpen, s, e));
+            parsed.Add((d.DayOfWeek, d.IsOpen, windows));
         }
         if (parsed.Select(p => p.Dow).Distinct().Count() != parsed.Count) throw new ArgumentException("availability.errors.duplicateDay");
 
@@ -237,19 +265,26 @@ public class AvailabilityService : IAvailabilityService
         var rules = await _availability.ListRulesAsync(clientId, ct);
         foreach (var p in parsed)
         {
-            var rule = rules.FirstOrDefault(r => r.DayOfWeek == p.Dow);
-            if (rule is null)
+            // Reuse the day's rows in start order, add what's missing, remove what's left over.
+            var existing = rules.Where(r => r.DayOfWeek == p.Dow).OrderBy(r => r.StartTime).ToList();
+            for (var w = 0; w < p.Windows.Count; w++)
             {
-                _availability.AddRule(new AvailabilityRule
+                var (start, end) = p.Windows[w];
+                if (w < existing.Count)
                 {
-                    Id = Guid.NewGuid(), ClientId = clientId, DayOfWeek = p.Dow, IsOpen = p.Open,
-                    StartTime = p.Start, EndTime = p.End, CreatedAt = now, UpdatedAt = now
-                });
+                    var rule = existing[w];
+                    rule.IsOpen = p.Open; rule.StartTime = start; rule.EndTime = end; rule.UpdatedAt = now;
+                }
+                else
+                {
+                    _availability.AddRule(new AvailabilityRule
+                    {
+                        Id = Guid.NewGuid(), ClientId = clientId, DayOfWeek = p.Dow, IsOpen = p.Open,
+                        StartTime = start, EndTime = end, CreatedAt = now, UpdatedAt = now
+                    });
+                }
             }
-            else
-            {
-                rule.IsOpen = p.Open; rule.StartTime = p.Start; rule.EndTime = p.End; rule.UpdatedAt = now;
-            }
+            foreach (var extra in existing.Skip(p.Windows.Count)) _availability.RemoveRule(extra);
         }
 
         var settings = await _availability.GetBookingSettingsAsync(clientId, ct);

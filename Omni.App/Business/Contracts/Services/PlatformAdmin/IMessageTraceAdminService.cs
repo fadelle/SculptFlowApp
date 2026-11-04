@@ -25,4 +25,12 @@ public interface IMessageTraceAdminService
     Task<MessageTracePage> ListAsync(int hours, Guid? clientId, Guid? conversationId, bool failedOnly, int page, int pageSize, CancellationToken ct);
 
     Task<MessageTraceSummary> SummaryAsync(int hours, CancellationToken ct);
+
+    /// <summary>Conversations whose last message is the customer's and got no answer within <paramref name="minutes"/>
+    /// (1..1440, default 15), sent in the last <paramref name="hours"/>, with what that message's trace came to (QA t7-10).</summary>
+    Task<UnansweredPage> UnansweredAsync(int hours, int minutes, Guid? clientId, int page, int pageSize, CancellationToken ct);
+
+    /// <summary>AI bot use per client over the last <paramref name="days"/> (1..90): runs, model calls, tokens, the estimated
+    /// model cost and the ai_reply revenue (QA t7-10).</summary>
+    Task<AiUsageReport> AiUsageAsync(int days, Guid? clientId, CancellationToken ct);
 }

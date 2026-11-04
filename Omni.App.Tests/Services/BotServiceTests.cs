@@ -112,6 +112,9 @@ public class BotServiceTests
         Assert.Equal([BotCapability.Knowledge, BotCapability.Pipeline], saved.Capabilities); // catalog order, no duplicates
         Assert.Equal([_document], saved.KnowledgeDocumentIds);
         Assert.Equal([_website], saved.WebsiteSourceIds);
+        // New sources are added through the repository so EF inserts them (QA t4-ai-01).
+        _bots.Verify(r => r.AddSource(It.Is<BotKnowledgeSource>(x => x.BotId == bot.Id && x.KnowledgeDocumentId == _document)), Times.Once);
+        _bots.Verify(r => r.AddSource(It.Is<BotKnowledgeSource>(x => x.BotId == bot.Id && x.WebsiteSourceId == _website)), Times.Once);
 
         // Back to all sources: the selected ones go.
         await Sut().SaveAsync(_clientId, bot.Id, Form());

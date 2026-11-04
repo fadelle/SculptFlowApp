@@ -25,7 +25,8 @@ public interface IBotTestService
     Task<(BotTestSession Session, IReadOnlyList<BotTestMessage> Lines)?> GetAsync(Guid clientId, Guid botId, Guid sessionId, CancellationToken ct = default);
 
     /// <summary>Deletes the session (the panel starts a new one on the next message).</summary>
-    Task ResetAsync(Guid clientId, Guid sessionId, CancellationToken ct = default);
+    /// <summary>Ends the bot's test chat; KeyNotFoundException (404) when the session isn't this bot's and client's (QA t1-accounts-17).</summary>
+    Task ResetAsync(Guid clientId, Guid botId, Guid sessionId, CancellationToken ct = default);
 
     // ---- The workflow's calls for a test run (AI tool endpoints with a test session)
 

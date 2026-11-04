@@ -12,6 +12,8 @@ public interface IAvailabilityRepository
 
     void AddRule(AvailabilityRule rule);
 
+    void RemoveRule(AvailabilityRule rule);
+
     /// <summary>Tracked.</summary>
     Task<BookingSettings?> GetBookingSettingsAsync(Guid clientId, CancellationToken ct = default);
 

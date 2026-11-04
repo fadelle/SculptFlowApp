@@ -71,7 +71,7 @@ public class BotMemoryRepositoryTests(PostgresFixture fixture) : RepoTestBase(fi
         await using (var db = NewContext())
         {
             // Resetting the test conversation (BotTestService.ResetAsync) removes its memory.
-            await new BotTestRepository(db).DeleteSessionAsync(c.Id, session.Id);
+            await new BotTestRepository(db).DeleteSessionAsync(c.Id, session.BotId, session.Id);
             Assert.Empty(await new BotMemoryRepository(db).ListRecentReadOnlyAsync(session.Id, true, 10));
             await db.Conversations.Where(x => x.Id == conversation.Id).ExecuteDeleteAsync();
             Assert.Empty(await new BotMemoryRepository(db).ListRecentReadOnlyAsync(conversation.Id, false, 10));

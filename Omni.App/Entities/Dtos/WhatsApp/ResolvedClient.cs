@@ -4,4 +4,4 @@ namespace Omni.App.Entities.Dtos.WhatsApp;
 /// MetaWebhookProcessor from PhoneNumberId/WabaId against the client's own stored WhatsApp
 /// connection (see IWhatsAppConnectionResolver), never taken from n8n or the Meta payload as an
 /// identity claim.</summary>
-public record ResolvedClient(Guid ClientId, Guid ChannelIntegrationId);
+public record ResolvedClient(Guid ClientId, Guid ChannelIntegrationId, string? WabaId = null);

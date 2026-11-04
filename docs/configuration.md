@@ -128,6 +128,9 @@ Generated from `Common/Statics/ConfigDefaults`; keep this table in step when you
 | Ai | MemoryExchanges | 10 | int 0–100 | Earlier exchanges (contact message + bot output) of the conversation the agent sees. |
 | Ai | TimeoutSeconds | 60 | int 5–600 | Timeout of one call to the AI model API. |
 | Ai | MaxConcurrentRuns | 4 | int 1–64 | Most bot runs (different conversations) at the same time; one conversation always runs one message at a time. |
+| Ai | InputTokenPriceUsdPerMillion | 1.25 | decimal 0–1000 | What the AI model provider charges per million input tokens (USD), for the admin portal's AI usage estimate only (QA t7-10). Billing never reads it. |
+| Ai | OutputTokenPriceUsdPerMillion | 10 | decimal 0–1000 | What the AI model provider charges per million output tokens (USD), for the admin portal's AI usage estimate only (QA t7-10). Billing never reads it. |
+| Ai | RetryUnansweredAfterSeconds | 120 | int 30–3600 | A provider's repeat of a customer message the AI never answered (nothing sent after it, conversation still in AI mode) asks the AI again once the message is this old; younger repeats are ignored so a run still in progress isn't doubled (QA t10-03). |
 | Benchmark | GeneratorModel | gpt-4o | string | Model that writes the retrieval benchmark's questions. |
 | Integrations | OAuthStateLifetimeMinutes | 15 | int 1–120 | How long a calendar or TikTok connect link stays valid. |
 | Integrations | TokenRefreshMarginMinutes | 5 | int 0–60 | Calendar and TikTok access tokens are refreshed this long before they expire. |

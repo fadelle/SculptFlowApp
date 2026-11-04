@@ -8,6 +8,8 @@ using Omni.App.Entities.Dtos.Monitoring;
 using Omni.App.Entities.Dtos.WhatsApp;
 using Omni.App.Entities.Models;
 using Omni.App.Entities.Responses.WhatsApp;
+using Omni.App.Common.Helpers;
+using Omni.App.Persistence.Contracts;
 using Omni.App.Persistence.Contracts.Channels;
 
 namespace Omni.App.Business.Engines.WhatsApp;
@@ -25,6 +27,8 @@ public class MetaWebhookProcessor : IMetaWebhookProcessor
     private readonly UnknownEventHandler _unknownEventHandler;
     private readonly ICacheManager _cache;
     private readonly IMessageTracer _tracer;
+    private readonly IUnitOfWork _unitOfWork;
+    private readonly ILogger<MetaWebhookProcessor> _logger;
 
     public MetaWebhookProcessor(
         IChannelIntegrationRepository integrations,
@@ -37,8 +41,12 @@ public class MetaWebhookProcessor : IMetaWebhookProcessor
         HistoryHandler historyHandler,
         AppStateSyncHandler appStateSyncHandler,
         UnknownEventHandler unknownEventHandler,
-        IMessageTracer tracer)
+        IMessageTracer tracer,
+        IUnitOfWork unitOfWork,
+        ILogger<MetaWebhookProcessor> logger)
     {
+        _unitOfWork = unitOfWork;
+        _logger = logger;
         _tracer = tracer;
         _integrations = integrations;
         _cache = cache;
@@ -62,7 +70,12 @@ public class MetaWebhookProcessor : IMetaWebhookProcessor
 
     public async Task<IReadOnlyList<WhatsAppWebhookResponse>> ProcessAllAsync(JsonElement root, CancellationToken ct = default)
     {
-        var parsedEvents = MetaWebhookParser.Parse(root);
+        var parsedEvents = MetaWebhookParser.Parse(root, out var unreadable);
+        if (unreadable > 0)
+        {
+            _tracer.Step(TraceSteps.WebhookIgnored, TraceOutcomes.Skipped, new TraceIds(Channel: ConversationChannel.WhatsApp),
+                detail: new { reason = "unreadable_parts", count = unreadable });
+        }
         if (parsedEvents.Count == 0)
         {
             _tracer.Step(TraceSteps.WebhookIgnored, TraceOutcomes.Skipped, new TraceIds(Channel: ConversationChannel.WhatsApp),
@@ -79,19 +92,48 @@ public class MetaWebhookProcessor : IMetaWebhookProcessor
         var results = new List<WhatsAppWebhookResponse>(parsedEvents.Count);
         foreach (var evt in parsedEvents)
         {
-            var client = await ResolveClientAsync(evt, ct);
+            ResolvedClient? client = null;
+            try
+            {
+                var (resolved, unresolvedReason) = await ResolveClientAsync(evt, ct);
+                client = resolved;
+                if (client is null)
+                {
+                    _tracer.Step(TraceSteps.WebhookClientUnresolved, TraceOutcomes.Skipped,
+                        new TraceIds(Channel: ConversationChannel.WhatsApp, ExternalMessageId: evt.ExternalMessageId),
+                        detail: new { kind = evt.Kind.ToString(), reason = unresolvedReason });
+                }
+                results.Add(await HandleAsync(evt, client, ct));
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // One bad event never fails the rest of the delivery (QA t10-03): the customer messages around it are still
+                // saved and answered, and Meta gets its 200 instead of retrying a delivery that would fail the same way.
+                _unitOfWork.DiscardChanges();
+                _logger.LogError(ex, "WhatsApp webhook: a {Kind} event failed and was skipped.", evt.Kind);
+                _tracer.Step(TraceSteps.WebhookEventFailed, TraceOutcomes.Failed,
+                    new TraceIds(client?.ClientId, Channel: ConversationChannel.WhatsApp, ExternalMessageId: evt.ExternalMessageId),
+                    detail: new { kind = evt.Kind.ToString(), error = TraceText.Error(ex) });
+                results.Add(new WhatsAppWebhookResponse(false, evt.Kind.ToString(), false, client?.ClientId));
+            }
+        }
+
+        // Every event was already persisted/broadcast above via its own handler call.
+        return results;
+    }
+
+    private async Task<WhatsAppWebhookResponse> HandleAsync(ParsedMetaEvent evt, ResolvedClient? client, CancellationToken ct)
+    {
+        {
             if (client is null)
             {
-                _tracer.Step(TraceSteps.WebhookClientUnresolved, TraceOutcomes.Skipped,
-                    new TraceIds(Channel: ConversationChannel.WhatsApp, ExternalMessageId: evt.ExternalMessageId), detail: new { kind = evt.Kind.ToString() });
                 // Can't attribute this event to a client we know about — acknowledge without
                 // guessing. Common right after a webhook is first configured, before any client has
                 // connected the matching phone number/WABA yet.
-                results.Add(await _unknownEventHandler.HandleAsync(evt, null, ct));
-                continue;
+                return await _unknownEventHandler.HandleAsync(evt, null, ct);
             }
 
-            var response = evt.Kind switch
+            return evt.Kind switch
             {
                 ParsedMetaEventKind.CustomerMessage => await _customerMessageHandler.HandleAsync(evt, client, ct),
                 ParsedMetaEventKind.BusinessAppEcho => await _businessAppEchoHandler.HandleAsync(evt, client, ct),
@@ -102,35 +144,47 @@ public class MetaWebhookProcessor : IMetaWebhookProcessor
                 ParsedMetaEventKind.AppStateSync => await _appStateSyncHandler.HandleAsync(evt, client, ct),
                 _ => await _unknownEventHandler.HandleAsync(evt, client, ct)
             };
-            results.Add(response);
         }
-
-        // Every event was already persisted/broadcast above via its own handler call.
-        return results;
     }
 
-    /// <summary>Resolves the trusted client for a parsed event from its own stored WhatsApp
-    /// connection — PhoneNumberId first (the more specific match, and present on most event
-    /// kinds), falling back to WabaId. This is the only place in the whole feature that decides
-    /// "which client does this belong to"; nothing downstream re-derives it from the payload.</summary>
-    private async Task<ResolvedClient?> ResolveClientAsync(ParsedMetaEvent evt, CancellationToken ct)
+    /// <summary>Resolves the trusted client for a parsed event from its own stored WhatsApp connection. This is the only place
+    /// in the whole feature that decides "which client does this belong to"; nothing downstream re-derives it from the payload.
+    /// Only CONNECTED connections receive anything (QA t10-01):
+    /// <list type="bullet">
+    /// <item>An event naming a phone number id goes to the connection with that number, and only when the delivery's account id
+    /// (if any) is that connection's; never on to the account id.</item>
+    /// <item>A message event (customer message, echo, status) without a phone number id goes nowhere.</item>
+    /// <item>An account-wide event (template, account update) goes to the one connection with that account id; two or more is
+    /// ambiguous and goes nowhere.</item>
+    /// </list>
+    /// Null with the reason when nothing matches.</summary>
+    private async Task<(ResolvedClient? Client, string? Reason)> ResolveClientAsync(ParsedMetaEvent evt, CancellationToken ct)
     {
         // Cached (every incoming message asks this); ChannelIntegrationService drops
         // CacheKeys.WhatsAppRoutingPrefix whenever a connection changes.
-        ResolvedClient? resolved = null;
         if (!string.IsNullOrWhiteSpace(evt.PhoneNumberId))
         {
-            resolved = await _cache.GetOrCreateAsync(CacheKeys.WhatsAppByPhoneNumberId(evt.PhoneNumberId), CacheKeys.WhatsAppRoutingTtl,
-                async token => ToResolved(await _integrations.FindWhatsAppByPhoneNumberIdAsync(evt.PhoneNumberId, token)), ct);
+            var byPhone = await _cache.GetOrCreateAsync(CacheKeys.WhatsAppByPhoneNumberId(evt.PhoneNumberId), CacheKeys.WhatsAppRoutingTtl,
+                async token => ToResolved(await _integrations.ListConnectedWhatsAppByPhoneNumberIdAsync(evt.PhoneNumberId, token)), ct);
+            if (byPhone is null) return (null, "unknown_phone_number_id");
+            if (!string.IsNullOrWhiteSpace(evt.WabaId) && !string.IsNullOrWhiteSpace(byPhone.WabaId) && byPhone.WabaId != evt.WabaId)
+            {
+                return (null, "waba_mismatch");
+            }
+            return (byPhone, null);
         }
-        if (resolved is null && !string.IsNullOrWhiteSpace(evt.WabaId))
+        if (evt.Kind is ParsedMetaEventKind.CustomerMessage or ParsedMetaEventKind.BusinessAppEcho or ParsedMetaEventKind.MessageStatus)
         {
-            resolved = await _cache.GetOrCreateAsync(CacheKeys.WhatsAppByWabaId(evt.WabaId), CacheKeys.WhatsAppRoutingTtl,
-                async token => ToResolved(await _integrations.FindWhatsAppByWabaIdAsync(evt.WabaId, token)), ct);
+            return (null, "no_phone_number_id");
         }
-        return resolved;
+        if (string.IsNullOrWhiteSpace(evt.WabaId)) return (null, "no_ids");
+
+        var byAccount = await _cache.GetOrCreateAsync(CacheKeys.WhatsAppByWabaId(evt.WabaId), CacheKeys.WhatsAppRoutingTtl,
+            async token => ToResolved(await _integrations.ListConnectedWhatsAppByWabaIdAsync(evt.WabaId, token)), ct);
+        return byAccount is null ? (null, "unknown_or_shared_waba") : (byAccount, null);
     }
 
-    private static ResolvedClient? ToResolved(ChannelIntegration? integration) =>
-        integration is null ? null : new ResolvedClient(integration.ClientId, integration.Id);
+    /// <summary>The one connection that matched, or null when none or several did (several = ambiguous, never a guess).</summary>
+    private static ResolvedClient? ToResolved(IReadOnlyList<ChannelIntegration> integrations) =>
+        integrations.Count == 1 ? new ResolvedClient(integrations[0].ClientId, integrations[0].Id, integrations[0].WhatsAppBusinessId) : null;
 }

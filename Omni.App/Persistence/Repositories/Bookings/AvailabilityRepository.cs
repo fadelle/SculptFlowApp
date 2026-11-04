@@ -30,6 +30,8 @@ public class AvailabilityRepository : IAvailabilityRepository
 
     public void AddRule(AvailabilityRule rule) => _db.AvailabilityRules.Add(rule);
 
+    public void RemoveRule(AvailabilityRule rule) => _db.AvailabilityRules.Remove(rule);
+
     public Task<BookingSettings?> GetBookingSettingsAsync(Guid clientId, CancellationToken ct = default) =>
         _db.BookingSettings.FirstOrDefaultAsync(s => s.ClientId == clientId, ct);
 

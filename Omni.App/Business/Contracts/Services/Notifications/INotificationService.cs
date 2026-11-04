@@ -41,6 +41,8 @@ public interface INotificationService
     Task<int> GetUnreadCountAsync(Guid clientId, CancellationToken ct = default);
 
     /// <summary>Marks one notification read. No-op (not an error) if it's already read or doesn't belong to this client.</summary>
+    /// <summary>Marks one of the client's notifications read; KeyNotFoundException (404) when it isn't this client's
+    /// (QA t1-accounts-17).</summary>
     Task MarkReadAsync(Guid clientId, Guid id, CancellationToken ct = default);
 
     Task MarkAllReadAsync(Guid clientId, CancellationToken ct = default);

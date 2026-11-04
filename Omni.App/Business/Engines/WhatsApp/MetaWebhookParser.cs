@@ -21,16 +21,28 @@ namespace Omni.App.Business.Engines.WhatsApp;
 /// </summary>
 public static class MetaWebhookParser
 {
-    public static IReadOnlyList<ParsedMetaEvent> Parse(JsonElement root)
+    public static IReadOnlyList<ParsedMetaEvent> Parse(JsonElement root) => Parse(root, out _);
+
+    /// <summary>Every event of a delivery. A part that isn't the shape Meta documents (a root, entry, change or value that isn't
+    /// an object, or anything inside a change that can't be read) is skipped and counted in <paramref name="unreadable"/>, so
+    /// it never fails the rest of the delivery (QA t10-03). Values longer than the columns they are stored in are cut.</summary>
+    public static IReadOnlyList<ParsedMetaEvent> Parse(JsonElement root, out int unreadable)
     {
+        unreadable = 0;
         var events = new List<ParsedMetaEvent>();
-        if (!root.TryGetProperty("entry", out var entries) || entries.ValueKind != JsonValueKind.Array)
+        if (root.ValueKind != JsonValueKind.Object || !root.TryGetProperty("entry", out var entries) || entries.ValueKind != JsonValueKind.Array)
         {
+            if (root.ValueKind != JsonValueKind.Object) unreadable++;
             return events;
         }
 
         foreach (var entry in entries.EnumerateArray())
         {
+            if (entry.ValueKind != JsonValueKind.Object)
+            {
+                unreadable++;
+                continue;
+            }
             var wabaId = GetString(entry, "id");
             if (!entry.TryGetProperty("changes", out var changes) || changes.ValueKind != JsonValueKind.Array)
             {
@@ -39,18 +51,51 @@ public static class MetaWebhookParser
 
             foreach (var change in changes.EnumerateArray())
             {
-                var field = GetString(change, "field") ?? "";
-                if (!change.TryGetProperty("value", out var value))
+                if (change.ValueKind != JsonValueKind.Object || !change.TryGetProperty("value", out var value) || value.ValueKind != JsonValueKind.Object)
                 {
+                    unreadable++;
                     continue;
                 }
-
-                events.AddRange(ParseChange(field, wabaId, value));
+                var field = GetString(change, "field") ?? "";
+                try
+                {
+                    events.AddRange(ParseChange(field, wabaId, value).ToList());
+                }
+                catch (InvalidOperationException)
+                {
+                    // A nested part of another JSON kind than documented (e.g. a message that is a string).
+                    unreadable++;
+                }
             }
         }
 
-        return events;
+        return events.Select(Clip).ToList();
     }
+
+    /// <summary>Cuts the values stored in limited columns (crm.messages, crm.contacts, channels.whatsapp_templates,
+    /// channels.whatsapp_health_events, channels.channel_integrations) so an over-long value Meta allows can't fail the save.</summary>
+    private static ParsedMetaEvent Clip(ParsedMetaEvent e) => e with
+    {
+        PhoneNumberId = Cut(e.PhoneNumberId, 200),
+        WabaId = Cut(e.WabaId, 200),
+        CustomerWaId = Cut(e.CustomerWaId, 50),
+        CustomerName = Cut(e.CustomerName, 200),
+        MessageType = Cut(e.MessageType, 30),
+        ExternalMessageId = Cut(e.ExternalMessageId, 200),
+        DeliveryStatus = Cut(e.DeliveryStatus, 30),
+        FailureCode = Cut(e.FailureCode, 100),
+        MetaTemplateId = Cut(e.MetaTemplateId, 200),
+        TemplateName = Cut(e.TemplateName, 200),
+        TemplateLanguage = Cut(e.TemplateLanguage, 10),
+        TemplateQualityRating = Cut(e.TemplateQualityRating, 30),
+        TemplatePreviousCategory = Cut(e.TemplatePreviousCategory, 30),
+        TemplateCurrentCategory = Cut(e.TemplateCurrentCategory, 30),
+        HealthEventType = Cut(e.HealthEventType, 100),
+        HealthStatus = Cut(e.HealthStatus, 50),
+        HealthCode = Cut(e.HealthCode, 100),
+    };
+
+    private static string? Cut(string? value, int max) => value is null || value.Length <= max ? value : value[..max];
 
     private static IEnumerable<ParsedMetaEvent> ParseChange(string field, string? wabaId, JsonElement value)
     {

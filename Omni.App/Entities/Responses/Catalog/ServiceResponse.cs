@@ -7,5 +7,7 @@ public record ServiceResponse(
     string? Code,
     string? Description,
     int? BookingDuration,
-    bool IsActive
+    bool IsActive,
+    decimal? Price = null,
+    string? Currency = null
 );

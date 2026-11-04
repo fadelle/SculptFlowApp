@@ -207,7 +207,8 @@ public class BusinessInfoModel : PageModel
         var client = await _clientContext.GetClientAsync(ct);
         if (client is null) return RedirectToPage();
 
-        var days = Days.Select(d => new DayRuleDto(d.DayOfWeek, d.IsOpen, d.Start ?? string.Empty, d.End ?? string.Empty)).ToList();
+        var days = Days.Select(d => new DayRuleDto(d.DayOfWeek, d.IsOpen, d.Start ?? string.Empty, d.End ?? string.Empty,
+            string.IsNullOrWhiteSpace(d.Start2) ? null : d.Start2, string.IsNullOrWhiteSpace(d.End2) ? null : d.End2)).ToList();
         var booking = new BookingRulesDto(DefaultDurationMinutes, BufferMinutes, NoticeHours * 60, MaxAdvanceDays);
         var timezone = TimezoneId ?? string.Empty;
 

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Omni.App.Entities.Dtos.Monitoring;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Omni.App.Business.Engines.Telegram;
@@ -157,8 +158,23 @@ public class MetaWebhookProcessorTests : WebhookTestBase
     {
         _cache.Setup(c => c.GetOrCreateAsync(It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<Func<CancellationToken, Task<ResolvedClient?>>>(), It.IsAny<CancellationToken>()))
             .Returns((string _, TimeSpan _, Func<CancellationToken, Task<ResolvedClient?>> f, CancellationToken ct) => f(ct));
-        Integrations.Setup(i => i.FindWhatsAppByPhoneNumberIdAsync("P1", It.IsAny<CancellationToken>())).ReturnsAsync(new ChannelIntegration { Id = ConnectionId, ClientId = ClientId });
-        Integrations.Setup(i => i.FindWhatsAppByWabaIdAsync("W1", It.IsAny<CancellationToken>())).ReturnsAsync(new ChannelIntegration { Id = ConnectionId, ClientId = ClientId });
+        Integrations.Setup(i => i.ListConnectedWhatsAppByPhoneNumberIdAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync([]);
+        Integrations.Setup(i => i.ListConnectedWhatsAppByWabaIdAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync([]);
+        Integrations.Setup(i => i.ListConnectedWhatsAppByPhoneNumberIdAsync("P1", It.IsAny<CancellationToken>())).ReturnsAsync([Connection()]);
+        Integrations.Setup(i => i.ListConnectedWhatsAppByWabaIdAsync("W1", It.IsAny<CancellationToken>())).ReturnsAsync([Connection()]);
+    }
+
+    private ChannelIntegration Connection(Guid? clientId = null) => new()
+    {
+        Id = ConnectionId, ClientId = clientId ?? ClientId, WhatsAppBusinessId = "W1", PhoneNumberId = "P1", Status = ChannelIntegrationStatus.Connected
+    };
+
+    private List<(string Step, string? Reason)> RecordUnresolved()
+    {
+        var steps = new List<(string, string?)>();
+        Tracer.Setup(t => t.Step(TraceSteps.WebhookClientUnresolved, It.IsAny<string>(), It.IsAny<TraceIds>(), It.IsAny<double?>(), It.IsAny<object?>()))
+            .Callback<string, string, TraceIds, double?, object?>((step, _, _, _, d) => steps.Add((step, d?.GetType().GetProperty("reason")?.GetValue(d) as string)));
+        return steps;
     }
 
     private MetaWebhookProcessor Sut() => new(Integrations.Object, _cache.Object,
@@ -170,7 +186,7 @@ public class MetaWebhookProcessorTests : WebhookTestBase
         new HistoryHandler(Uow.Object, Events.Object),
         new AppStateSyncHandler(Uow.Object, Events.Object),
         new UnknownEventHandler(Uow.Object, Events.Object),
-        Tracer.Object);
+        Tracer.Object, Uow.Object, NullLogger<MetaWebhookProcessor>.Instance);
 
     private static string Body(string phoneNumberId = "P1", string waId = "961700", string messageId = "m1") =>
         "{\"entry\":[{\"id\":\"W1\",\"changes\":[{\"field\":\"messages\",\"value\":{\"metadata\":{\"phone_number_id\":\"" + phoneNumberId + "\"},"
@@ -191,15 +207,39 @@ public class MetaWebhookProcessorTests : WebhookTestBase
     }
 
     [Fact]
-    public async Task Unrouteable_numbers_fall_back_to_waba_then_to_unknown()
+    public async Task A_message_to_an_unknown_or_disconnected_number_never_falls_back_to_the_account_id()
     {
-        var viaWaba = await Sut().ProcessAsync(J(Body("P-unknown")));
-        Assert.Equal("customer_message", viaWaba.EventType);
-
-        Integrations.Setup(i => i.FindWhatsAppByWabaIdAsync("W1", It.IsAny<CancellationToken>())).ReturnsAsync((ChannelIntegration?)null);
+        // QA t10-01: an unknown phone number id landed in whichever client shared the WABA id.
+        var unresolved = RecordUnresolved();
         var unknown = await Sut().ProcessAsync(J(Body("P-unknown")));
         Assert.Equal(("unknown", null), (unknown.EventType, unknown.ClientId));
-        Messages.Verify(m => m.IngestAsync(It.IsAny<IngestMessageRequest>(), It.IsAny<CancellationToken>()), Times.Once);
+        Messages.Verify(m => m.IngestAsync(It.IsAny<IngestMessageRequest>(), It.IsAny<CancellationToken>()), Times.Never);
+        Assert.Equal("unknown_phone_number_id", Assert.Single(unresolved).Reason);
+    }
+
+    [Fact]
+    public async Task A_message_whose_account_id_isnt_its_numbers_goes_nowhere()
+    {
+        var unresolved = RecordUnresolved();
+        var body = Body().Replace("\"id\":\"W1\"", "\"id\":\"W-other\"");
+        Assert.Equal("unknown", (await Sut().ProcessAsync(J(body))).EventType);
+        Assert.Equal("waba_mismatch", Assert.Single(unresolved).Reason);
+    }
+
+    [Fact]
+    public async Task An_account_wide_event_goes_to_the_one_connected_client_and_nowhere_when_two_share_the_account()
+    {
+        Templates.Setup(t => t.ApplyMetaEventAsync(It.IsAny<WhatsAppTemplateEventRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new WhatsAppTemplateResponse(Guid.NewGuid(), ClientId, "m", "n", "c", "en", "approved", null, null, "b", null, null, null, null, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow));
+        const string template = """{"entry":[{"id":"W1","changes":[{"field":"message_template_status_update","value":{"message_template_name":"promo","event":"APPROVED"}}]}]}""";
+        Assert.Equal(("template_status", ClientId), ((await Sut().ProcessAsync(J(template))).EventType, (await Sut().ProcessAsync(J(template))).ClientId));
+
+        var unresolved = RecordUnresolved();
+        Integrations.Setup(i => i.ListConnectedWhatsAppByWabaIdAsync("W1", It.IsAny<CancellationToken>())).ReturnsAsync([Connection(), Connection(Guid.NewGuid())]);
+        Templates.Invocations.Clear();
+        Assert.Equal("unknown", (await Sut().ProcessAsync(J(template))).EventType);
+        Templates.Verify(t => t.ApplyMetaEventAsync(It.IsAny<WhatsAppTemplateEventRequest>(), It.IsAny<CancellationToken>()), Times.Never);
+        Assert.Equal("unknown_or_shared_waba", Assert.Single(unresolved).Reason);
     }
 
     [Fact]
@@ -221,6 +261,51 @@ public class MetaWebhookProcessorTests : WebhookTestBase
         Assert.Equal("history", (await Sut().ProcessAsync(J(Wrap("history", "{" + meta + "}")))).EventType);
         Assert.Equal("app_state_sync", (await Sut().ProcessAsync(J(Wrap("smb_app_state_sync", "{}")))).EventType);
         Assert.Equal("unknown", (await Sut().ProcessAsync(J(Wrap("brand_new", "{}")))).EventType);
+    }
+
+    [Fact]
+    public async Task One_failing_event_is_skipped_and_traced_and_the_customer_message_beside_it_still_goes_to_the_ai()
+    {
+        // QA t10-03: a 257-character template name failed the whole delivery with a 500, after the message was saved.
+        Templates.Setup(t => t.ApplyMetaEventAsync(It.IsAny<WhatsAppTemplateEventRequest>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("database said no"));
+        var steps = new List<string>();
+        Tracer.Setup(t => t.Step(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<TraceIds>(), It.IsAny<double?>(), It.IsAny<object?>()))
+            .Callback<string, string, TraceIds, double?, object?>((step, _, _, _, _) => steps.Add(step));
+        var delivery = $$$"""
+            {"entry":[{"id":"W1","changes":[
+              {"field":"messages","value":{"metadata":{"phone_number_id":"P1"},"messages":[{"from":"961700","id":"a","type":"text","text":{"body":"opening hours?"}}]}},
+              {"field":"message_template_status_update","value":{"message_template_name":"{{{new string('t', 257)}}}","event":"APPROVED"}}]}]}
+            """;
+
+        var all = await Sut().ProcessAllAsync(J(delivery));
+
+        Assert.Equal(2, all.Count);
+        Assert.True(all[0].ShouldRunAi);
+        Assert.Equal((false, "TemplateStatus", false), (all[1].Processed, all[1].EventType, all[1].ShouldRunAi));
+        Uow.Verify(u => u.DiscardChanges(), Times.Once);
+        Assert.Contains(TraceSteps.WebhookEventFailed, steps);
+        // The name reached the template service cut to its column's 200 characters.
+        Templates.Verify(t => t.ApplyMetaEventAsync(It.Is<WhatsAppTemplateEventRequest>(r => r.Name.Length <= 200), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Parts_that_are_not_the_documented_shape_are_skipped_without_failing_the_rest()
+    {
+        var steps = new List<string>();
+        Tracer.Setup(t => t.Step(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<TraceIds>(), It.IsAny<double?>(), It.IsAny<object?>()))
+            .Callback<string, string, TraceIds, double?, object?>((step, _, _, _, _) => steps.Add(step));
+        const string delivery = """
+            {"entry":["not an object",{"id":"W1","changes":[{"field":"messages","value":42},
+              {"field":"messages","value":{"metadata":{"phone_number_id":"P1"},"messages":["oops"]}},
+              {"field":"messages","value":{"metadata":{"phone_number_id":"P1"},"messages":[{"from":"961700","id":"a","type":"text","text":{"body":"hi"}}]}}]}]}
+            """;
+
+        var all = await Sut().ProcessAllAsync(J(delivery));
+
+        Assert.True(Assert.Single(all).ShouldRunAi);
+        Assert.Contains(TraceSteps.WebhookIgnored, steps);
+        Assert.Equal("unknown", (await Sut().ProcessAsync(J("[1,2,3]"))).EventType);   // a root that isn't an object
     }
 
     [Fact]

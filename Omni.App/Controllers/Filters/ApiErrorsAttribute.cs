@@ -44,7 +44,8 @@ public sealed class ApiErrorsAttribute : ExceptionFilterAttribute
         var error = context.Exception is EmailSendException
             ? Text(context.HttpContext, EmailSendException.TextKey)
             : Localize(context.HttpContext, context.Exception);
-        context.Result = new ObjectResult(new { error }) { StatusCode = status };
+        // An exception with a code (e.g. BookingRulesException) also answers it, so a page can react to that case.
+        context.Result = new ObjectResult(context.Exception is IErrorCode coded ? (object)new { error, code = coded.Code } : new { error }) { StatusCode = status };
         context.ExceptionHandled = true;
     }
 

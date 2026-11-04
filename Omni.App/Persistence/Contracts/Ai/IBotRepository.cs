@@ -18,4 +18,8 @@ public interface IBotRepository
     void Remove(Bot bot);
 
     void RemoveSource(BotKnowledgeSource source);
+
+    /// <summary>A new source of a tracked bot. Added explicitly: a new row with its id already set, only added to the tracked
+    /// collection, would be sent as an UPDATE and fail (QA t4-ai-01).</summary>
+    void AddSource(BotKnowledgeSource source);
 }

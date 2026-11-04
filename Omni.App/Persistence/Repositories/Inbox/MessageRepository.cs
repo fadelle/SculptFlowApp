@@ -27,6 +27,9 @@ public class MessageRepository : IMessageRepository
         _db.Messages.FirstOrDefaultAsync(m =>
             m.ClientId == clientId && m.Channel == channel && m.ExternalMessageId == externalMessageId, ct);
 
+    public Task<bool> HasMessagesSinceAsync(Guid conversationId, DateTimeOffset since, Guid messageId, CancellationToken ct = default) =>
+        _db.Messages.AnyAsync(m => m.ConversationId == conversationId && m.Id != messageId && m.CreatedAt >= since, ct);
+
     public Task<Message?> GetForClientReadOnlyAsync(Guid clientId, Guid messageId, CancellationToken ct = default) =>
         _db.Messages.AsNoTracking().FirstOrDefaultAsync(m => m.ClientId == clientId && m.Id == messageId, ct);
 

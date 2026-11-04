@@ -301,6 +301,52 @@ public class AvailabilityServiceTests
         _availability.Verify(a => a.AddBookingSettings(It.IsAny<BookingSettings>()), Times.Never);
     }
 
+    [Fact]
+    public async Task A_day_can_have_a_second_window_after_a_break_and_dropping_it_removes_the_row()
+    {
+        // QA t5-ops-18: one window per day only (no lunch break, no split shift).
+        _settings = new BookingSettings();
+        var added = new List<AvailabilityRule>();
+        _availability.Setup(a => a.AddRule(It.IsAny<AvailabilityRule>())).Callback<AvailabilityRule>(r => { added.Add(r); _rules.Add(r); });
+        var week = Week(d => d == 1 ? new DayRuleDto(1, true, "09:00", "12:30", "14:00", "18:00") : new DayRuleDto(d, false, "09:00", "17:00"));
+
+        await Sut().SaveScheduleAsync(_clientId, "UTC", week, GoodRules);
+
+        var monday = added.Where(r => r.DayOfWeek == 1).OrderBy(r => r.StartTime).ToList();
+        Assert.Equal([(new TimeOnly(9, 0), new TimeOnly(12, 30)), (new TimeOnly(14, 0), new TimeOnly(18, 0))], monday.Select(r => (r.StartTime, r.EndTime)));
+        var read = (await Sut().GetSettingsAsync(_clientId)).Days.Single(d => d.DayOfWeek == 1);
+        Assert.Equal(("09:00", "12:30", "14:00", "18:00"), (read.Start, read.End, read.Start2, read.End2));
+
+        // Back to one window: the second row goes.
+        await Sut().SaveScheduleAsync(_clientId, "UTC", Week(d => d == 1 ? new DayRuleDto(1, true, "09:00", "17:00") : new DayRuleDto(d, false, "09:00", "17:00")), GoodRules);
+        _availability.Verify(a => a.RemoveRule(monday[1]), Times.Once);
+        Assert.Equal((new TimeOnly(9, 0), new TimeOnly(17, 0)), (monday[0].StartTime, monday[0].EndTime));
+    }
+
+    [Theory]
+    [InlineData("12:00", "15:00", "availability.errors.secondWindowOrder")]   // starts before the first ends
+    [InlineData("15:00", "", "availability.errors.secondWindowIncomplete")]
+    [InlineData("16:00", "15:00", "availability.errors.dayEndBeforeStart")]
+    public async Task A_second_window_must_be_complete_and_after_the_first(string start2, string end2, string key)
+    {
+        var ex = await Assert.ThrowsAsync<ArgumentException>(() => Sut().SaveScheduleAsync(_clientId, "UTC",
+            [new DayRuleDto(1, true, "09:00", "13:00", start2, end2)], GoodRules));
+        Assert.Equal(key, ex.Message);
+        _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Slots_come_from_both_windows_of_a_split_day_and_not_from_the_break()
+    {
+        var day = Today.AddDays(2);
+        _rules.Add(new AvailabilityRule { Id = Guid.NewGuid(), ClientId = _clientId, DayOfWeek = (int)day.DayOfWeek, IsOpen = true, StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(10, 0) });
+        _rules.Add(new AvailabilityRule { Id = Guid.NewGuid(), ClientId = _clientId, DayOfWeek = (int)day.DayOfWeek, IsOpen = true, StartTime = new TimeOnly(14, 0), EndTime = new TimeOnly(15, 0) });
+
+        var r = await Sut().GetSlotsAsync(_clientId, null, day, 1);
+
+        Assert.Equal(["09:00", "09:30", "14:00", "14:30"], r.Slots.Select(s => s.Time));
+    }
+
     [Theory]
     [InlineData("Mars/Olympus", 30, 0, 0, 30)]
     [InlineData("UTC", 4, 0, 0, 30)]

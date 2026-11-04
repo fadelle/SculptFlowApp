@@ -48,7 +48,7 @@ public class BotTestController : DashboardApiController
         var clientId = await GetClientIdAsync(ct);
         if (clientId is null) return Forbid();
 
-        await _tests.ResetAsync(clientId.Value, sessionId, ct);
+        await _tests.ResetAsync(clientId.Value, botId, sessionId, ct);
         return NoContent();
     }
 }

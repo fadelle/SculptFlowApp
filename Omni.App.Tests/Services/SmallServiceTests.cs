@@ -322,8 +322,8 @@ public class MemberDashboardClientProfileTests
 
         await Assert.ThrowsAsync<ArgumentException>(() => sut.UpdateDetailsAsync(_clientId, new UpdateClientDetailsRequest(" ", null, null, null, null, null, null)));
         await Assert.ThrowsAsync<ArgumentException>(() => sut.UpdateDetailsAsync(_clientId, new UpdateClientDetailsRequest(new string('n', 201), null, null, null, null, null, null)));
-        await sut.UpdateDetailsAsync(_clientId, new UpdateClientDetailsRequest(" New Name ", "123", "a@b.c", "https://x", "street", "9-5", "info"));
-        Assert.Equal(("New Name", "123", "a@b.c", "https://x", "street", "9-5", "info"), (client.Name, client.Phone, client.Email, client.Website, client.Address, client.OperatingHours, client.BookingInfo));
+        await sut.UpdateDetailsAsync(_clientId, new UpdateClientDetailsRequest(" New Name ", "+961 1 555 123", "a@b.co", "glow.lb", "street", "9-5", "info"));
+        Assert.Equal(("New Name", "+961 1 555 123", "a@b.co", "https://glow.lb", "street", "9-5", "info"), (client.Name, client.Phone, client.Email, client.Website, client.Address, client.OperatingHours, client.BookingInfo));
         uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
 
         clients.Setup(c => c.GetAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync((Client?)null);

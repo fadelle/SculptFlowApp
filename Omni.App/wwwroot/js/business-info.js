@@ -43,6 +43,20 @@
       var bad = open && s.value && e.value && e.value <= s.value;
       [s, e].forEach(function (el) { el.classList.toggle('input-error', !!bad); el.setCustomValidity(bad ? omniText.t('businessInfo.hours.endAfterStart') : ''); });
       row.querySelector('[data-day-err]').hidden = !bad;
+      // The second window (QA t5-ops-18): both times, after the first window, ending after it starts.
+      var second = row.querySelector('[data-day-second]');
+      var s2 = row.querySelector('[data-day-start2]'), e2 = row.querySelector('[data-day-end2]');
+      var used = open && !second.hidden;
+      var bad2 = used && ((s2.value && e2.value && e2.value <= s2.value) || (s2.value && e.value && s2.value < e.value));
+      s2.required = e2.required = used;
+      [s2, e2].forEach(function (el) { el.classList.toggle('input-error', !!bad2); el.setCustomValidity(bad2 ? omniText.t('businessInfo.hours.secondAfterFirst') : ''); });
+      row.querySelector('[data-day-err2]').hidden = !bad2;
+    };
+    var showSecond = function (row, show) {
+      row.querySelector('[data-day-second]').hidden = !show;
+      row.querySelector('[data-day-second-add]').hidden = show;
+      if (!show) { row.querySelector('[data-day-start2]').value = ''; row.querySelector('[data-day-end2]').value = ''; }
+      checkRow(row);
     };
     var syncRow = function (row) {
       var open = row.querySelector('[data-day-open]').checked;
@@ -58,6 +72,12 @@
         : omniText.plural('businessInfo.hours.open', n);
     };
     rows.forEach(function (row) {
+      row.querySelector('[data-day-second-add]').addEventListener('click', function () {
+        showSecond(row, true);
+        var e = row.querySelector('[data-day-end]').value, s2 = row.querySelector('[data-day-start2]');
+        if (!s2.value && e) s2.focus();
+      });
+      row.querySelector('[data-day-second-remove]').addEventListener('click', function () { showSecond(row, false); });
       row.querySelector('[data-day-open]').addEventListener('change', function () { syncRow(row); syncCount(); });
       row.querySelectorAll('input[type=time]').forEach(function (t) { t.addEventListener('input', function () { checkRow(row); }); });
       syncRow(row);
@@ -67,10 +87,14 @@
     document.getElementById('avail-copy').addEventListener('click', function () {
       var mon = rows.filter(function (r) { return r.dataset.day === 'Monday'; })[0] || rows[0];
       var s = mon.querySelector('[data-day-start]').value, e = mon.querySelector('[data-day-end]').value;
+      var monSecond = !mon.querySelector('[data-day-second]').hidden;
+      var s2 = mon.querySelector('[data-day-start2]').value, e2 = mon.querySelector('[data-day-end2]').value;
       rows.forEach(function (row) {
         if (row === mon || !row.querySelector('[data-day-open]').checked) return;
         row.querySelector('[data-day-start]').value = s;
         row.querySelector('[data-day-end]').value = e;
+        showSecond(row, monSecond);
+        if (monSecond) { row.querySelector('[data-day-start2]').value = s2; row.querySelector('[data-day-end2]').value = e2; }
         checkRow(row);
       });
     });

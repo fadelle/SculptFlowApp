@@ -84,6 +84,7 @@ public static class MessageTraceMapper
             TraceSteps.WebhookRejected => $"Webhook rejected{on}: {D("reason")}",
             TraceSteps.WebhookClientUnresolved => $"No client owns this number{on}; event {D("kind")} ignored",
             TraceSteps.WebhookIgnored => $"Webhook ignored{on}: {D("reason")}",
+            TraceSteps.WebhookEventFailed => $"One {D("kind")} event failed and was skipped{on}: {D("error")}",
             TraceSteps.MessageSaved => $"Saved to the inbox: {D("sender")} {D("type")} ({D("direction")})",
             TraceSteps.MessageDeduplicated => "Duplicate delivery; the message was already saved",
             TraceSteps.ConversationReopened => "Closed conversation reopened by the contact",

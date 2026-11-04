@@ -48,6 +48,23 @@ public class ApiErrorsTests
     }
 
     [Fact]
+    public void A_booking_rule_the_member_may_override_answers_422_with_its_code()
+    {
+        // QA t5-ops-01: the booking dialog asks "Book anyway?" on this code.
+        var context = new ExceptionContext(new ActionContext(new DefaultHttpContext(), new RouteData(), new ActionDescriptor()), [])
+        {
+            Exception = new BookingRulesException("bookings.rules.closed") { Reason = SlotCheckReason.Closed }
+        };
+
+        new ApiErrorsAttribute().OnException(context);
+
+        var result = Assert.IsType<ObjectResult>(context.Result);
+        Assert.Equal(422, result.StatusCode);
+        Assert.Equal("booking_rules", result.Value!.GetType().GetProperty("code")!.GetValue(result.Value));
+        Assert.Equal(409, ApiErrorsAttribute.StatusFor(new OverlappingRecordException("bookings.errors.overlap")));
+    }
+
+    [Fact]
     public void An_email_failure_answers_a_fixed_text_never_the_providers_reason()
     {
         var http = new DefaultHttpContext

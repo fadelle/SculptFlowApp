@@ -27,6 +27,14 @@ public class MessageServiceTests
     private readonly Mock<IOptOutService> _optOut = new();
     private readonly Mock<IAutoReplyService> _autoReplies = new();
     private readonly Mock<IBusinessTypeService> _businessTypes = PipelineKit.Types();
+    private readonly Mock<IConfigManager> _config = ConfigWithRetry();
+
+    private static Mock<IConfigManager> ConfigWithRetry()
+    {
+        var config = new Mock<IConfigManager>();
+        config.SetupGet(c => c.AiRetryUnansweredAfterSeconds).Returns(120);
+        return config;
+    }
     private readonly MessageBillingHold _hold = new(Guid.Empty, "key", BillingSettlementTrigger.OnProviderAccepted);
     private readonly Contact _contact;
 
@@ -48,7 +56,7 @@ public class MessageServiceTests
 
     private MessageService Sut() => new(_conversations.Object, _messages.Object, _contacts.Object, _templates.Object, _campaigns.Object, _uow.Object,
         _whatsApp.Object, [_sender.Object], _notifier.Object, _events.Object, _notifications.Object, _billing.Object, _entitlements.Object, _inboxSettings.Object, _tracer.Object,
-        _conversationService.Object, _optOut.Object, _autoReplies.Object, _businessTypes.Object);
+        _conversationService.Object, _optOut.Object, _autoReplies.Object, _businessTypes.Object, _config.Object);
 
     private void AutoReply(AutoReplyChoice choice) =>
         _autoReplies.Setup(a => a.ChooseAsync(_clientId, It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
@@ -344,6 +352,7 @@ public class MessageServiceTests
         Message? saved = null;
         _messages.Setup(m => m.Add(It.IsAny<Message>())).Callback<Message>(m => saved = m);
         _contacts.Setup(l => l.GetByIdAsync(_contactId, It.IsAny<CancellationToken>())).ReturnsAsync(_contact);
+        _contacts.Setup(l => l.GetAsync(_clientId, _contactId, It.IsAny<CancellationToken>())).ReturnsAsync(_contact);
 
         var r = await Sut().IngestAsync(Ingest(c.Id, IngestEventType.CustomerMessage));
 
@@ -551,6 +560,7 @@ public class MessageServiceTests
     {
         var c = Conv();
         _contacts.Setup(l => l.GetByIdAsync(_contactId, It.IsAny<CancellationToken>())).ReturnsAsync(_contact);
+        _contacts.Setup(l => l.GetAsync(_clientId, _contactId, It.IsAny<CancellationToken>())).ReturnsAsync(_contact);
         var recipient = new CampaignRecipient { Id = Guid.NewGuid(), Campaign = new Campaign { Name = "Spring" } };
         _campaigns.Setup(x => x.FindLatestAwaitingReplyAsync(_clientId, _contactId, It.IsAny<CancellationToken>())).ReturnsAsync(recipient);
 
@@ -851,6 +861,64 @@ public class MessageServiceTests
     }
 
     [Fact]
+    public async Task An_ingest_naming_another_contact_than_the_conversations_is_refused_and_changes_nothing()
+    {
+        // QA t8-03: a STOP into client A's conversation with client B's contactId opted B's contact out.
+        var c = Conv();
+        var request = Ingest(c.Id, IngestEventType.CustomerMessage) with { ContactId = Guid.NewGuid(), Content = "STOP" };
+
+        var ex = await Assert.ThrowsAsync<ArgumentException>(() => Sut().IngestAsync(request));
+
+        Assert.Equal("inbox.errors.contactNotInConversation", ex.Message);
+        _messages.Verify(m => m.Add(It.IsAny<Message>()), Times.Never);
+        _optOut.Verify(o => o.Apply(It.IsAny<Contact>(), It.IsAny<bool>(), It.IsAny<string>(), It.IsAny<Guid?>()), Times.Never);
+        _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task An_ingest_without_a_contact_id_uses_the_conversations_contact_read_within_the_client()
+    {
+        var c = Conv();
+        _contacts.Setup(l => l.GetAsync(_clientId, _contactId, It.IsAny<CancellationToken>())).ReturnsAsync(_contact);
+        Message? saved = null;
+        _messages.Setup(m => m.Add(It.IsAny<Message>())).Callback<Message>(m => saved = m);
+
+        await Sut().IngestAsync(Ingest(c.Id, IngestEventType.CustomerMessage) with { ContactId = Guid.Empty });
+
+        Assert.Equal(_contactId, saved!.ContactId);
+        _contacts.Verify(l => l.GetAsync(_clientId, _contactId, It.IsAny<CancellationToken>()), Times.Once);
+        _contacts.Verify(l => l.GetByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Theory]
+    // QA t10-03: the first delivery saved the message, then failed before the AI ran; every retry was ignored as a duplicate.
+    [InlineData(300, ConversationMode.Ai, "text", "when are you open?", false, true)]
+    [InlineData(30, ConversationMode.Ai, "text", "when are you open?", false, false)]     // too young: a run may still be going
+    [InlineData(300, ConversationMode.Human, "text", "when are you open?", false, false)]  // the team has it
+    [InlineData(300, ConversationMode.Ai, "image", null, false, false)]                   // never went to the AI anyway
+    [InlineData(300, ConversationMode.Ai, "text", "STOP", false, false)]                  // a stop word isn't for the AI
+    [InlineData(300, ConversationMode.Ai, "text", "when are you open?", true, false)]     // something came after it
+    public async Task A_repeat_of_a_customer_message_nobody_answered_asks_the_ai_again(int ageSeconds, string mode, string type, string? content,
+        bool laterMessages, bool expected)
+    {
+        var c = Conv(mode);
+        var existing = new Message
+        {
+            Id = Guid.NewGuid(), ClientId = _clientId, ConversationId = c.Id, ContactId = _contactId, Direction = MessageDirection.Inbound,
+            SenderType = MessageSenderType.Contact, Channel = ConversationChannel.WhatsApp, MessageType = type, Content = content,
+            CreatedAt = DateTimeOffset.UtcNow.AddSeconds(-ageSeconds)
+        };
+        _messages.Setup(m => m.FindByExternalIdAsync(_clientId, ConversationChannel.WhatsApp, "ext1", It.IsAny<CancellationToken>())).ReturnsAsync(existing);
+        _messages.Setup(m => m.HasMessagesSinceAsync(c.Id, existing.CreatedAt, existing.Id, It.IsAny<CancellationToken>())).ReturnsAsync(laterMessages);
+        _optOut.Setup(o => o.MatchKeyword("STOP")).Returns(true);
+
+        var r = await Sut().IngestAsync(Ingest(c.Id, IngestEventType.CustomerMessage));
+
+        Assert.Equal((true, expected), (r.Deduplicated, r.AiEligible));
+        _messages.Verify(m => m.Add(It.IsAny<Message>()), Times.Never);
+    }
+
+    [Fact]
     public async Task A_duplicate_delivery_records_a_skip()
     {
         var c = Conv();
@@ -869,6 +937,7 @@ public class MessageServiceTests
     {
         var c = Conv(ConversationMode.Ai);
         _contacts.Setup(l => l.GetByIdAsync(_contactId, It.IsAny<CancellationToken>())).ReturnsAsync(_contact);
+        _contacts.Setup(l => l.GetAsync(_clientId, _contactId, It.IsAny<CancellationToken>())).ReturnsAsync(_contact);
         _optOut.Setup(o => o.MatchKeyword("STOP")).Returns(true);
         _optOut.Setup(o => o.ConfirmationTextAsync(_clientId, _contact, true, It.IsAny<CancellationToken>())).ReturnsAsync("You're unsubscribed.");
         var saved = new List<Message>();
@@ -890,6 +959,7 @@ public class MessageServiceTests
         // QA t3-inbox-03: a second STOP got a second "you're unsubscribed".
         var c = Conv(ConversationMode.Ai);
         _contacts.Setup(l => l.GetByIdAsync(_contactId, It.IsAny<CancellationToken>())).ReturnsAsync(_contact);
+        _contacts.Setup(l => l.GetAsync(_clientId, _contactId, It.IsAny<CancellationToken>())).ReturnsAsync(_contact);
         _optOut.Setup(o => o.MatchKeyword("STOP")).Returns(true);
         _optOut.Setup(o => o.Apply(_contact, true, It.IsAny<string>(), It.IsAny<Guid?>())).Returns(false);
 
@@ -909,6 +979,7 @@ public class MessageServiceTests
         // QA t3-inbox-03: every new Telegram contact got "You're subscribed again" and no greeting.
         var c = Conv(ConversationMode.Ai);
         _contacts.Setup(l => l.GetByIdAsync(_contactId, It.IsAny<CancellationToken>())).ReturnsAsync(_contact);
+        _contacts.Setup(l => l.GetAsync(_clientId, _contactId, It.IsAny<CancellationToken>())).ReturnsAsync(_contact);
         _optOut.Setup(o => o.MatchKeyword(It.IsAny<string?>())).Returns(false);
         AutoReply(AutoReplyChoice.Send("Welcome! How can we help?"));
 
@@ -925,6 +996,7 @@ public class MessageServiceTests
     {
         var c = Conv(ConversationMode.Ai);
         _contacts.Setup(l => l.GetByIdAsync(_contactId, It.IsAny<CancellationToken>())).ReturnsAsync(_contact);
+        _contacts.Setup(l => l.GetAsync(_clientId, _contactId, It.IsAny<CancellationToken>())).ReturnsAsync(_contact);
         _optOut.Setup(o => o.MatchKeyword("/stop")).Returns(true);
         var r = await Sut().IngestAsync(Ingest(c.Id, IngestEventType.CustomerMessage, messageType: "command") with { Content = "/stop" });
         Assert.False(r.AiEligible);
@@ -936,6 +1008,7 @@ public class MessageServiceTests
     {
         var c = Conv(ConversationMode.Human);
         _contacts.Setup(l => l.GetByIdAsync(_contactId, It.IsAny<CancellationToken>())).ReturnsAsync(_contact);
+        _contacts.Setup(l => l.GetAsync(_clientId, _contactId, It.IsAny<CancellationToken>())).ReturnsAsync(_contact);
         _optOut.Setup(o => o.MatchKeyword(It.IsAny<string?>())).Returns(false);
         _optOut.Setup(o => o.ConfirmationTextAsync(_clientId, _contact, false, It.IsAny<CancellationToken>())).ReturnsAsync("Welcome back.");
         _sender.Setup(s => s.SendTextAsync(It.IsAny<Conversation>(), "Welcome back.", It.IsAny<CancellationToken>())).ThrowsAsync(new ChannelSendException("window closed"));
@@ -952,6 +1025,7 @@ public class MessageServiceTests
     {
         var c = Conv(ConversationMode.Ai);
         _contacts.Setup(l => l.GetByIdAsync(_contactId, It.IsAny<CancellationToken>())).ReturnsAsync(_contact);
+        _contacts.Setup(l => l.GetAsync(_clientId, _contactId, It.IsAny<CancellationToken>())).ReturnsAsync(_contact);
         var r = await Sut().IngestAsync(Ingest(c.Id, IngestEventType.CustomerMessage));
         Assert.True(r.AiEligible);
         await Sut().IngestAsync(Ingest(c.Id, IngestEventType.BusinessAppEcho, externalId: "ext2") with { Content = "stop" });
@@ -1070,6 +1144,7 @@ public class MessageServiceTests
     {
         var c = Conv(ConversationMode.Human);
         _contacts.Setup(l => l.GetByIdAsync(_contactId, It.IsAny<CancellationToken>())).ReturnsAsync(_contact);
+        _contacts.Setup(l => l.GetAsync(_clientId, _contactId, It.IsAny<CancellationToken>())).ReturnsAsync(_contact);
         _optOut.Setup(o => o.MatchKeyword(It.IsAny<string?>())).Returns(true);
         AutoReply(AutoReplyChoice.Send("Hi"));
 

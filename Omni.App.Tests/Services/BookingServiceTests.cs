@@ -148,13 +148,65 @@ public class BookingServiceTests
     }
 
     [Fact]
-    public async Task Create_skips_availability_and_a_failing_in_app_notifier_is_ignored()
+    public async Task A_member_booking_is_checked_under_the_client_lock_fills_its_end_and_a_failing_in_app_notifier_is_ignored()
     {
+        // QA t5-ops-01: the dashboard booking skipped every rule.
         _notifier.Setup(n => n.BookingChangedAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>())).ThrowsAsync(new InvalidOperationException());
+        Booking? saved = null;
+        _bookings.Setup(a => a.Add(It.IsAny<Booking>())).Callback<Booking>(a => saved = a);
         var r = await Sut().CreateAsync(Req());
         Assert.Equal(BookingStatus.Booked, r.Status);
-        _availability.Verify(a => a.CheckSlotAsync(It.IsAny<Guid>(), It.IsAny<Guid?>(), It.IsAny<DateTimeOffset>(), It.IsAny<DateTimeOffset?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()), Times.Never);
+        Assert.Equal(saved!.ScheduledStart.AddMinutes(30), saved.ScheduledEnd);   // the service/default length when none was given
+        _bookings.Verify(a => a.LockClientForBookingAsync(_clientId, It.IsAny<CancellationToken>()), Times.Once);
+        _availability.Verify(a => a.OverlapsBookingAsync(_clientId, It.IsAny<DateTimeOffset>(), It.IsAny<DateTimeOffset>(), null, It.IsAny<CancellationToken>()), Times.Once);
+        _tx.Verify(t => t.CommitAsync(It.IsAny<CancellationToken>()), Times.Once);
         _notifications.Verify(n => n.CreateAsync(_clientId, NotificationType.BookingCreated, It.IsAny<NotificationText>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task A_member_can_never_book_on_top_of_another_booking()
+    {
+        _availability.Setup(a => a.OverlapsBookingAsync(_clientId, It.IsAny<DateTimeOffset>(), It.IsAny<DateTimeOffset>(), null, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        var ex = await Assert.ThrowsAsync<OverlappingRecordException>(() => Sut().CreateAsync(Req() with { OverrideRules = true }));
+        Assert.Equal("bookings.errors.overlap", ex.Message);
+        _bookings.Verify(a => a.Add(It.IsAny<Booking>()), Times.Never);
+        _tx.Verify(t => t.CommitAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Theory]
+    [InlineData(SlotCheckReason.Closed, "bookings.rules.closed")]
+    [InlineData(SlotCheckReason.Past, "bookings.rules.past")]
+    [InlineData(SlotCheckReason.Notice, "bookings.rules.notice")]
+    [InlineData(SlotCheckReason.Horizon, "bookings.rules.horizon")]
+    [InlineData(SlotCheckReason.Overlap, "bookings.rules.buffer")]
+    [InlineData(SlotCheckReason.NotConfigured, "bookings.rules.notConfigured")]
+    public async Task A_soft_rule_asks_the_member_first_and_is_booked_once_they_confirm(string reason, string key)
+    {
+        _availability.Setup(a => a.CheckSlotAsync(_clientId, It.IsAny<Guid?>(), It.IsAny<DateTimeOffset>(), It.IsAny<DateTimeOffset?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Guid _, Guid? _, DateTimeOffset s, DateTimeOffset? e, Guid? _, CancellationToken _) => new SlotCheck("no", e ?? s.AddMinutes(45), reason));
+
+        var ex = await Assert.ThrowsAsync<BookingRulesException>(() => Sut().CreateAsync(Req()));
+        Assert.Equal((key, reason, BookingRulesException.ErrorCode), (ex.Message, ex.Reason, ex.Code));
+        _bookings.Verify(a => a.Add(It.IsAny<Booking>()), Times.Never);
+
+        Booking? saved = null;
+        _bookings.Setup(a => a.Add(It.IsAny<Booking>())).Callback<Booking>(a => saved = a);
+        await Sut().CreateAsync(Req() with { OverrideRules = true });
+        Assert.Equal(saved!.ScheduledStart.AddMinutes(45), saved.ScheduledEnd);
+    }
+
+    [Theory]
+    [InlineData(0, -30, "bookings.errors.endBeforeStart")]
+    [InlineData(0, 0, "bookings.errors.endBeforeStart")]
+    [InlineData(0, 25 * 60, "bookings.errors.tooLong")]
+    [InlineData(-400, 30, "bookings.errors.dateOutOfRange")]
+    [InlineData(800, 30, "bookings.errors.dateOutOfRange")]
+    public async Task Impossible_times_are_refused_before_anything_else(int startDays, int lengthMinutes, string key)
+    {
+        var start = DateTimeOffset.UtcNow.AddDays(startDays);
+        var ex = await Assert.ThrowsAsync<ArgumentException>(() => Sut().CreateAsync(Req(start) with { ScheduledEnd = start.AddMinutes(lengthMinutes), OverrideRules = true }));
+        Assert.Equal(key, ex.Message);
+        _bookings.Verify(a => a.LockClientForBookingAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -209,7 +261,7 @@ public class BookingServiceTests
         var a = MakeBooking(BookingStatus.Confirmed);
         Setup(a);
         var from = a.ScheduledStart;
-        var start = new DateTimeOffset(2030, 3, 4, 11, 0, 0, TimeSpan.FromHours(2));   // 09:00 UTC
+        var start = new DateTimeOffset(DateTime.SpecifyKind(DateTime.UtcNow.Date.AddDays(20).AddHours(11), DateTimeKind.Unspecified), TimeSpan.FromHours(2));   // 09:00 UTC
         var newService = Guid.NewGuid();
 
         var r = await Sut().UpdateAsync(_clientId, a.Id, new UpdateBookingRequest(start, start.AddMinutes(45), newService, " video ", "  bring the form  "));
@@ -224,7 +276,30 @@ public class BookingServiceTests
         _calendar.Verify(c => c.TriggerBookingSyncAsync(_clientId, It.IsAny<BookingResponse>(), "rescheduled", It.IsAny<CancellationToken>()), Times.Once);
         _notifications.Verify(n => n.CreateAsync(_clientId, NotificationType.BookingRescheduled, It.IsAny<NotificationText>(), _contactId, null, a.Id, null,
             It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
-        _availability.Verify(x => x.CheckSlotAsync(It.IsAny<Guid>(), It.IsAny<Guid?>(), It.IsAny<DateTimeOffset>(), It.IsAny<DateTimeOffset?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()), Times.Never);
+        // The move is checked like a new booking, with this booking left out (QA t5-ops-01).
+        _availability.Verify(x => x.OverlapsBookingAsync(_clientId, start, start.AddMinutes(45), a.Id, It.IsAny<CancellationToken>()), Times.Once);
+        _bookings.Verify(x => x.LockClientForBookingAsync(_clientId, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task A_member_cant_move_a_booking_on_top_of_another_and_is_asked_before_moving_it_outside_opening_hours()
+    {
+        var a = MakeBooking();
+        Setup(a);
+        var before = a.ScheduledStart;
+        var start = a.ScheduledStart.AddHours(2);
+        _availability.Setup(x => x.OverlapsBookingAsync(_clientId, start, start.AddMinutes(30), a.Id, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        await Assert.ThrowsAsync<OverlappingRecordException>(() => Sut().UpdateAsync(_clientId, a.Id, new UpdateBookingRequest(start, start.AddMinutes(30), null, null, null, true)));
+
+        var later = a.ScheduledStart.AddHours(5);
+        _availability.Setup(x => x.CheckSlotAsync(_clientId, It.IsAny<Guid?>(), later, It.IsAny<DateTimeOffset?>(), a.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SlotCheck("closed", later.AddMinutes(30), SlotCheckReason.Closed));
+        await Assert.ThrowsAsync<BookingRulesException>(() => Sut().UpdateAsync(_clientId, a.Id, new UpdateBookingRequest(later, later.AddMinutes(30), null, null, null)));
+        Assert.Equal(before, a.ScheduledStart);
+        _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+
+        await Sut().UpdateAsync(_clientId, a.Id, new UpdateBookingRequest(later, later.AddMinutes(30), null, null, null, true));
+        Assert.Equal(later, a.ScheduledStart);
     }
 
     [Fact]
@@ -244,9 +319,10 @@ public class BookingServiceTests
         _calendar.Verify(c => c.TriggerBookingSyncAsync(_clientId, It.IsAny<BookingResponse>(), "updated", It.IsAny<CancellationToken>()), Times.Once);
         _notifications.Verify(n => n.CreateAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<NotificationText>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
 
-        // Clearing the service, place and notes.
+        // Clearing the service, place, notes and length.
         await Sut().UpdateAsync(_clientId, a.Id, new UpdateBookingRequest(a.ScheduledStart, null, null, "", " "));
-        Assert.Equal(((Guid?)null, (string?)null, (string?)null, (DateTimeOffset?)null), (a.ServiceId, a.LocationType, a.Notes, a.ScheduledEnd));
+        // A booking always keeps an end: without one it takes the service or default length (QA t5-ops-01).
+        Assert.Equal(((Guid?)null, (string?)null, (string?)null, a.ScheduledStart.AddMinutes(30)), (a.ServiceId, a.LocationType, a.Notes, a.ScheduledEnd));
     }
 
     [Theory]

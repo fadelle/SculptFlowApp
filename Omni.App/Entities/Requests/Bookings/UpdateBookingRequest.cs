@@ -7,5 +7,7 @@ public record UpdateBookingRequest(
     DateTimeOffset? ScheduledEnd,
     Guid? ServiceId,
     string? LocationType,
-    string? Notes
+    string? Notes,
+    // Move past the soft rules after being asked (see CreateBookingRequest.OverrideRules).
+    bool OverrideRules = false
 );

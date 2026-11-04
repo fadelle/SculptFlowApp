@@ -27,6 +27,7 @@ public interface IConversationService
     /// t3-inbox-04), with each tab's count and the unread total. An unknown filter is refused.</summary>
     Task<ConversationListPage> ListAsync(Guid clientId, ConversationListRequest request, CancellationToken ct = default);
 
+    /// <summary>The conversation's messages; KeyNotFoundException (404) when it isn't this client's (QA t1-accounts-17).</summary>
     Task<IReadOnlyList<MessageResponse>> GetMessagesAsync(Guid clientId, Guid conversationId, CancellationToken ct = default);
 
     /// <summary>Marks the conversation as read by members now (clears its unread count). False if it

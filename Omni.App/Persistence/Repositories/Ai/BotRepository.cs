@@ -35,4 +35,6 @@ public class BotRepository : IBotRepository
     public void Remove(Bot bot) => _db.Bots.Remove(bot);
 
     public void RemoveSource(BotKnowledgeSource source) => _db.BotKnowledgeSources.Remove(source);
+
+    public void AddSource(BotKnowledgeSource source) => _db.BotKnowledgeSources.Add(source);
 }

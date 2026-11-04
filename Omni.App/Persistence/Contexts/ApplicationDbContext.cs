@@ -218,6 +218,8 @@ public class ApplicationDbContext : IdentityUserContext<AppUser>
             e.Property(x => x.Code).HasColumnName("code").HasMaxLength(100);
             e.Property(x => x.Description).HasColumnName("description");
             e.Property(x => x.BookingDuration).HasColumnName("booking_duration");
+            e.Property(x => x.Price).HasColumnName("price").HasPrecision(12, 2);
+            e.Property(x => x.Currency).HasColumnName("currency").HasMaxLength(3);
             e.Property(x => x.IsActive).HasColumnName("is_active");
             e.Property(x => x.CreatedAt).HasColumnName("created_at");
             e.Property(x => x.UpdatedAt).HasColumnName("updated_at");

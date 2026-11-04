@@ -55,13 +55,17 @@ public class MessageService : IMessageService
     private readonly IAutoReplyService _autoReplies;
     private readonly IBusinessTypeService _businessTypes;
 
+    private readonly IConfigManager _config;
+
     public MessageService(
         IConversationRepository conversations, IMessageRepository messages, IContactRepository contacts,
         IWhatsAppTemplateRepository templates, ICampaignRepository campaigns, IUnitOfWork unitOfWork, IWhatsAppService whatsApp, IEnumerable<IChannelSender> senders,
         IInboxNotifier notifier, IEventLogger events, INotificationService notifications,
         IMessageBillingService billing, IEntitlementService entitlements, IInboxSettingsService inboxSettings, IMessageTracer tracer,
-        IConversationService conversationService, IOptOutService optOut, IAutoReplyService autoReplies, IBusinessTypeService businessTypes)
+        IConversationService conversationService, IOptOutService optOut, IAutoReplyService autoReplies, IBusinessTypeService businessTypes,
+        IConfigManager config)
     {
+        _config = config;
         _autoReplies = autoReplies;
         _businessTypes = businessTypes;
         _conversationService = conversationService;
@@ -544,6 +548,13 @@ public class MessageService : IMessageService
         {
             return new IngestMessageResult(Found: false, Deduplicated: false, null);
         }
+        // The contact is the conversation's (QA t8-03): a different contactId, even another client's, is refused (400) instead of
+        // opting out or updating someone else's contact; an empty one means "the conversation's".
+        if (request.ContactId != Guid.Empty && request.ContactId != conversation.ContactId)
+        {
+            throw new ArgumentException("inbox.errors.contactNotInConversation");
+        }
+        request = request with { ContactId = conversation.ContactId };
 
         // Idempotency: Meta/n8n webhook deliveries can retry. If we've already recorded this exact
         // external message for this client+channel, hand back the existing row instead of a duplicate.
@@ -552,11 +563,12 @@ public class MessageService : IMessageService
             var existing = await _messages.FindByExternalIdAsync(request.ClientId, request.Channel, request.ExternalMessageId, ct);
             if (existing is not null)
             {
+                var retryAi = await IsUnansweredRepeatAsync(conversation, existing, ct);
                 _tracer.Step(TraceSteps.MessageDeduplicated, TraceOutcomes.Skipped,
                     new TraceIds(request.ClientId, request.ConversationId, existing.Id, request.Channel, request.ExternalMessageId),
-                    detail: new { eventType = request.EventType });
+                    detail: new { eventType = request.EventType, retryAi });
                 return new IngestMessageResult(Found: true, Deduplicated: true, InboxMapper.ToResponse(existing),
-                    conversation.Mode, AiEligible: false);
+                    conversation.Mode, AiEligible: retryAi);
             }
         }
 
@@ -656,7 +668,7 @@ public class MessageService : IMessageService
             }
         }
 
-        var contact = await _contacts.GetByIdAsync(request.ContactId, ct);
+        var contact = await _contacts.GetAsync(request.ClientId, request.ContactId, ct);
         if (contact is not null)
         {
             contact.LastContactAt = now;
@@ -921,6 +933,20 @@ public class MessageService : IMessageService
 
     /// <summary>Message types a stop/start word can arrive as (Telegram's /stop is a command).</summary>
     private static readonly HashSet<string> OptOutMessageTypes = new(StringComparer.OrdinalIgnoreCase) { "text", "command" };
+
+    /// <summary>A provider repeating a customer message the AI never answered (QA t10-03: its first delivery failed after the
+    /// message was saved, so the AI never ran, and every retry was "deduplicated" and ignored). Asks the AI again only when the
+    /// message would have gone to it (a customer text in AI mode, not a stop/start word), nothing at all came after it, and it
+    /// is older than Ai / RetryUnansweredAfterSeconds, so a run still in progress is never doubled.</summary>
+    private async Task<bool> IsUnansweredRepeatAsync(Conversation conversation, Message message, CancellationToken ct)
+    {
+        if (message.Direction != MessageDirection.Inbound || message.SenderType != MessageSenderType.Contact) return false;
+        if (conversation.Mode != ConversationMode.Ai) return false;
+        if (!AiEligibleMessageTypes.Contains(message.MessageType) && !IsTelegramStart(message)) return false;
+        if (OptOutMessageTypes.Contains(message.MessageType) && !IsTelegramStart(message) && _optOut.MatchKeyword(message.Content) is not null) return false;
+        if (message.CreatedAt > DateTimeOffset.UtcNow.AddSeconds(-_config.AiRetryUnansweredAfterSeconds)) return false;
+        return !await _messages.HasMessagesSinceAsync(conversation.Id, message.CreatedAt, message.Id, ct);
+    }
 
     /// <summary>Customer message types the AI assistant is allowed to see — see IngestMessageResult.AiEligible.</summary>
     private static readonly HashSet<string> AiEligibleMessageTypes = new(StringComparer.OrdinalIgnoreCase) { "text", "interactive" };

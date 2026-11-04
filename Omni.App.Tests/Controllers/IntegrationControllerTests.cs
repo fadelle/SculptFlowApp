@@ -174,6 +174,21 @@ public class WebhookControllerTests
         _ai.Verify(a => a.NotifyAsync(It.IsAny<AiTriggerPayload>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
     }
 
+    [Fact]
+    public async Task A_signed_delivery_always_gets_its_200_and_one_failed_ai_trigger_doesnt_stop_the_others()
+    {
+        // QA t10-03: an error answered 500, so Meta retried a delivery that failed the same way every time.
+        var client = Guid.NewGuid(); var c1 = Guid.NewGuid(); var c2 = Guid.NewGuid();
+        WhatsAppWebhookResponse Msg(Guid convo) => new(true, "customer_message", true, client, ConversationId: convo, MessageType: "text", Content: "hi");
+        Processed(Msg(c1), Msg(c2));
+        _ai.Setup(a => a.NotifyAsync(It.Is<AiTriggerPayload>(p => p.ConversationId == c1), It.IsAny<CancellationToken>())).ThrowsAsync(new HttpRequestException("n8n down"));
+        Assert.IsType<OkResult>(await Signed("{}").Receive(default));
+        _ai.Verify(a => a.NotifyAsync(It.Is<AiTriggerPayload>(p => p.ConversationId == c2), It.IsAny<CancellationToken>()), Times.Once);
+
+        _processor.Setup(p => p.ProcessAllAsync(It.IsAny<JsonElement>(), It.IsAny<CancellationToken>())).ThrowsAsync(new InvalidOperationException("db down"));
+        Assert.IsType<OkResult>(await Signed("{}").Receive(default));
+    }
+
     [Theory]
     [InlineData(null)]
     [InlineData("sha256=deadbeef")]

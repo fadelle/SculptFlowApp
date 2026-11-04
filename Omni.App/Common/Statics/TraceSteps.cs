@@ -11,6 +11,8 @@ public static class TraceSteps
     public const string WebhookRejected = "webhook.rejected";
     public const string WebhookClientUnresolved = "webhook.client_unresolved";
     public const string WebhookIgnored = "webhook.ignored";
+    /// <summary>One event of a delivery failed and was skipped; the rest of the delivery went on (QA t10-03).</summary>
+    public const string WebhookEventFailed = "webhook.event_failed";
 
     // Inbox
     public const string MessageSaved = "message.saved";

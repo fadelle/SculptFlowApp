@@ -235,8 +235,11 @@ public class BotTestServiceTests
         Assert.NotNull(await Sut().GetAsync(_clientId, _bot.Id, session.Id));
         Assert.Null(await Sut().GetAsync(_clientId, Guid.NewGuid(), session.Id));
         Assert.Null(await Sut().GetAsync(_clientId, _bot.Id, Guid.NewGuid()));
-        await Sut().ResetAsync(_clientId, session.Id);
-        _tests.Verify(t => t.DeleteSessionAsync(_clientId, session.Id, It.IsAny<CancellationToken>()), Times.Once);
+        _tests.Setup(t => t.DeleteSessionAsync(_clientId, _bot.Id, session.Id, It.IsAny<CancellationToken>())).ReturnsAsync(1);
+        await Sut().ResetAsync(_clientId, _bot.Id, session.Id);
+        _tests.Verify(t => t.DeleteSessionAsync(_clientId, _bot.Id, session.Id, It.IsAny<CancellationToken>()), Times.Once);
+        // Another bot's or client's session is "not found", never a silent 204 (QA t1-accounts-17).
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => Sut().ResetAsync(_clientId, Guid.NewGuid(), session.Id));
         await Assert.ThrowsAsync<KeyNotFoundException>(() => Sut().CancelAsync(Run(new BotTestSession { Id = Guid.NewGuid() })));
     }
 }

@@ -382,6 +382,12 @@ create table if not exists core.services (
   created_at             timestamptz not null default now(),
   updated_at             timestamptz not null default now()
 );
+-- QA t5-ops-18: an optional price per service (shown to the AI's get_services and on the Services page). Both or neither.
+alter table core.services add column if not exists price numeric(12,2);
+alter table core.services add column if not exists currency varchar(3);
+alter table core.services drop constraint if exists ck_services_price;
+alter table core.services add constraint ck_services_price check (
+  (price is null and currency is null) or (price >= 0 and currency ~ '^[A-Z]{3}$'));
 
 create index if not exists ix_services_client_id on core.services(client_id);
 
@@ -1797,9 +1803,9 @@ create index if not exists ix_kbr_generation on knowledge.knowledge_retrieval_be
 -- =====================================================================
 -- Structured client availability (the booking source of truth; clients.operating_hours stays free text for the AI to quote)
 -- ---------------------------------------------------------------------
--- Weekly schedule: one row per (client, weekday). day_of_week follows .NET DayOfWeek: 0 = Sunday ... 6 = Saturday.
--- Times are the client's LOCAL wall-clock (clients.timezone). To allow several windows per day later, drop
--- ux_availability_rules_day - the slot service already iterates every rule row for a day.
+-- Weekly schedule: one or more rows per (client, weekday), each an opening window (QA t5-ops-18: split days, e.g. a lunch
+-- break; the dashboard offers two). A closed day keeps one row with is_open = false. day_of_week follows .NET DayOfWeek:
+-- 0 = Sunday ... 6 = Saturday. Times are the client's LOCAL wall-clock (clients.timezone).
 create table if not exists scheduling.availability_rules (
   id           uuid primary key default gen_random_uuid(),
   client_id    uuid not null references core.clients(id) on delete cascade,
@@ -1811,7 +1817,8 @@ create table if not exists scheduling.availability_rules (
   updated_at   timestamptz not null default now(),
   constraint ck_availability_rules_range check (end_time > start_time)
 );
-create unique index if not exists ux_availability_rules_day on scheduling.availability_rules(client_id, day_of_week);
+drop index if exists scheduling.ux_availability_rules_day;
+create index if not exists ix_availability_rules_client_day on scheduling.availability_rules(client_id, day_of_week);
 drop trigger if exists trg_availability_rules_updated_at on scheduling.availability_rules;
 create trigger trg_availability_rules_updated_at before update on scheduling.availability_rules
   for each row execute function set_updated_at();

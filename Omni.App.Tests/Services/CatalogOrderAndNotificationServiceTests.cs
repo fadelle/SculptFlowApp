@@ -41,6 +41,36 @@ public class ServiceServiceTests
     }
 
     [Fact]
+    public async Task A_service_can_have_a_price_with_its_currency_and_both_go_to_the_ai()
+    {
+        // QA t5-ops-18: services had no price; the AI could only quote the Knowledge Base text.
+        Service? added = null;
+        _repo.Setup(r => r.Add(It.IsAny<Service>())).Callback<Service>(p => added = p);
+        var r = await Sut().CreateAsync(new CreateServiceRequest(_clientId, "Facial", null, null, 45, 49.999m, " usd "));
+        Assert.Equal((50.00m, "USD"), (added!.Price, added.Currency));
+        Assert.Equal((50.00m, "USD"), (r.Price, r.Currency));
+
+        // A currency without a price is dropped; clearing the price clears both.
+        var p = Existing();
+        p.Price = 10m; p.Currency = "EUR";
+        await Sut().UpdateAsync(_clientId, p.Id, new UpdateServiceRequest("Nose job", null, null, 30, null, "EUR"));
+        Assert.Equal(((decimal?)null, (string?)null), (p.Price, p.Currency));
+    }
+
+    [Theory]
+    [InlineData(-1, "USD", "services.errors.priceRange")]
+    [InlineData(10_000_001, "USD", "services.errors.priceRange")]
+    [InlineData(10, null, "services.errors.currencyRequired")]
+    [InlineData(10, "US", "services.errors.currencyRequired")]
+    [InlineData(10, "U5D", "services.errors.currencyRequired")]
+    public async Task A_price_must_be_sensible_and_name_its_currency(double price, string? currency, string key)
+    {
+        var ex = await Assert.ThrowsAsync<ArgumentException>(() => Sut().CreateAsync(new CreateServiceRequest(_clientId, "Facial", null, null, 45, (decimal)price, currency)));
+        Assert.Equal(key, ex.Message);
+        _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
     public async Task Create_rejects_duplicates_in_the_same_client()
     {
         _repo.Setup(r => r.NameExistsAsync(_clientId, "Facelift", null, It.IsAny<CancellationToken>())).ReturnsAsync(true);
@@ -327,9 +357,10 @@ public class NotificationServiceTests
     }
 
     [Fact]
-    public async Task MarkRead_ignores_missing_or_already_read_and_stamps_unread()
+    public async Task MarkRead_is_not_found_for_a_missing_one_ignores_an_already_read_one_and_stamps_unread()
     {
-        await Sut().MarkReadAsync(_clientId, Guid.NewGuid());
+        // QA t1-accounts-17: another client's or an unknown notification was a silent 204.
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => Sut().MarkReadAsync(_clientId, Guid.NewGuid()));
         var read = new Notification { Id = Guid.NewGuid(), IsRead = true };
         _repo.Setup(r => r.GetAsync(_clientId, read.Id, It.IsAny<CancellationToken>())).ReturnsAsync(read);
         await Sut().MarkReadAsync(_clientId, read.Id);

@@ -158,13 +158,58 @@ public class BookingService : IBookingService
     public async Task<BookingResponse> CreateAsync(CreateBookingRequest request, CancellationToken ct = default)
     {
         await EnsureBookingsIncludedAsync(request.ClientId, ct);
+        EnsureSaneTimes(request.ScheduledStart, request.ScheduledEnd);
+        // Under the same per-client lock as the AI's booking, so two people can't book one time at once (QA t5-ops-01).
+        await using var tx = await _unitOfWork.BeginTransactionAsync(ct);
+        await LockClientAsync(request.ClientId, ct);
         if (!await _contacts.ExistsAsync(request.ClientId, request.ContactId, ct))
         {
             throw new ArgumentException("contacts.errors.notFound");
         }
-        var booking = await CreateCoreAsync(request, ct);
+        var end = await CheckMemberTimeAsync(request.ClientId, request.ServiceId, request.ScheduledStart, request.ScheduledEnd, null,
+            request.OverrideRules, ct);
+
+        var booking = await CreateCoreAsync(request with { ScheduledEnd = end }, ct);
+        await tx.CommitAsync(ct);
         await NotifyChangedAsync(request.ClientId, booking, "created", ct);
         return booking;
+    }
+
+    /// <summary>Times a member typed: the end after the start, at most a day long, and within a year back and two years ahead
+    /// (QA t5-ops-01: 1900, 9999 and 30-day bookings were stored). 400 otherwise.</summary>
+    private static void EnsureSaneTimes(DateTimeOffset start, DateTimeOffset? end)
+    {
+        if (end is { } e && e <= start) throw new ArgumentException("bookings.errors.endBeforeStart");
+        if (end is { } f && f - start > TimeSpan.FromDays(1)) throw new ArgumentException("bookings.errors.tooLong");
+        var now = DateTimeOffset.UtcNow;
+        if (start < now.AddYears(-1) || start > now.AddYears(2)) throw new ArgumentException("bookings.errors.dateOutOfRange");
+    }
+
+    /// <summary>A member's time, under the client lock: never on top of another booking (409); the soft rules (opening hours,
+    /// notice, horizon, past, buffer, no availability set up) refuse with BookingRulesException until the member confirms
+    /// (<paramref name="overrideRules"/>). Returns the end to store (the service's length when none was given).</summary>
+    private async Task<DateTimeOffset> CheckMemberTimeAsync(Guid clientId, Guid? serviceId, DateTimeOffset start, DateTimeOffset? end,
+        Guid? excludeBookingId, bool overrideRules, CancellationToken ct)
+    {
+        var check = await _availability.CheckSlotAsync(clientId, serviceId, start, end, excludeBookingId, ct);
+        var slotEnd = end ?? check.End;
+        if (await _availability.OverlapsBookingAsync(clientId, start, slotEnd, excludeBookingId, ct))
+        {
+            throw new OverlappingRecordException("bookings.errors.overlap");
+        }
+        if (check.Error is not null && !overrideRules)
+        {
+            throw check.Reason switch
+            {
+                SlotCheckReason.Past => new BookingRulesException("bookings.rules.past") { Reason = SlotCheckReason.Past },
+                SlotCheckReason.Notice => new BookingRulesException("bookings.rules.notice") { Reason = SlotCheckReason.Notice },
+                SlotCheckReason.Horizon => new BookingRulesException("bookings.rules.horizon") { Reason = SlotCheckReason.Horizon },
+                SlotCheckReason.Closed => new BookingRulesException("bookings.rules.closed") { Reason = SlotCheckReason.Closed },
+                SlotCheckReason.Overlap => new BookingRulesException("bookings.rules.buffer") { Reason = SlotCheckReason.Overlap },
+                _ => new BookingRulesException("bookings.rules.notConfigured") { Reason = SlotCheckReason.NotConfigured }
+            };
+        }
+        return slotEnd;
     }
 
     private async Task<BookingResponse> CreateCoreAsync(CreateBookingRequest request, CancellationToken ct)
@@ -278,10 +323,7 @@ public class BookingService : IBookingService
         }
         var start = request.ScheduledStart.ToUniversalTime();
         var end = request.ScheduledEnd?.ToUniversalTime();
-        if (end is not null && end <= start)
-        {
-            throw new ArgumentException("bookings.errors.endBeforeStart");
-        }
+        EnsureSaneTimes(start, end);
         var location = string.IsNullOrWhiteSpace(request.LocationType) ? null : request.LocationType.Trim();
         // An unknown place the booking already had (another tool may have set one) can stay; a new one must be a known value.
         if (location is not null && location != booking.LocationType && !BookingLocationType.All.Contains(location))
@@ -295,6 +337,13 @@ public class BookingService : IBookingService
         }
 
         var moved = start != booking.ScheduledStart || end != booking.ScheduledEnd;
+        // Under the client lock; a move gets the same checks as a member's new booking (QA t5-ops-01).
+        await using var tx = await _unitOfWork.BeginTransactionAsync(ct);
+        await LockClientAsync(clientId, ct);
+        if (moved)
+        {
+            end = (await CheckMemberTimeAsync(clientId, request.ServiceId, start, end, booking.Id, request.OverrideRules, ct)).ToUniversalTime();
+        }
         var previousStart = booking.ScheduledStart;
         booking.ScheduledStart = start;
         booking.ScheduledEnd = end;
@@ -311,6 +360,7 @@ public class BookingService : IBookingService
 
         await _unitOfWork.SaveChangesAsync(ct);
         var response = await ToResponseAsync(booking, ct);
+        await tx.CommitAsync(ct);
         // "updated" refreshes open calendars and the connected calendars' event without a notification.
         await NotifyChangedAsync(clientId, response, moved ? "rescheduled" : "updated", ct);
         return response;

@@ -74,8 +74,9 @@ public class NotificationService : INotificationService
 
     public async Task MarkReadAsync(Guid clientId, Guid id, CancellationToken ct = default)
     {
-        var notification = await _notifications.GetAsync(clientId, id, ct);
-        if (notification is null || notification.IsRead) return;
+        // Another client's (or an unknown) notification is "not found" (QA t1-accounts-17); an already read one is fine.
+        var notification = await _notifications.GetAsync(clientId, id, ct) ?? throw new KeyNotFoundException("notifications.errors.notFound");
+        if (notification.IsRead) return;
 
         notification.IsRead = true;
         notification.ReadAt = DateTimeOffset.UtcNow;

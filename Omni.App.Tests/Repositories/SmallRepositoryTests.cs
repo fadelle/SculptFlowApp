@@ -205,9 +205,9 @@ public class ChannelIntegrationRepositoryTests(PostgresFixture fixture) : RepoTe
         Assert.NotNull(await repo.GetByIdReadOnlyAsync(wa.Id));
         Assert.Equal(wa.Id, await repo.GetIdAsync(c.Id, ChannelType.WhatsApp));
         Assert.Equal(Guid.Empty, await repo.GetIdAsync(other.Id, ChannelType.WhatsApp));
-        Assert.Equal(wa.Id, (await repo.FindWhatsAppByPhoneNumberIdAsync(phone))!.Id);
-        Assert.Null(await repo.FindWhatsAppByPhoneNumberIdAsync("nope"));
-        Assert.Equal(wa.Id, (await repo.FindWhatsAppByWabaIdAsync(waba))!.Id);
+        Assert.Equal(wa.Id, Assert.Single(await repo.ListConnectedWhatsAppByPhoneNumberIdAsync(phone)).Id);
+        Assert.Empty(await repo.ListConnectedWhatsAppByPhoneNumberIdAsync("nope"));
+        Assert.Equal(wa.Id, Assert.Single(await repo.ListConnectedWhatsAppByWabaIdAsync(waba)).Id);
         Assert.Equal(2, (await repo.ListForClientReadOnlyAsync(c.Id)).Count);
         Assert.Equal([ChannelType.Telegram, ChannelType.WhatsApp], (await repo.ListForClientReadOnlyAsync(c.Id)).Select(i => i.Channel).Order());
     }
@@ -227,8 +227,13 @@ public class ChannelIntegrationRepositoryTests(PostgresFixture fixture) : RepoTe
         await using (var db = NewContext())
         {
             var repo = new ChannelIntegrationRepository(db);
-            Assert.Equal(real.Id, (await repo.FindWhatsAppByPhoneNumberIdAsync(phone))!.Id);
-            Assert.Equal(real.Id, (await repo.FindWhatsAppByWabaIdAsync(waba))!.Id);
+            // QA t10-01: routing sees only connected rows, never the disconnected one.
+            Assert.Equal(real.Id, Assert.Single(await repo.ListConnectedWhatsAppByPhoneNumberIdAsync(phone)).Id);
+            Assert.Equal(real.Id, Assert.Single(await repo.ListConnectedWhatsAppByWabaIdAsync(waba)).Id);
+            await db.ChannelIntegrations.Where(i => i.Id == real.Id).ExecuteUpdateAsync(u => u.SetProperty(i => i.Status, ChannelIntegrationStatus.Disconnected));
+            Assert.Empty(await repo.ListConnectedWhatsAppByPhoneNumberIdAsync(phone));
+            Assert.Empty(await repo.ListConnectedWhatsAppByWabaIdAsync(waba));
+            await db.ChannelIntegrations.Where(i => i.Id == real.Id).ExecuteUpdateAsync(u => u.SetProperty(i => i.Status, ChannelIntegrationStatus.Connected));
         }
 
         // A second connected row with the same number is still refused.

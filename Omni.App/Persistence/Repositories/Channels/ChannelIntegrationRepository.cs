@@ -40,17 +40,17 @@ public class ChannelIntegrationRepository : IChannelIntegrationRepository
         (await GetReadOnlyAsync(clientId, channel, ct))?.Id ?? Guid.Empty;
 
     // A disconnected row keeps its ids (only connected numbers are unique), so the connected row wins when both exist.
-    public Task<ChannelIntegration?> FindWhatsAppByPhoneNumberIdAsync(string phoneNumberId, CancellationToken ct = default) =>
-        _db.ChannelIntegrations
-            .Where(c => c.Channel == ChannelType.WhatsApp && c.PhoneNumberId == phoneNumberId)
-            .OrderByDescending(c => c.Status == ChannelIntegrationStatus.Connected).ThenByDescending(c => c.UpdatedAt)
-            .FirstOrDefaultAsync(ct);
+    public async Task<IReadOnlyList<ChannelIntegration>> ListConnectedWhatsAppByPhoneNumberIdAsync(string phoneNumberId, CancellationToken ct = default) =>
+        await _db.ChannelIntegrations.AsNoTracking()
+            .Where(c => c.Channel == ChannelType.WhatsApp && c.Status == ChannelIntegrationStatus.Connected && c.PhoneNumberId == phoneNumberId)
+            .OrderByDescending(c => c.UpdatedAt)
+            .ToListAsync(ct);
 
-    public Task<ChannelIntegration?> FindWhatsAppByWabaIdAsync(string wabaId, CancellationToken ct = default) =>
-        _db.ChannelIntegrations
-            .Where(c => c.Channel == ChannelType.WhatsApp && c.WhatsAppBusinessId == wabaId)
-            .OrderByDescending(c => c.Status == ChannelIntegrationStatus.Connected).ThenByDescending(c => c.UpdatedAt)
-            .FirstOrDefaultAsync(ct);
+    public async Task<IReadOnlyList<ChannelIntegration>> ListConnectedWhatsAppByWabaIdAsync(string wabaId, CancellationToken ct = default) =>
+        await _db.ChannelIntegrations.AsNoTracking()
+            .Where(c => c.Channel == ChannelType.WhatsApp && c.Status == ChannelIntegrationStatus.Connected && c.WhatsAppBusinessId == wabaId)
+            .OrderByDescending(c => c.UpdatedAt)
+            .ToListAsync(ct);
 
     public Task<bool> IsTelegramBotConnectedElsewhereAsync(string botId, Guid clientId, CancellationToken ct = default) =>
         _db.ChannelIntegrations.AnyAsync(c =>

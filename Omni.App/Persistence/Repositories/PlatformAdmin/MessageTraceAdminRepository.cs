@@ -1,5 +1,8 @@
 using Microsoft.EntityFrameworkCore;
+using Omni.App.Common.Enums;
+using Omni.App.Common.Helpers;
 using Omni.App.Common.Statics;
+using Omni.App.Entities.Dtos.Ai;
 using Omni.App.Entities.Dtos.PlatformAdmin;
 using Omni.App.Entities.Models;
 using Omni.App.Persistence.Contexts;
@@ -130,6 +133,14 @@ public class MessageTraceAdminRepository : IMessageTraceAdminRepository
 
         var page = await groups.OrderByDescending(g => g.EndedAt).ThenBy(g => g.TraceId).Skip(skip).Take(take).ToListAsync(ct);
         var traceIds = page.Select(g => g.TraceId).ToList();
+        var outcomes = await OutcomesReadOnlyAsync(traceIds, DateTimeOffset.UtcNow, ct);
+        // The conversation comes from the first step that names one (QA t7-10: the first step naming a client often doesn't).
+        var conversations = await _db.MessageTraceSteps.AsNoTracking()
+            .Where(s => traceIds.Contains(s.TraceId) && s.ConversationId != null)
+            .GroupBy(s => s.TraceId)
+            .Select(g => new { TraceId = g.Key, Id = g.Min(s => s.Id) })
+            .Join(_db.MessageTraceSteps, x => x.Id, s => s.Id, (x, s) => new { x.TraceId, s.ConversationId })
+            .ToDictionaryAsync(x => x.TraceId, x => x.ConversationId, ct);
 
         // The trace's client/conversation/channel come from its first step that names them (webhook.received names none).
         var namedIds = await _db.MessageTraceSteps.AsNoTracking()
@@ -154,12 +165,127 @@ public class MessageTraceAdminRepository : IMessageTraceAdminRepository
             var first = picked[g.FirstId];
             named.TryGetValue(g.TraceId, out var about);
             var failed = g.FailedId is { } failedId ? picked[failedId] : null;
+            var (outcome, reason) = outcomes.GetValueOrDefault(g.TraceId, (TraceResults.Other, null));
             return new TraceSummaryRow(g.TraceId, g.StartedAt, g.EndedAt, g.Steps, g.FailedSteps, errors.GetValueOrDefault(g.TraceId),
-                about?.ClientId ?? first.ClientId, about?.ConversationId ?? first.ConversationId, about?.Channel ?? first.Channel,
-                first.Step, failed?.Step, failed?.Detail);
+                about?.ClientId ?? first.ClientId, conversations.GetValueOrDefault(g.TraceId) ?? about?.ConversationId ?? first.ConversationId,
+                about?.Channel ?? first.Channel, first.Step, failed?.Step, failed?.Detail, outcome, reason);
         }).ToList();
         return (rows, total);
     }
+
+    // Steps that mean "not answered on purpose"; their detail's "reason" is the outcome's reason.
+    private static readonly string[] SkipSteps =
+    [
+        TraceSteps.BotSkipped, TraceSteps.BotReplyStopped, TraceSteps.SendBlocked, TraceSteps.SendRejectedMode,
+        TraceSteps.WebhookClientUnresolved, TraceSteps.WebhookIgnored
+    ];
+
+    public async Task<Dictionary<string, (string Outcome, string? Reason)>> OutcomesReadOnlyAsync(IReadOnlyCollection<string> traceIds,
+        DateTimeOffset now, CancellationToken ct = default)
+    {
+        if (traceIds.Count == 0) return [];
+        var skipSteps = SkipSteps;
+        var facts = await _db.MessageTraceSteps.AsNoTracking()
+            .Where(s => traceIds.Contains(s.TraceId))
+            .GroupBy(s => s.TraceId)
+            .Select(g => new
+            {
+                TraceId = g.Key,
+                EndedAt = g.Max(s => s.OccurredAt),
+                Accepted = g.Count(s => s.Step == TraceSteps.SendProviderAccepted),
+                ModeChanged = g.Count(s => s.Step == TraceSteps.ConversationModeChanged),
+                Triggered = g.Count(s => s.Step == TraceSteps.BotTriggered || s.Step == TraceSteps.BotRunStarted),
+                Saved = g.Count(s => s.Step == TraceSteps.MessageSaved),
+                FailedId = g.Min(s => s.Outcome == TraceOutcomes.Failed ? (long?)s.Id : null),
+                SkipId = g.Min(s => skipSteps.Contains(s.Step) ? (long?)s.Id : null)
+            })
+            .ToListAsync(ct);
+        var pickIds = facts.Select(f => f.FailedId).Concat(facts.Select(f => f.SkipId)).Where(id => id != null).Select(id => id!.Value).ToList();
+        var picked = await _db.MessageTraceSteps.AsNoTracking().Where(s => pickIds.Contains(s.Id))
+            .Select(s => new { s.Id, s.Step, s.Detail }).ToDictionaryAsync(s => s.Id, ct);
+        // A handoff the bot made (its handoff action, or the handover after a failed run) that worked.
+        var actions = await _db.MessageTraceSteps.AsNoTracking()
+            .Where(s => traceIds.Contains(s.TraceId) && s.Step == TraceSteps.BotActionResult && s.Outcome == TraceOutcomes.Ok)
+            .Select(s => new { s.TraceId, s.Detail }).ToListAsync(ct);
+        var handedOff = actions.Where(a => IsHandoffAction(a.Detail)).Select(a => a.TraceId).ToHashSet();
+
+        return facts.ToDictionary(f => f.TraceId, f => TraceResultRule.Of(new TraceFacts(
+            f.Accepted, f.ModeChanged, handedOff.Contains(f.TraceId), f.Triggered, f.Saved,
+            f.FailedId is { } fid ? picked[fid].Step : null,
+            f.SkipId is { } sid ? picked[sid].Step : null,
+            f.SkipId is { } sid2 ? picked[sid2].Detail : null,
+            f.EndedAt), now));
+    }
+
+    private static bool IsHandoffAction(string detail)
+    {
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(detail);
+            return doc.RootElement.TryGetProperty("action", out var action)
+                && action.GetString() is BotDecision.Handoff or "run_failed";
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return false;
+        }
+    }
+
+    public async Task<(List<UnansweredRow> Rows, int Total)> ListUnansweredReadOnlyAsync(DateTimeOffset from, DateTimeOffset before, Guid? clientId,
+        int skip, int take, CancellationToken ct = default)
+    {
+        var conversations = _db.Conversations.AsNoTracking()
+            .Where(c => c.LastMessageDirection == MessageDirection.Inbound && c.LastMessageAt >= from && c.LastMessageAt <= before
+                        && c.Status != ConversationStatus.Closed);
+        if (clientId is { } id) conversations = conversations.Where(c => c.ClientId == id);
+        var total = await conversations.CountAsync(ct);
+        if (total == 0) return ([], 0);
+
+        var page = await conversations.OrderBy(c => c.LastMessageAt).ThenBy(c => c.Id).Skip(skip).Take(take)
+            .Select(c => new
+            {
+                c.Id, c.ClientId, ClientName = _db.Clients.Where(x => x.Id == c.ClientId).Select(x => x.Name).FirstOrDefault() ?? "", ContactName = c.Contact!.FullName,
+                c.Channel, c.Mode, c.LastMessageAt,
+                Last = _db.Messages.Where(m => m.ConversationId == c.Id && m.Direction == MessageDirection.Inbound)
+                    .OrderByDescending(m => m.CreatedAt).Select(m => new { m.Id, m.MessageType, m.TraceId }).FirstOrDefault()
+            })
+            .ToListAsync(ct);
+        var traceIds = page.Where(p => p.Last?.TraceId != null).Select(p => p.Last!.TraceId!).Distinct().ToList();
+        var outcomes = await OutcomesReadOnlyAsync(traceIds, DateTimeOffset.UtcNow, ct);
+        var rows = page.Select(p =>
+        {
+            (string Outcome, string? Reason)? outcome = p.Last?.TraceId is { } t && outcomes.TryGetValue(t, out var o) ? o : null;
+            return new UnansweredRow(p.Id, p.ClientId, p.ClientName, p.ContactName, p.Channel, p.Mode, p.LastMessageAt!.Value,
+                p.Last?.Id, p.Last?.MessageType, p.Last?.TraceId, outcome?.Outcome, outcome?.Reason);
+        }).ToList();
+        return (rows, total);
+    }
+
+    public async Task<List<AiUsageCounts>> AiUsageReadOnlyAsync(DateTimeOffset from, Guid? clientId, CancellationToken ct = default) =>
+        await _db.Database.SqlQuery<AiUsageCounts>($"""
+            select s.client_id as "ClientId", c.name as "ClientName",
+                   count(*) filter (where s.step = 'bot.run_started') as "Runs",
+                   count(*) filter (where s.step = 'bot.run_failed') as "FailedRuns",
+                   count(*) filter (where s.step = 'bot.model_called' and s.outcome = 'ok') as "ModelCalls",
+                   coalesce(sum(case when s.step = 'bot.model_called' and jsonb_typeof(s.detail -> 'inputTokens') = 'number'
+                                     then (s.detail ->> 'inputTokens')::bigint end), 0)::bigint as "InputTokens",
+                   coalesce(sum(case when s.step = 'bot.model_called' and jsonb_typeof(s.detail -> 'outputTokens') = 'number'
+                                     then (s.detail ->> 'outputTokens')::bigint end), 0)::bigint as "OutputTokens"
+            from activity.message_trace_steps s
+            join core.clients c on c.id = s.client_id
+            where s.occurred_at >= {from}
+              and s.step in ('bot.run_started', 'bot.run_failed', 'bot.model_called')
+              and ({clientId}::uuid is null or s.client_id = {clientId}::uuid)
+            group by s.client_id, c.name
+            """).ToListAsync(ct);
+
+    public async Task<List<AiReplyRevenue>> AiReplyRevenueReadOnlyAsync(DateTimeOffset from, Guid? clientId, CancellationToken ct = default) =>
+        await _db.BillingUsageRecords.AsNoTracking()
+            .Where(u => u.EventType == BillableEventTypes.AiReply && u.ChargeStatus == ChargeStatus.Settled && u.OccurredAt >= from
+                        && (clientId == null || u.ClientId == clientId))
+            .GroupBy(u => new { u.ClientId, u.Currency })
+            .Select(g => new AiReplyRevenue(g.Key.ClientId, g.Sum(u => (u.Amount ?? 0) - u.RefundedAmount), g.Key.Currency))
+            .ToListAsync(ct);
 
     public async Task<TraceCounts> CountSinceReadOnlyAsync(DateTimeOffset from, CancellationToken ct = default)
     {

@@ -25,6 +25,10 @@ public class UnitOfWork : IUnitOfWork
         {
             throw new DuplicateRecordException(ex);
         }
+        catch (DbUpdateException ex) when (DbErrors.AsInvalidRecord(ex) is { } invalid)
+        {
+            throw invalid;
+        }
     }
 
     public async Task<bool> TrySaveChangesAsync(CancellationToken ct = default)
@@ -38,6 +42,10 @@ public class UnitOfWork : IUnitOfWork
         {
             _db.ChangeTracker.Clear();
             return false;
+        }
+        catch (DbUpdateException ex) when (DbErrors.AsInvalidRecord(ex) is { } invalid)
+        {
+            throw invalid;
         }
     }
 

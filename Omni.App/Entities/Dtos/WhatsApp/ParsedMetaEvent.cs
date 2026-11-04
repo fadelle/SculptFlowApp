@@ -8,7 +8,7 @@ namespace Omni.App.Entities.Dtos.WhatsApp;
 /// them touch entry[].changes[].value... directly. See MetaWebhookParser's own doc comment for how
 /// defensively it's built (unrecognized fields degrade to null/Unknown rather than throwing).
 /// </summary>
-public class ParsedMetaEvent
+public record ParsedMetaEvent
 {
     public required ParsedMetaEventKind Kind { get; init; }
 

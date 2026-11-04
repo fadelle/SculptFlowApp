@@ -19,6 +19,10 @@ public interface IAvailabilityService
     /// excludeBookingId ignores one booking (the one being rescheduled) so it does not block its own new time.</summary>
     Task<SlotCheck> CheckSlotAsync(Guid clientId, Guid? serviceId, DateTimeOffset start, DateTimeOffset? end, Guid? excludeBookingId = null, CancellationToken ct = default);
 
+    /// <summary>Whether [start, end) overlaps another of the client's booked, confirmed, attended or no-show bookings (no buffer):
+    /// the one rule a member can't override (QA t5-ops-01). excludeBookingId ignores the booking being moved.</summary>
+    Task<bool> OverlapsBookingAsync(Guid clientId, DateTimeOffset start, DateTimeOffset end, Guid? excludeBookingId = null, CancellationToken ct = default);
+
     Task<AvailabilitySettingsDto> GetSettingsAsync(Guid clientId, CancellationToken ct = default);
 
     /// <summary>Saves the timezone, the seven weekly rules and the booking rules together. ArgumentException on invalid input.</summary>

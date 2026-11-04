@@ -65,16 +65,18 @@ public class ClientAdminService : IClientAdminService
         var tz = string.IsNullOrWhiteSpace(update.Timezone) ? "UTC" : update.Timezone.Trim();
         if (!TimeZoneInfo.TryFindSystemTimeZoneById(tz, out _))
             throw new ArgumentException($"Unknown time zone '{tz}'. Use an IANA name such as Asia/Beirut.");
+        // The same contact-detail rules as the client's own Business Info page (QA t1-accounts-12).
+        var details = ClientDetailsRules.Clean(update.Phone, update.Email, update.Website, update.Address, update.OperatingHours, update.BookingInfo);
         var client = await _repository.GetForUpdateAsync(id, ct) ?? throw new KeyNotFoundException("Client not found.");
         client.Name = update.Name.Trim();
-        client.Phone = Clean(update.Phone);
-        client.Email = Clean(update.Email);
-        client.Website = Clean(update.Website);
+        client.Phone = details.Phone;
+        client.Email = details.Email;
+        client.Website = details.Website;
         client.CountryCode = Clean(update.CountryCode)?.ToUpperInvariant();
         client.Timezone = tz;
-        client.Address = Clean(update.Address);
-        client.OperatingHours = Clean(update.OperatingHours);
-        client.BookingInfo = Clean(update.BookingInfo);
+        client.Address = details.Address;
+        client.OperatingHours = details.OperatingHours;
+        client.BookingInfo = details.BookingInfo;
         client.UpdatedAt = _time.GetUtcNow();
         await _unitOfWork.SaveChangesAsync(ct);
         return new PlatformAdminChange(id);

@@ -33,9 +33,18 @@ public class ContactStageWalkTests(PostgresFixture fixture) : RepoTestBase(fixtu
         new(new ContactRepository(db), new UnitOfWork(db), _events.Object, _catalog.Object, new ClientRepository(db, _cache), Types(db),
             Mock.Of<IMessageTracer>());
 
+    /// <summary>Every time is bookable (a member's booking is checked since QA t5-ops-01; this walk is about stages).</summary>
+    private static IAvailabilityService OpenAvailability()
+    {
+        var availability = new Mock<IAvailabilityService>();
+        availability.Setup(a => a.CheckSlotAsync(It.IsAny<Guid>(), It.IsAny<Guid?>(), It.IsAny<DateTimeOffset>(), It.IsAny<DateTimeOffset?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Guid _, Guid? _, DateTimeOffset s, DateTimeOffset? e, Guid? _, CancellationToken _) => new SlotCheck(null, e ?? s.AddMinutes(30)));
+        return availability.Object;
+    }
+
     private BookingService Bookings(ApplicationDbContext db) => new(new BookingRepository(db), new ContactRepository(db),
         new ClientRepository(db, _cache), new ServiceRepository(db, _cache), new UnitOfWork(db), _events.Object, _catalog.Object,
-        new Mock<IAvailabilityService>().Object, new Mock<IInboxNotifier>().Object, new Mock<INotificationService>().Object,
+        OpenAvailability(), new Mock<IInboxNotifier>().Object, new Mock<INotificationService>().Object,
         new Mock<ICalendarIntegrationService>().Object, new Mock<ICampaignRepository>().Object, new Mock<IConfigManager>().Object, Types(db), TextKit.Localizer(),
         new Mock<IEntitlementService>().Object);
 

@@ -5,5 +5,7 @@ public record CreateServiceRequest(
     string Name,
     string? Code,
     string? Description,
-    int? BookingDuration
+    int? BookingDuration,
+    decimal? Price = null,
+    string? Currency = null
 );

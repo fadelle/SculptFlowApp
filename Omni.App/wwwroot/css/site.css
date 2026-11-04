@@ -1486,11 +1486,12 @@ td .cell-sub { white-space: nowrap; }
 .save-bar.is-idle { box-shadow: none; }
 .save-row { padding: 1rem 1.25rem; }
 .avail-week { display: flex; flex-direction: column; gap: 0.4rem; }
-.avail-time { width: 8rem; }
+.avail-time { width: 9.25rem; } /* fits a 12-hour "09:00 AM" with the clock icon */
 .week { display: flex; flex-direction: column; gap: 0.35rem; }
 .week-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; min-height: 40px; }
 .week-row .switch-row { width: 10rem; }
 .week-times { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; }
+.week-second { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; } /* a second window the same day (QA t5-ops-18) */
 .week-closed { display: none; font-size: 0.875rem; }
 .week-row.is-closed .week-times { display: none; }
 .week-row.is-closed .week-closed { display: inline; }

@@ -40,6 +40,7 @@ public class CatalogService : ICatalogService
     public async Task<ServiceResponse> CreateAsync(CreateServiceRequest request, CancellationToken ct = default)
     {
         var (name, code, description) = Validate(request.Name, request.Code, request.Description, request.BookingDuration);
+        var (price, currency) = ValidatePrice(request.Price, request.Currency);
         await EnsureNameAvailableAsync(request.ClientId, name, exceptId: null, ct);
 
         var service = new Service
@@ -50,6 +51,8 @@ public class CatalogService : ICatalogService
             Code = code,
             Description = description,
             BookingDuration = request.BookingDuration,
+            Price = price,
+            Currency = currency,
             IsActive = true,
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow
@@ -66,8 +69,11 @@ public class CatalogService : ICatalogService
         if (service is null) return null;
 
         var (name, code, description) = Validate(request.Name, request.Code, request.Description, request.BookingDuration);
+        var (price, currency) = ValidatePrice(request.Price, request.Currency);
         await EnsureNameAvailableAsync(clientId, name, exceptId: id, ct);
 
+        service.Price = price;
+        service.Currency = currency;
         service.Name = name;
         service.Code = code;
         service.Description = description;
@@ -76,6 +82,17 @@ public class CatalogService : ICatalogService
 
         await _unitOfWork.SaveChangesAsync(ct);
         return CatalogMapper.ToResponse(service);
+    }
+
+    /// <summary>An optional price (QA t5-ops-18): none, or 0 to 10,000,000 with a 3-letter currency (stored upper case). A
+    /// currency without a price is dropped.</summary>
+    private static (decimal? Price, string? Currency) ValidatePrice(decimal? price, string? currency)
+    {
+        if (price is null) return (null, null);
+        if (price < 0 || price > 10_000_000) throw new ArgumentException("services.errors.priceRange");
+        var code = (currency ?? string.Empty).Trim().ToUpperInvariant();
+        if (code.Length != 3 || !code.All(char.IsAsciiLetterUpper)) throw new ArgumentException("services.errors.currencyRequired");
+        return (Math.Round(price.Value, 2), code);
     }
 
     public async Task<ServiceResponse?> SetActiveAsync(Guid clientId, Guid id, bool isActive, CancellationToken ct = default)

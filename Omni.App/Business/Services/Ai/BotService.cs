@@ -237,8 +237,14 @@ public class BotService : IBotService
             bot.KnowledgeSources.Remove(source);
             _bots.RemoveSource(source);
         }
-        bot.KnowledgeSources.AddRange(wantedDocuments.Select(d => new BotKnowledgeSource { Id = Guid.NewGuid(), BotId = bot.Id, KnowledgeDocumentId = d }));
-        bot.KnowledgeSources.AddRange(wantedWebsites.Select(w => new BotKnowledgeSource { Id = Guid.NewGuid(), BotId = bot.Id, WebsiteSourceId = w }));
+        // Added through the repository so EF inserts them (QA t4-ai-01: only adding them to the tracked bot sent an UPDATE).
+        var added = wantedDocuments.Select(d => new BotKnowledgeSource { Id = Guid.NewGuid(), BotId = bot.Id, KnowledgeDocumentId = d })
+            .Concat(wantedWebsites.Select(w => new BotKnowledgeSource { Id = Guid.NewGuid(), BotId = bot.Id, WebsiteSourceId = w }));
+        foreach (var source in added)
+        {
+            bot.KnowledgeSources.Add(source);
+            _bots.AddSource(source);
+        }
     }
 
     private async Task<Dictionary<Guid, int>> AccountCountsAsync(Guid clientId, CancellationToken ct) =>

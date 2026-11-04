@@ -21,11 +21,13 @@ public interface IChannelIntegrationRepository
     /// <summary>The id of the client's row for the channel, or Guid.Empty.</summary>
     Task<Guid> GetIdAsync(Guid clientId, string channel, CancellationToken ct = default);
 
-    /// <summary>Tracked WhatsApp row by Meta phone number id.</summary>
-    Task<ChannelIntegration?> FindWhatsAppByPhoneNumberIdAsync(string phoneNumberId, CancellationToken ct = default);
+    /// <summary>The CONNECTED WhatsApp rows with this Meta phone number id, read-only (webhook routing, QA t10-01: a
+    /// disconnected row never receives anything).</summary>
+    Task<IReadOnlyList<ChannelIntegration>> ListConnectedWhatsAppByPhoneNumberIdAsync(string phoneNumberId, CancellationToken ct = default);
 
-    /// <summary>Tracked WhatsApp row by WhatsApp Business Account id.</summary>
-    Task<ChannelIntegration?> FindWhatsAppByWabaIdAsync(string wabaId, CancellationToken ct = default);
+    /// <summary>The CONNECTED WhatsApp rows with this WhatsApp Business Account id, read-only (webhook routing of events that
+    /// name only the account; more than one is ambiguous and nothing is routed).</summary>
+    Task<IReadOnlyList<ChannelIntegration>> ListConnectedWhatsAppByWabaIdAsync(string wabaId, CancellationToken ct = default);
 
     /// <summary>Is this Telegram bot connected to a different client?</summary>
     Task<bool> IsTelegramBotConnectedElsewhereAsync(string botId, Guid clientId, CancellationToken ct = default);

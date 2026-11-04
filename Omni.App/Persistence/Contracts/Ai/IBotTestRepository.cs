@@ -22,6 +22,6 @@ public interface IBotTestRepository
     /// <summary>Set-based delete of every session (and its lines) last changed before <paramref name="before"/>, any client.</summary>
     Task<int> DeleteSessionsOlderThanAsync(DateTimeOffset before, CancellationToken ct = default);
 
-    /// <summary>Set-based delete of one of the client's sessions and its lines.</summary>
-    Task<int> DeleteSessionAsync(Guid clientId, Guid sessionId, CancellationToken ct = default);
+    /// <summary>Deletes the bot's test session of this client; the number of rows deleted (0 = not this bot's or client's).</summary>
+    Task<int> DeleteSessionAsync(Guid clientId, Guid botId, Guid sessionId, CancellationToken ct = default);
 }

@@ -37,6 +37,19 @@ public class MessageTracesAdminController : ControllerBase
     [HttpGet("summary")]
     public async Task<IActionResult> Summary([FromQuery] int hours, CancellationToken ct) => Ok(await _traces.SummaryAsync(Hours(hours), ct));
 
+    /// <summary>Conversations left without an answer (QA t7-10): their last message is the customer's, older than
+    /// <paramref name="minutes"/>, from the last <paramref name="hours"/>.</summary>
+    [HttpGet("unanswered")]
+    public async Task<IActionResult> Unanswered([FromQuery] int hours, [FromQuery] int minutes, [FromQuery] Guid? clientId, [FromQuery] int page,
+        [FromQuery] int pageSize, CancellationToken ct) =>
+        Ok(await _traces.UnansweredAsync(Hours(hours), minutes <= 0 ? 15 : minutes, clientId, page <= 0 ? 1 : page,
+            pageSize <= 0 ? MessageTraceLimits.DefaultPageSize : pageSize, ct));
+
+    /// <summary>AI bot use per client over the last <paramref name="days"/> (QA t7-10).</summary>
+    [HttpGet("ai-usage")]
+    public async Task<IActionResult> AiUsage([FromQuery] int days, [FromQuery] Guid? clientId, CancellationToken ct) =>
+        Ok(await _traces.AiUsageAsync(days <= 0 ? 7 : days, clientId, ct));
+
     [HttpGet("resolve")]
     public async Task<IActionResult> Resolve([FromQuery] string? q, CancellationToken ct) => Ok(await _traces.ResolveAsync(q ?? string.Empty, ct));
 

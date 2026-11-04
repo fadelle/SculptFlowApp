@@ -48,7 +48,9 @@
                 try { data = text ? JSON.parse(text) : null; } catch (e) { /* not JSON */ }
                 if (!res.ok) {
                     var msg = (data && (data.error || data.title)) || omniText.t('common.errors.requestFailed', [res.status]);
-                    throw new Error(msg);
+                    var error = new Error(msg);
+                    error.code = data && data.code; // e.g. "booking_rules": a rule the member may book past (QA t5-ops-01)
+                    throw error;
                 }
                 return data;
             });
@@ -562,23 +564,44 @@
         };
 
         var editingId = state.editingId;
-        var request = editingId
-            ? api('PATCH', '/api/bookings/' + editingId, {
-                scheduledStart: startIso, scheduledEnd: endIso, serviceId: body.serviceId, locationType: body.locationType, notes: body.notes
-            })
-            : api('POST', '/api/bookings', body);
+        function send(overrideRules) {
+            return editingId
+                ? api('PATCH', '/api/bookings/' + editingId, {
+                    scheduledStart: startIso, scheduledEnd: endIso, serviceId: body.serviceId, locationType: body.locationType, notes: body.notes,
+                    overrideRules: overrideRules
+                })
+                : api('POST', '/api/bookings', Object.assign({}, body, { overrideRules: overrideRules }));
+        }
 
         var btn = $('cal-new-save');
         btn.disabled = true;
-        request.then(function () {
+        send(false).catch(function (e) {
+            // Outside opening hours, in the past, inside the notice or beyond the horizon: the member may book it anyway.
+            // An overlap with another booking is never allowed (it comes back as a plain error).
+            if (e.code !== 'booking_rules') throw e;
+            return askBookAnyway(e.message).then(function (yes) {
+                if (!yes) { var stop = new Error(''); stop.cancelled = true; throw stop; }
+                return send(true);
+            });
+        }).then(function () {
             btn.disabled = false;
             closeNewBooking();
             showMessage(editingId ? omniText.t('bookings.edit.saved') : omniText.t('bookings.new.created'));
             return loadMonth(state.year, state.month);
         }).catch(function (e) {
             btn.disabled = false;
-            err.textContent = e.message;
+            if (!e.cancelled) err.textContent = e.message;
         });
+    }
+
+    /** "You are closed at that time. … Book anyway?" (the Aurora kit's dialog, or the browser's). Resolves true to book. */
+    function askBookAnyway(reason) {
+        var message = omniText.t('bookings.rules.confirm', [reason]);
+        if (window.Aurora && window.Aurora.confirm) {
+            return window.Aurora.confirm({ title: omniText.t('bookings.rules.title'), message: message, confirmLabel: omniText.t('bookings.rules.bookAnyway'),
+                cancelLabel: omniText.t('common.cancel') });
+        }
+        return Promise.resolve(window.confirm(message));
     }
 
     // ---------------------------------------------------------------- wiring

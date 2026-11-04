@@ -140,6 +140,9 @@ public class ConfigManager : IConfigManager
     public int AiMemoryExchanges => GetInt(ConfigDefaults.AiMemoryExchanges);
     public int AiTimeoutSeconds => GetInt(ConfigDefaults.AiTimeoutSeconds);
     public int AiMaxConcurrentRuns => GetInt(ConfigDefaults.AiMaxConcurrentRuns);
+    public int AiRetryUnansweredAfterSeconds => GetInt(ConfigDefaults.AiRetryUnansweredAfterSeconds);
+    public decimal AiInputTokenPriceUsdPerMillion => GetDecimal(ConfigDefaults.AiInputTokenPriceUsdPerMillion);
+    public decimal AiOutputTokenPriceUsdPerMillion => GetDecimal(ConfigDefaults.AiOutputTokenPriceUsdPerMillion);
     public string BenchmarkGeneratorModel => GetString(ConfigDefaults.BenchmarkGeneratorModel);
 
     // ---- Integrations
