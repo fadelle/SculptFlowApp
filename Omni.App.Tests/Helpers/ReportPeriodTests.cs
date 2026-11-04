@@ -29,6 +29,25 @@ public class ReportPeriodTests
     }
 
     [Fact]
+    public void Custom_dates_are_kept_between_2000_and_a_year_after_today()
+    {
+        // QA t5-ops-15: /dashboard?Period=custom&From=1900-01-01&To=9999-12-31 was a 500 (ArgumentOutOfRangeException).
+        Assert.Equal((ReportPeriod.Custom, (DateOnly?)ReportPeriod.Earliest, (DateOnly?)Wednesday.AddYears(1)),
+            ReportPeriod.Resolve(ReportPeriod.Custom, new DateOnly(1900, 1, 1), DateOnly.MaxValue, Wednesday));
+        Assert.Equal((ReportPeriod.Custom, (DateOnly?)ReportPeriod.Earliest, (DateOnly?)ReportPeriod.Earliest),
+            ReportPeriod.Resolve(ReportPeriod.Custom, DateOnly.MinValue, new DateOnly(1999, 12, 31), Wednesday));
+        Assert.Equal((ReportPeriod.Custom, (DateOnly?)new DateOnly(2026, 4, 1), (DateOnly?)Wednesday.AddYears(1)),
+            ReportPeriod.Resolve(ReportPeriod.Custom, DateOnly.MaxValue, new DateOnly(2026, 4, 1), Wednesday)); // swapped, then clamped
+
+        foreach (var zone in new[] { "Pacific/Kiritimati", "Pacific/Pago_Pago", "UTC" })
+        {
+            var tz = TimeZoneInfo.FindSystemTimeZoneById(zone);
+            var (from, to) = ReportPeriod.ToUtcRange(DateOnly.MinValue, DateOnly.MaxValue, tz);   // callers that skip Resolve
+            Assert.True(from < to);
+        }
+    }
+
+    [Fact]
     public void Utc_range_runs_from_local_midnight_to_the_midnight_after_the_last_day()
     {
         var newYork = TimeZoneInfo.FindSystemTimeZoneById("America/New_York");   // UTC-4 in April

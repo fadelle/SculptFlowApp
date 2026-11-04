@@ -24,12 +24,19 @@ public sealed class RequireFeatureAttribute : Attribute, IAsyncActionFilter
 {
     public const string NotIncludedCode = BotToolOutcomes.FeatureNotIncludedCode;
 
-    public RequireFeatureAttribute(string featureKey)
+    /// <summary>The plan must include <paramref name="featureKey"/>, or any one of <paramref name="orFeatureKeys"/> (e.g. services:
+    /// bookings or the AI assistant, QA t2-billing-03).</summary>
+    public RequireFeatureAttribute(string featureKey, params string[] orFeatureKeys)
     {
         FeatureKey = featureKey;
+        FeatureKeys = [featureKey, .. orFeatureKeys];
     }
 
+    /// <summary>The first (or only) feature; the one an AI tool's answer names.</summary>
     public string FeatureKey { get; }
+
+    /// <summary>Every feature that lets the action run (any one is enough).</summary>
+    public IReadOnlyList<string> FeatureKeys { get; }
 
     /// <summary>Answer as an AI tool business outcome (200, success = false) instead of a 422.</summary>
     public bool AiTool { get; init; }
@@ -47,12 +54,24 @@ public sealed class RequireFeatureAttribute : Attribute, IAsyncActionFilter
             return;
         }
 
-        try
+        var entitlements = services.GetRequiredService<IEntitlementService>();
+        EntitlementDeniedException? denied = null;
+        foreach (var key in FeatureKeys)
         {
-            await services.GetRequiredService<IEntitlementService>().EnsureFeatureAsync(clientId.Value, FeatureKey, ct);
+            try
+            {
+                await entitlements.EnsureFeatureAsync(clientId.Value, key, ct);
+                denied = null;
+                break;
+            }
+            catch (EntitlementDeniedException ex)
+            {
+                denied ??= ex;   // the first feature's refusal is the one answered
+            }
         }
-        catch (EntitlementDeniedException) when (AiTool)
+        if (denied is not null)
         {
+            if (!AiTool) throw denied;
             context.Result = new OkObjectResult(BotToolOutcomes.FeatureNotIncluded(FeatureKey));
             return;
         }

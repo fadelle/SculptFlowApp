@@ -74,6 +74,8 @@ public class IndexModel : PageModel
         var tz = ViewerTimeZone.Resolve(Request, client.Timezone);
         var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, tz).Date);
         (Period, var fromDate, var toDate) = ReportPeriod.Resolve(Period, From, To, today);
+        // The picker shows the custom dates actually used (kept within 2000 .. a year ahead, QA t5-ops-15).
+        if (Period == ReportPeriod.Custom) (From, To) = (fromDate, toDate);
         RangeLabel = ReportPeriod.Label(_text, fromDate, toDate);
 
         // Viewer-local midnights -> UTC instants; the upper bound is exclusive (midnight after the last day).

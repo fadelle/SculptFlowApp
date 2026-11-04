@@ -11,8 +11,6 @@ namespace Omni.App.Business.Services.Clients;
 
 public class ClientProfileService : IClientProfileService
 {
-    private const int MaxNameLength = 200;
-
     private readonly IClientRepository _clients;
     private readonly IUnitOfWork _unitOfWork;
 
@@ -24,9 +22,7 @@ public class ClientProfileService : IClientProfileService
 
     public async Task UpdateDetailsAsync(Guid clientId, UpdateClientDetailsRequest request, CancellationToken ct = default)
     {
-        var name = (request.Name ?? string.Empty).Trim();
-        if (name.Length == 0) throw new ArgumentException("clients.errors.nameRequired");
-        if (name.Length > MaxNameLength) throw new ArgumentException("clients.errors.nameTooLong").WithArgs(MaxNameLength);
+        var name = ClientDetailsRules.Name(request.Name);
 
         // QA t1-accounts-12: the contact details are checked (format, length, http(s) website) before anything changes.
         var details = ClientDetailsRules.Clean(request.Phone, request.Email, request.Website, request.Address, request.OperatingHours, request.BookingInfo);

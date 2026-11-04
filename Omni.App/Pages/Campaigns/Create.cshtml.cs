@@ -264,7 +264,7 @@ public class CreateModel : PageModel
                     return Page();
                 }
                 scheduledAt = ViewerTimeZone.ToUtc(ScheduleDate.Value.ToDateTime(ScheduleTime.Value), ViewerTimeZone.Resolve(Request, client.Timezone));
-                if (scheduledAt <= DateTimeOffset.UtcNow)
+                if (scheduledAt < DateTimeOffset.UtcNow + Omni.App.Business.Services.Campaigns.CampaignService.MinScheduleNotice)
                 {
                     ErrorMessage = _text[SchedulePastKey].Value;
                     await LoadAsync(ct);

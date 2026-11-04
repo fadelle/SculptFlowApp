@@ -241,6 +241,40 @@ public class ClientAdminServiceTests
         Assert.Equal("clients.errors.invalidWebsite", (await Assert.ThrowsAsync<ArgumentException>(() => Sut().UpdateAsync(Guid.NewGuid(), Update() with { Website = "javascript:alert(1)" }, default))).Message);
     }
 
+    // QA t6-admin-01: a 611-character name (and other over-long fields) reached the database and gave a 500.
+    [Theory]
+    [InlineData("name", "clients.errors.nameTooLong")]
+    [InlineData("phone", "clients.errors.invalidPhone")]
+    [InlineData("email", "clients.errors.invalidEmail")]
+    [InlineData("website", "clients.errors.invalidWebsite")]
+    [InlineData("country", "clients.errors.invalidCountry")]
+    [InlineData("address", "clients.errors.addressTooLong")]
+    public async Task Update_refuses_a_field_too_long_for_its_column_before_reading_the_client(string field, string key)
+    {
+        var update = field switch
+        {
+            "name" => Update(new string('n', 611)),
+            "phone" => Update() with { Phone = new string('1', 51) },
+            "email" => Update() with { Email = new string('e', 195) + "@x.com" },
+            "website" => Update() with { Website = "https://" + new string('w', 300) + ".lb" },
+            "country" => Update() with { CountryCode = "LEBANON" },
+            _ => Update() with { Address = new string('a', 501) },
+        };
+        var ex = await Assert.ThrowsAsync<ArgumentException>(() => Sut().UpdateAsync(Guid.NewGuid(), update, default));
+        Assert.Equal(key, ex.Message);
+        _repo.Verify(r => r.GetForUpdateAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+        _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Update_takes_a_name_at_its_limit_and_no_country()
+    {
+        var client = new Client { Id = Guid.NewGuid(), Name = "Old", CountryCode = "LB" };
+        _repo.Setup(r => r.GetForUpdateAsync(client.Id, It.IsAny<CancellationToken>())).ReturnsAsync(client);
+        await Sut().UpdateAsync(client.Id, Update(new string('n', 200)) with { CountryCode = " " }, default);
+        Assert.Equal((200, (string?)null), (client.Name.Length, client.CountryCode));
+    }
+
     [Fact]
     public async Task Activation_is_idempotent()
     {

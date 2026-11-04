@@ -1,3 +1,4 @@
+using Omni.App.Common.Statics;
 using Microsoft.AspNetCore.Mvc;
 using Omni.App.Business.Contracts.Managers;
 using Omni.App.Business.Contracts.Services.Knowledge;
@@ -44,6 +45,7 @@ public class KnowledgeController : DashboardApiController
 
     /// <summary>Updates only chunk size, chunk overlap, top K and minimum similarity — the request type
     /// has no fields for the read-only settings, so they can't be changed here.</summary>
+    [RequireFeature(EntitlementKeys.AiAssistant)] // writes need the AI assistant (QA t2-billing-03); reads and deletes stay open
     [HttpPut("settings")]
     public async Task<ActionResult<KnowledgeSettingsResponse>> UpdateSettings([FromBody] UpdateKnowledgeSettingsRequest request, CancellationToken ct)
     {
@@ -62,6 +64,7 @@ public class KnowledgeController : DashboardApiController
         return doc is null ? NotFound() : Ok(doc);
     }
 
+    [RequireFeature(EntitlementKeys.AiAssistant)] // writes need the AI assistant (QA t2-billing-03); reads and deletes stay open
     [HttpPost]
     public async Task<ActionResult<KnowledgeDocumentResponse>> Create([FromBody] SaveKnowledgeRequest request, CancellationToken ct)
     {
@@ -82,6 +85,7 @@ public class KnowledgeController : DashboardApiController
     /// <summary>Creates a document from ONE uploaded PDF/DOCX/TXT (multipart/form-data: file, optional title,
     /// category, isActive). The text is extracted server-side and goes through the same chunk → embed →
     /// store pipeline as a manual entry, so it's searchable immediately. The file itself isn't kept.</summary>
+    [RequireFeature(EntitlementKeys.AiAssistant)] // writes need the AI assistant (QA t2-billing-03); reads and deletes stay open
     [HttpPost("upload")]
     public async Task<ActionResult<KnowledgeDocumentResponse>> Upload([FromForm] KnowledgeUploadForm form, CancellationToken ct)
     {
@@ -105,6 +109,7 @@ public class KnowledgeController : DashboardApiController
         }
     }
 
+    [RequireFeature(EntitlementKeys.AiAssistant)] // writes need the AI assistant (QA t2-billing-03); reads and deletes stay open
     [HttpPut("{id:guid}")]
     public async Task<ActionResult<KnowledgeDocumentResponse>> Update(Guid id, [FromBody] SaveKnowledgeRequest request, CancellationToken ct)
     {
@@ -122,6 +127,7 @@ public class KnowledgeController : DashboardApiController
         }
     }
 
+    [RequireFeature(EntitlementKeys.AiAssistant)] // writes need the AI assistant (QA t2-billing-03); reads and deletes stay open
     [HttpPost("{id:guid}/active")]
     public async Task<ActionResult<KnowledgeDocumentResponse>> SetActive(Guid id, [FromBody] SetKnowledgeActiveRequest request, CancellationToken ct)
     {

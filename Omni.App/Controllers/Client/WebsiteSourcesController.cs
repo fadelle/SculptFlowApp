@@ -1,3 +1,4 @@
+using Omni.App.Common.Statics;
 using Microsoft.AspNetCore.Mvc;
 using Omni.App.Business.Contracts.Managers;
 using Omni.App.Business.Contracts.Services.Knowledge;
@@ -32,6 +33,7 @@ public class WebsiteSourcesController : DashboardApiController
     }
 
     /// <summary>Adds a website and queues its first crawl (202 Accepted — the crawl is not finished yet).</summary>
+    [RequireFeature(EntitlementKeys.AiAssistant)] // writes need the AI assistant (QA t2-billing-03); reads and deletes stay open
     [HttpPost]
     public async Task<ActionResult<WebsiteSourceResponse>> Create([FromBody] CreateWebsiteSourceRequest request, CancellationToken ct)
     {
@@ -61,6 +63,7 @@ public class WebsiteSourcesController : DashboardApiController
         return Ok(await _websites.ListPagesAsync(clientId.Value, id, status, Math.Max(skip, 0), take, ct));
     }
 
+    [RequireFeature(EntitlementKeys.AiAssistant)] // writes need the AI assistant (QA t2-billing-03); reads and deletes stay open
     [HttpPost("{id:guid}/rescrape")]
     public async Task<ActionResult<WebsiteSourceResponse>> Rescrape(Guid id, CancellationToken ct)
     {
@@ -78,6 +81,7 @@ public class WebsiteSourcesController : DashboardApiController
         }
     }
 
+    [RequireFeature(EntitlementKeys.AiAssistant)] // writes need the AI assistant (QA t2-billing-03); reads and deletes stay open
     [HttpPost("{id:guid}/active")]
     public async Task<ActionResult<WebsiteSourceResponse>> SetActive(Guid id, [FromBody] SetKnowledgeActiveRequest request, CancellationToken ct)
     {

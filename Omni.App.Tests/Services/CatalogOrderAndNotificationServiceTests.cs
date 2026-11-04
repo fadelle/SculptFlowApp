@@ -63,6 +63,7 @@ public class ServiceServiceTests
     [InlineData(10, null, "services.errors.currencyRequired")]
     [InlineData(10, "US", "services.errors.currencyRequired")]
     [InlineData(10, "U5D", "services.errors.currencyRequired")]
+    [InlineData(10, "XYZ", "services.errors.currencyRequired")] // three letters but not an ISO 4217 code (QA t3-inbox-09)
     public async Task A_price_must_be_sensible_and_name_its_currency(double price, string? currency, string key)
     {
         var ex = await Assert.ThrowsAsync<ArgumentException>(() => Sut().CreateAsync(new CreateServiceRequest(_clientId, "Facial", null, null, 45, (decimal)price, currency)));
@@ -273,6 +274,145 @@ public class OrderServiceTests
         var b = MakeOrder(contactId: contact.Id);
         await Sut().UpdateAsync(_clientId, b.Id, new UpdateOrderRequest(OrderStatus.Quoted, null, null, null, null, null, null));
         Assert.Equal(PipelineKit.Attended, contact.StageKey);
+    }
+
+    // ---- QA t3-inbox-09: amounts, currency, status moves and the contact's stage after a cancel ----
+
+    [Theory]
+    [InlineData(-10)]
+    [InlineData(10_000_000.01)]
+    [InlineData(1e15)]
+    public async Task Create_refuses_an_amount_outside_0_to_10_million(double amount)
+    {
+        var ex = await Assert.ThrowsAsync<ArgumentException>(() => Sut().CreateAsync(new CreateOrderRequest(_clientId, Guid.NewGuid(), Guid.NewGuid(), null, (decimal)amount, "USD", null)));
+        Assert.Equal("orders.errors.amountRange", ex.Message);
+        _orders.Verify(r => r.Add(It.IsAny<Order>()), Times.Never);
+    }
+
+    [Theory]
+    [InlineData("xyz")]
+    [InlineData("DOLLR")]
+    [InlineData("")]
+    [InlineData("U5D")]
+    public async Task Create_refuses_a_currency_that_is_not_an_ISO_code(string currency)
+    {
+        var ex = await Assert.ThrowsAsync<ArgumentException>(() => Sut().CreateAsync(new CreateOrderRequest(_clientId, Guid.NewGuid(), Guid.NewGuid(), null, 10m, currency, null)));
+        Assert.Equal("orders.errors.invalidCurrency", ex.Message);
+        _orders.Verify(r => r.Add(It.IsAny<Order>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Create_upper_cases_the_currency_rounds_to_cents_and_allows_none()
+    {
+        var added = new List<Order>();
+        _orders.Setup(r => r.Add(It.IsAny<Order>())).Callback<Order>(added.Add);
+        await Sut().CreateAsync(new CreateOrderRequest(_clientId, Guid.NewGuid(), Guid.NewGuid(), null, 10.456m, " eur ", null));
+        await Sut().CreateAsync(new CreateOrderRequest(_clientId, Guid.NewGuid(), Guid.NewGuid(), null, 0m, null, null));
+        Assert.Equal(("EUR", 10.46m), (added[0].CurrencyCode, added[0].QuotedAmount));
+        Assert.Equal(((string?)null, 0m), (added[1].CurrencyCode, added[1].QuotedAmount));
+    }
+
+    [Fact]
+    public async Task Update_with_a_bad_value_changes_nothing()
+    {
+        var b = MakeOrder();
+        b.QuotedAmount = 100m;
+        b.CurrencyCode = "USD";
+        var amount = await Assert.ThrowsAsync<ArgumentException>(() => Sut().UpdateAsync(_clientId, b.Id, new UpdateOrderRequest(null, 200m, -5m, null, "EUR", null, null)));
+        Assert.Equal("orders.errors.amountRange", amount.Message);
+        var currency = await Assert.ThrowsAsync<ArgumentException>(() => Sut().UpdateAsync(_clientId, b.Id, new UpdateOrderRequest(null, 200m, null, null, "xyz", null, null)));
+        Assert.Equal("orders.errors.invalidCurrency", currency.Message);
+        Assert.Equal((100m, (decimal?)null, "USD"), (b.QuotedAmount, b.DepositAmount, b.CurrencyCode));
+        _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Theory]
+    [InlineData(OrderStatus.Completed, OrderStatus.Canceled)]
+    [InlineData(OrderStatus.Completed, OrderStatus.Considering)]
+    [InlineData(OrderStatus.Confirmed, OrderStatus.Quoted)]
+    [InlineData(OrderStatus.DepositPaid, OrderStatus.Considering)]
+    [InlineData(OrderStatus.Lost, OrderStatus.Completed)]
+    [InlineData(OrderStatus.Canceled, OrderStatus.Confirmed)]
+    public async Task Update_refuses_a_status_move_the_table_does_not_allow(string from, string to)
+    {
+        var b = MakeOrder(from);
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => Sut().UpdateAsync(_clientId, b.Id, new UpdateOrderRequest(to, null, null, null, null, null, null)));
+        Assert.Equal("orders.errors.statusChange", ex.Message);
+        Assert.Equal(from, b.Status);
+        _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Theory]
+    [InlineData(OrderStatus.Considering, OrderStatus.Completed)]   // steps may be skipped
+    [InlineData(OrderStatus.Quoted, OrderStatus.Considering)]
+    [InlineData(OrderStatus.DepositPaid, OrderStatus.Confirmed)]
+    [InlineData(OrderStatus.Confirmed, OrderStatus.DepositPaid)]
+    [InlineData(OrderStatus.Confirmed, OrderStatus.Canceled)]
+    [InlineData(OrderStatus.Lost, OrderStatus.Considering)]        // reopened
+    [InlineData(OrderStatus.Canceled, OrderStatus.Quoted)]
+    [InlineData(OrderStatus.Completed, OrderStatus.Completed)]     // the same status again (the popup sends it with every save)
+    public async Task Update_allows_the_moves_in_the_table(string from, string to)
+    {
+        var b = MakeOrder(from);
+        await Sut().UpdateAsync(_clientId, b.Id, new UpdateOrderRequest(to, null, 50m, null, null, null, null));
+        Assert.Equal((to, (decimal?)50m), (b.Status, b.DepositAmount));
+    }
+
+    [Fact]
+    public void Every_status_has_a_row_in_the_table_and_completed_is_final()
+    {
+        foreach (var status in OrderStatus.All)
+        {
+            Assert.All(OrderService.NextStatuses(status), next => Assert.Contains(next, OrderStatus.All));
+            Assert.DoesNotContain(status, OrderService.NextStatuses(status));
+        }
+        Assert.Empty(OrderService.NextStatuses(OrderStatus.Completed));
+        Assert.Equal(6, OrderService.NextStatuses(OrderStatus.Considering).Count);
+    }
+
+    [Theory]
+    [InlineData(OrderStatus.Canceled)]
+    [InlineData(OrderStatus.Lost)]
+    public async Task Canceling_the_only_confirmed_order_moves_the_customer_to_the_closed_stage(string status)
+    {
+        var contact = new Contact { Id = Guid.NewGuid(), StageKey = PipelineKit.Customer };
+        _contacts.Setup(l => l.GetByIdAsync(contact.Id, It.IsAny<CancellationToken>())).ReturnsAsync(contact);
+        var b = MakeOrder(OrderStatus.Confirmed, contact.Id);
+        // The read-only list still shows this order as confirmed (it is the one being changed) plus an old lost one.
+        _orders.Setup(r => r.ListForContactReadOnlyAsync(_clientId, contact.Id, It.IsAny<CancellationToken>())).ReturnsAsync(
+            [new Order { Id = b.Id, Status = OrderStatus.Confirmed }, new Order { Id = Guid.NewGuid(), Status = OrderStatus.Lost }]);
+        await Sut().UpdateAsync(_clientId, b.Id, new UpdateOrderRequest(status, null, null, null, null, null, null));
+        Assert.Equal(PipelineKit.NotInterested, contact.StageKey);
+        _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Canceling_keeps_the_customer_when_another_confirmed_order_remains()
+    {
+        var contact = new Contact { Id = Guid.NewGuid(), StageKey = PipelineKit.Customer };
+        _contacts.Setup(l => l.GetByIdAsync(contact.Id, It.IsAny<CancellationToken>())).ReturnsAsync(contact);
+        var b = MakeOrder(OrderStatus.Confirmed, contact.Id);
+        _orders.Setup(r => r.ListForContactReadOnlyAsync(_clientId, contact.Id, It.IsAny<CancellationToken>())).ReturnsAsync(
+            [new Order { Id = b.Id, Status = OrderStatus.Confirmed }, new Order { Id = Guid.NewGuid(), Status = OrderStatus.Completed }]);
+        await Sut().UpdateAsync(_clientId, b.Id, new UpdateOrderRequest(OrderStatus.Canceled, null, null, null, null, null, null));
+        Assert.Equal(PipelineKit.Customer, contact.StageKey);
+    }
+
+    [Fact]
+    public async Task Canceling_leaves_a_contact_someone_already_moved_on_and_ignores_an_unconfirmed_order()
+    {
+        var moved = new Contact { Id = Guid.NewGuid(), StageKey = PipelineKit.NeedsHuman };
+        _contacts.Setup(l => l.GetByIdAsync(moved.Id, It.IsAny<CancellationToken>())).ReturnsAsync(moved);
+        await Sut().UpdateAsync(_clientId, MakeOrder(OrderStatus.DepositPaid, moved.Id).Id,
+            new UpdateOrderRequest(OrderStatus.Lost, null, null, null, null, null, null));
+        Assert.Equal(PipelineKit.NeedsHuman, moved.StageKey);
+
+        // A quote that is canceled never made them a customer: the stage isn't touched.
+        var customer = new Contact { Id = Guid.NewGuid(), StageKey = PipelineKit.Customer };
+        _contacts.Setup(l => l.GetByIdAsync(customer.Id, It.IsAny<CancellationToken>())).ReturnsAsync(customer);
+        await Sut().UpdateAsync(_clientId, MakeOrder(OrderStatus.Quoted, customer.Id).Id, new UpdateOrderRequest(OrderStatus.Canceled, null, null, null, null, null, null));
+        Assert.Equal(PipelineKit.Customer, customer.StageKey);
+        _orders.Verify(r => r.ListForContactReadOnlyAsync(_clientId, customer.Id, It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]

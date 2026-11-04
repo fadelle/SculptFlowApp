@@ -61,18 +61,20 @@ public class ClientAdminService : IClientAdminService
 
     public async Task<PlatformAdminChange> UpdateAsync(Guid id, ClientUpdate update, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(update.Name)) throw new ArgumentException("Client name is required.");
+        // Every field is checked before anything is read or written: a value that doesn't fit is a 400, never a 500 (QA t6-admin-01).
+        var name = ClientDetailsRules.Name(update.Name);
+        var country = ClientDetailsRules.Country(update.CountryCode);
         var tz = string.IsNullOrWhiteSpace(update.Timezone) ? "UTC" : update.Timezone.Trim();
         if (!TimeZoneInfo.TryFindSystemTimeZoneById(tz, out _))
             throw new ArgumentException($"Unknown time zone '{tz}'. Use an IANA name such as Asia/Beirut.");
         // The same contact-detail rules as the client's own Business Info page (QA t1-accounts-12).
         var details = ClientDetailsRules.Clean(update.Phone, update.Email, update.Website, update.Address, update.OperatingHours, update.BookingInfo);
         var client = await _repository.GetForUpdateAsync(id, ct) ?? throw new KeyNotFoundException("Client not found.");
-        client.Name = update.Name.Trim();
+        client.Name = name;
         client.Phone = details.Phone;
         client.Email = details.Email;
         client.Website = details.Website;
-        client.CountryCode = Clean(update.CountryCode)?.ToUpperInvariant();
+        client.CountryCode = country;
         client.Timezone = tz;
         client.Address = details.Address;
         client.OperatingHours = details.OperatingHours;

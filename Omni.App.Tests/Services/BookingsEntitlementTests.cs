@@ -122,6 +122,53 @@ public class BookingsEntitlementTests
         Assert.Equal(action is not null, attribute.AiTool);
     }
 
+    [Fact]
+    public async Task A_filter_with_alternatives_runs_when_any_one_feature_is_included()
+    {
+        // QA t2-billing-03: /api/services needs bookings OR the AI assistant, like the Services page.
+        var filter = new RequireFeatureAttribute(EntitlementKeys.Bookings, EntitlementKeys.AiAssistant);
+        var aiOnly = new ClientEntitlements(true, true, SubscriptionStatus.Active, "ai", "AI", null,
+            new Dictionary<string, string> { [EntitlementKeys.AiAssistant] = "true" });
+        Assert.True((await RunAsync(filter, Context(EntitlementKit.With(aiOnly).Object, _clientId, []))).Ran);
+        Assert.True((await RunAsync(filter, Context(EntitlementKit.With(WithBookings).Object, _clientId, []))).Ran);
+        var ex = await Assert.ThrowsAsync<EntitlementDeniedException>(() => RunAsync(filter, Context(EntitlementKit.With(WithoutBookings).Object, _clientId, [])));
+        Assert.Equal(EntitlementKeys.Bookings, ex.Entitlement);   // the first feature's refusal is answered
+    }
+
+    [Theory]
+    [InlineData(typeof(Omni.App.Controllers.Client.KnowledgeController), "Create", EntitlementKeys.AiAssistant)]
+    [InlineData(typeof(Omni.App.Controllers.Client.KnowledgeController), "Upload", EntitlementKeys.AiAssistant)]
+    [InlineData(typeof(Omni.App.Controllers.Client.KnowledgeController), "Update", EntitlementKeys.AiAssistant)]
+    [InlineData(typeof(Omni.App.Controllers.Client.KnowledgeController), "UpdateSettings", EntitlementKeys.AiAssistant)]
+    [InlineData(typeof(Omni.App.Controllers.Client.KnowledgeController), "SetActive", EntitlementKeys.AiAssistant)]
+    [InlineData(typeof(Omni.App.Controllers.Client.WebsiteSourcesController), "Create", EntitlementKeys.AiAssistant)]
+    [InlineData(typeof(Omni.App.Controllers.Client.WebsiteSourcesController), "Rescrape", EntitlementKeys.AiAssistant)]
+    [InlineData(typeof(Omni.App.Controllers.Client.WebsiteSourcesController), "SetActive", EntitlementKeys.AiAssistant)]
+    [InlineData(typeof(Omni.App.Controllers.Client.ServicesController), "Create", EntitlementKeys.Bookings)]
+    [InlineData(typeof(Omni.App.Controllers.Client.ServicesController), "Update", EntitlementKeys.Bookings)]
+    [InlineData(typeof(Omni.App.Controllers.Client.ServicesController), "SetActive", EntitlementKeys.Bookings)]
+    public void Knowledge_website_and_service_writes_need_the_plan_feature(Type controller, string action, string feature)
+    {
+        // QA t2-billing-03: these wrote (and embedded at Omni's AI cost) without the plan's feature.
+        var attribute = controller.GetMethod(action)!.GetCustomAttributes(typeof(RequireFeatureAttribute), true).Cast<RequireFeatureAttribute>().Single();
+        Assert.Equal(feature, attribute.FeatureKey);
+        if (controller == typeof(Omni.App.Controllers.Client.ServicesController)) Assert.Contains(EntitlementKeys.AiAssistant, attribute.FeatureKeys);
+    }
+
+    [Theory]
+    [InlineData(typeof(Omni.App.Controllers.Client.KnowledgeController))]
+    [InlineData(typeof(Omni.App.Controllers.Client.WebsiteSourcesController))]
+    [InlineData(typeof(Omni.App.Controllers.Client.ServicesController))]
+    public void Their_reads_and_deletes_stay_open(Type controller)
+    {
+        Assert.Empty(controller.GetCustomAttributes(typeof(RequireFeatureAttribute), true));
+        foreach (var method in controller.GetMethods().Where(m => m.GetCustomAttributes(typeof(Microsoft.AspNetCore.Mvc.HttpGetAttribute), true).Length > 0
+                     || m.GetCustomAttributes(typeof(Microsoft.AspNetCore.Mvc.HttpDeleteAttribute), true).Length > 0))
+        {
+            Assert.Empty(method.GetCustomAttributes(typeof(RequireFeatureAttribute), true));
+        }
+    }
+
     [Theory]
     [InlineData("SearchKnowledge")]
     [InlineData("GetClientInfo")]

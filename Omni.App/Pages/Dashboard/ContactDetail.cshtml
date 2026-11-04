@@ -209,6 +209,7 @@ else
                                 <td class="row-actions">
                                     <a href="/dashboard/contacts/@contact.Id?order=new" class="au-btn au-btn--outlined au-btn--sm" data-modal-open="order-overlay"
                                        data-order-id="@o.Id" data-order-service="@o.ServiceName" data-order-status="@o.Status"
+                                       data-order-next="@string.Join(',', Omni.App.Business.Services.Orders.OrderService.NextStatuses(o.Status))"
                                        data-order-quoted="@o.QuotedAmount?.ToString(System.Globalization.CultureInfo.InvariantCulture)"
                                        data-order-deposit="@o.DepositAmount?.ToString(System.Globalization.CultureInfo.InvariantCulture)"
                                        data-order-final="@o.FinalAmount?.ToString(System.Globalization.CultureInfo.InvariantCulture)"
@@ -315,7 +316,7 @@ else
                     </div>
                     <div class="au-form-field">
                         <label class="au-form-label" for="order-quoted">@T["contactDetail.orders.quotedAmount"]</label>
-                        <input type="number" name="OrderQuoted" id="order-quoted" value="@Model.OrderQuoted?.ToString(System.Globalization.CultureInfo.InvariantCulture)" class="au-input" min="0" step="0.01" dir="ltr" />
+                        <input type="number" name="OrderQuoted" id="order-quoted" value="@Model.OrderQuoted?.ToString(System.Globalization.CultureInfo.InvariantCulture)" class="au-input" min="0" max="10000000" step="0.01" dir="ltr" />
                     </div>
                     <div class="au-form-field">
                         <label class="au-form-label" for="order-currency">@T["contactDetail.orders.currency"]</label>
@@ -323,11 +324,11 @@ else
                     </div>
                     <div class="au-form-field" data-order-edit-only hidden="@(Model.OrderId is null)">
                         <label class="au-form-label" for="order-deposit">@T["contactDetail.orders.depositAmount"]</label>
-                        <input type="number" name="OrderDeposit" id="order-deposit" value="@Model.OrderDeposit?.ToString(System.Globalization.CultureInfo.InvariantCulture)" class="au-input" min="0" step="0.01" dir="ltr" />
+                        <input type="number" name="OrderDeposit" id="order-deposit" value="@Model.OrderDeposit?.ToString(System.Globalization.CultureInfo.InvariantCulture)" class="au-input" min="0" max="10000000" step="0.01" dir="ltr" />
                     </div>
                     <div class="au-form-field" data-order-edit-only hidden="@(Model.OrderId is null)">
                         <label class="au-form-label" for="order-final">@T["contactDetail.orders.finalAmount"]</label>
-                        <input type="number" name="OrderFinal" id="order-final" value="@Model.OrderFinal?.ToString(System.Globalization.CultureInfo.InvariantCulture)" class="au-input" min="0" step="0.01" dir="ltr" />
+                        <input type="number" name="OrderFinal" id="order-final" value="@Model.OrderFinal?.ToString(System.Globalization.CultureInfo.InvariantCulture)" class="au-input" min="0" max="10000000" step="0.01" dir="ltr" />
                     </div>
                     <div class="au-form-field au-span-2">
                         <label class="au-form-label" for="order-notes">@T["contactDetail.details.notes"] <span class="opt">@T["common.optional"]</span></label>

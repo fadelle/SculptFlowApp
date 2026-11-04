@@ -242,6 +242,16 @@ public class DashboardPageTests
     }
 
     [Fact]
+    public async Task An_extreme_custom_range_is_clamped_instead_of_crashing()
+    {
+        // QA t5-ops-15: From=1900-01-01&To=9999-12-31 was a 500.
+        var (model, from, to) = await RunAsync("custom", new DateOnly(1900, 1, 1), new DateOnly(9999, 12, 31));
+        Assert.Equal(new DateTimeOffset(2000, 1, 1, 0, 0, 0, TimeSpan.Zero), from);
+        Assert.True(to <= DateTimeOffset.UtcNow.AddYears(1).AddDays(2), $"The end was {to}; it should stop a year after today.");
+        Assert.Equal(new DateOnly(2000, 1, 1), model.From);
+    }
+
+    [Fact]
     public async Task A_custom_range_is_sent_as_midnights_with_an_exclusive_end()
     {
         var (model, from, to) = await RunAsync("custom", new DateOnly(2026, 3, 1), new DateOnly(2026, 3, 10));

@@ -19,8 +19,13 @@ public static class ReportPeriod
     /// <summary>The dropdown's choices, in display order.</summary>
     public static readonly IReadOnlyList<string> All = [ThisWeek, LastWeek, ThisMonth, LastMonth, Last7Days, Last30Days, AllTime, Custom];
 
+    /// <summary>The earliest date a custom period can start (nothing in Omni is older). A custom period ends at most a year
+    /// after today. Dates outside are moved to the edge (QA t5-ops-15: 1900 to 9999 was a 500).</summary>
+    public static readonly DateOnly Earliest = new(2000, 1, 1);
+
     /// <summary>Inclusive viewer-local start/end dates for a period (nulls = all time). Weeks start on Monday. An unknown
-    /// period falls back to this month (the returned Period says which one was used).</summary>
+    /// period falls back to this month (the returned Period says which one was used). Custom dates are kept between
+    /// <see cref="Earliest"/> and a year after today.</summary>
     public static (string Period, DateOnly? From, DateOnly? To) Resolve(string? period, DateOnly? from, DateOnly? to, DateOnly today)
     {
         var mondayOffset = ((int)today.DayOfWeek + 6) % 7; // Monday = 0 … Sunday = 6
@@ -38,8 +43,9 @@ public static class ReportPeriod
             case AllTime: return (period, null, null);
             case Custom:
                 if (from is null && to is null) return (period, null, null);
-                var start = from ?? to!.Value;
-                var end = to ?? today;
+                var latest = today.AddYears(1);
+                var start = Clamp(from ?? to!.Value, Earliest, latest);
+                var end = Clamp(to ?? today, Earliest, latest);
                 return start <= end ? (period, start, end) : (period, end, start);
             default:
                 return (ThisMonth, firstOfMonth, today);
@@ -60,7 +66,13 @@ public static class ReportPeriod
     public static DateTimeOffset LocalMidnightUtc(DateOnly date, TimeZoneInfo tz) =>
         ViewerTimeZone.ToUtc(date.ToDateTime(TimeOnly.MinValue), tz);
 
-    /// <summary>[from, to) UTC instants for inclusive local dates: the upper bound is the midnight after the last day.</summary>
+    /// <summary>[from, to) UTC instants for inclusive local dates: the upper bound is the midnight after the last day. Dates
+    /// are kept between <see cref="Earliest"/> and year 9000, so no time zone shift can overflow (callers that skip Resolve).</summary>
     public static (DateTimeOffset? From, DateTimeOffset? To) ToUtcRange(DateOnly? from, DateOnly? to, TimeZoneInfo tz) =>
-        (from is null ? null : LocalMidnightUtc(from.Value, tz), to is null ? null : LocalMidnightUtc(to.Value.AddDays(1), tz));
+        (from is null ? null : LocalMidnightUtc(Clamp(from.Value, Earliest, SafeLatest), tz),
+         to is null ? null : LocalMidnightUtc(Clamp(to.Value, Earliest, SafeLatest).AddDays(1), tz));
+
+    private static readonly DateOnly SafeLatest = new(9000, 12, 31);
+
+    private static DateOnly Clamp(DateOnly date, DateOnly min, DateOnly max) => date < min ? min : date > max ? max : date;
 }

@@ -130,6 +130,66 @@ public class CampaignServiceTests
         Assert.Equal((CampaignStatus.Scheduled, when), (r!.Status, draft.ScheduledAt));
     }
 
+    // QA t5-ops-10: 2020-01-01 was accepted and the worker started the campaign on its next tick.
+    [Theory]
+    [InlineData(-60 * 24 * 365 * 6)]   // 2020
+    [InlineData(-1)]
+    [InlineData(0)]
+    [InlineData(0.5)]                  // less than a minute ahead
+    public async Task Schedule_refuses_a_time_that_is_not_at_least_a_minute_ahead(double minutesAhead)
+    {
+        var draft = MakeCampaign();
+        var ex = await Assert.ThrowsAsync<ArgumentException>(() => Sut().ScheduleAsync(_clientId, draft.Id, DateTimeOffset.UtcNow.AddMinutes(minutesAhead)));
+        Assert.Equal("campaigns.create.errors.schedulePast", ex.Message);
+        Assert.Equal((CampaignStatus.Draft, (DateTimeOffset?)null), (draft.Status, draft.ScheduledAt));
+        _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Schedule_stores_the_time_in_UTC()
+    {
+        var draft = MakeCampaign();
+        var beirut = new DateTimeOffset(DateTime.UtcNow.AddDays(2).Ticks, TimeSpan.Zero).ToOffset(TimeSpan.FromHours(3));
+        await Sut().ScheduleAsync(_clientId, draft.Id, beirut);
+        Assert.Equal((TimeSpan.Zero, beirut.UtcDateTime), (draft.ScheduledAt!.Value.Offset, draft.ScheduledAt.Value.UtcDateTime));
+    }
+
+    [Fact]
+    public async Task Create_refuses_a_past_time_for_the_draft()
+    {
+        var ex = await Assert.ThrowsAsync<ArgumentException>(() => Sut().CreateAsync(Create([Guid.NewGuid()]) with { ScheduledAt = new DateTimeOffset(2020, 1, 1, 0, 0, 0, TimeSpan.Zero) }));
+        Assert.Equal("campaigns.create.errors.schedulePast", ex.Message);
+        _campaigns.Verify(r => r.Add(It.IsAny<Campaign>()), Times.Never);
+    }
+
+    // QA t5-ops-11: cancelling a draft marked every recipient failed with the English "Campaign cancelled.".
+    [Fact]
+    public async Task Cancel_marks_unsent_recipients_skipped_with_a_reason_not_failed()
+    {
+        var c = MakeCampaign();
+        var pending = Recipient(c);
+        var queued = Recipient(c, CampaignRecipientStatus.Queued);
+        _campaigns.Setup(x => x.ListRecipientsInStatusAsync(c.Id, It.Is<IReadOnlyCollection<string>>(s => s.Contains(CampaignRecipientStatus.Pending) && s.Contains(CampaignRecipientStatus.Queued)), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<CampaignRecipient> { pending, queued });
+        var r = await Sut().CancelAsync(_clientId, c.Id);
+        Assert.Equal(CampaignStatus.Cancelled, r!.Status);
+        Assert.All(new[] { pending, queued }, x =>
+        {
+            Assert.Equal((CampaignRecipientStatus.Skipped, CampaignSkipReason.CampaignCancelled), (x.Status, x.SkipReason));
+            Assert.Null(x.FailureReason);
+            Assert.Null(x.FailedAt);
+        });
+    }
+
+    [Fact]
+    public void Skip_reasons_read_as_translated_text_and_unknown_ones_stay_readable()
+    {
+        var text = TextKit.Localizer();
+        Assert.Equal("Campaign cancelled before sending", CampaignSkipReason.Label(text, CampaignSkipReason.CampaignCancelled));
+        Assert.Equal("No phone number", CampaignSkipReason.Label(text, CampaignSkipReason.NoPhone));
+        Assert.Equal("Some new reason", CampaignSkipReason.Label(text, "some_new_reason"));
+    }
+
     [Fact]
     public async Task Send_queues_pending_recipients_starts_the_campaign_and_processes_a_batch()
     {
@@ -354,7 +414,7 @@ public class CampaignServiceTests
     }
 
     [Fact]
-    public async Task Cancel_fails_outstanding_recipients_and_rejects_finished_campaigns()
+    public async Task Cancel_skips_outstanding_recipients_and_rejects_finished_campaigns()
     {
         Assert.Null(await Sut().CancelAsync(_clientId, Guid.NewGuid()));
         await Assert.ThrowsAsync<InvalidOperationException>(() => Sut().CancelAsync(_clientId, MakeCampaign(CampaignStatus.Completed).Id));
@@ -367,7 +427,7 @@ public class CampaignServiceTests
             .ReturnsAsync(new List<CampaignRecipient> { p, q });
         var r = await Sut().CancelAsync(_clientId, c.Id);
         Assert.Equal(CampaignStatus.Cancelled, r!.Status);
-        Assert.All(new[] { p, q }, x => Assert.Equal((CampaignRecipientStatus.Failed, "Campaign cancelled."), (x.Status, x.FailureReason)));
+        Assert.All(new[] { p, q }, x => Assert.Equal((CampaignRecipientStatus.Skipped, CampaignSkipReason.CampaignCancelled), (x.Status, x.SkipReason)));
     }
 
     // ---------------------------------------------------------------- stop / resume / background sending
@@ -583,7 +643,7 @@ public class CampaignServiceTests
         var q = Recipient(c, CampaignRecipientStatus.Queued);
         _campaigns.Setup(x => x.ListRecipientsInStatusAsync(c.Id, It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>())).ReturnsAsync(new List<CampaignRecipient> { q });
         var r = await Sut().CancelAsync(_clientId, c.Id);
-        Assert.Equal((CampaignStatus.Cancelled, CampaignRecipientStatus.Failed), (r!.Status, q.Status));
+        Assert.Equal((CampaignStatus.Cancelled, CampaignRecipientStatus.Skipped), (r!.Status, q.Status));
     }
 
     // ---------------------------------------------------------------- reads / stats

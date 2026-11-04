@@ -1,3 +1,5 @@
+using Omni.App.Common.Statics;
+using Omni.App.Controllers.Filters;
 using Microsoft.AspNetCore.Mvc;
 using Omni.App.Business.Contracts.Managers;
 using Omni.App.Business.Contracts.Services.Catalog;
@@ -37,6 +39,7 @@ public class ServicesController : DashboardApiController
         return service is null ? NotFound() : Ok(service);
     }
 
+    [RequireFeature(EntitlementKeys.Bookings, EntitlementKeys.AiAssistant)] // like the Services page (QA t2-billing-03); reads stay open
     [HttpPost]
     public async Task<ActionResult<ServiceResponse>> Create([FromBody] CreateServiceRequest request, CancellationToken ct)
     {
@@ -47,6 +50,7 @@ public class ServicesController : DashboardApiController
         return CreatedAtAction(nameof(GetById), new { id = service.Id }, service);
     }
 
+    [RequireFeature(EntitlementKeys.Bookings, EntitlementKeys.AiAssistant)] // like the Services page (QA t2-billing-03); reads stay open
     [HttpPut("{id:guid}")]
     public async Task<ActionResult<ServiceResponse>> Update(Guid id, [FromBody] UpdateServiceRequest request, CancellationToken ct)
     {
@@ -59,6 +63,7 @@ public class ServicesController : DashboardApiController
 
     /// <summary>Activate/deactivate — services are never deleted (contacts, bookings and service
     /// bookings reference them).</summary>
+    [RequireFeature(EntitlementKeys.Bookings, EntitlementKeys.AiAssistant)] // like the Services page (QA t2-billing-03); reads stay open
     [HttpPost("{id:guid}/active")]
     public async Task<ActionResult<ServiceResponse>> SetActive(Guid id, [FromBody] SetServiceActiveRequest request, CancellationToken ct)
     {

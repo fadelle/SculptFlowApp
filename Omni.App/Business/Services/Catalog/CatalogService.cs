@@ -90,8 +90,8 @@ public class CatalogService : ICatalogService
     {
         if (price is null) return (null, null);
         if (price < 0 || price > 10_000_000) throw new ArgumentException("services.errors.priceRange");
-        var code = (currency ?? string.Empty).Trim().ToUpperInvariant();
-        if (code.Length != 3 || !code.All(char.IsAsciiLetterUpper)) throw new ArgumentException("services.errors.currencyRequired");
+        // A real ISO 4217 code (QA t3-inbox-09: "XYZ" passed the old three-letters check).
+        var code = CurrencyCodes.Normalize(currency) ?? throw new ArgumentException("services.errors.currencyRequired");
         return (Math.Round(price.Value, 2), code);
     }
 

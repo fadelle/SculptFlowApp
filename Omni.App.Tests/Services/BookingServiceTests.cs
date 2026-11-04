@@ -209,6 +209,49 @@ public class BookingServiceTests
         _bookings.Verify(a => a.LockClientForBookingAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
+    // QA t5-ops-02: over-long booking type, place or place name was a 500 (value too long for the column).
+    [Theory]
+    [InlineData(51, null, 0, "bookings.errors.typeTooLong")]
+    [InlineData(0, "rooftop", 0, "bookings.errors.unknownLocation")]
+    [InlineData(0, "in_person_and_also_much_longer_than_thirty", 0, "bookings.errors.unknownLocation")]
+    [InlineData(0, null, 201, "bookings.errors.locationNameTooLong")]
+    public async Task A_members_booking_texts_must_fit_and_its_place_must_be_known(int typeLength, string? location, int nameLength, string key)
+    {
+        var request = Req() with { BookingType = new string('t', typeLength), LocationType = location, LocationName = nameLength == 0 ? null : new string('n', nameLength) };
+        var ex = await Assert.ThrowsAsync<ArgumentException>(() => Sut().CreateAsync(request));
+        Assert.Equal(key, ex.Message);
+        _bookings.Verify(a => a.Add(It.IsAny<Booking>()), Times.Never);
+        _bookings.Verify(a => a.LockClientForBookingAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Booking_texts_are_trimmed_and_fit_exactly_at_their_limits()
+    {
+        Booking? added = null;
+        _bookings.Setup(a => a.Add(It.IsAny<Booking>())).Callback<Booking>(b => added = b);
+        await Sut().CreateAsync(Req() with { BookingType = " " + new string('t', 50) + " ", LocationType = " video ", LocationName = new string('n', 200) });
+        Assert.Equal((new string('t', 50), "video", 200), (added!.BookingType, added.LocationType, added.LocationName!.Length));
+
+        await Sut().CreateAsync(Req(DateTimeOffset.UtcNow.AddDays(3)) with { BookingType = "  ", LocationType = " ", LocationName = " " });
+        Assert.Equal(("standard", (string?)null, (string?)null), (added!.BookingType, added.LocationType, added.LocationName));
+    }
+
+    [Fact]
+    public async Task The_AI_path_keeps_short_unknown_places_but_refuses_over_long_texts()
+    {
+        Booking? added = null;
+        _bookings.Setup(a => a.Add(It.IsAny<Booking>())).Callback<Booking>(b => added = b);
+        await Sut().BookAvailableSlotAsync(Req() with { LocationType = "studio" });
+        Assert.Equal("studio", added!.LocationType);
+
+        added = null;
+        var ex = await Assert.ThrowsAsync<ArgumentException>(() => Sut().BookAvailableSlotAsync(Req() with { LocationType = new string('x', 31) }));
+        Assert.Equal("bookings.errors.unknownLocation", ex.Message);
+        ex = await Assert.ThrowsAsync<ArgumentException>(() => Sut().BookAvailableSlotAsync(Req() with { BookingType = new string('x', 51) }));
+        Assert.Equal("bookings.errors.typeTooLong", ex.Message);
+        Assert.Null(added);
+    }
+
     [Fact]
     public async Task Create_rejects_a_contact_from_another_client()
     {

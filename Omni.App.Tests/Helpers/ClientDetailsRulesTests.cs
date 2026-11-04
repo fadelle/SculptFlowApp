@@ -23,6 +23,34 @@ public class ClientDetailsRulesTests
     public void Bad_details_are_refused_with_their_reason(string? phone, string? email, string? website, string key) =>
         Assert.Equal(key, Assert.Throws<ArgumentException>(() => ClientDetailsRules.Clean(phone, email, website, null, null, null)).Message);
 
+    [Theory]
+    [InlineData(" lb ", "LB")]
+    [InlineData("ae", "AE")]
+    [InlineData("FR", "FR")]
+    [InlineData(" ", null)]
+    [InlineData(null, null)]
+    public void A_country_is_a_known_two_letter_code_upper_cased(string? input, string? expected) =>
+        Assert.Equal(expected, ClientDetailsRules.Country(input));
+
+    [Theory]
+    [InlineData("LBN")]
+    [InlineData("XX")]
+    [InlineData("L1")]
+    [InlineData("en-US")]
+    [InlineData("Lebanon")]
+    public void An_unknown_or_malformed_country_is_refused(string input) =>
+        Assert.Equal("clients.errors.invalidCountry", Assert.Throws<ArgumentException>(() => ClientDetailsRules.Country(input)).Message);
+
+    [Fact]
+    public void A_name_is_required_trimmed_and_at_most_200_characters()
+    {
+        Assert.Equal("Glow", ClientDetailsRules.Name("  Glow "));
+        Assert.Equal(200, ClientDetailsRules.Name(new string('n', 200)).Length);
+        Assert.Equal("clients.errors.nameRequired", Assert.Throws<ArgumentException>(() => ClientDetailsRules.Name("  ")).Message);
+        var tooLong = Assert.Throws<ArgumentException>(() => ClientDetailsRules.Name(new string('n', 201)));
+        Assert.Equal(("clients.errors.nameTooLong", (object?)200), (tooLong.Message, Assert.Single(TextError.ArgsOf(tooLong))));
+    }
+
     [Fact]
     public void Long_texts_are_refused_with_their_limit()
     {

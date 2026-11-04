@@ -1,6 +1,7 @@
 // Contact page orders popup (Pages/Dashboard/ContactDetail.cshtml, #order-overlay): modal.js opens it; this switches it
 // between adding an order (the Add button) and editing one (an Edit button's data-order-*: id, service name, status,
-// amounts, currency). Adding picks a service; editing shows the service and adds status, deposit and final amount.
+// amounts, currency). Adding picks a service; editing shows the service and adds status, deposit and final amount. The
+// status list offers only the current status and the ones it may move to (data-order-next, OrderService's table).
 (function () {
   var overlay = document.getElementById('order-overlay');
   if (!overlay) return;
@@ -28,7 +29,14 @@
       return;
     }
     document.getElementById('order-service-name').textContent = trigger.getAttribute('data-order-service') || '—';
-    set('order-status', trigger.getAttribute('data-order-status'));
+    var current = trigger.getAttribute('data-order-status');
+    var next = (trigger.getAttribute('data-order-next') || '').split(',');
+    document.querySelectorAll('#order-status option').forEach(function (o) {
+      var allowed = o.value === current || next.indexOf(o.value) >= 0;
+      o.disabled = !allowed;
+      o.hidden = !allowed;
+    });
+    set('order-status', current);
     set('order-quoted', trigger.getAttribute('data-order-quoted'));
     set('order-deposit', trigger.getAttribute('data-order-deposit'));
     set('order-final', trigger.getAttribute('data-order-final'));

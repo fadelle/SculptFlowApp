@@ -8,7 +8,30 @@ namespace Omni.App.Common.Helpers;
 /// </summary>
 public static class ClientDetailsRules
 {
-    public const int PhoneMax = 50, EmailMax = 200, WebsiteMax = 300, AddressMax = 500, TextMax = 2000;
+    public const int NameMax = 200, PhoneMax = 50, EmailMax = 200, WebsiteMax = 300, AddressMax = 500, TextMax = 2000;
+
+    /// <summary>The client's name, trimmed: required and at most <see cref="NameMax"/> characters (core.clients.name varchar(200);
+    /// QA t6-admin-01: the admin portal's 611-character name was a 500).</summary>
+    public static string Name(string? name)
+    {
+        var clean = Trim(name) ?? throw new ArgumentException("clients.errors.nameRequired");
+        return clean.Length <= NameMax ? clean : throw new ArgumentException("clients.errors.nameTooLong").WithArgs(NameMax);
+    }
+
+    /// <summary>An ISO 3166 two-letter country code, upper-cased (LB, AE, FR); blank = none (QA t6-admin-01).</summary>
+    public static string? Country(string? code)
+    {
+        var clean = Trim(code)?.ToUpperInvariant();
+        if (clean is null) return null;
+        var known = clean.Length == 2 && clean.All(char.IsAsciiLetterUpper) && IsRegion(clean);
+        return known ? clean : throw new ArgumentException("clients.errors.invalidCountry");
+    }
+
+    private static bool IsRegion(string code)
+    {
+        try { return new System.Globalization.RegionInfo(code).TwoLetterISORegionName == code; }
+        catch (ArgumentException) { return false; }
+    }
 
     public record Cleaned(string? Phone, string? Email, string? Website, string? Address, string? OperatingHours, string? BookingInfo);
 

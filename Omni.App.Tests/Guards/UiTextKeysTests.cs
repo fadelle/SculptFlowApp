@@ -28,7 +28,7 @@ public partial class UiTextKeysTests
         {
             "terms.", FilterLabelHelper.KeyPrefix, KnowledgeCategory.LabelKeyPrefix,
             BillingTextHelper.EntitlementKeyPrefix, BillingTextHelper.EventTypeKeyPrefix, BillingTextHelper.LedgerKeyPrefix,
-            ReminderText.StatusKeyPrefix, ReminderText.ReasonKeyPrefix
+            ReminderText.StatusKeyPrefix, ReminderText.ReasonKeyPrefix, CampaignSkipReason.LabelKeyPrefix
         }.Any(prefix => key.StartsWith(prefix, StringComparison.Ordinal));
 
     private static IEnumerable<string> SourceFiles() =>
@@ -114,6 +114,18 @@ public partial class UiTextKeysTests
         Assert.True(missing.Count == 0, "Reminder values with no label in en.json:\n  " + string.Join("\n  ", missing));
         var stray = english.Keys.Where(k => (k.StartsWith(ReminderText.StatusKeyPrefix) || k.StartsWith(ReminderText.ReasonKeyPrefix)) && !keys.Contains(k)).ToList();
         Assert.True(stray.Count == 0, "Reminder labels for no value:\n  " + string.Join("\n  ", stray));
+    }
+
+    [Fact]
+    public void Every_campaign_skip_reason_has_a_label()
+    {
+        var english = Strings("en");
+        var keys = CampaignSkipReason.All.Select(r => CampaignSkipReason.LabelKeyPrefix + FilterLabelHelper.KeyPart(r)).ToList();
+        Assert.Equal(ConstantsOf(typeof(CampaignSkipReason)).Where(v => v != CampaignSkipReason.LabelKeyPrefix).Order(), CampaignSkipReason.All.Order());
+        var missing = keys.Where(k => !english.ContainsKey(k)).ToList();
+        Assert.True(missing.Count == 0, "Skip reasons with no label in en.json:\n  " + string.Join("\n  ", missing));
+        var stray = english.Keys.Where(k => k.StartsWith(CampaignSkipReason.LabelKeyPrefix) && !keys.Contains(k)).ToList();
+        Assert.True(stray.Count == 0, "Skip reason labels for no reason:\n  " + string.Join("\n  ", stray));
     }
 
     private static IEnumerable<string> ConstantsOf(Type type) =>

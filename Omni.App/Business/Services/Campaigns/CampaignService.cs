@@ -109,6 +109,8 @@ public class CampaignService : ICampaignService
         {
             throw new ArgumentException("campaigns.errors.nameRequired");
         }
+        // A draft may carry the time it is meant for, but never a past one (QA t5-ops-10: a past date was stored).
+        if (request.ScheduledAt is { } planned) EnsureFutureTime(planned);
         await _entitlements.EnsureFeatureAsync(request.ClientId, EntitlementKeys.Campaigns, ct);
 
         var template = await _templates.GetReadOnlyAsync(request.ClientId, request.WhatsAppTemplateId, ct);
@@ -160,7 +162,7 @@ public class CampaignService : ICampaignService
             AudienceType = audienceType,
             AudienceFilters = request.AudienceFilters,
             Status = CampaignStatus.Draft,
-            ScheduledAt = request.ScheduledAt,
+            ScheduledAt = request.ScheduledAt?.ToUniversalTime(),
             CreatedAt = now,
             UpdatedAt = now
         };
@@ -205,15 +207,26 @@ public class CampaignService : ICampaignService
         {
             throw new InvalidOperationException("campaigns.errors.scheduleNotDraft").WithArgs(TextArg.Value(campaign.Status));
         }
+        // A time in the past would make the worker start it on its next tick (QA t5-ops-10); "Send now" is the way for that.
+        EnsureFutureTime(scheduledAt);
         await _entitlements.EnsureFeatureAsync(clientId, EntitlementKeys.Campaigns, ct);
         if (await StartProblemAsync(clientId, campaign, ct) is { } problem) throw problem;
 
         campaign.Status = CampaignStatus.Scheduled;
-        campaign.ScheduledAt = scheduledAt;
+        campaign.ScheduledAt = scheduledAt.ToUniversalTime();
         campaign.UpdatedAt = DateTimeOffset.UtcNow;
         await _unitOfWork.SaveChangesAsync(ct);
 
         return ToResponse(campaign);
+    }
+
+    /// <summary>How far ahead a scheduled time must be: at least a minute, so it can't already have passed when the worker looks.</summary>
+    public static readonly TimeSpan MinScheduleNotice = TimeSpan.FromMinutes(1);
+
+    /// <summary>400 for a time less than <see cref="MinScheduleNotice"/> from now.</summary>
+    public static void EnsureFutureTime(DateTimeOffset scheduledAt)
+    {
+        if (scheduledAt < DateTimeOffset.UtcNow + MinScheduleNotice) throw new ArgumentException("campaigns.create.errors.schedulePast");
     }
 
     public async Task<ProcessCampaignBatchResult?> SendAsync(Guid clientId, Guid id, int batchSize = 20, CancellationToken ct = default)
@@ -463,11 +476,12 @@ public class CampaignService : ICampaignService
         var now = DateTimeOffset.UtcNow;
         var outstanding = await _campaigns.ListRecipientsInStatusAsync(id,
             new[] { CampaignRecipientStatus.Pending, CampaignRecipientStatus.Queued }, ct);
+        // Never sent, so not failed: skipped, with a reason the page translates (QA t5-ops-11: a cancelled draft showed
+        // "Failed 5" with the English "Campaign cancelled.").
         foreach (var r in outstanding)
         {
-            r.Status = CampaignRecipientStatus.Failed;
-            r.FailureReason = "Campaign cancelled.";
-            r.FailedAt = now;
+            r.Status = CampaignRecipientStatus.Skipped;
+            r.SkipReason = CampaignSkipReason.CampaignCancelled;
             r.UpdatedAt = now;
         }
 

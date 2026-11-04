@@ -1,5 +1,6 @@
 using Omni.App.Business.Contracts.Managers;
 using Omni.App.Business.Contracts.Services.Campaigns;
+using Omni.App.Common.Enums;
 using Omni.App.Entities.Dtos.Campaigns;
 using Omni.App.Entities.Models;
 using Omni.App.Persistence.Contracts.Campaigns;
@@ -19,9 +20,9 @@ public class CampaignAudienceService : ICampaignAudienceService
 
     public string? GetSkipReasonIfNotContactable(Contact contact)
     {
-        if (string.IsNullOrWhiteSpace(contact.Phone)) return "no_phone";
-        if (contact.OptedOutAt.HasValue) return "opted_out";
-        if (!contact.MarketingOptIn) return "marketing_opt_in_false";
+        if (string.IsNullOrWhiteSpace(contact.Phone)) return CampaignSkipReason.NoPhone;
+        if (contact.OptedOutAt.HasValue) return CampaignSkipReason.OptedOut;
+        if (!contact.MarketingOptIn) return CampaignSkipReason.MarketingOptInFalse;
         return null;
     }
 

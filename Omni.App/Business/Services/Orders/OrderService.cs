@@ -52,6 +52,9 @@ public class OrderService : IOrderService
         {
             throw new ArgumentException("orders.errors.bookingNotFound");
         }
+        // QA t3-inbox-09: amounts 0..10M and a real currency (a negative amount and "xyz" were saved; 1e15 and "DOLLR" gave 500s).
+        var quoted = CheckAmount(request.QuotedAmount);
+        var currency = CheckCurrency(request.CurrencyCode);
 
         var order = new Order
         {
@@ -61,8 +64,8 @@ public class OrderService : IOrderService
             ServiceId = request.ServiceId,
             BookingId = request.BookingId,
             Status = OrderStatus.Considering,
-            QuotedAmount = request.QuotedAmount,
-            CurrencyCode = request.CurrencyCode,
+            QuotedAmount = quoted,
+            CurrencyCode = currency,
             Notes = request.Notes,
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow
@@ -86,13 +89,24 @@ public class OrderService : IOrderService
             {
                 throw new ArgumentException("orders.errors.invalidStatus").WithArgs(request.Status);
             }
+            // Only the moves the transition table allows (QA t3-inbox-09: a completed order could become canceled, a lost one
+            // completed). Saving the same status again is fine (the popup sends it with every amount change).
+            if (request.Status != previousStatus && !CanMove(previousStatus, request.Status))
+            {
+                throw new InvalidOperationException("orders.errors.statusChange");
+            }
             order.Status = request.Status;
         }
 
-        if (request.QuotedAmount is not null) order.QuotedAmount = request.QuotedAmount;
-        if (request.DepositAmount is not null) order.DepositAmount = request.DepositAmount;
-        if (request.FinalAmount is not null) order.FinalAmount = request.FinalAmount;
-        if (request.CurrencyCode is not null) order.CurrencyCode = request.CurrencyCode;
+        // Every value is checked before any is applied, so a bad one leaves the order as it was.
+        var quoted = CheckAmount(request.QuotedAmount);
+        var deposit = CheckAmount(request.DepositAmount);
+        var final = CheckAmount(request.FinalAmount);
+        var currency = request.CurrencyCode is null ? null : CheckCurrency(request.CurrencyCode);
+        if (quoted is not null) order.QuotedAmount = quoted;
+        if (deposit is not null) order.DepositAmount = deposit;
+        if (final is not null) order.FinalAmount = final;
+        if (currency is not null) order.CurrencyCode = currency;
         if (request.ServiceDate is not null) order.ServiceDate = request.ServiceDate;
         if (request.Notes is not null) order.Notes = request.Notes;
 
@@ -114,8 +128,65 @@ public class OrderService : IOrderService
                 metadataJson: $"{{\"amount\": {order.FinalAmount?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "null"}}}");
         }
 
+        // A confirmed order that is canceled or lost no longer makes the contact a customer: when it was their only one, they
+        // move to the pipeline's closed/lost stage (QA t3-inbox-09: they stayed "Customer").
+        if (request.Status is OrderStatus.Canceled or OrderStatus.Lost && IsConfirmed(previousStatus))
+        {
+            await LeaveConvertedAsync(clientId, order, ct);
+        }
+
         await _unitOfWork.SaveChangesAsync(ct);
         return await ToResponseAsync(order, ct);
+    }
+
+    private async Task LeaveConvertedAsync(Guid clientId, Order order, CancellationToken ct)
+    {
+        var contact = await _contacts.GetByIdAsync(order.ContactId, ct);
+        if (contact is null) return;
+        var pipeline = await _businessTypes.GetPipelineAsync(clientId, ct);
+        if (pipeline.CategoryOf(contact.StageKey) != StageCategory.Converted) return;   // someone already moved them on
+        var others = await _orders.ListForContactReadOnlyAsync(clientId, order.ContactId, ct);
+        if (others.Any(o => o.Id != order.Id && IsConfirmed(o.Status))) return;         // another order still counts
+        var stage = pipeline.MoveTo(contact.StageKey, StageCategory.ClosedLost);
+        if (stage is null) return;
+        contact.StageKey = stage;
+        contact.UpdatedAt = DateTimeOffset.UtcNow;
+    }
+
+    /// <summary>Which status may follow which. Open orders (considering, quoted) may go anywhere, steps may be skipped; once
+    /// paid or confirmed an order can't go back to a quote; completed is final; canceled and lost can only be reopened.</summary>
+    private static readonly IReadOnlyDictionary<string, string[]> Transitions = new Dictionary<string, string[]>
+    {
+        [OrderStatus.Considering] = [OrderStatus.Quoted, OrderStatus.DepositPaid, OrderStatus.Confirmed, OrderStatus.Completed, OrderStatus.Canceled, OrderStatus.Lost],
+        [OrderStatus.Quoted] = [OrderStatus.Considering, OrderStatus.DepositPaid, OrderStatus.Confirmed, OrderStatus.Completed, OrderStatus.Canceled, OrderStatus.Lost],
+        [OrderStatus.DepositPaid] = [OrderStatus.Confirmed, OrderStatus.Completed, OrderStatus.Canceled, OrderStatus.Lost],
+        [OrderStatus.Confirmed] = [OrderStatus.DepositPaid, OrderStatus.Completed, OrderStatus.Canceled, OrderStatus.Lost],
+        [OrderStatus.Completed] = [],
+        [OrderStatus.Canceled] = [OrderStatus.Considering, OrderStatus.Quoted],
+        [OrderStatus.Lost] = [OrderStatus.Considering, OrderStatus.Quoted],
+    };
+
+    /// <summary>True when an order in <paramref name="from"/> may move to <paramref name="to"/> (a different status).</summary>
+    public static bool CanMove(string from, string to) => Transitions.TryGetValue(from, out var next) && next.Contains(to);
+
+    /// <summary>The statuses an order in <paramref name="from"/> may move to (the contact page offers only these).</summary>
+    public static IReadOnlyList<string> NextStatuses(string from) => Transitions.TryGetValue(from, out var next) ? next : [];
+
+    /// <summary>Order amounts: 0 to 10,000,000, rounded to cents (the column is numeric(12,2)).</summary>
+    public const decimal MaxAmount = 10_000_000m;
+
+    private static decimal? CheckAmount(decimal? amount)
+    {
+        if (amount is null) return null;
+        if (amount < 0 || amount > MaxAmount) throw new ArgumentException("orders.errors.amountRange");
+        return Math.Round(amount.Value, 2);
+    }
+
+    /// <summary>Null stays null (no currency yet); anything typed must be an ISO 4217 code.</summary>
+    private static string? CheckCurrency(string? currency)
+    {
+        if (currency is null) return null;
+        return CurrencyCodes.Normalize(currency) ?? throw new ArgumentException("orders.errors.invalidCurrency");
     }
 
     private static bool IsConfirmed(string? status) =>

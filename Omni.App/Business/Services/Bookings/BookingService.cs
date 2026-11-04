@@ -95,6 +95,7 @@ public class BookingService : IBookingService
     public async Task<BookingResponse> BookAvailableSlotAsync(CreateBookingRequest request, CancellationToken ct = default)
     {
         await EnsureBookingsIncludedAsync(request.ClientId, ct);
+        request = CleanTexts(request, knownLocationOnly: false);
         await using var tx = await _unitOfWork.BeginTransactionAsync(ct);
 
         // Serialize bookings per client until commit: the second of two concurrent attempts waits here, then its check
@@ -158,6 +159,7 @@ public class BookingService : IBookingService
     public async Task<BookingResponse> CreateAsync(CreateBookingRequest request, CancellationToken ct = default)
     {
         await EnsureBookingsIncludedAsync(request.ClientId, ct);
+        request = CleanTexts(request, knownLocationOnly: true);
         EnsureSaneTimes(request.ScheduledStart, request.ScheduledEnd);
         // Under the same per-client lock as the AI's booking, so two people can't book one time at once (QA t5-ops-01).
         await using var tx = await _unitOfWork.BeginTransactionAsync(ct);
@@ -174,6 +176,26 @@ public class BookingService : IBookingService
         await NotifyChangedAsync(request.ClientId, booking, "created", ct);
         return booking;
     }
+
+    /// <summary>Booking type, place and place name fit their columns (QA t5-ops-02: over-long values were a 500): trimmed, an
+    /// empty type is "standard", an empty place is none; too long is 400. A member's place must be one the dialog offers; the
+    /// AI/n8n path keeps accepting other short values, as before.</summary>
+    private static CreateBookingRequest CleanTexts(CreateBookingRequest request, bool knownLocationOnly)
+    {
+        var type = string.IsNullOrWhiteSpace(request.BookingType) ? "standard" : request.BookingType.Trim();
+        if (type.Length > MaxBookingTypeLength) throw new ArgumentException("bookings.errors.typeTooLong");
+        var location = string.IsNullOrWhiteSpace(request.LocationType) ? null : request.LocationType.Trim();
+        if (location is not null && (location.Length > MaxLocationTypeLength || knownLocationOnly && !BookingLocationType.All.Contains(location)))
+        {
+            throw new ArgumentException("bookings.errors.unknownLocation").WithArgs(location.Length > MaxLocationTypeLength ? location[..MaxLocationTypeLength] + "…" : location);
+        }
+        var name = string.IsNullOrWhiteSpace(request.LocationName) ? null : request.LocationName.Trim();
+        if (name?.Length > MaxLocationNameLength) throw new ArgumentException("bookings.errors.locationNameTooLong");
+        return request with { BookingType = type, LocationType = location, LocationName = name };
+    }
+
+    /// <summary>The scheduling.bookings column sizes: booking_type varchar(50), location_type varchar(30), location_name varchar(200).</summary>
+    public const int MaxBookingTypeLength = 50, MaxLocationTypeLength = 30, MaxLocationNameLength = 200;
 
     /// <summary>Times a member typed: the end after the start, at most a day long, and within a year back and two years ahead
     /// (QA t5-ops-01: 1900, 9999 and 30-day bookings were stored). 400 otherwise.</summary>
@@ -226,7 +248,7 @@ public class BookingService : IBookingService
             ClientId = request.ClientId,
             ContactId = request.ContactId,
             ServiceId = request.ServiceId,
-            BookingType = string.IsNullOrWhiteSpace(request.BookingType) ? "standard" : request.BookingType,
+            BookingType = request.BookingType,
             Status = BookingStatus.Booked,
             // Npgsql only stores UTC-offset values; callers (n8n) send the client-local offset returned by get_available_slots.
             ScheduledStart = request.ScheduledStart.ToUniversalTime(),
