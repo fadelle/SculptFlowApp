@@ -106,6 +106,8 @@ internal sealed class FakeBotTools : IBotToolService
         Answer("reply", run, (conversationId, request.Content));
     public Task<BotToolResult> HandoffAsync(BotRunContext run, Guid conversationId, Guid clientId, HandoffToHumanRequest request, CancellationToken ct = default) =>
         Answer("handoff", run, (conversationId, request.Reason));
+    public Task<BotToolResult> RunFailedAsync(BotRunContext run, Guid conversationId, CancellationToken ct = default) =>
+        Answer("run_failed", run, conversationId);
 }
 
 /// <summary>crm.bot_memory in memory, with the repository's newest-first window and trimming.</summary>

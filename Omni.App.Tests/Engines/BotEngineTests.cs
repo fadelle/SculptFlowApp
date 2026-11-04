@@ -50,6 +50,9 @@ public class BotEngineTests
         Bot: new AiBotConfig(BotKit.BotId, "Front desk", "custom", "Be brief.", (IReadOnlyList<string>?)capabilities ?? BotCapability.All.ToList(), "on_request", "en"),
         TestSessionId: testSession);
 
+    /// <summary>QA t4-ai-03: a run that ends without an answer hands the conversation to the team (one run_failed call), nothing else.</summary>
+    private void AssertOnlyRunFailed() => Assert.Equal(["run_failed"], _tools.Calls.Select(c => c.Tool));
+
     private IEnumerable<string> Steps(string step) => _steps.Where(s => s.Step == step).Select(s => s.Outcome);
 
     private (string Tool, object? Arguments) Single(string tool) => Assert.Single(_tools.Calls.Where(c => c.Tool == tool).Select(c => (c.Tool, c.Arguments)));
@@ -216,7 +219,7 @@ public class BotEngineTests
     [InlineData("```json\n{\"action\":\"reply\",\"message\":\"x\"}\n```")]
     [InlineData("[1,2]")]
     [InlineData("")]
-    public async Task Unreadable_output_is_a_failed_decision_remembered_with_nothing_sent(string output)
+    public async Task Unreadable_output_is_a_failed_decision_remembered_and_handed_over(string output)
     {
         _model.Text(output);
 
@@ -224,25 +227,25 @@ public class BotEngineTests
 
         Assert.Contains(_steps, s => s.Step == TraceSteps.BotDecision && s.Outcome == TraceOutcomes.Failed && s.Detail.Contains("unreadable_output"));
         Assert.Equal(output, Assert.Single(_memory.Rows).Output);
-        Assert.Empty(_tools.Calls);
+        AssertOnlyRunFailed();
     }
 
     [Theory]
     [InlineData("book")]
     [InlineData("Reply")]
     [InlineData(null)]
-    public async Task An_unknown_action_sends_nothing(string? action)
+    public async Task An_unknown_action_sends_nothing_and_hands_over(string? action)
     {
         _model.Text(JsonSerializer.Serialize(new { action, message = "hi" }));
 
         await Sut().RunAsync(Trigger());
 
         Assert.Contains(_steps, s => s.Step == TraceSteps.BotDecision && s.Outcome == TraceOutcomes.Failed && s.Detail.Contains("unknown_action"));
-        Assert.Empty(_tools.Calls);
+        AssertOnlyRunFailed();
     }
 
     [Fact]
-    public async Task A_model_failure_ends_the_run_traced_without_memory_or_messages()
+    public async Task A_model_failure_ends_the_run_traced_and_hands_it_to_the_team()
     {
         _model.Throw(new AiModelException("The AI model API answered HTTP 500."));
 
@@ -251,7 +254,7 @@ public class BotEngineTests
         Assert.Contains(_steps, s => s.Step == TraceSteps.BotModelCalled && s.Outcome == TraceOutcomes.Failed);
         Assert.Contains(_steps, s => s.Step == TraceSteps.BotRunFailed && s.Detail.Contains("HTTP 500"));
         Assert.Empty(_memory.Rows);
-        Assert.Empty(_tools.Calls);
+        AssertOnlyRunFailed();
     }
 
     // ---------------------------------------------------------------- reply
@@ -272,14 +275,14 @@ public class BotEngineTests
     }
 
     [Fact]
-    public async Task Another_reply_error_is_a_failed_step()
+    public async Task Another_reply_error_is_a_failed_step_and_hands_over()
     {
         _tools.Answers["reply"] = BotToolResult.NotFound();
         _model.Decide("reply", message: "Hi");
 
         await Sut().RunAsync(Trigger());
 
-        Assert.Equal([TraceOutcomes.Failed], Steps(TraceSteps.BotActionResult));
+        Assert.Equal([TraceOutcomes.Failed, TraceOutcomes.Ok], Steps(TraceSteps.BotActionResult));
     }
 
     // ---------------------------------------------------------------- schedule
@@ -358,7 +361,7 @@ public class BotEngineTests
     }
 
     [Fact]
-    public async Task An_error_answer_from_the_schedule_tool_sends_nothing()
+    public async Task An_error_answer_from_the_schedule_tool_sends_nothing_and_hands_over()
     {
         _tools.Answers["schedule"] = BotToolResult.BadRequest(new { error = "bad" });
         _model.Decide("schedule", scheduledStart: "2026-09-29T16:00:00+03:00");
@@ -366,7 +369,7 @@ public class BotEngineTests
         await Sut().RunAsync(Trigger());
 
         Assert.Single(_model.Requests);
-        Assert.Equal([TraceOutcomes.Failed], Steps(TraceSteps.BotActionResult));
+        Assert.Equal([TraceOutcomes.Failed, TraceOutcomes.Ok], Steps(TraceSteps.BotActionResult));
         NothingSent();
     }
 

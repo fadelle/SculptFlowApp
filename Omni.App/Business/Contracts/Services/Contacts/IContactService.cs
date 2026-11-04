@@ -17,7 +17,14 @@ public interface IContactService
     Task<(IReadOnlyList<ContactResponse> Items, int TotalCount)> ListAsync(
         Guid clientId, string? stage, Guid? serviceId, string? search, int skip, int take, CancellationToken ct = default);
 
+    /// <summary>Changes a contact's details (null = unchanged; an empty name, phone or email clears it, but a contact keeps a
+    /// name or a phone). A phone is stored as digits; an email must look like one.</summary>
     Task<ContactResponse?> UpdateAsync(Guid clientId, Guid id, UpdateContactRequest request, CancellationToken ct = default);
+
+    /// <summary>A contact a member adds by hand (Contacts' "Add", the booking dialog's "+ New"; QA t3-inbox-12, t5-ops-04):
+    /// a name or a phone, optionally an email, a service of the client's and notes; source <c>manual</c>, the entry stage. A phone
+    /// another contact already has is refused, naming that contact.</summary>
+    Task<ContactResponse> AddManualAsync(Guid clientId, ManualContactRequest request, CancellationToken ct = default);
 
     /// <summary>StageKey must be a stage key of the client's business type (ArgumentException otherwise). A real stage change
     /// stamps LastContactAt and logs an event chosen by the new stage's category (see ContactService).</summary>

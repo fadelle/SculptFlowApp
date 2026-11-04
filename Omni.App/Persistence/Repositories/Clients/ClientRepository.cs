@@ -69,6 +69,13 @@ public class ClientRepository : IClientRepository
          where u.IsActive && (u.Role == UserRole.Client || u.Role == UserRole.Member)
          select cu.Id).CountAsync(ct);
 
+    public Task<bool> HasActiveOwnerAsync(Guid clientId, CancellationToken ct = default) =>
+        (from cu in _db.ClientUsers
+         where cu.ClientId == clientId && cu.IsActive
+         join u in _db.Users on cu.UserId equals u.Id
+         where u.IsActive && u.Role == UserRole.Client
+         select cu.Id).AnyAsync(ct);
+
     public async Task<IReadOnlyList<ClientSummaryRow>> ListByNamePrefixAsync(string namePrefix, CancellationToken ct = default) =>
         await _db.Clients.AsNoTracking()
             .Where(c => c.Name.StartsWith(namePrefix))

@@ -43,6 +43,18 @@ public class ContactsController : DashboardApiController
             : Ok(contact);
     }
 
+    /// <summary>A contact a member adds by hand (the booking dialog's "+ New"; QA t5-ops-04, t3-inbox-12). 400 with the reason: no
+    /// name or phone, a phone or email that isn't one, a phone another contact already has, a service that isn't the client's.</summary>
+    [HttpPost("manual")]
+    public async Task<ActionResult<ContactResponse>> AddManual([FromBody] ManualContactRequest request, CancellationToken ct)
+    {
+        var clientId = await GetClientIdAsync(ct);
+        if (clientId is null) return Forbid();
+
+        var contact = await _contacts.AddManualAsync(clientId.Value, request, ct);
+        return CreatedAtAction(nameof(GetById), new { id = contact.Id }, contact);
+    }
+
     [HttpGet]
     public async Task<ActionResult<object>> List(
         [FromQuery] string? stage,

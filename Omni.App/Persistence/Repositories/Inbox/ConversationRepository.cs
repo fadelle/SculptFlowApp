@@ -2,6 +2,8 @@ using Microsoft.EntityFrameworkCore;
 using Omni.App.Common.Enums;
 using Omni.App.Entities.Dtos.Inbox;
 using Omni.App.Entities.Models;
+using Omni.App.Entities.Requests.Inbox;
+using Omni.App.Persistence.Helpers;
 using Omni.App.Persistence.Contexts;
 using Omni.App.Persistence.Contracts.Inbox;
 
@@ -46,19 +48,49 @@ public class ConversationRepository : IConversationRepository
             .Select(c => c.Mode == ConversationMode.Human)
             .FirstOrDefaultAsync(ct);
 
-    public async Task<(IReadOnlyList<ConversationListRow> Items, int TotalCount)> ListInboxAsync(Guid clientId, int skip, int take,
-        CancellationToken ct = default)
+    public async Task<ConversationListPage> ListInboxAsync(Guid clientId, ConversationListRequest request, CancellationToken ct = default)
     {
-        var query = _db.Conversations
-            .Include(c => c.Contact).ThenInclude(l => l!.Service)
-            .Where(c => c.ClientId == clientId);
+        var query = _db.Conversations.Where(c => c.ClientId == clientId);
+        if (!string.IsNullOrWhiteSpace(request.Search))
+        {
+            var pattern = QueryPaging.Like(request.Search);
+            query = query.Where(c => EF.Functions.ILike(c.Contact!.FullName ?? "", pattern) || EF.Functions.ILike(c.Contact.Phone ?? "", pattern)
+                                     || (c.Contact.Service != null && EF.Functions.ILike(c.Contact.Service.Name, pattern)));
+        }
 
-        var totalCount = await query.CountAsync(ct);
+        // Every tab's count for this search in one query (the tabs and their numbers cover everything, not one page).
+        var counts = await query.GroupBy(_ => 1).Select(g => new InboxListCounts(
+                g.Count(),
+                g.Count(c => c.Status != ConversationStatus.Closed && c.Status != ConversationStatus.Archived
+                             && (c.Mode == ConversationMode.Human || c.Mode == ConversationMode.Approval)),
+                g.Count(c => c.Status != ConversationStatus.Closed && c.Status != ConversationStatus.Archived && c.Mode == ConversationMode.Ai),
+                g.Count(c => c.Status == ConversationStatus.Closed || c.Status == ConversationStatus.Archived)))
+            .FirstOrDefaultAsync(ct) ?? new InboxListCounts(0, 0, 0, 0);
+
+        query = request.Filter switch
+        {
+            InboxListFilter.Closed => query.Where(c => c.Status == ConversationStatus.Closed || c.Status == ConversationStatus.Archived),
+            InboxListFilter.Needs => query.Where(c => c.Status != ConversationStatus.Closed && c.Status != ConversationStatus.Archived
+                                                      && (c.Mode == ConversationMode.Human || c.Mode == ConversationMode.Approval)),
+            InboxListFilter.Ai => query.Where(c => c.Status != ConversationStatus.Closed && c.Status != ConversationStatus.Archived && c.Mode == ConversationMode.Ai),
+            _ => query
+        };
+        var totalCount = request.Filter switch
+        {
+            InboxListFilter.Closed => counts.Closed,
+            InboxListFilter.Needs => counts.Needs,
+            InboxListFilter.Ai => counts.Ai,
+            _ => counts.All
+        };
+
+        // Customer messages nobody has opened yet, in every conversation (not just this page or tab).
+        var unreadTotal = await _db.Messages.CountAsync(m => m.ClientId == clientId && m.Direction == MessageDirection.Inbound
+            && _db.Conversations.Any(c => c.Id == m.ConversationId && (c.LastReadAt == null || m.CreatedAt > c.LastReadAt)), ct);
 
         var items = await query
-            .OrderByDescending(c => c.LastMessageAt ?? c.CreatedAt)
-            .Skip(skip)
-            .Take(take)
+            .OrderByDescending(c => c.LastMessageAt ?? c.CreatedAt).ThenByDescending(c => c.Id)
+            .Skip(request.Skip)
+            .Take(request.Take)
             .Select(c => new ConversationListRow(
                 c.Id, c.ContactId, c.Contact!.FullName, c.Contact.Phone, c.Contact.Service != null ? c.Contact.Service.Name : null,
                 c.Channel, c.Status, c.Mode,
@@ -68,7 +100,7 @@ public class ConversationRepository : IConversationRepository
                                         && (c.LastReadAt == null || m.CreatedAt > c.LastReadAt))))
             .ToListAsync(ct);
 
-        return (items, totalCount);
+        return new ConversationListPage(items, totalCount, counts, unreadTotal);
     }
 
     public Task<int> MarkReadAsync(Guid clientId, Guid conversationId, DateTimeOffset readAt, CancellationToken ct = default) =>

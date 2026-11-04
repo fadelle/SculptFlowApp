@@ -32,4 +32,12 @@ public interface IClientRegistrationService
     /// <summary>Same NEW USER -> NEW CLIENT rule and the same single transaction as <see cref="RegisterAsync"/>,
     /// but the user has no password and is created with a provider-verified email.</summary>
     Task<ClientRegistrationResult> RegisterExternalAsync(RegisterExternalClientRequest request, CancellationToken ct = default);
+
+    /// <summary>The admin portal opens a client for a sale (QA t6-admin-20): the same client rows as a sign-up (client, billing
+    /// account, Knowledge Base settings) in one transaction, but no user yet (the owner accepts an emailed invite), open
+    /// whatever Accounts:SignupEnabled says. Then the plan: <paramref name="planCode"/> (first period free) or the sign-up plan;
+    /// a plan that fails to start only logs. ArgumentException for a missing or too long name, a bad or already used owner
+    /// email, an unknown business type, language or plan, before anything is saved.</summary>
+    Task<OpenedClient> OpenForOwnerAsync(string? clientName, string? businessTypeCode, string? language, string? ownerEmail, string? planCode,
+        CancellationToken ct = default);
 }

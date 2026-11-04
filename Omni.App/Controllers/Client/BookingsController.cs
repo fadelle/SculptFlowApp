@@ -54,6 +54,18 @@ public class BookingsController : DashboardApiController
         return booking is null ? NotFound() : Ok(booking);
     }
 
+    /// <summary>A member edits a booking: time, duration, service, location, notes (QA t5-ops-04; IBookingService.UpdateAsync).
+    /// 400 with the reason when it can't change.</summary>
+    [HttpPatch("{id:guid}")]
+    public async Task<ActionResult<BookingResponse>> Update(Guid id, [FromBody] UpdateBookingRequest request, CancellationToken ct)
+    {
+        var clientId = await GetClientIdAsync(ct);
+        if (clientId is null) return Forbid();
+
+        var booking = await _bookings.UpdateAsync(clientId.Value, id, request, ct);
+        return booking is null ? NotFound() : Ok(booking);
+    }
+
     [HttpPatch("{id:guid}/status")]
     public async Task<ActionResult<BookingResponse>> UpdateStatus(Guid id, [FromBody] UpdateBookingStatusRequest request, CancellationToken ct)
     {

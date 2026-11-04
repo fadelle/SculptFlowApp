@@ -34,6 +34,12 @@ public class AccountTokenRepository : IAccountTokenRepository
             .OrderByDescending(t => t.CreatedAt)
             .ToListAsync(ct);
 
+    public async Task<IReadOnlyList<AccountToken>> ListPendingOwnerInvitesAsync(Guid clientId, CancellationToken ct = default) =>
+        await _db.AccountTokens
+            .Where(t => t.Purpose == AccountTokenPurpose.OwnerInvite && t.ClientId == clientId && t.UsedAt == null && t.RevokedAt == null)
+            .OrderByDescending(t => t.CreatedAt)
+            .ToListAsync(ct);
+
     public Task<AccountToken?> GetInviteAsync(Guid clientId, Guid inviteId, CancellationToken ct = default) =>
         _db.AccountTokens.FirstOrDefaultAsync(t => t.Id == inviteId && t.ClientId == clientId && t.Purpose == AccountTokenPurpose.Invite, ct);
 

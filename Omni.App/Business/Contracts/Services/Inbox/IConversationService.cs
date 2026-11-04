@@ -23,9 +23,9 @@ public interface IConversationService
     Task<(ConversationResponse Conversation, IReadOnlyList<MessageResponse> Messages)?> GetByIdWithMessagesAsync(
         Guid clientId, Guid id, CancellationToken ct = default);
 
-    /// <summary>Inbox conversation list (left pane) — newest activity first.</summary>
-    Task<(IReadOnlyList<ConversationListRow> Items, int TotalCount)> ListAsync(
-        Guid clientId, int skip, int take, CancellationToken ct = default);
+    /// <summary>Inbox conversation list (left pane): newest activity first, searched and filtered by tab on the server (QA
+    /// t3-inbox-04), with each tab's count and the unread total. An unknown filter is refused.</summary>
+    Task<ConversationListPage> ListAsync(Guid clientId, ConversationListRequest request, CancellationToken ct = default);
 
     Task<IReadOnlyList<MessageResponse>> GetMessagesAsync(Guid clientId, Guid conversationId, CancellationToken ct = default);
 
@@ -48,6 +48,11 @@ public interface IConversationService
     /// worded for the reason), logged as a system human_handoff with reason ai_reply_{failureReason}. Members can Return to AI
     /// once the wallet is topped up.</summary>
     Task<ConversationResponse?> HandOverUnpaidAiReplyAsync(Guid clientId, Guid conversationId, string failureReason, CancellationToken ct = default);
+
+    /// <summary>The AI couldn't answer (its run failed, or its reply couldn't be sent): the same hand-over (human mode, needs-human
+    /// stage, one Handoff notification saying so), logged as a system human_handoff with reason ai_failed. True when it handed
+    /// over, false when the team already had it, null when the conversation doesn't exist.</summary>
+    Task<bool?> HandOverFailedAiAsync(Guid clientId, Guid conversationId, CancellationToken ct = default);
 
     /// <summary>A member hands the conversation back — AI may auto-reply again. Throws EntitlementDeniedException (422) when
     /// the client's plan doesn't include the AI assistant, InvalidOperationException (422) when no active bot answers on the

@@ -70,6 +70,23 @@ public class ContactsAndBookingsControllerTests : ClientControllerTestBase
     }
 
     [Fact]
+    public async Task A_contact_added_by_hand_is_201_for_the_signed_in_client_and_forbidden_without_one()
+    {
+        // QA t3-inbox-12 / t5-ops-04: the client comes from the session, never the body.
+        SignedIn();
+        var req = new ManualContactRequest("Rana", "96170123456", null, null, null);
+        var contact = Contact();
+        _contacts.Setup(l => l.AddManualAsync(ClientId, req, It.IsAny<CancellationToken>())).ReturnsAsync(contact);
+        var created = Assert.IsType<CreatedAtActionResult>((await Contacts().AddManual(req, default)).Result);
+        Assert.Equal((nameof(ContactsController.GetById), contact), (created.ActionName, created.Value));
+        Assert.Empty(typeof(ContactsController).GetMethod(nameof(ContactsController.AddManual))!
+            .GetCustomAttributes(typeof(Omni.App.Controllers.Filters.RequireIngestKeyAttribute), inherit: true));
+
+        NoClient();
+        IsForbid(await Contacts().AddManual(req, default));
+    }
+
+    [Fact]
     public void Contact_intake_needs_the_ingest_key_because_it_takes_the_client_from_the_body()
     {
         var create = typeof(ContactsController).GetMethod(nameof(ContactsController.Create))!;
@@ -114,6 +131,20 @@ public class ContactsAndBookingsControllerTests : ClientControllerTestBase
             .ReturnsAsync(new BookingResponse(Guid.NewGuid(), ClientId, req.ContactId, null, null, null, "standard", "booked", req.ScheduledStart, null, null, null, null, DateTimeOffset.UtcNow));
         Assert.IsType<CreatedAtActionResult>((await Appts().Create(req, default)).Result);
         Assert.Equal(ClientId, seen!.ClientId);
+    }
+
+    [Fact]
+    public async Task A_member_edits_a_booking_of_their_own_client_only()
+    {
+        // QA t5-ops-04: PATCH /api/bookings/{id} with the client from the session.
+        var id = Guid.NewGuid();
+        var req = new UpdateBookingRequest(DateTimeOffset.UtcNow.AddDays(1), null, null, "phone", "n");
+        var edited = new BookingResponse(id, ClientId, Guid.NewGuid(), null, null, null, "standard", "booked", req.ScheduledStart, null, "phone", null, "n", DateTimeOffset.UtcNow);
+        _bookings.Setup(b => b.UpdateAsync(ClientId, id, req, It.IsAny<CancellationToken>())).ReturnsAsync(edited);
+        Assert.Same(edited, Assert.IsType<OkObjectResult>((await Appts().Update(id, req, default)).Result).Value);
+        Assert.IsType<NotFoundResult>((await Appts().Update(Guid.NewGuid(), req, default)).Result);
+        NoClient();
+        Assert.IsType<ForbidResult>((await Appts().Update(id, req, default)).Result);
     }
 
     [Fact]
@@ -179,8 +210,10 @@ public class ConversationsControllerTests : ClientControllerTestBase
         Assert.IsType<CreatedAtActionResult>((await Sut().Create(new CreateConversationRequest(Guid.NewGuid(), Guid.NewGuid(), "whatsapp", null), default)).Result);
         Assert.Equal(ClientId, seen!.ClientId);
 
-        _conversations.Setup(c => c.ListAsync(ClientId, 0, 200, It.IsAny<CancellationToken>())).ReturnsAsync((new List<ConversationListRow>() as IReadOnlyList<ConversationListRow>, 0));
-        Assert.IsType<OkObjectResult>((await Sut().List(0, 999, default)).Result);
+        // take is capped at 200; search and tab go to the service as given.
+        _conversations.Setup(c => c.ListAsync(ClientId, new ConversationListRequest("ann", "needs", 0, 200), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ConversationListPage([], 0, new InboxListCounts(0, 0, 0, 0), 0));
+        Assert.IsType<OkObjectResult>((await Sut().List(-5, 999, "ann", "needs", default)).Result);
         Assert.IsType<NotFoundResult>((await Sut().GetById(convo.Id, default)).Result);
         _conversations.Setup(c => c.GetByIdWithMessagesAsync(ClientId, convo.Id, It.IsAny<CancellationToken>())).ReturnsAsync((convo, new List<MessageResponse>() as IReadOnlyList<MessageResponse>));
         Assert.IsType<OkObjectResult>((await Sut().GetById(convo.Id, default)).Result);

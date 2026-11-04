@@ -13,4 +13,8 @@ public interface IAccountEmailService
     /// words.</summary>
     Task SendInviteAsync(string email, string? fullName, string? inviterName, Client client, string? inviterLanguage, string link, int days,
         CancellationToken ct = default);
+
+    /// <summary>The owner invite of a client the admin portal opened (QA t6-admin-20), in the client's default language, with
+    /// its business-type words.</summary>
+    Task SendOwnerInviteAsync(string email, string? fullName, Client client, string link, int days, CancellationToken ct = default);
 }

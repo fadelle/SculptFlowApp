@@ -128,6 +128,101 @@ public class ContactServiceTests
     }
 
     [Fact]
+    public async Task Adding_by_hand_cleans_the_phone_and_creates_a_manual_contact_in_the_entry_stage()
+    {
+        // QA t3-inbox-12: a customer who called or walked in could not be added.
+        Contact? added = null;
+        _contacts.Setup(l => l.Add(It.IsAny<Contact>())).Callback<Contact>(c => added = c);
+        var svc = Guid.NewGuid();
+        var r = await Sut().AddManualAsync(_clientId, new ManualContactRequest("  Rana  ", "+961 70-123 456", " r@x.io ", svc, "  Called  "));
+        Assert.Equal(("Rana", "96170123456", "r@x.io", "manual", PipelineKit.New, "Called", svc),
+            (added!.FullName, added.Phone, added.Email, added.Source, added.StageKey, added.Notes, added.ServiceId));
+        Assert.Equal(added.Id, r.Id);
+        _services.Verify(p => p.EnsureUsableAsync(_clientId, svc, It.IsAny<CancellationToken>()), Times.Once);
+        _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+
+        // A phone alone is enough.
+        await Sut().AddManualAsync(_clientId, new ManualContactRequest(null, "96170999999", null, null, null));
+        Assert.Equal(((string?)null, "96170999999"), (added.FullName, added.Phone));
+    }
+
+    [Theory]
+    [InlineData(" ", " ", null, "contacts.errors.nameOrPhoneRequired")]
+    [InlineData("Rana", "12345", null, "contacts.errors.invalidPhone")]
+    [InlineData("Rana", "1234567890123456", null, "contacts.errors.invalidPhone")]
+    [InlineData("Rana", null, "not-an-email", "contacts.errors.invalidEmail")]
+    [InlineData("Rana", "call me 12345678", null, "contacts.errors.invalidPhone")]
+    [InlineData(null, "+961 70 123 456 789 000 111", null, "contacts.errors.invalidPhone")]
+    public async Task Adding_by_hand_refuses_what_is_not_a_contact(string? name, string? phone, string? email, string key)
+    {
+        var ex = await Assert.ThrowsAsync<ArgumentException>(() => Sut().AddManualAsync(_clientId, new ManualContactRequest(name, phone, email, null, null)));
+        Assert.Equal(key, ex.Message);
+        _contacts.Verify(l => l.Add(It.IsAny<Contact>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Adding_by_hand_names_the_contact_who_already_has_the_phone()
+    {
+        var other = Existing();
+        _contacts.Setup(l => l.FindByPhoneAsync(_clientId, "961700", It.IsAny<CancellationToken>())).ReturnsAsync(other);
+        var ex = await Assert.ThrowsAsync<ArgumentException>(() => Sut().AddManualAsync(_clientId, new ManualContactRequest("Rana", "+961 700", null, null, null)));
+        Assert.Equal("contacts.errors.phoneTaken", ex.Message);
+        Assert.Equal("Old Name", Assert.Single(TextError.ArgsOf(ex)));
+        _contacts.Verify(l => l.Add(It.IsAny<Contact>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Editing_details_cleans_clears_and_converts_the_follow_up_to_utc()
+    {
+        var contact = Found();
+        contact.Email = "old@x.io"; contact.NextFollowupAt = DateTimeOffset.UtcNow;
+        var at = new DateTimeOffset(2026, 11, 25, 9, 0, 0, TimeSpan.FromHours(2));
+        await Sut().UpdateAsync(_clientId, contact.Id, new UpdateContactRequest(null, " Rana ", null, null, "+961 70 1", "", null, "", null, " hi ", at));
+        Assert.Equal(("Rana", "961701", (string?)null, (string?)null, "hi", TimeSpan.Zero, at),
+            (contact.FullName, contact.Phone, contact.Email, contact.City, contact.Notes, contact.NextFollowupAt!.Value.Offset, contact.NextFollowupAt.Value));
+
+        await Sut().UpdateAsync(_clientId, contact.Id, new UpdateContactRequest(null, null, null, null, null, null, null, null, null, null, null, ClearNextFollowup: true));
+        Assert.Null(contact.NextFollowupAt);
+    }
+
+    [Fact]
+    public async Task Editing_details_refuses_before_changing_anything()
+    {
+        var contact = Found();
+        var other = Existing();
+        other.FullName = "Sami";
+        _contacts.Setup(l => l.FindByPhoneAsync(_clientId, "961711", It.IsAny<CancellationToken>())).ReturnsAsync(other);
+        _contacts.Setup(l => l.FindByPhoneAsync(_clientId, "961700", It.IsAny<CancellationToken>())).ReturnsAsync(contact);
+
+        var blank = await Assert.ThrowsAsync<ArgumentException>(() => Sut().UpdateAsync(_clientId, contact.Id, new UpdateContactRequest(null, "", null, null, "", null, null, null, null, null, null)));
+        Assert.Equal("contacts.errors.nameOrPhoneRequired", blank.Message);
+        var taken = await Assert.ThrowsAsync<ArgumentException>(() => Sut().UpdateAsync(_clientId, contact.Id, new UpdateContactRequest(null, "New", null, null, "961711", null, null, null, null, null, null)));
+        Assert.Equal(("contacts.errors.phoneTaken", "Sami"), (taken.Message, Assert.Single(TextError.ArgsOf(taken))));
+        await Assert.ThrowsAsync<ArgumentException>(() => Sut().UpdateAsync(_clientId, contact.Id, new UpdateContactRequest(null, "New", null, null, null, "bad", null, null, null, null, null)));
+        Assert.Equal(("Old Name", "961700"), (contact.FullName, contact.Phone));
+        _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+
+        // Longer than the column is a 400 with the limit, never a database error (QA t3-inbox-08).
+        foreach (var (request, key, max) in new[]
+        {
+            (new UpdateContactRequest(null, new string('N', 201), null, null, null, null, null, null, null, null, null), "contacts.errors.nameTooLong", 200),
+            (new UpdateContactRequest(null, null, new string('F', 101), null, null, null, null, null, null, null, null), "contacts.errors.nameTooLong", 100),
+            (new UpdateContactRequest(null, null, null, null, null, new string('e', 196) + "@x.io", null, null, null, null, null), "contacts.errors.emailTooLong", 200),
+            (new UpdateContactRequest(null, null, null, null, null, null, null, new string('C', 101), null, null, null), "contacts.errors.cityTooLong", 100),
+            (new UpdateContactRequest(null, null, null, null, null, null, null, null, new string('T', 101), null, null), "contacts.errors.timelineTooLong", 100),
+        })
+        {
+            var tooLong = await Assert.ThrowsAsync<ArgumentException>(() => Sut().UpdateAsync(_clientId, contact.Id, request));
+            Assert.Equal((key, (object?)max), (tooLong.Message, Assert.Single(TextError.ArgsOf(tooLong))));
+        }
+        Assert.Equal(("Old Name", "Beirut"), (contact.FullName, contact.City));
+
+        // Keeping its own phone is fine.
+        await Sut().UpdateAsync(_clientId, contact.Id, new UpdateContactRequest(null, "New", null, null, "961700", null, null, null, null, null, null));
+        Assert.Equal("New", contact.FullName);
+    }
+
+    [Fact]
     public async Task Update_returns_null_for_unknown_contact_and_propagates_service_errors()
     {
         Assert.Null(await Sut().UpdateAsync(_clientId, Guid.NewGuid(), new UpdateContactRequest(null, "x", null, null, null, null, null, null, null, null, null)));

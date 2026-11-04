@@ -135,8 +135,8 @@ public class SimpleListPageTests
     public async Task Inbox_loads_the_first_fifty_conversations()
     {
         var conversations = new Mock<IConversationService>();
-        conversations.Setup(c => c.ListAsync(Glow.Id, 0, 50, It.IsAny<CancellationToken>()))
-            .ReturnsAsync((new List<ConversationListRow>() as IReadOnlyList<ConversationListRow>, 0)).Verifiable();
+        conversations.Setup(c => c.ListAsync(Glow.Id, new ConversationListRequest(null, null, 0, 50), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ConversationListPage([], 0, new InboxListCounts(0, 0, 0, 0), 0)).Verifiable();
         var inboxSettings = new Mock<IInboxSettingsService>();
         inboxSettings.Setup(a => a.GetAsync(Glow.Id, It.IsAny<CancellationToken>())).ReturnsAsync(new InboxSettingsDto(false, null, [], []));
         var model = new InboxIndex(ClientContext(Glow).Object, conversations.Object, inboxSettings.Object, PipelineKit.Types().Object).Attach();
@@ -335,20 +335,20 @@ public class DashboardPageTests
             .ReturnsAsync((new List<DashboardContactRow>() as IReadOnlyList<DashboardContactRow>, 60)).Verifiable();
         contacts.Setup(l => l.GetDistinctSourcesAsync(Glow.Id, It.IsAny<CancellationToken>())).ReturnsAsync(new List<string> { "web" });
 
-        var model = new Omni.App.Pages.Dashboard.ContactsModel(ClientContext(Glow).Object, dashboard.Object, contacts.Object, config.Object)
+        var model = new Omni.App.Pages.Dashboard.ContactsModel(ClientContext(Glow).Object, dashboard.Object, contacts.Object, config.Object, NoServices(), TextKit.Localizer())
         {
             Stage = "new", Search = "ann", Source = "web", PageNumber = -3,
         }.Attach();
         IReadOnlyList<PipelineStageOption> stages = [new("new", StageCategory.Open, "New")];
         contacts.Setup(l => l.ListStagesAsync(Glow.Id, It.IsAny<CancellationToken>())).ReturnsAsync(stages);
-        await model.OnGetAsync(default);
+        await model.OnGetAsync(false, default);
         Assert.Equal((1, 60, 3, 25), (model.PageNumber, model.TotalCount, model.TotalPages, model.PageSize));
         Assert.Equal(["web"], model.AllSources);
         Assert.Same(stages, model.Stages);
         dashboard.Verify();
 
-        var none = new Omni.App.Pages.Dashboard.ContactsModel(ClientContext(null).Object, dashboard.Object, contacts.Object, config.Object).Attach();
-        await none.OnGetAsync(default);
+        var none = new Omni.App.Pages.Dashboard.ContactsModel(ClientContext(null).Object, dashboard.Object, contacts.Object, config.Object, NoServices(), TextKit.Localizer()).Attach();
+        await none.OnGetAsync(false, default);
         Assert.False(none.ClientConfigured);
     }
 
@@ -361,8 +361,8 @@ public class DashboardPageTests
         dashboard.Setup(d => d.GetContactsAsync(Glow.Id, null, null, null, 10, 10, It.IsAny<CancellationToken>()))
             .ReturnsAsync((new List<DashboardContactRow>() as IReadOnlyList<DashboardContactRow>, 15)).Verifiable();
         var contacts = Mock.Of<IContactService>(l => l.GetDistinctSourcesAsync(Glow.Id, It.IsAny<CancellationToken>()) == Task.FromResult<IReadOnlyList<string>>(new List<string>()));
-        var model = new Omni.App.Pages.Dashboard.ContactsModel(ClientContext(Glow).Object, dashboard.Object, contacts, config.Object) { PageNumber = 2 }.Attach();
-        await model.OnGetAsync(default);
+        var model = new Omni.App.Pages.Dashboard.ContactsModel(ClientContext(Glow).Object, dashboard.Object, contacts, config.Object, NoServices(), TextKit.Localizer()) { PageNumber = 2 }.Attach();
+        await model.OnGetAsync(false, default);
         dashboard.Verify();
     }
 
@@ -442,6 +442,98 @@ public class DashboardPageTests
         Assert.IsType<PageResult>(await noService.OnPostOrderAsync(default));
         Assert.True(noService.OrderFormOpen);
         Assert.Contains("this", noService.OrderError);
+    }
+
+    [Fact]
+    public async Task Contacts_add_popup_opens_from_the_link_adds_by_hand_and_reopens_with_the_reason()
+    {
+        // QA t3-inbox-12: there was no way to add a contact who called or walked in.
+        var dashboard = new Mock<IDashboardService>();
+        dashboard.Setup(d => d.GetContactsAsync(Glow.Id, null, null, null, 0, 25, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((new List<DashboardContactRow>() as IReadOnlyList<DashboardContactRow>, 0));
+        var config = new Mock<IConfigManager>();
+        config.SetupGet(c => c.DashboardContactsPageSize).Returns(25);
+        var contacts = new Mock<IContactService>();
+        contacts.Setup(l => l.GetDistinctSourcesAsync(Glow.Id, It.IsAny<CancellationToken>())).ReturnsAsync(new List<string>());
+        var added = Blank<ContactResponse>() with { Id = Guid.NewGuid() };
+        ManualContactRequest? sent = null;
+        contacts.Setup(l => l.AddManualAsync(Glow.Id, It.IsAny<ManualContactRequest>(), It.IsAny<CancellationToken>()))
+            .Callback<Guid, ManualContactRequest, CancellationToken>((_, r, _) => sent = r).ReturnsAsync(added);
+        Omni.App.Pages.Dashboard.ContactsModel Sut(Client? client = null) =>
+            new Omni.App.Pages.Dashboard.ContactsModel(ClientContext(client ?? Glow).Object, dashboard.Object, contacts.Object, config.Object, NoServices(), TextKit.Localizer()).Attach();
+
+        var link = Sut();
+        await link.OnGetAsync(true, default);
+        Assert.True(link.AddFormOpen);
+        var plain = Sut();
+        await plain.OnGetAsync(false, default);
+        Assert.False(plain.AddFormOpen);
+
+        var serviceId = Guid.NewGuid();
+        var add = Sut();
+        add.NewName = "Rana"; add.NewPhone = "+961 70 123 456"; add.NewEmail = "r@x.io"; add.NewServiceId = serviceId; add.NewNotes = "Called";
+        var redirect = Assert.IsType<LocalRedirectResult>(await add.OnPostAddAsync(default));
+        Assert.Equal($"/dashboard/contacts/{added.Id}", redirect.Url);
+        Assert.Equal(new ManualContactRequest("Rana", "+961 70 123 456", "r@x.io", serviceId, "Called"), sent);
+        Assert.Contains("added", add.StatusMessage);
+
+        contacts.Setup(l => l.AddManualAsync(Glow.Id, It.IsAny<ManualContactRequest>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new ArgumentException("contacts.errors.nameOrPhoneRequired"));
+        var refused = Sut();
+        Assert.IsType<PageResult>(await refused.OnPostAddAsync(default));
+        Assert.Equal(("Enter a name or a phone number.", true, true), (refused.AddError, refused.AddFormOpen, refused.ClientConfigured));
+
+        var none = new Omni.App.Pages.Dashboard.ContactsModel(ClientContext(null).Object, dashboard.Object, contacts.Object, config.Object, NoServices(), TextKit.Localizer()).Attach();
+        Assert.IsType<RedirectToPageResult>(await none.OnPostAddAsync(default));
+    }
+
+    [Fact]
+    public async Task Edit_details_prefills_saves_the_follow_up_day_in_the_business_timezone_and_clears_it_when_empty()
+    {
+        // QA t3-inbox-12: name, phone, email, notes and the follow-up could not be edited.
+        var beirut = SomeClient(timezone: "Asia/Beirut");
+        var id = Guid.NewGuid();
+        var contacts = new Mock<IContactService>();
+        var current = Contact() with { Id = id, FullName = "Rana", Phone = "96170123456", Email = "r@x.io", City = "Beirut", Notes = "n",
+            NextFollowupAt = new DateTimeOffset(2026, 11, 19, 23, 0, 0, TimeSpan.Zero) };   // 01:00 on the 20th in Beirut
+        contacts.Setup(l => l.GetByIdAsync(beirut.Id, id, It.IsAny<CancellationToken>())).ReturnsAsync(current);
+        contacts.Setup(l => l.GetDistinctSourcesAsync(beirut.Id, It.IsAny<CancellationToken>())).ReturnsAsync(new List<string>());
+        var requests = new List<UpdateContactRequest>();
+        contacts.Setup(l => l.UpdateAsync(beirut.Id, id, It.IsAny<UpdateContactRequest>(), It.IsAny<CancellationToken>()))
+            .Callback<Guid, Guid, UpdateContactRequest, CancellationToken>((_, _, r, _) => requests.Add(r)).ReturnsAsync(current);
+        Omni.App.Pages.Dashboard.ContactDetailModel Sut() => new Omni.App.Pages.Dashboard.ContactDetailModel(ClientContext(beirut).Object, contacts.Object,
+            Mock.Of<IOptOutService>(), Mock.Of<IContactDataService>(), NoOrders(), NoServices(), TextKit.Localizer()) { Id = id }.Attach();
+
+        var view = Sut();
+        Assert.IsType<PageResult>(await view.OnGetAsync(null, default));
+        Assert.Equal(("Rana", "96170123456", "r@x.io", "Beirut", "n", new DateOnly(2026, 11, 20), false),
+            (view.EditName, view.EditPhone, view.EditEmail, view.EditCity, view.EditNotes, view.EditFollowup, view.EditFormOpen));
+
+        // 09:00 in Beirut (UTC+2 in November) is 07:00 UTC; blank fields are sent as "" (= clear).
+        var save = Sut();
+        save.EditName = "Rana K"; save.EditPhone = "96170123456"; save.EditFollowup = new DateOnly(2026, 11, 25);
+        Assert.IsType<RedirectToPageResult>(await save.OnPostDetailsAsync(default));
+        var sent = requests[^1];
+        Assert.Equal(("Rana K", "96170123456", "", "", "", new DateTimeOffset(2026, 11, 25, 7, 0, 0, TimeSpan.Zero), false),
+            (sent.FullName, sent.Phone, sent.Email, sent.City, sent.Notes, sent.NextFollowupAt, sent.ClearNextFollowup));
+        Assert.Equal("Details saved.", save.StatusMessage);
+
+        var clear = Sut();
+        clear.EditName = "Rana";
+        Assert.IsType<RedirectToPageResult>(await clear.OnPostDetailsAsync(default));
+        Assert.Equal(((DateTimeOffset?)null, true), (requests[^1].NextFollowupAt, requests[^1].ClearNextFollowup));
+
+        // A refusal shows the page again with the popup open, the reason and what was typed.
+        contacts.Setup(l => l.UpdateAsync(beirut.Id, id, It.IsAny<UpdateContactRequest>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new ArgumentException("contacts.errors.invalidEmail").WithArgs("nope"));
+        var bad = Sut();
+        bad.EditName = "Rana"; bad.EditEmail = "nope";
+        Assert.IsType<PageResult>(await bad.OnPostDetailsAsync(default));
+        Assert.Equal((true, "nope"), (bad.EditFormOpen, bad.EditEmail));
+        Assert.Contains("\"nope\" is not an email address", bad.EditError);
+
+        contacts.Setup(l => l.UpdateAsync(beirut.Id, id, It.IsAny<UpdateContactRequest>(), It.IsAny<CancellationToken>())).ReturnsAsync((ContactResponse?)null);
+        Assert.IsType<NotFoundResult>(await Sut().OnPostDetailsAsync(default));
     }
 
     [Fact]

@@ -266,6 +266,7 @@ public class MessageService : IMessageService
         {
             await _billing.SendFailedAsync(billingHold, ct);
             await _billing.SendFailedAsync(aiReplyHold, ct);
+            await KeepFailedAiReplyAsync(conversation, messageId, content, ct);
             throw;
         }
 
@@ -313,6 +314,47 @@ public class MessageService : IMessageService
             MessageDirection.Outbound, MessageSenderType.Ai, MessageOrigin.Ai, now, ct);
 
         return InboxMapper.ToResponse(message);
+    }
+
+    /// <summary>The AI's reply couldn't be sent (QA t10-07: with a broken WhatsApp token every reply was lost without a trace). It is
+    /// kept as a failed AI message, so the team reads what the AI meant to say, and the conversation goes to the team with one
+    /// "the AI couldn't answer" notification (IConversationService.HandOverFailedAiAsync). Never throws: the caller rethrows
+    /// the send's own error.</summary>
+    private async Task KeepFailedAiReplyAsync(Conversation conversation, Guid messageId, string content, CancellationToken ct)
+    {
+        try
+        {
+            var now = DateTimeOffset.UtcNow;
+            _messages.Add(new Message
+            {
+                Id = messageId,
+                ClientId = conversation.ClientId,
+                ConversationId = conversation.Id,
+                ContactId = conversation.ContactId,
+                Direction = MessageDirection.Outbound,
+                SenderType = MessageSenderType.Ai,
+                Origin = MessageOrigin.Ai,
+                Channel = conversation.Channel,
+                MessageType = "text",
+                Content = content,
+                IsAiGenerated = true,
+                DeliveryStatus = "failed",
+                FailedAt = now,
+                FailureCode = "send_failed",
+                CreatedAt = now,
+                TraceId = TraceContext.CurrentTraceId()
+            });
+            await _unitOfWork.SaveChangesAsync(ct);
+            await _notifier.NewMessageAsync(conversation.ClientId, conversation.Id, messageId, conversation.ContactId,
+                MessageDirection.Outbound, MessageSenderType.Ai, MessageOrigin.Ai, now, ct);
+            await _conversationService.HandOverFailedAiAsync(conversation.ClientId, conversation.Id, ct);
+        }
+        catch (Exception keep) when (keep is not OperationCanceledException)
+        {
+            _unitOfWork.DiscardChanges();
+            _tracer.Step(TraceSteps.SendBlocked, TraceOutcomes.Failed, Ids(conversation, messageId),
+                detail: new { kind = "ai_failed_reply", error = TraceText.Error(keep) });
+        }
     }
 
     /// <summary>The ai_reply reservation of an AI reply. Refused (BillingDeniedException): traced, the conversation is handed
@@ -621,13 +663,16 @@ public class MessageService : IMessageService
             contact.UpdatedAt = now;
         }
 
-        // A customer message that is only a stop/start word changes the contact's opt-out (and gets one confirmation below);
-        // the AI is not asked about it.
+        // A customer message that is only a stop/start word changes the contact's opt-out (and gets one confirmation below, only
+        // when it changed something); the AI is not asked about it. Telegram's /start is the chat opening (Telegram sends it
+        // for every new chat), never "subscribe again" (QA t3-inbox-03); a command can still opt out (/stop).
         bool? optOutKeyword = null;
-        if (request.EventType == IngestEventType.CustomerMessage && contact is not null && OptOutMessageTypes.Contains(message.MessageType))
+        var optOutChanged = false;
+        if (request.EventType == IngestEventType.CustomerMessage && contact is not null && OptOutMessageTypes.Contains(message.MessageType)
+            && !IsTelegramStart(message))
         {
             optOutKeyword = _optOut.MatchKeyword(request.Content);
-            if (optOutKeyword is { } stop) _optOut.Apply(contact, stop, origin, request.ConversationId);
+            if (optOutKeyword is { } stop) optOutChanged = _optOut.Apply(contact, stop, origin, request.ConversationId);
         }
 
         // CAMPAIGN_REPLY: a genuine customer reply, attributed to whichever campaign send is the most recent
@@ -702,7 +747,7 @@ public class MessageService : IMessageService
         // the AI assistant gains multimodal handling.
         var aiEligible = request.EventType == IngestEventType.CustomerMessage
             && conversation.Mode == ConversationMode.Ai
-            && AiEligibleMessageTypes.Contains(message.MessageType)
+            && (AiEligibleMessageTypes.Contains(message.MessageType) || IsTelegramStart(message)) // /start: the bot greets
             && optOutKeyword is null;
         if (request.EventType == IngestEventType.CustomerMessage && !aiEligible)
         {
@@ -714,7 +759,8 @@ public class MessageService : IMessageService
 
         if (optOutKeyword is { } optedOut && contact is not null)
         {
-            await ConfirmOptOutAsync(request.ClientId, request.ConversationId, contact, optedOut, ids, ct);
+            // A second STOP (or a START from someone subscribed) changes nothing, so nothing is confirmed.
+            if (optOutChanged) await ConfirmOptOutAsync(request.ClientId, request.ConversationId, contact, optedOut, ids, ct);
         }
         else if (firstContactMessage || reopened)
         {
@@ -868,13 +914,18 @@ public class MessageService : IMessageService
         return InboxMapper.ToResponse(message);
     }
 
+    /// <summary>Telegram's /start (alone or with a deep-link payload): what Telegram sends when someone opens the chat.</summary>
+    private static bool IsTelegramStart(Message message) =>
+        message.MessageType == "command" && message.Content is { } text
+        && (text.Trim().Equals("/start", StringComparison.OrdinalIgnoreCase) || text.TrimStart().StartsWith("/start ", StringComparison.OrdinalIgnoreCase));
+
     /// <summary>Message types a stop/start word can arrive as (Telegram's /stop is a command).</summary>
     private static readonly HashSet<string> OptOutMessageTypes = new(StringComparer.OrdinalIgnoreCase) { "text", "command" };
 
     /// <summary>Customer message types the AI assistant is allowed to see — see IngestMessageResult.AiEligible.</summary>
     private static readonly HashSet<string> AiEligibleMessageTypes = new(StringComparer.OrdinalIgnoreCase) { "text", "interactive" };
-    // (Telegram commands like /start arrive as message type "command" and media as "image"/"audio"/…,
-    // so they're saved to the Inbox but never reach the AI.)
+    // (Telegram commands arrive as message type "command" and media as "image"/"audio"/…, so they're saved to the Inbox but
+    // don't reach the AI; /start is the exception, see IsTelegramStart, so the bot greets someone who just opened the chat.)
 
     private async Task<IngestMessageResult> HandleStatusUpdateAsync(IngestMessageRequest request, CancellationToken ct)
     {

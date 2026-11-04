@@ -34,6 +34,8 @@ public class MessageServiceTests
     {
         InboxSettings(planIncludesBot: true, reopenedConversations: true);
         AutoReply(AutoReplyChoice.Skip(AutoReplyRules.SkipOff));
+        // A stop/start word changes the contact's opt-out unless a test says it was already so.
+        _optOut.Setup(o => o.Apply(It.IsAny<Contact>(), It.IsAny<bool>(), It.IsAny<string>(), It.IsAny<Guid?>())).Returns(true);
         _contact = new Contact { Id = _contactId, ClientId = _clientId, FullName = "Ann Lee", Phone = "96170123456" };
         _sender.SetupGet(s => s.Channel).Returns(ConversationChannel.WhatsApp);
         _sender.Setup(s => s.SendTextAsync(It.IsAny<Conversation>(), It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync("wamid.sent");
@@ -164,12 +166,23 @@ public class MessageServiceTests
     }
 
     [Fact]
-    public async Task AiReply_failure_releases_the_hold_but_does_not_notify_members()
+    public async Task A_failed_ai_reply_is_kept_as_a_failed_message_and_hands_the_conversation_to_the_team()
     {
+        // QA t10-07: with a broken WhatsApp token every AI reply vanished: no bubble, no notification, still "AI is replying".
         var c = Conv();
-        _sender.Setup(s => s.SendTextAsync(It.IsAny<Conversation>(), It.IsAny<string>(), It.IsAny<CancellationToken>())).ThrowsAsync(new ChannelSendException("x"));
-        await Assert.ThrowsAsync<ChannelSendException>(() => Sut().SendAiReplyAsync(_clientId, c.Id, "hi"));
+        _sender.Setup(s => s.SendTextAsync(It.IsAny<Conversation>(), It.IsAny<string>(), It.IsAny<CancellationToken>())).ThrowsAsync(new ChannelSendException("OAuthException 190"));
+        Message? kept = null;
+        _messages.Setup(m => m.Add(It.IsAny<Message>())).Callback<Message>(m => kept = m);
+
+        await Assert.ThrowsAsync<ChannelSendException>(() => Sut().SendAiReplyAsync(_clientId, c.Id, "We open at 9 tomorrow."));
+
         _billing.Verify(b => b.SendFailedAsync(_hold, It.IsAny<CancellationToken>()), Times.Once);
+        Assert.Equal(("We open at 9 tomorrow.", "failed", MessageSenderType.Ai, true), (kept!.Content, kept.DeliveryStatus, kept.SenderType, kept.FailedAt is not null));
+        Assert.Null(kept.ExternalMessageId);
+        _notifier.Verify(n => n.NewMessageAsync(_clientId, c.Id, kept.Id, It.IsAny<Guid>(), MessageDirection.Outbound, MessageSenderType.Ai, MessageOrigin.Ai,
+            It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()), Times.Once);
+        // One hand-over (it notifies the members); no separate "send failed" notification on top.
+        _conversationService.Verify(s => s.HandOverFailedAiAsync(_clientId, c.Id, It.IsAny<CancellationToken>()), Times.Once);
         _notifications.Verify(n => n.CreateAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<NotificationText>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -869,6 +882,53 @@ public class MessageServiceTests
         Assert.Equal((MessageSenderType.System, MessageOrigin.System, "You're unsubscribed."), (reply.SenderType, reply.Origin, reply.Content));
         _sender.Verify(s => s.SendTextAsync(c, "You're unsubscribed.", It.IsAny<CancellationToken>()), Times.Once);
         Assert.Equal(ConversationMode.Ai, c.Mode); // an automatic message never takes the conversation over
+    }
+
+    [Fact]
+    public async Task A_stop_that_changes_nothing_is_not_confirmed_again()
+    {
+        // QA t3-inbox-03: a second STOP got a second "you're unsubscribed".
+        var c = Conv(ConversationMode.Ai);
+        _contacts.Setup(l => l.GetByIdAsync(_contactId, It.IsAny<CancellationToken>())).ReturnsAsync(_contact);
+        _optOut.Setup(o => o.MatchKeyword("STOP")).Returns(true);
+        _optOut.Setup(o => o.Apply(_contact, true, It.IsAny<string>(), It.IsAny<Guid?>())).Returns(false);
+
+        var r = await Sut().IngestAsync(Ingest(c.Id, IngestEventType.CustomerMessage) with { Content = "STOP" });
+
+        Assert.False(r.AiEligible); // still not a question for the AI
+        _optOut.Verify(o => o.ConfirmationTextAsync(It.IsAny<Guid>(), It.IsAny<Contact>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Never);
+        _sender.Verify(s => s.SendTextAsync(It.IsAny<Conversation>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Theory]
+    [InlineData("/start")]
+    [InlineData("/start campaign_42")]
+    [InlineData("/START")]
+    public async Task Telegrams_start_opens_the_chat_it_is_not_a_subscribe_again(string text)
+    {
+        // QA t3-inbox-03: every new Telegram contact got "You're subscribed again" and no greeting.
+        var c = Conv(ConversationMode.Ai);
+        _contacts.Setup(l => l.GetByIdAsync(_contactId, It.IsAny<CancellationToken>())).ReturnsAsync(_contact);
+        _optOut.Setup(o => o.MatchKeyword(It.IsAny<string?>())).Returns(false);
+        AutoReply(AutoReplyChoice.Send("Welcome! How can we help?"));
+
+        var r = await Sut().IngestAsync(Ingest(c.Id, IngestEventType.CustomerMessage, messageType: "command", newContact: true) with { Content = text });
+
+        Assert.True(r.AiEligible); // the bot greets
+        _optOut.Verify(o => o.MatchKeyword(It.IsAny<string?>()), Times.Never);
+        _optOut.Verify(o => o.Apply(It.IsAny<Contact>(), It.IsAny<bool>(), It.IsAny<string>(), It.IsAny<Guid?>()), Times.Never);
+        _autoReplies.Verify(a => a.ChooseAsync(_clientId, It.IsAny<string>(), AutoReplyTrigger.NewConversation, true, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task A_stop_command_still_opts_the_contact_out()
+    {
+        var c = Conv(ConversationMode.Ai);
+        _contacts.Setup(l => l.GetByIdAsync(_contactId, It.IsAny<CancellationToken>())).ReturnsAsync(_contact);
+        _optOut.Setup(o => o.MatchKeyword("/stop")).Returns(true);
+        var r = await Sut().IngestAsync(Ingest(c.Id, IngestEventType.CustomerMessage, messageType: "command") with { Content = "/stop" });
+        Assert.False(r.AiEligible);
+        _optOut.Verify(o => o.Apply(_contact, true, It.IsAny<string>(), c.Id), Times.Once);
     }
 
     [Fact]

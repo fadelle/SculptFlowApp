@@ -159,6 +159,17 @@ public class BotTestService : IBotTestService
         return true;
     }
 
+    public async Task<bool> RunFailedAsync(BotRunContext run, CancellationToken ct = default)
+    {
+        var session = await _tests.GetSessionForUpdateAsync(run.ClientId, run.TestSessionId!.Value, ct);
+        if (session is null) return false;
+        var now = DateTimeOffset.UtcNow;
+        session.UpdatedAt = now;
+        AddNote(session, BotTestNote.Of(BotTestNote.ErrorKey), now);
+        await _unitOfWork.SaveChangesAsync(ct);
+        return true;
+    }
+
     public async Task<ScheduleBookingResult> ScheduleAsync(BotRunContext run, ScheduleBookingRequest request, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -187,8 +198,9 @@ public class BotTestService : IBotTestService
         }
 
         var now = DateTimeOffset.UtcNow;
-        session.SimulatedBookingStart = slot.Start;
-        session.SimulatedBookingEnd = slot.End;
+        // Slots carry the client's local offset; the database only stores UTC (QA t4-ai-02: a non-UTC client's test booking failed).
+        session.SimulatedBookingStart = slot.Start.ToUniversalTime();
+        session.SimulatedBookingEnd = slot.End.ToUniversalTime();
         session.SimulatedServiceId = request.ServiceId;
         session.UpdatedAt = now;
         var booking = Existing(session, tz)!;

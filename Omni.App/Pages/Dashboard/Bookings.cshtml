@@ -64,11 +64,11 @@ else
         <div class="cal-drawer-body" id="cal-drawer-body"></div>
     </div>
 
-    @* ---------- New booking ---------- *@
+    @* ---------- New booking / edit a booking (QA t5-ops-04: the same dialog; bookings-calendar.js switches it with the data-* labels) ---------- *@
     <div class="bm-overlay" id="cal-new-overlay" hidden>
         <div class="card cal-modal" role="dialog" aria-modal="true" aria-labelledby="cal-new-title">
             <div class="modal-head">
-                <h3 id="cal-new-title" class="card-title">@T["bookings.new.title"]</h3>
+                <h3 id="cal-new-title" class="card-title" data-title-new="@T["bookings.new.title"]" data-title-edit="@T["bookings.edit.title"]">@T["bookings.new.title"]</h3>
                 <button type="button" class="au-icon-btn" id="cal-new-close" aria-label="@T["common.close"]" title="@T["common.close"]"><span class="au-icon" aria-hidden="true">close</span></button>
             </div>
             <div id="cal-new-error" class="connect-error modal-error" role="alert"></div>
@@ -79,12 +79,32 @@ else
                         <input type="text" id="cal-new-contact-search" class="au-input search-input" placeholder="@T["contacts.search.placeholder"]" autocomplete="off" />
                         <div class="picker-chip" id="cal-new-contact-chip" hidden>
                             <span class="avatar-sm" id="cal-new-contact-chip-avatar"></span>
-                            <span class="picker-chip-label" id="cal-new-contact-chip-label"></span>
+                            <span class="picker-chip-label" id="cal-new-contact-chip-label" dir="auto"></span>
                             <button type="button" class="picker-chip-x" id="cal-new-contact-clear" aria-label="@T["bookings.new.changeContact"]">&times;</button>
                         </div>
                         <div class="picker-results" id="cal-new-contact-results" role="listbox" hidden></div>
                     </div>
                     <input type="hidden" id="cal-new-contact-id" />
+                    @* "+ New contact" (QA t5-ops-04): a walk-in or a caller who isn't a contact yet; POST /api/contacts/manual, then picked. *@
+                    <button type="button" class="au-link cal-new-contact-add-open" id="cal-new-contact-add-open"><span class="au-icon" aria-hidden="true">person_add</span>@T["bookings.new.addContact"]</button>
+                    <div class="cal-new-contact-add" id="cal-new-contact-add" hidden>
+                        <div class="au-form-grid">
+                            <div class="au-form-field">
+                                <label class="au-form-label" for="cal-new-contact-name">@T["contacts.add.name"]</label>
+                                <input type="text" id="cal-new-contact-name" class="au-input" maxlength="200" dir="auto" autocomplete="off" />
+                            </div>
+                            <div class="au-form-field">
+                                <label class="au-form-label" for="cal-new-contact-phone">@T["contacts.table.phone"]</label>
+                                <input type="tel" id="cal-new-contact-phone" class="au-input" maxlength="30" dir="ltr" autocomplete="off" placeholder="+961 70 123 456" />
+                            </div>
+                        </div>
+                        <span class="au-help">@T["bookings.new.addContactHelp"]</span>
+                        <div id="cal-new-contact-add-error" class="connect-error" role="alert"></div>
+                        <div class="au-form-actions">
+                            <button type="button" class="au-btn au-btn--text au-btn--sm" id="cal-new-contact-add-cancel">@T["common.cancel"]</button>
+                            <button type="button" class="au-btn au-btn--outlined au-btn--sm" id="cal-new-contact-add-save">@T["contacts.add.submit"]</button>
+                        </div>
+                    </div>
                 </div>
                 <div class="au-form-field">
                     <label class="au-form-label" for="cal-new-service">@T["contacts.table.service"] <span class="opt">@T["common.optional"]</span></label>
@@ -121,11 +141,11 @@ else
                 </div>
                 <div class="au-form-field">
                     <label class="au-form-label" for="cal-new-notes">@T["bookings.notes"] <span class="opt">@T["common.optional"]</span></label>
-                    <textarea id="cal-new-notes" class="au-textarea" rows="2"></textarea>
+                    <textarea id="cal-new-notes" class="au-textarea" rows="2" maxlength="2000" dir="auto"></textarea>
                 </div>
                 <div class="au-form-actions">
                     <button type="button" class="au-btn au-btn--text" id="cal-new-cancel">@T["common.cancel"]</button>
-                    <button type="button" class="au-btn au-btn--primary" id="cal-new-save">@T["bookings.new.create"]</button>
+                    <button type="button" class="au-btn au-btn--primary" id="cal-new-save" data-label-new="@T["bookings.new.create"]" data-label-edit="@T["common.saveChanges"]">@T["bookings.new.create"]</button>
                 </div>
             </div>
         </div>
@@ -166,6 +186,7 @@ else
                 <a class="au-link" id="cal-appt-full" href="#">@T["bookings.openFullPage"]</a>
             </div>
             <div class="au-form-actions">
+                <button type="button" class="au-btn au-btn--outlined cal-appt-edit" id="cal-appt-edit" hidden><span class="au-icon" aria-hidden="true">edit</span>@T["bookings.edit.button"]</button>
                 <button type="button" class="au-btn au-btn--text" id="cal-appt-cancel">@T["common.cancel"]</button>
                 <button type="button" class="au-btn au-btn--primary" id="cal-appt-save">@T["common.save"]</button>
             </div>

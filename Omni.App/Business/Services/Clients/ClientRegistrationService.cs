@@ -37,12 +37,14 @@ public partial class ClientRegistrationService : IClientRegistrationService
     private readonly IConfigManager _config;
     private readonly IBusinessTypeService _businessTypes;
     private readonly ITextContext _text;
+    private readonly IPlanService _plans;
 
     public ClientRegistrationService(
         IClientRepository clients, IBillingAccountRepository billingAccounts, IUnitOfWork unitOfWork, UserManager<AppUser> users, IKnowledgeSettingsService knowledgeSettings,
         ILogger<ClientRegistrationService> logger, ISubscriptionService subscriptions,
-        IConfigManager config, IBusinessTypeService businessTypes, ITextContext text)
+        IConfigManager config, IBusinessTypeService businessTypes, ITextContext text, IPlanService plans)
     {
+        _plans = plans;
         _config = config;
         _businessTypes = businessTypes;
         _text = text;
@@ -152,36 +154,14 @@ public partial class ClientRegistrationService : IClientRegistrationService
                     };
                 }
 
-                var client = new Client
-                {
-                    Id = Guid.NewGuid(),
-                    Name = clientName,
-                    Slug = slug,
-                    Email = email,
-                    Timezone = "UTC",
-                    BusinessTypeCode = businessTypeCode,
-                    // The dashboard opens in the language the owner signed up in.
-                    DefaultLanguage = _text.Language,
-                    IsActive = true,
-                    CreatedAt = now,
-                    UpdatedAt = now
-                };
-                _clients.Add(client);
+                // The dashboard opens in the language the owner signed up in.
+                var client = AddClient(clientName, slug, email, businessTypeCode, _text.Language, now);
                 _clients.AddMembership(new ClientUser
                 {
                     Id = Guid.NewGuid(),
                     ClientId = client.Id,
                     UserId = user.Id,
                     IsActive = true,
-                    CreatedAt = now,
-                    UpdatedAt = now
-                });
-                // Its (empty) prepaid billing account — see Billing/. Balances only ever change through the ledger.
-                _billingAccounts.Add(new BillingAccount
-                {
-                    Id = Guid.NewGuid(),
-                    ClientId = client.Id,
-                    Currency = _config.BillingCurrency,
                     CreatedAt = now,
                     UpdatedAt = now
                 });
@@ -216,23 +196,110 @@ public partial class ClientRegistrationService : IClientRegistrationService
         return ClientRegistrationResult.Fail(FailedKey);
     }
 
+    /// <summary>The client row and its (empty) prepaid billing account — see Billing/. Balances only ever change through the
+    /// ledger. Not saved yet.</summary>
+    private Client AddClient(string clientName, string slug, string email, string businessTypeCode, string language, DateTimeOffset now)
+    {
+        var client = new Client
+        {
+            Id = Guid.NewGuid(),
+            Name = clientName,
+            Slug = slug,
+            Email = email,
+            Timezone = "UTC",
+            BusinessTypeCode = businessTypeCode,
+            DefaultLanguage = language,
+            IsActive = true,
+            CreatedAt = now,
+            UpdatedAt = now
+        };
+        _clients.Add(client);
+        _billingAccounts.Add(new BillingAccount
+        {
+            Id = Guid.NewGuid(),
+            ClientId = client.Id,
+            Currency = _config.BillingCurrency,
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        return client;
+    }
+
+    public async Task<OpenedClient> OpenForOwnerAsync(string? clientName, string? businessTypeCode, string? language, string? ownerEmail,
+        string? planCode, CancellationToken ct = default)
+    {
+        var name = (clientName ?? string.Empty).Trim();
+        var email = (ownerEmail ?? string.Empty).Trim();
+        var plan = string.IsNullOrWhiteSpace(planCode) ? null : planCode.Trim();
+        if (name.Length == 0) throw new ArgumentException(ClientNameRequiredKey);
+        if (name.Length > MaxNameLength) throw new ArgumentException(ClientNameTooLongKey).WithArgs(MaxNameLength);
+        if (!EmailAddress.IsValid(email)) throw new ArgumentException(EmailInvalidKey);
+        if (!await _businessTypes.IsActiveAsync(businessTypeCode, ct)) throw new ArgumentException(BusinessTypeRequiredKey);
+        var dashboardLanguage = LanguageCode.Normalize(language) ?? AppLanguage.English;
+        if (plan is not null && await _plans.GetAsync(plan, ct) is not { IsActive: true })
+        {
+            throw new ArgumentException("clients.errors.unknownPlan").WithArgs(plan);
+        }
+        // Sign-in names are emails: the owner can't be someone who already signs in (they would never get a second account).
+        if (await _users.FindByNameAsync(email) is not null || await _users.FindByEmailAsync(email) is not null)
+        {
+            throw new ArgumentException("members.errors.emailTaken");
+        }
+
+        for (var attempt = 0; attempt < MaxSlugAttempts; attempt++)
+        {
+            var slug = await UniqueSlugAsync(name, attempt, ct);
+            await using var tx = await _unitOfWork.BeginTransactionAsync(ct);
+            try
+            {
+                var client = AddClient(name, slug, email, businessTypeCode!.Trim(), dashboardLanguage, DateTimeOffset.UtcNow);
+                await _unitOfWork.SaveChangesAsync(ct);
+                await _knowledgeSettings.GetAsync(client.Id, ct);
+                await tx.CommitAsync(ct);
+                _logger.LogInformation("Admin opened client {ClientId} ({Slug}) for owner invite.", client.Id, client.Slug);
+
+                var started = plan is null ? await StartSignupPlanAsync(client.Id, ct) : await StartPlanAsync(client.Id, plan, BillingSource.Admin,
+                    "Plan when the admin portal opened the client", ct);
+                return new OpenedClient(client, plan ?? SignupPlanOrNull(), started);
+            }
+            catch (Exception ex) when (_unitOfWork.IsDuplicateRecord(ex))
+            {
+                await RollbackAsync(tx, ct);
+                _logger.LogInformation("Opening a client hit a unique-constraint race (attempt {Attempt}); retrying.", attempt + 1);
+            }
+        }
+        throw new InvalidOperationException(FailedKey);
+    }
+
+    private string? SignupPlanOrNull()
+    {
+        var signupPlan = _config.BillingSignupPlanCode.Trim();
+        return _config.BillingEnabled && signupPlan.Length > 0 ? signupPlan : null;
+    }
+
     /// <summary>With billing on and Billing:SignupPlanCode set, a new client starts on that plan with its first period
     /// free (a trial). Runs after the registration commit (billing uses its own transaction); if it fails the
     /// account still exists and an admin can assign a plan, so this only logs.</summary>
-    private async Task StartSignupPlanAsync(Guid clientId, CancellationToken ct)
+    private async Task<bool> StartSignupPlanAsync(Guid clientId, CancellationToken ct)
     {
-        var signupPlan = _config.BillingSignupPlanCode.Trim();
-        if (!_config.BillingEnabled || signupPlan.Length == 0) return;
+        var signupPlan = SignupPlanOrNull();
+        return signupPlan is not null && await StartPlanAsync(clientId, signupPlan, BillingSource.System, "Plan at signup", ct);
+    }
+
+    /// <summary>Starts the plan with its first period free; false (and a log line) when it can't.</summary>
+    private async Task<bool> StartPlanAsync(Guid clientId, string planCode, string source, string reason, CancellationToken ct)
+    {
         try
         {
             await _subscriptions.StartAsync(new StartSubscriptionRequest(
-                clientId, signupPlan, $"signup:{clientId}", ChargeFirstPeriod: false,
-                Source: BillingSource.System, Reason: "Plan at signup"), ct);
+                clientId, planCode, $"signup:{clientId}", ChargeFirstPeriod: false, Source: source, Reason: reason), ct);
+            return true;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogError(ex, "Billing: couldn't start the signup plan {Plan} for new client {ClientId}; assign one from the admin API.",
-                signupPlan, clientId);
+            _logger.LogError(ex, "Billing: couldn't start the plan {Plan} for new client {ClientId}; assign one from the admin API.",
+                planCode, clientId);
+            return false;
         }
     }
 

@@ -16,6 +16,15 @@ public interface IClientAdminService
 
     Task<ClientDetail?> GetAsync(Guid id, CancellationToken ct);
 
+    /// <summary>Opens a client for a sale and invites its owner (QA t6-admin-20): IClientRegistrationService.OpenForOwnerAsync
+    /// (its refusals: ArgumentException before anything is saved), then IInviteService.InviteOwnerAsync. A plan that didn't
+    /// start or an email that didn't go is reported in the answer, not thrown: the client exists either way.</summary>
+    Task<ClientCreated> CreateAsync(CreateClientRequest request, string requestBaseUrl, CancellationToken ct);
+
+    /// <summary>Emails the client's owner a new invite link (the old one stops working): IInviteService.ResendOwnerInviteAsync.
+    /// KeyNotFoundException (never invited), ArgumentException (the owner already joined: clients.errors.ownerExists).</summary>
+    Task<OwnerInviteSent> ResendOwnerInviteAsync(Guid id, string requestBaseUrl, CancellationToken ct);
+
     Task<ClientCounts> CountsAsync(Guid id, CancellationToken ct);
 
     /// <summary>Throws KeyNotFoundException (no client) or ArgumentException (missing name, unknown time zone).</summary>

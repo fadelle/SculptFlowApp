@@ -201,6 +201,84 @@ public class BookingServiceTests
         _notifications.Verify(n => n.CreateAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<NotificationText>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
+    // ---------------------------------------------------------------- a member's edit (QA t5-ops-04)
+
+    [Fact]
+    public async Task A_member_moves_a_booking_in_utc_keeps_its_status_logs_notifies_and_updates_calendars()
+    {
+        var a = MakeBooking(BookingStatus.Confirmed);
+        Setup(a);
+        var from = a.ScheduledStart;
+        var start = new DateTimeOffset(2030, 3, 4, 11, 0, 0, TimeSpan.FromHours(2));   // 09:00 UTC
+        var newService = Guid.NewGuid();
+
+        var r = await Sut().UpdateAsync(_clientId, a.Id, new UpdateBookingRequest(start, start.AddMinutes(45), newService, " video ", "  bring the form  "));
+
+        Assert.Equal((TimeSpan.Zero, start, start.AddMinutes(45), newService, "video", "bring the form", BookingStatus.Confirmed),
+            (a.ScheduledStart.Offset, a.ScheduledStart, a.ScheduledEnd, a.ServiceId, a.LocationType, a.Notes, a.Status));
+        Assert.Equal(a.Id, r!.Id);
+        _services.Verify(p => p.EnsureUsableAsync(_clientId, newService, It.IsAny<CancellationToken>()), Times.Once);
+        _events.Verify(e => e.Log(_clientId, EventTypes.BookingRescheduled, _contactId, null, a.Id, null,
+            It.Is<string>(m => m.Contains("\"by\":\"member\"") && m.Contains(from.ToString("yyyy-MM-dd")))), Times.Once);
+        _notifier.Verify(n => n.BookingChangedAsync(_clientId, a.Id, "rescheduled", It.IsAny<CancellationToken>()), Times.Once);
+        _calendar.Verify(c => c.TriggerBookingSyncAsync(_clientId, It.IsAny<BookingResponse>(), "rescheduled", It.IsAny<CancellationToken>()), Times.Once);
+        _notifications.Verify(n => n.CreateAsync(_clientId, NotificationType.BookingRescheduled, It.IsAny<NotificationText>(), _contactId, null, a.Id, null,
+            It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
+        _availability.Verify(x => x.CheckSlotAsync(It.IsAny<Guid>(), It.IsAny<Guid?>(), It.IsAny<DateTimeOffset>(), It.IsAny<DateTimeOffset?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Editing_only_the_details_is_an_update_without_a_reschedule_or_notification()
+    {
+        var oldService = Guid.NewGuid();
+        var a = MakeBooking(serviceId: oldService);
+        a.LocationType = "kiosk";   // a place another tool set may stay
+        Setup(a);
+
+        await Sut().UpdateAsync(_clientId, a.Id, new UpdateBookingRequest(a.ScheduledStart, a.ScheduledEnd, oldService, "kiosk", "new note"));
+
+        Assert.Equal(("new note", "kiosk"), (a.Notes, a.LocationType));
+        _services.Verify(p => p.EnsureUsableAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);   // kept, not re-checked
+        _events.Verify(e => e.Log(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<string?>(), It.IsAny<string>()), Times.Never);
+        _notifier.Verify(n => n.BookingChangedAsync(_clientId, a.Id, "updated", It.IsAny<CancellationToken>()), Times.Once);
+        _calendar.Verify(c => c.TriggerBookingSyncAsync(_clientId, It.IsAny<BookingResponse>(), "updated", It.IsAny<CancellationToken>()), Times.Once);
+        _notifications.Verify(n => n.CreateAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<NotificationText>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+
+        // Clearing the service, place and notes.
+        await Sut().UpdateAsync(_clientId, a.Id, new UpdateBookingRequest(a.ScheduledStart, null, null, "", " "));
+        Assert.Equal(((Guid?)null, (string?)null, (string?)null, (DateTimeOffset?)null), (a.ServiceId, a.LocationType, a.Notes, a.ScheduledEnd));
+    }
+
+    [Theory]
+    [InlineData(BookingStatus.Attended, 0, null, "bookings.errors.cantEdit")]
+    [InlineData(BookingStatus.Canceled, 0, null, "bookings.errors.cantEdit")]
+    [InlineData(BookingStatus.Booked, -30, null, "bookings.errors.endBeforeStart")]
+    [InlineData(BookingStatus.Booked, 0, "garden", "bookings.errors.unknownLocation")]
+    public async Task A_booking_that_cant_change_or_a_bad_edit_is_refused_and_nothing_changes(string status, int endMinutes, string? location, string key)
+    {
+        var a = MakeBooking(status);
+        Setup(a);
+        var before = (a.ScheduledStart, a.ScheduledEnd, a.LocationType);
+        var start = a.ScheduledStart.AddHours(1);
+        var ex = await Assert.ThrowsAsync<ArgumentException>(() =>
+            Sut().UpdateAsync(_clientId, a.Id, new UpdateBookingRequest(start, endMinutes == 0 ? null : start.AddMinutes(endMinutes), null, location, null)));
+        Assert.Equal(key, ex.Message);
+        Assert.Equal(before, (a.ScheduledStart, a.ScheduledEnd, a.LocationType));
+        _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Editing_another_clients_booking_is_not_found_and_a_new_service_must_be_usable()
+    {
+        Assert.Null(await Sut().UpdateAsync(_clientId, Guid.NewGuid(), new UpdateBookingRequest(DateTimeOffset.UtcNow, null, null, null, null)));
+
+        var a = MakeBooking();
+        Setup(a);
+        _services.Setup(p => p.EnsureUsableAsync(_clientId, It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ThrowsAsync(new ArgumentException("services.errors.inactive"));
+        await Assert.ThrowsAsync<ArgumentException>(() => Sut().UpdateAsync(_clientId, a.Id, new UpdateBookingRequest(a.ScheduledStart, a.ScheduledEnd, Guid.NewGuid(), null, null)));
+        _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
     // ---------------------------------------------------------------- reschedule / cancel
 
     [Fact]

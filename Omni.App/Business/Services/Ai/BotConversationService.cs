@@ -46,4 +46,18 @@ public class BotConversationService : IBotConversationService
         }
         return true;
     }
+
+    public async Task<bool?> RunFailedAsync(BotRunContext run, Guid conversationId, CancellationToken ct = default)
+    {
+        if (run.IsTest) return await _tests.RunFailedAsync(run, ct);
+
+        var handedOff = await _conversations.HandOverFailedAiAsync(run.ClientId, conversationId, ct);
+        if (handedOff is not true) return handedOff;
+        // The contact hears that a person will answer (a send that fails here is traced, never thrown).
+        if (!string.IsNullOrWhiteSpace(run.HandoffMessage))
+        {
+            await _messages.SendHandoffMessageAsync(run.ClientId, conversationId, run.BotId, run.HandoffMessage, ct);
+        }
+        return true;
+    }
 }

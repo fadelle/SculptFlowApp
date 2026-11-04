@@ -31,6 +31,17 @@ public interface IInviteService
     /// client.</summary>
     Task RevokeAsync(UserAccess actor, Guid inviteId, CancellationToken ct = default);
 
+    /// <summary>The admin portal opened this client and invites its owner (QA t6-admin-20): a link that creates the client user
+    /// (role client) when accepted, emailed in the client's language. Any earlier owner link stops working. ArgumentException
+    /// for a bad email or a name over 200 characters, an email that already signs in (members.errors.emailTaken), or a client
+    /// that already has its owner (clients.errors.ownerExists); KeyNotFoundException for an unknown client; EmailSendException
+    /// when the email can't go (the new link is then not kept).</summary>
+    Task<InviteResponse> InviteOwnerAsync(Guid clientId, string? email, string? fullName, string requestBaseUrl, CancellationToken ct = default);
+
+    /// <summary>A new owner link for the latest owner invite's person (the old one stops working); same refusals as
+    /// InviteOwnerAsync, KeyNotFoundException (clients.errors.noOwnerInvite) when the client never had one.</summary>
+    Task<InviteResponse> ResendOwnerInviteAsync(Guid clientId, string requestBaseUrl, CancellationToken ct = default);
+
     /// <summary>The admin portal's cancel: any client's invite. Returns its client. KeyNotFoundException when unknown.</summary>
     Task<Guid> RevokeAnyAsync(Guid inviteId, CancellationToken ct = default);
 
@@ -38,8 +49,8 @@ public interface IInviteService
     /// is inactive).</summary>
     Task<InviteLanding?> GetLandingAsync(string? token, CancellationToken ct = default);
 
-    /// <summary>Creates the member user (role member, email confirmed) and its active membership, marks the invite used, in
-    /// one transaction, and returns the user to sign in. ArgumentException (acceptInvite.errors.*, Identity password rules,
+    /// <summary>Creates the member user (role member, email confirmed; role client for an owner invite, which needs no seat
+    /// check) and its active membership, marks the invite used, in one transaction, and returns the user to sign in. ArgumentException (acceptInvite.errors.*, Identity password rules,
     /// members.errors.emailTaken); InvalidOperationException (acceptInvite.errors.linkInvalid) for a dead link;
     /// EntitlementDeniedException when the plan lost the seat meanwhile.</summary>
     Task<AppUser> AcceptAsync(string? token, string? fullName, string? password, string? confirmPassword, CancellationToken ct = default);

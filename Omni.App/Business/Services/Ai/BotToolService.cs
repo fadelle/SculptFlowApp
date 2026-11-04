@@ -251,4 +251,10 @@ public class BotToolService : IBotToolService
         var handedOff = await _botConversations.HandOffAsync(run, conversationId, request.Reason, ct);
         return handedOff is null ? BotToolResult.NotFound() : BotToolResult.Ok(new { handedOff });
     }
+
+    public async Task<BotToolResult> RunFailedAsync(BotRunContext run, Guid conversationId, CancellationToken ct = default)
+    {
+        var handedOff = await _botConversations.RunFailedAsync(run, conversationId, ct);
+        return handedOff is null ? BotToolResult.NotFound() : BotToolResult.Ok(new { handedOff });
+    }
 }

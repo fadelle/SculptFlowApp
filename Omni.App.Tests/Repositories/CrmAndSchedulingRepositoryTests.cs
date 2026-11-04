@@ -289,8 +289,10 @@ public class ConversationAndMessageRepositoryTests(PostgresFixture fixture) : Re
 
         await using var db = NewContext();
         var repo = new ConversationRepository(db);
-        var (items, total) = await repo.ListInboxAsync(c.Id, 0, 10);
+        var page = await repo.ListInboxAsync(c.Id, new ConversationListRequest(null, null, 0, 10));
+        var (items, total) = (page.Items, page.TotalCount);
         Assert.Equal(2, total);
+        Assert.Equal(3, page.UnreadTotal);                          // 2 in the recent one + 1 never read
         Assert.Equal([recent.Id, old.Id], items.Select(i => i.Id));
         Assert.Equal("unread 2", items[0].LastMessagePreview);
         Assert.Equal(2, items[0].UnreadCount);
@@ -298,7 +300,47 @@ public class ConversationAndMessageRepositoryTests(PostgresFixture fixture) : Re
         Assert.Equal(1, items[1].UnreadCount);                      // never read: every inbound counts
         Assert.Equal("Rhinoplasty", items[1].ServiceName);
 
-        Assert.Equal(old.Id, Assert.Single((await repo.ListInboxAsync(c.Id, 1, 10)).Items).Id);
+        Assert.Equal(old.Id, Assert.Single((await repo.ListInboxAsync(c.Id, new ConversationListRequest(null, null, 1, 10))).Items).Id);
+    }
+
+    [PostgresFact]
+    public async Task The_inbox_list_searches_and_filters_every_conversation_on_the_server()
+    {
+        // QA t3-inbox-04: only the newest 50 were loaded, so older ones couldn't be found, counted or opened.
+        var c = MakeClient(); var other = MakeClient();
+        var botox = MakeService(c.Id, "Botox");
+        var sara = MakeContact(c.Id, "سارة Haddad", "+96170111", botox.Id);
+        var omar = MakeContact(c.Id, "Omar", "+96170222");
+        var lina = MakeContact(c.Id, "Lina", "+96170333");
+        var stranger = MakeContact(other.Id, "Sara Other", "+96170444");
+        var withTeam = MakeConversation(c.Id, sara.Id, lastMessageAt: Now.AddDays(-40)); withTeam.Mode = ConversationMode.Human;
+        var withAi = MakeConversation(c.Id, omar.Id, lastMessageAt: Now.AddHours(-1)); withAi.Mode = ConversationMode.Ai;
+        var closed = MakeConversation(c.Id, lina.Id, lastMessageAt: Now.AddHours(-2)); closed.Mode = ConversationMode.Human; closed.Status = ConversationStatus.Closed;
+        var foreign = MakeConversation(other.Id, stranger.Id, lastMessageAt: Now);
+        var unread = MakeMessage(withTeam, content: "old question", createdAt: Now.AddDays(-40));
+        await SeedAsync(c, other, botox, sara, omar, lina, stranger, withTeam, withAi, closed, foreign, unread);
+
+        await using var db = NewContext();
+        var repo = new ConversationRepository(db);
+        Task<ConversationListPage> List(string? search, string? filter, int skip = 0, int take = 1) =>
+            repo.ListInboxAsync(c.Id, new ConversationListRequest(search, filter, skip, take));
+
+        var all = await List(null, InboxListFilter.All);
+        Assert.Equal((3, new InboxListCounts(3, 1, 1, 1), 1), (all.TotalCount, all.Counts, all.UnreadTotal)); // counts cover everything, not one page
+        Assert.Equal(withAi.Id, Assert.Single(all.Items).Id);
+        Assert.Equal(withTeam.Id, Assert.Single((await List(null, InboxListFilter.Needs)).Items).Id);
+        Assert.Equal(closed.Id, Assert.Single((await List(null, InboxListFilter.Closed)).Items).Id);
+        Assert.Equal(withAi.Id, Assert.Single((await List(null, InboxListFilter.Ai)).Items).Id);
+
+        // Search: name (any script, any case), phone, service; another client's "Sara" never shows.
+        Assert.Equal(withTeam.Id, Assert.Single((await List("سارة", null, take: 50)).Items).Id);
+        Assert.Equal(withTeam.Id, Assert.Single((await List("haddad", null, take: 50)).Items).Id);
+        Assert.Equal(omar.Id, Assert.Single((await List("70222", null, take: 50)).Items).ContactId);
+        Assert.Equal(withTeam.Id, Assert.Single((await List("botox", null, take: 50)).Items).Id);
+        var none = await List("100%_", null, take: 50);
+        Assert.Equal((0, new InboxListCounts(0, 0, 0, 0)), (none.TotalCount, none.Counts));
+        var searchedCounts = (await List("o", null, take: 50)).Counts; // Omar by name, Sara by her Botox service
+        Assert.Equal(2, searchedCounts.All);
     }
 
     [PostgresFact]

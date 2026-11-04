@@ -1,5 +1,6 @@
 using Omni.App.Entities.Dtos.Inbox;
 using Omni.App.Entities.Models;
+using Omni.App.Entities.Requests.Inbox;
 
 namespace Omni.App.Persistence.Contracts.Inbox;
 
@@ -25,8 +26,9 @@ public interface IConversationRepository
 
     Task<bool> IsInHumanModeAsync(Guid clientId, Guid conversationId, CancellationToken ct = default);
 
-    /// <summary>The Inbox list: newest activity first, with last message preview and unread count.</summary>
-    Task<(IReadOnlyList<ConversationListRow> Items, int TotalCount)> ListInboxAsync(Guid clientId, int skip, int take,
+    /// <summary>The Inbox list: newest activity first, with last message preview and unread count, searched (contact name, phone,
+    /// service) and filtered by tab on the server, plus every tab's count and the unread total over all conversations.</summary>
+    Task<ConversationListPage> ListInboxAsync(Guid clientId, ConversationListRequest request,
         CancellationToken ct = default);
 
     /// <summary>Sets LastReadAt directly in the database (no updated_at bump). Returns the number of rows changed.</summary>

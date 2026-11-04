@@ -3,6 +3,9 @@ using Omni.App.Business.Contracts.Services.BusinessTypes;
 using Omni.App.Common.Statics;
 using Omni.App.Business.Contracts.Services.Clients;
 using Omni.App.Business.Contracts.Services.Inbox;
+using Omni.App.Business.Contracts.Services.Members;
+using Omni.App.Common.Exceptions;
+using Omni.App.Common.Helpers;
 using Omni.App.Business.Contracts.Services.PlatformAdmin;
 using Omni.App.Business.Mappers.PlatformAdmin;
 using Omni.App.Entities.Dtos.BusinessTypes;
@@ -26,9 +29,17 @@ public class ClientAdminService : IClientAdminService
     private readonly IClientProfileService _profile;
     private readonly ICacheManager _cache;
 
+    private readonly IClientRegistrationService _registration;
+    private readonly IInviteService _invites;
+    private readonly ILogger<ClientAdminService> _logger;
+
     public ClientAdminService(IClientAdminRepository repository, IUnitOfWork unitOfWork, TimeProvider time, IInboxSettingsService inboxSettings,
-        IBusinessTypeService businessTypes, IClientProfileService profile, ICacheManager cache)
+        IBusinessTypeService businessTypes, IClientProfileService profile, ICacheManager cache, IClientRegistrationService registration,
+        IInviteService invites, ILogger<ClientAdminService> logger)
     {
+        _registration = registration;
+        _invites = invites;
+        _logger = logger;
         _cache = cache;
         _profile = profile;
         _inboxSettings = inboxSettings;
@@ -89,6 +100,33 @@ public class ClientAdminService : IClientAdminService
         if (request is null) throw new ArgumentException("Send aiEnabled, botId, aiBotNewConversations and aiBotReopenedConversations."); // text-ok: read by the admin portal's developer
         await _inboxSettings.UpdateAccountAsync(id, channelIntegrationId, request, ct);
         return new PlatformAdminChange(id);
+    }
+
+    public async Task<ClientCreated> CreateAsync(CreateClientRequest request, string requestBaseUrl, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var name = Clean(request.OwnerName);
+        if (name?.Length > 200) throw new ArgumentException("members.errors.nameTooLong").WithArgs(200);
+        var opened = await _registration.OpenForOwnerAsync(request.Name, request.BusinessTypeCode, request.Language, request.OwnerEmail,
+            request.PlanCode, ct);
+        var client = opened.Client;
+        try
+        {
+            var invite = await _invites.InviteOwnerAsync(client.Id, request.OwnerEmail, name, requestBaseUrl, ct);
+            return new ClientCreated(client.Id, client.Slug, opened.PlanCode, opened.PlanStarted, true, invite.ExpiresAt);
+        }
+        catch (EmailSendException ex)
+        {
+            // The client is there; the portal offers "Send the invite again".
+            _logger.LogWarning(ex, "Client {ClientId} opened, but the owner invite email couldn't go.", client.Id);
+            return new ClientCreated(client.Id, client.Slug, opened.PlanCode, opened.PlanStarted, false, null);
+        }
+    }
+
+    public async Task<OwnerInviteSent> ResendOwnerInviteAsync(Guid id, string requestBaseUrl, CancellationToken ct)
+    {
+        var invite = await _invites.ResendOwnerInviteAsync(id, requestBaseUrl, ct);
+        return new OwnerInviteSent(id, invite.Email, invite.ExpiresAt);
     }
 
     public async Task<PlatformAdminChange> SetDefaultLanguageAsync(Guid id, string? language, CancellationToken ct)

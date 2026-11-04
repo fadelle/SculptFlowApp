@@ -5,6 +5,7 @@ using Omni.App.Business.Contracts.Services.Inbox;
 using Omni.App.Common.Enums;
 using Omni.App.Common.Exceptions;
 using Omni.App.Controllers.Filters;
+using Omni.App.Entities.Dtos.Inbox;
 using Omni.App.Entities.Requests.Inbox;
 using Omni.App.Entities.Responses.Inbox;
 
@@ -45,13 +46,13 @@ public class ConversationsController : ControllerBase
     /// <summary>Inbox conversation list (left pane) — newest activity first.</summary>
     [Authorize]
     [HttpGet]
-    public async Task<ActionResult<object>> List([FromQuery] int skip = 0, [FromQuery] int take = 50, CancellationToken ct = default)
+    public async Task<ActionResult<ConversationListPage>> List([FromQuery] int skip = 0, [FromQuery] int take = 50, [FromQuery] string? search = null,
+        [FromQuery] string? filter = null, CancellationToken ct = default)
     {
         var clientId = await _clientContext.GetClientIdAsync(ct);
         if (clientId is null) return Forbid();
 
-        var (items, totalCount) = await _conversations.ListAsync(clientId.Value, Math.Max(skip, 0), Math.Clamp(take, 1, 200), ct);
-        return Ok(new { items, totalCount });
+        return Ok(await _conversations.ListAsync(clientId.Value, new ConversationListRequest(search, filter, Math.Max(skip, 0), Math.Clamp(take, 1, 200)), ct));
     }
 
     [Authorize]

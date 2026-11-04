@@ -37,6 +37,22 @@ public class ClientsAdminController : ControllerBase
     public async Task<IActionResult> Get(Guid id, CancellationToken ct) =>
         await _clients.GetAsync(id, ct) is { } client ? Ok(client) : NotFound();
 
+    /// <summary>Opens a client for a sale and emails its owner an invite (QA t6-admin-20). 201 with what happened; 400 with the
+    /// reason before anything is saved.</summary>
+    [HttpPost]
+    public async Task<IActionResult> Create([FromBody] CreateClientRequest request, CancellationToken ct)
+    {
+        var created = await _clients.CreateAsync(request, RequestBaseUrl, ct);
+        return CreatedAtAction(nameof(Get), new { id = created.ClientId }, created);
+    }
+
+    /// <summary>A new owner invite link (the old one stops working). 404 never invited; 400 the owner already joined.</summary>
+    [HttpPost("{id:guid}/owner-invite")]
+    public async Task<IActionResult> ResendOwnerInvite(Guid id, CancellationToken ct) =>
+        Ok(await _clients.ResendOwnerInviteAsync(id, RequestBaseUrl, ct));
+
+    private string RequestBaseUrl => $"{Request.Scheme}://{Request.Host}";
+
     [HttpGet("{id:guid}/counts")]
     public async Task<IActionResult> Counts(Guid id, CancellationToken ct) => Ok(await _clients.CountsAsync(id, ct));
 

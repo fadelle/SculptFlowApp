@@ -20,6 +20,22 @@ public class BotConversationServiceTests
             .ReturnsAsync(new HandoffResult(new ConversationResponse(_conversation, _clientId, Guid.NewGuid(), "whatsapp", "active", "human", false, true, null, null, null, false, DateTimeOffset.UtcNow), handedOff));
 
     [Fact]
+    public async Task A_failed_run_hands_a_live_conversation_over_with_the_bots_message_and_notes_a_test()
+    {
+        // QA t4-ai-03.
+        var run = Run();
+        _conversations.SetupSequence(c => c.HandOverFailedAiAsync(_clientId, _conversation, It.IsAny<CancellationToken>())).ReturnsAsync(true).ReturnsAsync(false);
+        Assert.True(await Sut().RunFailedAsync(run, _conversation));
+        Assert.False(await Sut().RunFailedAsync(run, _conversation));
+        _messages.Verify(m => m.SendHandoffMessageAsync(_clientId, _conversation, run.BotId, "Moved to the team.", It.IsAny<CancellationToken>()), Times.Once);
+
+        var test = Run(testSession: Guid.NewGuid());
+        _tests.Setup(t => t.RunFailedAsync(test, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        Assert.True(await Sut().RunFailedAsync(test, _conversation));
+        _conversations.Verify(c => c.HandOverFailedAiAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
+    }
+
+    [Fact]
     public async Task A_real_handoff_sends_the_bots_message_once_and_a_repeat_sends_nothing()
     {
         var run = Run();

@@ -32,4 +32,8 @@ public interface IAccountTokenRepository
 
     /// <summary>Whether this client already has an open invite for this email (case-insensitive).</summary>
     Task<bool> HasOpenInviteAsync(Guid clientId, string email, DateTimeOffset now, CancellationToken ct = default);
+
+    /// <summary>The client's owner invites that were neither accepted nor revoked, newest first (tracked, so a resend can
+    /// revoke them).</summary>
+    Task<IReadOnlyList<AccountToken>> ListPendingOwnerInvitesAsync(Guid clientId, CancellationToken ct = default);
 }

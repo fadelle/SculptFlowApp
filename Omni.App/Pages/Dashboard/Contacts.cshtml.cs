@@ -1,5 +1,10 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.Extensions.Localization;
+using Omni.App.Business.Contracts.Services.Catalog;
+using Omni.App.Common.Helpers;
+using Omni.App.Entities.Requests.Contacts;
+using Omni.App.Entities.Responses.Catalog;
 using Omni.App.Business.Contracts.Managers;
 using Omni.App.Business.Contracts.Services.Dashboard;
 using Omni.App.Business.Contracts.Services.Contacts;
@@ -9,16 +14,24 @@ using Omni.App.Entities.Dtos.Dashboard;
 
 namespace Omni.App.Pages.Dashboard;
 
-/// <summary>Page 2 — Interested People.</summary>
+/// <summary>Page 2 — Interested People. "Add" opens a popup that adds a contact by hand (QA t3-inbox-12; <c>?add=true</c> opens it
+/// without script), then goes to the new contact's page.</summary>
 public class ContactsModel : PageModel
 {
     private readonly ICurrentClientContext _clientContext;
     private readonly IDashboardService _dashboard;
     private readonly IContactService _contacts;
     private readonly IConfigManager _config;
+    private readonly ICatalogService _catalog;
+    private readonly IStringLocalizer _text;
 
-    public ContactsModel(ICurrentClientContext clientContext, IDashboardService dashboard, IContactService contacts, IConfigManager config)
+    private const string AddedKey = "contacts.add.done";
+
+    public ContactsModel(ICurrentClientContext clientContext, IDashboardService dashboard, IContactService contacts, IConfigManager config,
+        ICatalogService catalog, IStringLocalizer text)
     {
+        _catalog = catalog;
+        _text = text;
         _config = config;
         _clientContext = clientContext;
         _dashboard = dashboard;
@@ -53,7 +66,45 @@ public class ContactsModel : PageModel
     /// <summary>Every source value this client's contacts actually have, for the source filter.</summary>
     public IReadOnlyList<string> AllSources { get; private set; } = Array.Empty<string>();
 
-    public async Task OnGetAsync(CancellationToken ct)
+    /// <summary>The client's active services, for the new contact's optional service.</summary>
+    public IReadOnlyList<ServiceResponse> ActiveServices { get; private set; } = Array.Empty<ServiceResponse>();
+
+    [BindProperty] public string? NewName { get; set; }
+    [BindProperty] public string? NewPhone { get; set; }
+    [BindProperty] public string? NewEmail { get; set; }
+    [BindProperty] public Guid? NewServiceId { get; set; }
+    [BindProperty] public string? NewNotes { get; set; }
+
+    /// <summary>The add popup is open on load (<c>?add=true</c>, or a save that failed: then with <see cref="AddError"/>).</summary>
+    public bool AddFormOpen { get; private set; }
+    public string? AddError { get; private set; }
+
+    public async Task OnGetAsync(bool add, CancellationToken ct)
+    {
+        await LoadAsync(ct);
+        AddFormOpen = add && ClientConfigured;
+    }
+
+    public async Task<IActionResult> OnPostAddAsync(CancellationToken ct)
+    {
+        var client = await _clientContext.GetClientAsync(ct);
+        if (client is null) return RedirectToPage();
+        try
+        {
+            var contact = await _contacts.AddManualAsync(client.Id, new ManualContactRequest(NewName, NewPhone, NewEmail, NewServiceId, NewNotes), ct);
+            StatusMessage = _text[AddedKey].Value;
+            return LocalRedirect($"/dashboard/contacts/{contact.Id}");
+        }
+        catch (ArgumentException ex)
+        {
+            AddError = _text.Localize(ex);
+            AddFormOpen = true;
+            await LoadAsync(ct);
+            return Page();
+        }
+    }
+
+    private async Task LoadAsync(CancellationToken ct)
     {
         var client = await _clientContext.GetClientAsync(ct);
         if (client is null)
@@ -71,6 +122,7 @@ public class ContactsModel : PageModel
         TotalCount = totalCount;
         AllSources = await _contacts.GetDistinctSourcesAsync(client.Id, ct);
         Stages = await _contacts.ListStagesAsync(client.Id, ct);
+        ActiveServices = await _catalog.ListAsync(client.Id, activeOnly: true, ct);
     }
 
     public int TotalPages => (int)Math.Ceiling(TotalCount / (double)PageSize);

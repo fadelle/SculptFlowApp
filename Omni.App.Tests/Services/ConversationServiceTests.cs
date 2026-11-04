@@ -186,6 +186,25 @@ public class ConversationServiceTests
         _notifications.Verify(n => n.CreateAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<NotificationText>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
+    [Fact]
+    public async Task An_ai_that_couldnt_answer_hands_the_conversation_to_the_team_once()
+    {
+        // QA t4-ai-03 / t10-07.
+        var c = Conv();
+        _contacts.Setup(l => l.GetFullNameAsync(_contactId, It.IsAny<CancellationToken>())).ReturnsAsync("Ann Lee");
+
+        Assert.True(await Sut().HandOverFailedAiAsync(_clientId, c.Id));
+        Assert.Equal(ConversationMode.Human, c.Mode);
+        _events.Verify(e => e.Log(_clientId, EventTypes.HumanHandoff, null, c.Id, null, MessageOrigin.System, "{\"reason\":\"ai_failed\"}"), Times.Once);
+        _notifications.Verify(n => n.CreateAsync(_clientId, NotificationType.Handoff, It.Is<NotificationText>(t => TextKit.Reads(t, "AI handed off to your team",
+            "Ann Lee needs your team's attention: the AI assistant couldn't answer (its reply failed or it hit an error). Open the conversation to reply.")),
+            _contactId, c.Id, null, null, $"/inbox?conversationId={c.Id}", It.IsAny<CancellationToken>()), Times.Once);
+
+        Assert.False(await Sut().HandOverFailedAiAsync(_clientId, c.Id)); // already with the team: nothing more
+        _notifications.Verify(n => n.CreateAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<NotificationText>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
+        Assert.Null(await Sut().HandOverFailedAiAsync(_clientId, Guid.NewGuid()));
+    }
+
     [Theory]
     [InlineData(UsageFailureReason.InsufficientFunds, "Ann Lee needs your team's attention: the AI assistant didn't reply because your plan's credit and wallet can't cover it. See Settings → Billing.")]
     [InlineData(UsageFailureReason.RateNotFound, "Ann Lee needs your team's attention: the AI assistant didn't reply because AI replies aren't priced for your account yet. Please contact support.")]
@@ -347,11 +366,16 @@ public class ConversationServiceTests
     }
 
     [Fact]
-    public async Task List_delegates_to_the_repository()
+    public async Task List_tidies_the_search_and_tab_and_refuses_an_unknown_tab()
     {
-        _conversations.Setup(r => r.ListInboxAsync(_clientId, 2, 3, It.IsAny<CancellationToken>()))
-            .ReturnsAsync((new List<ConversationListRow>() as IReadOnlyList<ConversationListRow>, 9));
-        var (_, total) = await Sut().ListAsync(_clientId, 2, 3);
-        Assert.Equal(9, total);
+        var page = new ConversationListPage([], 9, new InboxListCounts(9, 1, 2, 3), 4);
+        _conversations.Setup(r => r.ListInboxAsync(_clientId, new ConversationListRequest("ann", InboxListFilter.Needs, 2, 3), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(page);
+        _conversations.Setup(r => r.ListInboxAsync(_clientId, new ConversationListRequest(null, InboxListFilter.All, 0, 50), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(page with { TotalCount = 1 });
+
+        Assert.Same(page, await Sut().ListAsync(_clientId, new ConversationListRequest("  ann ", " NEEDS ", 2, 3)));
+        Assert.Equal(1, (await Sut().ListAsync(_clientId, new ConversationListRequest(" ", null, 0, 50))).TotalCount);
+        await Assert.ThrowsAsync<ArgumentException>(() => Sut().ListAsync(_clientId, new ConversationListRequest(null, "spam", 0, 50)));
     }
 }

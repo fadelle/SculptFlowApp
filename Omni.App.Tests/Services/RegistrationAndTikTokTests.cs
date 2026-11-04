@@ -16,6 +16,7 @@ public class ClientRegistrationServiceTests
     private readonly Mock<IKnowledgeSettingsService> _knowledge = new();
     private readonly Mock<ISubscriptionService> _subscriptions = new();
     private readonly Mock<IConfigManager> _config = new();
+    private readonly Mock<IPlanService> _plans = new();
     private readonly Mock<IBusinessTypeService> _businessTypes = TextKit.PermissiveBusinessTypes();
 
     public ClientRegistrationServiceTests()
@@ -33,7 +34,7 @@ public class ClientRegistrationServiceTests
     }
 
     private ClientRegistrationService Sut() => new(_clients.Object, _accounts.Object, _uow.Object, _users.Object, _knowledge.Object, NullLogger<ClientRegistrationService>.Instance, _subscriptions.Object, _config.Object,
-        _businessTypes.Object, TextKit.Context());
+        _businessTypes.Object, TextKit.Context(), _plans.Object);
 
     [Fact]
     public async Task With_signups_switched_off_neither_registration_creates_anything()
@@ -100,6 +101,61 @@ public class ClientRegistrationServiceTests
         _knowledge.Verify(k => k.GetAsync(client.Id, It.IsAny<CancellationToken>()), Times.Once);
         _tx.Verify(t => t.CommitAsync(It.IsAny<CancellationToken>()), Times.Once);
         _subscriptions.Verify(s => s.StartAsync(It.Is<StartSubscriptionRequest>(q => q.ClientId == client.Id && q.PlanCode == "starter" && !q.ChargeFirstPeriod), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    // ---- the admin portal opens a client (QA t6-admin-20) -------------------------------------------------------------
+
+    [Fact]
+    public async Task The_portal_opens_a_client_without_a_user_in_its_language_on_the_chosen_plan_even_with_signups_closed()
+    {
+        _config.SetupGet(c => c.AccountsSignupEnabled).Returns(false);
+        _plans.Setup(p => p.GetAsync("growth", It.IsAny<CancellationToken>())).ReturnsAsync(Omni.App.Tests.Pages.PageKit.Blank<PlanResponse>() with { Code = "growth", IsActive = true });
+        Client? client = null;
+        _clients.Setup(c => c.Add(It.IsAny<Client>())).Callback<Client>(c => client = c);
+        BillingAccount? account = null;
+        _accounts.Setup(a => a.Add(It.IsAny<BillingAccount>())).Callback<BillingAccount>(a => account = a);
+
+        var opened = await Sut().OpenForOwnerAsync("  Glow Client ", $" {TextKit.Clinic} ", " AR ", " olga@x.com ", " growth ");
+
+        Assert.Same(client, opened.Client);
+        Assert.Equal(("Glow Client", "glow-client", "olga@x.com", TextKit.Clinic, "ar", true), (client!.Name, client.Slug, client.Email, client.BusinessTypeCode, client.DefaultLanguage, client.IsActive));
+        Assert.Equal(client.Id, account!.ClientId);
+        Assert.Equal(("growth", true), (opened.PlanCode, opened.PlanStarted));
+        _clients.Verify(c => c.AddMembership(It.IsAny<ClientUser>()), Times.Never);
+        _users.Verify(u => u.CreateAsync(It.IsAny<AppUser>()), Times.Never);
+        _knowledge.Verify(k => k.GetAsync(client.Id, It.IsAny<CancellationToken>()), Times.Once);
+        _tx.Verify(t => t.CommitAsync(It.IsAny<CancellationToken>()), Times.Once);
+        _subscriptions.Verify(s => s.StartAsync(It.Is<StartSubscriptionRequest>(q => q.ClientId == client.Id && q.PlanCode == "growth" && !q.ChargeFirstPeriod
+            && q.Source == BillingSource.Admin), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Without_a_plan_the_portal_uses_the_signup_plan_and_a_plan_that_fails_still_opens_the_client()
+    {
+        _subscriptions.Setup(s => s.StartAsync(It.IsAny<StartSubscriptionRequest>(), It.IsAny<CancellationToken>())).ThrowsAsync(new InvalidOperationException("no"));
+        var opened = await Sut().OpenForOwnerAsync("Glow", TextKit.Clinic, null, "olga@x.com", null);
+        Assert.Equal(("starter", false, "en"), (opened.PlanCode, opened.PlanStarted, opened.Client.DefaultLanguage));
+        _tx.Verify(t => t.CommitAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Theory]
+    [InlineData(" ", "olga@x.com", "general", null, null, "signup.errors.clientNameRequired")]
+    [InlineData("Glow", "not-an-email", "general", null, null, "signup.errors.emailInvalid")]
+    [InlineData("Glow", "olga@x.com", "retired", null, null, "signup.errors.businessTypeRequired")]
+    [InlineData("Glow", "olga@x.com", "general", "xx", null, "languages.errors.unknown")]
+    [InlineData("Glow", "olga@x.com", "general", null, "gone", "clients.errors.unknownPlan")]
+    [InlineData("Glow", "taken@x.com", "general", null, null, "members.errors.emailTaken")]
+    public async Task The_portal_is_refused_before_anything_is_saved(string name, string email, string type, string? language, string? plan, string key)
+    {
+        _businessTypes.Setup(t => t.IsActiveAsync("retired", It.IsAny<CancellationToken>())).ReturnsAsync(false);
+        _plans.Setup(p => p.GetAsync("gone", It.IsAny<CancellationToken>())).ReturnsAsync(Omni.App.Tests.Pages.PageKit.Blank<PlanResponse>() with { Code = "gone", IsActive = false });
+        _users.Setup(u => u.FindByEmailAsync("taken@x.com")).ReturnsAsync(new AppUser());
+
+        var ex = await Assert.ThrowsAsync<ArgumentException>(() => Sut().OpenForOwnerAsync(name, type, language, email, plan));
+
+        Assert.Equal(key, ex.Message);
+        _uow.Verify(u => u.BeginTransactionAsync(It.IsAny<CancellationToken>()), Times.Never);
+        _clients.Verify(c => c.Add(It.IsAny<Client>()), Times.Never);
     }
 
     [Theory]

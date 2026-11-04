@@ -141,7 +141,44 @@ public class ClientAdminServiceTests
     private readonly Mock<IClientProfileService> _profile = new();
     private readonly Mock<ICacheManager> _cache = new();
 
-    private ClientAdminService Sut() => new(_repo.Object, _uow.Object, TimeProvider.System, _inboxSettings.Object, _businessTypes.Object, _profile.Object, _cache.Object);
+    private readonly Mock<IClientRegistrationService> _registration = new();
+    private readonly Mock<IInviteService> _invites = new();
+
+    private ClientAdminService Sut() => new(_repo.Object, _uow.Object, TimeProvider.System, _inboxSettings.Object, _businessTypes.Object, _profile.Object, _cache.Object,
+        _registration.Object, _invites.Object, Microsoft.Extensions.Logging.Abstractions.NullLogger<ClientAdminService>.Instance);
+
+    [Fact]
+    public async Task Opening_a_client_goes_through_registration_then_invites_its_owner()
+    {
+        // QA t6-admin-20.
+        var client = new Client { Id = Guid.NewGuid(), Slug = "glow", Name = "Glow" };
+        _registration.Setup(r => r.OpenForOwnerAsync("Glow", TextKit.Clinic, "ar", "olga@x.com", "growth", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new OpenedClient(client, "growth", true));
+        var expires = DateTimeOffset.UtcNow.AddDays(7);
+        _invites.Setup(i => i.InviteOwnerAsync(client.Id, "olga@x.com", "Olga", "http://app", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new InviteResponse(Guid.NewGuid(), "olga@x.com", "Olga", DateTimeOffset.UtcNow, expires, false));
+
+        var created = await Sut().CreateAsync(new CreateClientRequest("Glow", TextKit.Clinic, "olga@x.com", " Olga ", "growth", "ar"), "http://app", default);
+
+        Assert.Equal(new ClientCreated(client.Id, "glow", "growth", true, true, expires), created);
+    }
+
+    [Fact]
+    public async Task A_client_whose_owner_email_failed_is_still_reported_as_opened_and_a_refusal_opens_nothing()
+    {
+        var client = new Client { Id = Guid.NewGuid(), Slug = "glow" };
+        _registration.Setup(r => r.OpenForOwnerAsync(It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new OpenedClient(client, null, false));
+        _invites.Setup(i => i.InviteOwnerAsync(client.Id, It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new EmailSendException("down"));
+        var request = new CreateClientRequest("Glow", TextKit.Clinic, "olga@x.com", null, null, null);
+
+        Assert.Equal(new ClientCreated(client.Id, "glow", null, false, false, null), await Sut().CreateAsync(request, "http://app", default));
+
+        // A too-long owner name is refused before the client is opened.
+        await Assert.ThrowsAsync<ArgumentException>(() => Sut().CreateAsync(request with { OwnerName = new string('a', 201) }, "http://app", default));
+        _registration.Verify(r => r.OpenForOwnerAsync(It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
 
     [Fact]
     public async Task Business_type_preview_and_change_go_through_the_business_type_service()
@@ -520,6 +557,19 @@ public class AutomationCleanupServiceTests
         _tx.Verify(t => t.CommitAsync(It.IsAny<CancellationToken>()), Times.Once);
         _cache.Verify(c => c.RemoveByPrefixAsync(CacheKeys.WhatsAppRoutingPrefix, It.IsAny<CancellationToken>()), Times.Once);
         _cache.Verify(c => c.RemoveAsync(CacheKeys.Entitlements(_clientId), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Theory]
+    [InlineData("owner-x@omni-automation.test", AutomationDeleteOutcome.Deleted)]
+    [InlineData("owner@real.com", AutomationDeleteOutcome.NotAutomationClient)]
+    [InlineData(null, AutomationDeleteOutcome.NotAutomationClient)]
+    public async Task A_client_nobody_joined_yet_is_automation_data_only_when_its_invited_owner_is_a_test_address(string? email, AutomationDeleteOutcome expected)
+    {
+        // QA t6-admin-20: a client the portal opened has no users until its owner accepts.
+        _clients.Setup(c => c.GetReadOnlyAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(new Client { Id = _clientId, Name = "[Automation] New", Email = email });
+        _clients.Setup(c => c.ListMemberUserIdsAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(new List<string>());
+        _users.Setup(u => u.ListEmailsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>())).ReturnsAsync(Array.Empty<string>());
+        Assert.Equal(expected, await Sut().DeleteClientAsync(_clientId));
     }
 
     [Theory]

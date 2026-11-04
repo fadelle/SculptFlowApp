@@ -257,4 +257,93 @@ public class InviteServiceTests
         _clients.Verify(c => c.AddMembership(It.IsAny<ClientUser>()), Times.Never);
         Assert.Null(invite.UsedAt);
     }
+
+    // ---- owner invites (QA t6-admin-20) ----------------------------------------------------------------------------
+
+    private void OwnerEmails() =>
+        _emails.Setup(e => e.SendOwnerInviteAsync(It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<Client>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .Callback<string, string?, Client, string, int, CancellationToken>((_, _, _, link, _, _) => _links.Add(link));
+
+    [Fact]
+    public async Task The_admin_portal_invites_a_new_clients_owner_and_an_earlier_owner_link_stops_working()
+    {
+        OwnerEmails();
+        var earlier = new AccountToken { Id = Guid.NewGuid(), Purpose = AccountTokenPurpose.OwnerInvite, ClientId = _clientId, Email = "old@x.com" };
+        _tokens.Setup(t => t.ListPendingOwnerInvitesAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(new[] { earlier });
+
+        var r = await Sut().InviteOwnerAsync(_clientId, " Olga@X.com ", " Olga ", "http://localhost");
+
+        var invite = Assert.Single(_added);
+        Assert.Equal((AccountTokenPurpose.OwnerInvite, _clientId, "Olga@X.com", "Olga", _now.AddDays(7), (string?)null),
+            (invite.Purpose, invite.ClientId, invite.Email, invite.FullName, invite.ExpiresAt, invite.CreatedByUserId));
+        Assert.Equal(_now, earlier.RevokedAt);
+        Assert.Equal((invite.Id, _now.AddDays(7)), (r.Id, r.ExpiresAt));
+        Assert.Equal(invite.TokenHash, AccountTokenCodec.Hash(TokenOf(Assert.Single(_links))));
+        _emails.Verify(e => e.SendOwnerInviteAsync("Olga@X.com", "Olga", _client, It.Is<string>(l => l.Contains("/Account/AcceptInvite")), 7, It.IsAny<CancellationToken>()), Times.Once);
+        _entitlements.VerifyNoOtherCalls();   // the owner needs no seat check
+        _tx.Verify(t => t.CommitAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task An_owner_invite_is_refused_for_a_used_email_a_client_with_its_owner_or_an_unknown_client()
+    {
+        _users.Setup(u => u.FindByEmailAsync("taken@x.com")).ReturnsAsync(new AppUser());
+        _tokens.Setup(t => t.ListPendingOwnerInvitesAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(Array.Empty<AccountToken>());
+        Assert.Equal("members.errors.emailTaken", (await Assert.ThrowsAsync<ArgumentException>(() => Sut().InviteOwnerAsync(_clientId, "taken@x.com", null, "http://x"))).Message);
+        Assert.Equal("members.errors.emailInvalid", (await Assert.ThrowsAsync<ArgumentException>(() => Sut().InviteOwnerAsync(_clientId, "nope", null, "http://x"))).Message);
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => Sut().InviteOwnerAsync(Guid.NewGuid(), "a@x.com", null, "http://x"));
+        _clients.Setup(c => c.HasActiveOwnerAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        Assert.Equal("clients.errors.ownerExists", (await Assert.ThrowsAsync<ArgumentException>(() => Sut().InviteOwnerAsync(_clientId, "a@x.com", null, "http://x"))).Message);
+        // After the owner joined, a resend says so (their invite is used, not missing).
+        Assert.Equal("clients.errors.ownerExists", (await Assert.ThrowsAsync<ArgumentException>(() => Sut().ResendOwnerInviteAsync(_clientId, "http://x"))).Message);
+        _clients.Setup(c => c.HasActiveOwnerAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(false);
+        Assert.Equal("clients.errors.noOwnerInvite", (await Assert.ThrowsAsync<KeyNotFoundException>(() => Sut().ResendOwnerInviteAsync(_clientId, "http://x"))).Message);
+        Assert.Empty(_added);
+    }
+
+    [Fact]
+    public async Task Resending_an_owner_invite_sends_a_new_link_to_the_same_person_and_a_failed_email_keeps_the_old_link()
+    {
+        OwnerEmails();
+        var pending = new AccountToken { Id = Guid.NewGuid(), Purpose = AccountTokenPurpose.OwnerInvite, ClientId = _clientId, Email = "olga@x.com", FullName = "Olga" };
+        _tokens.Setup(t => t.ListPendingOwnerInvitesAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(new[] { pending });
+
+        await Sut().ResendOwnerInviteAsync(_clientId, "http://localhost");
+        Assert.Equal(("olga@x.com", "Olga"), (Assert.Single(_added).Email, _added[0].FullName));
+        Assert.Equal(_now, pending.RevokedAt);
+
+        pending.RevokedAt = null;
+        _emails.Setup(e => e.SendOwnerInviteAsync(It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<Client>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new EmailSendException("down"));
+        await Assert.ThrowsAsync<EmailSendException>(() => Sut().ResendOwnerInviteAsync(_clientId, "http://localhost"));
+        _tx.Verify(t => t.RollbackAsync(It.IsAny<CancellationToken>()), Times.Once);
+        _uow.Verify(u => u.DiscardChanges(), Times.Once);
+    }
+
+    [Fact]
+    public async Task Accepting_an_owner_invite_creates_the_client_user_without_a_seat_check_but_never_a_second_owner()
+    {
+        var invite = Stored("raw", "olga@x.com");
+        invite.Purpose = AccountTokenPurpose.OwnerInvite;
+        Assert.NotNull(await Sut().GetLandingAsync("raw"));
+
+        var user = await Sut().AcceptAsync("raw", "Olga", "Passw0rd!", "Passw0rd!");
+        Assert.Equal((UserRole.Client, "olga@x.com", _now), (user.Role, user.Email, invite.UsedAt!.Value));
+        _entitlements.VerifyNoOtherCalls();
+
+        var again = Stored("raw2", "other@x.com");
+        again.Purpose = AccountTokenPurpose.OwnerInvite;
+        _clients.Setup(c => c.HasActiveOwnerAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        Assert.Equal("acceptInvite.errors.linkInvalid",
+            (await Assert.ThrowsAsync<InvalidOperationException>(() => Sut().AcceptAsync("raw2", "Other", "Passw0rd!", "Passw0rd!"))).Message);
+        Assert.Null(again.UsedAt);
+    }
+
+    [Fact]
+    public async Task A_password_reset_link_is_not_an_invite()
+    {
+        var reset = Stored("raw");
+        reset.Purpose = AccountTokenPurpose.PasswordReset;
+        Assert.Null(await Sut().GetLandingAsync("raw"));
+    }
 }

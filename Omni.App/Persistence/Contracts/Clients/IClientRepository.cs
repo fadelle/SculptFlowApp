@@ -33,6 +33,9 @@ public interface IClientRepository
     /// <summary>Seats in use: active memberships of active client and member users (the max_users entitlement).</summary>
     Task<int> CountSeatsInUseAsync(Guid clientId, CancellationToken ct = default);
 
+    /// <summary>Whether the client has an active client user (its owner) with an active membership.</summary>
+    Task<bool> HasActiveOwnerAsync(Guid clientId, CancellationToken ct = default);
+
     Task<IReadOnlyList<ClientSummaryRow>> ListByNamePrefixAsync(string namePrefix, CancellationToken ct = default);
 
     Task<IReadOnlyList<string>> ListMemberUserIdsAsync(Guid clientId, CancellationToken ct = default);

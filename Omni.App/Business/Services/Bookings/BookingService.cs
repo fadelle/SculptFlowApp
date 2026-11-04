@@ -122,15 +122,15 @@ public class BookingService : IBookingService
     }
 
     /// <summary>Tells the client's open calendars to re-fetch (best-effort SignalR) AND — for created/rescheduled/canceled — creates
-    /// the matching BOOKING_* notification (see INotificationService; "status_changed" covers attended/no_show/confirmed, which
-    /// aren't in the notification list). Called only once the booking row is actually committed — never on a mere request.</summary>
+    /// the matching BOOKING_* notification (see INotificationService; "status_changed" covers attended/no_show/confirmed and
+    /// "updated" a member's edit without a time change, which aren't in the notification list). Called only once the booking row is actually committed — never on a mere request.</summary>
     private async Task NotifyChangedAsync(Guid clientId, BookingResponse booking, string change, CancellationToken ct)
     {
         try { await _notifier.BookingChangedAsync(clientId, booking.Id, change, ct); }
         catch { /* best effort */ }
 
         // Only AFTER the booking change is already committed — TriggerBookingSyncAsync itself decides
-        // whether "change" maps to a real external-calendar operation (created/rescheduled/canceled only) and
+        // whether "change" maps to a real external-calendar operation (created/rescheduled/updated/canceled) and
         // never throws, so a calendar problem can never affect the booking operation that already succeeded.
         await _calendarSync.TriggerBookingSyncAsync(clientId, booking, change, ct);
 
@@ -262,6 +262,58 @@ public class BookingService : IBookingService
         var updateResponse = await ToResponseAsync(booking, ct);
         await NotifyChangedAsync(clientId, updateResponse, status == BookingStatus.Canceled ? "canceled" : "status_changed", ct);
         return updateResponse;
+    }
+
+    public async Task<BookingResponse?> UpdateAsync(Guid clientId, Guid id, UpdateBookingRequest request, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        await EnsureBookingsIncludedAsync(clientId, ct);
+
+        var booking = await _bookings.GetAsync(clientId, id, ct);
+        if (booking is null) return null;
+
+        if (booking.Status != BookingStatus.Booked && booking.Status != BookingStatus.Confirmed)
+        {
+            throw new ArgumentException("bookings.errors.cantEdit").WithArgs(TextArg.Value(booking.Status));
+        }
+        var start = request.ScheduledStart.ToUniversalTime();
+        var end = request.ScheduledEnd?.ToUniversalTime();
+        if (end is not null && end <= start)
+        {
+            throw new ArgumentException("bookings.errors.endBeforeStart");
+        }
+        var location = string.IsNullOrWhiteSpace(request.LocationType) ? null : request.LocationType.Trim();
+        // An unknown place the booking already had (another tool may have set one) can stay; a new one must be a known value.
+        if (location is not null && location != booking.LocationType && !BookingLocationType.All.Contains(location))
+        {
+            throw new ArgumentException("bookings.errors.unknownLocation").WithArgs(location);
+        }
+        // Only a CHANGE of service is checked: keeping a service that was deactivated since must keep working.
+        if (request.ServiceId is { } serviceId && serviceId != booking.ServiceId)
+        {
+            await _services.EnsureUsableAsync(clientId, serviceId, ct);
+        }
+
+        var moved = start != booking.ScheduledStart || end != booking.ScheduledEnd;
+        var previousStart = booking.ScheduledStart;
+        booking.ScheduledStart = start;
+        booking.ScheduledEnd = end;
+        booking.ServiceId = request.ServiceId;
+        booking.LocationType = location;
+        booking.Notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim();
+        booking.UpdatedAt = DateTimeOffset.UtcNow;
+
+        if (moved)
+        {
+            _events.Log(clientId, EventTypes.BookingRescheduled, contactId: booking.ContactId, bookingId: booking.Id,
+                metadataJson: JsonSerializer.Serialize(new { by = "member", from = previousStart, to = start }));
+        }
+
+        await _unitOfWork.SaveChangesAsync(ct);
+        var response = await ToResponseAsync(booking, ct);
+        // "updated" refreshes open calendars and the connected calendars' event without a notification.
+        await NotifyChangedAsync(clientId, response, moved ? "rescheduled" : "updated", ct);
+        return response;
     }
 
     public async Task<BookingResponse?> RescheduleAsync(

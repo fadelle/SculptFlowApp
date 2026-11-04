@@ -14,6 +14,7 @@ public record BotTestNote(string Key, IReadOnlyList<string> Args)
     public const string HandedOffNoReasonKey = "bots.test.notes.handedOffNoReason";
     public const string ReplyRefusedKey = "bots.test.notes.replyRefused";
     public const string NotReachableKey = "bots.test.notes.notReachable";
+    public const string ErrorKey = "bots.test.notes.error";
 
     public static BotTestNote Of(string key, params string[] args) => new(key, args);
 }

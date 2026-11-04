@@ -17,4 +17,8 @@ public interface IBotConversationService
     /// <summary>Hands the conversation to the team; true when this call made the change, false when it was already with the
     /// team (or the test run had already handed off), null when the conversation isn't the client's.</summary>
     Task<bool?> HandOffAsync(BotRunContext run, Guid conversationId, string? reason, CancellationToken ct = default);
+
+    /// <summary>The bot's run failed: a live conversation is handed to the team (once; null when it doesn't exist), a test
+    /// session gets an error note. True when this call changed something.</summary>
+    Task<bool?> RunFailedAsync(BotRunContext run, Guid conversationId, CancellationToken ct = default);
 }

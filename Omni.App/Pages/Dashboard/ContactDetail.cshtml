@@ -56,7 +56,10 @@ else
 
     <div class="contact-grid">
         <section class="au-panel au-panel--round au-panel--pad" aria-labelledby="contact-details-title">
-            <div class="au-panel__head"><h3 class="au-panel__title" id="contact-details-title">@T["contactDetail.details.title"]</h3></div>
+            <div class="au-panel__head">
+                <h3 class="au-panel__title" id="contact-details-title">@T["contactDetail.details.title"]</h3>
+                <a href="#contact-edit-overlay" class="au-btn au-btn--outlined au-btn--sm" data-modal-open="contact-edit-overlay" id="contact-edit-open"><span class="au-icon" aria-hidden="true">edit</span>@T["common.edit"]</a>
+            </div>
             <dl class="au-detail-rows">
                 <div class="au-detail-row"><dt>@T["contacts.table.phone"]</dt><dd><span dir="ltr">@(contact.Phone ?? "—")</span></dd></div>
                 <div class="au-detail-row"><dt>@T["contactDetail.details.email"]</dt><dd><span dir="ltr">@(contact.Email ?? "—")</span></dd></div>
@@ -218,6 +221,53 @@ else
             </div>
         }
     </section>
+
+    @* Edit details (QA t3-inbox-12; popup, modal.js). A failed save shows the page again with the popup open and the reason. *@
+    <div class="bm-overlay" data-modal id="contact-edit-overlay" hidden="@(!Model.EditFormOpen)">
+        <div class="card form-modal" role="dialog" aria-modal="true" aria-labelledby="contact-edit-title">
+            <div class="modal-head">
+                <h3 id="contact-edit-title" class="card-title">@T["contactDetail.edit.title"]</h3>
+                <button type="button" class="au-icon-btn" data-modal-close aria-label="@T["common.close"]" title="@T["common.close"]"><span class="au-icon" aria-hidden="true">close</span></button>
+            </div>
+            @if (Model.EditError is not null)
+            {
+                <partial name="_Messages" model="new PageMessagesModel(null, Model.EditError)" />
+            }
+            <form method="post" asp-page-handler="Details" asp-route-id="@contact.Id" id="contact-edit-form">
+                <div class="au-form-grid">
+                    <div class="au-form-field au-span-2">
+                        <label class="au-form-label" for="contact-edit-name">@T["contacts.add.name"]</label>
+                        <input type="text" name="EditName" id="contact-edit-name" value="@Model.EditName" class="au-input" maxlength="200" dir="auto" autocomplete="off" />
+                    </div>
+                    <div class="au-form-field">
+                        <label class="au-form-label" for="contact-edit-phone">@T["contacts.table.phone"]</label>
+                        <input type="tel" name="EditPhone" id="contact-edit-phone" value="@Model.EditPhone" class="au-input" maxlength="30" dir="ltr" autocomplete="off" />
+                    </div>
+                    <div class="au-form-field">
+                        <label class="au-form-label" for="contact-edit-email">@T["contactDetail.details.email"]</label>
+                        <input type="email" name="EditEmail" id="contact-edit-email" value="@Model.EditEmail" class="au-input" maxlength="200" dir="ltr" autocomplete="off" />
+                    </div>
+                    <div class="au-form-field">
+                        <label class="au-form-label" for="contact-edit-city">@T["contactDetail.details.city"]</label>
+                        <input type="text" name="EditCity" id="contact-edit-city" value="@Model.EditCity" class="au-input" maxlength="200" dir="auto" autocomplete="off" />
+                    </div>
+                    <div class="au-form-field">
+                        <label class="au-form-label" for="contact-edit-followup">@T["contacts.table.nextFollowUp"]</label>
+                        <input type="date" name="EditFollowup" id="contact-edit-followup" value="@Model.EditFollowup?.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)" class="au-input" dir="ltr" />
+                    </div>
+                    <div class="au-form-field au-span-2">
+                        <label class="au-form-label" for="contact-edit-notes">@T["contactDetail.details.notes"]</label>
+                        <textarea name="EditNotes" id="contact-edit-notes" rows="3" class="au-textarea" maxlength="2000" dir="auto">@Model.EditNotes</textarea>
+                    </div>
+                </div>
+                <p class="au-help">@T["contactDetail.edit.help"]</p>
+                <div class="au-form-actions">
+                    <button type="button" class="au-btn au-btn--text" data-modal-close>@T["common.cancel"]</button>
+                    <button type="submit" class="au-btn au-btn--primary">@T["common.saveChanges"]</button>
+                </div>
+            </form>
+        </div>
+    </div>
 
     @* Add / edit an order (popup; modal.js opens it, contact-orders.js switches it to editing from the Edit button's data-order-*). *@
     <div class="bm-overlay" data-modal id="order-overlay" hidden="@(!Model.OrderFormOpen)">

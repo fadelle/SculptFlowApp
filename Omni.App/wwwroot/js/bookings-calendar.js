@@ -10,7 +10,8 @@
         monthData: null,             // the last GET /api/bookings/calendar response (covers the grid AND the drawer)
         drawerDate: null,            // "yyyy-MM-dd" the day drawer is currently showing, or null
         contactSearchTimer: null,
-        selectedContact: null           // { id, label } chosen in the New Booking form
+        selectedContact: null,          // { id, label } chosen in the New Booking form
+        editingId: null                 // the booking the dialog is editing (QA t5-ops-04), null = a new booking
     };
 
     function $(id) { return document.getElementById(id); }
@@ -297,6 +298,7 @@
         $('cal-appt-notes').textContent = '…';
         $('cal-appt-notes-row').hidden = false;
         $('cal-appt-status').value = a.status;
+        $('cal-appt-edit').hidden = !canEdit(a.status);
         $('cal-appt-error').textContent = '';
         $('cal-appt-full').href = '/dashboard/bookings/' + a.id;
         $('cal-appt-contact').href = '/dashboard/contacts/' + a.contactId;
@@ -321,6 +323,9 @@
         state.openBooking = null;
         $('cal-appt-overlay').hidden = true;
     }
+
+    /** Only a booked or confirmed booking can be edited (the server refuses the rest). */
+    function canEdit(status) { return status === 'booked' || status === 'confirmed'; }
 
     function saveBookingStatus() {
         var a = state.openBooking;
@@ -350,6 +355,7 @@
     // ---------------------------------------------------------------- new booking
 
     function openNewBooking(prefillDateIso) {
+        setDialogMode(null);
         $('cal-new-error').textContent = '';
         clearContact();
         $('cal-new-date').value = prefillDateIso || state.drawerDate || todayIso();
@@ -365,6 +371,55 @@
         $('cal-new-contact-search').focus();
     }
 
+    /** Switches the dialog between a new booking and editing one: title, button label, and whether the contact can change. */
+    function setDialogMode(editingId) {
+        state.editingId = editingId;
+        var editing = !!editingId;
+        $('cal-new-title').textContent = $('cal-new-title').getAttribute(editing ? 'data-title-edit' : 'data-title-new');
+        $('cal-new-save').textContent = $('cal-new-save').getAttribute(editing ? 'data-label-edit' : 'data-label-new');
+        $('cal-new-contact-clear').hidden = editing;
+        $('cal-new-contact-add-open').hidden = editing;
+        closeAddContact();
+    }
+
+    /** "2026-11-04T07:00:00Z" seen in an IANA zone -> { date: "2026-11-04", time: "09:00" }. */
+    function zonedParts(iso, timeZone) {
+        var parts = new Intl.DateTimeFormat('en-CA', {
+            timeZone: timeZone || 'UTC', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
+        }).formatToParts(new Date(iso));
+        var get = function (t) { return parts.find(function (p) { return p.type === t; }).value; };
+        return { date: get('year') + '-' + get('month') + '-' + get('day'), time: get('hour') + ':' + get('minute') };
+    }
+
+    /** Opens the dialog on an existing booking (the details popup's "Edit", or ?edit={id} from the booking's own page):
+        its time in the calendar's timezone, duration, service, place and notes. The contact stays. */
+    function openEditBooking(id) {
+        return api('GET', '/api/bookings/' + id).then(function (full) {
+            if (!canEdit(full.status)) { showMessage(omniText.t('bookings.edit.notEditable'), 'error'); return; }
+            setDialogMode(full.id);
+            $('cal-new-error').textContent = '';
+            clearContact();
+            pickContact({ id: full.contactId, fullName: full.contactFullName, phone: null, serviceId: null });
+            var timeZone = gridTimeZone() || OmniTime.viewerTimeZone || 'UTC';
+            var when = zonedParts(full.scheduledStart, timeZone);
+            $('cal-new-date').value = when.date;
+            $('cal-new-time').value = when.time;
+            $('cal-new-tz-hint').textContent = gridTimeZone() ? (currentView() === 'mine' ? omniText.t('bookings.new.tzMine', [timeZone]) : omniText.t('bookings.new.tzClient', [timeZone])) : '';
+            var minutes = full.scheduledEnd ? Math.round((new Date(full.scheduledEnd) - new Date(full.scheduledStart)) / 60000) : 0;
+            $('cal-new-duration').value = minutes > 0 ? String(minutes) : '';
+            var location = $('cal-new-location');
+            if (full.locationType && !Array.prototype.some.call(location.options, function (o) { return o.value === full.locationType; })) {
+                location.appendChild(el('option', { value: full.locationType, text: full.locationType })); // a place another tool set
+            }
+            location.value = full.locationType || '';
+            $('cal-new-notes').value = full.notes || '';
+            updateRange();
+            loadServices(full.serviceId, full.serviceName);
+            $('cal-new-overlay').hidden = false;
+            $('cal-new-time').focus();
+        }).catch(function (e) { showMessage(e.message, 'error'); });
+    }
+
     /** "09:00 – 09:30" under the date/time/duration row. */
     function updateRange() {
         var time = $('cal-new-time').value;
@@ -374,12 +429,16 @@
 
     function closeNewBooking() { $('cal-new-overlay').hidden = true; }
 
-    function loadServices() {
+    function loadServices(selectedId, selectedName) {
         var sel = $('cal-new-service');
         api('GET', '/api/services').then(function (services) {
             sel.textContent = '';
             sel.appendChild(el('option', { value: '', text: omniText.t('bookings.new.noService') }));
             services.forEach(function (p) { sel.appendChild(el('option', { value: p.id, text: p.name })); });
+            if (selectedId && !services.some(function (p) { return p.id === selectedId; })) {
+                sel.appendChild(el('option', { value: selectedId, text: selectedName || omniText.t('contactDetail.noService') }));
+            }
+            sel.value = selectedId || '';
         }).catch(function (e) { showMessage(e.message, 'error'); });
     }
 
@@ -390,7 +449,16 @@
             box.textContent = '';
             box.hidden = false;
             var items = (res && res.items) || [];
-            if (!items.length) { box.appendChild(el('div', { class: 'picker-empty', text: omniText.t('bookings.new.noMatches') })); return; }
+            // The list covers the "+ New contact" link under the search, so it carries the same choice last (QA t5-ops-04).
+            var addOption = el('button', { type: 'button', class: 'picker-option picker-option--add', id: 'cal-new-contact-add-option', onclick: openAddContact }, [
+                el('span', { class: 'au-icon', 'aria-hidden': 'true', text: 'person_add' }),
+                el('span', { class: 'picker-option-name', text: omniText.t('bookings.new.addContact') })
+            ]);
+            if (!items.length) {
+                box.appendChild(el('div', { class: 'picker-empty', text: omniText.t('bookings.new.noMatches') }));
+                box.appendChild(addOption);
+                return;
+            }
             items.forEach(function (contact) {
                 box.appendChild(el('button', { type: 'button', class: 'picker-option', role: 'option', onclick: function () { pickContact(contact); } }, [
                     el('span', { class: 'avatar-sm', text: initialOf(contact.fullName) }),
@@ -400,6 +468,7 @@
                     ])
                 ]));
             });
+            box.appendChild(addOption);
         }).catch(function () { /* transient — members can retype */ });
     }
 
@@ -420,6 +489,42 @@
         }
     }
 
+    /** Opens the inline "+ New contact" fields, filled from what was typed in the search (a number goes to the phone). */
+    function openAddContact() {
+        var typed = $('cal-new-contact-search').value.trim();
+        var looksLikePhone = /^[+\d][\d\s().-]*$/.test(typed) && typed.replace(/\D/g, '').length >= 3;
+        $('cal-new-contact-name').value = looksLikePhone ? '' : typed;
+        $('cal-new-contact-phone').value = looksLikePhone ? typed : '';
+        $('cal-new-contact-add-error').textContent = '';
+        $('cal-new-contact-results').hidden = true;
+        $('cal-new-contact-add').hidden = false;
+        $('cal-new-contact-add-open').hidden = true;
+        $(looksLikePhone || !typed ? 'cal-new-contact-name' : 'cal-new-contact-phone').focus();
+    }
+
+    function closeAddContact() {
+        $('cal-new-contact-add').hidden = true;
+        $('cal-new-contact-add-open').hidden = !!state.editingId;
+    }
+
+    function saveAddContact() {
+        var err = $('cal-new-contact-add-error');
+        err.textContent = '';
+        var name = $('cal-new-contact-name').value.trim();
+        var phone = $('cal-new-contact-phone').value.trim();
+        if (!name && !phone) { err.textContent = omniText.t('contacts.errors.nameOrPhoneRequired'); return; }
+        var btn = $('cal-new-contact-add-save');
+        btn.disabled = true;
+        api('POST', '/api/contacts/manual', { fullName: name || null, phone: phone || null }).then(function (contact) {
+            btn.disabled = false;
+            closeAddContact();
+            pickContact(contact);
+        }).catch(function (e) {
+            btn.disabled = false;
+            err.textContent = e.message;
+        });
+    }
+
     function clearContact() {
         state.selectedContact = null;
         $('cal-new-contact-id').value = '';
@@ -436,7 +541,7 @@
         var contactId = $('cal-new-contact-id').value;
         var date = $('cal-new-date').value;
         var time = $('cal-new-time').value;
-        if (!contactId) { err.textContent = omniText.t('bookings.new.pickContact'); return; }
+        if (!contactId && !state.editingId) { err.textContent = omniText.t('bookings.new.pickContact'); return; }
         if (!date || !time) { err.textContent = omniText.t('bookings.new.dateTimeRequired'); return; }
 
         var timeZone = gridTimeZone() || OmniTime.viewerTimeZone || 'UTC';
@@ -456,12 +561,19 @@
             notes: $('cal-new-notes').value || null
         };
 
+        var editingId = state.editingId;
+        var request = editingId
+            ? api('PATCH', '/api/bookings/' + editingId, {
+                scheduledStart: startIso, scheduledEnd: endIso, serviceId: body.serviceId, locationType: body.locationType, notes: body.notes
+            })
+            : api('POST', '/api/bookings', body);
+
         var btn = $('cal-new-save');
         btn.disabled = true;
-        api('POST', '/api/bookings', body).then(function () {
+        request.then(function () {
             btn.disabled = false;
             closeNewBooking();
-            showMessage(omniText.t('bookings.new.created'));
+            showMessage(editingId ? omniText.t('bookings.edit.saved') : omniText.t('bookings.new.created'));
             return loadMonth(state.year, state.month);
         }).catch(function (e) {
             btn.disabled = false;
@@ -525,6 +637,12 @@
             state.contactSearchTimer = setTimeout(function () { searchContacts(q); }, 250);
         });
         $('cal-new-contact-clear').addEventListener('click', function () { clearContact(); $('cal-new-contact-search').focus(); });
+        $('cal-new-contact-add-open').addEventListener('click', openAddContact);
+        $('cal-new-contact-add-cancel').addEventListener('click', closeAddContact);
+        $('cal-new-contact-add-save').addEventListener('click', saveAddContact);
+        ['cal-new-contact-name', 'cal-new-contact-phone'].forEach(function (id) {
+            $(id).addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); saveAddContact(); } });
+        });
         $('cal-new-time').addEventListener('input', updateRange);
         $('cal-new-duration').addEventListener('input', updateRange);
 
@@ -532,6 +650,19 @@
         $('cal-appt-cancel').addEventListener('click', closeBooking);
         $('cal-appt-overlay').addEventListener('click', function (e) { if (e.target === $('cal-appt-overlay')) closeBooking(); });
         $('cal-appt-save').addEventListener('click', saveBookingStatus);
+        $('cal-appt-edit').addEventListener('click', function () {
+            var a = state.openBooking;
+            if (!a) return;
+            closeBooking();
+            openEditBooking(a.id);
+        });
+
+        // The booking page's "Edit" links here with ?edit={id}; drop it from the address so a reload doesn't reopen the dialog.
+        var editId = new URLSearchParams(window.location.search).get('edit');
+        if (editId) {
+            history.replaceState(null, '', window.location.pathname);
+            openEditBooking(editId);
+        }
 
         document.addEventListener('keydown', function (e) {
             if (e.key !== 'Escape') return;

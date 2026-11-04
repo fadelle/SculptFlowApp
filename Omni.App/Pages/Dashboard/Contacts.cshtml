@@ -33,6 +33,9 @@ else
     <partial name="_Messages" model="new PageMessagesModel(Model.StatusMessage, null)" />
     <div class="au-page-head">
         <p class="au-page-head__sub">@T["contacts.intro"]</p>
+        <div class="au-page-head__actions">
+            <a href="/dashboard/contacts?add=true" class="au-btn au-btn--primary" data-modal-open="contact-add-overlay"><span class="au-icon" aria-hidden="true">add</span>@T["contacts.add.button"]</a>
+        </div>
     </div>
 
     @* #contacts-filters and #contacts-results are read by wwwroot/js/contacts.js (live search swaps the results in place). *@
@@ -149,6 +152,58 @@ else
                     }
                 </div>
             }
+        </div>
+    </div>
+
+    @* Add a contact by hand (popup; modal.js). A failed save shows the page again with the popup open and the reason. *@
+    <div class="bm-overlay" data-modal id="contact-add-overlay" hidden="@(!Model.AddFormOpen)">
+        <div class="card form-modal" role="dialog" aria-modal="true" aria-labelledby="contact-add-title">
+            <div class="modal-head">
+                <h3 id="contact-add-title" class="card-title">@T["contacts.add.title"]</h3>
+                <button type="button" class="au-icon-btn" data-modal-close aria-label="@T["common.close"]" title="@T["common.close"]"><span class="au-icon" aria-hidden="true">close</span></button>
+            </div>
+            @if (Model.AddError is not null)
+            {
+                <partial name="_Messages" model="new PageMessagesModel(null, Model.AddError)" />
+            }
+            <form method="post" asp-page-handler="Add">
+                <p class="au-help">@T["contacts.add.help"]</p>
+                <div class="au-form-grid">
+                    <div class="au-form-field au-span-2">
+                        <label class="au-form-label" for="contact-add-name">@T["contacts.add.name"]</label>
+                        <input type="text" name="NewName" id="contact-add-name" value="@Model.NewName" class="au-input" maxlength="200" dir="auto" autocomplete="off" />
+                    </div>
+                    <div class="au-form-field">
+                        <label class="au-form-label" for="contact-add-phone">@T["contacts.table.phone"]</label>
+                        <input type="tel" name="NewPhone" id="contact-add-phone" value="@Model.NewPhone" class="au-input" maxlength="30" dir="ltr" autocomplete="off" placeholder="+961 70 123 456" />
+                    </div>
+                    <div class="au-form-field">
+                        <label class="au-form-label" for="contact-add-email">@T["contactDetail.details.email"] <span class="opt">@T["common.optional"]</span></label>
+                        <input type="email" name="NewEmail" id="contact-add-email" value="@Model.NewEmail" class="au-input" maxlength="200" dir="ltr" autocomplete="off" />
+                    </div>
+                    @if (Model.ActiveServices.Count > 0)
+                    {
+                        <div class="au-form-field au-span-2">
+                            <label class="au-form-label" for="contact-add-service">@T["contacts.table.service"] <span class="opt">@T["common.optional"]</span></label>
+                            <select name="NewServiceId" id="contact-add-service" class="au-select">
+                                <option value="">—</option>
+                                @foreach (var s in Model.ActiveServices)
+                                {
+                                    <option value="@s.Id" selected="@(s.Id == Model.NewServiceId)">@s.Name</option>
+                                }
+                            </select>
+                        </div>
+                    }
+                    <div class="au-form-field au-span-2">
+                        <label class="au-form-label" for="contact-add-notes">@T["contactDetail.details.notes"] <span class="opt">@T["common.optional"]</span></label>
+                        <textarea name="NewNotes" id="contact-add-notes" rows="2" class="au-textarea" maxlength="2000" dir="auto">@Model.NewNotes</textarea>
+                    </div>
+                </div>
+                <div class="au-form-actions">
+                    <button type="button" class="au-btn au-btn--text" data-modal-close>@T["common.cancel"]</button>
+                    <button type="submit" class="au-btn au-btn--primary">@T["contacts.add.submit"]</button>
+                </div>
+            </form>
         </div>
     </div>
 

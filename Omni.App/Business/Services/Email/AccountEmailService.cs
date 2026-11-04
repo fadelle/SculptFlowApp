@@ -46,4 +46,15 @@ public class AccountEmailService : IAccountEmailService
             [text["emails.invite.expiry", days], text["emails.invite.ignore"]]);
         await _email.SendAsync(new EmailMessage(email, name, text["emails.invite.subject", client.Name], html, plain, InviteTag), ct);
     }
+
+    public async Task SendOwnerInviteAsync(string email, string? fullName, Client client, string link, int days, CancellationToken ct = default)
+    {
+        var text = await _readerText.ForAsync([client.DefaultLanguage], client.BusinessTypeCode, ct);
+        var name = string.IsNullOrWhiteSpace(fullName) ? null : fullName.Trim();
+        var (html, plain) = EmailLayout.Build(text, text["emails.ownerInvite.heading", client.Name],
+            [name is null ? text["emails.common.greetingNoName"] : text["emails.common.greeting", name], text["emails.ownerInvite.body", client.Name]],
+            text["emails.ownerInvite.button"], link,
+            [text["emails.invite.expiry", days], text["emails.invite.ignore"]]);
+        await _email.SendAsync(new EmailMessage(email, name, text["emails.ownerInvite.subject", client.Name], html, plain, InviteTag), ct);
+    }
 }

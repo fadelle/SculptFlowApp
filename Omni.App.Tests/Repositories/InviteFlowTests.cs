@@ -20,6 +20,8 @@ public class InviteFlowTests(PostgresFixture fixture) : RepoTestBase(fixture)
         emails.Setup(e => e.SendInviteAsync(It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<Client>(), It.IsAny<string?>(),
                 It.IsAny<string>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .Callback<string, string?, string?, Client, string?, string, int, CancellationToken>((_, _, _, _, _, link, _, _) => links.Add(link));
+        emails.Setup(e => e.SendOwnerInviteAsync(It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<Client>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .Callback<string, string?, Client, string, int, CancellationToken>((_, _, _, link, _, _) => links.Add(link));
         var config = new Mock<IConfigManager>();
         config.SetupGet(c => c.AccountsInviteDays).Returns(7);
 
@@ -90,6 +92,41 @@ public class InviteFlowTests(PostgresFixture fixture) : RepoTestBase(fixture)
         Assert.NotNull(row.UsedAt);
         Assert.Empty(await InScopeAsync(sp, s => s.ListAsync(client.Id)));
         Assert.Null(await InScopeAsync(sp, s => s.GetLandingAsync(token)));
+    }
+
+    [PostgresFact]
+    public async Task A_client_the_portal_opened_gets_its_owner_through_the_emailed_link_once()
+    {
+        // QA t6-admin-20: owner_invite rows pass the purpose check, a resend replaces the link, the owner joins as the client user.
+        var links = new List<string>();
+        await using var sp = Services(links);
+        var client = MakeClient();
+        await SeedAsync(client);
+        var email = $"owner-{Guid.NewGuid():N}@x.com";
+
+        await InScopeAsync(sp, s => s.InviteOwnerAsync(client.Id, email, "Olga", "http://localhost"));
+        var resent = await InScopeAsync(sp, s => s.ResendOwnerInviteAsync(client.Id, "http://localhost"));
+        Assert.Equal(2, links.Count);
+        Assert.Null(await InScopeAsync(sp, s => s.GetLandingAsync(TokenOf(links[0]))));   // the first link stopped working
+        var token = TokenOf(links[1]);
+        Assert.Equal(new InviteLanding(client.Name, email, "Olga"), await InScopeAsync(sp, s => s.GetLandingAsync(token)));
+        Assert.Empty(await InScopeAsync(sp, s => s.ListAsync(client.Id)));   // not a member invite
+
+        var user = await InScopeAsync(sp, s => s.AcceptAsync(token, "Olga", "Passw0rd-1", "Passw0rd-1"));
+
+        using (var scope = sp.CreateScope())
+        {
+            var clients = scope.ServiceProvider.GetRequiredService<IClientRepository>();
+            var access = await clients.GetUserAccessAsync(user.Id);
+            Assert.Equal((client.Id, UserRole.Client), (access!.ClientId, access.Role));
+            Assert.True(await clients.HasActiveOwnerAsync(client.Id));
+        }
+        await using (var db = NewContext())
+        {
+            Assert.Equal(AccountTokenPurpose.OwnerInvite, (await db.AccountTokens.SingleAsync(t => t.Id == resent.Id)).Purpose);
+        }
+        var again = await Assert.ThrowsAsync<ArgumentException>(() => InScopeAsync(sp, s => s.InviteOwnerAsync(client.Id, $"x-{Guid.NewGuid():N}@x.com", null, "http://localhost")));
+        Assert.Equal("clients.errors.ownerExists", again.Message);
     }
 
     [PostgresFact]

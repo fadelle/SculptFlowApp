@@ -132,17 +132,37 @@ public class ContactService : IContactService
             await _services.EnsureUsableAsync(clientId, newServiceId, ct);
         }
 
+        // Everything is checked before the contact changes, so a refusal leaves it as it was.
+        var name = request.FullName is null ? contact.FullName : NameOrThrow(request.FullName);
+        var firstName = request.FirstName is null ? contact.FirstName : Limited(request.FirstName, PartNameMax, () => new ArgumentException("contacts.errors.nameTooLong"));
+        var lastName = request.LastName is null ? contact.LastName : Limited(request.LastName, PartNameMax, () => new ArgumentException("contacts.errors.nameTooLong"));
+        var phone = request.Phone is null ? contact.Phone : PhoneOrThrow(request.Phone);
+        var email = request.Email is null ? contact.Email : EmailOrThrow(request.Email);
+        var city = request.City is null ? contact.City : Limited(request.City, CityMax, () => new ArgumentException("contacts.errors.cityTooLong"));
+        var timeline = request.DesiredTimeline is null ? contact.DesiredTimeline : Limited(request.DesiredTimeline, TimelineMax, () => new ArgumentException("contacts.errors.timelineTooLong"));
+        var language = request.PreferredLanguage is null ? contact.PreferredLanguage : LanguageOrThrow(request.PreferredLanguage);
+        if (string.IsNullOrWhiteSpace(name) && string.IsNullOrWhiteSpace(phone))
+        {
+            throw new ArgumentException("contacts.errors.nameOrPhoneRequired");
+        }
+        if (phone is not null && phone != contact.Phone
+            && await _contacts.FindByPhoneAsync(clientId, phone, ct) is { } other && other.Id != contact.Id)
+        {
+            throw new ArgumentException("contacts.errors.phoneTaken").WithArgs(other.FullName ?? phone);
+        }
+
         if (request.ServiceId is not null) contact.ServiceId = request.ServiceId;
-        if (request.FullName is not null) contact.FullName = request.FullName;
-        if (request.FirstName is not null) contact.FirstName = request.FirstName;
-        if (request.LastName is not null) contact.LastName = request.LastName;
-        if (request.Phone is not null) contact.Phone = request.Phone;
-        if (request.Email is not null) contact.Email = request.Email;
-        if (request.PreferredLanguage is not null) contact.PreferredLanguage = LanguageOrThrow(request.PreferredLanguage);
-        if (request.City is not null) contact.City = request.City;
-        if (request.DesiredTimeline is not null) contact.DesiredTimeline = request.DesiredTimeline;
-        if (request.Notes is not null) contact.Notes = request.Notes;
-        if (request.NextFollowupAt is not null) contact.NextFollowupAt = request.NextFollowupAt;
+        contact.FullName = name;
+        contact.FirstName = firstName;
+        contact.LastName = lastName;
+        contact.Phone = phone;
+        contact.Email = email;
+        contact.PreferredLanguage = language;
+        contact.City = city;
+        contact.DesiredTimeline = timeline;
+        if (request.Notes is not null) contact.Notes = Clean(request.Notes);
+        if (request.NextFollowupAt is not null) contact.NextFollowupAt = request.NextFollowupAt.Value.ToUniversalTime();
+        else if (request.ClearNextFollowup) contact.NextFollowupAt = null;
 
         contact.UpdatedAt = DateTimeOffset.UtcNow;
 
@@ -153,6 +173,63 @@ public class ContactService : IContactService
 
         await _unitOfWork.SaveChangesAsync(ct);
         return ContactMapper.ToResponse(contact);
+    }
+
+    public async Task<ContactResponse> AddManualAsync(Guid clientId, ManualContactRequest request, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var name = NameOrThrow(request.FullName);
+        var phone = PhoneOrThrow(request.Phone);
+        var email = EmailOrThrow(request.Email);
+        if (name is null && phone is null)
+        {
+            throw new ArgumentException("contacts.errors.nameOrPhoneRequired");
+        }
+        if (phone is not null && await _contacts.FindByPhoneAsync(clientId, phone, ct) is { } existing)
+        {
+            throw new ArgumentException("contacts.errors.phoneTaken").WithArgs(existing.FullName ?? phone);
+        }
+        if (request.ServiceId is { } serviceId)
+        {
+            await _services.EnsureUsableAsync(clientId, serviceId, ct);
+        }
+
+        var (contact, _) = await CreateOrGetAsync(new CreateContactRequest(clientId, request.ServiceId, name, null, null, phone, email,
+            ContactSource.Manual, null, null, null, null, null, null, Clean(request.Notes)), ct);
+        return contact;
+    }
+
+    private static string? Clean(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    // Column sizes of crm.contacts: a longer value is a 400 with the limit, never a database error (QA t3-inbox-08).
+    private const int NameMax = 200, PartNameMax = 100, EmailMax = 200, CityMax = 100, TimelineMax = 100;
+
+    /// <summary>Trimmed text (blank = cleared) no longer than <paramref name="max"/> characters; longer throws <paramref name="tooLong"/>
+    /// with the limit (the keys stay literal for the text guard).</summary>
+    private static string? Limited(string? value, int max, Func<ArgumentException> tooLong)
+    {
+        var clean = Clean(value);
+        return clean is null || clean.Length <= max ? clean : throw tooLong().WithArgs(max);
+    }
+
+    private static string? NameOrThrow(string? name) => Limited(name, NameMax, () => new ArgumentException("contacts.errors.nameTooLong"));
+
+    /// <summary>A phone typed in the dashboard, stored the way channels store it: digits only (WhatsApp's wa_id has no "+"); blank
+    /// clears it. Letters, or fewer than 6 or more than 15 digits, aren't a phone number (400).</summary>
+    private static string? PhoneOrThrow(string? phone)
+    {
+        if (string.IsNullOrWhiteSpace(phone)) return null;
+        var digits = new string(phone.Where(char.IsAsciiDigit).ToArray());
+        var onlyPhoneCharacters = phone.All(c => char.IsAsciiDigit(c) || c is ' ' or '+' or '-' or '(' or ')' or '.');
+        return onlyPhoneCharacters && digits.Length is >= 6 and <= 15
+            ? digits
+            : throw new ArgumentException("contacts.errors.invalidPhone").WithArgs(phone.Trim().Length > 40 ? phone.Trim()[..40] + "…" : phone.Trim());
+    }
+
+    private static string? EmailOrThrow(string? email)
+    {
+        var clean = Limited(email, EmailMax, () => new ArgumentException("contacts.errors.emailTooLong"));
+        return clean is null || EmailAddress.IsValid(clean) ? clean : throw new ArgumentException("contacts.errors.invalidEmail").WithArgs(clean);
     }
 
     /// <summary>A language a person typed or picked in the dashboard: blank clears it, a language name or code becomes its

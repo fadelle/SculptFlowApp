@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Omni.App.Entities.Requests.Inbox;
 using Omni.App.Business.Contracts.Managers;
 using Omni.App.Business.Contracts.Services.BusinessTypes;
 using Omni.App.Business.Contracts.Services.Inbox;
@@ -61,7 +62,6 @@ public class IndexModel : PageModel
         AiAssistantAvailable = (await _inboxSettings.GetAsync(client.Id, ct)).PlanIncludesAiBot;
         Pipeline = await _businessTypes.GetPipelineAsync(client.Id, ct);
 
-        var (items, _) = await _conversations.ListAsync(client.Id, skip: 0, take: 50, ct);
-        Conversations = items;
+        Conversations = (await _conversations.ListAsync(client.Id, new ConversationListRequest(null, null, 0, 50), ct)).Items;
     }
 }

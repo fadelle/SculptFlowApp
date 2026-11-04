@@ -74,8 +74,41 @@ public class InviteService : IInviteService
             Id = Guid.NewGuid(), Purpose = AccountTokenPurpose.Invite, ClientId = actor.ClientId, Email = email, FullName = fullName,
             CreatedByUserId = actor.UserId, CreatedAt = now
         };
-        await IssueAndSendAsync(invite, actor, requestBaseUrl, now, ct);
+        await IssueAndSendAsync(invite, actor.ClientId, requestBaseUrl, now,
+            (client, link, days) => _emails.SendInviteAsync(invite.Email, invite.FullName, actor.FullName, client, actor.Language, link, days, ct), ct);
         return ToResponse(invite, now);
+    }
+
+    public async Task<InviteResponse> InviteOwnerAsync(Guid clientId, string? email, string? fullName, string requestBaseUrl, CancellationToken ct = default)
+    {
+        var address = (email ?? string.Empty).Trim();
+        var name = string.IsNullOrWhiteSpace(fullName) ? null : fullName.Trim();
+        if (!EmailAddress.IsValid(address)) throw new ArgumentException("members.errors.emailInvalid");
+        if (name?.Length > MaxNameLength) throw new ArgumentException("members.errors.nameTooLong").WithArgs(MaxNameLength);
+        _ = await _clients.GetReadOnlyAsync(clientId, ct) ?? throw new KeyNotFoundException("clients.errors.notFound");
+        if (await _clients.HasActiveOwnerAsync(clientId, ct)) throw new ArgumentException("clients.errors.ownerExists");
+        if (await _users.FindByNameAsync(address) is not null || await _users.FindByEmailAsync(address) is not null)
+            throw new ArgumentException("members.errors.emailTaken");
+
+        var now = _time.GetUtcNow();
+        // One owner link at a time: an earlier one (another address, or a resend) stops working.
+        foreach (var old in await _tokens.ListPendingOwnerInvitesAsync(clientId, ct)) old.RevokedAt = now;
+        var invite = new AccountToken
+        {
+            Id = Guid.NewGuid(), Purpose = AccountTokenPurpose.OwnerInvite, ClientId = clientId, Email = address, FullName = name, CreatedAt = now
+        };
+        await IssueAndSendAsync(invite, clientId, requestBaseUrl, now,
+            (client, link, days) => _emails.SendOwnerInviteAsync(invite.Email, invite.FullName, client, link, days, ct), ct);
+        return ToResponse(invite, now);
+    }
+
+    public async Task<InviteResponse> ResendOwnerInviteAsync(Guid clientId, string requestBaseUrl, CancellationToken ct = default)
+    {
+        // After the owner joined, their invite is used: say so rather than "never invited".
+        if (await _clients.HasActiveOwnerAsync(clientId, ct)) throw new ArgumentException("clients.errors.ownerExists");
+        var latest = (await _tokens.ListPendingOwnerInvitesAsync(clientId, ct)).FirstOrDefault()
+            ?? throw new KeyNotFoundException("clients.errors.noOwnerInvite");
+        return await InviteOwnerAsync(clientId, latest.Email, latest.FullName, requestBaseUrl, ct);
     }
 
     public async Task<InviteResponse> ResendAsync(UserAccess actor, Guid inviteId, string requestBaseUrl, CancellationToken ct = default)
@@ -93,7 +126,8 @@ public class InviteService : IInviteService
             Id = Guid.NewGuid(), Purpose = AccountTokenPurpose.Invite, ClientId = actor.ClientId, Email = old.Email, FullName = old.FullName,
             CreatedByUserId = actor.UserId, CreatedAt = now
         };
-        await IssueAndSendAsync(invite, actor, requestBaseUrl, now, ct);
+        await IssueAndSendAsync(invite, actor.ClientId, requestBaseUrl, now,
+            (client, link, days) => _emails.SendInviteAsync(invite.Email, invite.FullName, actor.FullName, client, actor.Language, link, days, ct), ct);
         return ToResponse(invite, now);
     }
 
@@ -128,13 +162,22 @@ public class InviteService : IInviteService
         if (await _users.FindByNameAsync(invite.Email) is not null || await _users.FindByEmailAsync(invite.Email) is not null)
             throw new ArgumentException("members.errors.emailTaken");
         var now = _time.GetUtcNow();
-        // The invite held this seat; the plan may have shrunk since, so check again without counting the invite twice.
-        await EnsureSeatAsync(client.Id, now, exceptInviteId: invite.Id, ct);
+        var owner = invite.Purpose == AccountTokenPurpose.OwnerInvite;
+        if (owner)
+        {
+            // The client's first user: no seat question, but never a second owner.
+            if (await _clients.HasActiveOwnerAsync(client.Id, ct)) throw new InvalidOperationException(LinkInvalidKey);
+        }
+        else
+        {
+            // The invite held this seat; the plan may have shrunk since, so check again without counting the invite twice.
+            await EnsureSeatAsync(client.Id, now, exceptInviteId: invite.Id, ct);
+        }
 
         var user = new AppUser
         {
-            UserName = invite.Email, Email = invite.Email, EmailConfirmed = true, FullName = name, Role = UserRole.Member, IsActive = true,
-            CreatedAt = now, UpdatedAt = now
+            UserName = invite.Email, Email = invite.Email, EmailConfirmed = true, FullName = name, Role = owner ? UserRole.Client : UserRole.Member,
+            IsActive = true, CreatedAt = now, UpdatedAt = now
         };
         await using var tx = await _unitOfWork.BeginTransactionAsync(ct);
         var created = await _users.CreateAsync(user, password);
@@ -167,13 +210,14 @@ public class InviteService : IInviteService
 
     /// <summary>Saves the invite with a fresh token, then emails the link. A failed email removes the new invite again
     /// (and restores a resent one), so nobody is left with an invite they never got.</summary>
-    private async Task IssueAndSendAsync(AccountToken invite, UserAccess actor, string requestBaseUrl, DateTimeOffset now, CancellationToken ct)
+    private async Task IssueAndSendAsync(AccountToken invite, Guid clientId, string requestBaseUrl, DateTimeOffset now,
+        Func<Client, string, int, Task> send, CancellationToken ct)
     {
         var days = _config.AccountsInviteDays;
         var raw = AccountTokenCodec.NewToken();
         invite.TokenHash = AccountTokenCodec.Hash(raw)!;
         invite.ExpiresAt = now.AddDays(days);
-        var client = await _clients.GetReadOnlyAsync(actor.ClientId, ct) ?? throw new KeyNotFoundException("members.errors.notFound");
+        var client = await _clients.GetReadOnlyAsync(clientId, ct) ?? throw new KeyNotFoundException("members.errors.notFound");
         var link = AccountLinks.Build(AccountLinks.Origin(_configuration["App:PublicBaseUrl"], requestBaseUrl), AccountLinks.AcceptInvitePath, raw);
 
         await using var tx = await _unitOfWork.BeginTransactionAsync(ct);
@@ -181,7 +225,7 @@ public class InviteService : IInviteService
         await _unitOfWork.SaveChangesAsync(ct);
         try
         {
-            await _emails.SendInviteAsync(invite.Email, invite.FullName, actor.FullName, client, actor.Language, link, days, ct);
+            await send(client, link, days);
         }
         catch
         {
@@ -190,7 +234,7 @@ public class InviteService : IInviteService
             throw;
         }
         await tx.CommitAsync(ct);
-        _logger.LogInformation("Invite {InviteId} sent for client {ClientId}.", invite.Id, actor.ClientId);
+        _logger.LogInformation("Invite {InviteId} ({Purpose}) sent for client {ClientId}.", invite.Id, invite.Purpose, clientId);
     }
 
     private async Task EnsureSeatAsync(Guid clientId, DateTimeOffset now, Guid? exceptInviteId, CancellationToken ct)
@@ -204,7 +248,8 @@ public class InviteService : IInviteService
         var hash = AccountTokenCodec.Hash(token);
         if (hash is null) return null;
         var invite = await _tokens.GetByHashAsync(hash, ct);
-        if (invite is null || invite.Purpose != AccountTokenPurpose.Invite || invite.ClientId is null || !invite.IsOpen(_time.GetUtcNow())) return null;
+        if (invite is null || invite.Purpose is not (AccountTokenPurpose.Invite or AccountTokenPurpose.OwnerInvite) || invite.ClientId is null
+            || !invite.IsOpen(_time.GetUtcNow())) return null;
         var client = await _clients.GetReadOnlyAsync(invite.ClientId.Value, ct);
         return client is { IsActive: true } ? (invite, client) : null;
     }

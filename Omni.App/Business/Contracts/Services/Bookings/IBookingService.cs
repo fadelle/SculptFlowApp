@@ -20,6 +20,13 @@ public interface IBookingService
 
     Task<BookingResponse?> UpdateStatusAsync(Guid clientId, Guid id, string status, CancellationToken ct = default);
 
+    /// <summary>A member edits a booking from the dashboard (QA t5-ops-04): time, duration, service, location and notes. Only a
+    /// booked or confirmed booking can change (ArgumentException otherwise); the end must follow the start; a new service must be
+    /// one of the client's active ones. Like a member's new booking it isn't held to the opening hours, and the status stays as
+    /// it is. A time change logs booking_rescheduled, notifies as a reschedule and updates connected calendars; reminders follow
+    /// the new time by themselves (they are keyed by the start). Null when the booking isn't this client's.</summary>
+    Task<BookingResponse?> UpdateAsync(Guid clientId, Guid id, UpdateBookingRequest request, CancellationToken ct = default);
+
     /// <summary>The AI's reschedule_booking: moves ONE of this contact's own upcoming (booked/confirmed) bookings to a new time. id is optional: when omitted the contact's single upcoming booking is used (MultipleUpcomingBookingsException if there are several).
     /// Same rules and per-client lock as booking (hours, exceptions, notice, horizon, overlaps, buffer), with the booking
     /// itself excluded from the overlap check. Status returns to Booked. Returns null when the booking doesn't exist for this

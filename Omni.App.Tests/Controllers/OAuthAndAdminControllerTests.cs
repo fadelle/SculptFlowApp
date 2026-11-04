@@ -252,6 +252,24 @@ public class IngestAndAdminControllerTests
     }
 
     [Fact]
+    public async Task The_portal_opens_a_client_with_201_and_resends_the_owner_invite()
+    {
+        // QA t6-admin-20.
+        var id = Guid.NewGuid();
+        var clients = new Mock<IClientAdminService>();
+        var request = new CreateClientRequest("Glow", TextKit.Clinic, "olga@x.com", "Olga", "growth", "ar");
+        var created = new ClientCreated(id, "glow", "growth", true, true, DateTimeOffset.UtcNow.AddDays(7));
+        clients.Setup(s => s.CreateAsync(request, It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(created);
+        var sent = new OwnerInviteSent(id, "olga@x.com", DateTimeOffset.UtcNow.AddDays(7));
+        clients.Setup(s => s.ResendOwnerInviteAsync(id, It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(sent);
+        var c = new ClientsAdminController(clients.Object).With();
+
+        var result = Assert.IsType<CreatedAtActionResult>(await c.Create(request, default));
+        Assert.Equal((nameof(ClientsAdminController.Get), (object?)id, (object?)created), (result.ActionName, result.RouteValues!["id"], result.Value));
+        Assert.Same(sent, Assert.IsType<OkObjectResult>(await c.ResendOwnerInvite(id, default)).Value);
+    }
+
+    [Fact]
     public async Task Platform_admin_controllers_pass_requests_through_and_map_missing_rows_to_404()
     {
         var id = Guid.NewGuid();

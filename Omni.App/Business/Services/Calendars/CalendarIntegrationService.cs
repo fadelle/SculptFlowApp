@@ -289,6 +289,7 @@ public class CalendarIntegrationService : ICalendarIntegrationService
             {
                 "created" => "create",
                 "rescheduled" => "update",
+                "updated" => "update", // a member changed the service, place or notes (QA t5-ops-04)
                 "canceled" => "cancel",
                 _ => null // status_changed (attended/no_show/confirmed) — not synced
             };

@@ -36,6 +36,9 @@ public interface IBotTestService
     /// bot's handoff message.</summary>
     Task<bool> HandoffAsync(BotRunContext run, string? reason, CancellationToken ct = default);
 
+    /// <summary>The bot's run failed: an error note ends the "typing…" wait. True when the note was added.</summary>
+    Task<bool> RunFailedAsync(BotRunContext run, CancellationToken ct = default);
+
     /// <summary>schedule_booking, simulated: checks the time against the real open slots and the test contact's simulated
     /// booking, and answers exactly like the real tool.</summary>
     Task<ScheduleBookingResult> ScheduleAsync(BotRunContext run, ScheduleBookingRequest request, CancellationToken ct = default);

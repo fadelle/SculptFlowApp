@@ -147,6 +147,36 @@ public class BotTestServiceTests
     }
 
     [Fact]
+    public async Task A_failed_run_adds_an_error_note_so_the_test_chat_stops_waiting()
+    {
+        // QA t4-ai-03: the panel showed "typing…" forever.
+        var session = Session();
+        Assert.True(await Sut().RunFailedAsync(Run(session)));
+        Assert.Equal([BotTestNote.ErrorKey], NoteKeys());
+        Assert.False(await Sut().RunFailedAsync(new BotRunContext(_clientId, _bot.Id, BotCapability.All.ToHashSet(), null, null, Guid.NewGuid())));
+    }
+
+    [Fact]
+    public async Task A_simulated_booking_for_a_client_outside_utc_is_stored_in_utc()
+    {
+        // QA t4-ai-02: slots carry the client's offset (Beirut +02:00/+03:00) and PostgreSQL only stores UTC, so the save failed
+        // with a 500 and the test chat waited forever.
+        var local = _slot.ToOffset(TimeSpan.FromHours(3));
+        var date = DateOnly.FromDateTime(_slot.UtcDateTime);
+        _clients.Setup(r => r.GetReadOnlyAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(new Client { Id = _clientId, Timezone = "Asia/Beirut" });
+        _availability.Setup(a => a.GetSlotsAsync(_clientId, It.IsAny<Guid?>(), It.IsAny<DateOnly>(), 1, It.IsAny<CancellationToken>())).ReturnsAsync(
+            new AvailabilityResponse(true, "Asia/Beirut", "2026-01-01", 30, "x", "y", null,
+                [new AvailableSlotResponse(local, local.AddMinutes(30), date.ToString("yyyy-MM-dd"), "17:00", "label")]));
+        var session = Session();
+
+        var booked = await Sut().ScheduleAsync(Run(session), new ScheduleBookingRequest(_slot));
+
+        Assert.True(booked.Success);
+        Assert.Equal((TimeSpan.Zero, TimeSpan.Zero), (session.SimulatedBookingStart!.Value.Offset, session.SimulatedBookingEnd!.Value.Offset));
+        Assert.Equal(_slot.UtcDateTime, session.SimulatedBookingStart.Value.UtcDateTime);
+    }
+
+    [Fact]
     public async Task Scheduling_is_simulated_against_the_real_slots_and_the_test_contacts_one_booking()
     {
         var session = Session();

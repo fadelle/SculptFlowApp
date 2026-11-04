@@ -1,6 +1,6 @@
 // The unread count next to "Inbox" in the sidebar, loaded on every authenticated page (Pages/Shared/_Layout.cshtml).
 // (The user menu, theme toggle and sidebar drawer are the Aurora kit's: aurora.js.)
-// The count comes from the same GET /api/conversations the Inbox uses (summing unreadCount), and
+// The count is GET /api/conversations' unreadTotal (every conversation, not one page; QA t3-inbox-04), and
 // SignalR only says "something changed, re-fetch" — same principle as inbox.js and notifications.js.
 (function () {
   var badge = document.getElementById('sidebar-inbox-badge');
@@ -15,10 +15,10 @@
   window.SF_setInboxUnread = setCount;
 
   function refresh() {
-    fetch('/api/conversations?take=200')
+    fetch('/api/conversations?take=1')
       .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
       .then(function (result) {
-        setCount((result.items || []).reduce(function (sum, c) { return sum + (c.unreadCount || 0); }, 0));
+        setCount(result.unreadTotal || 0);
       })
       .catch(function () { /* the badge is a hint; leave it as it was */ });
   }

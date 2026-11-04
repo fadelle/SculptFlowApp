@@ -28,7 +28,7 @@ namespace Omni.App.Business.Engines.Ai;
 /// are the /api/ai ones), at most Ai / MaxToolIterations model calls. The exchange is remembered as soon as the agent
 /// finishes, whatever happens next.</item>
 /// <item>"llm_result" + "action_needed": the final output parsed as the decision JSON; reply / schedule / cancel / handoff,
-/// anything else (or unreadable output) ends the run with nothing sent.</item>
+/// anything else (or unreadable output) ends the run as failed (below).</item>
 /// <item>reply → "send_message" with the decision's message.</item>
 /// <item>schedule → "schedule_booking" ({scheduledStart, serviceId || null, notes "", reason || null,
 /// confirmReplaceExisting, bookingId || null}); cancel → "cancel_booking" (bookingId || null, {reason || null}). Then
@@ -36,8 +36,9 @@ namespace Omni.App.Business.Engines.Ai;
 /// "result_formatter" (model Ai / FormatterModel) and its text is sent; a success with another code goes nowhere.</item>
 /// <item>handoff → "handoff_to_human" with reason || "The contact needs a team member."; the bot sends nothing else.</item>
 /// </list>
-/// An error answer of an action call (4xx/5xx) or of the reply ends the run like a failed n8n HTTP node: traced, nothing
-/// more sent; a 409 from the reply (taken over, billing refused) is a quiet stop.
+/// An error answer of an action call (4xx/5xx) or of the reply, an exception or an unreadable answer ends the run as failed:
+/// traced, then a live conversation goes to the team (one notification, the bot's handoff message) and a test chat gets an
+/// error note (QA t4-ai-03). A 409 from the reply (taken over, billing refused) is a quiet stop.
 /// </summary>
 public class BotEngine : IBotEngine
 {
@@ -127,6 +128,7 @@ public class BotEngine : IBotEngine
             {
                 var reason = output == MaxIterationsOutput ? "max_tool_iterations" : "unreadable_output";
                 _tracer.Step(TraceSteps.BotDecision, TraceOutcomes.Failed, run.Ids, detail: new { reason });
+                await RunFailedAsync(run, ct);
                 return;
             }
 
@@ -150,6 +152,7 @@ public class BotEngine : IBotEngine
                     break;
                 default:
                     _tracer.Step(TraceSteps.BotDecision, TraceOutcomes.Failed, run.Ids, detail: new { reason = "unknown_action", action = decision.Action });
+                    await RunFailedAsync(run, ct);
                     break;
             }
         }
@@ -157,6 +160,25 @@ public class BotEngine : IBotEngine
         {
             _logger.LogWarning(ex, "Bot run failed for conversation {ConversationId}.", trigger.ConversationId);
             _tracer.Step(TraceSteps.BotRunFailed, TraceOutcomes.Failed, run.Ids, detail: new { error = TraceText.Error(ex) });
+            await RunFailedAsync(run, ct);
+        }
+    }
+
+    /// <summary>The run ends without an answer (QA t4-ai-03): a live conversation goes to the team with one notification and the
+    /// bot's handoff message, a test chat gets an error note instead of "typing…" forever. Never throws: it is the last resort.</summary>
+    private async Task RunFailedAsync(Run run, CancellationToken ct)
+    {
+        if (ct.IsCancellationRequested) return; // shutting down: the run didn't fail, it was stopped
+        try
+        {
+            var result = await _tools.CallAsync(run.Call, BotTools.Handoff,
+                (botRun, c) => _tools.RunFailedAsync(botRun, run.Trigger.ConversationId, c), ct);
+            _tracer.Step(TraceSteps.BotActionResult, result.IsError ? TraceOutcomes.Failed : TraceOutcomes.Ok, run.Ids,
+                detail: new { action = "run_failed", status = result.Status });
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+        {
+            _logger.LogError(ex, "Handing a failed bot run to the team failed for conversation {ConversationId}.", run.Trigger.ConversationId);
         }
     }
 
@@ -312,6 +334,7 @@ public class BotEngine : IBotEngine
         if (result.IsError)
         {
             _tracer.Step(TraceSteps.BotActionResult, TraceOutcomes.Failed, run.Ids, detail: new { action, status = result.Status });
+            await RunFailedAsync(run, ct);
             return;
         }
 
@@ -343,6 +366,7 @@ public class BotEngine : IBotEngine
         }
         _tracer.Step(TraceSteps.BotActionResult, result.IsError ? TraceOutcomes.Failed : TraceOutcomes.Ok, run.Ids,
             detail: new { action = BotDecision.Reply, status = result.Status });
+        if (result.IsError) await RunFailedAsync(run, ct);
     }
 
     private async Task<AiModelResponse> CallModelAsync(Run run, string role, int iteration, AiModelRequest request, CancellationToken ct)

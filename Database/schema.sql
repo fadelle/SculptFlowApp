@@ -1178,10 +1178,16 @@ create table if not exists identity.account_tokens (
   revoked_at           timestamptz,
   created_at           timestamptz not null default now(),
 
-  constraint ck_account_tokens_purpose check (purpose in ('invite','password_reset')),
+  constraint ck_account_tokens_purpose check (purpose in ('invite','owner_invite','password_reset')),
   constraint ck_account_tokens_reset_user check (purpose <> 'password_reset' or user_id is not null),
-  constraint ck_account_tokens_invite_client check (purpose <> 'invite' or client_id is not null)
+  constraint ck_account_tokens_invite_client check (purpose not in ('invite','owner_invite') or client_id is not null)
 );
+-- owner_invite (QA t6-admin-20): the admin portal opened the client and emailed its owner a link; accepting it creates the
+-- client user. Re-runnable for databases made before it.
+alter table identity.account_tokens drop constraint if exists ck_account_tokens_purpose;
+alter table identity.account_tokens add constraint ck_account_tokens_purpose check (purpose in ('invite','owner_invite','password_reset'));
+alter table identity.account_tokens drop constraint if exists ck_account_tokens_invite_client;
+alter table identity.account_tokens add constraint ck_account_tokens_invite_client check (purpose not in ('invite','owner_invite') or client_id is not null);
 
 create unique index if not exists ux_account_tokens_token_hash on identity.account_tokens(token_hash);
 create index if not exists ix_account_tokens_user_id on identity.account_tokens(user_id);

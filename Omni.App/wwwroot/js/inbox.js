@@ -42,7 +42,12 @@
   var searchEl = document.getElementById('inbox-search');
   var btnBack = document.getElementById('inbox-btn-back');
   var btnContactClose = document.getElementById('inbox-contact-close');
-  var listFilter = 'all'; // all | needs | ai | closed — purely client-side, over the list already loaded
+  var listFilter = 'all'; // all | needs | ai | closed — the server filters (GET /api/conversations?filter=)
+  var listSearch = '';     // the server searches name, phone and service (?search=)
+  var listItems = [];      // the rows loaded so far, newest activity first
+  var listTotal = 0;       // how many match the search and tab
+  var listRequest = 0;     // only the newest list request may render
+  var PAGE_SIZE = 50;
 
   // ---------------------------------------------------------------------
   // API helpers
@@ -162,51 +167,61 @@
   }
 
   // ---------------------------------------------------------------------
-  // List search + filter tabs (client-side only; the API call is unchanged)
+  // List search + filter tabs: done by the server over every conversation (QA t3-inbox-04: only the newest 50 used to
+  // be reachable), a page at a time with "Show more".
   // ---------------------------------------------------------------------
-  function matchesFilter(el, filter) {
-    var closed = el.getAttribute('data-closed') === 'true';
-    if (filter === 'closed') return closed;
-    if (filter === 'needs') return !closed && el.getAttribute('data-needs') === 'true';
-    if (filter === 'ai') return !closed && el.getAttribute('data-mode') === 'ai';
-    return true;
+  function listUrl(skip, take) {
+    var query = new URLSearchParams({ skip: String(skip), take: String(take), filter: listFilter });
+    if (listSearch) query.set('search', listSearch);
+    return withClient('/api/conversations?' + query.toString());
   }
 
-  function applyListFilter() {
-    var q = (searchEl && searchEl.value || '').trim().toLowerCase();
-    var items = listEl.querySelectorAll('.inbox-conv-item');
-    var counts = { all: 0, needs: 0, ai: 0, closed: 0 };
-    var visible = 0;
-    items.forEach(function (el) {
-      var matchesSearch = !q || (el.getAttribute('data-search') || '').indexOf(q) !== -1;
-      Object.keys(counts).forEach(function (f) { if (matchesSearch && matchesFilter(el, f)) counts[f]++; });
-      var show = matchesSearch && matchesFilter(el, listFilter);
-      el.hidden = !show;
-      if (show) visible++;
+  // A refresh (SignalR, after an action) re-reads as many rows as are on screen, so a scrolled list keeps its place.
+  function loadConversationList() {
+    var token = ++listRequest;
+    var take = Math.min(Math.max(listItems.length, PAGE_SIZE), 200);
+    return apiGet(listUrl(0, take)).then(function (page) {
+      if (token !== listRequest) return;
+      listItems = page.items || [];
+      listTotal = page.totalCount || 0;
+      renderConversationList(page);
     });
-    document.querySelectorAll('[data-count]').forEach(function (el) {
-      var n = counts[el.getAttribute('data-count')];
-      el.textContent = n > 0 ? n : '';
-    });
-    var noMatch = listEl.querySelector('.inbox-list-nomatch');
-    if (items.length > 0 && visible === 0) {
-      if (!noMatch) {
-        noMatch = document.createElement('div');
-        noMatch.className = 'inbox-list-message inbox-list-nomatch';
-        noMatch.textContent = omniText.t('inbox.list.noMatch');
-        listEl.appendChild(noMatch);
-      }
-    } else if (noMatch) {
-      noMatch.remove();
-    }
   }
 
-  if (searchEl) searchEl.addEventListener('input', applyListFilter);
+  function loadMoreConversations() {
+    var token = ++listRequest;
+    return apiGet(listUrl(listItems.length, PAGE_SIZE)).then(function (page) {
+      if (token !== listRequest) return;
+      var known = {};
+      listItems.forEach(function (c) { known[c.id] = true; });
+      (page.items || []).forEach(function (c) { if (!known[c.id]) listItems.push(c); });
+      listTotal = page.totalCount || 0;
+      renderConversationList(page);
+    });
+  }
+
+  // A new search or tab starts from the first page.
+  function reloadConversationList() {
+    listItems = [];
+    return loadConversationList();
+  }
+
+  var searchTimer = null;
+  if (searchEl) searchEl.addEventListener('input', function () {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(function () {
+      listSearch = searchEl.value.trim();
+      reloadConversationList();
+    }, 300);
+  });
+  function selectTab(btn) {
+    listFilter = btn.getAttribute('data-filter');
+    document.querySelectorAll('.inbox-filter').forEach(function (b) { b.classList.toggle('active', b === btn); });
+  }
   document.querySelectorAll('.inbox-filter').forEach(function (btn) {
     btn.addEventListener('click', function () {
-      listFilter = btn.getAttribute('data-filter');
-      document.querySelectorAll('.inbox-filter').forEach(function (b) { b.classList.toggle('active', b === btn); });
-      applyListFilter();
+      selectTab(btn);
+      reloadConversationList();
     });
   });
 
@@ -220,13 +235,25 @@
     if (window.SF_setInboxUnread) window.SF_setInboxUnread(totalUnread);
   }
 
-  function renderConversationList(items) {
+  // The tabs' numbers and the unread total come from the server, over every conversation; the conversation being viewed
+  // counts as read (it is marked read as soon as it's opened).
+  function renderCounts(page) {
+    var counts = page.counts || {};
+    document.querySelectorAll('[data-count]').forEach(function (el) {
+      var n = counts[el.getAttribute('data-count')] || 0;
+      el.textContent = n > 0 ? n : '';
+    });
+    var open = listItems.filter(function (c) { return c.id === currentConversationId; })[0];
+    updateTabTitle(Math.max(0, (page.unreadTotal || 0) - (open ? (open.unreadCount || 0) : 0)));
+  }
+
+  function renderConversationList(page) {
+    var items = listItems;
     listEl.innerHTML = '';
-    var totalUnread = 0;
+    renderCounts(page);
     if (!items || items.length === 0) {
-      listEl.innerHTML = '<div class="inbox-list-message">' + escapeHtml(omniText.t('inbox.list.empty')) + '</div>';
-      applyListFilter();
-      updateTabTitle(0);
+      var message = listSearch || listFilter !== 'all' ? omniText.t('inbox.list.noMatch') : omniText.t('inbox.list.empty');
+      listEl.innerHTML = '<div class="inbox-list-message">' + escapeHtml(message) + '</div>';
       return;
     }
     items.forEach(function (c) {
@@ -234,7 +261,6 @@
       // Unread = customer messages members haven't opened yet. The conversation being viewed right now
       // counts as read (it is marked read on the server as soon as it's opened / a message arrives in it).
       var unreadCount = c.id === currentConversationId ? 0 : (c.unreadCount || 0);
-      totalUnread += unreadCount;
       var closed = c.status === 'closed' || c.status === 'archived';
       div.className = 'inbox-conv-item' + (c.id === currentConversationId ? ' active' : '') + (unreadCount > 0 ? ' unread' : '') + (closed ? ' closed' : '');
       div.setAttribute('data-conversation-id', c.id);
@@ -243,7 +269,6 @@
       div.setAttribute('data-channel', c.channel || '');
       div.setAttribute('data-mode', c.mode || '');
       div.setAttribute('data-closed', closed ? 'true' : 'false');
-      div.setAttribute('data-search', ((c.contactFullName || '') + ' ' + (c.contactPhone || '') + ' ' + (c.serviceName || '')).toLowerCase());
 
       // "Needs Human" means AI is paused, the customer spoke last, AND members haven't opened it yet
       // — not just "mode is human". Members sending from the dashboard also sets mode to human, but
@@ -278,9 +303,15 @@
       div.addEventListener('click', function () { selectConversation(c.id); });
       listEl.appendChild(div);
     });
+    if (items.length < listTotal) {
+      var more = document.createElement('button');
+      more.type = 'button';
+      more.className = 'au-btn au-btn--text inbox-load-more';
+      more.textContent = omniText.plural('inbox.list.showMore', listTotal - items.length);
+      more.addEventListener('click', function () { more.disabled = true; loadMoreConversations(); });
+      listEl.appendChild(more);
+    }
     renderTimestamps();
-    applyListFilter();
-    updateTabTitle(totalUnread);
   }
 
   // Tells the server members have seen this conversation (clears its unread count). The server then
@@ -408,14 +439,31 @@
 
   // ConversationResponse (from the API) doesn't carry contact/service display info — that's a
   // list-only concern (ConversationListRow). We already have it on the clicked list item's own
-  // data attributes, so read it from there instead of adding it to the conversation DTO.
+  // data attributes; a conversation that isn't in the loaded list (a notification's link, an older one)
+  // takes it from its contact instead.
   function renderConversationHeader(conversation) {
     var listItem = document.querySelector('.inbox-conv-item[data-conversation-id="' + conversation.id + '"]');
-    var contactName = (listItem && listItem.getAttribute('data-contact-name')) || omniText.t('inbox.unknownName');
-    nameEl.textContent = contactName;
-    threadAvatarEl.textContent = initials(contactName);
-    var service = (listItem && listItem.getAttribute('data-service-name')) || '';
-    serviceEl.textContent = [service, channelLabel(conversation.channel)].filter(Boolean).join(' · ');
+    var showContact = function (contactName, service) {
+      nameEl.textContent = contactName || omniText.t('inbox.unknownName');
+      threadAvatarEl.textContent = initials(contactName);
+      serviceEl.textContent = [service, channelLabel(conversation.channel)].filter(Boolean).join(' · ');
+    };
+    if (listItem) {
+      showContact(listItem.getAttribute('data-contact-name'), listItem.getAttribute('data-service-name') || '');
+    } else {
+      showContact(null, '');
+      var fill = function (contact) {
+        if (currentConversationId === conversation.id) showContact(contact.fullName, contact.serviceName || '');
+      };
+      if (contactInfoCache[conversation.contactId]) {
+        fill(contactInfoCache[conversation.contactId]);
+      } else {
+        apiGet(withClient('/api/contacts/' + conversation.contactId)).then(function (contact) {
+          contactInfoCache[conversation.contactId] = contact;
+          fill(contact);
+        }).catch(function () { /* the header keeps "Unknown" */ });
+      }
+    }
     modeEl.textContent = conversation.mode === 'ai' ? omniText.t('inbox.thread.aiReplying')
       : conversation.mode === 'human' ? omniText.t('inbox.thread.teamReplying') : omniText.t('inbox.thread.awaitingApproval');
     modeEl.className = 'inbox-mode inbox-mode-' + conversation.mode;
@@ -444,12 +492,6 @@
   // ---------------------------------------------------------------------
   // Data loading
   // ---------------------------------------------------------------------
-  function loadConversationList() {
-    return apiGet(withClient('/api/conversations')).then(function (result) {
-      renderConversationList(result.items);
-    });
-  }
-
   function selectConversation(id) {
     var switchingConversation = id !== currentConversationId;
     currentConversationId = id;
@@ -759,23 +801,20 @@
   renderTimestamps();
   // Replace the server-rendered first paint with the client-rendered list so unread badges / the tab
   // title are consistent from the start.
+  // Dashboard 'Needs attention' link (/inbox?filter=needs) opens with that tab; "Open in Inbox" from a contact page
+  // (/inbox?search=<phone>) searches every conversation and opens the only match straight away.
+  var startQuery = new URLSearchParams(window.location.search);
+  var startTab = startQuery.get('filter') && document.querySelector('.inbox-filter[data-filter="' + startQuery.get('filter') + '"]');
+  if (startTab) selectTab(startTab);
+  if (startQuery.get('search') && searchEl) {
+    searchEl.value = startQuery.get('search');
+    listSearch = searchEl.value.trim();
+  }
   loadConversationList().then(function () {
-    // Deep link from a notification bell click (/inbox?conversationId=...) — open it once the list exists.
-    var query = new URLSearchParams(window.location.search);
-    var wanted = query.get('conversationId');
+    // Deep link from a notification bell click (/inbox?conversationId=...): it opens even when it isn't among the rows loaded.
+    var wanted = startQuery.get('conversationId');
     if (wanted) selectConversation(wanted);
-    // "Open in Inbox" from a contact page (/inbox?search=<phone>): pre-fill the list search, and open
-    // the conversation straight away when exactly one matches.
-    // Dashboard 'Needs attention' link (/inbox?filter=needs): open with that tab selected.
-    var filterTab = query.get('filter') && document.querySelector('.inbox-filter[data-filter="' + query.get('filter') + '"]');
-    if (filterTab) filterTab.click();
-    var search = query.get('search');
-    if (search && searchEl) {
-      searchEl.value = search;
-      applyListFilter();
-      var matches = listEl.querySelectorAll('.inbox-conv-item:not([hidden])');
-      if (!wanted && matches.length === 1) selectConversation(matches[0].getAttribute('data-conversation-id'));
-    }
+    else if (listSearch && listItems.length === 1) selectConversation(listItems[0].id);
   });
 
   // ---------------------------------------------------------------------

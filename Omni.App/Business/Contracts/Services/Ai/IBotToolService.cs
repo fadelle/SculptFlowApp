@@ -58,4 +58,8 @@ public interface IBotToolService
 
     /// <summary>handoff_to_human: { handedOff }, 404 when the conversation isn't the client's.</summary>
     Task<BotToolResult> HandoffAsync(BotRunContext run, Guid conversationId, Guid clientId, HandoffToHumanRequest request, CancellationToken ct = default);
+
+    /// <summary>The run failed (an error, an unreadable answer, a tool that failed): a live conversation goes to the team with one
+    /// "the AI couldn't answer" notification (and the bot's handoff message); a test session gets an error note.</summary>
+    Task<BotToolResult> RunFailedAsync(BotRunContext run, Guid conversationId, CancellationToken ct = default);
 }

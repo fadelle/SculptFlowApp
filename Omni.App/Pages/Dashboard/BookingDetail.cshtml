@@ -34,6 +34,11 @@ else
     </div>
     <div class="detail-chips">
         <span class="badge @StatusBadgeHelper.CssClass(appt.Status)">@T.ValueLabel(appt.Status)</span>
+        @if (appt.Status is BookingStatus.Booked or BookingStatus.Confirmed)
+        {
+            @* Opens the calendar's edit dialog for this booking (QA t5-ops-04). *@
+            <a class="au-btn au-btn--outlined au-btn--sm" href="/dashboard/bookings?edit=@appt.Id" id="booking-edit"><span class="au-icon" aria-hidden="true">edit</span>@T["bookings.edit.button"]</a>
+        }
         <a class="au-btn au-btn--outlined au-btn--sm" href="/dashboard/contacts/@appt.ContactId"><span class="au-icon" aria-hidden="true">person</span>@T["bookings.openContact"]</a>
         <partial name="_TimeViewSwitch" model="Model.ClientTimezone" />
     </div>

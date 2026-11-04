@@ -35,6 +35,7 @@ public class ContactDetailModel : PageModel
     private const string DeletedKey = "contactDetail.data.deleted";
     private const string OrderAddedKey = "contactDetail.orders.added";
     private const string OrderSavedKey = "contactDetail.orders.saved";
+    private const string DetailsSavedKey = "contactDetail.edit.saved";
 
     private readonly ICurrentClientContext _clientContext;
     private readonly IContactService _contacts;
@@ -141,6 +142,21 @@ public class ContactDetailModel : PageModel
     [BindProperty]
     public string? OrderNotes { get; set; }
 
+    /// <summary>The business's timezone: the follow-up day is read and saved in it.</summary>
+    private TimeZoneInfo _zone = TimeZoneInfo.Utc;
+
+    [BindProperty] public string? EditName { get; set; }
+    [BindProperty] public string? EditPhone { get; set; }
+    [BindProperty] public string? EditEmail { get; set; }
+    [BindProperty] public string? EditCity { get; set; }
+    [BindProperty] public string? EditNotes { get; set; }
+    /// <summary>The next follow-up's day (09:00 in the business's timezone); empty clears it.</summary>
+    [BindProperty] public DateOnly? EditFollowup { get; set; }
+
+    /// <summary>The details popup is open on load (a save that failed: then with <see cref="EditError"/>).</summary>
+    public bool EditFormOpen { get; private set; }
+    public string? EditError { get; private set; }
+
     /// <summary>The order popup is open on load (?order=new, or a save that failed: then with <see cref="OrderError"/>).</summary>
     public bool OrderFormOpen { get; private set; }
 
@@ -162,9 +178,18 @@ public class ContactDetailModel : PageModel
     }
 
     /// <summary>The classification form's values from the stored contact.</summary>
-    private void FillContactFields()
+    private void FillContactFields(bool fillDetails = true)
     {
         var contact = Contact!;
+        if (fillDetails)
+        {
+            EditName = contact.FullName;
+            EditPhone = contact.Phone;
+            EditEmail = contact.Email;
+            EditCity = contact.City;
+            EditNotes = contact.Notes;
+            EditFollowup = contact.NextFollowupAt is { } at ? DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(at, _zone).DateTime) : null;
+        }
         StageKey = contact.StageKey;
         Qualification = contact.Qualification;
         SourceChoice = !string.IsNullOrWhiteSpace(contact.Source) && SourceOptions.Contains(contact.Source, StringComparer.OrdinalIgnoreCase)
@@ -197,6 +222,33 @@ public class ContactDetailModel : PageModel
         {
             ErrorMessage = _text.Localize(ex);
             await LoadAsync(ct);
+            return Page();
+        }
+    }
+
+    /// <summary>"Edit details" (QA t3-inbox-12): name, phone, email, city, notes and the next follow-up's day.</summary>
+    public async Task<IActionResult> OnPostDetailsAsync(CancellationToken ct)
+    {
+        var client = await _clientContext.GetClientAsync(ct);
+        if (client is null) return RedirectToPage();
+        _zone = ZoneOf(client.Timezone);
+        DateTimeOffset? followup = EditFollowup is { } day
+            ? new DateTimeOffset(day.ToDateTime(new TimeOnly(9, 0)), _zone.GetUtcOffset(day.ToDateTime(new TimeOnly(9, 0)))).ToUniversalTime()
+            : null;
+        try
+        {
+            var contact = await _contacts.UpdateAsync(client.Id, Id, new UpdateContactRequest(null, EditName ?? "", null, null, EditPhone ?? "", EditEmail ?? "",
+                null, EditCity ?? "", null, EditNotes ?? "", followup, ClearNextFollowup: followup is null), ct);
+            if (contact is null) return NotFound();
+            StatusMessage = _text[DetailsSavedKey].Value;
+            return RedirectToPage(new { Id });
+        }
+        catch (ArgumentException ex)
+        {
+            EditError = _text.Localize(ex);
+            EditFormOpen = true;
+            await LoadAsync(ct);
+            if (Contact is not null) FillContactFields(fillDetails: false);
             return Page();
         }
     }
@@ -284,6 +336,9 @@ public class ContactDetailModel : PageModel
         }
     }
 
+    private static TimeZoneInfo ZoneOf(string? timezone) =>
+        TimeZoneInfo.TryFindSystemTimeZoneById(timezone ?? "UTC", out var zone) ? zone : TimeZoneInfo.Utc;
+
     private async Task LoadAsync(CancellationToken ct)
     {
         var client = await _clientContext.GetClientAsync(ct);
@@ -294,6 +349,7 @@ public class ContactDetailModel : PageModel
         }
 
         ClientConfigured = true;
+        _zone = ZoneOf(client.Timezone);
 
         Contact = await _contacts.GetByIdAsync(client.Id, Id, ct);
         if (Contact is null) return;

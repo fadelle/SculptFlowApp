@@ -11,5 +11,7 @@ public record UpdateContactRequest(
     string? City,
     string? DesiredTimeline,
     string? Notes,
-    DateTimeOffset? NextFollowupAt
+    DateTimeOffset? NextFollowupAt,
+    /// <summary>True clears the next follow-up (NextFollowupAt null only means "unchanged").</summary>
+    bool ClearNextFollowup = false
 );

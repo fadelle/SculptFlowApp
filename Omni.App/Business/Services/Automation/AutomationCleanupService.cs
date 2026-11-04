@@ -36,8 +36,11 @@ public class AutomationCleanupService : IAutomationCleanupService
         var emails = await _users.ListEmailsAsync(userIds, ct);
 
         var isAutomationClient = client.Name.StartsWith(AutomationClients.NamePrefix, StringComparison.Ordinal)
-            && emails.Count > 0
-            && emails.All(e => e.EndsWith(AutomationClients.EmailDomain, StringComparison.OrdinalIgnoreCase));
+            // Its users are all test addresses; or it has none yet (opened from the portal, owner not joined) and its own email,
+            // the invited owner's, is one (QA t6-admin-20).
+            && (emails.Count > 0
+                ? emails.All(e => e.EndsWith(AutomationClients.EmailDomain, StringComparison.OrdinalIgnoreCase))
+                : client.Email?.EndsWith(AutomationClients.EmailDomain, StringComparison.OrdinalIgnoreCase) == true);
         if (!isAutomationClient) return AutomationDeleteOutcome.NotAutomationClient;
 
         await using var tx = await _unitOfWork.BeginTransactionAsync(ct);

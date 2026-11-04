@@ -149,10 +149,15 @@ public class ConversationService : IConversationService
         return (InboxMapper.ToResponse(conversation), messages.Select(InboxMapper.ToResponse).ToList());
     }
 
-    public async Task<(IReadOnlyList<ConversationListRow> Items, int TotalCount)> ListAsync(
-        Guid clientId, int skip, int take, CancellationToken ct = default)
+    public Task<ConversationListPage> ListAsync(Guid clientId, ConversationListRequest request, CancellationToken ct = default)
     {
-        return await _conversations.ListInboxAsync(clientId, skip, take, ct);
+        var filter = string.IsNullOrWhiteSpace(request.Filter) ? InboxListFilter.All : request.Filter.Trim().ToLowerInvariant();
+        if (!InboxListFilter.Values.Contains(filter))
+        {
+            throw new ArgumentException("inbox.errors.unknownFilter").WithArgs(request.Filter);
+        }
+        var search = string.IsNullOrWhiteSpace(request.Search) ? null : request.Search.Trim();
+        return _conversations.ListInboxAsync(clientId, request with { Search = search, Filter = filter }, ct);
     }
 
     public async Task<IReadOnlyList<MessageResponse>> GetMessagesAsync(Guid clientId, Guid conversationId, CancellationToken ct = default)
@@ -209,6 +214,11 @@ public class ConversationService : IConversationService
             System.Text.Json.JsonSerializer.Serialize(new { reason = "ai_reply_" + failureReason }),
             who => NotificationText.Of("notifications.handoff.title",
                 failureReason == UsageFailureReason.InsufficientFunds ? AiReplyNoBalanceKey : AiReplyNotPricedKey, who), ct))?.Conversation;
+
+    public async Task<bool?> HandOverFailedAiAsync(Guid clientId, Guid conversationId, CancellationToken ct = default) =>
+        (await HandOffAsync(clientId, conversationId, MessageOrigin.System,
+            System.Text.Json.JsonSerializer.Serialize(new { reason = "ai_failed" }),
+            who => NotificationText.Of("notifications.handoff.title", "notifications.handoff.messageAiFailed", who), ct))?.HandedOff;
 
     // The hand-over notification's wording when billing refused an AI reply (no balance / no ai_reply rate).
     private const string AiReplyNoBalanceKey = "notifications.handoff.messageAiNoBalance";
