@@ -3,6 +3,7 @@ using Omni.App.Business.Contracts.Engines.Billing;
 using Omni.App.Business.Contracts.Managers;
 using Omni.App.Business.Contracts.Providers.Channels;
 using Omni.App.Business.Contracts.Services.Billing;
+using Omni.App.Business.Contracts.Services.BusinessTypes;
 using Omni.App.Business.Contracts.Services.Contacts;
 using Omni.App.Business.Contracts.Services.Inbox;
 using Omni.App.Business.Contracts.Services.Notifications;
@@ -52,15 +53,17 @@ public class MessageService : IMessageService
     private readonly IConversationService _conversationService;
     private readonly IOptOutService _optOut;
     private readonly IAutoReplyService _autoReplies;
+    private readonly IBusinessTypeService _businessTypes;
 
     public MessageService(
         IConversationRepository conversations, IMessageRepository messages, IContactRepository contacts,
         IWhatsAppTemplateRepository templates, ICampaignRepository campaigns, IUnitOfWork unitOfWork, IWhatsAppService whatsApp, IEnumerable<IChannelSender> senders,
         IInboxNotifier notifier, IEventLogger events, INotificationService notifications,
         IMessageBillingService billing, IEntitlementService entitlements, IInboxSettingsService inboxSettings, IMessageTracer tracer,
-        IConversationService conversationService, IOptOutService optOut, IAutoReplyService autoReplies)
+        IConversationService conversationService, IOptOutService optOut, IAutoReplyService autoReplies, IBusinessTypeService businessTypes)
     {
         _autoReplies = autoReplies;
+        _businessTypes = businessTypes;
         _conversationService = conversationService;
         _optOut = optOut;
         _tracer = tracer;
@@ -197,6 +200,7 @@ public class MessageService : IMessageService
         {
             conversation.Contact.LastContactAt = now;
             conversation.Contact.UpdatedAt = now;
+            await MoveOnFromEntryStageAsync(clientId, conversation.Contact, ct);
         }
 
         // Don't log message content into event metadata — just that a send happened and by whom.
@@ -444,6 +448,8 @@ public class MessageService : IMessageService
         {
             conversation.Contact.LastContactAt = now;
             conversation.Contact.UpdatedAt = now;
+            // A member's template from the Inbox is a reply too; a campaign or a reminder isn't the team answering.
+            if (origin == MessageOrigin.Dashboard) await MoveOnFromEntryStageAsync(clientId, conversation.Contact, ct);
         }
 
         var eventType = origin switch
@@ -757,6 +763,17 @@ public class MessageService : IMessageService
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _tracer.Step(TraceSteps.SendBlocked, TraceOutcomes.Failed, ids, detail: new { kind = "auto_reply", error = TraceText.Error(ex) });
+        }
+    }
+
+    /// <summary>The team's first reply moves a contact still in its entry stage to the next open stage ("new" to "contacted"
+    /// in both built-in types); any other stage, or a type with a single open stage, is left alone. AI replies, campaigns and
+    /// reminders don't move it.</summary>
+    private async Task MoveOnFromEntryStageAsync(Guid clientId, Contact contact, CancellationToken ct)
+    {
+        if ((await _businessTypes.GetPipelineAsync(clientId, ct)).NextAfterEntry(contact.StageKey) is { } next)
+        {
+            contact.StageKey = next;
         }
     }
 

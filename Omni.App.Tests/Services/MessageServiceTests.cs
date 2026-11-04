@@ -26,6 +26,7 @@ public class MessageServiceTests
     private readonly Mock<IConversationService> _conversationService = new();
     private readonly Mock<IOptOutService> _optOut = new();
     private readonly Mock<IAutoReplyService> _autoReplies = new();
+    private readonly Mock<IBusinessTypeService> _businessTypes = PipelineKit.Types();
     private readonly MessageBillingHold _hold = new(Guid.Empty, "key", BillingSettlementTrigger.OnProviderAccepted);
     private readonly Contact _contact;
 
@@ -45,7 +46,7 @@ public class MessageServiceTests
 
     private MessageService Sut() => new(_conversations.Object, _messages.Object, _contacts.Object, _templates.Object, _campaigns.Object, _uow.Object,
         _whatsApp.Object, [_sender.Object], _notifier.Object, _events.Object, _notifications.Object, _billing.Object, _entitlements.Object, _inboxSettings.Object, _tracer.Object,
-        _conversationService.Object, _optOut.Object, _autoReplies.Object);
+        _conversationService.Object, _optOut.Object, _autoReplies.Object, _businessTypes.Object);
 
     private void AutoReply(AutoReplyChoice choice) =>
         _autoReplies.Setup(a => a.ChooseAsync(_clientId, It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
@@ -183,6 +184,44 @@ public class MessageServiceTests
     private Template_ Setup(WhatsAppTemplate t) { _templates.Setup(r => r.GetReadOnlyAsync(_clientId, t.Id, It.IsAny<CancellationToken>())).ReturnsAsync(t); return new Template_(t); }
 
     private sealed record Template_(WhatsAppTemplate T);
+
+    [Theory]
+    [InlineData(PipelineKit.New, PipelineKit.Contacted)]          // the team's first reply moves a new contact on
+    [InlineData(PipelineKit.Contacted, PipelineKit.Contacted)]    // later replies leave it
+    [InlineData(PipelineKit.Booked, PipelineKit.Booked)]          // any other stage is left alone
+    public async Task A_members_reply_moves_a_contact_out_of_the_entry_stage(string from, string expected)
+    {
+        _contact.StageKey = from;
+        var c = Conv();
+        await Sut().SendAsync(_clientId, c.Id, new SendMessageRequest("hello"));
+        Assert.Equal(expected, _contact.StageKey);
+    }
+
+    [Fact]
+    public async Task A_members_template_moves_a_new_contact_on_but_an_ai_reply_campaign_or_reminder_doesnt()
+    {
+        var t = Template();
+        Setup(t);
+
+        _contact.StageKey = PipelineKit.New;
+        await Sut().SendTemplateAsync(_clientId, Conv().Id, new SendTemplateMessageRequest(t.Id, ["Ann", "20%"]));
+        Assert.Equal(PipelineKit.Contacted, _contact.StageKey);
+
+        _contact.StageKey = PipelineKit.New;
+        await Sut().SendCampaignTemplateAsync(_clientId, Conv().Id, t.Id, ["Ann", "20%"], Guid.NewGuid(), Guid.NewGuid());
+        await Sut().SendReminderTemplateAsync(_clientId, Conv().Id, t.Id, ["Ann", "20%"]);
+        await Sut().SendAiReplyAsync(_clientId, Conv().Id, "Hello from the bot");
+        Assert.Equal(PipelineKit.New, _contact.StageKey);
+    }
+
+    [Fact]
+    public async Task A_type_with_a_single_open_stage_keeps_the_contact_on_reply()
+    {
+        _businessTypes.Use(new ClientPipeline([new("only", StageCategory.Open, "Only"), new("won", StageCategory.Converted, "Won")]));
+        _contact.StageKey = "only";
+        await Sut().SendAsync(_clientId, Conv().Id, new SendMessageRequest("hello"));
+        Assert.Equal("only", _contact.StageKey);
+    }
 
     [Fact]
     public async Task Template_is_sent_rendered_billed_by_current_category_and_marks_human_mode()

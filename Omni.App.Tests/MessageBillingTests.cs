@@ -84,7 +84,7 @@ public class MessageBillingTests
                 new WhatsAppTemplateRepository(db), new CampaignRepository(db), new UnitOfWork(db), WhatsApp, new IChannelSender[] { new WhatsAppChannelSender(WhatsApp) },
                 NullProxy<IInboxNotifier>.Create(), new EventLogger(new EventLogRepository(db)), NullProxy<INotificationService>.Create(),
                 MessageBilling, H.Entitlements(db), new InboxSettingsService(new InboxSettingsRepository(db), new BotRepository(db), new ClientRepository(db), H.Entitlements(db), new ChannelIntegrationRepository(db), new IChannelSender[] { new WhatsAppChannelSender(WhatsApp) }, new UnitOfWork(db)), Mock.Of<IMessageTracer>(),
-                Conversations.Object, optOut ?? Mock.Of<IOptOutService>(), NoAutoReplies());
+                Conversations.Object, optOut ?? Mock.Of<IOptOutService>(), NoAutoReplies(), PipelineKit.Types().Object);
         }
 
         private static IAutoReplyService NoAutoReplies()
