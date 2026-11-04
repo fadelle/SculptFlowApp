@@ -22,6 +22,8 @@ public class WhatsAppTemplateRepository : IWhatsAppTemplateRepository
 
     public void Add(WhatsAppTemplate template) => _db.WhatsAppTemplates.Add(template);
 
+    public void Remove(WhatsAppTemplate template) => _db.WhatsAppTemplates.Remove(template);
+
     public Task<WhatsAppTemplate?> GetAsync(Guid clientId, Guid templateId, CancellationToken ct = default) =>
         _db.WhatsAppTemplates.FirstOrDefaultAsync(t => t.ClientId == clientId && t.Id == templateId, ct);
 

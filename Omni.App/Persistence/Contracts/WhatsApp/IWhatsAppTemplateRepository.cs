@@ -7,6 +7,9 @@ public interface IWhatsAppTemplateRepository
 {
     void Add(WhatsAppTemplate template);
 
+    /// <summary>Removes a tracked template (messages that used it keep their text; their link is cleared by the database).</summary>
+    void Remove(WhatsAppTemplate template);
+
     Task<WhatsAppTemplate?> GetAsync(Guid clientId, Guid templateId, CancellationToken ct = default);
 
     /// <summary>Read-only copies, newest first (cached).</summary>

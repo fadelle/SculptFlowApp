@@ -23,8 +23,6 @@ public interface IConversationService
     Task<(ConversationResponse Conversation, IReadOnlyList<MessageResponse> Messages)?> GetByIdWithMessagesAsync(
         Guid clientId, Guid id, CancellationToken ct = default);
 
-    Task<MessageResponse?> AddMessageAsync(Guid clientId, Guid conversationId, CreateMessageRequest request, CancellationToken ct = default);
-
     /// <summary>Inbox conversation list (left pane) — newest activity first.</summary>
     Task<(IReadOnlyList<ConversationListRow> Items, int TotalCount)> ListAsync(
         Guid clientId, int skip, int take, CancellationToken ct = default);

@@ -79,17 +79,6 @@ public class ConversationsController : ControllerBase
         return Ok(messages);
     }
 
-    [Authorize]
-    [HttpPost("{id:guid}/messages")]
-    public async Task<ActionResult<MessageResponse>> AddMessage(Guid id, [FromBody] CreateMessageRequest request, CancellationToken ct)
-    {
-        var clientId = await _clientContext.GetClientIdAsync(ct);
-        if (clientId is null) return Forbid();
-
-        var message = await _conversations.AddMessageAsync(clientId.Value, id, request, ct);
-        return message is null ? NotFound() : Ok(message);
-    }
-
     /// <summary>A member replies from the Inbox (MessageService.SendAsync): flips the conversation to human mode. Fails with
     /// 409 (via [ApiErrors]) if the 24-hour WhatsApp customer service window is closed — the client should offer SendTemplate
     /// instead. The AI bot replies through POST /api/ai/conversations/{id}/reply instead.</summary>

@@ -79,6 +79,37 @@ public class MetaGraphClientTests
     }
 
     [Fact]
+    public async Task Object_id_reads_the_object_with_the_given_token_and_surfaces_meta_refusals()
+    {
+        _http.Enqueue(HttpStatusCode.OK, "{\"id\":\"page1\",\"name\":\"Glow\"}");
+        Assert.Equal("page1", await Sut().GetObjectIdAsync("me", "page tok"));
+        Assert.Contains("/me?fields=id&access_token=page%20tok", _http.Requests[0].Uri.AbsoluteUri);
+        _http.Enqueue(HttpStatusCode.OK, "{}");
+        Assert.Null(await Sut().GetObjectIdAsync("ig1", "tok"));
+        _http.Enqueue(HttpStatusCode.BadRequest, "{\"error\":{\"message\":\"Invalid OAuth access token\",\"code\":190}}");
+        await Assert.ThrowsAsync<MetaGraphApiException>(() => Sut().GetObjectIdAsync("me", "bad"));
+    }
+
+    [Fact]
+    public async Task Template_edit_posts_to_the_template_and_delete_names_one_language()
+    {
+        // QA t8-17.
+        _http.Enqueue(HttpStatusCode.OK, "{\"success\":true}");
+        await Sut().EditMessageTemplateAsync("tpl-1", "tok", "utility", new object[] { new { type = "BODY", text = "Hi" } });
+        Assert.Equal(HttpMethod.Post, _http.Requests[0].Method);
+        Assert.Contains("/tpl-1?access_token=tok", _http.Requests[0].Uri.AbsoluteUri);
+        Assert.Contains("\"category\":\"UTILITY\"", _http.Requests[0].Body);
+
+        _http.Enqueue(HttpStatusCode.OK, "{\"success\":true}");
+        await Sut().DeleteMessageTemplateAsync("W1", "tok", "spring promo", "tpl-1");
+        Assert.Equal(HttpMethod.Delete, _http.Requests[1].Method);
+        Assert.Contains("/W1/message_templates?hsm_id=tpl-1&name=spring%20promo&access_token=tok", _http.Requests[1].Uri.AbsoluteUri);
+
+        _http.Enqueue(HttpStatusCode.BadRequest, "{\"error\":{\"message\":\"nope\"}}");
+        await Assert.ThrowsAsync<MetaGraphApiException>(() => Sut().DeleteMessageTemplateAsync("W1", "tok", "x", "tpl-2"));
+    }
+
+    [Fact]
     public async Task Granted_scopes_use_the_app_token_for_debug_token()
     {
         _http.Enqueue(HttpStatusCode.OK, "{\"data\":{\"scopes\":[\"whatsapp_business_management\",null,\"business_management\"]}}");

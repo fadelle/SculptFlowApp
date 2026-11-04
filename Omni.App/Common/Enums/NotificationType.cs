@@ -10,4 +10,6 @@ public static class NotificationType
     public const string CampaignReply = "CAMPAIGN_REPLY";
     public const string OutboundMessageFailed = "OUTBOUND_MESSAGE_FAILED";
     public const string IntegrationUnhealthy = "INTEGRATION_UNHEALTHY";
+    /// <summary>Meta approved, rejected, paused, disabled, flagged or re-categorised a WhatsApp template.</summary>
+    public const string TemplateStatusChanged = "TEMPLATE_STATUS_CHANGED";
 }

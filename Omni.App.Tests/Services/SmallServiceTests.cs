@@ -350,6 +350,63 @@ public class CacheAdminServiceTests
     }
 
     [Fact]
+    public async Task Get_masks_channel_tokens_and_pins_in_cached_connections()
+    {
+        // QA t6-admin-03: channels:integrations:{client} showed bot and WhatsApp tokens in clear text.
+        var connections = new List<ChannelIntegration>
+        {
+            new() { Id = Guid.NewGuid(), Channel = ChannelType.Telegram, AccessToken = "9272094454:AAFp-secret", WebhookVerifyToken = "hook-secret", TelegramBotUsername = "glow_bot" },
+            new() { Id = Guid.NewGuid(), Channel = ChannelType.WhatsApp, AccessToken = "EAAG-secret", Pin = "123456", PhoneNumberId = "pn1", WebhookVerifyToken = null },
+        };
+        var json = System.Text.Json.JsonSerializer.Serialize(connections, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web));
+        _cache.Setup(c => c.GetRawAsync("channels:integrations:x", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((new CacheEntryInfo("channels:integrations:x", DateTimeOffset.UtcNow.AddMinutes(1), json.Length), json));
+
+        var value = (await Sut().GetAsync("channels:integrations:x", default)).Value;
+
+        Assert.DoesNotContain("secret", value.GetRawText());
+        Assert.DoesNotContain("123456", value.GetRawText());
+        var tg = value[0];
+        var wa = value[1];
+        Assert.Equal(("(set)", "(set)", "glow_bot"), (tg.GetProperty("accessToken").GetString(), tg.GetProperty("webhookVerifyToken").GetString(), tg.GetProperty("telegramBotUsername").GetString()));
+        Assert.Equal(("(set)", "(set)", "pn1"), (wa.GetProperty("accessToken").GetString(), wa.GetProperty("pin").GetString(), wa.GetProperty("phoneNumberId").GetString()));
+        Assert.Equal(System.Text.Json.JsonValueKind.Null, wa.GetProperty("webhookVerifyToken").ValueKind); // "not set" stays visible
+    }
+
+    [Fact]
+    public void Redaction_masks_secret_names_at_any_depth_and_leaves_counts_and_ordinary_fields()
+    {
+        var json = """{"a":{"refresh_token":"r1","Client-Secret":"s1","apiKey":"k1","password":"p1","tokenHash":"h1","credentials":"c1","inputTokens":42,"name":"Glow","items":[{"pin":"0000"}]},"empty":{"accessToken":""}}""";
+        var redacted = SecretRedactor.Redact(json);
+        Assert.Equal("""{"a":{"refresh_token":"(set)","Client-Secret":"(set)","apiKey":"(set)","password":"(set)","tokenHash":"(set)","credentials":"(set)","inputTokens":42,"name":"Glow","items":[{"pin":"(set)"}]},"empty":{"accessToken":""}}""", redacted);
+        Assert.Equal("[1,2]", SecretRedactor.Redact("[1,2]"));
+    }
+
+    [Fact]
+    public void Every_secret_named_field_on_an_entity_or_dto_is_masked_when_cached()
+    {
+        // Walks every entity, DTO and response type: whatever is cached (table caches hold entity copies, others DTOs), a
+        // string property whose name says "secret" comes out masked in the admin view.
+        var options = new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web)
+        { ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles };
+        var checkedProperties = new List<string>();
+        foreach (var type in typeof(ChannelIntegration).Assembly.GetTypes().Where(t => t is { IsClass: true, IsAbstract: false, IsGenericTypeDefinition: false }
+                     && t.Namespace?.StartsWith("Omni.App.Entities", StringComparison.Ordinal) == true))
+        {
+            var secrets = type.GetProperties().Where(p => p.PropertyType == typeof(string) && p.CanWrite && p.GetIndexParameters().Length == 0
+                && System.Text.RegularExpressions.Regex.IsMatch(p.Name, "Token|Secret|Password|ApiKey|PrivateKey|Credential|^Pin$")).ToList();
+            if (secrets.Count == 0) continue;
+            var instance = System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(type);
+            foreach (var p in secrets) p.SetValue(instance, "LEAK-" + p.Name);
+            var redacted = SecretRedactor.Redact(System.Text.Json.JsonSerializer.Serialize(instance, type, options));
+            Assert.DoesNotContain("LEAK-", redacted);
+            checkedProperties.AddRange(secrets.Select(p => $"{type.Name}.{p.Name}"));
+        }
+        Assert.Contains("ChannelIntegration.AccessToken", checkedProperties);
+        Assert.Contains("ChannelIntegration.Pin", checkedProperties);
+    }
+
+    [Fact]
     public async Task Remove_by_key_prefix_and_clear()
     {
         await Assert.ThrowsAsync<KeyNotFoundException>(() => Sut().RemoveAsync("missing", default));

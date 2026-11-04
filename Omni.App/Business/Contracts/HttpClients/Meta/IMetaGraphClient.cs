@@ -27,6 +27,10 @@ public interface IMetaGraphClient
     /// <summary>Looks up display info for a WhatsApp phone number (from Embedded Signup).</summary>
     Task<WhatsAppPhoneNumberInfo?> GetWhatsAppPhoneNumberAsync(string phoneNumberId, string accessToken, CancellationToken ct = default);
 
+    /// <summary>The id Graph answers for <paramref name="objectId"/> read with <paramref name="accessToken"/> (<c>me</c> = the
+    /// token's own user or page), or null; throws MetaGraphApiException when Meta refuses (bad token, no access).</summary>
+    Task<string?> GetObjectIdAsync(string objectId, string accessToken, CancellationToken ct = default);
+
     /// <summary>DEBUG-ONLY: asks Meta what scopes/permissions a token actually carries (via /debug_token).</summary>
     Task<IReadOnlyList<string>> GetGrantedScopesAsync(string accessToken, CancellationToken ct = default);
 
@@ -61,4 +65,12 @@ public interface IMetaGraphClient
 
     /// <summary>Refreshes a submitted template's current review status/rejection reason from Meta.</summary>
     Task<MetaTemplateStatusResult> GetMessageTemplateStatusAsync(string metaTemplateId, string accessToken, CancellationToken ct = default);
+
+    /// <summary>Edits a template Meta already has (POST /{template-id}): its category and components. Meta allows it for
+    /// rejected and paused templates (and sends the edited one for review again).</summary>
+    Task EditMessageTemplateAsync(string metaTemplateId, string accessToken, string category, object components, CancellationToken ct = default);
+
+    /// <summary>Deletes one template at Meta (DELETE /{waba-id}/message_templates?hsm_id=…&amp;name=…): with the template id only
+    /// that language goes, not every language sharing the name.</summary>
+    Task DeleteMessageTemplateAsync(string wabaId, string accessToken, string name, string metaTemplateId, CancellationToken ct = default);
 }

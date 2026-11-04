@@ -11,6 +11,9 @@ public interface IOrderRepository
     Task<(IReadOnlyList<Order> Items, int TotalCount)> ListAsync(Guid clientId, string? status, int skip, int take,
         CancellationToken ct = default);
 
+    /// <summary>One contact's orders, newest first, with Service loaded (read-only).</summary>
+    Task<IReadOnlyList<Order>> ListForContactReadOnlyAsync(Guid clientId, Guid contactId, CancellationToken ct = default);
+
     void Add(Order order);
 
     /// <summary>Loads order.Contact and order.Service.</summary>

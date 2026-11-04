@@ -44,6 +44,8 @@ namespace Omni.App.Pages.Campaigns;
 /// manual selection (see OnPostAsync).
 /// </summary>
 [RequirePlanFeature(EntitlementKeys.Campaigns)]
+// Campaigns are WhatsApp templates: without a connected number the page says so and links to Messaging Integrations.
+[RequireConnectedChannel(ChannelType.WhatsApp)]
 public class CreateModel : PageModel
 {
     private static readonly Regex PlaceholderPattern = new(@"\{\{(\d+)\}\}", RegexOptions.Compiled);

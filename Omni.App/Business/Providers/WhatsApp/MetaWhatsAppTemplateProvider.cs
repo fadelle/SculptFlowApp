@@ -44,6 +44,30 @@ public class MetaWhatsAppTemplateProvider : IWhatsAppTemplateProvider
         return new WhatsAppTemplateStatusResult(result.Status, result.RejectedReason);
     }
 
+    public async Task EditAsync(ChannelIntegration integration, WhatsAppTemplate template, CancellationToken ct = default)
+    {
+        try
+        {
+            await _meta.EditMessageTemplateAsync(template.MetaTemplateId!, integration.AccessToken!, template.Category, BuildMetaComponents(template), ct);
+        }
+        catch (MetaGraphApiException ex)
+        {
+            throw new WhatsAppTemplateProviderException(ex.Message);
+        }
+    }
+
+    public async Task DeleteAsync(ChannelIntegration integration, WhatsAppTemplate template, CancellationToken ct = default)
+    {
+        try
+        {
+            await _meta.DeleteMessageTemplateAsync(integration.WhatsAppBusinessId!, integration.AccessToken!, template.Name, template.MetaTemplateId!, ct);
+        }
+        catch (MetaGraphApiException ex)
+        {
+            throw new WhatsAppTemplateProviderException(ex.Message);
+        }
+    }
+
     /// <summary>Builds Meta's "components" array (header/body/footer/buttons) for a template create
     /// call from our stored fields. {{1}}, {{2}}... placeholders in Body pass through as-is — Meta
     /// parses those itself from the text.</summary>

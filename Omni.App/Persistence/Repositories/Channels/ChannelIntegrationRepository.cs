@@ -39,13 +39,18 @@ public class ChannelIntegrationRepository : IChannelIntegrationRepository
     public async Task<Guid> GetIdAsync(Guid clientId, string channel, CancellationToken ct = default) =>
         (await GetReadOnlyAsync(clientId, channel, ct))?.Id ?? Guid.Empty;
 
+    // A disconnected row keeps its ids (only connected numbers are unique), so the connected row wins when both exist.
     public Task<ChannelIntegration?> FindWhatsAppByPhoneNumberIdAsync(string phoneNumberId, CancellationToken ct = default) =>
-        _db.ChannelIntegrations.FirstOrDefaultAsync(
-            c => c.Channel == ChannelType.WhatsApp && c.PhoneNumberId == phoneNumberId, ct);
+        _db.ChannelIntegrations
+            .Where(c => c.Channel == ChannelType.WhatsApp && c.PhoneNumberId == phoneNumberId)
+            .OrderByDescending(c => c.Status == ChannelIntegrationStatus.Connected).ThenByDescending(c => c.UpdatedAt)
+            .FirstOrDefaultAsync(ct);
 
     public Task<ChannelIntegration?> FindWhatsAppByWabaIdAsync(string wabaId, CancellationToken ct = default) =>
-        _db.ChannelIntegrations.FirstOrDefaultAsync(
-            c => c.Channel == ChannelType.WhatsApp && c.WhatsAppBusinessId == wabaId, ct);
+        _db.ChannelIntegrations
+            .Where(c => c.Channel == ChannelType.WhatsApp && c.WhatsAppBusinessId == wabaId)
+            .OrderByDescending(c => c.Status == ChannelIntegrationStatus.Connected).ThenByDescending(c => c.UpdatedAt)
+            .FirstOrDefaultAsync(ct);
 
     public Task<bool> IsTelegramBotConnectedElsewhereAsync(string botId, Guid clientId, CancellationToken ct = default) =>
         _db.ChannelIntegrations.AnyAsync(c =>

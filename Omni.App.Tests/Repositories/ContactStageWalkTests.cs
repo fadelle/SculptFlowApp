@@ -40,7 +40,7 @@ public class ContactStageWalkTests(PostgresFixture fixture) : RepoTestBase(fixtu
         new Mock<IEntitlementService>().Object);
 
     private OrderService Orders(ApplicationDbContext db) =>
-        new(new OrderRepository(db), new ContactRepository(db), new UnitOfWork(db), _events.Object, _catalog.Object, Types(db));
+        new(new OrderRepository(db), new ContactRepository(db), new UnitOfWork(db), _events.Object, _catalog.Object, Types(db), new BookingRepository(db));
 
     [PostgresTheory]
     [InlineData(TextKit.Clinic)]

@@ -371,15 +371,88 @@ public class DashboardPageTests
     private static ContactResponse Contact(string status = "new", string? source = "web") =>
         Blank<ContactResponse>() with { StageKey = status, Qualification = "hot", Source = source };
 
+    internal static IOrderService NoOrders(params OrderResponse[] orders)
+    {
+        var mock = new Mock<IOrderService>();
+        mock.Setup(o => o.ListForContactAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync(orders);
+        return mock.Object;
+    }
+
+    internal static ICatalogService NoServices()
+    {
+        var mock = new Mock<ICatalogService>();
+        mock.Setup(c => c.ListAsync(It.IsAny<Guid>(), true, It.IsAny<CancellationToken>())).ReturnsAsync(Array.Empty<ServiceResponse>());
+        return mock.Object;
+    }
+
+    [Fact]
+    public async Task Contact_detail_lists_the_contacts_orders_and_opens_the_add_popup_from_the_inbox_link()
+    {
+        // QA t3-inbox-10: orders had no UI.
+        var id = Guid.NewGuid();
+        var contacts = new Mock<IContactService>();
+        contacts.Setup(l => l.GetByIdAsync(Glow.Id, id, It.IsAny<CancellationToken>())).ReturnsAsync(Contact());
+        contacts.Setup(l => l.GetDistinctSourcesAsync(Glow.Id, It.IsAny<CancellationToken>())).ReturnsAsync(new List<string>());
+        var order = Blank<OrderResponse>() with { Id = Guid.NewGuid(), Status = OrderStatus.Quoted, ServiceName = "Facial" };
+        var model = new Omni.App.Pages.Dashboard.ContactDetailModel(ClientContext(Glow).Object, contacts.Object, Mock.Of<IOptOutService>(), Mock.Of<IContactDataService>(),
+            NoOrders(order), NoServices(), TextKit.Localizer()) { Id = id }.Attach();
+
+        Assert.IsType<PageResult>(await model.OnGetAsync(null, default));
+        Assert.Equal((order.Id, false), (Assert.Single(model.Orders).Id, model.OrderFormOpen));
+        await model.OnGetAsync("new", default);
+        Assert.True(model.OrderFormOpen);
+    }
+
+    [Fact]
+    public async Task Adding_and_editing_an_order_go_through_the_order_service_and_a_refusal_reopens_the_popup()
+    {
+        var id = Guid.NewGuid();
+        var contacts = new Mock<IContactService>();
+        contacts.Setup(l => l.GetByIdAsync(Glow.Id, id, It.IsAny<CancellationToken>())).ReturnsAsync(Contact());
+        contacts.Setup(l => l.GetDistinctSourcesAsync(Glow.Id, It.IsAny<CancellationToken>())).ReturnsAsync(new List<string>());
+        var existing = Blank<OrderResponse>() with { Id = Guid.NewGuid(), Status = OrderStatus.Considering };
+        var orders = new Mock<IOrderService>();
+        orders.Setup(o => o.ListForContactAsync(Glow.Id, id, It.IsAny<CancellationToken>())).ReturnsAsync(new[] { existing });
+        CreateOrderRequest? created = null;
+        orders.Setup(o => o.CreateAsync(It.IsAny<CreateOrderRequest>(), It.IsAny<CancellationToken>()))
+            .Callback<CreateOrderRequest, CancellationToken>((r, _) => created = r).ReturnsAsync(existing);
+        UpdateOrderRequest? updated = null;
+        orders.Setup(o => o.UpdateAsync(Glow.Id, existing.Id, It.IsAny<UpdateOrderRequest>(), It.IsAny<CancellationToken>()))
+            .Callback<Guid, Guid, UpdateOrderRequest, CancellationToken>((_, _, r, _) => updated = r).ReturnsAsync(existing);
+        Omni.App.Pages.Dashboard.ContactDetailModel Sut() => new Omni.App.Pages.Dashboard.ContactDetailModel(ClientContext(Glow).Object, contacts.Object,
+            Mock.Of<IOptOutService>(), Mock.Of<IContactDataService>(), orders.Object, NoServices(), TextKit.Localizer()) { Id = id }.Attach();
+
+        var add = Sut();
+        var serviceId = Guid.NewGuid();
+        add.OrderServiceId = serviceId; add.OrderQuoted = 120m; add.OrderCurrency = " usd "; add.OrderNotes = "  ";
+        Assert.IsType<RedirectToPageResult>(await add.OnPostOrderAsync(default));
+        Assert.Equal((Glow.Id, id, serviceId, (Guid?)null, 120m, "USD", (string?)null),
+            (created!.ClientId, created.ContactId, created.ServiceId, created.BookingId, created.QuotedAmount, created.CurrencyCode, created.Notes));
+
+        var edit = Sut();
+        edit.OrderId = existing.Id; edit.OrderStatusValue = OrderStatus.Confirmed; edit.OrderFinal = 100m;
+        Assert.IsType<RedirectToPageResult>(await edit.OnPostOrderAsync(default));
+        Assert.Equal((OrderStatus.Confirmed, 100m), (updated!.Status, updated.FinalAmount));
+
+        // Another contact's order is "not found"; a missing service reopens the popup with the reason.
+        var foreign = Sut();
+        foreign.OrderId = Guid.NewGuid();
+        Assert.IsType<NotFoundResult>(await foreign.OnPostOrderAsync(default));
+        var noService = Sut();
+        Assert.IsType<PageResult>(await noService.OnPostOrderAsync(default));
+        Assert.True(noService.OrderFormOpen);
+        Assert.Contains("this", noService.OrderError);
+    }
+
     [Fact]
     public async Task Contact_detail_404s_for_an_unknown_contact_and_is_empty_without_a_client()
     {
         var contacts = new Mock<IContactService>();
-        var model = new Omni.App.Pages.Dashboard.ContactDetailModel(ClientContext(Glow).Object, contacts.Object, Mock.Of<IOptOutService>(), Mock.Of<IContactDataService>(), TextKit.Localizer()) { Id = Guid.NewGuid() }.Attach();
-        Assert.IsType<NotFoundResult>(await model.OnGetAsync(default));
+        var model = new Omni.App.Pages.Dashboard.ContactDetailModel(ClientContext(Glow).Object, contacts.Object, Mock.Of<IOptOutService>(), Mock.Of<IContactDataService>(), NoOrders(), NoServices(), TextKit.Localizer()) { Id = Guid.NewGuid() }.Attach();
+        Assert.IsType<NotFoundResult>(await model.OnGetAsync(null, default));
 
-        var none = new Omni.App.Pages.Dashboard.ContactDetailModel(ClientContext(null).Object, contacts.Object, Mock.Of<IOptOutService>(), Mock.Of<IContactDataService>(), TextKit.Localizer()).Attach();
-        Assert.IsType<PageResult>(await none.OnGetAsync(default));
+        var none = new Omni.App.Pages.Dashboard.ContactDetailModel(ClientContext(null).Object, contacts.Object, Mock.Of<IOptOutService>(), Mock.Of<IContactDataService>(), NoOrders(), NoServices(), TextKit.Localizer()).Attach();
+        Assert.IsType<PageResult>(await none.OnGetAsync(null, default));
         Assert.False(none.ClientConfigured);
     }
 
@@ -393,10 +466,10 @@ public class DashboardPageTests
         var contacts = new Mock<IContactService>();
         contacts.Setup(l => l.GetByIdAsync(Glow.Id, id, It.IsAny<CancellationToken>())).ReturnsAsync(Contact("contacted", source));
         contacts.Setup(l => l.GetDistinctSourcesAsync(Glow.Id, It.IsAny<CancellationToken>())).ReturnsAsync(new List<string> { "WEB" });
-        var model = new Omni.App.Pages.Dashboard.ContactDetailModel(ClientContext(Glow).Object, contacts.Object, Mock.Of<IOptOutService>(), Mock.Of<IContactDataService>(), TextKit.Localizer()) { Id = id }.Attach();
+        var model = new Omni.App.Pages.Dashboard.ContactDetailModel(ClientContext(Glow).Object, contacts.Object, Mock.Of<IOptOutService>(), Mock.Of<IContactDataService>(), NoOrders(), NoServices(), TextKit.Localizer()) { Id = id }.Attach();
         IReadOnlyList<PipelineStageOption> stages = [new("contacted", StageCategory.Open, "Reached out")];
         contacts.Setup(l => l.ListStagesAsync(Glow.Id, It.IsAny<CancellationToken>())).ReturnsAsync(stages);
-        Assert.IsType<PageResult>(await model.OnGetAsync(default));
+        Assert.IsType<PageResult>(await model.OnGetAsync(null, default));
         Assert.Same(stages, model.Stages);
         Assert.Equal(("contacted", "hot", choice), (model.StageKey, model.Qualification, model.SourceChoice));
         Assert.Equal(custom, model.CustomSource);
@@ -411,8 +484,8 @@ public class DashboardPageTests
         var contacts = new Mock<IContactService>();
         contacts.Setup(l => l.GetByIdAsync(Glow.Id, id, It.IsAny<CancellationToken>())).ReturnsAsync(Contact(source: "tiktok"));
         contacts.Setup(l => l.GetDistinctSourcesAsync(Glow.Id, It.IsAny<CancellationToken>())).ReturnsAsync(new List<string>());
-        var model = new Omni.App.Pages.Dashboard.ContactDetailModel(ClientContext(Glow).Object, contacts.Object, Mock.Of<IOptOutService>(), Mock.Of<IContactDataService>(), TextKit.Localizer()) { Id = id }.Attach();
-        await model.OnGetAsync(default);
+        var model = new Omni.App.Pages.Dashboard.ContactDetailModel(ClientContext(Glow).Object, contacts.Object, Mock.Of<IOptOutService>(), Mock.Of<IContactDataService>(), NoOrders(), NoServices(), TextKit.Localizer()) { Id = id }.Attach();
+        await model.OnGetAsync(null, default);
         Assert.Contains("tiktok", model.SourceOptions);
     }
 
@@ -425,7 +498,7 @@ public class DashboardPageTests
         contacts.Setup(l => l.UpdateStageAsync(Glow.Id, id, It.IsAny<UpdateContactStageRequest>(), It.IsAny<CancellationToken>()))
             .Callback<Guid, Guid, UpdateContactStageRequest, CancellationToken>((_, _, r, _) => seen = r)
             .ReturnsAsync(Contact());
-        var model = new Omni.App.Pages.Dashboard.ContactDetailModel(ClientContext(Glow).Object, contacts.Object, Mock.Of<IOptOutService>(), Mock.Of<IContactDataService>(), TextKit.Localizer())
+        var model = new Omni.App.Pages.Dashboard.ContactDetailModel(ClientContext(Glow).Object, contacts.Object, Mock.Of<IOptOutService>(), Mock.Of<IContactDataService>(), NoOrders(), NoServices(), TextKit.Localizer())
         {
             Id = id, StageKey = "qualified", Qualification = "warm", SourceChoice = "other", CustomSource = "  podcast ",
         }.Attach();
@@ -456,8 +529,8 @@ public class DashboardPageTests
         var contacts = new Mock<IContactService>();
         contacts.Setup(l => l.GetByIdAsync(Glow.Id, id, It.IsAny<CancellationToken>())).ReturnsAsync(Contact() with { PreferredLanguage = language });
         contacts.Setup(l => l.GetDistinctSourcesAsync(Glow.Id, It.IsAny<CancellationToken>())).ReturnsAsync(new List<string>());
-        var model = new Omni.App.Pages.Dashboard.ContactDetailModel(ClientContext(Glow).Object, contacts.Object, Mock.Of<IOptOutService>(), Mock.Of<IContactDataService>(), TextKit.Localizer()) { Id = id }.Attach();
-        await model.OnGetAsync(default);
+        var model = new Omni.App.Pages.Dashboard.ContactDetailModel(ClientContext(Glow).Object, contacts.Object, Mock.Of<IOptOutService>(), Mock.Of<IContactDataService>(), NoOrders(), NoServices(), TextKit.Localizer()) { Id = id }.Attach();
+        await model.OnGetAsync(null, default);
         Assert.Equal((choice, custom), (model.LanguageChoice, model.CustomLanguage));
         Assert.Equal(["en", "ar", "fr"], model.LanguageOptions);
     }
@@ -469,7 +542,7 @@ public class DashboardPageTests
         var contacts = new Mock<IContactService>();
         contacts.Setup(l => l.GetByIdAsync(Glow.Id, id, It.IsAny<CancellationToken>())).ReturnsAsync(Contact());
         contacts.Setup(l => l.GetDistinctSourcesAsync(Glow.Id, It.IsAny<CancellationToken>())).ReturnsAsync(new List<string>());
-        var model = new Omni.App.Pages.Dashboard.ContactDetailModel(ClientContext(Glow).Object, contacts.Object, Mock.Of<IOptOutService>(), Mock.Of<IContactDataService>(), TextKit.Localizer()) { Id = id, SourceChoice = "web" }.Attach();
+        var model = new Omni.App.Pages.Dashboard.ContactDetailModel(ClientContext(Glow).Object, contacts.Object, Mock.Of<IOptOutService>(), Mock.Of<IContactDataService>(), NoOrders(), NoServices(), TextKit.Localizer()) { Id = id, SourceChoice = "web" }.Attach();
 
         Assert.IsType<NotFoundResult>(await model.OnPostAsync(default));          // the service returns null
 
@@ -484,7 +557,7 @@ public class DashboardPageTests
         await model.OnPostAsync(default);
         Assert.Equal("'vip' isn't one of your contact stages.", model.ErrorMessage); // a keyed message is shown in words
 
-        var none = new Omni.App.Pages.Dashboard.ContactDetailModel(ClientContext(null).Object, contacts.Object, Mock.Of<IOptOutService>(), Mock.Of<IContactDataService>(), TextKit.Localizer()).Attach();
+        var none = new Omni.App.Pages.Dashboard.ContactDetailModel(ClientContext(null).Object, contacts.Object, Mock.Of<IOptOutService>(), Mock.Of<IContactDataService>(), NoOrders(), NoServices(), TextKit.Localizer()).Attach();
         Assert.IsType<RedirectToPageResult>(await none.OnPostAsync(default));
     }
 
@@ -620,19 +693,43 @@ public class CampaignDetailsPageTests
 {
     private static readonly Client Glow = SomeClient();
 
+    private static IChannelIntegrationService Channels(params string[] connected)
+    {
+        var channels = new Mock<IChannelIntegrationService>();
+        channels.Setup(c => c.ListConnectedChannelsAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(connected.ToHashSet(StringComparer.Ordinal));
+        return channels.Object;
+    }
+
+    [Fact]
+    public async Task Campaign_details_warn_while_WhatsApp_is_not_connected()
+    {
+        // QA t5-ops-05: the page now says why a campaign can't send.
+        var id = Guid.NewGuid();
+        var campaigns = new Mock<ICampaignService>();
+        campaigns.Setup(c => c.GetByIdAsync(Glow.Id, id, It.IsAny<CancellationToken>())).ReturnsAsync(Blank<CampaignDetailsResponse>());
+
+        var without = new CampaignDetails(ClientContext(Glow).Object, campaigns.Object, Channels(), TextKit.Localizer()).Attach();
+        await without.OnGetAsync(id, default);
+        var with = new CampaignDetails(ClientContext(Glow).Object, campaigns.Object, Channels(ChannelType.Telegram, ChannelType.WhatsApp), TextKit.Localizer()).Attach();
+        await with.OnGetAsync(id, default);
+
+        Assert.Equal((false, true), (without.WhatsAppConnected, with.WhatsAppConnected));
+    }
+
     [Fact]
     public async Task Campaign_details_load_404_or_show_empty_without_a_client()
     {
         var id = Guid.NewGuid();
         var campaigns = new Mock<ICampaignService>();
-        var model = new CampaignDetails(ClientContext(Glow).Object, campaigns.Object, TextKit.Localizer()).Attach();
+        var model = new CampaignDetails(ClientContext(Glow).Object, campaigns.Object, Channels(ChannelType.WhatsApp), TextKit.Localizer()).Attach();
         Assert.IsType<NotFoundResult>(await model.OnGetAsync(id, default));
 
         campaigns.Setup(c => c.GetByIdAsync(Glow.Id, id, It.IsAny<CancellationToken>())).ReturnsAsync(Blank<CampaignDetailsResponse>());
         Assert.IsType<PageResult>(await model.OnGetAsync(id, default));
         Assert.NotNull(model.Details);
 
-        var none = new CampaignDetails(ClientContext(null).Object, campaigns.Object, TextKit.Localizer()).Attach();
+        var none = new CampaignDetails(ClientContext(null).Object, campaigns.Object, Channels(ChannelType.WhatsApp), TextKit.Localizer()).Attach();
         Assert.IsType<PageResult>(await none.OnGetAsync(id, default));
         Assert.False(none.ClientConfigured);
     }
@@ -647,7 +744,7 @@ public class CampaignDetailsPageTests
             .ReturnsAsync(Blank<ProcessCampaignBatchResult>() with { Processed = 5, Succeeded = 5, Failed = 0, RemainingQueued = 0, CampaignCompleted = true })
             .ReturnsAsync((ProcessCampaignBatchResult?)null)
             .ThrowsAsync(new InvalidOperationException("Not approved yet."));
-        var model = new CampaignDetails(ClientContext(Glow).Object, campaigns.Object, TextKit.Localizer()).Attach();
+        var model = new CampaignDetails(ClientContext(Glow).Object, campaigns.Object, Channels(ChannelType.WhatsApp), TextKit.Localizer()).Attach();
 
         Assert.IsType<RedirectToPageResult>(await model.OnPostSendAsync(id, default));
         Assert.Contains("18 sent so far, 2 failed; the other 5 go out automatically", model.StatusMessage);
@@ -658,7 +755,7 @@ public class CampaignDetailsPageTests
         await model.OnPostSendAsync(id, default);
         Assert.Equal("Not approved yet.", model.ErrorMessage);
 
-        var none = new CampaignDetails(ClientContext(null).Object, campaigns.Object, TextKit.Localizer()).Attach();
+        var none = new CampaignDetails(ClientContext(null).Object, campaigns.Object, Channels(ChannelType.WhatsApp), TextKit.Localizer()).Attach();
         Assert.IsType<RedirectToPageResult>(await none.OnPostSendAsync(id, default));
     }
 
@@ -667,7 +764,7 @@ public class CampaignDetailsPageTests
     {
         var id = Guid.NewGuid();
         var campaigns = new Mock<ICampaignService>();
-        var model = new CampaignDetails(ClientContext(Glow).Object, campaigns.Object, TextKit.Localizer()).Attach();
+        var model = new CampaignDetails(ClientContext(Glow).Object, campaigns.Object, Channels(ChannelType.WhatsApp), TextKit.Localizer()).Attach();
         await model.OnPostCancelAsync(id, default);
         Assert.Equal("Campaign cancelled.", model.StatusMessage);
 
@@ -675,7 +772,7 @@ public class CampaignDetailsPageTests
         await model.OnPostCancelAsync(id, default);
         Assert.Equal("Already sent.", model.ErrorMessage);
 
-        var none = new CampaignDetails(ClientContext(null).Object, campaigns.Object, TextKit.Localizer()).Attach();
+        var none = new CampaignDetails(ClientContext(null).Object, campaigns.Object, Channels(ChannelType.WhatsApp), TextKit.Localizer()).Attach();
         Assert.IsType<RedirectToPageResult>(await none.OnPostCancelAsync(id, default));
     }
 
@@ -684,7 +781,7 @@ public class CampaignDetailsPageTests
     {
         var id = Guid.NewGuid();
         var campaigns = new Mock<ICampaignService>();
-        var model = new CampaignDetails(ClientContext(Glow).Object, campaigns.Object, TextKit.Localizer()).Attach();
+        var model = new CampaignDetails(ClientContext(Glow).Object, campaigns.Object, Channels(ChannelType.WhatsApp), TextKit.Localizer()).Attach();
         Assert.IsType<RedirectToPageResult>(await model.OnPostStopAsync(id, default));
         Assert.Contains("Campaign stopped", model.StatusMessage);
         campaigns.Verify(c => c.StopAsync(Glow.Id, id, It.IsAny<CancellationToken>()), Times.Once);
@@ -693,7 +790,7 @@ public class CampaignDetailsPageTests
         await model.OnPostStopAsync(id, default);
         Assert.Equal("Only a scheduled or sending campaign can be stopped.", model.ErrorMessage);
 
-        var none = new CampaignDetails(ClientContext(null).Object, campaigns.Object, TextKit.Localizer()).Attach();
+        var none = new CampaignDetails(ClientContext(null).Object, campaigns.Object, Channels(ChannelType.WhatsApp), TextKit.Localizer()).Attach();
         Assert.IsType<RedirectToPageResult>(await none.OnPostStopAsync(id, default));
         campaigns.Verify(c => c.StopAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
     }
@@ -712,14 +809,14 @@ public class CampaignDetailsPageTests
         var optOut = new Mock<IOptOutService>();
         optOut.Setup(o => o.SetAsync(Glow.Id, id, It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Omni.App.Business.Mappers.Contacts.ContactMapper.ToResponse(new Contact { Id = id, ClientId = Glow.Id }));
-        var model = new Omni.App.Pages.Dashboard.ContactDetailModel(ClientContext(Glow, UserRole.Member, "m1").Object, Mock.Of<IContactService>(), optOut.Object, Mock.Of<IContactDataService>(), TextKit.Localizer()) { Id = id }.Attach();
+        var model = new Omni.App.Pages.Dashboard.ContactDetailModel(ClientContext(Glow, UserRole.Member, "m1").Object, Mock.Of<IContactService>(), optOut.Object, Mock.Of<IContactDataService>(), DashboardPageTests.NoOrders(), DashboardPageTests.NoServices(), TextKit.Localizer()) { Id = id }.Attach();
 
         Assert.Equal("page:(same)", RedirectTarget(await model.OnPostOptOutAsync(true, default)));
         Assert.Equal("Opted out: no more campaigns, reminders or templates.", model.StatusMessage);
         Assert.Equal("page:(same)", RedirectTarget(await model.OnPostOptOutAsync(false, default)));
         Assert.Equal("Opted back in.", model.StatusMessage);
 
-        var stranger = new Omni.App.Pages.Dashboard.ContactDetailModel(ClientContext(Glow).Object, Mock.Of<IContactService>(), Mock.Of<IOptOutService>(), Mock.Of<IContactDataService>(), TextKit.Localizer()) { Id = Guid.NewGuid() }.Attach();
+        var stranger = new Omni.App.Pages.Dashboard.ContactDetailModel(ClientContext(Glow).Object, Mock.Of<IContactService>(), Mock.Of<IOptOutService>(), Mock.Of<IContactDataService>(), DashboardPageTests.NoOrders(), DashboardPageTests.NoServices(), TextKit.Localizer()) { Id = Guid.NewGuid() }.Attach();
         Assert.IsType<NotFoundResult>(await stranger.OnPostOptOutAsync(true, default));
     }
 
@@ -734,11 +831,11 @@ public class CampaignDetailsPageTests
         contacts.Setup(c => c.GetDistinctSourcesAsync(Glow.Id, It.IsAny<CancellationToken>())).ReturnsAsync([]);
         var data = new Mock<IContactDataService>();
 
-        var owner = new Omni.App.Pages.Dashboard.ContactDetailModel(ClientContext(Glow).Object, contacts.Object, Mock.Of<IOptOutService>(), data.Object, TextKit.Localizer()) { Id = id }.Attach();
-        await owner.OnGetAsync(default);
+        var owner = new Omni.App.Pages.Dashboard.ContactDetailModel(ClientContext(Glow).Object, contacts.Object, Mock.Of<IOptOutService>(), data.Object, DashboardPageTests.NoOrders(), DashboardPageTests.NoServices(), TextKit.Localizer()) { Id = id }.Attach();
+        await owner.OnGetAsync(null, default);
         Assert.Equal((true, "+96170123456"), (owner.CanManageData, owner.DeleteConfirmation));
-        var member = new Omni.App.Pages.Dashboard.ContactDetailModel(ClientContext(Glow, UserRole.Member, "m1").Object, contacts.Object, Mock.Of<IOptOutService>(), data.Object, TextKit.Localizer()) { Id = id }.Attach();
-        await member.OnGetAsync(default);
+        var member = new Omni.App.Pages.Dashboard.ContactDetailModel(ClientContext(Glow, UserRole.Member, "m1").Object, contacts.Object, Mock.Of<IOptOutService>(), data.Object, DashboardPageTests.NoOrders(), DashboardPageTests.NoServices(), TextKit.Localizer()) { Id = id }.Attach();
+        await member.OnGetAsync(null, default);
         Assert.False(member.CanManageData);
 
         data.Setup(d => d.DeleteAsync(It.Is<UserAccess>(a => a.Role == UserRole.Client), id, "+96170123456", It.IsAny<CancellationToken>())).ReturnsAsync(true);

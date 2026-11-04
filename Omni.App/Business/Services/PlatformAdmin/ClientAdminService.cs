@@ -1,4 +1,6 @@
+using Omni.App.Business.Contracts.Managers;
 using Omni.App.Business.Contracts.Services.BusinessTypes;
+using Omni.App.Common.Statics;
 using Omni.App.Business.Contracts.Services.Clients;
 using Omni.App.Business.Contracts.Services.Inbox;
 using Omni.App.Business.Contracts.Services.PlatformAdmin;
@@ -22,10 +24,12 @@ public class ClientAdminService : IClientAdminService
     private readonly IInboxSettingsService _inboxSettings;
     private readonly IBusinessTypeService _businessTypes;
     private readonly IClientProfileService _profile;
+    private readonly ICacheManager _cache;
 
     public ClientAdminService(IClientAdminRepository repository, IUnitOfWork unitOfWork, TimeProvider time, IInboxSettingsService inboxSettings,
-        IBusinessTypeService businessTypes, IClientProfileService profile)
+        IBusinessTypeService businessTypes, IClientProfileService profile, ICacheManager cache)
     {
+        _cache = cache;
         _profile = profile;
         _inboxSettings = inboxSettings;
         _businessTypes = businessTypes;
@@ -72,6 +76,9 @@ public class ClientAdminService : IClientAdminService
         client.IsActive = active;
         client.UpdatedAt = _time.GetUtcNow();
         await _unitOfWork.SaveChangesAsync(ct);
+        // Who may use the app is cached per user (UserAccess) and needs an active client: drop it so the client's people are
+        // signed out on their next request (or let back in). Rare, so the whole prefix rather than a per-user lookup.
+        await _cache.RemoveByPrefixAsync(CacheKeys.MembershipPrefix, ct);
         return new PlatformAdminChange(id);
     }
 

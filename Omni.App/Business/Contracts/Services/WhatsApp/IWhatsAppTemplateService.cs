@@ -29,6 +29,17 @@ public interface IWhatsAppTemplateService
     /// or the client has no connected WhatsApp number. Returns null if it doesn't exist for this client.</summary>
     Task<WhatsAppTemplateResponse?> RetrySubmitAsync(Guid clientId, Guid id, CancellationToken ct = default);
 
+    /// <summary>Changes a draft, rejected or paused template's category and content. One Meta already has is edited
+    /// there and goes back to review (pending); one Meta never accepted is submitted again (or stays a draft without
+    /// WhatsApp). Null if it doesn't exist for this client; InvalidOperationException for any other status, a missing
+    /// WhatsApp connection or Meta refusing the edit (nothing is changed then).</summary>
+    Task<WhatsAppTemplateResponse?> UpdateAsync(Guid clientId, Guid id, UpdateWhatsAppTemplateRequest request, CancellationToken ct = default);
+
+    /// <summary>Deletes a template (at Meta too when Meta has it), so its name can be used again. False if it doesn't exist
+    /// for this client; InvalidOperationException while a campaign uses it, without a WhatsApp connection for one Meta
+    /// has, or when Meta refuses.</summary>
+    Task<bool> DeleteAsync(Guid clientId, Guid id, CancellationToken ct = default);
+
     /// <summary>Applies a normalized template webhook event n8n forwarded (status change, category
     /// change, quality update) — upserts by (ClientId, MetaTemplateId), falling back to
     /// (ClientId, Name, Language) for events that don't carry Meta's id yet. Idempotent by

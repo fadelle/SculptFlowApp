@@ -105,11 +105,29 @@ public class OrderServiceTests
     private readonly Mock<IEventLogger> _events = new();
     private readonly Mock<ICatalogService> _services = new();
     private readonly Mock<IBusinessTypeService> _businessTypes = PipelineKit.Types();
+    private readonly Mock<IBookingRepository> _bookings = new();
 
     public OrderServiceTests() =>
         _contacts.Setup(l => l.ExistsAsync(_clientId, It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync(true);
 
-    private OrderService Sut() => new(_orders.Object, _contacts.Object, _uow.Object, _events.Object, _services.Object, _businessTypes.Object);
+    private OrderService Sut() => new(_orders.Object, _contacts.Object, _uow.Object, _events.Object, _services.Object, _businessTypes.Object, _bookings.Object);
+
+    [Fact]
+    public async Task Create_refuses_a_booking_of_another_client_or_contact_and_an_unknown_one_alike()
+    {
+        // QA t1-accounts-01: another client's booking was linked silently and an unknown id gave a 500.
+        var contactId = Guid.NewGuid();
+        var foreign = await Assert.ThrowsAsync<ArgumentException>(() => Sut().CreateAsync(new CreateOrderRequest(_clientId, contactId, Guid.NewGuid(), Guid.NewGuid(), 10m, "USD", null)));
+        Assert.Equal("orders.errors.bookingNotFound", foreign.Message);
+        _orders.Verify(r => r.Add(It.IsAny<Order>()), Times.Never);
+
+        var booking = new Booking { Id = Guid.NewGuid(), ClientId = _clientId, ContactId = contactId };
+        _bookings.Setup(b => b.GetForContactAsync(_clientId, contactId, booking.Id, It.IsAny<CancellationToken>())).ReturnsAsync(booking);
+        Order? added = null;
+        _orders.Setup(r => r.Add(It.IsAny<Order>())).Callback<Order>(o => added = o);
+        await Sut().CreateAsync(new CreateOrderRequest(_clientId, contactId, Guid.NewGuid(), booking.Id, 10m, "USD", null));
+        Assert.Equal(booking.Id, added!.BookingId);
+    }
 
     private Order MakeOrder(string status = OrderStatus.Considering, Guid? contactId = null)
     {

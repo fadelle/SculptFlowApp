@@ -43,6 +43,7 @@ Generated from `Common/Statics/ConfigDefaults`; keep this table in step when you
 |---|---|---|---|---|
 | Accounts | SignupEnabled | true | bool | Whether anyone can create a new client from the Register page or "Continue with Google". Off = only existing accounts can sign in. |
 | Accounts | SignupsPerIpPerHour | 20 | int 1–1000 | Most sign-up attempts one IP address may make per hour (Register and the Google client-name step). |
+| Accounts | AttemptsPerIpPerHour | 60 | int 5–1000 | Most sign-in, forgot-password, reset-password and accept-invite attempts one IP address may make per hour (sign-up has its own limit). |
 | Accounts | ResetLinkMinutes | 60 | int 10–1440 | How long a password reset link works (minutes). Each link works once. |
 | Accounts | ResetEmailsPerHour | 3 | int 1–20 | Most password reset emails one account gets per hour; further requests get the same answer but send nothing. |
 | Accounts | InviteDays | 7 | int 1–30 | How long a member invite link works (days). |

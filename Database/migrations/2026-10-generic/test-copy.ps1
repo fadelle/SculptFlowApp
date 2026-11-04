@@ -4,8 +4,10 @@
 
 .DESCRIPTION
   1. Creates a fresh cluster (own port) in a temp folder.
-  2. Database "old": the OLD project's schema + seeds taken from git (-OldRef, default main) + the old demo seed +
-     the old admin-schema.sql from the portal repo + test-old-extras.sql (the cases the demo data lacks).
+  2. Database "old": the OLD project's schema + seeds taken from git (-OldRef, default dbbb066, the last commit with the
+     old clinic schema now that main has the new one) + the old demo seed + the old admin-schema.sql from the portal repo
+     (-AdminRef, default b373601, before the portal moved onto the main app's identity tables) + test-old-extras.sql (the
+     cases the demo data lacks).
   3. Database "new": this branch's Database/schema.sql + seed-config.sql.
   4. Runs copy-from-old.sql (postgres_fdw to "old"), then test-copy-assert.sql: row counts, every mapping, users,
      admins, settings, sequences.
@@ -26,9 +28,9 @@ param(
     [int]$Port = 55444,
     [int]$AppPort = 5189,
     [string]$WorkDir = (Join-Path ([IO.Path]::GetTempPath()) 'omni-copy-test'),
-    [string]$OldRef = 'main',
+    [string]$OldRef = 'dbbb066',
     [string]$AdminRepo = '',
-    [string]$AdminRef = 'main',
+    [string]$AdminRef = 'b373601',
     [switch]$SkipAppLogin,
     [switch]$Keep
 )

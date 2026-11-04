@@ -96,6 +96,10 @@ else if (Model.Details is not null)
     </div>
 
     <partial name="_Messages" model="new PageMessagesModel(Model.StatusMessage, Model.ErrorMessage)" />
+    @if (!Model.WhatsAppConnected && c.Status is CampaignStatus.Draft or CampaignStatus.Scheduled or CampaignStatus.Paused or CampaignStatus.Running)
+    {
+        <div class="au-alert au-alert--warning" role="status"><div class="au-alert__body">@T["campaigns.details.whatsAppNotConnected"] <a href="/settings/integrations">@T["nav.integrations"]</a></div></div>
+    }
 
     @if (st.TotalRecipients > 0)
     {

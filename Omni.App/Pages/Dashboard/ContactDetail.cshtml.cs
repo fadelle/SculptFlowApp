@@ -2,13 +2,18 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.Extensions.Localization;
 using Omni.App.Business.Contracts.Managers;
+using Omni.App.Business.Contracts.Services.Catalog;
 using Omni.App.Business.Contracts.Services.Contacts;
+using Omni.App.Business.Contracts.Services.Orders;
 using Omni.App.Common.Enums;
 using Omni.App.Common.Helpers;
 using Omni.App.Entities.Dtos.BusinessTypes;
 using Omni.App.Entities.Models;
 using Omni.App.Entities.Requests.Contacts;
+using Omni.App.Entities.Requests.Orders;
+using Omni.App.Entities.Responses.Catalog;
 using Omni.App.Entities.Responses.Contacts;
+using Omni.App.Entities.Responses.Orders;
 
 namespace Omni.App.Pages.Dashboard;
 
@@ -19,7 +24,8 @@ namespace Omni.App.Pages.Dashboard;
 /// IContactService.UpdateStageAsync the existing POST /api/contacts/{id}/stage endpoint
 /// already uses (UpdateContactStageRequest just gained an optional Source field for this — see its
 /// remarks), so there's no second write path and Campaign counts see the change immediately (they
-/// read live from the database, no caching).
+/// read live from the database, no caching). Also the contact's orders (QA t3-inbox-10): listed, added and updated in a
+/// popup through IOrderService (the same rules as /api/orders); <c>?order=new</c> opens the add popup (the Inbox's link).
 /// </summary>
 public class ContactDetailModel : PageModel
 {
@@ -27,16 +33,22 @@ public class ContactDetailModel : PageModel
     private const string OptedOutKey = "contactDetail.optOut.done";
     private const string OptedInKey = "contactDetail.optOut.undone";
     private const string DeletedKey = "contactDetail.data.deleted";
+    private const string OrderAddedKey = "contactDetail.orders.added";
+    private const string OrderSavedKey = "contactDetail.orders.saved";
 
     private readonly ICurrentClientContext _clientContext;
     private readonly IContactService _contacts;
     private readonly IOptOutService _optOut;
     private readonly IContactDataService _data;
+    private readonly IOrderService _orders;
+    private readonly ICatalogService _catalog;
     private readonly IStringLocalizer _text;
 
     public ContactDetailModel(ICurrentClientContext clientContext, IContactService contacts, IOptOutService optOut, IContactDataService data,
-        IStringLocalizer text)
+        IOrderService orders, ICatalogService catalog, IStringLocalizer text)
     {
+        _orders = orders;
+        _catalog = catalog;
         _clientContext = clientContext;
         _contacts = contacts;
         _optOut = optOut;
@@ -95,28 +107,72 @@ public class ContactDetailModel : PageModel
     [BindProperty]
     public string? CustomLanguage { get; set; }
 
+    /// <summary>The contact's orders, newest first.</summary>
+    public IReadOnlyList<OrderResponse> Orders { get; private set; } = Array.Empty<OrderResponse>();
+
+    /// <summary>The client's active services: what a new order can be for.</summary>
+    public IReadOnlyList<ServiceResponse> ActiveServices { get; private set; } = Array.Empty<ServiceResponse>();
+
+    public IReadOnlyList<string> OrderStatuses { get; } =
+        [OrderStatus.Considering, OrderStatus.Quoted, OrderStatus.DepositPaid, OrderStatus.Confirmed, OrderStatus.Completed, OrderStatus.Canceled, OrderStatus.Lost];
+
+    /// <summary>The order the popup edits; empty when it adds one.</summary>
+    [BindProperty]
+    public Guid? OrderId { get; set; }
+
+    [BindProperty]
+    public Guid? OrderServiceId { get; set; }
+
+    [BindProperty]
+    public string? OrderStatusValue { get; set; }
+
+    [BindProperty]
+    public decimal? OrderQuoted { get; set; }
+
+    [BindProperty]
+    public decimal? OrderDeposit { get; set; }
+
+    [BindProperty]
+    public decimal? OrderFinal { get; set; }
+
+    [BindProperty]
+    public string? OrderCurrency { get; set; }
+
+    [BindProperty]
+    public string? OrderNotes { get; set; }
+
+    /// <summary>The order popup is open on load (?order=new, or a save that failed: then with <see cref="OrderError"/>).</summary>
+    public bool OrderFormOpen { get; private set; }
+
+    public string? OrderError { get; private set; }
+
     [TempData]
     public string? StatusMessage { get; set; }
 
     [TempData]
     public string? ErrorMessage { get; set; }
 
-    public async Task<IActionResult> OnGetAsync(CancellationToken ct)
+    public async Task<IActionResult> OnGetAsync(string? order, CancellationToken ct)
     {
         await LoadAsync(ct);
         if (ClientConfigured && Contact is null) return NotFound();
-        if (Contact is not null)
-        {
-            StageKey = Contact.StageKey;
-            Qualification = Contact.Qualification;
-            SourceChoice = !string.IsNullOrWhiteSpace(Contact.Source) && SourceOptions.Contains(Contact.Source, StringComparer.OrdinalIgnoreCase)
-                ? Contact.Source : "other";
-            CustomSource = SourceChoice == "other" ? Contact.Source : null;
-            var language = Contact.PreferredLanguage;
-            LanguageChoice = string.IsNullOrEmpty(language) ? string.Empty : LanguageOptions.Contains(language) ? language : OtherLanguage;
-            CustomLanguage = LanguageChoice == OtherLanguage ? language : null;
-        }
+        if (Contact is not null) FillContactFields();
+        OrderFormOpen = order == "new" && Contact is not null;
         return Page();
+    }
+
+    /// <summary>The classification form's values from the stored contact.</summary>
+    private void FillContactFields()
+    {
+        var contact = Contact!;
+        StageKey = contact.StageKey;
+        Qualification = contact.Qualification;
+        SourceChoice = !string.IsNullOrWhiteSpace(contact.Source) && SourceOptions.Contains(contact.Source, StringComparer.OrdinalIgnoreCase)
+            ? contact.Source : "other";
+        CustomSource = SourceChoice == "other" ? contact.Source : null;
+        var language = contact.PreferredLanguage;
+        LanguageChoice = string.IsNullOrEmpty(language) ? string.Empty : LanguageOptions.Contains(language) ? language : OtherLanguage;
+        CustomLanguage = LanguageChoice == OtherLanguage ? language : null;
     }
 
     public async Task<IActionResult> OnPostAsync(CancellationToken ct)
@@ -141,6 +197,44 @@ public class ContactDetailModel : PageModel
         {
             ErrorMessage = _text.Localize(ex);
             await LoadAsync(ct);
+            return Page();
+        }
+    }
+
+    /// <summary>Adds an order for this contact (OrderId empty) or updates one of its orders: status, amounts, currency.</summary>
+    public async Task<IActionResult> OnPostOrderAsync(CancellationToken ct)
+    {
+        var client = await _clientContext.GetClientAsync(ct);
+        if (client is null) return RedirectToPage();
+
+        var currency = string.IsNullOrWhiteSpace(OrderCurrency) ? null : OrderCurrency.Trim().ToUpperInvariant();
+        var notes = string.IsNullOrWhiteSpace(OrderNotes) ? null : OrderNotes.Trim();
+        try
+        {
+            if (OrderId is { } id)
+            {
+                // Only an order of this contact (another contact's id is "not found", like an unknown one).
+                if (!(await _orders.ListForContactAsync(client.Id, Id, ct)).Any(o => o.Id == id)) return NotFound();
+                var updated = await _orders.UpdateAsync(client.Id, id,
+                    new UpdateOrderRequest(OrderStatusValue, OrderQuoted, OrderDeposit, OrderFinal, currency, null, notes), ct);
+                if (updated is null) return NotFound();
+                StatusMessage = _text[OrderSavedKey].Value;
+            }
+            else
+            {
+                if (OrderServiceId is not { } serviceId) throw new ArgumentException("contactDetail.orders.serviceRequired");
+                await _orders.CreateAsync(new CreateOrderRequest(client.Id, Id, serviceId, null, OrderQuoted, currency, notes), ct);
+                StatusMessage = _text[OrderAddedKey].Value;
+            }
+            return RedirectToPage(new { Id });
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            // Nothing was saved: the popup opens again with what was typed and why.
+            OrderError = _text.Localize(ex);
+            OrderFormOpen = true;
+            await LoadAsync(ct);
+            if (Contact is not null) FillContactFields();
             return Page();
         }
     }
@@ -206,6 +300,8 @@ public class ContactDetailModel : PageModel
         CanManageData = (await _clientContext.GetAccessAsync(ct))?.Role == UserRole.Client;
         DeleteConfirmation = ContactDataRules.ConfirmationText(Contact.FullName, Contact.Phone, Contact.Email);
         Stages = await _contacts.ListStagesAsync(client.Id, ct);
+        Orders = await _orders.ListForContactAsync(client.Id, Id, ct);
+        ActiveServices = await _catalog.ListAsync(client.Id, activeOnly: true, ct);
 
         var distinctSources = await _contacts.GetDistinctSourcesAsync(client.Id, ct);
         var options = new List<string>(distinctSources);

@@ -20,4 +20,8 @@ public interface IWhatsAppService
     Task<string> SendTemplateMessageAsync(
         Guid clientId, string toPhone, string templateName, string languageCode,
         IReadOnlyList<string> bodyParameters, CancellationToken ct = default);
+
+    /// <summary>True when the client has a connected WhatsApp number that can send (the check every send makes), so a
+    /// caller can refuse before reserving money or starting a campaign.</summary>
+    Task<bool> IsReadyAsync(Guid clientId, CancellationToken ct = default);
 }

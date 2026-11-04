@@ -45,6 +45,8 @@ public static class CacheKeys
     // ---- Identity: what a signed-in main-app user may use (client, role, language, security stamp; UserAccess), read on
     // every signed-in request. Saving the user or one of their memberships clears it; the lifetime
     // (Cache:MembershipsMinutes) is short anyway, so a deactivated user loses access quickly even if a clear were missed.
+    // It also needs the client to be active: ClientAdminService.SetActiveAsync clears the whole prefix when a client is
+    // deactivated or reactivated.
     public const string MembershipPrefix = "identity:membership:";
     public static string Membership(string userId) => MembershipPrefix + userId;
 

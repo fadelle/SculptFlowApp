@@ -974,8 +974,11 @@ alter table channels.channel_integrations add column if not exists last_health_e
 -- than one client (webhook routing: phone_number_id -> channel_integration -> client_id depends on
 -- this being unambiguous).
 drop index if exists ix_channel_integrations_phone_number_id;
-create unique index if not exists ux_channel_integrations_phone_number_id
-  on channels.channel_integrations(phone_number_id) where phone_number_id is not null;
+-- Connected rows only (QA t8-01): a disconnected row keeps its number for display, but whoever saved a number first
+-- must not own it for good; a connection is only saved once Meta confirms the token reaches the number.
+drop index if exists channels.ux_channel_integrations_phone_number_id;
+create unique index if not exists ux_channel_integrations_connected_phone_number_id
+  on channels.channel_integrations(phone_number_id) where phone_number_id is not null and status = 'connected';
 
 -- WABA id stays non-unique on purpose: one WABA can contain multiple phone numbers, so multiple
 -- rows legitimately sharing a whatsapp_business_id is expected, not a conflict.
@@ -1894,7 +1897,7 @@ create table if not exists activity.notifications (
   client_id               uuid not null references core.clients(id) on delete cascade,
   type                    varchar(40) not null
     check (type in ('NEW_CONTACT','HANDOFF','BOOKING_CREATED','BOOKING_RESCHEDULED','BOOKING_CANCELED',
-                     'CAMPAIGN_REPLY','OUTBOUND_MESSAGE_FAILED','INTEGRATION_UNHEALTHY')),
+                     'CAMPAIGN_REPLY','OUTBOUND_MESSAGE_FAILED','INTEGRATION_UNHEALTHY','TEMPLATE_STATUS_CHANGED')),
   -- title/message hold strings-file keys (Resources/i18n/en.json); text_args their arguments, so each viewer reads the
   -- notification in their own language and business-type words. Rows written before keys hold plain text.
   title                   varchar(200) not null,
@@ -1912,6 +1915,12 @@ create table if not exists activity.notifications (
   created_at              timestamptz not null default now()
 );
 alter table activity.notifications add column if not exists text_args text[] not null default '{}';
+-- TEMPLATE_STATUS_CHANGED (QA t8-15): databases created earlier hold the inline check without it; replace it by name.
+alter table activity.notifications drop constraint if exists notifications_type_check;
+alter table activity.notifications drop constraint if exists ck_notifications_type;
+alter table activity.notifications add constraint ck_notifications_type
+  check (type in ('NEW_CONTACT','HANDOFF','BOOKING_CREATED','BOOKING_RESCHEDULED','BOOKING_CANCELED',
+                  'CAMPAIGN_REPLY','OUTBOUND_MESSAGE_FAILED','INTEGRATION_UNHEALTHY','TEMPLATE_STATUS_CHANGED'));
 create index if not exists ix_notifications_client_created on activity.notifications(client_id, created_at desc);
 create index if not exists ix_notifications_client_unread on activity.notifications(client_id) where is_read = false;
 

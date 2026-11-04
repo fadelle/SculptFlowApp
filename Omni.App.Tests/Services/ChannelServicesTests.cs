@@ -53,15 +53,63 @@ public class ChannelIntegrationServiceTests
     }
 
     [Fact]
-    public async Task Save_creates_a_connected_row_checks_entitlements_and_clears_routing_cache()
+    public async Task Manual_WhatsApp_is_saved_only_after_Meta_confirms_the_number_is_in_that_WABA()
+    {
+        // QA t8-01: the manual form / PUT goes through the same checks as Embedded Signup.
+        _graph.Setup(g => g.GetPhoneNumbersForWabaAsync("waba", "tok", It.IsAny<CancellationToken>())).ReturnsAsync(new List<WabaPhoneNumberInfo> { new("pn", "+961 70", "Biz") });
+        ChannelIntegration? added = null;
+        _repo.Setup(r => r.Add(It.IsAny<ChannelIntegration>())).Callback<ChannelIntegration>(c => added = c);
+
+        var r = await Sut().SaveAsync(Save(_clientId, ChannelType.WhatsApp, "tok", "verify", "123456"));
+
+        Assert.Equal((ChannelIntegrationStatus.Connected, "tok", "pn", "waba"), (added!.Status, added.AccessToken, added.PhoneNumberId, added.WhatsAppBusinessId));
+        Assert.NotNull(added.LastVerifiedAt);
+        Assert.True(r.HasAccessToken);
+        _graph.Verify(g => g.RegisterPhoneNumberAsync("pn", "tok", added.Pin!, It.IsAny<CancellationToken>()), Times.Once);
+        _entitlements.Verify(e => e.EnsureCanConnectChannelAsync(_clientId, ChannelType.WhatsApp, It.IsAny<CancellationToken>()), Times.AtLeastOnce);
+        _cache.Verify(c => c.RemoveByPrefixAsync(CacheKeys.WhatsAppRoutingPrefix, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Manual_WhatsApp_with_someone_elses_number_or_WABA_is_refused_and_nothing_is_saved()
+    {
+        // The token's WABA doesn't list the number (another business's number, or another business's WABA id).
+        _graph.Setup(g => g.GetPhoneNumbersForWabaAsync("waba", "tok", It.IsAny<CancellationToken>())).ReturnsAsync(new List<WabaPhoneNumberInfo> { new("mine", "+961 71", "Biz") });
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => Sut().SaveAsync(Save(_clientId, ChannelType.WhatsApp)));
+        Assert.Equal("channels.errors.whatsAppNotInWaba", ex.Message);
+
+        // Meta refuses the token for that WABA altogether.
+        _graph.Setup(g => g.GetPhoneNumbersForWabaAsync("waba", "bad", It.IsAny<CancellationToken>())).ThrowsAsync(new MetaGraphApiException("(#100) no permission"));
+        await Assert.ThrowsAsync<MetaGraphApiException>(() => Sut().SaveAsync(Save(_clientId, ChannelType.WhatsApp, "bad")));
+
+        // Missing ids or token.
+        await Assert.ThrowsAsync<ArgumentException>(() => Sut().SaveAsync(Save(_clientId, ChannelType.WhatsApp) with { PhoneNumberId = " " }));
+        await Assert.ThrowsAsync<ArgumentException>(() => Sut().SaveAsync(Save(_clientId, ChannelType.WhatsApp, token: null)));
+
+        _repo.Verify(r => r.Add(It.IsAny<ChannelIntegration>()), Times.Never);
+        _graph.Verify(g => g.RegisterPhoneNumberAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Manual_Facebook_and_Instagram_need_a_token_Meta_ties_to_the_id()
     {
         ChannelIntegration? added = null;
         _repo.Setup(r => r.Add(It.IsAny<ChannelIntegration>())).Callback<ChannelIntegration>(c => added = c);
-        var r = await Sut().SaveAsync(Save(_clientId, ChannelType.WhatsApp, "tok", "verify", "123456"));
-        Assert.Equal((ChannelIntegrationStatus.Connected, "tok", "verify", "123456"), (added!.Status, added.AccessToken, added.WebhookVerifyToken, added.Pin));
-        Assert.True(r.HasAccessToken);
-        _entitlements.Verify(e => e.EnsureCanConnectChannelAsync(_clientId, ChannelType.WhatsApp, It.IsAny<CancellationToken>()), Times.Once);
-        _cache.Verify(c => c.RemoveByPrefixAsync(CacheKeys.WhatsAppRoutingPrefix, It.IsAny<CancellationToken>()), Times.Once);
+
+        // A Page token answers /me with another page; an Instagram id the token can't read.
+        _graph.Setup(g => g.GetObjectIdAsync("me", "tok", It.IsAny<CancellationToken>())).ReturnsAsync("someone-elses-page");
+        _graph.Setup(g => g.GetObjectIdAsync("ig1", "tok", It.IsAny<CancellationToken>())).ThrowsAsync(new MetaGraphApiException("(#10) no access"));
+        var fb = await Assert.ThrowsAsync<InvalidOperationException>(() => Sut().SaveAsync(Save(_clientId, ChannelType.Facebook)));
+        var ig = await Assert.ThrowsAsync<InvalidOperationException>(() => Sut().SaveAsync(Save(_clientId, ChannelType.Instagram)));
+        Assert.Equal(("channels.errors.metaNotVerified", "channels.errors.metaNotVerified"), (fb.Message, ig.Message));
+        await Assert.ThrowsAsync<ArgumentException>(() => Sut().SaveAsync(Save(_clientId, ChannelType.Facebook) with { PageId = null }));
+        Assert.Null(added);
+
+        // Confirmed: saved as connected.
+        _graph.Setup(g => g.GetObjectIdAsync("me", "tok", It.IsAny<CancellationToken>())).ReturnsAsync("page1");
+        await Sut().SaveAsync(Save(_clientId, ChannelType.Facebook));
+        Assert.Equal((ChannelIntegrationStatus.Connected, "page1"), (added!.Status, added.PageId));
     }
 
     [Fact]
@@ -79,6 +127,8 @@ public class ChannelIntegrationServiceTests
     {
         var row = new ChannelIntegration { ClientId = _clientId, Channel = ChannelType.Facebook, AccessToken = "old", WebhookVerifyToken = "oldv", Pin = "999999" };
         _repo.Setup(r => r.GetAsync(_clientId, ChannelType.Facebook, It.IsAny<CancellationToken>())).ReturnsAsync(row);
+        // The ids are checked again with the stored token.
+        _graph.Setup(g => g.GetObjectIdAsync("me", "old", It.IsAny<CancellationToken>())).ReturnsAsync("page1");
         await Sut().SaveAsync(Save(_clientId, token: "", verify: " ", pin: null));
         Assert.Equal(("old", "oldv", "999999", ChannelIntegrationStatus.Connected), (row.AccessToken, row.WebhookVerifyToken, row.Pin, row.Status));
         _repo.Verify(r => r.Add(It.IsAny<ChannelIntegration>()), Times.Never);
@@ -126,11 +176,16 @@ public class ChannelIntegrationServiceTests
     }
 
     [Fact]
-    public async Task ConnectWhatsApp_with_explicit_ids_skips_discovery()
+    public async Task ConnectWhatsApp_with_explicit_ids_skips_discovery_but_checks_the_number_is_in_the_WABA()
     {
+        _graph.Setup(g => g.GetPhoneNumbersForWabaAsync("W9", "tok", It.IsAny<CancellationToken>())).ReturnsAsync(new List<WabaPhoneNumberInfo> { new("P9", "+1", null) });
         await Sut().ConnectWhatsAppAsync(new ConnectWhatsAppRequest(_clientId, AccessToken: "tok", WabaId: "W9", PhoneNumberId: "P9"));
         _graph.Verify(g => g.GetClientWhatsAppBusinessAccountsAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
         _graph.Verify(g => g.RegisterPhoneNumberAsync("P9", "tok", It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+
+        // Embedded Signup's ids come from the browser: a WABA id that doesn't hold the number is refused before anything happens.
+        await Assert.ThrowsAsync<InvalidOperationException>(() => Sut().ConnectWhatsAppAsync(new ConnectWhatsAppRequest(_clientId, AccessToken: "tok", WabaId: "W9", PhoneNumberId: "P-other")));
+        _graph.Verify(g => g.RegisterPhoneNumberAsync("P-other", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]

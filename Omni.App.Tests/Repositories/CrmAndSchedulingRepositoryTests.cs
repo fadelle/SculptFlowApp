@@ -135,6 +135,47 @@ public class ClientRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixtu
     }
 
     [PostgresFact]
+    public async Task A_deactivated_clients_people_have_no_access_until_it_is_reactivated()
+    {
+        // QA t6-admin-04: "Deactivate" in the portal set clients.is_active = false and its people kept signing in.
+        var suspended = MakeClient();
+        var owner = MakeUser(fullName: "Owner");
+        var member = MakeUser(role: UserRole.Member);
+        await SeedAsync(suspended, owner, member);
+        await using (var db = NewContext())
+        {
+            var repo = new ClientRepository(db);
+            repo.AddMembership(new ClientUser { Id = Guid.NewGuid(), ClientId = suspended.Id, UserId = owner.Id, IsActive = true, CreatedAt = Now, UpdatedAt = Now });
+            repo.AddMembership(new ClientUser { Id = Guid.NewGuid(), ClientId = suspended.Id, UserId = member.Id, IsActive = true, CreatedAt = Now, UpdatedAt = Now });
+            await db.SaveChangesAsync();
+        }
+        await using (var read = NewContext())
+        {
+            Assert.NotNull(await new ClientRepository(read).GetUserAccessAsync(owner.Id));
+        }
+
+        await using (var db = NewContext())
+        {
+            (await db.Clients.SingleAsync(c => c.Id == suspended.Id)).IsActive = false;
+            await db.SaveChangesAsync();
+        }
+        await using (var read = NewContext())
+        {
+            var r = new ClientRepository(read);
+            Assert.Null(await r.GetUserAccessAsync(owner.Id));
+            Assert.Null(await r.GetUserAccessAsync(member.Id));
+        }
+
+        await using (var db = NewContext())
+        {
+            (await db.Clients.SingleAsync(c => c.Id == suspended.Id)).IsActive = true;
+            await db.SaveChangesAsync();
+        }
+        await using var again = NewContext();
+        Assert.Equal(suspended.Id, (await new ClientRepository(again).GetUserAccessAsync(member.Id))!.ClientId);
+    }
+
+    [PostgresFact]
     public async Task Access_needs_an_active_client_or_member_user_with_an_active_membership()
     {
         var active = MakeClient(); var inactive = MakeClient();

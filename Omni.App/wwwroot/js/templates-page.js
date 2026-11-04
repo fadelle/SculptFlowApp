@@ -1,7 +1,8 @@
 // WhatsApp Templates page (Pages/WhatsApp/Templates/Index.cshtml): list tabs, the side panel that shows one
 // template as WhatsApp renders it, and the "New template" popup (name formatting, category cards, language,
-// header type, "+ Insert blank", character counters, live preview). Presentation only — the form posts the
-// same fields as before. Live status updates stay in whatsapp-templates.js.
+// header type, "+ Insert blank", character counters, live preview), which also edits a draft, rejected or paused
+// template ([data-edit-template]: same fields, handler Edit, name and language fixed). Presentation only — the form
+// posts the same fields as before. Live status updates stay in whatsapp-templates.js.
 (function () {
   function $(id) { return document.getElementById(id); }
   function esc(s) { var d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
@@ -71,10 +72,44 @@
   var nameEl = $('tpl-name'), bodyEl = $('tpl-body'), headerEl = $('tpl-header'), footerEl = $('tpl-footer');
   var langSelect = $('tpl-lang-select'), langEl = $('tpl-lang');
 
-  function openModal() { overlay.hidden = false; nameEl.focus(); refresh(); }
+  var titleEl = $('new-template-title'), submitLabel = $('tpl-submit').querySelector('span:last-child');
+  var createTitle = titleEl.textContent, createSubmit = submitLabel.textContent, createAction = form.getAttribute('action');
+
+  // Create mode: an empty name and the Create handler. Edit mode: the row's values, name and language fixed.
+  function setMode(row) {
+    var editing = !!row;
+    if (!editing && nameEl.readOnly) form.reset(); // back from editing: an empty new template
+    $('tpl-id').value = editing ? row.getAttribute('data-template-id') : '';
+    form.setAttribute('action', editing ? createAction.replace(/handler=Create/i, 'handler=Edit') : createAction);
+    titleEl.textContent = editing ? overlay.getAttribute('data-edit-title') : createTitle;
+    submitLabel.textContent = editing ? overlay.getAttribute('data-edit-submit') : createSubmit;
+    nameEl.readOnly = editing;
+    langSelect.disabled = editing;
+    langEl.readOnly = editing;
+    if (!editing) return;
+    nameEl.value = row.getAttribute('data-name');
+    langEl.value = row.getAttribute('data-lang');
+    langSelect.value = Array.prototype.some.call(langSelect.options, function (o) { return o.value === langEl.value; }) ? langEl.value : '__other';
+    langEl.hidden = langSelect.value !== '__other';
+    bodyEl.value = row.getAttribute('data-body') || '';
+    headerEl.value = row.getAttribute('data-header') || '';
+    footerEl.value = row.getAttribute('data-footer') || '';
+    [['Category', row.getAttribute('data-category')], ['HeaderType', row.getAttribute('data-header-type') || 'none']].forEach(function (pair) {
+      var input = form.querySelector('input[name="' + pair[0] + '"][value="' + pair[1] + '"]');
+      if (input) input.checked = true;
+    });
+  }
+  function openModal(row) { setMode(row && row.nodeType === 1 ? row : null); overlay.hidden = false; (nameEl.readOnly ? bodyEl : nameEl).focus(); refresh(); }
   function closeModal() { overlay.hidden = true; }
-  if ($('new-template-btn')) $('new-template-btn').addEventListener('click', openModal);
-  document.querySelectorAll('[data-open-new-template]').forEach(function (b) { b.addEventListener('click', openModal); });
+  if ($('new-template-btn')) $('new-template-btn').addEventListener('click', function () { openModal(null); });
+  document.querySelectorAll('[data-open-new-template]').forEach(function (b) { b.addEventListener('click', function () { openModal(null); }); });
+  // Edit buttons live in the rows and in their copies in the side panel, so listen on the page.
+  document.addEventListener('click', function (e) {
+    var btn = e.target.closest('[data-edit-template]');
+    if (!btn) return;
+    var row = document.querySelector('#templates-tbody tr[data-template-id="' + btn.getAttribute('data-edit-template') + '"]');
+    if (row) openModal(row);
+  });
   $('new-template-close').addEventListener('click', closeModal);
   $('new-template-cancel').addEventListener('click', closeModal);
   overlay.addEventListener('click', function (e) { if (e.target === overlay) closeModal(); });

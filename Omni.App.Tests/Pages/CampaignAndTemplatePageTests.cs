@@ -317,4 +317,46 @@ public class WhatsAppTemplatePageTests
         Assert.Equal("Not a draft.", model.ErrorMessage);
         Assert.IsType<RedirectToPageResult>(await Sut(true).OnPostRetryAsync(id, default));
     }
+
+    [Fact]
+    public async Task Editing_sends_the_popups_fields_and_reports_the_outcome()
+    {
+        // QA t8-17: a rejected or paused template can be fixed and sent for review again.
+        var id = Guid.NewGuid();
+        UpdateWhatsAppTemplateRequest? sent = null;
+        _templates.Setup(t => t.UpdateAsync(Glow.Id, id, It.IsAny<UpdateWhatsAppTemplateRequest>(), It.IsAny<CancellationToken>()))
+            .Callback((Guid _, Guid _, UpdateWhatsAppTemplateRequest r, CancellationToken _) => sent = r)
+            .ReturnsAsync(Template(WhatsAppTemplateStatus.Pending));
+        var model = Sut();
+        model.TemplateId = id; model.Category = "utility"; model.Body = "New"; model.HeaderType = WhatsAppTemplateHeaderType.None; model.Footer = "f";
+
+        Assert.IsType<RedirectToPageResult>(await model.OnPostEditAsync(default));
+        Assert.Equal(("utility", "New", (string?)null, "f"), (sent!.Category, sent.Body, sent.HeaderType, sent.Footer));
+        Assert.Equal("Changes to 'promo' saved — status: Pending.", model.StatusMessage);
+
+        _templates.Setup(t => t.UpdateAsync(Glow.Id, id, It.IsAny<UpdateWhatsAppTemplateRequest>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("templates.errors.cantEdit"));
+        await model.OnPostEditAsync(default);
+        Assert.Contains("can be edited only", model.ErrorMessage);
+
+        model.TemplateId = null;
+        Assert.IsType<RedirectToPageResult>(await model.OnPostEditAsync(default));
+    }
+
+    [Fact]
+    public async Task Deleting_reports_the_name_or_why_it_was_kept()
+    {
+        var id = Guid.NewGuid();
+        _templates.Setup(t => t.GetByIdAsync(Glow.Id, id, It.IsAny<CancellationToken>())).ReturnsAsync(Template(WhatsAppTemplateStatus.Rejected, name: "old_promo"));
+        _templates.SetupSequence(t => t.DeleteAsync(Glow.Id, id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true)
+            .ThrowsAsync(new InvalidOperationException("templates.errors.usedByCampaign"));
+        var model = Sut();
+
+        await model.OnPostDeleteAsync(id, default);
+        Assert.Equal("Template 'old_promo' deleted.", model.StatusMessage);
+        await model.OnPostDeleteAsync(id, default);
+        Assert.Contains("can't be deleted", model.ErrorMessage);
+        Assert.IsType<RedirectToPageResult>(await Sut(true).OnPostDeleteAsync(id, default));
+    }
 }

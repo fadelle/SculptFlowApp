@@ -37,6 +37,8 @@ public class MessageServiceTests
         _sender.SetupGet(s => s.Channel).Returns(ConversationChannel.WhatsApp);
         _sender.Setup(s => s.SendTextAsync(It.IsAny<Conversation>(), It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync("wamid.sent");
         _billing.Setup(b => b.ReserveOutboundAsync(It.IsAny<OutboundMessageBillingContext>(), It.IsAny<CancellationToken>())).ReturnsAsync(_hold);
+        // The client's WhatsApp is connected unless a test says otherwise (template sends check it first).
+        _whatsApp.Setup(w => w.IsReadyAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync(true);
         _whatsApp.Setup(w => w.SendTemplateMessageAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IReadOnlyList<string>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync("wamid.tpl");
     }
@@ -234,6 +236,12 @@ public class MessageServiceTests
         Setup(pending);
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => Sut().SendTemplateAsync(_clientId, c.Id, new SendTemplateMessageRequest(pending.Id, null)));
         Assert.Contains("isn't approved", TextKit.English(ex));
+
+        // QA t5-ops-05: without a connected WhatsApp the send is refused before billing is asked anything.
+        _whatsApp.Setup(w => w.IsReadyAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(false);
+        var notConnected = await Assert.ThrowsAsync<WhatsAppSendException>(() => Sut().SendTemplateAsync(_clientId, c.Id, new SendTemplateMessageRequest(pending.Id, null)));
+        Assert.Equal("channels.whatsApp.errors.notConnected", notConnected.Message);
+        _whatsApp.Setup(w => w.IsReadyAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(true);
 
         _contact.Phone = null;
         var ok = Template();

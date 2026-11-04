@@ -4,6 +4,9 @@ namespace Omni.App.Common.Enums;
 /// human_handoff event and the message trace when a conversation goes to the team because of it.</summary>
 public static class AiBotBlockReason
 {
+    /// <summary>The client was deactivated by a platform admin: no bot answers anywhere.</summary>
+    public const string ClientInactive = "client_inactive";
+
     /// <summary>The plan doesn't include the AI assistant.</summary>
     public const string PlanWithoutAi = "plan_without_ai_assistant";
 

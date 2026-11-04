@@ -9,6 +9,7 @@ using Omni.App.Entities.Models;
 using Omni.App.Entities.Requests.Orders;
 using Omni.App.Entities.Responses.Orders;
 using Omni.App.Persistence.Contracts;
+using Omni.App.Persistence.Contracts.Bookings;
 using Omni.App.Persistence.Contracts.Contacts;
 using Omni.App.Persistence.Contracts.Orders;
 using Omni.App.Common.Helpers;
@@ -23,10 +24,12 @@ public class OrderService : IOrderService
     private readonly IEventLogger _events;
     private readonly ICatalogService _services;
     private readonly IBusinessTypeService _businessTypes;
+    private readonly IBookingRepository _bookings;
 
     public OrderService(IOrderRepository orders, IContactRepository contacts, IUnitOfWork unitOfWork,
-        IEventLogger events, ICatalogService services, IBusinessTypeService businessTypes)
+        IEventLogger events, ICatalogService services, IBusinessTypeService businessTypes, IBookingRepository bookings)
     {
+        _bookings = bookings;
         _orders = orders;
         _contacts = contacts;
         _unitOfWork = unitOfWork;
@@ -42,6 +45,12 @@ public class OrderService : IOrderService
         if (!await _contacts.ExistsAsync(request.ClientId, request.ContactId, ct))
         {
             throw new ArgumentException("contacts.errors.notFound");
+        }
+        // The booking it follows must be this client's and this contact's. Another client's id and an unknown one get the
+        // same answer, so booking ids can't be probed (QA t1-accounts-01; an unknown id used to break the foreign key: 500).
+        if (request.BookingId is { } bookingId && await _bookings.GetForContactAsync(request.ClientId, request.ContactId, bookingId, ct) is null)
+        {
+            throw new ArgumentException("orders.errors.bookingNotFound");
         }
 
         var order = new Order
@@ -118,6 +127,9 @@ public class OrderService : IOrderService
         var (items, totalCount) = await _orders.ListAsync(clientId, status, skip, take, ct);
         return (items.Select(OrderMapper.ToResponse).ToList(), totalCount);
     }
+
+    public async Task<IReadOnlyList<OrderResponse>> ListForContactAsync(Guid clientId, Guid contactId, CancellationToken ct = default) =>
+        (await _orders.ListForContactReadOnlyAsync(clientId, contactId, ct)).Select(OrderMapper.ToResponse).ToList();
 
     private async Task<OrderResponse> ToResponseAsync(Order o, CancellationToken ct)
     {

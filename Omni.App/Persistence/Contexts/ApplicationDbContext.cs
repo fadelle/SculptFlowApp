@@ -518,14 +518,14 @@ public class ApplicationDbContext : IdentityUserContext<AppUser>
             e.HasIndex(x => new { x.ClientId, x.Channel })
                 .IsUnique()
                 .HasDatabaseName("ux_channel_integrations_client_channel");
-            // A Meta phone_number_id must never map to more than one client — webhook routing
-            // (phone_number_id -> channel_integration -> client_id) depends on this being
-            // unambiguous. Filtered (not null only): most rows here are non-WhatsApp channels
-            // (Instagram/Facebook) or WhatsApp rows not yet connected, neither of which sets this.
+            // A connected Meta phone_number_id must never map to more than one client — webhook routing
+            // (phone_number_id -> channel_integration -> client_id) depends on this being unambiguous.
+            // Connected rows only, like telegram_bot_id: a disconnected row keeps its number for display but
+            // doesn't block the business that really owns it (QA t8-01).
             e.HasIndex(x => x.PhoneNumberId)
                 .IsUnique()
-                .HasFilter("phone_number_id IS NOT NULL")
-                .HasDatabaseName("ux_channel_integrations_phone_number_id");
+                .HasFilter("phone_number_id IS NOT NULL AND status = 'connected'")
+                .HasDatabaseName("ux_channel_integrations_connected_phone_number_id");
             // WABA id is deliberately NOT unique — one WABA can contain multiple phone numbers, so
             // multiple channel_integrations rows (even across different clients, in principle) can
             // legitimately share a whatsapp_business_id. Indexed for lookup speed only.

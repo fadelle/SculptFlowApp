@@ -159,6 +159,139 @@ else
         </section>
     </div>
 
+    @* ---------- Orders (QA t3-inbox-10): listed here, added and edited in the popup below. ---------- *@
+    <section class="au-panel au-panel--round au-panel--pad mt-3" aria-labelledby="contact-orders-title" id="orders">
+        <div class="au-panel__head">
+            <h3 class="au-panel__title" id="contact-orders-title">@T["contactDetail.orders.title"]</h3>
+            <a href="/dashboard/contacts/@contact.Id?order=new" class="au-btn au-btn--outlined au-btn--sm" data-modal-open="order-overlay"><span class="au-icon" aria-hidden="true">add</span>@T["contactDetail.orders.add"]</a>
+        </div>
+        @if (Model.Orders.Count == 0)
+        {
+            <p class="au-help">@T["contactDetail.orders.empty"]</p>
+        }
+        else
+        {
+            <div class="au-table-scroll">
+                <table class="au-table au-table--stack">
+                    <thead>
+                        <tr>
+                            <th>@T["contactDetail.orders.service"]</th>
+                            <th>@T["services.table.status"]</th>
+                            <th>@T["contactDetail.orders.amount"]</th>
+                            <th>@T["contactDetail.orders.created"]</th>
+                            <th><span class="au-sr-only">@T["services.table.actions"]</span></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var o in Model.Orders)
+                        {
+                            var amount = o.FinalAmount ?? o.QuotedAmount;
+                            <tr>
+                                <td data-label="@T["contactDetail.orders.service"]" dir="auto">@(o.ServiceName ?? "—")</td>
+                                <td data-label="@T["services.table.status"]"><span class="badge @StatusBadgeHelper.CssClass(o.Status)">@T.ValueLabel(o.Status)</span></td>
+                                <td data-label="@T["contactDetail.orders.amount"]">
+                                    <div>
+                                        @if (amount is { } a)
+                                        {
+                                            <span dir="ltr">@a.Display("#,0.##") @o.CurrencyCode</span>
+                                            <div class="cell-sub">@(o.FinalAmount is not null ? T["contactDetail.orders.final"] : T["contactDetail.orders.quoted"])@(o.DepositAmount is { } d ? T["contactDetail.orders.depositNote", d.Display("#,0.##")].Value : "")</div>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-subtle">—</span>
+                                        }
+                                    </div>
+                                </td>
+                                <td data-label="@T["contactDetail.orders.created"]" class="cell-sub">@LocalTimeHelper.Time(o.CreatedAt, "date")</td>
+                                <td class="row-actions">
+                                    <a href="/dashboard/contacts/@contact.Id?order=new" class="au-btn au-btn--outlined au-btn--sm" data-modal-open="order-overlay"
+                                       data-order-id="@o.Id" data-order-service="@o.ServiceName" data-order-status="@o.Status"
+                                       data-order-quoted="@o.QuotedAmount?.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+                                       data-order-deposit="@o.DepositAmount?.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+                                       data-order-final="@o.FinalAmount?.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+                                       data-order-currency="@o.CurrencyCode">@T["common.edit"]</a>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+
+    @* Add / edit an order (popup; modal.js opens it, contact-orders.js switches it to editing from the Edit button's data-order-*). *@
+    <div class="bm-overlay" data-modal id="order-overlay" hidden="@(!Model.OrderFormOpen)">
+        <div class="card form-modal" role="dialog" aria-modal="true" aria-labelledby="order-form-title">
+            <div class="modal-head">
+                <h3 id="order-form-title" class="card-title" data-title-add="@T["contactDetail.orders.addTitle"]" data-title-edit="@T["contactDetail.orders.editTitle"]">@(Model.OrderId is null ? T["contactDetail.orders.addTitle"] : T["contactDetail.orders.editTitle"])</h3>
+                <button type="button" class="au-icon-btn" data-modal-close aria-label="@T["common.close"]" title="@T["common.close"]"><span class="au-icon" aria-hidden="true">close</span></button>
+            </div>
+            @if (Model.OrderError is not null)
+            {
+                <partial name="_Messages" model="new PageMessagesModel(null, Model.OrderError)" />
+            }
+            @* #order-id, #order-service-field, #order-service-name, [data-order-edit-only] and #order-submit are read by contact-orders.js. *@
+            <form method="post" asp-page-handler="Order" asp-route-id="@contact.Id" id="order-form">
+                <input type="hidden" name="OrderId" id="order-id" value="@Model.OrderId" />
+                <div class="au-form-grid">
+                    <div class="au-form-field au-span-2" id="order-service-field" hidden="@(Model.OrderId is not null)">
+                        <label class="au-form-label" for="order-service">@T["contactDetail.orders.service"]<span class="au-required">*</span></label>
+                        @if (Model.ActiveServices.Count == 0)
+                        {
+                            <p class="au-help">@T["contactDetail.orders.noServices"] <a href="/Services">@T["nav.services"]</a></p>
+                        }
+                        else
+                        {
+                            <select name="OrderServiceId" id="order-service" class="au-select">
+                                @foreach (var s in Model.ActiveServices)
+                                {
+                                    <option value="@s.Id" selected="@(s.Id == Model.OrderServiceId)">@s.Name</option>
+                                }
+                            </select>
+                        }
+                    </div>
+                    <div class="au-form-field au-span-2" data-order-edit-only hidden="@(Model.OrderId is null)">
+                        <span class="au-form-label">@T["contactDetail.orders.service"]</span>
+                        <strong id="order-service-name" dir="auto"></strong>
+                    </div>
+                    <div class="au-form-field au-span-2" data-order-edit-only hidden="@(Model.OrderId is null)">
+                        <label class="au-form-label" for="order-status">@T["services.table.status"]</label>
+                        <select name="OrderStatusValue" id="order-status" class="au-select">
+                            @foreach (var s in Model.OrderStatuses)
+                            {
+                                <option value="@s" selected="@(s == Model.OrderStatusValue)">@T.ValueLabel(s)</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="au-form-field">
+                        <label class="au-form-label" for="order-quoted">@T["contactDetail.orders.quotedAmount"]</label>
+                        <input type="number" name="OrderQuoted" id="order-quoted" value="@Model.OrderQuoted?.ToString(System.Globalization.CultureInfo.InvariantCulture)" class="au-input" min="0" step="0.01" dir="ltr" />
+                    </div>
+                    <div class="au-form-field">
+                        <label class="au-form-label" for="order-currency">@T["contactDetail.orders.currency"]</label>
+                        <input type="text" name="OrderCurrency" id="order-currency" value="@Model.OrderCurrency" class="au-input" maxlength="3" dir="ltr" autocomplete="off" placeholder="USD" />
+                    </div>
+                    <div class="au-form-field" data-order-edit-only hidden="@(Model.OrderId is null)">
+                        <label class="au-form-label" for="order-deposit">@T["contactDetail.orders.depositAmount"]</label>
+                        <input type="number" name="OrderDeposit" id="order-deposit" value="@Model.OrderDeposit?.ToString(System.Globalization.CultureInfo.InvariantCulture)" class="au-input" min="0" step="0.01" dir="ltr" />
+                    </div>
+                    <div class="au-form-field" data-order-edit-only hidden="@(Model.OrderId is null)">
+                        <label class="au-form-label" for="order-final">@T["contactDetail.orders.finalAmount"]</label>
+                        <input type="number" name="OrderFinal" id="order-final" value="@Model.OrderFinal?.ToString(System.Globalization.CultureInfo.InvariantCulture)" class="au-input" min="0" step="0.01" dir="ltr" />
+                    </div>
+                    <div class="au-form-field au-span-2">
+                        <label class="au-form-label" for="order-notes">@T["contactDetail.details.notes"] <span class="opt">@T["common.optional"]</span></label>
+                        <textarea name="OrderNotes" id="order-notes" rows="2" class="au-textarea" maxlength="1000" dir="auto">@Model.OrderNotes</textarea>
+                    </div>
+                </div>
+                <div class="au-form-actions">
+                    <button type="button" class="au-btn au-btn--text" data-modal-close>@T["common.cancel"]</button>
+                    <button type="submit" class="au-btn au-btn--primary" id="order-submit" data-label-add="@T["contactDetail.orders.add"]" data-label-edit="@T["common.saveChanges"]">@(Model.OrderId is null ? T["contactDetail.orders.add"] : T["common.saveChanges"])</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     @if (Model.CanManageData)
     {
         <section class="au-panel au-panel--round au-panel--pad mt-3" aria-labelledby="contact-data-title" id="contact-data">
@@ -184,4 +317,5 @@ else
 
     <partial name="_StatusHelp" model="Model.Stages" />
     <script src="~/js/status-help.js" asp-append-version="true"></script>
+    <script src="~/js/contact-orders.js" asp-append-version="true"></script>
 }

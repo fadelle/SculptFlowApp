@@ -24,6 +24,8 @@ public class IndexModel : PageModel
     private const string RefreshedKey = "templates.refreshed";
     private const string RetryRejectedKey = "templates.retryRejected";
     private const string RetrySentKey = "templates.retrySent";
+    private const string EditedKey = "templates.edit.done";
+    private const string DeletedKey = "templates.delete.done";
 
     private readonly ICurrentClientContext _clientContext;
     private readonly IWhatsAppTemplateService _templates;
@@ -62,6 +64,10 @@ public class IndexModel : PageModel
 
     [BindProperty]
     public string? Footer { get; set; }
+
+    /// <summary>The template the popup edits (Edit handler); empty when it creates one.</summary>
+    [BindProperty]
+    public Guid? TemplateId { get; set; }
 
     [TempData]
     public string? StatusMessage { get; set; }
@@ -107,6 +113,54 @@ public class IndexModel : PageModel
             ReopenNewTemplate = true;
             await LoadAsync(ct);
             return Page();
+        }
+
+        return RedirectToPage();
+    }
+
+    /// <summary>Saves the popup's changes to a draft, rejected or paused template (QA t8-17); Meta reviews it again.</summary>
+    public async Task<IActionResult> OnPostEditAsync(CancellationToken ct)
+    {
+        var client = await _clientContext.GetClientAsync(ct);
+        if (client is null || TemplateId is not { } id) return RedirectToPage();
+
+        try
+        {
+            var template = await _templates.UpdateAsync(client.Id, id, new UpdateWhatsAppTemplateRequest(
+                Category, Body, HeaderType == WhatsAppTemplateHeaderType.None ? null : HeaderType, HeaderContent, Footer), ct);
+            if (template is not null)
+            {
+                if (template.Status == WhatsAppTemplateStatus.Rejected)
+                    ErrorMessage = _text[SubmitFailedKey, template.Name, template.RejectionReason ?? string.Empty].Value;
+                else
+                    StatusMessage = _text[EditedKey, template.Name, _text.TemplateStatusLabel(template.Status)].Value;
+            }
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            ErrorMessage = _text.Localize(ex);
+        }
+
+        return RedirectToPage();
+    }
+
+    /// <summary>Deletes a template (at Meta too), so its name can be used again (QA t8-17).</summary>
+    public async Task<IActionResult> OnPostDeleteAsync(Guid id, CancellationToken ct)
+    {
+        var client = await _clientContext.GetClientAsync(ct);
+        if (client is null) return RedirectToPage();
+
+        try
+        {
+            var template = await _templates.GetByIdAsync(client.Id, id, ct);
+            if (template is not null && await _templates.DeleteAsync(client.Id, id, ct))
+            {
+                StatusMessage = _text[DeletedKey, template.Name].Value;
+            }
+        }
+        catch (InvalidOperationException ex)
+        {
+            ErrorMessage = _text.Localize(ex);
         }
 
         return RedirectToPage();

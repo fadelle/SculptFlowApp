@@ -32,6 +32,8 @@
         : Group(t.Status) == "attention" && t.Status != WhatsAppTemplateStatus.Rejected && t.Status != WhatsAppTemplateStatus.Draft ? T["templates.why.flagged"].Value
         : null;
     var languages = new[] { "en_US", "en_GB", "ar", "fr", "es", "de", "tr" };
+    // Meta lets these be changed and sent for review again (WhatsAppTemplateService.UpdateAsync).
+    static bool Editable(string status) => status is WhatsAppTemplateStatus.Draft or WhatsAppTemplateStatus.Rejected or WhatsAppTemplateStatus.Paused;
 }
 
 @if (!Model.ClientConfigured)
@@ -105,7 +107,7 @@ else
                                 var why = Why(t);
                                 <tr class="row-link" data-template-id="@t.Id" data-group="@Group(t.Status)"
                                     data-name="@t.Name" data-body="@t.Body" data-header="@(t.HeaderType == WhatsAppTemplateHeaderType.Text ? t.HeaderContent : "")"
-                                    data-header-type="@(t.HeaderType ?? "none")" data-footer="@t.Footer" data-lang="@t.Language"
+                                    data-header-type="@(t.HeaderType ?? "none")" data-footer="@t.Footer" data-lang="@t.Language" data-category="@t.Category"
                                     data-meta="@(string.IsNullOrEmpty(t.MetaTemplateId) ? "" : "1")">
                                     <td data-label="@T["templates.table.template"]"><strong dir="ltr">@t.Name</strong></td>
                                     <td data-label="@T["knowledge.table.category"]" class="text-md"><div>@T.ValueLabel(t.Category)<div class="cell-sub">@LanguageName(t.Language)</div></div></td>
@@ -146,6 +148,15 @@ else
                                                 <button type="submit" class="au-btn au-btn--outlined au-btn--sm" title="@T["templates.retry.help"]">@T["templates.retry.button"]</button>
                                             </form>
                                         }
+                                        @if (Editable(t.Status))
+                                        {
+                                            <button type="button" class="au-btn au-btn--text au-btn--sm" data-edit-template="@t.Id" title="@T["templates.edit.help"]"><span class="au-icon" aria-hidden="true">edit</span>@T["templates.edit.button"]</button>
+                                        }
+                                        <form method="post" asp-page-handler="Delete" class="inline-form"
+                                              data-au-confirm="@T["templates.delete.confirm", t.Name]" data-au-confirm-title="@T["templates.delete.title"]" data-au-confirm-label="@T["templates.delete.button"]" data-au-confirm-tone="danger">
+                                            <input type="hidden" name="id" value="@t.Id" />
+                                            <button type="submit" class="au-btn au-btn--text au-btn--sm btn-danger-text">@T["templates.delete.button"]</button>
+                                        </form>
                                     </td>
                                 </tr>
                             }
@@ -175,7 +186,7 @@ else
     }
 
     @* ---------- New template (popup; ids read by templates-page.js) ---------- *@
-    <div class="bm-overlay" id="new-template-overlay" hidden>
+    <div class="bm-overlay" id="new-template-overlay" hidden data-edit-title="@T["templates.edit.title"]" data-edit-submit="@T["templates.edit.submit"]">
         <div class="card tpl-modal" role="dialog" aria-modal="true" aria-labelledby="new-template-title">
             <div class="modal-head">
                 <h3 id="new-template-title" class="card-title">@T["templates.new"]</h3>
@@ -186,6 +197,7 @@ else
                 <partial name="_Messages" model="new PageMessagesModel(null, Model.ErrorMessage)" />
             }
             <form method="post" asp-page-handler="Create" id="new-template-form">
+                <input type="hidden" name="TemplateId" id="tpl-id" value="" />
                 <div class="tpl-form-grid">
                     <div class="integration-form">
                         <label class="field">
@@ -260,7 +272,7 @@ else
                 </div>
                 <div class="au-form-actions">
                     <button type="button" class="au-btn au-btn--text" id="new-template-cancel">@T["common.cancel"]</button>
-                    <button type="submit" class="au-btn au-btn--primary"><span class="au-icon au-icon--dir" aria-hidden="true">send</span>@T["templates.form.submit"]</button>
+                    <button type="submit" class="au-btn au-btn--primary" id="tpl-submit"><span class="au-icon au-icon--dir" aria-hidden="true">send</span><span>@T["templates.form.submit"]</span></button>
                 </div>
             </form>
         </div>

@@ -36,13 +36,19 @@ public class WhatsAppService : IWhatsAppService
             new WhatsAppTemplateSend(templateName, languageCode, bodyParameters), ct);
     }
 
+    public async Task<bool> IsReadyAsync(Guid clientId, CancellationToken ct = default) =>
+        IsReady(await _integrations.GetReadOnlyAsync(clientId, ChannelType.WhatsApp, ct));
+
     private async Task<ChannelIntegration> ResolveAsync(Guid clientId, CancellationToken ct)
     {
         var integration = await _integrations.GetReadOnlyAsync(clientId, ChannelType.WhatsApp, ct);
-        if (integration is null || integration.Status != ChannelIntegrationStatus.Connected || !_provider.IsReady(integration))
+        if (integration is null || !IsReady(integration))
         {
             throw new WhatsAppSendException("channels.whatsApp.errors.notConnected");
         }
         return integration;
     }
+
+    private bool IsReady(ChannelIntegration? integration) =>
+        integration is not null && integration.Status == ChannelIntegrationStatus.Connected && _provider.IsReady(integration);
 }

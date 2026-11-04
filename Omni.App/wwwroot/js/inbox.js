@@ -503,6 +503,8 @@
       document.getElementById('inbox-contact-followup').textContent = formatDate(contact.nextFollowupAt);
       document.getElementById('inbox-contact-created').textContent = formatDate(contact.createdAt);
       document.getElementById('inbox-contact-profile').href = '/dashboard/contacts/' + contact.id;
+      // The contact page opens its "add order" popup for ?order=new.
+      document.getElementById('inbox-contact-order').href = '/dashboard/contacts/' + contact.id + '?order=new';
 
       var step = stage ? journeyStep(stage.category) : 0;
       document.getElementById('inbox-contact-journey-wrap').hidden = step === 0; // off-path stages (lost, no-show…) show just the badge

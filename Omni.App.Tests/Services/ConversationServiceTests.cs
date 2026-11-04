@@ -141,103 +141,6 @@ public class ConversationServiceTests
 
     // ---------------------------------------------------------------- AddMessage
 
-    private static CreateMessageRequest Msg(string direction, string sender, string channel = "whatsapp", string? type = null, string? origin = null) =>
-        new(direction, sender, channel, type, "hello", "ext", false, origin);
-
-    [Fact]
-    public async Task AddMessage_validates_direction_and_returns_null_for_unknown_conversation()
-    {
-        await Assert.ThrowsAsync<ArgumentException>(() => Sut().AddMessageAsync(_clientId, Guid.NewGuid(), Msg("sideways", "contact")));
-        await Assert.ThrowsAsync<ArgumentException>(() => Sut().AddMessageAsync(_clientId, Guid.NewGuid(), Msg("inbound", "martian")));
-        Assert.Null(await Sut().AddMessageAsync(_clientId, Guid.NewGuid(), Msg("inbound", "contact")));
-    }
-
-    [Fact]
-    public async Task Outbound_message_stamps_conversation_and_moves_a_new_contact_to_contacted()
-    {
-        var c = Conv();
-        var contact = new Contact { Id = _contactId, StageKey = PipelineKit.New };
-        _contacts.Setup(l => l.GetByIdAsync(_contactId, It.IsAny<CancellationToken>())).ReturnsAsync(contact);
-        Message? saved = null;
-        _messages.Setup(m => m.Add(It.IsAny<Message>())).Callback<Message>(m => saved = m);
-
-        var r = await Sut().AddMessageAsync(_clientId, c.Id, Msg("outbound", "member"));
-
-        Assert.Equal(("text", MessageOrigin.Dashboard, "hello"), (saved!.MessageType, saved.Origin, saved.Content));
-        Assert.NotNull(saved.SentAt);
-        Assert.Null(saved.ReceivedAt);
-        Assert.Equal(("outbound", saved.CreatedAt), (c.LastMessageDirection, c.LastMessageAt!.Value));
-        Assert.Equal(PipelineKit.Contacted, contact.StageKey);
-        Assert.NotNull(contact.LastContactAt);
-        Assert.Equal(saved.Id, r!.Id);
-    }
-
-    [Theory]
-    [InlineData("in_touch", "in_touch")]   // only the entry stage moves on
-    [InlineData("visit_set", "visit_set")]
-    [InlineData("inquiry", "in_touch")]
-    public async Task The_first_reply_moves_only_an_entry_stage_contact_to_the_next_open_stage(string from, string expected)
-    {
-        _businessTypes.Use(PipelineKit.Custom());
-        var c = Conv();
-        var contact = new Contact { Id = _contactId, StageKey = from };
-        _contacts.Setup(l => l.GetByIdAsync(_contactId, It.IsAny<CancellationToken>())).ReturnsAsync(contact);
-        await Sut().AddMessageAsync(_clientId, c.Id, Msg("outbound", "member"));
-        Assert.Equal(expected, contact.StageKey);
-    }
-
-    [Fact]
-    public async Task A_type_with_one_open_stage_keeps_the_contact_on_reply()
-    {
-        _businessTypes.Use(new ClientPipeline([new("open_only", StageCategory.Open, "Open"), new("b", StageCategory.Booked, "B")]));
-        var c = Conv();
-        var contact = new Contact { Id = _contactId, StageKey = "open_only" };
-        _contacts.Setup(l => l.GetByIdAsync(_contactId, It.IsAny<CancellationToken>())).ReturnsAsync(contact);
-        await Sut().AddMessageAsync(_clientId, c.Id, Msg("outbound", "member"));
-        Assert.Equal("open_only", contact.StageKey);
-    }
-
-    [Fact]
-    public async Task Inbound_message_keeps_the_contact_status_and_sets_received_time()
-    {
-        var c = Conv();
-        var contact = new Contact { Id = _contactId, StageKey = PipelineKit.New };
-        _contacts.Setup(l => l.GetByIdAsync(_contactId, It.IsAny<CancellationToken>())).ReturnsAsync(contact);
-        Message? saved = null;
-        _messages.Setup(m => m.Add(It.IsAny<Message>())).Callback<Message>(m => saved = m);
-        await Sut().AddMessageAsync(_clientId, c.Id, Msg("inbound", "contact"));
-        Assert.Equal(PipelineKit.New, contact.StageKey);
-        Assert.NotNull(saved!.ReceivedAt);
-        Assert.Null(saved.SentAt);
-        Assert.Equal(MessageOrigin.WhatsAppCustomer, saved.Origin);
-    }
-
-    [Theory]
-    [InlineData("ai", "whatsapp", MessageOrigin.Ai)]
-    [InlineData("member", "whatsapp", MessageOrigin.Dashboard)]
-    [InlineData("contact", "whatsapp", MessageOrigin.WhatsAppCustomer)]
-    [InlineData("contact", "telegram", MessageOrigin.TelegramCustomer)]
-    [InlineData("contact", "instagram", MessageOrigin.System)]
-    [InlineData("system", "whatsapp", MessageOrigin.System)]
-    public async Task Origin_is_inferred_from_sender_and_channel(string sender, string channel, string expected)
-    {
-        var c = Conv();
-        Message? saved = null;
-        _messages.Setup(m => m.Add(It.IsAny<Message>())).Callback<Message>(m => saved = m);
-        await Sut().AddMessageAsync(_clientId, c.Id, Msg("inbound", sender, channel));
-        Assert.Equal(expected, saved!.Origin);
-    }
-
-    [Fact]
-    public async Task An_explicit_origin_wins_over_inference()
-    {
-        var c = Conv();
-        Message? saved = null;
-        _messages.Setup(m => m.Add(It.IsAny<Message>())).Callback<Message>(m => saved = m);
-        await Sut().AddMessageAsync(_clientId, c.Id, Msg("outbound", "member", type: "image", origin: MessageOrigin.Campaign));
-        Assert.Equal((MessageOrigin.Campaign, "image"), (saved!.Origin, saved.MessageType));
-    }
-
     // ---------------------------------------------------------------- mode / read / close
 
     [Fact]
@@ -382,23 +285,6 @@ public class ConversationServiceTests
         Assert.Null(await Sut().ReopenAsync(_clientId, Guid.NewGuid()));
     }
 
-    [Fact]
-    public async Task A_contact_message_added_through_the_generic_path_reopens_but_a_member_message_does_not()
-    {
-        var closedForContact = Conv();
-        closedForContact.Status = ConversationStatus.Closed;
-        await Sut().AddMessageAsync(_clientId, closedForContact.Id, Msg("inbound", "contact"));
-        Assert.Equal(ConversationStatus.Active, closedForContact.Status);
-        _events.Verify(e => e.Log(_clientId, EventTypes.ConversationReopened, null, closedForContact.Id, null, MessageOrigin.WhatsAppCustomer, "{}"), Times.Once);
-        _notifier.Verify(n => n.ConversationUpdatedAsync(_clientId, closedForContact.Id, It.IsAny<CancellationToken>()), Times.Once);
-
-        var closedByMember = Conv();
-        closedByMember.Status = ConversationStatus.Closed;
-        await Sut().AddMessageAsync(_clientId, closedByMember.Id, Msg("outbound", "member"));
-        Assert.Equal(ConversationStatus.Closed, closedByMember.Status);
-        _notifier.Verify(n => n.ConversationUpdatedAsync(_clientId, closedByMember.Id, It.IsAny<CancellationToken>()), Times.Never);
-    }
-
     // ---------------------------------------------------------------- AI bot routing
 
     [Theory]
@@ -458,23 +344,6 @@ public class ConversationServiceTests
         Assert.Equal(EntitlementKeys.AiAssistant, ex.Entitlement);
         Assert.Equal(ConversationMode.Human, c.Mode);
         _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
-    }
-
-    [Fact]
-    public async Task A_contact_reopening_through_the_generic_path_goes_to_human_when_the_client_says_so()
-    {
-        InboxSettings(planIncludesBot: true, newConversations: true, reopenedConversations: false);
-        var closed = Conv();
-        closed.Status = ConversationStatus.Closed;
-
-        await Sut().AddMessageAsync(_clientId, closed.Id, Msg("inbound", "contact"));
-
-        Assert.Equal((ConversationStatus.Active, ConversationMode.Human), (closed.Status, closed.Mode));
-        _notifier.Verify(n => n.ConversationModeChangedAsync(_clientId, closed.Id, ConversationMode.Human, It.IsAny<CancellationToken>()), Times.Once);
-
-        var active = Conv();
-        await Sut().AddMessageAsync(_clientId, active.Id, Msg("inbound", "contact"));
-        Assert.Equal(ConversationMode.Ai, active.Mode);
     }
 
     [Fact]

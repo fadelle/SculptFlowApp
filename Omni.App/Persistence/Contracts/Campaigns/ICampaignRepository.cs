@@ -45,6 +45,11 @@ public interface ICampaignRepository
 
     Task<int> CountRecipientsInStatusAsync(Guid campaignId, string status, CancellationToken ct = default);
 
+    Task<int> CountRecipientsInStatusesAsync(Guid campaignId, IReadOnlyCollection<string> statuses, CancellationToken ct = default);
+
+    /// <summary>The name of one of the client's campaigns that uses this template, or null when none does.</summary>
+    Task<string?> FindNameUsingTemplateAsync(Guid clientId, Guid templateId, CancellationToken ct = default);
+
     Task<CampaignRecipient?> GetRecipientAsync(Guid recipientId, CancellationToken ct = default);
 
     /// <summary>Takes a Postgres session advisory lock on the campaign so only one sender works on it at a time (the

@@ -359,6 +359,11 @@ public class MessageService : IMessageService
         {
             throw new InvalidOperationException("templates.errors.whatsAppOnly").WithArgs(conversation.Channel);
         }
+        // Checked before the billing reservation, so a client without WhatsApp is told that (not a pricing refusal).
+        if (!await _whatsApp.IsReadyAsync(clientId, ct))
+        {
+            throw new WhatsAppSendException("channels.whatsApp.errors.notConnected");
+        }
         // A template is the business starting the conversation: never to a contact who opted out (stop word or a member).
         if (conversation.Contact is { } templateContact && (templateContact.OptedOutAt is not null || !templateContact.MarketingOptIn))
         {

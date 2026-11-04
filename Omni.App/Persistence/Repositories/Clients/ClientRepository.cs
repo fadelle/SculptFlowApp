@@ -42,6 +42,9 @@ public class ClientRepository : IClientRepository
                 where u.Id == userId && u.IsActive && (u.Role == UserRole.Client || u.Role == UserRole.Member)
                 join cu in _db.ClientUsers.AsNoTracking() on u.Id equals cu.UserId
                 where cu.IsActive
+                // A deactivated (suspended) client's people can't sign in or keep using the app (QA t6-admin-04).
+                join c in _db.Clients.AsNoTracking() on cu.ClientId equals c.Id
+                where c.IsActive
                 orderby cu.CreatedAt
                 select new UserAccess(u.Id, cu.ClientId, u.Role, u.Language, u.FullName, u.SecurityStamp)).FirstOrDefaultAsync(token), ct);
 

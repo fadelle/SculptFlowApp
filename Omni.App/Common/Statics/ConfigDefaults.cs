@@ -16,6 +16,8 @@ public static class ConfigDefaults
         "Whether anyone can create a new client from the Register page or \"Continue with Google\". Off = only existing accounts can sign in.");
     public static readonly ConfigDefinition AccountsSignupsPerIpPerHour = new("Accounts", "SignupsPerIpPerHour", "20", ConfigValueType.Int,
         "Most sign-up attempts one IP address may make per hour (Register and the Google client-name step).", 1, 1000);
+    public static readonly ConfigDefinition AccountsAttemptsPerIpPerHour = new("Accounts", "AttemptsPerIpPerHour", "60", ConfigValueType.Int,
+        "Most sign-in, forgot-password, reset-password and accept-invite attempts one IP address may make per hour (sign-up has its own limit).", 5, 1000);
     public static readonly ConfigDefinition AccountsResetLinkMinutes = new("Accounts", "ResetLinkMinutes", "60", ConfigValueType.Int,
         "How long a password reset link works (minutes). Each link works once.", 10, 1440);
     public static readonly ConfigDefinition AccountsResetEmailsPerHour = new("Accounts", "ResetEmailsPerHour", "3", ConfigValueType.Int,
@@ -251,6 +253,7 @@ public static class ConfigDefaults
     [
         AccountsSignupEnabled,
         AccountsSignupsPerIpPerHour,
+        AccountsAttemptsPerIpPerHour,
         AccountsResetLinkMinutes,
         AccountsResetEmailsPerHour,
         AccountsInviteDays,

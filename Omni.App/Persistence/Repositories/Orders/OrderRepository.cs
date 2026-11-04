@@ -17,6 +17,13 @@ public class OrderRepository : IOrderRepository
     public Task<Order?> GetAsync(Guid clientId, Guid orderId, CancellationToken ct = default) =>
         _db.Orders.FirstOrDefaultAsync(o => o.ClientId == clientId && o.Id == orderId, ct);
 
+    public async Task<IReadOnlyList<Order>> ListForContactReadOnlyAsync(Guid clientId, Guid contactId, CancellationToken ct = default) =>
+        await _db.Orders.AsNoTracking()
+            .Include(o => o.Service)
+            .Where(o => o.ClientId == clientId && o.ContactId == contactId)
+            .OrderByDescending(o => o.CreatedAt)
+            .ToListAsync(ct);
+
     public async Task<(IReadOnlyList<Order> Items, int TotalCount)> ListAsync(Guid clientId, string? status,
         int skip, int take, CancellationToken ct = default)
     {

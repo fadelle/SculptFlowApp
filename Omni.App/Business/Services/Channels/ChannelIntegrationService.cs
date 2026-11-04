@@ -4,6 +4,7 @@ using Omni.App.Business.Contracts.Services.Billing;
 using Omni.App.Business.Contracts.Managers;
 using Omni.App.Business.Contracts.Services.Channels;
 using Omni.App.Common.Enums;
+using Omni.App.Common.Exceptions;
 using Omni.App.Common.Statics;
 using Omni.App.Entities.Models;
 using Omni.App.Entities.Requests.Channels;
@@ -68,6 +69,58 @@ public class ChannelIntegrationService : IChannelIntegrationService
             throw new ArgumentException("channels.errors.telegramUseBotToken");
         }
 
+        // Typed in by hand (the PUT and the page's "Set up manually"): a connection is saved only once Meta confirms the
+        // token really reaches what it names, so nobody can claim another business's number, WABA or page.
+        var stored = await _integrations.GetAsync(request.ClientId, request.Channel, ct);
+        var token = !string.IsNullOrWhiteSpace(request.AccessToken) ? request.AccessToken.Trim() : stored?.AccessToken;
+        if (request.Channel == ChannelType.WhatsApp)
+        {
+            if (string.IsNullOrWhiteSpace(token) || string.IsNullOrWhiteSpace(request.PhoneNumberId) || string.IsNullOrWhiteSpace(request.WhatsAppBusinessId))
+            {
+                throw new ArgumentException("channels.errors.whatsAppManualFields");
+            }
+            // The Embedded Signup path: checks the number is in that WABA, registers it and saves.
+            return await ConnectWhatsAppAsync(new ConnectWhatsAppRequest(request.ClientId, AccessToken: token,
+                WabaId: request.WhatsAppBusinessId.Trim(), PhoneNumberId: request.PhoneNumberId.Trim()), ct);
+        }
+        if (!string.IsNullOrWhiteSpace(token))
+        {
+            await VerifyPageOrAccountAsync(request, token, ct);
+        }
+        return await SaveCoreAsync(request, ct);
+    }
+
+    /// <summary>Facebook / Instagram typed in by hand: a Page token answers <c>/me</c> with its own page, and an Instagram
+    /// account can only be read with a token allowed to see it. Anything else is refused (nothing is saved).</summary>
+    private async Task VerifyPageOrAccountAsync(SaveChannelIntegrationRequest request, string token, CancellationToken ct)
+    {
+        var expected = (request.Channel == ChannelType.Facebook ? request.PageId : request.InstagramBusinessId)?.Trim();
+        if (string.IsNullOrEmpty(expected) && request.Channel == ChannelType.Facebook)
+        {
+            throw new ArgumentException("channels.errors.pageIdRequired");
+        }
+        if (string.IsNullOrEmpty(expected))
+        {
+            throw new ArgumentException("channels.errors.instagramIdRequired");
+        }
+        string? seen;
+        try
+        {
+            seen = await _graph.GetObjectIdAsync(request.Channel == ChannelType.Facebook ? "me" : expected, token, ct);
+        }
+        catch (MetaGraphApiException)
+        {
+            seen = null; // an invalid token or no access: the same answer as a token for something else
+        }
+        if (!string.Equals(seen, expected, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("channels.errors.metaNotVerified").WithArgs(ChannelNames.Brand(request.Channel));
+        }
+    }
+
+    /// <summary>Saves a connection whose ids and token are already trusted (verified above, or by a connect flow).</summary>
+    private async Task<ChannelIntegrationResponse> SaveCoreAsync(SaveChannelIntegrationRequest request, CancellationToken ct)
+    {
         var row = await _integrations.GetAsync(request.ClientId, request.Channel, ct);
 
         // Saving with a token makes the channel connected — the plan's channel limits apply.
@@ -90,10 +143,10 @@ public class ChannelIntegrationService : IChannelIntegrationService
         }
 
         row.DisplayName = request.DisplayName;
-        row.PhoneNumberId = request.PhoneNumberId;
-        row.WhatsAppBusinessId = request.WhatsAppBusinessId;
-        row.PageId = request.PageId;
-        row.InstagramBusinessId = request.InstagramBusinessId;
+        row.PhoneNumberId = request.PhoneNumberId?.Trim();
+        row.WhatsAppBusinessId = request.WhatsAppBusinessId?.Trim();
+        row.PageId = request.PageId?.Trim();
+        row.InstagramBusinessId = request.InstagramBusinessId?.Trim();
 
         // Only overwrite a secret if a new value was actually typed in — the form never
         // round-trips a saved token back out, so an empty submission means "leave it as-is".
@@ -110,13 +163,15 @@ public class ChannelIntegrationService : IChannelIntegrationService
             row.Pin = request.Pin;
         }
 
-        // NOTE: this MVP doesn't call out to the WhatsApp/Meta Graph API to actually verify the
-        // credentials (Project 5) — "connected" here just means "an access token is on file".
-        // Wire real verification in here (and set LastVerifiedAt/LastError from the result) once
-        // that integration exists.
+        // Callers verified the token against Meta (SaveAsync, the connect flows), so a token on file means connected.
         row.Status = string.IsNullOrWhiteSpace(row.AccessToken)
             ? ChannelIntegrationStatus.Disconnected
             : ChannelIntegrationStatus.Connected;
+        if (row.Status == ChannelIntegrationStatus.Connected)
+        {
+            row.LastVerifiedAt = now;
+            row.LastError = null;
+        }
         row.UpdatedAt = now;
 
         await _unitOfWork.SaveChangesAsync(ct);
@@ -183,6 +238,16 @@ public class ChannelIntegrationService : IChannelIntegrationService
                 ?? throw new InvalidOperationException("channels.errors.noPhoneNumber").WithArgs(waba.WabaName, wabaId);
             phoneNumberId = phone.PhoneNumberId;
         }
+        else
+        {
+            // Ids from the browser (Embedded Signup's message, the manual form, the API): the number must be in that WABA
+            // and the token must reach it, or anyone could claim another business's number or WABA id.
+            var phones = await _graph.GetPhoneNumbersForWabaAsync(wabaId, token, ct);
+            if (!phones.Any(p => p.PhoneNumberId == phoneNumberId))
+            {
+                throw new InvalidOperationException("channels.errors.whatsAppNotInWaba").WithArgs(phoneNumberId, wabaId);
+            }
+        }
 
         var phoneInfo = await _graph.GetWhatsAppPhoneNumberAsync(phoneNumberId, token, ct);
 
@@ -193,7 +258,7 @@ public class ChannelIntegrationService : IChannelIntegrationService
         var pin = RandomNumberGenerator.GetInt32(0, 1_000_000).ToString("D6");
         await _graph.RegisterPhoneNumberAsync(phoneNumberId, token, pin, ct);
 
-        return await SaveAsync(new SaveChannelIntegrationRequest(
+        return await SaveCoreAsync(new SaveChannelIntegrationRequest(
             request.ClientId,
             ChannelType.WhatsApp,
             DisplayName: phoneInfo?.DisplayPhoneNumber ?? phoneInfo?.VerifiedName,
@@ -220,7 +285,7 @@ public class ChannelIntegrationService : IChannelIntegrationService
         var page = await _graph.GetFirstManagedPageAsync(longLivedToken, ct)
             ?? throw new InvalidOperationException("channels.errors.noPage");
 
-        return await SaveAsync(new SaveChannelIntegrationRequest(
+        return await SaveCoreAsync(new SaveChannelIntegrationRequest(
             request.ClientId,
             ChannelType.Facebook,
             DisplayName: page.PageName,

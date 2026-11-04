@@ -127,6 +127,13 @@ public class CampaignRepository : ICampaignRepository
     public Task<int> CountRecipientsInStatusAsync(Guid campaignId, string status, CancellationToken ct = default) =>
         _db.CampaignRecipients.CountAsync(r => r.CampaignId == campaignId && r.Status == status, ct);
 
+    public Task<string?> FindNameUsingTemplateAsync(Guid clientId, Guid templateId, CancellationToken ct = default) =>
+        _db.Campaigns.AsNoTracking().Where(c => c.ClientId == clientId && c.WhatsAppTemplateId == templateId)
+            .OrderByDescending(c => c.CreatedAt).Select(c => c.Name).FirstOrDefaultAsync(ct);
+
+    public Task<int> CountRecipientsInStatusesAsync(Guid campaignId, IReadOnlyCollection<string> statuses, CancellationToken ct = default) =>
+        _db.CampaignRecipients.CountAsync(r => r.CampaignId == campaignId && statuses.Contains(r.Status), ct);
+
     public Task<CampaignRecipient?> GetRecipientAsync(Guid recipientId, CancellationToken ct = default) =>
         _db.CampaignRecipients.FirstOrDefaultAsync(r => r.Id == recipientId, ct);
 

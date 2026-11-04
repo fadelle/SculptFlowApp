@@ -196,7 +196,6 @@ public class ConversationsControllerTests : ClientControllerTestBase
         Assert.IsType<NotFoundResult>((await Sut().ReturnToAi(id, default)).Result);
         Assert.IsType<NotFoundResult>((await Sut().Close(id, default)).Result);
         Assert.IsType<NotFoundResult>((await Sut().Reopen(id, default)).Result);
-        Assert.IsType<NotFoundResult>((await Sut().AddMessage(id, new CreateMessageRequest("inbound", "contact", "whatsapp", null, "x", null), default)).Result);
         Assert.IsType<NotFoundResult>((await Sut().SendTemplateMessage(id, new SendTemplateMessageRequest(Guid.NewGuid(), null), default)).Result);
         Assert.IsType<NotFoundResult>(await Sut().MarkRead(id, default));
         _conversations.Setup(c => c.MarkReadAsync(ClientId, id, It.IsAny<CancellationToken>())).ReturnsAsync(true);

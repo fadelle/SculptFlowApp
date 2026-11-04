@@ -29,6 +29,7 @@ public class ConfigManager : IConfigManager
     // ---- Accounts
     public bool AccountsSignupEnabled => GetBool(ConfigDefaults.AccountsSignupEnabled);
     public int AccountsSignupsPerIpPerHour => GetInt(ConfigDefaults.AccountsSignupsPerIpPerHour);
+    public int AccountsAttemptsPerIpPerHour => GetInt(ConfigDefaults.AccountsAttemptsPerIpPerHour);
     public int AccountsResetLinkMinutes => GetInt(ConfigDefaults.AccountsResetLinkMinutes);
     public int AccountsResetEmailsPerHour => GetInt(ConfigDefaults.AccountsResetEmailsPerHour);
     public int AccountsInviteDays => GetInt(ConfigDefaults.AccountsInviteDays);

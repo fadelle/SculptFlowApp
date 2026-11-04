@@ -48,6 +48,27 @@ public class WhatsAppTemplatesController : DashboardApiController
         return CreatedAtAction(nameof(GetById), new { id = template.Id }, template);
     }
 
+    /// <summary>Changes a draft, rejected or paused template's category and content (at Meta too, back to review).</summary>
+    [HttpPut("{id:guid}")]
+    public async Task<ActionResult<WhatsAppTemplateResponse>> Update(Guid id, [FromBody] UpdateWhatsAppTemplateRequest request, CancellationToken ct)
+    {
+        var clientId = await GetClientIdAsync(ct);
+        if (clientId is null) return Forbid();
+
+        var template = await _templates.UpdateAsync(clientId.Value, id, request, ct);
+        return template is null ? NotFound() : Ok(template);
+    }
+
+    /// <summary>Deletes a template (at Meta too), so its name can be used again. 422 while a campaign uses it.</summary>
+    [HttpDelete("{id:guid}")]
+    public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
+    {
+        var clientId = await GetClientIdAsync(ct);
+        if (clientId is null) return Forbid();
+
+        return await _templates.DeleteAsync(clientId.Value, id, ct) ? NoContent() : NotFound();
+    }
+
     /// <summary>Refreshes Status/RejectionReason from Meta for a template that's already been submitted.</summary>
     [HttpPost("{id:guid}/sync")]
     public async Task<ActionResult<WhatsAppTemplateResponse>> Sync(Guid id, CancellationToken ct)

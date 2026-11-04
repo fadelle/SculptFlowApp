@@ -183,8 +183,9 @@ if (GoogleLoginSettings.IsEnabled(builder.Configuration))
 
 // Behind Render's proxy the app only ever sees plain HTTP; trusting X-Forwarded-Proto makes Request.Scheme
 // https again, which Google's redirect_uri (built from the request) and Secure cookies both depend on.
-// X-Forwarded-For gives the real client IP for the sign-up rate limit; with the default ForwardLimit of 1 only the
-// address Render itself appended (the last one) is used, so a client can't pick its own by sending the header.
+// X-Forwarded-For: with the default ForwardLimit of 1 only the address Render itself appended (the last one, a proxy hop
+// that changes per request) is used, so a client can't pick its own by sending the header. The per-IP account limits use
+// the edge's client-IP header instead (Proxy:ClientIpHeader, see AccountRateLimiting).
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
     options.ForwardedHeaders = ForwardedHeaders.XForwardedProto | ForwardedHeaders.XForwardedFor;
@@ -194,8 +195,10 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 
 builder.Services.AddAuthorization();
 
-// Sign-up attempts per IP per hour (Accounts:SignupsPerIpPerHour); everything else is unlimited.
-builder.Services.AddSignupRateLimiting();
+// Per visitor IP per hour: sign-ups (Accounts:SignupsPerIpPerHour) and sign-in / reset / invite attempts
+// (Accounts:AttemptsPerIpPerHour); everything else is unlimited.
+builder.Services.Configure<ProxyOptions>(builder.Configuration.GetSection("Proxy"));
+builder.Services.AddAccountRateLimiting();
 
 // ---------------------------------------------------------------------
 // Application services — shared by both the API controllers and the

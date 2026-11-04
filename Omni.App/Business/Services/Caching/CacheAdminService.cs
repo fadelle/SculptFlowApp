@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Omni.App.Business.Contracts.Managers;
 using Omni.App.Business.Contracts.Services.Caching;
+using Omni.App.Common.Helpers;
 using Omni.App.Entities.Dtos.Caching;
 using Omni.App.Entities.Responses.Caching;
 
@@ -24,7 +25,8 @@ public class CacheAdminService : ICacheAdminService
     public async Task<CacheEntryResponse> GetAsync(string key, CancellationToken ct)
     {
         var raw = await _cache.GetRawAsync(key, ct) ?? throw new KeyNotFoundException($"'{key}' isn't cached.");
-        using var doc = JsonDocument.Parse(raw.Json);
+        // Cached copies can hold secrets (a channel connection's access and verify tokens, PIN): they never leave the app.
+        using var doc = JsonDocument.Parse(SecretRedactor.Redact(raw.Json));
         return new CacheEntryResponse(raw.Info.Key, raw.Info.ExpiresAt, raw.Info.SizeBytes, doc.RootElement.Clone());
     }
 

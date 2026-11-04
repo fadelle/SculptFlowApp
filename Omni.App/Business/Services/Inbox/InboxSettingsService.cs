@@ -66,7 +66,8 @@ public class InboxSettingsService : IInboxSettingsService
         var facts = await LoadAsync(clientId, ct);
         var account = facts.Accounts.FirstOrDefault(a => a.Channel == channel);
         return account is null
-            ? new AccountAiDecision(null, null, facts.Entitlements.CanUseAiAssistant ? AiBotBlockReason.NoAccount : AiBotBlockReason.PlanWithoutAi, false, false)
+            ? new AccountAiDecision(null, null, !facts.ClientActive ? AiBotBlockReason.ClientInactive
+                : facts.Entitlements.CanUseAiAssistant ? AiBotBlockReason.NoAccount : AiBotBlockReason.PlanWithoutAi, false, false)
             : facts.Decide(account, facts.RowFor(account.Id));
     }
 
@@ -118,19 +119,22 @@ public class InboxSettingsService : IInboxSettingsService
             .Where(c => c.Status == ChannelIntegrationStatus.Connected && _botChannels.Contains(c.Channel)).ToList();
         var rows = await _settings.ListForClientReadOnlyAsync(clientId, ct);
         var bots = await _bots.ListForClientReadOnlyAsync(clientId, ct);
-        return new Facts(entitlements, accounts, rows, bots, BotRules.AnsweringBotIds(bots, entitlements.MaximumAiBots));
+        // A deactivated client (or one that no longer exists) gets no AI replies; the cached client read keeps this cheap.
+        var clientActive = (await _clients.GetReadOnlyAsync(clientId, ct))?.IsActive ?? false;
+        return new Facts(entitlements, accounts, rows, bots, BotRules.AnsweringBotIds(bots, entitlements.MaximumAiBots), clientActive);
     }
 
     /// <summary>Everything one decision reads, loaded once.</summary>
     private sealed record Facts(ClientEntitlements Entitlements, IReadOnlyList<ChannelIntegration> Accounts, IReadOnlyList<InboxSettings> Rows,
-        IReadOnlyList<Bot> Bots, IReadOnlySet<Guid> AnsweringBotIds)
+        IReadOnlyList<Bot> Bots, IReadOnlySet<Guid> AnsweringBotIds, bool ClientActive)
     {
         public InboxSettings? RowFor(Guid accountId) => Rows.FirstOrDefault(r => r.ChannelIntegrationId == accountId);
 
         public AccountAiDecision Decide(ChannelIntegration account, InboxSettings? row)
         {
             var bot = row?.BotId is { } botId ? Bots.FirstOrDefault(b => b.Id == botId) : null;
-            var reason = !Entitlements.CanUseAiAssistant ? AiBotBlockReason.PlanWithoutAi
+            var reason = !ClientActive ? AiBotBlockReason.ClientInactive
+                : !Entitlements.CanUseAiAssistant ? AiBotBlockReason.PlanWithoutAi
                 : row is not { AiEnabled: true } ? AiBotBlockReason.AiDisabled
                 : bot is null ? AiBotBlockReason.NoBot
                 : bot.Status != BotStatus.Active ? AiBotBlockReason.BotInactive

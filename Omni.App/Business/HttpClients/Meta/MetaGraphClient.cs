@@ -100,6 +100,13 @@ public class MetaGraphClient : IMetaGraphClient
         return new WhatsAppPhoneNumberInfo(display, verifiedName);
     }
 
+    public async Task<string?> GetObjectIdAsync(string objectId, string accessToken, CancellationToken ct = default)
+    {
+        var url = GraphUrl(Uri.EscapeDataString(objectId)) + $"?fields=id&access_token={Uri.EscapeDataString(accessToken)}";
+        var json = await GetJsonAsync(url, ct);
+        return json.TryGetProperty("id", out var id) ? id.GetString() : null;
+    }
+
     public async Task<IReadOnlyList<string>> GetGrantedScopesAsync(string accessToken, CancellationToken ct = default)
     {
         // /debug_token needs an app access token (app_id|app_secret) to authenticate the *call*,
@@ -228,6 +235,25 @@ public class MetaGraphClient : IMetaGraphClient
         var status = json.TryGetProperty("status", out var s) ? s.GetString() ?? "PENDING" : "PENDING";
         var rejectedReason = json.TryGetProperty("rejected_reason", out var r) ? r.GetString() : null;
         return new MetaTemplateStatusResult(status, rejectedReason is "NONE" ? null : rejectedReason);
+    }
+
+    public async Task EditMessageTemplateAsync(string metaTemplateId, string accessToken, string category, object components, CancellationToken ct = default)
+    {
+        var url = GraphUrl(metaTemplateId) + $"?access_token={Uri.EscapeDataString(accessToken)}";
+        await PostJsonAsync(url, new { category = category.ToUpperInvariant(), components }, ct);
+    }
+
+    public async Task DeleteMessageTemplateAsync(string wabaId, string accessToken, string name, string metaTemplateId, CancellationToken ct = default)
+    {
+        var url = GraphUrl($"{wabaId}/message_templates")
+            + $"?hsm_id={Uri.EscapeDataString(metaTemplateId)}&name={Uri.EscapeDataString(name)}&access_token={Uri.EscapeDataString(accessToken)}";
+        using var response = await _http.DeleteAsync(url, ct);
+        if (!response.IsSuccessStatusCode)
+        {
+            var body = await response.Content.ReadAsStringAsync(ct);
+            throw new MetaGraphApiException(
+                $"Meta Graph API call failed ({(int)response.StatusCode} {response.StatusCode}): {body}");
+        }
     }
 
     private async Task<JsonElement> GetJsonAsync(string url, CancellationToken ct)

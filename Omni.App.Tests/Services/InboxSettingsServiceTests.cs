@@ -123,6 +123,22 @@ public class InboxSettingsServiceTests
     }
 
     [Fact]
+    public async Task A_deactivated_client_gets_no_ai_replies_on_any_account()
+    {
+        // QA t6-admin-04: a suspended client's AI kept replying.
+        _botList.Add(new Bot { Id = Guid.NewGuid(), ClientId = _clientId, Name = "B", Status = BotStatus.Active, CreatedAt = DateTimeOffset.UtcNow });
+        _rows.Add(new InboxSettings { Id = Guid.NewGuid(), ClientId = _clientId, ChannelIntegrationId = _whatsApp.Id, AiEnabled = true, BotId = _botList[0].Id });
+        Assert.True((await Sut().ResolveAsync(_clientId, ConversationChannel.WhatsApp)).BotAnswers);
+
+        _clients.Setup(r => r.GetReadOnlyAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(new Client { Id = _clientId, Name = "Glow", IsActive = false });
+
+        var decision = await Sut().ResolveAsync(_clientId, ConversationChannel.WhatsApp);
+        Assert.Equal((false, AiBotBlockReason.ClientInactive), (decision.BotAnswers, decision.BlockReason));
+        Assert.Equal(AiBotBlockReason.ClientInactive, (await Sut().ResolveAsync(_clientId, ConversationChannel.Facebook)).BlockReason);
+        Assert.Equal(ConversationMode.Human, await Sut().InitialModeAsync(_clientId, ConversationChannel.WhatsApp));
+    }
+
+    [Fact]
     public async Task A_channel_without_a_connected_account_has_no_bot()
     {
         _whatsApp.Status = ChannelIntegrationStatus.Disconnected;

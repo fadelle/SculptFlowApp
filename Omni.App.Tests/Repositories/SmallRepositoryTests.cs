@@ -96,6 +96,32 @@ public class OrderRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixtur
         Assert.NotNull(fresh.Contact);
         Assert.NotNull(fresh.Service);
     }
+
+    [PostgresFact]
+    public async Task A_contacts_orders_are_listed_newest_first_with_their_service_and_nobody_elses()
+    {
+        // QA t3-inbox-10: the contact page's Orders panel.
+        var c = MakeClient(); var other = MakeClient();
+        var svc = MakeService(c.Id); var contact = MakeContact(c.Id); var neighbour = MakeContact(c.Id);
+        var otherSvc = MakeService(other.Id); var otherContact = MakeContact(other.Id);
+        Order MakeOrder(Guid client, Guid contactId, Guid serviceId, int daysAgo) => new()
+        {
+            Id = Guid.NewGuid(), ClientId = client, ContactId = contactId, ServiceId = serviceId, Status = OrderStatus.Considering,
+            CreatedAt = Now.AddDays(-daysAgo), UpdatedAt = Now,
+        };
+        var older = MakeOrder(c.Id, contact.Id, svc.Id, 3);
+        var newer = MakeOrder(c.Id, contact.Id, svc.Id, 1);
+        var neighbours = MakeOrder(c.Id, neighbour.Id, svc.Id, 2);
+        var foreign = MakeOrder(other.Id, otherContact.Id, otherSvc.Id, 0);
+        await SeedAsync(c, other, svc, otherSvc, contact, neighbour, otherContact, older, newer, neighbours, foreign);
+
+        await using var db = NewContext();
+        var repo = new OrderRepository(db);
+        var list = await repo.ListForContactReadOnlyAsync(c.Id, contact.Id);
+        Assert.Equal([newer.Id, older.Id], list.Select(o => o.Id));
+        Assert.All(list, o => Assert.NotNull(o.Service));
+        Assert.Empty(await repo.ListForContactReadOnlyAsync(other.Id, contact.Id));
+    }
 }
 
 public class NotificationRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixture)
@@ -122,6 +148,18 @@ public class NotificationRepositoryTests(PostgresFixture fixture) : RepoTestBase
         Assert.Equal(2, await repo.CountUnreadAsync(c.Id));
         Assert.NotNull(await repo.GetAsync(c.Id, n1.Id));
         Assert.Null(await repo.GetAsync(other.Id, n1.Id));
+    }
+
+    [PostgresFact]
+    public async Task Every_notification_type_the_code_writes_is_allowed_by_the_table()
+    {
+        // QA t8-15 added TEMPLATE_STATUS_CHANGED; the table's check must know every type (schema.sql replaces it by name).
+        var c = MakeClient();
+        var notes = typeof(NotificationType).GetFields().Where(f => f.IsLiteral).Select(f => (string)f.GetRawConstantValue()!)
+            .Select(type => new Notification { Id = Guid.NewGuid(), ClientId = c.Id, Type = type, Title = type, CreatedAt = Now }).ToArray();
+        Assert.Contains(notes, n => n.Type == NotificationType.TemplateStatusChanged);
+        await SeedAsync([c, .. notes]);
+        Assert.Equal(notes.Length, await new NotificationRepository(NewContext()).CountUnreadAsync(c.Id));
     }
 
     [PostgresFact]
@@ -172,6 +210,32 @@ public class ChannelIntegrationRepositoryTests(PostgresFixture fixture) : RepoTe
         Assert.Equal(wa.Id, (await repo.FindWhatsAppByWabaIdAsync(waba))!.Id);
         Assert.Equal(2, (await repo.ListForClientReadOnlyAsync(c.Id)).Count);
         Assert.Equal([ChannelType.Telegram, ChannelType.WhatsApp], (await repo.ListForClientReadOnlyAsync(c.Id)).Select(i => i.Channel).Order());
+    }
+
+    [PostgresFact]
+    public async Task A_disconnected_number_no_longer_blocks_its_owner_and_routing_prefers_the_connected_row()
+    {
+        // QA t8-01: whoever saved a phone_number_id first owned it for good; now only connected numbers are unique.
+        var squatter = MakeClient(); var owner = MakeClient(); var third = MakeClient();
+        var phone = "P-" + Guid.NewGuid().ToString("N")[..8]; var waba = "W-" + Guid.NewGuid().ToString("N")[..8];
+        var old = Integration(squatter.Id, ChannelType.WhatsApp, ChannelIntegrationStatus.Disconnected);
+        old.PhoneNumberId = phone; old.WhatsAppBusinessId = waba;
+        var real = Integration(owner.Id, ChannelType.WhatsApp);
+        real.PhoneNumberId = phone; real.WhatsAppBusinessId = waba;
+        await SeedAsync(squatter, owner, third, old, real);
+
+        await using (var db = NewContext())
+        {
+            var repo = new ChannelIntegrationRepository(db);
+            Assert.Equal(real.Id, (await repo.FindWhatsAppByPhoneNumberIdAsync(phone))!.Id);
+            Assert.Equal(real.Id, (await repo.FindWhatsAppByWabaIdAsync(waba))!.Id);
+        }
+
+        // A second connected row with the same number is still refused.
+        await using var db2 = NewContext();
+        var copy = Integration(third.Id, ChannelType.WhatsApp); copy.PhoneNumberId = phone;
+        db2.ChannelIntegrations.Add(copy);
+        await Assert.ThrowsAsync<DuplicateRecordException>(() => new Omni.App.Persistence.Repositories.UnitOfWork(db2).SaveChangesAsync());
     }
 
     [PostgresFact]
@@ -239,6 +303,35 @@ public class WhatsAppRepositoryTests(PostgresFixture fixture) : RepoTestBase(fix
         repo.Add(added);
         await db.SaveChangesAsync();
         Assert.Equal(3, (await new WhatsAppTemplateRepository(NewContext()).ListForClientReadOnlyAsync(c.Id)).Count);
+    }
+
+    [PostgresFact]
+    public async Task A_template_messages_used_can_be_removed_and_the_messages_keep_their_text()
+    {
+        // QA t8-17: deleting a template; a message sent with it keeps its text, its link is cleared by the database.
+        var c = MakeClient();
+        var t = Template(c.Id, "old_promo");
+        var contact = new Contact { Id = Guid.NewGuid(), ClientId = c.Id, FullName = "Ann", CreatedAt = Now, UpdatedAt = Now };
+        var conversation = new Conversation { Id = Guid.NewGuid(), ClientId = c.Id, ContactId = contact.Id, Channel = ConversationChannel.WhatsApp, CreatedAt = Now, UpdatedAt = Now };
+        var message = new Message
+        {
+            Id = Guid.NewGuid(), ClientId = c.Id, ConversationId = conversation.Id, ContactId = contact.Id, Direction = MessageDirection.Outbound,
+            SenderType = MessageSenderType.Member, Origin = MessageOrigin.Dashboard, Channel = ConversationChannel.WhatsApp, MessageType = "template",
+            Content = "hello", WhatsAppTemplateId = t.Id, CreatedAt = Now,
+        };
+        await SeedAsync(c, t, contact, conversation, message);
+
+        await using (var db = NewContext())
+        {
+            var repo = new WhatsAppTemplateRepository(db);
+            repo.Remove((await repo.GetAsync(c.Id, t.Id))!);
+            await db.SaveChangesAsync();
+        }
+
+        await using var read = NewContext();
+        Assert.Null(await new WhatsAppTemplateRepository(read).GetAsync(c.Id, t.Id));
+        var kept = await read.Messages.AsNoTracking().SingleAsync(m => m.Id == message.Id);
+        Assert.Equal(("hello", (Guid?)null), (kept.Content, kept.WhatsAppTemplateId));
     }
 
     [PostgresFact]

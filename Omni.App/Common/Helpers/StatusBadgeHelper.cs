@@ -61,6 +61,12 @@ public static class StatusBadgeHelper
         ["cancelled"] = "badge-gray",
         ["failed"] = "badge-red",
 
+        // order status (confirmed, completed and canceled share the booking colours above)
+        ["considering"] = "badge-amber",
+        ["quoted"] = "badge-blue",
+        ["deposit_paid"] = "badge-teal",
+        ["lost"] = "badge-gray",
+
         // campaign recipient status
         ["queued"] = "badge-amber",
         ["sent"] = "badge-blue",

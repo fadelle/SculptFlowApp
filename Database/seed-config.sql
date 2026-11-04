@@ -14,6 +14,7 @@
 insert into config.settings (section, key, value, updated_by) values
   ('Accounts', 'SignupEnabled', 'true', 'seed'),
   ('Accounts', 'SignupsPerIpPerHour', '20', 'seed'),
+  ('Accounts', 'AttemptsPerIpPerHour', '60', 'seed'),
   ('Accounts', 'ResetLinkMinutes', '60', 'seed'),
   ('Accounts', 'ResetEmailsPerHour', '3', 'seed'),
   ('Accounts', 'InviteDays', '7', 'seed'),

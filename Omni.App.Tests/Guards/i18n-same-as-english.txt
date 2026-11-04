@@ -137,3 +137,7 @@ fr reports.contacts.title
 fr reports.contacts.source
 ar reports.bookings.title
 fr reports.bookings.title
+ar contactDetail.orders.title
+ar contactDetail.orders.service
+fr contactDetail.orders.title
+fr contactDetail.orders.service

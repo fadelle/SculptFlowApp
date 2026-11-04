@@ -1,6 +1,5 @@
-using System.Security.Cryptography;
-using System.Text;
 using Microsoft.AspNetCore.Mvc;
+using Omni.App.Common.Helpers;
 using Microsoft.AspNetCore.Mvc.Filters;
 
 namespace Omni.App.Controllers.Filters;
@@ -15,8 +14,8 @@ namespace Omni.App.Controllers.Filters;
 /// </summary>
 public class RequirePlatformAdminKeyAttribute : Attribute, IAsyncActionFilter
 {
-    public const string ConfigKey = "PlatformAdmin:ApiKey";
-    public const string HeaderName = "X-Platform-Admin-Key";
+    public const string ConfigKey = PlatformAdminKey.ConfigKey;
+    public const string HeaderName = PlatformAdminKey.HeaderName;
     public const string ActorHeaderName = "X-Admin-Actor";
 
     public async Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
@@ -28,8 +27,7 @@ public class RequirePlatformAdminKeyAttribute : Attribute, IAsyncActionFilter
             return;
         }
 
-        var provided = context.HttpContext.Request.Headers[HeaderName].FirstOrDefault() ?? string.Empty;
-        if (!CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(provided), Encoding.UTF8.GetBytes(expected)))
+        if (!PlatformAdminKey.Matches(context.HttpContext.Request, context.HttpContext.RequestServices.GetRequiredService<IConfiguration>()))
         {
             context.Result = new UnauthorizedObjectResult(new { error = $"Missing or invalid {HeaderName} header." });
             return;

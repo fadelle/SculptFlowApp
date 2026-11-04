@@ -149,84 +149,6 @@ public class ConversationService : IConversationService
         return (InboxMapper.ToResponse(conversation), messages.Select(InboxMapper.ToResponse).ToList());
     }
 
-    public async Task<MessageResponse?> AddMessageAsync(Guid clientId, Guid conversationId, CreateMessageRequest request, CancellationToken ct = default)
-    {
-        if (!MessageDirection.Inbound.Equals(request.Direction) && !MessageDirection.Outbound.Equals(request.Direction))
-        {
-            throw new ArgumentException("inbox.errors.invalidDirection").WithArgs(request.Direction);
-        }
-        if (request.SenderType is not (MessageSenderType.Contact or MessageSenderType.Ai or MessageSenderType.Member or MessageSenderType.System))
-        {
-            throw new ArgumentException("inbox.errors.invalidSenderType").WithArgs(request.SenderType);
-        }
-
-        var conversation = await _conversations.GetAsync(clientId, conversationId, ct);
-
-        if (conversation is null) return null;
-
-        var now = DateTimeOffset.UtcNow;
-
-        var message = new Message
-        {
-            Id = Guid.NewGuid(),
-            ClientId = clientId,
-            ConversationId = conversationId,
-            ContactId = conversation.ContactId,
-            Direction = request.Direction,
-            SenderType = request.SenderType,
-            Channel = request.Channel,
-            MessageType = string.IsNullOrWhiteSpace(request.MessageType) ? "text" : request.MessageType,
-            Content = request.Content,
-            ExternalMessageId = request.ExternalMessageId,
-            IsAiGenerated = request.IsAiGenerated,
-            Origin = request.Origin ?? InferOrigin(request.Direction, request.SenderType, request.Channel),
-            SentAt = request.Direction == MessageDirection.Outbound ? now : null,
-            ReceivedAt = request.Direction == MessageDirection.Inbound ? now : null,
-            CreatedAt = now,
-            TraceId = TraceContext.CurrentTraceId()
-        };
-
-        _messages.Add(message);
-
-        conversation.LastMessageAt = now;
-        conversation.LastMessageDirection = request.Direction;
-        conversation.UpdatedAt = now;
-
-        // A contact's message reopens a closed conversation (same rule as MessageService.IngestAsync).
-        var reopened = request.Direction == MessageDirection.Inbound && ConversationStatusSync.ReopenIfNotActive(conversation, now);
-        if (reopened)
-        {
-            _events.Log(clientId, EventTypes.ConversationReopened, conversationId: conversationId, source: message.Origin);
-        }
-
-        // Same reopen routing as MessageService.IngestAsync: the client (or its plan) may send reopened conversations to members.
-        var handedToHuman = reopened && conversation.Mode == ConversationMode.Ai
-            && !(await _inboxSettings.ResolveAsync(clientId, conversation.Channel, ct)).AnswersReopened;
-        if (handedToHuman)
-        {
-            ConversationModeSync.Apply(conversation, ConversationMode.Human, now);
-        }
-
-        var contact = await _contacts.GetByIdAsync(conversation.ContactId, ct);
-        if (contact is not null)
-        {
-            contact.LastContactAt = now;
-            contact.UpdatedAt = now;
-            // The first reply moves a contact out of the entry stage to the next open stage ("new" → "contacted" in both
-            // built-in types); a type with a single open stage keeps the contact where it is.
-            if (request.Direction == MessageDirection.Outbound
-                && (await _businessTypes.GetPipelineAsync(clientId, ct)).NextAfterEntry(contact.StageKey) is { } next)
-            {
-                contact.StageKey = next;
-            }
-        }
-
-        await _unitOfWork.SaveChangesAsync(ct);
-        if (reopened) await _notifier.ConversationUpdatedAsync(clientId, conversationId, ct);
-        if (handedToHuman) await _notifier.ConversationModeChangedAsync(clientId, conversationId, ConversationMode.Human, ct);
-        return InboxMapper.ToResponse(message);
-    }
-
     public async Task<(IReadOnlyList<ConversationListRow> Items, int TotalCount)> ListAsync(
         Guid clientId, int skip, int take, CancellationToken ct = default)
     {
@@ -388,17 +310,6 @@ public class ConversationService : IConversationService
         await _notifier.ConversationModeChangedAsync(clientId, conversationId, mode, ct);
 
         return InboxMapper.ToResponse(conversation);
-    }
-
-    /// <summary>Best-effort Origin for callers of the older generic AddMessageAsync/CreateMessageRequest
-    /// path that don't pass Origin explicitly — new code (MessageService) always sets it directly.</summary>
-    private static string InferOrigin(string direction, string senderType, string channel)
-    {
-        if (senderType == MessageSenderType.Ai) return MessageOrigin.Ai;
-        if (senderType == MessageSenderType.Member) return MessageOrigin.Dashboard;
-        if (senderType == MessageSenderType.Contact && channel == ConversationChannel.WhatsApp) return MessageOrigin.WhatsAppCustomer;
-        if (senderType == MessageSenderType.Contact && channel == ConversationChannel.Telegram) return MessageOrigin.TelegramCustomer;
-        return MessageOrigin.System;
     }
 
     public Task<bool> BelongsToClientAsync(Guid clientId, Guid conversationId, CancellationToken ct = default) =>

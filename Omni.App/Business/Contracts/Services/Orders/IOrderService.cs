@@ -11,4 +11,7 @@ public interface IOrderService
 
     Task<(IReadOnlyList<OrderResponse> Items, int TotalCount)> ListAsync(
         Guid clientId, string? status, int skip, int take, CancellationToken ct = default);
+
+    /// <summary>A contact's orders, newest first (the contact page's Orders panel).</summary>
+    Task<IReadOnlyList<OrderResponse>> ListForContactAsync(Guid clientId, Guid contactId, CancellationToken ct = default);
 }

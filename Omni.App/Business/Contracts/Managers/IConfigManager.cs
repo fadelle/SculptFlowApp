@@ -17,6 +17,7 @@ public interface IConfigManager
 
     /// <summary>Most sign-up attempts one IP address may make per hour. Default 20.</summary>
     int AccountsSignupsPerIpPerHour { get; }
+    int AccountsAttemptsPerIpPerHour { get; }
 
     /// <summary>How long a password reset link works (minutes). Default 60.</summary>
     int AccountsResetLinkMinutes { get; }

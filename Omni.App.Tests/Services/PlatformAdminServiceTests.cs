@@ -139,8 +139,9 @@ public class ClientAdminServiceTests
 
     private readonly Mock<IBusinessTypeService> _businessTypes = new();
     private readonly Mock<IClientProfileService> _profile = new();
+    private readonly Mock<ICacheManager> _cache = new();
 
-    private ClientAdminService Sut() => new(_repo.Object, _uow.Object, TimeProvider.System, _inboxSettings.Object, _businessTypes.Object, _profile.Object);
+    private ClientAdminService Sut() => new(_repo.Object, _uow.Object, TimeProvider.System, _inboxSettings.Object, _businessTypes.Object, _profile.Object, _cache.Object);
 
     [Fact]
     public async Task Business_type_preview_and_change_go_through_the_business_type_service()
@@ -209,8 +210,11 @@ public class ClientAdminServiceTests
         _repo.Setup(r => r.GetForUpdateAsync(client.Id, It.IsAny<CancellationToken>())).ReturnsAsync(client);
         await Sut().SetActiveAsync(client.Id, true, default);
         _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+        _cache.Verify(c => c.RemoveByPrefixAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
         await Sut().SetActiveAsync(client.Id, false, default);
         Assert.False(client.IsActive);
+        // QA t6-admin-04: the cached "who may use the app" is dropped, so its people are signed out on their next request.
+        _cache.Verify(c => c.RemoveByPrefixAsync(CacheKeys.MembershipPrefix, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

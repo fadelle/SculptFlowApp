@@ -5,6 +5,8 @@ using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.Extensions.Localization;
 using Omni.App.Business.Contracts.Managers;
 using Omni.App.Business.Contracts.Services.Campaigns;
+using Omni.App.Business.Contracts.Services.Channels;
+using Omni.App.Common.Enums;
 using Omni.App.Common.Helpers;
 using Omni.App.Entities.Responses.Campaigns;
 
@@ -20,17 +22,22 @@ public class DetailsModel : PageModel
 
     private readonly ICurrentClientContext _clientContext;
     private readonly ICampaignService _campaigns;
+    private readonly IChannelIntegrationService _channels;
     private readonly IStringLocalizer _text;
 
-    public DetailsModel(ICurrentClientContext clientContext, ICampaignService campaigns, IStringLocalizer text)
+    public DetailsModel(ICurrentClientContext clientContext, ICampaignService campaigns, IChannelIntegrationService channels, IStringLocalizer text)
     {
         _clientContext = clientContext;
         _campaigns = campaigns;
+        _channels = channels;
         _text = text;
     }
 
     public bool ClientConfigured { get; private set; }
     public CampaignDetailsResponse? Details { get; private set; }
+
+    /// <summary>False while the client has no connected WhatsApp number: the page warns that the campaign can't send.</summary>
+    public bool WhatsAppConnected { get; private set; } = true;
 
     [TempData]
     public string? StatusMessage { get; set; }
@@ -49,7 +56,9 @@ public class DetailsModel : PageModel
 
         ClientConfigured = true;
         Details = await _campaigns.GetByIdAsync(client.Id, id, ct);
-        return Details is null ? NotFound() : Page();
+        if (Details is null) return NotFound();
+        WhatsAppConnected = (await _channels.ListConnectedChannelsAsync(client.Id, ct)).Contains(ChannelType.WhatsApp);
+        return Page();
     }
 
     public async Task<IActionResult> OnPostSendAsync(Guid id, CancellationToken ct)

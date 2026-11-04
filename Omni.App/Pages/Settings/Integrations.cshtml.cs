@@ -24,6 +24,7 @@ public class IntegrationsModel : PageModel
     private readonly IStringLocalizer _text;
 
     private const string SavedKey = "integrations.done.saved";
+    private const string MetaRefusedKey = "channels.errors.metaRefused";
     private const string DisconnectedKey = "integrations.done.disconnected";
     private const string TelegramConnectedKey = "integrations.telegram.connected";
     private const string TelegramUnnamedKey = "integrations.telegram.unnamed";
@@ -119,9 +120,13 @@ public class IntegrationsModel : PageModel
                 PageId, InstagramBusinessId, AccessToken, WebhookVerifyToken), ct);
             StatusMessage = _text[SavedKey, Label(Channel)].Value;
         }
-        catch (InvalidOperationException ex) // e.g. the plan's channel limit
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException) // the plan's channel limit, missing ids, Meta didn't confirm them
         {
             ErrorMessage = _text.Localize(ex);
+        }
+        catch (MetaGraphApiException)
+        {
+            ErrorMessage = _text[MetaRefusedKey].Value;
         }
         return RedirectToPage();
     }

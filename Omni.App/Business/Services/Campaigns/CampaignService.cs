@@ -31,13 +31,15 @@ public class CampaignService : ICampaignService
     private readonly IMessageService _messages;
     private readonly ICampaignAudienceService _audience;
     private readonly IEntitlementService _entitlements;
+    private readonly IWhatsAppService _whatsApp;
 
     private readonly IStringLocalizer _text;
 
     public CampaignService(ICampaignRepository campaigns, IWhatsAppTemplateRepository templates, IContactRepository contacts,
         IMessageRepository messageRows, IUnitOfWork unitOfWork, IConversationService conversations, IMessageService messages, ICampaignAudienceService audience,
-        IEntitlementService entitlements, IStringLocalizer text)
+        IEntitlementService entitlements, IWhatsAppService whatsApp, IStringLocalizer text)
     {
+        _whatsApp = whatsApp;
         _text = text;
         _campaigns = campaigns;
         _templates = templates;
@@ -49,6 +51,13 @@ public class CampaignService : ICampaignService
         _audience = audience;
         _entitlements = entitlements;
     }
+
+    /// <summary>Recipient statuses that mean the message went out.</summary>
+    private static readonly string[] SentStatuses =
+    {
+        CampaignRecipientStatus.Sent, CampaignRecipientStatus.Delivered, CampaignRecipientStatus.Read,
+        CampaignRecipientStatus.Replied, CampaignRecipientStatus.Booked
+    };
 
     public async Task<IReadOnlyList<CampaignListRow>> ListAsync(Guid clientId, CancellationToken ct = default)
     {
@@ -197,6 +206,7 @@ public class CampaignService : ICampaignService
             throw new InvalidOperationException("campaigns.errors.scheduleNotDraft").WithArgs(TextArg.Value(campaign.Status));
         }
         await _entitlements.EnsureFeatureAsync(clientId, EntitlementKeys.Campaigns, ct);
+        if (await StartProblemAsync(clientId, campaign, ct) is { } problem) throw problem;
 
         campaign.Status = CampaignStatus.Scheduled;
         campaign.ScheduledAt = scheduledAt;
@@ -212,16 +222,37 @@ public class CampaignService : ICampaignService
         if (campaign is null) return null;
         await _entitlements.EnsureFeatureAsync(clientId, EntitlementKeys.Campaigns, ct);
 
-        if (campaign.Status is CampaignStatus.Draft or CampaignStatus.Scheduled or CampaignStatus.Paused)
-        {
-            await StartAsync(campaign, ct);
-        }
-        else if (campaign.Status != CampaignStatus.Running)
+        if (campaign.Status is not (CampaignStatus.Draft or CampaignStatus.Scheduled or CampaignStatus.Paused or CampaignStatus.Running))
         {
             throw new InvalidOperationException("campaigns.errors.cantSend").WithArgs(TextArg.Value(campaign.Status));
         }
+        if (await StartProblemAsync(clientId, campaign, ct) is { } problem) throw problem;
+        if (campaign.Status != CampaignStatus.Running)
+        {
+            await StartAsync(campaign, ct);
+        }
 
         return await ProcessBatchAsync(clientId, id, batchSize, ct);
+    }
+
+    /// <summary>Why the campaign can't send right now, or null: WhatsApp isn't connected (every recipient would fail), or
+    /// its template is gone or not approved. Checked when it is scheduled, started, resumed and before every batch.</summary>
+    private async Task<InvalidOperationException?> StartProblemAsync(Guid clientId, Campaign campaign, CancellationToken ct)
+    {
+        if (!await _whatsApp.IsReadyAsync(clientId, ct))
+        {
+            return new InvalidOperationException("campaigns.errors.whatsAppNotConnected");
+        }
+        var template = campaign.WhatsAppTemplateId is { } templateId ? await _templates.GetReadOnlyAsync(clientId, templateId, ct) : null;
+        if (template is null)
+        {
+            return new InvalidOperationException("campaigns.errors.noTemplate");
+        }
+        if (template.Status != WhatsAppTemplateStatus.Approved)
+        {
+            return new InvalidOperationException("templates.errors.notApproved").WithArgs(template.Name, TextArg.Value(template.Status));
+        }
+        return null;
     }
 
     /// <summary>Draft/Scheduled/Paused -> Running: queues every recipient still Pending (a stopped campaign that never
@@ -255,6 +286,15 @@ public class CampaignService : ICampaignService
             return new ProcessCampaignBatchResult(0, 0, 0, remaining, campaign.Status == CampaignStatus.Completed);
         }
         await _entitlements.EnsureFeatureAsync(clientId, EntitlementKeys.Campaigns, ct);
+
+        // WhatsApp disconnected (or the template withdrawn) while it ran: stop it, so Send resumes it once that's fixed,
+        // instead of failing everyone still queued.
+        if (await StartProblemAsync(clientId, campaign, ct) is not null)
+        {
+            await _campaigns.TryChangeStatusAsync(clientId, id, new[] { CampaignStatus.Running }, CampaignStatus.Paused, DateTimeOffset.UtcNow, ct);
+            var remaining = await _campaigns.CountRecipientsInStatusAsync(id, CampaignRecipientStatus.Queued, ct);
+            return new ProcessCampaignBatchResult(0, 0, 0, remaining, false);
+        }
 
         // One sender per campaign at a time (the Send button and the background sender, or two app instances), so
         // nobody is messaged twice. If another sender has it, it is already sending: report progress and step aside.
@@ -292,7 +332,10 @@ public class CampaignService : ICampaignService
                         && await _campaigns.GetStatusReadOnlyAsync(id, ct) == CampaignStatus.Running;
         if (completed)
         {
-            campaign.Status = CampaignStatus.Completed;
+            // Sends were tried and none went out: the campaign failed, it didn't complete.
+            var nothingSent = await _campaigns.CountRecipientsInStatusAsync(id, CampaignRecipientStatus.Failed, ct) > 0
+                              && await _campaigns.CountRecipientsInStatusesAsync(id, SentStatuses, ct) == 0;
+            campaign.Status = nothingSent ? CampaignStatus.Failed : CampaignStatus.Completed;
             campaign.CompletedAt = DateTimeOffset.UtcNow;
             campaign.UpdatedAt = campaign.CompletedAt.Value;
             await _unitOfWork.SaveChangesAsync(ct);
@@ -314,6 +357,13 @@ public class CampaignService : ICampaignService
             // Re-checked here (the list can be a minute old): never start one before its time, or one members stopped.
             if (campaign.ScheduledAt is null || campaign.ScheduledAt > DateTimeOffset.UtcNow) return null;
             await _entitlements.EnsureFeatureAsync(clientId, EntitlementKeys.Campaigns, ct);
+            // Due but WhatsApp isn't connected (or the template isn't approved): stop it rather than fail every recipient;
+            // the campaign page says why, and Send resumes it once that's fixed.
+            if (await StartProblemAsync(clientId, campaign, ct) is not null)
+            {
+                await _campaigns.TryChangeStatusAsync(clientId, id, new[] { CampaignStatus.Scheduled }, CampaignStatus.Paused, DateTimeOffset.UtcNow, ct);
+                return null;
+            }
             await StartAsync(campaign, ct);
         }
         else if (campaign.Status != CampaignStatus.Running)

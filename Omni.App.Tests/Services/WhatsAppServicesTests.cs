@@ -11,6 +11,7 @@ public class WhatsAppTemplateServiceTests
     private readonly Mock<IWhatsAppTemplateProvider> _provider = new();
     private readonly Mock<IInboxNotifier> _notifier = new();
     private readonly Mock<IEventLogger> _events = new();
+    private readonly Mock<ICampaignRepository> _campaigns = new();
     private ChannelIntegration? _integration;
 
     public WhatsAppTemplateServiceTests()
@@ -25,7 +26,106 @@ public class WhatsAppTemplateServiceTests
         Id = Guid.NewGuid(), ClientId = _clientId, Channel = ChannelType.WhatsApp, Status = ChannelIntegrationStatus.Connected, WhatsAppBusinessId = "W1"
     };
 
-    private WhatsAppTemplateService Sut() => new(_templates.Object, _integrations.Object, _uow.Object, _provider.Object, _notifier.Object, _events.Object);
+    private WhatsAppTemplateService Sut() => new(_templates.Object, _integrations.Object, _uow.Object, _provider.Object, _notifier.Object, _events.Object, Mock.Of<INotificationService>(), _campaigns.Object);
+
+    // ---------------------------------------------------------------- QA t8-17: edit and delete
+
+    private WhatsAppTemplate Stored(string status, string? metaId = "meta-7")
+    {
+        var t = new WhatsAppTemplate { Id = Guid.NewGuid(), ClientId = _clientId, Name = "spring", Language = "en_US", Category = "marketing", Body = "Old", Status = status, MetaTemplateId = metaId, RejectionReason = "INVALID_FORMAT" };
+        _templates.Setup(r => r.GetAsync(_clientId, t.Id, It.IsAny<CancellationToken>())).ReturnsAsync(t);
+        return t;
+    }
+
+    private static UpdateWhatsAppTemplateRequest Edit(string body = "Hi {{1}}, new text", string category = "utility") => new(category, body, "text", "Header", " ");
+
+    [Theory]
+    [InlineData(WhatsAppTemplateStatus.Rejected)]
+    [InlineData(WhatsAppTemplateStatus.Paused)]
+    public async Task Editing_a_template_meta_has_sends_the_edit_and_puts_it_back_in_review(string status)
+    {
+        var t = Stored(status);
+        var r = await Sut().UpdateAsync(_clientId, t.Id, Edit());
+        _provider.Verify(p => p.EditAsync(_integration!, t, It.IsAny<CancellationToken>()), Times.Once);
+        Assert.Equal((WhatsAppTemplateStatus.Pending, (string?)null, "Hi {{1}}, new text", "utility", "text", "Header", (string?)null),
+            (r!.Status, t.RejectionReason, t.Body, t.Category, t.HeaderType, t.HeaderContent, t.Footer));
+        _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task A_refused_edit_changes_nothing()
+    {
+        var t = Stored(WhatsAppTemplateStatus.Rejected);
+        _provider.Setup(p => p.EditAsync(It.IsAny<ChannelIntegration>(), t, It.IsAny<CancellationToken>())).ThrowsAsync(new WhatsAppTemplateProviderException("(#100) Invalid parameter"));
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => Sut().UpdateAsync(_clientId, t.Id, Edit()));
+        Assert.Equal("templates.errors.editRefused", ex.Message);
+        _uow.Verify(u => u.DiscardChanges(), Times.Once);
+        _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Editing_one_meta_never_accepted_submits_it_again_or_keeps_a_draft_without_whatsapp()
+    {
+        var failed = Stored(WhatsAppTemplateStatus.Rejected, metaId: null);
+        _provider.Setup(p => p.SubmitAsync(It.IsAny<ChannelIntegration>(), failed, It.IsAny<CancellationToken>())).ReturnsAsync(new WhatsAppTemplateSubmitResult("meta-9", "PENDING"));
+        Assert.Equal(WhatsAppTemplateStatus.Pending, (await Sut().UpdateAsync(_clientId, failed.Id, Edit()))!.Status);
+        Assert.Equal("meta-9", failed.MetaTemplateId);
+        _provider.Verify(p => p.EditAsync(It.IsAny<ChannelIntegration>(), It.IsAny<WhatsAppTemplate>(), It.IsAny<CancellationToken>()), Times.Never);
+
+        _integration = null;
+        var draft = Stored(WhatsAppTemplateStatus.Rejected, metaId: null);
+        var r = await Sut().UpdateAsync(_clientId, draft.Id, Edit());
+        Assert.Equal((WhatsAppTemplateStatus.Draft, (string?)null), (r!.Status, draft.RejectionReason));
+    }
+
+    [Theory]
+    [InlineData(WhatsAppTemplateStatus.Approved)]
+    [InlineData(WhatsAppTemplateStatus.Pending)]
+    [InlineData(WhatsAppTemplateStatus.Disabled)]
+    public async Task Only_draft_rejected_or_paused_templates_can_be_edited(string status)
+    {
+        var t = Stored(status);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => Sut().UpdateAsync(_clientId, t.Id, Edit()));
+        await Assert.ThrowsAsync<ArgumentException>(() => Sut().UpdateAsync(_clientId, Stored(WhatsAppTemplateStatus.Rejected).Id, Edit(body: " ")));
+        await Assert.ThrowsAsync<ArgumentException>(() => Sut().UpdateAsync(_clientId, Stored(WhatsAppTemplateStatus.Rejected).Id, Edit(category: "bogus")));
+        Assert.Null(await Sut().UpdateAsync(_clientId, Guid.NewGuid(), Edit()));
+    }
+
+    [Fact]
+    public async Task Deleting_removes_it_at_meta_and_here_so_the_name_is_free_again()
+    {
+        var atMeta = Stored(WhatsAppTemplateStatus.Rejected);
+        Assert.True(await Sut().DeleteAsync(_clientId, atMeta.Id));
+        _provider.Verify(p => p.DeleteAsync(_integration!, atMeta, It.IsAny<CancellationToken>()), Times.Once);
+        _templates.Verify(r => r.Remove(atMeta), Times.Once);
+
+        var local = Stored(WhatsAppTemplateStatus.Draft, metaId: null);
+        _integration = null; // a draft Meta never had needs no connection
+        Assert.True(await Sut().DeleteAsync(_clientId, local.Id));
+        _provider.Verify(p => p.DeleteAsync(It.IsAny<ChannelIntegration>(), local, It.IsAny<CancellationToken>()), Times.Never);
+        _templates.Verify(r => r.Remove(local), Times.Once);
+        Assert.False(await Sut().DeleteAsync(_clientId, Guid.NewGuid()));
+    }
+
+    [Fact]
+    public async Task A_template_a_campaign_uses_or_meta_refuses_to_delete_is_kept()
+    {
+        var used = Stored(WhatsAppTemplateStatus.Approved);
+        _campaigns.Setup(c => c.FindNameUsingTemplateAsync(_clientId, used.Id, It.IsAny<CancellationToken>())).ReturnsAsync("Spring sale");
+        var inUse = await Assert.ThrowsAsync<InvalidOperationException>(() => Sut().DeleteAsync(_clientId, used.Id));
+        Assert.Equal("templates.errors.usedByCampaign", inUse.Message);
+
+        var refused = Stored(WhatsAppTemplateStatus.Paused);
+        _provider.Setup(p => p.DeleteAsync(It.IsAny<ChannelIntegration>(), refused, It.IsAny<CancellationToken>())).ThrowsAsync(new WhatsAppTemplateProviderException("(#100) nope"));
+        Assert.Equal("templates.errors.deleteRefused", (await Assert.ThrowsAsync<InvalidOperationException>(() => Sut().DeleteAsync(_clientId, refused.Id))).Message);
+
+        _integration = null;
+        var offline = Stored(WhatsAppTemplateStatus.Rejected);
+        Assert.Equal("templates.errors.connectFirst", (await Assert.ThrowsAsync<InvalidOperationException>(() => Sut().DeleteAsync(_clientId, offline.Id))).Message);
+
+        _templates.Verify(r => r.Remove(It.IsAny<WhatsAppTemplate>()), Times.Never);
+        _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
 
     private CreateWhatsAppTemplateRequest Create(string category = "marketing", string name = "promo", string body = "Hi", string language = "") =>
         new(_clientId, name, category, language, body, null, null, null, null, null);

@@ -46,7 +46,10 @@ public class MessageBillingTests
     private sealed class FakeWhatsApp : IWhatsAppService
     {
         public bool Fail { get; set; }
+        public bool Ready { get; set; } = true;
         public int Sends { get; private set; }
+
+        public Task<bool> IsReadyAsync(Guid clientId, CancellationToken ct = default) => Task.FromResult(Ready);
 
         public Task<string> SendTextMessageAsync(Guid clientId, string toPhone, string text, CancellationToken ct = default) => Send();
 
@@ -206,6 +209,22 @@ public class MessageBillingTests
         Assert.Equal(0m, account.ReservedAmount);
         Assert.Single((await s.H.LedgerAsync(s.Client)), l => l.EntryType == LedgerEntryType.UsageDebit);
         await s.H.AssertReconciledAsync(s.Client);
+    }
+
+    [PostgresFact]
+    public async Task ATemplateSend_WithoutConnectedWhatsApp_IsRefusedBeforeAnythingIsReserved()
+    {
+        // QA t5-ops-05: the pricing check ran first, so a client without WhatsApp was told the message "isn't priced".
+        var s = await SetupAsync(wallet: 1m);
+        s.WhatsApp.Ready = false;
+
+        var ex = await Assert.ThrowsAsync<WhatsAppSendException>(() => s.SendTemplateAsync(s.MarketingTemplate));
+
+        Assert.Equal("channels.whatsApp.errors.notConnected", ex.Message);
+        Assert.Equal(0, s.WhatsApp.Sends);
+        Assert.Equal(0m, (await s.H.AccountAsync(s.Client)).ReservedAmount);
+        await using var db = s.H.Db();
+        Assert.False(await db.BillingUsageRecords.AnyAsync(u => u.ClientId == s.Client));
     }
 
     [PostgresFact]

@@ -18,4 +18,11 @@ public interface IWhatsAppTemplateProvider
     Task<WhatsAppTemplateSubmitResult> SubmitAsync(ChannelIntegration integration, WhatsAppTemplate template, CancellationToken ct = default);
 
     Task<WhatsAppTemplateStatusResult> GetStatusAsync(ChannelIntegration integration, WhatsAppTemplate template, CancellationToken ct = default);
+
+    /// <summary>Sends the template's current category and content to Meta as an edit of the one it already has (rejected
+    /// or paused), for review again. Throws WhatsAppTemplateProviderException when Meta refuses.</summary>
+    Task EditAsync(ChannelIntegration integration, WhatsAppTemplate template, CancellationToken ct = default);
+
+    /// <summary>Deletes the template at Meta. Throws WhatsAppTemplateProviderException when Meta refuses.</summary>
+    Task DeleteAsync(ChannelIntegration integration, WhatsAppTemplate template, CancellationToken ct = default);
 }
