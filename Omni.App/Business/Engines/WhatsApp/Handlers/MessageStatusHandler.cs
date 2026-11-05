@@ -1,4 +1,7 @@
+using Omni.App.Business.Contracts.Managers;
 using Omni.App.Business.Contracts.Services.Inbox;
+using Omni.App.Common.Statics;
+using Omni.App.Entities.Dtos.Monitoring;
 using Omni.App.Common.Enums;
 using Omni.App.Entities.Dtos.WhatsApp;
 using Omni.App.Entities.Requests.Inbox;
@@ -14,10 +17,12 @@ namespace Omni.App.Business.Engines.WhatsApp.Handlers;
 public class MessageStatusHandler
 {
     private readonly IMessageService _messages;
+    private readonly IMessageTracer? _tracer;
 
-    public MessageStatusHandler(IMessageService messages)
+    public MessageStatusHandler(IMessageService messages, IMessageTracer? tracer = null)
     {
         _messages = messages;
+        _tracer = tracer;
     }
 
     public async Task<WhatsAppWebhookResponse> HandleAsync(ParsedMetaEvent evt, ResolvedClient client, CancellationToken ct)
@@ -27,6 +32,14 @@ public class MessageStatusHandler
             Content: null, evt.ExternalMessageId, evt.DeliveryStatus, SentAt: null, ReceivedAt: null,
             MessageType: null, MetadataJson: null, FailureCode: evt.FailureCode, FailureReason: evt.FailureReason,
             OccurredAt: evt.Timestamp), ct);
+
+        // A status for a message Omni never sent leaves a trace, so a missing message can be diagnosed (QA t10-12).
+        if (!result.Found)
+        {
+            _tracer?.Step(TraceSteps.WebhookIgnored, TraceOutcomes.Skipped,
+                new TraceIds(client.ClientId, Channel: ConversationChannel.WhatsApp, ExternalMessageId: evt.ExternalMessageId),
+                detail: new { reason = "status_unmatched", status = evt.DeliveryStatus });
+        }
 
         return new WhatsAppWebhookResponse(
             Processed: result.Found, EventType: "message_status", ShouldRunAi: false,

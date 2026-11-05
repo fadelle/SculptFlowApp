@@ -45,13 +45,16 @@ public class PlanUsageService : IPlanUsageService
             .Where(c => c.Status == ChannelIntegrationStatus.Connected).ToList();
         var activeBots = (await _bots.ListForClientReadOnlyAsync(clientId, ct)).Count(b => b.Status == BotStatus.Active);
 
+        // Without an active plan the enforced limits are all 0 ("Seats 1 of 0", QA t2-billing-15): show the plan's own limits.
+        int? Limit(string key, int? enforced) => summary.HasAccess ? enforced : PlanLimit(summary, key);
         var quotas = new List<PlanQuotaRow>
         {
-            new(EntitlementKeys.MaxUsers, seats, plan.MaximumUsers),
-            new(EntitlementKeys.MaxChannelConnections, connected.Count, plan.MaximumChannelConnections),
-            new(EntitlementKeys.MaxWhatsAppNumbers, connected.Count(c => c.Channel == ChannelType.WhatsApp), plan.MaximumWhatsAppNumbers),
+            new(EntitlementKeys.MaxUsers, seats, Limit(EntitlementKeys.MaxUsers, plan.MaximumUsers)),
+            new(EntitlementKeys.MaxChannelConnections, connected.Count, Limit(EntitlementKeys.MaxChannelConnections, plan.MaximumChannelConnections)),
+            new(EntitlementKeys.MaxWhatsAppNumbers, connected.Count(c => c.Channel == ChannelType.WhatsApp), Limit(EntitlementKeys.MaxWhatsAppNumbers, plan.MaximumWhatsAppNumbers)),
         };
-        if (plan.CanUseAiAssistant) quotas.Add(new(EntitlementKeys.MaxAiBots, activeBots, plan.MaximumAiBots));
+        var aiIncluded = summary.HasAccess ? plan.CanUseAiAssistant : summary.Entitlements.Any(e => e.Key == EntitlementKeys.AiAssistant && e.Value == "true");
+        if (aiIncluded) quotas.Add(new(EntitlementKeys.MaxAiBots, activeBots, Limit(EntitlementKeys.MaxAiBots, plan.MaximumAiBots)));
 
         // Charged usage (summary.Usage) and usage Omni didn't charge (summary.ProviderDirectUsage) both count.
         var charged = summary.Usage.Select(u => (u.EventType, u.Count, u.Amount));
@@ -63,6 +66,12 @@ public class PlanUsageService : IPlanUsageService
         return new PlanUsageDto(quotas,
             messages.Sum(u => u.Count), messages.Sum(u => u.Amount),
             aiReplies.Sum(u => u.Count), aiReplies.Sum(u => u.Amount),
-            plan.CanUseAiAssistant);
+            aiIncluded);
     }
+
+    /// <summary>The subscription's plan's own limit (with add-ons), as the summary lists it: null = unlimited.</summary>
+    private static int? PlanLimit(ClientBillingSummary summary, string key) =>
+        summary.Entitlements.FirstOrDefault(e => e.Key == key)?.Value is { } value
+            ? value == EntitlementCatalog.Unlimited ? null : int.TryParse(value, out var n) ? n : 0
+            : 0;
 }

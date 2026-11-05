@@ -55,6 +55,7 @@ public class ConfigManager : IConfigManager
     public int BillingRateBackdateToleranceMinutes => GetInt(ConfigDefaults.BillingRateBackdateToleranceMinutes);
     public int BillingRecentTransactions => GetInt(ConfigDefaults.BillingRecentTransactions);
     public bool BillingChargeAiReplies => GetBool(ConfigDefaults.BillingChargeAiReplies);
+    public bool BillingAddonsRenewByDefault => GetBool(ConfigDefaults.BillingAddonsRenewByDefault);
 
     // ---- OptOut
     public bool OptOutEnabled => GetBool(ConfigDefaults.OptOutEnabled);

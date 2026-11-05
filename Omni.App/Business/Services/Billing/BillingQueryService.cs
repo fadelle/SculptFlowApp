@@ -233,8 +233,8 @@ public class BillingQueryService : IBillingQueryService
             recent.Select(ToTransaction).ToList(),
             channelAccounts, providerDirect,
             plan?.TrialDays,
-            addons.Where(a => a.Addon is not null).Select(a => new ClientAddonRow(a.Addon!.Code, a.Addon.Name, a.Addon.EntitlementKey, a.Quantity,
-                a.Addon.UnitPrice, a.Addon.Currency.Trim(), a.Quantity * a.Addon.UnitPrice)).ToList());
+            AddonService.ToRows(addons, _config.BillingAddonsRenewByDefault),
+            subscription?.EndedAt);
     }
 
     /// <summary>Who pays for usage, in client-facing English words (the admin portal; the client's Billing page uses

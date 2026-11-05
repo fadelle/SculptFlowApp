@@ -10,4 +10,6 @@ public static class BillingSource
     public const string System = "system";
     /// <summary>The billing maintenance worker (renewals, expiry, stale reservations).</summary>
     public const string Worker = "worker";
+    /// <summary>The client's account owner on Settings → Billing (e.g. whether an add-on renews).</summary>
+    public const string Client = "client";
 }

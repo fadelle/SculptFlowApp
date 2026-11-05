@@ -70,6 +70,12 @@ public class MetaWebhookProcessor : IMetaWebhookProcessor
 
     public async Task<IReadOnlyList<WhatsAppWebhookResponse>> ProcessAllAsync(JsonElement root, CancellationToken ct = default)
     {
+        if (!MetaWebhookParser.IsWhatsAppDelivery(root))
+        {
+            _tracer.Step(TraceSteps.WebhookIgnored, TraceOutcomes.Skipped, new TraceIds(Channel: ConversationChannel.WhatsApp),
+                detail: new { reason = "not_whatsapp" });
+            return [new WhatsAppWebhookResponse(true, "unknown", false, null)];
+        }
         var parsedEvents = MetaWebhookParser.Parse(root, out var unreadable);
         if (unreadable > 0)
         {
@@ -90,6 +96,7 @@ public class MetaWebhookProcessor : IMetaWebhookProcessor
         }
 
         var results = new List<WhatsAppWebhookResponse>(parsedEvents.Count);
+        var heardFrom = new HashSet<Guid>();
         foreach (var evt in parsedEvents)
         {
             ResolvedClient? client = null;
@@ -97,6 +104,7 @@ public class MetaWebhookProcessor : IMetaWebhookProcessor
             {
                 var (resolved, unresolvedReason) = await ResolveClientAsync(evt, ct);
                 client = resolved;
+                if (client is not null) heardFrom.Add(client.ChannelIntegrationId);
                 if (client is null)
                 {
                     _tracer.Step(TraceSteps.WebhookClientUnresolved, TraceOutcomes.Skipped,
@@ -116,6 +124,14 @@ public class MetaWebhookProcessor : IMetaWebhookProcessor
                     detail: new { kind = evt.Kind.ToString(), error = TraceText.Error(ex) });
                 results.Add(new WhatsAppWebhookResponse(false, evt.Kind.ToString(), false, client?.ClientId));
             }
+        }
+
+        // "Last heard from Meta" follows every delivery that reached a connection, messages included (QA t10-11: only Telegram
+        // and health events moved it).
+        var now = DateTimeOffset.UtcNow;
+        foreach (var integrationId in heardFrom)
+        {
+            await _integrations.TouchLastWebhookAsync(integrationId, now, ct);
         }
 
         // Every event was already persisted/broadcast above via its own handler call.

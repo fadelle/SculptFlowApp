@@ -34,6 +34,7 @@ insert into config.settings (section, key, value, updated_by) values
   ('Billing', 'RateBackdateToleranceMinutes', '5', 'seed'),
   ('Billing', 'RecentTransactions', '15', 'seed'),
   ('Billing', 'ChargeAiReplies', 'true', 'seed'),
+  ('Billing', 'AddonsRenewByDefault', 'false', 'seed'),
   ('OptOut', 'Enabled', 'true', 'seed'),
   ('OptOut', 'StopKeywords', 'stop,stopall,unsubscribe,arret,desabonner,desinscrire,توقف,ايقاف,الغاء الاشتراك', 'seed'),
   ('OptOut', 'StartKeywords', 'start,unstop,subscribe,demarrer,اشتراك', 'seed'),

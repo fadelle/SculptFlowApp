@@ -5,8 +5,10 @@ namespace Omni.App.Tests;
 /// <summary>
 /// The billing tests need a real PostgreSQL (row locks, unique indexes, the exclusion constraint and the immutability
 /// triggers are part of what's being tested). Point OMNI_TEST_DB at a THROWAWAY server you can create databases
-/// on, e.g. "Host=localhost;Port=55433;Username=postgres". Each test run creates a fresh database
-/// (omni_test_xxx), applies Database/schema.sql to it, and drops it afterwards.
+/// on, e.g. "Host=127.0.0.1;Port=55433;Username=postgres;Password=postgres". Each test run creates a fresh database
+/// (omni_test_xxx), applies Database/schema.sql to it, and drops it afterwards. GSS encryption is turned off unless
+/// the connection string says otherwise (QA t0-01): on Windows, Npgsql's GSS negotiation with a local server can hang
+/// until the connection times out, and the full run then fails with hundreds of "The operation has timed out".
 /// Without the variable the database tests are skipped. Remote hosts are refused unless
 /// OMNI_TEST_DB_ALLOW_REMOTE=1, so the tests can never touch the shared Supabase database by accident.
 /// </summary>
@@ -19,8 +21,18 @@ public static class TestDatabase
         get
         {
             var value = Environment.GetEnvironmentVariable(EnvironmentVariable);
-            return string.IsNullOrWhiteSpace(value) ? null : value;
+            return string.IsNullOrWhiteSpace(value) ? null : WithDefaults(value);
         }
+    }
+
+    /// <summary>The connection string with GSS encryption disabled when it doesn't choose a mode itself.</summary>
+    public static string WithDefaults(string connectionString)
+    {
+        var builder = new NpgsqlConnectionStringBuilder(connectionString);
+        var chosen = System.Text.RegularExpressions.Regex.IsMatch(connectionString, @"(^|;)\s*gss\s*encryption\s*mode\s*=",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        if (!chosen) builder.GssEncryptionMode = GssEncryptionMode.Disable;
+        return builder.ConnectionString;
     }
 
     public static string? SkipReason => AdminConnectionString is null

@@ -47,6 +47,8 @@ public partial class AddonService : IAddonService
         if (name.Length is 0 or > 100) throw new ArgumentException("Add-on name is required (max 100 characters).");
         if (request.UnitPrice < 0 || decimal.Round(request.UnitPrice, 2) != request.UnitPrice)
             throw new ArgumentException("Unit price must be zero or more, with at most 2 decimals.");
+        if (request.UnitPrice > BillingLimits.MaxAddonPrice)
+            throw new ArgumentException($"Unit price can be at most {BillingLimits.MaxAddonPrice:N0}.");
 
         await using var unit = _units.Create();
         var now = _time.GetUtcNow();
@@ -153,10 +155,36 @@ public partial class AddonService : IAddonService
         return ToRows(await read.Addons.ListForClientReadOnlyAsync(clientId, ct));
     }
 
-    private static IReadOnlyList<ClientAddonRow> ToRows(IEnumerable<ClientAddon> addons) =>
+    public async Task<IReadOnlyList<ClientAddonRow>> SetAutoRenewAsync(Guid clientId, string code, bool? autoRenew, string source, string? actor,
+        CancellationToken ct = default)
+    {
+        var now = _time.GetUtcNow();
+        await using var unit = _units.Create();
+        var addon = await unit.Addons.GetAsync((code ?? string.Empty).Trim().ToLowerInvariant(), ct)
+            ?? throw new KeyNotFoundException("Add-on not found.");
+        var row = await unit.Addons.GetForClientAsync(clientId, addon.Id, ct)
+            ?? throw new KeyNotFoundException("This client doesn't have that add-on.");
+        if (row.AutoRenew != autoRenew)
+        {
+            var previous = row.AutoRenew;
+            row.AutoRenew = autoRenew;
+            row.UpdatedAt = now;
+            BillingLedger.LogEvent(unit, clientId, BillingEventTypes.AddonChanged, source,
+                new { addon = addon.Code, autoRenew = new { from = previous, to = autoRenew }, actor }, now);
+            await unit.SaveChangesAsync(ct);
+            _logger.LogInformation("Billing: client {ClientId} add-on {Addon} renewal set to {AutoRenew} by {Actor}.", clientId, addon.Code,
+                autoRenew?.ToString() ?? "default", actor ?? source);
+        }
+        return ToRows(await unit.Addons.ListForClientReadOnlyAsync(clientId, ct));
+    }
+
+    private IReadOnlyList<ClientAddonRow> ToRows(IEnumerable<ClientAddon> addons) => ToRows(addons, _config.BillingAddonsRenewByDefault);
+
+    /// <summary>The client's add-ons as rows, each with its renewal choice and whether it renews (the choice, else the default).</summary>
+    public static IReadOnlyList<ClientAddonRow> ToRows(IEnumerable<ClientAddon> addons, bool renewByDefault) =>
         addons.Where(a => a.Addon is not null)
             .Select(a => new ClientAddonRow(a.Addon!.Code, a.Addon.Name, a.Addon.EntitlementKey, a.Quantity, a.Addon.UnitPrice, a.Addon.Currency.Trim(),
-                a.Quantity * a.Addon.UnitPrice))
+                a.Quantity * a.Addon.UnitPrice, a.AutoRenew, a.AutoRenew ?? renewByDefault))
             .ToList();
 
     private static AddonResponse ToResponse(Addon a, IReadOnlyDictionary<Guid, int> counts) =>

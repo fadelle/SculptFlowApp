@@ -1928,12 +1928,13 @@ create table if not exists activity.notifications (
   created_at              timestamptz not null default now()
 );
 alter table activity.notifications add column if not exists text_args text[] not null default '{}';
--- TEMPLATE_STATUS_CHANGED (QA t8-15): databases created earlier hold the inline check without it; replace it by name.
+-- TEMPLATE_STATUS_CHANGED (QA t8-15), BILLING (add-ons ended at a renewal, 2026-11-05): databases created earlier hold an
+-- older check; replace it by name.
 alter table activity.notifications drop constraint if exists notifications_type_check;
 alter table activity.notifications drop constraint if exists ck_notifications_type;
 alter table activity.notifications add constraint ck_notifications_type
   check (type in ('NEW_CONTACT','HANDOFF','BOOKING_CREATED','BOOKING_RESCHEDULED','BOOKING_CANCELED',
-                  'CAMPAIGN_REPLY','OUTBOUND_MESSAGE_FAILED','INTEGRATION_UNHEALTHY','TEMPLATE_STATUS_CHANGED'));
+                  'CAMPAIGN_REPLY','OUTBOUND_MESSAGE_FAILED','INTEGRATION_UNHEALTHY','TEMPLATE_STATUS_CHANGED','BILLING'));
 create index if not exists ix_notifications_client_created on activity.notifications(client_id, created_at desc);
 create index if not exists ix_notifications_client_unread on activity.notifications(client_id) where is_read = false;
 
@@ -2182,6 +2183,9 @@ create table if not exists billing.client_addons (
   updated_at  timestamptz not null default now()
 );
 create unique index if not exists ux_client_addons_client_addon on billing.client_addons(client_id, addon_id);
+-- Whether this add-on renews with the plan: true / false as the client or admin chose, null = the setting
+-- Billing:AddonsRenewByDefault (default false: an add-on ends at the renewal). Decided 2026-11-05.
+alter table billing.client_addons add column if not exists auto_renew boolean;
 drop trigger if exists trg_client_addons_updated_at on billing.client_addons;
 create trigger trg_client_addons_updated_at before update on billing.client_addons
   for each row execute function public.set_updated_at();

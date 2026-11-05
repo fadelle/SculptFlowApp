@@ -32,6 +32,12 @@ public class BillingAddonRepository : IBillingAddonRepository
             .OrderBy(c => c.Addon!.SortOrder)
             .ToListAsync(ct);
 
+    public async Task<IReadOnlyList<ClientAddon>> ListForClientAsync(Guid clientId, CancellationToken ct = default) =>
+        await _db.ClientAddons.Include(c => c.Addon)
+            .Where(c => c.ClientId == clientId)
+            .OrderBy(c => c.Addon!.SortOrder).ThenBy(c => c.Addon!.Code)
+            .ToListAsync(ct);
+
     public Task<ClientAddon?> GetForClientAsync(Guid clientId, Guid addonId, CancellationToken ct = default) =>
         _db.ClientAddons.FirstOrDefaultAsync(c => c.ClientId == clientId && c.AddonId == addonId, ct);
 

@@ -23,6 +23,12 @@ public static class MetaWebhookParser
 {
     public static IReadOnlyList<ParsedMetaEvent> Parse(JsonElement root) => Parse(root, out _);
 
+    /// <summary>False when the delivery says it is about something other than a WhatsApp Business Account ("object" set to
+    /// another value, e.g. "page" or "instagram"); such a delivery is ignored (QA t10-12). A body without "object" is read.</summary>
+    public static bool IsWhatsAppDelivery(JsonElement root) =>
+        root.ValueKind != JsonValueKind.Object || GetString(root, "object") is not { } kind
+        || string.Equals(kind, "whatsapp_business_account", StringComparison.Ordinal);
+
     /// <summary>Every event of a delivery. A part that isn't the shape Meta documents (a root, entry, change or value that isn't
     /// an object, or anything inside a change that can't be read) is skipped and counted in <paramref name="unreadable"/>, so
     /// it never fails the rest of the delivery (QA t10-03). Values longer than the columns they are stored in are cut.</summary>
@@ -44,6 +50,9 @@ public static class MetaWebhookParser
                 continue;
             }
             var wabaId = GetString(entry, "id");
+            // Meta's time for the entry: an account-wide event (health, template) has no time of its own, and a retried
+            // delivery repeats it, so it is the event's time (QA t10-11: "now" made every retry look new).
+            var entryTime = ParseUnixTimestamp(GetString(entry, "time"));
             if (!entry.TryGetProperty("changes", out var changes) || changes.ValueKind != JsonValueKind.Array)
             {
                 continue;
@@ -59,7 +68,8 @@ public static class MetaWebhookParser
                 var field = GetString(change, "field") ?? "";
                 try
                 {
-                    events.AddRange(ParseChange(field, wabaId, value).ToList());
+                    events.AddRange(ParseChange(field, wabaId, value).Select(e => e.Timestamp is null && entryTime is not null && e.Kind is
+                        ParsedMetaEventKind.WhatsAppHealth or ParsedMetaEventKind.TemplateStatus ? e with { Timestamp = entryTime } : e).ToList());
                 }
                 catch (InvalidOperationException)
                 {
@@ -223,7 +233,9 @@ public static class MetaWebhookParser
     /// customer) regardless of which field/direction this particular payload represents.</summary>
     private static IEnumerable<ParsedMetaEvent> ParseMessageEntries(string? wabaId, JsonElement value, ParsedMetaEventKind kind)
     {
-        if (!value.TryGetProperty("messages", out var messages) || messages.ValueKind != JsonValueKind.Array)
+        // Meta sends echoes as value.message_echoes[] (QA t10-04: they were dropped); value.messages[] is also accepted.
+        var listName = kind == ParsedMetaEventKind.BusinessAppEcho && value.TryGetProperty("message_echoes", out _) ? "message_echoes" : "messages";
+        if (!value.TryGetProperty(listName, out var messages) || messages.ValueKind != JsonValueKind.Array)
         {
             yield break;
         }
@@ -247,11 +259,11 @@ public static class MetaWebhookParser
         foreach (var m in messages.EnumerateArray())
         {
             var from = GetString(m, "from");
-            // A customer message is the sender's ("from"); an echo's "from" is the business, so its customer is the one
-            // listed contact (or the message's "to").
+            // A customer message is the sender's ("from"); an echo's "from" is the business itself, so its customer is the
+            // message's "to" (or the one listed contact), never "from" (QA t10-04).
             var customerWaId = kind == ParsedMetaEventKind.CustomerMessage
                 ? from ?? onlyWaId
-                : onlyWaId ?? GetString(m, "to") ?? from;
+                : GetString(m, "to") ?? onlyWaId;
             var customerName = customerWaId is not null && names.TryGetValue(customerWaId, out var name) ? name : null;
             var messageType = GetString(m, "type") ?? "text";
             var (content, metadataJson, selectedValue) = ExtractMessageContent(m, messageType);

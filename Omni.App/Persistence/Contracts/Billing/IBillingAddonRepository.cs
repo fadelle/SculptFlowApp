@@ -21,6 +21,9 @@ public interface IBillingAddonRepository
     /// <summary>The client's row of this add-on (tracked), or null.</summary>
     Task<ClientAddon?> GetForClientAsync(Guid clientId, Guid addonId, CancellationToken ct = default);
 
+    /// <summary>The client's add-ons with their catalog rows, tracked, in catalog order (the renewal changes and removes them).</summary>
+    Task<IReadOnlyList<ClientAddon>> ListForClientAsync(Guid clientId, CancellationToken ct = default);
+
     void AddForClient(ClientAddon clientAddon);
 
     void RemoveForClient(ClientAddon clientAddon);

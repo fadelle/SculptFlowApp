@@ -9,10 +9,11 @@ namespace Omni.App.Business.Engines.WhatsApp.Handlers;
 
 /// <summary>
 /// Handles ParsedMetaEventKind.BusinessAppEcho — members replied to a customer directly from the
-/// WhatsApp Business App (coexistence) rather than the dashboard. Same contact/conversation resolution
-/// as CustomerMessageHandler (Meta's "contacts[]" identifies the customer either way — see
-/// MetaWebhookParser), but a different IngestEventType: IMessageService.IngestAsync forces the
-/// conversation to human mode and never treats this as AI-eligible.
+/// WhatsApp Business App (coexistence) rather than the dashboard. Confirmed 2026-11-05 (QA t10-04): the reply is
+/// saved in the customer's conversation as the member's outbound message and the conversation goes to human mode,
+/// so the AI steps back and the Inbox shows the whole conversation. The customer is the echo's "to" (or the listed
+/// contact), never the business's own "from" (MetaWebhookParser); without one nothing is saved. IngestAsync never
+/// treats an echo as AI-eligible.
 /// </summary>
 public class BusinessAppEchoHandler
 {

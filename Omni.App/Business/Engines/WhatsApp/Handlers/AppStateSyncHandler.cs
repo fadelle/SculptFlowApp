@@ -23,7 +23,7 @@ public class AppStateSyncHandler
 
     public async Task<WhatsAppWebhookResponse> HandleAsync(ParsedMetaEvent evt, ResolvedClient client, CancellationToken ct)
     {
-        _events.Log(client.ClientId, EventTypes.WhatsAppAppStateSyncReceived, source: "n8n",
+        _events.Log(client.ClientId, EventTypes.WhatsAppAppStateSyncReceived, source: "whatsapp",
             metadataJson: JsonSerializer.Serialize(new { raw = evt.RawJson }));
         await _unitOfWork.SaveChangesAsync(ct);
 

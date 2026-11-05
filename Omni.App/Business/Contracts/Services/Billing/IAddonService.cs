@@ -21,6 +21,13 @@ public interface IAddonService
 
     Task<IReadOnlyList<ClientAddonRow>> ListForClientAsync(Guid clientId, CancellationToken ct = default);
 
+    /// <summary>Whether one of the client's add-ons renews with the plan: true, false, or null = follow
+    /// Billing:AddonsRenewByDefault (decided 2026-11-05). An add-on that doesn't renew ends at the next renewal (its units go,
+    /// nothing is charged). Logged as billing_addon_changed. KeyNotFoundException for an unknown add-on or one the client
+    /// doesn't have.</summary>
+    Task<IReadOnlyList<ClientAddonRow>> SetAutoRenewAsync(Guid clientId, string code, bool? autoRenew, string source, string? actor,
+        CancellationToken ct = default);
+
     /// <summary>Sets the client's units of an add-on (0 removes it). Added units cost their price now: BillingDeniedException
     /// when the wallet can't pay. KeyNotFoundException for an unknown add-on; InvalidOperationException when the client has no
     /// active subscription or the add-on is switched off (only for adding). A repeated idempotency key changes nothing.</summary>

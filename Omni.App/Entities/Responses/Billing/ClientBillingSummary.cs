@@ -29,4 +29,6 @@ public record ClientBillingSummary(
     IReadOnlyList<ClientChannelBillingRow> ChannelAccounts,
     IReadOnlyList<ProviderDirectUsageRow> ProviderDirectUsage,
     int? TrialDays = null,
-    IReadOnlyList<ClientAddonRow>? Addons = null);
+    IReadOnlyList<ClientAddonRow>? Addons = null,
+    // When an expired or cancelled subscription ended (QA t2-billing-15: the page said "Renews on" for one).
+    DateTimeOffset? EndedAt = null);

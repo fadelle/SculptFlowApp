@@ -45,6 +45,17 @@ public class BillingAdminControllerTests
     }
 
     [Fact]
+    public async Task An_add_ons_renewal_choice_records_the_admin_and_null_means_the_default()
+    {
+        _addons.Setup(a => a.SetAutoRenewAsync(Client, "extra-user", null, BillingSource.Admin, "ops@omni", It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new ClientAddonRow("extra-user", "Extra user", EntitlementKeys.MaxUsers, 2, 8m, "USD", 16m, null, false)]);
+
+        var ok = Assert.IsType<OkObjectResult>(await Sut(actor: "ops@omni").SetClientAddonRenewal(Client, "extra-user", new SetAddonRenewalRequest(null), default));
+
+        Assert.False(Assert.Single((IReadOnlyList<ClientAddonRow>)ok.Value!).Renews);
+    }
+
+    [Fact]
     public async Task Missing_plan_is_404()
     {
         _plans.Setup(p => p.GetAsync("gold", It.IsAny<CancellationToken>())).ReturnsAsync((PlanResponse?)null);
@@ -88,6 +99,8 @@ public class BillingAdminControllerTests
         Assert.IsType<NotFoundResult>(await sut.ListRates("x", true, default));
         Assert.IsType<NotFoundResult>(await sut.AddRate("x", new AddRateRequest("e", null, null, null, null, 1, 2), default));
         Assert.IsType<NotFoundResult>(await sut.CloseRate(Guid.NewGuid(), null, default));
+        _rateCards.Setup(r => r.CancelScheduledRateAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync((RateResponse?)null);
+        Assert.IsType<NotFoundResult>(await sut.CancelScheduledRate(Guid.NewGuid(), default));
     }
 
     [Fact]

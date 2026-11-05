@@ -80,6 +80,8 @@ public class BillingRateCardRepository : IBillingRateCardRepository
 
     public void AddRate(BillingRate rate) => _db.BillingRates.Add(rate);
 
+    public void RemoveRate(BillingRate rate) => _db.BillingRates.Remove(rate);
+
     public async Task<IReadOnlyList<RatingCard>> ListRatingCardsAsync(Guid clientId, CancellationToken ct = default) =>
         (await _cache.ReadThroughAsync(CacheKeys.RatingCards(clientId), CacheArea.BillingRates,
             token => LoadRatingCardsAsync(clientId, token), ct))!;

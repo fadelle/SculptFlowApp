@@ -241,6 +241,51 @@ public class MetaWebhookParserTests
         Assert.Equal("96171", echoTo.CustomerWaId);
     }
 
+    // ---- QA t10-11 / t10-12 ----
+
+    [Fact]
+    public void Account_events_take_the_entrys_time_so_a_retry_is_the_same_event()
+    {
+        var json = """{"entry":[{"id":"WABA1","time":1793318400,"changes":[{"field":"account_update","value":{"event":"ACCOUNT_VIOLATION"}},{"field":"message_template_status_update","value":{"event":"APPROVED","message_template_name":"t"}},{"field":"messages","value":{"metadata":{"phone_number_id":"PN1"},"messages":[{"from":"1","id":"w","type":"text","text":{"body":"x"}}]}}]}]}""";
+        var events = P(json);
+        var at = DateTimeOffset.FromUnixTimeSeconds(1793318400);
+        Assert.Equal(at, events.Single(e => e.Kind == ParsedMetaEventKind.WhatsAppHealth).Timestamp);
+        Assert.Equal(at, events.Single(e => e.Kind == ParsedMetaEventKind.TemplateStatus).Timestamp);
+        Assert.Null(events.Single(e => e.Kind == ParsedMetaEventKind.CustomerMessage).Timestamp); // a message keeps its own (here none)
+        Assert.Equal(at, P(json).Single(e => e.Kind == ParsedMetaEventKind.WhatsAppHealth).Timestamp);  // the retry: same time
+    }
+
+    [Theory]
+    [InlineData("[]")]
+    [InlineData("\"text\"")]
+    [InlineData("""{"entry":[1]}""")]
+    [InlineData("""{"entry":[{"id":"W","changes":[{"field":"messages","value":"a string"}]}]}""")]
+    public void Shapes_Meta_doesnt_send_are_skipped_not_thrown(string json) => Assert.Empty(P(json));
+
+    [Theory]
+    [InlineData("""{"object":"whatsapp_business_account","entry":[]}""", true)]
+    [InlineData("""{"entry":[]}""", true)]
+    [InlineData("""{"object":"page","entry":[]}""", false)]
+    [InlineData("""{"object":"instagram","entry":[]}""", false)]
+    public void Only_whatsapp_business_account_deliveries_are_read(string json, bool expected) =>
+        Assert.Equal(expected, MetaWebhookParser.IsWhatsAppDelivery(JsonDocument.Parse(json).RootElement));
+
+    // ---- QA t10-04: echoes in Meta's documented shape ----
+
+    [Fact]
+    public void An_echo_in_Metas_shape_is_read_and_its_customer_is_to_never_from()
+    {
+        var e = Assert.Single(P(Change("smb_message_echoes", """
+            { "messaging_product":"whatsapp", "metadata":{"display_phone_number":"15550100999","phone_number_id":"PN1"},
+              "message_echoes":[{"from":"15550100999","to":"96170777","id":"wamid.echo","timestamp":"1700000000","type":"text","text":{"body":"from the phone"}}]}
+            """)));
+        Assert.Equal((ParsedMetaEventKind.BusinessAppEcho, "96170777", "from the phone", "wamid.echo"), (e.Kind, e.CustomerWaId, e.Content, e.ExternalMessageId));
+
+        // Without contacts[] or "to", the business's own number is never taken as the customer.
+        var noTo = Assert.Single(P(Change("smb_message_echoes", """{ @META, "messages":[{"from":"15550100999","id":"e","type":"text","text":{"body":"x"}}]}""")));
+        Assert.Null(noTo.CustomerWaId);
+    }
+
     // ---- QA t10-08: click-to-WhatsApp ads and changed numbers ----
 
     [Fact]

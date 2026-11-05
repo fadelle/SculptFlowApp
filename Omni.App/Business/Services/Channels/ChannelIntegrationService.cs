@@ -1,3 +1,4 @@
+using Omni.App.Business.Services.WhatsApp;
 using System.Security.Cryptography;
 using Omni.App.Business.Contracts.HttpClients.Meta;
 using Omni.App.Business.Contracts.Services.Billing;
@@ -172,6 +173,7 @@ public class ChannelIntegrationService : IChannelIntegrationService
             row.LastVerifiedAt = now;
             row.LastError = null;
         }
+        if (row.Channel == ChannelType.WhatsApp) WhatsAppHealthService.Refresh(row);
         row.UpdatedAt = now;
 
         await _unitOfWork.SaveChangesAsync(ct);
@@ -205,6 +207,7 @@ public class ChannelIntegrationService : IChannelIntegrationService
         row.Pin = null;
         row.LastVerifiedAt = null;
         row.LastError = null;
+        if (row.Channel == ChannelType.WhatsApp) WhatsAppHealthService.Refresh(row);
         row.UpdatedAt = DateTimeOffset.UtcNow;
 
         await _unitOfWork.SaveChangesAsync(ct);

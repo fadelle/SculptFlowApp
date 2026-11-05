@@ -20,8 +20,38 @@ public class PlanUsageServiceTests
         _entitlements.Setup(e => e.GetAsync(ClientId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ClientEntitlements(true, hasAccess, SubscriptionStatus.Active, "growth", "Growth", null, values));
 
-    private static ClientBillingSummary Summary(IReadOnlyList<BillingUsageBreakdownRow> charged, IReadOnlyList<ProviderDirectUsageRow> uncharged) =>
-        Blank<ClientBillingSummary>() with { Usage = charged, ProviderDirectUsage = uncharged };
+    private static ClientBillingSummary Summary(IReadOnlyList<BillingUsageBreakdownRow> charged, IReadOnlyList<ProviderDirectUsageRow> uncharged,
+        bool hasAccess = true, IReadOnlyList<BillingEntitlementRow>? entitlements = null) =>
+        Blank<ClientBillingSummary>() with { Usage = charged, ProviderDirectUsage = uncharged, HasAccess = hasAccess, Entitlements = entitlements ?? [] };
+
+    [Fact]
+    public async Task An_ended_plan_shows_its_own_limits_not_zero()
+    {
+        // QA t2-billing-15: an expired trial read "Seats 1 of 0" (every enforced limit is 0 without an active plan).
+        Plan(new(), hasAccess: false);
+        _clients.Setup(c => c.CountSeatsInUseAsync(ClientId, It.IsAny<CancellationToken>())).ReturnsAsync(1);
+        _integrations.Setup(i => i.ListForClientReadOnlyAsync(ClientId, It.IsAny<CancellationToken>())).ReturnsAsync(new List<ChannelIntegration>());
+        _bots.Setup(b => b.ListForClientReadOnlyAsync(ClientId, It.IsAny<CancellationToken>())).ReturnsAsync(new List<Bot>());
+        var planValues = new List<BillingEntitlementRow>
+        {
+            new(EntitlementKeys.AiAssistant, "AI", "feature", "true"),
+            new(EntitlementKeys.MaxUsers, "Seats", "limit", "3"),
+            new(EntitlementKeys.MaxChannelConnections, "Channels", "limit", EntitlementCatalog.Unlimited),
+            new(EntitlementKeys.MaxWhatsAppNumbers, "WhatsApp", "limit", "1"),
+            new(EntitlementKeys.MaxAiBots, "Bots", "limit", "1"),
+        };
+
+        var usage = await Sut().GetAsync(ClientId, Summary([], [], hasAccess: false, entitlements: planValues));
+
+        Assert.Equal(new[]
+        {
+            new PlanQuotaRow(EntitlementKeys.MaxUsers, 1, 3),
+            new PlanQuotaRow(EntitlementKeys.MaxChannelConnections, 0, null),
+            new PlanQuotaRow(EntitlementKeys.MaxWhatsAppNumbers, 0, 1),
+            new PlanQuotaRow(EntitlementKeys.MaxAiBots, 0, 1),
+        }, usage.Quotas);
+        Assert.True(usage.AiIncluded);
+    }
 
     [Fact]
     public async Task Counts_seats_channels_whatsapp_and_active_bots_against_the_plan()

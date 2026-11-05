@@ -56,6 +56,8 @@ public static class ConfigDefaults
         "How many recent wallet transactions a client's billing page shows.", 1, 100);
     public static readonly ConfigDefinition BillingChargeAiReplies = new("Billing", "ChargeAiReplies", "true", ConfigValueType.Bool,
         "Charge each AI assistant reply as ai_reply usage (included credit first, then wallet). Needs an ai_reply rate; a client that can't pay gets no AI reply and the conversation goes to the team. Off = AI replies are not charged.");
+    public static readonly ConfigDefinition BillingAddonsRenewByDefault = new("Billing", "AddonsRenewByDefault", "false", ConfigValueType.Bool,
+        "Whether a client's add-ons renew with the plan when the client hasn't chosen for that add-on. Off = at each renewal an add-on ends (its extra units go, nothing is charged) unless it is set to renew.");
     public static readonly ConfigDefinition KnowledgeMinScore = new("Knowledge", "MinScore", "0.30", ConfigValueType.Decimal,
         "Minimum similarity for a search result, for new clients (each client can change its own).", 0, 1);
     public static readonly ConfigDefinition KnowledgeChunkMaxChars = new("Knowledge", "ChunkMaxChars", "1000", ConfigValueType.Int,
@@ -282,6 +284,7 @@ public static class ConfigDefaults
         BillingRateBackdateToleranceMinutes,
         BillingRecentTransactions,
         BillingChargeAiReplies,
+        BillingAddonsRenewByDefault,
 
         OptOutEnabled,
         OptOutStopKeywords,

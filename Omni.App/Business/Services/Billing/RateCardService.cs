@@ -130,6 +130,8 @@ public partial class RateCardService : IRateCardService
             throw new ArgumentException($"Provider billing must be empty (Omni-funded pricing) or one of: {string.Join(", ", ProviderBillingResponsibility.All)}.");
         }
         if (request.ClientRate < 0 || request.ProviderCost < 0) throw new ArgumentException("Prices can't be negative.");
+        if (request.ClientRate > BillingLimits.MaxRatePrice || request.ProviderCost > BillingLimits.MaxRatePrice)
+            throw new ArgumentException($"Prices can be at most {BillingLimits.MaxRatePrice:N0} per unit.");
         if (decimal.Round(request.ClientRate, 6) != request.ClientRate || decimal.Round(request.ProviderCost, 6) != request.ProviderCost)
         {
             throw new ArgumentException("Prices have at most 6 decimals.");
@@ -192,6 +194,39 @@ public partial class RateCardService : IRateCardService
         return ToResponse(rate, card.Code);
     }
 
+    public async Task<RateResponse?> CancelScheduledRateAsync(Guid rateId, CancellationToken ct = default)
+    {
+        var now = _time.GetUtcNow();
+        await using var unit = _units.Create();
+        await using var tx = await unit.BeginTransactionAsync(ct);
+        var rate = await unit.RateCards.GetRateAsync(rateId, ct);
+        if (rate is null) return null;
+        // Same lock as adding a version, so the versions can't change while this one is withdrawn.
+        await unit.RateCards.LockAsync(rate.RateCardId, ct);
+        if (rate.EffectiveFrom <= now)
+        {
+            throw new ArgumentException("This version has already started; end it instead.");
+        }
+
+        var versions = await unit.RateCards.ListRateVersionsAsync(rate.RateCardId, rate.EventType, rate.CountryCode, rate.Operator,
+            rate.Provider, rate.ProviderBilling, ct);
+        var previous = versions.FirstOrDefault(v => v.Id != rate.Id && v.EffectiveTo == rate.EffectiveFrom);
+        unit.RateCards.RemoveRate(rate);
+        await unit.SaveChangesAsync(ct);
+        // The previous version runs on to wherever the withdrawn one would have ended (open, or the next version's start).
+        if (previous is not null)
+        {
+            previous.EffectiveTo = rate.EffectiveTo;
+            await unit.SaveChangesAsync(ct);
+        }
+        await tx.CommitAsync(ct);
+
+        var cardCode = await unit.RateCards.GetCodeAsync(rate.RateCardId, ct);
+        _logger.LogInformation("Billing: scheduled rate {RateId} ({EventType}) on card {Card} from {From} was withdrawn{Restored}.",
+            rate.Id, rate.EventType, cardCode, rate.EffectiveFrom, previous is null ? "" : $"; version {previous.Id} applies again");
+        return ToResponse(rate, cardCode);
+    }
+
     public async Task<RateResponse?> CloseRateAsync(Guid rateId, DateTimeOffset? effectiveTo, CancellationToken ct = default)
     {
         var now = _time.GetUtcNow();
@@ -201,7 +236,13 @@ public partial class RateCardService : IRateCardService
         await using var unit = _units.Create();
         var rate = await unit.RateCards.GetRateAsync(rateId, ct);
         if (rate is null) return null;
-        if (end <= rate.EffectiveFrom) throw new ArgumentException("The end must be after the rate's start.");
+        if (end <= rate.EffectiveFrom)
+        {
+            // "End now" on a version that hasn't started can only mean "don't apply it": that is a cancel (QA t2-billing-04).
+            throw new ArgumentException(rate.EffectiveFrom > now
+                ? "This version hasn't started yet; cancel it instead of ending it."
+                : "The end must be after the rate's start.");
+        }
         if (rate.EffectiveTo is not null && rate.EffectiveTo <= now) throw new ArgumentException("This rate version has already ended.");
         rate.EffectiveTo = end;
         await unit.SaveChangesAsync(ct);

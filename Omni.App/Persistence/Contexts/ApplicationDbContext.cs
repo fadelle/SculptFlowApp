@@ -1007,6 +1007,7 @@ public class ApplicationDbContext : IdentityUserContext<AppUser>
             e.Property(x => x.ClientId).HasColumnName("client_id");
             e.Property(x => x.AddonId).HasColumnName("addon_id");
             e.Property(x => x.Quantity).HasColumnName("quantity");
+            e.Property(x => x.AutoRenew).HasColumnName("auto_renew");
             e.Property(x => x.CreatedAt).HasColumnName("created_at");
             e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
             e.HasOne<Client>().WithMany().HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Cascade);

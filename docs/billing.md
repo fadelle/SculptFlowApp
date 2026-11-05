@@ -27,8 +27,12 @@ worker idles. Plans, rate cards, wallets and account arrangements can be prepare
 - Start / change plan (`POST /api/platform-admin/billing/clients/{id}/subscription`, or `Billing:SignupPlanCode` at signup):
   new period from now; wallet pays the price (unless `chargeFirstPeriod=false`); old credit expires; plan credit granted.
   No proration.
-- Renewal (`BillingMaintenanceWorker`, every few minutes): next contiguous period, same charges (plan + add-ons). Can't
-  pay → `past_due`; every run retries, so a top-up renews it.
+- Renewal (`BillingMaintenanceWorker`, every few minutes): next contiguous period, the plan's price plus the add-ons set
+  to renew. Can't pay the plan → `past_due`; every run retries, so a top-up renews it. Add-ons at renewal (decided
+  2026-11-05): one not set to renew ends at the period's end whatever happens to the plan (row removed, nothing charged,
+  `billing_addon_changed` with `reason: not_renewed`); a renewing one is charged with the plan, and one the rest of the
+  wallet can't pay ends instead (`reason: insufficient_funds`) so the plan never lapses because of an extra. The client
+  gets a BILLING notification for each kind. `subscription_past_due`'s `due` is the plan's price.
 - Trials: a plan with `trial_days` (1–90, price 0) is a free trial. Its period lasts that many days and it never renews:
   at the end the subscription expires (event `subscription_expired` with `trialEnded`), the credit expires, and an admin
   moves the client to a paid plan. `Billing:SignupPlanCode` defaults to `trial`, the seeded Free Trial.
@@ -36,8 +40,11 @@ worker idles. Plans, rate cards, wallets and account arrangements can be prepare
   (`extra-user` $8, `extra-channel` $5, `extra-ai-bot` $15, `extra-whatsapp-number` $10 per month in the seed). The
   client's limit is the plan's value + its units (`AddonLimits`; `unlimited` stays unlimited). Added units are charged
   from the wallet at once (`addon_charge`, no proration, refused when the wallet can't pay or there is no active
-  subscription); every period start charges the plan and the add-ons together (one `addon_charge` row); removing units
-  refunds nothing. Set from the admin portal: `PUT clients/{id}/addons/{code}` `{ "quantity": 2 }` + `Idempotency-Key`.
+  subscription); a renewal charges the renewing add-ons with the plan (one `addon_charge` row); removing units refunds
+  nothing. Set from the admin portal: `PUT clients/{id}/addons/{code}` `{ "quantity": 2 }` + `Idempotency-Key`.
+  Whether an add-on renews (`client_addons.auto_renew`): true / false as the account owner (Settings → Billing) or an
+  admin (`PUT clients/{id}/addons/{code}/renewal` `{ "autoRenew": true }`) chose; null follows
+  `Billing:AddonsRenewByDefault` (default false: add-ons end at each renewal unless set to renew).
 - Expired / cancelled / no plan: the client signs in and sees all its data, but can't send messages, run campaigns,
   use the AI assistant or connect channels.
 
@@ -289,18 +296,26 @@ Changes apply to future usage only; recorded usage keeps its snapshot. Each chan
 ## Admin API (all under `/api/platform-admin/billing`, header `X-Platform-Admin-Key`, actor in `X-Admin-Actor`; normally used through the Omni.Admin portal's Billing pages)
 
 Plans: `GET/POST plans`, `GET/PUT plans/{code}`, `PUT plans/{code}/entitlements`, `GET entitlements` ·
-Add-ons: `GET addons`, `PUT addons/{code}`, `GET clients/{id}/addons`, `PUT clients/{id}/addons/{code}` ·
-Rate cards: `GET/POST rate-cards`, `PUT rate-cards/{code}`, `GET/POST rate-cards/{code}/rates`, `POST rates/{id}/close` ·
+Add-ons: `GET addons`, `PUT addons/{code}`, `GET clients/{id}/addons`, `PUT clients/{id}/addons/{code}`,
+`PUT clients/{id}/addons/{code}/renewal` (`{ "autoRenew": true|false|null }`; rows carry `autoRenew` and `renews`) ·
+Rate cards: `GET/POST rate-cards`, `PUT rate-cards/{code}`, `GET/POST rate-cards/{code}/rates`, `POST rates/{id}/close`, `DELETE rates/{id}` (cancels a version that
+hasn't started: it is deleted and the version before it gets back its end, so the current price keeps applying; ending an
+upcoming version before its start says to cancel it; QA t2-billing-04) ·
 Provider billing: `GET provider-billing`, `GET clients/{id}/channel-accounts`, `PUT channel-accounts/{id}/provider-billing`,
 `POST channel-accounts/{id}/provider-billing/reset` ·
 Clients: `GET accounts`, `GET clients/{id}`, `POST clients/{id}/subscription` (+ `/cancel`, `/resume`, `/renew`),
 `POST clients/{id}/wallet/top-ups`, `POST clients/{id}/wallet/adjustments` (amounts in whole cents, 400 for more than 2 decimals;
-usage keeps 6 decimals; QA t2-billing-23), `GET clients/{id}/usage`,
+usage keeps 6 decimals; QA t2-billing-23; at most 100,000 per top-up or adjustment, QA t2-billing-05). Upper bounds
+(`BillingLimits`): plan price and included credit 1,000,000, add-on unit price 1,000,000, rate price or cost 100,000 per unit;
+over them is a 400, not a numeric overflow. Every billing write for an unknown client is a 404 (`BillingAccountRepository.LockAsync`
+turns the missing client into `clients.errors.notFound`; QA t2-billing-14), `GET clients/{id}/usage`,
 `POST clients/{id}/usage/{usageId}/refund`, `GET clients/{id}/ledger`, `GET clients/{id}/reconciliation`,
 `GET clients/{id}/quote` · Reporting: `GET report?from=&to=` (usage revenue, provider cost paid by Omni vs paid
 externally, margin, subscription revenue, add-on revenue (`addon_charge`), top-ups, net manual wallet adjustments and usage
-refunds; QA t2-billing-09). The client's own read-only view: Settings → Billing (Omni charges
-apart from provider-direct usage) and `GET /api/billing/summary|usage|transactions`.
+refunds; QA t2-billing-09). The client's own view: Settings → Billing (Omni charges apart from provider-direct usage;
+the owner also chooses there whether each add-on renews) and `GET /api/billing/summary|usage|transactions`. An ended,
+cancelled or past-due plan shows its state and date ("Ended on", "Cancelled on", "Payment overdue · grace ends") and the
+plan's own limits, not the zeros enforced without access (QA t2-billing-15; the summary carries `endedAt`).
 
 ## Postponed on purpose
 

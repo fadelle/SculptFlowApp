@@ -196,6 +196,34 @@ public class SimpleListPageTests
     }
 
     [Fact]
+    public async Task Only_the_owner_chooses_whether_an_add_on_renews()
+    {
+        // Decided 2026-11-05: add-ons end at renewal unless set to renew; the owner can say yes, no or follow the default.
+        var config = new Mock<Omni.App.Business.Contracts.Managers.IConfigManager>();
+        config.SetupGet(c => c.BillingEnabled).Returns(true);
+        var addons = new Mock<IAddonService>();
+        var text = new Mock<Microsoft.Extensions.Localization.IStringLocalizer>();
+        text.Setup(t => t[Omni.App.Pages.Settings.BillingModel.RenewSavedKey]).Returns(new Microsoft.Extensions.Localization.LocalizedString("k", "Saved."));
+        Omni.App.Pages.Settings.BillingModel Page(string role) => new Omni.App.Pages.Settings.BillingModel(ClientContext(Glow, role, "owner-1").Object,
+            Mock.Of<IBillingQueryService>(), config.Object, Mock.Of<IPlanUsageService>(), addons.Object, text.Object).Attach();
+
+        foreach (var (choice, autoRenew) in new[] { ("yes", (bool?)true), ("no", false), ("default", null) })
+        {
+            var owner = Page(UserRole.Client);
+            Assert.IsType<RedirectToPageResult>(await owner.OnPostAddonRenewalAsync("extra-user", choice, default));
+            Assert.Equal("Saved.", owner.StatusMessage);
+            addons.Verify(a => a.SetAutoRenewAsync(Glow.Id, "extra-user", autoRenew, BillingSource.Client, "owner-1", It.IsAny<CancellationToken>()), Times.Once);
+        }
+
+        Assert.IsType<ForbidResult>(await Page(UserRole.Member).OnPostAddonRenewalAsync("extra-user", "yes", default));
+        await Assert.ThrowsAsync<ArgumentException>(() => Page(UserRole.Client).OnPostAddonRenewalAsync("extra-user", "maybe", default));
+        addons.Setup(a => a.SetAutoRenewAsync(Glow.Id, "gone", It.IsAny<bool?>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new KeyNotFoundException());
+        Assert.IsType<NotFoundResult>(await Page(UserRole.Client).OnPostAddonRenewalAsync("gone", "yes", default));
+        Assert.Equal(4, addons.Invocations.Count); // the member and the bad choice never reached the service
+    }
+
+    [Fact]
     public async Task Bookings_page_only_needs_the_client()
     {
         var bookings = new Omni.App.Pages.Dashboard.BookingsModel(ClientContext(SomeClient(timezone: "Asia/Beirut")).Object, EntitlementKit.All().Object).Attach();

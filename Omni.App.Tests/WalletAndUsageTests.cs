@@ -331,6 +331,49 @@ public class WalletAndUsageTests
     }
 
     [PostgresFact]
+    public async Task AmountsOutsideSaneBounds_AreRefusedBeforeAnythingIsStored()
+    {
+        // QA t2-billing-05: 1e-7 hit the ledger's sign check and 999,999,999,999 / 1e12 / 1e13 overflowed numeric(18,6), all as
+        // 500s; a plan priced 1e15 was accepted.
+        var (h, client, _) = await SetupAsync(topUp: 10m);
+        foreach (var amount in new[] { 0.0000001m, 100_000.01m, 999_999_999_999m, 1_000_000_000_000m })
+        {
+            await Assert.ThrowsAsync<ArgumentException>(() => h.Billing.TopUpAsync(new WalletTopUp(client, amount, Guid.NewGuid().ToString("N"), "r", "x", BillingSource.Admin, "ops")));
+        }
+        foreach (var amount in new[] { 0.0000001m, -100_000.01m, 100_000.01m })
+        {
+            await Assert.ThrowsAsync<ArgumentException>(() => h.Billing.AdjustAsync(new WalletAdjustment(client, amount, LedgerBalanceType.Wallet, "x", Guid.NewGuid().ToString("N"), BillingSource.Admin, "ops")));
+        }
+        Assert.Equal(100_010m, (await h.Billing.TopUpAsync(new WalletTopUp(client, 100_000m, "max", "r", "the maximum", BillingSource.Admin, "ops"))).BalanceAfter);
+
+        var card = await h.CreateClientCardAsync(await h.CreateClientAsync());
+        await Assert.ThrowsAsync<ArgumentException>(() => h.AddRateAsync(card, BillingHarness.Unique("evt"), clientRate: 10_000_000_000_000m));
+        await Assert.ThrowsAsync<ArgumentException>(() => h.AddRateAsync(card, BillingHarness.Unique("evt"), clientRate: 1m, providerCost: 100_001m));
+        await Assert.ThrowsAsync<ArgumentException>(() => h.CreatePlanAsync(price: 1_000_000_000_000_000m, credit: 0m));
+        await Assert.ThrowsAsync<ArgumentException>(() => h.CreatePlanAsync(price: 10m, credit: 1_000_000.01m));
+        var addons = new Omni.App.Business.Services.Billing.AddonService(h.Factory, h.Config, h.Cache, h.Time, Microsoft.Extensions.Logging.Abstractions.NullLogger<Omni.App.Business.Services.Billing.AddonService>.Instance);
+        await Assert.ThrowsAsync<ArgumentException>(() => addons.SaveAsync("too-dear", new AddonRequest("Too dear", EntitlementKeys.MaxUsers, 1_000_000.01m)));
+
+        await using var db = h.Db();
+        Assert.Equal(2, await db.BillingLedgerEntries.CountAsync(l => l.ClientId == client && l.EntryType == LedgerEntryType.WalletTopUp));
+        await h.AssertReconciledAsync(client);
+    }
+
+    [PostgresFact]
+    public async Task BillingWritesForAnUnknownClient_AreNotFound()
+    {
+        // QA t2-billing-14: the billing.accounts foreign key failed with a 500.
+        var h = new BillingHarness(_db.ConnectionString);
+        var nobody = Guid.NewGuid();
+        var topUp = await Assert.ThrowsAsync<KeyNotFoundException>(() => h.Billing.TopUpAsync(new WalletTopUp(nobody, 5m, "k1", "ref", "x", BillingSource.Admin, "ops")));
+        Assert.Equal("clients.errors.notFound", topUp.Message);
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => h.Billing.AdjustAsync(new WalletAdjustment(nobody, 1m, LedgerBalanceType.Wallet, "x", "k2", BillingSource.Admin, "ops")));
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => h.Subscriptions.CancelAsync(nobody, true, BillingSource.Admin, "ops", null));
+        await using var db = h.Db();
+        Assert.False(await db.BillingAccounts.AnyAsync(a => a.ClientId == nobody));
+    }
+
+    [PostgresFact]
     public async Task TopUpsAndAdjustments_AreInWholeCents()
     {
         // QA t2-billing-23: 0.1234567 was stored as 0.123457 and the client saw 4-decimal amounts.

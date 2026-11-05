@@ -22,6 +22,51 @@ public class RatingTests
     }
 
     [PostgresFact]
+    public async Task AScheduledVersion_CanBeCancelled_AndThePreviousPriceKeepsApplying()
+    {
+        // QA t2-billing-04: "End now" on an upcoming version always failed, so a mistaken future price was bound to apply.
+        var h = new BillingHarness(_db.ConnectionString);
+        var client = await h.CreateClientAsync();
+        var card = await h.CreateClientCardAsync(client);
+        var evt = BillingHarness.Unique("evt");
+        var current = (await h.AddRateAsync(card, evt, clientRate: 0.033333m))!;
+        var upcoming = (await h.AddRateAsync(card, evt, clientRate: 0.05m, from: h.Time.Now.AddDays(2)))!;
+
+        var end = await Assert.ThrowsAsync<ArgumentException>(() => h.RateCards.CloseRateAsync(upcoming.Id, null));
+        Assert.Contains("cancel it", end.Message);
+
+        var cancelled = await h.RateCards.CancelScheduledRateAsync(upcoming.Id);
+        Assert.Equal(upcoming.Id, cancelled!.Id);
+        await using (var db = h.Db())
+        {
+            Assert.False(await db.BillingRates.AnyAsync(r => r.Id == upcoming.Id));
+            Assert.Null((await db.BillingRates.AsNoTracking().SingleAsync(r => r.Id == current.Id)).EffectiveTo); // open again
+        }
+        // A new upcoming version at the same moment is accepted again.
+        Assert.NotNull(await h.AddRateAsync(card, evt, clientRate: 0.04m, from: h.Time.Now.AddDays(2)));
+
+        // A version that already started can't be cancelled, and an unknown one is not found.
+        var started = await Assert.ThrowsAsync<ArgumentException>(() => h.RateCards.CancelScheduledRateAsync(current.Id));
+        Assert.Contains("already started", started.Message);
+        Assert.Null(await h.RateCards.CancelScheduledRateAsync(Guid.NewGuid()));
+    }
+
+    [PostgresFact]
+    public async Task CancellingAMiddleVersion_GivesThePreviousOneItsEnd()
+    {
+        var h = new BillingHarness(_db.ConnectionString);
+        var client = await h.CreateClientAsync();
+        var card = await h.CreateClientCardAsync(client);
+        var evt = BillingHarness.Unique("evt");
+        var first = (await h.AddRateAsync(card, evt, clientRate: 1m))!;
+        var middle = (await h.AddRateAsync(card, evt, clientRate: 2m, from: h.Time.Now.AddDays(2)))!;
+        var last = (await h.AddRateAsync(card, evt, clientRate: 3m, from: h.Time.Now.AddDays(5)))!;
+        await h.RateCards.CancelScheduledRateAsync(middle.Id);
+        await using var db = h.Db();
+        Assert.Equal(last.EffectiveFrom, (await db.BillingRates.AsNoTracking().SingleAsync(r => r.Id == first.Id)).EffectiveTo);
+    }
+
+    [PostgresFact]
     public async Task ARateExists_TheUsageIsPricedWithIt()
     {
         var h = new BillingHarness(_db.ConnectionString);

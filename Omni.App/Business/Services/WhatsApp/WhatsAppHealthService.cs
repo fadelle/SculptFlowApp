@@ -171,6 +171,18 @@ public class WhatsAppHealthService : IWhatsAppHealthService
         return ToHealthResponse(integration);
     }
 
+    /// <summary>Sets the connection's health from its current state (connected or not, account, phone, name): what
+    /// ApplyHealthEventAsync does after an event, for a connect or disconnect (QA t10-11: a reconnected number stayed
+    /// "disconnected" until Meta's next health event). Changes only the row; the caller saves it.</summary>
+    public static void Refresh(ChannelIntegration integration)
+    {
+        var (isHealthy, healthLevel, problemCode, problemMessage) = RecomputeHealth(integration);
+        integration.IsHealthy = isHealthy;
+        integration.HealthLevel = healthLevel;
+        integration.LastProblemCode = healthLevel == WhatsAppHealthLevel.Healthy ? null : problemCode;
+        integration.LastProblemMessage = healthLevel == WhatsAppHealthLevel.Healthy ? null : problemMessage;
+    }
+
     /// <summary>Derives a simplified, client-facing health state from the raw fields Meta's webhooks
     /// populate. Tolerant by design: an unrecognized status value doesn't count as a problem, it
     /// just doesn't trip any of the known-bad checks below — matches "normalize carefully while

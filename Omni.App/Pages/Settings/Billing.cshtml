@@ -27,9 +27,18 @@ else
     // A trial ends instead of renewing: show the days left (whole days, rounded up).
     var onTrial = s.TrialDays is not null && s.SubscriptionStatus == "active" && s.CurrentPeriodEnd is not null;
     var trialDaysLeft = onTrial ? Math.Max(0, (int)Math.Ceiling((s.CurrentPeriodEnd!.Value - DateTimeOffset.UtcNow).TotalDays)) : 0;
+    // The date card follows the status (QA t2-billing-15: an expired trial said "Renews on" and "$0.00 / month").
+    var ended = s.SubscriptionStatus is "expired" or "cancelled";
+    var pastDue = s.SubscriptionStatus == "past_due";
+    var (dateLabel, dateValue) = ended ? (s.SubscriptionStatus == "cancelled" ? T["billing.plan.cancelledOn"] : T["billing.plan.endedOn"], s.EndedAt ?? s.CurrentPeriodEnd)
+        : pastDue ? (T["billing.plan.graceEndsOn"], s.GraceEndsAt ?? s.CurrentPeriodEnd)
+        : onTrial ? (T["billing.trial.endsOn"], s.CurrentPeriodEnd)
+        : s.CancelAtPeriodEnd ? (T["billing.plan.endsOn"], s.CurrentPeriodEnd)
+        : (T["billing.plan.renewsOn"], s.CurrentPeriodEnd);
     <div class="au-page-head">
         <p class="au-page-head__sub">@T["billing.intro"]</p>
     </div>
+    <partial name="_Messages" model="new PageMessagesModel(Model.StatusMessage, null)" />
 
     @if (s.SubscriptionStatus == "past_due")
     {
@@ -61,13 +70,21 @@ else
             <span class="au-eyebrow">@T["billing.plan.current"]</span>
             <div class="au-stat__value">@(s.PlanName ?? T["billing.plan.none"].Value)</div>
             <span class="au-stat__hint"><span class="badge @badge.Css">@badge.Text</span>
-                @if (onTrial) { <text>· @T["billing.trial.badge"]</text> }
+                @if (s.TrialDays is { } trialLength) { <text>· @T.Plural("billing.trial.length", trialLength)</text> }
                 else if (s.PlanPrice is not null) { <text>· @T["billing.plan.price", Money(s.PlanPrice.Value), s.BillingPeriod == BillingPeriod.Year ? T["billing.plan.perYear"] : T["billing.plan.perMonth"]]</text> }</span>
         </div>
         <div class="au-stat">
-            <span class="au-eyebrow">@(onTrial ? T["billing.trial.endsOn"] : s.CancelAtPeriodEnd ? T["billing.plan.endsOn"] : T["billing.plan.renewsOn"])</span>
-            <div class="au-stat__value">@LocalTimeHelper.Time(s.CurrentPeriodEnd, "date")</div>
-            @if (onTrial)
+            <span class="au-eyebrow">@dateLabel</span>
+            <div class="au-stat__value">@LocalTimeHelper.Time(dateValue, "date")</div>
+            @if (pastDue)
+            {
+                <span class="au-stat__hint">@T["billing.plan.paymentOverdue"]</span>
+            }
+            else if (ended)
+            {
+                <span class="au-stat__hint">@T["billing.plan.endedHint"]</span>
+            }
+            else if (onTrial)
             {
                 <span class="au-stat__hint">@T.Plural("billing.trial.daysLeft", trialDaysLeft)</span>
             }
@@ -156,16 +173,36 @@ else
         <div class="au-table-card">
             <div class="au-table-scroll">
                 <table class="au-table au-table--stack">
-                    <thead><tr><th>@T["billing.addons.limit"]</th><th class="au-right">@T["billing.addons.units"]</th><th class="au-right">@T["billing.addons.cost"]</th></tr></thead>
+                    <thead><tr><th>@T["billing.addons.limit"]</th><th class="au-right">@T["billing.addons.units"]</th><th class="au-right">@T["billing.addons.cost"]</th><th>@T["billing.addons.renews"]</th></tr></thead>
                     <tbody>
                         @foreach (var a in addons)
                         {
-                            <tr><td data-label="@T["billing.addons.limit"]">@T.EntitlementLabel(a.EntitlementKey, a.Name)</td><td data-label="@T["billing.addons.units"]" class="au-right"><span dir="ltr">+@a.Quantity.Display("N0")</span></td><td data-label="@T["billing.addons.cost"]" class="au-right">@Money(a.PeriodPrice)</td></tr>
+                            var choice = a.AutoRenew switch { true => "yes", false => "no", _ => "default" };
+                            <tr><td data-label="@T["billing.addons.limit"]">@T.EntitlementLabel(a.EntitlementKey, a.Name)</td><td data-label="@T["billing.addons.units"]" class="au-right"><span dir="ltr">+@a.Quantity.Display("N0")</span></td><td data-label="@T["billing.addons.cost"]" class="au-right">@Money(a.PeriodPrice)</td>
+                                <td data-label="@T["billing.addons.renews"]">
+                                    @if (Model.CanChooseRenewal)
+                                    {
+                                        <form method="post" asp-page-handler="AddonRenewal" class="addon-renewal">
+                                            <input type="hidden" name="code" value="@a.Code" />
+                                            <select name="choice" class="au-select au-select--sm" aria-label="@T["billing.addons.renews"]" onchange="this.form.requestSubmit()">
+                                                <option value="default" selected="@(choice == "default")">@(Model.AddonsRenewByDefault ? T["billing.addons.renewDefaultYes"] : T["billing.addons.renewDefaultNo"])</option>
+                                                <option value="yes" selected="@(choice == "yes")">@T["billing.addons.renewYes"]</option>
+                                                <option value="no" selected="@(choice == "no")">@T["billing.addons.renewNo"]</option>
+                                            </select>
+                                            <noscript><button type="submit" class="au-btn au-btn--outlined au-btn--sm">@T["common.save"]</button></noscript>
+                                        </form>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge @(a.Renews ? "badge-green" : "badge-gray")">@(a.Renews ? T["billing.addons.renewYes"] : T["billing.addons.renewNo"])</span>
+                                    }
+                                </td></tr>
                         }
                     </tbody>
                 </table>
             </div>
         </div>
+        <p class="text-subtle mt-2">@(Model.AddonsRenewByDefault ? T["billing.addons.renewHelpOn"] : T["billing.addons.renewHelpOff"])</p>
     }
     <p class="text-subtle mt-2">@T["billing.addons.ask"]</p>
 

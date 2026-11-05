@@ -16,9 +16,17 @@ public class BillingAccountRepository : IBillingAccountRepository
 
     public async Task<BillingAccount> LockAsync(Guid clientId, string currency, CancellationToken ct = default)
     {
-        await _db.Database.ExecuteSqlInterpolatedAsync(
-            $"insert into billing.accounts (id, client_id, currency) values ({Guid.NewGuid()}, {clientId}, {currency}) on conflict (client_id) do nothing",
-            ct);
+        try
+        {
+            await _db.Database.ExecuteSqlInterpolatedAsync(
+                $"insert into billing.accounts (id, client_id, currency) values ({Guid.NewGuid()}, {clientId}, {currency}) on conflict (client_id) do nothing",
+                ct);
+        }
+        catch (Npgsql.PostgresException ex) when (ex.SqlState == Npgsql.PostgresErrorCodes.ForeignKeyViolation)
+        {
+            // No such client: every billing write (top-up, adjustment, add-ons, subscription) answers 404, not a 500 (QA t2-billing-14).
+            throw new KeyNotFoundException("clients.errors.notFound");
+        }
         var rows = await _db.BillingAccounts
             .FromSqlInterpolated($"select * from billing.accounts where client_id = {clientId} for update")
             .ToListAsync(ct);

@@ -27,7 +27,7 @@ public class UnknownEventHandler
     {
         if (client is not null)
         {
-            _events.Log(client.ClientId, EventTypes.WhatsAppUnknownEventReceived, source: "n8n",
+            _events.Log(client.ClientId, EventTypes.WhatsAppUnknownEventReceived, source: "whatsapp",
                 metadataJson: JsonSerializer.Serialize(new { field = evt.RawFieldName, raw = evt.RawJson }));
             await _unitOfWork.SaveChangesAsync(ct);
         }

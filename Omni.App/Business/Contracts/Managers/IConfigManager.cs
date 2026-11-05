@@ -79,6 +79,10 @@ public interface IConfigManager
     /// <summary>Charge each AI assistant reply as ai_reply usage (included credit first, then wallet). Needs an ai_reply rate; a client that can't pay gets no AI reply and the conversation goes to the team. Off = AI replies are not charged. Default true.</summary>
     bool BillingChargeAiReplies { get; }
 
+    /// <summary>Whether add-ons renew with the plan when the client hasn't chosen for that add-on (client_addons.auto_renew null).
+    /// Default false: an add-on ends at the renewal unless it is set to renew.</summary>
+    bool BillingAddonsRenewByDefault { get; }
+
     // ---- OptOut
     /// <summary>A whole-message stop/start word opts the contact out of / back into business-started messages. Default true.</summary>
     bool OptOutEnabled { get; }

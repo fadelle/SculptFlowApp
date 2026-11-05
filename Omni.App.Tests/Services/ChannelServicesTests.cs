@@ -64,6 +64,7 @@ public class ChannelIntegrationServiceTests
 
         Assert.Equal((ChannelIntegrationStatus.Connected, "tok", "pn", "waba"), (added!.Status, added.AccessToken, added.PhoneNumberId, added.WhatsAppBusinessId));
         Assert.NotNull(added.LastVerifiedAt);
+        Assert.Equal((WhatsAppHealthLevel.Healthy, true), (added.HealthLevel, added.IsHealthy)); // QA t10-11: health follows the connect
         Assert.True(r.HasAccessToken);
         _graph.Verify(g => g.RegisterPhoneNumberAsync("pn", "tok", added.Pin!, It.IsAny<CancellationToken>()), Times.Once);
         _entitlements.Verify(e => e.EnsureCanConnectChannelAsync(_clientId, ChannelType.WhatsApp, It.IsAny<CancellationToken>()), Times.AtLeastOnce);
@@ -148,6 +149,29 @@ public class ChannelIntegrationServiceTests
         await Sut().DisconnectAsync(_clientId, ChannelType.Facebook);
         Assert.Equal((ChannelIntegrationStatus.Disconnected, null, null, null, null), (row.Status, row.AccessToken, row.WebhookVerifyToken, row.Pin, row.LastError));
         _cache.Verify(c => c.RemoveByPrefixAsync(CacheKeys.WhatsAppRoutingPrefix, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Reconnecting_and_disconnecting_WhatsApp_recompute_its_health()
+    {
+        // QA t10-11: a reconnected number stayed "disconnected" until Meta's next health event.
+        var row = new ChannelIntegration
+        {
+            ClientId = _clientId, Channel = ChannelType.WhatsApp, Status = ChannelIntegrationStatus.Disconnected, HealthLevel = WhatsAppHealthLevel.Disconnected,
+            IsHealthy = false, LastProblemMessage = "WhatsApp is not connected.", PhoneNumberId = "pn", WhatsAppBusinessId = "waba"
+        };
+        _repo.Setup(r => r.GetAsync(_clientId, ChannelType.WhatsApp, It.IsAny<CancellationToken>())).ReturnsAsync(row);
+        _graph.Setup(g => g.GetPhoneNumbersForWabaAsync("waba", "tok", It.IsAny<CancellationToken>())).ReturnsAsync(new List<WabaPhoneNumberInfo> { new("pn", "+961 70", "Biz") });
+        await Sut().SaveAsync(Save(_clientId, ChannelType.WhatsApp, "tok", "verify", "123456"));
+        Assert.Equal((WhatsAppHealthLevel.Healthy, true, (string?)null), (row.HealthLevel, row.IsHealthy, row.LastProblemMessage));
+
+        await Sut().DisconnectAsync(_clientId, ChannelType.WhatsApp);
+        Assert.Equal((WhatsAppHealthLevel.Disconnected, false), (row.HealthLevel, row.IsHealthy));
+
+        // An account problem Meta reported earlier still counts after reconnecting.
+        row.AccountStatus = "disabled";
+        await Sut().SaveAsync(Save(_clientId, ChannelType.WhatsApp, "tok", "verify", "123456"));
+        Assert.Equal(WhatsAppHealthLevel.Problem, row.HealthLevel);
     }
 
     [Fact]

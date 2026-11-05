@@ -46,6 +46,9 @@ public interface IBillingRateCardRepository
 
     void AddRate(BillingRate rate);
 
+    /// <summary>Removes a rate version (only one that never took effect; usage keeps a reference to any other).</summary>
+    void RemoveRate(BillingRate rate);
+
     // ---- rating
     /// <summary>The client's cards, most specific first (client, plan, default); inactive cards are skipped.</summary>
     Task<IReadOnlyList<RatingCard>> ListRatingCardsAsync(Guid clientId, CancellationToken ct = default);

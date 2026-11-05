@@ -100,6 +100,10 @@ public partial class PlanService : IPlanService
         {
             throw new ArgumentException("Included usage credit must be zero or more, with at most 2 decimals.");
         }
+        if (request.Price > BillingLimits.MaxPlanPrice || request.IncludedUsageCredit > BillingLimits.MaxPlanPrice)
+        {
+            throw new ArgumentException($"A plan's price and included credit can be at most {BillingLimits.MaxPlanPrice:N0} each.");
+        }
         var period = (request.BillingPeriod ?? string.Empty).Trim().ToLowerInvariant();
         if (!BillingPeriod.IsValid(period)) throw new ArgumentException("Billing period must be 'month' or 'year'.");
         if (request.TrialDays is int trialDays && (trialDays is < 1 or > 90 || request.Price != 0))

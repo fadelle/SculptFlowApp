@@ -115,14 +115,20 @@ public class WhatsAppHandlerTests : WebhookTestBase
     }
 
     [Fact]
-    public async Task BusinessAppEcho_is_ingested_as_an_echo_and_never_triggers_ai()
+    public async Task BusinessAppEcho_is_saved_as_an_echo_in_the_customers_conversation_and_never_triggers_ai()
     {
+        // Confirmed 2026-11-05 (QA t10-04): the member's phone reply is saved and the conversation goes to the team.
         var handler = new BusinessAppEchoHandler(Contacts.Object, Conversations.Object, Messages.Object);
         var r = await handler.HandleAsync(Evt(ParsedMetaEventKind.BusinessAppEcho), Client, default);
+        Contacts.Verify(l => l.GetOrCreateByPhoneAsync(ClientId, "+96170123456", It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
         Messages.Verify(m => m.IngestAsync(It.Is<IngestMessageRequest>(i => i.EventType == IngestEventType.BusinessAppEcho), It.IsAny<CancellationToken>()), Times.Once);
-        Assert.Equal(("business_app_echo", false), (r.EventType, r.ShouldRunAi));
+        Assert.Equal(("business_app_echo", false, ConversationId), (r.EventType, r.ShouldRunAi, r.ConversationId));
+
+        // No customer (no "to" and no contacts[]): nothing is saved, and no contact is made for the business's own number.
+        Contacts.Invocations.Clear();
         var none = await handler.HandleAsync(Evt(ParsedMetaEventKind.BusinessAppEcho, waId: null), Client, default);
         Assert.Null(none.ConversationId);
+        Contacts.Verify(l => l.GetOrCreateByPhoneAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -169,9 +175,9 @@ public class WhatsAppHandlerTests : WebhookTestBase
         var unknown = await new UnknownEventHandler(Uow.Object, Events.Object).HandleAsync(Evt(ParsedMetaEventKind.Unknown), Client, default);
         Assert.Equal(["history", "app_state_sync", "unknown"], [history.EventType, state.EventType, unknown.EventType]);
         Assert.All(new[] { history, state, unknown }, r => Assert.False(r.ShouldRunAi));
-        Events.Verify(e => e.Log(ClientId, EventTypes.WhatsAppHistorySyncReceived, null, null, null, "n8n", It.IsAny<string>()), Times.Once);
-        Events.Verify(e => e.Log(ClientId, EventTypes.WhatsAppAppStateSyncReceived, null, null, null, "n8n", It.IsAny<string>()), Times.Once);
-        Events.Verify(e => e.Log(ClientId, EventTypes.WhatsAppUnknownEventReceived, null, null, null, "n8n", It.IsAny<string>()), Times.Once);
+        Events.Verify(e => e.Log(ClientId, EventTypes.WhatsAppHistorySyncReceived, null, null, null, "whatsapp", It.IsAny<string>()), Times.Once);
+        Events.Verify(e => e.Log(ClientId, EventTypes.WhatsAppAppStateSyncReceived, null, null, null, "whatsapp", It.IsAny<string>()), Times.Once);
+        Events.Verify(e => e.Log(ClientId, EventTypes.WhatsAppUnknownEventReceived, null, null, null, "whatsapp", It.IsAny<string>()), Times.Once);
 
         var orphan = await new UnknownEventHandler(Uow.Object, Events.Object).HandleAsync(Evt(ParsedMetaEventKind.Unknown), null, default);
         Assert.Null(orphan.ClientId);
@@ -226,6 +232,43 @@ public class MetaWebhookProcessorTests : WebhookTestBase
     {
         var r = await Sut().ProcessAsync(J("{}"));
         Assert.Equal(("unknown", true, false), (r.EventType, r.Processed, r.ShouldRunAi));
+    }
+
+    [Fact]
+    public async Task A_delivery_for_another_object_is_ignored_and_traced()
+    {
+        // QA t10-12: {"object":"page"} was processed as an unknown WhatsApp event.
+        var r = await Sut().ProcessAsync(J("{\"object\":\"page\",\"entry\":[{\"id\":\"W1\",\"changes\":[{\"field\":\"feed\",\"value\":{}}]}]}"));
+        Assert.Equal(("unknown", (Guid?)null), (r.EventType, r.ClientId));
+        Tracer.Verify(t => t.Step(TraceSteps.WebhookIgnored, TraceOutcomes.Skipped, It.IsAny<TraceIds>(), It.IsAny<double?>(),
+            It.Is<object?>(d => d!.ToString()!.Contains("not_whatsapp"))), Times.Once);
+        Events.Verify(e => e.Log(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<string?>(), It.IsAny<string>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Every_delivery_that_reaches_a_connection_moves_last_heard_once()
+    {
+        // QA t10-11: customer messages didn't move "Last heard from Meta".
+        await Sut().ProcessAllAsync(J("{\"entry\":[{\"id\":\"W1\",\"changes\":[{\"field\":\"messages\",\"value\":{\"metadata\":{\"phone_number_id\":\"P1\"},"
+            + "\"messages\":[{\"from\":\"1\",\"id\":\"a\",\"type\":\"text\",\"text\":{\"body\":\"x\"}},{\"from\":\"1\",\"id\":\"b\",\"type\":\"text\",\"text\":{\"body\":\"y\"}}]}}]}]}"));
+        Integrations.Verify(i => i.TouchLastWebhookAsync(ConnectionId, It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()), Times.Once);
+
+        Integrations.Invocations.Clear();
+        await Sut().ProcessAllAsync(J(Body(phoneNumberId: "UNKNOWN")));
+        Integrations.Verify(i => i.TouchLastWebhookAsync(It.IsAny<Guid>(), It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task A_status_for_a_message_omni_never_sent_leaves_a_trace()
+    {
+        // QA t10-12: an unmatched status left nothing anywhere.
+        Messages.Setup(m => m.IngestAsync(It.Is<IngestMessageRequest>(i => i.EventType == IngestEventType.StatusUpdate), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new IngestMessageResult(false, false, null));
+        var handler = new MessageStatusHandler(Messages.Object, Tracer.Object);
+        var r = await handler.HandleAsync(new ParsedMetaEvent { Kind = ParsedMetaEventKind.MessageStatus, ExternalMessageId = "wamid.nobody", DeliveryStatus = "delivered" }, Client, default);
+        Assert.False(r.Processed);
+        Tracer.Verify(t => t.Step(TraceSteps.WebhookIgnored, TraceOutcomes.Skipped, It.Is<TraceIds>(i => i.ExternalMessageId == "wamid.nobody"), It.IsAny<double?>(),
+            It.Is<object?>(d => d!.ToString()!.Contains("status_unmatched"))), Times.Once);
     }
 
     [Fact]

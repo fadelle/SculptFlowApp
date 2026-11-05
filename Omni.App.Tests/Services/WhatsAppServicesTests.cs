@@ -442,6 +442,18 @@ public class WhatsAppHealthServiceTests
         Assert.Equal(WhatsAppHealthLevel.Problem, r.HealthLevel);
     }
 
+    [Theory]
+    [InlineData(ChannelIntegrationStatus.Connected, null, WhatsAppHealthLevel.Healthy)]
+    [InlineData(ChannelIntegrationStatus.Connected, "restricted", WhatsAppHealthLevel.Problem)]
+    [InlineData(ChannelIntegrationStatus.Disconnected, null, WhatsAppHealthLevel.Disconnected)]
+    public void Refresh_sets_health_from_the_rows_state(string status, string? account, string level)
+    {
+        var row = new ChannelIntegration { Status = status, AccountStatus = account, HealthLevel = "stale", LastProblemMessage = "old" };
+        WhatsAppHealthService.Refresh(row);
+        Assert.Equal(level, row.HealthLevel);
+        Assert.Equal(level == WhatsAppHealthLevel.Healthy, row.LastProblemMessage is null);
+    }
+
     [Fact]
     public async Task A_rejected_display_name_is_a_warning()
     {

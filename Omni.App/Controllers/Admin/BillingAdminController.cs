@@ -102,6 +102,12 @@ public class BillingAdminController : ControllerBase
         return Ok(await _addons.SetQuantityAsync(clientId, code, request.Quantity, key, BillingSource.Admin, Actor, ct));
     }
 
+    /// <summary>Whether the client's add-on renews with the plan (null = the Billing:AddonsRenewByDefault setting). An add-on that
+    /// doesn't renew ends at the next renewal; 404 for an add-on the client doesn't have.</summary>
+    [HttpPut("clients/{clientId:guid}/addons/{code}/renewal")]
+    public async Task<IActionResult> SetClientAddonRenewal(Guid clientId, string code, [FromBody] SetAddonRenewalRequest request, CancellationToken ct) =>
+        Ok(await _addons.SetAutoRenewAsync(clientId, code, request?.AutoRenew, BillingSource.Admin, Actor, ct));
+
     [HttpGet("rate-cards")]
     public async Task<IActionResult> ListRateCards(CancellationToken ct) => Ok(await _rateCards.ListAsync(ct));
 
@@ -122,6 +128,11 @@ public class BillingAdminController : ControllerBase
     [HttpPost("rate-cards/{code}/rates")]
     public async Task<IActionResult> AddRate(string code, [FromBody] AddRateRequest request, CancellationToken ct) =>
         await _rateCards.AddRateAsync(code, request, Actor, ct) is { } rate ? Ok(rate) : NotFound();
+
+    /// <summary>Withdraws a rate version that hasn't started (QA t2-billing-04); 400 for one that already started.</summary>
+    [HttpDelete("rates/{id:guid}")]
+    public async Task<IActionResult> CancelScheduledRate(Guid id, CancellationToken ct) =>
+        await _rateCards.CancelScheduledRateAsync(id, ct) is { } rate ? Ok(rate) : NotFound();
 
     [HttpPost("rates/{id:guid}/close")]
     public async Task<IActionResult> CloseRate(Guid id, [FromBody] CloseRateRequest? request, CancellationToken ct) =>

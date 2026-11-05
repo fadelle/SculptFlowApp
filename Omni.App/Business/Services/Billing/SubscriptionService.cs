@@ -1,5 +1,7 @@
 using Omni.App.Business.Contracts.Managers;
 using Omni.App.Business.Contracts.Services.Billing;
+using Omni.App.Business.Contracts.Services.Notifications;
+using Omni.App.Entities.Dtos.Notifications;
 using Omni.App.Business.Engines.Billing;
 using Omni.App.Common.Enums;
 using Omni.App.Common.Exceptions;
@@ -20,8 +22,12 @@ public class SubscriptionService : ISubscriptionService
     private readonly IConfigManager _config;
     private readonly ICacheManager _cache;
 
-    public SubscriptionService(IBillingUnitOfWorkFactory units, TimeProvider time, ILogger<SubscriptionService> logger, IConfigManager config, ICacheManager cache)
+    private readonly INotificationService? _notifications;
+
+    public SubscriptionService(IBillingUnitOfWorkFactory units, TimeProvider time, ILogger<SubscriptionService> logger, IConfigManager config, ICacheManager cache,
+        INotificationService? notifications = null)
     {
+        _notifications = notifications;
         _config = config;
         _cache = cache;
         _units = units;
@@ -142,6 +148,8 @@ public class SubscriptionService : ISubscriptionService
         var plan = subscription.Plan!;
         var periodEnd = subscription.CurrentPeriodEnd;
         RenewalOutcome outcome;
+        var notRenewed = new List<ClientAddon>();
+        var unpaid = new List<ClientAddon>();
 
         if (plan.TrialDays is not null)
         {
@@ -168,7 +176,28 @@ public class SubscriptionService : ISubscriptionService
         {
             var newStart = periodEnd;
             var keyBase = $"subscription:{subscription.Id}:period:{Stamp(newStart)}";
-            var addonsPrice = PlanPeriod.AddonsTotal(await unit.Addons.ListForClientReadOnlyAsync(clientId, ct));
+
+            // Add-ons at the period's end (decided 2026-11-05): one not set to renew (its own choice, else
+            // Billing:AddonsRenewByDefault, off by default) ends now, whatever happens to the plan.
+            var clientAddons = await unit.Addons.ListForClientAsync(clientId, ct);
+            var renewByDefault = _config.BillingAddonsRenewByDefault;
+            notRenewed.AddRange(clientAddons.Where(a => !(a.AutoRenew ?? renewByDefault)));
+            EndAddons(unit, clientId, notRenewed, "not_renewed", periodEnd, now);
+            var renewing = clientAddons.Except(notRenewed).ToList();
+
+            // The plan renews if the wallet pays the plan; each renewing add-on the rest of the wallet can't pay ends instead, so
+            // the plan never lapses because of an extra (decided 2026-11-05).
+            var addonsPrice = 0m;
+            if (CanPay(account, plan.Price, plan.IncludedUsageCredit))
+            {
+                foreach (var addon in renewing)
+                {
+                    var price = addon.Quantity * addon.Addon!.UnitPrice;
+                    if (CanPay(account, plan.Price + addonsPrice + price, plan.IncludedUsageCredit)) addonsPrice += price;
+                    else unpaid.Add(addon);
+                }
+                EndAddons(unit, clientId, unpaid, "insufficient_funds", periodEnd, now);
+            }
             if (CanPay(account, plan.Price + addonsPrice, plan.IncludedUsageCredit))
             {
                 await StartPeriodAsync(unit, account, plan, plan.Price, addonsPrice, keyBase,
@@ -189,7 +218,7 @@ public class SubscriptionService : ISubscriptionService
                 subscription.Status = SubscriptionStatus.PastDue;
                 subscription.PastDueSince = now;
                 BillingLedger.LogEvent(unit, clientId, BillingEventTypes.SubscriptionPastDue, BillingSource.Worker,
-                    new { plan = plan.Code, due = plan.Price + addonsPrice, currency = account.Currency, wallet = account.WalletBalance, graceDays = _config.BillingGracePeriodDays }, now);
+                    new { plan = plan.Code, due = plan.Price, currency = account.Currency, wallet = account.WalletBalance, graceDays = _config.BillingGracePeriodDays }, now);
                 outcome = RenewalOutcome.PastDue;
             }
             else if (now >= (subscription.PastDueSince ?? now).AddDays(_config.BillingGracePeriodDays))
@@ -202,7 +231,15 @@ public class SubscriptionService : ISubscriptionService
             }
             else
             {
-                return RenewalOutcome.PastDue; // still in grace, still unpaid: nothing changes
+                // Still in grace, still unpaid: only add-ons that weren't renewing end (at the period's end, as always).
+                if (notRenewed.Count > 0)
+                {
+                    await unit.SaveChangesAsync(ct);
+                    await tx.CommitAsync(ct);
+                    await _cache.RemoveAsync(CacheKeys.Entitlements(clientId), ct);
+                    await NotifyEndedAddonsAsync(clientId, notRenewed, unpaid, ct);
+                }
+                return RenewalOutcome.PastDue;
             }
         }
 
@@ -210,6 +247,7 @@ public class SubscriptionService : ISubscriptionService
         await unit.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
         await _cache.RemoveAsync(CacheKeys.Entitlements(clientId), ct);
+        await NotifyEndedAddonsAsync(clientId, notRenewed, unpaid, ct);
 
         if (outcome == RenewalOutcome.Renewed)
         {
@@ -351,4 +389,44 @@ public class SubscriptionService : ISubscriptionService
     }
 
     private static string Stamp(DateTimeOffset value) => value.UtcDateTime.ToString("yyyyMMdd'T'HHmmss'Z'");
+
+    /// <summary>Ends add-ons at a renewal: the rows go (their extra units with them), nothing is charged or refunded, and each is
+    /// logged as billing_addon_changed with why ("not_renewed" or "insufficient_funds").</summary>
+    private static void EndAddons(IBillingUnitOfWork unit, Guid clientId, IReadOnlyList<ClientAddon> addons, string reason, DateTimeOffset periodEnd,
+        DateTimeOffset now)
+    {
+        foreach (var addon in addons)
+        {
+            unit.Addons.RemoveForClient(addon);
+            BillingLedger.LogEvent(unit, clientId, BillingEventTypes.AddonChanged, BillingSource.Worker,
+                new { addon = addon.Addon?.Code, from = addon.Quantity, to = 0, reason, periodEnd }, now);
+        }
+    }
+
+    /// <summary>Tells the client which add-ons ended at the renewal: one notice for those not set to renew, one for those the
+    /// wallet couldn't pay. A failed notice is logged, never thrown (the renewal is already saved).</summary>
+    private async Task NotifyEndedAddonsAsync(Guid clientId, IReadOnlyList<ClientAddon> notRenewed, IReadOnlyList<ClientAddon> unpaid, CancellationToken ct)
+    {
+        if (_notifications is null) return;
+        static string Names(IEnumerable<ClientAddon> addons) => string.Join(", ", addons.Select(a => a.Addon?.Name ?? "?"));
+        try
+        {
+            if (notRenewed.Count > 0)
+            {
+                await _notifications.CreateAsync(clientId, NotificationType.Billing,
+                    NotificationText.Of("notifications.billing.addonsEnded.title", "notifications.billing.addonsEnded.message", Names(notRenewed)),
+                    link: "/settings/billing", ct: ct);
+            }
+            if (unpaid.Count > 0)
+            {
+                await _notifications.CreateAsync(clientId, NotificationType.Billing,
+                    NotificationText.Of("notifications.billing.addonsUnpaid.title", "notifications.billing.addonsUnpaid.message", Names(unpaid)),
+                    link: "/settings/billing", ct: ct);
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogError(ex, "Billing: the add-ons notice for client {ClientId} couldn't be created.", clientId);
+        }
+    }
 }

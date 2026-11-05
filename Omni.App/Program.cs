@@ -487,6 +487,13 @@ builder.Services.AddSwaggerGen(options =>
     });
 });
 
+// A year of HSTS, subdomains included (QA t1-accounts-03: it was 30 days, this host only).
+builder.Services.AddHsts(options =>
+{
+    options.MaxAge = TimeSpan.FromDays(365);
+    options.IncludeSubDomains = true;
+});
+
 var app = builder.Build();
 
 // `dotnet run -- create-admin <email> "<full name>"` creates an admin user (role admin; password from ADMIN_PASSWORD or
@@ -498,6 +505,8 @@ if (args.Length > 0 && args[0] == AdminCli.CreateAdminCommand)
 }
 
 app.UseForwardedHeaders();
+// Security headers on every response, the error pages and static files included (QA t1-accounts-03).
+app.UseMiddleware<SecurityHeadersMiddleware>();
 
 // ---------------------------------------------------------------------
 // Middleware pipeline

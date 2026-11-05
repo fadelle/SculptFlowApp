@@ -20,4 +20,8 @@ public interface IRateCardService
     Task<RateResponse?> AddRateAsync(string cardCode, AddRateRequest request, string? actor, CancellationToken ct = default);
     /// <summary>Ends a rate version (default: now). After that, events it covered need another rate.</summary>
     Task<RateResponse?> CloseRateAsync(Guid rateId, DateTimeOffset? effectiveTo, CancellationToken ct = default);
+    /// <summary>Withdraws a version that hasn't started yet (QA t2-billing-04): it is deleted and the version before it gets
+    /// back the end it had (open, or the start of the version after), so the price it would have replaced keeps applying.
+    /// Null when there is no such rate; ArgumentException for one that already started (end it with CloseRateAsync).</summary>
+    Task<RateResponse?> CancelScheduledRateAsync(Guid rateId, CancellationToken ct = default);
 }
