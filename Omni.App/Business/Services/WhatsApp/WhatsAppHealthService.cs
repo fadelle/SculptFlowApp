@@ -1,3 +1,4 @@
+using Omni.App.Common.Helpers;
 using System.Text.Json;
 using Omni.App.Business.Contracts.Managers;
 using Omni.App.Business.Contracts.Services.Notifications;
@@ -55,6 +56,12 @@ public class WhatsAppHealthService : IWhatsAppHealthService
 
     public async Task<WhatsAppHealthResponse> ApplyHealthEventAsync(WhatsAppHealthEventRequest request, CancellationToken ct = default)
     {
+        // Checked against their columns before anything is stored (QA t8-06: "{bad" raw metadata was a 500).
+        RequestChecks.MaxLength(request.EventType, 100, "eventType");
+        RequestChecks.MaxLength(request.Status, 50, "status");
+        RequestChecks.MaxLength(request.Code, 100, "code");
+        RequestChecks.MaxLength(request.QualityRating, 30, "qualityRating");
+        RequestChecks.Json(request.RawMetadataJson, "rawMetadataJson");
         var integration = await _integrations.GetAsync(request.ClientId, ChannelType.WhatsApp, ct);
         if (integration is null)
         {

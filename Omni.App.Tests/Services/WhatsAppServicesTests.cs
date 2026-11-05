@@ -165,7 +165,24 @@ public class WhatsAppTemplateServiceTests
     {
         _provider.Setup(p => p.SubmitAsync(It.IsAny<ChannelIntegration>(), It.IsAny<WhatsAppTemplate>(), It.IsAny<CancellationToken>())).ThrowsAsync(new WhatsAppTemplateProviderException("Body too long"));
         var r = await Sut().CreateAsync(Create());
-        Assert.Equal((WhatsAppTemplateStatus.Rejected, "Body too long"), (r.Status, r.RejectionReason));
+        Assert.Equal((WhatsAppTemplateStatus.Rejected, "Body too long", (string?)null), (r.Status, r.RejectionReason, r.SubmitError));
+    }
+
+    [Fact]
+    public async Task A_template_that_couldnt_reach_meta_stays_a_draft_and_says_why_instead_of_rejected()
+    {
+        // QA t8-12: an invalid token marked new templates "Rejected" with Meta's raw JSON as the reason.
+        _provider.Setup(p => p.SubmitAsync(It.IsAny<ChannelIntegration>(), It.IsAny<WhatsAppTemplate>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new WhatsAppTemplateProviderException("Invalid OAuth access token - Cannot parse access token", couldNotReach: true));
+
+        var created = await Sut().CreateAsync(Create());
+        Assert.Equal((WhatsAppTemplateStatus.Draft, (string?)null, "Invalid OAuth access token - Cannot parse access token"),
+            (created.Status, created.RejectionReason, created.SubmitError));
+
+        var draft = Existing();
+        var retried = await Sut().RetrySubmitAsync(_clientId, draft.Id);
+        Assert.Equal((WhatsAppTemplateStatus.Draft, (string?)null), (draft.Status, draft.RejectionReason));
+        Assert.NotNull(retried!.SubmitError);
     }
 
     private WhatsAppTemplate Existing(string? metaId = null, string status = WhatsAppTemplateStatus.Draft)
@@ -262,6 +279,17 @@ public class WhatsAppTemplateServiceTests
         Assert.Equal(("meta-1", "weird", "marketing", ""), (added!.MetaTemplateId, added.Status, added.Category, added.Body));
     }
 
+    [Fact]
+    public async Task A_template_event_with_values_that_dont_fit_is_a_400_and_nothing_is_stored()
+    {
+        // QA t8-06: a 40-character status was a 500 with an HTML page.
+        var tooLong = await Assert.ThrowsAsync<ArgumentException>(() => Sut().ApplyMetaEventAsync(Event(status: new string('X', 40))));
+        Assert.Equal(RequestChecks.TooLongKey, tooLong.Message);
+        var notJson = await Assert.ThrowsAsync<ArgumentException>(() => Sut().ApplyMetaEventAsync(Event() with { ComponentsJson = "{bad" }));
+        Assert.Equal(RequestChecks.NotJsonKey, notJson.Message);
+        _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
     // ---- QA t10-06 ----
 
     [Theory]
@@ -350,6 +378,17 @@ public class WhatsAppHealthServiceTests
 
     private WhatsAppHealthEventRequest Req(string type, string? status = null, string? quality = null, string? waba = "W1", string? phone = "P1", string? code = null, string? message = null, DateTimeOffset? at = null) =>
         new(_clientId, type, waba, phone, status, quality, code, message, at, "{}");
+
+    [Fact]
+    public async Task A_health_event_with_bad_raw_metadata_or_an_oversized_status_is_a_400()
+    {
+        // QA t8-06: "{bad" raw metadata was a 500.
+        var notJson = await Assert.ThrowsAsync<ArgumentException>(() => Sut().ApplyHealthEventAsync(Req("PHONE_NUMBER_QUALITY_UPDATE") with { RawMetadataJson = "{bad" }));
+        Assert.Equal(RequestChecks.NotJsonKey, notJson.Message);
+        var tooLong = await Assert.ThrowsAsync<ArgumentException>(() => Sut().ApplyHealthEventAsync(Req("PHONE_NUMBER_QUALITY_UPDATE", status: new string('X', 51))));
+        Assert.Equal(RequestChecks.TooLongKey, tooLong.Message);
+        _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
 
     [Fact]
     public async Task Health_is_null_without_a_connection_and_unknown_until_an_event_arrives()

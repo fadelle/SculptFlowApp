@@ -259,7 +259,7 @@ public class WhatsAppTemplatePageTests
 
         await model.OnPostCreateAsync(default);
         Assert.Null(model.StatusMessage);
-        Assert.Contains("submission failed: bad format", model.ErrorMessage);
+        Assert.Contains("Meta didn't accept template 'promo': bad format", model.ErrorMessage);
 
         await model.OnPostCreateAsync(default);
         Assert.Equal("Name is required.", model.ErrorMessage);

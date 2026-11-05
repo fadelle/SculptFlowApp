@@ -100,6 +100,21 @@ public class WhatsAppTemplateProviderTests
             .ThrowsAsync(new MetaGraphApiException("invalid"));
         await Assert.ThrowsAsync<WhatsAppTemplateProviderException>(() => provider.SubmitAsync(integration, Template()));
 
+        // QA t8-12: Meta's readable message, and whether the template was judged at all.
+        _meta.Setup(m => m.CreateMessageTemplateAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<object>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(MetaGraphApiException.FromResponse(400, "BadRequest",
+                """{"error":{"message":"Invalid OAuth access token - Cannot parse access token","type":"OAuthException","code":190,"fbtrace_id":"x"}}"""));
+        var token = await Assert.ThrowsAsync<WhatsAppTemplateProviderException>(() => provider.SubmitAsync(integration, Template()));
+        Assert.Equal(("Invalid OAuth access token - Cannot parse access token", true), (token.Message, token.CouldNotReach));
+        _meta.Setup(m => m.CreateMessageTemplateAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<object>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(MetaGraphApiException.FromResponse(400, "BadRequest",
+                """{"error":{"message":"Invalid parameter","type":"OAuthException","code":100,"error_subcode":2388042,"error_user_msg":"Message template body has too many variables for its length."}}"""));
+        var content = await Assert.ThrowsAsync<WhatsAppTemplateProviderException>(() => provider.SubmitAsync(integration, Template()));
+        Assert.Equal(("Message template body has too many variables for its length.", false), (content.Message, content.CouldNotReach));
+        _meta.Setup(m => m.CreateMessageTemplateAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<object>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new HttpRequestException("No such host is known."));
+        Assert.True((await Assert.ThrowsAsync<WhatsAppTemplateProviderException>(() => provider.SubmitAsync(integration, Template()))).CouldNotReach);
+
         _meta.Setup(m => m.GetMessageTemplateStatusAsync("tpl-1", "tok", It.IsAny<CancellationToken>())).ReturnsAsync(new MetaTemplateStatusResult("REJECTED", "why"));
         var status = await provider.GetStatusAsync(integration, Template());
         Assert.Equal(("REJECTED", "why"), (status.Status, status.RejectedReason));

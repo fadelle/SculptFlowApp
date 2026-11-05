@@ -47,6 +47,9 @@ public class BotConversationService : IBotConversationService
         return true;
     }
 
+    public Task<bool?> RunStoppedAsync(Guid clientId, Guid conversationId, string? reason, CancellationToken ct = default) =>
+        _conversations.HandOverStoppedAiAsync(clientId, conversationId, reason, ct);
+
     public async Task<bool?> RunFailedAsync(BotRunContext run, Guid conversationId, CancellationToken ct = default)
     {
         if (run.IsTest) return await _tests.RunFailedAsync(run, ct);

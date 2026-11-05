@@ -115,6 +115,7 @@ public class ConversationModeSyncTests
         Assert.False(c.AiEnabled);
         var note = Assert.Single(c.Messages);
         Assert.Equal("Handed from AI to your team", note.Content);
+        Assert.Equal(MessageMetadata.HandedToTeamMarker, note.MetadataJson); // QA t7-07: the Inbox words it from the key
         Assert.Equal(at.AddMilliseconds(-1), note.CreatedAt);
         Assert.Equal(c.Id, note.ConversationId);
     }
@@ -126,7 +127,7 @@ public class ConversationModeSyncTests
         ConversationModeSync.Apply(c, ConversationMode.Ai);
         Assert.True(c.AiEnabled);
         Assert.False(c.HumanTakeover);
-        Assert.Equal("Returned to AI", Assert.Single(c.Messages).Content);
+        Assert.Equal(("Returned to AI", MessageMetadata.ReturnedToAiMarker), (Assert.Single(c.Messages).Content, c.Messages.Single().MetadataJson));
     }
 
     [Theory]

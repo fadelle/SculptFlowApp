@@ -69,6 +69,10 @@ internal sealed class FakeBotTools : IBotToolService
 {
     public HashSet<string> Capabilities { get; set; } = new(BotCapability.All);
     public bool BookingsIncluded { get; set; } = true;
+    /// <summary>Set: the bot itself may no longer answer (BotToolCheck reason), so every call is a 403 BOT_NOT_ALLOWED like the real
+    /// service's (QA t7-01). Tools listed in StopAfter still answer first (the bot was turned off mid-run).</summary>
+    public string? BotDenied { get; set; }
+    public HashSet<string> AllowedBeforeStop { get; } = new();
     public Dictionary<string, BotToolResult> Answers { get; } = new();
     public List<(string Tool, BotToolCall Call, object? Arguments)> Calls { get; } = new();
     public List<string> Routes { get; } = new();
@@ -77,6 +81,7 @@ internal sealed class FakeBotTools : IBotToolService
         CancellationToken ct = default)
     {
         Routes.Add(tool.Route);
+        if (BotDenied is not null && !AllowedBeforeStop.Contains(tool.Route)) return BotToolResult.Forbidden(BotToolOutcomes.BotNotAllowed(BotDenied));
         if (tool.Capability is { } capability && !Capabilities.Contains(capability)) return BotToolResult.Ok(BotToolOutcomes.NotAllowed(BotToolCheck.NotAllowed));
         if (tool.Feature is { } feature && !BookingsIncluded) return BotToolResult.Ok(BotToolOutcomes.FeatureNotIncluded(feature));
         var run = new BotRunContext(call.ClientId, call.BotId ?? Guid.Empty, Capabilities, null, null, call.TestSessionId);
@@ -96,7 +101,7 @@ internal sealed class FakeBotTools : IBotToolService
     public Task<BotToolResult> UpdateContactAsync(BotRunContext run, Guid clientId, Guid contactId, UpdateContactContextRequest request, CancellationToken ct = default) =>
         Answer("update_contact", run, (contactId, request));
     public Task<BotToolResult> GetAvailableSlotsAsync(BotRunContext run, Guid clientId, Guid? contactId, Guid? serviceId, DateOnly? date, int? days, CancellationToken ct = default) =>
-        Answer("get_available_slots", run, (contactId, date));
+        Answer("get_available_slots", run, (contactId, serviceId, date));
     public Task<BotToolResult> ScheduleBookingAsync(BotRunContext run, Guid clientId, Guid contactId, ScheduleBookingRequest request, CancellationToken ct = default) =>
         Answer("schedule", run, (contactId, request));
     public Task<BotToolResult> GetMyBookingsAsync(BotRunContext run, Guid clientId, Guid contactId, CancellationToken ct = default) => Answer("get_my_bookings", run, contactId);
@@ -108,6 +113,8 @@ internal sealed class FakeBotTools : IBotToolService
         Answer("handoff", run, (conversationId, request.Reason));
     public Task<BotToolResult> RunFailedAsync(BotRunContext run, Guid conversationId, CancellationToken ct = default) =>
         Answer("run_failed", run, conversationId);
+    public Task<BotToolResult> RunStoppedAsync(BotToolCall call, Guid conversationId, string? reason, CancellationToken ct = default) =>
+        Answer("run_stopped", new BotRunContext(call.ClientId, call.BotId ?? Guid.Empty, Capabilities, null, null, call.TestSessionId), (conversationId, reason));
 }
 
 /// <summary>crm.bot_memory in memory, with the repository's newest-first window and trimming.</summary>

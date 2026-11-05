@@ -22,5 +22,8 @@ public record WhatsAppTemplateResponse(
     string? PreviousCategory = null,
     string? CurrentCategory = null,
     string? ComponentsJson = null,
-    DateTimeOffset? LastMetaEventAt = null
+    DateTimeOffset? LastMetaEventAt = null,
+    // Set only on the answer to a create, edit or submit that couldn't reach Meta (or the WhatsApp connection needs renewing):
+    // Meta's explanation. The template stays a draft (QA t8-12). Never stored.
+    string? SubmitError = null
 );

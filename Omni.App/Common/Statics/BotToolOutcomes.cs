@@ -21,6 +21,19 @@ public static class BotToolOutcomes
             "help with that here and that a team member can, following your handoff policy." // text-ok: AI instruction
     };
 
+    public const string BotNotAllowedCode = "BOT_NOT_ALLOWED";
+
+    /// <summary>The bot itself may no longer answer (deactivated, deleted, beyond the plan's bots, the plan lost the AI
+    /// assistant; BotToolCheck reasons): answered as a 403, the run stops and the conversation goes to the team (QA t7-01).</summary>
+    public static object BotNotAllowed(string? reason) => new
+    {
+        success = false,
+        code = BotNotAllowedCode,
+        reason,
+        message = "This bot may no longer answer this conversation.", // text-ok: read by the AI, never shown to the contact
+        instruction = "Stop. Nothing was sent, looked up, booked or changed. A team member will take over." // text-ok: AI instruction
+    };
+
     /// <summary>The client's plan doesn't include the feature the tool needs (an EntitlementKeys value).</summary>
     public static object FeatureNotIncluded(string feature) => new
     {

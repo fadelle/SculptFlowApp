@@ -162,6 +162,8 @@ public static class ConfigDefaults
         "Timeout of one call to the AI model API.", 5, 600);
     public static readonly ConfigDefinition AiMaxConcurrentRuns = new("Ai", "MaxConcurrentRuns", "4", ConfigValueType.Int,
         "Most bot runs (different conversations) at the same time; one conversation always runs one message at a time.", 1, 64);
+    public static readonly ConfigDefinition AiBurstWaitMilliseconds = new("Ai", "BurstWaitMilliseconds", "1000", ConfigValueType.Int,
+        "How long a conversation's next bot run waits after its message arrived, so messages the contact sent together are all saved and answered in the order they were written (0 = no wait).", 0, 10000);
     public static readonly ConfigDefinition AiInputTokenPriceUsdPerMillion = new("Ai", "InputTokenPriceUsdPerMillion", "1.25", ConfigValueType.Decimal,
         "What the AI model provider charges per million input tokens (USD), for the admin portal's AI usage estimate only (QA t7-10). Billing never reads it.", 0, 1000);
     public static readonly ConfigDefinition AiOutputTokenPriceUsdPerMillion = new("Ai", "OutputTokenPriceUsdPerMillion", "10", ConfigValueType.Decimal,
@@ -360,6 +362,7 @@ public static class ConfigDefaults
         AiMemoryExchanges,
         AiTimeoutSeconds,
         AiMaxConcurrentRuns,
+        AiBurstWaitMilliseconds,
         AiRetryUnansweredAfterSeconds,
         AiInputTokenPriceUsdPerMillion,
         AiOutputTokenPriceUsdPerMillion,

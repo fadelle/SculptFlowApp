@@ -14,4 +14,7 @@ public record TelegramWebhookResult(
     string? MessageType = null,
     string? Content = null,
     string? Mode = null,
-    bool Deduplicated = false);
+    bool Deduplicated = false,
+    // When the contact wrote it and Telegram's per-chat message_id: the bot run queue answers a burst in this order (QA t7-06).
+    DateTimeOffset? SentAt = null,
+    long? ChatMessageId = null);

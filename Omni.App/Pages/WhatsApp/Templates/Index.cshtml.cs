@@ -20,6 +20,7 @@ public class IndexModel : PageModel
 {
     private const string SavedKey = "templates.saved";
     private const string SubmitFailedKey = "templates.submitFailed";
+    private const string NotSubmittedKey = "templates.notSubmitted";
     private const string DuplicateKey = "templates.errors.duplicate";
     private const string RefreshedKey = "templates.refreshed";
     private const string RetryRejectedKey = "templates.retryRejected";
@@ -96,10 +97,11 @@ public class IndexModel : PageModel
                 HeaderType == WhatsAppTemplateHeaderType.None ? null : HeaderType,
                 HeaderContent, Footer, ButtonsJson: null, VariablesJson: null), ct);
 
-            StatusMessage = template.Status == WhatsAppTemplateStatus.Rejected
+            StatusMessage = template.Status == WhatsAppTemplateStatus.Rejected || template.SubmitError is not null
                 ? null
                 : _text[SavedKey, template.Name, _text.TemplateStatusLabel(template.Status)].Value;
-            ErrorMessage = template.Status == WhatsAppTemplateStatus.Rejected
+            ErrorMessage = template.SubmitError is { } notSubmitted ? _text[NotSubmittedKey, template.Name, notSubmitted].Value
+                : template.Status == WhatsAppTemplateStatus.Rejected
                 ? _text[SubmitFailedKey, template.Name, template.RejectionReason ?? string.Empty].Value
                 : null;
         }
@@ -130,7 +132,9 @@ public class IndexModel : PageModel
                 Category, Body, HeaderType == WhatsAppTemplateHeaderType.None ? null : HeaderType, HeaderContent, Footer), ct);
             if (template is not null)
             {
-                if (template.Status == WhatsAppTemplateStatus.Rejected)
+                if (template.SubmitError is { } notSubmitted)
+                    ErrorMessage = _text[NotSubmittedKey, template.Name, notSubmitted].Value;
+                else if (template.Status == WhatsAppTemplateStatus.Rejected)
                     ErrorMessage = _text[SubmitFailedKey, template.Name, template.RejectionReason ?? string.Empty].Value;
                 else
                     StatusMessage = _text[EditedKey, template.Name, _text.TemplateStatusLabel(template.Status)].Value;
@@ -198,7 +202,9 @@ public class IndexModel : PageModel
             var template = await _templates.RetrySubmitAsync(client.Id, id, ct);
             if (template is not null)
             {
-                if (template.Status == WhatsAppTemplateStatus.Rejected)
+                if (template.SubmitError is { } notSubmitted)
+                    ErrorMessage = _text[NotSubmittedKey, template.Name, notSubmitted].Value;
+                else if (template.Status == WhatsAppTemplateStatus.Rejected)
                     ErrorMessage = _text[RetryRejectedKey, template.Name, template.RejectionReason ?? string.Empty].Value;
                 else
                     StatusMessage = _text[RetrySentKey, template.Name].Value;

@@ -68,6 +68,41 @@ public class BotRunWorkerTests
     }
 
     [Fact]
+    public async Task A_burst_is_answered_in_the_order_the_contact_wrote_it_not_the_order_it_was_saved()
+    {
+        // QA t7-06: "hi" lost the contact-creation race, was saved last and answered last. Telegram: same second, message_id order.
+        _config.SetupGet(c => c.AiBurstWaitMilliseconds).Returns(300);
+        var worker = Worker(maxRuns: 4);
+        await worker.StartAsync(CancellationToken.None);
+        var chat = Guid.NewGuid();
+        var second = DateTimeOffset.UtcNow;
+        AiTriggerPayload Msg(string text, long id) => Run(chat, text) with { SentAt = second, ProviderOrder = id };
+        foreach (var text in new[] { "hi", "I want to ask", "how much", "cash?" }) _engine.Release(text);
+
+        _queue.TryEnqueue(Msg("I want to ask", 11));
+        _queue.TryEnqueue(Msg("how much", 12));
+        await Task.Delay(100);
+        _queue.TryEnqueue(Msg("cash?", 13));
+        _queue.TryEnqueue(Msg("hi", 10)); // saved last, written first
+
+        await Until(() => _engine.Ended.Count == 4);
+        Assert.Equal(["hi", "I want to ask", "how much", "cash?"], _engine.Events.Where(e => e.StartsWith("start:")).Select(e => e[6..]));
+        await worker.StopAsync(CancellationToken.None);
+    }
+
+    [Fact]
+    public void Runs_are_ordered_by_when_they_were_written_then_the_chats_own_order_then_the_queue()
+    {
+        var t = DateTimeOffset.UtcNow;
+        BotRunWorker.Pending P(DateTimeOffset? sent, long? order, long seq) =>
+            new(Run(Guid.Empty, "x") with { SentAt = sent, ProviderOrder = order }, t, seq);
+
+        Assert.True(BotRunWorker.Compare(P(t, 9, 1), P(t.AddSeconds(1), 1, 0)) < 0);  // earlier second first
+        Assert.True(BotRunWorker.Compare(P(t, 2, 1), P(t, 1, 0)) > 0);                 // same second: message id
+        Assert.True(BotRunWorker.Compare(P(null, null, 0), P(null, null, 1)) < 0);     // nothing known: queue order
+    }
+
+    [Fact]
     public async Task With_a_limit_of_one_runs_go_one_by_one_and_a_failing_run_does_not_stop_the_worker()
     {
         var worker = Worker(maxRuns: 1);

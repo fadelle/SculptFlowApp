@@ -94,7 +94,14 @@ public class BotToolService : IBotToolService
         Func<BotRunContext, CancellationToken, Task<BotToolResult>> body, CancellationToken ct)
     {
         var check = await _runtime.AuthorizeAsync(call.ClientId, call.BotId, call.TestSessionId, tool.Capability, ct);
-        if (check.Run is null) return BotToolResult.Ok(BotToolOutcomes.NotAllowed(check.DeniedReason));
+        // A tool this bot isn't given is a business outcome the AI handles (200); the bot itself no longer being allowed to answer
+        // (QA t7-01: deactivated or the plan downgraded mid-run) is an error, so the run stops instead of reporting a reply it never sent.
+        if (check.Run is null)
+        {
+            return check.DeniedReason == BotToolCheck.NotAllowed
+                ? BotToolResult.Ok(BotToolOutcomes.NotAllowed(check.DeniedReason))
+                : BotToolResult.Forbidden(BotToolOutcomes.BotNotAllowed(check.DeniedReason));
+        }
 
         if (tool.Feature is { } feature)
         {
@@ -255,6 +262,14 @@ public class BotToolService : IBotToolService
     public async Task<BotToolResult> RunFailedAsync(BotRunContext run, Guid conversationId, CancellationToken ct = default)
     {
         var handedOff = await _botConversations.RunFailedAsync(run, conversationId, ct);
+        return handedOff is null ? BotToolResult.NotFound() : BotToolResult.Ok(new { handedOff });
+    }
+
+    public async Task<BotToolResult> RunStoppedAsync(BotToolCall call, Guid conversationId, string? reason, CancellationToken ct = default)
+    {
+        // No bot permission is checked: the bot lost it, which is why the run stopped. A test chat has nobody to hand over to.
+        if (call.TestSessionId is not null || call.ClientId == Guid.Empty) return BotToolResult.Ok(new { handedOff = false });
+        var handedOff = await _botConversations.RunStoppedAsync(call.ClientId, conversationId, reason, ct);
         return handedOff is null ? BotToolResult.NotFound() : BotToolResult.Ok(new { handedOff });
     }
 }

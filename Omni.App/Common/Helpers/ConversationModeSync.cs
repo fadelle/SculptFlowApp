@@ -1,6 +1,8 @@
 using Omni.App.Common.Enums;
 using Omni.App.Entities.Models;
 
+using Omni.App.Common.Statics;
+
 namespace Omni.App.Common.Helpers;
 
 /// <summary>Single place that changes Conversation.Mode — keeps the legacy AiEnabled/HumanTakeover
@@ -16,9 +18,11 @@ public static class ConversationModeSync
         conversation.AiEnabled = mode == ConversationMode.Ai;
         conversation.HumanTakeover = mode == ConversationMode.Human;
 
-        var note = previous == ConversationMode.Ai && mode == ConversationMode.Human ? "Handed from AI to your team"
-            : previous == ConversationMode.Human && mode == ConversationMode.Ai ? "Returned to AI"
-            : null;
+        // The marker's key (MessageMetadata) is what the Inbox shows, in the reader's language (QA t7-07); the English sentence
+        // stays as the content for anything that reads the text alone (an export).
+        (string? note, string? marker) = previous == ConversationMode.Ai && mode == ConversationMode.Human ? ("Handed from AI to your team", MessageMetadata.HandedToTeamMarker) // text-ok: fallback, the Inbox words it from the key
+            : previous == ConversationMode.Human && mode == ConversationMode.Ai ? ("Returned to AI", MessageMetadata.ReturnedToAiMarker) // text-ok: fallback, the Inbox words it from the key
+            : ((string?)null, (string?)null);
         if (note is null) return;
 
         // A timeline marker the Inbox renders as a divider. Id left unset so EF inserts it (a preset key on a
@@ -34,6 +38,7 @@ public static class ConversationModeSync
             Channel = conversation.Channel,
             MessageType = "text",
             Content = note,
+            MetadataJson = marker,
             Origin = MessageOrigin.System,
             CreatedAt = (at ?? DateTimeOffset.UtcNow).AddMilliseconds(-1)
         });

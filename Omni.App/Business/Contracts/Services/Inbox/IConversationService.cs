@@ -55,6 +55,10 @@ public interface IConversationService
     /// over, false when the team already had it, null when the conversation doesn't exist.</summary>
     Task<bool?> HandOverFailedAiAsync(Guid clientId, Guid conversationId, CancellationToken ct = default);
 
+    /// <summary>The bot stopped mid-run because it may no longer answer (deactivated, deleted, the plan lost the AI assistant; QA
+    /// t7-01): the same hand-over, logged with reason ai_stopped (and why), one Handoff notification saying so.</summary>
+    Task<bool?> HandOverStoppedAiAsync(Guid clientId, Guid conversationId, string? reason, CancellationToken ct = default);
+
     /// <summary>A member hands the conversation back — AI may auto-reply again. Throws EntitlementDeniedException (422) when
     /// the client's plan doesn't include the AI assistant, InvalidOperationException (422) when no active bot answers on the
     /// conversation's account (Inbox settings).</summary>

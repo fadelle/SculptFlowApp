@@ -52,6 +52,7 @@ public sealed class DatabaseLogger : ILogger
     public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
     {
         if (!IsEnabled(logLevel) || AppLogLevels.NameOf(logLevel) is not { } level) return;
+        if (IsHandledRace(_category, exception)) return;
         try
         {
             _collector.Add(Build(level, eventId, state, exception, formatter));
@@ -60,6 +61,20 @@ public sealed class DatabaseLogger : ILogger
         {
             // Never let the error log break the caller; the console logger still has the entry.
         }
+    }
+
+    /// <summary>EF Core's own error log of a unique-key violation (QA t7-06: a contact's first burst of messages logged 6 Error rows
+    /// for the contact/conversation creation races). The unit of work turns every such violation into DuplicateRecordException,
+    /// which the caller handles (it re-reads the row); one nobody handles still fails its request and is logged there, so EF's
+    /// copy is noise in the error log.</summary>
+    internal static bool IsHandledRace(string category, Exception? exception)
+    {
+        if (!category.StartsWith("Microsoft.EntityFrameworkCore", StringComparison.Ordinal)) return false;
+        for (var e = exception; e is not null; e = e.InnerException)
+        {
+            if (e is Npgsql.PostgresException { SqlState: Npgsql.PostgresErrorCodes.UniqueViolation }) return true;
+        }
+        return false;
     }
 
     private AppLog Build<TState>(string level, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)

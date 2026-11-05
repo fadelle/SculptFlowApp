@@ -956,6 +956,12 @@ alter table crm.messages add column if not exists deleted_at timestamptz;
 alter table crm.messages add column if not exists failure_code varchar(100);
 alter table crm.messages add column if not exists failure_reason text;
 alter table crm.messages add column if not exists metadata_json jsonb;
+-- QA t7-07: the Inbox's mode markers carry a key ({"marker": ...}) and are shown in the reader's language; rows written before
+-- held only the English sentence. Re-runnable (only markers still without metadata).
+update crm.messages set metadata_json = '{"marker":"handed_to_team"}'::jsonb
+ where sender_type = 'system' and metadata_json is null and content = 'Handed from AI to your team';
+update crm.messages set metadata_json = '{"marker":"returned_to_ai"}'::jsonb
+ where sender_type = 'system' and metadata_json is null and content = 'Returned to AI';
 
 -- ---------------------------------------------------------------------
 -- channel_integrations: WhatsApp account/phone health, populated from Meta's account_update,

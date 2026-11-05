@@ -100,8 +100,8 @@ public class WhatsAppTemplateService : IWhatsAppTemplateService
         await _unitOfWork.SaveChangesAsync(ct);
 
         // No connected WhatsApp number yet: it stays a local draft, and "Retry submit" sends it later.
-        await SubmitForReviewAsync(template, ct);
-        return ToResponse(template);
+        var (_, notSubmitted) = await SubmitForReviewAsync(template, ct);
+        return ToResponse(template) with { SubmitError = notSubmitted };
     }
 
     private static void ValidateContent(string? category, string? body)
@@ -145,8 +145,8 @@ public class WhatsAppTemplateService : IWhatsAppTemplateService
             template.Status = WhatsAppTemplateStatus.Draft;
             template.RejectionReason = null;
             await _unitOfWork.SaveChangesAsync(ct);
-            await SubmitForReviewAsync(template, ct);
-            return ToResponse(template);
+            var (_, notSubmitted) = await SubmitForReviewAsync(template, ct);
+            return ToResponse(template) with { SubmitError = notSubmitted };
         }
 
         var integration = await ReadyIntegrationAsync(clientId, ct);
@@ -209,23 +209,25 @@ public class WhatsAppTemplateService : IWhatsAppTemplateService
             throw new InvalidOperationException("templates.errors.alreadyAtMeta");
         }
 
-        var submitted = await SubmitForReviewAsync(template, ct);
-        if (!submitted)
+        var (attempted, notSubmitted) = await SubmitForReviewAsync(template, ct);
+        if (!attempted)
         {
             throw new InvalidOperationException("templates.errors.connectFirst");
         }
-        return ToResponse(template);
+        return ToResponse(template) with { SubmitError = notSubmitted };
     }
 
-    /// <summary>Sends a template that has no MetaTemplateId yet to Meta for review. Returns false (and leaves it a
-    /// draft) when the client has no connected WhatsApp number. A Meta refusal is kept on the row as Rejected + RejectionReason so the user doesn't lose their work and
-    /// can retry.</summary>
-    private async Task<bool> SubmitForReviewAsync(WhatsAppTemplate template, CancellationToken ct)
+    /// <summary>Sends a template that has no MetaTemplateId yet to Meta for review. Attempted is false (and it stays a draft)
+    /// when the client has no connected WhatsApp number. Meta refusing the template is kept on the row as Rejected +
+    /// RejectionReason (Meta's readable explanation) so the user doesn't lose their work and can fix it. Meta not reachable, or the
+    /// WhatsApp connection needing renewal (QA t8-12: an invalid token marked it "Rejected" with raw JSON), keeps it a draft and
+    /// returns why as NotSubmitted; "Submit" sends it again once WhatsApp is reconnected.</summary>
+    private async Task<(bool Attempted, string? NotSubmitted)> SubmitForReviewAsync(WhatsAppTemplate template, CancellationToken ct)
     {
         var integration = await ReadyIntegrationAsync(template.ClientId, ct);
         if (integration is null)
         {
-            return false;
+            return (false, null);
         }
 
         try
@@ -238,6 +240,14 @@ public class WhatsAppTemplateService : IWhatsAppTemplateService
             template.UpdatedAt = DateTimeOffset.UtcNow;
             await _unitOfWork.SaveChangesAsync(ct);
         }
+        catch (WhatsAppTemplateProviderException ex) when (ex.CouldNotReach)
+        {
+            template.Status = WhatsAppTemplateStatus.Draft;
+            template.RejectionReason = null;
+            template.UpdatedAt = DateTimeOffset.UtcNow;
+            await _unitOfWork.SaveChangesAsync(ct);
+            return (true, ex.Message);
+        }
         catch (WhatsAppTemplateProviderException ex)
         {
             template.Status = WhatsAppTemplateStatus.Rejected;
@@ -245,7 +255,7 @@ public class WhatsAppTemplateService : IWhatsAppTemplateService
             template.UpdatedAt = DateTimeOffset.UtcNow;
             await _unitOfWork.SaveChangesAsync(ct);
         }
-        return true;
+        return (true, null);
     }
 
     public async Task<WhatsAppTemplateResponse?> SyncStatusAsync(Guid clientId, Guid id, CancellationToken ct = default)
@@ -277,6 +287,16 @@ public class WhatsAppTemplateService : IWhatsAppTemplateService
         {
             throw new ArgumentException("Name is required (used as the upsert fallback key when MetaTemplateId is absent).", nameof(request)); // text-ok: n8n sync contract
         }
+        // Checked against their columns before anything is stored (QA t8-06: a 40-character status was a 500).
+        RequestChecks.MaxLength(request.Name, 200, "name");
+        RequestChecks.MaxLength(request.MetaTemplateId, 200, "metaTemplateId");
+        RequestChecks.MaxLength(request.Language, 10, "language");
+        RequestChecks.MaxLength(request.Category, 30, "category");
+        RequestChecks.MaxLength(request.Status, 20, "status");
+        RequestChecks.MaxLength(request.QualityRating, 30, "qualityRating");
+        RequestChecks.MaxLength(request.PreviousCategory, 30, "previousCategory");
+        RequestChecks.MaxLength(request.CurrentCategory, 30, "currentCategory");
+        RequestChecks.Json(request.ComponentsJson, "componentsJson");
 
         // Don't trust ClientId blindly — if the event carries a WabaId, it must match this
         // client's own stored WhatsApp connection, or a misrouted/misconfigured n8n workflow could

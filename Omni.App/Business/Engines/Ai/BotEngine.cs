@@ -173,12 +173,36 @@ public class BotEngine : IBotEngine
         {
             var result = await _tools.CallAsync(run.Call, BotTools.Handoff,
                 (botRun, c) => _tools.RunFailedAsync(botRun, run.Trigger.ConversationId, c), ct);
+            if (result.Status == StatusCodes.Status403Forbidden)
+            {
+                await RunStoppedAsync(run, result, ct); // the bot can't even hand over: it may no longer answer
+                return;
+            }
             _tracer.Step(TraceSteps.BotActionResult, result.IsError ? TraceOutcomes.Failed : TraceOutcomes.Ok, run.Ids,
                 detail: new { action = "run_failed", status = result.Status });
         }
         catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
             _logger.LogError(ex, "Handing a failed bot run to the team failed for conversation {ConversationId}.", run.Trigger.ConversationId);
+        }
+    }
+
+    /// <summary>The bot may no longer answer (a 403 BOT_NOT_ALLOWED from a tool, QA t7-01: deactivated or the plan downgraded
+    /// mid-run): traced as bot.reply_stopped with why, and the conversation goes to the team so a member answers. Never throws.</summary>
+    private async Task RunStoppedAsync(Run run, BotToolResult refused, CancellationToken ct)
+    {
+        var reason = (JsonSerializer.SerializeToNode(refused.Body, new JsonSerializerOptions(JsonSerializerDefaults.Web)) as JsonObject)?["reason"]?.GetValue<string>();
+        _tracer.Step(TraceSteps.BotReplyStopped, TraceOutcomes.Skipped, run.Ids, detail: new { code = BotToolOutcomes.BotNotAllowedCode, reason });
+        if (ct.IsCancellationRequested) return;
+        try
+        {
+            var result = await _tools.RunStoppedAsync(run.Call, run.Trigger.ConversationId, reason, ct);
+            _tracer.Step(TraceSteps.BotActionResult, result.IsError ? TraceOutcomes.Failed : TraceOutcomes.Ok, run.Ids,
+                detail: new { action = "run_stopped", status = result.Status });
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+        {
+            _logger.LogError(ex, "Handing a stopped bot run to the team failed for conversation {ConversationId}.", run.Trigger.ConversationId);
         }
     }
 
@@ -271,7 +295,7 @@ public class BotEngine : IBotEngine
         }
     }
 
-    private static Task<BotToolResult> AvailableSlotsAsync(IBotToolService tools, AiTriggerPayload trigger, BotRunContext run, JsonObject args, CancellationToken ct)
+    private static async Task<BotToolResult> AvailableSlotsAsync(IBotToolService tools, AiTriggerPayload trigger, BotRunContext run, JsonObject args, CancellationToken ct)
     {
         // The workflow sent the AI's date as the query parameter: empty = none, anything else must be a date (else 400).
         var text = Arg(args, "date");
@@ -280,11 +304,26 @@ public class BotEngine : IBotEngine
         {
             if (!DateOnly.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed))
             {
-                return Task.FromResult(BotToolResult.BadRequest(new { error = $"The value '{text}' is not a valid date." })); // text-ok: read by the AI only
+                return BotToolResult.BadRequest(new { error = $"The value '{text}' is not a valid date." }); // text-ok: read by the AI only
             }
             date = parsed;
         }
-        return tools.GetAvailableSlotsAsync(run, trigger.ClientId, trigger.ContactId, null, date, null, ct);
+        // The service, so the times fit its length (QA t7-03: without it they were on the default duration's grid and the booking
+        // then refused a time it had offered). Empty = not known yet.
+        var service = Arg(args, "serviceId");
+        if (!TryId(service, out var serviceId))
+        {
+            return BotToolResult.BadRequest(new { error = $"The value '{service}' is not a service id. Call get_services for the ids." }); // text-ok: read by the AI only
+        }
+        try
+        {
+            return await tools.GetAvailableSlotsAsync(run, trigger.ClientId, trigger.ContactId, serviceId, date, null, ct);
+        }
+        catch (ArgumentException)
+        {
+            // An unknown or inactive service (AvailabilityService): the AI can look the ids up again.
+            return BotToolResult.BadRequest(new { error = "That service isn't one of the business's active services. Call get_services for the ids." }); // text-ok: read by the AI only
+        }
     }
 
     // ---------------------------------------------------------------- actions
@@ -324,6 +363,11 @@ public class BotEngine : IBotEngine
         var reason = OrNull(decision.Reason) ?? HandoffFallbackReason;
         var result = await _tools.CallAsync(run.Call, BotTools.Handoff,
             (botRun, c) => _tools.HandoffAsync(botRun, run.Trigger.ConversationId, run.Trigger.ClientId, new HandoffToHumanRequest(reason), c), ct);
+        if (result.Status == StatusCodes.Status403Forbidden)
+        {
+            await RunStoppedAsync(run, result, ct);
+            return;
+        }
         _tracer.Step(TraceSteps.BotActionResult, result.IsError ? TraceOutcomes.Failed : TraceOutcomes.Ok, run.Ids,
             detail: new { action = BotDecision.Handoff, status = result.Status });
     }
@@ -331,6 +375,11 @@ public class BotEngine : IBotEngine
     /// <summary>schedule_status / cancel_status and their switches: what reaches result_formatter, then send_message.</summary>
     private async Task FormatAndReplyAsync(Run run, string action, BotToolResult result, IReadOnlySet<string> successCodes, CancellationToken ct)
     {
+        if (result.Status == StatusCodes.Status403Forbidden)
+        {
+            await RunStoppedAsync(run, result, ct);
+            return;
+        }
         if (result.IsError)
         {
             _tracer.Step(TraceSteps.BotActionResult, TraceOutcomes.Failed, run.Ids, detail: new { action, status = result.Status });
@@ -353,11 +402,17 @@ public class BotEngine : IBotEngine
         await ReplyAsync(run, response.OutputText ?? "", ct);
     }
 
-    /// <summary>send_message: the bot's reply. A 409 (taken over, billing refused) stops quietly; another error fails.</summary>
+    /// <summary>send_message: the bot's reply. A 409 (taken over, billing refused) stops quietly; a 403 (the bot may no longer
+    /// answer, QA t7-01) stops and hands the conversation to the team; another error fails.</summary>
     private async Task ReplyAsync(Run run, string? content, CancellationToken ct)
     {
         var result = await _tools.CallAsync(run.Call, BotTools.Reply,
             (botRun, c) => _tools.ReplyAsync(botRun, run.Trigger.ConversationId, run.Trigger.ClientId, new AiReplyRequest(content, ReplyId(run.Trigger)), c), ct);
+        if (result.Status == StatusCodes.Status403Forbidden)
+        {
+            await RunStoppedAsync(run, result, ct);
+            return;
+        }
         if (result.Status == StatusCodes.Status409Conflict)
         {
             var code = (JsonSerializer.SerializeToNode(result.Body, new JsonSerializerOptions(JsonSerializerDefaults.Web)) as JsonObject)?["code"]?.GetValue<string>();

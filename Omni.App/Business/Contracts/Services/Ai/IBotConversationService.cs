@@ -21,4 +21,7 @@ public interface IBotConversationService
     /// <summary>The bot's run failed: a live conversation is handed to the team (once; null when it doesn't exist), a test
     /// session gets an error note. True when this call changed something.</summary>
     Task<bool?> RunFailedAsync(BotRunContext run, Guid conversationId, CancellationToken ct = default);
+
+    /// <summary>The bot lost its permission mid-run (QA t7-01): the conversation goes to the team (once; null when it doesn't exist).</summary>
+    Task<bool?> RunStoppedAsync(Guid clientId, Guid conversationId, string? reason, CancellationToken ct = default);
 }

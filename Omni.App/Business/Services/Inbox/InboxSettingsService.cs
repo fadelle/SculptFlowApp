@@ -140,7 +140,8 @@ public class InboxSettingsService : IInboxSettingsService
                 : bot.Status != BotStatus.Active ? AiBotBlockReason.BotInactive
                 : !AnsweringBotIds.Contains(bot.Id) ? AiBotBlockReason.BotLimit
                 : null;
-            return new AccountAiDecision(account.Id, bot?.Id, reason, row?.AiBotNewConversations ?? true, row?.AiBotReopenedConversations ?? true);
+            return new AccountAiDecision(account.Id, bot?.Id, reason, row?.AiBotNewConversations ?? true, row?.AiBotReopenedConversations ?? true,
+                bot?.HandoffMessage);
         }
     }
 }

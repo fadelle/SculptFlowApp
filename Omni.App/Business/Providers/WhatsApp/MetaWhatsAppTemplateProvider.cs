@@ -34,7 +34,16 @@ public class MetaWhatsAppTemplateProvider : IWhatsAppTemplateProvider
         }
         catch (MetaGraphApiException ex)
         {
-            throw new WhatsAppTemplateProviderException(ex.Message);
+            throw WhatsAppTemplateProviderException.From(ex);
+        }
+        catch (HttpRequestException ex)
+        {
+            // Meta could not be reached at all (QA t8-12): the template was not judged, it stays a draft.
+            throw new WhatsAppTemplateProviderException(ex.Message, couldNotReach: true, ex);
+        }
+        catch (TaskCanceledException ex) when (!ct.IsCancellationRequested)
+        {
+            throw new WhatsAppTemplateProviderException(ex.Message, couldNotReach: true, ex); // timed out
         }
     }
 
@@ -52,7 +61,7 @@ public class MetaWhatsAppTemplateProvider : IWhatsAppTemplateProvider
         }
         catch (MetaGraphApiException ex)
         {
-            throw new WhatsAppTemplateProviderException(ex.Message);
+            throw WhatsAppTemplateProviderException.From(ex);
         }
     }
 
@@ -64,7 +73,7 @@ public class MetaWhatsAppTemplateProvider : IWhatsAppTemplateProvider
         }
         catch (MetaGraphApiException ex)
         {
-            throw new WhatsAppTemplateProviderException(ex.Message);
+            throw WhatsAppTemplateProviderException.From(ex);
         }
     }
 

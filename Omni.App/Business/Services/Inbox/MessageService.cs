@@ -551,6 +551,13 @@ public class MessageService : IMessageService
         {
             throw new ArgumentException("inbox.errors.invalidEventType").WithArgs(request.EventType);
         }
+        // Values the integration sends, checked against their columns before anything is stored (QA t8-06).
+        RequestChecks.MaxLength(request.Channel, 50, "channel");
+        RequestChecks.MaxLength(request.MessageType, 30, "messageType");
+        RequestChecks.MaxLength(request.ExternalMessageId, 200, "externalMessageId");
+        RequestChecks.MaxLength(request.DeliveryStatus, 30, "deliveryStatus");
+        RequestChecks.MaxLength(request.FailureCode, 100, "failureCode");
+        RequestChecks.Json(request.MetadataJson, "metadataJson");
 
         if (request.EventType == IngestEventType.StatusUpdate)
         {
@@ -642,11 +649,18 @@ public class MessageService : IMessageService
         var firstContactMessage = request.EventType == IngestEventType.CustomerMessage && conversation.LastCustomerMessageAt is null;
         if (request.EventType == IngestEventType.CustomerMessage)
         {
-            conversation.LastCustomerMessageAt = now;
-            // The 24h window is a WhatsApp rule only — other channels (Telegram) have no such limit.
-            if (conversation.Channel == ConversationChannel.WhatsApp)
+            // The 24h window runs from when the customer wrote (the provider's time), never later than now, and never moves back
+            // (QA t8-05: a late or replayed message reopened an expired window, and Meta then refused the free-form reply).
+            var wroteAt = request.ReceivedAt is { } at && at < now ? at : now;
+            if (conversation.LastCustomerMessageAt is null || wroteAt > conversation.LastCustomerMessageAt)
             {
-                conversation.ServiceWindowExpiresAt = now.AddHours(24);
+                conversation.LastCustomerMessageAt = wroteAt;
+            }
+            // The 24h window is a WhatsApp rule only — other channels (Telegram) have no such limit.
+            if (conversation.Channel == ConversationChannel.WhatsApp
+                && (conversation.ServiceWindowExpiresAt is null || wroteAt.AddHours(24) > conversation.ServiceWindowExpiresAt))
+            {
+                conversation.ServiceWindowExpiresAt = wroteAt.AddHours(24);
             }
 
             // A contact writing again brings a closed conversation back into the working list. Only a genuine
@@ -656,25 +670,48 @@ public class MessageService : IMessageService
 
         var modeChanged = false;
         string? modeReason = null;
+        var handedToTeam = false;
+        AccountAiDecision? decision = null;
         if (moveToHuman && conversation.Mode != ConversationMode.Human)
         {
             ConversationModeSync.Apply(conversation, ConversationMode.Human, now);
             modeChanged = true;
             modeReason = "member_replied_from_business_app";
         }
+        else if (request.EventType == IngestEventType.CustomerMessage && reopened && conversation.Mode == ConversationMode.Human
+            && !NeedsPerson(message.MessageType))
+        {
+            // QA t7-02 (decided 2026-11-05): a conversation handed to the team stays with the team until a member presses Return
+            // to AI. The one exception is a fresh start: the contact writes again into a conversation that was closed, and the
+            // bot answers it when the account lets the bot answer reopened conversations.
+            decision = await _inboxSettings.ResolveAsync(request.ClientId, conversation.Channel, ct);
+            if (decision.AnswersReopened)
+            {
+                ConversationModeSync.Apply(conversation, ConversationMode.Ai, now);
+                modeChanged = true;
+                modeReason = "reopened";
+                _events.Log(request.ClientId, EventTypes.ReturnedToAi, contactId: request.ContactId,
+                    conversationId: request.ConversationId, source: MessageOrigin.System,
+                    metadataJson: System.Text.Json.JsonSerializer.Serialize(new { reason = modeReason }));
+            }
+        }
         else if (request.EventType == IngestEventType.CustomerMessage && conversation.Mode == ConversationMode.Ai)
         {
             // No bot answers when the plan no longer includes the AI assistant, or the conversation's account has AI off, no
             // bot, an inactive bot or one beyond the plan's AI bots; and the account may send conversations a contact reopens
-            // straight to members. Either way the conversation goes to human mode (same state as a handoff), so it lands in the
-            // team's needs-attention list and n8n is never called (see aiEligible below).
-            var decision = await _inboxSettings.ResolveAsync(request.ClientId, conversation.Channel, ct);
+            // straight to members. A photo, voice note, video, document, sticker, location or contact goes to the team too,
+            // caption or not (QA t7-04, decided 2026-11-05: the bot reads text only for now). Either way the conversation goes to
+            // human mode (same state as a handoff), so it lands in the team's needs-attention list, members are notified and the
+            // bot is never asked (see aiEligible below).
+            decision = await _inboxSettings.ResolveAsync(request.ClientId, conversation.Channel, ct);
             var reason = decision.BlockReason
-                ?? (reopened && !decision.AnswersReopened ? AiBotBlockReason.ReopenedToHuman : null);
+                ?? (reopened && !decision.AnswersReopened ? AiBotBlockReason.ReopenedToHuman : null)
+                ?? (NeedsPerson(message.MessageType) ? AiBotBlockReason.MediaMessage : null);
             if (reason is not null)
             {
                 ConversationModeSync.Apply(conversation, ConversationMode.Human, now);
                 modeChanged = true;
+                handedToTeam = true;
                 modeReason = reason;
                 _events.Log(request.ClientId, EventTypes.HumanHandoff, contactId: request.ContactId,
                     conversationId: request.ConversationId, source: MessageOrigin.System,
@@ -687,6 +724,13 @@ public class MessageService : IMessageService
         {
             contact.LastContactAt = now;
             contact.UpdatedAt = now;
+            // Like a handoff by the bot: the contact now needs a person (its stage moves only if it isn't a needs-human one already).
+            if (handedToTeam
+                && (await _businessTypes.GetPipelineAsync(request.ClientId, ct)).MoveTo(contact.StageKey, StageCategory.NeedsHuman) is { } stage
+                && stage != contact.StageKey)
+            {
+                contact.StageKey = stage;
+            }
         }
 
         // A customer message that is only a stop/start word changes the contact's opt-out (and gets one confirmation below, only
@@ -697,7 +741,7 @@ public class MessageService : IMessageService
         if (request.EventType == IngestEventType.CustomerMessage && contact is not null && OptOutMessageTypes.Contains(message.MessageType)
             && !IsTelegramStart(message))
         {
-            optOutKeyword = _optOut.MatchKeyword(request.Content);
+            optOutKeyword = MatchOptOut(message);
             if (optOutKeyword is { } stop) optOutChanged = _optOut.Apply(contact, stop, origin, request.ConversationId);
         }
 
@@ -730,14 +774,28 @@ public class MessageService : IMessageService
         _tracer.Step(TraceSteps.MessageSaved, TraceOutcomes.Ok, ids,
             detail: new { eventType = request.EventType, direction, sender = senderType, type = message.MessageType });
         if (reopened) _tracer.Step(TraceSteps.ConversationReopened, TraceOutcomes.Ok, ids);
-        if (modeChanged) _tracer.Step(TraceSteps.ConversationModeChanged, TraceOutcomes.Ok, ids, detail: new { mode = ConversationMode.Human, reason = modeReason });
+        if (modeChanged) _tracer.Step(TraceSteps.ConversationModeChanged, TraceOutcomes.Ok, ids, detail: new { mode = conversation.Mode, reason = modeReason });
 
         await _notifier.NewMessageAsync(request.ClientId, request.ConversationId, message.Id, request.ContactId,
             direction, senderType, origin, now, ct);
         _tracer.Step(TraceSteps.InboxNotified, TraceOutcomes.Ok, ids);
         if (modeChanged)
         {
-            await _notifier.ConversationModeChangedAsync(request.ClientId, request.ConversationId, ConversationMode.Human, ct);
+            await _notifier.ConversationModeChangedAsync(request.ClientId, request.ConversationId, conversation.Mode, ct);
+        }
+        if (handedToTeam)
+        {
+            // QA t7-02: the team hears about an automatic switch like it does about the bot's own handoff.
+            object who = string.IsNullOrWhiteSpace(contact?.FullName) ? TextArg.Of("notifications.anyone.conversation") : contact!.FullName;
+            await _notifications.CreateAsync(request.ClientId, NotificationType.Handoff,
+                NotificationText.Of("notifications.handoff.title", "notifications.handoff.messageAutomatic", who, TextArg.Of(HandoffReasonKey(modeReason!))),
+                contactId: request.ContactId, conversationId: request.ConversationId,
+                link: $"/inbox?conversationId={request.ConversationId}", ct: ct);
+            // A message the bot can't read (QA t7-04): the bot was answering, so the contact hears that a person will reply.
+            if (modeReason == AiBotBlockReason.MediaMessage && decision?.BotId is { } botId && !string.IsNullOrWhiteSpace(decision.HandoffMessage))
+            {
+                await SendHandoffMessageAsync(request.ClientId, request.ConversationId, botId, decision.HandoffMessage, ct);
+            }
         }
         if (reopened)
         {
@@ -780,7 +838,14 @@ public class MessageService : IMessageService
             // Why the bot won't see this message: the most specific reason first.
             var reason = optOutKeyword is not null ? "opt_out_keyword"
                 : modeReason ?? (conversation.Mode != ConversationMode.Ai ? "conversation_in_human_mode" : "message_type_not_supported");
-            _tracer.Step(TraceSteps.BotSkipped, TraceOutcomes.Skipped, ids, detail: new { reason, type = message.MessageType });
+            // A conversation that started with the team: why (QA t7-02), so an admin can tell the plan from the account's setting.
+            string? startedWithTeam = null;
+            if (reason == "conversation_in_human_mode" && firstContactMessage)
+            {
+                decision ??= await _inboxSettings.ResolveAsync(request.ClientId, conversation.Channel, ct);
+                startedWithTeam = decision.BlockReason ?? (!decision.NewConversations ? "new_conversations_off" : null);
+            }
+            _tracer.Step(TraceSteps.BotSkipped, TraceOutcomes.Skipped, ids, detail: new { reason, type = message.MessageType, startedWithTeam });
         }
 
         if (optOutKeyword is { } optedOut && contact is not null)
@@ -945,8 +1010,59 @@ public class MessageService : IMessageService
         message.MessageType == "command" && message.Content is { } text
         && (text.Trim().Equals("/start", StringComparison.OrdinalIgnoreCase) || text.TrimStart().StartsWith("/start ", StringComparison.OrdinalIgnoreCase));
 
-    /// <summary>Message types a stop/start word can arrive as (Telegram's /stop is a command).</summary>
-    private static readonly HashSet<string> OptOutMessageTypes = new(StringComparer.OrdinalIgnoreCase) { "text", "command" };
+    /// <summary>Message types a stop/start word can arrive as: typed text, Telegram's /stop (a command), and a tapped quick-reply
+    /// button or list item on WhatsApp (QA t8-08: a template's "Stop" button didn't opt the contact out).</summary>
+    private static readonly HashSet<string> OptOutMessageTypes = new(StringComparer.OrdinalIgnoreCase) { "text", "command", "button", "interactive" };
+
+    /// <summary>Whether a customer message is a stop/start word (true = stop). A tapped button or list item also matches by its
+    /// payload / reply id, and by its first word for a stop ("Stop promotions", Meta's marketing opt-out button).</summary>
+    private bool? MatchOptOut(Message message)
+    {
+        var match = _optOut.MatchKeyword(message.Content);
+        if (match is not null || message.MessageType is not ("button" or "interactive")) return match;
+        if (ReplyId(message) is { } replyId && _optOut.MatchKeyword(replyId) is { } byId) return byId;
+        var firstWord = message.Content?.Trim().Split(' ', 2, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
+        return firstWord is not null && _optOut.MatchKeyword(firstWord) == true ? true : null;
+    }
+
+    /// <summary>The stable id behind a tapped button (its payload) or list item (its id), from the message's metadata.</summary>
+    private static string? ReplyId(Message message)
+    {
+        if (string.IsNullOrWhiteSpace(message.MetadataJson)) return null;
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(message.MetadataJson);
+            var root = doc.RootElement;
+            if (root.ValueKind != System.Text.Json.JsonValueKind.Object) return null;
+            if (root.TryGetProperty("payload", out var payload) && payload.ValueKind == System.Text.Json.JsonValueKind.String) return payload.GetString();
+            if (root.TryGetProperty("type", out var type) && type.ValueKind == System.Text.Json.JsonValueKind.String
+                && root.TryGetProperty(type.GetString()!, out var reply) && reply.ValueKind == System.Text.Json.JsonValueKind.Object
+                && reply.TryGetProperty("id", out var id) && id.ValueKind == System.Text.Json.JsonValueKind.String)
+            {
+                return id.GetString();
+            }
+        }
+        catch (System.Text.Json.JsonException)
+        {
+        }
+        return null;
+    }
+
+    /// <summary>The notification wording of an automatic handoff's reason: notifications.handoff.reason.{the AiBotBlockReason value in
+    /// camelCase}, e.g. media_message -> notifications.handoff.reason.mediaMessage.</summary>
+    public const string HandoffReasonKeyPrefix = "notifications.handoff.reason.";
+
+    public static string HandoffReasonKey(string reason) =>
+        HandoffReasonKeyPrefix + System.Text.RegularExpressions.Regex.Replace(reason, "_([a-z])", m => m.Groups[1].Value.ToUpperInvariant());
+
+    /// <summary>Customer message types that never reach the bot and need nobody either: commands other than /start, a reaction
+    /// to a message, and WhatsApp's system notes (e.g. "changed their number").</summary>
+    private static readonly HashSet<string> NoReplyNeededTypes = new(StringComparer.OrdinalIgnoreCase) { "command", "reaction", "system", "request_welcome" };
+
+    /// <summary>A message the bot can't read but a person can (photo, voice note, video, document, sticker, location, contact,
+    /// anything unsupported): in AI mode it hands the conversation to the team (QA t7-04).</summary>
+    private static bool NeedsPerson(string messageType) =>
+        !AiEligibleMessageTypes.Contains(messageType) && !NoReplyNeededTypes.Contains(messageType);
 
     /// <summary>A provider repeating a customer message the AI never answered (QA t10-03: its first delivery failed after the
     /// message was saved, so the AI never ran, and every retry was "deduplicated" and ignored). Asks the AI again only when the
@@ -957,15 +1073,16 @@ public class MessageService : IMessageService
         if (message.Direction != MessageDirection.Inbound || message.SenderType != MessageSenderType.Contact) return false;
         if (conversation.Mode != ConversationMode.Ai) return false;
         if (!AiEligibleMessageTypes.Contains(message.MessageType) && !IsTelegramStart(message)) return false;
-        if (OptOutMessageTypes.Contains(message.MessageType) && !IsTelegramStart(message) && _optOut.MatchKeyword(message.Content) is not null) return false;
+        if (OptOutMessageTypes.Contains(message.MessageType) && !IsTelegramStart(message) && MatchOptOut(message) is not null) return false;
         if (message.CreatedAt > DateTimeOffset.UtcNow.AddSeconds(-_config.AiRetryUnansweredAfterSeconds)) return false;
         return !await _messages.HasMessagesSinceAsync(conversation.Id, message.CreatedAt, message.Id, ct);
     }
 
     /// <summary>Customer message types the AI assistant is allowed to see — see IngestMessageResult.AiEligible.</summary>
-    private static readonly HashSet<string> AiEligibleMessageTypes = new(StringComparer.OrdinalIgnoreCase) { "text", "interactive" };
-    // (Telegram commands arrive as message type "command" and media as "image"/"audio"/…, so they're saved to the Inbox but
-    // don't reach the AI; /start is the exception, see IsTelegramStart, so the bot greets someone who just opened the chat.)
+    private static readonly HashSet<string> AiEligibleMessageTypes = new(StringComparer.OrdinalIgnoreCase) { "text", "interactive", "button" };
+    // (A tapped template button reaches the bot as its label, e.g. "Yes, confirm", QA t8-08. Telegram commands arrive as message
+    // type "command" and media as "image"/"audio"/…: saved to the Inbox, never to the bot (media hands the conversation to the
+    // team, see NeedsPerson); /start is the exception, see IsTelegramStart, so the bot greets someone who just opened the chat.)
 
     private async Task<IngestMessageResult> HandleStatusUpdateAsync(IngestMessageRequest request, CancellationToken ct)
     {

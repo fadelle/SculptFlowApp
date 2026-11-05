@@ -251,8 +251,7 @@ public class MetaGraphClient : IMetaGraphClient
         if (!response.IsSuccessStatusCode)
         {
             var body = await response.Content.ReadAsStringAsync(ct);
-            throw new MetaGraphApiException(
-                $"Meta Graph API call failed ({(int)response.StatusCode} {response.StatusCode}): {body}");
+            throw MetaGraphApiException.FromResponse((int)response.StatusCode, response.StatusCode.ToString(), body);
         }
     }
 
@@ -263,8 +262,7 @@ public class MetaGraphClient : IMetaGraphClient
 
         if (!response.IsSuccessStatusCode)
         {
-            throw new MetaGraphApiException(
-                $"Meta Graph API call failed ({(int)response.StatusCode} {response.StatusCode}): {body}");
+            throw MetaGraphApiException.FromResponse((int)response.StatusCode, response.StatusCode.ToString(), body);
         }
 
         return JsonDocument.Parse(body).RootElement.Clone();
@@ -278,8 +276,7 @@ public class MetaGraphClient : IMetaGraphClient
 
         if (!response.IsSuccessStatusCode)
         {
-            throw new MetaGraphApiException(
-                $"Meta Graph API call failed ({(int)response.StatusCode} {response.StatusCode}): {body}");
+            throw MetaGraphApiException.FromResponse((int)response.StatusCode, response.StatusCode.ToString(), body);
         }
 
         return JsonDocument.Parse(body).RootElement.Clone();

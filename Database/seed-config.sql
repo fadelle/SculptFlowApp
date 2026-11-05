@@ -100,6 +100,7 @@ insert into config.settings (section, key, value, updated_by) values
   ('Ai', 'MemoryExchanges', '10', 'seed'),
   ('Ai', 'TimeoutSeconds', '60', 'seed'),
   ('Ai', 'MaxConcurrentRuns', '4', 'seed'),
+  ('Ai', 'BurstWaitMilliseconds', '1000', 'seed'),
   ('Ai', 'RetryUnansweredAfterSeconds', '120', 'seed'),
   ('Ai', 'InputTokenPriceUsdPerMillion', '1.25', 'seed'),
   ('Ai', 'OutputTokenPriceUsdPerMillion', '10', 'seed'),

@@ -105,8 +105,8 @@ public class BotEngineTests
         await Sut().RunAsync(Trigger("Monday?"));
 
         Assert.Equal(2, _model.Requests.Count);
-        var (contact, date) = ((Guid?, DateOnly?))Single("get_available_slots").Arguments!;
-        Assert.Equal((ContactId, new DateOnly(2026, 11, 2)), (contact, date));
+        var (contact, service, date) = ((Guid?, Guid?, DateOnly?))Single("get_available_slots").Arguments!;
+        Assert.Equal((ContactId, (Guid?)null, new DateOnly(2026, 11, 2)), (contact, service, date));
         var second = _model.Requests[1].Input.Select(i => i.Json).ToList();
         Assert.Equal(["function_call", "function_call", "function_call_output", "function_call_output"], second.Skip(1).Select(i => (string?)i["type"]));
         Assert.Equal("""{"configured":true,"slots":[{"start":"2026-11-02T14:00:00+02:00"}]}""", (string?)second[3]["output"]);
@@ -272,6 +272,83 @@ public class BotEngineTests
         Assert.Contains(_steps, s => s.Step == TraceSteps.BotReplyStopped && s.Outcome == TraceOutcomes.Skipped && s.Detail.Contains(code));
         Assert.Empty(Steps(TraceSteps.BotRunFailed));
         Assert.Empty(Steps(TraceSteps.BotActionResult));
+    }
+
+    [Theory]
+    [InlineData("reply")]
+    [InlineData("handoff")]
+    [InlineData("schedule")]
+    public async Task A_bot_that_may_no_longer_answer_stops_and_the_team_takes_over(string action)
+    {
+        // QA t7-01: the bot was deactivated (or the plan downgraded) mid-run; the refused reply was traced as a success and the
+        // contact got nothing.
+        _tools.BotDenied = BotToolCheck.BotNotActive;
+        if (action == "schedule") _model.Decide("schedule", scheduledStart: "2026-09-29T16:00:00+03:00", serviceId: ServiceId.ToString());
+        else _model.Decide(action, message: "Hi", reason: "asked for a person");
+
+        await Sut().RunAsync(Trigger());
+
+        Assert.Contains(_steps, s => s.Step == TraceSteps.BotReplyStopped && s.Detail.Contains(BotToolOutcomes.BotNotAllowedCode)
+            && s.Detail.Contains(BotToolCheck.BotNotActive));
+        Assert.Equal((ConversationId, BotToolCheck.BotNotActive), ((Guid, string?))Single("run_stopped").Arguments!);
+        Assert.DoesNotContain(_tools.Calls, c => c.Tool is "reply" or "handoff" or "schedule" or "run_failed");
+        Assert.Contains(_steps, s => s.Step == TraceSteps.BotActionResult && s.Detail.Contains("run_stopped"));
+        Assert.Empty(Steps(TraceSteps.BotRunFailed));
+    }
+
+    [Fact]
+    public async Task The_real_tool_service_refuses_a_bot_that_lost_its_permission_with_a_403_and_hands_over_without_it()
+    {
+        var runtime = new Mock<IBotRuntimeService>();
+        runtime.Setup(r => r.AuthorizeAsync(ClientId, BotKit.BotId, null, It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(BotToolCheck.Denied(BotToolCheck.BotNotActive));
+        var conversations = new Mock<IBotConversationService>();
+        conversations.Setup(c => c.RunStoppedAsync(ClientId, ConversationId, BotToolCheck.BotNotActive, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        var tools = new BotToolService(Mock.Of<IClientContext>(), Mock.Of<ICatalogService>(), Mock.Of<IContactService>(), Mock.Of<IBookingService>(),
+            Mock.Of<IAvailabilityService>(), Mock.Of<IKnowledgeSearchService>(), runtime.Object, Mock.Of<IBotTestService>(), conversations.Object,
+            Mock.Of<IEntitlementService>(), _tracer.Object);
+        _model.Decide("reply", message: "A full session is $120.");
+
+        await Sut(tools).RunAsync(Trigger());
+
+        conversations.VerifyAll();
+        conversations.Verify(c => c.ReplyAsync(It.IsAny<BotRunContext>(), It.IsAny<Guid>(), It.IsAny<string?>(), It.IsAny<CancellationToken>(), It.IsAny<string?>()), Times.Never);
+        Assert.Contains(_steps, s => s.Step == TraceSteps.BotToolCalled && s.Outcome == TraceOutcomes.Failed && s.Detail.Contains("403"));
+        Assert.Contains(_steps, s => s.Step == TraceSteps.BotReplyStopped);
+    }
+
+    [Fact]
+    public async Task A_tool_this_bot_isnt_given_is_still_a_business_outcome_the_ai_reads()
+    {
+        var runtime = new Mock<IBotRuntimeService>();
+        runtime.Setup(r => r.AuthorizeAsync(ClientId, BotKit.BotId, null, It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(BotToolCheck.Denied(BotToolCheck.NotAllowed));
+        var tools = new BotToolService(Mock.Of<IClientContext>(), Mock.Of<ICatalogService>(), Mock.Of<IContactService>(), Mock.Of<IBookingService>(),
+            Mock.Of<IAvailabilityService>(), Mock.Of<IKnowledgeSearchService>(), runtime.Object, Mock.Of<IBotTestService>(), Mock.Of<IBotConversationService>(),
+            Mock.Of<IEntitlementService>(), _tracer.Object);
+
+        var result = await tools.CallAsync(new BotToolCall(ClientId, BotKit.BotId, null), BotTools.Services, (_, _) => Task.FromResult(BotToolResult.Ok(null)));
+
+        Assert.Equal(200, result.Status);
+        Assert.Contains(BotToolOutcomes.NotAllowedCode, JsonSerializer.Serialize(result.Body));
+    }
+
+    [Fact]
+    public async Task Available_times_are_asked_for_the_service_so_they_fit_its_length()
+    {
+        // QA t7-03: without the service the times were on the default duration's grid ("every 5 minutes") and the booking then
+        // refused one it had offered.
+        _model.Call(("get_available_slots", $$"""{"date":"2026-11-03","serviceId":"{{ServiceId}}"}"""),
+                ("get_available_slots", """{"date":"2026-11-03","serviceId":""}"""),
+                ("get_available_slots", """{"date":"2026-11-03","serviceId":"not-an-id"}"""))
+            .Decide("reply", message: "9:00, 9:30 or 10:00?");
+
+        await Sut().RunAsync(Trigger("Tuesday morning?"));
+
+        var calls = _tools.Calls.Where(c => c.Tool == "get_available_slots").Select(c => ((Guid?, Guid?, DateOnly?))c.Arguments!).ToList();
+        Assert.Equal([(ContactId, ServiceId, new DateOnly(2026, 11, 3)), (ContactId, null, new DateOnly(2026, 11, 3))], calls);
+        var outputs = _model.Requests[1].Input.Select(i => i.Json).Where(i => (string?)i["type"] == "function_call_output").Select(i => (string?)i["output"]).ToList();
+        Assert.Contains(outputs, o => o!.Contains("400") && o.Contains("get_services")); // the bad id is answered, not run
     }
 
     [Fact]

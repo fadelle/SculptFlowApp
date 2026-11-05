@@ -232,6 +232,11 @@ public class ConversationService : IConversationService
             System.Text.Json.JsonSerializer.Serialize(new { reason = "ai_failed" }),
             who => NotificationText.Of("notifications.handoff.title", "notifications.handoff.messageAiFailed", who), ct))?.HandedOff;
 
+    public async Task<bool?> HandOverStoppedAiAsync(Guid clientId, Guid conversationId, string? reason, CancellationToken ct = default) =>
+        (await HandOffAsync(clientId, conversationId, MessageOrigin.System,
+            System.Text.Json.JsonSerializer.Serialize(new { reason = "ai_stopped", detail = reason }),
+            who => NotificationText.Of("notifications.handoff.title", "notifications.handoff.messageAiStopped", who), ct))?.HandedOff;
+
     // The hand-over notification's wording when billing refused an AI reply (no balance / no ai_reply rate).
     private const string AiReplyNoBalanceKey = "notifications.handoff.messageAiNoBalance";
     private const string AiReplyNotPricedKey = "notifications.handoff.messageAiNotPriced";

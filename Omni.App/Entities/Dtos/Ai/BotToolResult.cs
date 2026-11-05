@@ -1,13 +1,15 @@
 namespace Omni.App.Entities.Dtos.Ai;
 
 /// <summary>The answer of one AI tool call (IBotToolService): the HTTP status the /api/ai endpoint answers with and the JSON
-/// body the AI reads. Business outcomes (refusals, CONFIRMATION_REQUIRED, ...) are 200 with success = false; 400, 404, 409
-/// and 503 are the endpoint's error answers, a null body = an empty one.</summary>
+/// body the AI reads. Business outcomes (refusals, CONFIRMATION_REQUIRED, ...) are 200 with success = false; 400, 403 (the bot
+/// itself may no longer answer, QA t7-01), 404, 409 and 503 are the endpoint's error answers, a null body = an empty one.</summary>
 public record BotToolResult(int Status, object? Body)
 {
     public static BotToolResult Ok(object? body) => new(200, body);
 
     public static BotToolResult BadRequest(object body) => new(400, body);
+
+    public static BotToolResult Forbidden(object body) => new(403, body);
 
     public static BotToolResult NotFound(object? body = null) => new(404, body);
 

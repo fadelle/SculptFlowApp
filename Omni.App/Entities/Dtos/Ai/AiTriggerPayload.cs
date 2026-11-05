@@ -18,7 +18,9 @@ namespace Omni.App.Entities.Dtos.Ai;
 /// Bot is the AI bot that answers (its instructions, allowed actions, handoff policy and language, see AiBotConfig); n8n
 /// sends Bot.Id back as the X-Omni-Bot-Id header on every call. TestSessionId is set only for a bot test conversation (the
 /// bot editor's test panel): ConversationId and ContactId are then the test session's id (there is no real contact), and n8n sends it back as
-/// X-Omni-Test-Session so Omni simulates every write action.</summary>
+/// X-Omni-Test-Session so Omni simulates every write action. SentAt and ProviderOrder are when and in which order the contact
+/// wrote the message (the provider's time; Telegram's per-chat message_id): Omni's bot run queue answers a burst in that order
+/// (QA t7-06); n8n ignores them.</summary>
 public record AiTriggerPayload(
     Guid ClientId,
     Guid ConversationId,
@@ -39,5 +41,7 @@ public record AiTriggerPayload(
     AiBotConfig? Bot = null,
     Guid? TestSessionId = null,
     // The click-to-WhatsApp ad this message came from (headline — body), so the AI knows which offer "the ad" means (QA t10-08).
-    string? AdContext = null
+    string? AdContext = null,
+    DateTimeOffset? SentAt = null,
+    long? ProviderOrder = null
 );

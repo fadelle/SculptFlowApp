@@ -63,6 +63,22 @@ public class AppLogCollectorTests
     }
 
     [Fact]
+    public void EF_cores_log_of_a_unique_key_race_the_app_handles_is_not_an_error_row()
+    {
+        // QA t7-06: a new contact's first burst logged 6 Error rows for the contact/conversation creation races it handles.
+        var race = new Microsoft.EntityFrameworkCore.DbUpdateException("save failed",
+            new Npgsql.PostgresException("duplicate key", "ERROR", "ERROR", Npgsql.PostgresErrorCodes.UniqueViolation));
+        var other = new Microsoft.EntityFrameworkCore.DbUpdateException("save failed",
+            new Npgsql.PostgresException("bad", "ERROR", "ERROR", Npgsql.PostgresErrorCodes.ForeignKeyViolation));
+
+        Assert.True(DatabaseLogger.IsHandledRace("Microsoft.EntityFrameworkCore.Update", race));
+        Assert.True(DatabaseLogger.IsHandledRace("Microsoft.EntityFrameworkCore.Database.Command", race.InnerException));
+        Assert.False(DatabaseLogger.IsHandledRace("Microsoft.EntityFrameworkCore.Update", other));
+        Assert.False(DatabaseLogger.IsHandledRace("Microsoft.AspNetCore.Diagnostics.ExceptionHandlerMiddleware", race)); // unhandled: kept
+        Assert.False(DatabaseLogger.IsHandledRace("Microsoft.EntityFrameworkCore.Update", null));
+    }
+
+    [Fact]
     public async Task Suppress_stops_capture_for_the_current_flow_only_until_disposed()
     {
         using (_sut.Suppress())

@@ -288,6 +288,10 @@ public interface IConfigManager
     /// <summary>Most bot runs (different conversations) at the same time; one conversation always runs one message at a time. Default 4.</summary>
     int AiMaxConcurrentRuns { get; }
 
+    /// <summary>How long a conversation's next bot run waits after its message arrived, so a burst is saved and answered in the
+    /// order it was written (QA t7-06). Default 1000; 0 = no wait.</summary>
+    int AiBurstWaitMilliseconds { get; }
+
     /// <summary>A repeated, never-answered customer message asks the AI again once it is this old (QA t10-03). Default 120.</summary>
     int AiRetryUnansweredAfterSeconds { get; }
 

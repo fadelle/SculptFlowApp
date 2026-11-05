@@ -62,4 +62,9 @@ public interface IBotToolService
     /// <summary>The run failed (an error, an unreadable answer, a tool that failed): a live conversation goes to the team with one
     /// "the AI couldn't answer" notification (and the bot's handoff message); a test session gets an error note.</summary>
     Task<BotToolResult> RunFailedAsync(BotRunContext run, Guid conversationId, CancellationToken ct = default);
+
+    /// <summary>The bot may no longer answer (a 403 BOT_NOT_ALLOWED mid-run, QA t7-01): a live conversation goes to the team with
+    /// one "the AI stopped" notification, without the bot's permission (it has none any more) and without its handoff message.
+    /// Nothing happens for a test chat.</summary>
+    Task<BotToolResult> RunStoppedAsync(BotToolCall call, Guid conversationId, string? reason, CancellationToken ct = default);
 }

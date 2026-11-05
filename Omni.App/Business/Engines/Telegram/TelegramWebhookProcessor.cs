@@ -114,7 +114,9 @@ public class TelegramWebhookProcessor : ITelegramWebhookProcessor
             MessageType: result.Message?.MessageType,
             Content: result.Message?.Content,
             Mode: result.ConversationMode,
-            Deduplicated: result.Deduplicated);
+            Deduplicated: result.Deduplicated,
+            SentAt: msg.Timestamp,
+            ChatMessageId: msg.MessageId);
     }
 
     /// <summary>The stable external id stored on both inbound and outbound Telegram messages.</summary>
@@ -157,7 +159,7 @@ public class TelegramWebhookProcessor : ITelegramWebhookProcessor
             await _aiTrigger.NotifyAsync(new AiTriggerPayload(
                 result.ClientId.Value, result.ConversationId.Value, result.ContactId, result.MessageId,
                 Channel: ConversationChannel.Telegram, MessageType: result.MessageType, MessageText: result.Content,
-                SelectedValue: null), ct);
+                SelectedValue: null, SentAt: result.SentAt, ProviderOrder: result.ChatMessageId), ct);
         }
 
         return WebhookReceiveOutcome.Accepted;

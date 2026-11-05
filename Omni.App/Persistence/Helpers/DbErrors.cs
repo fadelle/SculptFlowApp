@@ -14,11 +14,12 @@ internal static class DbErrors
     public static bool IsForeignKeyViolation(DbUpdateException ex) =>
         ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.ForeignKeyViolation };
 
-    /// <summary>A value the table forbids: a check constraint, a not-null column, text longer than its column or a number out of
-    /// range (23514, 23502, 22001, 22003).</summary>
+    /// <summary>A value the table forbids: a check constraint, a not-null column, text longer than its column, a number out of
+    /// range, or text that isn't the column's type such as bad JSON (23514, 23502, 22001, 22003, 22P02; QA t8-06).</summary>
     public static bool IsInvalidValue(DbUpdateException ex) =>
         ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.CheckViolation or PostgresErrorCodes.NotNullViolation
-            or PostgresErrorCodes.StringDataRightTruncation or PostgresErrorCodes.NumericValueOutOfRange };
+            or PostgresErrorCodes.StringDataRightTruncation or PostgresErrorCodes.NumericValueOutOfRange
+            or PostgresErrorCodes.InvalidTextRepresentation };
 
     /// <summary>The domain exception for a save the data itself made fail (QA t1-accounts-02), or null for any other failure.</summary>
     public static Exception? AsInvalidRecord(DbUpdateException ex) =>

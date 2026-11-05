@@ -202,6 +202,23 @@ public class ConversationServiceTests
     }
 
     [Fact]
+    public async Task A_bot_that_stopped_mid_run_hands_the_conversation_to_the_team_once()
+    {
+        // QA t7-01: the bot was turned off (or the plan downgraded) while it was answering.
+        var c = Conv();
+        _contacts.Setup(l => l.GetFullNameAsync(_contactId, It.IsAny<CancellationToken>())).ReturnsAsync("Ann Lee");
+
+        Assert.True(await Sut().HandOverStoppedAiAsync(_clientId, c.Id, BotToolCheck.BotNotActive));
+        Assert.Equal(ConversationMode.Human, c.Mode);
+        _events.Verify(e => e.Log(_clientId, EventTypes.HumanHandoff, null, c.Id, null, MessageOrigin.System,
+            "{\"reason\":\"ai_stopped\",\"detail\":\"bot_not_active\"}"), Times.Once);
+        _notifications.Verify(n => n.CreateAsync(_clientId, NotificationType.Handoff, It.Is<NotificationText>(t => TextKit.Reads(t, "AI handed off to your team",
+            "Ann Lee needs your team's attention: the AI assistant stopped before answering (its bot was turned off or the plan changed). Open the conversation to reply.")),
+            _contactId, c.Id, null, null, $"/inbox?conversationId={c.Id}", It.IsAny<CancellationToken>()), Times.Once);
+        Assert.False(await Sut().HandOverStoppedAiAsync(_clientId, c.Id, null));
+    }
+
+    [Fact]
     public async Task An_ai_that_couldnt_answer_hands_the_conversation_to_the_team_once()
     {
         // QA t4-ai-03 / t10-07.

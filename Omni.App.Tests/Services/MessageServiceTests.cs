@@ -765,7 +765,13 @@ public class MessageServiceTests
 
         steps.Clear();
         await Sut().IngestAsync(Ingest(Conv().Id, IngestEventType.CustomerMessage, externalId: "e2", messageType: "image"));
+        Assert.Contains("media_message", steps.Single(s => s.Step == TraceSteps.ConversationModeChanged).Detail); // QA t7-04
+        Assert.Contains("media_message", steps.Single(s => s.Step == TraceSteps.BotSkipped).Detail);
+
+        steps.Clear();
+        await Sut().IngestAsync(Ingest(Conv().Id, IngestEventType.CustomerMessage, externalId: "e2b", messageType: "reaction"));
         Assert.Contains("message_type_not_supported", steps.Single(s => s.Step == TraceSteps.BotSkipped).Detail);
+        Assert.DoesNotContain(steps, s => s.Step == TraceSteps.ConversationModeChanged); // a reaction needs nobody
 
         steps.Clear();
         InboxSettings(planIncludesBot: false, reopenedConversations: true);
@@ -785,6 +791,191 @@ public class MessageServiceTests
         await Sut().IngestAsync(Ingest(Conv().Id, IngestEventType.BusinessAppEcho, externalId: "e5"));
         Assert.Contains("member_replied_from_business_app", steps.Single(s => s.Step == TraceSteps.ConversationModeChanged).Detail);
         Assert.DoesNotContain(steps, s => s.Step == TraceSteps.BotSkipped); // not a customer message
+    }
+
+    // ---------------------------------------------------------------- who answers (QA t7-02, t7-04)
+
+    private void Decision(AccountAiDecision decision) =>
+        _inboxSettings.Setup(a => a.ResolveAsync(_clientId, It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(decision);
+
+    private void VerifyHandoffNotice(Guid conversationId, string reasonKey, Func<Times> times) =>
+        _notifications.Verify(n => n.CreateAsync(_clientId, NotificationType.Handoff,
+            It.Is<NotificationText>(t => t.MessageKey == "notifications.handoff.messageAutomatic" && ((TextArg)t.Args[1]!).Key == reasonKey),
+            _contactId, conversationId, null, null, $"/inbox?conversationId={conversationId}", It.IsAny<CancellationToken>()), times);
+
+    [Theory]
+    [InlineData("image")]
+    [InlineData("audio")]
+    [InlineData("video")]
+    [InlineData("document")]
+    [InlineData("sticker")]
+    [InlineData("location")]
+    [InlineData("contacts")]
+    [InlineData("unsupported")]
+    public async Task Media_in_ai_mode_goes_to_the_team_with_a_notice_and_the_bots_handoff_message(string messageType)
+    {
+        // Decided 2026-11-05 (QA t7-04): anything but text goes to the team, caption or not; the bot reads text only for now.
+        var botId = Guid.NewGuid();
+        Decision(new AccountAiDecision(Guid.NewGuid(), botId, null, true, true, "A team member will reply shortly."));
+        _contacts.Setup(l => l.GetAsync(_clientId, _contactId, It.IsAny<CancellationToken>())).ReturnsAsync(_contact);
+        _contact.StageKey = PipelineKit.New;
+        var c = Conv();
+
+        var r = await Sut().IngestAsync(Ingest(c.Id, IngestEventType.CustomerMessage, messageType: messageType) with { Content = "How much would this cost?" });
+
+        Assert.False(r.AiEligible);
+        Assert.Equal(ConversationMode.Human, c.Mode);
+        Assert.Equal(PipelineKit.NeedsHuman, _contact.StageKey);
+        _events.Verify(e => e.Log(_clientId, EventTypes.HumanHandoff, _contactId, c.Id, null, MessageOrigin.System, "{\"reason\":\"media_message\"}"), Times.Once);
+        _notifier.Verify(n => n.ConversationModeChangedAsync(_clientId, c.Id, ConversationMode.Human, It.IsAny<CancellationToken>()), Times.Once);
+        VerifyHandoffNotice(c.Id, "notifications.handoff.reason.mediaMessage", Times.Once);
+        _sender.Verify(s => s.SendTextAsync(c, "A team member will reply shortly.", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Media_the_team_already_has_and_a_reaction_change_nothing()
+    {
+        var human = Conv(ConversationMode.Human);
+        await Sut().IngestAsync(Ingest(human.Id, IngestEventType.CustomerMessage, externalId: "v1", messageType: "audio"));
+        var ai = Conv();
+        var r = await Sut().IngestAsync(Ingest(ai.Id, IngestEventType.CustomerMessage, externalId: "r1", messageType: "reaction"));
+
+        Assert.Equal((ConversationMode.Human, ConversationMode.Ai, false), (human.Mode, ai.Mode, r.AiEligible));
+        _notifications.Verify(n => n.CreateAsync(It.IsAny<Guid>(), NotificationType.Handoff, It.IsAny<NotificationText>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(),
+            It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+        _sender.Verify(s => s.SendTextAsync(It.IsAny<Conversation>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task A_switch_to_the_team_because_the_bot_cant_answer_notifies_members_with_why()
+    {
+        // QA t7-02: an automatic switch (plan without the AI assistant, bot inactive, ...) was silent.
+        InboxSettings(planIncludesBot: false, reopenedConversations: true);
+        var c = Conv();
+
+        await Sut().IngestAsync(Ingest(c.Id, IngestEventType.CustomerMessage));
+
+        Assert.Equal(ConversationMode.Human, c.Mode);
+        VerifyHandoffNotice(c.Id, "notifications.handoff.reason.planWithoutAiAssistant", Times.Once);
+        _sender.Verify(s => s.SendTextAsync(It.IsAny<Conversation>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never); // no bot message
+    }
+
+    [Fact]
+    public async Task A_conversation_with_the_team_stays_with_it_until_it_was_closed_and_the_contact_writes_again()
+    {
+        // Decided 2026-11-05 (QA t7-02): handed to the team = the team's until Return to AI, or a fresh start after it was closed.
+        var open = Conv(ConversationMode.Human);
+        var r = await Sut().IngestAsync(Ingest(open.Id, IngestEventType.CustomerMessage, externalId: "o1"));
+        Assert.Equal((ConversationMode.Human, false), (open.Mode, r.AiEligible));
+
+        var closed = Conv(ConversationMode.Human);
+        closed.Status = ConversationStatus.Closed;
+        r = await Sut().IngestAsync(Ingest(closed.Id, IngestEventType.CustomerMessage, externalId: "c1"));
+        Assert.Equal((ConversationMode.Ai, ConversationStatus.Active, true), (closed.Mode, closed.Status, r.AiEligible));
+        Assert.Equal(MessageMetadata.ReturnedToAiMarker, Assert.Single(closed.Messages).MetadataJson);
+        _events.Verify(e => e.Log(_clientId, EventTypes.ReturnedToAi, _contactId, closed.Id, null, MessageOrigin.System, "{\"reason\":\"reopened\"}"), Times.Once);
+        _notifier.Verify(n => n.ConversationModeChangedAsync(_clientId, closed.Id, ConversationMode.Ai, It.IsAny<CancellationToken>()), Times.Once);
+
+        // ... but not when reopened conversations go to the team, or the bot can't answer, or it is a photo.
+        InboxSettings(planIncludesBot: true, reopenedConversations: false);
+        var toTeam = Conv(ConversationMode.Human);
+        toTeam.Status = ConversationStatus.Closed;
+        await Sut().IngestAsync(Ingest(toTeam.Id, IngestEventType.CustomerMessage, externalId: "c2"));
+        InboxSettings(planIncludesBot: false, reopenedConversations: true);
+        var noBot = Conv(ConversationMode.Human);
+        noBot.Status = ConversationStatus.Closed;
+        await Sut().IngestAsync(Ingest(noBot.Id, IngestEventType.CustomerMessage, externalId: "c3"));
+        InboxSettings(planIncludesBot: true, reopenedConversations: true);
+        var photo = Conv(ConversationMode.Human);
+        photo.Status = ConversationStatus.Closed;
+        await Sut().IngestAsync(Ingest(photo.Id, IngestEventType.CustomerMessage, externalId: "c4", messageType: "image"));
+        Assert.All(new[] { toTeam, noBot, photo }, c => Assert.Equal((ConversationMode.Human, ConversationStatus.Active), (c.Mode, c.Status)));
+    }
+
+    [Fact]
+    public async Task A_conversation_that_started_with_the_team_says_why_in_its_trace()
+    {
+        var steps = RecordSteps();
+        Decision(new AccountAiDecision(Guid.NewGuid(), Guid.NewGuid(), null, NewConversations: false, ReopenedConversations: true));
+        await Sut().IngestAsync(Ingest(Conv(ConversationMode.Human).Id, IngestEventType.CustomerMessage));
+        Assert.Contains("new_conversations_off", steps.Single(s => s.Step == TraceSteps.BotSkipped).Detail);
+
+        steps.Clear();
+        InboxSettings(planIncludesBot: false, reopenedConversations: true);
+        await Sut().IngestAsync(Ingest(Conv(ConversationMode.Human).Id, IngestEventType.CustomerMessage, externalId: "e2"));
+        Assert.Contains("\"startedWithTeam\":\"plan_without_ai_assistant\"", steps.Single(s => s.Step == TraceSteps.BotSkipped).Detail);
+    }
+
+    // ---------------------------------------------------------------- service window (QA t8-05)
+
+    [Fact]
+    public async Task The_service_window_runs_from_when_the_customer_wrote_and_never_moves_back()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var late = Conv(windowOpen: false);
+        await Sut().IngestAsync(Ingest(late.Id, IngestEventType.CustomerMessage, externalId: "w1") with { ReceivedAt = now.AddHours(-30) });
+        Assert.Equal(now.AddHours(-30), late.LastCustomerMessageAt);
+        Assert.Equal(now.AddHours(-6), late.ServiceWindowExpiresAt);
+        Assert.False(late.IsServiceWindowOpen(now)); // a 30-hour-old message doesn't reopen it
+
+        var open = Conv(); // open for 5 more hours
+        var expires = open.ServiceWindowExpiresAt;
+        open.LastCustomerMessageAt = now.AddHours(-19);
+        await Sut().IngestAsync(Ingest(open.Id, IngestEventType.CustomerMessage, externalId: "w2") with { ReceivedAt = now.AddHours(-20) });
+        Assert.Equal((expires, now.AddHours(-19)), (open.ServiceWindowExpiresAt, open.LastCustomerMessageAt)); // an older message moves nothing back
+
+        var future = Conv(windowOpen: false);
+        await Sut().IngestAsync(Ingest(future.Id, IngestEventType.CustomerMessage, externalId: "w3") with { ReceivedAt = now.AddHours(2) });
+        Assert.InRange(future.ServiceWindowExpiresAt!.Value, now.AddHours(24), DateTimeOffset.UtcNow.AddHours(24)); // never later than now + 24h
+    }
+
+    // ---------------------------------------------------------------- tapped buttons (QA t8-08)
+
+    [Fact]
+    public async Task A_tapped_stop_button_opts_out_and_a_tapped_reply_reaches_the_bot()
+    {
+        _optOut.Setup(o => o.MatchKeyword(It.IsAny<string?>())).Returns((string? text) =>
+            text?.Trim().ToLowerInvariant() switch { "stop" => true, "start" => false, _ => (bool?)null });
+        _contacts.Setup(l => l.GetAsync(_clientId, _contactId, It.IsAny<CancellationToken>())).ReturnsAsync(_contact);
+
+        var promo = await Sut().IngestAsync(Ingest(Conv().Id, IngestEventType.CustomerMessage, externalId: "b1", messageType: "button")
+            with { Content = "Stop promotions", MetadataJson = """{"payload":"unsubscribe","text":"Stop promotions"}""" });
+        var byId = await Sut().IngestAsync(Ingest(Conv().Id, IngestEventType.CustomerMessage, externalId: "b2", messageType: "interactive")
+            with { Content = "No more offers", MetadataJson = """{"type":"button_reply","button_reply":{"id":"STOP","title":"No more offers"}}""" });
+        var confirm = await Sut().IngestAsync(Ingest(Conv().Id, IngestEventType.CustomerMessage, externalId: "b3", messageType: "button")
+            with { Content = "Yes, confirm", MetadataJson = """{"payload":"confirm","text":"Yes, confirm"}""" });
+        var startWord = await Sut().IngestAsync(Ingest(Conv().Id, IngestEventType.CustomerMessage, externalId: "b4", messageType: "button")
+            with { Content = "Start booking", MetadataJson = """{"payload":"book"}""" });
+
+        _optOut.Verify(o => o.Apply(_contact, true, It.IsAny<string>(), It.IsAny<Guid?>()), Times.Exactly(2));
+        _optOut.Verify(o => o.Apply(_contact, false, It.IsAny<string>(), It.IsAny<Guid?>()), Times.Never); // "Start ..." on a button isn't a start word
+        Assert.Equal((false, false, true, true), (promo.AiEligible, byId.AiEligible, confirm.AiEligible, startWord.AiEligible));
+    }
+
+    // ---------------------------------------------------------------- bad ingest input (QA t8-06)
+
+    [Theory]
+    [InlineData("messageType")]
+    [InlineData("externalMessageId")]
+    [InlineData("metadataJson")]
+    [InlineData("deliveryStatus")]
+    public async Task Ingest_values_that_dont_fit_are_a_400_naming_the_field_and_nothing_is_saved(string field)
+    {
+        var c = Conv();
+        var request = Ingest(c.Id, IngestEventType.CustomerMessage);
+        request = field switch
+        {
+            "messageType" => request with { MessageType = new string('x', 40) },
+            "externalMessageId" => request with { ExternalMessageId = new string('x', 306) },
+            "deliveryStatus" => request with { DeliveryStatus = new string('x', 31) },
+            _ => request with { MetadataJson = "{not json" },
+        };
+
+        var ex = await Assert.ThrowsAsync<ArgumentException>(() => Sut().IngestAsync(request));
+
+        Assert.Equal(field == "metadataJson" ? RequestChecks.NotJsonKey : RequestChecks.TooLongKey, ex.Message);
+        Assert.Equal(field, Assert.IsType<TextArg>(TextError.ArgsOf(ex)[0]).StoredValue);
+        _messages.Verify(m => m.Add(It.IsAny<Message>()), Times.Never);
     }
 
     // ---------------------------------------------------------------- AI reply billing (ai_reply)
@@ -1099,6 +1290,7 @@ public class MessageServiceTests
     [Fact]
     public async Task A_message_that_reopens_a_closed_conversation_gets_the_reopened_auto_reply()
     {
+        InboxSettings(planIncludesBot: true, reopenedConversations: false); // reopened conversations go to the team: it stays human
         var c = Conv(ConversationMode.Human);
         c.LastCustomerMessageAt = DateTimeOffset.UtcNow.AddDays(-3);
         c.Status = ConversationStatus.Closed;

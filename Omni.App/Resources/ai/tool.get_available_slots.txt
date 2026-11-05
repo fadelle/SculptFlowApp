@@ -2,10 +2,11 @@ Get the real open booking times at this business. Call this whenever the contact
 
 Input:
 - date: the day to check, as YYYY-MM-DD in the business's local timezone. Work out relative words like "tomorrow" or "Friday" from today's date.
+- serviceId: the id of the service the contact wants (call get_services to find it). Always pass it once you know the service: services take different lengths, and only with it are the times ones the whole service fits in (a time checked without it may be refused when booking). If the business has more than one service and you don't know which one yet, ask the contact first.
 
 Result:
 - configured=false means the business hasn't set up its schedule. Don't offer any times; tell the contact a team member will confirm a time, and hand off if appropriate.
-- slots is the list of open times. Each slot has start and end with the business's timezone offset. Present them naturally in local time, for example "2:00 PM, 3:00 PM or 4:15 PM". Don't show the raw timestamp or the offset.
+- slots is the list of open times. Each slot has start and end with the business's timezone offset. Present them naturally in local time, for example "2:00 PM, 3:00 PM or 4:15 PM". Don't show the raw timestamp or the offset. When there are many, offer three or four spread over the day (for example "9:00, 10:30 or 2:00, or another time?"), never a long list or "every few minutes".
 - If slots is empty, say nothing is available that day and offer to check another day. Don't invent alternatives.
 - If the contact wants a time window like "afternoon" or "after 3", filter the returned slots yourself. Don't offer times that weren't returned.
 - existingUpcomingBookings and canCreateNewBooking describe the contact's CURRENT bookings, separate from the requested date.

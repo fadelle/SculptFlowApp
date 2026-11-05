@@ -27,4 +27,8 @@ public static class AiBotBlockReason
 
     /// <summary>The bot answers the account, but not conversations a contact reopens.</summary>
     public const string ReopenedToHuman = "reopened_to_human";
+
+    /// <summary>Not an account block: the contact sent something the bot can't read (photo, voice note, video, document,
+    /// sticker, location, contact), so the conversation goes to the team (QA t7-04).</summary>
+    public const string MediaMessage = "media_message";
 }

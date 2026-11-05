@@ -54,7 +54,7 @@
   // ---------------------------------------------------------------------
   function apiGet(path) {
     return fetch(path).then(function (res) {
-      if (!res.ok) throw new ErroromniText.t('common.errors.requestFailed', [res.status]);
+      if (!res.ok) throw new Error(omniText.t('common.errors.requestFailed', [res.status]));
       return res.json();
     });
   }
@@ -352,6 +352,16 @@
   };
   function journeyStep(category) { return (cfg.journeyCategories || []).indexOf(category) + 1; }
 
+  // A mode marker in the reader's language from its key (QA t7-07); a marker without one shows its stored text.
+  var MARKER_TEXT = {
+    handed_to_team: function () { return omniText.t('inbox.marker.handedToTeam'); },
+    returned_to_ai: function () { return omniText.t('inbox.marker.returnedToAi'); }
+  };
+  function markerText(m) {
+    var match = /"marker"\s*:\s*"([a-z_]+)"/.exec(m.metadataJson || '');
+    return match && MARKER_TEXT[match[1]] ? MARKER_TEXT[match[1]]() : (m.content || '');
+  }
+
   function escapeHtml(s) {
     var div = document.createElement('div');
     div.textContent = s == null ? '' : String(s);
@@ -413,7 +423,7 @@
       if (m.origin === 'system' && m.senderType === 'system' && !/"automatic"\s*:\s*true/.test(m.metadataJson || '')) {
         var marker = document.createElement('div');
         marker.className = 'inbox-mode-marker';
-        marker.innerHTML = '<span>' + escapeHtml(m.content || '') + ' &middot; ' + formatClock(m.createdAt) + '</span>';
+        marker.innerHTML = '<span>' + escapeHtml(markerText(m)) + ' &middot; ' + formatClock(m.createdAt) + '</span>';
         messagesEl.appendChild(marker);
         return;
       }

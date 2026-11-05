@@ -1,7 +1,8 @@
 {
   "type": "object",
   "properties": {
-    "date": { "type": "string", "description": "The day the contact asked about. Return exactly YYYY-MM-DD, for example 2026-09-24." }
+    "date": { "type": "string", "description": "The day the contact asked about. Return exactly YYYY-MM-DD, for example 2026-09-24." },
+    "serviceId": { "type": "string", "description": "The id (from get_services) of the service the contact wants, so the times fit its length; empty when not known yet.", "default": "" }
   },
   "required": ["date"]
 }

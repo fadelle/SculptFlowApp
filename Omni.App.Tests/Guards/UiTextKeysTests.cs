@@ -28,7 +28,8 @@ public partial class UiTextKeysTests
         {
             "terms.", FilterLabelHelper.KeyPrefix, KnowledgeCategory.LabelKeyPrefix,
             BillingTextHelper.EntitlementKeyPrefix, BillingTextHelper.EventTypeKeyPrefix, BillingTextHelper.LedgerKeyPrefix,
-            ReminderText.StatusKeyPrefix, ReminderText.ReasonKeyPrefix, CampaignSkipReason.LabelKeyPrefix, TemplateReasons.LabelKeyPrefix
+            ReminderText.StatusKeyPrefix, ReminderText.ReasonKeyPrefix, CampaignSkipReason.LabelKeyPrefix, TemplateReasons.LabelKeyPrefix,
+            Omni.App.Business.Services.Inbox.MessageService.HandoffReasonKeyPrefix
         }.Any(prefix => key.StartsWith(prefix, StringComparison.Ordinal));
 
     private static IEnumerable<string> SourceFiles() =>
