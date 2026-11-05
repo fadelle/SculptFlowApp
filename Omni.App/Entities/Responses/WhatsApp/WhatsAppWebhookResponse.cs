@@ -35,5 +35,7 @@ public record WhatsAppWebhookResponse(
     string? Content = null,
     /// <summary>Interactive/button replies only — the stable Meta reply id (e.g. "rhinoplasty"),
     /// separate from Content (the user-visible title sent as messageText). Null otherwise.</summary>
-    string? SelectedValue = null
+    string? SelectedValue = null,
+    /// <summary>CustomerMessage from a click-to-WhatsApp ad: what the ad offered (headline — body), for the AI (QA t10-08).</summary>
+    string? AdContext = null
 );

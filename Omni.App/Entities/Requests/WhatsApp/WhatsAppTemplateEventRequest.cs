@@ -22,5 +22,10 @@ public record WhatsAppTemplateEventRequest(
     string? PreviousCategory,
     string? CurrentCategory,
     string? ComponentsJson,
-    DateTimeOffset? OccurredAt
+    DateTimeOffset? OccurredAt,
+    // Meta's own explanation and recommendation for a rejection or pause (rejection_info / other_info; QA t10-06).
+    string? ReasonDetail = null,
+    // template_category_update announcing a change still to come: the new category and when it applies.
+    string? PendingCategory = null,
+    DateTimeOffset? PendingCategoryAt = null
 );

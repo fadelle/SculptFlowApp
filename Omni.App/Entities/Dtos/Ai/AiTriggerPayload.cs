@@ -37,5 +37,7 @@ public record AiTriggerPayload(
     string? AiProfile = null,
     IReadOnlyDictionary<string, TermForms>? Terms = null,
     AiBotConfig? Bot = null,
-    Guid? TestSessionId = null
+    Guid? TestSessionId = null,
+    // The click-to-WhatsApp ad this message came from (headline — body), so the AI knows which offer "the ad" means (QA t10-08).
+    string? AdContext = null
 );

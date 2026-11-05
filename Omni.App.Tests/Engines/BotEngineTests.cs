@@ -436,7 +436,7 @@ public class BotEngineTests
         tests.Setup(t => t.ScheduleAsync(It.Is<BotRunContext>(r => r.TestSessionId == session), It.IsAny<ScheduleBookingRequest>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(simulated);
         var conversations = new Mock<IBotConversationService>();
-        conversations.Setup(c => c.ReplyAsync(It.IsAny<BotRunContext>(), session, "Booked (test)", It.IsAny<CancellationToken>()))
+        conversations.Setup(c => c.ReplyAsync(It.IsAny<BotRunContext>(), session, "Booked (test)", It.IsAny<CancellationToken>(), It.Is<string?>(k => k != null && k.StartsWith("bot-run:"))))
             .ReturnsAsync(new BotReplyOutcome(Guid.NewGuid(), false));
         var runtime = new Mock<IBotRuntimeService>();
         runtime.Setup(r => r.AuthorizeAsync(ClientId, BotKit.BotId, session, It.IsAny<string?>(), It.IsAny<CancellationToken>()))

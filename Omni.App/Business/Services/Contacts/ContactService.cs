@@ -9,6 +9,7 @@ using Omni.App.Common.Helpers;
 using Omni.App.Common.Statics;
 using Omni.App.Entities.Dtos.BusinessTypes;
 using Omni.App.Entities.Dtos.Monitoring;
+using Omni.App.Entities.Dtos.WhatsApp;
 using Omni.App.Entities.Models;
 using Omni.App.Entities.Requests.Contacts;
 using Omni.App.Entities.Responses.Contacts;
@@ -384,10 +385,56 @@ public class ContactService : IContactService
         };
         _contacts.Add(contact);
         _events.Log(clientId, EventTypes.ContactCreated, contactId: contact.Id, source: "whatsapp");
-        await _unitOfWork.SaveChangesAsync(ct);
+        if (!await _unitOfWork.TrySaveChangesAsync(ct))
+        {
+            // Two first messages from one new number at once (QA t10-10: the loser was a 500): the other delivery created it.
+            var winner = await _contacts.FindByPhoneAsync(clientId, phone, ct)
+                ?? throw new InvalidOperationException("Contact conflict reported but the existing contact was not found."); // text-ok: internal invariant
+            return (ContactMapper.ToResponse(winner), false);
+        }
 
         return (ContactMapper.ToResponse(contact), true);
     }
+
+    /// <summary>The source a contact gets when their first message came from a click-to-WhatsApp ad.</summary>
+    public const string AdSource = "whatsapp_ad";
+
+    public async Task ApplyAdReferralAsync(Guid clientId, Guid contactId, MetaAdReferral referral, CancellationToken ct = default)
+    {
+        var contact = await _contacts.GetAsync(clientId, contactId, ct);
+        if (contact is null) return;
+        var untouched = contact.Source is null or "whatsapp" && string.IsNullOrWhiteSpace(contact.SourceDetail);
+        if (!untouched) return;
+        contact.Source = AdSource;
+        contact.SourceDetail = Clip(referral.Summary, 200);
+        contact.CampaignName = referral.SourceId is null ? contact.CampaignName : Clip($"Ad {referral.SourceId}", 200);
+        contact.UpdatedAt = DateTimeOffset.UtcNow;
+        await _unitOfWork.SaveChangesAsync(ct);
+    }
+
+    public async Task<bool> ChangePhoneAsync(Guid clientId, Guid contactId, string newPhone, CancellationToken ct = default)
+    {
+        var contact = await _contacts.GetAsync(clientId, contactId, ct);
+        if (contact is null || string.Equals(contact.Phone, newPhone, StringComparison.Ordinal)) return false;
+        if (await _contacts.FindByPhoneAsync(clientId, newPhone, ct) is { } other && other.Id != contactId)
+        {
+            _events.Log(clientId, EventTypes.ContactPhoneChanged, contactId: contact.Id, source: "whatsapp",
+                metadataJson: JsonSerializer.Serialize(new { from = contact.Phone, to = newPhone, applied = false, otherContactId = other.Id }));
+            await _unitOfWork.SaveChangesAsync(ct);
+            return false;
+        }
+        var previous = contact.Phone;
+        contact.Phone = newPhone;
+        // The WhatsApp identity follows the number (it is how a message finds its contact).
+        if (contact.ExternalContactId == $"whatsapp:{previous}") contact.ExternalContactId = $"whatsapp:{newPhone}";
+        contact.UpdatedAt = DateTimeOffset.UtcNow;
+        _events.Log(clientId, EventTypes.ContactPhoneChanged, contactId: contact.Id, source: "whatsapp",
+            metadataJson: JsonSerializer.Serialize(new { from = previous, to = newPhone, applied = true }));
+        await _unitOfWork.SaveChangesAsync(ct);
+        return true;
+    }
+
+    private static string? Clip(string? value, int max) => value is null || value.Length <= max ? value : value[..max];
 
     public async Task<(ContactResponse Contact, bool WasCreated)> GetOrCreateByExternalIdAsync(
         Guid clientId, string externalContactId, string source, string? fullName, string? firstName, string? lastName,

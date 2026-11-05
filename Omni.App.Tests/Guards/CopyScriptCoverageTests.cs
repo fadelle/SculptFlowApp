@@ -21,7 +21,8 @@ public class CopyScriptCoverageTests
     // has nothing to apply to, so copied clients start with AI off).
     private static readonly string[] NotCopied =
         ["crm.bots", "crm.bot_knowledge_sources", "crm.bot_test_sessions", "crm.bot_test_messages", "crm.inbox_settings",
-         "crm.bot_memory"]; // the C# bot engine's memory (2026-10-26); n8n kept its memory in its own RAM
+         "crm.bot_memory", // the C# bot engine's memory (2026-10-26); n8n kept its memory in its own RAM
+         "channels.whatsapp_webhook_deliveries"]; // the webhook inbox (QA t10-10): in-flight deliveries, nothing to carry over
 
     private static string Root => LeftoverNameScanner.FindRepoRoot();
 

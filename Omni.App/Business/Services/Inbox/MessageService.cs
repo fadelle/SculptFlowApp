@@ -224,7 +224,7 @@ public class MessageService : IMessageService
         return InboxMapper.ToResponse(message);
     }
 
-    public async Task<MessageResponse?> SendAiReplyAsync(Guid clientId, Guid conversationId, string content, CancellationToken ct = default)
+    public async Task<MessageResponse?> SendAiReplyAsync(Guid clientId, Guid conversationId, string content, CancellationToken ct = default, string? replyKey = null)
     {
         if (string.IsNullOrWhiteSpace(content))
         {
@@ -233,6 +233,18 @@ public class MessageService : IMessageService
 
         var conversation = await _conversations.GetWithContactAsync(clientId, conversationId, ct);
         if (conversation is null) return null;
+
+        // One reply, one message id (QA t2-billing-02: a retried reply call was charged and sent twice). A retry waits for the
+        // first call, then finds its message and gets it back: nothing is charged or sent again.
+        var latestInbound = await _messages.GetLatestInboundIdAsync(conversationId, ct);
+        var messageId = StableId.From("ai-reply", conversationId.ToString(),
+            string.IsNullOrWhiteSpace(replyKey) ? $"{latestInbound}:{StableId.Hash(content)}" : "key:" + replyKey.Trim());
+        await using var replyLock = await _messages.LockReplyAsync(messageId, ReplyLockWait, ct);
+        if (await _messages.GetForClientReadOnlyAsync(clientId, messageId, ct) is { } earlier)
+        {
+            _tracer.Step(TraceSteps.SendRequested, TraceOutcomes.Skipped, Ids(conversation, messageId), detail: new { kind = "ai", reason = "duplicate_reply" });
+            return InboxMapper.ToResponse(earlier);
+        }
 
         // The mandatory re-check: a human may have taken over between the webhook that triggered
         // this AI reply and the AI actually finishing its response. Read fresh from the DB — never
@@ -243,7 +255,6 @@ public class MessageService : IMessageService
             throw new ConversationNotInAiModeException(conversation.Mode);
         }
 
-        var messageId = Guid.NewGuid();
         _tracer.Step(TraceSteps.SendRequested, TraceOutcomes.Ok, Ids(conversation, messageId), detail: new { kind = "ai" });
 
         // The reply itself is charged (ai_reply: included credit, then wallet) before anything is sent. A client that can't
@@ -319,6 +330,9 @@ public class MessageService : IMessageService
 
         return InboxMapper.ToResponse(message);
     }
+
+    /// <summary>How long a retried AI reply waits for the first call to finish before giving up.</summary>
+    private static readonly TimeSpan ReplyLockWait = TimeSpan.FromSeconds(30);
 
     /// <summary>The AI's reply couldn't be sent (QA t10-07: with a broken WhatsApp token every reply was lost without a trace). It is
     /// kept as a failed AI message, so the team reads what the AI meant to say, and the conversation goes to the team with one

@@ -15,6 +15,9 @@ public static class EventTypes
     public const string ContactOptedIn = "contact_opted_in";
     /// <summary>A contact and its data were deleted for a privacy request (the event keeps no link to the contact).</summary>
     public const string ContactDeleted = "contact_deleted";
+    /// <summary>The customer changed their WhatsApp number (Meta's user_changed_number); metadata {from, to, applied} —
+    /// applied false when another contact already had the new number (QA t10-08).</summary>
+    public const string ContactPhoneChanged = "contact_phone_changed";
     public const string BookingCreated = "booking_created";
     public const string BookingAttended = "booking_attended";
     public const string BookingNoShow = "booking_no_show";

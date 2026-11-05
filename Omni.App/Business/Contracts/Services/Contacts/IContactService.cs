@@ -3,6 +3,8 @@ using Omni.App.Entities.Models;
 using Omni.App.Entities.Requests.Contacts;
 using Omni.App.Entities.Responses.Contacts;
 
+using Omni.App.Entities.Dtos.WhatsApp;
+
 namespace Omni.App.Business.Contracts.Services.Contacts;
 
 public interface IContactService
@@ -48,6 +50,16 @@ public interface IContactService
     /// <summary>WasCreated tells the caller this is a genuinely new contact's very first inbound message — used for
     /// the NEW_CONTACT notification (see INotificationService). False for every later message from the same contact.</summary>
     Task<(ContactResponse Contact, bool WasCreated)> GetOrCreateByPhoneAsync(Guid clientId, string phone, string? fullName, CancellationToken ct = default);
+
+    /// <summary>Click-to-WhatsApp (QA t10-08): a contact whose first message came from an ad gets source "whatsapp_ad", the ad's
+    /// headline as source detail and its id as campaign. First touch wins: only a new contact, or one still on the plain
+    /// "whatsapp" source with no detail, is changed.</summary>
+    Task ApplyAdReferralAsync(Guid clientId, Guid contactId, MetaAdReferral referral, CancellationToken ct = default);
+
+    /// <summary>The customer changed their WhatsApp number (Meta's user_changed_number; QA t10-08): the contact takes the new
+    /// phone, so the next message from it continues the same contact, and a contact_phone_changed event is logged. False (and
+    /// nothing changes) when another of the client's contacts already has that number, or the contact is unknown.</summary>
+    Task<bool> ChangePhoneAsync(Guid clientId, Guid contactId, string newPhone, CancellationToken ct = default);
 
     /// <summary>Finds or creates the contact for a channel-native identity that has NO phone number
     /// (Telegram today): matched strictly on (clientId, externalContactId), so the same person on two

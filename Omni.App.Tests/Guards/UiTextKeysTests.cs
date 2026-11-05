@@ -28,7 +28,7 @@ public partial class UiTextKeysTests
         {
             "terms.", FilterLabelHelper.KeyPrefix, KnowledgeCategory.LabelKeyPrefix,
             BillingTextHelper.EntitlementKeyPrefix, BillingTextHelper.EventTypeKeyPrefix, BillingTextHelper.LedgerKeyPrefix,
-            ReminderText.StatusKeyPrefix, ReminderText.ReasonKeyPrefix, CampaignSkipReason.LabelKeyPrefix
+            ReminderText.StatusKeyPrefix, ReminderText.ReasonKeyPrefix, CampaignSkipReason.LabelKeyPrefix, TemplateReasons.LabelKeyPrefix
         }.Any(prefix => key.StartsWith(prefix, StringComparison.Ordinal));
 
     private static IEnumerable<string> SourceFiles() =>
@@ -114,6 +114,17 @@ public partial class UiTextKeysTests
         Assert.True(missing.Count == 0, "Reminder values with no label in en.json:\n  " + string.Join("\n  ", missing));
         var stray = english.Keys.Where(k => (k.StartsWith(ReminderText.StatusKeyPrefix) || k.StartsWith(ReminderText.ReasonKeyPrefix)) && !keys.Contains(k)).ToList();
         Assert.True(stray.Count == 0, "Reminder labels for no value:\n  " + string.Join("\n  ", stray));
+    }
+
+    [Fact]
+    public void Every_template_reason_code_and_account_state_has_a_label()
+    {
+        var english = Strings("en");
+        var keys = TemplateReasons.Codes.Select(TemplateReasons.LabelKey).ToList();
+        Assert.Empty(keys.Where(k => !english.ContainsKey(k)));
+        Assert.Empty(english.Keys.Where(k => k.StartsWith(TemplateReasons.LabelKeyPrefix) && !keys.Contains(k)));
+        // The Health page shows each account state through T.ValueLabel (QA t10-02).
+        Assert.Empty(ConstantsOf(typeof(WhatsAppAccountState)).Select(s => FilterLabelHelper.KeyOf(s)!).Where(k => !english.ContainsKey(k)));
     }
 
     [Fact]

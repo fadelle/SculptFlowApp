@@ -18,6 +18,8 @@ namespace Omni.App.Common.Helpers;
 public static class AiPromptValues
 {
     public const string NoContactLanguage = "not known yet";
+    /// <summary>adContext when the message didn't come from an ad.</summary>
+    public const string NoAd = "none";
     public const string DefaultTimezone = "UTC";
 
     /// <summary>The agent's placeholders (and the formatter's system prompt's, a subset) for one contact message.</summary>
@@ -35,7 +37,8 @@ public static class AiPromptValues
             ["timezone"] = timezone,
             ["now"] = LocalNow(now, timezone),
             ["conversationId"] = trigger.ConversationId.ToString(),
-            ["messageText"] = trigger.MessageText ?? ""
+            ["messageText"] = trigger.MessageText ?? "",
+            ["adContext"] = Or(trigger.AdContext, NoAd)
         };
     }
 

@@ -299,6 +299,9 @@ builder.Services.AddScoped<IBookingService, BookingService>();
 // Booking reminders (Milestone C): settings per client, BookingReminderWorker sends the due ones.
 builder.Services.AddScoped<IBookingReminderService, BookingReminderService>();
 builder.Services.AddHostedService<BookingReminderWorker>();
+// Live Inbox connections by user and client, closed when access ends (QA t11-auto-02).
+builder.Services.AddSingleton<ILiveConnections, LiveConnections>();
+builder.Services.AddHostedService<LiveConnectionCheckJob>();
 builder.Services.AddScoped<IConversationService, ConversationService>();
 builder.Services.AddScoped<IOrderService, OrderService>();
 builder.Services.AddScoped<IDashboardService, DashboardService>();
@@ -407,6 +410,10 @@ builder.Services.AddScoped<HistoryHandler>();
 builder.Services.AddScoped<AppStateSyncHandler>();
 builder.Services.AddScoped<UnknownEventHandler>();
 builder.Services.AddScoped<IMetaWebhookProcessor, MetaWebhookProcessor>();
+// The webhook stores deliveries and answers Meta at once; the worker processes them in order (QA t10-10).
+builder.Services.AddScoped<IWhatsAppWebhookInbox, WhatsAppWebhookInbox>();
+builder.Services.AddSingleton<IWhatsAppDeliverySignal, WhatsAppDeliverySignal>();
+builder.Services.AddHostedService<WhatsAppDeliveryWorker>();
 
 // Telegram (direct Bot API) — a channel adapter alongside WhatsApp. Inbound: TelegramWebhookController ->
 // TelegramWebhookProcessor -> the same Contact/Conversation/Message services. Outbound: IChannelSender

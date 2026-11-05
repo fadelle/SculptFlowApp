@@ -30,6 +30,11 @@ public record ParsedMetaEvent
     public string? SelectedValue { get; init; }
     public string? ExternalMessageId { get; init; }
     public DateTimeOffset? Timestamp { get; init; }
+    /// <summary>Click-to-WhatsApp: the ad the customer came from (Meta's referral object; also kept whole in MetadataJson,
+    /// with ctwa_clid). Null for a message that didn't come from an ad (QA t10-08).</summary>
+    public MetaAdReferral? Referral { get; init; }
+    /// <summary>A system message telling the customer changed number: their new wa_id (QA t10-08).</summary>
+    public string? NewWaId { get; init; }
 
     // MessageStatus
     public string? DeliveryStatus { get; init; }
@@ -47,6 +52,11 @@ public record ParsedMetaEvent
     public string? TemplatePreviousCategory { get; init; }
     public string? TemplateCurrentCategory { get; init; }
     public string? TemplateComponentsJson { get; init; }
+    /// <summary>Meta's own explanation and recommendation (rejection_info, or other_info for a pause), when it sends one.</summary>
+    public string? TemplateReasonDetail { get; init; }
+    /// <summary>template_category_update announcing a change still to come: the category Meta will move it to, and when.</summary>
+    public string? TemplatePendingCategory { get; init; }
+    public DateTimeOffset? TemplatePendingCategoryAt { get; init; }
 
     // WhatsAppHealth
     public string? HealthEventType { get; init; }

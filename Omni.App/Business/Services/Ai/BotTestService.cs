@@ -111,13 +111,25 @@ public class BotTestService : IBotTestService
         if (await _tests.DeleteSessionAsync(clientId, botId, sessionId, ct) == 0) throw new KeyNotFoundException("bots.test.errors.sessionNotFound");
     }
 
-    public async Task<bool> ReplyAsync(BotRunContext run, string? content, CancellationToken ct = default)
+    public async Task<bool> ReplyAsync(BotRunContext run, string? content, CancellationToken ct = default, string? replyKey = null)
     {
         var text = string.IsNullOrWhiteSpace(content) ? throw new ArgumentException("inbox.errors.contentRequired") : content.Trim();
-        var session = await SessionAsync(run, ct);
+        // Row lock on the session: a retried reply waits for the first and then finds its line (QA t2-billing-02: the wallet was
+        // charged twice and the transcript had the bot line twice).
+        await using var transaction = await _unitOfWork.BeginTransactionAsync(ct);
+        var session = await _tests.GetSessionForUpdateAsync(run.ClientId, run.TestSessionId!.Value, ct)
+            ?? throw new KeyNotFoundException("bots.test.errors.sessionNotFound");
+        var lines = await _tests.ListMessagesAsync(session.Id, ct);
+        var lastContactLine = lines.LastOrDefault(l => l.Role == BotTestRole.Contact)?.Id;
+        var messageId = StableId.From("bot-test-reply", session.Id.ToString(),
+            string.IsNullOrWhiteSpace(replyKey) ? $"{lastContactLine}:{StableId.Hash(text)}" : "key:" + replyKey.Trim());
+        if (lines.Any(l => l.Id == messageId))
+        {
+            await transaction.CommitAsync(ct);
+            return true;
+        }
 
         // Charged like a live AI reply (ai_reply: included credit, then wallet); there is no channel message to pay for.
-        var messageId = Guid.NewGuid();
         MessageBillingHold? hold;
         try
         {
@@ -127,6 +139,7 @@ public class BotTestService : IBotTestService
         {
             AddNote(session, BotTestNote.Of(BotTestNote.ReplyRefusedKey), DateTimeOffset.UtcNow);
             await _unitOfWork.SaveChangesAsync(ct);
+            await transaction.CommitAsync(ct);
             return false;
         }
 
@@ -134,6 +147,7 @@ public class BotTestService : IBotTestService
         _tests.AddMessage(new BotTestMessage { Id = messageId, SessionId = session.Id, ClientId = run.ClientId, Role = BotTestRole.Bot, Content = text, CreatedAt = now });
         session.UpdatedAt = now;
         await _unitOfWork.SaveChangesAsync(ct);
+        await transaction.CommitAsync(ct);
         await _billing.SentAsync(hold, ct);
         return true;
     }

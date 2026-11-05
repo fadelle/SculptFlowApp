@@ -40,6 +40,10 @@ public class CustomerMessageHandler
         var (contact, contactWasCreated) = await _contacts.GetOrCreateByPhoneAsync(client.ClientId, phone, evt.CustomerName, ct);
         var conversation = await _conversations.GetOrCreateForContactAsync(client.ClientId, contact.Id, ConversationChannel.WhatsApp, ct);
 
+        // QA t10-08: the ad the customer came from marks a new contact's source; a changed number moves the contact to it.
+        if (evt.Referral is not null) await _contacts.ApplyAdReferralAsync(client.ClientId, contact.Id, evt.Referral, ct);
+        if (!string.IsNullOrWhiteSpace(evt.NewWaId)) await _contacts.ChangePhoneAsync(client.ClientId, contact.Id, "+" + evt.NewWaId.TrimStart('+'), ct);
+
         var result = await _messages.IngestAsync(new IngestMessageRequest(
             client.ClientId, conversation.Id, contact.Id, IngestEventType.CustomerMessage, ConversationChannel.WhatsApp,
             evt.Content, evt.ExternalMessageId, DeliveryStatus: null, SentAt: null, ReceivedAt: evt.Timestamp,
@@ -51,6 +55,6 @@ public class CustomerMessageHandler
             ConversationId: conversation.Id, ContactId: contact.Id, MessageId: result.Message?.Id,
             ExternalMessageId: evt.ExternalMessageId, Mode: result.ConversationMode,
             MessageType: result.Message?.MessageType, Content: result.Message?.Content,
-            SelectedValue: evt.SelectedValue);
+            SelectedValue: evt.SelectedValue, AdContext: evt.Referral?.Summary);
     }
 }

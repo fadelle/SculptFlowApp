@@ -27,7 +27,7 @@
     };
     // Why a template needs attention, in plain words.
     string? Why(WhatsAppTemplateResponse t) =>
-        !string.IsNullOrWhiteSpace(t.RejectionReason) ? t.RejectionReason
+        TemplateReasons.Describe(T, t.RejectionReason) is { } reason ? reason
         : t.Status is WhatsAppTemplateStatus.Paused or WhatsAppTemplateStatus.Disabled ? T["templates.why.stopped"].Value
         : Group(t.Status) == "attention" && t.Status != WhatsAppTemplateStatus.Rejected && t.Status != WhatsAppTemplateStatus.Draft ? T["templates.why.flagged"].Value
         : null;

@@ -186,6 +186,10 @@ Every AI assistant reply (`MessageService.SendAiReplyAsync`, the n8n `messages/s
    press Return to AI once the wallet is topped up.
 4. A reservation left open (crash between send and settle) is settled by the maintenance worker when the AI message row
    exists, released when it doesn't.
+5. A retried reply is the same reply (QA t2-billing-02): its message id is derived (`StableId`) from the reply's `replyId`
+   (n8n may send one; the in-app BotEngine uses `bot-run:{triggering message id}`), else from the latest customer message
+   and the text. A session advisory lock on that id makes a second call wait for the first, then answer with its message:
+   no second `ai_reply`, no second send. Bot test sessions do the same under the session's row lock.
 
 `Billing:ChargeAiReplies` (default `true`) turns the charge off without touching rates. **Charging needs an `ai_reply`
 rate**: with billing on and no rate, every AI reply is refused and goes to the team. An `ai_message` ingested by n8n
@@ -290,10 +294,12 @@ Rate cards: `GET/POST rate-cards`, `PUT rate-cards/{code}`, `GET/POST rate-cards
 Provider billing: `GET provider-billing`, `GET clients/{id}/channel-accounts`, `PUT channel-accounts/{id}/provider-billing`,
 `POST channel-accounts/{id}/provider-billing/reset` ·
 Clients: `GET accounts`, `GET clients/{id}`, `POST clients/{id}/subscription` (+ `/cancel`, `/resume`, `/renew`),
-`POST clients/{id}/wallet/top-ups`, `POST clients/{id}/wallet/adjustments`, `GET clients/{id}/usage`,
+`POST clients/{id}/wallet/top-ups`, `POST clients/{id}/wallet/adjustments` (amounts in whole cents, 400 for more than 2 decimals;
+usage keeps 6 decimals; QA t2-billing-23), `GET clients/{id}/usage`,
 `POST clients/{id}/usage/{usageId}/refund`, `GET clients/{id}/ledger`, `GET clients/{id}/reconciliation`,
 `GET clients/{id}/quote` · Reporting: `GET report?from=&to=` (usage revenue, provider cost paid by Omni vs paid
-externally, margin, subscription revenue, top-ups). The client's own read-only view: Settings → Billing (Omni charges
+externally, margin, subscription revenue, add-on revenue (`addon_charge`), top-ups, net manual wallet adjustments and usage
+refunds; QA t2-billing-09). The client's own read-only view: Settings → Billing (Omni charges
 apart from provider-direct usage) and `GET /api/billing/summary|usage|transactions`.
 
 ## Postponed on purpose

@@ -237,10 +237,12 @@ public class WhatsAppTemplateServiceTests
     {
         var t = Existing("meta-1", status: WhatsAppTemplateStatus.Pending);
         _templates.Setup(r => r.FindByProviderTemplateIdAsync(_clientId, "meta-1", It.IsAny<CancellationToken>())).ReturnsAsync(t);
+        t.RejectionReason = "INVALID_FORMAT";
         var r = await Sut().ApplyMetaEventAsync(Event() with { Reason = "NONE", QualityRating = "GREEN", CurrentCategory = "utility", Category = "UTILITY" });
-        Assert.Equal((WhatsAppTemplateStatus.Approved, "NONE", "GREEN", "utility", "utility"), (t.Status, t.RejectionReason, t.QualityRating, t.CurrentCategory, t.Category));
+        // Approved has no reason: Meta's "NONE" isn't one and an old rejection reason goes (QA t10-06).
+        Assert.Equal((WhatsAppTemplateStatus.Approved, (string?)null, "GREEN", "utility", "utility"), (t.Status, t.RejectionReason, t.QualityRating, t.CurrentCategory, t.Category));
         Assert.Equal(_integration!.Id, t.ChannelIntegrationId);
-        _notifier.Verify(n => n.WhatsAppTemplateUpdatedAsync(_clientId, t.Id, "promo", WhatsAppTemplateStatus.Approved, "NONE", It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()), Times.Once);
+        _notifier.Verify(n => n.WhatsAppTemplateUpdatedAsync(_clientId, t.Id, "promo", WhatsAppTemplateStatus.Approved, null, It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()), Times.Once);
         _events.Verify(e => e.Log(_clientId, EventTypes.WhatsAppTemplateStatusChanged, null, null, null, "n8n", It.Is<string>(s => s.Contains("\"previousStatus\":\"pending\""))), Times.Once);
         Assert.Equal(t.Id, r.Id);
     }
@@ -258,6 +260,48 @@ public class WhatsAppTemplateServiceTests
         _templates.Setup(r => r.FindByNameAsync(_clientId, "promo", "en_US", It.IsAny<CancellationToken>())).ReturnsAsync((WhatsAppTemplate?)null);
         await Sut().ApplyMetaEventAsync(Event(status: "WEIRD", category: "MARKETING"));
         Assert.Equal(("meta-1", "weird", "marketing", ""), (added!.MetaTemplateId, added.Status, added.Category, added.Body));
+    }
+
+    // ---- QA t10-06 ----
+
+    [Theory]
+    [InlineData("REINSTATED")]
+    [InlineData("UNARCHIVED")]
+    public async Task A_reinstated_template_is_approved_again(string status)
+    {
+        var t = Existing("meta-1", status: WhatsAppTemplateStatus.Paused);
+        t.RejectionReason = "FIRST_PAUSE Paused for low quality.";
+        _templates.Setup(r => r.FindByProviderTemplateIdAsync(_clientId, "meta-1", It.IsAny<CancellationToken>())).ReturnsAsync(t);
+        await Sut().ApplyMetaEventAsync(Event(status: status) with { Reason = "NONE" });
+        Assert.Equal((WhatsAppTemplateStatus.Approved, (string?)null), (t.Status, t.RejectionReason));
+    }
+
+    [Fact]
+    public async Task A_rejection_keeps_the_code_and_Metas_explanation_and_a_new_status_clears_an_old_reason()
+    {
+        var t = Existing("meta-1", status: WhatsAppTemplateStatus.Pending);
+        _templates.Setup(r => r.FindByProviderTemplateIdAsync(_clientId, "meta-1", It.IsAny<CancellationToken>())).ReturnsAsync(t);
+        await Sut().ApplyMetaEventAsync(Event(status: "REJECTED") with { Reason = "INVALID_FORMAT", ReasonDetail = "Variables can't be at the start." });
+        Assert.Equal((WhatsAppTemplateStatus.Rejected, "INVALID_FORMAT\nVariables can't be at the start."), (t.Status, t.RejectionReason));
+
+        await Sut().ApplyMetaEventAsync(Event(status: "REJECTED")); // repeated without a reason: kept
+        Assert.Equal("INVALID_FORMAT\nVariables can't be at the start.", t.RejectionReason);
+
+        await Sut().ApplyMetaEventAsync(Event(status: "ARCHIVED") with { Reason = "NONE" }); // another status, no reason: cleared
+        Assert.Equal(("archived", (string?)null), (t.Status, t.RejectionReason));
+    }
+
+    [Theory]
+    [InlineData("message_template_quality_update", null)]
+    [InlineData("template_category_update", null)]
+    [InlineData("message_template_quality_update", "x")]
+    public async Task A_quality_or_category_event_for_an_unknown_template_makes_no_row(string eventType, string? status)
+    {
+        var r = await Sut().ApplyMetaEventAsync(new WhatsAppTemplateEventRequest(_clientId, eventType, "W1", "meta-9", "qa_t10_quality", "en_US",
+            null, status, null, "RED", null, null, null, null));
+        Assert.Null(r);
+        _templates.Verify(x => x.Add(It.IsAny<WhatsAppTemplate>()), Times.Never);
+        _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -357,6 +401,61 @@ public class WhatsAppHealthServiceTests
         Assert.Equal(expectedLevel, r.HealthLevel);
         _healthEvents.Verify(h => h.Add(It.Is<WhatsAppHealthEvent>(e => e.EventType == type && e.ClientId == _clientId)), Times.Once);
         _notifier.Verify(n => n.WhatsAppHealthUpdatedAsync(_clientId, _integration.Id, expectedLevel, It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    // QA t10-02: Meta's real account_update values (as the parser states them) and a rejected display name.
+    [Theory]
+    [InlineData("disabled", WhatsAppHealthLevel.Problem)]
+    [InlineData("restricted", WhatsAppHealthLevel.Problem)]
+    [InlineData("scheduled_for_disable", WhatsAppHealthLevel.Warning)]
+    [InlineData("violation", WhatsAppHealthLevel.Warning)]
+    [InlineData("removed", WhatsAppHealthLevel.Disconnected)]
+    [InlineData("reinstated", WhatsAppHealthLevel.Healthy)]
+    [InlineData("unrestricted", WhatsAppHealthLevel.Healthy)]
+    public async Task Account_states_set_the_level(string state, string level)
+    {
+        var r = await Sut().ApplyHealthEventAsync(Req(WhatsAppHealthEventType.AccountUpdate, state, phone: null));
+        Assert.Equal(level, r.HealthLevel);
+    }
+
+    [Fact]
+    public async Task A_ban_is_notified_an_unrelated_account_event_keeps_it_and_reinstate_clears_it()
+    {
+        await Sut().ApplyHealthEventAsync(Req(WhatsAppHealthEventType.AccountUpdate, "disabled", phone: null, message: "DISABLE 2026-10-30"));
+        Assert.Equal((WhatsAppHealthLevel.Problem, false), (_integration.HealthLevel, _integration.IsHealthy));
+        Assert.Equal("Meta disabled this WhatsApp account; messages can't be sent. (DISABLE 2026-10-30)", _integration.LastProblemMessage);
+        _notifications.Verify(n => n.CreateAsync(_clientId, NotificationType.IntegrationUnhealthy, It.IsAny<NotificationText>(), null, null, null, _integration.Id, "/WhatsApp/Health", It.IsAny<CancellationToken>()), Times.Once);
+
+        await Sut().ApplyHealthEventAsync(Req(WhatsAppHealthEventType.AccountUpdate, "VERIFIED_ACCOUNT", phone: null, at: DateTimeOffset.UtcNow.AddSeconds(1)));
+        Assert.Equal((WhatsAppHealthLevel.Problem, "disabled"), (_integration.HealthLevel, _integration.AccountStatus));
+
+        await Sut().ApplyHealthEventAsync(Req(WhatsAppHealthEventType.AccountUpdate, "reinstated", phone: null, at: DateTimeOffset.UtcNow.AddSeconds(2)));
+        Assert.Equal((WhatsAppHealthLevel.Healthy, "active", (string?)null, (string?)null), (_integration.HealthLevel, _integration.AccountStatus, _integration.LastProblemCode, _integration.LastProblemMessage));
+    }
+
+    [Theory]
+    [InlineData("BANNED")]
+    [InlineData("RESTRICTED")]
+    public async Task A_banned_or_restricted_number_is_a_problem(string status)
+    {
+        var r = await Sut().ApplyHealthEventAsync(Req(WhatsAppHealthEventType.PhoneNumberQualityUpdate, status, "GREEN"));
+        Assert.Equal(WhatsAppHealthLevel.Problem, r.HealthLevel);
+    }
+
+    [Fact]
+    public async Task A_rejected_display_name_is_a_warning()
+    {
+        var r = await Sut().ApplyHealthEventAsync(Req(WhatsAppHealthEventType.PhoneNumberNameUpdate, "REJECTED", message: "NAME_FORMAT_UNACCEPTABLE"));
+        Assert.Equal(WhatsAppHealthLevel.Warning, r.HealthLevel);
+        Assert.Contains("display name", _integration.LastProblemMessage);
+    }
+
+    [Fact]
+    public async Task Unflagged_leaves_no_last_problem()
+    {
+        _integration.PhoneStatus = "FLAGGED";
+        await Sut().ApplyHealthEventAsync(Req(WhatsAppHealthEventType.PhoneNumberQualityUpdate, "UNFLAGGED", message: "15550100999"));
+        Assert.Equal((WhatsAppHealthLevel.Healthy, (string?)null), (_integration.HealthLevel, _integration.LastProblemMessage));
     }
 
     [Fact]

@@ -2809,6 +2809,45 @@ create trigger trg_auto_replies_updated_at
   before update on crm.auto_replies
   for each row execute function public.set_updated_at();
 
+-- ---------------------------------------------------------------------
+-- WhatsApp webhook inbox (QA t10-10): the webhook stores each signed delivery here and answers Meta at once; the
+-- WhatsAppDeliveryWorker processes them in order in the background (Meta redelivers slow answers, and a 30-entry
+-- delivery took 69 s). body_hash makes a redelivered identical body one row. Done rows are deleted after 7 days.
+-- ---------------------------------------------------------------------
+create table if not exists channels.whatsapp_webhook_deliveries (
+  id               bigserial primary key,
+  body             text not null,
+  body_hash        varchar(64) not null,
+  trace_parent     varchar(60),
+  status           varchar(20) not null default 'pending',
+  attempts         int not null default 0,
+  received_at      timestamptz not null default now(),
+  next_attempt_at  timestamptz not null default now(),
+  locked_until     timestamptz,
+  processed_at     timestamptz,
+  last_error       text,
+  constraint ck_whatsapp_webhook_deliveries_status check (status in ('pending','processing','done','failed'))
+);
+create unique index if not exists ux_whatsapp_webhook_deliveries_hash on channels.whatsapp_webhook_deliveries(body_hash);
+create index if not exists ix_whatsapp_webhook_deliveries_due on channels.whatsapp_webhook_deliveries(id)
+  where status in ('pending','processing');
+
+-- One WhatsApp conversation per contact (QA t10-10: racing first messages). Created only when the data already has no
+-- duplicates; otherwise a notice names how many contacts have more than one, and nothing else changes.
+do $$
+declare dup int;
+begin
+  if to_regclass('crm.ux_conversations_client_contact_whatsapp') is null then
+    select count(*) into dup from (
+      select 1 from crm.conversations where channel = 'whatsapp' group by client_id, contact_id having count(*) > 1) d;
+    if dup = 0 then
+      create unique index ux_conversations_client_contact_whatsapp on crm.conversations(client_id, contact_id) where channel = 'whatsapp';
+    else
+      raise notice 'ux_conversations_client_contact_whatsapp not created: % contact(s) have more than one WhatsApp conversation', dup;
+    end if;
+  end if;
+end $$;
+
 -- UTC guard: every moment in time is stored as timestamptz (UTC); only the client-local availability columns
 -- (availability_rules/exceptions start_time/end_time/date, read together with clients.timezone) are
 -- zone-less on purpose. If any other column ever drifts to `timestamp without time zone`, convert it here,

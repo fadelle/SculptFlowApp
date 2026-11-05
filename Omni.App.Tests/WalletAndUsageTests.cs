@@ -331,6 +331,25 @@ public class WalletAndUsageTests
     }
 
     [PostgresFact]
+    public async Task TopUpsAndAdjustments_AreInWholeCents()
+    {
+        // QA t2-billing-23: 0.1234567 was stored as 0.123457 and the client saw 4-decimal amounts.
+        var (h, client, _) = await SetupAsync(topUp: 10m);
+        var topUp = await Assert.ThrowsAsync<ArgumentException>(() => h.Billing.TopUpAsync(
+            new WalletTopUp(client, 0.1234567m, "c1", "ref", "too precise", BillingSource.Admin, "ops")));
+        Assert.Contains("2 decimals", topUp.Message);
+        await Assert.ThrowsAsync<ArgumentException>(() => h.Billing.AdjustAsync(
+            new WalletAdjustment(client, 1.005m, LedgerBalanceType.Wallet, "half a cent", "c2", BillingSource.Admin, "ops")));
+        await Assert.ThrowsAsync<ArgumentException>(() => h.Billing.AdjustAsync(
+            new WalletAdjustment(client, -0.001m, LedgerBalanceType.IncludedCredit, "a tenth of a cent", "c3", BillingSource.Admin, "ops")));
+
+        Assert.Equal(11.25m, (await h.Billing.TopUpAsync(new WalletTopUp(client, 1.25m, "c4", "ref", "cents", BillingSource.Admin, "ops"))).BalanceAfter);
+        Assert.Equal(10.75m, (await h.Billing.AdjustAsync(new WalletAdjustment(client, -0.50m, LedgerBalanceType.Wallet, "cents", "c5", BillingSource.Admin, "ops"))).BalanceAfter);
+        Assert.True(BillingMath.IsCents(12.30m) && BillingMath.IsCents(-0.01m) && !BillingMath.IsCents(0.033333m));
+        await h.AssertReconciledAsync(client);
+    }
+
+    [PostgresFact]
     public async Task ManualAdjustments_NeedAReason_AndCantTakeBalancesBelowZero()
     {
         var (h, client, evt) = await SetupAsync(price: 4m, topUp: 10m);

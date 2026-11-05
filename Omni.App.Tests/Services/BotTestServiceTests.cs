@@ -27,6 +27,8 @@ public class BotTestServiceTests
         _bots.Setup(r => r.ListForClientReadOnlyAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(() => [_bot]);
         _tests.Setup(r => r.AddSession(It.IsAny<BotTestSession>())).Callback<BotTestSession>(_sessions.Add);
         _tests.Setup(r => r.AddMessage(It.IsAny<BotTestMessage>())).Callback<BotTestMessage>(_lines.Add);
+        _tests.Setup(r => r.ListMessagesAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Guid id, CancellationToken _) => _lines.Where(l => l.SessionId == id).ToList());
         _tests.Setup(r => r.GetSessionAsync(_clientId, It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Guid _, Guid id, CancellationToken _) => _sessions.FirstOrDefault(s => s.Id == id));
         _tests.Setup(r => r.GetSessionForUpdateAsync(_clientId, It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
@@ -126,6 +128,29 @@ public class BotTestServiceTests
         Assert.False(await Sut().ReplyAsync(Run(session), "Again"));
         Assert.Equal([BotTestNote.ReplyRefusedKey], NoteKeys());
         await Assert.ThrowsAsync<ArgumentException>(() => Sut().ReplyAsync(Run(session), " "));
+    }
+
+    [Fact]
+    public async Task A_retried_reply_is_neither_charged_nor_added_again()
+    {
+        // QA t2-billing-02: an n8n retry of the reply call charged ai_reply twice and showed the bot line twice.
+        var session = Session();
+        var hold = new MessageBillingHold(_clientId, "k", BillingSettlementTrigger.OnProviderAccepted);
+        _billing.Setup(b => b.ReserveAiReplyAsync(_clientId, null, It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync(hold);
+        _lines.Add(new BotTestMessage { Id = Guid.NewGuid(), SessionId = session.Id, ClientId = _clientId, Role = BotTestRole.Contact, Content = "hours?" });
+
+        Assert.True(await Sut().ReplyAsync(Run(session), "We open at 9."));
+        Assert.True(await Sut().ReplyAsync(Run(session), "We open at 9."));          // the retry: same text after the same contact line
+        Assert.True(await Sut().ReplyAsync(Run(session), "Anything else?"));          // a different reply is a new line
+        Assert.True(await Sut().ReplyAsync(Run(session), "We open at 9.", replyKey: "exec-1"));
+        Assert.True(await Sut().ReplyAsync(Run(session), "We open at 9!", replyKey: "exec-1")); // the same reply id is the same reply
+        Assert.Equal(["We open at 9.", "Anything else?", "We open at 9."], _lines.Where(l => l.Role == BotTestRole.Bot).Select(l => l.Content));
+        _billing.Verify(b => b.ReserveAiReplyAsync(_clientId, null, It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Exactly(3));
+
+        // After the contact writes again, the same words are a new reply.
+        _lines.Add(new BotTestMessage { Id = Guid.NewGuid(), SessionId = session.Id, ClientId = _clientId, Role = BotTestRole.Contact, Content = "and Sunday?" });
+        Assert.True(await Sut().ReplyAsync(Run(session), "We open at 9."));
+        Assert.Equal(4, _lines.Count(l => l.Role == BotTestRole.Bot));
     }
 
     [Fact]

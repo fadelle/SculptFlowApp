@@ -302,6 +302,7 @@ public class BillingService : IBillingService
     public async Task<LedgerResult> TopUpAsync(WalletTopUp request, CancellationToken ct = default)
     {
         if (request.Amount <= 0) throw new ArgumentException("A top-up amount must be greater than zero.", nameof(request));
+        if (!BillingMath.IsCents(request.Amount)) throw new ArgumentException("A top-up amount can have at most 2 decimals (whole cents).", nameof(request));
         ValidateKey(request.IdempotencyKey);
         var now = _time.GetUtcNow();
         var key = "topup:" + request.IdempotencyKey;
@@ -335,6 +336,7 @@ public class BillingService : IBillingService
     public async Task<LedgerResult> AdjustAsync(WalletAdjustment request, CancellationToken ct = default)
     {
         if (request.Amount == 0) throw new ArgumentException("An adjustment amount can't be zero.", nameof(request));
+        if (!BillingMath.IsCents(request.Amount)) throw new ArgumentException("An adjustment amount can have at most 2 decimals (whole cents).", nameof(request));
         if (string.IsNullOrWhiteSpace(request.Reason)) throw new ArgumentException("A reason is required for a manual adjustment.", nameof(request));
         if (request.BalanceType is not (LedgerBalanceType.Wallet or LedgerBalanceType.IncludedCredit))
         {

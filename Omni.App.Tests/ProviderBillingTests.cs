@@ -153,6 +153,37 @@ public class ProviderBillingTests
     }
 
     [PostgresFact]
+    public async Task TheReport_ShowsAddonRevenueWalletAdjustmentsAndRefunds()
+    {
+        // QA t2-billing-09: add-on revenue (addon_charge) was missing from the report. The report covers every client, so this
+        // test works in a window of its own, far from other tests' rows.
+        var h = new BillingHarness(_db.ConnectionString);
+        h.Time.Now = new DateTimeOffset(2047, 1, 1, 0, 0, 0, TimeSpan.Zero).AddMinutes(Random.Shared.Next(0, 500_000));
+        var client = await h.CreateClientAsync();
+        await h.TopUpAsync(client, 50m);
+        await h.Billing.AdjustAsync(new WalletAdjustment(client, 4m, LedgerBalanceType.Wallet, "goodwill", Guid.NewGuid().ToString("N"), BillingSource.Admin, "tests"));
+        await h.Billing.AdjustAsync(new WalletAdjustment(client, -1.5m, LedgerBalanceType.Wallet, "correction", Guid.NewGuid().ToString("N"), BillingSource.Admin, "tests"));
+        await h.Billing.AdjustAsync(new WalletAdjustment(client, 25m, LedgerBalanceType.IncludedCredit, "credit, not money", Guid.NewGuid().ToString("N"), BillingSource.Admin, "tests"));
+        var account = await h.AccountAsync(client);
+        await using (var db = h.Db())
+        {
+            foreach (var (type, amount) in new[] { (LedgerEntryType.AddonCharge, -16m), (LedgerEntryType.AddonCharge, -16m), (LedgerEntryType.UsageRefund, 0.25m) })
+            {
+                db.BillingLedgerEntries.Add(new BillingLedgerEntry
+                {
+                    Id = Guid.NewGuid(), ClientId = client, BillingAccountId = account.Id, EntryType = type, BalanceType = LedgerBalanceType.Wallet,
+                    Amount = amount, BalanceAfter = 0, Currency = "USD", IdempotencyKey = Guid.NewGuid().ToString("N"), Source = BillingSource.System,
+                    CreatedAt = h.Time.Now
+                });
+            }
+            await db.SaveChangesAsync();
+        }
+
+        var report = await h.Queries.GetReportAsync(h.Time.Now.AddHours(-1), h.Time.Now.AddHours(1));
+        Assert.Equal((32m, 2.5m, 0.25m, 50m), (report.AddonRevenue, report.ManualAdjustments, report.UsageRefunds, report.TopUps));
+    }
+
+    [PostgresFact]
     public async Task TheReport_SeparatesCostPaidByPlatformFromCostPaidExternally()
     {
         var (h, client, card, evt) = await SetupAsync(wallet: 10m);

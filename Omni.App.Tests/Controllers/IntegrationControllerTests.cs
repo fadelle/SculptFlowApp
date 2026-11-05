@@ -114,11 +114,10 @@ public class AuthorizationFilterTests
 
 public class WebhookControllerTests
 {
-    private readonly Mock<IMetaWebhookProcessor> _processor = new();
-    private readonly Mock<IAiTriggerNotifier> _ai = new();
+    private readonly Mock<IWhatsAppWebhookInbox> _inbox = new();
 
     private WhatsAppWebhookController Sut(string? verifyToken = "verify-me") =>
-        new WhatsAppWebhookController(_processor.Object, _ai.Object, ControllerTestKit.Config(("Meta:WebhookVerifyToken", verifyToken)), NullLogger<WhatsAppWebhookController>.Instance, Mock.Of<IMessageTracer>()).With();
+        new WhatsAppWebhookController(_inbox.Object, ControllerTestKit.Config(("Meta:WebhookVerifyToken", verifyToken)), NullLogger<WhatsAppWebhookController>.Instance, Mock.Of<IMessageTracer>()).With();
 
     [Fact]
     public void Meta_handshake_echoes_the_challenge_only_for_the_right_token()
@@ -135,7 +134,7 @@ public class WebhookControllerTests
         var sig = signature == "valid"
             ? "sha256=" + Convert.ToHexString(System.Security.Cryptography.HMACSHA256.HashData(Encoding.UTF8.GetBytes(Secret), Encoding.UTF8.GetBytes(body))).ToLowerInvariant()
             : signature;
-        return new WhatsAppWebhookController(_processor.Object, _ai.Object, ControllerTestKit.Config(("Meta:AppSecret", Secret)), NullLogger<WhatsAppWebhookController>.Instance, Mock.Of<IMessageTracer>())
+        return new WhatsAppWebhookController(_inbox.Object, ControllerTestKit.Config(("Meta:AppSecret", Secret)), NullLogger<WhatsAppWebhookController>.Instance, Mock.Of<IMessageTracer>())
             .With(ctx =>
             {
                 ctx.Request.Body = new MemoryStream(Encoding.UTF8.GetBytes(body));
@@ -143,50 +142,24 @@ public class WebhookControllerTests
             });
     }
 
-    private void Processed(params WhatsAppWebhookResponse[] responses) =>
-        _processor.Setup(p => p.ProcessAllAsync(It.IsAny<JsonElement>(), It.IsAny<CancellationToken>())).ReturnsAsync(responses);
-
     [Fact]
-    public async Task Receive_triggers_the_ai_only_when_the_processor_says_so()
+    public async Task A_signed_delivery_is_stored_exactly_as_sent_and_answered_at_once()
     {
-        var client = Guid.NewGuid(); var convo = Guid.NewGuid();
-        Processed(new WhatsAppWebhookResponse(true, "customer_message", true, client, ConversationId: convo, ContactId: Guid.NewGuid(), MessageId: Guid.NewGuid(), MessageType: "text", Content: "hi", SelectedValue: "b"));
-        Assert.IsType<OkResult>(await Signed("{}").Receive(default));
-        _ai.Verify(a => a.NotifyAsync(It.Is<AiTriggerPayload>(p => p.ClientId == client && p.ConversationId == convo && p.Channel == "whatsapp" && p.MessageText == "hi" && p.SelectedValue == "b"), It.IsAny<CancellationToken>()), Times.Once);
+        // QA t10-10: processing ran inside the request (about 2.3 s a message), so Meta waited 69 s for a 30-entry delivery.
+        const string body = "{\"entry\":[{\"id\":\"W1\"}]}";
+        Assert.IsType<OkResult>(await Signed(body).Receive(default));
+        _inbox.Verify(i => i.EnqueueAsync(It.Is<byte[]>(b => Encoding.UTF8.GetString(b) == body), It.IsAny<CancellationToken>()), Times.Once);
 
-        _ai.Invocations.Clear();
-        Processed(new WhatsAppWebhookResponse(true, "message_status", false, client));
-        await Signed("{}").Receive(default);
-        Processed(new WhatsAppWebhookResponse(true, "customer_message", true, client)); // no conversation id
-        await Signed("{}").Receive(default);
-        _ai.Verify(a => a.NotifyAsync(It.IsAny<AiTriggerPayload>(), It.IsAny<CancellationToken>()), Times.Never);
+        // A redelivery Meta sends again is stored once (the inbox says so) and still gets its 200.
+        _inbox.Setup(i => i.EnqueueAsync(It.IsAny<byte[]>(), It.IsAny<CancellationToken>())).ReturnsAsync(false);
+        Assert.IsType<OkResult>(await Signed(body).Receive(default));
     }
 
     [Fact]
-    public async Task A_batch_triggers_the_ai_once_per_conversation_using_the_last_message()
+    public async Task A_delivery_that_cant_be_stored_is_a_500_so_Meta_sends_it_again()
     {
-        var client = Guid.NewGuid(); var c1 = Guid.NewGuid(); var c2 = Guid.NewGuid();
-        WhatsAppWebhookResponse Msg(Guid convo, string text) => new(true, "customer_message", true, client, ConversationId: convo, MessageType: "text", Content: text);
-        Processed(Msg(c1, "a"), Msg(c2, "b"), Msg(c1, "c"));
-        await Signed("{}").Receive(default);
-        _ai.Verify(a => a.NotifyAsync(It.Is<AiTriggerPayload>(p => p.ConversationId == c1 && p.MessageText == "c"), It.IsAny<CancellationToken>()), Times.Once);
-        _ai.Verify(a => a.NotifyAsync(It.Is<AiTriggerPayload>(p => p.ConversationId == c2 && p.MessageText == "b"), It.IsAny<CancellationToken>()), Times.Once);
-        _ai.Verify(a => a.NotifyAsync(It.IsAny<AiTriggerPayload>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
-    }
-
-    [Fact]
-    public async Task A_signed_delivery_always_gets_its_200_and_one_failed_ai_trigger_doesnt_stop_the_others()
-    {
-        // QA t10-03: an error answered 500, so Meta retried a delivery that failed the same way every time.
-        var client = Guid.NewGuid(); var c1 = Guid.NewGuid(); var c2 = Guid.NewGuid();
-        WhatsAppWebhookResponse Msg(Guid convo) => new(true, "customer_message", true, client, ConversationId: convo, MessageType: "text", Content: "hi");
-        Processed(Msg(c1), Msg(c2));
-        _ai.Setup(a => a.NotifyAsync(It.Is<AiTriggerPayload>(p => p.ConversationId == c1), It.IsAny<CancellationToken>())).ThrowsAsync(new HttpRequestException("n8n down"));
-        Assert.IsType<OkResult>(await Signed("{}").Receive(default));
-        _ai.Verify(a => a.NotifyAsync(It.Is<AiTriggerPayload>(p => p.ConversationId == c2), It.IsAny<CancellationToken>()), Times.Once);
-
-        _processor.Setup(p => p.ProcessAllAsync(It.IsAny<JsonElement>(), It.IsAny<CancellationToken>())).ThrowsAsync(new InvalidOperationException("db down"));
-        Assert.IsType<OkResult>(await Signed("{}").Receive(default));
+        _inbox.Setup(i => i.EnqueueAsync(It.IsAny<byte[]>(), It.IsAny<CancellationToken>())).ThrowsAsync(new InvalidOperationException("db down"));
+        Assert.Equal(500, Assert.IsType<StatusCodeResult>(await Signed("{}").Receive(default)).StatusCode);
     }
 
     [Theory]
@@ -197,7 +170,7 @@ public class WebhookControllerTests
     {
         var result = await Signed("{\"entry\":[]}", signature).Receive(default);
         Assert.IsType<UnauthorizedResult>(result);
-        _processor.Verify(p => p.ProcessAllAsync(It.IsAny<JsonElement>(), It.IsAny<CancellationToken>()), Times.Never);
+        _inbox.Verify(i => i.EnqueueAsync(It.IsAny<byte[]>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -211,16 +184,17 @@ public class WebhookControllerTests
     [Fact]
     public async Task Without_a_configured_app_secret_nothing_is_accepted()
     {
-        var controller = new WhatsAppWebhookController(_processor.Object, _ai.Object, ControllerTestKit.Config(), NullLogger<WhatsAppWebhookController>.Instance, Mock.Of<IMessageTracer>())
+        var controller = new WhatsAppWebhookController(_inbox.Object, ControllerTestKit.Config(), NullLogger<WhatsAppWebhookController>.Instance, Mock.Of<IMessageTracer>())
             .With(ctx => ctx.Request.Body = new MemoryStream(Encoding.UTF8.GetBytes("{}")));
         Assert.IsType<UnauthorizedResult>(await controller.Receive(default));
-        _processor.Verify(p => p.ProcessAllAsync(It.IsAny<JsonElement>(), It.IsAny<CancellationToken>()), Times.Never);
+        _inbox.Verify(i => i.EnqueueAsync(It.IsAny<byte[]>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
     public async Task A_signed_body_that_is_not_json_is_a_bad_request()
     {
         Assert.IsType<BadRequestResult>(await Signed("not json").Receive(default));
+        _inbox.Verify(i => i.EnqueueAsync(It.IsAny<byte[]>(), It.IsAny<CancellationToken>()), Times.Never);
     }
     [Theory]
     [InlineData(WebhookReceiveOutcome.NotFound, 404)]
@@ -249,7 +223,13 @@ public class WebhookControllerTests
         var templates = new Mock<IWhatsAppTemplateService>();
         var health = new Mock<IWhatsAppHealthService>();
         var events = new WhatsAppIntegrationEventsController(templates.Object, health.Object).With();
-        Assert.IsType<OkObjectResult>((await events.TemplateEvent(new WhatsAppTemplateEventRequest(Guid.NewGuid(), "e", null, null, "n", null, null, null, null, null, null, null, null, null), default)).Result);
+        var templateEvent = new WhatsAppTemplateEventRequest(Guid.NewGuid(), "e", null, null, "n", null, null, null, null, null, null, null, null, null);
+        // A quality or category event for a template the client doesn't have changes nothing (QA t10-06).
+        Assert.IsType<NoContentResult>((await events.TemplateEvent(templateEvent, default)).Result);
+        templates.Setup(t => t.ApplyMetaEventAsync(templateEvent, It.IsAny<CancellationToken>())).ReturnsAsync(new WhatsAppTemplateResponse(
+            Guid.NewGuid(), Guid.NewGuid(), null, "n", "utility", "en_US", "approved", null, null, "b", null, null, null, null,
+            DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, null, null, null, null, null, null));
+        Assert.IsType<OkObjectResult>((await events.TemplateEvent(templateEvent, default)).Result);
         Assert.IsType<OkObjectResult>((await events.HealthEvent(new WhatsAppHealthEventRequest(Guid.NewGuid(), "e", null, null, null, null, null, null, null, null), default)).Result);
     }
 }

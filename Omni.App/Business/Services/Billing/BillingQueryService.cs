@@ -155,6 +155,10 @@ public class BillingQueryService : IBillingQueryService
         // Ledger sign convention: charges are negative, so revenue is the negated sum.
         var subscriptionRevenue = -await unit.Ledger.SumOfTypeAsync(LedgerEntryType.SubscriptionCharge, from, to, ct);
         var topUps = await unit.Ledger.SumOfTypeAsync(LedgerEntryType.WalletTopUp, from, to, ct);
+        // QA t2-billing-09: add-ons are recurring revenue like subscriptions; adjustments and refunds are wallet money only.
+        var addonRevenue = -await unit.Ledger.SumOfTypeAsync(LedgerEntryType.AddonCharge, from, to, ct);
+        var adjustments = await unit.Ledger.SumOfTypeAsync(LedgerEntryType.ManualAdjustment, from, to, ct, LedgerBalanceType.Wallet);
+        var refunds = await unit.Ledger.SumOfTypeAsync(LedgerEntryType.UsageRefund, from, to, ct, LedgerBalanceType.Wallet);
 
         var rows = usage
             .Select(x =>
@@ -168,7 +172,7 @@ public class BillingQueryService : IBillingQueryService
         var paidByPlatformCost = rows.Where(r => r.ProviderBilling == ProviderBillingResponsibility.PlatformFunded).Sum(r => r.ProviderCost);
         var paidExternallyCost = rows.Where(r => r.ProviderBilling != ProviderBillingResponsibility.PlatformFunded).Sum(r => r.ProviderCost);
         return new BillingReport(from, to, _config.BillingCurrency, rows, revenue, paidByPlatformCost, paidExternallyCost,
-            revenue - paidByPlatformCost, subscriptionRevenue, topUps);
+            revenue - paidByPlatformCost, subscriptionRevenue, topUps, addonRevenue, adjustments, refunds);
     }
 
     // ------------------------------------------------------------------------------------------------------------

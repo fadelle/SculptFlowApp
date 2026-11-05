@@ -18,16 +18,16 @@ public class BotConversationService : IBotConversationService
         _tests = tests;
     }
 
-    public async Task<BotReplyOutcome?> ReplyAsync(BotRunContext run, Guid conversationId, string? content, CancellationToken ct = default)
+    public async Task<BotReplyOutcome?> ReplyAsync(BotRunContext run, Guid conversationId, string? content, CancellationToken ct = default, string? replyKey = null)
     {
         if (!run.IsTest)
         {
-            var message = await _messages.SendAiReplyAsync(run.ClientId, conversationId, content ?? string.Empty, ct);
+            var message = await _messages.SendAiReplyAsync(run.ClientId, conversationId, content ?? string.Empty, ct, replyKey);
             return message is null ? null : new BotReplyOutcome(message.Id, Test: false);
         }
 
         // A test run's "conversation" is its test session.
-        if (!await _tests.ReplyAsync(run, content, ct)) throw new AiReplyRefusedException("test_reply_refused"); // text-ok: a reason code the workflow reads
+        if (!await _tests.ReplyAsync(run, content, ct, replyKey)) throw new AiReplyRefusedException("test_reply_refused"); // text-ok: a reason code the workflow reads
         return new BotReplyOutcome(null, Test: true);
     }
 

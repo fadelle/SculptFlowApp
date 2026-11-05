@@ -68,6 +68,35 @@ public class WhatsAppHandlerTests : WebhookTestBase
     }
 
     [Fact]
+    public async Task A_message_from_an_ad_marks_the_contact_and_tells_the_AI()
+    {
+        // QA t10-08.
+        var referral = new MetaAdReferral("ad", "120201", null, "50% off Service A", null, "ARAk");
+        var handler = new CustomerMessageHandler(Contacts.Object, Conversations.Object, Messages.Object);
+        var r = await handler.HandleAsync(Evt(ParsedMetaEventKind.CustomerMessage) with { Referral = referral }, Client, default);
+        Contacts.Verify(l => l.ApplyAdReferralAsync(ClientId, ContactId, referral, It.IsAny<CancellationToken>()), Times.Once);
+        Assert.Equal("50% off Service A", r.AdContext);
+
+        var plain = await handler.HandleAsync(Evt(ParsedMetaEventKind.CustomerMessage), Client, default);
+        Assert.Null(plain.AdContext);
+        Contacts.Verify(l => l.ApplyAdReferralAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<MetaAdReferral>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task A_changed_number_moves_the_contact_and_the_notice_is_saved_without_running_the_AI()
+    {
+        // QA t10-08: user_changed_number was a blank bubble and the new number would have made a second contact.
+        Messages.Setup(m => m.IngestAsync(It.IsAny<IngestMessageRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new IngestMessageResult(true, false, Msg(), ConversationMode.Ai, false));
+        var handler = new CustomerMessageHandler(Contacts.Object, Conversations.Object, Messages.Object);
+        var evt = Evt(ParsedMetaEventKind.CustomerMessage) with { MessageType = "system", Content = "User A changed from 96170123456 to 96171003002", NewWaId = "96171003002" };
+        var r = await handler.HandleAsync(evt, Client, default);
+        Contacts.Verify(l => l.ChangePhoneAsync(ClientId, ContactId, "+96171003002", It.IsAny<CancellationToken>()), Times.Once);
+        Messages.Verify(m => m.IngestAsync(It.Is<IngestMessageRequest>(i => i.MessageType == "system" && i.Content == "User A changed from 96170123456 to 96171003002"), It.IsAny<CancellationToken>()), Times.Once);
+        Assert.False(r.ShouldRunAi);
+    }
+
+    [Fact]
     public async Task CustomerMessage_without_a_sender_is_acknowledged_without_side_effects()
     {
         var handler = new CustomerMessageHandler(Contacts.Object, Conversations.Object, Messages.Object);

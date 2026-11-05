@@ -61,7 +61,7 @@ public class BotConversationServiceTests
     public async Task A_live_reply_is_sent_as_the_ai_and_a_test_reply_joins_the_transcript()
     {
         var message = new MessageResponse(Guid.NewGuid(), _clientId, _conversation, "outbound", "ai", "ai", "whatsapp", "text", "hi", null, true, null, null, null, null, DateTimeOffset.UtcNow, null, null, null, null, null, null, null);
-        _messages.Setup(m => m.SendAiReplyAsync(_clientId, _conversation, "hi", It.IsAny<CancellationToken>())).ReturnsAsync(message);
+        _messages.Setup(m => m.SendAiReplyAsync(_clientId, _conversation, "hi", It.IsAny<CancellationToken>(), It.IsAny<string?>())).ReturnsAsync(message);
         Assert.Equal(new BotReplyOutcome(message.Id, false), await Sut().ReplyAsync(Run(), _conversation, "hi"));
         Assert.Null(await Sut().ReplyAsync(Run(), Guid.NewGuid(), "hi"));
 

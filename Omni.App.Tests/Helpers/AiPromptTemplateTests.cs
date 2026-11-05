@@ -26,6 +26,7 @@ public class AiPromptTemplateTests
         Channel: "whatsapp",
         MessageType: "text",
         MessageText: "Can I book \"Friday\"?\nشكرا 🙏",
+        AdContext: "50% off Service A — This week only",
         ClientName: "Glow & Co",
         BusinessType: "salon",
         Language: "en",
@@ -47,7 +48,7 @@ public class AiPromptTemplateTests
 
     private static (AiTriggerPayload Trigger, string TermsJs) TriggerFor(string name) => name == "full"
         ? (Sample, SampleTermsJs)
-        : (Sample with { ContactLanguage = "", Timezone = null, Terms = null, AiProfile = null }, "null");
+        : (Sample with { ContactLanguage = "", Timezone = null, Terms = null, AiProfile = null, AdContext = null }, "null");
 
     [Theory]
     [MemberData(nameof(Triggers))]
@@ -60,6 +61,14 @@ public class AiPromptTemplateTests
         Assert.Equal(n8n, AiPromptTemplate.RenderFile(AiPrompts.AgentSystem, AiPromptValues.ForMessage(payload, Now)));
         // The agent's user input is the message text itself (promptType define, text = messageText).
         Assert.Equal("={{ $('user_message').item.json.body.messageText }}", agent.GetProperty("text").GetString());
+    }
+
+    [Fact]
+    public void The_ad_a_message_came_from_reaches_the_agent()
+    {
+        // QA t10-08: the AI didn't know which offer "your ad" meant and handed off.
+        Assert.Contains("this ad):\n50% off Service A — This week only\n", AiPromptTemplate.RenderFile(AiPrompts.AgentSystem, AiPromptValues.ForMessage(Sample, Now)));
+        Assert.Contains("this ad):\nnone\n", AiPromptTemplate.RenderFile(AiPrompts.AgentSystem, AiPromptValues.ForMessage(Sample with { AdContext = null }, Now)));
     }
 
     [Theory]

@@ -144,8 +144,10 @@ public class ClientAdminServiceTests
     private readonly Mock<IClientRegistrationService> _registration = new();
     private readonly Mock<IInviteService> _invites = new();
 
+    private readonly Mock<ILiveConnections> _live = new();
+
     private ClientAdminService Sut() => new(_repo.Object, _uow.Object, TimeProvider.System, _inboxSettings.Object, _businessTypes.Object, _profile.Object, _cache.Object,
-        _registration.Object, _invites.Object, Microsoft.Extensions.Logging.Abstractions.NullLogger<ClientAdminService>.Instance);
+        _registration.Object, _invites.Object, Microsoft.Extensions.Logging.Abstractions.NullLogger<ClientAdminService>.Instance, _live.Object);
 
     [Fact]
     public async Task Opening_a_client_goes_through_registration_then_invites_its_owner()
@@ -286,6 +288,7 @@ public class ClientAdminServiceTests
         _cache.Verify(c => c.RemoveByPrefixAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
         await Sut().SetActiveAsync(client.Id, false, default);
         Assert.False(client.IsActive);
+        _live.Verify(l => l.CloseClient(client.Id), Times.Once); // QA t11-auto-02: open Inbox pages are closed
         // QA t6-admin-04: the cached "who may use the app" is dropped, so its people are signed out on their next request.
         _cache.Verify(c => c.RemoveByPrefixAsync(CacheKeys.MembershipPrefix, It.IsAny<CancellationToken>()), Times.Once);
     }

@@ -102,7 +102,18 @@ public class ConversationService : IConversationService
         var existing = await _conversations.FindForContactAsync(clientId, contactId, channel, ct);
         if (existing is not null) return InboxMapper.ToResponse(existing);
 
-        return await CreateCoreAsync(new CreateConversationRequest(clientId, contactId, channel, ExternalThreadId: null), ct);
+        if (!ConversationChannel.All.Contains(channel))
+        {
+            throw new ArgumentException("inbox.errors.invalidChannel").WithArgs(channel);
+        }
+        var created = AddNew(new CreateConversationRequest(clientId, contactId, channel, ExternalThreadId: null),
+            await _inboxSettings.InitialModeAsync(clientId, channel, ct));
+        if (await _unitOfWork.TrySaveChangesAsync(ct)) return InboxMapper.ToResponse(created);
+
+        // Two first messages from one contact at once (QA t10-10): the unique index on WhatsApp conversations lets one win; use it.
+        var winner = await _conversations.FindForContactAsync(clientId, contactId, channel, ct)
+            ?? throw new InvalidOperationException("Conversation conflict reported but the existing conversation was not found."); // text-ok: internal invariant
+        return InboxMapper.ToResponse(winner);
     }
 
     public async Task<ConversationResponse> GetOrCreateForContactAsync(

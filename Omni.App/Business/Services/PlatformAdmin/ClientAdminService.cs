@@ -33,10 +33,13 @@ public class ClientAdminService : IClientAdminService
     private readonly IInviteService _invites;
     private readonly ILogger<ClientAdminService> _logger;
 
+    private readonly ILiveConnections? _live;
+
     public ClientAdminService(IClientAdminRepository repository, IUnitOfWork unitOfWork, TimeProvider time, IInboxSettingsService inboxSettings,
         IBusinessTypeService businessTypes, IClientProfileService profile, ICacheManager cache, IClientRegistrationService registration,
-        IInviteService invites, ILogger<ClientAdminService> logger)
+        IInviteService invites, ILogger<ClientAdminService> logger, ILiveConnections? live = null)
     {
+        _live = live;
         _registration = registration;
         _invites = invites;
         _logger = logger;
@@ -94,6 +97,8 @@ public class ClientAdminService : IClientAdminService
         // Who may use the app is cached per user (UserAccess) and needs an active client: drop it so the client's people are
         // signed out on their next request (or let back in). Rare, so the whole prefix rather than a per-user lookup.
         await _cache.RemoveByPrefixAsync(CacheKeys.MembershipPrefix, ct);
+        // Open Inbox pages stop receiving the client's live updates at once (QA t11-auto-02).
+        if (!active) _live?.CloseClient(id);
         return new PlatformAdminChange(id);
     }
 

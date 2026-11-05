@@ -47,7 +47,10 @@ public interface IMessageService
     /// sending (a human may have taken over while the AI was "thinking"), throwing
     /// ConversationNotInAiModeException if not. Unlike SendAsync (members), this never flips the
     /// conversation to human mode — origin=ai, sender_type=ai throughout.</summary>
-    Task<MessageResponse?> SendAiReplyAsync(Guid clientId, Guid conversationId, string content, CancellationToken ct = default);
+    /// <remarks>A retry of the same reply is answered with the message the first call made, with no second charge or send
+    /// (QA t2-billing-02): <paramref name="replyKey"/> names the reply (n8n's execution and node), else the same content
+    /// after the same latest customer message is the same reply.</remarks>
+    Task<MessageResponse?> SendAiReplyAsync(Guid clientId, Guid conversationId, string content, CancellationToken ct = default, string? replyKey = null);
 
     /// <summary>The AI bot's handoff message, right after the bot handed the conversation to the team (once per real handoff,
     /// IBotConversationService): an automatic message (billed like any text, never changes the mode), event

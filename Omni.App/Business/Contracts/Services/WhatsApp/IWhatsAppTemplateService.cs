@@ -45,5 +45,6 @@ public interface IWhatsAppTemplateService
     /// (ClientId, Name, Language) for events that don't carry Meta's id yet. Idempotent by
     /// construction: re-applying the same state twice just re-sets the same fields, no duplicate
     /// rows possible. Broadcasts WhatsAppTemplateUpdated on success.</summary>
-    Task<WhatsAppTemplateResponse> ApplyMetaEventAsync(WhatsAppTemplateEventRequest request, CancellationToken ct = default);
+    /// Null when a quality or category event names a template this client doesn't have (no empty row is made for it; QA t10-06).
+    Task<WhatsAppTemplateResponse?> ApplyMetaEventAsync(WhatsAppTemplateEventRequest request, CancellationToken ct = default);
 }

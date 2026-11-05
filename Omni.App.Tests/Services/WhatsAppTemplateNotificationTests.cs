@@ -48,7 +48,9 @@ public class WhatsAppTemplateNotificationTests
         var (type, text, link) = Assert.Single(_sent);
         Assert.Equal((NotificationType.TemplateStatusChanged, "/WhatsApp/Templates"), (type, link));
         Assert.Equal(("notifications.template.rejected.title", "notifications.template.rejected.messageReason"), (text.TitleKey, text.MessageKey));
-        Assert.Equal(["spring_promo", "INVALID_FORMAT"], text.Args);
+        // The code reaches the owner as its label, in their language (QA t10-06), not as INVALID_FORMAT.
+        Assert.Equal("spring_promo", text.Args[0]);
+        Assert.Equal(TemplateReasons.LabelKey("INVALID_FORMAT"), Assert.IsType<TextArg>(text.Args[1]).Key);
     }
 
     [Theory]

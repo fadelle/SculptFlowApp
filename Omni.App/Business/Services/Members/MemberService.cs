@@ -1,3 +1,4 @@
+using Omni.App.Business.Contracts.Managers;
 using Microsoft.AspNetCore.Identity;
 using Omni.App.Business.Contracts.Services.Billing;
 using Omni.App.Business.Contracts.Services.Members;
@@ -21,10 +22,12 @@ public class MemberService : IMemberService
     private readonly IEntitlementService _entitlements;
     private readonly IAccountTokenRepository _tokens;
     private readonly TimeProvider _time;
+    private readonly ILiveConnections? _live;
 
     public MemberService(IClientRepository clients, IUnitOfWork unitOfWork, UserManager<AppUser> users, IEntitlementService entitlements,
-        IAccountTokenRepository tokens, TimeProvider time)
+        IAccountTokenRepository tokens, TimeProvider time, ILiveConnections? live = null)
     {
+        _live = live;
         _clients = clients;
         _unitOfWork = unitOfWork;
         _users = users;
@@ -82,6 +85,8 @@ public class MemberService : IMemberService
         membership.IsActive = active;
         membership.UpdatedAt = _time.GetUtcNow();
         await _unitOfWork.SaveChangesAsync(ct);
+        // An open Inbox stops receiving the client's live updates at once (QA t11-auto-02).
+        if (!active) _live?.CloseUser(membership.UserId);
     }
 
     /// <summary>One more active client/member user must fit the plan's seats (max_users; unlimited when unset). Open invites

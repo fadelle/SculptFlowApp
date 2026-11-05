@@ -38,6 +38,7 @@ public class ApplicationDbContext : IdentityUserContext<AppUser>
     public DbSet<Campaign> Campaigns => Set<Campaign>();
     public DbSet<CampaignRecipient> CampaignRecipients => Set<CampaignRecipient>();
     public DbSet<WhatsAppHealthEvent> WhatsAppHealthEvents => Set<WhatsAppHealthEvent>();
+    public DbSet<WhatsAppWebhookDelivery> WhatsAppWebhookDeliveries => Set<WhatsAppWebhookDelivery>();
     public DbSet<KnowledgeDocument> KnowledgeDocuments => Set<KnowledgeDocument>();
     public DbSet<KnowledgeChunk> KnowledgeChunks => Set<KnowledgeChunk>();
     public DbSet<KnowledgeSearchSettings> KnowledgeSearchSettings => Set<KnowledgeSearchSettings>();
@@ -663,6 +664,25 @@ public class ApplicationDbContext : IdentityUserContext<AppUser>
         // ---------------------------------------------------------------
         // whatsapp_health_events
         // ---------------------------------------------------------------
+        // The WhatsApp webhook inbox (QA t10-10): see WhatsAppDeliveryRepository.
+        modelBuilder.Entity<WhatsAppWebhookDelivery>(e =>
+        {
+            e.ToTable("whatsapp_webhook_deliveries", "channels");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id").UseIdentityByDefaultColumn();
+            e.Property(x => x.Body).HasColumnName("body").IsRequired();
+            e.Property(x => x.BodyHash).HasColumnName("body_hash").HasMaxLength(64).IsRequired();
+            e.Property(x => x.TraceParent).HasColumnName("trace_parent").HasMaxLength(60);
+            e.Property(x => x.Status).HasColumnName("status").HasMaxLength(20).IsRequired();
+            e.Property(x => x.Attempts).HasColumnName("attempts");
+            e.Property(x => x.ReceivedAt).HasColumnName("received_at");
+            e.Property(x => x.NextAttemptAt).HasColumnName("next_attempt_at");
+            e.Property(x => x.LockedUntil).HasColumnName("locked_until");
+            e.Property(x => x.ProcessedAt).HasColumnName("processed_at");
+            e.Property(x => x.LastError).HasColumnName("last_error");
+            e.HasIndex(x => x.BodyHash).IsUnique();
+        });
+
         modelBuilder.Entity<WhatsAppHealthEvent>(e =>
         {
             e.ToTable("whatsapp_health_events", "channels");

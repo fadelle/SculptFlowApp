@@ -19,12 +19,10 @@ namespace Omni.App.Controllers.Integrations;
 /// GET is Meta's webhook subscription verification handshake (hub.mode/hub.verify_token/hub.challenge).
 /// POST is every subsequent webhook delivery — raw Meta JSON in.
 ///
-/// Both actions are thin: all Meta-specific parsing, client resolution, persistence, and SignalR
-/// broadcasting already lives in Business/Engines/WhatsApp/MetaWebhookProcessor.cs (and the Handlers
-/// beneath it) — this controller does not duplicate any of that, it only decides, from the flat
-/// WhatsAppWebhookResponse the processor already returns, whether to make the one new outbound
-/// call: notifying n8n's AI workflow when (and only when) ShouldRunAi is true. Non-AI events
-/// (statuses, echoes, templates, health, unknown) never reach n8n at all — see IAiTriggerNotifier.
+/// Both actions are thin: POST only checks the signature and the JSON, stores the delivery
+/// (IWhatsAppWebhookInbox) and answers. Everything else — parsing, client resolution, persistence,
+/// SignalR broadcasts (MetaWebhookProcessor and its Handlers) and the AI trigger for eligible customer
+/// messages (IAiTriggerNotifier) — runs afterwards in WhatsAppDeliveryWorker (QA t10-10).
 ///
 /// Architecture, before vs. after:
 ///   Before:  Meta -> n8n (classifies + forwards raw JSON) -> this app
@@ -40,19 +38,16 @@ namespace Omni.App.Controllers.Integrations;
 [Route("api/integrations/whatsapp/webhook")]
 public class WhatsAppWebhookController : ControllerBase
 {
-    private readonly IMetaWebhookProcessor _webhookProcessor;
-    private readonly IAiTriggerNotifier _aiTrigger;
+    private readonly IWhatsAppWebhookInbox _inbox;
     private readonly IConfiguration _configuration;
     private readonly ILogger<WhatsAppWebhookController> _logger;
     private readonly IMessageTracer _tracer;
 
     public WhatsAppWebhookController(
-        IMetaWebhookProcessor webhookProcessor, IAiTriggerNotifier aiTrigger,
-        IConfiguration configuration, ILogger<WhatsAppWebhookController> logger, IMessageTracer tracer)
+        IWhatsAppWebhookInbox inbox, IConfiguration configuration, ILogger<WhatsAppWebhookController> logger, IMessageTracer tracer)
     {
         _tracer = tracer;
-        _webhookProcessor = webhookProcessor;
-        _aiTrigger = aiTrigger;
+        _inbox = inbox;
         _configuration = configuration;
         _logger = logger;
     }
@@ -81,8 +76,10 @@ public class WhatsAppWebhookController : ControllerBase
     }
 
     /// <summary>Every WhatsApp webhook delivery from Meta. The raw body must carry a valid X-Hub-Signature-256 (HMAC-SHA256 keyed with
-    /// Meta:AppSecret) or nothing is processed. Then it reuses the MetaWebhookParser -> MetaWebhookProcessor -> Handlers pipeline.
-    /// One batch can hold messages from several contacts, so the AI is triggered once per conversation (the last message wins).</summary>
+    /// Meta:AppSecret) or nothing is processed. A signed delivery is stored and answered at once (QA t10-10: processing took
+    /// about 2.3 s per message, so a 30-entry delivery waited 69 s and Meta redelivers slow ones); WhatsAppDeliveryWorker
+    /// processes it in the background, in order, through MetaWebhookParser -> MetaWebhookProcessor -> Handlers, then triggers
+    /// the AI once per conversation (IWhatsAppWebhookInbox).</summary>
     [HttpPost]
     public async Task<IActionResult> Receive(CancellationToken ct)
     {
@@ -96,11 +93,9 @@ public class WhatsAppWebhookController : ControllerBase
             return Unauthorized();
         }
 
-        JsonElement rawBody;
         try
         {
             using var document = JsonDocument.Parse(body);
-            rawBody = document.RootElement.Clone();
         }
         catch (JsonException)
         {
@@ -108,40 +103,18 @@ public class WhatsAppWebhookController : ControllerBase
             return BadRequest();
         }
 
-        // Once the signature is valid Meta always gets its 200 (QA t10-03): a failed event is skipped and traced by the processor,
-        // and a delivery Meta retried would only fail the same way. Each saved customer message still gets its AI run.
-        IReadOnlyList<WhatsAppWebhookResponse> results;
+        // Stored = Meta's 200; processing (and any failure in it) happens in the background and never reaches Meta (QA t10-03,
+        // t10-10). Only a delivery we couldn't store answers 500, so Meta sends it again.
         try
         {
-            results = await _webhookProcessor.ProcessAllAsync(rawBody, ct);
+            await _inbox.EnqueueAsync(body, ct);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogError(ex, "WhatsApp webhook: the delivery couldn't be processed.");
-            _tracer.Step(TraceSteps.WebhookEventFailed, TraceOutcomes.Failed, new TraceIds(Channel: Channel), detail: new { kind = "delivery", error = TraceText.Error(ex) });
-            return Ok();
+            _logger.LogError(ex, "WhatsApp webhook: the delivery couldn't be stored; Meta will send it again.");
+            _tracer.Step(TraceSteps.WebhookEventFailed, TraceOutcomes.Failed, new TraceIds(Channel: Channel), detail: new { kind = "store", error = TraceText.Error(ex) });
+            return StatusCode(StatusCodes.Status500InternalServerError);
         }
-        var aiTriggers = results
-            .Where(r => r.ShouldRunAi && r.ClientId.HasValue && r.ConversationId.HasValue)
-            .GroupBy(r => r.ConversationId!.Value)
-            .Select(g => g.Last());
-        foreach (var result in aiTriggers)
-        {
-            try
-            {
-                await _aiTrigger.NotifyAsync(new AiTriggerPayload(
-                    result.ClientId!.Value, result.ConversationId!.Value, result.ContactId, result.MessageId,
-                    Channel: Channel, MessageType: result.MessageType, MessageText: result.Content,
-                    SelectedValue: result.SelectedValue), ct);
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                // One conversation's trigger failing doesn't stop the others; its message stays unanswered, so a repeat asks again.
-                _logger.LogError(ex, "WhatsApp webhook: the AI trigger for conversation {ConversationId} failed.", result.ConversationId);
-            }
-        }
-
-        // Meta only needs a fast 200 acknowledgement — the response body isn't inspected.
         return Ok();
     }
 

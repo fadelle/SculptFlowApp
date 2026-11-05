@@ -233,7 +233,7 @@ public class BotToolService : IBotToolService
         // The workflow needs these two outcomes as 409s with a code (it stops without retrying), not as 422s.
         try
         {
-            var outcome = await _botConversations.ReplyAsync(run, conversationId, request.Content, ct);
+            var outcome = await _botConversations.ReplyAsync(run, conversationId, request.Content, ct, request.ReplyId);
             return outcome is null ? BotToolResult.NotFound() : BotToolResult.Ok(outcome);
         }
         catch (ConversationNotInAiModeException ex)

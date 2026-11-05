@@ -17,5 +17,6 @@ public interface IBillingLedgerRepository
     Task<decimal> SumAsync(Guid clientId, string balanceType, CancellationToken ct = default);
 
     /// <summary>Sum of every entry of this type created in [from, to), all clients.</summary>
-    Task<decimal> SumOfTypeAsync(string entryType, DateTimeOffset from, DateTimeOffset to, CancellationToken ct = default);
+    /// <summary>Sum of one entry type's amounts in [from, to); only one balance (wallet, included credit) when given.</summary>
+    Task<decimal> SumOfTypeAsync(string entryType, DateTimeOffset from, DateTimeOffset to, CancellationToken ct = default, string? balanceType = null);
 }

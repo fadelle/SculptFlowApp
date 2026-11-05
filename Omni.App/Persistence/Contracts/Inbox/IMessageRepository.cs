@@ -26,4 +26,12 @@ public interface IMessageRepository
         IReadOnlyCollection<Guid> conversationIds, CancellationToken ct = default);
 
     Task<IReadOnlyList<Message>> ListByIdsReadOnlyAsync(IReadOnlyCollection<Guid> messageIds, CancellationToken ct = default);
+
+    /// <summary>The conversation's latest inbound (customer) message id, or null.</summary>
+    Task<Guid?> GetLatestInboundIdAsync(Guid conversationId, CancellationToken ct = default);
+
+    /// <summary>Waits (up to <paramref name="wait"/>) for a lock on one AI reply's message id, so a retried reply call waits for
+    /// the first one and then finds its message instead of sending again (QA t2-billing-02). A Postgres session advisory lock
+    /// on this context's connection, released on dispose. Null when it couldn't be taken in time.</summary>
+    Task<IAsyncDisposable?> LockReplyAsync(Guid messageId, TimeSpan wait, CancellationToken ct = default);
 }

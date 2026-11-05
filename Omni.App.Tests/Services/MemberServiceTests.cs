@@ -28,7 +28,9 @@ public class MemberServiceTests
     internal static MemberService Sut(IClientRepository clients) =>
         new(clients, Mock.Of<IUnitOfWork>(), NewUserManager().Object, Mock.Of<IEntitlementService>(), Mock.Of<IAccountTokenRepository>(), TimeProvider.System);
 
-    private MemberService Sut() => new(_clients.Object, _uow.Object, _users.Object, _entitlements.Object, _tokens.Object, TimeProvider.System);
+    private readonly Mock<ILiveConnections> _live = new();
+
+    private MemberService Sut() => new(_clients.Object, _uow.Object, _users.Object, _entitlements.Object, _tokens.Object, TimeProvider.System, _live.Object);
 
     private UserAccess Owner => new("owner", _clientId, UserRole.Client, null, "Olga", null);
     private UserAccess Member => new("m0", _clientId, UserRole.Member, null, "Max", null);
@@ -90,6 +92,8 @@ public class MemberServiceTests
         await Sut().SetActiveAsync(Owner, "m1", false);
         Assert.False(m.IsActive);
         _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+        // QA t11-auto-02: their open Inbox stops receiving live updates at once.
+        _live.Verify(l => l.CloseUser("m1"), Times.Once);
         _entitlements.Verify(e => e.EnsureWithinLimitAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
 
         _entitlements.Setup(e => e.EnsureWithinLimitAsync(_clientId, EntitlementKeys.MaxUsers, 3, It.IsAny<CancellationToken>()))

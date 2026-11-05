@@ -400,6 +400,7 @@ public class ContactServiceTests
     [Fact]
     public async Task GetOrCreateByPhone_finds_or_creates_a_whatsapp_contact()
     {
+        _uow.Setup(u => u.TrySaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(true);
         var contact = Existing();
         _contacts.Setup(l => l.FindByPhoneAsync(_clientId, "961700", It.IsAny<CancellationToken>())).ReturnsAsync(contact);
         var (found, wasCreated) = await Sut().GetOrCreateByPhoneAsync(_clientId, "961700", "X");
@@ -413,6 +414,67 @@ public class ContactServiceTests
         Assert.Equal(("whatsapp", "whatsapp:961799", true), (added!.Source, added.ExternalContactId, added.MarketingOptIn));
         _events.Verify(e => e.Log(_clientId, EventTypes.ContactCreated, added.Id, null, null, "whatsapp", "{}"), Times.Once);
         Assert.Equal(added.Id, fresh.Id);
+    }
+
+    [Fact]
+    public async Task GetOrCreateByPhone_yields_to_a_concurrent_first_message_from_the_same_number()
+    {
+        // QA t10-10: racing first messages from one new number gave 500s (duplicate external id).
+        var winner = Existing();
+        _uow.Setup(u => u.TrySaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(false);
+        _contacts.SetupSequence(l => l.FindByPhoneAsync(_clientId, "+96170", It.IsAny<CancellationToken>())).ReturnsAsync((Contact?)null).ReturnsAsync(winner);
+        var (contact, created) = await Sut().GetOrCreateByPhoneAsync(_clientId, "+96170", "Ann");
+        Assert.Equal((winner.Id, false), (contact.Id, created));
+    }
+
+    // ---- QA t10-08 ----
+
+    [Theory]
+    [InlineData("whatsapp", null, true)]
+    [InlineData(null, null, true)]
+    [InlineData("whatsapp", "Spring promo", false)]   // already attributed: first touch wins
+    [InlineData("manual", null, false)]
+    public async Task An_ad_marks_a_contacts_source_only_on_first_touch(string? source, string? detail, bool changes)
+    {
+        var contact = Existing();
+        contact.Source = source;
+        contact.SourceDetail = detail;
+        _contacts.Setup(l => l.GetAsync(_clientId, contact.Id, It.IsAny<CancellationToken>())).ReturnsAsync(contact);
+        await Sut().ApplyAdReferralAsync(_clientId, contact.Id, new MetaAdReferral("ad", "120201", null, "50% off Service A", "This week only", "ARAk"));
+        if (changes)
+        {
+            Assert.Equal((ContactService.AdSource, "50% off Service A — This week only", "Ad 120201"), (contact.Source, contact.SourceDetail, contact.CampaignName));
+        }
+        else
+        {
+            Assert.Equal((source, detail), (contact.Source, contact.SourceDetail));
+        }
+    }
+
+    [Fact]
+    public async Task A_changed_number_moves_the_contact_and_its_whatsapp_identity()
+    {
+        var contact = Existing();
+        contact.Phone = "+96170";
+        contact.ExternalContactId = "whatsapp:+96170";
+        _contacts.Setup(l => l.GetAsync(_clientId, contact.Id, It.IsAny<CancellationToken>())).ReturnsAsync(contact);
+        Assert.True(await Sut().ChangePhoneAsync(_clientId, contact.Id, "+96171"));
+        Assert.Equal(("+96171", "whatsapp:+96171"), (contact.Phone, contact.ExternalContactId));
+        _events.Verify(e => e.Log(_clientId, EventTypes.ContactPhoneChanged, contact.Id, null, null, "whatsapp", It.Is<string>(s => s.Contains("\"applied\":true"))), Times.Once);
+    }
+
+    [Fact]
+    public async Task A_changed_number_another_contact_has_is_logged_but_not_applied()
+    {
+        var contact = Existing();
+        contact.Phone = "+96170";
+        var other = Existing();
+        _contacts.Setup(l => l.GetAsync(_clientId, contact.Id, It.IsAny<CancellationToken>())).ReturnsAsync(contact);
+        _contacts.Setup(l => l.FindByPhoneAsync(_clientId, "+96171", It.IsAny<CancellationToken>())).ReturnsAsync(other);
+        Assert.False(await Sut().ChangePhoneAsync(_clientId, contact.Id, "+96171"));
+        Assert.Equal("+96170", contact.Phone);
+        _events.Verify(e => e.Log(_clientId, EventTypes.ContactPhoneChanged, contact.Id, null, null, "whatsapp", It.Is<string>(s => s.Contains("\"applied\":false"))), Times.Once);
+        Assert.False(await Sut().ChangePhoneAsync(_clientId, Guid.NewGuid(), "+96172"));   // unknown contact
     }
 
     [Fact]

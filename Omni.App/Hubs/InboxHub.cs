@@ -19,21 +19,32 @@ public class InboxHub : Hub
 {
     private readonly ICurrentClientContext _clientContext;
     private readonly IConversationService _conversations;
+    private readonly ILiveConnections _live;
 
-    public InboxHub(ICurrentClientContext clientContext, IConversationService conversations)
+    public InboxHub(ICurrentClientContext clientContext, IConversationService conversations, ILiveConnections live)
     {
         _clientContext = clientContext;
         _conversations = conversations;
+        _live = live;
     }
 
     public override async Task OnConnectedAsync()
     {
-        var clientId = await _clientContext.GetClientIdAsync(Context.ConnectionAborted);
-        if (clientId is not null)
+        var access = await _clientContext.GetAccessAsync(Context.ConnectionAborted);
+        if (access is not null)
         {
-            await Groups.AddToGroupAsync(Context.ConnectionId, ClientGroup(clientId.Value));
+            await Groups.AddToGroupAsync(Context.ConnectionId, ClientGroup(access.ClientId));
+            // Known by user and client, so losing access closes it (QA t11-auto-02; ILiveConnections, LiveConnectionCheckJob).
+            var context = Context;
+            _live.Add(context.ConnectionId, access.UserId, access.ClientId, context.User ?? new System.Security.Claims.ClaimsPrincipal(), context.Abort);
         }
         await base.OnConnectedAsync();
+    }
+
+    public override async Task OnDisconnectedAsync(Exception? exception)
+    {
+        _live.Remove(Context.ConnectionId);
+        await base.OnDisconnectedAsync(exception);
     }
 
     /// <summary>Optional finer-grained subscription for whichever conversation is currently open in

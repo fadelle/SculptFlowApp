@@ -71,6 +71,9 @@ Conversation ID:
 Contact message:
 {{messageText}}
 
+Ad the contact tapped to send this message (when it names one, "the ad", "this offer" or "the promotion" mean this ad):
+{{adContext}}
+
 Business timezone:
 {{timezone}}
 

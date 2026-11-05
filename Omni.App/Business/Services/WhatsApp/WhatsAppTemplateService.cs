@@ -271,7 +271,7 @@ public class WhatsAppTemplateService : IWhatsAppTemplateService
         return ToResponse(template);
     }
 
-    public async Task<WhatsAppTemplateResponse> ApplyMetaEventAsync(WhatsAppTemplateEventRequest request, CancellationToken ct = default)
+    public async Task<WhatsAppTemplateResponse?> ApplyMetaEventAsync(WhatsAppTemplateEventRequest request, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(request.Name))
         {
@@ -303,6 +303,13 @@ public class WhatsAppTemplateService : IWhatsAppTemplateService
         var previousStatus = template?.Status;
         var previousCategory = template is null ? null : (string.IsNullOrWhiteSpace(template.CurrentCategory) ? template.Category : template.CurrentCategory);
 
+        // A quality or category event alone says nothing worth a row: an unknown template stays unknown (QA t10-06: an empty
+        // "draft" row appeared for a quality update).
+        if (template is null && (string.IsNullOrWhiteSpace(request.Status) || IsQualityOrCategoryEvent(request.EventType)))
+        {
+            return null;
+        }
+
         if (template is null)
         {
             // Meta knows about a template we don't have a local row for yet (created directly in
@@ -328,7 +335,12 @@ public class WhatsAppTemplateService : IWhatsAppTemplateService
         if (request.CurrentCategory is not null) template.CurrentCategory = request.CurrentCategory;
         if (request.QualityRating is not null) template.QualityRating = request.QualityRating;
         if (request.ComponentsJson is not null) template.ComponentsJson = request.ComponentsJson;
-        if (request.Reason is not null) template.RejectionReason = request.Reason;
+        // The reason belongs to the status it came with (QA t10-06): an approved template has none, Meta's "NONE" is none, and a
+        // new status without a reason clears an old one. A rejection keeps Meta's code and its own explanation.
+        var reason = TemplateReasons.Compose(request.Reason, request.ReasonDetail);
+        if (template.Status == WhatsAppTemplateStatus.Approved) template.RejectionReason = null;
+        else if (reason is not null) template.RejectionReason = reason;
+        else if (!string.Equals(previousStatus, template.Status, StringComparison.Ordinal)) template.RejectionReason = null;
         template.ChannelIntegrationId = integration?.Id ?? template.ChannelIntegrationId;
         template.LastMetaEventAt = request.OccurredAt ?? now;
         template.UpdatedAt = now;
@@ -352,6 +364,15 @@ public class WhatsAppTemplateService : IWhatsAppTemplateService
             await _notifications.CreateAsync(request.ClientId, NotificationType.TemplateStatusChanged, statusText,
                 channelIntegrationId: template.ChannelIntegrationId, link: TemplatesLink, ct: ct);
         }
+        // Meta announces a category change before it happens: the owner hears what will change and when (QA t10-06).
+        if (!string.IsNullOrWhiteSpace(request.PendingCategory))
+        {
+            await _notifications.CreateAsync(request.ClientId, NotificationType.TemplateStatusChanged,
+                NotificationText.Of("notifications.template.categorySoon.title", "notifications.template.categorySoon.message",
+                    template.Name, TextArg.Value(request.PendingCategory.ToLowerInvariant()),
+                    (request.PendingCategoryAt ?? now).UtcDateTime.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)),
+                channelIntegrationId: template.ChannelIntegrationId, link: TemplatesLink, ct: ct);
+        }
         var newCategory = request.CurrentCategory?.ToLowerInvariant();
         if (previousCategory is not null && !string.IsNullOrWhiteSpace(newCategory)
             && !string.Equals(previousCategory, newCategory, StringComparison.OrdinalIgnoreCase))
@@ -367,6 +388,9 @@ public class WhatsAppTemplateService : IWhatsAppTemplateService
 
     private const string TemplatesLink = "/WhatsApp/Templates";
 
+    private static bool IsQualityOrCategoryEvent(string? eventType) =>
+        eventType is not null && (eventType.Contains("quality", StringComparison.OrdinalIgnoreCase) || eventType.Contains("category", StringComparison.OrdinalIgnoreCase));
+
     /// <summary>The notification for a status change the owner should hear about, or null (no change, or one that
     /// doesn't affect sending such as pending or in appeal).</summary>
     private static NotificationText? StatusNotification(string? previousStatus, WhatsAppTemplate template)
@@ -377,7 +401,7 @@ public class WhatsAppTemplateService : IWhatsAppTemplateService
             WhatsAppTemplateStatus.Approved => NotificationText.Of("notifications.template.approved.title", "notifications.template.approved.message", template.Name),
             WhatsAppTemplateStatus.Rejected => string.IsNullOrWhiteSpace(template.RejectionReason)
                 ? NotificationText.Of("notifications.template.rejected.title", "notifications.template.rejected.message", template.Name)
-                : NotificationText.Of("notifications.template.rejected.title", "notifications.template.rejected.messageReason", template.Name, template.RejectionReason),
+                : NotificationText.Of("notifications.template.rejected.title", "notifications.template.rejected.messageReason", template.Name, TemplateReasons.Arg(template.RejectionReason)),
             WhatsAppTemplateStatus.Paused => NotificationText.Of("notifications.template.paused.title", "notifications.template.paused.message", template.Name),
             WhatsAppTemplateStatus.Disabled => NotificationText.Of("notifications.template.disabled.title", "notifications.template.disabled.message", template.Name),
             WhatsAppTemplateStatus.Flagged => NotificationText.Of("notifications.template.flagged.title", "notifications.template.flagged.message", template.Name),
@@ -396,7 +420,9 @@ public class WhatsAppTemplateService : IWhatsAppTemplateService
         "PAUSED" => WhatsAppTemplateStatus.Paused,
         "DISABLED" => WhatsAppTemplateStatus.Disabled,
         "FLAGGED" => WhatsAppTemplateStatus.Flagged,
-        "DELETED" => WhatsAppTemplateStatus.Deleted,
+        "DELETED" or "PENDING_DELETION" => WhatsAppTemplateStatus.Deleted,
+        // Back in use after a pause or an archive (QA t10-06: "reinstated" showed as a problem and couldn't be sent).
+        "REINSTATED" or "UNARCHIVED" => WhatsAppTemplateStatus.Approved,
         _ => metaStatus.ToLowerInvariant()
     };
 

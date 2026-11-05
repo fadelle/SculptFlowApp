@@ -98,7 +98,9 @@ public class WhatsAppHealthService : IWhatsAppHealthService
                 if (request.Status is not null) integration.NameStatus = request.Status;
                 break;
             case WhatsAppHealthEventType.AccountUpdate:
-                if (request.Status is not null) integration.AccountStatus = request.Status;
+                // Only a change of the account's standing moves it; "verified", "partner added" and the like leave a ban or
+                // restriction in place (QA t10-02).
+                if (AccountState(request.Status) is { } state) integration.AccountStatus = state;
                 break;
             case WhatsAppHealthEventType.AccountReviewUpdate:
                 if (request.Status is not null) integration.AccountReviewStatus = request.Status;
@@ -116,8 +118,9 @@ public class WhatsAppHealthService : IWhatsAppHealthService
         var (isHealthy, healthLevel, problemCode, problemMessage) = RecomputeHealth(integration);
         integration.IsHealthy = isHealthy;
         integration.HealthLevel = healthLevel;
-        integration.LastProblemCode = problemCode ?? request.Code;
-        integration.LastProblemMessage = problemMessage ?? request.Message;
+        // A healthy connection has no "last problem" (QA t10-02: UNFLAGGED left a phone number there).
+        integration.LastProblemCode = healthLevel == WhatsAppHealthLevel.Healthy ? null : problemCode ?? request.Code;
+        integration.LastProblemMessage = healthLevel == WhatsAppHealthLevel.Healthy ? null : JoinMessage(problemMessage, request.Message);
         integration.LastWebhookAt = DateTimeOffset.UtcNow;
         integration.LastHealthEventAt = occurredAt;
         integration.UpdatedAt = DateTimeOffset.UtcNow;
@@ -179,14 +182,30 @@ public class WhatsAppHealthService : IWhatsAppHealthService
             return (false, WhatsAppHealthLevel.Disconnected, null, "WhatsApp is not connected.");
         }
 
-        if (c.AccountStatus is not null && BadAccountStatuses.Contains(c.AccountStatus.ToLowerInvariant()))
+        var account = c.AccountStatus?.ToLowerInvariant();
+        if (account == WhatsAppAccountState.Removed)
         {
-            return (false, WhatsAppHealthLevel.Problem, c.AccountStatus, $"WhatsApp account status is '{c.AccountStatus}'.");
+            return (false, WhatsAppHealthLevel.Disconnected, c.AccountStatus, "Meta removed this WhatsApp account from the app; nothing can be sent or received.");
+        }
+
+        if (account is not null && BadAccountStatuses.Contains(account))
+        {
+            return (false, WhatsAppHealthLevel.Problem, c.AccountStatus, account switch
+            {
+                WhatsAppAccountState.Restricted => "Meta restricted this WhatsApp account; some messages can't be sent.",
+                _ => "Meta disabled this WhatsApp account; messages can't be sent."
+            });
         }
 
         if (string.Equals(c.AccountReviewStatus, "rejected", StringComparison.OrdinalIgnoreCase))
         {
             return (false, WhatsAppHealthLevel.Problem, c.AccountReviewStatus, "WhatsApp account review was rejected.");
+        }
+
+        // A banned or restricted NUMBER blocks or limits sending like an account ban does (QA t10-02).
+        if (c.PhoneStatus?.ToLowerInvariant() is "banned" or "restricted")
+        {
+            return (false, WhatsAppHealthLevel.Problem, c.PhoneStatus, $"Meta {c.PhoneStatus.ToLowerInvariant()} this phone number; messages may not be sent.");
         }
 
         if (string.Equals(c.PhoneQualityRating, "red", StringComparison.OrdinalIgnoreCase))
@@ -198,6 +217,18 @@ public class WhatsAppHealthService : IWhatsAppHealthService
         if (string.Equals(c.PhoneQualityRating, "yellow", StringComparison.OrdinalIgnoreCase))
         {
             return (true, WhatsAppHealthLevel.Warning, c.PhoneQualityRating, "Phone number quality rating dropped to yellow.");
+        }
+
+        if (account is WhatsAppAccountState.ScheduledForDisable or WhatsAppAccountState.Violation)
+        {
+            return (true, WhatsAppHealthLevel.Warning, c.AccountStatus, account == WhatsAppAccountState.Violation
+                ? "Meta reported a policy violation on this WhatsApp account."
+                : "Meta will disable this WhatsApp account unless the issue is fixed.");
+        }
+
+        if (string.Equals(c.NameStatus, "rejected", StringComparison.OrdinalIgnoreCase))
+        {
+            return (true, WhatsAppHealthLevel.Warning, c.NameStatus, "Meta rejected this number's display name.");
         }
 
         if (c.PhoneStatus is not null && BadPhoneStatuses.Contains(c.PhoneStatus.ToLowerInvariant()))
@@ -214,7 +245,25 @@ public class WhatsAppHealthService : IWhatsAppHealthService
         return (true, WhatsAppHealthLevel.Healthy, null, null);
     }
 
-    private static readonly HashSet<string> BadAccountStatuses = new() { "disabled", "banned", "restricted" };
+    private static readonly HashSet<string> BadAccountStatuses = new() { WhatsAppAccountState.Disabled, WhatsAppAccountState.Banned, WhatsAppAccountState.Restricted };
+
+    /// <summary>The account state an account_update sets, or null for an event that says nothing about the account's standing
+    /// (verified, partner added, country update...). Accepts the parser's states and n8n's older raw values.</summary>
+    public static string? AccountState(string? status) => status?.Trim().ToLowerInvariant() switch
+    {
+        "disabled" or "disable" => WhatsAppAccountState.Disabled,
+        "banned" => WhatsAppAccountState.Banned,
+        "restricted" or "account_restriction" => WhatsAppAccountState.Restricted,
+        "scheduled_for_disable" or "schedule_for_disable" => WhatsAppAccountState.ScheduledForDisable,
+        "violation" or "account_violation" => WhatsAppAccountState.Violation,
+        "removed" or "account_deleted" or "partner_removed" or "account_offboarded" => WhatsAppAccountState.Removed,
+        "reinstated" or "reinstate" or "unrestricted" or "active" => WhatsAppAccountState.Active,
+        _ => null
+    };
+
+    /// <summary>The problem in our words, with Meta's detail after it when it adds something.</summary>
+    private static string? JoinMessage(string? ours, string? meta) =>
+        ours is null ? meta : string.IsNullOrWhiteSpace(meta) || ours.Contains(meta, StringComparison.OrdinalIgnoreCase) ? ours : $"{ours} ({meta})";
     private static readonly HashSet<string> BadPhoneStatuses = new() { "flagged", "downgrade", "restricted", "banned" };
 
     private static WhatsAppHealthResponse ToHealthResponse(ChannelIntegration c) => new(

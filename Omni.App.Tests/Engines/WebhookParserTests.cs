@@ -21,7 +21,7 @@ public class TelegramUpdateParserTests
         var json = $$$"""
             {"entry":[1,{"id":"W1","changes":[{"field":"messages","value":{"metadata":{"phone_number_id":"P1"},
               "contacts":[{"wa_id":"{{{new string('9', 60)}}}","profile":{"name":"{{{new string('N', 300)}}}"}}],
-              "messages":[{"from":"961","id":"{{{new string('w', 250)}}}","type":"{{{new string('x', 40)}}}"}]}},
+              "messages":[{"from":"{{{new string('9', 60)}}}","id":"{{{new string('w', 250)}}}","type":"{{{new string('x', 40)}}}"}]}},
               {"field":"message_template_status_update","value":{"message_template_name":"{{{new string('t', 257)}}}","message_template_language":"en_US_very_long","event":"APPROVED"}}]}]}
             """;
 
@@ -134,9 +134,10 @@ public class MetaWebhookParserTests
     [Fact]
     public void Text_message_with_contact_profile()
     {
-        var e = Assert.Single(P(Change("messages", """{ @META, "contacts":[{"wa_id":"961700","profile":{"name":"Sam"}}], "messages":[{"from":"961999","id":"wamid.1","timestamp":"1700000000","type":"text","text":{"body":"hi"}}]}""")));
+        var e = Assert.Single(P(Change("messages", """{ @META, "contacts":[{"wa_id":"961700","profile":{"name":"Sam"}}], "messages":[{"from":"961700","id":"wamid.1","timestamp":"1700000000","type":"text","text":{"body":"hi"}}]}""")));
         Assert.Equal(ParsedMetaEventKind.CustomerMessage, e.Kind);
         Assert.Equal(("PN1", "WABA1", "961700", "Sam"), (e.PhoneNumberId, e.WabaId, e.CustomerWaId, e.CustomerName));
+        Assert.Null(e.Referral);
         Assert.Equal(("text", "hi", "wamid.1"), (e.MessageType, e.Content, e.ExternalMessageId));
         Assert.Equal(DateTimeOffset.FromUnixTimeSeconds(1700000000), e.Timestamp);
     }
@@ -209,9 +210,118 @@ public class MetaWebhookParserTests
         Assert.Equal(ParsedMetaEventKind.WhatsAppHealth, e.Kind);
         // current_limit is a messaging tier, not a quality rating: it must not end up in the rating field.
         Assert.Equal((field, "PN9", "FLAGGED", null, "7"), (e.HealthEventType, e.PhoneNumberId, e.HealthStatus, e.HealthQualityRating, e.HealthCode));
-        Assert.Equal("+1", e.HealthMessage);
+        // display_phone_number is not a message (QA t10-02: UNFLAGGED showed the phone number as the last problem).
+        Assert.Null(e.HealthMessage);
         Assert.Equal("GREEN", Assert.Single(P(Change(field, """{"phone_number_id":"PN9","event":"CONNECTED","quality_rating":"GREEN"}"""))).HealthQualityRating);
         Assert.Equal("PN2", Assert.Single(P(Change(field, """{"metadata":{"phone_number_id":"PN2"},"decision":"APPROVED"}"""))).PhoneNumberId);
+    }
+
+    // ---- QA t10-05: one change carrying messages from two customers ----
+
+    [Fact]
+    public void Each_message_belongs_to_its_own_sender()
+    {
+        var events = P(Change("messages", """
+            { @META, "contacts":[{"wa_id":"96171001003","profile":{"name":"X"}},{"wa_id":"96171001004","profile":{"name":"Y"}}],
+              "messages":[{"from":"96171001003","id":"w1","type":"text","text":{"body":"what are your hours?"}},
+                          {"from":"96171001004","id":"w2","type":"text","text":{"body":"how much is service A?"}}]}
+            """));
+        Assert.Equal([("96171001003", "X", "what are your hours?"), ("96171001004", "Y", "how much is service A?")],
+            events.Select(e => (e.CustomerWaId!, e.CustomerName, e.Content!)));
+    }
+
+    [Fact]
+    public void A_sender_missing_from_contacts_keeps_its_number_and_an_echo_belongs_to_the_listed_customer()
+    {
+        var unnamed = Assert.Single(P(Change("messages", """{ @META, "contacts":[{"wa_id":"1","profile":{"name":"One"}}], "messages":[{"from":"2","id":"w","type":"text","text":{"body":"x"}}]}""")));
+        Assert.Equal(("2", (string?)null), (unnamed.CustomerWaId, unnamed.CustomerName));
+        var echo = Assert.Single(P(Change("smb_message_echoes", """{ @META, "contacts":[{"wa_id":"96170","profile":{"name":"Cust"}}], "messages":[{"from":"15550001","to":"96170","id":"e","type":"text","text":{"body":"hi"}}]}""")));
+        Assert.Equal(("96170", "Cust"), (echo.CustomerWaId, echo.CustomerName));
+        var echoTo = Assert.Single(P(Change("smb_message_echoes", """{ @META, "messages":[{"from":"15550001","to":"96171","id":"e2","type":"text","text":{"body":"hi"}}]}""")));
+        Assert.Equal("96171", echoTo.CustomerWaId);
+    }
+
+    // ---- QA t10-08: click-to-WhatsApp ads and changed numbers ----
+
+    [Fact]
+    public void A_message_from_an_ad_keeps_the_referral()
+    {
+        var e = Assert.Single(P(Change("messages", """
+            { @META, "contacts":[{"wa_id":"96170","profile":{"name":"Ann"}}],
+              "messages":[{"from":"96170","id":"w","type":"text","text":{"body":"Hi, I saw your ad. Is the offer still valid?"},
+                "referral":{"source_url":"https://fb.me/x","source_id":"120201","source_type":"ad","headline":"50% off Service A","body":"This week only","media_type":"image","ctwa_clid":"ARAkLk"}}]}
+            """)));
+        Assert.Equal(new Omni.App.Entities.Dtos.WhatsApp.MetaAdReferral("ad", "120201", "https://fb.me/x", "50% off Service A", "This week only", "ARAkLk"), e.Referral);
+        Assert.Equal("50% off Service A — This week only", e.Referral!.Summary);
+        Assert.Equal("Hi, I saw your ad. Is the offer still valid?", e.Content);
+        var metadata = JsonDocument.Parse(e.MetadataJson!).RootElement.GetProperty("referral");
+        Assert.Equal(("ARAkLk", "120201"), (metadata.GetProperty("ctwa_clid").GetString(), metadata.GetProperty("source_id").GetString()));
+
+        // A photo from an ad keeps its media details next to the referral.
+        var photo = Assert.Single(P(Change("messages", """{ @META, "messages":[{"from":"96170","id":"p","type":"image","image":{"id":"m1","caption":"this one"},"referral":{"source_id":"9","source_type":"ad"}}]}""")));
+        var photoMeta = JsonDocument.Parse(photo.MetadataJson!).RootElement;
+        Assert.Equal(("m1", "9"), (photoMeta.GetProperty("id").GetString(), photoMeta.GetProperty("referral").GetProperty("source_id").GetString()));
+        Assert.Equal("ad 9", photo.Referral!.Summary);
+    }
+
+    [Theory]
+    [InlineData("""{"body":"User A changed from 96170 to 96171","wa_id":"96171","type":"user_changed_number"}""", "96171")]
+    [InlineData("""{"body":"User A changed number","new_wa_id":"96172","type":"customer_changed_number"}""", "96172")]
+    [InlineData("""{"body":"Something else","type":"customer_identity_changed","identity":"x"}""", null)]
+    public void A_system_message_has_its_text_and_a_changed_number(string system, string? newWaId)
+    {
+        var e = Assert.Single(P(Change("messages", """{ @META, "messages":[{"from":"96170","id":"s","type":"system","system":""" + system + "}]}")));
+        Assert.Equal(("system", newWaId), (e.MessageType, e.NewWaId));
+        Assert.False(string.IsNullOrWhiteSpace(e.Content));
+    }
+
+    // ---- QA t10-02: Meta's documented account_update shapes (entry.id = the WABA, no phone_number_id) ----
+
+    [Theory]
+    [InlineData("""{"event":"DISABLED_UPDATE","ban_info":{"waba_ban_state":"DISABLE","waba_ban_date":"2026-10-30"}}""", "disabled", "DISABLE 2026-10-30")]
+    [InlineData("""{"event":"DISABLED_UPDATE","ban_info":{"waba_ban_state":"SCHEDULE_FOR_DISABLE"}}""", "scheduled_for_disable", null)]
+    [InlineData("""{"event":"DISABLED_UPDATE","ban_info":{"waba_ban_state":"REINSTATE"}}""", "reinstated", null)]
+    [InlineData("""{"event":"ACCOUNT_RESTRICTION","restriction_info":[{"restriction_type":"RESTRICTED_BIZ_INITIATED_MESSAGING","expiration":1793318400}]}""", "restricted", "RESTRICTED_BIZ_INITIATED_MESSAGING until 2026-10-30")]
+    [InlineData("""{"event":"ACCOUNT_RESTRICTION","restriction_info":[]}""", "unrestricted", null)]
+    [InlineData("""{"event":"ACCOUNT_VIOLATION","violation_info":{"violation_type":"SCAM"}}""", "violation", "SCAM")]
+    [InlineData("""{"event":"ACCOUNT_DELETED"}""", "removed", null)]
+    [InlineData("""{"event":"PARTNER_REMOVED"}""", "removed", null)]
+    [InlineData("""{"event":"ACCOUNT_OFFBOARDED"}""", "removed", null)]
+    [InlineData("""{"event":"VERIFIED_ACCOUNT","phone_number":"15550100999"}""", "VERIFIED_ACCOUNT", null)]
+    public void Account_updates_become_an_account_state(string value, string state, string? message)
+    {
+        var e = Assert.Single(P(Change("account_update", value)));
+        Assert.Equal((ParsedMetaEventKind.WhatsAppHealth, "WABA1", (string?)null), (e.Kind, e.WabaId, e.PhoneNumberId));
+        Assert.Equal((state, message), (e.HealthStatus, e.HealthMessage));
+    }
+
+    [Fact]
+    public void A_rejected_display_name_keeps_its_reason()
+    {
+        var e = Assert.Single(P(Change("phone_number_name_update", """{"display_phone_number":"15550100999","decision":"REJECTED","requested_verified_name":"Glow","rejection_reason":"NAME_FORMAT_UNACCEPTABLE"}""")));
+        Assert.Equal(("REJECTED", "NAME_FORMAT_UNACCEPTABLE"), (e.HealthStatus, e.HealthMessage));
+    }
+
+    // ---- QA t10-06: template events as Meta sends them ----
+
+    [Fact]
+    public void Template_category_updates_reasons_and_explanations()
+    {
+        var done = Assert.Single(P(Change("template_category_update", """{"message_template_id":7,"message_template_name":"promo","message_template_language":"en_US","previous_category":"UTILITY","new_category":"MARKETING"}""")));
+        Assert.Equal((ParsedMetaEventKind.TemplateStatus, "template_category_update", "UTILITY", "MARKETING", (string?)null),
+            (done.Kind, done.RawFieldName, done.TemplatePreviousCategory, done.TemplateCurrentCategory, done.TemplatePendingCategory));
+
+        var soon = Assert.Single(P(Change("template_category_update", """{"message_template_id":7,"message_template_name":"promo","correct_category":"MARKETING","category_update_timestamp":1793318400}""")));
+        Assert.Equal(("MARKETING", (string?)null, DateTimeOffset.FromUnixTimeSeconds(1793318400)), (soon.TemplatePendingCategory, soon.TemplateCurrentCategory, soon.TemplatePendingCategoryAt!.Value));
+
+        var approved = Assert.Single(P(Change("message_template_status_update", """{"event":"APPROVED","message_template_name":"promo","reason":"NONE"}""")));
+        Assert.Null(approved.TemplateReason);
+
+        var rejected = Assert.Single(P(Change("message_template_status_update", """{"event":"REJECTED","message_template_name":"promo","reason":"INVALID_FORMAT","rejection_info":{"reason":"Variables can't be at the start.","recommendation":"Add text before {{1}}."}}""")));
+        Assert.Equal(("INVALID_FORMAT", "Variables can't be at the start. Add text before {{1}}."), (rejected.TemplateReason, rejected.TemplateReasonDetail));
+
+        var paused = Assert.Single(P(Change("message_template_status_update", """{"event":"PAUSED","message_template_name":"promo","reason":"NONE","other_info":{"title":"FIRST_PAUSE","description":"Paused for 3 hours because of low quality."}}""")));
+        Assert.Equal(((string?)null, "FIRST_PAUSE Paused for 3 hours because of low quality."), (paused.TemplateReason, paused.TemplateReasonDetail));
     }
 
     [Fact]

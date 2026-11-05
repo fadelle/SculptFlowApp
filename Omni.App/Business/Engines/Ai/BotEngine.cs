@@ -357,7 +357,7 @@ public class BotEngine : IBotEngine
     private async Task ReplyAsync(Run run, string? content, CancellationToken ct)
     {
         var result = await _tools.CallAsync(run.Call, BotTools.Reply,
-            (botRun, c) => _tools.ReplyAsync(botRun, run.Trigger.ConversationId, run.Trigger.ClientId, new AiReplyRequest(content), c), ct);
+            (botRun, c) => _tools.ReplyAsync(botRun, run.Trigger.ConversationId, run.Trigger.ClientId, new AiReplyRequest(content, ReplyId(run.Trigger)), c), ct);
         if (result.Status == StatusCodes.Status409Conflict)
         {
             var code = (JsonSerializer.SerializeToNode(result.Body, new JsonSerializerOptions(JsonSerializerDefaults.Web)) as JsonObject)?["code"]?.GetValue<string>();
@@ -368,6 +368,10 @@ public class BotEngine : IBotEngine
             detail: new { action = BotDecision.Reply, status = result.Status });
         if (result.IsError) await RunFailedAsync(run, ct);
     }
+
+    /// <summary>One reply per customer message: a run started again for the same message (a retry after a crash) finds the
+    /// reply the first run sent instead of charging and sending another (QA t2-billing-02).</summary>
+    private static string? ReplyId(AiTriggerPayload trigger) => trigger.MessageId is { } id ? $"bot-run:{id}" : null;
 
     private async Task<AiModelResponse> CallModelAsync(Run run, string role, int iteration, AiModelRequest request, CancellationToken ct)
     {

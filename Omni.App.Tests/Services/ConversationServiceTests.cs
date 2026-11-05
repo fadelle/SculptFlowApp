@@ -20,6 +20,7 @@ public class ConversationServiceTests
     {
         InboxSettings(planIncludesBot: true, newConversations: true, reopenedConversations: true);
         _uow.Setup(u => u.BeginTransactionAsync(It.IsAny<CancellationToken>())).ReturnsAsync(Mock.Of<IUnitOfWorkTransaction>());
+        _uow.Setup(u => u.TrySaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(true);
     }
 
     private ConversationService Sut() => new(_conversations.Object, _messages.Object, _contacts.Object, _uow.Object, _notifier.Object, _events.Object, _notifications.Object, _inboxSettings.Object, _businessTypes.Object);
@@ -83,8 +84,21 @@ public class ConversationServiceTests
     [Fact]
     public async Task GetOrCreateForContact_creates_when_missing()
     {
+        _uow.Setup(u => u.TrySaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(true);
         await Sut().GetOrCreateForContactAsync(_clientId, _contactId, "whatsapp");
         _conversations.Verify(r => r.Add(It.IsAny<Conversation>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task GetOrCreateForContact_yields_to_a_concurrent_first_message_from_the_same_contact()
+    {
+        // QA t10-10: two first messages at once; the unique index on WhatsApp conversations lets one insert win.
+        var winner = Conv();
+        _uow.Setup(u => u.TrySaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(false);
+        _conversations.SetupSequence(r => r.FindForContactAsync(_clientId, _contactId, "whatsapp", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Conversation?)null).ReturnsAsync(winner);
+        Assert.Equal(winner.Id, (await Sut().GetOrCreateForContactAsync(_clientId, _contactId, "whatsapp")).Id);
+        await Assert.ThrowsAsync<ArgumentException>(() => Sut().GetOrCreateForContactAsync(_clientId, _contactId, "pigeon"));
     }
 
     [Fact]

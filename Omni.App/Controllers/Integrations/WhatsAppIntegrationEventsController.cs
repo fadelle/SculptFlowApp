@@ -38,7 +38,7 @@ public class WhatsAppIntegrationEventsController : ControllerBase
     public async Task<ActionResult<WhatsAppTemplateResponse>> TemplateEvent([FromBody] WhatsAppTemplateEventRequest request, CancellationToken ct)
     {
         var template = await _templates.ApplyMetaEventAsync(request, ct);
-        return Ok(template);
+        return template is null ? NoContent() : Ok(template);
     }
 
     [HttpPost("health/events")]

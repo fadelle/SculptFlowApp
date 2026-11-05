@@ -192,7 +192,7 @@ try {
         $startInfo.RedirectStandardOutput = $true
         $startInfo.RedirectStandardError = $true
         $startInfo.EnvironmentVariables['ASPNETCORE_ENVIRONMENT'] = 'Staging'
-        $startInfo.EnvironmentVariables['ConnectionStrings__Postgres'] = "Host=localhost;Port=$Port;Username=postgres;Database=new;Pooling=true"
+        $startInfo.EnvironmentVariables['ConnectionStrings__Postgres'] = "Host=127.0.0.1;Port=$Port;Username=postgres;Database=new;Pooling=true;Gss Encryption Mode=Disable;SSL Mode=Disable"
         $startInfo.EnvironmentVariables['PlatformAdmin__ApiKey'] = $apiKey
         $startInfo.EnvironmentVariables['N8n__AiWebhookUrl'] = ''
         $startInfo.EnvironmentVariables['N8n__CalendarSyncWebhookUrl'] = ''

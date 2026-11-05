@@ -31,7 +31,9 @@ public interface IBotTestService
     // ---- The workflow's calls for a test run (AI tool endpoints with a test session)
 
     /// <summary>The bot's reply: charged as ai_reply (no channel message), then added. False when billing refused it (noted).</summary>
-    Task<bool> ReplyAsync(BotRunContext run, string? content, CancellationToken ct = default);
+    /// <remarks>A retried reply (same replyKey, or the same text after the same contact line) is not charged or added again
+    /// (QA t2-billing-02).</remarks>
+    Task<bool> ReplyAsync(BotRunContext run, string? content, CancellationToken ct = default, string? replyKey = null);
 
     /// <summary>The bot hands off: once per session (a repeated call changes nothing and returns false), with a note and the
     /// bot's handoff message.</summary>

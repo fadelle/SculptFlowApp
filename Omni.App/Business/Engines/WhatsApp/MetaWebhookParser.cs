@@ -90,6 +90,13 @@ public static class MetaWebhookParser
         TemplateQualityRating = Cut(e.TemplateQualityRating, 30),
         TemplatePreviousCategory = Cut(e.TemplatePreviousCategory, 30),
         TemplateCurrentCategory = Cut(e.TemplateCurrentCategory, 30),
+        TemplatePendingCategory = Cut(e.TemplatePendingCategory, 30),
+        TemplateReasonDetail = Cut(e.TemplateReasonDetail, 2000),
+        NewWaId = Cut(e.NewWaId, 50),
+        Referral = e.Referral is null ? null : e.Referral with
+        {
+            SourceId = Cut(e.Referral.SourceId, 100), Headline = Cut(e.Referral.Headline, 200), Body = Cut(e.Referral.Body, 1000)
+        },
         HealthEventType = Cut(e.HealthEventType, 100),
         HealthStatus = Cut(e.HealthStatus, 50),
         HealthCode = Cut(e.HealthCode, 100),
@@ -118,7 +125,8 @@ public static class MetaWebhookParser
 
             case "message_template_status_update":
             case "message_template_quality_update":
-            case "message_template_category_update":
+            case "template_category_update":          // the field Meta actually sends (QA t10-06)
+            case "message_template_category_update":  // kept for n8n's older forwarding
                 yield return ParseTemplateEvent(field, wabaId, value);
                 break;
 
@@ -222,31 +230,47 @@ public static class MetaWebhookParser
 
         var phoneNumberId = value.TryGetProperty("metadata", out var metadata) ? GetString(metadata, "phone_number_id") : null;
 
-        string? customerWaId = null;
-        string? customerName = null;
-        if (value.TryGetProperty("contacts", out var contacts) && contacts.ValueKind == JsonValueKind.Array && contacts.GetArrayLength() > 0)
+        // Every contact Meta lists, by wa_id: one change can carry messages from several customers (QA t10-05).
+        var names = new Dictionary<string, string?>(StringComparer.Ordinal);
+        string? onlyWaId = null;
+        if (value.TryGetProperty("contacts", out var contacts) && contacts.ValueKind == JsonValueKind.Array)
         {
-            var contact = contacts[0];
-            customerWaId = GetString(contact, "wa_id");
-            if (contact.TryGetProperty("profile", out var profile))
+            foreach (var contact in contacts.EnumerateArray())
             {
-                customerName = GetString(profile, "name");
+                var waId = GetString(contact, "wa_id");
+                if (waId is null) continue;
+                names[waId] = contact.TryGetProperty("profile", out var profile) ? GetString(profile, "name") : null;
             }
+            if (contacts.GetArrayLength() == 1) onlyWaId = GetString(contacts[0], "wa_id");
         }
 
         foreach (var m in messages.EnumerateArray())
         {
             var from = GetString(m, "from");
+            // A customer message is the sender's ("from"); an echo's "from" is the business, so its customer is the one
+            // listed contact (or the message's "to").
+            var customerWaId = kind == ParsedMetaEventKind.CustomerMessage
+                ? from ?? onlyWaId
+                : onlyWaId ?? GetString(m, "to") ?? from;
+            var customerName = customerWaId is not null && names.TryGetValue(customerWaId, out var name) ? name : null;
             var messageType = GetString(m, "type") ?? "text";
             var (content, metadataJson, selectedValue) = ExtractMessageContent(m, messageType);
+            var referral = Referral(m);
+            if (referral is not null) metadataJson = WithReferral(metadataJson, m.GetProperty("referral"));
+            var newWaId = messageType == "system" && m.TryGetProperty("system", out var system)
+                && GetString(system, "type") is "user_changed_number" or "customer_changed_number"
+                    ? GetString(system, "wa_id") ?? GetString(system, "new_wa_id")
+                    : null;
 
             yield return new ParsedMetaEvent
             {
                 Kind = kind,
                 PhoneNumberId = phoneNumberId,
                 WabaId = wabaId,
-                CustomerWaId = customerWaId ?? from,
+                CustomerWaId = customerWaId,
                 CustomerName = customerName,
+                Referral = referral,
+                NewWaId = newWaId,
                 MessageType = messageType,
                 Content = content,
                 MetadataJson = metadataJson,
@@ -306,6 +330,12 @@ public static class MetaWebhookParser
             case "contacts":
                 return ("[contact]", m.TryGetProperty("contacts", out var sharedContacts) ? sharedContacts.GetRawText() : null, null);
 
+            case "system":
+                // e.g. "User A changed from 15550001 to 15550002" (QA t10-08: it was stored as an empty bubble).
+                return m.TryGetProperty("system", out var systemInfo)
+                    ? (GetString(systemInfo, "body"), systemInfo.GetRawText(), null)
+                    : (null, null, null);
+
             case "reaction":
                 return m.TryGetProperty("reaction", out var reaction)
                     ? (GetString(reaction, "emoji"), reaction.GetRawText(), null)
@@ -323,6 +353,40 @@ public static class MetaWebhookParser
         }
     }
 
+    /// <summary>Meta's click-to-WhatsApp referral on a message, or null.</summary>
+    private static MetaAdReferral? Referral(JsonElement m)
+    {
+        if (!m.TryGetProperty("referral", out var r) || r.ValueKind != JsonValueKind.Object) return null;
+        return new MetaAdReferral(GetString(r, "source_type"), GetString(r, "source_id"), GetString(r, "source_url"),
+            GetString(r, "headline"), GetString(r, "body"), GetString(r, "ctwa_clid"));
+    }
+
+    /// <summary>The message's metadata with Meta's referral added under "referral" (a text message has none of its own).</summary>
+    private static string WithReferral(string? metadataJson, JsonElement referral)
+    {
+        System.Text.Json.Nodes.JsonObject obj;
+        try { obj = (metadataJson is null ? null : System.Text.Json.Nodes.JsonNode.Parse(metadataJson) as System.Text.Json.Nodes.JsonObject) ?? new(); }
+        catch (JsonException) { obj = new() { ["raw"] = metadataJson }; }
+        obj["referral"] = System.Text.Json.Nodes.JsonNode.Parse(referral.GetRawText());
+        return obj.ToJsonString();
+    }
+
+    /// <summary>Meta's reason "NONE" means no reason (QA t10-06: approved templates showed "NONE").</summary>
+    private static string? Reason(string? reason) =>
+        string.IsNullOrWhiteSpace(reason) || string.Equals(reason, "NONE", StringComparison.OrdinalIgnoreCase) ? null : reason;
+
+    /// <summary>Meta's own words for a rejection (rejection_info) or a pause (other_info), joined into one text.</summary>
+    private static string? ReasonDetail(JsonElement value)
+    {
+        foreach (var (name, first, second) in new[] { ("rejection_info", "reason", "recommendation"), ("other_info", "title", "description") })
+        {
+            if (!value.TryGetProperty(name, out var info) || info.ValueKind != JsonValueKind.Object) continue;
+            var parts = new[] { GetString(info, first), GetString(info, second) }.Where(p => !string.IsNullOrWhiteSpace(p)).ToList();
+            if (parts.Count > 0) return string.Join(" ", parts);
+        }
+        return null;
+    }
+
     private static ParsedMetaEvent ParseTemplateEvent(string field, string? wabaId, JsonElement value) => new()
     {
         Kind = ParsedMetaEventKind.TemplateStatus,
@@ -331,7 +395,11 @@ public static class MetaWebhookParser
         TemplateName = GetString(value, "message_template_name"),
         TemplateLanguage = GetString(value, "message_template_language"),
         TemplateStatus = GetString(value, "event") ?? GetString(value, "status"),
-        TemplateReason = GetString(value, "reason"),
+        TemplateReason = Reason(GetString(value, "reason")),
+        TemplateReasonDetail = ReasonDetail(value),
+        // template_category_update before the change happens: the category it will get and from when (QA t10-06).
+        TemplatePendingCategory = GetString(value, "new_category") is null ? GetString(value, "correct_category") : null,
+        TemplatePendingCategoryAt = ParseUnixTimestamp(GetString(value, "category_update_timestamp")),
         TemplateQualityRating = GetString(value, "new_quality_score") ?? GetString(value, "quality_score"),
         TemplatePreviousCategory = GetString(value, "previous_category"),
         TemplateCurrentCategory = GetString(value, "new_category"),
@@ -348,16 +416,67 @@ public static class MetaWebhookParser
             ?? (value.TryGetProperty("metadata", out var md) ? GetString(md, "phone_number_id") : null),
         WabaId = wabaId,
         HealthEventType = field,
-        HealthStatus = GetString(value, "event") ?? GetString(value, "status") ?? GetString(value, "decision"),
+        HealthStatus = field == "account_update" ? AccountState(value) : GetString(value, "event") ?? GetString(value, "status") ?? GetString(value, "decision"),
         // phone_number_quality_update carries the event (FLAGGED, UNFLAGGED, UPGRADE, DOWNGRADE, ONBOARDING) and
         // current_limit (a messaging TIER such as TIER_10K), never a green/yellow/red rating. The tier is not a quality
         // rating, so only an explicit quality_rating is mapped here; the tier stays in the raw payload.
         HealthQualityRating = GetString(value, "quality_rating"),
         HealthCode = GetString(value, "code"),
-        HealthMessage = GetString(value, "message") ?? GetString(value, "display_phone_number"),
+        // Never the display phone number: it isn't a message (QA t10-02: "15550100999" showed as the last problem).
+        HealthMessage = GetString(value, "message") ?? (field == "account_update" ? AccountDetail(value) : null)
+            ?? (field == "phone_number_name_update" ? GetString(value, "rejection_reason") : null),
         RawFieldName = field,
         RawJson = value.GetRawText()
     };
+
+    /// <summary>account_update as one account state (QA t10-02; Meta's documented events): DISABLED_UPDATE by its
+    /// ban_info.waba_ban_state (DISABLE → disabled, SCHEDULE_FOR_DISABLE → scheduled_for_disable, REINSTATE → reinstated);
+    /// ACCOUNT_RESTRICTION → restricted (unrestricted when the list is empty); ACCOUNT_VIOLATION → violation; ACCOUNT_DELETED,
+    /// PARTNER_REMOVED and ACCOUNT_OFFBOARDED → removed. Any other event (verified, partner added...) passes through as itself
+    /// and doesn't change the account's state (WhatsAppHealthService.AccountState).</summary>
+    private static string? AccountState(JsonElement value)
+    {
+        var evt = GetString(value, "event") ?? GetString(value, "status");
+        switch (evt?.ToUpperInvariant())
+        {
+            case "DISABLED_UPDATE":
+                var ban = value.TryGetProperty("ban_info", out var banInfo) ? GetString(banInfo, "waba_ban_state") : null;
+                return ban?.ToUpperInvariant() switch
+                {
+                    "DISABLE" => "disabled",
+                    "SCHEDULE_FOR_DISABLE" => "scheduled_for_disable",
+                    "REINSTATE" => "reinstated",
+                    _ => "disabled"
+                };
+            case "ACCOUNT_RESTRICTION":
+                return value.TryGetProperty("restriction_info", out var restrictions) && restrictions.ValueKind == JsonValueKind.Array
+                       && restrictions.GetArrayLength() > 0 ? "restricted" : "unrestricted";
+            case "ACCOUNT_VIOLATION":
+                return "violation";
+            case "ACCOUNT_DELETED" or "PARTNER_REMOVED" or "ACCOUNT_OFFBOARDED":
+                return "removed";
+            default:
+                return evt;
+        }
+    }
+
+    /// <summary>The detail behind an account_update, for the technical "last problem" line: the restriction types and until
+    /// when, the violation type, or the ban date.</summary>
+    private static string? AccountDetail(JsonElement value)
+    {
+        if (value.TryGetProperty("restriction_info", out var restrictions) && restrictions.ValueKind == JsonValueKind.Array)
+        {
+            var items = restrictions.EnumerateArray()
+                .Select(r => (Type: GetString(r, "restriction_type"), Until: ParseUnixTimestamp(GetString(r, "expiration"))))
+                .Where(r => r.Type is not null)
+                .Select(r => r.Until is { } until ? $"{r.Type} until {until:yyyy-MM-dd}" : r.Type!)
+                .ToList();
+            if (items.Count > 0) return string.Join(", ", items);
+        }
+        if (value.TryGetProperty("violation_info", out var violation) && GetString(violation, "violation_type") is { } type) return type;
+        if (value.TryGetProperty("ban_info", out var banInfo) && GetString(banInfo, "waba_ban_date") is { } date) return $"{GetString(banInfo, "waba_ban_state")} {date}".Trim();
+        return null;
+    }
 
     /// <summary>Reads a property as a string regardless of whether Meta sent it as a JSON string or
     /// a bare number (template/WABA ids are inconsistently one or the other across Meta API

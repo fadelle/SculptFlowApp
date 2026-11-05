@@ -228,6 +228,29 @@ public class MessageBillingTests
     }
 
     [PostgresFact]
+    public async Task ARetriedAiReply_IsChargedAndSentOnce_EvenWhenBothCallsArriveTogether()
+    {
+        // QA t2-billing-02: an n8n retry of the reply call charged ai_reply twice and sent the reply twice.
+        var s = await SetupAsync(wallet: 1m, serviceWindowOpen: true, mode: ConversationMode.Ai);
+        await s.H.AddRateAsync(s.Card, BillableEventTypes.AiReply, 0.02m, 0.004m);
+
+        var together = await Task.WhenAll(s.SendAiReplyAsync("We open at 9."), s.SendAiReplyAsync("We open at 9."));
+        var later = await s.SendAiReplyAsync("We open at 9.");
+        Assert.Equal(1, together.Concat([later]).Select(m => m.Id).Distinct().Count());
+        Assert.Equal(1, s.WhatsApp.Sends);
+
+        var other = await s.SendAiReplyAsync("Anything else?");   // a different reply is sent and charged
+        Assert.NotEqual(later.Id, other.Id);
+        Assert.Equal(2, s.WhatsApp.Sends);
+
+        await using var db = s.H.Db();
+        Assert.Equal(2, await db.BillingUsageRecords.CountAsync(u => u.ClientId == s.Client && u.EventType == BillableEventTypes.AiReply));
+        Assert.Equal(2, await db.Messages.CountAsync(m => m.ConversationId == s.Conversation && m.Origin == MessageOrigin.Ai));
+        Assert.Equal(0.96m, (await s.H.AccountAsync(s.Client)).WalletBalance);
+        await s.H.AssertReconciledAsync(s.Client);
+    }
+
+    [PostgresFact]
     public async Task AiReplies_ArePaidFromIncludedCreditThenWallet_AndRefusedWhenNeitherCovers()
     {
         // AI plan: $0.05 of included credit, an ai_reply rate of $0.02 (the client's card here; normally the default card). Free-form WhatsApp replies

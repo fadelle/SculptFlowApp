@@ -42,7 +42,12 @@ else
 {
     var h = Model.Health;
     var quality = Quality(h.PhoneQualityRating);
-    var accountBad = h.AccountStatus is not null && new[] { "disabled", "banned", "restricted" }.Contains(h.AccountStatus.ToLowerInvariant());
+    var account = h.AccountStatus?.ToLowerInvariant();
+    var accountBad = account is WhatsAppAccountState.Disabled or WhatsAppAccountState.Banned or WhatsAppAccountState.Restricted;
+    // Warnings that aren't about the number's quality (QA t10-02): the account may be disabled, or its display name was rejected.
+    var accountWarning = account is WhatsAppAccountState.ScheduledForDisable or WhatsAppAccountState.Violation;
+    var nameRejected = string.Equals(h.NameStatus, "rejected", StringComparison.OrdinalIgnoreCase);
+    var phoneBad = h.PhoneStatus?.ToLowerInvariant() is "banned" or "restricted";
     var reviewRejected = string.Equals(h.AccountReviewStatus, "rejected", StringComparison.OrdinalIgnoreCase);
 
     // Banner: what the health level means for the client, and what to do about it (from the same fields the
@@ -51,16 +56,23 @@ else
     {
         WhatsAppHealthLevel.Healthy => ("ok", "check_circle", T["whatsAppHealth.hero.healthyTitle"].Value, T["whatsAppHealth.hero.healthyText"].Value, (string?)null),
         WhatsAppHealthLevel.Warning => ("warn", "warning", T["whatsAppHealth.hero.warningTitle"].Value,
-            quality?.Level == "medium" ? T["whatsAppHealth.hero.mediumText"].Value
+            accountWarning ? T["whatsAppHealth.hero.accountText", Nice(h.AccountStatus)].Value
+                : nameRejected ? T["whatsAppHealth.hero.nameRejectedText"].Value
+                : quality?.Level == "medium" ? T["whatsAppHealth.hero.mediumText"].Value
                 : T["whatsAppHealth.hero.phoneStatusText", Nice(h.PhoneStatus)].Value,
-            quality?.Level == "medium" ? T["whatsAppHealth.hero.mediumTodo"].Value
+            accountWarning ? T["whatsAppHealth.hero.problemTodo"].Value
+                : nameRejected ? T["whatsAppHealth.hero.nameRejectedTodo"].Value
+                : quality?.Level == "medium" ? T["whatsAppHealth.hero.mediumTodo"].Value
                 : T["whatsAppHealth.hero.phoneStatusTodo"].Value),
         WhatsAppHealthLevel.Problem => ("bad", "error", T["whatsAppHealth.hero.problemTitle"].Value,
             accountBad ? T["whatsAppHealth.hero.accountText", Nice(h.AccountStatus)].Value
+                : phoneBad ? T["whatsAppHealth.hero.phoneStatusText", Nice(h.PhoneStatus)].Value
                 : reviewRejected ? T["whatsAppHealth.hero.reviewText"].Value
                 : T["whatsAppHealth.hero.lowText"].Value,
             T["whatsAppHealth.hero.problemTodo"].Value),
-        WhatsAppHealthLevel.Disconnected => ("off", "link_off", T["dashboard.whatsApp.notConnected"].Value, T["whatsAppHealth.hero.disconnectedText"].Value, T["whatsAppHealth.hero.disconnectedTodo"].Value),
+        WhatsAppHealthLevel.Disconnected => ("off", "link_off", T["dashboard.whatsApp.notConnected"].Value,
+            account == WhatsAppAccountState.Removed ? T["whatsAppHealth.hero.removedText"].Value : T["whatsAppHealth.hero.disconnectedText"].Value,
+            T["whatsAppHealth.hero.disconnectedTodo"].Value),
         _ => ("off", "help", T["whatsAppHealth.hero.unknownTitle"].Value, T["whatsAppHealth.hero.unknownText"].Value, (string?)null)
     };
     var lastHeardLong = h.LastWebhookAt is null || DateTimeOffset.UtcNow - h.LastWebhookAt.Value > TimeSpan.FromHours(24);

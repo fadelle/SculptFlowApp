@@ -34,8 +34,8 @@ public class BillingLedgerRepository : IBillingLedgerRepository
     public Task<decimal> SumAsync(Guid clientId, string balanceType, CancellationToken ct = default) =>
         _db.BillingLedgerEntries.Where(l => l.ClientId == clientId && l.BalanceType == balanceType).SumAsync(l => l.Amount, ct);
 
-    public Task<decimal> SumOfTypeAsync(string entryType, DateTimeOffset from, DateTimeOffset to, CancellationToken ct = default) =>
+    public Task<decimal> SumOfTypeAsync(string entryType, DateTimeOffset from, DateTimeOffset to, CancellationToken ct = default, string? balanceType = null) =>
         _db.BillingLedgerEntries.AsNoTracking()
-            .Where(l => l.EntryType == entryType && l.CreatedAt >= from && l.CreatedAt < to)
+            .Where(l => l.EntryType == entryType && l.CreatedAt >= from && l.CreatedAt < to && (balanceType == null || l.BalanceType == balanceType))
             .SumAsync(l => l.Amount, ct);
 }

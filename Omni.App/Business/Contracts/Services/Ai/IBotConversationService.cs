@@ -12,7 +12,7 @@ public interface IBotConversationService
     /// <summary>Sends the bot's reply (IMessageService.SendAiReplyAsync; the conversation must still be in AI mode). Null when
     /// the conversation isn't the client's. Throws ConversationNotInAiModeException / AiReplyRefusedException like it; a test
     /// run whose reply billing refused throws AiReplyRefusedException too.</summary>
-    Task<BotReplyOutcome?> ReplyAsync(BotRunContext run, Guid conversationId, string? content, CancellationToken ct = default);
+    Task<BotReplyOutcome?> ReplyAsync(BotRunContext run, Guid conversationId, string? content, CancellationToken ct = default, string? replyKey = null);
 
     /// <summary>Hands the conversation to the team; true when this call made the change, false when it was already with the
     /// team (or the test run had already handed off), null when the conversation isn't the client's.</summary>
