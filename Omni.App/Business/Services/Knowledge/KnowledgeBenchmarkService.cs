@@ -86,6 +86,8 @@ public partial class KnowledgeBenchmarkService : IKnowledgeBenchmarkService
         await ExpireOldGenerationsAsync(clientId, ct);
         var pendingGenerationId = await _benchmark.GetPendingGenerationIdAsync(clientId, ct);
         var generationInProgress = pendingGenerationId is not null;
+        // Since when it waits and when it gives up, for the portal (QA t9-02: a broken workflow looked like a generation still working).
+        var pendingSince = generationInProgress ? await _benchmark.GetPendingGenerationStartedAtAsync(clientId, ct) : null;
 
         var cutoff = DateTimeOffset.UtcNow - StaleRunAge;
         var inProgress = await _benchmark.HasRunInProgressAsync(clientId, cutoff, ct);
@@ -95,7 +97,8 @@ public partial class KnowledgeBenchmarkService : IKnowledgeBenchmarkService
             _generator.IsConfigured, inProgress, generationInProgress, pendingGenerationId,
             await CurrentSettingsSnapshotAsync(clientId, ct),
             latest is null ? null : ToSummary(latest),
-            latestCompleted is null ? null : ToSummary(latestCompleted));
+            latestCompleted is null ? null : ToSummary(latestCompleted),
+            pendingSince, pendingSince + GenerationTimeout);
     }
 
     // ---------------------------------------------------------------------------------------------

@@ -5,6 +5,9 @@ namespace Omni.App.Entities.Dtos.Ai;
 public record BotToolCheck(BotRunContext? Run, string? DeniedReason)
 {
     public const string UnknownBot = "unknown_bot";
+    /// <summary>The call names no client or no bot (X-Omni-Bot-Id): the caller (the n8n workflow) isn't passing on the AI trigger's
+    /// values (QA t9-01).</summary>
+    public const string MissingContext = "missing_context";
     public const string BotNotActive = "bot_not_active";
     public const string UnknownTestSession = "unknown_test_session";
     public const string NotAllowed = "not_allowed";

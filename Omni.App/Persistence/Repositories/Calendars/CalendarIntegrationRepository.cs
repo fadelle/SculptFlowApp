@@ -64,4 +64,12 @@ public class CalendarIntegrationRepository : ICalendarIntegrationRepository
             s => s.BookingId == bookingId && s.CalendarIntegrationId == integrationId, ct);
 
     public void AddSync(BookingCalendarSync sync) => _db.BookingCalendarSyncs.Add(sync);
+
+    public async Task<IReadOnlyList<BookingCalendarSync>> ListUnansweredSyncsAsync(DateTimeOffset sentBefore, int take, CancellationToken ct = default) =>
+        await _db.BookingCalendarSyncs
+            .Where(s => s.Status == BookingCalendarSyncStatus.Pending && s.UpdatedAt < sentBefore)
+            .OrderBy(s => s.UpdatedAt).Take(take).ToListAsync(ct);
+
+    public Task<CalendarIntegration?> GetByIdAnyClientAsync(Guid integrationId, CancellationToken ct = default) =>
+        _db.CalendarIntegrations.FirstOrDefaultAsync(c => c.Id == integrationId, ct);
 }

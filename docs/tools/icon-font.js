@@ -10,7 +10,7 @@ const web = path.join(__dirname, '..', '..', 'Omni.App');
 const out = path.join(web, 'wwwroot', 'fonts');
 
 // Icons the kit (aurora.js / aurora.css) draws itself.
-const kit = ['check_circle', 'close', 'dark_mode', 'error', 'expand_more', 'info', 'light_mode', 'menu', 'warning'];
+const kit = ['article', 'check_circle', 'close', 'dark_mode', 'error', 'expand_more', 'info', 'light_mode', 'menu', 'warning'];
 
 // Where icon names appear:
 //   <span class="au-icon …">name</span>        (views, partials, JS strings)

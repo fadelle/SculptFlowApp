@@ -379,6 +379,37 @@ public class KnowledgeBenchmarkServiceTests
         Assert.True(d.GeneratorConfigured);
     }
 
+    // QA t9-02: a generation n8n never answered looked like one still working, for 30 minutes.
+    [Fact]
+    public async Task Dashboard_says_since_when_a_generation_waits_and_when_it_is_given_up()
+    {
+        _repo.Setup(r => r.GetCaseCountsAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(new BenchmarkCaseCounts(0, 0, 0, 0, 0));
+        var started = DateTimeOffset.UtcNow.AddMinutes(-2);
+        _repo.Setup(r => r.GetPendingGenerationIdAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(Guid.NewGuid());
+        _repo.Setup(r => r.GetPendingGenerationStartedAtAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(started);
+
+        var d = await Sut().GetDashboardAsync(_clientId);
+
+        Assert.Equal((started, started.AddMinutes(10)), (d.PendingGenerationSince, d.PendingGenerationTimesOutAt));
+    }
+
+    [Fact]
+    public async Task Dashboard_without_a_waiting_generation_has_no_times()
+    {
+        _repo.Setup(r => r.GetCaseCountsAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(new BenchmarkCaseCounts(0, 0, 0, 0, 0));
+        var d = await Sut().GetDashboardAsync(_clientId);
+        Assert.Null(d.PendingGenerationSince);
+        Assert.Null(d.PendingGenerationTimesOutAt);
+        _repo.Verify(r => r.GetPendingGenerationStartedAtAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public void The_generation_waits_five_minutes_by_default_and_the_busy_message_says_how_to_stop_it()
+    {
+        Assert.Equal("5", ConfigDefaults.BenchmarkGenerationTimeoutMinutes.DefaultValue);
+        Assert.Contains("Stop generating", new BenchmarkGenerationInProgressException().Message);
+    }
+
     [Fact]
     public async Task Run_and_result_lookups()
     {

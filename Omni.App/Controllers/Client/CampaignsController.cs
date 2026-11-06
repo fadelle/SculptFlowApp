@@ -140,6 +140,18 @@ public class CampaignsController : DashboardApiController
         return campaign is null ? NotFound() : Ok(campaign);
     }
 
+    /// <summary>Sends the campaign's failed recipients again (QA t8-11): they are queued, the campaign runs and the first batch goes out.
+    /// 422 when none failed, or the campaign was never started or was cancelled.</summary>
+    [HttpPost("{id:guid}/retry-failed")]
+    public async Task<ActionResult<ProcessCampaignBatchResult>> RetryFailed(Guid id, [FromQuery] int batchSize = 20, CancellationToken ct = default)
+    {
+        var clientId = await GetClientIdAsync(ct);
+        if (clientId is null) return Forbid();
+
+        var result = await _campaigns.RetryFailedAsync(clientId.Value, id, batchSize, ct);
+        return result is null ? NotFound() : Ok(result);
+    }
+
     [HttpPost("{id:guid}/cancel")]
     public async Task<ActionResult<CampaignResponse>> Cancel(Guid id, CancellationToken ct)
     {

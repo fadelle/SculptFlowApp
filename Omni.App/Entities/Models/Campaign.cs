@@ -42,6 +42,9 @@ public class Campaign
     public DateTimeOffset? ScheduledAt { get; set; }
     public DateTimeOffset? StartedAt { get; set; }
     public DateTimeOffset? CompletedAt { get; set; }
+    /// <summary>Why sending stopped by itself (WhatsApp not connected, the token, the template, Meta's account problem), shown on the
+    /// campaign page; cleared when it is resumed. Null when a member stopped it or it never stopped.</summary>
+    public string? PausedReason { get; set; }
     public Guid? CreatedByUserId { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }

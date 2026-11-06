@@ -19,6 +19,7 @@ public class DetailsModel : PageModel
     private const string SendingKey = "campaigns.send.sending";
     private const string StoppedKey = "campaigns.stop.done";
     private const string CancelledKey = "campaigns.cancel.done";
+    private const string RetryingKey = "campaigns.retry.done";
 
     private readonly ICurrentClientContext _clientContext;
     private readonly ICampaignService _campaigns;
@@ -92,6 +93,25 @@ public class DetailsModel : PageModel
         {
             await _campaigns.StopAsync(client.Id, id, ct);
             StatusMessage = _text[StoppedKey].Value;
+        }
+        catch (InvalidOperationException ex)
+        {
+            ErrorMessage = _text.Localize(ex);
+        }
+
+        return RedirectToPage(new { id });
+    }
+
+    /// <summary>"Retry failed" (QA t8-11): the failed recipients are sent again.</summary>
+    public async Task<IActionResult> OnPostRetryFailedAsync(Guid id, CancellationToken ct)
+    {
+        var client = await _clientContext.GetClientAsync(ct);
+        if (client is null) return RedirectToPage();
+
+        try
+        {
+            var result = await _campaigns.RetryFailedAsync(client.Id, id, batchSize: 20, ct);
+            StatusMessage = result is null ? null : _text[RetryingKey, result.Succeeded, result.Failed, result.RemainingQueued].Value;
         }
         catch (InvalidOperationException ex)
         {

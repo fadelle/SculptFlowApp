@@ -35,7 +35,7 @@ public class BotRuntimeService : IBotRuntimeService
 
     public async Task<BotToolCheck> AuthorizeAsync(Guid clientId, Guid? botId, Guid? testSessionId, string? capability, CancellationToken ct = default)
     {
-        if (clientId == Guid.Empty || botId is not { } id) return BotToolCheck.Denied(BotToolCheck.UnknownBot);
+        if (clientId == Guid.Empty || botId is not { } id) return BotToolCheck.Denied(BotToolCheck.MissingContext);
         var bots = await _bots.ListForClientReadOnlyAsync(clientId, ct);
         // Client isolation: the bot must be the calling client's own, so a tool call can never reach another client's data.
         var bot = bots.FirstOrDefault(b => b.Id == id);

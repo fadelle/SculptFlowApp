@@ -98,7 +98,8 @@ public class AccountSignInTests(PostgresFixture fixture) : RepoTestBase(fixture)
         var user = await CreateAsync(sp, role, active, role == UserRole.Admin ? null : true);
         var admin = await AdminSignInAsync(sp, user.Email, Password);
         Assert.Equal(allowed, admin is not null);
-        if (allowed) Assert.Equal(new AdminIdentity(user.Id, "Pat admin", user.Email), admin);
+        if (allowed) Assert.Equal((user.Id, "Pat admin", user.Email), (admin!.Id, admin.FullName, admin.Email));
+        if (allowed) Assert.Equal(16, admin!.SessionStamp?.Length); // QA t6-admin-13: the portal compares it on every request
     }
 
     [PostgresFact]
@@ -113,7 +114,8 @@ public class AccountSignInTests(PostgresFixture fixture) : RepoTestBase(fixture)
         await using (var db = NewContext())
         {
             var row = await db.Users.AsNoTracking().SingleAsync(u => u.Id == user.Id);
-            Assert.Equal((1, (DateTimeOffset?)null), (row.AccessFailedCount, row.LastLoginAt));
+            // A wrong admin password doesn't count towards a lockout (QA t6-admin-12).
+            Assert.Equal((0, (DateTimeOffset?)null), (row.AccessFailedCount, row.LastLoginAt));
         }
 
         Assert.NotNull(await AdminSignInAsync(sp, " " + user.Email!.ToUpperInvariant() + " ", Password)); // trimmed, any case
@@ -123,26 +125,32 @@ public class AccountSignInTests(PostgresFixture fixture) : RepoTestBase(fixture)
         Assert.NotNull(signedIn.LastLoginAt);
     }
 
-    [PostgresTheory]
-    [InlineData(UserRole.Member)]
-    [InlineData(UserRole.Admin)]
-    public async Task Five_wrong_passwords_lock_any_account_for_fifteen_minutes(string role)
+    [PostgresFact]
+    public async Task Five_wrong_passwords_lock_a_member_for_fifteen_minutes()
     {
         await using var sp = Services();
-        var user = await CreateAsync(sp, role, membershipActive: role == UserRole.Admin ? null : true);
-        for (var i = 0; i < AccountRules.MaxFailedSignIns; i++)
-        {
-            if (role == UserRole.Admin) Assert.Null(await AdminSignInAsync(sp, user.Email, "wrong"));
-            else Assert.False((await MainAppSignInAsync(sp, user.Id, "wrong")).Succeeded);
-        }
+        var user = await CreateAsync(sp, UserRole.Member, membershipActive: true);
+        for (var i = 0; i < AccountRules.MaxFailedSignIns; i++) Assert.False((await MainAppSignInAsync(sp, user.Id, "wrong")).Succeeded);
 
         // The right password no longer helps while locked.
-        if (role == UserRole.Admin) Assert.Null(await AdminSignInAsync(sp, user.Email, Password));
-        else Assert.True((await MainAppSignInAsync(sp, user.Id, Password)).IsLockedOut);
+        Assert.True((await MainAppSignInAsync(sp, user.Id, Password)).IsLockedOut);
 
         await using var db = NewContext();
         var lockedUntil = (await db.Users.AsNoTracking().SingleAsync(u => u.Id == user.Id)).LockoutEnd!.Value;
         Assert.InRange(lockedUntil - DateTimeOffset.UtcNow, TimeSpan.FromMinutes(14), AccountRules.LockoutDuration);
+    }
+
+    // QA t6-admin-12: anyone could keep the real admin out for 15 minutes, again and again. The portal limits attempts per network.
+    [PostgresFact]
+    public async Task Wrong_passwords_never_lock_an_admin_out()
+    {
+        await using var sp = Services();
+        var user = await CreateAsync(sp, UserRole.Admin, membershipActive: null);
+        for (var i = 0; i < AccountRules.MaxFailedSignIns + 1; i++) Assert.Null(await AdminSignInAsync(sp, user.Email, "wrong"));
+
+        Assert.NotNull(await AdminSignInAsync(sp, user.Email, Password));
+        await using var db = NewContext();
+        Assert.Null((await db.Users.AsNoTracking().SingleAsync(u => u.Id == user.Id)).LockoutEnd);
     }
 
     /// <summary>The admin portal's old users table (admin.admin_users) hashed with PasswordHasher&lt;AdminUser&gt;; the

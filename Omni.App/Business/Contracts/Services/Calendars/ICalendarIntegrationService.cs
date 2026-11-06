@@ -58,4 +58,9 @@ public interface ICalendarIntegrationService
     /// trigger per connected-and-enabled calendar for this client. Best-effort: never throws, so a calendar problem
     /// can never affect the booking operation that triggered it.</summary>
     Task TriggerBookingSyncAsync(Guid clientId, BookingResponse booking, string operation, CancellationToken ct = default);
+
+    /// <summary>Marks syncs with no answer after Calendars / SyncAnswerTimeoutMinutes as failed, their connections unhealthy, and tells
+    /// each client once (QA t9-03: a broken n8n workflow left syncs pending forever with the connection still "healthy"). A late
+    /// answer still counts. Returns how many syncs it failed.</summary>
+    Task<int> FailUnansweredSyncsAsync(CancellationToken ct = default);
 }

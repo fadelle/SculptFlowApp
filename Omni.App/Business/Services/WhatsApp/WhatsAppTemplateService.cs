@@ -67,16 +67,24 @@ public class WhatsAppTemplateService : IWhatsAppTemplateService
 
     public async Task<WhatsAppTemplateResponse> CreateAsync(CreateWhatsAppTemplateRequest request, CancellationToken ct = default)
     {
-        ValidateContent(request.Category, request.Body);
+        ValidateContent(request.Category, request.Body, request.HeaderType, request.HeaderContent, request.Footer);
         if (string.IsNullOrWhiteSpace(request.Name))
         {
             throw new ArgumentException("templates.errors.nameBodyRequired");
         }
-        // Meta only accepts lower-case letters, digits and underscores (max 512); catch it here rather than at submission.
-        if (request.Name.Length > 512 || !request.Name.All(c => c is (>= 'a' and <= 'z') or (>= '0' and <= '9') or '_'))
+        // Meta only accepts lower-case letters, digits and underscores; catch it here rather than at submission. At most 200, the
+        // column's length (QA t8-13: Meta's 512 was allowed and a 300-character name was a 500).
+        if (request.Name.Length > NameMaxLength || !request.Name.All(c => c is (>= 'a' and <= 'z') or (>= '0' and <= '9') or '_'))
         {
             throw new ArgumentException("templates.errors.nameInvalid");
         }
+        // Everything is checked before the row is saved, so a bad value leaves no draft behind (QA t8-13: bad buttons did).
+        if (!string.IsNullOrWhiteSpace(request.Language) && !IsLanguageCode(request.Language))
+        {
+            throw new ArgumentException(LanguageInvalidKey).WithArgs(request.Language);
+        }
+        ValidateButtons(request.ButtonsJson);
+        RequestChecks.Json(request.VariablesJson, "variablesJson");
 
         var now = DateTimeOffset.UtcNow;
         var template = new WhatsAppTemplate
@@ -87,7 +95,7 @@ public class WhatsAppTemplateService : IWhatsAppTemplateService
             Category = request.Category,
             Language = string.IsNullOrWhiteSpace(request.Language) ? "en_US" : request.Language,
             Status = WhatsAppTemplateStatus.Draft,
-            HeaderType = request.HeaderType,
+            HeaderType = string.IsNullOrWhiteSpace(request.HeaderType) ? null : request.HeaderType,
             HeaderContent = request.HeaderContent,
             Body = request.Body,
             Footer = request.Footer,
@@ -104,7 +112,25 @@ public class WhatsAppTemplateService : IWhatsAppTemplateService
         return ToResponse(template) with { SubmitError = notSubmitted };
     }
 
-    private static void ValidateContent(string? category, string? body)
+    // Meta's limits for a template (QA t8-13: a 2,000-character body was accepted and then refused by Meta).
+    public const int NameMaxLength = 200;
+    public const int BodyMaxLength = 1024;
+    public const int HeaderTextMaxLength = 60;
+    public const int FooterMaxLength = 60;
+    public const int MaxButtons = 10;
+    public const int ButtonTextMaxLength = 25;
+
+    public const string LanguageInvalidKey = "templates.errors.languageInvalid";
+    public const string HeaderTypeInvalidKey = "templates.errors.headerTypeInvalid";
+    public const string ButtonsInvalidKey = "templates.errors.buttonsInvalid";
+
+    /// <summary>A language code shaped like Meta's: two or three lower-case letters, optionally "_" and a two-letter region (en, fil,
+    /// en_US, pt_BR). Meta itself refuses a well-formed code it doesn't support, with a readable reason.</summary>
+    internal static bool IsLanguageCode(string code) =>
+        System.Text.RegularExpressions.Regex.IsMatch(code, "^[a-z]{2,3}(_[A-Z]{2})?$");
+
+    /// <summary>The fields both create and edit set, checked against Meta's rules and the columns (400 naming what's wrong).</summary>
+    private static void ValidateContent(string? category, string? body, string? headerType, string? headerContent, string? footer)
     {
         if (category is null || !WhatsAppTemplateCategory.All.Contains(category))
         {
@@ -113,6 +139,37 @@ public class WhatsAppTemplateService : IWhatsAppTemplateService
         if (string.IsNullOrWhiteSpace(body))
         {
             throw new ArgumentException("templates.errors.nameBodyRequired");
+        }
+        RequestChecks.MaxLength(body, BodyMaxLength, "body");
+        if (!string.IsNullOrWhiteSpace(headerType) && !WhatsAppTemplateHeaderType.All.Contains(headerType))
+        {
+            throw new ArgumentException(HeaderTypeInvalidKey).WithArgs(headerType);
+        }
+        if (headerType == WhatsAppTemplateHeaderType.Text) RequestChecks.MaxLength(headerContent, HeaderTextMaxLength, "headerContent");
+        RequestChecks.MaxLength(footer, FooterMaxLength, "footer");
+    }
+
+    /// <summary>Buttons are Meta's list: a JSON array of at most 10 objects, each with a "type" (and a "text" of at most 25 characters when it has one)
+    /// (QA t8-13: "{not json}" was a 500, and {"a":1} was saved and then broke the submission).</summary>
+    internal static void ValidateButtons(string? buttonsJson)
+    {
+        if (string.IsNullOrWhiteSpace(buttonsJson)) return;
+        try
+        {
+            using var doc = JsonDocument.Parse(buttonsJson);
+            var root = doc.RootElement;
+            var ok = root.ValueKind == JsonValueKind.Array && root.GetArrayLength() is > 0 and <= MaxButtons
+                     && root.EnumerateArray().All(b => b.ValueKind == JsonValueKind.Object
+                         && b.TryGetProperty("type", out var type) && type.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(type.GetString())
+                         // A copy-code or one-time-password button has no text; the others have a short one.
+                         && (!b.TryGetProperty("text", out var text)
+                             || (text.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(text.GetString())
+                                 && text.GetString()!.Length <= ButtonTextMaxLength)));
+            if (!ok) throw new ArgumentException(ButtonsInvalidKey).WithArgs(MaxButtons, ButtonTextMaxLength);
+        }
+        catch (JsonException)
+        {
+            throw new ArgumentException(ButtonsInvalidKey).WithArgs(MaxButtons, ButtonTextMaxLength);
         }
     }
 
@@ -129,7 +186,7 @@ public class WhatsAppTemplateService : IWhatsAppTemplateService
         {
             throw new InvalidOperationException("templates.errors.cantEdit").WithArgs(TextArg.Value(template.Status));
         }
-        ValidateContent(request.Category, request.Body);
+        ValidateContent(request.Category, request.Body, request.HeaderType, request.HeaderContent, request.Footer);
 
         var now = DateTimeOffset.UtcNow;
         template.Category = request.Category;

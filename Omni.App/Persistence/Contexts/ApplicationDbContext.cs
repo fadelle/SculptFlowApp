@@ -596,6 +596,7 @@ public class ApplicationDbContext : IdentityUserContext<AppUser>
             e.Property(x => x.ScheduledAt).HasColumnName("scheduled_at");
             e.Property(x => x.StartedAt).HasColumnName("started_at");
             e.Property(x => x.CompletedAt).HasColumnName("completed_at");
+            e.Property(x => x.PausedReason).HasColumnName("paused_reason").HasMaxLength(500);
             e.Property(x => x.CreatedByUserId).HasColumnName("created_by_user_id");
             e.Property(x => x.CreatedAt).HasColumnName("created_at");
             e.Property(x => x.UpdatedAt).HasColumnName("updated_at");

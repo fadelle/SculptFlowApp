@@ -78,6 +78,47 @@ public class BotToolAttributeTests
         Assert.False(ran);
     }
 
+    // QA t9-01: the live n8n workflow sent no clientId and no bot header; every tool answered 200 and nothing ever looked wrong.
+    [Fact]
+    public async Task A_call_without_the_client_or_the_bot_is_a_400_so_the_run_fails_visibly()
+    {
+        _runtime.Setup(r => r.AuthorizeAsync(It.IsAny<Guid>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(BotToolCheck.Denied(BotToolCheck.MissingContext));
+
+        var (ran, result, _) = await RunAsync(new BotToolAttribute(BotCapability.Knowledge), new());
+
+        Assert.False(ran);
+        var body = JsonSerializer.Serialize(Assert.IsType<BadRequestObjectResult>(result).Value);
+        Assert.Contains($"\"code\":\"{BotToolOutcomes.MissingContextCode}\"", body);
+        Assert.Contains("X-Omni-Bot-Id", body);
+    }
+
+    [Theory]
+    [InlineData(BotToolCheck.UnknownBot)]
+    [InlineData(BotToolCheck.BotNotActive)]
+    public async Task A_bot_that_may_no_longer_answer_is_a_403_like_the_code_engine(string reason)
+    {
+        _runtime.Setup(r => r.AuthorizeAsync(It.IsAny<Guid>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(BotToolCheck.Denied(reason));
+
+        var (ran, result, _) = await RunAsync(new BotToolAttribute(), new() { ["clientId"] = _clientId }, r => r.Headers[BotToolAttribute.BotHeader] = Guid.NewGuid().ToString());
+
+        Assert.False(ran);
+        var forbidden = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(StatusCodes.Status403Forbidden, forbidden.StatusCode);
+        Assert.Contains($"\"code\":\"{BotToolOutcomes.BotNotAllowedCode}\"", JsonSerializer.Serialize(forbidden.Value));
+    }
+
+    [Fact]
+    public async Task The_runtime_calls_a_missing_client_or_bot_missing_context()
+    {
+        var bots = new Mock<IBotRepository>();
+        var runtime = new Omni.App.Business.Services.Ai.BotRuntimeService(bots.Object, Mock.Of<IBotTestRepository>(), Mock.Of<IEntitlementService>());
+        Assert.Equal(BotToolCheck.MissingContext, (await runtime.AuthorizeAsync(Guid.Empty, Guid.NewGuid(), null, null)).DeniedReason);
+        Assert.Equal(BotToolCheck.MissingContext, (await runtime.AuthorizeAsync(_clientId, null, null, null)).DeniedReason);
+        bots.Verify(b => b.ListForClientReadOnlyAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
     [Fact]
     public void Every_ai_tool_action_is_a_bot_tool_and_runs_before_the_feature_check()
     {

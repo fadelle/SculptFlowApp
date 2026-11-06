@@ -426,7 +426,7 @@ public class MessageService : IMessageService
         // Checked before the billing reservation, so a client without WhatsApp is told that (not a pricing refusal).
         if (!await _whatsApp.IsReadyAsync(clientId, ct))
         {
-            throw new WhatsAppSendException("channels.whatsApp.errors.notConnected");
+            throw new WhatsAppSendException(WhatsAppSendException.NotConnectedKey);
         }
         // A template is the business starting the conversation: never to a contact who opted out (stop word or a member).
         if (conversation.Contact is { } templateContact && (templateContact.OptedOutAt is not null || !templateContact.MarketingOptIn))
@@ -463,7 +463,8 @@ public class MessageService : IMessageService
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             await _billing.SendFailedAsync(billingHold, ct);
-            await NotifyOutboundFailureAsync(clientId, conversation, ct);
+            // A campaign tells the members once for the whole campaign (QA t8-11: one notification per recipient).
+            if (origin != MessageOrigin.Campaign) await NotifyOutboundFailureAsync(clientId, conversation, ct);
             throw;
         }
 
@@ -545,6 +546,14 @@ public class MessageService : IMessageService
         return rendered;
     }
 
+    public const string ChannelMismatchKey = "inbox.errors.channelMismatch";
+    public const string InvalidDeliveryStatusKey = "inbox.errors.invalidDeliveryStatus";
+    public const string StatusOnInboundKey = "inbox.errors.statusOnInbound";
+
+    /// <summary>A time the caller reports, never later than now (a missing one is now).</summary>
+    private static DateTimeOffset NotAfter(DateTimeOffset? reported, DateTimeOffset now) =>
+        reported is { } at && at < now ? at : now;
+
     public async Task<IngestMessageResult> IngestAsync(IngestMessageRequest request, CancellationToken ct = default)
     {
         if (!IngestEventType.All.Contains(request.EventType))
@@ -576,6 +585,13 @@ public class MessageService : IMessageService
             throw new ArgumentException("inbox.errors.contactNotInConversation");
         }
         request = request with { ContactId = conversation.ContactId };
+        // The channel is the conversation's (QA t8-07: "telegram" and "pigeon" messages were stored in a WhatsApp thread); an empty
+        // one means "the conversation's".
+        if (!string.IsNullOrWhiteSpace(request.Channel) && !string.Equals(request.Channel, conversation.Channel, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ArgumentException(ChannelMismatchKey).WithArgs(TextArg.Value(request.Channel), TextArg.Value(conversation.Channel));
+        }
+        request = request with { Channel = conversation.Channel };
 
         // Idempotency: Meta/n8n webhook deliveries can retry. If we've already recorded this exact
         // external message for this client+channel, hand back the existing row instead of a duplicate.
@@ -626,11 +642,13 @@ public class MessageService : IMessageService
             MessageType = string.IsNullOrWhiteSpace(request.MessageType) ? "text" : request.MessageType,
             Content = request.Content,
             ExternalMessageId = request.ExternalMessageId,
-            DeliveryStatus = request.DeliveryStatus,
+            // A delivery status belongs to a message the business sent (QA t8-07).
+            DeliveryStatus = direction == MessageDirection.Outbound ? request.DeliveryStatus : null,
             MetadataJson = request.MetadataJson,
             IsAiGenerated = isAiGenerated,
-            SentAt = direction == MessageDirection.Outbound ? request.SentAt ?? now : null,
-            ReceivedAt = direction == MessageDirection.Inbound ? request.ReceivedAt ?? now : null,
+            // The provider's time, never later than now (QA t8-07: a 2099 date was stored).
+            SentAt = direction == MessageDirection.Outbound ? NotAfter(request.SentAt, now) : null,
+            ReceivedAt = direction == MessageDirection.Inbound ? NotAfter(request.ReceivedAt, now) : null,
             CreatedAt = now,
             TraceId = TraceContext.CurrentTraceId()
         };
@@ -651,7 +669,7 @@ public class MessageService : IMessageService
         {
             // The 24h window runs from when the customer wrote (the provider's time), never later than now, and never moves back
             // (QA t8-05: a late or replayed message reopened an expired window, and Meta then refused the free-form reply).
-            var wroteAt = request.ReceivedAt is { } at && at < now ? at : now;
+            var wroteAt = NotAfter(request.ReceivedAt, now);
             if (conversation.LastCustomerMessageAt is null || wroteAt > conversation.LastCustomerMessageAt)
             {
                 conversation.LastCustomerMessageAt = wroteAt;
@@ -1091,10 +1109,22 @@ public class MessageService : IMessageService
             throw new ArgumentException("inbox.errors.externalIdRequired");
         }
 
+        // Only the statuses a provider reports (QA t8-07: a missing status cleared the real one, and "banana" was stored).
+        if (string.IsNullOrWhiteSpace(request.DeliveryStatus) || !MessageDeliveryStatus.All.Contains(request.DeliveryStatus))
+        {
+            throw new ArgumentException(InvalidDeliveryStatusKey).WithArgs(TextArg.Value(request.DeliveryStatus ?? ""));
+        }
+        request = request with { DeliveryStatus = request.DeliveryStatus.ToLowerInvariant() };
+
         var message = await _messages.FindByExternalIdAsync(request.ClientId, request.Channel, request.ExternalMessageId, ct);
         if (message is null)
         {
             return new IngestMessageResult(Found: false, Deduplicated: false, null);
+        }
+        // A delivery status is about a message the business sent: a customer's message is never "failed" or "read".
+        if (message.Direction != MessageDirection.Outbound)
+        {
+            throw new ArgumentException(StatusOnInboundKey);
         }
 
         // Providers retry callbacks and don't guarantee order ("read" can arrive before "delivered").
@@ -1111,7 +1141,7 @@ public class MessageService : IMessageService
         var isLateStep = ProgressRank(incoming) > 0 && ProgressRank(incoming) < ProgressRank(message.DeliveryStatus);
 
         // Not a new message — just update delivery status and tell the Inbox. Never touches AI/mode.
-        var occurredAt = request.OccurredAt ?? DateTimeOffset.UtcNow;
+        var occurredAt = NotAfter(request.OccurredAt, DateTimeOffset.UtcNow);
         // Captured before the switch so OUTBOUND_MESSAGE_FAILED only fires on the FIRST time this message is
         // reported failed — a retried/duplicate "failed" webhook for the same message must not re-notify.
         var justFailed = message.Direction == MessageDirection.Outbound && message.FailedAt is null

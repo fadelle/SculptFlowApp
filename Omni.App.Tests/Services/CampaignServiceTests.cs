@@ -15,6 +15,7 @@ public class CampaignServiceTests
     private readonly Mock<ICampaignAudienceService> _audience = new();
     private readonly Mock<IEntitlementService> _entitlements = new();
     private readonly Mock<IWhatsAppService> _whatsApp = new();
+    private readonly Mock<INotificationService> _notifications = new();
     private readonly WhatsAppTemplate _template;
 
     public CampaignServiceTests()
@@ -29,7 +30,7 @@ public class CampaignServiceTests
     }
 
     private CampaignService Sut() => new(_campaigns.Object, _templates.Object, _contacts.Object, _messageRows.Object, _uow.Object,
-        _conversations.Object, _messages.Object, _audience.Object, _entitlements.Object, _whatsApp.Object, TextKit.Localizer());
+        _conversations.Object, _messages.Object, _audience.Object, _entitlements.Object, _whatsApp.Object, _notifications.Object, TextKit.Localizer());
 
     private Campaign MakeCampaign(string status = CampaignStatus.Draft)
     {
@@ -688,6 +689,217 @@ public class CampaignServiceTests
         _campaigns.Setup(x => x.ListRecipientsWithContactAsync(c.Id, It.IsAny<CancellationToken>())).ReturnsAsync(new List<CampaignRecipient> { r });
         var d = await Sut().GetByIdAsync(_clientId, c.Id);
         Assert.Equal((1, 1, "Hi {{1}}", "Ann"), (d!.Stats.TotalRecipients, d.Stats.Sent, d.TemplateBody, d.Recipients[0].ContactFullName));
+    }
+
+    // ---------------------------------------------------------------- QA t8-11: a problem that fails everyone pauses, once
+
+    private static string MetaError(int code, string message) => $"{{\"error\":{{\"message\":\"{message}\",\"type\":\"OAuthException\",\"code\":{code}}}}}";
+
+    /// <summary>A running campaign with two queued recipients whose sends throw <paramref name="error"/>.</summary>
+    private (Campaign Campaign, CampaignRecipient First, CampaignRecipient Second) RunningWithSendError(Exception error)
+    {
+        var c = MakeCampaign(CampaignStatus.Running);
+        var r1 = Recipient(c, CampaignRecipientStatus.Queued);
+        var r2 = Recipient(c, CampaignRecipientStatus.Queued);
+        _campaigns.Setup(x => x.ListQueuedBatchAsync(c.Id, 20, It.IsAny<CancellationToken>())).ReturnsAsync(new List<CampaignRecipient> { r1, r2 });
+        var conv = new ConversationResponse(Guid.NewGuid(), _clientId, Guid.NewGuid(), "whatsapp", "active", "ai", true, false, null, null, null, false, DateTimeOffset.UtcNow);
+        _conversations.Setup(x => x.GetOrCreateForContactAsync(_clientId, It.IsAny<Guid>(), ConversationChannel.WhatsApp, It.IsAny<CancellationToken>())).ReturnsAsync(conv);
+        _messages.Setup(m => m.SendCampaignTemplateAsync(_clientId, conv.Id, _template.Id, It.IsAny<IReadOnlyList<string>>(), c.Id, It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(error);
+        _campaigns.Setup(x => x.TryChangeStatusAsync(_clientId, c.Id, It.IsAny<IReadOnlyCollection<string>>(), CampaignStatus.Paused, It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        _campaigns.Setup(x => x.CountRecipientsInStatusAsync(c.Id, CampaignRecipientStatus.Queued, It.IsAny<CancellationToken>())).ReturnsAsync(2);
+        return (c, r1, r2);
+    }
+
+    [Fact]
+    public async Task An_invalid_token_pauses_the_campaign_once_with_the_reason_and_keeps_everyone_queued()
+    {
+        var (c, r1, r2) = RunningWithSendError(WhatsAppSendException.FromResponse(401, "Unauthorized", MetaError(190, "Error validating access token")));
+
+        var result = await Sut().ProcessBatchAsync(_clientId, c.Id);
+
+        Assert.Equal((0, 2, false), (result!.Processed, result.RemainingQueued, result.CampaignCompleted));
+        Assert.All(new[] { r1, r2 }, r => Assert.Equal((CampaignRecipientStatus.Queued, (string?)null), (r.Status, r.FailureReason)));
+        Assert.Equal(CampaignStatus.Paused, c.Status);
+        Assert.Contains("Error validating access token", c.PausedReason);
+        Assert.DoesNotContain("{\"error\"", c.PausedReason);
+        _messages.Verify(m => m.SendCampaignTemplateAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<IReadOnlyList<string>>(), It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Once);
+        _notifications.Verify(n => n.CreateAsync(_clientId, NotificationType.OutboundMessageFailed,
+            It.Is<NotificationText>(t => t.MessageKey == CampaignService.PausedMessageKey), null, null, null, null, $"/campaigns/{c.Id}", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Theory]
+    [InlineData(132015)] // template paused by Meta
+    [InlineData(131031)] // account locked
+    public async Task A_template_or_account_problem_pauses_too(int code)
+    {
+        var (c, r1, _) = RunningWithSendError(WhatsAppSendException.FromResponse(400, "BadRequest", MetaError(code, "Not now")));
+        await Sut().ProcessBatchAsync(_clientId, c.Id);
+        Assert.Equal((CampaignStatus.Paused, CampaignRecipientStatus.Queued), (c.Status, r1.Status));
+    }
+
+    [Fact]
+    public async Task A_template_withdrawn_while_sending_pauses_the_campaign()
+    {
+        var (c, r1, _) = RunningWithSendError(new InvalidOperationException("templates.errors.notApproved").WithArgs("promo", TextArg.Value("paused")));
+        await Sut().ProcessBatchAsync(_clientId, c.Id);
+        Assert.Equal((CampaignStatus.Paused, CampaignRecipientStatus.Queued), (c.Status, r1.Status));
+    }
+
+    [Fact]
+    public async Task A_recipient_problem_fails_only_that_recipient_with_a_readable_reason_and_no_notification_each()
+    {
+        var (c, r1, r2) = RunningWithSendError(WhatsAppSendException.FromResponse(400, "BadRequest", MetaError(131026, "Message undeliverable")));
+
+        var result = await Sut().ProcessBatchAsync(_clientId, c.Id);
+
+        Assert.Equal((2, 2), (result!.Processed, result.Failed));
+        Assert.All(new[] { r1, r2 }, r =>
+        {
+            Assert.Equal(CampaignRecipientStatus.Failed, r.Status);
+            Assert.Contains("Message undeliverable", r.FailureReason);
+            Assert.DoesNotContain("{\"error\"", r.FailureReason);
+        });
+        Assert.Equal(CampaignStatus.Running, c.Status);
+        _campaigns.Verify(x => x.TryChangeStatusAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<string>(), It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Metas_rate_limit_ends_the_batch_without_pausing_or_failing_anyone()
+    {
+        var (c, r1, r2) = RunningWithSendError(WhatsAppSendException.FromResponse(400, "BadRequest", MetaError(130429, "Rate limit hit")));
+
+        var result = await Sut().ProcessBatchAsync(_clientId, c.Id);
+
+        Assert.Equal((0, false), (result!.Processed, result.CampaignCompleted));
+        Assert.Equal((CampaignStatus.Running, CampaignRecipientStatus.Queued, CampaignRecipientStatus.Queued), (c.Status, r1.Status, r2.Status));
+        _campaigns.Verify(x => x.TryChangeStatusAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<string>(), It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()), Times.Never);
+        _notifications.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task A_campaign_finishing_with_failures_sends_one_notification()
+    {
+        var c = MakeCampaign(CampaignStatus.Running);
+        _campaigns.Setup(x => x.ListQueuedBatchAsync(c.Id, 20, It.IsAny<CancellationToken>())).ReturnsAsync(new List<CampaignRecipient>());
+        _campaigns.Setup(x => x.CountRecipientsInStatusAsync(c.Id, CampaignRecipientStatus.Failed, It.IsAny<CancellationToken>())).ReturnsAsync(3);
+        _campaigns.Setup(x => x.CountRecipientsInStatusesAsync(c.Id, It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>())).ReturnsAsync(5);
+
+        await Sut().ProcessBatchAsync(_clientId, c.Id);
+
+        Assert.Equal(CampaignStatus.Completed, c.Status);
+        _notifications.Verify(n => n.CreateAsync(_clientId, NotificationType.OutboundMessageFailed,
+            It.Is<NotificationText>(t => t.MessageKey == CampaignService.FinishedWithFailuresMessageKey && t.Args.Contains(3)),
+            null, null, null, null, $"/campaigns/{c.Id}", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task A_campaign_finishing_without_failures_sends_no_notification()
+    {
+        var c = MakeCampaign(CampaignStatus.Running);
+        _campaigns.Setup(x => x.ListQueuedBatchAsync(c.Id, 20, It.IsAny<CancellationToken>())).ReturnsAsync(new List<CampaignRecipient>());
+        await Sut().ProcessBatchAsync(_clientId, c.Id);
+        Assert.Equal(CampaignStatus.Completed, c.Status);
+        _notifications.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task Resuming_clears_the_pause_reason()
+    {
+        var c = MakeCampaign(CampaignStatus.Paused);
+        c.PausedReason = "WhatsApp send failed (401 Unauthorized): token";
+        _campaigns.Setup(x => x.ListRecipientsInStatusAsync(c.Id, It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>())).ReturnsAsync(new List<CampaignRecipient>());
+        _campaigns.Setup(x => x.ListQueuedBatchAsync(c.Id, 20, It.IsAny<CancellationToken>())).ReturnsAsync(new List<CampaignRecipient>());
+        _campaigns.Setup(x => x.CountRecipientsInStatusAsync(c.Id, CampaignRecipientStatus.Queued, It.IsAny<CancellationToken>())).ReturnsAsync(1);
+        await Sut().SendAsync(_clientId, c.Id);
+        Assert.Equal((CampaignStatus.Running, (string?)null), (c.Status, c.PausedReason));
+    }
+
+    [Theory]
+    [InlineData(WhatsAppTemplateStatus.Rejected)]
+    [InlineData(WhatsAppTemplateStatus.Draft)]
+    [InlineData(WhatsAppTemplateStatus.Pending)]
+    public async Task Create_refuses_a_template_that_is_not_approved(string status)
+    {
+        _template.Status = status;
+        var ex = await Assert.ThrowsAsync<ArgumentException>(() => Sut().CreateAsync(Create([Guid.NewGuid()])));
+        Assert.Equal("templates.errors.notApproved", ex.Message);
+        _campaigns.Verify(r => r.Add(It.IsAny<Campaign>()), Times.Never);
+    }
+
+    // ---------------------------------------------------------------- QA t8-11: Retry failed
+
+    [Theory]
+    [InlineData(CampaignStatus.Completed)]
+    [InlineData(CampaignStatus.Failed)]
+    [InlineData(CampaignStatus.Paused)]
+    public async Task Retry_failed_queues_the_failed_recipients_again_and_runs_the_campaign(string status)
+    {
+        var c = MakeCampaign(status);
+        c.CompletedAt = DateTimeOffset.UtcNow.AddHours(-1);
+        var failed = Recipient(c, CampaignRecipientStatus.Failed);
+        failed.FailureReason = "WhatsApp send failed (401 Unauthorized): token";
+        failed.FailureCode = "190";
+        failed.FailedAt = DateTimeOffset.UtcNow.AddHours(-1);
+        failed.MessageId = Guid.NewGuid();
+        _campaigns.Setup(x => x.ListRecipientsInStatusAsync(c.Id, It.Is<IReadOnlyCollection<string>>(s => s.Single() == CampaignRecipientStatus.Failed), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<CampaignRecipient> { failed });
+        _campaigns.Setup(x => x.ListRecipientsInStatusAsync(c.Id, It.Is<IReadOnlyCollection<string>>(s => s.Single() == CampaignRecipientStatus.Pending), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<CampaignRecipient>());
+        _campaigns.Setup(x => x.ListQueuedBatchAsync(c.Id, 20, It.IsAny<CancellationToken>())).ReturnsAsync(new List<CampaignRecipient>());
+        _campaigns.Setup(x => x.CountRecipientsInStatusAsync(c.Id, CampaignRecipientStatus.Queued, It.IsAny<CancellationToken>())).ReturnsAsync(1);
+
+        var result = await Sut().RetryFailedAsync(_clientId, c.Id);
+
+        Assert.NotNull(result);
+        Assert.Equal((CampaignStatus.Running, (DateTimeOffset?)null), (c.Status, c.CompletedAt));
+        Assert.Equal(CampaignRecipientStatus.Queued, failed.Status);
+        Assert.Null(failed.FailureReason);
+        Assert.Null(failed.FailureCode);
+        Assert.Null(failed.FailedAt);
+        Assert.Null(failed.MessageId);
+        Assert.NotNull(failed.QueuedAt);
+    }
+
+    [Fact]
+    public async Task Retry_failed_is_refused_when_nothing_failed_the_campaign_never_ran_or_WhatsApp_is_not_ready()
+    {
+        Assert.Null(await Sut().RetryFailedAsync(_clientId, Guid.NewGuid()));
+
+        var draft = MakeCampaign();
+        Assert.Equal(CampaignService.CantRetryKey, (await Assert.ThrowsAsync<InvalidOperationException>(() => Sut().RetryFailedAsync(_clientId, draft.Id))).Message);
+        var cancelled = MakeCampaign(CampaignStatus.Cancelled);
+        Assert.Equal(CampaignService.CantRetryKey, (await Assert.ThrowsAsync<InvalidOperationException>(() => Sut().RetryFailedAsync(_clientId, cancelled.Id))).Message);
+
+        var done = MakeCampaign(CampaignStatus.Completed);
+        _campaigns.Setup(x => x.ListRecipientsInStatusAsync(done.Id, It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>())).ReturnsAsync(new List<CampaignRecipient>());
+        Assert.Equal(CampaignService.NothingToRetryKey, (await Assert.ThrowsAsync<InvalidOperationException>(() => Sut().RetryFailedAsync(_clientId, done.Id))).Message);
+
+        var failedOne = MakeCampaign(CampaignStatus.Completed);
+        _campaigns.Setup(x => x.ListRecipientsInStatusAsync(failedOne.Id, It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<CampaignRecipient> { Recipient(failedOne, CampaignRecipientStatus.Failed) });
+        _whatsApp.Setup(w => w.IsReadyAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(false);
+        Assert.Equal("campaigns.errors.whatsAppNotConnected", (await Assert.ThrowsAsync<InvalidOperationException>(() => Sut().RetryFailedAsync(_clientId, failedOne.Id))).Message);
+        Assert.Equal(CampaignStatus.Completed, failedOne.Status);
+    }
+
+    // ---------------------------------------------------------------- the send error's kind
+
+    [Theory]
+    [InlineData(401, "{\"error\":{\"message\":\"Bad token\",\"code\":190}}", true, false)]
+    [InlineData(400, "{\"error\":{\"message\":\"Template paused\",\"code\":132015}}", true, false)]
+    [InlineData(400, "{\"error\":{\"message\":\"Undeliverable\",\"code\":131026}}", false, false)]
+    [InlineData(500, "{\"error\":{\"message\":\"Something went wrong\",\"code\":131000}}", false, false)]
+    [InlineData(400, "{\"error\":{\"message\":\"Too many\",\"code\":130429}}", false, true)]
+    [InlineData(503, "<html>down</html>", true, false)]
+    [InlineData(400, "not json", false, false)]
+    public void A_send_error_says_whether_it_fails_everyone_or_is_a_rate_limit(int status, string body, bool stopsEveryone, bool rateLimited)
+    {
+        var ex = WhatsAppSendException.FromResponse(status, "Reason", body);
+        Assert.Equal((stopsEveryone, rateLimited), (ex.StopsEveryone, ex.IsRateLimited));
+        Assert.DoesNotContain("{\"error\"", ex.Message);
+        Assert.True(new WhatsAppSendException(WhatsAppSendException.NotConnectedKey).StopsEveryone);
     }
 }
 

@@ -37,12 +37,10 @@ public class AdminAccountService : IAdminAccountService
         }
 
         if (await _users.IsLockedOutAsync(user) || !user.IsActive) return null;
-        // CheckPasswordAsync also rehashes an old-format hash on success.
-        if (!await _users.CheckPasswordAsync(user, password))
-        {
-            await _users.AccessFailedAsync(user); // locks after AccountRules.MaxFailedSignIns
-            return null;
-        }
+        // CheckPasswordAsync also rehashes an old-format hash on success. A wrong password doesn't count towards a lockout: anyone
+        // could otherwise keep the real admin out for good (QA t6-admin-12). The portal limits sign-in attempts per network instead
+        // (Omni.Admin LoginThrottling), and only the portal can call this (platform-admin key).
+        if (!await _users.CheckPasswordAsync(user, password)) return null;
 
         await _users.ResetAccessFailedCountAsync(user);
         user.LastLoginAt = _time.GetUtcNow();
@@ -121,7 +119,12 @@ public class AdminAccountService : IAdminAccountService
         if (!result.Succeeded) throw new ArgumentException(string.Join(" ", result.Errors.Select(e => e.Description)));
     }
 
-    private static AdminIdentity ToIdentity(AppUser user) => new(user.Id, user.FullName, user.Email);
+    private static AdminIdentity ToIdentity(AppUser user) => new(user.Id, user.FullName, user.Email, SessionStampOf(user.SecurityStamp));
+
+    /// <summary>A short fingerprint of the security stamp (SHA-256, 16 hex characters): enough to notice a change, useless to forge.</summary>
+    public static string? SessionStampOf(string? securityStamp) => string.IsNullOrEmpty(securityStamp)
+        ? null
+        : Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(securityStamp)))[..16];
 
     private AdminRow ToRow(AppUser user) =>
         new(user.Id, user.Email, user.FullName, user.IsActive, user.LockoutEnd > _time.GetUtcNow(), user.LastLoginAt, user.CreatedAt);

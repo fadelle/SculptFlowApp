@@ -49,6 +49,10 @@ public interface ICampaignService
     /// messaged stay waiting, so <see cref="SendAsync"/> resumes it and <see cref="CancelAsync"/> ends it.</summary>
     Task<CampaignResponse?> StopAsync(Guid clientId, Guid id, CancellationToken ct = default);
 
+    /// <summary>"Retry failed": queues the failed recipients again and sends the first batch (the background sender sends the rest).
+    /// For a completed, failed, stopped or sending campaign; 422 when none failed or it was never started or was cancelled.</summary>
+    Task<ProcessCampaignBatchResult?> RetryFailedAsync(Guid clientId, Guid id, int batchSize = 20, CancellationToken ct = default);
+
     /// <summary>Cancels a Draft/Scheduled/Running/Paused campaign. Recipients already sent are untouched;
     /// any still Pending/Queued are marked Failed with an explanatory ErrorMessage.</summary>
     Task<CampaignResponse?> CancelAsync(Guid clientId, Guid id, CancellationToken ct = default);

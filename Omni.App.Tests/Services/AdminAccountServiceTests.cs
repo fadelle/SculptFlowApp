@@ -80,7 +80,7 @@ public class AdminAccountServiceTests
         await Assert.ThrowsAsync<KeyNotFoundException>(() => Sut().SetPasswordAsync("c1", "Long-enough-1"));
         await Assert.ThrowsAsync<KeyNotFoundException>(() => Sut().SetActiveAsync("missing", false, "a1"));
         Assert.Null(await Sut().GetActiveAsync("c1"));
-        Assert.Equal(new AdminIdentity("a1", "Ada", "ada@x.com"), await Sut().GetActiveAsync("a1"));
+        Assert.Equal(new AdminIdentity("a1", "Ada", "ada@x.com", AdminAccountService.SessionStampOf(_ada.SecurityStamp)), await Sut().GetActiveAsync("a1"));
         _ada.IsActive = false;
         Assert.Null(await Sut().GetActiveAsync("a1"));
     }
@@ -100,5 +100,46 @@ public class AdminAccountServiceTests
         _users.Verify(m => m.AddPasswordAsync(_bo, "Long-enough-1"), Times.Once);
         _users.Verify(m => m.ResetAccessFailedCountAsync(_bo), Times.Once);
         _users.Verify(m => m.SetLockoutEndDateAsync(_bo, null), Times.Once);
+    }
+
+    // QA t6-admin-12: five wrong passwords locked the real admin out for 15 minutes, again and again.
+    [Fact]
+    public async Task A_wrong_password_is_refused_without_counting_towards_a_lockout()
+    {
+        _users.Setup(m => m.FindByEmailAsync("ada@x.com")).ReturnsAsync(_ada);
+        _users.Setup(m => m.IsLockedOutAsync(_ada)).ReturnsAsync(false);
+        _users.Setup(m => m.CheckPasswordAsync(_ada, "wrong")).ReturnsAsync(false);
+
+        for (var i = 0; i < 6; i++) Assert.Null(await Sut().SignInAsync("ada@x.com", "wrong"));
+
+        _users.Verify(m => m.AccessFailedAsync(It.IsAny<AppUser>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task A_locked_or_inactive_admin_still_cannot_sign_in()
+    {
+        _users.Setup(m => m.FindByEmailAsync("ada@x.com")).ReturnsAsync(_ada);
+        _users.Setup(m => m.CheckPasswordAsync(_ada, "right-password")).ReturnsAsync(true);
+        _users.Setup(m => m.IsLockedOutAsync(_ada)).ReturnsAsync(true);
+        Assert.Null(await Sut().SignInAsync("ada@x.com", "right-password"));
+        _users.Setup(m => m.IsLockedOutAsync(_ada)).ReturnsAsync(false);
+        _ada.IsActive = false;
+        Assert.Null(await Sut().SignInAsync("ada@x.com", "right-password"));
+    }
+
+    // QA t6-admin-13: the portal compares this to sign an admin out after their password was set.
+    [Fact]
+    public async Task The_session_stamp_is_a_fingerprint_that_follows_the_security_stamp()
+    {
+        _ada.SecurityStamp = "STAMP-ONE";
+        var before = (await Sut().GetActiveAsync("a1"))!.SessionStamp;
+        _ada.SecurityStamp = "STAMP-TWO"; // what setting the password does
+        var after = (await Sut().GetActiveAsync("a1"))!.SessionStamp;
+
+        Assert.NotNull(before);
+        Assert.Equal(16, before!.Length);
+        Assert.NotEqual(before, after);
+        Assert.DoesNotContain("STAMP", before);
+        Assert.Null(AdminAccountService.SessionStampOf(null));
     }
 }

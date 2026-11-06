@@ -3,6 +3,7 @@ using System.Text.Json;
 using Omni.App.Business.Contracts.Services.Billing;
 using Omni.App.Business.Contracts.Services.Campaigns;
 using Omni.App.Business.Contracts.Services.Inbox;
+using Omni.App.Business.Contracts.Services.Notifications;
 using Omni.App.Common.Enums;
 using Omni.App.Common.Exceptions;
 using Omni.App.Common.Statics;
@@ -16,6 +17,7 @@ using Omni.App.Persistence.Contracts.Inbox;
 using Omni.App.Persistence.Contracts.Contacts;
 using Omni.App.Persistence.Contracts.WhatsApp;
 using Omni.App.Entities.Dtos.Ui;
+using Omni.App.Entities.Dtos.Notifications;
 using Microsoft.Extensions.Localization;
 
 namespace Omni.App.Business.Services.Campaigns;
@@ -32,14 +34,26 @@ public class CampaignService : ICampaignService
     private readonly ICampaignAudienceService _audience;
     private readonly IEntitlementService _entitlements;
     private readonly IWhatsAppService _whatsApp;
+    private readonly INotificationService _notifications;
 
     private readonly IStringLocalizer _text;
 
+    public const string PausedTitleKey = "notifications.campaignPaused.title";
+    public const string PausedMessageKey = "notifications.campaignPaused.message";
+    public const string FinishedWithFailuresTitleKey = "notifications.campaignFailures.title";
+    public const string FinishedWithFailuresMessageKey = "notifications.campaignFailures.message";
+    public const string NothingToRetryKey = "campaigns.errors.nothingToRetry";
+    public const string CantRetryKey = "campaigns.errors.cantRetry";
+
+    /// <summary>The longest pause reason stored (campaigns.paused_reason).</summary>
+    public const int PausedReasonMaxLength = 500;
+
     public CampaignService(ICampaignRepository campaigns, IWhatsAppTemplateRepository templates, IContactRepository contacts,
         IMessageRepository messageRows, IUnitOfWork unitOfWork, IConversationService conversations, IMessageService messages, ICampaignAudienceService audience,
-        IEntitlementService entitlements, IWhatsAppService whatsApp, IStringLocalizer text)
+        IEntitlementService entitlements, IWhatsAppService whatsApp, INotificationService notifications, IStringLocalizer text)
     {
         _whatsApp = whatsApp;
+        _notifications = notifications;
         _text = text;
         _campaigns = campaigns;
         _templates = templates;
@@ -117,6 +131,11 @@ public class CampaignService : ICampaignService
         if (template is null)
         {
             throw new ArgumentException("templates.errors.notFound");
+        }
+        // Only an approved template can be sent (QA t8-11: campaigns were created with a rejected or draft one, then failed everyone).
+        if (template.Status != WhatsAppTemplateStatus.Approved)
+        {
+            throw new ArgumentException("templates.errors.notApproved").WithArgs(template.Name, TextArg.Value(template.Status));
         }
 
         var audienceType = string.IsNullOrWhiteSpace(request.AudienceType) ? CampaignAudienceType.Custom : request.AudienceType;
@@ -284,8 +303,70 @@ public class CampaignService : ICampaignService
 
         campaign.Status = CampaignStatus.Running;
         campaign.StartedAt ??= now;
+        campaign.PausedReason = null;
         campaign.UpdatedAt = now;
         await _unitOfWork.SaveChangesAsync(ct);
+    }
+
+    /// <summary>Stops a campaign that can't go on by itself (Running or Scheduled -> Paused), records why for the campaign page and
+    /// tells the members once. Nothing happens when it was already stopped, cancelled or finished meanwhile.</summary>
+    private async Task PauseByItselfAsync(Campaign campaign, string fromStatus, Exception problem, CancellationToken ct)
+    {
+        var now = DateTimeOffset.UtcNow;
+        if (!await _campaigns.TryChangeStatusAsync(campaign.ClientId, campaign.Id, new[] { fromStatus }, CampaignStatus.Paused, now, ct)) return;
+
+        // Stored as worded now, like a recipient's failure reason (outside a request: the default language).
+        var reason = _text.Localize(problem);
+        if (reason.Length > PausedReasonMaxLength) reason = reason[..PausedReasonMaxLength];
+        campaign.PausedReason = reason;
+        campaign.UpdatedAt = now;
+        await _unitOfWork.SaveChangesAsync(ct);
+        campaign.Status = CampaignStatus.Paused;
+
+        await _notifications.CreateAsync(campaign.ClientId, NotificationType.OutboundMessageFailed,
+            NotificationText.Of(PausedTitleKey, PausedMessageKey, campaign.Name, reason),
+            link: $"/campaigns/{campaign.Id}", ct: ct);
+    }
+
+    /// <summary>Sends the failed recipients again (QA t8-11: a failed recipient could never be resent): they are queued again, the
+    /// campaign runs, and the first batch goes out now. For a campaign that finished, failed, is stopped or is still sending; 422 when
+    /// none failed or the campaign was never started or was cancelled.</summary>
+    public async Task<ProcessCampaignBatchResult?> RetryFailedAsync(Guid clientId, Guid id, int batchSize = 20, CancellationToken ct = default)
+    {
+        var campaign = await _campaigns.GetAsync(clientId, id, ct);
+        if (campaign is null) return null;
+        if (campaign.Status is not (CampaignStatus.Completed or CampaignStatus.Failed or CampaignStatus.Paused or CampaignStatus.Running))
+        {
+            throw new InvalidOperationException(CantRetryKey).WithArgs(TextArg.Value(campaign.Status));
+        }
+        await _entitlements.EnsureFeatureAsync(clientId, EntitlementKeys.Campaigns, ct);
+
+        var failed = await _campaigns.ListRecipientsInStatusAsync(id, new[] { CampaignRecipientStatus.Failed }, ct);
+        if (failed.Count == 0)
+        {
+            throw new InvalidOperationException(NothingToRetryKey);
+        }
+        if (await StartProblemAsync(clientId, campaign, ct) is { } problem) throw problem;
+
+        var now = DateTimeOffset.UtcNow;
+        foreach (var r in failed)
+        {
+            r.Status = CampaignRecipientStatus.Queued;
+            r.QueuedAt = now;
+            r.FailedAt = null;
+            r.FailureCode = null;
+            r.FailureReason = null;
+            r.MessageId = null;
+            r.ExternalMessageId = null;
+            r.SentAt = null;
+            r.DeliveredAt = null;
+            r.ReadAt = null;
+            r.UpdatedAt = now;
+        }
+        campaign.CompletedAt = null;
+        await StartAsync(campaign, ct);
+
+        return await ProcessBatchAsync(clientId, id, batchSize, ct);
     }
 
     public async Task<ProcessCampaignBatchResult?> ProcessBatchAsync(Guid clientId, Guid id, int batchSize = 20, CancellationToken ct = default)
@@ -302,9 +383,9 @@ public class CampaignService : ICampaignService
 
         // WhatsApp disconnected (or the template withdrawn) while it ran: stop it, so Send resumes it once that's fixed,
         // instead of failing everyone still queued.
-        if (await StartProblemAsync(clientId, campaign, ct) is not null)
+        if (await StartProblemAsync(clientId, campaign, ct) is { } startProblem)
         {
-            await _campaigns.TryChangeStatusAsync(clientId, id, new[] { CampaignStatus.Running }, CampaignStatus.Paused, DateTimeOffset.UtcNow, ct);
+            await PauseByItselfAsync(campaign, CampaignStatus.Running, startProblem, ct);
             var remaining = await _campaigns.CountRecipientsInStatusAsync(id, CampaignRecipientStatus.Queued, ct);
             return new ProcessCampaignBatchResult(0, 0, 0, remaining, false);
         }
@@ -333,7 +414,18 @@ public class CampaignService : ICampaignService
                 break;
             }
 
-            var ok = await ProcessRecipientAsync(clientId, recipient, ct);
+            bool ok;
+            try
+            {
+                ok = await ProcessRecipientAsync(clientId, recipient, ct);
+            }
+            catch (CampaignHalt halt)
+            {
+                // Not about this recipient: it stays queued, and so does everyone after it.
+                if (halt.Pause) await PauseByItselfAsync(campaign, CampaignStatus.Running, halt.Problem, ct);
+                stillRunning = false;
+                break;
+            }
             processed++;
             if (ok) succeeded++; else failed++;
         }
@@ -352,6 +444,15 @@ public class CampaignService : ICampaignService
             campaign.CompletedAt = DateTimeOffset.UtcNow;
             campaign.UpdatedAt = campaign.CompletedAt.Value;
             await _unitOfWork.SaveChangesAsync(ct);
+
+            // One notification for the campaign's failures, not one per recipient (QA t8-11).
+            var failedCount = await _campaigns.CountRecipientsInStatusAsync(id, CampaignRecipientStatus.Failed, ct);
+            if (failedCount > 0)
+            {
+                await _notifications.CreateAsync(clientId, NotificationType.OutboundMessageFailed,
+                    NotificationText.Of(FinishedWithFailuresTitleKey, FinishedWithFailuresMessageKey, campaign.Name, failedCount),
+                    link: $"/campaigns/{id}", ct: ct);
+            }
         }
 
         return new ProcessCampaignBatchResult(processed, succeeded, failed, remainingQueued, completed);
@@ -372,9 +473,9 @@ public class CampaignService : ICampaignService
             await _entitlements.EnsureFeatureAsync(clientId, EntitlementKeys.Campaigns, ct);
             // Due but WhatsApp isn't connected (or the template isn't approved): stop it rather than fail every recipient;
             // the campaign page says why, and Send resumes it once that's fixed.
-            if (await StartProblemAsync(clientId, campaign, ct) is not null)
+            if (await StartProblemAsync(clientId, campaign, ct) is { } problem)
             {
-                await _campaigns.TryChangeStatusAsync(clientId, id, new[] { CampaignStatus.Scheduled }, CampaignStatus.Paused, DateTimeOffset.UtcNow, ct);
+                await PauseByItselfAsync(campaign, CampaignStatus.Scheduled, problem, ct);
                 return null;
             }
             await StartAsync(campaign, ct);
@@ -407,13 +508,21 @@ public class CampaignService : ICampaignService
 
         campaign.Status = CampaignStatus.Paused;
         campaign.UpdatedAt = now;
+        if (campaign.PausedReason is not null)
+        {
+            campaign.PausedReason = null;
+            await _unitOfWork.SaveChangesAsync(ct);
+        }
         return ToResponse(campaign);
     }
 
     /// <summary>Sends one recipient's template and records the outcome. A single recipient's failure (bad phone
     /// number, WhatsApp API error, etc.) must not abort the batch — EXCEPT running out of prepaid balance or losing
     /// the subscription: then the recipient stays queued and the exception stops the batch, so the campaign
-    /// continues where it left off after a top-up instead of burning the rest of the audience as failed.</summary>
+    /// continues where it left off after a top-up instead of burning the rest of the audience as failed. Likewise a
+    /// problem that would fail everyone (QA t8-11: WhatsApp's token, account or template, Meta down) leaves the recipient
+    /// queued and pauses the campaign with the reason (<see cref="CampaignHalt"/>), and Meta's rate limit just ends the
+    /// batch so the next run goes on.</summary>
     private async Task<bool> ProcessRecipientAsync(Guid clientId, CampaignRecipient recipient, CancellationToken ct)
     {
         // Each recipient's send is its own story in the message trace (not one trace for the whole batch).
@@ -450,6 +559,15 @@ public class CampaignService : ICampaignService
         catch (Exception ex) when (ex is BillingDeniedException { Reason: UsageFailureReason.InsufficientFunds } or EntitlementDeniedException)
         {
             throw;
+        }
+        catch (WhatsAppSendException ex) when (ex.StopsEveryone || ex.IsRateLimited)
+        {
+            throw new CampaignHalt(ex, pause: ex.StopsEveryone);
+        }
+        catch (InvalidOperationException ex) when (ex.Message == NotApprovedKey)
+        {
+            // The template was paused or withdrawn while it ran.
+            throw new CampaignHalt(ex, pause: true);
         }
         catch (Exception ex)
         {
@@ -490,6 +608,22 @@ public class CampaignService : ICampaignService
         await _unitOfWork.SaveChangesAsync(ct);
 
         return ToResponse(campaign);
+    }
+
+    private const string NotApprovedKey = "templates.errors.notApproved";
+
+    /// <summary>A send problem that isn't the recipient's: the batch stops with the recipient still queued, and the campaign is
+    /// paused when Pause (otherwise it is only Meta's rate limit, and the next run goes on).</summary>
+    private sealed class CampaignHalt : Exception
+    {
+        public CampaignHalt(Exception problem, bool pause) : base(problem.Message, problem)
+        {
+            Problem = problem;
+            Pause = pause;
+        }
+
+        public Exception Problem { get; }
+        public bool Pause { get; }
     }
 
     /// <summary>A hand-picked contact list is stored as audience_type = custom with no filters (see Pages/Campaigns/Create).</summary>
@@ -551,6 +685,6 @@ public class CampaignService : ICampaignService
     private static CampaignResponse ToResponse(Campaign c, string? templateName = null) => new(
         c.Id, c.ClientId, c.Name, c.CampaignType, c.Channel, c.WhatsAppTemplateId, templateName ?? c.WhatsAppTemplate?.Name,
         c.AudienceType, c.AudienceFilters, c.Status,
-        c.ScheduledAt, c.StartedAt, c.CompletedAt, c.CreatedAt, c.UpdatedAt
+        c.ScheduledAt, c.StartedAt, c.CompletedAt, c.CreatedAt, c.UpdatedAt, c.PausedReason
     );
 }

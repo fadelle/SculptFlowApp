@@ -107,7 +107,7 @@ Generated from `Common/Statics/ConfigDefaults`; keep this table in step when you
 | Benchmark | MinSourceChunkChars | 80 | int 1–5000 | Shortest chunk that may be used to generate a question. |
 | Benchmark | MaxConsecutiveErrors | 5 | int 1–100 | A benchmark run stops after this many retrieval errors in a row. |
 | Benchmark | StaleRunHours | 2 | int 1–48 | A run still marked running after this long is treated as abandoned. |
-| Benchmark | GenerationTimeoutMinutes | 30 | int 1–240 | How long to wait for n8n to send generated questions. |
+| Benchmark | GenerationTimeoutMinutes | 5 | int 1–240 | How long to wait for n8n to send generated questions (it answers within seconds when it works; the portal shows since when it waits and when it gives up). |
 | Benchmark | MaxQuestionsPerChunk | 3 | int 1–10 | Most generated questions accepted per chunk. |
 | Campaigns | DefaultInactiveDays | 60 | int 1–3650 | Default "inactive for" days of a reactivation audience. |
 | Campaigns | BookingAttributionDays | 14 | int 1–365 | A booking made this many days after a contact replied to a campaign counts as that campaign's booking. |
@@ -118,9 +118,10 @@ Generated from `Common/Statics/ConfigDefaults`; keep this table in step when you
 | Embeddings | Dimensions | 1536 | int 1–4096 | Vector size the model returns. Must equal the vector(N) size of knowledge.knowledge_chunks.embedding (1536). |
 | Embeddings | ApiKey | (empty) | string | SECRET. API key of the embeddings API. Never shown back: the Configuration page and API only say whether it is set. |
 | Embeddings | MaxInputsPerRequest | 64 | int 1–2048 | Texts sent to the embeddings API in one request. |
-| Calendars | SyncEngine | n8n | string (n8n or code) | Which engine pushes booking changes to connected Google and Outlook calendars: `n8n` (the calendar sync workflow at `N8n:CalendarSyncWebhookUrl`) or `code` (`CalendarSyncClient` in the app). Read for every sync. |
-| Benchmark | GeneratorEngine | n8n | string (n8n or code) | Which engine writes the retrieval benchmark's questions: `n8n` (the workflow at `N8n:KnowledgeBenchmarkWebhookUrl`) or `code` (`KnowledgeBenchmarkGenerator` with `Benchmark` / `GeneratorModel`). Read for every generation. |
-| Ai | BotEngine | n8n | string (n8n or code) | Which engine answers contacts and the bot test panel: `n8n` (the AI assistant workflow at `N8n:AiWebhookUrl`) or `code` (`BotEngine` in the app). Read for every message, so a change applies within the settings refresh. |
+| Calendars | SyncAnswerTimeoutMinutes | 10 | int 2–1440 | A calendar sync with no answer after this long is marked failed, the connection unhealthy, and the client is told (an n8n workflow that never calls back, or a sync lost in a restart). Checked every 2 minutes by `CalendarSyncWatchdogJob`. |
+| Calendars | SyncEngine | code | string (n8n or code) | Which engine pushes booking changes to connected Google and Outlook calendars: `n8n` (the calendar sync workflow at `N8n:CalendarSyncWebhookUrl`) or `code` (`CalendarSyncClient` in the app). Read for every sync. |
+| Benchmark | GeneratorEngine | code | string (n8n or code) | Which engine writes the retrieval benchmark's questions: `n8n` (the workflow at `N8n:KnowledgeBenchmarkWebhookUrl`) or `code` (`KnowledgeBenchmarkGenerator` with `Benchmark` / `GeneratorModel`). Read for every generation. |
+| Ai | BotEngine | code | string (n8n or code) | Which engine answers contacts and the bot test panel: `n8n` (the AI assistant workflow at `N8n:AiWebhookUrl`) or `code` (`BotEngine` in the app). Read for every message, so a change applies within the settings refresh. |
 | Ai | BaseUrl | https://api.openai.com/v1 | string | Base URL of the OpenAI Responses API the AI bot and the benchmark question generator call. |
 | Ai | ApiKey | (empty) | string | SECRET. API key of the AI model API (bot replies, result wording, benchmark questions). Empty = the `Embeddings` / `ApiKey` is used. Never shown back: the Configuration page and API only say whether it is set. |
 | Ai | BotModel | gpt-6-luna | string | Model of the AI bot's agent (reads the contact's message, calls tools, decides the action). |

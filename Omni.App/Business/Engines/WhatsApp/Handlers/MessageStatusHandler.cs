@@ -27,6 +27,19 @@ public class MessageStatusHandler
 
     public async Task<WhatsAppWebhookResponse> HandleAsync(ParsedMetaEvent evt, ResolvedClient client, CancellationToken ct)
     {
+        // A status Omni doesn't know (Meta adds some now and then) is left alone rather than refused, so the webhook still succeeds.
+        if (string.IsNullOrWhiteSpace(evt.DeliveryStatus) || !MessageDeliveryStatus.All.Contains(evt.DeliveryStatus))
+        {
+            _tracer?.Step(TraceSteps.WebhookIgnored, TraceOutcomes.Skipped,
+                new TraceIds(client.ClientId, Channel: ConversationChannel.WhatsApp, ExternalMessageId: evt.ExternalMessageId),
+                detail: new { reason = "status_unknown", status = evt.DeliveryStatus });
+            return new WhatsAppWebhookResponse(
+                Processed: false, EventType: "message_status", ShouldRunAi: false,
+                ClientId: client.ClientId, WhatsAppConnectionId: client.ChannelIntegrationId,
+                ConversationId: null, ContactId: null, MessageId: null,
+                ExternalMessageId: evt.ExternalMessageId, Status: evt.DeliveryStatus);
+        }
+
         var result = await _messages.IngestAsync(new IngestMessageRequest(
             client.ClientId, Guid.Empty, Guid.Empty, IngestEventType.StatusUpdate, ConversationChannel.WhatsApp,
             Content: null, evt.ExternalMessageId, evt.DeliveryStatus, SentAt: null, ReceivedAt: null,

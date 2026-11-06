@@ -372,4 +372,111 @@ public class CalendarIntegrationServiceTests
         Assert.False(integ.IsHealthy);
         Assert.Contains("invalid_grant", integ.LastProblemMessage);
     }
+    // ---------------------------------------------------------------- QA t9-06: nothing to cancel
+
+    private (CalendarIntegration Integration, BookingResponse Booking, BookingCalendarSync Sync, List<(string Op, string? Event)> Ops) FailedCreate()
+    {
+        var integ = Connected();
+        integ.IsHealthy = false;
+        integ.LastProblemMessage = "Google Calendar answered HTTP 401 to the create.";
+        _calendars.Setup(c => c.ListSyncTargetsAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(new List<CalendarIntegration> { integ });
+        var appt = Appt();
+        var sync = new BookingCalendarSync { Id = Guid.NewGuid(), BookingId = appt.Id, CalendarIntegrationId = integ.Id, Status = BookingCalendarSyncStatus.Failed,
+            LastOperation = "create", LastError = integ.LastProblemMessage };
+        _calendars.Setup(c => c.GetSyncAsync(appt.Id, integ.Id, It.IsAny<CancellationToken>())).ReturnsAsync(sync);
+        var ops = new List<(string Op, string? Event)>();
+        _notifier.Setup(n => n.NotifySyncAsync(It.IsAny<CalendarSyncTriggerPayload>(), It.IsAny<CancellationToken>()))
+            .Callback<CalendarSyncTriggerPayload, CancellationToken>((p, _) => ops.Add((p.Operation, p.ExternalEventId)));
+        return (integ, appt, sync, ops);
+    }
+
+    [Fact]
+    public async Task Cancelling_a_booking_whose_event_was_never_made_calls_nobody_and_keeps_the_real_problem()
+    {
+        var (integ, appt, sync, ops) = FailedCreate();
+
+        await Sut().TriggerBookingSyncAsync(_clientId, appt, "canceled", default);
+
+        Assert.Empty(ops);
+        Assert.Equal((BookingCalendarSyncStatus.Canceled, "cancel"), (sync.Status, sync.LastOperation));
+        Assert.Equal("Google Calendar answered HTTP 401 to the create.", integ.LastProblemMessage);
+    }
+
+    [Fact]
+    public async Task Rescheduling_after_a_failed_create_creates_the_event()
+    {
+        var (_, appt, _, ops) = FailedCreate();
+        await Sut().TriggerBookingSyncAsync(_clientId, appt, "rescheduled", default);
+        Assert.Equal([("create", (string?)null)], ops);
+    }
+
+    [Fact]
+    public async Task A_change_while_the_create_is_still_waiting_is_sent_as_before()
+    {
+        var (_, appt, sync, ops) = FailedCreate();
+        sync.Status = BookingCalendarSyncStatus.Pending;
+        await Sut().TriggerBookingSyncAsync(_clientId, appt, "canceled", default);
+        Assert.Equal([("cancel", (string?)null)], ops);
+    }
+
+    // ---------------------------------------------------------------- QA t9-03: a sync nobody answers
+
+    [Fact]
+    public async Task Unanswered_syncs_fail_their_connection_goes_unhealthy_and_the_client_is_told_once()
+    {
+        var integ = Connected();
+        _config.SetupGet(c => c.CalendarsSyncAnswerTimeoutMinutes).Returns(10);
+        _config.SetupGet(c => c.CalendarsSyncEngine).Returns("n8n");
+        var syncs = new List<BookingCalendarSync>
+        {
+            new() { Id = Guid.NewGuid(), CalendarIntegrationId = integ.Id, Status = BookingCalendarSyncStatus.Pending, UpdatedAt = DateTimeOffset.UtcNow.AddMinutes(-30) },
+            new() { Id = Guid.NewGuid(), CalendarIntegrationId = integ.Id, Status = BookingCalendarSyncStatus.Pending, UpdatedAt = DateTimeOffset.UtcNow.AddMinutes(-20) },
+        };
+        DateTimeOffset? cutoff = null;
+        _calendars.Setup(c => c.ListUnansweredSyncsAsync(It.IsAny<DateTimeOffset>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .Callback<DateTimeOffset, int, CancellationToken>((before, _, _) => cutoff = before).ReturnsAsync(syncs);
+        _calendars.Setup(c => c.GetByIdAnyClientAsync(integ.Id, It.IsAny<CancellationToken>())).ReturnsAsync(integ);
+
+        Assert.Equal(2, await Sut().FailUnansweredSyncsAsync());
+
+        Assert.InRange(cutoff!.Value, DateTimeOffset.UtcNow.AddMinutes(-11), DateTimeOffset.UtcNow.AddMinutes(-9));
+        Assert.All(syncs, s => Assert.Equal(BookingCalendarSyncStatus.Failed, s.Status));
+        Assert.False(integ.IsHealthy);
+        Assert.Contains("no answer within 10 minutes", integ.LastProblemMessage);
+        Assert.Contains("n8n", integ.LastProblemMessage);
+        _notifications.Verify(n => n.CreateAsync(_clientId, NotificationType.IntegrationUnhealthy,
+            It.Is<NotificationText>(t => t.Args.OfType<TextArg>().Any(a => a.Key == CalendarIntegrationService.NoAnswerKey)),
+            null, null, null, null, "/settings/calendar-integrations", It.IsAny<CancellationToken>()), Times.Once);
+
+        // Already flagged: the next unanswered sync doesn't notify again.
+        syncs.ForEach(s => s.Status = BookingCalendarSyncStatus.Pending);
+        await Sut().FailUnansweredSyncsAsync();
+        _notifications.Verify(n => n.CreateAsync(It.IsAny<Guid>(), NotificationType.IntegrationUnhealthy, It.IsAny<NotificationText>(),
+            It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task With_nothing_unanswered_nothing_changes()
+    {
+        _calendars.Setup(c => c.ListUnansweredSyncsAsync(It.IsAny<DateTimeOffset>(), It.IsAny<int>(), It.IsAny<CancellationToken>())).ReturnsAsync(new List<BookingCalendarSync>());
+        Assert.Equal(0, await Sut().FailUnansweredSyncsAsync());
+        _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task A_late_answer_after_the_timeout_still_counts()
+    {
+        var integ = Connected();
+        integ.IsHealthy = false;
+        var requestId = Guid.NewGuid();
+        var appt = Appt();
+        var sync = new BookingCalendarSync { Id = Guid.NewGuid(), BookingId = appt.Id, CalendarIntegrationId = integ.Id, Status = BookingCalendarSyncStatus.Failed,
+            LastRequestId = requestId, LastOperation = "create", LastError = "no answer" };
+        _calendars.Setup(c => c.GetSyncAsync(appt.Id, integ.Id, It.IsAny<CancellationToken>())).ReturnsAsync(sync);
+
+        await Sut().ApplySyncCallbackAsync(new CalendarSyncCallbackRequest(_clientId, appt.Id, integ.Id, requestId, true, "ev1", null));
+
+        Assert.Equal((BookingCalendarSyncStatus.Synced, "ev1", true), (sync.Status, sync.ExternalEventId, integ.IsHealthy));
+    }
+
 }

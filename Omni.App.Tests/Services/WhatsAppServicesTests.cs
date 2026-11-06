@@ -141,6 +141,60 @@ public class WhatsAppTemplateServiceTests
     public async Task Create_validates(string category, string name, string body) =>
         await Assert.ThrowsAsync<ArgumentException>(() => Sut().CreateAsync(Create(category, name, body)));
 
+    // QA t8-13: each of these was a 500 (one after saving an orphan draft); now a 400 naming the field, and nothing is saved.
+    public static TheoryData<CreateWhatsAppTemplateRequest, string> BadTemplates()
+    {
+        var ok = new CreateWhatsAppTemplateRequest(Guid.Empty, "promo", "marketing", "en_US", "Hi", null, null, null, null, null);
+        return new()
+        {
+            { ok with { Name = new string('a', 201) }, "templates.errors.nameInvalid" },
+            { ok with { Language = "klingon<script>" }, WhatsAppTemplateService.LanguageInvalidKey },
+            { ok with { Language = "english" }, WhatsAppTemplateService.LanguageInvalidKey },
+            { ok with { HeaderType = "hologram" }, WhatsAppTemplateService.HeaderTypeInvalidKey },
+            { ok with { HeaderType = "text", HeaderContent = new string('h', 61) }, RequestChecks.TooLongKey },
+            { ok with { Body = new string('b', 1025) }, RequestChecks.TooLongKey },
+            { ok with { Footer = new string('f', 61) }, RequestChecks.TooLongKey },
+            { ok with { ButtonsJson = "{not json" }, WhatsAppTemplateService.ButtonsInvalidKey },
+            { ok with { ButtonsJson = "{\"a\":1}" }, WhatsAppTemplateService.ButtonsInvalidKey },
+            { ok with { ButtonsJson = "[]" }, WhatsAppTemplateService.ButtonsInvalidKey },
+            { ok with { ButtonsJson = "[{\"text\":\"Yes\"}]" }, WhatsAppTemplateService.ButtonsInvalidKey },
+            { ok with { ButtonsJson = "[{\"type\":\"QUICK_REPLY\",\"text\":\"" + new string('x', 26) + "\"}]" }, WhatsAppTemplateService.ButtonsInvalidKey },
+            { ok with { VariablesJson = "{nope" }, RequestChecks.NotJsonKey },
+        };
+    }
+
+    [Theory]
+    [MemberData(nameof(BadTemplates))]
+    public async Task Create_refuses_bad_values_before_saving_anything(CreateWhatsAppTemplateRequest request, string key)
+    {
+        var ex = await Assert.ThrowsAsync<ArgumentException>(() => Sut().CreateAsync(request with { ClientId = _clientId }));
+        Assert.Equal(key, ex.Message);
+        _templates.Verify(t => t.Add(It.IsAny<WhatsAppTemplate>()), Times.Never);
+        _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Create_accepts_a_200_character_name_meta_language_codes_and_meta_button_shapes()
+    {
+        _provider.Setup(p => p.SubmitAsync(_integration!, It.IsAny<WhatsAppTemplate>(), It.IsAny<CancellationToken>())).ReturnsAsync(new WhatsAppTemplateSubmitResult("meta-1", "PENDING"));
+        var buttons = "[{\"type\":\"QUICK_REPLY\",\"text\":\"Yes\"},{\"type\":\"URL\",\"text\":\"Open\",\"url\":\"https://x.test\"},{\"type\":\"COPY_CODE\",\"example\":\"SAVE10\"}]";
+        foreach (var language in new[] { "en", "fil", "pt_BR" })
+        {
+            await Sut().CreateAsync(Create(name: new string('a', 200), language: language) with { ButtonsJson = buttons, HeaderType = "none" });
+        }
+        _templates.Verify(t => t.Add(It.IsAny<WhatsAppTemplate>()), Times.Exactly(3));
+    }
+
+    [Fact]
+    public async Task Editing_checks_the_header_type_and_lengths_too()
+    {
+        var t = Stored(WhatsAppTemplateStatus.Draft, metaId: null);
+        Assert.Equal(WhatsAppTemplateService.HeaderTypeInvalidKey,
+            (await Assert.ThrowsAsync<ArgumentException>(() => Sut().UpdateAsync(_clientId, t.Id, Edit() with { HeaderType = "hologram" }))).Message);
+        Assert.Equal(RequestChecks.TooLongKey,
+            (await Assert.ThrowsAsync<ArgumentException>(() => Sut().UpdateAsync(_clientId, t.Id, Edit(body: new string('b', 1025))))).Message);
+    }
+
     [Fact]
     public async Task Create_submits_to_the_provider_and_maps_the_status()
     {

@@ -327,7 +327,24 @@ public class CalendarIntegrationService : ICalendarIntegrationService
                 // own one-upcoming-per-contact guard already prevents from reusing the same booking row.
                 if (sync is not null && sync.Status == BookingCalendarSyncStatus.Canceled && syncOp != "create") continue;
 
-                string effectiveOp = syncOp;
+                // No calendar event was ever made for it (the create failed, e.g. an expired token): a cancel has nothing to remove, so it
+                // is only recorded, and the connection keeps showing the real problem (QA t9-06: a cancel sent with no event id got a 404
+                // that replaced the 401 telling the client to reconnect). A change made after a failed create creates the event now.
+                var op = syncOp;
+                if (sync is not null && string.IsNullOrEmpty(sync.ExternalEventId) && sync.Status != BookingCalendarSyncStatus.Pending)
+                {
+                    if (op == "cancel")
+                    {
+                        sync.Status = BookingCalendarSyncStatus.Canceled;
+                        sync.LastOperation = op;
+                        sync.UpdatedAt = DateTimeOffset.UtcNow;
+                        await _unitOfWork.SaveChangesAsync(ct);
+                        continue;
+                    }
+                    if (op == "update") op = "create";
+                }
+
+                string effectiveOp = op;
                 if (sync is null)
                 {
                     sync = new BookingCalendarSync
@@ -337,7 +354,7 @@ public class CalendarIntegrationService : ICalendarIntegrationService
                     };
                     _calendars.AddSync(sync);
                 }
-                else if (effectiveOp == "create")
+                else if (effectiveOp == "create" && !string.IsNullOrEmpty(sync.ExternalEventId))
                 {
                     // A sync row already exists for this booking+calendar (a retried "created" notification,
                     // never expected in normal operation) — send it as an update instead of risking a duplicate.
@@ -365,6 +382,46 @@ public class CalendarIntegrationService : ICalendarIntegrationService
             // let a problem here surface to the caller (BookingService).
         }
     }
+
+    public async Task<int> FailUnansweredSyncsAsync(CancellationToken ct = default)
+    {
+        var minutes = _config.CalendarsSyncAnswerTimeoutMinutes;
+        var now = DateTimeOffset.UtcNow;
+        var syncs = await _calendars.ListUnansweredSyncsAsync(now.AddMinutes(-minutes), 200, ct);
+        if (syncs.Count == 0) return 0;
+
+        // Stored like the providers' own problem texts (shown as written on the connection); the notification is worded per reader.
+        var message = $"The calendar sync got no answer within {minutes} minutes. If this keeps happening, check the calendar sync engine ({_config.CalendarsSyncEngine})."; // text-ok: stored problem text, like the provider errors
+        var unhealthy = new List<CalendarIntegration>();
+        foreach (var group in syncs.GroupBy(s => s.CalendarIntegrationId))
+        {
+            foreach (var sync in group)
+            {
+                sync.Status = BookingCalendarSyncStatus.Failed;
+                sync.LastError = message;
+                sync.UpdatedAt = now;
+            }
+            var integration = await _calendars.GetByIdAnyClientAsync(group.Key, ct);
+            if (integration is null) continue;
+            if (integration.IsHealthy) unhealthy.Add(integration);
+            integration.IsHealthy = false;
+            integration.LastProblemMessage = message;
+            integration.UpdatedAt = now;
+        }
+        await _unitOfWork.SaveChangesAsync(ct);
+
+        // Once per connection that just became unhealthy, like a failed sync's answer.
+        foreach (var integration in unhealthy)
+        {
+            await _notifications.CreateAsync(integration.ClientId, NotificationType.IntegrationUnhealthy,
+                NotificationText.Of("notifications.calendar.title", "notifications.calendar.problem", ProviderLabel(integration.Provider),
+                    TextArg.Of(NoAnswerKey)),
+                link: "/settings/calendar-integrations", ct: ct);
+        }
+        return syncs.Count;
+    }
+
+    public const string NoAnswerKey = "notifications.calendar.noAnswer";
 
     // ------------------------------------------------------------------ helpers
 

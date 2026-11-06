@@ -26,4 +26,10 @@ public interface ICalendarIntegrationRepository
     Task<BookingCalendarSync?> GetSyncAsync(Guid bookingId, Guid integrationId, CancellationToken ct = default);
 
     void AddSync(BookingCalendarSync sync);
+
+    /// <summary>Syncs still pending (sent, no answer) since before <paramref name="sentBefore"/>, oldest first, across clients; tracked.</summary>
+    Task<IReadOnlyList<BookingCalendarSync>> ListUnansweredSyncsAsync(DateTimeOffset sentBefore, int take, CancellationToken ct = default);
+
+    /// <summary>A connection by id whatever its client (for the unanswered-sync check); tracked.</summary>
+    Task<CalendarIntegration?> GetByIdAnyClientAsync(Guid integrationId, CancellationToken ct = default);
 }

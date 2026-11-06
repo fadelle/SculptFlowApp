@@ -19,4 +19,8 @@ public record BenchmarkDashboardResponse(
     /// <summary>The most recent run of any status (drives the progress bar).</summary>
     BenchmarkRunSummary? LatestRun,
     /// <summary>The most recent COMPLETED run — the headline metrics come from this one.</summary>
-    BenchmarkRunSummary? LatestCompletedRun);
+    BenchmarkRunSummary? LatestCompletedRun,
+    /// <summary>When the waiting generation was started (QA t9-02); null when none waits.</summary>
+    DateTimeOffset? PendingGenerationSince = null,
+    /// <summary>When the waiting generation is given up (Benchmark / GenerationTimeoutMinutes after it started).</summary>
+    DateTimeOffset? PendingGenerationTimesOutAt = null);

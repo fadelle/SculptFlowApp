@@ -271,6 +271,20 @@ public class MetaWebhookProcessorTests : WebhookTestBase
             It.Is<object?>(d => d!.ToString()!.Contains("status_unmatched"))), Times.Once);
     }
 
+    [Theory]
+    [InlineData("warning")]
+    [InlineData(null)]
+    public async Task A_status_omni_does_not_know_is_left_alone_not_refused(string? status)
+    {
+        // QA t8-07: the ingest now refuses unknown statuses, so the webhook skips them instead of failing on Meta's new ones.
+        var handler = new MessageStatusHandler(Messages.Object, Tracer.Object);
+        var r = await handler.HandleAsync(new ParsedMetaEvent { Kind = ParsedMetaEventKind.MessageStatus, ExternalMessageId = "wamid.1", DeliveryStatus = status }, Client, default);
+        Assert.False(r.Processed);
+        Messages.Verify(m => m.IngestAsync(It.IsAny<IngestMessageRequest>(), It.IsAny<CancellationToken>()), Times.Never);
+        Tracer.Verify(t => t.Step(TraceSteps.WebhookIgnored, TraceOutcomes.Skipped, It.IsAny<TraceIds>(), It.IsAny<double?>(),
+            It.Is<object?>(d => d!.ToString()!.Contains("status_unknown"))), Times.Once);
+    }
+
     [Fact]
     public async Task Customer_message_is_routed_by_phone_number_id()
     {

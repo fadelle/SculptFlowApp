@@ -433,7 +433,7 @@ public class MessageServiceTests
         var telegram = Conv(channel: ConversationChannel.Telegram);
         var whatsApp = Conv();
 
-        var r = await Sut().IngestAsync(Ingest(telegram.Id, IngestEventType.CustomerMessage));
+        var r = await Sut().IngestAsync(Ingest(telegram.Id, IngestEventType.CustomerMessage) with { Channel = ConversationChannel.Telegram });
         Assert.Equal((ConversationMode.Human, false), (telegram.Mode, r.AiEligible));
         _events.Verify(e => e.Log(_clientId, EventTypes.HumanHandoff, _contactId, telegram.Id, null, MessageOrigin.System, "{\"reason\":\"bot_inactive\"}"), Times.Once);
 
@@ -1359,4 +1359,97 @@ public class MessageServiceTests
         _billing.Verify(b => b.SendFailedAsync(_hold, It.IsAny<CancellationToken>()), Times.Once);
         _tracer.Verify(t => t.Step(TraceSteps.SendBlocked, TraceOutcomes.Failed, It.IsAny<TraceIds>(), It.IsAny<double?>(), It.IsAny<object?>()), Times.Once);
     }
+    // ---------------------------------------------------------------- QA t8-07: inconsistent ingest data
+
+    [Theory]
+    [InlineData(ConversationChannel.Telegram)]
+    [InlineData("pigeon")]
+    public async Task A_message_on_another_channel_than_its_conversation_is_refused(string channel)
+    {
+        var c = Conv();
+        var ex = await Assert.ThrowsAsync<ArgumentException>(() => Sut().IngestAsync(Ingest(c.Id, IngestEventType.CustomerMessage) with { Channel = channel }));
+        Assert.Equal(MessageService.ChannelMismatchKey, ex.Message);
+        _messages.Verify(m => m.Add(It.IsAny<Message>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task A_message_without_a_channel_takes_its_conversations()
+    {
+        var c = Conv(channel: ConversationChannel.Telegram);
+        Message? saved = null;
+        _messages.Setup(m => m.Add(It.IsAny<Message>())).Callback<Message>(m => saved = m);
+        await Sut().IngestAsync(Ingest(c.Id, IngestEventType.CustomerMessage) with { Channel = "" });
+        Assert.Equal(ConversationChannel.Telegram, saved!.Channel);
+    }
+
+    [Fact]
+    public async Task Times_in_the_future_are_stored_as_now_and_an_inbound_message_carries_no_delivery_status()
+    {
+        var c = Conv();
+        var saved = new List<Message>();
+        _messages.Setup(m => m.Add(It.IsAny<Message>())).Callback<Message>(saved.Add);
+        var future = new DateTimeOffset(2099, 1, 1, 0, 0, 0, TimeSpan.Zero);
+
+        await Sut().IngestAsync(Ingest(c.Id, IngestEventType.CustomerMessage) with { ReceivedAt = future, DeliveryStatus = "read" });
+        await Sut().IngestAsync(Ingest(c.Id, IngestEventType.AiMessage, externalId: "ext2") with { SentAt = future });
+
+        Assert.True(saved[0].ReceivedAt <= DateTimeOffset.UtcNow);
+        Assert.Null(saved[0].DeliveryStatus);
+        Assert.True(saved[1].SentAt <= DateTimeOffset.UtcNow);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("banana")]
+    public async Task A_status_update_needs_a_real_status_and_never_clears_the_one_stored(string? status)
+    {
+        var m = FoundMessage(Outbound("read"));
+        var ex = await Assert.ThrowsAsync<ArgumentException>(() => Sut().IngestAsync(Status("read") with { DeliveryStatus = status }));
+        Assert.Equal(MessageService.InvalidDeliveryStatusKey, ex.Message);
+        Assert.Equal("read", m.DeliveryStatus);
+    }
+
+    [Fact]
+    public async Task A_status_update_for_a_customers_message_is_refused()
+    {
+        var inbound = Outbound(null);
+        inbound.Direction = MessageDirection.Inbound;
+        FoundMessage(inbound);
+        var ex = await Assert.ThrowsAsync<ArgumentException>(() => Sut().IngestAsync(Status("failed")));
+        Assert.Equal(MessageService.StatusOnInboundKey, ex.Message);
+        Assert.Null(inbound.FailedAt);
+    }
+
+    [Fact]
+    public async Task A_status_time_in_the_future_is_stored_as_now_and_the_status_in_lower_case()
+    {
+        var m = FoundMessage(Outbound("sent"));
+        await Sut().IngestAsync(Status("DELIVERED") with { OccurredAt = new DateTimeOffset(2099, 1, 1, 0, 0, 0, TimeSpan.Zero) });
+        Assert.Equal("delivered", m.DeliveryStatus);
+        Assert.True(m.DeliveredAt <= DateTimeOffset.UtcNow);
+    }
+
+    [Fact]
+    public void The_new_contact_flag_is_never_read_from_a_request_body()
+    {
+        var json = $"{{\"clientId\":\"{_clientId}\",\"conversationId\":\"{Guid.NewGuid()}\",\"contactId\":\"{_contactId}\",\"eventType\":\"customer_message\",\"channel\":\"whatsapp\",\"contactWasNewlyCreated\":true}}";
+        var request = System.Text.Json.JsonSerializer.Deserialize<IngestMessageRequest>(json, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web));
+        Assert.False(request!.ContactWasNewlyCreated);
+    }
+
+    // QA t8-11: a campaign tells the members once for the whole campaign, not once per recipient.
+    [Fact]
+    public async Task A_failed_campaign_send_releases_the_hold_without_a_notification_per_recipient()
+    {
+        var c = Conv();
+        var t = Template();
+        Setup(t);
+        _whatsApp.Setup(w => w.SendTemplateMessageAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IReadOnlyList<string>>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new ChannelSendException("rejected"));
+        await Assert.ThrowsAsync<ChannelSendException>(() => Sut().SendCampaignTemplateAsync(_clientId, c.Id, t.Id, [], Guid.NewGuid(), Guid.NewGuid()));
+        _billing.Verify(b => b.SendFailedAsync(_hold, It.IsAny<CancellationToken>()), Times.Once);
+        _notifications.Verify(n => n.CreateAsync(It.IsAny<Guid>(), NotificationType.OutboundMessageFailed, It.IsAny<NotificationText>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
 }

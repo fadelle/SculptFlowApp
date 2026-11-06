@@ -72,11 +72,11 @@ public class BotRuntimeServiceTests
         Assert.NotNull((await Sut().AuthorizeAsync(_clientId, bot.Id, null, null)).Run); // reply / handoff: every bot
 
         Assert.Equal(BotToolCheck.NotAllowed, (await Sut().AuthorizeAsync(_clientId, bot.Id, null, BotCapability.Bookings)).DeniedReason);
-        Assert.Equal(BotToolCheck.UnknownBot, (await Sut().AuthorizeAsync(_clientId, null, null, null)).DeniedReason);
+        Assert.Equal(BotToolCheck.MissingContext, (await Sut().AuthorizeAsync(_clientId, null, null, null)).DeniedReason);
         Assert.Equal(BotToolCheck.UnknownBot, (await Sut().AuthorizeAsync(_clientId, Guid.NewGuid(), null, null)).DeniedReason);
         // Another client's id with this bot: refused, so no tool can reach another client's data.
         Assert.Equal(BotToolCheck.UnknownBot, (await Sut().AuthorizeAsync(Guid.NewGuid(), bot.Id, null, null)).DeniedReason);
-        Assert.Equal(BotToolCheck.UnknownBot, (await Sut().AuthorizeAsync(Guid.Empty, bot.Id, null, null)).DeniedReason);
+        Assert.Equal(BotToolCheck.MissingContext, (await Sut().AuthorizeAsync(Guid.Empty, bot.Id, null, null)).DeniedReason);
     }
 
     [Fact]

@@ -220,7 +220,8 @@ public class ConfigSettingsTests
         foreach (var engine in new[] { ConfigDefaults.AiBotEngine, ConfigDefaults.CalendarsSyncEngine, ConfigDefaults.BenchmarkGeneratorEngine })
         {
             Assert.Equal([WorkflowEngines.N8n, WorkflowEngines.Code], engine.Choices);
-            Assert.Equal(WorkflowEngines.N8n, engine.DefaultValue);
+            // code by default (QA t9-01): a fresh deploy doesn't start on an n8n workflow that may not be set up.
+            Assert.Equal(WorkflowEngines.Code, engine.DefaultValue);
         }
         Assert.Null(ConfigDefaults.AiBaseUrl.Choices); // a pattern that isn't a list
         Assert.Null(ConfigDefaults.AiTimeoutSeconds.Choices); // no pattern

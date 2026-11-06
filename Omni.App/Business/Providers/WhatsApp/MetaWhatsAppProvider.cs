@@ -83,7 +83,7 @@ public class MetaWhatsAppProvider : IWhatsAppProvider
 
         if (!response.IsSuccessStatusCode)
         {
-            throw new WhatsAppSendException($"WhatsApp send failed ({(int)response.StatusCode} {response.StatusCode}): {body}");
+            throw WhatsAppSendException.FromResponse((int)response.StatusCode, response.StatusCode.ToString(), body);
         }
 
         using var doc = JsonDocument.Parse(body);

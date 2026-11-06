@@ -130,6 +130,7 @@ public class ConfigManager : IConfigManager
     public int EmbeddingsMaxInputsPerRequest => GetInt(ConfigDefaults.EmbeddingsMaxInputsPerRequest);
 
     public string CalendarsSyncEngine => GetString(ConfigDefaults.CalendarsSyncEngine);
+    public int CalendarsSyncAnswerTimeoutMinutes => GetInt(ConfigDefaults.CalendarsSyncAnswerTimeoutMinutes);
     public string BenchmarkGeneratorEngine => GetString(ConfigDefaults.BenchmarkGeneratorEngine);
     // ---- Ai
     public string AiBotEngine => GetString(ConfigDefaults.AiBotEngine);

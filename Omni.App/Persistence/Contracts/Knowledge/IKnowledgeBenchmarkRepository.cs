@@ -141,6 +141,9 @@ public interface IKnowledgeBenchmarkRepository
 
     Task<Guid?> GetPendingGenerationIdAsync(Guid clientId, CancellationToken ct = default);
 
+    /// <summary>When the generation now waiting for the question generator was started; null when none waits.</summary>
+    Task<DateTimeOffset?> GetPendingGenerationStartedAtAsync(Guid clientId, CancellationToken ct = default);
+
     /// <summary>Read-only, newest first.</summary>
     Task<IReadOnlyList<KnowledgeRetrievalBenchmarkGeneration>> ListGenerationsAsync(Guid clientId, int take, CancellationToken ct = default);
 

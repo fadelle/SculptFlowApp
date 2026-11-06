@@ -47,9 +47,11 @@ else if (Model.Details is not null)
     var canCancel = c.Status is CampaignStatus.Draft or CampaignStatus.Scheduled or CampaignStatus.Running or CampaignStatus.Paused;
     var canStop = c.Status is CampaignStatus.Scheduled or CampaignStatus.Running;
     var canSend = c.Status is CampaignStatus.Draft or CampaignStatus.Scheduled or CampaignStatus.Paused;
+    // Failed recipients can be sent again once the problem is fixed (QA t8-11).
+    var canRetry = st.Failed > 0 && c.Status is CampaignStatus.Completed or CampaignStatus.Failed or CampaignStatus.Paused or CampaignStatus.Running;
     var sendCount = st.TotalRecipients - st.Skipped;
     var waitingCount = st.Pending + st.Queued;
-    var sendIcon = c.Status == CampaignStatus.Paused ? "play_arrow" : "send";
+    var sendIcon /* icon:play_arrow */ = c.Status == CampaignStatus.Paused ? "play_arrow" : "send";
     var sendLabel = c.Status == CampaignStatus.Paused ? T["campaigns.send.resume"].Value
         : T.Plural("campaigns.send.now", sendCount).Value;
     // Sending can't be undone, so the button asks first (the kit's styled confirm).
@@ -93,9 +95,20 @@ else if (Model.Details is not null)
                 <button type="submit" class="au-btn au-btn--primary au-btn--sm"><span class="@IconDirection.ClassFor(sendIcon)" aria-hidden="true">@sendIcon</span>@sendLabel</button>
             </form>
         }
+        @if (canRetry)
+        {
+            <form method="post" asp-page-handler="RetryFailed"
+                  data-au-confirm="@T["campaigns.retry.confirm", st.Failed]" data-au-confirm-title="@T["campaigns.retry.button"]" data-au-confirm-label="@T["campaigns.retry.button"]">
+                <button type="submit" class="au-btn au-btn--outlined au-btn--sm"><span class="au-icon" aria-hidden="true">refresh</span>@T["campaigns.retry.button"]</button>
+            </form>
+        }
     </div>
 
     <partial name="_Messages" model="new PageMessagesModel(Model.StatusMessage, Model.ErrorMessage)" />
+    @if (c.Status == CampaignStatus.Paused && !string.IsNullOrWhiteSpace(c.PausedReason))
+    {
+        <div class="au-alert au-alert--warning" role="status"><div class="au-alert__body" dir="auto">@T["campaigns.details.pausedBecause", c.PausedReason]</div></div>
+    }
     @if (!Model.WhatsAppConnected && c.Status is CampaignStatus.Draft or CampaignStatus.Scheduled or CampaignStatus.Paused or CampaignStatus.Running)
     {
         <div class="au-alert au-alert--warning" role="status"><div class="au-alert__body">@T["campaigns.details.whatsAppNotConnected"] <a href="/settings/integrations">@T["nav.integrations"]</a></div></div>

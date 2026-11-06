@@ -353,6 +353,11 @@ public class KnowledgeBenchmarkRepository : IKnowledgeBenchmarkRepository
             .Where(g => g.ClientId == clientId && g.Status == BenchmarkGenerationStatus.Pending)
             .OrderByDescending(g => g.CreatedAt).Select(g => (Guid?)g.Id).FirstOrDefaultAsync(ct);
 
+    public Task<DateTimeOffset?> GetPendingGenerationStartedAtAsync(Guid clientId, CancellationToken ct = default) =>
+        _db.KnowledgeBenchmarkGenerations.AsNoTracking()
+            .Where(g => g.ClientId == clientId && g.Status == BenchmarkGenerationStatus.Pending)
+            .OrderByDescending(g => g.CreatedAt).Select(g => (DateTimeOffset?)g.CreatedAt).FirstOrDefaultAsync(ct);
+
     public async Task<IReadOnlyList<KnowledgeRetrievalBenchmarkGeneration>> ListGenerationsAsync(Guid clientId, int take,
         CancellationToken ct = default) =>
         await _db.KnowledgeBenchmarkGenerations.AsNoTracking()

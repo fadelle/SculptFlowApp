@@ -1221,6 +1221,8 @@ alter table marketing.campaigns add column if not exists campaign_type varchar(3
 alter table marketing.campaigns add column if not exists channel varchar(30) not null default 'whatsapp';
 alter table marketing.campaigns add column if not exists audience_type varchar(30) not null default 'custom';
 alter table marketing.campaigns add column if not exists audience_filters jsonb;
+-- Why sending stopped by itself (WhatsApp token, account or template; QA t8-11), shown on the campaign page.
+alter table marketing.campaigns add column if not exists paused_reason varchar(500);
 
 -- Nullable at the DB level for forward-compatibility with a future non-template campaign type;
 -- every campaign actually sendable today still requires one — enforced in

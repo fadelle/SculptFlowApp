@@ -6,5 +6,5 @@ namespace Omni.App.Common.Exceptions;
 public class BenchmarkGenerationInProgressException : InvalidOperationException
 {
     public BenchmarkGenerationInProgressException()
-        : base("A test-case generation is already waiting for the question generator — wait for it to finish (or for it to time out).") { }
+        : base("A test-case generation is already waiting for the question generator. Press \"Stop generating\" to give up on it, or wait for it to finish or time out.") { }
 }

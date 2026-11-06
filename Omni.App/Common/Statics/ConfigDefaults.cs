@@ -118,8 +118,8 @@ public static class ConfigDefaults
         "A benchmark run stops after this many retrieval errors in a row.", 1, 100);
     public static readonly ConfigDefinition BenchmarkStaleRunHours = new("Benchmark", "StaleRunHours", "2", ConfigValueType.Int,
         "A run still marked running after this long is treated as abandoned.", 1, 48);
-    public static readonly ConfigDefinition BenchmarkGenerationTimeoutMinutes = new("Benchmark", "GenerationTimeoutMinutes", "30", ConfigValueType.Int,
-        "How long to wait for n8n to send generated questions.", 1, 240);
+    public static readonly ConfigDefinition BenchmarkGenerationTimeoutMinutes = new("Benchmark", "GenerationTimeoutMinutes", "5", ConfigValueType.Int,
+        "How long to wait for n8n to send generated questions (it answers within seconds when it works).", 1, 240);
     public static readonly ConfigDefinition BenchmarkMaxQuestionsPerChunk = new("Benchmark", "MaxQuestionsPerChunk", "3", ConfigValueType.Int,
         "Most generated questions accepted per chunk.", 1, 10);
     public static readonly ConfigDefinition CampaignsDefaultInactiveDays = new("Campaigns", "DefaultInactiveDays", "60", ConfigValueType.Int,
@@ -140,11 +140,13 @@ public static class ConfigDefaults
         "SECRET. API key of the embeddings API. Never shown back: the Configuration page and API only say whether it is set.", IsSecret: true);
     public static readonly ConfigDefinition EmbeddingsMaxInputsPerRequest = new("Embeddings", "MaxInputsPerRequest", "64", ConfigValueType.Int,
         "Texts sent to the embeddings API in one request.", 1, 2048);
-    public static readonly ConfigDefinition CalendarsSyncEngine = new("Calendars", "SyncEngine", "n8n", ConfigValueType.String,
+    public static readonly ConfigDefinition CalendarsSyncEngine = new("Calendars", "SyncEngine", "code", ConfigValueType.String,
         "Which engine pushes booking changes to connected Google and Outlook calendars: n8n (the calendar sync workflow at N8n:CalendarSyncWebhookUrl) or code (CalendarSyncClient in the app). Read for every sync.", Pattern: @"^(n8n|code)$");
-    public static readonly ConfigDefinition BenchmarkGeneratorEngine = new("Benchmark", "GeneratorEngine", "n8n", ConfigValueType.String,
+    public static readonly ConfigDefinition CalendarsSyncAnswerTimeoutMinutes = new("Calendars", "SyncAnswerTimeoutMinutes", "10", ConfigValueType.Int,
+        "A calendar sync with no answer after this long is marked failed, the connection unhealthy, and the client is told (an n8n workflow that never calls back, or a sync lost in a restart).", 2, 1440);
+    public static readonly ConfigDefinition BenchmarkGeneratorEngine = new("Benchmark", "GeneratorEngine", "code", ConfigValueType.String,
         "Which engine writes the retrieval benchmark's questions: n8n (the workflow at N8n:KnowledgeBenchmarkWebhookUrl) or code (KnowledgeBenchmarkGenerator with Benchmark / GeneratorModel). Read for every generation.", Pattern: @"^(n8n|code)$");
-    public static readonly ConfigDefinition AiBotEngine = new("Ai", "BotEngine", "n8n", ConfigValueType.String,
+    public static readonly ConfigDefinition AiBotEngine = new("Ai", "BotEngine", "code", ConfigValueType.String,
         "Which engine answers contacts and the bot test panel: n8n (the AI assistant workflow at N8n:AiWebhookUrl) or code (BotEngine in the app). Read for every message, so a change applies within the settings refresh.", Pattern: @"^(n8n|code)$");
     public static readonly ConfigDefinition AiBaseUrl = new("Ai", "BaseUrl", "https://api.openai.com/v1", ConfigValueType.String,
         "Base URL of the OpenAI Responses API the AI bot and the benchmark question generator call.", Pattern: @"^https?://\S+$");
@@ -352,6 +354,7 @@ public static class ConfigDefaults
         EmbeddingsMaxInputsPerRequest,
 
         CalendarsSyncEngine,
+        CalendarsSyncAnswerTimeoutMinutes,
         BenchmarkGeneratorEngine,
         AiBotEngine,
         AiBaseUrl,

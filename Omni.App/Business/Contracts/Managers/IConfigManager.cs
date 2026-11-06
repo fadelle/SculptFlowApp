@@ -257,6 +257,9 @@ public interface IConfigManager
     /// <summary>Which engine pushes booking changes to connected Google and Outlook calendars: n8n or code (WorkflowEngines). Default n8n.</summary>
     string CalendarsSyncEngine { get; }
 
+    /// <summary>Minutes after which an unanswered calendar sync is marked failed (Calendars / SyncAnswerTimeoutMinutes).</summary>
+    int CalendarsSyncAnswerTimeoutMinutes { get; }
+
     /// <summary>Which engine writes the retrieval benchmark's questions: n8n or code (WorkflowEngines). Default n8n.</summary>
     string BenchmarkGeneratorEngine { get; }
 

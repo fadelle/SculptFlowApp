@@ -186,8 +186,12 @@ C8. **Check on staging:** "Forgot password?" sends an email whose link works onc
 The three n8n workflows also exist as code in the main app: the AI bot (`BotEngine`), calendar sync (`CalendarSyncClient`)
 and the benchmark question generator (`KnowledgeBenchmarkGenerator`). Each has a switch on the portal's Configuration page,
 a dropdown with `n8n` or `code`: `Ai / BotEngine`, `Calendars / SyncEngine`, `Benchmark / GeneratorEngine`. All three
-default to `n8n`, so a deploy changes nothing until you flip one; every switch is read per message, sync or generation, so a
-flip applies within a minute (the settings refresh), with no redeploy. The n8n steps above stay as they are while n8n is in use.
+default to `code` (since 2026-11-05, QA t9-01: the live n8n workflows weren't sending the values the app needs, so nobody
+got an answer). A database seeded earlier keeps the value it was seeded with (`n8n`) until you change it on the Configuration
+page. Every switch is read per message, sync or generation, so a flip applies within a minute (the settings refresh), with no
+redeploy. The n8n steps above stay as they are while n8n is in use; on n8n, a tool call without `clientId` or
+`X-Omni-Bot-Id` now answers 400 and the execution fails, and a calendar sync n8n never answers is marked failed after
+`Calendars / SyncAnswerTimeoutMinutes`.
 
 W1. **Database**, from this repo's root (re-runnable, keeps existing rows):
 

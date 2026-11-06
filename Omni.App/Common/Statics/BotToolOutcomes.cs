@@ -34,6 +34,18 @@ public static class BotToolOutcomes
         instruction = "Stop. Nothing was sent, looked up, booked or changed. A team member will take over." // text-ok: AI instruction
     };
 
+    public const string MissingContextCode = "BOT_CONTEXT_MISSING";
+
+    /// <summary>The call names no client or no bot: answered as a 400 so the caller's run fails where it can be seen (QA t9-01: the live
+    /// n8n workflow sent neither, every tool answered 200 "not allowed", and no contact ever got a reply while the trace said ok).</summary>
+    public static object MissingContext() => new
+    {
+        success = false,
+        code = MissingContextCode,
+        reason = "missing_context",
+        message = "The call must carry the client (clientId) and the bot (X-Omni-Bot-Id header) from the AI trigger, and its traceparent." // text-ok: integration contract
+    };
+
     /// <summary>The client's plan doesn't include the feature the tool needs (an EntitlementKeys value).</summary>
     public static object FeatureNotIncluded(string feature) => new
     {

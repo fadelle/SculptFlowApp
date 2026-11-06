@@ -11,9 +11,12 @@ namespace Omni.App.Controllers.Filters;
 /// bot test conversation, the test session in <see cref="TestSessionHeader"/> (n8n copies both from the AI trigger). The
 /// client is the action's <c>clientId</c> argument or a bound body's <c>ClientId</c>. <see cref="IBotRuntimeService.AuthorizeAsync"/>
 /// must allow the bot this <see cref="Capability"/> (null = a tool every bot has); the run is then in
-/// <c>HttpContext.Items[BotRunContext.ItemKey]</c> for the action (<see cref="RunOf"/>). A refusal answers HTTP 200 with
-/// <c>success = false</c> and code <see cref="NotAllowedCode"/>, like the tools' other business outcomes, with an
-/// instruction the AI follows (the workflow's result switches route it to a reply). Runs before RequireFeature.
+/// <c>HttpContext.Items[BotRunContext.ItemKey]</c> for the action (<see cref="RunOf"/>). A tool the bot isn't given answers HTTP 200
+/// with <c>success = false</c> and code <see cref="NotAllowedCode"/>, like the tools' other business outcomes, with an instruction
+/// the AI follows (the workflow's result switches route it to a reply). A call without the client or the bot is a 400
+/// (<see cref="BotToolOutcomes.MissingContext"/>, QA t9-01), and a bot that may no longer answer a 403
+/// (<see cref="BotToolOutcomes.BotNotAllowed"/>, as IBotToolService does for the code engine), so the run fails visibly instead of
+/// looking like a success. Runs before RequireFeature.
 /// </summary>
 [AttributeUsage(AttributeTargets.Method)]
 public sealed class BotToolAttribute : Attribute, IAsyncActionFilter, IOrderedFilter
@@ -44,7 +47,12 @@ public sealed class BotToolAttribute : Attribute, IAsyncActionFilter, IOrderedFi
             ClientIdOf(context), GuidHeader(http, BotHeader), GuidHeader(http, TestSessionHeader), Capability, http.RequestAborted);
         if (check.Run is null)
         {
-            context.Result = new OkObjectResult(NotAllowed(check.DeniedReason));
+            context.Result = check.DeniedReason switch
+            {
+                BotToolCheck.NotAllowed => new OkObjectResult(NotAllowed(check.DeniedReason)),
+                BotToolCheck.MissingContext => new BadRequestObjectResult(BotToolOutcomes.MissingContext()),
+                _ => new ObjectResult(BotToolOutcomes.BotNotAllowed(check.DeniedReason)) { StatusCode = StatusCodes.Status403Forbidden }
+            };
             return;
         }
         http.Items[BotRunContext.ItemKey] = check.Run;

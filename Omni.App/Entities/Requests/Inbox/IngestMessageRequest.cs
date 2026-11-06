@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Omni.App.Entities.Requests.Inbox;
 
 /// <summary>
@@ -32,7 +34,7 @@ public record IngestMessageRequest(
     /// column instead of our own ingestion time when provided.</summary>
     DateTimeOffset? OccurredAt = null,
     /// <summary>customer_message only, set by CustomerMessageHandler/TelegramWebhookProcessor from
-    /// IContactService's WasCreated — drives the NEW_CONTACT notification. Always false for any other caller
-    /// (e.g. the n8n ingest endpoint, which never creates a contact itself).</summary>
-    bool ContactWasNewlyCreated = false
+    /// IContactService's WasCreated — drives the NEW_CONTACT notification. Never read from a request body (QA t8-07: a caller
+    /// set it for an existing contact), so always false for the n8n ingest endpoint, which never creates a contact itself.</summary>
+    [property: JsonIgnore] bool ContactWasNewlyCreated = false
 );

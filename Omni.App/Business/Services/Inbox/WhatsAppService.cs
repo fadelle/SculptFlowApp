@@ -44,7 +44,7 @@ public class WhatsAppService : IWhatsAppService
         var integration = await _integrations.GetReadOnlyAsync(clientId, ChannelType.WhatsApp, ct);
         if (integration is null || !IsReady(integration))
         {
-            throw new WhatsAppSendException("channels.whatsApp.errors.notConnected");
+            throw new WhatsAppSendException(WhatsAppSendException.NotConnectedKey);
         }
         return integration;
     }

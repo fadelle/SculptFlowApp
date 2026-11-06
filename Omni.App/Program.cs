@@ -451,6 +451,8 @@ builder.Services.AddScoped<ICalendarSyncNotifier, CalendarSyncDispatcher>();
 builder.Services.AddHttpClient<ICalendarSyncClient, CalendarSyncClient>();
 builder.Services.AddSingleton<ICalendarSyncQueue, CalendarSyncQueue>();
 builder.Services.AddHostedService<CalendarSyncWorker>();
+// A sync nobody answers (n8n down, a code sync lost in a restart) is marked failed after Calendars / SyncAnswerTimeoutMinutes.
+builder.Services.AddHostedService<CalendarSyncWatchdogJob>();
 
 // ---------------------------------------------------------------------
 // Web layer

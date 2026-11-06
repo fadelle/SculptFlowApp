@@ -4,6 +4,7 @@ add
 apartment
 arrow_back
 arrow_forward
+article
 badge
 block
 calendar_month
@@ -57,6 +58,7 @@ person
 person_add
 person_off
 phone_iphone
+play_arrow
 quickreply
 receipt_long
 refresh

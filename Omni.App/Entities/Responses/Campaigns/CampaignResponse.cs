@@ -17,5 +17,7 @@ public record CampaignResponse(
     DateTimeOffset? StartedAt,
     DateTimeOffset? CompletedAt,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt
+    DateTimeOffset UpdatedAt,
+    /// <summary>Why sending stopped by itself (QA t8-11); null otherwise.</summary>
+    string? PausedReason = null
 );
