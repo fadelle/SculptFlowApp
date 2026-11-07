@@ -18,7 +18,7 @@ public class ClientSubscriptionRepository : IClientSubscriptionRepository
     public void Add(ClientSubscription subscription) => _db.ClientSubscriptions.Add(subscription);
 
     public Task<ClientSubscription?> GetWithPlanAsync(Guid clientId, CancellationToken ct = default) =>
-        _db.ClientSubscriptions.Include(s => s.Plan).FirstOrDefaultAsync(s => s.ClientId == clientId, ct);
+        _db.ClientSubscriptions.Include(s => s.Plan).ThenInclude(p => p!.Entitlements).FirstOrDefaultAsync(s => s.ClientId == clientId, ct);
 
     public Task<ClientSubscription?> GetWithPlanReadOnlyAsync(Guid clientId, CancellationToken ct = default) =>
         _db.ClientSubscriptions.AsNoTracking().Include(s => s.Plan).FirstOrDefaultAsync(s => s.ClientId == clientId, ct);

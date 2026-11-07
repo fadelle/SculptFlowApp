@@ -50,7 +50,7 @@ public class DashboardRepository : IDashboardRepository
         }
         if (!string.IsNullOrWhiteSpace(search))
         {
-            var pattern = $"%{search.Trim()}%";
+            var pattern = QueryPaging.Like(search); // % and _ are searched for, not wildcards (QA t3-inbox-19)
             query = query.Where(l => EF.Functions.ILike(l.FullName ?? "", pattern) || EF.Functions.ILike(l.Phone ?? "", pattern));
         }
 
@@ -79,7 +79,7 @@ public class DashboardRepository : IDashboardRepository
         if (!string.IsNullOrWhiteSpace(status)) query = query.Where(a => a.Status == status);
         if (!string.IsNullOrWhiteSpace(search))
         {
-            var pattern = $"%{search.Trim()}%";
+            var pattern = QueryPaging.Like(search);
             query = query.Where(a => EF.Functions.ILike(a.Contact!.FullName ?? "", pattern) || EF.Functions.ILike(a.Contact!.Phone ?? "", pattern));
         }
 

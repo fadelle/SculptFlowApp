@@ -1280,6 +1280,7 @@ td .cell-sub { white-space: nowrap; }
 .inbox-day-divider { position: sticky; top: 0; z-index: 2; display: flex; justify-content: center; margin: 0.25rem 0; pointer-events: none; }
 /* Same minimum width for every chip, so an earlier (wider) date chip pinned underneath never peeks out. */
 .inbox-day-divider span { min-width: 7.5rem; padding: 0.2rem 0.75rem; border: 1px solid var(--border); border-radius: 999px; background: var(--au-paper); box-shadow: var(--au-shadow-paper); color: var(--text-muted); font-size: 0.72rem; font-weight: 650; text-align: center; }
+.inbox-earlier { display: flex; justify-content: center; margin: 0.25rem 0 0.75rem; }
 .inbox-mode-marker { display: flex; align-items: center; gap: 0.6rem; margin: 0.6rem 0; color: var(--text-muted); font-size: 0.75rem; }
 .inbox-mode-marker span { padding: 0.25rem 0.75rem; border: 1px dashed var(--au-input-border-hover); border-radius: 999px; background: var(--au-paper); }
 .inbox-mode-marker::before, .inbox-mode-marker::after { content: ""; flex: 1; height: 1px; background: var(--border); }

@@ -123,6 +123,116 @@ public class AddonAndTrialTests
         await h.AssertReconciledAsync(client);
     }
 
+    // QA t2-billing-06: an extra seat on a plan with unlimited seats was charged (and would be at every renewal) for nothing.
+    [PostgresFact]
+    public async Task Units_of_a_limit_the_plan_has_unlimited_are_refused_and_never_charged()
+    {
+        var h = new BillingHarness(_db.ConnectionString);
+        var client = await h.CreateClientAsync();
+        var plan = await h.CreatePlanAsync(39m, 0m, new Dictionary<string, string> { [EntitlementKeys.MaxUsers] = EntitlementCatalog.Unlimited });
+        var addon = await AddonAsync(h, EntitlementKeys.MaxUsers, 8m);
+        await h.TopUpAsync(client, 100m);
+        await h.Subscriptions.StartAsync(Start(client, plan));
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => Addons(h).SetQuantityAsync(client, addon, 1, "k-unl", BillingSource.Admin, null));
+        Assert.Contains("no limit", ex.Message);
+        Assert.Empty(await Addons(h).ListForClientAsync(client));
+        Assert.Equal(61m, (await h.AccountAsync(client)).WalletBalance); // only the plan
+        Assert.DoesNotContain(await h.LedgerAsync(client), l => l.EntryType == LedgerEntryType.AddonCharge);
+    }
+
+    // QA t2-billing-18: the same key with another quantity answered 200 with the old state, as if the change had happened.
+    [PostgresFact]
+    public async Task A_key_reused_for_another_quantity_is_refused_and_a_true_retry_still_answers()
+    {
+        var h = new BillingHarness(_db.ConnectionString);
+        var client = await h.CreateClientAsync();
+        var plan = await h.CreatePlanAsync(10m, 0m, new Dictionary<string, string> { [EntitlementKeys.MaxUsers] = "2" });
+        var addon = await AddonAsync(h, EntitlementKeys.MaxUsers, 8m);
+        await h.TopUpAsync(client, 100m);
+        await h.Subscriptions.StartAsync(Start(client, plan));
+        await Addons(h).SetQuantityAsync(client, addon, 2, "k-reuse", BillingSource.Admin, null);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => Addons(h).SetQuantityAsync(client, addon, 5, "k-reuse", BillingSource.Admin, null));
+        Assert.Contains("different add-on change", ex.Message);
+        var retry = await Addons(h).SetQuantityAsync(client, addon, 2, "k-reuse", BillingSource.Admin, null);
+        Assert.Equal(2, Assert.Single(retry).Quantity);
+        var charge = Assert.Single(await h.LedgerAsync(client), l => l.EntryType == LedgerEntryType.AddonCharge);
+        Assert.Equal((-16m, AddonService.ChargeReference(addon, 2)), (charge.Amount, charge.Reference));
+        Assert.Equal(74m, (await h.AccountAsync(client)).WalletBalance);
+    }
+
+    // QA t2-billing-06: add-ons for a limit the new plan has unlimited buy nothing, so a plan change ends them uncharged.
+    [PostgresFact]
+    public async Task A_plan_change_to_unlimited_ends_the_add_ons_for_that_limit_uncharged_and_says_so()
+    {
+        var h = new BillingHarness(_db.ConnectionString);
+        var (subscriptions, notices) = WithNotices(h);
+        var client = await h.CreateClientAsync();
+        var basic = await h.CreatePlanAsync(10m, 0m, new Dictionary<string, string> { [EntitlementKeys.MaxUsers] = "2" });
+        var unlimited = await h.CreatePlanAsync(30m, 0m, new Dictionary<string, string> { [EntitlementKeys.MaxUsers] = EntitlementCatalog.Unlimited });
+        var addon = await AddonAsync(h, EntitlementKeys.MaxUsers, 8m);
+        await h.TopUpAsync(client, 100m);
+        await subscriptions.StartAsync(Start(client, basic));
+        await Addons(h).SetQuantityAsync(client, addon, 3, "k-3", BillingSource.Admin, null);
+
+        await subscriptions.StartAsync(Start(client, unlimited));
+
+        Assert.Empty(await Addons(h).ListForClientAsync(client));
+        Assert.Equal(100m - 10m - 24m - 30m, (await h.AccountAsync(client)).WalletBalance); // the new plan only, no add-ons with it
+        Assert.Equal([SubscriptionService.AddonEndReasonUnlimited], await AddonEndReasonsAsync(h, client));
+        VerifyNotice(notices, client, "notifications.billing.addonsIncluded.title", "Extra " + EntitlementKeys.MaxUsers, Times.Once());
+        await h.AssertReconciledAsync(client);
+    }
+
+    [PostgresFact]
+    public async Task At_renewal_an_add_on_for_a_limit_the_plan_made_unlimited_ends_uncharged()
+    {
+        var h = new BillingHarness(_db.ConnectionString);
+        var (subscriptions, notices) = WithNotices(h);
+        var client = await h.CreateClientAsync();
+        var plan = await h.CreatePlanAsync(10m, 0m, new Dictionary<string, string> { [EntitlementKeys.MaxChannelConnections] = "2" });
+        var addon = await AddonAsync(h, EntitlementKeys.MaxChannelConnections, 5m);
+        await h.TopUpAsync(client, 100m);
+        var started = await subscriptions.StartAsync(Start(client, plan));
+        await Addons(h).SetQuantityAsync(client, addon, 2, "k-2", BillingSource.Admin, null);
+        await Addons(h).SetAutoRenewAsync(client, addon, true, BillingSource.Admin, null);
+        await h.Plans.SetEntitlementsAsync(plan, new Dictionary<string, string> { [EntitlementKeys.MaxChannelConnections] = EntitlementCatalog.Unlimited });
+
+        h.Time.Now = started.CurrentPeriodEnd.AddMinutes(1);
+        Assert.Equal(RenewalOutcome.Renewed, await subscriptions.RenewIfDueAsync(client));
+
+        Assert.Empty(await Addons(h).ListForClientAsync(client));
+        Assert.Equal(100m - 10m - 10m - 10m, (await h.AccountAsync(client)).WalletBalance); // the add-on was never charged with the plan
+        Assert.Equal([SubscriptionService.AddonEndReasonUnlimited], await AddonEndReasonsAsync(h, client));
+        VerifyNotice(notices, client, "notifications.billing.addonsIncluded.title", "Extra " + EntitlementKeys.MaxChannelConnections, Times.Once());
+        await h.AssertReconciledAsync(client);
+    }
+
+    // QA t2-billing-17: a PUT without trialDays turned a trial into a never-ending free plan; without isActive it reactivated a plan.
+    [PostgresFact]
+    public async Task A_plan_update_keeps_what_it_leaves_out_and_a_trial_with_subscribers_stays_a_trial()
+    {
+        var h = new BillingHarness(_db.ConnectionString);
+        var paid = BillingHarness.Unique("plan").Replace('_', '-');
+        await h.Plans.CreateAsync(new PlanRequest(paid, "Paid", null, 10m, "month", 4m, null, IsActive: false, SortOrder: 7));
+        var updated = await h.Plans.UpdateAsync(paid, new PlanRequest(paid, "Paid 2", null, 12m, "month", null, null));
+        Assert.Equal(("Paid 2", 12m, 4m, false, 7), (updated!.Name, updated.Price, updated.IncludedUsageCredit, updated.IsActive, updated.SortOrder));
+        await Assert.ThrowsAsync<ArgumentException>(() => h.Plans.UpdateAsync(paid, new PlanRequest(paid, "Paid", null, null, "month", null, null)));
+
+        var trial = await TrialPlanAsync(h, days: 7);
+        var client = await h.CreateClientAsync();
+        await h.Subscriptions.StartAsync(Start(client, trial, charge: false));
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => h.Plans.UpdateAsync(trial, new PlanRequest(trial, "Free Trial", null, 0m, "month", 2m, null)));
+        Assert.Contains("can't stop being a trial", ex.Message);
+        Assert.Equal(7, (await h.Plans.GetAsync(trial))!.TrialDays);
+        Assert.Equal(14, (await h.Plans.UpdateAsync(trial, new PlanRequest(trial, "Free Trial", null, 0m, "month", 2m, null, TrialDays: 14)))!.TrialDays);
+
+        // Without subscribers the switch is an ordinary edit.
+        var spare = await TrialPlanAsync(h, days: 5);
+        Assert.Null((await h.Plans.UpdateAsync(spare, new PlanRequest(spare, "Now paid", null, 9m, "month", 0m, null)))!.TrialDays);
+    }
+
     [PostgresFact]
     public async Task Units_the_wallet_cant_pay_or_without_a_subscription_are_refused()
     {

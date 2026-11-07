@@ -19,7 +19,10 @@
 
     var id = ++requestId;
     fetch(url, { headers: { 'X-Requested-With': 'fetch' } })
-      .then(function (r) { if (!r.ok) throw new Error(r.status); return r.text(); })
+      .then(function (r) {
+        if (!r.ok) { var failed = new Error(r.status); failed.status = r.status; throw failed; }
+        return r.text();
+      })
       .then(function (html) {
         if (id !== requestId) return; // a newer search already went out
         var fresh = new DOMParser().parseFromString(html, 'text/html').getElementById('contacts-results');
@@ -29,7 +32,16 @@
         if (window.OmniTime) window.OmniTime.render(results);
         history.replaceState(null, '', url);
       })
-      .catch(function () { form.submit(); }); // fall back to a normal page load
+      .catch(function (err) {
+        // The edge firewall in front of the app refuses some searches that look like SQL (QA t3-inbox-06); a normal page load
+        // would only show its "Blocked" page, so say so and keep the page.
+        if (err && err.status === 403) {
+          var message = omniText.t('common.errors.blockedByFirewall');
+          if (window.Aurora && window.Aurora.toast) window.Aurora.toast.error(message); else alert(message);
+          return;
+        }
+        form.submit(); // fall back to a normal page load
+      });
   }
 
   form.addEventListener('submit', function (e) { e.preventDefault(); clearTimeout(timer); refresh(); });

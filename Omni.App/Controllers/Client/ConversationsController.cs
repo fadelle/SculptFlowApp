@@ -56,17 +56,19 @@ public class ConversationsController : ControllerBase
     }
 
     [Authorize]
+    /// <summary>The conversation and its newest messages (?take=, default Inbox / ThreadPageSize, at most 1,000) in thread order;
+    /// hasEarlier says older ones exist.</summary>
     [HttpGet("{id:guid}")]
-    public async Task<ActionResult<object>> GetById(Guid id, CancellationToken ct)
+    public async Task<ActionResult<object>> GetById(Guid id, [FromQuery] int? take, CancellationToken ct)
     {
         var clientId = await _clientContext.GetClientIdAsync(ct);
         if (clientId is null) return Forbid();
 
-        var result = await _conversations.GetByIdWithMessagesAsync(clientId.Value, id, ct);
+        var result = await _conversations.GetByIdWithMessagesAsync(clientId.Value, id, take, ct);
         if (result is null) return NotFound();
 
-        var (conversation, messages) = result.Value;
-        return Ok(new { conversation, messages });
+        var (conversation, messages, hasEarlier) = result.Value;
+        return Ok(new { conversation, messages, hasEarlier });
     }
 
     [Authorize]

@@ -15,15 +15,46 @@ public class ConversationServiceTests
     private readonly Mock<INotificationService> _notifications = new();
     private readonly Mock<IInboxSettingsService> _inboxSettings = new();
     private readonly Mock<IBusinessTypeService> _businessTypes = PipelineKit.Types();
+    private readonly Mock<IChannelIntegrationRepository> _channels = new();
+    private readonly Mock<IConfigManager> _config = new();
 
     public ConversationServiceTests()
     {
         InboxSettings(planIncludesBot: true, newConversations: true, reopenedConversations: true);
         _uow.Setup(u => u.BeginTransactionAsync(It.IsAny<CancellationToken>())).ReturnsAsync(Mock.Of<IUnitOfWorkTransaction>());
         _uow.Setup(u => u.TrySaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        // Every channel is connected unless a test says otherwise.
+        _channels.Setup(c => c.GetReadOnlyAsync(_clientId, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Guid _, string channel, CancellationToken _) => new ChannelIntegration { ClientId = _clientId, Channel = channel, Status = ChannelIntegrationStatus.Connected });
     }
 
-    private ConversationService Sut() => new(_conversations.Object, _messages.Object, _contacts.Object, _uow.Object, _notifier.Object, _events.Object, _notifications.Object, _inboxSettings.Object, _businessTypes.Object);
+    private ConversationService Sut() => new(_conversations.Object, _messages.Object, _contacts.Object, _uow.Object, _notifier.Object, _events.Object, _notifications.Object, _inboxSettings.Object, _businessTypes.Object, _channels.Object, _config.Object);
+
+    // QA t3-inbox-19: a conversation on a channel that isn't connected sat in the Inbox as an orphan that could never send.
+    [Theory]
+    [InlineData(ConversationChannel.WhatsApp, null)]
+    [InlineData(ConversationChannel.WhatsApp, ChannelIntegrationStatus.Disconnected)]
+    [InlineData(ConversationChannel.Instagram, null)]
+    public async Task Create_refuses_a_channel_that_isnt_connected(string channel, string? status)
+    {
+        _contacts.Setup(l => l.GetAsync(_clientId, _contactId, It.IsAny<CancellationToken>())).ReturnsAsync(new Contact { Id = _contactId, ClientId = _clientId });
+        _channels.Setup(c => c.GetReadOnlyAsync(_clientId, channel, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(status is null ? null : new ChannelIntegration { ClientId = _clientId, Channel = channel, Status = status });
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => Sut().CreateAsync(new CreateConversationRequest(_clientId, _contactId, channel, null)));
+        Assert.Equal("inbox.errors.channelNotConnected", ex.Message);
+        _conversations.Verify(r => r.Add(It.IsAny<Conversation>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Create_on_a_channel_without_a_connection_needs_none()
+    {
+        // Website, email and SMS conversations have no channel connection to check.
+        _contacts.Setup(l => l.GetAsync(_clientId, _contactId, It.IsAny<CancellationToken>())).ReturnsAsync(new Contact { Id = _contactId, ClientId = _clientId });
+        var r = await Sut().CreateAsync(new CreateConversationRequest(_clientId, _contactId, ConversationChannel.Website, null));
+        Assert.Equal(ConversationChannel.Website, r.Channel);
+        _channels.Verify(c => c.GetReadOnlyAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
 
     /// <summary>Inbox settings where every account's bot answers, except without the plan's AI assistant or on the channels
     /// in <paramref name="withoutBot"/> (an inactive bot there).</summary>
@@ -136,10 +167,31 @@ public class ConversationServiceTests
     {
         Assert.Null(await Sut().GetByIdWithMessagesAsync(_clientId, Guid.NewGuid()));
         var c = Conv();
-        _messages.Setup(m => m.ListForConversationAsync(c.Id, It.IsAny<CancellationToken>())).ReturnsAsync(new List<Message> { new() { Id = Guid.NewGuid(), ConversationId = c.Id, Content = "hi" } });
+        _config.SetupGet(x => x.InboxThreadPageSize).Returns(100);
+        _messages.Setup(m => m.ListLatestForConversationAsync(c.Id, 100, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((new List<Message> { new() { Id = Guid.NewGuid(), ConversationId = c.Id, Content = "hi" } }, true));
         var result = await Sut().GetByIdWithMessagesAsync(_clientId, c.Id);
         Assert.Equal(c.Id, result!.Value.Conversation.Id);
         Assert.Equal("hi", Assert.Single(result.Value.Messages).Content);
+        Assert.True(result.Value.HasEarlier);
+    }
+
+    // QA t3-inbox-16: every refresh re-read the whole history. Only the newest page (Inbox / ThreadPageSize), or what the Inbox
+    // shows, capped at 1,000.
+    [Theory]
+    [InlineData(null, 100)]
+    [InlineData(250, 250)]
+    [InlineData(5000, ConversationService.MaxThreadTake)]
+    [InlineData(0, 1)]
+    public async Task GetByIdWithMessages_reads_only_the_newest_page(int? take, int expected)
+    {
+        var c = Conv();
+        _config.SetupGet(x => x.InboxThreadPageSize).Returns(100);
+        _messages.Setup(m => m.ListLatestForConversationAsync(c.Id, It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((new List<Message>(), false));
+        await Sut().GetByIdWithMessagesAsync(_clientId, c.Id, take);
+        _messages.Verify(m => m.ListLatestForConversationAsync(c.Id, expected, It.IsAny<CancellationToken>()), Times.Once);
+        _messages.Verify(m => m.ListForConversationAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]

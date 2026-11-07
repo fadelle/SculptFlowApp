@@ -60,6 +60,9 @@ public class ContactRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixt
         Assert.Equal(3, ali.TotalCount);
         Assert.Single((await repo.ListAsync(c.Id, null, null, "222", 0, 50)).Items);
         Assert.Equal(0, (await repo.ListAsync(c.Id, null, null, "zzz", 0, 50)).TotalCount);
+        // % and _ are searched for, not wildcards (QA t3-inbox-19: "%" listed everyone).
+        Assert.Equal(0, (await repo.ListAsync(c.Id, null, null, "%", 0, 50)).TotalCount);
+        Assert.Equal(0, (await repo.ListAsync(c.Id, null, null, "_", 0, 50)).TotalCount);
 
         var page = await repo.ListAsync(c.Id, null, null, null, 1, 1);
         Assert.Equal(3, page.TotalCount);
@@ -385,6 +388,38 @@ public class ConversationAndMessageRepositoryTests(PostgresFixture fixture) : Re
         repo.Add(added);
         await db.SaveChangesAsync();
         Assert.Equal(4, (await new MessageRepository(NewContext()).ListForConversationAsync(convo.Id)).Count);
+    }
+
+    // QA t3-inbox-16: a burst of webhooks (or a retried delivery) inserts in any order; the thread follows the channel's time,
+    // then its message id within one second.
+    [PostgresFact]
+    public async Task The_thread_follows_when_messages_were_written_and_pages_from_the_newest()
+    {
+        var c = MakeClient();
+        var contact = MakeContact(c.Id);
+        var convo = MakeConversation(c.Id, contact.Id);
+        var second = Now.AddMinutes(-10);
+        // Saved in the wrong order: the retried "first" arrived last; "9" and "10" share a second.
+        var late = MakeMessage(convo, content: "first", createdAt: Now.AddMinutes(-1), externalId: "chat:1");
+        late.ReceivedAt = Now.AddMinutes(-20);
+        var ten = MakeMessage(convo, content: "ten", createdAt: Now.AddMinutes(-9), externalId: "chat:10");
+        ten.ReceivedAt = second;
+        var nine = MakeMessage(convo, content: "nine", createdAt: Now.AddMinutes(-8), externalId: "chat:9");
+        nine.ReceivedAt = second;
+        var reply = MakeMessage(convo, content: "reply", createdAt: Now.AddMinutes(-7));
+        reply.SentAt = Now.AddMinutes(-6);
+        var note = MakeMessage(convo, content: "note", createdAt: Now.AddMinutes(-5)); // no channel time: when it was saved
+        await SeedAsync(c, contact, convo, note, reply, nine, ten, late);
+
+        var repo = new MessageRepository(NewContext());
+        Assert.Equal(["first", "nine", "ten", "reply", "note"], (await repo.ListForConversationAsync(convo.Id)).Select(m => m.Content));
+
+        var (newest, hasEarlier) = await repo.ListLatestForConversationAsync(convo.Id, 2);
+        Assert.Equal(["reply", "note"], newest.Select(m => m.Content!));
+        Assert.True(hasEarlier);
+        var (all, more) = await repo.ListLatestForConversationAsync(convo.Id, 5);
+        Assert.Equal((5, false), (all.Count, more));
+        Assert.Equal("first", all[0].Content);
     }
 
     [PostgresFact]

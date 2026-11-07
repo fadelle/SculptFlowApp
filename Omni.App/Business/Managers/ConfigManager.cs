@@ -158,6 +158,9 @@ public class ConfigManager : IConfigManager
     // ---- Dashboard
     public int DashboardContactsPageSize => GetInt(ConfigDefaults.DashboardContactsPageSize);
 
+    // ---- Inbox
+    public int InboxThreadPageSize => GetInt(ConfigDefaults.InboxThreadPageSize);
+
     // ---- Localization
     public string LocalizationLanguages => GetString(ConfigDefaults.LocalizationLanguages);
     public int LocalizationLanguageCookieDays => GetInt(ConfigDefaults.LocalizationLanguageCookieDays);

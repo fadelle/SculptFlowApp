@@ -8,6 +8,7 @@ public interface IClientSubscriptionRepository
     void Add(ClientSubscription subscription);
 
     /// <summary>Tracked, with Plan.</summary>
+    /// <summary>Tracked, with the plan and its entitlements (renewal and add-ons check which limits are unlimited).</summary>
     Task<ClientSubscription?> GetWithPlanAsync(Guid clientId, CancellationToken ct = default);
 
     Task<ClientSubscription?> GetWithPlanReadOnlyAsync(Guid clientId, CancellationToken ct = default);

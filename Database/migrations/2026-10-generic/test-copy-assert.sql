@@ -89,6 +89,9 @@ select pg_temp.check('usage rate_source clinic -> client',
     (select count(*) from billing.usage_records where rate_source = 'clinic') = 0 and (select count(*) from billing.usage_records where rate_source = 'client') = 4);
 select pg_temp.check('ledger rows and sequence keep their values',
     (select count(*) from billing.ledger_entries) = 7 and (select min(seq) from billing.ledger_entries) is not null);
+select pg_temp.check('subscriptions anchor their periods at the copied period start',
+    (select count(*) from billing.subscriptions) > 0
+    and (select count(*) from billing.subscriptions where period_anchor is distinct from current_period_start) = 0);
 
 -- Logs, trace, timings.
 select pg_temp.check('error-log category prefix renamed',

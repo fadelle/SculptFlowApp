@@ -214,9 +214,11 @@ public class ConversationsControllerTests : ClientControllerTestBase
         _conversations.Setup(c => c.ListAsync(ClientId, new ConversationListRequest("ann", "needs", 0, 200), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ConversationListPage([], 0, new InboxListCounts(0, 0, 0, 0), 0));
         Assert.IsType<OkObjectResult>((await Sut().List(-5, 999, "ann", "needs", default)).Result);
-        Assert.IsType<NotFoundResult>((await Sut().GetById(convo.Id, default)).Result);
-        _conversations.Setup(c => c.GetByIdWithMessagesAsync(ClientId, convo.Id, It.IsAny<CancellationToken>())).ReturnsAsync((convo, new List<MessageResponse>() as IReadOnlyList<MessageResponse>));
-        Assert.IsType<OkObjectResult>((await Sut().GetById(convo.Id, default)).Result);
+        Assert.IsType<NotFoundResult>((await Sut().GetById(convo.Id, null, default)).Result);
+        _conversations.Setup(c => c.GetByIdWithMessagesAsync(ClientId, convo.Id, 300, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((convo, new List<MessageResponse>() as IReadOnlyList<MessageResponse>, true));
+        var page = Assert.IsType<OkObjectResult>((await Sut().GetById(convo.Id, 300, default)).Result);
+        Assert.Contains("hasEarlier = True", page.Value!.ToString()); // "Show earlier messages" needs to know (QA t3-inbox-16)
         _conversations.Setup(c => c.GetMessagesAsync(ClientId, convo.Id, It.IsAny<CancellationToken>())).ReturnsAsync(new List<MessageResponse>());
         Assert.IsType<OkObjectResult>((await Sut().GetMessages(convo.Id, default)).Result);
     }
@@ -252,7 +254,7 @@ public class ConversationsControllerTests : ClientControllerTestBase
         var id = Guid.NewGuid();
         IsForbid(await Sut().Create(new CreateConversationRequest(Guid.Empty, Guid.Empty, "whatsapp", null), default));
         IsForbid(await Sut().List(0, 10, default));
-        IsForbid(await Sut().GetById(id, default));
+        IsForbid(await Sut().GetById(id, null, default));
         IsForbid(await Sut().GetMessages(id, default));
         IsForbid(await Sut().TakeOver(id, default));
         IsForbid(await Sut().ReturnToAi(id, default));

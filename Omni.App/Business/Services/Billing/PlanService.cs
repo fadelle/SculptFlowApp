@@ -48,8 +48,8 @@ public partial class PlanService : IPlanService
         if (await unit.Plans.CodeExistsAsync(code, ct)) throw new ArgumentException($"A plan with code '{code}' already exists.");
 
         var now = _time.GetUtcNow();
-        var plan = new SubscriptionPlan { Id = Guid.NewGuid(), Code = code, Currency = _config.BillingCurrency, CreatedAt = now };
-        await ApplyAsync(unit, plan, request, now, ct);
+        var plan = new SubscriptionPlan { Id = Guid.NewGuid(), Code = code, Currency = _config.BillingCurrency, IsActive = true, CreatedAt = now };
+        await ApplyAsync(unit, plan, request, now, subscribers: 0, ct);
         unit.Plans.Add(plan);
         ReplaceEntitlements(unit, plan, request.Entitlements ?? new Dictionary<string, string>(), now);
         await unit.SaveChangesAsync(ct);
@@ -67,7 +67,8 @@ public partial class PlanService : IPlanService
         if (plan is null) return null;
 
         var now = _time.GetUtcNow();
-        await ApplyAsync(unit, plan, request, now, ct);
+        var subscribers = (await unit.Subscriptions.CountSubscribersByPlanAsync(ct)).GetValueOrDefault(plan.Id);
+        await ApplyAsync(unit, plan, request, now, subscribers, ct);
         if (request.Entitlements is not null) ReplaceEntitlements(unit, plan, request.Entitlements, now);
         await unit.SaveChangesAsync(ct);
         await _cache.RemoveByPrefixAsync(CacheKeys.EntitlementsPrefix, ct); // any client may be on this plan
@@ -91,23 +92,36 @@ public partial class PlanService : IPlanService
         return await GetAsync(code, ct);
     }
 
-    private async Task ApplyAsync(IBillingUnitOfWork unit, SubscriptionPlan plan, PlanRequest request, DateTimeOffset now, CancellationToken ct)
+    /// <summary>Checks the request and copies it onto the plan; values left out keep the plan's (see PlanRequest).
+    /// <paramref name="subscribers"/> = the plan's active and past-due subscriptions (0 for a new plan).</summary>
+    private async Task ApplyAsync(IBillingUnitOfWork unit, SubscriptionPlan plan, PlanRequest request, DateTimeOffset now, int subscribers,
+        CancellationToken ct)
     {
         var name = (request.Name ?? string.Empty).Trim();
         if (name.Length is 0 or > 100) throw new ArgumentException("Plan name is required (max 100 characters).");
-        if (request.Price < 0 || decimal.Round(request.Price, 2) != request.Price) throw new ArgumentException("Price must be zero or more, with at most 2 decimals.");
-        if (request.IncludedUsageCredit < 0 || decimal.Round(request.IncludedUsageCredit, 2) != request.IncludedUsageCredit)
+        if (request.Price is not decimal price) throw new ArgumentException("Price is required (0 for a free plan).");
+        if (price < 0 || decimal.Round(price, 2) != price) throw new ArgumentException("Price must be zero or more, with at most 2 decimals.");
+        var credit = request.IncludedUsageCredit ?? plan.IncludedUsageCredit;
+        if (credit < 0 || decimal.Round(credit, 2) != credit)
         {
             throw new ArgumentException("Included usage credit must be zero or more, with at most 2 decimals.");
         }
-        if (request.Price > BillingLimits.MaxPlanPrice || request.IncludedUsageCredit > BillingLimits.MaxPlanPrice)
+        if (price > BillingLimits.MaxPlanPrice || credit > BillingLimits.MaxPlanPrice)
         {
             throw new ArgumentException($"A plan's price and included credit can be at most {BillingLimits.MaxPlanPrice:N0} each.");
         }
         var period = (request.BillingPeriod ?? string.Empty).Trim().ToLowerInvariant();
         if (!BillingPeriod.IsValid(period)) throw new ArgumentException("Billing period must be 'month' or 'year'.");
-        if (request.TrialDays is int trialDays && (trialDays is < 1 or > 90 || request.Price != 0))
+        if (request.TrialDays is int trialDays && (trialDays is < 1 or > 90 || price != 0))
             throw new ArgumentException("A trial lasts 1 to 90 days and its price is 0.");
+        // A trial's subscribers end at the period end and a paid plan's renew: switching would renew trial subscribers at 0 for
+        // ever, or end paying ones (QA t2-billing-17). The number of days can change; it applies to trials started afterwards.
+        if (subscribers > 0 && (request.TrialDays is null) != (plan.TrialDays is null))
+        {
+            throw new InvalidOperationException(plan.TrialDays is null
+                ? $"The plan has {subscribers} subscriber(s), so it can't become a trial. Make a new trial plan instead."
+                : $"The plan has {subscribers} subscriber(s), so it can't stop being a trial (send its trialDays). Make a new paid plan instead.");
+        }
 
         Guid? rateCardId = null;
         if (!string.IsNullOrWhiteSpace(request.RateCardCode))
@@ -121,13 +135,13 @@ public partial class PlanService : IPlanService
 
         plan.Name = name;
         plan.Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim();
-        plan.Price = request.Price;
+        plan.Price = price;
         plan.BillingPeriod = period;
-        plan.IncludedUsageCredit = request.IncludedUsageCredit;
+        plan.IncludedUsageCredit = credit;
         plan.TrialDays = request.TrialDays;
         plan.RateCardId = rateCardId;
-        plan.IsActive = request.IsActive;
-        plan.SortOrder = request.SortOrder;
+        plan.IsActive = request.IsActive ?? plan.IsActive;
+        plan.SortOrder = request.SortOrder ?? plan.SortOrder;
         plan.UpdatedAt = now;
     }
 

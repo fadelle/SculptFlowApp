@@ -7,7 +7,11 @@ public interface IMessageRepository
     void Add(Message message);
 
     /// <summary>Oldest first.</summary>
+    /// <summary>Every message of the conversation in thread order (see MessageRepository.InThreadOrder).</summary>
     Task<IReadOnlyList<Message>> ListForConversationAsync(Guid conversationId, CancellationToken ct = default);
+
+    /// <summary>The newest <paramref name="take"/> messages in thread order, and whether older ones exist.</summary>
+    Task<(IReadOnlyList<Message> Items, bool HasEarlier)> ListLatestForConversationAsync(Guid conversationId, int take, CancellationToken ct = default);
 
     /// <summary>Tracked. The provider's id is unique per client and channel.</summary>
     Task<Message?> FindByExternalIdAsync(Guid clientId, string channel, string externalMessageId, CancellationToken ct = default);

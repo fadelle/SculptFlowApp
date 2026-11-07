@@ -18,10 +18,29 @@ public class MessageRepository : IMessageRepository
     public void Add(Message message) => _db.Messages.Add(message);
 
     public async Task<IReadOnlyList<Message>> ListForConversationAsync(Guid conversationId, CancellationToken ct = default) =>
-        await _db.Messages
-            .Where(m => m.ConversationId == conversationId)
-            .OrderBy(m => m.CreatedAt)
-            .ToListAsync(ct);
+        await InThreadOrder(_db.Messages.Where(m => m.ConversationId == conversationId)).ToListAsync(ct);
+
+    public async Task<(IReadOnlyList<Message> Items, bool HasEarlier)> ListLatestForConversationAsync(Guid conversationId, int take,
+        CancellationToken ct = default)
+    {
+        var m = _db.Messages.Where(x => x.ConversationId == conversationId);
+        var newestFirst = await m
+            .OrderByDescending(x => x.ReceivedAt ?? x.SentAt ?? x.CreatedAt)
+            .ThenByDescending(x => x.ExternalMessageId == null ? 0 : x.ExternalMessageId.Length).ThenByDescending(x => x.ExternalMessageId)
+            .ThenByDescending(x => x.CreatedAt).ThenByDescending(x => x.Id)
+            .Take(take + 1).ToListAsync(ct);
+        var items = newestFirst.Take(take).ToList();
+        items.Reverse();
+        return (items, newestFirst.Count > take);
+    }
+
+    /// <summary>Thread order (QA t3-inbox-16): when the customer wrote it or the provider sent it (the channel's own time, so a
+    /// late or retried delivery shows in its place), then the channel's message id for messages of the same second (Telegram's
+    /// grow with the chat: shorter first, then by value), then arrival. Not insert time alone: concurrent webhooks insert in any order.</summary>
+    private static IOrderedQueryable<Message> InThreadOrder(IQueryable<Message> messages) =>
+        messages.OrderBy(x => x.ReceivedAt ?? x.SentAt ?? x.CreatedAt)
+            .ThenBy(x => x.ExternalMessageId == null ? 0 : x.ExternalMessageId.Length).ThenBy(x => x.ExternalMessageId)
+            .ThenBy(x => x.CreatedAt).ThenBy(x => x.Id);
 
     public Task<Message?> FindByExternalIdAsync(Guid clientId, string channel, string externalMessageId, CancellationToken ct = default) =>
         _db.Messages.FirstOrDefaultAsync(m =>

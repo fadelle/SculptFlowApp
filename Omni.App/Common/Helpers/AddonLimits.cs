@@ -8,6 +8,10 @@ namespace Omni.App.Common.Helpers;
 /// unlimited; a key the plan doesn't list counts as 0). Features are untouched.</summary>
 public static class AddonLimits
 {
+    /// <summary>Whether the plan already has no limit on this key (an add-on for it would buy nothing). Needs the plan's entitlements loaded.</summary>
+    public static bool IsUnlimited(SubscriptionPlan plan, string entitlementKey) =>
+        plan.Entitlements.Any(e => e.EntitlementKey == entitlementKey && e.Value == EntitlementCatalog.Unlimited);
+
     public static Dictionary<string, string> Merge(IReadOnlyDictionary<string, string> planValues, IEnumerable<ClientAddon> addons)
     {
         var merged = new Dictionary<string, string>(planValues);

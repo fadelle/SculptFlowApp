@@ -1596,6 +1596,7 @@ public class ApplicationDbContext : IdentityUserContext<AppUser>
             e.Property(x => x.Status).HasColumnName("status").HasMaxLength(20).IsRequired();
             e.Property(x => x.CurrentPeriodStart).HasColumnName("current_period_start");
             e.Property(x => x.CurrentPeriodEnd).HasColumnName("current_period_end");
+            e.Property(x => x.PeriodAnchor).HasColumnName("period_anchor");
             e.Property(x => x.CancelAtPeriodEnd).HasColumnName("cancel_at_period_end");
             e.Property(x => x.PastDueSince).HasColumnName("past_due_since");
             e.Property(x => x.EndedAt).HasColumnName("ended_at");

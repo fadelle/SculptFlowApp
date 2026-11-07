@@ -67,6 +67,8 @@ public class WhatsAppTemplateService : IWhatsAppTemplateService
 
     public async Task<WhatsAppTemplateResponse> CreateAsync(CreateWhatsAppTemplateRequest request, CancellationToken ct = default)
     {
+        // Meta writes categories in capitals (UTILITY); they're stored lower-case (QA t3-inbox-19).
+        request = request with { Category = NormalizeCategory(request.Category) };
         ValidateContent(request.Category, request.Body, request.HeaderType, request.HeaderContent, request.Footer);
         if (string.IsNullOrWhiteSpace(request.Name))
         {
@@ -130,6 +132,8 @@ public class WhatsAppTemplateService : IWhatsAppTemplateService
         System.Text.RegularExpressions.Regex.IsMatch(code, "^[a-z]{2,3}(_[A-Z]{2})?$");
 
     /// <summary>The fields both create and edit set, checked against Meta's rules and the columns (400 naming what's wrong).</summary>
+    private static string? NormalizeCategory(string? category) => string.IsNullOrWhiteSpace(category) ? category : category.Trim().ToLowerInvariant();
+
     private static void ValidateContent(string? category, string? body, string? headerType, string? headerContent, string? footer)
     {
         if (category is null || !WhatsAppTemplateCategory.All.Contains(category))
@@ -186,6 +190,7 @@ public class WhatsAppTemplateService : IWhatsAppTemplateService
         {
             throw new InvalidOperationException("templates.errors.cantEdit").WithArgs(TextArg.Value(template.Status));
         }
+        request = request with { Category = NormalizeCategory(request.Category) };
         ValidateContent(request.Category, request.Body, request.HeaderType, request.HeaderContent, request.Footer);
 
         var now = DateTimeOffset.UtcNow;

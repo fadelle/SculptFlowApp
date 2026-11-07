@@ -56,13 +56,17 @@ public class SubscriptionService : ISubscriptionService
         var account = await unit.Accounts.LockAsync(request.ClientId, _config.BillingCurrency, ct);
 
         var subscription = await unit.Subscriptions.GetWithPlanAsync(request.ClientId, ct);
-        if (await unit.Ledger.KeyExistsAsync(request.ClientId, chargeKey, ct))
+        if (await unit.Ledger.FindByKeyReadOnlyAsync(request.ClientId, chargeKey, ct) is { } started)
         {
+            // The charge row names the plan the key started (QA t2-billing-18): the same key for another plan is refused, never
+            // answered as if the change had happened.
+            var asked = await unit.Plans.GetAsync(planCode, ct);
+            if (started.PlanId != asked?.Id) throw new InvalidOperationException("This idempotency key was already used to start a different plan.");
             _logger.LogInformation("Billing: duplicate subscription start {Key} for client {ClientId} ignored.", request.IdempotencyKey, request.ClientId);
             return subscription!;
         }
 
-        var plan = await unit.Plans.GetAsync(planCode, ct);
+        var plan = await unit.Plans.GetWithEntitlementsAsync(planCode, ct);
         if (plan is null || !plan.IsActive)
         {
             throw new ArgumentException($"Plan '{planCode}' doesn't exist or isn't active.", nameof(request));
@@ -73,8 +77,11 @@ public class SubscriptionService : ISubscriptionService
         }
 
         var price = request.ChargeFirstPeriod ? plan.Price : 0m;
-        // Add-ons are charged with the plan from each period start (none for a free first period).
-        var addonsPrice = request.ChargeFirstPeriod ? PlanPeriod.AddonsTotal(await unit.Addons.ListForClientReadOnlyAsync(request.ClientId, ct)) : 0m;
+        // Add-ons are charged with the plan from each period start (none for a free first period). One for a limit the new plan
+        // has unlimited buys nothing, so it ends instead (QA t2-billing-06).
+        var clientAddons = await unit.Addons.ListForClientAsync(request.ClientId, ct);
+        var included = IncludedInPlan(plan, clientAddons);
+        var addonsPrice = request.ChargeFirstPeriod ? PlanPeriod.AddonsTotal(clientAddons.Except(included)) : 0m;
         if (!CanPay(account, price + addonsPrice, plan.IncludedUsageCredit))
         {
             _logger.LogWarning("Billing: can't start plan {Plan} for client {ClientId}: price {Price} {Currency}, wallet {Wallet}, spendable {Spendable}.",
@@ -83,6 +90,7 @@ public class SubscriptionService : ISubscriptionService
                 $"The wallet doesn't cover the {plan.Name} plan price ({price:0.00} {account.Currency}). Top up first.");
         }
 
+        EndAddons(unit, request.ClientId, included, AddonEndReasonUnlimited, now, now);
         var previousPlanId = subscription?.PlanId;
         var isNew = subscription is null;
         if (subscription is null)
@@ -94,6 +102,7 @@ public class SubscriptionService : ISubscriptionService
         subscription.Status = SubscriptionStatus.Active;
         subscription.CurrentPeriodStart = now;
         subscription.CurrentPeriodEnd = PlanPeriod.End(plan, now);
+        subscription.PeriodAnchor = now;
         subscription.CancelAtPeriodEnd = false;
         subscription.PastDueSince = null;
         subscription.EndedAt = null;
@@ -119,6 +128,7 @@ public class SubscriptionService : ISubscriptionService
         await unit.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
         await _cache.RemoveAsync(CacheKeys.Entitlements(request.ClientId), ct);
+        await NotifyEndedAddonsAsync(request.ClientId, [], [], included, ct);
 
         _logger.LogInformation("Billing: client {ClientId} {Action} plan {Plan} until {PeriodEnd} (charged {Price} {Currency}, credit {Credit}) by {Actor}.",
             request.ClientId, isNew ? "started" : "changed to", plan.Code, subscription.CurrentPeriodEnd, price, account.Currency,
@@ -150,6 +160,7 @@ public class SubscriptionService : ISubscriptionService
         RenewalOutcome outcome;
         var notRenewed = new List<ClientAddon>();
         var unpaid = new List<ClientAddon>();
+        var included = new List<ClientAddon>();
 
         if (plan.TrialDays is not null)
         {
@@ -174,16 +185,31 @@ public class SubscriptionService : ISubscriptionService
         }
         else
         {
+            // Periods are counted from the anchor, so the day never drifts (31st -> 30th). A subscription more than a whole
+            // period overdue (the worker was down, a long grace) renews once, from now, instead of charging every missed
+            // period in a burst (QA t2-billing-19).
+            var anchor = subscription.PeriodAnchor ?? subscription.CurrentPeriodStart;
             var newStart = periodEnd;
+            var newEnd = PlanPeriod.End(plan, anchor, newStart);
+            var restartedFromNow = newEnd <= now;
+            if (restartedFromNow)
+            {
+                newStart = now;
+                anchor = now;
+                newEnd = PlanPeriod.End(plan, now);
+            }
             var keyBase = $"subscription:{subscription.Id}:period:{Stamp(newStart)}";
 
             // Add-ons at the period's end (decided 2026-11-05): one not set to renew (its own choice, else
-            // Billing:AddonsRenewByDefault, off by default) ends now, whatever happens to the plan.
+            // Billing:AddonsRenewByDefault, off by default) ends now, whatever happens to the plan. One for a limit the plan
+            // has unlimited buys nothing, so it ends too, uncharged (QA t2-billing-06).
             var clientAddons = await unit.Addons.ListForClientAsync(clientId, ct);
+            included.AddRange(IncludedInPlan(plan, clientAddons));
+            EndAddons(unit, clientId, included, AddonEndReasonUnlimited, periodEnd, now);
             var renewByDefault = _config.BillingAddonsRenewByDefault;
-            notRenewed.AddRange(clientAddons.Where(a => !(a.AutoRenew ?? renewByDefault)));
+            notRenewed.AddRange(clientAddons.Except(included).Where(a => !(a.AutoRenew ?? renewByDefault)));
             EndAddons(unit, clientId, notRenewed, "not_renewed", periodEnd, now);
-            var renewing = clientAddons.Except(notRenewed).ToList();
+            var renewing = clientAddons.Except(included).Except(notRenewed).ToList();
 
             // The plan renews if the wallet pays the plan; each renewing add-on the rest of the wallet can't pay ends instead, so
             // the plan never lapses because of an extra (decided 2026-11-05).
@@ -203,11 +229,16 @@ public class SubscriptionService : ISubscriptionService
                 await StartPeriodAsync(unit, account, plan, plan.Price, addonsPrice, keyBase,
                     new LedgerContext(BillingSource.Worker, Reason: "Subscription renewal", SubscriptionId: subscription.Id, PlanId: plan.Id), now, ct);
                 subscription.CurrentPeriodStart = newStart;
-                subscription.CurrentPeriodEnd = PlanPeriod.End(plan, newStart);
+                subscription.CurrentPeriodEnd = newEnd;
+                subscription.PeriodAnchor = anchor;
                 subscription.Status = SubscriptionStatus.Active;
                 subscription.PastDueSince = null;
                 BillingLedger.LogEvent(unit, clientId, BillingEventTypes.SubscriptionRenewed, BillingSource.Worker,
-                    new { plan = plan.Code, charged = plan.Price, addons = addonsPrice, currency = account.Currency, periodEnd = subscription.CurrentPeriodEnd }, now);
+                    new
+                    {
+                        plan = plan.Code, charged = plan.Price, addons = addonsPrice, currency = account.Currency, periodEnd = subscription.CurrentPeriodEnd,
+                        restartedFromNow, missedPeriodEnd = restartedFromNow ? periodEnd : (DateTimeOffset?)null
+                    }, now);
                 outcome = RenewalOutcome.Renewed;
             }
             else if (subscription.Status == SubscriptionStatus.Active)
@@ -231,13 +262,13 @@ public class SubscriptionService : ISubscriptionService
             }
             else
             {
-                // Still in grace, still unpaid: only add-ons that weren't renewing end (at the period's end, as always).
-                if (notRenewed.Count > 0)
+                // Still in grace, still unpaid: only add-ons that weren't renewing (or buy nothing) end, at the period's end as always.
+                if (notRenewed.Count > 0 || included.Count > 0)
                 {
                     await unit.SaveChangesAsync(ct);
                     await tx.CommitAsync(ct);
                     await _cache.RemoveAsync(CacheKeys.Entitlements(clientId), ct);
-                    await NotifyEndedAddonsAsync(clientId, notRenewed, unpaid, ct);
+                    await NotifyEndedAddonsAsync(clientId, notRenewed, unpaid, included, ct);
                 }
                 return RenewalOutcome.PastDue;
             }
@@ -247,7 +278,7 @@ public class SubscriptionService : ISubscriptionService
         await unit.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
         await _cache.RemoveAsync(CacheKeys.Entitlements(clientId), ct);
-        await NotifyEndedAddonsAsync(clientId, notRenewed, unpaid, ct);
+        await NotifyEndedAddonsAsync(clientId, notRenewed, unpaid, included, ct);
 
         if (outcome == RenewalOutcome.Renewed)
         {
@@ -390,6 +421,13 @@ public class SubscriptionService : ISubscriptionService
 
     private static string Stamp(DateTimeOffset value) => value.UtcDateTime.ToString("yyyyMMdd'T'HHmmss'Z'");
 
+    /// <summary>Why an add-on ended because the plan already has no limit on what it adds (billing_addon_changed reason).</summary>
+    public const string AddonEndReasonUnlimited = "plan_unlimited";
+
+    /// <summary>The client's add-ons for a limit the plan has unlimited: they buy nothing. Needs the plan's entitlements loaded.</summary>
+    private static List<ClientAddon> IncludedInPlan(SubscriptionPlan plan, IEnumerable<ClientAddon> addons) =>
+        addons.Where(a => a.Addon is not null && AddonLimits.IsUnlimited(plan, a.Addon.EntitlementKey)).ToList();
+
     /// <summary>Ends add-ons at a renewal: the rows go (their extra units with them), nothing is charged or refunded, and each is
     /// logged as billing_addon_changed with why ("not_renewed" or "insufficient_funds").</summary>
     private static void EndAddons(IBillingUnitOfWork unit, Guid clientId, IReadOnlyList<ClientAddon> addons, string reason, DateTimeOffset periodEnd,
@@ -403,9 +441,10 @@ public class SubscriptionService : ISubscriptionService
         }
     }
 
-    /// <summary>Tells the client which add-ons ended at the renewal: one notice for those not set to renew, one for those the
-    /// wallet couldn't pay. A failed notice is logged, never thrown (the renewal is already saved).</summary>
-    private async Task NotifyEndedAddonsAsync(Guid clientId, IReadOnlyList<ClientAddon> notRenewed, IReadOnlyList<ClientAddon> unpaid, CancellationToken ct)
+    /// <summary>Tells the client which add-ons ended: one notice for those not set to renew, one for those the wallet couldn't pay,
+    /// one for those the plan already includes without limit. A failed notice is logged, never thrown (the change is already saved).</summary>
+    private async Task NotifyEndedAddonsAsync(Guid clientId, IReadOnlyList<ClientAddon> notRenewed, IReadOnlyList<ClientAddon> unpaid,
+        IReadOnlyList<ClientAddon> included, CancellationToken ct)
     {
         if (_notifications is null) return;
         static string Names(IEnumerable<ClientAddon> addons) => string.Join(", ", addons.Select(a => a.Addon?.Name ?? "?"));
@@ -421,6 +460,12 @@ public class SubscriptionService : ISubscriptionService
             {
                 await _notifications.CreateAsync(clientId, NotificationType.Billing,
                     NotificationText.Of("notifications.billing.addonsUnpaid.title", "notifications.billing.addonsUnpaid.message", Names(unpaid)),
+                    link: "/settings/billing", ct: ct);
+            }
+            if (included.Count > 0)
+            {
+                await _notifications.CreateAsync(clientId, NotificationType.Billing,
+                    NotificationText.Of("notifications.billing.addonsIncluded.title", "notifications.billing.addonsIncluded.message", Names(included)),
                     link: "/settings/billing", ct: ct);
             }
         }

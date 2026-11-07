@@ -185,6 +185,21 @@ public class WhatsAppTemplateServiceTests
         _templates.Verify(t => t.Add(It.IsAny<WhatsAppTemplate>()), Times.Exactly(3));
     }
 
+    // QA t3-inbox-19: Meta's own upper-case category was refused; it's stored lower-case.
+    [Fact]
+    public async Task Create_and_edit_accept_metas_upper_case_category()
+    {
+        _provider.Setup(p => p.SubmitAsync(_integration!, It.IsAny<WhatsAppTemplate>(), It.IsAny<CancellationToken>())).ReturnsAsync(new WhatsAppTemplateSubmitResult("meta-1", "PENDING"));
+        WhatsAppTemplate? added = null;
+        _templates.Setup(t => t.Add(It.IsAny<WhatsAppTemplate>())).Callback<WhatsAppTemplate>(t => added = t);
+        await Sut().CreateAsync(Create() with { Category = " UTILITY " });
+        Assert.Equal(WhatsAppTemplateCategory.Utility, added!.Category);
+
+        var stored = Stored(WhatsAppTemplateStatus.Draft, metaId: null);
+        await Sut().UpdateAsync(_clientId, stored.Id, Edit() with { Category = "MARKETING" });
+        Assert.Equal(WhatsAppTemplateCategory.Marketing, stored.Category);
+    }
+
     [Fact]
     public async Task Editing_checks_the_header_type_and_lengths_too()
     {

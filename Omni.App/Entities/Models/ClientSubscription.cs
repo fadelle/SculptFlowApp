@@ -13,6 +13,9 @@ public class ClientSubscription
     public string Status { get; set; } = SubscriptionStatus.Active;
     public DateTimeOffset CurrentPeriodStart { get; set; }
     public DateTimeOffset CurrentPeriodEnd { get; set; }
+    /// <summary>When the run of periods began: every period ends a whole number of periods after it, so a month started on the
+    /// 31st ends on the 30th in September and the 31st again in October (QA t2-billing-19). Null (older rows) = CurrentPeriodStart.</summary>
+    public DateTimeOffset? PeriodAnchor { get; set; }
     /// <summary>Cancel requested: the subscription ends (cancelled) at CurrentPeriodEnd instead of renewing.</summary>
     public bool CancelAtPeriodEnd { get; set; }
     /// <summary>When a renewal first failed for lack of funds; the grace period counts from here.</summary>

@@ -2315,6 +2315,7 @@ create table if not exists billing.subscriptions (
   status                varchar(20) not null check (status in ('active','past_due','expired','cancelled')),
   current_period_start  timestamptz not null,
   current_period_end    timestamptz not null,
+  period_anchor         timestamptz,                                  -- start of the run of periods; null = current_period_start
   cancel_at_period_end  boolean not null default false,
   past_due_since        timestamptz,
   ended_at              timestamptz,
@@ -2322,6 +2323,9 @@ create table if not exists billing.subscriptions (
   updated_at            timestamptz not null default now(),
   constraint ck_subscriptions_period check (current_period_end > current_period_start)
 );
+-- QA t2-billing-19: every period ends a whole number of periods after period_anchor, so a month started on the 31st doesn't
+-- drift to the 30th for good. Set when a plan starts and when an overdue subscription restarts from now.
+alter table billing.subscriptions add column if not exists period_anchor timestamptz;
 create index if not exists ix_subscriptions_due on billing.subscriptions(current_period_end)
   where status in ('active','past_due');
 drop trigger if exists trg_subscriptions_updated_at on billing.subscriptions;
@@ -2438,8 +2442,8 @@ drop trigger if exists trg_usage_records_guard on billing.usage_records;
 create trigger trg_usage_records_guard before update on billing.usage_records
   for each row execute function billing.usage_records_guard();
 
--- Financial ledger: only real Omni money movements (never uncharged usage). Append-only (updates are rejected
--- by a trigger). balance_after = that balance right after this entry. Signs: credits to a balance are positive,
+-- Financial ledger: only real Omni money movements (never uncharged usage). Append-only (updates and deletes are rejected
+-- by a trigger; deleting the client still removes its rows). balance_after = that balance right after this entry. Signs: credits to a balance are positive,
 -- debits negative. A subscription_charge of 0 is allowed so every started period (trial, free plan) has exactly one
 -- charge row.
 create table if not exists billing.ledger_entries (
@@ -2507,11 +2511,19 @@ create index if not exists ix_ledger_entries_usage on billing.ledger_entries(usa
   where usage_record_id is not null;
 create or replace function billing.ledger_entries_immutable() returns trigger as $$
 begin
+  -- QA t2-billing-20: deletes are refused too, except when the client itself is being deleted (the cascade from core.clients,
+  -- directly or through billing.accounts, runs after the client row is gone).
+  if tg_op = 'DELETE' then
+    if not exists (select 1 from core.clients where id = old.client_id) then
+      return old;
+    end if;
+    raise exception 'billing.ledger_entries is append-only: post a correcting entry instead of deleting %', old.id;
+  end if;
   raise exception 'billing.ledger_entries is append-only: post a correcting entry instead of editing %', old.id;
 end;
 $$ language plpgsql;
 drop trigger if exists trg_ledger_entries_immutable on billing.ledger_entries;
-create trigger trg_ledger_entries_immutable before update on billing.ledger_entries
+create trigger trg_ledger_entries_immutable before update or delete on billing.ledger_entries
   for each row execute function billing.ledger_entries_immutable();
 
 -- Every existing client gets an (empty) billing account; new clients get one at registration (and lazily anyway).

@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Omni.App.Entities.Models;
 using Omni.App.Persistence.Contexts;
 using Omni.App.Persistence.Contracts.Contacts;
+using Omni.App.Persistence.Helpers;
 
 namespace Omni.App.Persistence.Repositories.Contacts;
 
@@ -44,7 +45,7 @@ public class ContactRepository : IContactRepository
 
         if (!string.IsNullOrWhiteSpace(search))
         {
-            var pattern = $"%{search.Trim()}%";
+            var pattern = QueryPaging.Like(search); // % and _ are searched for, not wildcards (QA t3-inbox-19)
             query = query.Where(l =>
                 EF.Functions.ILike(l.FullName ?? "", pattern) ||
                 EF.Functions.ILike(l.Phone ?? "", pattern) ||

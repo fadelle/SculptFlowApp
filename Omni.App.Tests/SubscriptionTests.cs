@@ -109,7 +109,7 @@ public class SubscriptionTests
 
         var renewed = await h.Subscriptions.GetAsync(client);
         Assert.Equal(started.CurrentPeriodEnd, renewed!.CurrentPeriodStart);
-        Assert.Equal(started.CurrentPeriodEnd.AddMonths(1), renewed.CurrentPeriodEnd);
+        Assert.Equal(started.CurrentPeriodStart.AddMonths(2), renewed.CurrentPeriodEnd); // counted from the start, so the day never drifts (QA t2-billing-19)
         var account = await h.AccountAsync(client);
         Assert.Equal(25m, account.IncludedCreditBalance);   // reset, unused $21 did not roll over
         Assert.Equal(300m - 99m - 99m, account.WalletBalance);
@@ -275,5 +275,106 @@ public class SubscriptionTests
         var entry = await db.BillingLedgerEntries.SingleAsync(l => l.ClientId == client);
         entry.Amount = 1000m;
         await Assert.ThrowsAnyAsync<DbUpdateException>(() => db.SaveChangesAsync());
+    }
+
+    // QA t2-billing-20: only UPDATE was blocked, so ledger history could be erased with a DELETE.
+    [PostgresFact]
+    public async Task TheLedger_RefusesDeletes_ButDeletingTheClientStillRemovesItsRows()
+    {
+        var h = new BillingHarness(_db.ConnectionString);
+        var client = await h.CreateClientAsync();
+        await h.TopUpAsync(client, 10m);
+
+        await using (var db = h.Db())
+        {
+            var ex = await Assert.ThrowsAnyAsync<Exception>(() => db.BillingLedgerEntries.Where(l => l.ClientId == client).ExecuteDeleteAsync());
+            Assert.Contains("append-only", ex.Message);
+            // The account cascade is refused too while the client exists.
+            await Assert.ThrowsAnyAsync<Exception>(() => db.BillingAccounts.Where(a => a.ClientId == client).ExecuteDeleteAsync());
+            Assert.Single(await db.BillingLedgerEntries.Where(l => l.ClientId == client).ToListAsync());
+        }
+        await using (var db = h.Db())
+        {
+            await db.Clients.Where(c => c.Id == client).ExecuteDeleteAsync();
+            Assert.Equal(0, await db.BillingLedgerEntries.CountAsync(l => l.ClientId == client));
+        }
+    }
+
+    // QA t2-billing-18: the same key for another plan answered 200 with the old plan, as if the change had happened.
+    [PostgresFact]
+    public async Task CreateSubscription_TheSameKeyForAnotherPlan_IsRefused()
+    {
+        var h = new BillingHarness(_db.ConnectionString);
+        var client = await h.CreateClientAsync();
+        var first = await h.CreatePlanAsync(price: 10m, credit: 0m);
+        var second = await h.CreatePlanAsync(price: 20m, credit: 0m);
+        await h.TopUpAsync(client, 100m);
+        var request = Start(client, first);
+        await h.Subscriptions.StartAsync(request);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => h.Subscriptions.StartAsync(request with { PlanCode = second }));
+        Assert.Contains("different plan", ex.Message);
+        Assert.Equal(first, (await h.Subscriptions.GetAsync(client))!.Plan!.Code);
+        Assert.Equal(first, (await h.Subscriptions.StartAsync(request)).Plan!.Code); // a true retry still answers
+        Assert.Equal(90m, (await h.AccountAsync(client)).WalletBalance);
+    }
+
+    // QA t2-billing-19: periods were counted from the last end, so a month started on the 31st moved to the 30th for good.
+    [PostgresFact]
+    public async Task Renewal_KeepsTheDayItStartedOn_EvenAfterAShortMonth()
+    {
+        var h = new BillingHarness(_db.ConnectionString);
+        var client = await h.CreateClientAsync();
+        var plan = await h.CreatePlanAsync(price: 10m, credit: 0m);
+        await h.TopUpAsync(client, 100m);
+        h.Time.Now = new DateTimeOffset(2027, 1, 31, 12, 0, 0, TimeSpan.Zero);
+        await h.Subscriptions.StartAsync(Start(client, plan));
+
+        var ends = new List<DateTimeOffset> { (await h.Subscriptions.GetAsync(client))!.CurrentPeriodEnd };
+        for (var i = 0; i < 3; i++)
+        {
+            h.Time.Now = ends[^1].AddMinutes(1);
+            Assert.Equal(RenewalOutcome.Renewed, await h.Subscriptions.RenewIfDueAsync(client));
+            ends.Add((await h.Subscriptions.GetAsync(client))!.CurrentPeriodEnd);
+        }
+
+        Assert.Equal(new[] { "2027-02-28", "2027-03-31", "2027-04-30", "2027-05-31" }, ends.Select(e => e.UtcDateTime.ToString("yyyy-MM-dd")));
+        await h.AssertReconciledAsync(client);
+    }
+
+    // QA t2-billing-19: a subscription months overdue (the worker down) was charged for every missed period in a burst.
+    [PostgresFact]
+    public async Task Renewal_SeveralPeriodsOverdue_RenewsOnceFromNow()
+    {
+        var h = new BillingHarness(_db.ConnectionString);
+        var client = await h.CreateClientAsync();
+        var plan = await h.CreatePlanAsync(price: 10m, credit: 0m);
+        await h.TopUpAsync(client, 100m);
+        var started = await h.Subscriptions.StartAsync(Start(client, plan));
+
+        h.Time.Now = started.CurrentPeriodEnd.AddDays(70);
+        Assert.Equal(RenewalOutcome.Renewed, await h.Subscriptions.RenewIfDueAsync(client));
+        Assert.Equal(RenewalOutcome.NotDue, await h.Subscriptions.RenewIfDueAsync(client));
+
+        var renewed = (await h.Subscriptions.GetAsync(client))!;
+        Assert.Equal((h.Time.Now, h.Time.Now.AddMonths(1)), (renewed.CurrentPeriodStart, renewed.CurrentPeriodEnd));
+        Assert.Equal(2, (await h.LedgerAsync(client)).Count(l => l.EntryType == LedgerEntryType.SubscriptionCharge));
+        Assert.Equal(80m, (await h.AccountAsync(client)).WalletBalance);
+        await h.AssertReconciledAsync(client);
+    }
+
+    // QA t2-billing-17: a paid plan with subscribers turned into a trial would end every paying subscription at its period end.
+    [PostgresFact]
+    public async Task APaidPlanWithSubscribers_CantBecomeATrial()
+    {
+        var h = new BillingHarness(_db.ConnectionString);
+        var client = await h.CreateClientAsync();
+        var plan = await h.CreatePlanAsync(price: 0m, credit: 0m);
+        await h.Subscriptions.StartAsync(Start(client, plan));
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            h.Plans.UpdateAsync(plan, new PlanRequest(plan, "Plan", null, 0m, "month", null, null, TrialDays: 7)));
+        Assert.Contains("can't become a trial", ex.Message);
+        Assert.Null((await h.Plans.GetAsync(plan))!.TrialDays);
     }
 }

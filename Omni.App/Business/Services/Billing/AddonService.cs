@@ -4,6 +4,7 @@ using Omni.App.Business.Contracts.Services.Billing;
 using Omni.App.Business.Engines.Billing;
 using Omni.App.Common.Enums;
 using Omni.App.Common.Exceptions;
+using Omni.App.Common.Helpers;
 using Omni.App.Common.Statics;
 using Omni.App.Entities.Dtos.Billing;
 using Omni.App.Entities.Models;
@@ -91,17 +92,24 @@ public partial class AddonService : IAddonService
         if (quantity is < 0 or > MaxQuantity) throw new ArgumentException($"Quantity must be between 0 and {MaxQuantity}.");
         var chargeKey = $"addon:{idempotencyKey}:charge";
         var now = _time.GetUtcNow();
+        code = (code ?? string.Empty).Trim().ToLowerInvariant();
 
         await using var unit = _units.Create();
         await using var tx = await unit.BeginTransactionAsync(ct);
         var account = await unit.Accounts.LockAsync(clientId, _config.BillingCurrency, ct);
-        if (await unit.Ledger.KeyExistsAsync(clientId, chargeKey, ct))
+        if (await unit.Ledger.FindByKeyReadOnlyAsync(clientId, chargeKey, ct) is { } charged)
         {
+            // The charge row remembers what the key bought (QA t2-billing-18): the same key for another add-on or quantity is
+            // refused, never answered as if it had happened. A row from before the quantity was recorded only names the add-on.
+            if (charged.Reference != ChargeReference(code, quantity) && charged.Reference != code)
+            {
+                throw new InvalidOperationException("This idempotency key was already used for a different add-on change.");
+            }
             _logger.LogInformation("Billing: duplicate add-on change {Key} for client {ClientId} ignored.", idempotencyKey, clientId);
             return ToRows(await unit.Addons.ListForClientReadOnlyAsync(clientId, ct));
         }
 
-        var addon = await unit.Addons.GetAsync((code ?? string.Empty).Trim().ToLowerInvariant(), ct)
+        var addon = await unit.Addons.GetAsync(code, ct)
             ?? throw new KeyNotFoundException("Add-on not found.");
         var row = await unit.Addons.GetForClientAsync(clientId, addon.Id, ct);
         var current = row?.Quantity ?? 0;
@@ -114,6 +122,11 @@ public partial class AddonService : IAddonService
             var subscription = await unit.Subscriptions.GetWithPlanAsync(clientId, ct);
             if (subscription is null || subscription.Status is not (SubscriptionStatus.Active or SubscriptionStatus.PastDue))
                 throw new InvalidOperationException("Add-ons need an active subscription: start a plan first.");
+            // Units of a limit the plan already has unlimited buy nothing, so they're never charged (QA t2-billing-06).
+            if (subscription.Plan is { } plan && AddonLimits.IsUnlimited(plan, addon.EntitlementKey))
+            {
+                throw new InvalidOperationException($"The {plan.Name} plan already has no limit on '{addon.EntitlementKey}', so there's nothing to add.");
+            }
             if (!string.Equals(addon.Currency.Trim(), account.Currency.Trim(), StringComparison.Ordinal))
                 throw new InvalidOperationException($"The add-on is priced in {addon.Currency}, but the client's account is in {account.Currency}.");
 
@@ -127,7 +140,7 @@ public partial class AddonService : IAddonService
                 }
                 await BillingLedger.PostAsync(unit, account, LedgerEntryType.AddonCharge, LedgerBalanceType.Wallet, -price, chargeKey,
                     new LedgerContext(source, actor, $"{addon.Name} × {added}", SubscriptionId: subscription.Id,
-                        Reference: addon.Code, CorrelationId: idempotencyKey), now, ct);
+                        Reference: ChargeReference(addon.Code, quantity), CorrelationId: idempotencyKey), now, ct);
             }
         }
 
@@ -177,6 +190,9 @@ public partial class AddonService : IAddonService
         }
         return ToRows(await unit.Addons.ListForClientReadOnlyAsync(clientId, ct));
     }
+
+    /// <summary>An add-on charge's reference: the add-on and the units the client has after it ("extra-user:5").</summary>
+    public static string ChargeReference(string code, int quantity) => $"{code}:{quantity.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
 
     private IReadOnlyList<ClientAddonRow> ToRows(IEnumerable<ClientAddon> addons) => ToRows(addons, _config.BillingAddonsRenewByDefault);
 

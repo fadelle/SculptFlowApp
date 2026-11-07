@@ -52,11 +52,37 @@
   // ---------------------------------------------------------------------
   // API helpers
   // ---------------------------------------------------------------------
+  // A refused request's message: the API's own ({ error }) when it answered; a 403 that isn't the API's (a page from the edge
+  // firewall in front of the app, QA t3-inbox-06) says the network blocked it, so the member can rephrase instead of guessing.
+  function failure(res) {
+    var isJson = (res.headers.get('content-type') || '').indexOf('json') >= 0;
+    if (!isJson && res.status === 403) return Promise.resolve(new Error(omniText.t('common.errors.blockedByFirewall')));
+    return (isJson ? res.json() : Promise.resolve({})).catch(function () { return {}; }).then(function (problem) {
+      return new Error(problem.error || problem.detail || omniText.t('common.errors.requestFailed', [res.status]));
+    });
+  }
+
   function apiGet(path) {
     return fetch(path).then(function (res) {
-      if (!res.ok) throw new Error(omniText.t('common.errors.requestFailed', [res.status]));
+      if (!res.ok) return failure(res).then(function (err) { throw err; });
       return res.json();
     });
+  }
+
+  // A background refresh (SignalR, start-up) that fails says so once, not on every event, until one works again (QA t3-inbox-15:
+  // failures were silent and the Inbox just stopped updating).
+  var refreshFailing = false;
+  function refreshFailed(err) {
+    console.error('[inbox] refresh failed', err);
+    if (refreshFailing) return;
+    refreshFailing = true;
+    showError(omniText.t('inbox.errors.refreshFailed', [err && err.message ? err.message : '']));
+  }
+  function refreshWorked() { refreshFailing = false; }
+
+  // A member's action (take over, return to AI, reopen, close) that fails says why.
+  function actionFailed(err) {
+    showError(omniText.t('inbox.errors.actionFailed', [err && err.message ? err.message : '']));
   }
 
   // A failed send shows as an error toast (the Aurora kit, aurora.js); a plain alert if the kit is missing.
@@ -80,11 +106,7 @@
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body || {})
     }).then(function (res) {
-      if (!res.ok) {
-        return res.json().catch(function () { return {}; }).then(function (problem) {
-          throw new Error(problem.error || problem.detail || omniText.t('common.errors.requestFailed', [res.status]));
-        });
-      }
+      if (!res.ok) return failure(res).then(function (err) { throw err; });
       return res.json().catch(function () { return {}; });
     });
   }
@@ -181,6 +203,7 @@
     var token = ++listRequest;
     var take = Math.min(Math.max(listItems.length, PAGE_SIZE), 200);
     return apiGet(listUrl(0, take)).then(function (page) {
+      refreshWorked();
       if (token !== listRequest) return;
       listItems = page.items || [];
       listTotal = page.totalCount || 0;
@@ -211,7 +234,7 @@
     clearTimeout(searchTimer);
     searchTimer = setTimeout(function () {
       listSearch = searchEl.value.trim();
-      reloadConversationList();
+      reloadConversationList().catch(refreshFailed);
     }, 300);
   });
   function selectTab(btn) {
@@ -221,7 +244,7 @@
   document.querySelectorAll('.inbox-filter').forEach(function (btn) {
     btn.addEventListener('click', function () {
       selectTab(btn);
-      reloadConversationList();
+      reloadConversationList().catch(refreshFailed);
     });
   });
 
@@ -300,7 +323,7 @@
           '</div>' +
         '</div>';
 
-      div.addEventListener('click', function () { selectConversation(c.id); });
+      div.addEventListener('click', function () { selectConversation(c.id).catch(actionFailed); });
       listEl.appendChild(div);
     });
     if (items.length < listTotal) {
@@ -308,7 +331,7 @@
       more.type = 'button';
       more.className = 'au-btn au-btn--text inbox-load-more';
       more.textContent = omniText.plural('inbox.list.showMore', listTotal - items.length);
-      more.addEventListener('click', function () { more.disabled = true; loadMoreConversations(); });
+      more.addEventListener('click', function () { more.disabled = true; loadMoreConversations().catch(function (err) { more.disabled = false; actionFailed(err); }); });
       listEl.appendChild(more);
     }
     renderTimestamps();
@@ -406,16 +429,36 @@
     return '<div class="inbox-msg-source">' + escapeHtml(originLabel(origin)) + '</div>';
   }
 
-  function renderMessages(messages) {
+  // When a message happened: when the customer wrote it or it was sent (the order the server returns them in, QA t3-inbox-16),
+  // else when it was saved.
+  function messageAt(m) { return m.receivedAt || m.sentAt || m.createdAt; }
+
+  // keepPlace: re-rendering the same conversation (a refresh, earlier messages) keeps the reader where they were unless they were
+  // at the newest message; a newly opened conversation starts at the bottom.
+  function renderMessages(messages, hasEarlier, keepPlace) {
+    var fromBottom = messagesEl.scrollHeight - messagesEl.scrollTop;
+    var atBottom = fromBottom - messagesEl.clientHeight < 40;
     messagesEl.innerHTML = '';
+    if (hasEarlier) {
+      // Only the newest messages are loaded; this asks for one more page (QA t3-inbox-16).
+      var earlier = document.createElement('div');
+      earlier.className = 'inbox-earlier';
+      earlier.innerHTML = '<button type="button" class="au-btn au-btn--outlined au-btn--sm">' + escapeHtml(omniText.t('inbox.thread.loadEarlier')) + '</button>';
+      earlier.querySelector('button').addEventListener('click', function (e) {
+        e.currentTarget.disabled = true;
+        threadTake = messages.length + threadPage;
+        refreshCurrentConversation().catch(refreshFailed);
+      });
+      messagesEl.appendChild(earlier);
+    }
     var lastDay = null;
     messages.forEach(function (m) {
-      var day = new Date(m.createdAt).toDateString();
+      var day = new Date(messageAt(m)).toDateString();
       if (day !== lastDay) {
         lastDay = day;
         var divider = document.createElement('div');
         divider.className = 'inbox-day-divider';
-        divider.innerHTML = '<span>' + escapeHtml(formatDay(m.createdAt)) + '</span>';
+        divider.innerHTML = '<span>' + escapeHtml(formatDay(messageAt(m))) + '</span>';
         messagesEl.appendChild(divider);
       }
       // System markers (mode changes, hand-offs) are notes for the team; an automatic message the contact received
@@ -423,7 +466,7 @@
       if (m.origin === 'system' && m.senderType === 'system' && !/"automatic"\s*:\s*true/.test(m.metadataJson || '')) {
         var marker = document.createElement('div');
         marker.className = 'inbox-mode-marker';
-        marker.innerHTML = '<span>' + escapeHtml(markerText(m)) + ' &middot; ' + formatClock(m.createdAt) + '</span>';
+        marker.innerHTML = '<span>' + escapeHtml(markerText(m)) + ' &middot; ' + formatClock(messageAt(m)) + '</span>';
         messagesEl.appendChild(marker);
         return;
       }
@@ -439,12 +482,12 @@
         bubbleLabel(m.origin) +
         '<div class="inbox-msg-content" dir="auto">' + (window.InboxVoice && window.InboxVoice.isVoice(m) ? window.InboxVoice.html(m) : escapeHtml(m.content || '')) + '</div>' +
         failureNote +
-        '<div class="inbox-msg-time" title="' + escapeHtml(formatTime(m.createdAt)) + '">' + formatClock(m.createdAt) + ' ' + tick + '</div>';
+        '<div class="inbox-msg-time" title="' + escapeHtml(formatTime(messageAt(m))) + '">' + formatClock(messageAt(m)) + ' ' + tick + '</div>';
 
       row.appendChild(bubble);
       messagesEl.appendChild(row);
     });
-    messagesEl.scrollTop = messagesEl.scrollHeight;
+    messagesEl.scrollTop = keepPlace && !atBottom ? messagesEl.scrollHeight - fromBottom : messagesEl.scrollHeight;
   }
 
   // ConversationResponse (from the API) doesn't carry contact/service display info — that's a
@@ -502,9 +545,15 @@
   // ---------------------------------------------------------------------
   // Data loading
   // ---------------------------------------------------------------------
+  // How many messages the open conversation shows: null = the server's first page (Inbox / ThreadPageSize); "Show earlier
+  // messages" adds a page (threadPage = the first page's size) and refreshes keep asking for that many.
+  var threadTake = null;
+  var threadPage = 0;
+
   function selectConversation(id) {
     var switchingConversation = id !== currentConversationId;
     currentConversationId = id;
+    if (switchingConversation) threadTake = null;
     emptyEl.hidden = true;
     threadEl.hidden = false;
     shellEl.classList.add('has-thread'); // phones show one pane at a time
@@ -524,10 +573,14 @@
       el.classList.toggle('active', el.getAttribute('data-conversation-id') === id);
     });
 
-    return apiGet(withClient('/api/conversations/' + id)).then(function (result) {
+    var url = '/api/conversations/' + id + (threadTake ? '?take=' + threadTake : '');
+    return apiGet(withClient(url)).then(function (result) {
+      refreshWorked();
+      if (id !== currentConversationId) return; // another conversation was opened meanwhile
+      if (!threadTake) threadPage = result.messages.length;
       currentContactId = result.conversation.contactId;
       renderConversationHeader(result.conversation);
-      renderMessages(result.messages);
+      renderMessages(result.messages, result.hasEarlier, !switchingConversation);
       if (!contactInfoEl.hidden) {
         loadContactInfo(currentContactId); // panel was left open across a refresh — keep it current
       }
@@ -760,19 +813,22 @@
   btnTakeover.addEventListener('click', function () {
     if (!currentConversationId) return;
     apiPost(withClient('/api/conversations/' + currentConversationId + '/take-over'))
-      .then(function () { return Promise.all([refreshCurrentConversation(), loadConversationList()]); });
+      .then(function () { return Promise.all([refreshCurrentConversation(), loadConversationList()]); })
+      .catch(actionFailed);
   });
 
   btnReturnAi.addEventListener('click', function () {
     if (!currentConversationId) return;
     apiPost(withClient('/api/conversations/' + currentConversationId + '/return-to-ai'))
-      .then(function () { return Promise.all([refreshCurrentConversation(), loadConversationList()]); });
+      .then(function () { return Promise.all([refreshCurrentConversation(), loadConversationList()]); })
+      .catch(actionFailed);
   });
 
   btnReopen.addEventListener('click', function () {
     if (!currentConversationId) return;
     apiPost(withClient('/api/conversations/' + currentConversationId + '/reopen'))
-      .then(function () { return Promise.all([refreshCurrentConversation(), loadConversationList()]); });
+      .then(function () { return Promise.all([refreshCurrentConversation(), loadConversationList()]); })
+      .catch(actionFailed);
   });
 
   // "⋯" menu in the thread header.
@@ -798,14 +854,15 @@
     ask(omniText.t('inbox.thread.close'), omniText.t('inbox.thread.closeConfirm'), omniText.t('inbox.thread.close')).then(function (ok) {
       if (!ok) return;
       apiPost(withClient('/api/conversations/' + id + '/close'))
-        .then(function () { return Promise.all([refreshCurrentConversation(), loadConversationList()]); });
+        .then(function () { return Promise.all([refreshCurrentConversation(), loadConversationList()]); })
+        .catch(actionFailed);
     });
   });
 
   // Wire up the server-rendered initial list rows (before any SignalR/refresh replaces them).
   document.querySelectorAll('.inbox-conv-item').forEach(function (el) {
     el.addEventListener('click', function () {
-      selectConversation(el.getAttribute('data-conversation-id'));
+      selectConversation(el.getAttribute('data-conversation-id')).catch(actionFailed);
     });
   });
   renderTimestamps();
@@ -823,9 +880,9 @@
   loadConversationList().then(function () {
     // Deep link from a notification bell click (/inbox?conversationId=...): it opens even when it isn't among the rows loaded.
     var wanted = startQuery.get('conversationId');
-    if (wanted) selectConversation(wanted);
-    else if (listSearch && listItems.length === 1) selectConversation(listItems[0].id);
-  });
+    if (wanted) return selectConversation(wanted);
+    if (listSearch && listItems.length === 1) return selectConversation(listItems[0].id);
+  }).catch(refreshFailed);
 
   // ---------------------------------------------------------------------
   // SignalR — real-time notifications only. Every handler re-fetches from the API rather than
@@ -840,36 +897,36 @@
     connection.on('NewMessage', function (payload) {
       var inOpenConversation = payload && payload.conversationId === currentConversationId;
       if (inOpenConversation) {
-        refreshCurrentConversation();
+        refreshCurrentConversation().catch(refreshFailed);
         // A customer message arriving in the conversation members are looking at is seen immediately.
         if (payload.direction === 'inbound') markRead(currentConversationId);
       }
       // Any other conversation: the refreshed list shows it as unread (badge + bold + tab title).
-      loadConversationList();
+      loadConversationList().catch(refreshFailed);
     });
 
     connection.on('MessageStatusUpdated', function (payload) {
       if (payload && payload.conversationId === currentConversationId) {
-        refreshCurrentConversation();
+        refreshCurrentConversation().catch(refreshFailed);
       }
     });
 
     connection.on('ConversationUpdated', function () {
-      loadConversationList();
+      loadConversationList().catch(refreshFailed);
     });
 
     connection.on('ConversationModeChanged', function (payload) {
-      loadConversationList();
+      loadConversationList().catch(refreshFailed);
       if (payload && payload.conversationId === currentConversationId) {
-        refreshCurrentConversation();
+        refreshCurrentConversation().catch(refreshFailed);
       }
     });
 
     // On reconnect, state may have changed while disconnected — re-read everything from the API
     // rather than assuming we didn't miss anything.
     connection.onreconnected(function () {
-      loadConversationList();
-      refreshCurrentConversation();
+      loadConversationList().catch(refreshFailed);
+      refreshCurrentConversation().catch(refreshFailed);
     });
 
     connection.start().catch(function (err) {

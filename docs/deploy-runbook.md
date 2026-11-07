@@ -221,6 +221,29 @@ W5. **Switching back:** set the switch to `n8n` again on the Configuration page.
     still finishes; new messages, syncs and generations go to n8n. Keep the n8n workflows active until every switch has
     stayed on `code` for a while.
 
+## Database connections and the edge firewall
+
+**Connections (QA t3-inbox-02).** Supabase's session pooler (port 5432) allows `pool_size` clients per database user, 15
+on the current plan. The main app, the admin portal and any tool signed in as the same user share them; above the limit
+the pooler refuses with `EMAXCONNSESSION` and the request that needed a connection fails (500). Each app therefore caps
+its own pool with `Database:MaxPoolSize` (`Database__MaxPoolSize` on Render): main app 10, portal 3, which leaves 2 for
+psql or a dashboard. A full pool waits up to the connection string's `Timeout` (15 s) for a free connection instead of
+failing. A `Maximum Pool Size` written in the connection string itself wins over the setting.
+
+- With a bigger database (a higher `pool_size`, Database → Settings → Connection pooling in Supabase), raise both caps so
+  that together they stay below the new limit, leaving a few for tools.
+- More instances of the main app each open up to their own cap: divide the budget between them.
+- Supabase's transaction pooler (port 6543) shares server connections between more clients. EF Core in this app doesn't
+  prepare statements, which that mode needs; it hasn't been tried here, so test it on staging before using it.
+
+**Edge firewall (QA t3-inbox-06).** Render sits behind Cloudflare, whose managed rules block some requests that look like
+SQL (for example a message `'; drop table x;--` or a search `x' or 1=1 --`) with a 403 page before they reach the app. The
+Inbox and Contacts now tell the member that the network blocked it and to rephrase. A customer's Telegram or WhatsApp
+message blocked this way never reaches the app (the provider keeps retrying and gives up). Those rules aren't in this
+code: check whether Render offers a way to relax them for `/api/integrations/*` (already authenticated by secret or
+signature) and the JSON message endpoints, ask Render support for that exception, or put the app behind an edge whose
+rules you control.
+
 ## First admin on a project without old data
 
 The copy brings the old admins over. On an empty project (schema, seed-config, portal `admin-schema.sql`, no copy), make the

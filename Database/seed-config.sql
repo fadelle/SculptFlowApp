@@ -110,6 +110,7 @@ insert into config.settings (section, key, value, updated_by) values
   ('Integrations', 'TokenRefreshMarginMinutes', '5', 'seed'),
   ('Voice', 'MaxBytes', '10485760', 'seed'),
   ('Dashboard', 'ContactsPageSize', '25', 'seed'),
+  ('Inbox', 'ThreadPageSize', '100', 'seed'),
   ('Localization', 'Languages', 'en,ar,fr', 'seed'),
   ('Localization', 'LanguageCookieDays', '365', 'seed'),
   ('Localization', 'ShowTextKeys', 'false', 'seed'),

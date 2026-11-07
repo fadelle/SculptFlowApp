@@ -26,9 +26,14 @@ worker idles. Plans, rate cards, wallets and account arrangements can be prepare
   (now, or at period end). `past_due` keeps the plan working during grace.
 - Start / change plan (`POST /api/platform-admin/billing/clients/{id}/subscription`, or `Billing:SignupPlanCode` at signup):
   new period from now; wallet pays the price (unless `chargeFirstPeriod=false`); old credit expires; plan credit granted.
-  No proration.
+  No proration. Its start is the subscription's `period_anchor`. Add-ons for a limit the new plan has unlimited end
+  uncharged (`reason: plan_unlimited`, BILLING notice "Add-ons ended: your plan already includes them").
 - Renewal (`BillingMaintenanceWorker`, every few minutes): next contiguous period, the plan's price plus the add-ons set
-  to renew. Can't pay the plan → `past_due`; every run retries, so a top-up renews it. Add-ons at renewal (decided
+  to renew. Periods end a whole number of periods after `period_anchor` (QA t2-billing-19): a month started on Jan 31
+  ends Feb 28, Mar 31, Apr 30, May 31, never drifting to the 30th. A subscription more than a whole period overdue (the worker
+  was down) renews once from now, with a new anchor, instead of charging every missed period in a burst; the
+  `subscription_renewed` event then says `restartedFromNow` and the missed period end. An add-on for a limit the plan now has
+  unlimited ends uncharged (`plan_unlimited`). Can't pay the plan → `past_due`; every run retries, so a top-up renews it. Add-ons at renewal (decided
   2026-11-05): one not set to renew ends at the period's end whatever happens to the plan (row removed, nothing charged,
   `billing_addon_changed` with `reason: not_renewed`); a renewing one is charged with the plan, and one the rest of the
   wallet can't pay ends instead (`reason: insufficient_funds`) so the plan never lapses because of an extra. The client
@@ -38,10 +43,12 @@ worker idles. Plans, rate cards, wallets and account arrangements can be prepare
   moves the client to a paid plan. `Billing:SignupPlanCode` defaults to `trial`, the seeded Free Trial.
 - Add-ons (`billing.addons` catalog, `billing.client_addons` per client, `IAddonService`): extra units of a limit
   (`extra-user` $8, `extra-channel` $5, `extra-ai-bot` $15, `extra-whatsapp-number` $10 per month in the seed). The
-  client's limit is the plan's value + its units (`AddonLimits`; `unlimited` stays unlimited). Added units are charged
+  client's limit is the plan's value + its units (`AddonLimits`; `unlimited` stays unlimited, so units of a limit the
+  plan has unlimited are refused with 422 and never charged, QA t2-billing-06). Added units are charged
   from the wallet at once (`addon_charge`, no proration, refused when the wallet can't pay or there is no active
   subscription); a renewal charges the renewing add-ons with the plan (one `addon_charge` row); removing units refunds
-  nothing. Set from the admin portal: `PUT clients/{id}/addons/{code}` `{ "quantity": 2 }` + `Idempotency-Key`.
+  nothing. Set from the admin portal: `PUT clients/{id}/addons/{code}` `{ "quantity": 2 }` + `Idempotency-Key`. The
+  charge row's reference is `{code}:{quantity}`, so the same key with another add-on or quantity is refused (422).
   Whether an add-on renews (`client_addons.auto_renew`): true / false as the account owner (Settings → Billing) or an
   admin (`PUT clients/{id}/addons/{code}/renewal` `{ "autoRenew": true }`) chose; null follows
   `Billing:AddonsRenewByDefault` (default false: add-ons end at each renewal unless set to renew).
@@ -129,7 +136,8 @@ free text (`[a-z0-9_]+`); a new one needs only rates — and only if Omni charge
 
 One `billing.accounts` row per client: `wallet_balance`, `included_credit_balance`, `reserved_amount`.
 **Spendable = wallet + included credit − reserved.** The wallet and included credit only finance what the client owes
-Omni. Every change is a `billing.ledger_entries` row in the same transaction (append-only), and
+Omni. Every change is a `billing.ledger_entries` row in the same transaction (append-only: a trigger refuses updates and
+deletes, except the cascade when the client itself is deleted, QA t2-billing-20), and
 `GET …/reconciliation` checks they agree. Uncharged usage never creates a ledger row.
 
 ### Rate cards
@@ -157,8 +165,10 @@ Omni. Every change is a `billing.ledger_entries` row in the same transaction (ap
 | `RefundAsync(client, usageId, reason)` | full amount back to where it came from, once | n/a |
 
 **Idempotency.** Same key twice → the first result (`Duplicate = true`). Settle twice → one charge. Settle after release
-(or release after settle) → `Conflict`, nothing changes. Admin top-ups, adjustments and plan starts take an
-`Idempotency-Key` header; renewals derive their keys from the period.
+(or release after settle) → `Conflict`, nothing changes. Admin top-ups, adjustments, plan starts and add-on changes take an
+`Idempotency-Key` header; renewals derive their keys from the period. A key reused for a different operation (another
+amount, plan or add-on quantity) is refused with 422 "already used for a different …", never answered with the old result
+(QA t2-billing-18).
 
 **Concurrency / transactions.** Each operation uses its own unit of work (`IBillingUnitOfWorkFactory.Create()`, its own
 `DbContext`), locks the client's `billing.accounts` row (`unit.Accounts.LockAsync`, `select … for update`), checks
@@ -295,7 +305,9 @@ Changes apply to future usage only; recorded usage keeps its snapshot. Each chan
 
 ## Admin API (all under `/api/platform-admin/billing`, header `X-Platform-Admin-Key`, actor in `X-Admin-Actor`; normally used through the Omni.Admin portal's Billing pages)
 
-Plans: `GET/POST plans`, `GET/PUT plans/{code}`, `PUT plans/{code}/entitlements`, `GET entitlements` ·
+Plans: `GET/POST plans`, `GET/PUT plans/{code}` (name, price and billingPeriod required; a PUT keeps includedUsageCredit,
+isActive, sortOrder and entitlements it leaves out; trialDays null = a normal plan, and a plan with subscribers can't switch
+between trial and paid, 422; QA t2-billing-17), `PUT plans/{code}/entitlements`, `GET entitlements` ·
 Add-ons: `GET addons`, `PUT addons/{code}`, `GET clients/{id}/addons`, `PUT clients/{id}/addons/{code}`,
 `PUT clients/{id}/addons/{code}/renewal` (`{ "autoRenew": true|false|null }`; rows carry `autoRenew` and `renews`) ·
 Rate cards: `GET/POST rate-cards`, `PUT rate-cards/{code}`, `GET/POST rate-cards/{code}/rates`, `POST rates/{id}/close`, `DELETE rates/{id}` (cancels a version that

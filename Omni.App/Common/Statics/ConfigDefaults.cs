@@ -188,6 +188,8 @@ public static class ConfigDefaults
         "Translation review mode: when on, opening any page with ?textKeys=1 shows each text's key after it (until ?textKeys=0). Never works in Production.");
     public static readonly ConfigDefinition DashboardContactsPageSize = new("Dashboard", "ContactsPageSize", "25", ConfigValueType.Int,
         "Contacts per page on the dashboard.", 5, 200);
+    public static readonly ConfigDefinition InboxThreadPageSize = new("Inbox", "ThreadPageSize", "100", ConfigValueType.Int,
+        "Messages an Inbox conversation shows at first (the newest); \"Show earlier messages\" loads this many more. Every refresh re-reads only what is on screen.", 20, 1000);
     public static readonly ConfigDefinition CacheClientsMinutes = new("Cache", "ClientsMinutes", "60", ConfigValueType.Int,
         "Minutes a cached copy is kept: Client rows (signed-in client, the bot's client info). Changes clear it at once; this is only how long an untouched copy lives.", 1, 1440);
     public static readonly ConfigDefinition CacheMembershipsMinutes = new("Cache", "MembershipsMinutes", "10", ConfigValueType.Int,
@@ -377,6 +379,7 @@ public static class ConfigDefaults
         VoiceMaxBytes,
 
         DashboardContactsPageSize,
+        InboxThreadPageSize,
 
         LocalizationLanguages,
         LocalizationLanguageCookieDays,

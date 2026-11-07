@@ -124,6 +124,9 @@ var connectionString = builder.Configuration.GetConnectionString("Postgres")
     ?? throw new InvalidOperationException(
         "Missing ConnectionStrings:Postgres. Set it in appsettings.Development.json " +
         "(local dev) or via user-secrets / environment variables (production, e.g. Supabase).");
+// At most Database:MaxPoolSize connections at once, below the Supabase pooler's client limit, so a burst of webhooks waits for a
+// connection instead of being refused (QA t3-inbox-02). A Maximum Pool Size in the connection string itself wins.
+connectionString = ConnectionPool.WithPoolLimit(connectionString, builder.Configuration.GetValue<int?>("Database:MaxPoolSize"));
 
 // Every save clears the cache keys of the rows it changes (Persistence/Helpers/CacheInvalidationInterceptor).
 builder.Services.AddSingleton<CacheInvalidationInterceptor>();

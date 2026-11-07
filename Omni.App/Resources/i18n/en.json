@@ -375,6 +375,7 @@
   "inbox.thread.info": "Info",
   "inbox.thread.more": "More actions",
   "inbox.thread.close": "Close conversation",
+  "inbox.thread.loadEarlier": "Show earlier messages",
   "inbox.thread.windowClosed": "The 24-hour WhatsApp window is closed. To reach this {contact}, send an approved template.",
   "inbox.composer.placeholder": "Write a reply…",
   "inbox.composer.label": "Your reply",
@@ -814,6 +815,7 @@
   "common.optional": "optional",
   "common.loading": "Loading…",
   "common.errors.requestFailed": "Request failed ({0}).",
+  "common.errors.blockedByFirewall": "The network’s firewall blocked this before it reached Omni, usually because the text looks like code (for example quotes with SQL words). Rephrase it and try again.",
 
   "days.short.sunday": "Sun",
   "days.short.monday": "Mon",
@@ -1765,6 +1767,9 @@
   "inbox.errors.unsupportedEventType": "The event type '{0}' can't create a message.",
   "inbox.errors.externalIdRequired": "A status update needs the provider's message id (externalMessageId).",
   "inbox.errors.channelMismatch": "This conversation is on {1}, so a message for it can't be on {0}.",
+  "inbox.errors.channelNotConnected": "This channel isn’t connected, so a conversation can’t be opened on it. Connect it in Settings → Messaging Integrations first.",
+  "inbox.errors.actionFailed": "That didn’t work: {0}",
+  "inbox.errors.refreshFailed": "The Inbox couldn’t refresh: {0} It tries again with the next update; reload the page if it stays out of date.",
   "inbox.errors.invalidDeliveryStatus": "'{0}' isn't a delivery status. Use sent, delivered, read, failed or deleted.",
   "inbox.errors.statusOnInbound": "A delivery status is only for a message sent to the customer, not for one the customer sent.",
 
@@ -1944,6 +1949,8 @@
   "notifications.billing.addonsEnded.message": "{0} weren't set to renew, so they ended and weren't charged. Set an add-on to renew on Settings → Billing to keep it next time.",
   "notifications.billing.addonsUnpaid.title": "Add-ons ended: not enough balance",
   "notifications.billing.addonsUnpaid.message": "Your plan renewed, but your balance couldn't also pay for {0}, so they ended. Add funds and ask for them again to get them back.",
+  "notifications.billing.addonsIncluded.title": "Add-ons ended: your plan already includes them",
+  "notifications.billing.addonsIncluded.message": "Your plan has no limit on what {0} added, so they ended and are no longer charged.",
 
   "signup.errors.closed": "New sign-ups are closed right now. Contact Omni to get an account.",
   "signup.errors.fullNameRequired": "Enter your full name.",

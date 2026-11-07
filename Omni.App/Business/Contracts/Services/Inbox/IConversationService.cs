@@ -20,8 +20,10 @@ public interface IConversationService
     /// unique index on (client_id, channel, external_thread_id).</summary>
     Task<ConversationResponse> GetOrCreateForContactAsync(Guid clientId, Guid contactId, string channel, string externalThreadId, CancellationToken ct = default);
 
-    Task<(ConversationResponse Conversation, IReadOnlyList<MessageResponse> Messages)?> GetByIdWithMessagesAsync(
-        Guid clientId, Guid id, CancellationToken ct = default);
+    /// <summary>The conversation and its newest <paramref name="take"/> messages (Inbox / ThreadPageSize when null; at most
+    /// 1,000) in thread order, and whether older ones exist.</summary>
+    Task<(ConversationResponse Conversation, IReadOnlyList<MessageResponse> Messages, bool HasEarlier)?> GetByIdWithMessagesAsync(
+        Guid clientId, Guid id, int? take = null, CancellationToken ct = default);
 
     /// <summary>Inbox conversation list (left pane): newest activity first, searched and filtered by tab on the server (QA
     /// t3-inbox-04), with each tab's count and the unread total. An unknown filter is refused.</summary>

@@ -139,6 +139,7 @@ Generated from `Common/Statics/ConfigDefaults`; keep this table in step when you
 | Integrations | TokenRefreshMarginMinutes | 5 | int 0–60 | Calendar and TikTok access tokens are refreshed this long before they expire. |
 | Voice | MaxBytes | 10485760 | int 1024–20971520 | Largest voice note (bytes) the Inbox will download from the provider to play or forward. |
 | Dashboard | ContactsPageSize | 25 | int 5–200 | Contacts per page on the dashboard. |
+| Inbox | ThreadPageSize | 100 | int 20–1000 | Messages an Inbox conversation shows at first (the newest); "Show earlier messages" loads this many more. Every refresh re-reads only what is on screen (at most 1,000), not the whole history. |
 | Localization | Languages | en,ar,fr | string (comma-separated two-letter codes) | Languages the dashboard is offered and shown in. English is always on; a language must also have a strings file (`Resources/i18n/{code}.json`). A user or client whose language is turned off sees the next choice (client default, browser, English). Remove a language here to hold it back. |
 | Localization | LanguageCookieDays | 365 | int 1–3650 | How long a visitor's language choice on the sign-in pages is remembered (`omni.lang` cookie). |
 | Localization | ShowTextKeys | false | bool | Translation review mode: when on, `?textKeys=1` on any page shows each text's key after it (`?textKeys=0` stops). Never works in Production. |
@@ -176,6 +177,8 @@ used, so a change applies at once.
   API and the Configuration page only say whether it is set, the admin audit log never records it, and the manager never
   logs it. The seed script stores it empty; set it on the Configuration page.
 - **Per environment** (appsettings / environment variables): `App:PublicBaseUrl`, `Telegram:ApiBaseUrl`,
+  `Database:MaxPoolSize` (10: the most database connections the app opens at once, kept below the Supabase pooler's
+  client limit with the portal's own cap; it is needed before the database can be read, so it can't be a database setting),
   the n8n webhook URLs, `Meta:AppId` / `GraphApiVersion` / login config ids, the Google, Microsoft and TikTok client ids and
   `TenantId`, `Logging`, `AllowedHosts`.
 - **Structured rules** in appsettings: `Billing:WhatsApp:*` and `Billing:ProviderBilling:Defaults:*` (lists and maps).

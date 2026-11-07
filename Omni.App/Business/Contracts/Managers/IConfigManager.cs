@@ -322,6 +322,10 @@ public interface IConfigManager
     /// <summary>Contacts per page on the dashboard. Default 25.</summary>
     int DashboardContactsPageSize { get; }
 
+    // ---- Inbox
+    /// <summary>Messages an Inbox conversation loads at first and per "Show earlier messages" (Inbox / ThreadPageSize). Default 100.</summary>
+    int InboxThreadPageSize { get; }
+
     // ---- Localization
     /// <summary>Comma-separated languages the dashboard is offered and shown in (LanguagePicker.Enabled reads it; English is
     /// always on). Default "en,ar,fr".</summary>

@@ -14,6 +14,7 @@ using Omni.App.Entities.Responses.Inbox;
 using Omni.App.Persistence.Contracts;
 using Omni.App.Persistence.Contracts.Inbox;
 using Omni.App.Persistence.Contracts.Contacts;
+using Omni.App.Persistence.Contracts.Channels;
 using Omni.App.Entities.Dtos.Notifications;
 using Omni.App.Entities.Dtos.Ui;
 
@@ -30,11 +31,18 @@ public class ConversationService : IConversationService
     private readonly INotificationService _notifications;
     private readonly IInboxSettingsService _inboxSettings;
     private readonly IBusinessTypeService _businessTypes;
+    private readonly IChannelIntegrationRepository _channels;
+    private readonly IConfigManager _config;
+
+    /// <summary>The most messages one thread request returns, whatever was asked.</summary>
+    public const int MaxThreadTake = 1000;
 
     public ConversationService(IConversationRepository conversations, IMessageRepository messages, IContactRepository contacts,
         IUnitOfWork unitOfWork, IInboxNotifier notifier, IEventLogger events, INotificationService notifications,
-        IInboxSettingsService inboxSettings, IBusinessTypeService businessTypes)
+        IInboxSettingsService inboxSettings, IBusinessTypeService businessTypes, IChannelIntegrationRepository channels, IConfigManager config)
     {
+        _channels = channels;
+        _config = config;
         _inboxSettings = inboxSettings;
         _businessTypes = businessTypes;
         _conversations = conversations;
@@ -57,6 +65,13 @@ public class ConversationService : IConversationService
         if (await _contacts.GetAsync(request.ClientId, request.ContactId, ct) is null)
         {
             throw new KeyNotFoundException("contacts.errors.notFound");
+        }
+        // A channel Omni connects (WhatsApp, Telegram, ...) must be connected: a conversation there couldn't send or receive
+        // anything and would sit in the Inbox as an orphan (QA t3-inbox-19).
+        if (ChannelType.All.Contains(request.Channel)
+            && (await _channels.GetReadOnlyAsync(request.ClientId, request.Channel, ct))?.Status != ChannelIntegrationStatus.Connected)
+        {
+            throw new InvalidOperationException("inbox.errors.channelNotConnected");
         }
 
         return await CreateCoreAsync(request, ct);
@@ -148,16 +163,18 @@ public class ConversationService : IConversationService
         return InboxMapper.ToResponse(winner);
     }
 
-    public async Task<(ConversationResponse Conversation, IReadOnlyList<MessageResponse> Messages)?> GetByIdWithMessagesAsync(
-        Guid clientId, Guid id, CancellationToken ct = default)
+    public async Task<(ConversationResponse Conversation, IReadOnlyList<MessageResponse> Messages, bool HasEarlier)?> GetByIdWithMessagesAsync(
+        Guid clientId, Guid id, int? take = null, CancellationToken ct = default)
     {
         var conversation = await _conversations.GetAsync(clientId, id, ct);
 
         if (conversation is null) return null;
 
-        var messages = await _messages.ListForConversationAsync(id, ct);
+        // Only the newest messages (QA t3-inbox-16: every refresh re-read the whole history). The Inbox asks for as many as it
+        // shows, so "Show earlier messages" and refreshes keep what is on screen.
+        var (messages, hasEarlier) = await _messages.ListLatestForConversationAsync(id, Math.Clamp(take ?? _config.InboxThreadPageSize, 1, MaxThreadTake), ct);
 
-        return (InboxMapper.ToResponse(conversation), messages.Select(InboxMapper.ToResponse).ToList());
+        return (InboxMapper.ToResponse(conversation), messages.Select(InboxMapper.ToResponse).ToList(), hasEarlier);
     }
 
     public Task<ConversationListPage> ListAsync(Guid clientId, ConversationListRequest request, CancellationToken ct = default)
