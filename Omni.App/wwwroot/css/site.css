@@ -619,7 +619,10 @@ textarea.text-input { min-height: 0; }
 .seg-opt:focus-within span { box-shadow: var(--au-focus-ring); }
 
 /* Pill filters / tabs above a list (Inbox, Campaigns, Templates, Health, Website pages) */
-.inbox-filters { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+/* One line of filters that scrolls sideways instead of wrapping onto two (QA t3-inbox-20). */
+.inbox-filters { display: flex; flex-wrap: nowrap; gap: 0.3rem; overflow-x: auto; scrollbar-width: none; }
+.inbox-filters::-webkit-scrollbar { display: none; }
+.inbox-filter { flex: 0 0 auto; }
 .inbox-filter {
   display: inline-flex;
   align-items: center;
@@ -721,7 +724,7 @@ textarea.text-input { min-height: 0; }
 .cell-sub { color: var(--text-muted); font-size: 0.78rem; font-weight: 400; }
 td .cell-sub { white-space: nowrap; }
 .cell-err { max-width: 320px; margin-top: 0.2rem; color: var(--tone-error); font-size: 0.78rem; white-space: normal; }
-.row-title { color: var(--text); font-weight: 650; text-decoration: none; }
+.row-title { color: var(--text); font-weight: 650; text-decoration: none; overflow-wrap: anywhere; } /* long names without spaces wrap on phones (QA t5-ops-24) */
 .row-link { cursor: pointer; }
 .row-dim td, .row-dim .row-title { color: var(--text-muted); }
 .row-actions { text-align: end; white-space: nowrap; }
@@ -1278,8 +1281,21 @@ td .cell-sub { white-space: nowrap; }
 /* "Today" / "Yesterday" / date chip between days of messages. position: sticky keeps the current day's chip pinned to
    the top of the thread while scrolling; the next day's chip slides over it (like WhatsApp). */
 .inbox-day-divider { position: sticky; top: 0; z-index: 2; display: flex; justify-content: center; margin: 0.25rem 0; pointer-events: none; }
+/* Phones: a compact thread header leaves room for the messages, and the sticky day pill no longer covers a bubble
+   (QA t3-inbox-20: header and actions took a third of the screen). */
+@media (max-width: 720px) {
+  .inbox-thread-header { gap: 0.4rem; padding: 0.45rem 0.75rem; }
+  .inbox-thread-header .inbox-avatar { width: 30px; height: 30px; font-size: 0.75rem; }
+  .inbox-thread-header .au-btn { padding-inline: 0.55rem; min-height: 30px; font-size: 0.78rem; }
+  .inbox-day-divider { position: static; }
+}
 /* Same minimum width for every chip, so an earlier (wider) date chip pinned underneath never peeks out. */
 .inbox-day-divider span { min-width: 7.5rem; padding: 0.2rem 0.75rem; border: 1px solid var(--border); border-radius: 999px; background: var(--au-paper); box-shadow: var(--au-shadow-paper); color: var(--text-muted); font-size: 0.72rem; font-weight: 650; text-align: center; }
+/* A plan limit the client is over (QA t2-billing-11). */
+.quota-over { border-color: var(--au-error); }
+.quota-over .au-stat__value { color: var(--au-error); }
+.quota-over__hint { color: var(--au-error); }
+
 .inbox-earlier { display: flex; justify-content: center; margin: 0.25rem 0 0.75rem; }
 .inbox-mode-marker { display: flex; align-items: center; gap: 0.6rem; margin: 0.6rem 0; color: var(--text-muted); font-size: 0.75rem; }
 .inbox-mode-marker span { padding: 0.25rem 0.75rem; border: 1px dashed var(--au-input-border-hover); border-radius: 999px; background: var(--au-paper); }
@@ -1296,6 +1312,14 @@ td .cell-sub { white-space: nowrap; }
 .inbox-voice-caption { margin-top: 0.35rem; }
 .inbox-voice-error { font-size: 0.8rem; opacity: 0.75; }
 .inbox-msg-time { margin-top: 0.25rem; font-size: 0.68rem; opacity: 0.75; text-align: end; }
+.inbox-msg-edited { font-style: italic; }
+/* A photo, document, location or contact card in a bubble (QA t10-09). */
+.inbox-attachment { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 6px 10px; border: 1px solid var(--au-border, rgba(0,0,0,.12)); border-radius: 10px; background: rgba(127,127,127,.06); overflow-wrap: anywhere; color: inherit; text-decoration: none; }
+a.inbox-attachment:hover { text-decoration: underline; }
+.inbox-attachment .au-icon { font-size: 18px; flex-shrink: 0; }
+.inbox-attachment-caption { margin-top: 0.35rem; }
+.inbox-composer-window, .inbox-composer-count { font-size: 0.72rem; color: var(--text-muted); white-space: nowrap; }
+.inbox-composer-window.is-soon, .inbox-composer-count.is-over { color: var(--au-error); font-weight: 600; }
 .inbox-msg-tick { font-size: 0.72rem; letter-spacing: -1px; }
 .inbox-msg-tick-read { color: var(--tick-read); opacity: 1; }
 .inbox-msg-tick-failed { color: var(--tone-error); opacity: 1; }
@@ -1464,6 +1488,17 @@ td .cell-sub { white-space: nowrap; }
 /* ---- Business Info: tabs, details form, opening hours (business-info.js) ---- */
 /* Tabs that are separate pages (Business Info) */
 .page-tabs { margin-bottom: 16px; }
+/* A long button label (French "Copier les horaires du lundi sur tous les jours ouverts") wraps instead of widening the page on a
+   phone, which also cut the tabs off (QA t1-accounts-15). */
+.page-tabs { max-width: 100%; }
+/* Members on a phone (QA t1-accounts-16): no empty "Actions" row, and the name cell stacks instead of squeezing. */
+@media (max-width: 720px) {
+  td.cell-empty { display: none; }
+  td.member-cell { display: block; }
+  td.member-cell .kb-title { flex-wrap: wrap; }
+  td.member-cell .cell-sub { margin-top: 4px; text-align: start; }
+}
+#avail-copy { white-space: normal; text-align: start; height: auto; min-height: 32px; max-width: 100%; }
 /* A grey dot after a tab label: that channel isn't connected (Settings → Auto-respond). */
 /* A channel's brand mark inside a tab label (Settings → Auto-respond). */
 .tab-channel-mark { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; margin-inline-end: 6px; border-radius: 6px; color: #fff; /* on a brand colour */ font-size: 0.55rem; font-weight: 800; vertical-align: middle; }
@@ -1688,3 +1723,8 @@ td .cell-sub { white-space: nowrap; }
 .quota-off { color: var(--text-muted); font-size: 0.95rem; font-weight: 500; }
 .feature-chips { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 .feature-chips .badge { display: inline-flex; align-items: center; gap: 0.3rem; }
+
+/* Website source: the pages already in the Knowledge Base, folded to one line (QA t4-ai-13). */
+.website-folded { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 12px 16px; }
+.website-folded > .au-icon { color: var(--au-success, #059669); }
+.import-failures { margin: 0; padding-inline-start: 1.2rem; display: grid; gap: 4px; }

@@ -56,6 +56,13 @@ public class BookingReminderRepository : IBookingReminderRepository
             .SetProperty(r => r.MessageId, messageId)
             .SetProperty(r => r.UpdatedAt, now), ct);
 
+    public async Task<IReadOnlyDictionary<string, int>> CountByStatusSinceAsync(Guid clientId, DateTimeOffset since, CancellationToken ct = default) =>
+        await _db.BookingReminders.AsNoTracking()
+            .Where(r => r.ClientId == clientId && r.CreatedAt >= since)
+            .GroupBy(r => r.Status)
+            .Select(g => new { g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.Key, x => x.Count, ct);
+
     public async Task<IReadOnlyList<BookingReminderRow>> ListForBookingAsync(Guid clientId, Guid bookingId, CancellationToken ct = default) =>
         await _db.BookingReminders.AsNoTracking()
             .Where(r => r.ClientId == clientId && r.BookingId == bookingId)

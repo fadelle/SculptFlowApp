@@ -14,6 +14,24 @@ public class EntitlementDeniedException : InvalidOperationException
     public const string LimitReachedKey = "billing.errors.limitReached";
     public const string InactiveKey = "billing.errors.inactive";
 
+    public const string AdminInactiveSendKey = "billing.errors.admin.inactiveSend";
+    public const string AdminNotIncludedKey = "billing.errors.admin.notIncluded";
+    public const string AdminInactiveFeatureKey = "billing.errors.admin.inactiveFeature";
+    public const string AdminLimitReachedKey = "billing.errors.admin.limitReached";
+    public const string AdminInactiveKey = "billing.errors.admin.inactive";
+
+    /// <summary>The same refusal in an admin's words, for the platform-admin API (QA t6-admin-19: "your plan ... See Settings →
+    /// Billing" — the admin has no Settings page and it isn't their plan). Null for a key without an admin wording.</summary>
+    public static string? AdminKeyFor(string key) => key switch
+    {
+        InactiveSendKey => AdminInactiveSendKey,
+        NotIncludedKey => AdminNotIncludedKey,
+        InactiveFeatureKey => AdminInactiveFeatureKey,
+        LimitReachedKey => AdminLimitReachedKey,
+        InactiveKey => AdminInactiveKey,
+        _ => null
+    };
+
     public EntitlementDeniedException(string entitlement, string message) : base(message)
     {
         Entitlement = entitlement;

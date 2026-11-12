@@ -8,4 +8,8 @@ namespace Omni.App.Business.Contracts.Services.Billing;
 public interface IPlanUsageService
 {
     Task<PlanUsageDto> GetAsync(Guid clientId, ClientBillingSummary summary, CancellationToken ct = default);
+
+    /// <summary>The limits the client is over right now (used above a non-null limit), counted as <see cref="GetAsync"/> does:
+    /// seats, connected channels, WhatsApp numbers and active AI bots (QA t2-billing-11).</summary>
+    Task<IReadOnlyList<PlanQuotaRow>> OverLimitsAsync(Guid clientId, CancellationToken ct = default);
 }

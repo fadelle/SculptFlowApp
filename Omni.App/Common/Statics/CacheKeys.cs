@@ -21,6 +21,9 @@ public static class CacheKeys
     public const string EntitlementsPrefix = "billing:entitlements:";
     public static string Entitlements(Guid clientId) => EntitlementsPrefix + clientId.ToString("N");
     public static readonly TimeSpan EntitlementsTtl = TimeSpan.FromMinutes(10);
+    /// <summary>The billing line on every dashboard page (BillingBannerService, a minute): under the entitlements prefix, so a
+    /// plan's entitlement change clears it too.</summary>
+    public static string BillingBanner(Guid clientId) => EntitlementsPrefix + "banner:" + clientId.ToString("N");
 
     // ---- WhatsApp: which client/connection an incoming Meta webhook belongs to (MetaWebhookProcessor). The whole prefix
     // is removed whenever a channel connection is saved or disconnected.
@@ -37,6 +40,10 @@ public static class CacheKeys
     // every dashboard request for the signed-in client's words and stage labels. Any saved type or stage drops it.
     public const string BusinessTypesPrefix = "core:business-type:";
     public const string BusinessTypes = BusinessTypesPrefix + "all";
+
+    // ---- CRM: a client's own stage labels (QA t12-fix-06), read with the stages on every contacts page. Saving one drops it.
+    public const string ClientStageLabelsPrefix = "crm:stage-labels:";
+    public static string ClientStageLabels(Guid clientId) => ClientStageLabelsPrefix + clientId.ToString("N");
 
     // ---- Core: a client's services, all of them by name (ServiceRepository.ListAsync / GetReadOnlyAsync filter it).
     public const string ServicesPrefix = "core:services:";
@@ -103,6 +110,9 @@ public static class CacheKeys
             case BusinessType:
             case PipelineStage:
                 yield return CacheEviction.Prefix(BusinessTypesPrefix);
+                break;
+            case ClientStageLabel l:
+                yield return CacheEviction.Key(ClientStageLabels(l.ClientId));
                 break;
             case ClientUser m:
                 yield return CacheEviction.Key(Membership(m.UserId));
@@ -175,6 +185,7 @@ public static class CacheKeys
     [
         CacheEviction.Key(Client(clientId)),
         CacheEviction.Key(Services(clientId)),
+        CacheEviction.Key(ClientStageLabels(clientId)),
         CacheEviction.Key(AvailabilityRules(clientId)),
         CacheEviction.Key(BookingSettings(clientId)),
         CacheEviction.Key(InboxSettings(clientId)),

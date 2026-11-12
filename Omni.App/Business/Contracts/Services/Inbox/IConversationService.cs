@@ -61,6 +61,10 @@ public interface IConversationService
     /// t7-01): the same hand-over, logged with reason ai_stopped (and why), one Handoff notification saying so.</summary>
     Task<bool?> HandOverStoppedAiAsync(Guid clientId, Guid conversationId, string? reason, CancellationToken ct = default);
 
+    /// <summary>The bot was asked and never answered (BotNoAnswerWatchdog, QA t9-04): the conversation goes to the team with a
+    /// notice. Null when the conversation is gone; false when it was already with the team.</summary>
+    Task<bool?> HandOverUnansweredAiAsync(Guid clientId, Guid conversationId, CancellationToken ct = default);
+
     /// <summary>A member hands the conversation back — AI may auto-reply again. Throws EntitlementDeniedException (422) when
     /// the client's plan doesn't include the AI assistant, InvalidOperationException (422) when no active bot answers on the
     /// conversation's account (Inbox settings).</summary>

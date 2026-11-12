@@ -34,6 +34,7 @@ public static class BillingModule
         services.AddScoped<IRateCardService, RateCardService>();
         services.AddScoped<IBillingQueryService, BillingQueryService>();
         services.AddScoped<IPlanUsageService, PlanUsageService>();
+        services.AddScoped<IBillingBannerService, BillingBannerService>();
 
         // One billing policy per messaging channel (the channel's own pricing rules).
         services.AddScoped<IChannelBillingPolicy, WhatsAppBillingPolicy>();

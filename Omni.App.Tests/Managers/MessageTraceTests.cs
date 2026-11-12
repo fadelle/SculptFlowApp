@@ -403,9 +403,13 @@ public class MessageTraceAdminTests
     public async Task The_timeline_merges_steps_messages_statuses_billing_events_and_errors_in_order()
     {
         SeedStory();
+        _repo.Setup(r => r.OutcomesReadOnlyAsync(It.Is<IReadOnlyCollection<string>>(ids => ids.Single() == Trace), It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<string, (string Outcome, string? Reason)> { [Trace] = (TraceResults.Replied, null) });
         var trace = await Sut().GetAsync(" " + Trace.ToUpperInvariant() + " ", default);
 
         Assert.Equal((Trace, _clientId, true), (trace.TraceId, trace.ClientId, trace.HasFailure));
+        // The outcome as on the list, so the portal can say why the bot did or didn't answer (QA t6-admin-28).
+        Assert.Equal((TraceResults.Replied, (string?)null), (trace.Outcome, trace.OutcomeReason));
         Assert.Equal([_conversationId], trace.ConversationIds);
         Assert.Equal([_inboundId, _replyId], trace.MessageIds);
         Assert.Equal(T0, trace.StartedAt);

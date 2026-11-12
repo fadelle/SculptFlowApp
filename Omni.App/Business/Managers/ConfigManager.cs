@@ -56,6 +56,8 @@ public class ConfigManager : IConfigManager
     public int BillingRecentTransactions => GetInt(ConfigDefaults.BillingRecentTransactions);
     public bool BillingChargeAiReplies => GetBool(ConfigDefaults.BillingChargeAiReplies);
     public bool BillingAddonsRenewByDefault => GetBool(ConfigDefaults.BillingAddonsRenewByDefault);
+    public int BillingTrialWarningDays => GetInt(ConfigDefaults.BillingTrialWarningDays);
+    public decimal BillingLowBalanceThreshold => GetDecimal(ConfigDefaults.BillingLowBalanceThreshold);
 
     // ---- OptOut
     public bool OptOutEnabled => GetBool(ConfigDefaults.OptOutEnabled);
@@ -143,7 +145,10 @@ public class ConfigManager : IConfigManager
     public int AiTimeoutSeconds => GetInt(ConfigDefaults.AiTimeoutSeconds);
     public int AiMaxConcurrentRuns => GetInt(ConfigDefaults.AiMaxConcurrentRuns);
     public int AiBurstWaitMilliseconds => GetInt(ConfigDefaults.AiBurstWaitMilliseconds);
+    public int AiMaxConcurrentRunsPerClient => GetInt(ConfigDefaults.AiMaxConcurrentRunsPerClient);
+    public bool AiMergeBurstMessages => GetBool(ConfigDefaults.AiMergeBurstMessages);
     public int AiRetryUnansweredAfterSeconds => GetInt(ConfigDefaults.AiRetryUnansweredAfterSeconds);
+    public int AiNoAnswerHandoffMinutes => GetInt(ConfigDefaults.AiNoAnswerHandoffMinutes);
     public decimal AiInputTokenPriceUsdPerMillion => GetDecimal(ConfigDefaults.AiInputTokenPriceUsdPerMillion);
     public decimal AiOutputTokenPriceUsdPerMillion => GetDecimal(ConfigDefaults.AiOutputTokenPriceUsdPerMillion);
     public string BenchmarkGeneratorModel => GetString(ConfigDefaults.BenchmarkGeneratorModel);

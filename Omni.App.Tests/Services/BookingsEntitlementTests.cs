@@ -147,6 +147,9 @@ public class BookingsEntitlementTests
     [InlineData(typeof(Omni.App.Controllers.Client.ServicesController), "Create", EntitlementKeys.Bookings)]
     [InlineData(typeof(Omni.App.Controllers.Client.ServicesController), "Update", EntitlementKeys.Bookings)]
     [InlineData(typeof(Omni.App.Controllers.Client.ServicesController), "SetActive", EntitlementKeys.Bookings)]
+    // QA t5-ops-20: the audience previews size a new campaign, so they need the plan like creating one.
+    [InlineData(typeof(Omni.App.Controllers.Client.CampaignsController), "AudiencePreview", EntitlementKeys.Campaigns)]
+    [InlineData(typeof(Omni.App.Controllers.Client.CampaignsController), "AudiencePreviewContacts", EntitlementKeys.Campaigns)]
     public void Knowledge_website_and_service_writes_need_the_plan_feature(Type controller, string action, string feature)
     {
         // QA t2-billing-03: these wrote (and embedded at Omni's AI cost) without the plan's feature.
@@ -241,7 +244,7 @@ public class BookingsEntitlementTests
         Assert.Equal("Bookings isn't included in your plan. See Settings → Billing.", detail.ErrorMessage);
 
         var calendar = new Mock<ICalendarIntegrationService>();
-        var settings = new Omni.App.Pages.Settings.CalendarIntegrationsModel(ClientContext(client).Object, calendar.Object, TextKit.Localizer(), without.Object).Attach();
+        var settings = new Omni.App.Pages.Settings.CalendarIntegrationsModel(ClientContext(client).Object, calendar.Object, TextKit.Localizer(), without.Object, []).Attach();
         await settings.OnGetAsync(default);
         Assert.False(settings.BookingsIncluded);
         calendar.Verify(c => c.ListAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);

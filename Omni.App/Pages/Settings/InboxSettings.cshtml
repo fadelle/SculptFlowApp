@@ -60,21 +60,18 @@ else
                         }
                     </div>
                     <div class="set-section-body">
-                        <label class="au-check">
-                            <input type="checkbox" class="au-switch" role="switch" name="AiEnabled" value="true" checked="@values.AiEnabled" disabled="@(!settings.PlanIncludesAiBot && !values.AiEnabled)" />
-                            @T["inboxSettings.aiEnabled"]
-                        </label>
+                        @* One choice (QA t7-08): "Your team" is AI off, a bot is AI on with that bot; there is no separate switch to contradict it. *@
                         <div class="au-form-field">
-                            <label class="au-form-label" for="@(idPrefix)-bot">@T["inboxSettings.bot"]</label>
+                            <label class="au-form-label" for="@(idPrefix)-bot">@T["inboxSettings.whoAnswers"]</label>
                             <select name="BotId" id="@(idPrefix)-bot" class="au-select">
-                                <option value="" selected="@(values.BotId is null)">@T["inboxSettings.noBot"]</option>
+                                <option value="" selected="@(!values.AiEnabled || values.BotId is null)">@T["inboxSettings.teamAnswers"]</option>
                                 @foreach (var bot in settings.Bots)
                                 {
-                                    var assigned = values.BotId == bot.Id;
+                                    var assigned = values.AiEnabled && values.BotId == bot.Id;
                                     // Only an active bot can be picked; one that was assigned and later deactivated still shows.
                                     if (bot.Status == BotStatus.Active || assigned)
                                     {
-                                        <option value="@bot.Id" selected="@assigned">@bot.Name@(bot.Status == BotStatus.Active ? "" : " (" + T[BotTextKeys.Status(bot.Status)].Value + ")")</option>
+                                        <option value="@bot.Id" selected="@assigned" disabled="@(!settings.PlanIncludesAiBot && !assigned)">@bot.Name@(bot.Status == BotStatus.Active ? "" : " (" + T[BotTextKeys.Status(bot.Status)].Value + ")")</option>
                                     }
                                 }
                             </select>

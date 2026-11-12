@@ -193,7 +193,8 @@ else
                                         <button type="button" class="au-icon-btn au-icon-btn--xs" data-day-second-remove aria-label="@T["businessInfo.hours.removeSecond"]" title="@T["businessInfo.hours.removeSecond"]"><span class="au-icon" aria-hidden="true">close</span></button>
                                     </span>
                                     <button type="button" class="au-btn au-btn--text au-btn--sm" data-day-second-add hidden="@(d.Start2 is not null)"><span class="au-icon" aria-hidden="true">add</span>@T["businessInfo.hours.addSecond"]</button>
-                                    <span class="field-err" data-day-err hidden>@T["businessInfo.hours.endAfterStart"]</span>
+                                    <span class="text-subtle" data-day-next hidden>@T["businessInfo.hours.nextDay"]</span>
+                                    <span class="field-err" data-day-err hidden>@T["businessInfo.hours.sameTime"]</span>
                                     <span class="field-err" data-day-err2 hidden>@T["businessInfo.hours.secondAfterFirst"]</span>
                                 </span>
                                 <span class="text-subtle week-closed">@T["businessInfo.hours.closed"]</span>

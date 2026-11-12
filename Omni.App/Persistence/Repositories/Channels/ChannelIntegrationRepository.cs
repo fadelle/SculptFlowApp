@@ -61,6 +61,28 @@ public class ChannelIntegrationRepository : IChannelIntegrationRepository
         (await ListForClientReadOnlyAsync(clientId, ct))
             .Count(c => c.Channel != exceptChannel && c.Status == ChannelIntegrationStatus.Connected);
 
+    public async Task<bool> MarkSendProblemAsync(ChannelIntegration integration, string code, string message, DateTimeOffset at, CancellationToken ct = default)
+    {
+        var text = message.Length > 1000 ? message[..1000] : message;
+        var moved = await _db.ChannelIntegrations
+            .Where(c => c.Id == integration.Id && c.HealthLevel != WhatsAppHealthLevel.Problem && c.HealthLevel != WhatsAppHealthLevel.Disconnected)
+            .ExecuteUpdateAsync(s => s.SetProperty(c => c.IsHealthy, false).SetProperty(c => c.HealthLevel, WhatsAppHealthLevel.Problem)
+                .SetProperty(c => c.LastProblemCode, code).SetProperty(c => c.LastProblemMessage, text).SetProperty(c => c.LastError, text)
+                .SetProperty(c => c.UpdatedAt, at), ct) > 0;
+        if (!moved)
+        {
+            // Already a problem: keep its newest words.
+            await _db.ChannelIntegrations.Where(c => c.Id == integration.Id)
+                .ExecuteUpdateAsync(s => s.SetProperty(c => c.LastError, text).SetProperty(c => c.UpdatedAt, at), ct);
+        }
+        if (_cache is not null)
+        {
+            await _cache.RemoveAsync(CacheKeys.ChannelIntegrations(integration.ClientId), ct);
+            await _cache.RemoveAsync(CacheKeys.ChannelIntegration(integration.Id), ct);
+        }
+        return moved;
+    }
+
     public Task TouchLastWebhookAsync(Guid integrationId, DateTimeOffset at, CancellationToken ct = default) =>
         _db.ChannelIntegrations.Where(c => c.Id == integrationId)
             .ExecuteUpdateAsync(s => s.SetProperty(c => c.LastWebhookAt, at), ct);

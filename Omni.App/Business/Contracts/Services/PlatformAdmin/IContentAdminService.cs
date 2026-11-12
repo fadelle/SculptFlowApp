@@ -32,4 +32,10 @@ public interface IContentAdminService
 
     /// <summary>Changes only Top K and minimum similarity; the client's chunking settings stay as they are.</summary>
     Task<PlatformAdminChange> UpdateSearchSettingsAsync(Guid clientId, int topK, double minimumSimilarity, CancellationToken ct);
+
+    /// <summary>Starts the client's Knowledge Base re-index (QA t4-ai-15). 404 for an unknown client, 422 while one runs.</summary>
+    Task<PlatformAdminChange> StartReindexAsync(Guid clientId, CancellationToken ct);
+
+    /// <summary>The client's running or last re-index since the main app started, or null.</summary>
+    Omni.App.Entities.Dtos.Knowledge.KnowledgeReindexProgress? ReindexProgress(Guid clientId);
 }

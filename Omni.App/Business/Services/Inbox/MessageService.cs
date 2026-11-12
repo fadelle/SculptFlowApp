@@ -167,7 +167,7 @@ public class MessageService : IMessageService
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             await _billing.SendFailedAsync(billingHold, ct);
-            await NotifyOutboundFailureAsync(clientId, conversation, ct);
+            // The member who sent it sees the refusal on screen; the whole team isn't told again (QA t8-14).
             throw;
         }
 
@@ -463,8 +463,9 @@ public class MessageService : IMessageService
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             await _billing.SendFailedAsync(billingHold, ct);
-            // A campaign tells the members once for the whole campaign (QA t8-11: one notification per recipient).
-            if (origin != MessageOrigin.Campaign) await NotifyOutboundFailureAsync(clientId, conversation, ct);
+            // Only a send nobody is watching tells the team (a reminder, an automatic message; QA t8-14): a member's own template
+            // send shows its refusal on screen, and a campaign tells the members once for the whole campaign (QA t8-11).
+            if (origin == MessageOrigin.System) await NotifyOutboundFailureAsync(clientId, conversation, ct);
             throw;
         }
 
@@ -847,15 +848,20 @@ public class MessageService : IMessageService
         // equipped to handle. Media/location/contact/reaction messages are saved but never reach
         // the AI "initially" per the event-routing table — extend AiEligibleMessageTypes if/when
         // the AI assistant gains multimodal handling.
+        // An interactive or button reply with no text (a WhatsApp Flows answer) gives the bot nothing to read: it answered
+        // "How can I help you?" to a filled form (QA t10-09). The team sees it in the Inbox.
+        var noText = message.MessageType is "interactive" or "button" && string.IsNullOrWhiteSpace(message.Content);
         var aiEligible = request.EventType == IngestEventType.CustomerMessage
             && conversation.Mode == ConversationMode.Ai
             && (AiEligibleMessageTypes.Contains(message.MessageType) || IsTelegramStart(message)) // /start: the bot greets
+            && !noText
             && optOutKeyword is null;
         if (request.EventType == IngestEventType.CustomerMessage && !aiEligible)
         {
             // Why the bot won't see this message: the most specific reason first.
             var reason = optOutKeyword is not null ? "opt_out_keyword"
-                : modeReason ?? (conversation.Mode != ConversationMode.Ai ? "conversation_in_human_mode" : "message_type_not_supported");
+                : modeReason ?? (conversation.Mode != ConversationMode.Ai ? "conversation_in_human_mode"
+                    : noText ? InteractiveWithoutTextReason : "message_type_not_supported");
             // A conversation that started with the team: why (QA t7-02), so an admin can tell the plan from the account's setting.
             string? startedWithTeam = null;
             if (reason == "conversation_in_human_mode" && firstContactMessage)
@@ -1097,6 +1103,9 @@ public class MessageService : IMessageService
     }
 
     /// <summary>Customer message types the AI assistant is allowed to see — see IngestMessageResult.AiEligible.</summary>
+    /// <summary>The bot.skipped reason for an interactive reply without text (QA t10-09).</summary>
+    public const string InteractiveWithoutTextReason = "interactive_without_text";
+
     private static readonly HashSet<string> AiEligibleMessageTypes = new(StringComparer.OrdinalIgnoreCase) { "text", "interactive", "button" };
     // (A tapped template button reaches the bot as its label, e.g. "Yes, confirm", QA t8-08. Telegram commands arrive as message
     // type "command" and media as "image"/"audio"/…: saved to the Inbox, never to the bot (media hands the conversation to the

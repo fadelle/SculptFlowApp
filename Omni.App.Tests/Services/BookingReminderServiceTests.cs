@@ -23,7 +23,8 @@ public class BookingReminderServiceTests
 
     private BookingReminderService Sut() => new(_reminders.Object, Mock.Of<IContactRepository>(), Mock.Of<IConversationRepository>(),
         Mock.Of<IConversationService>(), _templates.Object, _clients.Object, _entitlements.Object, Mock.Of<IMessageService>(),
-        Mock.Of<IReaderTextFactory>(), _uow.Object, _config.Object, TimeProvider.System, NullLogger<BookingReminderService>.Instance);
+        Mock.Of<IReaderTextFactory>(), _uow.Object, _config.Object, TimeProvider.System, NullLogger<BookingReminderService>.Instance,
+        Mock.Of<IChannelIntegrationRepository>());
 
     [Fact]
     public async Task Without_settings_reminders_are_off_with_24_and_2_hours()

@@ -180,7 +180,7 @@ public class InboxSettingsPageTests
     {
         var bot = Guid.NewGuid();
         var page = Sut(_client);
-        page.ChannelIntegrationId = _account; page.AiEnabled = true; page.BotId = bot; page.AiBotNewConversations = true;
+        page.ChannelIntegrationId = _account; page.BotId = bot; page.AiBotNewConversations = true;
         Assert.IsType<RedirectToPageResult>(await page.OnPostAsync(default));
         _inbox.Verify(i => i.UpdateAccountAsync(_client.Id, _account, new UpdateAccountAiRequest(true, bot, true, false), It.IsAny<CancellationToken>()), Times.Once);
         Assert.Equal("AI settings saved for WhatsApp · +961 70.", page.StatusMessage);
@@ -188,12 +188,23 @@ public class InboxSettingsPageTests
         _inbox.Setup(i => i.UpdateAccountAsync(_client.Id, _account, It.IsAny<UpdateAccountAiRequest>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new ArgumentException("inboxSettings.errors.botRequired"));
         var failing = Sut(_client);
-        failing.ChannelIntegrationId = _account; failing.AiEnabled = true;
+        failing.ChannelIntegrationId = _account; failing.BotId = bot;
         Assert.IsType<PageResult>(await failing.OnPostAsync(default));
         Assert.Equal("Choose the bot that answers before turning AI on.", failing.ErrorMessage);
         Assert.True(failing.FormValues(failing.Settings!.Accounts[0]).AiEnabled);
+        Assert.Equal(bot, failing.FormValues(failing.Settings!.Accounts[0]).BotId);
 
         _inbox.Setup(i => i.UpdateAccountAsync(_client.Id, _account, It.IsAny<UpdateAccountAiRequest>(), It.IsAny<CancellationToken>())).ThrowsAsync(new KeyNotFoundException());
         Assert.IsType<RedirectToPageResult>(await Sut(_client).OnPostAsync(default));
+    }
+
+    [Fact]
+    public async Task Your_team_is_one_choice_that_turns_ai_off()
+    {
+        // QA t7-08: "No bot (your team answers)" with the separate AI switch still on was refused.
+        var page = Sut(_client);
+        page.ChannelIntegrationId = _account; page.BotId = null;
+        Assert.IsType<RedirectToPageResult>(await page.OnPostAsync(default));
+        _inbox.Verify(i => i.UpdateAccountAsync(_client.Id, _account, new UpdateAccountAiRequest(false, null, false, false), It.IsAny<CancellationToken>()), Times.Once);
     }
 }

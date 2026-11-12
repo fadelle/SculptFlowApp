@@ -1,6 +1,7 @@
 using Omni.App.Common.Statics;
 using System.Text.Json;
 using Omni.App.Business.Contracts.Engines.Telegram;
+using Omni.App.Business.Contracts.Jobs;
 using Omni.App.Business.Contracts.HttpClients.N8n;
 using Omni.App.Business.Contracts.Managers;
 using Omni.App.Business.Contracts.Services.Inbox;
@@ -14,7 +15,10 @@ using Omni.App.Entities.Dtos.Monitoring;
 using Omni.App.Entities.Dtos.Telegram;
 using Omni.App.Entities.Models;
 using Omni.App.Entities.Requests.Inbox;
+using Omni.App.Persistence.Contracts;
 using Omni.App.Persistence.Contracts.Channels;
+using Omni.App.Persistence.Contracts.Contacts;
+using Omni.App.Persistence.Contracts.Inbox;
 
 namespace Omni.App.Business.Engines.Telegram;
 
@@ -27,11 +31,22 @@ public class TelegramWebhookProcessor : ITelegramWebhookProcessor
     private readonly IMessageService _messages;
     private readonly ILogger<TelegramWebhookProcessor> _logger;
     private readonly IMessageTracer _tracer;
+    private readonly IMessageRepository? _messageRows;
+    private readonly IContactRepository? _contactRows;
+    private readonly IOptOutService? _optOut;
+    private readonly IUnitOfWork? _unitOfWork;
+    private readonly IAiTriggerDispatchQueue? _deferredTriggers;
 
     public TelegramWebhookProcessor(
         IChannelIntegrationRepository integrations, IAiTriggerNotifier aiTrigger, IContactService contacts, IConversationService conversations, IMessageService messages,
-        ILogger<TelegramWebhookProcessor> logger, IMessageTracer tracer)
+        ILogger<TelegramWebhookProcessor> logger, IMessageTracer tracer, IMessageRepository? messageRows = null, IContactRepository? contactRows = null,
+        IOptOutService? optOut = null, IUnitOfWork? unitOfWork = null, IAiTriggerDispatchQueue? deferredTriggers = null)
     {
+        _deferredTriggers = deferredTriggers;
+        _messageRows = messageRows;
+        _contactRows = contactRows;
+        _optOut = optOut;
+        _unitOfWork = unitOfWork;
         _tracer = tracer;
         _integrations = integrations;
         _aiTrigger = aiTrigger;
@@ -54,6 +69,15 @@ public class TelegramWebhookProcessor : ITelegramWebhookProcessor
         await _integrations.TouchLastWebhookAsync(connectionId, now, ct);
 
         var channelIds = new TraceIds(clientId, Channel: ConversationChannel.Telegram);
+        if (parsed.Message is not null && parsed.Kind is TelegramUpdateKind.EditedMessage or TelegramUpdateKind.BotBlocked or TelegramUpdateKind.BotUnblocked)
+        {
+            var handled = parsed.Kind == TelegramUpdateKind.EditedMessage
+                ? await ApplyEditAsync(clientId, parsed.Message, ct)
+                : await ApplyBlockAsync(clientId, parsed.Message, blocked: parsed.Kind == TelegramUpdateKind.BotBlocked, ct);
+            _tracer.Step(handled ? TraceSteps.WebhookReceived : TraceSteps.WebhookIgnored, handled ? TraceOutcomes.Ok : TraceOutcomes.Skipped, channelIds,
+                detail: new { type = parsed.Kind.ToString(), handled });
+            return new TelegramWebhookResult(handled, parsed.Kind == TelegramUpdateKind.EditedMessage ? "edited_message" : "member_update", false, clientId);
+        }
         if (parsed.Kind != TelegramUpdateKind.CustomerMessage || parsed.Message is null)
         {
             _tracer.Step(TraceSteps.WebhookIgnored, TraceOutcomes.Skipped, channelIds, detail: new { reason = parsed.IgnoredReason });
@@ -119,6 +143,41 @@ public class TelegramWebhookProcessor : ITelegramWebhookProcessor
             ChatMessageId: msg.MessageId);
     }
 
+    /// <summary>An edit of a message Omni has (QA t3-inbox-17): its text becomes the new one, and its metadata says when it was
+    /// edited (the Inbox shows "edited"). An edit of a message Omni never stored is ignored. Never triggers the AI again.</summary>
+    private async Task<bool> ApplyEditAsync(Guid clientId, ParsedTelegramMessage edit, CancellationToken ct)
+    {
+        if (_messageRows is null || _unitOfWork is null) return false;
+        var stored = await _messageRows.FindByExternalIdAsync(clientId, ConversationChannel.Telegram, ExternalMessageId(edit.ChatId.ToString(), edit.MessageId), ct);
+        if (stored is null || stored.Direction != MessageDirection.Inbound) return false;
+        stored.Content = edit.Content;
+        stored.MetadataJson = WithEditedAt(stored.MetadataJson, edit.Timestamp);
+        await _unitOfWork.SaveChangesAsync(ct);
+        return true;
+    }
+
+    /// <summary>The message's metadata with "editedAt": a JSON object gets the property; none becomes {"editedAt": …}; a media
+    /// array (a photo's sizes) is kept as it is, since the media reader needs it.</summary>
+    public static string? WithEditedAt(string? metadata, DateTimeOffset at)
+    {
+        var node = string.IsNullOrWhiteSpace(metadata) ? new System.Text.Json.Nodes.JsonObject() : System.Text.Json.Nodes.JsonNode.Parse(metadata);
+        if (node is not System.Text.Json.Nodes.JsonObject obj) return metadata;
+        obj["editedAt"] = at.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", System.Globalization.CultureInfo.InvariantCulture);
+        return obj.ToJsonString();
+    }
+
+    /// <summary>Blocking the bot opts the contact out (campaigns, reminders and the AI stop; sends would fail anyway), starting
+    /// it again opts them back in: both are the person's own explicit act (QA t3-inbox-17).</summary>
+    private async Task<bool> ApplyBlockAsync(Guid clientId, ParsedTelegramMessage member, bool blocked, CancellationToken ct)
+    {
+        if (_contactRows is null || _optOut is null || _unitOfWork is null) return false;
+        var contact = await _contactRows.FindByExternalIdAsync(clientId, $"telegram:{member.ChatId}", ct);
+        if (contact is null) return false;
+        if (!_optOut.Apply(contact, blocked, blocked ? "telegram_blocked" : "telegram_unblocked")) return false;
+        await _unitOfWork.SaveChangesAsync(ct);
+        return true;
+    }
+
     /// <summary>The stable external id stored on both inbound and outbound Telegram messages.</summary>
     public static string ExternalMessageId(string chatId, long messageId) => $"{chatId}:{messageId}";
 
@@ -156,10 +215,13 @@ public class TelegramWebhookProcessor : ITelegramWebhookProcessor
         if (result.ShouldRunAi && result.ClientId.HasValue && result.ConversationId.HasValue)
         {
             // Same normalized trigger WhatsApp sends — only Channel differs. Never raw Telegram JSON.
-            await _aiTrigger.NotifyAsync(new AiTriggerPayload(
+            var trigger = new AiTriggerPayload(
                 result.ClientId.Value, result.ConversationId.Value, result.ContactId, result.MessageId,
                 Channel: ConversationChannel.Telegram, MessageType: result.MessageType, MessageText: result.Content,
-                SelectedValue: null, SentAt: result.SentAt, ProviderOrder: result.ChatMessageId), ct);
+                SelectedValue: null, SentAt: result.SentAt, ProviderOrder: result.ChatMessageId) { Traceparent = TraceContext.CurrentTraceparent() };
+            // The message is saved: answer Telegram now and let the plan/bot checks and the n8n call run afterwards (QA t3-inbox-22).
+            // Without the queue (tests) or when it is full, trigger inline as before.
+            if (_deferredTriggers?.TryEnqueue(trigger) != true) await _aiTrigger.NotifyAsync(trigger, ct);
         }
 
         return WebhookReceiveOutcome.Accepted;

@@ -47,6 +47,11 @@
     confirm.addEventListener('input', check);
   }
 
+  // The browser's time zone for a new business (QA t5-ops-21: every client started on UTC).
+  document.querySelectorAll('[data-browser-timezone]').forEach(function (input) {
+    try { input.value = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (e) { }
+  });
+
   document.querySelectorAll('[data-auth-form]').forEach(function (form) {
     form.addEventListener('submit', function (e) {
       if (form.dataset.sent) { e.preventDefault(); return; }

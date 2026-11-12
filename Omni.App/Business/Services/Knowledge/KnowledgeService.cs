@@ -123,6 +123,20 @@ public class KnowledgeService : IKnowledgeService
         return ToResponse(doc, pieces.Count);
     }
 
+    public async Task<bool> ReindexAsync(Guid clientId, Guid id, CancellationToken ct = default)
+    {
+        var doc = await _documents.GetAsync(clientId, id, ct);
+        if (doc is null) return false;
+        // Embeddings first, outside the transaction (as ReplaceSourceContentAsync): a provider failure leaves the old chunks.
+        var (pieces, vectors) = await ChunkAndEmbedAsync(clientId, doc.Title, doc.Content, ct);
+
+        await using var tx = await _unitOfWork.BeginTransactionAsync(ct);
+        await _documents.DeleteChunksAsync(doc.Id, ct);
+        await InsertChunksAsync(clientId, doc.Id, pieces, vectors, ct);
+        await tx.CommitAsync(ct);
+        return true;
+    }
+
     private sealed record SourceInfo(string SourceType, string? FileName = null, string? MimeType = null, long? SizeBytes = null, string? SourceUrl = null);
 
     private async Task<KnowledgeDocumentResponse> CreateCoreAsync(

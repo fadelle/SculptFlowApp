@@ -49,7 +49,7 @@ public class N8nKnowledgeBenchmarkGeneratorClient : IKnowledgeBenchmarkGenerator
         string body;
         try
         {
-            using var response = await _http.PostAsJsonAsync(url, payload, JsonOptions, ct);
+            using var response = await N8nWebhook.PostAsync(_http, url, payload, JsonOptions, _configuration, ct);
             body = await response.Content.ReadAsStringAsync(ct);
             if (!response.IsSuccessStatusCode)
             {

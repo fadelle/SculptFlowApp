@@ -27,7 +27,7 @@ public partial class UiTextKeysTests
         new[]
         {
             "terms.", FilterLabelHelper.KeyPrefix, KnowledgeCategory.LabelKeyPrefix,
-            BillingTextHelper.EntitlementKeyPrefix, BillingTextHelper.EventTypeKeyPrefix, BillingTextHelper.LedgerKeyPrefix,
+            BillingTextHelper.EntitlementKeyPrefix, BillingTextHelper.EventTypeKeyPrefix, BillingTextHelper.LedgerKeyPrefix, BillingTextHelper.PlanNameKeyPrefix,
             ReminderText.StatusKeyPrefix, ReminderText.ReasonKeyPrefix, CampaignSkipReason.LabelKeyPrefix, TemplateReasons.LabelKeyPrefix,
             Omni.App.Business.Services.Inbox.MessageService.HandoffReasonKeyPrefix
         }.Any(prefix => key.StartsWith(prefix, StringComparison.Ordinal));
@@ -191,9 +191,12 @@ public partial class UiTextKeysTests
                 Assert.True(source is not null, $"{language}.json has '{key}', which en.json doesn't.");
                 var unknown = TextFormat.PlaceholdersIn(text).Where(p => !p.All(char.IsAsciiDigit) && !TermPlaceholders.Names.Contains(p)).ToList();
                 Assert.True(unknown.Count == 0, $"{language}.json '{key}' uses unknown placeholder(s): {string.Join(", ", unknown)}");
-                // A translation may leave a placeholder out (an Arabic singular needs no count) but never adds one the code
-                // doesn't fill.
-                var extra = TextFormat.PlaceholdersIn(text).Except(TextFormat.PlaceholdersIn(english[source!])).ToList();
+                // A translation may leave a placeholder out (an Arabic singular needs no count) but never adds an argument the
+                // code doesn't fill. Term placeholders ({bookings}, {Contact}) are filled by the localizer for every text and are
+                // checked as known names above, so a language may use another form of a term (French "des {bookings}" where
+                // English says "{Booking} rules"; QA t1-accounts-15).
+                var extra = TextFormat.PlaceholdersIn(text).Where(p => p.All(char.IsAsciiDigit))
+                    .Except(TextFormat.PlaceholdersIn(english[source!])).ToList();
                 Assert.True(extra.Count == 0, $"{language}.json '{key}' uses {string.Join(", ", extra.Select(e => "{" + e + "}"))}, which the English text doesn't.");
             }
         }

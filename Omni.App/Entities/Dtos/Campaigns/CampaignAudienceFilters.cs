@@ -28,14 +28,22 @@ public record CampaignAudienceFilters(
 {
     private static readonly JsonSerializerOptions Options = new(JsonSerializerDefaults.Web);
 
-    /// <summary>Strict check for new campaigns: malformed filters must fail the request instead of silently targeting
-    /// everyone (<see cref="Parse"/> stays lenient so already-stored campaigns keep resolving).</summary>
+    /// <summary>For new filters: a key that isn't one of the filters above is refused (QA t5-ops-09: a typo such as
+    /// "stagekey" was ignored, so the campaign silently targeted every reachable contact).</summary>
+    private static readonly JsonSerializerOptions StrictOptions = new(JsonSerializerDefaults.Web)
+    {
+        UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow
+    };
+
+    /// <summary>Strict check for new campaigns and the audience previews: malformed filters or an unknown filter must fail
+    /// the request instead of silently targeting everyone (<see cref="Parse"/> stays lenient so already-stored campaigns
+    /// keep resolving).</summary>
     public static void Validate(string? json)
     {
         if (string.IsNullOrWhiteSpace(json)) return;
         try
         {
-            if (JsonSerializer.Deserialize<CampaignAudienceFilters>(json, Options) is null)
+            if (JsonSerializer.Deserialize<CampaignAudienceFilters>(json, StrictOptions) is null)
                 throw new ArgumentException("campaigns.errors.audienceInvalid");
         }
         catch (JsonException)

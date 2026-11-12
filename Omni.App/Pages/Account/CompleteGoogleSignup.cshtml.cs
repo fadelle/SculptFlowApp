@@ -33,6 +33,10 @@ public class CompleteGoogleSignupModel : PageModel
         _text = text;
     }
 
+    /// <summary>The browser's time zone (auth.js), so the business starts in it (QA t5-ops-21).</summary>
+    [BindProperty]
+    public string? Timezone { get; set; }
+
     [BindProperty]
     public string ClientName { get; set; } = string.Empty;
 
@@ -70,7 +74,7 @@ public class CompleteGoogleSignupModel : PageModel
         if (info is null) return Redirect("/Account/Login?externalError=unverified");
 
         var result = await _registration.RegisterExternalAsync(new RegisterExternalClientRequest(
-            FullName, ClientName, Email, info.LoginProvider, info.ProviderKey, info.ProviderDisplayName, BusinessTypeCode), ct);
+            FullName, ClientName, Email, info.LoginProvider, info.ProviderKey, info.ProviderDisplayName, BusinessTypeCode, Timezone), ct);
         if (!result.Succeeded)
         {
             ErrorMessage = string.Join(" ", result.Errors.Select(e => _text[e, ClientRegistrationService.MaxNameLength].Value));

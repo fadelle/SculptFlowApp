@@ -161,7 +161,8 @@ public class CachingRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixt
         await using (var db = CachedContext())
         {
             var account = (await Inbox(db).GetAsync(c.Id)).Accounts.Single(a => a.ChannelIntegrationId == whatsApp.Id);
-            Assert.Equal((true, (Guid?)null, AiBotBlockReason.NoBot), (account.AiEnabled, account.BotId, account.BlockReason));
+            // Deleting the bot turns AI off on its accounts (QA t7-08), and the next cached read sees it.
+            Assert.Equal((false, (Guid?)null, AiBotBlockReason.AiDisabled), (account.AiEnabled, account.BotId, account.BlockReason));
             Assert.Equal(1, await db.InboxSettings.CountAsync(s => s.ClientId == c.Id));
         }
 
@@ -171,6 +172,33 @@ public class CachingRepositoryTests(PostgresFixture fixture) : RepoTestBase(fixt
             db.InboxSettings.Add(new InboxSettings { Id = Guid.NewGuid(), ClientId = c.Id, ChannelIntegrationId = whatsApp.Id, CreatedAt = now, UpdatedAt = now });
             await Assert.ThrowsAsync<DuplicateRecordException>(() => new Omni.App.Persistence.Repositories.UnitOfWork(db).SaveChangesAsync());
         }
+    }
+
+    [PostgresFact]
+    public async Task A_send_problem_marks_health_once_and_clears_the_cached_rows()
+    {
+        // QA t8-10: a send that finds the token invalid makes the number's health a problem; cached reads see it at once.
+        var c = MakeClient("Health");
+        var wa = new ChannelIntegration
+        {
+            Id = Guid.NewGuid(), ClientId = c.Id, Channel = ChannelType.WhatsApp, Status = ChannelIntegrationStatus.Connected,
+            IsHealthy = true, HealthLevel = WhatsAppHealthLevel.Healthy, CreatedAt = Now, UpdatedAt = Now
+        };
+        await SeedAsync(c, wa);
+        await using (var db = CachedContext())
+            Assert.Equal(WhatsAppHealthLevel.Healthy, (await new ChannelIntegrationRepository(db, _cache).GetReadOnlyAsync(c.Id, ChannelType.WhatsApp))!.HealthLevel);
+
+        await using (var db = CachedContext())
+        {
+            var repo = new ChannelIntegrationRepository(db, _cache);
+            Assert.True(await repo.MarkSendProblemAsync(wa, "token_invalid", "Bad token", Now));
+            Assert.False(await repo.MarkSendProblemAsync(wa, "token_invalid", "Still bad", Now)); // already a problem: told once
+        }
+
+        await using var read = CachedContext();
+        var after = (await new ChannelIntegrationRepository(read, _cache).GetReadOnlyAsync(c.Id, ChannelType.WhatsApp))!;
+        Assert.Equal((false, WhatsAppHealthLevel.Problem, "token_invalid", "Bad token", "Still bad"),
+            (after.IsHealthy, after.HealthLevel, after.LastProblemCode, after.LastProblemMessage, after.LastError));
     }
 
     [PostgresFact]

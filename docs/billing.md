@@ -40,7 +40,14 @@ worker idles. Plans, rate cards, wallets and account arrangements can be prepare
   gets a BILLING notification for each kind. `subscription_past_due`'s `due` is the plan's price.
 - Trials: a plan with `trial_days` (1–90, price 0) is a free trial. Its period lasts that many days and it never renews:
   at the end the subscription expires (event `subscription_expired` with `trialEnded`), the credit expires, and an admin
-  moves the client to a paid plan. `Billing:SignupPlanCode` defaults to `trial`, the seeded Free Trial.
+  moves the client to a paid plan. `Billing:SignupPlanCode` defaults to `trial`, the seeded Free Trial. A client gets one free
+  trial: starting a trial records `billing.subscriptions.trial_used_at`, and another trial plan is refused ("already had a
+  trial") unless the admin ticks "allow another trial" (`allowAnotherTrial` on the plan start; QA t2-billing-21).
+- What the client sees (QA t2-billing-11 / t2-billing-12): every dashboard page shows a banner while a trial ends within
+  `Billing:TrialWarningDays` (3), after a trial or plan ended or was cancelled, while a renewal is unpaid, and when wallet plus
+  credit is under `Billing:LowBalanceThreshold` (5) (`BillingBannerService`, cached a minute); those state changes also ring
+  the bell. A plan change that leaves the client over a limit (users, bots, channels...) answers `overLimits`; the portal
+  says so and the client's Billing page marks the quota.
 - Add-ons (`billing.addons` catalog, `billing.client_addons` per client, `IAddonService`): extra units of a limit
   (`extra-user` $8, `extra-channel` $5, `extra-ai-bot` $15, `extra-whatsapp-number` $10 per month in the seed). The
   client's limit is the plan's value + its units (`AddonLimits`; `unlimited` stays unlimited, so units of a limit the
@@ -315,8 +322,10 @@ hasn't started: it is deleted and the version before it gets back its end, so th
 upcoming version before its start says to cancel it; QA t2-billing-04) ·
 Provider billing: `GET provider-billing`, `GET clients/{id}/channel-accounts`, `PUT channel-accounts/{id}/provider-billing`,
 `POST channel-accounts/{id}/provider-billing/reset` ·
-Clients: `GET accounts`, `GET clients/{id}`, `POST clients/{id}/subscription` (+ `/cancel`, `/resume`, `/renew`),
-`POST clients/{id}/wallet/top-ups`, `POST clients/{id}/wallet/adjustments` (amounts in whole cents, 400 for more than 2 decimals;
+Clients: `GET accounts`, `GET clients/{id}`, `POST clients/{id}/subscription` (`allowAnotherTrial`; the answer carries
+`overLimits`) (+ `/cancel` (an empty body is fine), `/resume`, `/renew`; QA t2-billing-25),
+`POST clients/{id}/wallet/top-ups`, `POST clients/{id}/wallet/adjustments` (a replayed `Idempotency-Key` answers the first
+entry and the portal doesn't audit it twice, QA t6-admin-09; amounts in whole cents, 400 for more than 2 decimals;
 usage keeps 6 decimals; QA t2-billing-23; at most 100,000 per top-up or adjustment, QA t2-billing-05). Upper bounds
 (`BillingLimits`): plan price and included credit 1,000,000, add-on unit price 1,000,000, rate price or cost 100,000 per unit;
 over them is a 400, not a numeric overflow. Every billing write for an unknown client is a 404 (`BillingAccountRepository.LockAsync`

@@ -16,6 +16,9 @@ public class ClientSubscription
     /// <summary>When the run of periods began: every period ends a whole number of periods after it, so a month started on the
     /// 31st ends on the 30th in September and the 31st again in October (QA t2-billing-19). Null (older rows) = CurrentPeriodStart.</summary>
     public DateTimeOffset? PeriodAnchor { get; set; }
+
+    /// <summary>When the client first started a trial plan; kept through every later plan (QA t2-billing-21: one trial each).</summary>
+    public DateTimeOffset? TrialUsedAt { get; set; }
     /// <summary>Cancel requested: the subscription ends (cancelled) at CurrentPeriodEnd instead of renewing.</summary>
     public bool CancelAtPeriodEnd { get; set; }
     /// <summary>When a renewal first failed for lack of funds; the grace period counts from here.</summary>

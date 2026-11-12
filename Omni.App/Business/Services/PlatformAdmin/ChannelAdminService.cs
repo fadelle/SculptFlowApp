@@ -1,3 +1,4 @@
+using Omni.App.Common.Enums;
 using Omni.App.Business.Contracts.Services.Calendars;
 using Omni.App.Business.Contracts.HttpClients.Meta;
 using Omni.App.Business.Contracts.Services.Channels;
@@ -55,6 +56,15 @@ public class ChannelAdminService : IChannelAdminService
     public Task<List<CalendarRow>> ListCalendarsAsync(Guid? clientId, CancellationToken ct) => _repository.ListCalendarsAsync(clientId, ct);
 
     public Task<List<TikTokRow>> ListTikTokAsync(Guid? clientId, CancellationToken ct) => _repository.ListTikTokAsync(clientId, ct);
+
+    public async Task<ChannelCheckResult> CheckAsync(Guid id, CancellationToken ct)
+    {
+        var row = await _repository.GetChannelAsync(id, ct) ?? throw new KeyNotFoundException("Channel connection not found.");
+        if (row.Channel != ChannelType.WhatsApp) throw new InvalidOperationException("Only a WhatsApp connection can be checked here.");
+        var result = await _channels.CheckWhatsAppAsync(row.ClientId, ct)
+                     ?? throw new InvalidOperationException("This WhatsApp connection isn't connected (no token or number on file).");
+        return result with { ClientId = row.ClientId }; // for the portal's audit entry
+    }
 
     public async Task<PlatformAdminChange> DisconnectAsync(Guid id, CancellationToken ct)
     {

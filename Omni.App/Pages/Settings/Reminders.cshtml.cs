@@ -59,7 +59,11 @@ public class RemindersModel : PageModel
         FirstHoursBefore = settings.FirstHoursBefore;
         SecondHoursBefore = settings.SecondHoursBefore;
         Templates = settings.Templates.ToDictionary(t => t.Key, t => (Guid?)t.Value);
+        Status = await _reminders.GetStatusAsync(clientId.Value, ct);
     }
+
+    /// <summary>What can be sent and what was sent lately (QA t5-ops-07).</summary>
+    public ReminderStatusDto? Status { get; private set; }
 
     public async Task<IActionResult> OnPostAsync(CancellationToken ct)
     {

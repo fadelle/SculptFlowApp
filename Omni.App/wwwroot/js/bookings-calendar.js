@@ -299,7 +299,7 @@
         $('cal-appt-location').textContent = '…';
         $('cal-appt-notes').textContent = '…';
         $('cal-appt-notes-row').hidden = false;
-        $('cal-appt-status').value = a.status;
+        offerStatuses($('cal-appt-status'), a.status);
         $('cal-appt-edit').hidden = !canEdit(a.status);
         $('cal-appt-error').textContent = '';
         $('cal-appt-full').href = '/dashboard/bookings/' + a.id;
@@ -324,6 +324,26 @@
     function closeBooking() {
         state.openBooking = null;
         $('cal-appt-overlay').hidden = true;
+    }
+
+    /** The statuses a member can pick from each status, as BookingStatus.NextFrom on the server (QA t5-ops-03): canceled and
+        rescheduled are final, an outcome can only be corrected, and "rescheduled" is never picked by hand. */
+    var NEXT_STATUS = {
+        booked: ['confirmed', 'attended', 'no_show', 'canceled'],
+        confirmed: ['booked', 'attended', 'no_show', 'canceled'],
+        attended: ['no_show'],
+        no_show: ['attended']
+    };
+
+    function offerStatuses(select, current) {
+        var next = NEXT_STATUS[current] || [];
+        Array.prototype.forEach.call(select.options, function (o) {
+            var offered = o.value === current || next.indexOf(o.value) >= 0;
+            o.hidden = !offered;
+            o.disabled = !offered;
+        });
+        select.value = current;
+        select.disabled = next.length === 0;
     }
 
     /** Only a booked or confirmed booking can be edited (the server refuses the rest). */
@@ -436,7 +456,11 @@
         api('GET', '/api/services').then(function (services) {
             sel.textContent = '';
             sel.appendChild(el('option', { value: '', text: omniText.t('bookings.new.noService') }));
-            services.forEach(function (p) { sel.appendChild(el('option', { value: p.id, text: p.name })); });
+            services.forEach(function (p) {
+                var option = el('option', { value: p.id, text: p.name });
+                if (p.bookingDuration > 0) option.setAttribute('data-duration', String(p.bookingDuration));
+                sel.appendChild(option);
+            });
             if (selectedId && !services.some(function (p) { return p.id === selectedId; })) {
                 sel.appendChild(el('option', { value: selectedId, text: selectedName || omniText.t('contactDetail.noService') }));
             }
@@ -668,6 +692,12 @@
         });
         $('cal-new-time').addEventListener('input', updateRange);
         $('cal-new-duration').addEventListener('input', updateRange);
+        // Choosing a service takes its length (QA t5-ops-19: the dialog kept 30 minutes and stored 14:00-14:30 for a 60-minute service).
+        $('cal-new-service').addEventListener('change', function () {
+            var option = this.options[this.selectedIndex];
+            var minutes = option && option.getAttribute('data-duration');
+            if (minutes) { $('cal-new-duration').value = minutes; updateRange(); }
+        });
 
         $('cal-appt-close').addEventListener('click', closeBooking);
         $('cal-appt-cancel').addEventListener('click', closeBooking);

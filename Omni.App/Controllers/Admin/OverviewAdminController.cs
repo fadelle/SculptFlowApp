@@ -14,11 +14,19 @@ namespace Omni.App.Controllers.Admin;
 public class OverviewAdminController : ControllerBase
 {
     private readonly IOverviewAdminService _overview;
+    private readonly Persistence.Contracts.Monitoring.IPlatformAdminWriteRepository? _writes;
 
-    public OverviewAdminController(IOverviewAdminService overview)
+    public OverviewAdminController(IOverviewAdminService overview, Persistence.Contracts.Monitoring.IPlatformAdminWriteRepository? writes = null)
     {
         _overview = overview;
+        _writes = writes;
     }
+
+    /// <summary>Every write to this API as the main app recorded it (who said they were, from where, the route and its status),
+    /// newest first, 50 a page; also calls that didn't come through the portal (QA t6-admin-23).</summary>
+    [HttpGet("admin-writes")]
+    public async Task<IActionResult> AdminWrites([FromQuery] Guid? clientId, [FromQuery] int page, CancellationToken ct) =>
+        _writes is null ? NotFound() : Ok(await _writes.ListAsync(clientId, page, ct));
 
     [HttpGet("totals")]
     public async Task<IActionResult> Totals(CancellationToken ct) => Ok(await _overview.TotalsAsync(ct));

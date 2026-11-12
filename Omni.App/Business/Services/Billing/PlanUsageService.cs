@@ -69,6 +69,23 @@ public class PlanUsageService : IPlanUsageService
             aiIncluded);
     }
 
+    public async Task<IReadOnlyList<PlanQuotaRow>> OverLimitsAsync(Guid clientId, CancellationToken ct = default)
+    {
+        var plan = await _entitlements.GetAsync(clientId, ct);
+        var seats = await _clients.CountSeatsInUseAsync(clientId, ct) + await _tokens.CountOpenInvitesAsync(clientId, _time.GetUtcNow(), null, ct);
+        var connected = (await _integrations.ListForClientReadOnlyAsync(clientId, ct))
+            .Where(c => c.Status == ChannelIntegrationStatus.Connected).ToList();
+        var activeBots = (await _bots.ListForClientReadOnlyAsync(clientId, ct)).Count(b => b.Status == BotStatus.Active);
+        var rows = new List<PlanQuotaRow>
+        {
+            new(EntitlementKeys.MaxUsers, seats, plan.MaximumUsers),
+            new(EntitlementKeys.MaxChannelConnections, connected.Count, plan.MaximumChannelConnections),
+            new(EntitlementKeys.MaxWhatsAppNumbers, connected.Count(c => c.Channel == ChannelType.WhatsApp), plan.MaximumWhatsAppNumbers),
+            new(EntitlementKeys.MaxAiBots, activeBots, plan.CanUseAiAssistant ? plan.MaximumAiBots : 0),
+        };
+        return rows.Where(q => q.Limit is { } limit && q.Used > limit).ToList();
+    }
+
     /// <summary>The subscription's plan's own limit (with add-ons), as the summary lists it: null = unlimited.</summary>
     private static int? PlanLimit(ClientBillingSummary summary, string key) =>
         summary.Entitlements.FirstOrDefault(e => e.Key == key)?.Value is { } value

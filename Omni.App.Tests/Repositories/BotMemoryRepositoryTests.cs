@@ -71,7 +71,11 @@ public class BotMemoryRepositoryTests(PostgresFixture fixture) : RepoTestBase(fi
         await using (var db = NewContext())
         {
             // Resetting the test conversation (BotTestService.ResetAsync) removes its memory.
+            Assert.True(await new BotMemoryRepository(db).OwnerExistsAsync(session.Id, true));
+            Assert.True(await new BotMemoryRepository(db).OwnerExistsAsync(conversation.Id, false));
+            Assert.False(await new BotMemoryRepository(db).OwnerExistsAsync(conversation.Id, true)); // a key is one kind of owner
             await new BotTestRepository(db).DeleteSessionAsync(c.Id, session.BotId, session.Id);
+            Assert.False(await new BotMemoryRepository(db).OwnerExistsAsync(session.Id, true)); // QA t4-ai-19
             Assert.Empty(await new BotMemoryRepository(db).ListRecentReadOnlyAsync(session.Id, true, 10));
             await db.Conversations.Where(x => x.Id == conversation.Id).ExecuteDeleteAsync();
             Assert.Empty(await new BotMemoryRepository(db).ListRecentReadOnlyAsync(conversation.Id, false, 10));

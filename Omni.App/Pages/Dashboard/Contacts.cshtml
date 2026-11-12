@@ -34,6 +34,13 @@ else
     <div class="au-page-head">
         <p class="au-page-head__sub">@T["contacts.intro"]</p>
         <div class="au-page-head__actions">
+            @* CSV in and out (QA t12-fix-05): import for any member, export of the filtered list for the owner. *@
+            <a href="/dashboard/contacts/import" class="au-btn au-btn--outlined"><span class="au-icon" aria-hidden="true">upload</span>@T["contacts.import.button"]</a> @* icon:upload *@
+            @if (Model.CanExport)
+            {
+                <a href="/dashboard/contacts?handler=Export&Stage=@Uri.EscapeDataString(Model.Stage ?? "")&Search=@Uri.EscapeDataString(Model.Search ?? "")&Source=@Uri.EscapeDataString(Model.Source ?? "")"
+                   class="au-btn au-btn--outlined" download><span class="au-icon" aria-hidden="true">download</span>@T["contacts.export.button"]</a> @* icon:download *@
+            }
             <a href="/dashboard/contacts?add=true" class="au-btn au-btn--primary" data-modal-open="contact-add-overlay"><span class="au-icon" aria-hidden="true">add</span>@T["contacts.add.button"]</a>
         </div>
     </div>

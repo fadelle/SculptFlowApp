@@ -129,7 +129,8 @@ public class MessageServiceTests
         _billing.Verify(b => b.SendFailedAsync(_hold, It.IsAny<CancellationToken>()), Times.Once);
         _billing.Verify(b => b.SentAsync(It.IsAny<MessageBillingHold?>(), It.IsAny<CancellationToken>()), Times.Never);
         _messages.Verify(m => m.Add(It.IsAny<Message>()), Times.Never);
-        _notifications.Verify(n => n.CreateAsync(_clientId, NotificationType.OutboundMessageFailed, It.Is<NotificationText>(t => TextKit.Reads(t, null, "Message failed to send to Ann Lee.")), _contactId, c.Id, null, null, It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
+        // The member saw the refusal on screen: no notice for the whole team (QA t8-14).
+        _notifications.Verify(n => n.CreateAsync(_clientId, NotificationType.OutboundMessageFailed, It.IsAny<NotificationText>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -321,6 +322,10 @@ public class MessageServiceTests
             .ThrowsAsync(new ChannelSendException("rejected"));
         await Assert.ThrowsAsync<ChannelSendException>(() => Sut().SendTemplateAsync(_clientId, c.Id, new SendTemplateMessageRequest(t.Id, null)));
         _billing.Verify(b => b.SendFailedAsync(_hold, It.IsAny<CancellationToken>()), Times.Once);
+        // The member who sent it sees the refusal; the team isn't told (QA t8-14)...
+        _notifications.Verify(n => n.CreateAsync(_clientId, NotificationType.OutboundMessageFailed, It.IsAny<NotificationText>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+        // ...but a reminder nobody is watching is.
+        await Assert.ThrowsAsync<ChannelSendException>(() => Sut().SendReminderTemplateAsync(_clientId, c.Id, t.Id, []));
         _notifications.Verify(n => n.CreateAsync(_clientId, NotificationType.OutboundMessageFailed, It.IsAny<NotificationText>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -378,6 +383,21 @@ public class MessageServiceTests
         var c = Conv(mode);
         var r = await Sut().IngestAsync(Ingest(c.Id, IngestEventType.CustomerMessage, messageType: messageType));
         Assert.Equal(eligible, r.AiEligible);
+    }
+
+    [Theory]
+    [InlineData("interactive", """{"type":"nfm_reply","nfm_reply":{"name":"flow","response_json":"{}"}}""")]
+    [InlineData("button", """{"payload":"x"}""")]
+    public async Task An_interactive_reply_without_text_is_saved_but_not_given_to_the_bot(string messageType, string metadata)
+    {
+        // QA t10-09: a WhatsApp Flows answer has no text, and the bot answered it with "How can I help you?".
+        var c = Conv(ConversationMode.Ai);
+        Message? saved = null;
+        _messages.Setup(m => m.Add(It.IsAny<Message>())).Callback<Message>(m => saved = m);
+        var r = await Sut().IngestAsync(Ingest(c.Id, IngestEventType.CustomerMessage, messageType: messageType) with { Content = null, MetadataJson = metadata });
+        Assert.False(r.AiEligible);
+        Assert.NotNull(saved);
+        Assert.Equal(ConversationMode.Ai, c.Mode); // it stays with the bot for the next message
     }
 
     [Fact]

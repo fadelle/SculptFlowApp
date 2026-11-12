@@ -72,7 +72,10 @@ public sealed class DatabaseLogger : ILogger
         if (!category.StartsWith("Microsoft.EntityFrameworkCore", StringComparison.Ordinal)) return false;
         for (var e = exception; e is not null; e = e.InnerException)
         {
-            if (e is Npgsql.PostgresException { SqlState: Npgsql.PostgresErrorCodes.UniqueViolation }) return true;
+            // Also the overlap (exclusion) and missing-reference violations the app maps to 409 / 400 (QA t2-billing-25: an
+            // overlapping booking wrote two Error rows for an answer that was a plain 409).
+            if (e is Npgsql.PostgresException { SqlState: Npgsql.PostgresErrorCodes.UniqueViolation or Npgsql.PostgresErrorCodes.ExclusionViolation
+                    or Npgsql.PostgresErrorCodes.ForeignKeyViolation }) return true;
         }
         return false;
     }

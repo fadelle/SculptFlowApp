@@ -181,6 +181,44 @@ public class ChannelIntegrationService : IChannelIntegrationService
         return ToResponse(row);
     }
 
+    public async Task<Entities.Dtos.PlatformAdmin.ChannelCheckResult?> CheckWhatsAppAsync(Guid clientId, CancellationToken ct = default)
+    {
+        var row = await _integrations.GetAsync(clientId, ChannelType.WhatsApp, ct);
+        if (row is not { Status: ChannelIntegrationStatus.Connected } || string.IsNullOrWhiteSpace(row.AccessToken) || string.IsNullOrWhiteSpace(row.PhoneNumberId))
+        {
+            return null;
+        }
+        var now = DateTimeOffset.UtcNow;
+        Entities.Dtos.PlatformAdmin.ChannelCheckResult result;
+        try
+        {
+            var info = await _graph.GetWhatsAppPhoneNumberAsync(row.PhoneNumberId, row.AccessToken, ct);
+            if (info is null)
+            {
+                row.LastError = "Meta answered without the phone number: the number may have been removed from the account.";
+                result = new(false, null, null, row.LastError, now);
+            }
+            else
+            {
+                row.LastVerifiedAt = now;
+                row.LastError = null;
+                result = new(true, info.DisplayPhoneNumber, info.VerifiedName, null, now);
+            }
+        }
+        catch (MetaGraphApiException ex)
+        {
+            // Meta's own words, never the raw JSON; column-sized.
+            var reason = ex.UserMessage ?? (ex.ErrorCode == 190 ? "The access token is invalid or expired." : "Meta refused the check.");
+            row.LastError = reason.Length > 500 ? reason[..500] : reason;
+            result = new(false, null, null, row.LastError, now);
+        }
+        WhatsAppHealthService.Refresh(row);
+        row.UpdatedAt = now;
+        await _unitOfWork.SaveChangesAsync(ct);
+        await _cache.RemoveByPrefixAsync(CacheKeys.WhatsAppRoutingPrefix, ct);
+        return result;
+    }
+
     public async Task DisconnectAsync(Guid clientId, string channel, CancellationToken ct = default)
     {
         if (!ChannelType.All.Contains(channel))

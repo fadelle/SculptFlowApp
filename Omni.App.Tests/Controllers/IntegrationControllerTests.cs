@@ -30,6 +30,17 @@ internal static class ControllerTestKit
         new ConfigurationBuilder().AddInMemoryCollection(values.ToDictionary(v => v.Key, v => v.Value)).Build();
 
     /// <summary>Runs an action filter against a request and reports whether the action ran and which result the filter set.</summary>
+    /// <summary>Runs an authorization filter against a request: the action would run when the filter set no result.</summary>
+    public static async Task<(bool ActionRan, IActionResult? Result)> RunAsync(IAsyncAuthorizationFilter filter, IConfiguration configuration, Action<HttpRequest>? request = null)
+    {
+        var http = new DefaultHttpContext { RequestServices = new ServiceCollection().AddSingleton(configuration).BuildServiceProvider() };
+        request?.Invoke(http.Request);
+        var context = new AuthorizationFilterContext(new ActionContext(http, new RouteData(), new ActionDescriptor()), new List<IFilterMetadata>());
+        await filter.OnAuthorizationAsync(context);
+        return (context.Result is null, context.Result);
+    }
+
+    /// <summary>Runs an action filter against a request and reports whether the action ran and which result the filter set.</summary>
     public static async Task<(bool ActionRan, IActionResult? Result)> RunAsync(IAsyncActionFilter filter, IConfiguration configuration, Action<HttpRequest>? request = null)
     {
         var http = new DefaultHttpContext { RequestServices = new ServiceCollection().AddSingleton(configuration).BuildServiceProvider() };
@@ -86,6 +97,16 @@ public class AuthorizationFilterTests
         (ran, result) = await ControllerTestKit.RunAsync(filter, cfg, r => r.Headers[RequirePlatformAdminKeyAttribute.HeaderName] = "admin-key");
         Assert.True(ran);
         Assert.Null(result);
+    }
+
+    [Fact]
+    public void Key_filters_run_before_model_binding_and_validation()
+    {
+        // QA t4-ai-08 / t6-admin-08: as action filters they ran after [ApiController]'s validation, so a caller without the
+        // key got a 400 listing the request's fields (and internal type names) instead of a 401.
+        Assert.IsAssignableFrom<IAsyncAuthorizationFilter>(new RequireIngestKeyAttribute());
+        Assert.IsAssignableFrom<IAsyncAuthorizationFilter>(new RequirePlatformAdminKeyAttribute());
+        Assert.False(new RequireIngestKeyAttribute() is IAsyncActionFilter);
     }
 
     [Fact]
@@ -216,7 +237,8 @@ public class WebhookControllerTests
         var controller = new MessagesController(messages.Object).With();
         var request = new IngestMessageRequest(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), IngestEventType.CustomerMessage, "whatsapp", "hi", null, null, null, null);
         messages.Setup(m => m.IngestAsync(request, It.IsAny<CancellationToken>())).ReturnsAsync(new IngestMessageResult(false, false, null));
-        Assert.IsType<NotFoundObjectResult>((await controller.Ingest(request, default)).Result);
+        var notFound = Assert.IsType<NotFoundObjectResult>((await controller.Ingest(request, default)).Result);
+        Assert.Contains("conversation_required", System.Text.Json.JsonSerializer.Serialize(notFound.Value)); // QA t8-04: says why
         messages.Setup(m => m.IngestAsync(request, It.IsAny<CancellationToken>())).ReturnsAsync(new IngestMessageResult(true, false, null, "ai", true));
         Assert.True(((IngestMessageResult)Assert.IsType<OkObjectResult>((await controller.Ingest(request, default)).Result).Value!).AiEligible);
 

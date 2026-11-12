@@ -75,7 +75,7 @@ else
             @if ((unhealthy || failed) && !string.IsNullOrEmpty(info?.LastProblemMessage))
             {
                 <div class="int-strip int-strip-problem">
-                    <div><span class="cell-sub">@T["integrations.strip.problem"]</span><span class="int-val">@info.LastProblemMessage</span></div>
+                    <div><span class="cell-sub">@T["integrations.strip.problem"]</span><span class="int-val">@StoredText.Show(info.LastProblemMessage, T)</span></div>
                 </div>
             }
             else if (pending)
@@ -126,6 +126,10 @@ else
                         <input type="hidden" name="provider" value="@provider" />
                         <button type="submit" class="au-btn au-btn--text au-btn--sm">@T["integrations.action.reset"]</button>
                     </form>
+                }
+                else if (!connected && Model.NotSetUp.Contains(provider))
+                {
+                    <span class="cell-sub">@T["calendars.notSetUp", shortName]</span>
                 }
                 else if (!connected)
                 {

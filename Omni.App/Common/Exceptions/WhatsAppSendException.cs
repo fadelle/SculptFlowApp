@@ -35,6 +35,19 @@ public class WhatsAppSendException : ChannelSendException
             or 133010 or 132001 or 132015 or 132016
         : HttpStatus is 401 or 403 or >= 500);
 
+    /// <summary>The connection itself is broken (QA t8-10): the access token (0, 190, 102; or HTTP 401 without a code), its permissions
+    /// (3, 10, 200-299; or 403) or the account / number (368, 131031, 131042, 131045, 133010). Unlike a template or a Meta outage,
+    /// these mean the number's health is a problem until someone reconnects it. Null when it isn't one.</summary>
+    public string? ConnectionProblemCode => ErrorCode switch
+    {
+        0 or 190 or 102 => "token_invalid",
+        3 or 10 or (>= 200 and <= 299) => "permission_missing",
+        368 or 131031 or 131042 or 131045 or 133010 => "account_problem",
+        null when HttpStatus == 401 => "token_invalid",
+        null when HttpStatus == 403 => "permission_missing",
+        _ => null
+    };
+
     /// <summary>Meta's rate limits (4, 80007 the app or account; 130429 the number's throughput; 131048 spam rate limit): sending
     /// later works.</summary>
     public bool IsRateLimited => ErrorCode is 4 or 80007 or 130429 or 131048;

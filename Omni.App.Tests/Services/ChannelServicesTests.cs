@@ -21,6 +21,36 @@ public class ChannelIntegrationServiceTests
         new(client, channel, "Page", "pn", "waba", "page1", "ig1", token, verify, pin);
 
     [Fact]
+    public async Task Checking_the_stored_whatsapp_token_records_the_answer_and_a_refusal_shows_in_the_health()
+    {
+        // QA t8-20: the admin could only paste a token; the stored one was never checked, and "healthy" sat next to a last error.
+        var row = new ChannelIntegration
+        {
+            Id = Guid.NewGuid(), ClientId = _clientId, Channel = ChannelType.WhatsApp, Status = ChannelIntegrationStatus.Connected,
+            AccessToken = "stored", PhoneNumberId = "P1", LastError = "[QA] token expired", HealthLevel = WhatsAppHealthLevel.Healthy, IsHealthy = true
+        };
+        _repo.Setup(r => r.GetAsync(_clientId, ChannelType.WhatsApp, It.IsAny<CancellationToken>())).ReturnsAsync(row);
+        _graph.Setup(g => g.GetWhatsAppPhoneNumberAsync("P1", "stored", It.IsAny<CancellationToken>())).ReturnsAsync(new WhatsAppPhoneNumberInfo("+961 70 000000", "Glow"));
+
+        var ok = await Sut().CheckWhatsAppAsync(_clientId);
+        Assert.Equal((true, "+961 70 000000", "Glow"), (ok!.Ok, ok.DisplayPhoneNumber, ok.VerifiedName));
+        Assert.Null(row.LastError);
+        Assert.NotNull(row.LastVerifiedAt);
+        Assert.Equal(WhatsAppHealthLevel.Healthy, row.HealthLevel);
+
+        _graph.Setup(g => g.GetWhatsAppPhoneNumberAsync("P1", "stored", It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new MetaGraphApiException("raw", 401, 190, "Error validating access token: Session has expired."));
+        var refused = await Sut().CheckWhatsAppAsync(_clientId);
+        Assert.False(refused!.Ok);
+        Assert.Equal("Error validating access token: Session has expired.", row.LastError);
+        Assert.Equal(WhatsAppHealthLevel.Warning, row.HealthLevel); // never "healthy" next to a last error
+        _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Exactly(2));
+
+        row.Status = ChannelIntegrationStatus.Disconnected;
+        Assert.Null(await Sut().CheckWhatsAppAsync(_clientId));
+    }
+
+    [Fact]
     public async Task Connected_channels_come_from_the_cached_read_and_skip_disconnected_ones()
     {
         _repo.Setup(r => r.ListForClientReadOnlyAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(new List<ChannelIntegration>

@@ -47,6 +47,26 @@ public class ApiErrorsTests
         Assert.Equal("Your plan doesn't include campaigns.", result.Value!.GetType().GetProperty("error")!.GetValue(result.Value));
     }
 
+    [Theory]
+    [InlineData("/api/platform-admin/contacts/x/mode", "The client's plan doesn't include")]
+    [InlineData("/api/campaigns", "isn't included in your plan")]
+    public void A_plan_refusal_on_the_admin_api_speaks_to_the_admin(string path, string expected)
+    {
+        // QA t6-admin-19: the admin read "your plan ... See Settings -> Billing".
+        var http = new DefaultHttpContext { RequestServices = new Microsoft.Extensions.DependencyInjection.ServiceCollection()
+            .AddSingleton<Microsoft.Extensions.Localization.IStringLocalizer>(TextKit.Localizer()).BuildServiceProvider() };
+        http.Request.Path = path;
+        var context = new ExceptionContext(new ActionContext(http, new RouteData(), new ActionDescriptor()), [])
+        {
+            Exception = new EntitlementDeniedException(EntitlementKeys.AiAssistant, EntitlementDeniedException.NotIncludedKey).WithArgs("AI assistant")
+        };
+
+        new ApiErrorsAttribute().OnException(context);
+
+        var error = (string)Assert.IsType<ObjectResult>(context.Result).Value!.GetType().GetProperty("error")!.GetValue(Assert.IsType<ObjectResult>(context.Result).Value)!;
+        Assert.Contains(expected, error);
+    }
+
     [Fact]
     public void A_booking_rule_the_member_may_override_answers_422_with_its_code()
     {
@@ -62,6 +82,9 @@ public class ApiErrorsTests
         Assert.Equal(422, result.StatusCode);
         Assert.Equal("booking_rules", result.Value!.GetType().GetProperty("code")!.GetValue(result.Value));
         Assert.Equal(409, ApiErrorsAttribute.StatusFor(new OverlappingRecordException("bookings.errors.overlap")));
+        // No connected WhatsApp number is the client's setup, a 409, not a provider failure (QA t8-18).
+        Assert.Equal(409, ApiErrorsAttribute.StatusFor(new WhatsAppSendException(WhatsAppSendException.NotConnectedKey)));
+        Assert.Equal(502, ApiErrorsAttribute.StatusFor(new WhatsAppSendException("Meta said no", 400, 131026, null)));
     }
 
     [Fact]

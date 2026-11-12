@@ -68,6 +68,14 @@ public class BookingRepository : IBookingRepository
             .OrderBy(a => a.ScheduledStart)
             .ToListAsync(ct);
 
+    public async Task<IReadOnlyDictionary<Guid, int>> CountUpcomingByServiceAsync(Guid clientId, DateTimeOffset now, CancellationToken ct = default) =>
+        await _db.Bookings.AsNoTracking()
+            .Where(a => a.ClientId == clientId && a.ServiceId != null && a.ScheduledStart >= now
+                && (a.Status == BookingStatus.Booked || a.Status == BookingStatus.Confirmed))
+            .GroupBy(a => a.ServiceId!.Value)
+            .Select(g => new { g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.Key, x => x.Count, ct);
+
     public Task<int> CountNeedingOutcomeAsync(Guid clientId, DateTimeOffset now, CancellationToken ct = default) =>
         _db.Bookings.CountAsync(a => a.ClientId == clientId && a.ScheduledStart < now
             && (a.Status == BookingStatus.Booked || a.Status == BookingStatus.Confirmed), ct);

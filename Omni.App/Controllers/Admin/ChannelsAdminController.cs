@@ -42,6 +42,10 @@ public class ChannelsAdminController : ControllerBase
     public async Task<IActionResult> Disconnect(Guid id, CancellationToken ct) => Ok(await _channels.DisconnectAsync(id, ct));
 
     /// <summary>Platform-admin diagnostic: what Meta says about an access token or an embedded-signup code.</summary>
+    /// <summary>Checks the stored WhatsApp token with Meta and records the result (QA t8-20).</summary>
+    [HttpPost("{id:guid}/check")]
+    public async Task<IActionResult> Check(Guid id, CancellationToken ct) => Ok(await _channels.CheckAsync(id, ct));
+
     [HttpPost("whatsapp/debug-token")]
     public async Task<IActionResult> DebugWhatsAppToken([FromBody] DebugTokenRequest request, CancellationToken ct) =>
         Ok(await _channels.DebugWhatsAppTokenAsync(request, ct));

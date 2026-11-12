@@ -1,3 +1,4 @@
+using Omni.App.Business.Contracts.Jobs;
 using Omni.App.Business.Contracts.Managers;
 using Omni.App.Business.Contracts.Services.Knowledge;
 using Omni.App.Business.Engines.Knowledge;
@@ -25,8 +26,12 @@ public class KnowledgeSettingsService : IKnowledgeSettingsService
     private readonly IConfiguration _configuration;
     private readonly IConfigManager _config;
 
-    public KnowledgeSettingsService(IKnowledgeSettingsRepository settings, IUnitOfWork unitOfWork, IConfiguration configuration, IConfigManager config)
+    private readonly IKnowledgeReindexQueue? _reindex;
+
+    public KnowledgeSettingsService(IKnowledgeSettingsRepository settings, IUnitOfWork unitOfWork, IConfiguration configuration, IConfigManager config,
+        IKnowledgeReindexQueue? reindex = null)
     {
+        _reindex = reindex;
         _settings = settings;
         _unitOfWork = unitOfWork;
         _configuration = configuration;
@@ -78,12 +83,16 @@ public class KnowledgeSettingsService : IKnowledgeSettingsService
 
         var row = await _settings.GetAsync(clientId, ct)
                   ?? throw new InvalidOperationException("Couldn't load Knowledge Base settings."); // text-ok: internal invariant
+        var chunkingChanged = row.ChunkSizeTokens != request.ChunkSizeTokens || row.ChunkOverlapTokens != request.ChunkOverlapTokens;
         row.ChunkSizeTokens = request.ChunkSizeTokens;
         row.ChunkOverlapTokens = request.ChunkOverlapTokens;
         row.TopK = request.TopK;
         row.MinimumSimilarity = request.MinimumSimilarity;
         row.UpdatedAt = DateTimeOffset.UtcNow;
         await _unitOfWork.SaveChangesAsync(ct);
+        // New chunk sizes apply to what is already there too, in the background (QA t4-ai-15: re-save each entry by hand).
+        // Top K and the similarity cut-off are read at search time: nothing to redo.
+        if (chunkingChanged) _reindex?.Start(clientId, row.UpdatedAt);
         return ToResponse(row);
     }
 

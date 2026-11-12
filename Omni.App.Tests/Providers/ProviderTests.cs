@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using System.Net;
 using System.Text;
 using System.Text.Json;
@@ -148,6 +149,40 @@ public class WhatsAppServiceAndSenderTests
         Assert.Equal("meta-id", await Sut().SendTextMessageAsync(_clientId, "961", "hi"));
         Assert.Equal("meta-tpl", await Sut().SendTemplateMessageAsync(_clientId, "961", "promo", "en", ["a"]));
     }
+
+    [Theory]
+    [InlineData(401, "{\"error\":{\"message\":\"Bad token\",\"code\":190}}", true)]
+    [InlineData(400, "{\"error\":{\"message\":\"Template paused\",\"code\":132015}}", false)]
+    [InlineData(400, "{\"error\":{\"message\":\"Undeliverable\",\"code\":131026}}", false)]
+    public async Task A_send_that_finds_the_connection_broken_tells_the_health_service(int status, string body, bool recorded)
+    {
+        // QA t8-10: an expired token left the number "Healthy" while every message failed.
+        Connected();
+        var failure = WhatsAppSendException.FromResponse(status, "Reason", body);
+        _meta.Setup(p => p.SendTextAsync(It.IsAny<ChannelIntegration>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>())).ThrowsAsync(failure);
+        _meta.Setup(p => p.SendTemplateAsync(It.IsAny<ChannelIntegration>(), It.IsAny<string>(), It.IsAny<WhatsAppTemplateSend>(), It.IsAny<CancellationToken>())).ThrowsAsync(failure);
+        var health = new Mock<IWhatsAppHealthService>();
+        var scopes = new ServiceCollection().AddScoped(_ => health.Object).BuildServiceProvider().GetRequiredService<IServiceScopeFactory>();
+        var sut = new WhatsAppService(_integrations.Object, _meta.Object, scopes);
+
+        Assert.Same(failure, await Assert.ThrowsAsync<WhatsAppSendException>(() => sut.SendTextMessageAsync(_clientId, "961", "hi")));
+        Assert.Same(failure, await Assert.ThrowsAsync<WhatsAppSendException>(() => sut.SendTemplateMessageAsync(_clientId, "961", "promo", "en", [])));
+
+        health.Verify(h => h.RecordSendFailureAsync(It.IsAny<ChannelIntegration>(), failure, It.IsAny<CancellationToken>()), recorded ? Times.Exactly(2) : Times.Never());
+    }
+
+    [Theory]
+    [InlineData(190, null, "token_invalid")]
+    [InlineData(102, null, "token_invalid")]
+    [InlineData(200, null, "permission_missing")]
+    [InlineData(131031, null, "account_problem")]
+    [InlineData(null, 401, "token_invalid")]
+    [InlineData(null, 403, "permission_missing")]
+    [InlineData(132001, null, null)]
+    [InlineData(131016, null, null)]
+    [InlineData(null, 500, null)]
+    public void Only_a_broken_connection_has_a_problem_code(int? metaCode, int? httpStatus, string? expected) =>
+        Assert.Equal(expected, new WhatsAppSendException("x", httpStatus ?? 400, metaCode, null).ConnectionProblemCode);
 
     [Fact]
     public async Task Sending_is_refused_when_not_connected_or_not_ready()

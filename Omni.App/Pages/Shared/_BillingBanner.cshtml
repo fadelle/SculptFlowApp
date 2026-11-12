@@ -1,0 +1,27 @@
+@inject ICurrentClientContext CurrentClient
+@inject Omni.App.Business.Contracts.Services.Billing.IBillingBannerService Banners
+@* The plan line on every dashboard page (QA t2-billing-12): no plan, an unpaid renewal, a trial ending soon or a low
+   balance. Nothing when all is well or billing is off. Hidden on Settings → Billing itself, which explains it in full. *@
+@{
+    var client = User.Identity?.IsAuthenticated == true ? await CurrentClient.GetClientAsync() : null;
+    var onBilling = (Context.Request.Path.Value ?? "").StartsWith("/settings/billing", StringComparison.OrdinalIgnoreCase);
+    var banner = client is null || onBilling ? null : await Banners.GetAsync(client.Id);
+}
+@if (banner is not null)
+{
+    var amount = banner.Amount is { } a ? (banner.Currency == "USD" ? "$" : "") + a.Display("#,0.00") + (banner.Currency == "USD" ? "" : " " + banner.Currency) : "";
+    <div class="au-alert @(banner.Urgent ? "au-alert--error" : "au-alert--warning") billing-banner" role="status" data-billing-banner="@banner.Kind">
+        <span class="au-icon au-alert__icon" aria-hidden="true">@(banner.Urgent ? "error" : "info")</span>@* icon:error icon:info *@
+        <div class="au-alert__body">
+            @if (banner.When is { } when)
+            {
+                @T.Html(banner.TextKey, LocalTimeHelper.Time(when, "date"))
+            }
+            else
+            {
+                @T[banner.TextKey, amount]
+            }
+            <a class="au-link" href="/settings/billing">@T["billing.banner.open"]</a>
+        </div>
+    </div>
+}

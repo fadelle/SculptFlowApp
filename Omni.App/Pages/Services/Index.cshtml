@@ -29,7 +29,7 @@ else
 
     @if (Model.Services.Count == 0)
     {
-        var empty = new EmptyStateModel(Icon: "medical_services", Title: T["services.empty.title"].Value,
+        var empty = new EmptyStateModel(Icon: "category", Title: T["services.empty.title"].Value,
             Text: T["services.empty.text"].Value,
             ActionLabel: T["services.add"].Value, ActionHref: "/Services?add=true");
         <div class="au-panel au-panel--round"><partial name="_EmptyState" model="empty" /></div>
@@ -95,7 +95,9 @@ else
                                 <td class="row-actions">
                                     <a href="/Services?edit=@p.Id" class="au-btn au-btn--outlined au-btn--sm" data-modal-open="svc-overlay" data-svc-edit
                                        data-svc-id="@p.Id" data-svc-name="@p.Name" data-svc-code="@p.Code" data-svc-duration="@p.BookingDuration" data-svc-price="@p.Price?.ToString(System.Globalization.CultureInfo.InvariantCulture)" data-svc-currency="@p.Currency" data-svc-desc="@p.Description">@T["common.edit"]</a>
-                                    <form method="post" asp-page-handler="Toggle" class="inline-form">
+                                    <form method="post" asp-page-handler="Toggle" class="inline-form"
+                                          data-au-confirm="@(p.IsActive && Model.UpcomingBookings.GetValueOrDefault(p.Id) is var upcoming and > 0 ? T.Plural("services.deactivate.confirm", upcoming, p.Name, upcoming).Value : null)"
+                                          data-au-confirm-title="@T["services.deactivate.title"]" data-au-confirm-label="@T["services.deactivate"]">
                                         <input type="hidden" name="id" value="@p.Id" />
                                         <input type="hidden" name="active" value="@((!p.IsActive).ToString().ToLowerInvariant())" />
                                         <button type="submit" class="au-btn au-btn--text au-btn--sm">@(p.IsActive ? T["services.deactivate"] : T["services.activate"])</button>

@@ -26,6 +26,10 @@ public interface ISubscriptionService
     /// <summary>Renews (or moves to past_due / expired / cancelled) when the client's period has ended.</summary>
     Task<RenewalOutcome> RenewIfDueAsync(Guid clientId, CancellationToken ct = default);
 
+    /// <summary>The same renewal check run by someone (an admin's "Run renewal now"): the ledger and events record that source and
+    /// actor instead of the worker (QA t2-billing-25).</summary>
+    Task<RenewalOutcome> RenewIfDueAsync(Guid clientId, string source, string? actor, CancellationToken ct = default);
+
     /// <summary>Immediately = ends now (no refund); otherwise it ends at the period end instead of renewing.</summary>
     Task<ClientSubscription?> CancelAsync(Guid clientId, bool immediately, string source, string? actor, string? reason, CancellationToken ct = default);
 

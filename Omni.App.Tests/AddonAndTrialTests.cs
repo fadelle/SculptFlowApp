@@ -60,6 +60,53 @@ public class AddonAndTrialTests
     }
 
     [PostgresFact]
+    public async Task A_client_gets_one_trial_unless_the_admin_allows_another()
+    {
+        // QA t2-billing-21: restarting the trial gave a fresh 7 days each time.
+        var h = new BillingHarness(_db.ConnectionString);
+        var client = await h.CreateClientAsync();
+        var plan = await TrialPlanAsync(h);
+
+        var first = await h.Subscriptions.StartAsync(Start(client, plan, charge: false));
+        Assert.Equal(h.Time.Now, first.TrialUsedAt);
+        h.Time.Advance(TimeSpan.FromDays(2));
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => h.Subscriptions.StartAsync(Start(client, plan, charge: false)));
+        Assert.Contains("already had a trial", ex.Message);
+
+        var again = await h.Subscriptions.StartAsync(Start(client, plan, charge: false) with { AllowAnotherTrial = true });
+        Assert.Equal(first.TrialUsedAt, again.TrialUsedAt); // the first trial is remembered
+        Assert.Equal(h.Time.Now.AddDays(7), again.CurrentPeriodEnd);
+        await h.AssertReconciledAsync(client);
+    }
+
+    [PostgresFact]
+    public async Task The_client_is_told_when_its_trial_ends_and_when_a_renewal_cant_be_paid()
+    {
+        // QA t2-billing-12: nothing but Settings → Billing said a trial had ended or a renewal had failed.
+        var h = new BillingHarness(_db.ConnectionString);
+        var (subscriptions, notices) = WithNotices(h);
+        var trialClient = await h.CreateClientAsync();
+        await subscriptions.StartAsync(Start(trialClient, await TrialPlanAsync(h), charge: false));
+        var paidClient = await h.CreateClientAsync();
+        var paid = await h.CreatePlanAsync(30m, 0m);
+        await h.TopUpAsync(paidClient, 30m);
+        await subscriptions.StartAsync(Start(paidClient, paid)); // the wallet pays the first month only
+
+        h.Time.Advance(TimeSpan.FromDays(32));
+        Assert.Equal(RenewalOutcome.Expired, await subscriptions.RenewIfDueAsync(trialClient));
+        Assert.Equal(RenewalOutcome.PastDue, await subscriptions.RenewIfDueAsync(paidClient));
+        Assert.Equal(RenewalOutcome.PastDue, await subscriptions.RenewIfDueAsync(paidClient)); // still in grace: no second notice
+
+        notices.Verify(n => n.CreateAsync(trialClient, NotificationType.Billing,
+            It.Is<NotificationText>(t => t.TitleKey == "notifications.billing.trialEnded.title"), null, null, null, null, "/settings/billing",
+            It.IsAny<CancellationToken>()), Times.Once);
+        notices.Verify(n => n.CreateAsync(paidClient, NotificationType.Billing,
+            It.Is<NotificationText>(t => t.TitleKey == "notifications.billing.renewalUnpaid.title" && ((string)t.Args[1]!).StartsWith("[[time:")),
+            null, null, null, null, "/settings/billing", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [PostgresFact]
     public async Task A_trial_runs_for_its_days_then_expires_instead_of_renewing()
     {
         var h = new BillingHarness(_db.ConnectionString);

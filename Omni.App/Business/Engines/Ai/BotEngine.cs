@@ -156,6 +156,10 @@ public class BotEngine : IBotEngine
                     break;
             }
         }
+        catch (RunGoneException)
+        {
+            _tracer.Step(TraceSteps.BotSkipped, TraceOutcomes.Skipped, run.Ids, detail: new { reason = "conversation_gone" });
+        }
         catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
             _logger.LogWarning(ex, "Bot run failed for conversation {ConversationId}.", trigger.ConversationId);
@@ -250,6 +254,10 @@ public class BotEngine : IBotEngine
             }
         }
         output ??= MaxIterationsOutput;
+
+        // The test chat (or its bot) was deleted while the model was thinking: nothing to remember or answer (QA t4-ai-19).
+        var memoryKey = test ? trigger.TestSessionId!.Value : trigger.ConversationId;
+        if (!await _memory.OwnerExistsAsync(memoryKey, test, ct)) throw new RunGoneException();
 
         _memory.Add(new BotMemory
         {
@@ -492,6 +500,9 @@ public class BotEngine : IBotEngine
         flag = false;
         return string.IsNullOrWhiteSpace(value) || bool.TryParse(value, out flag);
     }
+
+    /// <summary>The run's conversation or test chat no longer exists: the run ends quietly, without an error or a reply.</summary>
+    private sealed class RunGoneException : Exception;
 
     private sealed record Run(AiTriggerPayload Trigger, AiBotConfig Bot, TraceIds Ids, BotToolCall Call, DateTimeOffset Now);
 

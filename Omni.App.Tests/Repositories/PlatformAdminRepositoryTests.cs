@@ -41,7 +41,12 @@ public class PlatformAdminRepositoryTests(PostgresFixture fixture) : RepoTestBas
     {
         var w = await SeedWorldAsync("Zeta Client " + Guid.NewGuid().ToString("N")[..6]);
         var inactive = MakeClient("Zeta Closed " + Guid.NewGuid().ToString("N")[..6]); inactive.IsActive = false;
-        await SeedAsync(inactive);
+        var telegram = new ChannelIntegration
+        {
+            Id = Guid.NewGuid(), ClientId = w.Client.Id, Channel = ChannelType.Telegram, Status = ChannelIntegrationStatus.Error,
+            CreatedAt = Now, UpdatedAt = Now,
+        };
+        await SeedAsync(inactive, telegram);
 
         await using var db = NewContext();
         var repo = new ClientAdminRepository(db);
@@ -51,6 +56,10 @@ public class PlatformAdminRepositoryTests(PostgresFixture fixture) : RepoTestBas
         var row = all.Items.Single(r => r.Id == w.Client.Id);
         Assert.Equal((1, 1, ChannelIntegrationStatus.Connected), (row.ContactCount, row.ConversationCount, row.WhatsAppStatus));
         Assert.Equal("not set up", all.Items.Single(r => r.Id == inactive.Id).WhatsAppStatus);
+        // Every channel with its status, not only WhatsApp (QA t6-admin-24).
+        Assert.Equal([new ClientChannelState(ChannelType.Telegram, ChannelIntegrationStatus.Error), new ClientChannelState(ChannelType.WhatsApp, ChannelIntegrationStatus.Connected)],
+            row.Channels);
+        Assert.Empty(all.Items.Single(r => r.Id == inactive.Id).Channels);
 
         Assert.Equal(w.Client.Id, Assert.Single((await repo.ListAsync(prefix, true, 1)).Items).Id);
         Assert.Equal(inactive.Id, Assert.Single((await repo.ListAsync(prefix, false, 1)).Items).Id);
@@ -272,7 +281,7 @@ public class PlatformAdminRepositoryTests(PostgresFixture fixture) : RepoTestBas
         var problems = await repo.ProblemsAsync();
         Assert.Contains(problems, p => p.ClientId == w.Client.Id);                   // the unhealthy WhatsApp channel and/or failed message
 
-        Assert.Contains(await repo.RecentClientsAsync(500), c => c.Id == w.Client.Id);
+        Assert.Contains(await repo.RecentClientsAsync(500), c => c.Id == w.Client.Id && c.Channels.Count == 1);
         Assert.Single((await repo.EventsAsync(w.Client.Id, null, 1)).Items);
         Assert.Single((await repo.EventsAsync(w.Client.Id, evt.EventType, 1)).Items);
         Assert.Empty((await repo.EventsAsync(w.Client.Id, "other_type", 1)).Items);

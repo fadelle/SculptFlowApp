@@ -1,3 +1,5 @@
+using Omni.App.Common.Statics;
+
 namespace Omni.App.Entities.Dtos.PlatformAdmin;
 
 /// <summary>One message's whole story: every step, message, delivery status, charge, business event and saved error of
@@ -10,4 +12,7 @@ public record MessageTrace(
     List<Guid> ConversationIds,
     List<Guid> MessageIds,
     bool HasFailure,
-    List<MessageTraceEntry> Entries);
+    List<MessageTraceEntry> Entries,
+    // What the trace came to and why (TraceResultRule, as on the list), so the portal can say why the bot didn't answer (QA t6-admin-28).
+    string Outcome = TraceResults.Other,
+    string? OutcomeReason = null);

@@ -14,17 +14,44 @@ public class WhatsAppService : IWhatsAppService
 {
     private readonly IChannelIntegrationRepository _integrations;
     private readonly IWhatsAppProvider _provider;
+    private readonly IServiceScopeFactory? _scopes;
+    private readonly ILogger<WhatsAppService>? _logger;
 
-    public WhatsAppService(IChannelIntegrationRepository integrations, IWhatsAppProvider provider)
+    public WhatsAppService(IChannelIntegrationRepository integrations, IWhatsAppProvider provider, IServiceScopeFactory? scopes = null,
+        ILogger<WhatsAppService>? logger = null)
     {
         _integrations = integrations;
         _provider = provider;
+        _scopes = scopes;
+        _logger = logger;
     }
 
     public async Task<string> SendTextMessageAsync(Guid clientId, string toPhone, string text, CancellationToken ct = default)
     {
         var integration = await ResolveAsync(clientId, ct);
-        return await _provider.SendTextAsync(integration, toPhone, text, ct);
+        try { return await _provider.SendTextAsync(integration, toPhone, text, ct); }
+        catch (WhatsAppSendException ex) when (ex.ConnectionProblemCode is not null)
+        {
+            await RecordProblemAsync(integration, ex, ct);
+            throw;
+        }
+    }
+
+    /// <summary>The number's health learns from a send that found the connection broken (QA t8-10). In its own scope, so the
+    /// failing send's pending changes are neither saved nor lost with it; never hides the send's own error.</summary>
+    private async Task RecordProblemAsync(ChannelIntegration integration, WhatsAppSendException failure, CancellationToken ct)
+    {
+        if (_scopes is null) return;
+        try
+        {
+            await using var scope = _scopes.CreateAsyncScope();
+            await scope.ServiceProvider.GetRequiredService<Contracts.Services.WhatsApp.IWhatsAppHealthService>()
+                .RecordSendFailureAsync(integration, failure, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger?.LogWarning(ex, "WhatsApp health for client {ClientId} wasn't updated after a failed send.", integration.ClientId);
+        }
     }
 
     public async Task<string> SendTemplateMessageAsync(
@@ -32,8 +59,16 @@ public class WhatsAppService : IWhatsAppService
         IReadOnlyList<string> bodyParameters, CancellationToken ct = default)
     {
         var integration = await ResolveAsync(clientId, ct);
-        return await _provider.SendTemplateAsync(integration, toPhone,
-            new WhatsAppTemplateSend(templateName, languageCode, bodyParameters), ct);
+        try
+        {
+            return await _provider.SendTemplateAsync(integration, toPhone,
+                new WhatsAppTemplateSend(templateName, languageCode, bodyParameters), ct);
+        }
+        catch (WhatsAppSendException ex) when (ex.ConnectionProblemCode is not null)
+        {
+            await RecordProblemAsync(integration, ex, ct);
+            throw;
+        }
     }
 
     public async Task<bool> IsReadyAsync(Guid clientId, CancellationToken ct = default) =>

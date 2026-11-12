@@ -1,3 +1,4 @@
+using Omni.App.Common.Helpers;
 using System.Net.Http.Headers;
 using System.Text.Json;
 using Omni.App.Business.Contracts.HttpClients.Calendars;
@@ -26,11 +27,11 @@ public class GoogleCalendarProviderClient : ICalendarProviderClient
 
     public string Provider => CalendarProvider.Google;
 
-    private string ClientId => _configuration["GoogleCalendar:ClientId"]
-        ?? throw new InvalidOperationException("Missing GoogleCalendar:ClientId configuration.");
+    private string ClientId => OAuthSetting.Required(_configuration, "GoogleCalendar:ClientId");
 
-    private string ClientSecret => _configuration["GoogleCalendar:ClientSecret"]
-        ?? throw new InvalidOperationException("Missing GoogleCalendar:ClientSecret — set it via user-secrets.");
+    private string ClientSecret => OAuthSetting.Required(_configuration, "GoogleCalendar:ClientSecret");
+
+    public bool IsConfigured => OAuthSetting.Has(_configuration, "GoogleCalendar:ClientId", "GoogleCalendar:ClientSecret");
 
     public string BuildAuthorizationUrl(string redirectUri, string state) =>
         "https://accounts.google.com/o/oauth2/v2/auth"

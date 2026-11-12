@@ -24,6 +24,10 @@ public interface IBookingReminderService
     /// <summary>The client's approved WhatsApp templates, by name (the settings page's choices).</summary>
     Task<IReadOnlyList<ReminderTemplateOption>> ListTemplateOptionsAsync(Guid clientId, CancellationToken ct = default);
 
+    /// <summary>What reminders can send right now and what they did in the last 7 days (QA t5-ops-07: "saved" with no channel
+    /// or template, and nothing ever went out).</summary>
+    Task<ReminderStatusDto> GetStatusAsync(Guid clientId, CancellationToken ct = default);
+
     /// <summary>The booking's reminder rows, newest first.</summary>
     Task<IReadOnlyList<BookingReminderRow>> ListForBookingAsync(Guid clientId, Guid bookingId, CancellationToken ct = default);
 

@@ -22,7 +22,9 @@ public class CopyScriptCoverageTests
     private static readonly string[] NotCopied =
         ["crm.bots", "crm.bot_knowledge_sources", "crm.bot_test_sessions", "crm.bot_test_messages", "crm.inbox_settings",
          "crm.bot_memory", // the C# bot engine's memory (2026-10-26); n8n kept its memory in its own RAM
-         "channels.whatsapp_webhook_deliveries"]; // the webhook inbox (QA t10-10): in-flight deliveries, nothing to carry over
+         "channels.whatsapp_webhook_deliveries", // the webhook inbox (QA t10-10): in-flight deliveries, nothing to carry over
+         "activity.platform_admin_writes", // the main app's own platform-admin write log (QA t6-admin-23): starts empty
+         "crm.client_stage_labels"]; // per-client stage names (QA t12-fix-06): the old project had none
 
     private static string Root => LeftoverNameScanner.FindRepoRoot();
 

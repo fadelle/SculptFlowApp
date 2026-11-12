@@ -1,15 +1,24 @@
 @page "/inbox"
 @model Omni.App.Pages.Inbox.IndexModel
+@inject ICurrentClientContext CurrentClient
+@inject Omni.App.Business.Contracts.Services.Billing.IEntitlementService Entitlements
 @{
+    // The AI filter and the booking links follow the plan like the sidebar (QA t3-inbox-20).
+    var inboxClientId = await CurrentClient.GetClientIdAsync();
+    var inboxPlan = inboxClientId is null ? null : await Entitlements.GetAsync(inboxClientId.Value);
+    var aiIncluded = inboxPlan is null || inboxPlan.CanUseAiAssistant;
+    var bookingsIncluded = inboxPlan is null || inboxPlan.CanUseBookings;
     ViewData["Title"] = T["inbox.title"].Value;
     ViewData["SignalRFirst"] = true; // the layout loads the SignalR client before this page's scripts
 
-    // Presentation only — mirrors initials()/modeLabel() in wwwroot/js/inbox.js, which re-renders this list on load.
+    // Presentation only — mirrors initials()/modeLabel() in wwwroot/js/inbox.js, which re-renders this list on load. Letters
+    // and digits only: "[QA] TG 0106" is "Q0", not "[0" (QA t3-inbox-20).
     static string Initials(string? name)
     {
-        var parts = (name ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        if (parts.Length == 0) return "?";
-        return parts.Length == 1 ? parts[0][..1] : string.Concat(parts[0][..1], parts[^1][..1]);
+        var parts = (name ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries)
+            .Select(p => new string(p.Where(char.IsLetterOrDigit).ToArray())).Where(p => p.Length > 0).ToList();
+        if (parts.Count == 0) return "?";
+        return (parts.Count == 1 ? parts[0][..1] : string.Concat(parts[0][..1], parts[^1][..1])).ToUpperInvariant();
     }
     string ModeLabel(string mode) => mode switch { "ai" => T["inbox.mode.ai"], "human" => T["inbox.mode.human"], "approval" => T["inbox.mode.approval"], _ => mode };
     var unknownName = T["inbox.unknownName"].Value;
@@ -30,7 +39,10 @@ else
                 <div class="inbox-filters" role="tablist" aria-label="@T["inbox.filter.label"]">
                     <button type="button" class="inbox-filter active" data-filter="all">@T["inbox.filter.all"] <span class="inbox-filter-count" data-count="all"></span></button>
                     <button type="button" class="inbox-filter" data-filter="needs">@T["inbox.filter.needs"] <span class="inbox-filter-count" data-count="needs"></span></button>
-                    <button type="button" class="inbox-filter" data-filter="ai">@T["inbox.mode.ai"] <span class="inbox-filter-count" data-count="ai"></span></button>
+                    @if (aiIncluded)
+                    {
+                        <button type="button" class="inbox-filter" data-filter="ai">@T["inbox.mode.ai"] <span class="inbox-filter-count" data-count="ai"></span></button>
+                    }
                     <button type="button" class="inbox-filter" data-filter="closed">@T["inbox.filter.closed"] <span class="inbox-filter-count" data-count="closed"></span></button>
                 </div>
             </div>
@@ -118,6 +130,9 @@ else
                 <div class="inbox-window-closed-notice" id="inbox-window-closed-notice" hidden>
                     @T["inbox.thread.windowClosed"]
                 </div>
+                <div class="inbox-window-closed-notice" id="inbox-channel-off-notice" hidden>
+                    @T["inbox.thread.channelNotConnected"] <a class="au-link" href="/settings/integrations">@T["inbox.thread.channelNotConnectedLink"]</a>
+                </div>
 
                 <form class="inbox-composer" id="inbox-composer">
                     <textarea class="inbox-composer-input" id="inbox-composer-input" dir="auto" placeholder="@T["inbox.composer.placeholder"]" rows="2" aria-label="@T["inbox.composer.label"]"></textarea>
@@ -126,6 +141,9 @@ else
                             <span class="au-icon" aria-hidden="true">description</span>@T["inbox.composer.sendTemplate"]
                         </button>
                         <span class="inbox-composer-hint">@T["inbox.composer.hint"]</span>
+                        @* The WhatsApp 24-hour window's countdown (QA t8-19) and the message length near the channel's limit (QA t3-inbox-14). *@
+                        <span class="inbox-composer-window" id="inbox-composer-window" hidden></span>
+                        <span class="inbox-composer-count" id="inbox-composer-count" hidden></span>
                         <button type="submit" class="au-btn au-btn--primary au-btn--sm" id="inbox-composer-send">
                             <span class="au-icon au-icon--dir" aria-hidden="true">send</span>@T["inbox.composer.send"]
                         </button>
@@ -157,7 +175,7 @@ else
                 <span class="badge badge-gray" id="inbox-contact-stage">—</span>
             </div>
 
-            <div class="inbox-contact-section" id="inbox-contact-journey-wrap">
+            <div class="inbox-contact-section" id="inbox-contact-journey-wrap" data-bookings="@(bookingsIncluded ? "on" : "off")">
                 <span class="eyebrow">@T["inbox.contact.journey"]</span>
                 <div class="journey" id="inbox-contact-journey">@foreach (var _ in IndexModel.JourneyCategories){<i></i>}</div>
                 <div class="journey-labels">@foreach (var category in IndexModel.JourneyCategories){<span>@Model.JourneyLabel(category)</span>}</div>
@@ -177,7 +195,10 @@ else
             <div class="inbox-contact-actions">
                 <a class="au-btn au-btn--outlined" id="inbox-contact-profile" href="#"><span class="au-icon" aria-hidden="true">person</span>@T["inbox.contact.profile"]</a>
                 <a class="au-btn au-btn--outlined" id="inbox-contact-order" href="#"><span class="au-icon" aria-hidden="true">receipt_long</span>@T["inbox.contact.createOrder"]</a>
-                <a class="au-btn au-btn--outlined" href="/dashboard/bookings"><span class="au-icon" aria-hidden="true">calendar_month</span>@T["inbox.contact.bookings"]</a>
+                @if (bookingsIncluded)
+                {
+                    <a class="au-btn au-btn--outlined" href="/dashboard/bookings"><span class="au-icon" aria-hidden="true">calendar_month</span>@T["inbox.contact.bookings"]</a>
+                }
             </div>
         </aside>
     </div>
@@ -193,4 +214,5 @@ else
     };
 </script>
 <script src="~/js/inbox-voice.js" asp-append-version="true"></script>
+<script src="~/js/inbox-message-view.js" asp-append-version="true"></script>
 <script src="~/js/inbox.js" asp-append-version="true"></script>

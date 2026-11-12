@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.Extensions.Localization;
+using Omni.App.Business.Contracts.HttpClients.Calendars;
 using Omni.App.Business.Contracts.Managers;
 using Omni.App.Business.Contracts.Services.Billing;
 using Omni.App.Business.Contracts.Services.Calendars;
@@ -29,13 +30,18 @@ public class CalendarIntegrationsModel : PageModel
     private readonly IEntitlementService _entitlements;
 
     public CalendarIntegrationsModel(ICurrentClientContext clientContext, ICalendarIntegrationService calendar, IStringLocalizer text,
-        IEntitlementService entitlements)
+        IEntitlementService entitlements, IEnumerable<ICalendarProviderClient> providers)
     {
+        // Providers whose OAuth app this server doesn't have: no Connect button (QA t5-ops-13).
+        NotSetUp = providers.Where(p => !p.IsConfigured).Select(p => p.Provider).ToHashSet();
         _entitlements = entitlements;
         _clientContext = clientContext;
         _calendar = calendar;
         _text = text;
     }
+
+    /// <summary>Calendar providers this server has no OAuth app for (no client id or secret).</summary>
+    public IReadOnlySet<string> NotSetUp { get; }
 
     public bool ClientConfigured { get; private set; }
 

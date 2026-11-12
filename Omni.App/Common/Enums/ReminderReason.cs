@@ -12,6 +12,8 @@ public static class ReminderReason
     /// <summary>No WhatsApp or Telegram conversation and no phone number to start one.</summary>
     public const string NoConversation = "no_conversation";
     public const string ChannelUnsupported = "channel_unsupported";
+    /// <summary>A new WhatsApp conversation was needed but WhatsApp isn't connected (QA t5-ops-06).</summary>
+    public const string ChannelNotConnected = "channel_not_connected";
     /// <summary>No WhatsApp template is chosen for any language.</summary>
     public const string NoTemplate = "no_template";
     public const string TemplateNotApproved = "template_not_approved";
@@ -23,5 +25,5 @@ public static class ReminderReason
     public const string SendFailed = "send_failed";
 
     public static readonly IReadOnlyList<string> All =
-        [MadeInsideWindow, Superseded, OptedOut, NoConversation, ChannelUnsupported, NoTemplate, TemplateNotApproved, TemplateParameters, NoBalance, SendFailed];
+        [MadeInsideWindow, Superseded, OptedOut, NoConversation, ChannelUnsupported, ChannelNotConnected, NoTemplate, TemplateNotApproved, TemplateParameters, NoBalance, SendFailed];
 }

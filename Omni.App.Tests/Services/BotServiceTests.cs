@@ -201,7 +201,7 @@ public class BotServiceTests
     }
 
     [Fact]
-    public async Task Deleting_a_bot_leaves_its_accounts_with_ai_on_but_no_bot()
+    public async Task Deleting_a_bot_turns_ai_off_on_its_accounts()
     {
         var bot = Existing(status: BotStatus.Active);
         var account = new InboxSettings { Id = Guid.NewGuid(), ClientId = _clientId, ChannelIntegrationId = Guid.NewGuid(), AiEnabled = true, BotId = bot.Id };
@@ -210,7 +210,8 @@ public class BotServiceTests
 
         await Sut().DeleteAsync(_clientId, bot.Id);
 
-        Assert.Equal((true, (Guid?)null), (account.AiEnabled, account.BotId));
+        // QA t7-08: AI on with no bot left the account unsavable until its switch was turned off; the team answers now.
+        Assert.Equal((false, (Guid?)null), (account.AiEnabled, account.BotId));
         Assert.Empty(_list);
         await Assert.ThrowsAsync<KeyNotFoundException>(() => Sut().DeleteAsync(_clientId, bot.Id));
         Assert.Null(await Sut().GetAsync(_clientId, bot.Id));

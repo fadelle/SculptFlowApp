@@ -35,8 +35,10 @@ public class InboxSettingsModel : PageModel
     public InboxSettingsDto? Settings { get; private set; }
 
     [BindProperty] public Guid ChannelIntegrationId { get; set; }
-    [BindProperty] public bool AiEnabled { get; set; }
+    /// <summary>The account's one "who answers" choice (QA t7-08): a bot turns AI on with it, none ("Your team") turns AI off.</summary>
     [BindProperty] public Guid? BotId { get; set; }
+
+    public bool AiEnabled => BotId is not null;
     [BindProperty] public bool AiBotNewConversations { get; set; }
     [BindProperty] public bool AiBotReopenedConversations { get; set; }
 

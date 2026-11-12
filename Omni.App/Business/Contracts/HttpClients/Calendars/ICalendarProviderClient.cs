@@ -11,6 +11,10 @@ public interface ICalendarProviderClient
 {
     string Provider { get; }
 
+    /// <summary>Whether this server has the provider's OAuth app (client id and secret): the settings page offers Connect
+    /// only then (QA t5-ops-13).</summary>
+    bool IsConfigured { get; }
+
     /// <summary>The URL to send the browser to for consent. state must be an opaque, server-generated value
     /// (CalendarOAuthController protects it) — never anything derived only from client input.</summary>
     string BuildAuthorizationUrl(string redirectUri, string state);

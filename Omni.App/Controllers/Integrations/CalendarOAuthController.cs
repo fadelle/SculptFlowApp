@@ -112,9 +112,9 @@ public class CalendarOAuthController : Controller
 
         if (oauthState is null || oauthState.ClientId != clientId.Value || oauthState.Provider != provider)
         {
-            var expired = _text["oauth.errors.expired"].Value;
-            await _calendar.FailConnectAsync(clientId.Value, provider, expired, ct);
-            return RedirectWithError(expired);
+            // Stored as a key, so every member reads it in their own language (QA t5-ops-14).
+            await _calendar.FailConnectAsync(clientId.Value, provider, StoredText.Key("oauth.errors.expired"), ct);
+            return RedirectWithError(_text["oauth.errors.expired"].Value);
         }
 
         if (!string.IsNullOrEmpty(error))
@@ -126,9 +126,8 @@ public class CalendarOAuthController : Controller
 
         if (string.IsNullOrEmpty(code))
         {
-            var noCode = _text["oauth.errors.noCode", ProviderLabel(provider)].Value;
-            await _calendar.FailConnectAsync(clientId.Value, provider, noCode, ct);
-            return RedirectWithError(noCode);
+            await _calendar.FailConnectAsync(clientId.Value, provider, StoredText.Key("oauth.errors.noCode", ProviderLabel(provider)), ct);
+            return RedirectWithError(_text["oauth.errors.noCode", ProviderLabel(provider)].Value);
         }
 
         try
@@ -142,9 +141,8 @@ public class CalendarOAuthController : Controller
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Calendar OAuth code exchange failed for {Provider}.", provider);
-            var failed = _text["oauth.errors.connectFailed", _text.Localize(ex)].Value;
-            await _calendar.FailConnectAsync(clientId.Value, provider, failed, ct);
-            return RedirectWithError(failed);
+            await _calendar.FailConnectAsync(clientId.Value, provider, StoredText.Key("oauth.errors.connectFailed", _text.Localize(ex)), ct);
+            return RedirectWithError(_text["oauth.errors.connectFailed", _text.Localize(ex)].Value);
         }
 
         TempData["StatusMessage"] = _text["oauth.connected", ProviderLabel(provider)].Value;

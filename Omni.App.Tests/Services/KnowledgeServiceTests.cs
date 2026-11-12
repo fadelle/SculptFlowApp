@@ -201,6 +201,22 @@ public class KnowledgeServiceTests
     }
 
     [Fact]
+    public async Task Reindex_rechunks_the_stored_text_and_keeps_the_old_chunks_when_embedding_fails()
+    {
+        // QA t4-ai-15: the background re-index after a chunk-size change.
+        Assert.False(await Sut().ReindexAsync(_clientId, Guid.NewGuid()));
+        var d = Found(Doc(KnowledgeSourceType.Website));
+        Assert.True(await Sut().ReindexAsync(_clientId, d.Id));
+        _documents.Verify(x => x.DeleteChunksAsync(d.Id, It.IsAny<CancellationToken>()), Times.Once);
+        _tx.Verify(t => t.CommitAsync(It.IsAny<CancellationToken>()), Times.Once);
+
+        _embeddings.Setup(e => e.EmbedBatchAsync(It.IsAny<IReadOnlyList<string>>(), "model-x", 8, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new HttpRequestException("provider down"));
+        await Assert.ThrowsAsync<HttpRequestException>(() => Sut().ReindexAsync(_clientId, d.Id));
+        _documents.Verify(x => x.DeleteChunksAsync(d.Id, It.IsAny<CancellationToken>()), Times.Once); // nothing removed the second time
+    }
+
+    [Fact]
     public async Task SetActive_toggles_without_touching_chunks()
     {
         Assert.Null(await Sut().SetActiveAsync(_clientId, Guid.NewGuid(), false));

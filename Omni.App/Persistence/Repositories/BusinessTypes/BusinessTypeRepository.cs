@@ -29,6 +29,22 @@ public class BusinessTypeRepository : IBusinessTypeRepository
             return types;
         }, ct))!;
 
+    public async Task<IReadOnlyList<ClientStageLabel>> ListClientLabelsReadOnlyAsync(Guid clientId, CancellationToken ct = default) =>
+        (await _cache.ReadThroughAsync(CacheKeys.ClientStageLabels(clientId), CacheArea.BusinessTypes, async token =>
+            await _db.ClientStageLabels.AsNoTracking().Where(l => l.ClientId == clientId).ToListAsync(token), ct))!;
+
+    public Task<List<ClientStageLabel>> ListClientLabelsAsync(Guid clientId, CancellationToken ct = default) =>
+        _db.ClientStageLabels.Where(l => l.ClientId == clientId).ToListAsync(ct);
+
+    public void AddClientLabel(ClientStageLabel label) => _db.ClientStageLabels.Add(label);
+
+    public void RemoveClientLabel(ClientStageLabel label) => _db.ClientStageLabels.Remove(label);
+
+    public async Task ForgetClientLabelsAsync(Guid clientId, CancellationToken ct = default)
+    {
+        if (_cache is not null) await _cache.RemoveAsync(CacheKeys.ClientStageLabels(clientId), ct);
+    }
+
     public async Task<BusinessType?> GetReadOnlyAsync(string code, CancellationToken ct = default) =>
         (await ListReadOnlyAsync(ct)).FirstOrDefault(t => t.Code == code);
 

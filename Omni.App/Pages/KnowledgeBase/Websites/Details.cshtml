@@ -40,6 +40,7 @@
     var d = Model.Detail;
     // "View text" remembers this exact page (including the filter) so Cancel/Save on the entry return here.
     var backToThisPage = "/KnowledgeBase/Websites/" + Model.Id + (string.IsNullOrEmpty(Model.Status) ? "" : "?status=" + Uri.EscapeDataString(Model.Status));
+    string PageLink(int p) => "/KnowledgeBase/Websites/" + Model.Id + "?" + (string.IsNullOrEmpty(Model.Status) ? "" : "status=" + Uri.EscapeDataString(Model.Status) + "&") + "p=" + p;
 }
 
 @if (!Model.ClientConfigured || d is null)
@@ -191,7 +192,7 @@ else
         </div>
     </div>
 
-    @if (Model.Pages.Count == 0)
+    @if (Model.Pages.Count == 0 && Model.FoldedInKnowledge == 0)
     {
         var noPages = new EmptyStateModel(Icon: s.InProgress ? "hourglass_top" : "web_asset_off",
             Title: s.InProgress ? T["website.pages.readingTitle"].Value : T["website.pages.emptyTitle"].Value,
@@ -202,6 +203,17 @@ else
     }
     else
     {
+        @if (Model.FoldedInKnowledge > 0)
+        {
+            @* The pages the AI already uses, folded to one line (QA t4-ai-13); the problems are listed below it. *@
+            <div class="au-panel au-panel--round website-folded mb-3">
+                <span class="au-icon" aria-hidden="true">check_circle</span>
+                <span>@T[T.PluralKey("website.pages.folded", Model.FoldedInKnowledge), Model.FoldedInKnowledge]</span>
+                <a class="au-link" href="/KnowledgeBase/Websites/@s.Id?status=in_kb">@T["website.pages.foldedShow"]</a>
+            </div>
+        }
+        @if (Model.Pages.Count > 0)
+        {
         <div class="au-table-card">
             <div class="au-table-scroll">
             <table class="au-table au-table--stack">
@@ -246,7 +258,20 @@ else
                 </tbody>
             </table>
             </div>
+            @if (Model.TotalPages > 1)
+            {
+                <div class="au-pager">
+                    <span class="au-pager__count">@T["website.pages.range", (Model.PageNumber - 1) * DetailsModel.PageSize + 1, Math.Min(Model.PageNumber * DetailsModel.PageSize, Model.TotalCount), Model.TotalCount]</span>
+                    <ul class="pagination" aria-label="@T["common.pages"]">
+                        @for (var pn = 1; pn <= Model.TotalPages; pn++)
+                        {
+                            <li class="@(pn == Model.PageNumber ? "active" : "")"><a href="@PageLink(pn)" aria-current="@(pn == Model.PageNumber ? "page" : null)">@pn</a></li>
+                        }
+                    </ul>
+                </div>
+            }
         </div>
+        }
     }
 
     @if (d.RecentRuns.Count > 1)

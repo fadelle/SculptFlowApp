@@ -176,6 +176,20 @@ public class ConversationServiceTests
         Assert.True(result.Value.HasEarlier);
     }
 
+    [Fact]
+    public async Task An_opened_conversation_says_whether_its_channel_is_connected()
+    {
+        // QA t8-18: after WhatsApp was disconnected the composer still looked like it would send.
+        var c = Conv();
+        _config.SetupGet(x => x.InboxThreadPageSize).Returns(100);
+        _messages.Setup(m => m.ListLatestForConversationAsync(c.Id, 100, It.IsAny<CancellationToken>())).ReturnsAsync((new List<Message>(), false));
+        Assert.True((await Sut().GetByIdWithMessagesAsync(_clientId, c.Id))!.Value.Conversation.ChannelConnected);
+
+        _channels.Setup(x => x.GetReadOnlyAsync(_clientId, c.Channel, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ChannelIntegration { ClientId = _clientId, Channel = c.Channel, Status = ChannelIntegrationStatus.Disconnected });
+        Assert.False((await Sut().GetByIdWithMessagesAsync(_clientId, c.Id))!.Value.Conversation.ChannelConnected);
+    }
+
     // QA t3-inbox-16: every refresh re-read the whole history. Only the newest page (Inbox / ThreadPageSize), or what the Inbox
     // shows, capped at 1,000.
     [Theory]
@@ -268,6 +282,22 @@ public class ConversationServiceTests
             "Ann Lee needs your team's attention: the AI assistant stopped before answering (its bot was turned off or the plan changed). Open the conversation to reply.")),
             _contactId, c.Id, null, null, $"/inbox?conversationId={c.Id}", It.IsAny<CancellationToken>()), Times.Once);
         Assert.False(await Sut().HandOverStoppedAiAsync(_clientId, c.Id, null));
+    }
+
+    [Fact]
+    public async Task A_bot_that_never_answered_hands_the_conversation_to_the_team_once()
+    {
+        // QA t9-04: BotNoAnswerWatchdog.
+        var c = Conv();
+        _contacts.Setup(l => l.GetFullNameAsync(_contactId, It.IsAny<CancellationToken>())).ReturnsAsync("Ann Lee");
+
+        Assert.True(await Sut().HandOverUnansweredAiAsync(_clientId, c.Id));
+        Assert.Equal(ConversationMode.Human, c.Mode);
+        _events.Verify(e => e.Log(_clientId, EventTypes.HumanHandoff, null, c.Id, null, MessageOrigin.System, "{\"reason\":\"bot_no_answer\"}"), Times.Once);
+        _notifications.Verify(n => n.CreateAsync(_clientId, NotificationType.Handoff, It.Is<NotificationText>(t => TextKit.Reads(t, "AI handed off to your team",
+            "Ann Lee needs your team's attention: the AI assistant was asked but never answered. Open the conversation to reply.")),
+            _contactId, c.Id, null, null, $"/inbox?conversationId={c.Id}", It.IsAny<CancellationToken>()), Times.Once);
+        Assert.False(await Sut().HandOverUnansweredAiAsync(_clientId, c.Id));
     }
 
     [Fact]

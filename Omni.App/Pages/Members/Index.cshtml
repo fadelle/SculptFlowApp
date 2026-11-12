@@ -22,7 +22,8 @@ else
     <partial name="_Messages" model="new PageMessagesModel(Model.StatusMessage, Model.ErrorMessage)" />
 
     <div class="au-page-head">
-        <p class="au-page-head__sub">@T["members.intro", Model.ClientName]</p>
+        @* <bdi>: a client name starting or ending with punctuation ("[QA] Glow") keeps its order in Arabic (QA t1-accounts-14). *@
+        <p class="au-page-head__sub">@T.Html("members.intro", new Microsoft.AspNetCore.Html.HtmlString("<bdi>" + System.Net.WebUtility.HtmlEncode(Model.ClientName ?? "") + "</bdi>"))</p>
         @if (Model.CanManage)
         {
             <div class="au-page-head__actions">
@@ -98,7 +99,7 @@ else
                             var name = DisplayName(m);
                             var isMe = m.UserId == Model.CurrentUserId;
                             <tr class="@(m.IsActive ? "" : "row-dim")">
-                                <td data-label="@T["members.table.name"]">
+                                <td data-label="@T["members.table.name"]" class="member-cell">
                                     <div class="kb-title">
                                         <span class="avatar @(m.IsActive ? "" : "avatar-off")">@Initials(name)</span>
                                         <span class="row-title" dir="auto">@name</span>
@@ -115,7 +116,8 @@ else
                                 <td data-label="@T["members.table.lastSignIn"]" class="cell-sub">@LocalTimeHelper.Time(m.LastLoginAt, "datetime", T["members.lastSignIn.never"].Value)</td>
                                 @if (Model.CanManage)
                                 {
-                                    <td data-label="@T["members.table.actions"]">
+                                    @* No actions for yourself or the owner: an empty cell, hidden on a phone (QA t1-accounts-16). *@
+                                    <td data-label="@T["members.table.actions"]" class="@(!isMe && m.Role == UserRole.Member ? "" : "cell-empty")">
                                         @if (!isMe && m.Role == UserRole.Member)
                                         {
                                             <form method="post" asp-page-handler="@(m.IsActive ? "Deactivate" : "Reactivate")"

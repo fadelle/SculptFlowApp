@@ -372,6 +372,10 @@ public class TikTokIntegrationServiceTests
         await Sut().CompleteConnectAsync(_clientId, new TikTokOAuthTokenResult("a2", null, expires, null), new TikTokAccountInfo("open1", null, "Client TT", null));
         Assert.Equal(("union1", "r"), (_row.UnionId, _row.RefreshToken)); // kept when the provider omits them
 
+        // Only a connect in progress can fail (QA t5-ops-14): a stray callback leaves the connected account alone.
+        await Sut().FailConnectAsync(_clientId, "denied");
+        Assert.Equal(TikTokIntegrationStatus.Connected, _row.Status);
+        _row.Status = TikTokIntegrationStatus.Pending;
         await Sut().FailConnectAsync(_clientId, "denied");
         Assert.Equal((TikTokIntegrationStatus.Error, "denied"), (_row.Status, _row.LastProblemMessage));
     }

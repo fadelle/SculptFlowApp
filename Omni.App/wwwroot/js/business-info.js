@@ -40,14 +40,18 @@
     var checkRow = function (row) {
       var open = row.querySelector('[data-day-open]').checked;
       var s = row.querySelector('[data-day-start]'), e = row.querySelector('[data-day-end]');
-      var bad = open && s.value && e.value && e.value <= s.value;
-      [s, e].forEach(function (el) { el.classList.toggle('input-error', !!bad); el.setCustomValidity(bad ? omniText.t('businessInfo.hours.endAfterStart') : ''); });
+      // An end before the start closes the next day (QA t12-fix-07); the same time is no window.
+      var bad = open && s.value && e.value && e.value === s.value;
+      [s, e].forEach(function (el) { el.classList.toggle('input-error', !!bad); el.setCustomValidity(bad ? omniText.t('businessInfo.hours.sameTime') : ''); });
       row.querySelector('[data-day-err]').hidden = !bad;
-      // The second window (QA t5-ops-18): both times, after the first window, ending after it starts.
+      // The second window (QA t5-ops-18): both times, after the first window; only the last hours may run past midnight.
       var second = row.querySelector('[data-day-second]');
       var s2 = row.querySelector('[data-day-start2]'), e2 = row.querySelector('[data-day-end2]');
       var used = open && !second.hidden;
-      var bad2 = used && ((s2.value && e2.value && e2.value <= s2.value) || (s2.value && e.value && s2.value < e.value));
+      var firstOvernight = s.value && e.value && e.value < s.value;
+      var bad2 = used && ((s2.value && e2.value && e2.value === s2.value) || (s2.value && e.value && s2.value < e.value) || firstOvernight);
+      var overnight = open && (used ? (s2.value && e2.value && e2.value < s2.value) : firstOvernight);
+      row.querySelector('[data-day-next]').hidden = !overnight || bad || bad2;
       s2.required = e2.required = used;
       [s2, e2].forEach(function (el) { el.classList.toggle('input-error', !!bad2); el.setCustomValidity(bad2 ? omniText.t('businessInfo.hours.secondAfterFirst') : ''); });
       row.querySelector('[data-day-err2]').hidden = !bad2;

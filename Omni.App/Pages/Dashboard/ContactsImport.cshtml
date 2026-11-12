@@ -1,0 +1,109 @@
+@page "/dashboard/contacts/import"
+@model Omni.App.Pages.Dashboard.ContactsImportModel
+@using Omni.App.Entities.Dtos.Contacts
+@{
+    ViewData["Title"] = T["contacts.import.title"].Value;
+    string FieldLabel(string field) => field switch
+    {
+        ContactImportField.Name => T["contacts.import.field.name"].Value,
+        ContactImportField.Phone => T["contacts.import.field.phone"].Value,
+        ContactImportField.Email => T["contacts.import.field.email"].Value,
+        ContactImportField.City => T["contacts.import.field.city"].Value,
+        ContactImportField.Notes => T["contacts.import.field.notes"].Value,
+        _ => T["contacts.import.field.stage"].Value
+    };
+}
+
+@if (!Model.ClientConfigured)
+{
+    <partial name="_NoClient" />
+}
+else
+{
+    <div class="au-back-header">
+        <a class="au-icon-btn au-icon-btn--bordered" href="/dashboard/contacts" aria-label="@T["contacts.import.back"]" title="@T["contacts.import.back"]"><span class="au-icon au-icon--dir" aria-hidden="true">arrow_back</span></a>
+        <div class="min-w-0">
+            <h2 class="au-back-header__title">@T["contacts.import.title"]</h2>
+            <span class="au-back-header__sub">@T["contacts.import.sub", Model.MaxRows, Model.MaxKilobytes]</span>
+        </div>
+    </div>
+
+    <partial name="_Messages" model="new PageMessagesModel(null, Model.ErrorMessage)" />
+
+    @if (Model.Result is { } result)
+    {
+        <section class="au-panel au-panel--round au-panel--pad au-stack">
+            <div class="au-alert @(result.Failed.Count == 0 ? "au-alert--success" : "au-alert--warning")" role="status">
+                <div class="au-alert__body">@T["contacts.import.summary", result.Added, result.Updated, result.Skipped, result.Failed.Count]</div>
+            </div>
+            @if (result.Failed.Count > 0)
+            {
+                <h3 class="section-title">@T["contacts.import.failedTitle"]</h3>
+                <ul class="import-failures">
+                    @foreach (var f in result.Failed.Take(200))
+                    {
+                        <li><strong>@T["contacts.import.line", f.Line]</strong> <span dir="auto">@f.Reason</span></li>
+                    }
+                </ul>
+            }
+            <div class="au-form-actions">
+                <a href="/dashboard/contacts/import" class="au-btn au-btn--outlined">@T["contacts.import.another"]</a>
+                <a href="/dashboard/contacts" class="au-btn au-btn--primary">@T["contacts.import.toContacts"]</a>
+            </div>
+        </section>
+    }
+    else if (Model.Preview is { } preview && Model.Csv is not null)
+    {
+        @* Step 2: the column for each field and the first rows; the file comes back in the hidden field. *@
+        <form method="post" asp-page-handler="Import" class="au-panel au-panel--round au-panel--pad au-stack">
+            <textarea name="Csv" hidden>@Model.Csv</textarea>
+            <p class="au-help m-0">@T["contacts.import.mapIntro", preview.RowCount]</p>
+            <div class="au-form-grid">
+                @foreach (var field in ContactImportField.All)
+                {
+                    var chosen = Model.Mapping.TryGetValue(field, out var idx) ? idx : -1;
+                    <div class="au-form-field">
+                        <label class="au-form-label" for="map-@field">@FieldLabel(field)</label>
+                        <select class="au-select" id="map-@field" name="Mapping[@field]">
+                            <option value="-1">@T["contacts.import.notImported"]</option>
+                            @for (var c = 0; c < preview.Headers.Length; c++)
+                            {
+                                <option value="@c" selected="@(c == chosen)">@(string.IsNullOrWhiteSpace(preview.Headers[c]) ? T["contacts.import.column", c + 1].Value : preview.Headers[c])</option>
+                            }
+                        </select>
+                    </div>
+                }
+            </div>
+            <label class="set-row">
+                <input type="checkbox" name="UpdateExisting" value="true" checked="@Model.UpdateExisting" />
+                <span>@T["contacts.import.updateExisting"]</span>
+            </label>
+            <div class="au-table-scroll">
+                <table class="au-table">
+                    <thead><tr>@foreach (var h in preview.Headers) { <th dir="auto">@h</th> }</tr></thead>
+                    <tbody>
+                        @foreach (var row in preview.Sample)
+                        {
+                            <tr>@foreach (var cell in row) { <td dir="auto">@cell</td> }</tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <div class="au-form-actions">
+                <a href="/dashboard/contacts/import" class="au-btn au-btn--text">@T["common.cancel"]</a>
+                <button type="submit" class="au-btn au-btn--primary">@T["contacts.import.run", preview.RowCount]</button>
+            </div>
+        </form>
+    }
+    else
+    {
+        @* Step 1: the file. *@
+        <form method="post" asp-page-handler="Preview" enctype="multipart/form-data" class="au-panel au-panel--round au-panel--pad au-stack">
+            <p class="au-help m-0">@T["contacts.import.intro"]</p>
+            <input type="file" name="file" accept=".csv,text/csv" required class="au-input" aria-label="@T["contacts.import.file"]" />
+            <div class="au-form-actions">
+                <button type="submit" class="au-btn au-btn--primary">@T["contacts.import.check"]</button>
+            </div>
+        </form>
+    }
+}

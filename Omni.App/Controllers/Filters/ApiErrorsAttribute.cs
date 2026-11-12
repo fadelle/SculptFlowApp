@@ -43,15 +43,26 @@ public sealed class ApiErrorsAttribute : ExceptionFilterAttribute
         }
         var error = context.Exception is EmailSendException
             ? Text(context.HttpContext, EmailSendException.TextKey)
-            : Localize(context.HttpContext, context.Exception);
+            // A plan refusal answering the platform-admin API speaks to the admin, not the client (QA t6-admin-19).
+            : context.Exception is EntitlementDeniedException denied && context.HttpContext.Request.Path.StartsWithSegments("/api/platform-admin")
+                && EntitlementDeniedException.AdminKeyFor(denied.Message) is { } adminKey
+                ? Text(context.HttpContext, adminKey, TextError.ArgsOf(denied).Select(a => (object)(a is null ? "" : a)).ToArray())
+                : Localize(context.HttpContext, context.Exception);
         // An exception with a code (e.g. BookingRulesException) also answers it, so a page can react to that case.
         context.Result = new ObjectResult(context.Exception is IErrorCode coded ? (object)new { error, code = coded.Code } : new { error }) { StatusCode = status };
         context.ExceptionHandled = true;
     }
 
     /// <summary>The exception's message in the request's language when it is a strings-file key, else as written.</summary>
-    public static string Localize(HttpContext http, Exception exception) =>
-        http.RequestServices?.GetService<IStringLocalizer>().Localize(exception) ?? exception.Message;
+    public static string Localize(HttpContext http, Exception exception)
+    {
+        // A known provider failure in the user's words, not Meta's raw JSON (QA t3-inbox-14).
+        if (ProviderErrorText.For(exception) is { } known && http.RequestServices?.GetService<IStringLocalizer>() is { } text)
+        {
+            return text[known.Key, known.Args].Value;
+        }
+        return http.RequestServices?.GetService<IStringLocalizer>().Localize(exception) ?? exception.Message;
+    }
 
     /// <summary>A strings-file key's text in the request's language, for a controller that writes its own error body
     /// (the key itself when there is no localizer).</summary>
@@ -65,6 +76,8 @@ public sealed class ApiErrorsAttribute : ExceptionFilterAttribute
         BenchmarkRunInProgressException or BenchmarkGenerationInProgressException => StatusCodes.Status409Conflict,
         ServiceWindowClosedException or DuplicateRecordException or OverlappingRecordException => StatusCodes.Status409Conflict,
         BenchmarkGeneratorNotConfiguredException => StatusCodes.Status503ServiceUnavailable,
+        // No connected number is the client's setup, not a provider failure (QA t8-18: a 502 logged as an error).
+        WhatsAppSendException { Message: WhatsAppSendException.NotConnectedKey } => StatusCodes.Status409Conflict,
         ChannelSendException or MetaGraphApiException or BenchmarkGenerationException or EmailSendException => StatusCodes.Status502BadGateway,
         UnauthorizedAccessException => StatusCodes.Status403Forbidden,
         KeyNotFoundException => StatusCodes.Status404NotFound,

@@ -55,6 +55,16 @@ public class CampaignServiceTests
         new(_clientId, name, _template.Id, contactIds ?? [], vars, null, null, audienceType, null);
 
     [Fact]
+    public async Task A_name_or_type_too_long_for_the_table_is_a_400_not_a_500()
+    {
+        // QA t5-ops-08: a 201-character name was a DbUpdateException and the HTML error page.
+        var ex = await Assert.ThrowsAsync<ArgumentException>(() => Sut().CreateAsync(Create(name: new string('a', 201))));
+        Assert.Equal("campaigns.errors.nameTooLong", ex.Message);
+        var type = await Assert.ThrowsAsync<ArgumentException>(() => Sut().CreateAsync(Create() with { CampaignType = new string('t', 31) }));
+        Assert.Equal("campaigns.errors.typeTooLong", type.Message);
+    }
+
+    [Fact]
     public async Task Create_validates_name_template_audience_and_recipients()
     {
         await Assert.ThrowsAsync<ArgumentException>(() => Sut().CreateAsync(Create(name: " ")));
@@ -937,6 +947,28 @@ public class CampaignAudienceServiceTests
     [InlineData("not json")]
     [InlineData("[1,2]")]
     public void Filters_parse_leniently(string? json) => Assert.Null(CampaignAudienceFilters.Parse(json).InactiveDays);
+
+    [Theory]
+    [InlineData("{\"stagekey\":[\"new\"]}")]
+    [InlineData("{\"inactiveDays\":10,\"citys\":[\"Beirut\"]}")]
+    [InlineData("{\"inactiveDays\":")]
+    public void New_filters_with_an_unknown_key_or_bad_json_are_refused(string json)
+    {
+        // QA t5-ops-09: a typo was ignored, so the campaign targeted every reachable contact.
+        Assert.Equal("campaigns.errors.audienceInvalid", Assert.Throws<ArgumentException>(() => CampaignAudienceFilters.Validate(json)).Message);
+        Assert.Null(CampaignAudienceFilters.Parse(json).StageKeys); // stored campaigns still resolve leniently
+    }
+
+    [Fact]
+    public void Every_known_filter_key_is_accepted()
+    {
+        CampaignAudienceFilters.Validate("{\"inactiveDays\":3,\"serviceId\":null,\"stageKeys\":[\"new\"],\"sources\":[],\"qualifications\":[]," +
+            "\"createdAfter\":null,\"createdBefore\":null,\"lastContactedAfter\":null,\"lastContactedBefore\":null,\"bookingStatuses\":[]," +
+            "\"countries\":[],\"cities\":[]}");
+        CampaignAudienceFilters.Validate(System.Text.Json.JsonSerializer.Serialize(new CampaignAudienceFilters(InactiveDays: 5),
+            new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web)));
+    }
+
 
     [Fact]
     public void Filters_parse_all_fields_case_insensitively()

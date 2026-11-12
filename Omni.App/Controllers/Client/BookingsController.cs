@@ -31,7 +31,9 @@ public class BookingsController : DashboardApiController
         var clientId = await GetClientIdAsync(ct);
         if (clientId is null) return Forbid();
 
-        return Ok(await _availability.GetSlotsAsync(clientId.Value, serviceId, date, days ?? (date is null ? 7 : 1), ct));
+        var slots = await _availability.GetSlotsAsync(clientId.Value, serviceId, date, days ?? (date is null ? 7 : 1), ct);
+        // A member reads the note in their own language, not the AI's instruction (QA t5-ops-22).
+        return Ok(slots.MessageKey is { } key ? slots with { Message = ApiErrorsAttribute.Text(HttpContext, key, slots.MessageArgs) } : slots);
     }
 
     [HttpPost]

@@ -48,8 +48,69 @@ public partial class BusinessTypeService : IBusinessTypeService
     public async Task<bool> IsActiveAsync(string? code, CancellationToken ct = default) =>
         !string.IsNullOrWhiteSpace(code) && await _types.GetReadOnlyAsync(code.Trim(), ct) is { IsActive: true };
 
-    public async Task<IReadOnlyList<PipelineStageOption>> ListStagesForClientAsync(Guid clientId, CancellationToken ct = default) =>
-        (await StagesOfClientAsync(clientId, ct)).Select(s => BusinessTypeMapper.ToOption(s, _text.Language)).ToList();
+    public async Task<IReadOnlyList<PipelineStageOption>> ListStagesForClientAsync(Guid clientId, CancellationToken ct = default)
+    {
+        var stages = await StagesOfClientAsync(clientId, ct);
+        if (stages.Count == 0) return [];
+        // The client's own names win in each language (QA t12-fix-06); keys and categories are always the type's.
+        var own = await OwnLabelsAsync(clientId, ct);
+        return stages.Select(s => new PipelineStageOption(s.Key, s.Category,
+            own.TryGetValue(s.Key, out var mine) ? LabelWithOwn(s, mine, _text.Language) : BusinessTypeMapper.LabelOf(s, _text.Language))).ToList();
+    }
+
+    public async Task<IReadOnlyList<ClientStageLabelRow>> ListClientStageLabelsAsync(Guid clientId, CancellationToken ct = default)
+    {
+        var stages = await StagesOfClientAsync(clientId, ct);
+        var own = stages.Count == 0 ? [] : await OwnLabelsAsync(clientId, ct);
+        return stages.Select(s => new ClientStageLabelRow(s.Key, s.Category, BusinessTypeMapper.ParseTexts(s.LabelsJson),
+            own.GetValueOrDefault(s.Key) ?? new Dictionary<string, string>())).ToList();
+    }
+
+    public async Task SaveClientStageLabelsAsync(Guid clientId, IReadOnlyDictionary<string, Dictionary<string, string>> labels,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(labels);
+        var keys = (await StagesOfClientAsync(clientId, ct)).Select(s => s.Key).ToHashSet(StringComparer.Ordinal);
+        if (keys.Count == 0) throw new KeyNotFoundException("clients.errors.notFound");
+        var wanted = new Dictionary<string, Dictionary<string, string>>(StringComparer.Ordinal);
+        foreach (var (key, texts) in labels)
+        {
+            if (!keys.Contains(key)) throw new ArgumentException("businessTypes.errors.stageNotOfClient").WithArgs(key);
+            var clean = Texts(texts, MaxLabelLength, key);
+            if (clean.Count > 0) wanted[key] = clean;
+        }
+
+        var now = _time.GetUtcNow();
+        var rows = await _types.ListClientLabelsAsync(clientId, ct);
+        foreach (var row in rows.Where(r => !wanted.ContainsKey(r.StageKey)).ToList()) _types.RemoveClientLabel(row);
+        foreach (var (key, texts) in wanted)
+        {
+            var json = BusinessTypeMapper.ToJson(texts);
+            if (rows.FirstOrDefault(r => r.StageKey == key) is { } row)
+            {
+                if (row.LabelsJson != json) { row.LabelsJson = json; row.UpdatedAt = now; }
+            }
+            else
+            {
+                _types.AddClientLabel(new ClientStageLabel { ClientId = clientId, StageKey = key, LabelsJson = json, CreatedAt = now, UpdatedAt = now });
+            }
+        }
+        await _unitOfWork.SaveChangesAsync(ct);
+        await _types.ForgetClientLabelsAsync(clientId, ct);
+    }
+
+    private async Task<Dictionary<string, Dictionary<string, string>>> OwnLabelsAsync(Guid clientId, CancellationToken ct) =>
+        (await _types.ListClientLabelsReadOnlyAsync(clientId, ct) ?? []).ToDictionary(l => l.StageKey, l => BusinessTypeMapper.ParseTexts(l.LabelsJson));
+
+    /// <summary>The client's label in the language, else the type's, else the client's English one, else the type's English one.</summary>
+    internal static string LabelWithOwn(PipelineStage stage, IReadOnlyDictionary<string, string> own, string language)
+    {
+        if (own.TryGetValue(language, out var mine) && !string.IsNullOrWhiteSpace(mine)) return mine;
+        var type = BusinessTypeMapper.ParseTexts(stage.LabelsJson);
+        if (type.TryGetValue(language, out var theirs) && !string.IsNullOrWhiteSpace(theirs)) return theirs;
+        return own.TryGetValue(AppLanguage.English, out var mineEn) && !string.IsNullOrWhiteSpace(mineEn) ? mineEn
+            : BusinessTypeMapper.Pick(type, AppLanguage.English, stage.Key);
+    }
 
     public async Task<bool> IsStageOfClientAsync(Guid clientId, string? key, CancellationToken ct = default) =>
         !string.IsNullOrEmpty(key) && (await StagesOfClientAsync(clientId, ct)).Any(s => s.Key == key);

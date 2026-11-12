@@ -23,6 +23,28 @@ else
 
     <partial name="_Messages" model="new PageMessagesModel(Model.StatusMessage, Model.ErrorMessage)" />
 
+    @if (Model.Reindex is { } ri)
+    {
+        @* QA t4-ai-15: the background re-index and how far it is. *@
+        <div class="au-alert @(ri.Running ? "" : ri.Failed > 0 ? "au-alert--warning" : "au-alert--success") mb-3" role="status">
+            <span class="au-icon au-alert__icon" aria-hidden="true">@(ri.Running ? "sync" : ri.Failed > 0 ? "warning" : "check_circle")</span>
+            <div class="au-alert__body">
+                @if (ri.Running)
+                {
+                    @T["knowledgeSettings.reindex.running", ri.Done, ri.Total]
+                }
+                else if (ri.Failed > 0)
+                {
+                    @T["knowledgeSettings.reindex.doneWithFailures", ri.Total - ri.Failed, ri.Failed]
+                }
+                else
+                {
+                    @T["knowledgeSettings.reindex.done", ri.Total]
+                }
+            </div>
+        </div>
+    }
+
     <section class="au-panel au-panel--round au-panel--pad">
         <form method="post">
             <p class="au-help m-0">@T["knowledgeSettings.note"]</p>
@@ -67,6 +89,12 @@ else
                 <a href="/KnowledgeBase" class="au-btn au-btn--text">@T["common.cancel"]</a>
                 <button type="submit" class="au-btn au-btn--primary">@T["knowledgeSettings.save"]</button>
             </div>
+        </form>
+        <form method="post" asp-page-handler="Reindex" class="mt-2">
+            <button type="submit" class="au-btn au-btn--outlined au-btn--sm" disabled="@(Model.Reindex?.Running == true)">
+                <span class="au-icon" aria-hidden="true">sync</span>@T["knowledgeSettings.reindex.button"]
+            </button>
+            <span class="cell-sub">@T["knowledgeSettings.reindex.help"]</span>
         </form>
     </section>
 

@@ -56,6 +56,10 @@ public class RegisterModel : PageModel
     [BindProperty]
     public string ConfirmPassword { get; set; } = string.Empty;
 
+    /// <summary>Filled by auth.js from the browser (Intl), so the business starts in its own time zone (QA t5-ops-21).</summary>
+    [BindProperty]
+    public string? Timezone { get; set; }
+
     [BindProperty(SupportsGet = true)]
     public string? ReturnUrl { get; set; }
 
@@ -75,7 +79,7 @@ public class RegisterModel : PageModel
     public async Task<IActionResult> OnPostAsync(CancellationToken ct)
     {
         var result = await _registration.RegisterAsync(
-            new RegisterClientRequest(FullName, ClientName, Email, Password, ConfirmPassword, BusinessTypeCode), ct);
+            new RegisterClientRequest(FullName, ClientName, Email, Password, ConfirmPassword, BusinessTypeCode, Timezone), ct);
 
         if (!result.Succeeded)
         {

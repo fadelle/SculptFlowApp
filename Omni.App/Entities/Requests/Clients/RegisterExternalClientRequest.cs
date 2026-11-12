@@ -12,4 +12,5 @@ namespace Omni.App.Entities.Requests.Clients;
 /// name an active business type.</summary>
 public record RegisterExternalClientRequest(
     string? FullName, string? ClientName, string? Email, string LoginProvider, string ProviderKey, string? ProviderDisplayName,
-    string? BusinessTypeCode = null);
+    string? BusinessTypeCode = null,
+    string? Timezone = null);

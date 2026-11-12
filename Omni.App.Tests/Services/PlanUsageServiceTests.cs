@@ -25,6 +25,32 @@ public class PlanUsageServiceTests
         Blank<ClientBillingSummary>() with { Usage = charged, ProviderDirectUsage = uncharged, HasAccess = hasAccess, Entitlements = entitlements ?? [] };
 
     [Fact]
+    public async Task Over_limits_lists_only_what_the_client_uses_beyond_the_plan()
+    {
+        // QA t2-billing-11: a downgrade to 1 seat left 3 seats in use without a word.
+        Plan(new()
+        {
+            [EntitlementKeys.MaxUsers] = "1", [EntitlementKeys.MaxChannelConnections] = EntitlementCatalog.Unlimited,
+            [EntitlementKeys.MaxWhatsAppNumbers] = "1", [EntitlementKeys.AiAssistant] = "false"
+        });
+        _clients.Setup(c => c.CountSeatsInUseAsync(ClientId, It.IsAny<CancellationToken>())).ReturnsAsync(3);
+        _integrations.Setup(i => i.ListForClientReadOnlyAsync(ClientId, It.IsAny<CancellationToken>())).ReturnsAsync(new List<ChannelIntegration>
+        {
+            new() { Channel = ChannelType.WhatsApp, Status = ChannelIntegrationStatus.Connected },
+            new() { Channel = ChannelType.Telegram, Status = ChannelIntegrationStatus.Connected },
+        });
+        _bots.Setup(b => b.ListForClientReadOnlyAsync(ClientId, It.IsAny<CancellationToken>())).ReturnsAsync(new List<Bot> { new() { Status = BotStatus.Active } });
+
+        var over = await Sut().OverLimitsAsync(ClientId);
+
+        Assert.Equal(new[]
+        {
+            new PlanQuotaRow(EntitlementKeys.MaxUsers, 3, 1),
+            new PlanQuotaRow(EntitlementKeys.MaxAiBots, 1, 0), // an active bot on a plan without the AI assistant
+        }, over);
+    }
+
+    [Fact]
     public async Task An_ended_plan_shows_its_own_limits_not_zero()
     {
         // QA t2-billing-15: an expired trial read "Seats 1 of 0" (every enforced limit is 0 without an active plan).

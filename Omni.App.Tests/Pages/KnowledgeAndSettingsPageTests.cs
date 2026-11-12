@@ -6,6 +6,7 @@ using static Omni.App.Tests.Pages.PageKit;
 using KbIndex = Omni.App.Pages.KnowledgeBase.IndexModel;
 using KbSettings = Omni.App.Pages.KnowledgeBase.SettingsModel;
 using SiteDetails = Omni.App.Pages.KnowledgeBase.Websites.DetailsModel;
+using Omni.App.Business.Contracts.HttpClients.Calendars;
 using CalendarPage = Omni.App.Pages.Settings.CalendarIntegrationsModel;
 
 namespace Omni.App.Tests.Pages;
@@ -373,9 +374,9 @@ public class KnowledgeSettingsAndWebsitePageTests
         var id = Guid.NewGuid();
         var sites = new Mock<IWebsiteSourceService>();
         sites.Setup(w => w.GetAsync(Glow.Id, id, It.IsAny<CancellationToken>())).ReturnsAsync(Blank<WebsiteSourceDetailResponse>());
-        sites.Setup(w => w.ListPagesAsync(Glow.Id, id, "failed", 0, 300, It.IsAny<CancellationToken>())).ReturnsAsync(new List<WebsitePageResponse> { Blank<WebsitePageResponse>() });
-        sites.Setup(w => w.ListPagesAsync(Glow.Id, id, WebsitePageStatus.Indexed, 0, 300, It.IsAny<CancellationToken>())).ReturnsAsync(new List<WebsitePageResponse> { Blank<WebsitePageResponse>() });
-        sites.Setup(w => w.ListPagesAsync(Glow.Id, id, WebsitePageStatus.Unchanged, 0, 300, It.IsAny<CancellationToken>())).ReturnsAsync(new List<WebsitePageResponse> { Blank<WebsitePageResponse>(), Blank<WebsitePageResponse>() });
+        sites.Setup(w => w.ListPagesAsync(Glow.Id, id, "failed", 0, 500, It.IsAny<CancellationToken>())).ReturnsAsync(new List<WebsitePageResponse> { Blank<WebsitePageResponse>() });
+        sites.Setup(w => w.ListPagesAsync(Glow.Id, id, WebsitePageStatus.Indexed, 0, 500, It.IsAny<CancellationToken>())).ReturnsAsync(new List<WebsitePageResponse> { Blank<WebsitePageResponse>() });
+        sites.Setup(w => w.ListPagesAsync(Glow.Id, id, WebsitePageStatus.Unchanged, 0, 500, It.IsAny<CancellationToken>())).ReturnsAsync(new List<WebsitePageResponse> { Blank<WebsitePageResponse>(), Blank<WebsitePageResponse>() });
 
         var failed = new SiteDetails(ClientContext(Glow).Object, sites.Object, TextKit.Localizer()) { Id = id, Status = "failed" }.Attach();
         Assert.IsType<PageResult>(await failed.OnGetAsync(default));
@@ -387,6 +388,23 @@ public class KnowledgeSettingsAndWebsitePageTests
 
         var missing = new SiteDetails(ClientContext(Glow).Object, sites.Object, TextKit.Localizer()) { Id = Guid.NewGuid() }.Attach();
         Assert.IsType<NotFoundResult>(await missing.OnGetAsync(default));
+
+        // "All": the pages in the Knowledge Base fold into a count, the problems come first (failed, then skipped), 50 per page
+        // (QA t4-ai-13: a 100-page crawl was one 50,000 px list).
+        static WebsitePageResponse P(string url, string status) => new(Guid.NewGuid(), url, null, status, null, null, null, null, 0, null);
+        var every = Enumerable.Range(0, 120).Select(i => P($"https://x.test/ok{i:000}", WebsitePageStatus.Indexed))
+            .Concat(Enumerable.Range(0, 55).Select(i => P($"https://x.test/skip{i:00}", WebsitePageStatus.Skipped)))
+            .Append(P("https://x.test/zz-broken", WebsitePageStatus.Failed)).Append(P("https://x.test/same", WebsitePageStatus.Unchanged)).ToList();
+        sites.Setup(w => w.ListPagesAsync(Glow.Id, id, null, 0, 500, It.IsAny<CancellationToken>())).ReturnsAsync(every);
+        var all = new SiteDetails(ClientContext(Glow).Object, sites.Object, TextKit.Localizer()) { Id = id }.Attach();
+        await all.OnGetAsync(default);
+        Assert.Equal((121, 56, 2, 1), (all.FoldedInKnowledge, all.TotalCount, all.TotalPages, all.PageNumber));
+        Assert.Equal(SiteDetails.PageSize, all.Pages.Count);
+        Assert.Equal(WebsitePageStatus.Failed, all.Pages[0].Status);
+        Assert.All(all.Pages.Skip(1), p => Assert.Equal(WebsitePageStatus.Skipped, p.Status));
+        var second = new SiteDetails(ClientContext(Glow).Object, sites.Object, TextKit.Localizer()) { Id = id, PageNumber = 9 }.Attach();
+        await second.OnGetAsync(default);
+        Assert.Equal((2, 6), (second.PageNumber, second.Pages.Count)); // a page past the end shows the last one
         var none = new SiteDetails(ClientContext(null).Object, sites.Object, TextKit.Localizer()).Attach();
         Assert.IsType<PageResult>(await none.OnGetAsync(default));
     }
@@ -438,11 +456,25 @@ public class KnowledgeSettingsAndWebsitePageTests
     // ---- calendar integrations -------------------------------------------------------------------------------------
 
     [Fact]
+    public void Calendar_page_offers_connect_only_for_providers_this_server_has_set_up()
+    {
+        // QA t5-ops-13: Outlook without an OAuth app sent members to Microsoft with an empty client_id.
+        var google = new Mock<ICalendarProviderClient>();
+        google.SetupGet(p => p.Provider).Returns(CalendarProvider.Google);
+        google.SetupGet(p => p.IsConfigured).Returns(true);
+        var outlook = new Mock<ICalendarProviderClient>();
+        outlook.SetupGet(p => p.Provider).Returns(CalendarProvider.Outlook);
+        var model = new CalendarPage(ClientContext(Glow).Object, Mock.Of<ICalendarIntegrationService>(), TextKit.Localizer(), EntitlementKit.All().Object,
+            [google.Object, outlook.Object]);
+        Assert.Equal([CalendarProvider.Outlook], model.NotSetUp);
+    }
+
+    [Fact]
     public async Task Calendar_page_actions_report_success_and_errors()
     {
         var calendar = new Mock<ICalendarIntegrationService>();
         calendar.Setup(c => c.ListAsync(Glow.Id, It.IsAny<CancellationToken>())).ReturnsAsync(new List<CalendarIntegrationResponse>());
-        var model = new CalendarPage(ClientContext(Glow).Object, calendar.Object, TextKit.Localizer(), EntitlementKit.All().Object).Attach();
+        var model = new CalendarPage(ClientContext(Glow).Object, calendar.Object, TextKit.Localizer(), EntitlementKit.All().Object, []).Attach();
         await model.OnGetAsync(default);
         Assert.True(model.ClientConfigured);
 
@@ -476,7 +508,7 @@ public class KnowledgeSettingsAndWebsitePageTests
     public async Task Calendar_page_without_a_client_does_nothing()
     {
         var calendar = new Mock<ICalendarIntegrationService>();
-        var model = new CalendarPage(ClientContext(null).Object, calendar.Object, TextKit.Localizer(), EntitlementKit.All().Object).Attach();
+        var model = new CalendarPage(ClientContext(null).Object, calendar.Object, TextKit.Localizer(), EntitlementKit.All().Object, []).Attach();
         await model.OnGetAsync(default);
         Assert.False(model.ClientConfigured);
         Assert.IsType<RedirectToPageResult>(await model.OnPostRefreshCalendarsAsync("google", default));

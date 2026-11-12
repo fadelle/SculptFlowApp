@@ -95,6 +95,13 @@ public partial class KnowledgeBenchmarkService
         {
             return new GenerationReceiveResult(GenerationReceiveStatus.NotFound, null, "No generation has this id.");
         }
+        // A callback names its generation in the URL; a body id that disagrees is refused before anything else, so a repeat
+        // delivery for a finished generation can't answer 200 to a body meant for another one (QA t4-ai-16).
+        var echoed = Guid.TryParse(reply.GenerationId, out var parsed) ? parsed : (Guid?)null;
+        if (!requireEcho && reply.GenerationId is not null && echoed != generationId)
+        {
+            throw new ArgumentException("The generationId in the body doesn't match the generationId in the URL.");
+        }
         if (generation.Status == BenchmarkGenerationStatus.Completed)
         {
             return new GenerationReceiveResult(GenerationReceiveStatus.AlreadyProcessed, await SummaryOfAsync(generation, ct), null);
@@ -114,7 +121,6 @@ public partial class KnowledgeBenchmarkService
         // Correlation check: the reply must belong to THIS request. A synchronous reply has nowhere else to say which request it
         // answers, so the echo is mandatory there; a callback already names the generation in its URL, so a body id is optional
         // but must agree with it.
-        var echoed = Guid.TryParse(reply.GenerationId, out var parsed) ? parsed : (Guid?)null;
         if (requireEcho && echoed is null)
         {
             const string missing = "The question generator did not return the generationId it was sent. The n8n workflow must echo generationId back in its response.";
@@ -127,11 +133,6 @@ public partial class KnowledgeBenchmarkService
             await FailGenerationAsync(generationId, wrong);
             throw new BenchmarkGenerationException(wrong);
         }
-        if (!requireEcho && reply.GenerationId is not null && echoed != generationId)
-        {
-            throw new ArgumentException("The generationId in the body doesn't match the generationId in the URL.");
-        }
-
         return await ApplyGenerationResultAsync(generationId, reply.Questions, rawBody, ct);
     }
 

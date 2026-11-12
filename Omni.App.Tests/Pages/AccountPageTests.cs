@@ -45,6 +45,32 @@ public class AccountPageTests
     }
 
     [Fact]
+    public async Task Login_counts_wrong_passwords_per_account_and_address_without_identitys_lockout()
+    {
+        // QA t12-fix-01: Identity's per-account lockout let anyone lock the owner out; the throttle locks the address instead.
+        var signIn = SignIn();
+        signIn.Setup(s => s.PasswordSignInAsync("a@x.com", "bad", true, false)).ReturnsAsync(SignInResult.Failed);
+        var throttle = new Omni.App.Common.Helpers.SignInThrottle(TimeProvider.System);
+        LoginModel Model() => new LoginModel(signIn.Object, TextKit.Localizer(), throttle) { Email = "a@x.com", Password = "bad" }.Attach();
+
+        for (var i = 1; i < AccountRules.MaxFailedSignIns; i++)
+        {
+            var attempt = Model();
+            await attempt.OnPostAsync();
+            Assert.Contains("don't match", attempt.ErrorMessage);
+        }
+        var fifth = Model();
+        await fifth.OnPostAsync();
+        Assert.Contains("Too many attempts", fifth.ErrorMessage);
+        var sixth = Model();
+        await sixth.OnPostAsync();
+        Assert.Contains("Too many attempts", sixth.ErrorMessage);
+        // Identity's own lockout is never asked to count, and the locked address isn't even checked against the password.
+        signIn.Verify(s => s.PasswordSignInAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(), true), Times.Never);
+        signIn.Verify(s => s.PasswordSignInAsync("a@x.com", "bad", true, false), Times.Exactly(AccountRules.MaxFailedSignIns));
+    }
+
+    [Fact]
     public async Task Login_rejects_wrong_passwords_and_reports_lockouts_separately()
     {
         var signIn = SignIn();

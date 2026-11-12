@@ -160,7 +160,8 @@ public class BookingServiceTests
         _bookings.Verify(a => a.LockClientForBookingAsync(_clientId, It.IsAny<CancellationToken>()), Times.Once);
         _availability.Verify(a => a.OverlapsBookingAsync(_clientId, It.IsAny<DateTimeOffset>(), It.IsAny<DateTimeOffset>(), null, It.IsAny<CancellationToken>()), Times.Once);
         _tx.Verify(t => t.CommitAsync(It.IsAny<CancellationToken>()), Times.Once);
-        _notifications.Verify(n => n.CreateAsync(_clientId, NotificationType.BookingCreated, It.IsAny<NotificationText>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
+        // A booking a member makes in the dashboard rings no bell (QA t5-ops-23); one the AI makes does (BookAvailableSlot test).
+        _notifications.Verify(n => n.CreateAsync(_clientId, NotificationType.BookingCreated, It.IsAny<NotificationText>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -274,10 +275,11 @@ public class BookingServiceTests
     [InlineData(BookingStatus.Attended, PipelineKit.Attended, EventTypes.BookingAttended, "status_changed")]
     [InlineData(BookingStatus.NoShow, PipelineKit.NoShow, EventTypes.BookingNoShow, "status_changed")]
     [InlineData(BookingStatus.Confirmed, PipelineKit.New, null, "status_changed")]
-    [InlineData(BookingStatus.Canceled, PipelineKit.New, null, "canceled")]
+    [InlineData(BookingStatus.Canceled, PipelineKit.New, EventTypes.BookingCanceled, "canceled")]
     public async Task UpdateStatus_moves_the_contact_and_logs(string status, string expectedContact, string? eventType, string change)
     {
-        var a = MakeBooking();
+        // An outcome needs a booking that has started (QA t5-ops-03): yesterday's.
+        var a = MakeBooking(daysAhead: BookingStatus.IsOutcome(status) ? -1 : 3);
         Setup(a);
         var r = await Sut().UpdateStatusAsync(_clientId, a.Id, status);
         Assert.Equal(status, r!.Status);
@@ -287,10 +289,98 @@ public class BookingServiceTests
         _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
+    [Theory]
+    [InlineData(BookingStatus.Canceled, BookingStatus.Attended)]
+    [InlineData(BookingStatus.Canceled, BookingStatus.Booked)]
+    [InlineData(BookingStatus.Attended, BookingStatus.Booked)]
+    [InlineData(BookingStatus.NoShow, BookingStatus.Canceled)]
+    [InlineData(BookingStatus.Booked, BookingStatus.Rescheduled)]
+    [InlineData(BookingStatus.Rescheduled, BookingStatus.Booked)]
+    public async Task Only_real_status_changes_are_allowed(string from, string to)
+    {
+        // QA t5-ops-03: canceled -> attended -> booked, and "rescheduled" without a new time, were all accepted.
+        var a = MakeBooking(from, daysAhead: -1);
+        Setup(a);
+        var ex = await Assert.ThrowsAsync<ArgumentException>(() => Sut().UpdateStatusAsync(_clientId, a.Id, to));
+        Assert.Equal("bookings.errors.cantChangeStatus", ex.Message);
+        Assert.Equal(from, a.Status);
+        _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Theory]
+    [InlineData(BookingStatus.Attended, BookingStatus.NoShow)]
+    [InlineData(BookingStatus.NoShow, BookingStatus.Attended)]
+    [InlineData(BookingStatus.Confirmed, BookingStatus.Booked)]
+    public async Task An_outcome_can_be_corrected_and_a_confirmation_undone(string from, string to)
+    {
+        var a = MakeBooking(from, daysAhead: -1);
+        Setup(a);
+        Assert.Equal(to, (await Sut().UpdateStatusAsync(_clientId, a.Id, to))!.Status);
+    }
+
+    [Theory]
+    [InlineData(BookingStatus.Attended)]
+    [InlineData(BookingStatus.NoShow)]
+    public async Task A_future_booking_cant_get_an_outcome(string outcome)
+    {
+        var a = MakeBooking(daysAhead: 3);
+        Setup(a);
+        var ex = await Assert.ThrowsAsync<ArgumentException>(() => Sut().UpdateStatusAsync(_clientId, a.Id, outcome));
+        Assert.Equal("bookings.errors.outcomeBeforeStart", ex.Message);
+        Assert.Equal(PipelineKit.New, _contact.StageKey);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("  ")]
+    public async Task A_missing_status_is_refused(string? status)
+    {
+        // QA t6-admin-16: the admin portal's tampered form without a status.
+        var ex = await Assert.ThrowsAsync<ArgumentException>(() => Sut().UpdateStatusAsync(_clientId, Guid.NewGuid(), status!));
+        Assert.Equal("bookings.errors.statusRequired", ex.Message);
+    }
+
+    [Fact]
+    public async Task The_same_status_changes_nothing()
+    {
+        var a = MakeBooking(BookingStatus.Confirmed);
+        Setup(a);
+        Assert.Equal(BookingStatus.Confirmed, (await Sut().UpdateStatusAsync(_clientId, a.Id, BookingStatus.Confirmed))!.Status);
+        _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+        _notifier.Verify(n => n.BookingChangedAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Theory]
+    [InlineData(false, PipelineKit.Contacted)]
+    [InlineData(true, PipelineKit.Booked)]
+    public async Task Canceling_the_only_upcoming_booking_moves_the_contact_out_of_booked(bool anotherBooking, string expected)
+    {
+        // QA t5-ops-03: a cancel from the status select logged no booking_canceled and left the contact "booked".
+        _contact.StageKey = PipelineKit.Booked;
+        var a = MakeBooking();
+        Setup(a);
+        if (anotherBooking) _upcoming.Add(MakeBooking(daysAhead: 9));
+
+        await Sut().UpdateStatusAsync(_clientId, a.Id, BookingStatus.Canceled);
+
+        Assert.Equal(expected, _contact.StageKey);
+        _events.Verify(e => e.Log(_clientId, EventTypes.BookingCanceled, _contactId, It.IsAny<Guid?>(), a.Id, It.IsAny<string?>(), It.Is<string>(m => m.Contains("\"by\":\"member\""))), Times.Once);
+        _notifier.Verify(n => n.BookingChangedAsync(_clientId, a.Id, "canceled", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public void The_status_table_matches_the_rules()
+    {
+        Assert.Empty(BookingStatus.NextFrom(BookingStatus.Canceled));
+        Assert.Empty(BookingStatus.NextFrom(BookingStatus.Rescheduled));
+        Assert.DoesNotContain(BookingStatus.Rescheduled, BookingStatus.All.SelectMany(BookingStatus.NextFrom));
+        Assert.All(BookingStatus.All.SelectMany(BookingStatus.NextFrom), s => Assert.Contains(s, BookingStatus.All));
+    }
+
     [Fact]
     public async Task Status_changes_other_than_book_move_cancel_send_no_in_app_notification()
     {
-        var a = MakeBooking();
+        var a = MakeBooking(daysAhead: -1);
         Setup(a);
         await Sut().UpdateStatusAsync(_clientId, a.Id, BookingStatus.Attended);
         _notifications.Verify(n => n.CreateAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<NotificationText>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
@@ -317,8 +407,9 @@ public class BookingServiceTests
             It.Is<string>(m => m.Contains("\"by\":\"member\"") && m.Contains(from.ToString("yyyy-MM-dd")))), Times.Once);
         _notifier.Verify(n => n.BookingChangedAsync(_clientId, a.Id, "rescheduled", It.IsAny<CancellationToken>()), Times.Once);
         _calendar.Verify(c => c.TriggerBookingSyncAsync(_clientId, It.IsAny<BookingResponse>(), "rescheduled", It.IsAny<CancellationToken>()), Times.Once);
+        // The member's own move rings no bell (QA t5-ops-23); calendars still refresh (above).
         _notifications.Verify(n => n.CreateAsync(_clientId, NotificationType.BookingRescheduled, It.IsAny<NotificationText>(), _contactId, null, a.Id, null,
-            It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
+            It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
         // The move is checked like a new booking, with this booking left out (QA t5-ops-01).
         _availability.Verify(x => x.OverlapsBookingAsync(_clientId, start, start.AddMinutes(45), a.Id, It.IsAny<CancellationToken>()), Times.Once);
         _bookings.Verify(x => x.LockClientForBookingAsync(_clientId, It.IsAny<CancellationToken>()), Times.Once);
@@ -469,7 +560,7 @@ public class BookingServiceTests
         Setup(a);
         var r = await Sut().CancelAsync(_clientId, _contactId, null, "changed mind");
         Assert.Equal(BookingStatus.Canceled, r!.Status);
-        _events.Verify(e => e.Log(_clientId, EventTypes.BookingCanceled, _contactId, null, a.Id, null, "{\"reason\":\"changed mind\"}"), Times.Once);
+        _events.Verify(e => e.Log(_clientId, EventTypes.BookingCanceled, _contactId, null, a.Id, null, "{\"reason\":\"changed mind\",\"by\":\"ai\"}"), Times.Once);
         _notifier.Verify(n => n.BookingChangedAsync(_clientId, a.Id, "canceled", It.IsAny<CancellationToken>()), Times.Once);
 
         // second call: already canceled â†’ returned as-is, no new event or notification

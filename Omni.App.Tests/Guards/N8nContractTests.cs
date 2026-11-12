@@ -76,6 +76,8 @@ public class N8nContractTests
                 .ToDictionary(h => h.GetProperty("name").GetString()!, h => h.GetProperty("value").GetString()!);
             Assert.Equal("={{ $('user_message').item.json.body.bot.id }}", headers[BotToolAttribute.BotHeader]);
             Assert.Equal("={{ $('user_message').item.json.body.testSessionId || '' }}", headers[BotToolAttribute.TestSessionHeader]);
+            // QA t4-ai-09: the run's signed token, so the ingest key alone can't act for a client.
+            Assert.Equal("={{ $('user_message').item.json.body.runToken || '' }}", headers[AiRunToken.Header]);
         });
 
         // The reply goes to the bot's own endpoint (live or test), with the text only.
@@ -106,6 +108,20 @@ public class N8nContractTests
 
         Assert.Contains("generationId", used);
         Assert.Empty(used.Except(FieldsOf(typeof(BenchmarkGeneratorPayload))));
+    }
+
+    [Theory]
+    [MemberData(nameof(Workflows))]
+    public void Every_webhook_trigger_requires_omnis_webhook_secret(string file)
+    {
+        // QA t4-ai-09: the webhooks had no auth, so anyone with the URL could start runs at the business's OpenAI cost.
+        var hooks = Nodes(Load(file)).Where(n => n.GetProperty("type").GetString() == "n8n-nodes-base.webhook").ToList();
+        Assert.NotEmpty(hooks);
+        Assert.All(hooks, hook =>
+        {
+            Assert.Equal("headerAuth", Parameters(hook).GetProperty("authentication").GetString());
+            Assert.Equal("Omni webhook secret", hook.GetProperty("credentials").GetProperty("httpHeaderAuth").GetProperty("name").GetString());
+        });
     }
 
     [Theory]

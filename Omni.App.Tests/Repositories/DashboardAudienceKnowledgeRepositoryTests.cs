@@ -111,13 +111,15 @@ public class DashboardRepositoryTests(PostgresFixture fixture) : RepoTestBase(fi
         var overdue = MakeContact(c.Id); overdue.NextFollowupAt = Now.AddDays(-1);
         var overdueLost = MakeContact(c.Id, stage: PipelineKit.Lost); overdueLost.NextFollowupAt = Now.AddDays(-1);
         var future = MakeContact(c.Id); future.NextFollowupAt = Now.AddDays(1);
-        var human = MakeConversation(c.Id, open.Id); human.Mode = ConversationMode.Human;
-        var approval = MakeConversation(c.Id, overdue.Id, "telegram"); approval.Mode = ConversationMode.Approval;
+        var human = MakeConversation(c.Id, open.Id); human.Mode = ConversationMode.Human; human.LastMessageAt = Now;
+        var approval = MakeConversation(c.Id, overdue.Id, "telegram"); approval.Mode = ConversationMode.Approval; approval.LastMessageAt = Now;
+        // QA t5-ops-06: a human conversation with no message yet (a reminder that wasn't sent) isn't waiting.
+        var empty = MakeConversation(c.Id, future.Id, "telegram"); empty.Mode = ConversationMode.Human; empty.LastMessageAt = null;
         var ai = MakeConversation(c.Id, future.Id);
         var closedHuman = MakeConversation(c.Id, overdueLost.Id); closedHuman.Mode = ConversationMode.Human; closedHuman.Status = ConversationStatus.Closed;
         var needsOutcome = MakeBooking(c.Id, open.Id, Now.AddDays(-1));
         await SeedAsync(c, other, open, overdue, overdueLost, future);
-        await SeedAsync(human, approval, ai, closedHuman, needsOutcome);
+        await SeedAsync(human, approval, ai, closedHuman, needsOutcome, empty);
 
         await using var db = NewContext();
         var counts = await new DashboardRepository(db).GetAttentionCountsAsync(c.Id, Now);

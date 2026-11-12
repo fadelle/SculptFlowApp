@@ -30,4 +30,7 @@ public interface IBookingReminderRepository
 
     /// <summary>The booking's reminders, newest first (booking page).</summary>
     Task<IReadOnlyList<BookingReminderRow>> ListForBookingAsync(Guid clientId, Guid bookingId, CancellationToken ct = default);
+
+    /// <summary>The client's reminders since <paramref name="since"/>, counted by status (sent, skipped, failed).</summary>
+    Task<IReadOnlyDictionary<string, int>> CountByStatusSinceAsync(Guid clientId, DateTimeOffset since, CancellationToken ct = default);
 }

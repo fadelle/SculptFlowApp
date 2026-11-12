@@ -1,3 +1,4 @@
+using Omni.App.Common.Helpers;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
@@ -43,7 +44,8 @@ public class TelegramBotClient : ITelegramBotClient
         {
             url,
             secret_token = secretToken,
-            allowed_updates = new[] { "message" }
+            // Edits and blocks too (QA t3-inbox-17); an existing bot picks them up on reconnect (setWebhook again).
+            allowed_updates = new[] { "message", "edited_message", "my_chat_member" }
         }, ct);
     }
 
@@ -66,7 +68,8 @@ public class TelegramBotClient : ITelegramBotClient
     {
         if (text.Length > MaxMessageLength)
         {
-            throw new TelegramApiException($"Telegram messages are limited to {MaxMessageLength} characters (this one is {text.Length}).");
+            // A strings-file key, read in the member's language (QA t3-inbox-14); the composer counts the characters too.
+            throw new TelegramApiException(TooLongKey).WithArgs(MaxMessageLength, text.Length);
         }
 
         // chat_id is a number for private chats; send it as a number when it parses so Telegram
@@ -178,18 +181,31 @@ public class TelegramBotClient : ITelegramBotClient
             {
                 var description = root.TryGetProperty("description", out var d) ? d.GetString() : null;
                 var code = root.TryGetProperty("error_code", out var c) && c.ValueKind == JsonValueKind.Number ? c.GetInt32() : statusCode;
-                throw new TelegramApiException(FriendlyMessage(code, description), code);
+                throw Failure(code, description);
             }
 
             return root.TryGetProperty("result", out var result) ? result.Clone() : default;
         }
     }
 
-    private static string FriendlyMessage(int code, string? description) => code switch
+    public const string TooLongKey = "providers.telegram.tooLong";
+    public const string UnauthorizedKey = "providers.telegram.unauthorized";
+    public const string BlockedKey = "providers.telegram.blocked";
+    public const string RateLimitedKey = "providers.telegram.rateLimited";
+    public const string ChatNotFoundKey = "providers.telegram.chatNotFound";
+    public const string FileUnavailableKey = "providers.telegram.fileUnavailable";
+    public const string OtherKey = "providers.telegram.other";
+
+    /// <summary>Telegram's answer as a strings-file key (QA t3-inbox-14: "Telegram error 400: Bad Request: chat not found" in
+    /// English); Telegram's own description stays an argument of the fallback.</summary>
+    private static TelegramApiException Failure(int code, string? description) => code switch
     {
-        401 => "Telegram rejected the bot token (Unauthorized). Check that it was copied exactly from BotFather.",
-        403 => "Telegram refused the message — the user has blocked the bot or never started a chat with it.",
-        429 => "Telegram is rate-limiting this bot — try again in a moment.",
-        _ => $"Telegram error {code}: {description ?? "unknown error"}"
+        401 => new TelegramApiException(UnauthorizedKey, code),
+        403 => new TelegramApiException(BlockedKey, code),
+        429 => new TelegramApiException(RateLimitedKey, code),
+        400 when description?.Contains("chat not found", StringComparison.OrdinalIgnoreCase) == true => new TelegramApiException(ChatNotFoundKey, code),
+        400 when description?.Contains("file_id", StringComparison.OrdinalIgnoreCase) == true
+            || description?.Contains("file identifier", StringComparison.OrdinalIgnoreCase) == true => new TelegramApiException(FileUnavailableKey, code),
+        _ => new TelegramApiException(OtherKey, code).WithArgs(code, description ?? "—")
     };
 }

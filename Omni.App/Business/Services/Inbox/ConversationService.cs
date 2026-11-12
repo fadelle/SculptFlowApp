@@ -174,7 +174,9 @@ public class ConversationService : IConversationService
         // shows, so "Show earlier messages" and refreshes keep what is on screen.
         var (messages, hasEarlier) = await _messages.ListLatestForConversationAsync(id, Math.Clamp(take ?? _config.InboxThreadPageSize, 1, MaxThreadTake), ct);
 
-        return (InboxMapper.ToResponse(conversation), messages.Select(InboxMapper.ToResponse).ToList(), hasEarlier);
+        var connected = !ChannelType.All.Contains(conversation.Channel)
+            || (await _channels.GetReadOnlyAsync(clientId, conversation.Channel, ct))?.Status == ChannelIntegrationStatus.Connected;
+        return (InboxMapper.ToResponse(conversation) with { ChannelConnected = connected }, messages.Select(InboxMapper.ToResponse).ToList(), hasEarlier);
     }
 
     public Task<ConversationListPage> ListAsync(Guid clientId, ConversationListRequest request, CancellationToken ct = default)
@@ -253,6 +255,11 @@ public class ConversationService : IConversationService
         (await HandOffAsync(clientId, conversationId, MessageOrigin.System,
             System.Text.Json.JsonSerializer.Serialize(new { reason = "ai_stopped", detail = reason }),
             who => NotificationText.Of("notifications.handoff.title", "notifications.handoff.messageAiStopped", who), ct))?.HandedOff;
+
+    public async Task<bool?> HandOverUnansweredAiAsync(Guid clientId, Guid conversationId, CancellationToken ct = default) =>
+        (await HandOffAsync(clientId, conversationId, MessageOrigin.System,
+            System.Text.Json.JsonSerializer.Serialize(new { reason = "bot_no_answer" }),
+            who => NotificationText.Of("notifications.handoff.title", "notifications.handoff.messageAiNoAnswer", who), ct))?.HandedOff;
 
     // The hand-over notification's wording when billing refused an AI reply (no balance / no ai_reply rate).
     private const string AiReplyNoBalanceKey = "notifications.handoff.messageAiNoBalance";

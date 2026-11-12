@@ -62,7 +62,7 @@ public class DashboardRepository : IDashboardRepository
             .Take(take)
             .Select(l => new DashboardContactRow(
                 l.Id, l.FullName, l.Phone, l.Service!.Name, l.Source, l.StageKey,
-                l.Qualification, l.LastContactAt, l.NextFollowupAt, l.CreatedAt))
+                l.Qualification, l.LastContactAt, l.NextFollowupAt, l.CreatedAt, l.Email, l.City, l.PreferredLanguage, l.OptedOutAt))
             .ToListAsync(ct);
 
         return (items, totalCount);
@@ -128,7 +128,9 @@ public class DashboardRepository : IDashboardRepository
     {
         var conversations = await _db.Conversations.CountAsync(c => c.ClientId == clientId
             && c.Status == ConversationStatus.Active
-            && (c.Mode == ConversationMode.Human || c.Mode == ConversationMode.Approval), ct);
+            && (c.Mode == ConversationMode.Human || c.Mode == ConversationMode.Approval)
+            // A conversation with no message yet isn't waiting for anyone (QA t5-ops-06).
+            && c.LastMessageAt != null, ct);
 
         var overdueFollowups = await _db.Contacts.CountAsync(l => l.ClientId == clientId
             && l.NextFollowupAt != null && l.NextFollowupAt < now

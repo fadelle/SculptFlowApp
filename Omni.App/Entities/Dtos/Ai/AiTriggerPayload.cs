@@ -43,5 +43,7 @@ public record AiTriggerPayload(
     // The click-to-WhatsApp ad this message came from (headline — body), so the AI knows which offer "the ad" means (QA t10-08).
     string? AdContext = null,
     DateTimeOffset? SentAt = null,
-    long? ProviderOrder = null
+    long? ProviderOrder = null,
+    // A signed token for this run (AiRunToken): n8n sends it back as X-Omni-Run-Token on every tool call (QA t4-ai-09).
+    string? RunToken = null
 );

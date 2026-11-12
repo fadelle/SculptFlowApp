@@ -99,9 +99,8 @@ public class TikTokOAuthController : Controller
 
         if (oauthState is null || oauthState.ClientId != clientId.Value)
         {
-            var expired = _text["oauth.errors.expired"].Value;
-            await _tiktok.FailConnectAsync(clientId.Value, expired, ct);
-            return RedirectWithError(expired);
+            await _tiktok.FailConnectAsync(clientId.Value, StoredText.Key("oauth.errors.expired"), ct);
+            return RedirectWithError(_text["oauth.errors.expired"].Value);
         }
 
         if (!string.IsNullOrEmpty(error))
@@ -113,9 +112,8 @@ public class TikTokOAuthController : Controller
 
         if (string.IsNullOrEmpty(code))
         {
-            var noCode = _text["oauth.errors.noCode", TikTokName].Value;
-            await _tiktok.FailConnectAsync(clientId.Value, noCode, ct);
-            return RedirectWithError(noCode);
+            await _tiktok.FailConnectAsync(clientId.Value, StoredText.Key("oauth.errors.noCode", TikTokName), ct);
+            return RedirectWithError(_text["oauth.errors.noCode", TikTokName].Value);
         }
 
         try
@@ -128,9 +126,8 @@ public class TikTokOAuthController : Controller
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "TikTok OAuth code exchange failed.");
-            var failed = _text["oauth.errors.connectFailed", _text.Localize(ex)].Value;
-            await _tiktok.FailConnectAsync(clientId.Value, failed, ct);
-            return RedirectWithError(failed);
+            await _tiktok.FailConnectAsync(clientId.Value, StoredText.Key("oauth.errors.connectFailed", _text.Localize(ex)), ct);
+            return RedirectWithError(_text["oauth.errors.connectFailed", _text.Localize(ex)].Value);
         }
 
         TempData["StatusMessage"] = _text["oauth.connected", TikTokName].Value;

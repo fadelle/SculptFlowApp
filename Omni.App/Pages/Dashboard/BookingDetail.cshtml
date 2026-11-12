@@ -50,7 +50,7 @@ else
         <form method="post">
             <div class="au-form-field">
                 <label class="au-form-label" for="appt-status">@T["bookings.status"]</label>
-                <select name="Status" id="appt-status" class="au-select">
+                <select name="Status" id="appt-status" class="au-select" disabled="@(Model.StatusOptions.Count <= 1)">
                     @foreach (var s in Model.StatusOptions)
                     {
                         <option value="@s" selected="@(s == Model.Status)">@T.ValueLabel(s)</option>
@@ -59,7 +59,10 @@ else
             </div>
             <div class="au-form-actions">
                 <a href="/dashboard/bookings" class="au-btn au-btn--text">@T["bookingDetail.backToCalendar"]</a>
-                <button type="submit" class="au-btn au-btn--primary">@T["common.saveChanges"]</button>
+                @if (Model.StatusOptions.Count > 1)
+                {
+                    <button type="submit" class="au-btn au-btn--primary">@T["common.saveChanges"]</button>
+                }
             </div>
         </form>
     </section>

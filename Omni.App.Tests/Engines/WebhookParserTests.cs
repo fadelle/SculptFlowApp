@@ -92,9 +92,44 @@ public class TelegramUpdateParserTests
         Assert.True((DateTimeOffset.UtcNow - m.Timestamp).Duration() < TimeSpan.FromMinutes(1));
     }
 
+    [Fact]
+    public void An_edited_message_is_parsed_like_a_message()
+    {
+        // QA t3-inbox-17: edits were dropped silently.
+        var u = TelegramUpdateParser.Parse(J("{\"update_id\":7,\"edited_message\":{\"message_id\":42,\"date\":1790000000,\"edit_date\":1790000100,\"chat\":{\"id\":5,\"type\":\"private\"},\"from\":{\"id\":5,\"is_bot\":false,\"first_name\":\"Ann\"},\"text\":\"fixed typo\"}}"));
+        Assert.Equal(TelegramUpdateKind.EditedMessage, u.Kind);
+        Assert.Equal((5L, 42L, "fixed typo"), (u.Message!.ChatId, u.Message.MessageId, u.Message.Content));
+    }
+
+    [Theory]
+    [InlineData("kicked", TelegramUpdateKind.BotBlocked)]
+    [InlineData("member", TelegramUpdateKind.BotUnblocked)]
+    public void Blocking_and_restarting_the_bot_are_parsed(string status, TelegramUpdateKind kind)
+    {
+        var u = TelegramUpdateParser.Parse(J("{\"update_id\":8,\"my_chat_member\":{\"chat\":{\"id\":9,\"type\":\"private\",\"first_name\":\"Ann\"},\"date\":1790000000,\"new_chat_member\":{\"status\":\"" + status + "\"}}}"));
+        Assert.Equal(kind, u.Kind);
+        Assert.Equal(9L, u.Message!.ChatId);
+    }
+
+    [Theory]
+    [InlineData(null, true)]
+    [InlineData("{\"file_id\":\"f\"}", true)]
+    [InlineData("[{\"file_id\":\"a\"},{\"file_id\":\"b\"}]", false)]
+    public void An_edit_marks_object_or_empty_metadata_and_keeps_a_media_array(string? metadata, bool marked)
+    {
+        var at = new DateTimeOffset(2026, 11, 7, 10, 0, 0, TimeSpan.Zero);
+        var result = Omni.App.Business.Engines.Telegram.TelegramWebhookProcessor.WithEditedAt(metadata, at);
+        Assert.Equal(marked, result!.Contains("\"editedAt\":\"2026-11-07T10:00:00Z\""));
+        if (!marked) Assert.Equal(metadata, result);
+        if (metadata?.Contains("file_id") == true && marked) Assert.Contains("\"file_id\":\"f\"", result);
+    }
+
     [Theory]
     [InlineData("[]", "not_an_object")]
-    [InlineData("{\"update_id\":1,\"edited_message\":{}}", "unsupported_update_type")]
+    [InlineData("{\"update_id\":1,\"edited_message\":{}}", "no_chat")]
+    [InlineData("{\"update_id\":1,\"channel_post\":{}}", "unsupported_update_type")]
+    [InlineData("{\"update_id\":1,\"my_chat_member\":{\"chat\":{\"id\":1,\"type\":\"group\"}}}", "non_private_chat")]
+    [InlineData("{\"update_id\":1,\"my_chat_member\":{\"chat\":{\"id\":1,\"type\":\"private\"},\"new_chat_member\":{\"status\":\"administrator\"}}}", "member_status_administrator")]
     [InlineData("{\"update_id\":1,\"message\":5}", "unsupported_update_type")]
     [InlineData("{\"update_id\":1,\"message\":{\"message_id\":1}}", "no_chat")]
     [InlineData("{\"update_id\":1,\"message\":{\"message_id\":1,\"chat\":{\"id\":\"x\"}}}", "no_chat")]

@@ -26,6 +26,7 @@ public class ApplicationDbContext : IdentityUserContext<AppUser>
     public DbSet<Client> Clients => Set<Client>();
     public DbSet<BusinessType> BusinessTypes => Set<BusinessType>();
     public DbSet<PipelineStage> PipelineStages => Set<PipelineStage>();
+    public DbSet<ClientStageLabel> ClientStageLabels => Set<ClientStageLabel>();
     public DbSet<Service> Services => Set<Service>();
     public DbSet<Contact> Contacts => Set<Contact>();
     public DbSet<Conversation> Conversations => Set<Conversation>();
@@ -82,6 +83,7 @@ public class ApplicationDbContext : IdentityUserContext<AppUser>
     public DbSet<ConfigSetting> ConfigSettings => Set<ConfigSetting>();
     public DbSet<ApiRouteStat> ApiRouteStats => Set<ApiRouteStat>();
     public DbSet<AppLog> AppLogs => Set<AppLog>();
+    public DbSet<PlatformAdminWrite> PlatformAdminWrites => Set<PlatformAdminWrite>();
     public DbSet<MessageTraceStep> MessageTraceSteps => Set<MessageTraceStep>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -191,6 +193,17 @@ public class ApplicationDbContext : IdentityUserContext<AppUser>
             e.Property(x => x.CreatedAt).HasColumnName("created_at");
             e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
             e.HasMany(x => x.Stages).WithOne().HasForeignKey(x => x.BusinessTypeCode).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ClientStageLabel>(e =>
+        {
+            e.ToTable("client_stage_labels", "crm");
+            e.HasKey(x => new { x.ClientId, x.StageKey });
+            e.Property(x => x.ClientId).HasColumnName("client_id");
+            e.Property(x => x.StageKey).HasColumnName("stage_key").HasMaxLength(50);
+            e.Property(x => x.LabelsJson).HasColumnName("labels").HasColumnType("jsonb").IsRequired();
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+            e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
         });
 
         modelBuilder.Entity<PipelineStage>(e =>
@@ -1474,6 +1487,20 @@ public class ApplicationDbContext : IdentityUserContext<AppUser>
         });
 
         // Saved warnings and errors (activity.app_logs) — see AppLog and AppLogFlushJob. No foreign keys on purpose.
+        modelBuilder.Entity<PlatformAdminWrite>(e =>
+        {
+            e.ToTable("platform_admin_writes", "activity");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id").UseIdentityAlwaysColumn();
+            e.Property(x => x.OccurredAt).HasColumnName("occurred_at");
+            e.Property(x => x.Actor).HasColumnName("actor").HasMaxLength(200).IsRequired();
+            e.Property(x => x.IpAddress).HasColumnName("ip_address").HasMaxLength(64);
+            e.Property(x => x.Method).HasColumnName("method").HasMaxLength(10).IsRequired();
+            e.Property(x => x.Path).HasColumnName("path").HasMaxLength(300).IsRequired();
+            e.Property(x => x.StatusCode).HasColumnName("status_code");
+            e.Property(x => x.ClientId).HasColumnName("client_id");
+        });
+
         modelBuilder.Entity<AppLog>(e =>
         {
             e.ToTable("app_logs", "activity");
@@ -1597,6 +1624,7 @@ public class ApplicationDbContext : IdentityUserContext<AppUser>
             e.Property(x => x.CurrentPeriodStart).HasColumnName("current_period_start");
             e.Property(x => x.CurrentPeriodEnd).HasColumnName("current_period_end");
             e.Property(x => x.PeriodAnchor).HasColumnName("period_anchor");
+            e.Property(x => x.TrialUsedAt).HasColumnName("trial_used_at");
             e.Property(x => x.CancelAtPeriodEnd).HasColumnName("cancel_at_period_end");
             e.Property(x => x.PastDueSince).HasColumnName("past_due_since");
             e.Property(x => x.EndedAt).HasColumnName("ended_at");

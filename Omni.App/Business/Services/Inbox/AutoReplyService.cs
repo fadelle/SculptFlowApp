@@ -123,6 +123,7 @@ public class AutoReplyService : IAutoReplyService
     public async Task<AutoReplyChoice> ChooseAsync(Guid clientId, string channel, string trigger, bool aiAnswers, CancellationToken ct = default)
     {
         if (!_config.AutoReplyEnabled) return AutoReplyChoice.Skip(AutoReplyRules.SkipDisabledByAdmin);
+        if ((await _clients.GetReadOnlyAsync(clientId, ct))?.IsActive != true) return AutoReplyChoice.Skip(AutoReplyRules.SkipClientInactive);
         var row = await _autoReplies.GetReadOnlyAsync(clientId, channel, ct);
         return AutoReplyRules.Choose(row is null ? null : ToDto(row), trigger, aiAnswers);
     }

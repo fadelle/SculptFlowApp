@@ -83,6 +83,12 @@ public interface IConfigManager
     /// Default false: an add-on ends at the renewal unless it is set to renew.</summary>
     bool BillingAddonsRenewByDefault { get; }
 
+    /// <summary>Days before a trial ends that the billing banner warns (QA t2-billing-12).</summary>
+    int BillingTrialWarningDays { get; }
+
+    /// <summary>Wallet + included credit below which the billing banner warns; 0 = never (QA t2-billing-12).</summary>
+    decimal BillingLowBalanceThreshold { get; }
+
     // ---- OptOut
     /// <summary>A whole-message stop/start word opts the contact out of / back into business-started messages. Default true.</summary>
     bool OptOutEnabled { get; }
@@ -294,6 +300,15 @@ public interface IConfigManager
     /// <summary>How long a conversation's next bot run waits after its message arrived, so a burst is saved and answered in the
     /// order it was written (QA t7-06). Default 1000; 0 = no wait.</summary>
     int AiBurstWaitMilliseconds { get; }
+
+    /// <summary>Most bot runs of one client at once (QA t7-05: one busy client delayed every client). Default 2.</summary>
+    int AiMaxConcurrentRunsPerClient { get; }
+
+    /// <summary>Waiting text messages of one conversation are answered in one run (QA t4-ai-18). Default true.</summary>
+    bool AiMergeBurstMessages { get; }
+
+    /// <summary>Minutes without a reply after the bot was asked before the conversation goes to the team (QA t9-04); 0 = never. Default 10.</summary>
+    int AiNoAnswerHandoffMinutes { get; }
 
     /// <summary>A repeated, never-answered customer message asks the AI again once it is this old (QA t10-03). Default 120.</summary>
     int AiRetryUnansweredAfterSeconds { get; }

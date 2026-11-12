@@ -26,7 +26,9 @@ public class ChannelAdminRepository : IChannelAdminRepository
             .Select(c => new ChannelRow(c.Id, c.ClientId, c.Client!.Name, c.Channel,
                 c.Status, c.DisplayName,
                 c.PhoneNumberId ?? c.TelegramBotUsername ?? c.PageId,
-                c.HealthLevel, c.IsHealthy, c.LastProblemMessage, c.LastError, c.WebhookStatus, c.LastWebhookAt,
+                // A row whose stored level predates the LastError rule (QA t8-20) still reads as a warning.
+                c.LastError != null && c.HealthLevel == WhatsAppHealthLevel.Healthy ? WhatsAppHealthLevel.Warning : c.HealthLevel,
+                c.IsHealthy, c.LastProblemMessage ?? c.LastError, c.LastError, c.WebhookStatus, c.LastWebhookAt,
                 c.LastVerifiedAt, c.UpdatedAt))
             .ToListAsync(ct);
     }

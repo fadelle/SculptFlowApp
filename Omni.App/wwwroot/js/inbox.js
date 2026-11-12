@@ -179,7 +179,8 @@
 
   // "Layla Haddad" -> "LH". Mirrors Initials() in Pages/Inbox/Index.cshtml.
   function initials(name) {
-    var parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+    // Letters and digits only (QA t3-inbox-20: "[QA] TG 0106" showed "[0").
+    var parts = String(name || '').trim().split(/\s+/).map(function (p) { return p.replace(/[^\p{L}\p{N}]/gu, ''); }).filter(Boolean);
     if (parts.length === 0) return '?';
     return (parts[0].charAt(0) + (parts.length > 1 ? parts[parts.length - 1].charAt(0) : '')).toUpperCase();
   }
@@ -318,7 +319,7 @@
           '</div>' +
           (c.serviceName ? '<div class="inbox-conv-service">' + escapeHtml(c.serviceName) + '</div>' : '') +
           '<div class="inbox-conv-bottom">' +
-            '<span class="inbox-conv-preview" dir="auto">' + escapeHtml(c.lastMessagePreview || omniText.t('inbox.list.noMessages')) + '</span>' +
+            '<span class="inbox-conv-preview" dir="auto">' + escapeHtml((window.InboxMessageView ? window.InboxMessageView.previewText(c.lastMessagePreview) : c.lastMessagePreview) || omniText.t('inbox.list.noMessages')) + '</span>' +
             modePill +
           '</div>' +
         '</div>';
@@ -429,6 +430,14 @@
     return '<div class="inbox-msg-source">' + escapeHtml(originLabel(origin)) + '</div>';
   }
 
+  // A voice note plays; a photo, location, contact card, Flows answer… reads by its type (inbox-message-view.js, QA t10-09);
+  // anything else is its text.
+  function messageBody(m) {
+    if (window.InboxVoice && window.InboxVoice.isVoice(m)) return window.InboxVoice.html(m);
+    var typed = window.InboxMessageView ? window.InboxMessageView.html(m) : null;
+    return typed !== null && typed !== undefined ? typed : escapeHtml(m.content || '');
+  }
+
   // When a message happened: when the customer wrote it or it was sent (the order the server returns them in, QA t3-inbox-16),
   // else when it was saved.
   function messageAt(m) { return m.receivedAt || m.sentAt || m.createdAt; }
@@ -480,9 +489,11 @@
         ? '<div class="inbox-msg-failure">' + escapeHtml(m.failureReason) + '</div>' : '';
       bubble.innerHTML =
         bubbleLabel(m.origin) +
-        '<div class="inbox-msg-content" dir="auto">' + (window.InboxVoice && window.InboxVoice.isVoice(m) ? window.InboxVoice.html(m) : escapeHtml(m.content || '')) + '</div>' +
+        '<div class="inbox-msg-content" dir="auto">' + messageBody(m) + '</div>' +
         failureNote +
-        '<div class="inbox-msg-time" title="' + escapeHtml(formatTime(messageAt(m))) + '">' + formatClock(messageAt(m)) + ' ' + tick + '</div>';
+        '<div class="inbox-msg-time" title="' + escapeHtml(formatTime(messageAt(m))) + '">' + formatClock(messageAt(m)) + ' ' + tick +
+        // A message the contact edited afterwards (Telegram; QA t3-inbox-17) shows the new text and says so.
+        (/"editedAt"\s*:/.test(m.metadataJson || '') ? ' <span class="inbox-msg-edited">' + escapeHtml(omniText.t('inbox.thread.edited')) + '</span>' : '') + '</div>';
 
       row.appendChild(bubble);
       messagesEl.appendChild(row);
@@ -534,11 +545,18 @@
     // The 24h customer-service window (and message templates) are WhatsApp-only — a Telegram
     // conversation can always be replied to, so its composer is never disabled and has no template button.
     var isWhatsApp = conversation.channel === 'whatsapp';
-    currentWindowOpen = !isWhatsApp || !!conversation.isServiceWindowOpen;
+    // A channel that isn't connected can't send at all (QA t8-18): the composer and templates are off, with a notice.
+    var channelOff = conversation.channelConnected === false;
+    currentWindowOpen = !channelOff && (!isWhatsApp || !!conversation.isServiceWindowOpen);
     composerInputEl.disabled = !currentWindowOpen;
     composerSendEl.disabled = !currentWindowOpen;
-    windowClosedNoticeEl.hidden = currentWindowOpen;
-    btnSendTemplate.hidden = !isWhatsApp;
+    windowClosedNoticeEl.hidden = currentWindowOpen || channelOff;
+    var channelOffEl = document.getElementById('inbox-channel-off-notice');
+    if (channelOffEl) channelOffEl.hidden = !channelOff;
+    windowEndsAt = isWhatsApp && currentWindowOpen && conversation.serviceWindowExpiresAt ? new Date(conversation.serviceWindowExpiresAt) : null;
+    updateWindowCountdown();
+    updateComposerCount();
+    btnSendTemplate.hidden = !isWhatsApp || channelOff;
     hideTemplatePicker();
   }
 
@@ -612,7 +630,10 @@
       document.getElementById('inbox-contact-order').href = '/dashboard/contacts/' + contact.id + '?order=new';
 
       var step = stage ? journeyStep(stage.category) : 0;
-      document.getElementById('inbox-contact-journey-wrap').hidden = step === 0; // off-path stages (lost, no-show…) show just the badge
+      var journeyWrap = document.getElementById('inbox-contact-journey-wrap');
+      // Off-path stages (lost, no-show…) show just the badge; so does every contact on a plan without bookings, whose journey
+      // (booked, attended) would only point at what the plan doesn't include (QA t3-inbox-20).
+      journeyWrap.hidden = step === 0 || journeyWrap.getAttribute('data-bookings') === 'off';
       document.querySelectorAll('#inbox-contact-journey i').forEach(function (el, i) { el.classList.toggle('on', i < step); });
     };
 
@@ -649,6 +670,44 @@
   // ---------------------------------------------------------------------
   // Composer + mode controls
   // ---------------------------------------------------------------------
+  // The longest text one message may have (Telegram's and WhatsApp's limit is 4096). Near it the composer counts, past it
+  // Send waits (QA t3-inbox-14: the 4108-character message was refused by Telegram after sending).
+  var MAX_MESSAGE = 4096;
+  var countEl = document.getElementById('inbox-composer-count');
+  function updateComposerCount() {
+    if (!countEl) return;
+    var length = composerInputEl.value.length;
+    countEl.hidden = length < MAX_MESSAGE - 300;
+    countEl.textContent = omniText.t('inbox.composer.count', [length, MAX_MESSAGE]);
+    countEl.classList.toggle('is-over', length > MAX_MESSAGE);
+    if (currentWindowOpen) composerSendEl.disabled = length > MAX_MESSAGE;
+  }
+  composerInputEl.addEventListener('input', updateComposerCount);
+
+  // WhatsApp's 24-hour window: how long is left, and the composer closes when it ends while the page is open (QA t8-19:
+  // the next send failed with a 409).
+  var windowEndsAt = null;
+  var windowEl = document.getElementById('inbox-composer-window');
+  function updateWindowCountdown() {
+    if (!windowEl) return;
+    if (!windowEndsAt) { windowEl.hidden = true; return; }
+    var left = windowEndsAt.getTime() - Date.now();
+    if (left <= 0) {
+      windowEndsAt = null;
+      windowEl.hidden = true;
+      currentWindowOpen = false;
+      composerInputEl.disabled = true;
+      composerSendEl.disabled = true;
+      windowClosedNoticeEl.hidden = false;
+      return;
+    }
+    var hours = Math.floor(left / 3600000), minutes = Math.max(1, Math.ceil((left % 3600000) / 60000));
+    windowEl.hidden = false;
+    windowEl.textContent = hours > 0 ? omniText.t('inbox.composer.windowHours', [hours, minutes]) : omniText.t('inbox.composer.windowMinutes', [minutes]);
+    windowEl.classList.toggle('is-soon', left < 3600000);
+  }
+  setInterval(updateWindowCountdown, 30000);
+
   // Enter sends (matches WhatsApp/Slack-style chat composers); Shift+Enter inserts a newline.
   composerInputEl.addEventListener('keydown', function (e) {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -716,7 +775,9 @@
   function loadApprovedTemplates() {
     if (approvedTemplates) return Promise.resolve(approvedTemplates);
     return apiGet(withClient('/api/whatsapp/templates')).then(function (templates) {
-      approvedTemplates = (templates || []).filter(function (t) { return t.status === 'approved'; });
+      // Approved templates with a body to show: one known only from a Meta event has none, and was preselected with an
+      // empty preview (QA t8-19).
+      approvedTemplates = (templates || []).filter(function (t) { return t.status === 'approved' && (t.body || '').trim() !== ''; });
       return approvedTemplates;
     });
   }
@@ -766,7 +827,10 @@
         templates.forEach(function (t) {
           var opt = document.createElement('option');
           opt.value = t.id;
-          opt.textContent = t.name + ' (' + t.language + ')';
+          // Its category says what it costs (marketing is charged at a higher rate than utility; QA t8-19).
+          var categoryKey = 'values.' + String(t.category || '').toLowerCase(); // values.marketing / values.utility
+          var category = t.category ? omniText.t(categoryKey) : '';
+          opt.textContent = t.name + ' (' + t.language + ')' + (category && category.indexOf('values.') !== 0 ? ' · ' + category : '');
           templateSelectEl.appendChild(opt);
         });
       }

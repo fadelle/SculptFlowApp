@@ -132,7 +132,12 @@ public class OverviewAdminRepository : IOverviewAdminRepository
                 _db.Conversations.Where(x => x.ClientId == c.Id).Max(x => x.LastMessageAt),
                 _db.ChannelIntegrations.Where(i => i.ClientId == c.Id && i.Channel == ChannelType.WhatsApp)
                     .Select(i => i.Status).FirstOrDefault() ?? "not set up",
-                c.CreatedAt))
+                c.CreatedAt)
+            {
+                // Every channel, not only WhatsApp (QA t6-admin-24: Telegram/Instagram clients read "WhatsApp: not set up").
+                Channels = _db.ChannelIntegrations.Where(i => i.ClientId == c.Id).OrderBy(i => i.Channel)
+                    .Select(i => new ClientChannelState(i.Channel, i.Status)).ToList()
+            })
             .ToListAsync(ct);
 
     public Task<PagedResponse<EventRow>> EventsAsync(Guid? clientId, string? eventType, int page, CancellationToken ct = default)

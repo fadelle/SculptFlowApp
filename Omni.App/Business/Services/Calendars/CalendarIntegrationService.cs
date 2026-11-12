@@ -118,10 +118,14 @@ public class CalendarIntegrationService : ICalendarIntegrationService
         return ToResponse(row);
     }
 
-    public async Task<CalendarIntegrationResponse> FailConnectAsync(Guid clientId, string provider, string errorMessage, CancellationToken ct = default)
+    public async Task<CalendarIntegrationResponse?> FailConnectAsync(Guid clientId, string provider, string errorMessage, CancellationToken ct = default)
     {
         EnsureKnownProvider(provider);
-        var row = await GetOrCreateAsync(clientId, provider, ct);
+        // Only a connect in progress can fail (QA t5-ops-14): a stray or old callback must not flip a connected calendar, or
+        // one never set up, to "error".
+        var row = await _calendars.GetWithCalendarsAsync(clientId, provider, ct);
+        if (row is null) return null;
+        if (row.Status != CalendarIntegrationStatus.Pending) return ToResponse(row);
         row.Status = CalendarIntegrationStatus.Error;
         row.LastProblemMessage = errorMessage;
         row.UpdatedAt = DateTimeOffset.UtcNow;

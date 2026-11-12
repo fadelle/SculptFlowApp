@@ -124,8 +124,10 @@ public class BookingService : IBookingService
 
     /// <summary>Tells the client's open calendars to re-fetch (best-effort SignalR) AND — for created/rescheduled/canceled — creates
     /// the matching BOOKING_* notification (see INotificationService; "status_changed" covers attended/no_show/confirmed and
-    /// "updated" a member's edit without a time change, which aren't in the notification list). Called only once the booking row is actually committed — never on a mere request.</summary>
-    private async Task NotifyChangedAsync(Guid clientId, BookingResponse booking, string change, CancellationToken ct)
+    /// "updated" a member's edit without a time change, which aren't in the notification list). Called only once the booking row is actually committed — never on a mere request.
+    /// The bell notice is only for changes the team didn't make itself (the AI, the contact): a member's own create, edit or cancel
+    /// in the dashboard refreshes the calendars but adds no notification (QA t5-ops-23: 26 notices after a short session).</summary>
+    private async Task NotifyChangedAsync(Guid clientId, BookingResponse booking, string change, CancellationToken ct, bool bell = true)
     {
         try { await _notifier.BookingChangedAsync(clientId, booking.Id, change, ct); }
         catch { /* best effort */ }
@@ -149,7 +151,7 @@ public class BookingService : IBookingService
                 NotificationText.Of("notifications.booking.canceled.title", "notifications.booking.canceled.message", who, what, whenLabel)),
             _ => (null, null)
         };
-        if (type is null) return;
+        if (type is null || !bell) return;
 
         await _notifications.CreateAsync(clientId, type, text!,
             contactId: booking.ContactId, bookingId: booking.Id,
@@ -173,7 +175,7 @@ public class BookingService : IBookingService
 
         var booking = await CreateCoreAsync(request with { ScheduledEnd = end }, ct);
         await tx.CommitAsync(ct);
-        await NotifyChangedAsync(request.ClientId, booking, "created", ct);
+        await NotifyChangedAsync(request.ClientId, booking, "created", ct, bell: false); // a member made it in the dashboard
         return booking;
     }
 
@@ -294,8 +296,13 @@ public class BookingService : IBookingService
         return booking is null ? null : BookingMapper.ToResponse(booking);
     }
 
+    public Task<IReadOnlyDictionary<Guid, int>> CountUpcomingByServiceAsync(Guid clientId, CancellationToken ct = default) =>
+        _bookings.CountUpcomingByServiceAsync(clientId, DateTimeOffset.UtcNow, ct);
+
     public async Task<BookingResponse?> UpdateStatusAsync(Guid clientId, Guid id, string status, CancellationToken ct = default)
     {
+        status = status?.Trim() ?? string.Empty;
+        if (status.Length == 0) throw new ArgumentException("bookings.errors.statusRequired");
         if (!BookingStatus.All.Contains(status))
         {
             throw new ArgumentException("bookings.errors.invalidStatus").WithArgs(status);
@@ -304,6 +311,20 @@ public class BookingService : IBookingService
 
         var booking = await _bookings.GetAsync(clientId, id, ct);
         if (booking is null) return null;
+        if (booking.Status == status) return await ToResponseAsync(booking, ct); // nothing to change
+
+        // Only real changes (QA t5-ops-03): a canceled booking stays canceled, an outcome needs the booking to have started.
+        if (!BookingStatus.NextFrom(booking.Status).Contains(status))
+        {
+            throw new ArgumentException("bookings.errors.cantChangeStatus")
+                .WithArgs(TextArg.Value(booking.Status), TextArg.Value(status));
+        }
+        if (BookingStatus.IsOutcome(status) && booking.ScheduledStart > DateTimeOffset.UtcNow)
+        {
+            throw new ArgumentException("bookings.errors.outcomeBeforeStart").WithArgs(TextArg.Value(status));
+        }
+        // A cancel is the same cancel as everywhere else: the canceled event, the stage moved back, the calendar event removed.
+        if (status == BookingStatus.Canceled) return await CancelCoreAsync(clientId, booking, reason: null, by: "member", ct);
 
         booking.Status = status;
         booking.UpdatedAt = DateTimeOffset.UtcNow;
@@ -327,8 +348,41 @@ public class BookingService : IBookingService
 
         await _unitOfWork.SaveChangesAsync(ct);
         var updateResponse = await ToResponseAsync(booking, ct);
-        await NotifyChangedAsync(clientId, updateResponse, status == BookingStatus.Canceled ? "canceled" : "status_changed", ct);
+        await NotifyChangedAsync(clientId, updateResponse, "status_changed", ct);
         return updateResponse;
+    }
+
+    /// <summary>Cancels a booked or confirmed booking: the canceled event (with who and why), the contact moved back out of
+    /// the booked stage when this was their only upcoming booking, then the notification and the calendar delete.</summary>
+    private async Task<BookingResponse> CancelCoreAsync(Guid clientId, Booking booking, string? reason, string by, CancellationToken ct)
+    {
+        booking.Status = BookingStatus.Canceled;
+        booking.UpdatedAt = DateTimeOffset.UtcNow;
+
+        _events.Log(clientId, EventTypes.BookingCanceled, contactId: booking.ContactId, bookingId: booking.Id,
+            metadataJson: JsonSerializer.Serialize(new { reason, by }));
+
+        // Still "booked" with nothing booked any more: back to the stage after the entry one ("contacted"), the furthest
+        // open stage a contact who booked has surely reached. Another upcoming booking keeps them booked.
+        var contact = await _contacts.GetAsync(clientId, booking.ContactId, ct);
+        if (contact is not null)
+        {
+            var pipeline = await _businessTypes.GetPipelineAsync(clientId, ct);
+            if (pipeline.CategoryOf(contact.StageKey) == StageCategory.Booked)
+            {
+                var others = await _bookings.ListUpcomingForContactAsync(clientId, booking.ContactId, DateTimeOffset.UtcNow, ct);
+                if (!others.Any(b => b.Id != booking.Id && BookingStatus.BlocksTime(b.Status)))
+                {
+                    contact.StageKey = pipeline.NextAfterEntry(pipeline.EntryKey) ?? pipeline.EntryKey;
+                    contact.UpdatedAt = DateTimeOffset.UtcNow;
+                }
+            }
+        }
+
+        await _unitOfWork.SaveChangesAsync(ct);
+        var response = await ToResponseAsync(booking, ct);
+        await NotifyChangedAsync(clientId, response, "canceled", ct, bell: by != "member");
+        return response;
     }
 
     public async Task<BookingResponse?> UpdateAsync(Guid clientId, Guid id, UpdateBookingRequest request, CancellationToken ct = default)
@@ -384,7 +438,7 @@ public class BookingService : IBookingService
         var response = await ToResponseAsync(booking, ct);
         await tx.CommitAsync(ct);
         // "updated" refreshes open calendars and the connected calendars' event without a notification.
-        await NotifyChangedAsync(clientId, response, moved ? "rescheduled" : "updated", ct);
+        await NotifyChangedAsync(clientId, response, moved ? "rescheduled" : "updated", ct, bell: false); // the member's own edit
         return response;
     }
 
@@ -449,16 +503,7 @@ public class BookingService : IBookingService
             throw new ArgumentException("bookings.errors.cantCancel").WithArgs(TextArg.Value(booking.Status));
         }
 
-        booking.Status = BookingStatus.Canceled;
-        booking.UpdatedAt = DateTimeOffset.UtcNow;
-
-        _events.Log(clientId, EventTypes.BookingCanceled, contactId: booking.ContactId, bookingId: booking.Id,
-            metadataJson: JsonSerializer.Serialize(new { reason }));
-
-        await _unitOfWork.SaveChangesAsync(ct);
-        var cancelResponse = await ToResponseAsync(booking, ct);
-        await NotifyChangedAsync(clientId, cancelResponse, "canceled", ct);
-        return cancelResponse;
+        return await CancelCoreAsync(clientId, booking, reason, by: "ai", ct);
     }
 
     public async Task<ContactBookingContext?> GetBookingContextAsync(Guid clientId, Guid contactId, CancellationToken ct = default)

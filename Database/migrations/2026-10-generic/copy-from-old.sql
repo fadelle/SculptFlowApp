@@ -439,13 +439,16 @@ from old_billing.plans o;
 
 -- billing.subscriptions -> billing.subscriptions
 insert into billing.subscriptions (
-    id, client_id, plan_id, status, current_period_start, current_period_end, period_anchor, cancel_at_period_end,
+    id, client_id, plan_id, status, current_period_start, current_period_end, period_anchor, trial_used_at, cancel_at_period_end,
     past_due_since, ended_at, created_at, updated_at
 )
 select
-    o.id, o.clinic_id, o.plan_id, o.status, o.current_period_start, o.current_period_end, o.current_period_start, o.cancel_at_period_end,
-    o.past_due_since, o.ended_at, o.created_at, o.updated_at
-from old_billing.subscriptions o;
+    o.id, o.clinic_id, o.plan_id, o.status, o.current_period_start, o.current_period_end, o.current_period_start,
+    -- A client on a trial plan has used its trial (QA t2-billing-21).
+    case when p.trial_days is not null then o.current_period_start end,
+    o.cancel_at_period_end, o.past_due_since, o.ended_at, o.created_at, o.updated_at
+from old_billing.subscriptions o
+left join billing.plans p on p.id = o.plan_id;
 
 -- billing.rates -> billing.rates
 insert into billing.rates (

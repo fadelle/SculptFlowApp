@@ -16,6 +16,12 @@ namespace Omni.App.Business.Services.Bookings;
 
 public class AvailabilityService : IAvailabilityService
 {
+    // The member's wording of each note (QA t5-ops-22); the AI tool keeps its own Message.
+    private const string PastKey = "bookings.available.past";
+    private const string NotConfiguredKey = "bookings.available.notConfigured";
+    private const string TooFarKey = "bookings.available.tooFar";
+    private const string NoneKey = "bookings.available.none";
+
     // Defaults for clients without their own booking settings, read through IConfigManager (config.settings, else
     // the constants in Common/Statics/ConfigDefaults).
     private int DefaultDurationMinutes => _config.AvailabilityDefaultDurationMinutes;
@@ -57,7 +63,7 @@ public class AvailabilityService : IAvailabilityService
         if (!ctx.Configured)
         {
             return NotConfigured(ctx.Tz.Id, duration, today,
-                "This client hasn't set up its booking availability yet, so no times can be offered.");
+                "This client hasn't set up its booking availability yet, so no times can be offered.") with { MessageKey = NotConfiguredKey };
         }
 
         // A past date is almost always the caller working from the wrong "today". Don't silently search other dates —
@@ -68,7 +74,7 @@ public class AvailabilityService : IAvailabilityService
                 requested.ToString("yyyy-MM-dd"), requested.ToString("yyyy-MM-dd"),
                 $"The requested date {requested:yyyy-MM-dd} is in the past. Today is {today:yyyy-MM-dd} ({today.DayOfWeek}). " +
                 "Resolve the contact's day from today's date and call again with a date that is today or later.",
-                Array.Empty<AvailableSlotResponse>());
+                Array.Empty<AvailableSlotResponse>()) { MessageKey = PastKey };
         }
 
         days = Math.Clamp(days, 1, MaxRangeDays);
@@ -80,23 +86,27 @@ public class AvailabilityService : IAvailabilityService
         if (start > maxDate)
         {
             return new AvailabilityResponse(true, ctx.Tz.Id, today.ToString("yyyy-MM-dd"), duration, start.ToString("yyyy-MM-dd"), start.ToString("yyyy-MM-dd"),
-                $"Bookings can only be made up to {ctx.Settings.MaximumAdvanceBookingDays} days ahead.", Array.Empty<AvailableSlotResponse>());
+                $"Bookings can only be made up to {ctx.Settings.MaximumAdvanceBookingDays} days ahead.", Array.Empty<AvailableSlotResponse>())
+            {
+                MessageKey = TooFarKey, MessageArgs = [ctx.Settings.MaximumAdvanceBookingDays]
+            };
         }
 
-        await ctx.LoadExceptionsAsync(_availability, clientId, start, end, ct);
-        var busy = await LoadBusyAsync(clientId, ctx, start, end, ct);
+        // From the day before: its late hours can run past midnight into the first day of the range (QA t12-fix-07).
+        await ctx.LoadExceptionsAsync(_availability, clientId, start.AddDays(-1), end, ct);
+        var busy = await LoadBusyAsync(clientId, ctx, start, end.AddDays(1), ct);
 
         var buffer = ctx.Settings.BufferMinutes;
         var step = duration + buffer;
         var earliest = nowUtc.AddMinutes(ctx.Settings.MinimumBookingNoticeMinutes);
         var slots = new List<AvailableSlotResponse>();
 
-        for (var date = start; date <= end; date = date.AddDays(1))
+        for (var date = start.AddDays(-1); date <= end; date = date.AddDays(1))
         {
-            foreach (var (windowStart, windowEnd) in ctx.Windows(date))
+            foreach (var (spanStart, spanEnd) in ctx.Spans(date))
             {
-                var cursor = date.ToDateTime(windowStart);
-                var limit = date.ToDateTime(windowEnd);
+                var cursor = spanStart;
+                var limit = spanEnd;
 
                 // Next-fit: take a slot, advance by duration + buffer; when an existing booking (plus buffer) is in the way,
                 // jump to the first moment after it. Keeps slots on a tidy grid while still using the gaps around off-grid bookings.
@@ -108,6 +118,10 @@ public class AvailabilityService : IAvailabilityService
                     var slotEnd = slotStart.AddMinutes(duration);
 
                     if (slotStart < earliest) { cursor = cursor.AddMinutes(step); continue; }
+                    // A slot is listed under the day it starts on: the day before's late hours only count from the range's start.
+                    var slotDate = DateOnly.FromDateTime(cursor);
+                    if (slotDate < start) { cursor = cursor.AddMinutes(step); continue; }
+                    if (slotDate > maxDate) break;
 
                     if (IsBlocked(busy, buffer, slotStart, slotEnd, out var freeFrom))
                     {
@@ -117,15 +131,18 @@ public class AvailabilityService : IAvailabilityService
                     }
 
                     slots.Add(new AvailableSlotResponse(slotStart, slotEnd,
-                        date.ToString("yyyy-MM-dd"), cursor.ToString("HH:mm"),
-                        $"{date.DayOfWeek} {cursor.ToString("h:mm tt", System.Globalization.CultureInfo.InvariantCulture)}"));
+                        slotDate.ToString("yyyy-MM-dd"), cursor.ToString("HH:mm"),
+                        $"{slotDate.DayOfWeek} {cursor.ToString("h:mm tt", System.Globalization.CultureInfo.InvariantCulture)}"));
                     cursor = cursor.AddMinutes(step);
                 }
             }
         }
 
         var message = slots.Count == 0 ? "No available times in this date range." : null;
-        return new AvailabilityResponse(true, ctx.Tz.Id, today.ToString("yyyy-MM-dd"), duration, start.ToString("yyyy-MM-dd"), end.ToString("yyyy-MM-dd"), message, slots);
+        return new AvailabilityResponse(true, ctx.Tz.Id, today.ToString("yyyy-MM-dd"), duration, start.ToString("yyyy-MM-dd"), end.ToString("yyyy-MM-dd"), message, slots)
+        {
+            MessageKey = slots.Count == 0 ? NoneKey : null
+        };
     }
 
     public async Task<SlotCheck> CheckSlotAsync(
@@ -155,13 +172,12 @@ public class AvailabilityService : IAvailabilityService
             return new SlotCheck($"Bookings can only be made up to {ctx.Settings.MaximumAdvanceBookingDays} days ahead.", slotEnd, SlotCheckReason.Horizon);
         }
 
-        await ctx.LoadExceptionsAsync(_availability, clientId, date, date, ct);
-        var inWindow = ctx.Windows(date).Any(w =>
-            DateOnly.FromDateTime(endLocal) == date
-            && TimeOnly.FromDateTime(startLocal) >= w.Start && TimeOnly.FromDateTime(endLocal) <= w.End);
+        // The day before too: a booking after midnight can sit in its late hours (QA t12-fix-07).
+        await ctx.LoadExceptionsAsync(_availability, clientId, date.AddDays(-1), date, ct);
+        var inWindow = new[] { date.AddDays(-1), date }.SelectMany(ctx.Spans).Any(w => startLocal >= w.Start && endLocal <= w.End);
         if (!inWindow) return new SlotCheck("The client is not open for a booking at that time.", slotEnd, SlotCheckReason.Closed);
 
-        var busy = await LoadBusyAsync(clientId, ctx, date, date, ct, excludeBookingId);
+        var busy = await LoadBusyAsync(clientId, ctx, date, date.AddDays(1), ct, excludeBookingId);
         if (IsBlocked(busy, ctx.Settings.BufferMinutes, start, slotEnd, out _))
         {
             return new SlotCheck("That time is no longer available - it overlaps another booking.", slotEnd, SlotCheckReason.Overlap);
@@ -239,7 +255,8 @@ public class AvailabilityService : IAvailabilityService
             {
                 var name = TextArg.Of("days." + ((DayOfWeek)d.DayOfWeek).ToString().ToLowerInvariant());
                 if (!okStart || !okEnd) throw new ArgumentException("availability.errors.dayTimesRequired").WithArgs(name);
-                if (e <= s) throw new ArgumentException("availability.errors.dayEndBeforeStart").WithArgs(name);
+                // An end before the start closes the next day, e.g. 20:00 to 02:00 (QA t12-fix-07); the same time is no window.
+                if (e == s) throw new ArgumentException("availability.errors.dayEndSameAsStart").WithArgs(name);
                 windows.Add((s, e));
                 var hasStart2 = !string.IsNullOrWhiteSpace(d.Start2);
                 var hasEnd2 = !string.IsNullOrWhiteSpace(d.End2);
@@ -247,7 +264,9 @@ public class AvailabilityService : IAvailabilityService
                 {
                     if (!TimeOnly.TryParse(d.Start2, out var s2) || !TimeOnly.TryParse(d.End2, out var e2))
                         throw new ArgumentException("availability.errors.secondWindowIncomplete").WithArgs(name);
-                    if (e2 <= s2) throw new ArgumentException("availability.errors.dayEndBeforeStart").WithArgs(name);
+                    // Only the day's last hours may run past midnight.
+                    if (e < s) throw new ArgumentException("availability.errors.overnightLast").WithArgs(name);
+                    if (e2 == s2) throw new ArgumentException("availability.errors.dayEndSameAsStart").WithArgs(name);
                     if (s2 < e) throw new ArgumentException("availability.errors.secondWindowOrder").WithArgs(name);
                     windows.Add((s2, e2));
                 }
@@ -255,11 +274,22 @@ public class AvailabilityService : IAvailabilityService
             else
             {
                 // A closed day still stores a valid window (the times are kept for when it opens again).
-                windows.Add(okStart && okEnd && e > s ? (s, e) : (new TimeOnly(9, 0), new TimeOnly(17, 0)));
+                windows.Add(okStart && okEnd && e != s ? (s, e) : (new TimeOnly(9, 0), new TimeOnly(17, 0)));
             }
             parsed.Add((d.DayOfWeek, d.IsOpen, windows));
         }
         if (parsed.Select(p => p.Dow).Distinct().Count() != parsed.Count) throw new ArgumentException("availability.errors.duplicateDay");
+        // Late hours that run past midnight must end before the next day opens (QA t12-fix-07).
+        foreach (var p in parsed.Where(p => p.Open && p.Windows[^1].End < p.Windows[^1].Start))
+        {
+            var next = parsed.FirstOrDefault(n => n.Dow == (p.Dow + 1) % 7);
+            if (next.Windows is { Count: > 0 } && next.Open && next.Windows[0].Start < p.Windows[^1].End)
+            {
+                throw new ArgumentException("availability.errors.overnightOverlap").WithArgs(
+                    TextArg.Of("days." + ((DayOfWeek)p.Dow).ToString().ToLowerInvariant()),
+                    TextArg.Of("days." + ((DayOfWeek)next.Dow).ToString().ToLowerInvariant()));
+            }
+        }
 
         var now = DateTimeOffset.UtcNow;
         var rules = await _availability.ListRulesAsync(clientId, ct);
@@ -445,6 +475,11 @@ public class AvailabilityService : IAvailabilityService
             _exceptions.Clear();
             foreach (var e in rows) _exceptions[e.Date] = e;
         }
+
+        /// <summary>The open windows of a local date as local start/end moments: a window whose end is before its start closes
+        /// the next day (QA t12-fix-07: 20:00 to 02:00).</summary>
+        public IEnumerable<(DateTime Start, DateTime End)> Spans(DateOnly date) =>
+            Windows(date).Select(w => (date.ToDateTime(w.Start), w.End > w.Start ? date.ToDateTime(w.End) : date.AddDays(1).ToDateTime(w.End))).ToList();
 
         /// <summary>The open windows for a local date: a date exception replaces the weekly schedule entirely.</summary>
         public IEnumerable<(TimeOnly Start, TimeOnly End)> Windows(DateOnly date)

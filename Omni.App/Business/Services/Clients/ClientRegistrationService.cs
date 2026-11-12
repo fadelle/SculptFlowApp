@@ -97,7 +97,8 @@ public partial class ClientRegistrationService : IClientRegistrationService
         }
         if (!await _businessTypes.IsActiveAsync(request.BusinessTypeCode, ct)) return ClientRegistrationResult.Fail(BusinessTypeRequiredKey);
 
-        return await CreateAccountAsync(fullName, clientName, email, request.BusinessTypeCode!.Trim(), user => _users.CreateAsync(user, password), ct);
+        return await CreateAccountAsync(fullName, clientName, email, request.BusinessTypeCode!.Trim(), user => _users.CreateAsync(user, password), ct,
+            request.Timezone);
     }
 
     public async Task<ClientRegistrationResult> RegisterExternalAsync(RegisterExternalClientRequest request, CancellationToken ct = default)
@@ -121,12 +122,12 @@ public partial class ClientRegistrationService : IClientRegistrationService
             var created = await _users.CreateAsync(user);
             if (!created.Succeeded) return created;
             return await _users.AddLoginAsync(user, new UserLoginInfo(request.LoginProvider, request.ProviderKey, request.ProviderDisplayName));
-        }, ct);
+        }, ct, request.Timezone);
     }
 
     private async Task<ClientRegistrationResult> CreateAccountAsync(
         string fullName, string clientName, string email, string businessTypeCode, Func<AppUser, Task<IdentityResult>> createUser,
-        CancellationToken ct)
+        CancellationToken ct, string? timezone = null)
     {
         for (var attempt = 0; attempt < MaxSlugAttempts; attempt++)
         {
@@ -155,7 +156,7 @@ public partial class ClientRegistrationService : IClientRegistrationService
                 }
 
                 // The dashboard opens in the language the owner signed up in.
-                var client = AddClient(clientName, slug, email, businessTypeCode, _text.Language, now);
+                var client = AddClient(clientName, slug, email, businessTypeCode, _text.Language, now, timezone);
                 _clients.AddMembership(new ClientUser
                 {
                     Id = Guid.NewGuid(),
@@ -196,9 +197,17 @@ public partial class ClientRegistrationService : IClientRegistrationService
         return ClientRegistrationResult.Fail(FailedKey);
     }
 
+    /// <summary>The browser's time zone when it is a real IANA zone this server knows (QA t5-ops-21), else null.</summary>
+    internal static string? KnownTimezone(string? timezone)
+    {
+        var tz = timezone?.Trim();
+        return !string.IsNullOrEmpty(tz) && tz.Length <= 64 && tz.Contains('/') && TimeZoneInfo.TryFindSystemTimeZoneById(tz, out _) ? tz : null;
+    }
+
     /// <summary>The client row and its (empty) prepaid billing account — see Billing/. Balances only ever change through the
     /// ledger. Not saved yet.</summary>
-    private Client AddClient(string clientName, string slug, string email, string businessTypeCode, string language, DateTimeOffset now)
+    private Client AddClient(string clientName, string slug, string email, string businessTypeCode, string language, DateTimeOffset now,
+        string? timezone = null)
     {
         var client = new Client
         {
@@ -206,7 +215,7 @@ public partial class ClientRegistrationService : IClientRegistrationService
             Name = clientName,
             Slug = slug,
             Email = email,
-            Timezone = "UTC",
+            Timezone = KnownTimezone(timezone) ?? "UTC",
             BusinessTypeCode = businessTypeCode,
             DefaultLanguage = language,
             IsActive = true,

@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.Extensions.Localization;
 using Omni.App.Business.Contracts.Managers;
 using Omni.App.Business.Contracts.Services.Knowledge;
+using Omni.App.Common.Enums;
 using Omni.App.Common.Helpers;
 using Omni.App.Entities.Responses.Knowledge;
 
@@ -38,9 +39,23 @@ public class DetailsModel : PageModel
     [BindProperty(SupportsGet = true)]
     public string? Status { get; set; }
 
+    /// <summary>Pages per list page (QA t4-ai-13: a 100-page crawl was one 50,000 px list on a phone).</summary>
+    public const int PageSize = 50;
+    /// <summary>The most pages one list reads (the service's cap); a crawl is limited by WebScraping:MaxPages.</summary>
+    private const int ListCap = 500;
+
+    [BindProperty(SupportsGet = true, Name = "p")]
+    public int PageNumber { get; set; } = 1;
+
     public bool ClientConfigured { get; private set; }
     public WebsiteSourceDetailResponse? Detail { get; private set; }
     public IReadOnlyList<WebsitePageResponse> Pages { get; private set; } = Array.Empty<WebsitePageResponse>();
+    /// <summary>Pages in the current list (all list pages).</summary>
+    public int TotalCount { get; private set; }
+    public int TotalPages => Math.Max(1, (TotalCount + PageSize - 1) / PageSize);
+    /// <summary>In the "All" view, the pages already in the Knowledge Base are folded into one line with their count (and a link
+    /// to them), so the pages with a problem come first (QA t4-ai-13).</summary>
+    public int FoldedInKnowledge { get; private set; }
 
     [TempData]
     public string? StatusMessage { get; set; }
@@ -57,12 +72,39 @@ public class DetailsModel : PageModel
         Detail = await _websites.GetAsync(client.Id, Id, ct);
         if (Detail is null) return NotFound();
         // "In Knowledge Base" = indexed + unchanged pages (both are what the AI can use).
-        Pages = Status == "in_kb"
-            ? (await _websites.ListPagesAsync(client.Id, Id, Omni.App.Common.Enums.WebsitePageStatus.Indexed, 0, 300, ct))
-                .Concat(await _websites.ListPagesAsync(client.Id, Id, Omni.App.Common.Enums.WebsitePageStatus.Unchanged, 0, 300, ct)).ToList()
-            : await _websites.ListPagesAsync(client.Id, Id, Status, 0, 300, ct);
+        IReadOnlyList<WebsitePageResponse> list;
+        if (Status == "in_kb")
+        {
+            list = (await _websites.ListPagesAsync(client.Id, Id, WebsitePageStatus.Indexed, 0, ListCap, ct))
+                .Concat(await _websites.ListPagesAsync(client.Id, Id, WebsitePageStatus.Unchanged, 0, ListCap, ct)).ToList();
+        }
+        else if (!string.IsNullOrEmpty(Status))
+        {
+            list = await _websites.ListPagesAsync(client.Id, Id, Status, 0, ListCap, ct);
+        }
+        else
+        {
+            var every = await _websites.ListPagesAsync(client.Id, Id, null, 0, ListCap, ct);
+            FoldedInKnowledge = every.Count(p => InKnowledge(p.Status));
+            list = every.Where(p => !InKnowledge(p.Status)).OrderBy(p => ProblemRank(p.Status)).ThenBy(p => p.Url, StringComparer.Ordinal).ToList();
+        }
+        TotalCount = list.Count;
+        PageNumber = Math.Clamp(PageNumber, 1, TotalPages);
+        Pages = list.Skip((PageNumber - 1) * PageSize).Take(PageSize).ToList();
         return Page();
     }
+
+    private static bool InKnowledge(string status) => status is WebsitePageStatus.Indexed or WebsitePageStatus.Unchanged;
+
+    /// <summary>Failed first, then skipped, duplicate, removed, then the ones still being read.</summary>
+    internal static int ProblemRank(string status) => status switch
+    {
+        WebsitePageStatus.Failed => 0,
+        WebsitePageStatus.Skipped => 1,
+        WebsitePageStatus.Duplicate => 2,
+        WebsitePageStatus.Removed => 3,
+        _ => 4
+    };
 
     public async Task<IActionResult> OnPostRescrapeAsync(CancellationToken ct)
     {

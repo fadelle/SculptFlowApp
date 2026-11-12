@@ -77,7 +77,10 @@ else
                                 </td>
                                 <td class="row-actions">
                                     <a href="/Bots/Edit/@bot.Id" class="au-btn au-btn--outlined au-btn--sm">@T["common.edit"]</a>
-                                    <form method="post" asp-page-handler="Status" class="inline-form">
+                                    @* Deactivating a bot that answers accounts asks first (QA t7-08): their AI conversations go to the team. *@
+                                    <form method="post" asp-page-handler="Status" class="inline-form"
+                                          data-au-confirm="@(bot.Status == BotStatus.Active && bot.AccountCount > 0 ? T.Plural("bots.deactivate.confirm", bot.AccountCount, bot.Name, bot.AccountCount).Value : null)"
+                                          data-au-confirm-title="@T["bots.deactivate.title"]" data-au-confirm-label="@T["bots.deactivate"]">
                                         <input type="hidden" name="id" value="@bot.Id" />
                                         @if (bot.Status == BotStatus.Active)
                                         {

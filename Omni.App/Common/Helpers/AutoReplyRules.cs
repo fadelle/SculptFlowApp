@@ -10,6 +10,8 @@ public static class AutoReplyRules
     public const string SkipOff = "off";
     public const string SkipAiAnswers = "ai_answers";
     public const string SkipDisabledByAdmin = "disabled_by_admin";
+    /// <summary>The client is deactivated: its incoming messages are still saved, but nothing automatic goes out (QA t12-fix-02).</summary>
+    public const string SkipClientInactive = "client_inactive";
 
     /// <param name="settings">The channel's settings; null = the client has none (off).</param>
     /// <param name="trigger">AutoReplyTrigger.NewConversation or AutoReplyTrigger.Reopened.</param>
@@ -22,7 +24,8 @@ public static class AutoReplyRules
             AutoReplyTrigger.NewConversation => settings.NewConversationEnabled ? settings.NewConversationMessage : null,
             AutoReplyTrigger.Reopened => settings.ReopenedMode switch
             {
-                AutoReplyReopenedMode.Same => settings.NewConversationMessage,
+                // "Same message" is the new-conversation reply: off when that is off (QA t7-09).
+                AutoReplyReopenedMode.Same => settings.NewConversationEnabled ? settings.NewConversationMessage : null,
                 AutoReplyReopenedMode.Custom => settings.ReopenedMessage,
                 _ => null
             },

@@ -53,4 +53,8 @@ public interface IKnowledgeService
 
     /// <summary>Deletes the document and its chunks. Returns false if it isn't in this client.</summary>
     Task<bool> DeleteAsync(Guid clientId, Guid id, CancellationToken ct = default);
+
+    /// <summary>Re-chunks and re-embeds one entry's stored text with the client's current settings (the background re-index,
+    /// QA t4-ai-15). False when the entry is gone. A provider failure throws before anything changes: the old chunks stay.</summary>
+    Task<bool> ReindexAsync(Guid clientId, Guid id, CancellationToken ct = default);
 }

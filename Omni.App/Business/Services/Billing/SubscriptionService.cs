@@ -75,6 +75,12 @@ public class SubscriptionService : ISubscriptionService
         {
             throw new ArgumentException($"Plan '{planCode}' is priced in {plan.Currency}, but the client's account is in {account.Currency}.", nameof(request));
         }
+        // One trial per client (QA t2-billing-21: restarting the trial gave a fresh 7 days each time); the admin can allow another.
+        if (plan.TrialDays is not null && subscription?.TrialUsedAt is { } trialUsed && !request.AllowAnotherTrial)
+        {
+            throw new InvalidOperationException(
+                $"This client already had a trial (started {trialUsed:yyyy-MM-dd}). Choose a paid plan, or allow another trial on purpose.");
+        }
 
         var price = request.ChargeFirstPeriod ? plan.Price : 0m;
         // Add-ons are charged with the plan from each period start (none for a free first period). One for a limit the new plan
@@ -103,6 +109,7 @@ public class SubscriptionService : ISubscriptionService
         subscription.CurrentPeriodStart = now;
         subscription.CurrentPeriodEnd = PlanPeriod.End(plan, now);
         subscription.PeriodAnchor = now;
+        if (plan.TrialDays is not null) subscription.TrialUsedAt ??= now;
         subscription.CancelAtPeriodEnd = false;
         subscription.PastDueSince = null;
         subscription.EndedAt = null;
@@ -137,7 +144,10 @@ public class SubscriptionService : ISubscriptionService
         return subscription;
     }
 
-    public async Task<RenewalOutcome> RenewIfDueAsync(Guid clientId, CancellationToken ct = default)
+    public Task<RenewalOutcome> RenewIfDueAsync(Guid clientId, CancellationToken ct = default) =>
+        RenewIfDueAsync(clientId, BillingSource.Worker, null, ct);
+
+    public async Task<RenewalOutcome> RenewIfDueAsync(Guid clientId, string source, string? actor, CancellationToken ct = default)
     {
         var now = _time.GetUtcNow();
 
@@ -166,20 +176,20 @@ public class SubscriptionService : ISubscriptionService
         {
             // A trial never renews: it ends, and the admin moves the client to a paid plan.
             await ExpireCreditAsync(unit, account, $"subscription:{subscription.Id}:trial-ended:{Stamp(periodEnd)}:credit-expiry",
-                new LedgerContext(BillingSource.Worker, Reason: "Trial ended", SubscriptionId: subscription.Id, PlanId: plan.Id), now, ct);
+                new LedgerContext(source, actor, Reason: "Trial ended", SubscriptionId: subscription.Id, PlanId: plan.Id), now, ct);
             subscription.Status = SubscriptionStatus.Expired;
             subscription.EndedAt = periodEnd;
-            BillingLedger.LogEvent(unit, clientId, BillingEventTypes.SubscriptionExpired, BillingSource.Worker,
+            BillingLedger.LogEvent(unit, clientId, BillingEventTypes.SubscriptionExpired, source,
                 new { plan = plan.Code, endedAt = periodEnd, trialEnded = true }, now);
             outcome = RenewalOutcome.Expired;
         }
         else if (subscription.CancelAtPeriodEnd)
         {
             await ExpireCreditAsync(unit, account, $"subscription:{subscription.Id}:cancelled-at-end:{Stamp(periodEnd)}:credit-expiry",
-                new LedgerContext(BillingSource.Worker, Reason: "Subscription cancelled at period end", SubscriptionId: subscription.Id, PlanId: plan.Id), now, ct);
+                new LedgerContext(source, actor, Reason: "Subscription cancelled at period end", SubscriptionId: subscription.Id, PlanId: plan.Id), now, ct);
             subscription.Status = SubscriptionStatus.Cancelled;
             subscription.EndedAt = periodEnd;
-            BillingLedger.LogEvent(unit, clientId, BillingEventTypes.SubscriptionCancelled, BillingSource.Worker,
+            BillingLedger.LogEvent(unit, clientId, BillingEventTypes.SubscriptionCancelled, source,
                 new { plan = plan.Code, endedAt = periodEnd, scheduled = true }, now);
             outcome = RenewalOutcome.Cancelled;
         }
@@ -227,13 +237,13 @@ public class SubscriptionService : ISubscriptionService
             if (CanPay(account, plan.Price + addonsPrice, plan.IncludedUsageCredit))
             {
                 await StartPeriodAsync(unit, account, plan, plan.Price, addonsPrice, keyBase,
-                    new LedgerContext(BillingSource.Worker, Reason: "Subscription renewal", SubscriptionId: subscription.Id, PlanId: plan.Id), now, ct);
+                    new LedgerContext(source, actor, Reason: "Subscription renewal", SubscriptionId: subscription.Id, PlanId: plan.Id), now, ct);
                 subscription.CurrentPeriodStart = newStart;
                 subscription.CurrentPeriodEnd = newEnd;
                 subscription.PeriodAnchor = anchor;
                 subscription.Status = SubscriptionStatus.Active;
                 subscription.PastDueSince = null;
-                BillingLedger.LogEvent(unit, clientId, BillingEventTypes.SubscriptionRenewed, BillingSource.Worker,
+                BillingLedger.LogEvent(unit, clientId, BillingEventTypes.SubscriptionRenewed, source,
                     new
                     {
                         plan = plan.Code, charged = plan.Price, addons = addonsPrice, currency = account.Currency, periodEnd = subscription.CurrentPeriodEnd,
@@ -245,10 +255,10 @@ public class SubscriptionService : ISubscriptionService
             {
                 // The period is over either way, so its unused credit goes; the plan stays usable during the grace period.
                 await ExpireCreditAsync(unit, account, $"subscription:{subscription.Id}:ended:{Stamp(periodEnd)}:credit-expiry",
-                    new LedgerContext(BillingSource.Worker, Reason: "Period ended unpaid", SubscriptionId: subscription.Id, PlanId: plan.Id), now, ct);
+                    new LedgerContext(source, actor, Reason: "Period ended unpaid", SubscriptionId: subscription.Id, PlanId: plan.Id), now, ct);
                 subscription.Status = SubscriptionStatus.PastDue;
                 subscription.PastDueSince = now;
-                BillingLedger.LogEvent(unit, clientId, BillingEventTypes.SubscriptionPastDue, BillingSource.Worker,
+                BillingLedger.LogEvent(unit, clientId, BillingEventTypes.SubscriptionPastDue, source,
                     new { plan = plan.Code, due = plan.Price, currency = account.Currency, wallet = account.WalletBalance, graceDays = _config.BillingGracePeriodDays }, now);
                 outcome = RenewalOutcome.PastDue;
             }
@@ -256,7 +266,7 @@ public class SubscriptionService : ISubscriptionService
             {
                 subscription.Status = SubscriptionStatus.Expired;
                 subscription.EndedAt = now;
-                BillingLedger.LogEvent(unit, clientId, BillingEventTypes.SubscriptionExpired, BillingSource.Worker,
+                BillingLedger.LogEvent(unit, clientId, BillingEventTypes.SubscriptionExpired, source,
                     new { plan = plan.Code, pastDueSince = subscription.PastDueSince }, now);
                 outcome = RenewalOutcome.Expired;
             }
@@ -278,7 +288,9 @@ public class SubscriptionService : ISubscriptionService
         await unit.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
         await _cache.RemoveAsync(CacheKeys.Entitlements(clientId), ct);
+        await _cache.RemoveAsync(CacheKeys.BillingBanner(clientId), ct);
         await NotifyEndedAddonsAsync(clientId, notRenewed, unpaid, included, ct);
+        await NotifyStateAsync(clientId, outcome, plan, subscription.PastDueSince, ct);
 
         if (outcome == RenewalOutcome.Renewed)
         {
@@ -443,6 +455,30 @@ public class SubscriptionService : ISubscriptionService
 
     /// <summary>Tells the client which add-ons ended: one notice for those not set to renew, one for those the wallet couldn't pay,
     /// one for those the plan already includes without limit. A failed notice is logged, never thrown (the change is already saved).</summary>
+    /// <summary>One bell notice for the client when the worker ended its trial or plan or couldn't pay the renewal (QA
+    /// t2-billing-12: nothing said so but Settings → Billing). Renewed and not-due change nothing the client must act on.
+    /// Best effort: the subscription change is already committed.</summary>
+    private async Task NotifyStateAsync(Guid clientId, RenewalOutcome outcome, SubscriptionPlan plan, DateTimeOffset? pastDueSince, CancellationToken ct)
+    {
+        if (_notifications is null) return;
+        var text = outcome switch
+        {
+            RenewalOutcome.Expired when plan.TrialDays is not null =>
+                NotificationText.Of("notifications.billing.trialEnded.title", "notifications.billing.trialEnded.message", plan.Name),
+            RenewalOutcome.Expired => NotificationText.Of("notifications.billing.planEnded.title", "notifications.billing.planEnded.message", plan.Name),
+            RenewalOutcome.Cancelled => NotificationText.Of("notifications.billing.planCancelled.title", "notifications.billing.planCancelled.message", plan.Name),
+            RenewalOutcome.PastDue => NotificationText.Of("notifications.billing.renewalUnpaid.title", "notifications.billing.renewalUnpaid.message", plan.Name,
+                $"[[time:{(pastDueSince ?? _time.GetUtcNow()).AddDays(_config.BillingGracePeriodDays).ToUniversalTime():yyyy-MM-dd'T'HH:mm:ss'Z'}]]"),
+            _ => null
+        };
+        if (text is null) return;
+        try { await _notifications.CreateAsync(clientId, NotificationType.Billing, text, link: "/settings/billing", ct: ct); }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "Billing: the {Outcome} notice for client {ClientId} wasn't created.", outcome, clientId);
+        }
+    }
+
     private async Task NotifyEndedAddonsAsync(Guid clientId, IReadOnlyList<ClientAddon> notRenewed, IReadOnlyList<ClientAddon> unpaid,
         IReadOnlyList<ClientAddon> included, CancellationToken ct)
     {

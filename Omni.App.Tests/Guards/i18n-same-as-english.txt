@@ -141,3 +141,8 @@ ar contactDetail.orders.title
 ar contactDetail.orders.service
 fr contactDetail.orders.title
 fr contactDetail.orders.service
+fr inbox.msgType.image
+fr inbox.msgType.document
+fr contacts.import.field.notes
+fr contacts.export.service
+fr contacts.export.source

@@ -82,6 +82,14 @@ public class ContactStageWalkTests(PostgresFixture fixture) : RepoTestBase(fixtu
         }
         await AssertStageAsync(contactId, pipeline, StageCategory.Booked);
 
+        // The visit happened (an outcome needs a booking that has started; QA t5-ops-03).
+        await using (var db = NewContext())
+        {
+            var visit = await db.Bookings.SingleAsync(b => b.Id == bookingId);
+            visit.ScheduledStart = DateTimeOffset.UtcNow.AddHours(-2);
+            visit.ScheduledEnd = visit.ScheduledStart.AddMinutes(30);
+            await db.SaveChangesAsync();
+        }
         await using (var db = NewContext()) await Bookings(db).UpdateStatusAsync(client.Id, bookingId, BookingStatus.Attended);
         await AssertStageAsync(contactId, pipeline, StageCategory.Attended);
 

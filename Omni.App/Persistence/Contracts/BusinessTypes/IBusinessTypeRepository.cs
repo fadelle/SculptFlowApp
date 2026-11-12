@@ -21,6 +21,19 @@ public interface IBusinessTypeRepository
 
     void RemoveStage(PipelineStage stage);
 
+    /// <summary>The client's own stage labels (QA t12-fix-06), cached; empty when it has none.</summary>
+    Task<IReadOnlyList<ClientStageLabel>> ListClientLabelsReadOnlyAsync(Guid clientId, CancellationToken ct = default);
+
+    /// <summary>The same rows, tracked, to change them.</summary>
+    Task<List<ClientStageLabel>> ListClientLabelsAsync(Guid clientId, CancellationToken ct = default);
+
+    void AddClientLabel(ClientStageLabel label);
+
+    void RemoveClientLabel(ClientStageLabel label);
+
+    /// <summary>Drops the client's cached labels (the save interceptor does too; this covers a cache it isn't wired to).</summary>
+    Task ForgetClientLabelsAsync(Guid clientId, CancellationToken ct = default);
+
     /// <summary>How many clients use each type (types no client uses are left out).</summary>
     Task<IReadOnlyDictionary<string, int>> CountClientsByTypeAsync(CancellationToken ct = default);
 

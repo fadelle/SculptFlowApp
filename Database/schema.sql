@@ -396,6 +396,22 @@ create trigger trg_services_updated_at
   before update on core.services
   for each row execute function set_updated_at();
 
+-- A client's own names for its business type's stages (QA t12-fix-06). The keys and categories stay the type's, so
+-- reports, campaign filters and automatic moves keep working; a label per language ({"en": "...", "ar": "..."}) replaces the
+-- type's label for this client only. No row (or no label in a language) = the type's label. A key the client's type no longer
+-- has is ignored (it comes back if the client returns to a type with that key).
+create table if not exists crm.client_stage_labels (
+  client_id   uuid not null references core.clients(id) on delete cascade,
+  stage_key   varchar(50) not null,
+  labels      jsonb not null default '{}'::jsonb,
+  created_at  timestamptz not null default now(),
+  updated_at  timestamptz not null default now(),
+  constraint pk_client_stage_labels primary key (client_id, stage_key)
+);
+drop trigger if exists trg_client_stage_labels_updated_at on crm.client_stage_labels;
+create trigger trg_client_stage_labels_updated_at before update on crm.client_stage_labels
+  for each row execute function set_updated_at();
+
 -- ---------------------------------------------------------------------
 -- 3. contacts
 -- ---------------------------------------------------------------------
@@ -1823,8 +1839,12 @@ create table if not exists scheduling.availability_rules (
   end_time     time not null,
   created_at   timestamptz not null default now(),
   updated_at   timestamptz not null default now(),
-  constraint ck_availability_rules_range check (end_time > start_time)
+  -- end before start = the window closes the next day (QA t12-fix-07: 20:00 to 02:00); equal times are no window
+  constraint ck_availability_rules_range check (end_time <> start_time)
 );
+-- Existing databases: the constraint used to be end_time > start_time.
+alter table scheduling.availability_rules drop constraint if exists ck_availability_rules_range;
+alter table scheduling.availability_rules add constraint ck_availability_rules_range check (end_time <> start_time);
 drop index if exists scheduling.ux_availability_rules_day;
 create index if not exists ix_availability_rules_client_day on scheduling.availability_rules(client_id, day_of_week);
 drop trigger if exists trg_availability_rules_updated_at on scheduling.availability_rules;
@@ -2316,6 +2336,7 @@ create table if not exists billing.subscriptions (
   current_period_start  timestamptz not null,
   current_period_end    timestamptz not null,
   period_anchor         timestamptz,                                  -- start of the run of periods; null = current_period_start
+  trial_used_at         timestamptz,                                  -- first trial start; a second trial needs the admin's say
   cancel_at_period_end  boolean not null default false,
   past_due_since        timestamptz,
   ended_at              timestamptz,
@@ -2326,6 +2347,10 @@ create table if not exists billing.subscriptions (
 -- QA t2-billing-19: every period ends a whole number of periods after period_anchor, so a month started on the 31st doesn't
 -- drift to the 30th for good. Set when a plan starts and when an overdue subscription restarts from now.
 alter table billing.subscriptions add column if not exists period_anchor timestamptz;
+-- QA t2-billing-21: a client gets one trial; restarting it needs allowAnotherTrial from the admin. Kept through later plans.
+alter table billing.subscriptions add column if not exists trial_used_at timestamptz;
+update billing.subscriptions s set trial_used_at = s.current_period_start
+from billing.plans p where p.id = s.plan_id and p.trial_days is not null and s.trial_used_at is null;
 create index if not exists ix_subscriptions_due on billing.subscriptions(current_period_end)
   where status in ('active','past_due');
 drop trigger if exists trg_subscriptions_updated_at on billing.subscriptions;
@@ -2582,6 +2607,27 @@ create table if not exists activity.api_route_stats (
 );
 
 create index if not exists ix_api_route_stats_bucket_start on activity.api_route_stats(bucket_start);
+
+-- =====================================================================
+-- Platform-admin write log: activity.platform_admin_writes (QA t6-admin-23)
+--
+-- Every write to /api/platform-admin (any method but GET), recorded by the main app after it answered: the actor the
+-- X-Admin-Actor header named (free text: read it with the address), the visitor's address, method, path, status and the
+-- client the route names. Refused calls too. The portal's admin_audit_log only sees calls made through the portal; this
+-- one also catches direct calls with the shared key. Kept 365 days (PlatformAdminWriteLogMiddleware). No foreign keys.
+-- =====================================================================
+create table if not exists activity.platform_admin_writes (
+  id           bigint generated always as identity primary key,
+  occurred_at  timestamptz not null,
+  actor        varchar(200) not null,
+  ip_address   varchar(64),
+  method       varchar(10) not null,
+  path         varchar(300) not null,
+  status_code  int not null,
+  client_id    uuid
+);
+create index if not exists ix_platform_admin_writes_at on activity.platform_admin_writes(occurred_at desc);
+create index if not exists ix_platform_admin_writes_client on activity.platform_admin_writes(client_id, occurred_at desc) where client_id is not null;
 
 -- =====================================================================
 -- Error log: activity.app_logs

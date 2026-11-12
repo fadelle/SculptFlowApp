@@ -125,13 +125,17 @@ public class AiTriggerNotifier : IAiTriggerNotifier
                 : null,
             Timezone = profile.Timezone,
             AiProfile = profile.AiProfile,
-            Terms = profile.Terms
+            Terms = profile.Terms,
+            // n8n sends it back on every tool call: the ingest key alone can't act for a client (QA t4-ai-09).
+            RunToken = AiRunToken.Secret(_configuration) is { } secret && payload.Bot is { } bot
+                ? AiRunToken.Issue(secret, payload.ClientId, bot.Id, DateTimeOffset.UtcNow)
+                : null
         };
 
         var started = Stopwatch.GetTimestamp();
         try
         {
-            using var response = await _http.PostAsJsonAsync(url, trigger, JsonOptions, ct);
+            using var response = await N8nWebhook.PostAsync(_http, url, trigger, JsonOptions, _configuration, ct);
             var elapsed = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
             if (!response.IsSuccessStatusCode)
             {

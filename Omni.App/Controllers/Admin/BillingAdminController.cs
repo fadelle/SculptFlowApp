@@ -153,13 +153,18 @@ public class BillingAdminController : ControllerBase
     {
         if (IdempotencyKey is not { } key) return MissingIdempotencyKey();
         var subscription = await _subscriptions.StartAsync(new StartSubscriptionRequest(
-            clientId, request.PlanCode, key, request.ChargeFirstPeriod, BillingSource.Admin, Actor, request.Reason), ct);
-        return Ok(BillingQueryService.ToSubscription(subscription));
+            clientId, request.PlanCode, key, request.ChargeFirstPeriod, BillingSource.Admin, Actor, request.Reason, request.AllowAnotherTrial), ct);
+        // What the client now uses beyond the new plan's limits (QA t2-billing-11: a downgrade left 3 seats of 1 silently).
+        var usage = HttpContext?.RequestServices?.GetService<IPlanUsageService>();
+        var over = usage is null ? [] : await usage.OverLimitsAsync(clientId, ct);
+        return Ok(BillingQueryService.ToSubscription(subscription) with { OverLimits = over });
     }
 
     [HttpPost("clients/{clientId:guid}/subscription/cancel")]
-    public async Task<IActionResult> CancelSubscription(Guid clientId, [FromBody] CancelSubscriptionRequest request, CancellationToken ct) =>
-        await _subscriptions.CancelAsync(clientId, request.Immediately, BillingSource.Admin, Actor, request.Reason, ct) is { } s
+    public async Task<IActionResult> CancelSubscription(Guid clientId,
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] CancelSubscriptionRequest? request, CancellationToken ct) =>
+        // No body = cancel at the period's end, no reason (QA t2-billing-25: an empty POST was a 415).
+        await _subscriptions.CancelAsync(clientId, request?.Immediately ?? false, BillingSource.Admin, Actor, request?.Reason, ct) is { } s
             ? Ok(BillingQueryService.ToSubscription(s)) : NotFound();
 
     [HttpPost("clients/{clientId:guid}/subscription/resume")]
@@ -170,7 +175,7 @@ public class BillingAdminController : ControllerBase
     /// <summary>Runs the renewal check now (e.g. right after a top-up for a past-due client) instead of waiting for the worker.</summary>
     [HttpPost("clients/{clientId:guid}/subscription/renew")]
     public async Task<IActionResult> Renew(Guid clientId, CancellationToken ct) =>
-        Ok(new { outcome = (await _subscriptions.RenewIfDueAsync(clientId, ct)).ToString() });
+        Ok(new { outcome = (await _subscriptions.RenewIfDueAsync(clientId, BillingSource.Admin, Actor, ct)).ToString() });
 
     /// <summary>Adds money to the wallet (a payment received outside the app). Requires Idempotency-Key.</summary>
     [HttpPost("clients/{clientId:guid}/wallet/top-ups")]

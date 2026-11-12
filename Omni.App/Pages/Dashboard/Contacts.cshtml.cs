@@ -27,9 +27,12 @@ public class ContactsModel : PageModel
 
     private const string AddedKey = "contacts.add.done";
 
+    private readonly IContactImportService? _csv;
+
     public ContactsModel(ICurrentClientContext clientContext, IDashboardService dashboard, IContactService contacts, IConfigManager config,
-        ICatalogService catalog, IStringLocalizer text)
+        ICatalogService catalog, IStringLocalizer text, IContactImportService? csv = null)
     {
+        _csv = csv;
         _catalog = catalog;
         _text = text;
         _config = config;
@@ -123,7 +126,21 @@ public class ContactsModel : PageModel
         AllSources = await _contacts.GetDistinctSourcesAsync(client.Id, ct);
         Stages = await _contacts.ListStagesAsync(client.Id, ct);
         ActiveServices = await _catalog.ListAsync(client.Id, activeOnly: true, ct);
+        CanExport = (await _clientContext.GetAccessAsync(ct))?.Role == UserRole.Client;
     }
 
     public int TotalPages => (int)Math.Ceiling(TotalCount / (double)PageSize);
+
+    /// <summary>Only the owner may download the whole list (QA t12-fix-05): it is every contact's details at once.</summary>
+    public bool CanExport { get; private set; }
+
+    /// <summary>The list as filtered (stage, search, source) as a CSV file; the owner only.</summary>
+    public async Task<IActionResult> OnGetExportAsync(CancellationToken ct)
+    {
+        var client = await _clientContext.GetClientAsync(ct);
+        if (client is null || _csv is null) return RedirectToPage();
+        if ((await _clientContext.GetAccessAsync(ct))?.Role != UserRole.Client) return Forbid();
+        var csv = await _csv.ExportAsync(client.Id, Stage, Search, Source, ct);
+        return File(System.Text.Encoding.UTF8.GetBytes(csv), "text/csv; charset=utf-8", $"contacts-{DateTime.UtcNow:yyyy-MM-dd}.csv");
+    }
 }

@@ -74,4 +74,14 @@ public class ContentAdminController : ControllerBase
     [HttpPut("knowledge/settings/{clientId:guid}")]
     public async Task<IActionResult> UpdateSearchSettings(Guid clientId, [FromBody] SearchSettingsBody request, CancellationToken ct) =>
         Ok(await _content.UpdateSearchSettingsAsync(clientId, request.TopK, request.MinimumSimilarity, ct));
+
+    /// <summary>Re-indexes the client's whole Knowledge Base in the background (QA t4-ai-15); 202 { clientId }.</summary>
+    [HttpPost("knowledge/reindex/{clientId:guid}")]
+    public async Task<IActionResult> StartReindex(Guid clientId, CancellationToken ct) =>
+        Accepted(await _content.StartReindexAsync(clientId, ct));
+
+    /// <summary>The running or last re-index ({ total, done, failed, startedAt, finishedAt, running }); 404 when none since start-up.</summary>
+    [HttpGet("knowledge/reindex/{clientId:guid}")]
+    public IActionResult ReindexProgress(Guid clientId) =>
+        _content.ReindexProgress(clientId) is { } progress ? Ok(progress) : NotFound();
 }

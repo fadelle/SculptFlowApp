@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using System.Text;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -145,6 +146,22 @@ public class ContactsAndBookingsControllerTests : ClientControllerTestBase
         Assert.IsType<NotFoundResult>((await Appts().Update(Guid.NewGuid(), req, default)).Result);
         NoClient();
         Assert.IsType<ForbidResult>((await Appts().Update(id, req, default)).Result);
+    }
+
+    [Fact]
+    public async Task The_dashboard_reads_the_availability_note_in_its_own_words_not_the_ais()
+    {
+        // QA t5-ops-22: the dashboard showed "Resolve the contact's day from today's date and call again ...".
+        var past = new DateOnly(2020, 1, 1);
+        _availability.Setup(a => a.GetSlotsAsync(ClientId, null, past, 1, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AvailabilityResponse(true, "UTC", "t", 30, "a", "b", "Resolve the contact's day ... call again", []) { MessageKey = "bookings.available.past" });
+        var controller = Appts();
+        controller.ControllerContext.HttpContext.RequestServices = new Microsoft.Extensions.DependencyInjection.ServiceCollection()
+            .AddSingleton<Microsoft.Extensions.Localization.IStringLocalizer>(TextKit.Localizer()).BuildServiceProvider();
+
+        var answer = (AvailabilityResponse)Assert.IsType<OkObjectResult>((await controller.GetAvailable(null, past, null, default)).Result).Value!;
+
+        Assert.Equal(TextKit.Localizer()["bookings.available.past"].Value, answer.Message);
     }
 
     [Fact]

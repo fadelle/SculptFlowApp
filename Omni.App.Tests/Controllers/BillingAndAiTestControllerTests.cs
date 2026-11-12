@@ -213,12 +213,21 @@ public class BillingAdminControllerTests
     }
 
     [Fact]
-    public async Task Renew_reports_the_outcome_name()
+    public async Task Renew_reports_the_outcome_name_and_records_the_admin_who_ran_it()
     {
-        var outcome = Enum.GetValues<RenewalOutcome>().First();
-        _subscriptions.Setup(s => s.RenewIfDueAsync(Client, It.IsAny<CancellationToken>())).ReturnsAsync(outcome);
-        var ok = Assert.IsType<OkObjectResult>(await Sut().Renew(Client, default));
-        Assert.Contains(outcome.ToString(), ok.Value!.ToString());
+        // QA t2-billing-25: an admin's "Run renewal now" was logged as the worker, with no actor.
+        _subscriptions.Setup(s => s.RenewIfDueAsync(Client, BillingSource.Admin, "bob", It.IsAny<CancellationToken>())).ReturnsAsync(RenewalOutcome.PastDue);
+        var ok = Assert.IsType<OkObjectResult>(await Sut("k1", "bob").Renew(Client, default));
+        Assert.Contains("PastDue", ok.Value!.ToString());
+    }
+
+    [Fact]
+    public async Task Cancel_without_a_body_cancels_at_the_period_end()
+    {
+        // QA t2-billing-25: an empty POST answered 415.
+        _subscriptions.Setup(s => s.CancelAsync(Client, false, BillingSource.Admin, It.IsAny<string?>(), null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ClientSubscription { Id = Guid.NewGuid(), ClientId = Client, Status = SubscriptionStatus.Active, Plan = new SubscriptionPlan { Code = "p", Name = "P" } });
+        Assert.IsType<OkObjectResult>(await Sut().CancelSubscription(Client, null, default));
     }
 
     [Fact]

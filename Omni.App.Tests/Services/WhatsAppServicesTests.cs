@@ -448,6 +448,31 @@ public class WhatsAppHealthServiceTests
     private WhatsAppHealthEventRequest Req(string type, string? status = null, string? quality = null, string? waba = "W1", string? phone = "P1", string? code = null, string? message = null, DateTimeOffset? at = null) =>
         new(_clientId, type, waba, phone, status, quality, code, message, at, "{}");
 
+    [Theory]
+    [InlineData(true, 1)]
+    [InlineData(false, 0)]
+    public async Task A_broken_connection_found_by_a_send_marks_health_and_notifies_once(bool moved, int notices)
+    {
+        // QA t8-10.
+        var failure = new WhatsAppSendException("WhatsApp send failed (401): Bad token (code 190)", 401, 190, "Error validating access token");
+        _integrations.Setup(i => i.MarkSendProblemAsync(_integration, "token_invalid", "Error validating access token", It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(moved);
+
+        await Sut().RecordSendFailureAsync(_integration, failure);
+
+        _notifier.Verify(n => n.WhatsAppHealthUpdatedAsync(_clientId, _integration.Id, WhatsAppHealthLevel.Problem, It.IsAny<string?>(), It.IsAny<string?>(),
+            It.IsAny<string?>(), It.IsAny<string?>(), "Error validating access token", It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()), Times.Once);
+        _notifications.Verify(n => n.CreateAsync(_clientId, NotificationType.IntegrationUnhealthy, It.IsAny<NotificationText>(), null, null, null, _integration.Id,
+            "/WhatsApp/Health", It.IsAny<CancellationToken>()), Times.Exactly(notices));
+    }
+
+    [Fact]
+    public async Task A_send_error_that_isnt_the_connection_changes_no_health()
+    {
+        await Sut().RecordSendFailureAsync(_integration, new WhatsAppSendException("paused", 400, 132015, "Template paused"));
+        _integrations.Verify(i => i.MarkSendProblemAsync(It.IsAny<ChannelIntegration>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
     [Fact]
     public async Task A_health_event_with_bad_raw_metadata_or_an_oversized_status_is_a_400()
     {
@@ -501,7 +526,7 @@ public class WhatsAppHealthServiceTests
     [InlineData(WhatsAppHealthEventType.PhoneNumberQualityUpdate, "UPGRADE", null, WhatsAppHealthLevel.Healthy)]
     [InlineData(WhatsAppHealthEventType.PhoneNumberQualityUpdate, "ONBOARDING", null, WhatsAppHealthLevel.Healthy)]
     [InlineData(WhatsAppHealthEventType.PhoneNumberNameUpdate, "APPROVED", null, WhatsAppHealthLevel.Healthy)]
-    [InlineData(WhatsAppHealthEventType.ConnectionUpdate, null, null, WhatsAppHealthLevel.Healthy)]
+    [InlineData(WhatsAppHealthEventType.ConnectionUpdate, null, null, WhatsAppHealthLevel.Warning)] // its message is the last error (QA t8-20)
     [InlineData("something_else", "X", "RED", WhatsAppHealthLevel.Healthy)]
     public async Task Health_level_follows_the_event(string type, string? status, string? quality, string expectedLevel)
     {

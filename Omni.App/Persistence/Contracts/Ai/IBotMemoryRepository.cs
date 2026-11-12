@@ -11,6 +11,10 @@ public interface IBotMemoryRepository
 
     void Add(BotMemory memory);
 
+    /// <summary>Whether the conversation (or test session) the memory belongs to still exists: a bot or test chat deleted
+    /// while its run was thinking is gone, and its memory row would fail the foreign key (QA t4-ai-19).</summary>
+    Task<bool> OwnerExistsAsync(Guid key, bool test, CancellationToken ct = default);
+
     /// <summary>Deletes all but the newest <paramref name="keep"/> exchanges of the conversation (set-based).</summary>
     Task<int> DeleteAllButNewestAsync(Guid key, bool test, int keep, CancellationToken ct = default);
 }

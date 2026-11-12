@@ -7,6 +7,10 @@ public static class AccountRules
     /// <summary>Failed sign-ins in a row that lock an account (Identity lockout).</summary>
     public const int MaxFailedSignIns = 5;
 
+    /// <summary>Failed sign-ins for one account from any mix of addresses within <see cref="LockoutDuration"/> that lock it
+    /// everywhere (SignInThrottle; QA t12-fix-01). The per-address lockout above is what a normal user meets.</summary>
+    public const int MaxFailedSignInsPerAccount = 50;
+
     /// <summary>How long a locked account stays locked.</summary>
     public static readonly TimeSpan LockoutDuration = TimeSpan.FromMinutes(15);
 

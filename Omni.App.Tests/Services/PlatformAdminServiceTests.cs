@@ -499,7 +499,9 @@ public class ContentAndOverviewAdminServiceTests
     private readonly Mock<IKnowledgeService> _knowledge = new();
     private readonly Mock<IKnowledgeSettingsService> _settings = new();
 
-    private ContentAdminService Sut() => new(_repo.Object, _campaigns.Object, _services.Object, _knowledge.Object, _settings.Object);
+    private readonly Mock<IConfigManager> _contentConfig = new();
+
+    private ContentAdminService Sut() => new(_repo.Object, _campaigns.Object, _services.Object, _knowledge.Object, _settings.Object, _contentConfig.Object);
 
     [Fact]
     public async Task Campaign_cancel_goes_through_the_campaign_service()
@@ -532,6 +534,10 @@ public class ContentAndOverviewAdminServiceTests
         await Sut().UpdateSearchSettingsAsync(_clientId, 4, 0.4, default);
         _settings.Verify(s => s.UpdateAsync(_clientId, new UpdateKnowledgeSettingsRequest(300, 30, 4, 0.4), It.IsAny<CancellationToken>()), Times.Once);
         Assert.Equal(300, (await Sut().SearchSettingsAsync(_clientId, default))!.ChunkSizeTokens);
+        // The portal's form shows the platform's Top K range, not a fixed 1 to 20 (QA t6-admin-05).
+        _contentConfig.SetupGet(c => c.KnowledgeMinTopK).Returns(1);
+        _contentConfig.SetupGet(c => c.KnowledgeMaxTopK).Returns(10);
+        Assert.Equal((1, 10), ((await Sut().SearchSettingsAsync(_clientId, default))!.MinTopK, (await Sut().SearchSettingsAsync(_clientId, default))!.MaxTopK));
         Assert.Null(await Sut().SearchSettingsAsync(Guid.NewGuid(), default));
     }
 

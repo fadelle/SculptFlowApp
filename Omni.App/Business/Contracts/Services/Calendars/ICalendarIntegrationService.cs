@@ -29,7 +29,10 @@ public interface ICalendarIntegrationService
 
     /// <summary>Called by CalendarOAuthController when the provider denies consent or the code exchange fails.
     /// Marks the row Error with the given message so the settings page can show it.</summary>
-    Task<CalendarIntegrationResponse> FailConnectAsync(Guid clientId, string provider, string errorMessage, CancellationToken ct = default);
+    /// <summary>A connect that was started (Pending) failed: Error with the problem (a <see cref="Common.Helpers.StoredText"/>
+    /// key or the provider's own text). Any other state is left alone (null when there is no row): only an attempt in
+    /// progress can fail (QA t5-ops-14).</summary>
+    Task<CalendarIntegrationResponse?> FailConnectAsync(Guid clientId, string provider, string errorMessage, CancellationToken ct = default);
 
     /// <summary>Re-lists calendars for an already-connected account directly against the provider (e.g. the client
     /// created a new calendar). Throws ArgumentException if this provider isn't connected yet, or

@@ -69,7 +69,12 @@ public class AppLogCollectorTests
         var race = new Microsoft.EntityFrameworkCore.DbUpdateException("save failed",
             new Npgsql.PostgresException("duplicate key", "ERROR", "ERROR", Npgsql.PostgresErrorCodes.UniqueViolation));
         var other = new Microsoft.EntityFrameworkCore.DbUpdateException("save failed",
-            new Npgsql.PostgresException("bad", "ERROR", "ERROR", Npgsql.PostgresErrorCodes.ForeignKeyViolation));
+            new Npgsql.PostgresException("deadlock", "ERROR", "ERROR", Npgsql.PostgresErrorCodes.DeadlockDetected));
+        // QA t2-billing-25: an overlap (409) and a missing reference (400) the app answers are not error rows either.
+        var overlap = new Npgsql.PostgresException("overlap", "ERROR", "ERROR", Npgsql.PostgresErrorCodes.ExclusionViolation);
+        var missing = new Npgsql.PostgresException("fk", "ERROR", "ERROR", Npgsql.PostgresErrorCodes.ForeignKeyViolation);
+        Assert.True(DatabaseLogger.IsHandledRace("Microsoft.EntityFrameworkCore.Database.Command", overlap));
+        Assert.True(DatabaseLogger.IsHandledRace("Microsoft.EntityFrameworkCore.Update", missing));
 
         Assert.True(DatabaseLogger.IsHandledRace("Microsoft.EntityFrameworkCore.Update", race));
         Assert.True(DatabaseLogger.IsHandledRace("Microsoft.EntityFrameworkCore.Database.Command", race.InnerException));

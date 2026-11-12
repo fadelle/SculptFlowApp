@@ -247,6 +247,28 @@ public class InviteServiceTests
     }
 
     [Fact]
+    public async Task An_invitee_without_a_free_seat_is_told_in_their_own_words_and_the_team_is_notified()
+    {
+        // QA t1-accounts-11: the invitee was told to "See Settings -> Billing", a page they can't reach.
+        Stored("raw");
+        _entitlements.Setup(e => e.EnsureWithinLimitAsync(_clientId, EntitlementKeys.MaxUsers, It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new EntitlementDeniedException(EntitlementKeys.MaxUsers, EntitlementDeniedException.LimitReachedKey));
+        var notifications = new Mock<INotificationService>();
+        var time = new Mock<TimeProvider>();
+        time.Setup(t => t.GetUtcNow()).Returns(_now);
+        var sut = new InviteService(_tokens.Object, _clients.Object, _uow.Object, _users.Object, _entitlements.Object, _emails.Object, _config.Object,
+            new ConfigurationBuilder().Build(), time.Object, NullLogger<InviteService>.Instance, notifications.Object);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => sut.AcceptAsync("raw", "Ann", "Passw0rd!", "Passw0rd!"));
+
+        Assert.Equal(InviteService.NoSeatKey, ex.Message);
+        notifications.Verify(n => n.CreateAsync(_clientId, NotificationType.Billing,
+            It.Is<NotificationText>(t => t.TitleKey == "notifications.billing.inviteNoSeat.title" && (string)t.Args[0]! == "ann@x.com"),
+            null, null, null, null, "/Members", It.IsAny<CancellationToken>()), Times.Once);
+        _users.Verify(u => u.CreateAsync(It.IsAny<AppUser>(), It.IsAny<string>()), Times.Never);
+    }
+
+    [Fact]
     public async Task A_password_the_rules_refuse_rolls_back_and_keeps_the_link()
     {
         var invite = Stored("raw");

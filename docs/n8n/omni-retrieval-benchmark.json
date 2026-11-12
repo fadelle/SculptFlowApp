@@ -51,6 +51,7 @@
           "POST"
         ],
         "path": "b28c906d-1bc7-4545-a810-31817171df0f",
+        "authentication": "headerAuth",
         "options": {}
       },
       "type": "n8n-nodes-base.webhook",
@@ -61,7 +62,13 @@
       ],
       "id": "129c3794-c935-42f2-ab22-6651619e88bb",
       "name": "receive_chunks",
-      "webhookId": "b28c906d-1bc7-4545-a810-31817171df0f"
+      "webhookId": "b28c906d-1bc7-4545-a810-31817171df0f",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "omniWebhookSec0",
+          "name": "Omni webhook secret"
+        }
+      }
     },
     {
       "parameters": {

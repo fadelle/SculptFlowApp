@@ -62,6 +62,8 @@ Generated from `Common/Statics/ConfigDefaults`; keep this table in step when you
 | Billing | Currency | USD | string | The one account currency (ISO 4217, e.g. USD). Balances, plans and rates are stored in it: change it only before any money has moved. |
 | Billing | RateBackdateToleranceMinutes | 5 | int 0–1440 | How far in the past a new rate may start or an old one may end (clock skew allowance). |
 | Billing | RecentTransactions | 15 | int 1–100 | How many recent wallet transactions a client's billing page shows. |
+| Billing | TrialWarningDays | 3 | int 0–30 | How many days before a trial ends every dashboard page shows "Your free trial ends …" (QA t2-billing-12). 0 = only once it has ended. |
+| Billing | LowBalanceThreshold | 5 | decimal 0–100000 | Below this wallet plus included credit (account currency) every dashboard page warns that messages stop when it runs out (QA t2-billing-12). 0 = no warning. |
 | Billing | AddonsRenewByDefault | false | bool | Whether a client's add-ons renew with the plan when nobody chose for that add-on (`client_addons.auto_renew` null). Off = at each renewal an add-on ends (its extra units go, nothing is charged) unless the owner or an admin set it to renew. A renewing add-on the wallet can't pay ends; the plan still renews. |
 | Billing | ChargeAiReplies | true | bool | Charge each AI assistant reply as `ai_reply` usage (included credit first, then wallet). Needs an `ai_reply` rate; a client that can't pay gets no AI reply and the conversation goes to the team. Off = AI replies are not charged. |
 | OptOut | Enabled | true | bool | Whether a contact's message that is only a stop or start word opts them out of (or back into) business-started messages: campaigns, reminders and Inbox templates. |
@@ -130,6 +132,9 @@ Generated from `Common/Statics/ConfigDefaults`; keep this table in step when you
 | Ai | MemoryExchanges | 10 | int 0–100 | Earlier exchanges (contact message + bot output) of the conversation the agent sees. |
 | Ai | TimeoutSeconds | 60 | int 5–600 | Timeout of one call to the AI model API. |
 | Ai | MaxConcurrentRuns | 4 | int 1–64 | Most bot runs (different conversations) at the same time; one conversation always runs one message at a time. |
+| Ai | NoAnswerHandoffMinutes | 10 | int 0–1440 | When the bot was asked about a customer's message and nothing came back (no reply, no hand-off) for this many minutes, BotNoAnswerWatchdog hands the conversation to the team and records bot.no_answer in the message trace (QA t9-04). 0 = never. |
+| Ai | MaxConcurrentRunsPerClient | 2 | int 1–64 | Most bot runs of one client at the same time, so one busy client can't take every slot of Ai / MaxConcurrentRuns (QA t7-05). |
+| Ai | MergeBurstMessages | true | bool | Text messages a contact sends while the bot is still waiting to answer are answered together in one run, with one reply and one ai_reply charge (QA t4-ai-18). A photo or voice note is never merged (it hands the conversation to the team). Off = one run per message. |
 | Ai | BurstWaitMilliseconds | 1000 | int 0–10000 | How long a conversation's next bot run waits after its message arrived, so messages the contact sent together are all saved and answered in the order they were written (QA t7-06). 0 = no wait. |
 | Ai | InputTokenPriceUsdPerMillion | 1.25 | decimal 0–1000 | What the AI model provider charges per million input tokens (USD), for the admin portal's AI usage estimate only (QA t7-10). Billing never reads it. |
 | Ai | OutputTokenPriceUsdPerMillion | 10 | decimal 0–1000 | What the AI model provider charges per million output tokens (USD), for the admin portal's AI usage estimate only (QA t7-10). Billing never reads it. |
@@ -171,7 +176,10 @@ used, so a change applies at once.
 ## What stays outside the configuration manager
 
 - **Secrets** (user-secrets / environment variables): `ConnectionStrings:Postgres`, `PlatformAdmin:ApiKey`,
-  `N8n:IngestApiKey`, `Meta:AppSecret`, `Meta:WebhookVerifyToken`, `Brevo:ApiKey` (email; Milestone C), every
+  `N8n:IngestApiKey`, `N8n:RunTokenSecret` (signs the per-run token n8n sends back on every AI tool call; when set, `[BotTool]`
+  endpoints refuse a call without a valid `X-Omni-Run-Token`, QA t4-ai-09), `N8n:WebhookSecret` (sent to n8n as
+  `X-Omni-Webhook-Secret` on every webhook call; the workflows check it with the "Omni webhook secret" header credential),
+  `Meta:AppSecret`, `Meta:WebhookVerifyToken`, `Brevo:ApiKey` (email; Milestone C), every
   `ClientSecret`. The one exception is the embeddings API key, which Mohammad moved into the configuration manager as a
   **secret setting** (`IsSecret` in `ConfigDefaults`): it is stored in `config.settings` like the others, but the settings
   API and the Configuration page only say whether it is set, the admin audit log never records it, and the manager never

@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Localization;
+using Microsoft.Extensions.Options;
 using Omni.App.Common.Configs;
+using Omni.App.Common.Helpers;
 using Omni.App.Entities.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
@@ -15,11 +17,16 @@ public class LoginModel : PageModel
 
     private readonly SignInManager<AppUser> _signInManager;
     private readonly IStringLocalizer _text;
+    private readonly SignInThrottle? _throttle;
+    private readonly string? _ipHeader;
 
-    public LoginModel(SignInManager<AppUser> signInManager, IStringLocalizer text)
+    public LoginModel(SignInManager<AppUser> signInManager, IStringLocalizer text, SignInThrottle? throttle = null,
+        IOptions<ProxyOptions>? proxy = null)
     {
         _signInManager = signInManager;
         _text = text;
+        _throttle = throttle;
+        _ipHeader = proxy?.Value.ClientIpHeader;
     }
 
     [BindProperty]
@@ -51,12 +58,22 @@ public class LoginModel : PageModel
             return Page();
         }
 
-        var result = await _signInManager.PasswordSignInAsync(Email, Password, isPersistent: true, lockoutOnFailure: true);
-        if (!result.Succeeded)
+        // The lockout counts per account AND address (QA t12-fix-01), so a stranger's wrong passwords can't lock the owner out
+        // from their own address; Identity's own lockout still applies to an account an admin locked.
+        var address = ClientIp.Resolve(HttpContext, _ipHeader);
+        if (_throttle?.IsLocked(Email, address) == true)
         {
-            ErrorMessage = _text[result.IsLockedOut ? LockedOutKey : WrongPasswordKey].Value;
+            ErrorMessage = _text[LockedOutKey].Value;
             return Page();
         }
+        var result = await _signInManager.PasswordSignInAsync(Email, Password, isPersistent: true, lockoutOnFailure: _throttle is null);
+        if (!result.Succeeded)
+        {
+            if (!result.IsLockedOut && !result.IsNotAllowed) _throttle?.Failed(Email, address);
+            ErrorMessage = _text[result.IsLockedOut || _throttle?.IsLocked(Email, address) == true ? LockedOutKey : WrongPasswordKey].Value;
+            return Page();
+        }
+        _throttle?.Succeeded(Email, address);
 
         return LocalRedirect(Url.IsLocalUrl(ReturnUrl) ? ReturnUrl! : "/dashboard");
     }

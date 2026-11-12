@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Configuration;
+using Omni.App.Common.Helpers;
 using System.Reflection;
 using System.Text.Json;
 using Microsoft.AspNetCore.Http;
@@ -19,9 +21,15 @@ public class BotToolAttributeTests
     private readonly Mock<IBotRuntimeService> _runtime = new();
 
     private async Task<(bool Ran, IActionResult? Result, HttpContext Http)> RunAsync(BotToolAttribute filter, Dictionary<string, object?> arguments,
-        Action<HttpRequest>? request = null)
+        Action<HttpRequest>? request = null, string? runTokenSecret = null)
     {
-        var http = new DefaultHttpContext { RequestServices = new ServiceCollection().AddSingleton(_runtime.Object).BuildServiceProvider() };
+        var services = new ServiceCollection().AddSingleton(_runtime.Object);
+        if (runTokenSecret is not null)
+        {
+            services.AddSingleton<IConfiguration>(new ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string?> { [AiRunToken.SecretKey] = runTokenSecret }).Build());
+        }
+        var http = new DefaultHttpContext { RequestServices = services.BuildServiceProvider() };
         request?.Invoke(http.Request);
         var actionContext = new ActionContext(http, new RouteData(), new ActionDescriptor());
         var executing = new ActionExecutingContext(actionContext, new List<IFilterMetadata>(), arguments, new object());
@@ -50,6 +58,32 @@ public class BotToolAttributeTests
         Assert.True(ran);
         Assert.Null(result);
         Assert.Same(run, BotToolAttribute.RunOf(http));
+    }
+
+    [Theory]
+    [InlineData("none", false)]
+    [InlineData("other-client", false)]
+    [InlineData("valid", true)]
+    public async Task With_a_run_token_secret_a_call_needs_this_runs_token(string token, bool runs)
+    {
+        // QA t4-ai-09: the ingest key alone was enough to act for any client.
+        var run = new BotRunContext(_clientId, _botId, new HashSet<string>(), null, null, null);
+        _runtime.Setup(r => r.AuthorizeAsync(_clientId, _botId, null, null, It.IsAny<CancellationToken>())).ReturnsAsync(BotToolCheck.Allowed(run));
+        var value = token switch
+        {
+            "valid" => AiRunToken.Issue("s", _clientId, _botId, DateTimeOffset.UtcNow),
+            "other-client" => AiRunToken.Issue("s", Guid.NewGuid(), _botId, DateTimeOffset.UtcNow),
+            _ => null
+        };
+
+        var (ran, result, _) = await RunAsync(new BotToolAttribute(), new() { ["clientId"] = _clientId }, r =>
+        {
+            r.Headers[BotToolAttribute.BotHeader] = _botId.ToString();
+            if (value is not null) r.Headers[AiRunToken.Header] = value;
+        }, runTokenSecret: "s");
+
+        Assert.Equal(runs, ran);
+        if (!runs) Assert.IsType<UnauthorizedObjectResult>(result);
     }
 
     [Fact]

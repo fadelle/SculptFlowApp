@@ -54,7 +54,8 @@ public class BookingDetailModel : PageModel
 
     /// <summary>For the "Client time | My time" switch (_TimeViewSwitch); the header time defaults to client time.</summary>
     public string ClientTimezone { get; private set; } = "UTC";
-    public IReadOnlyList<string> StatusOptions { get; } = BookingStatus.All.OrderBy(s => s).ToList();
+    /// <summary>The booking's status and the ones it can move to (BookingStatus.NextFrom; QA t5-ops-03).</summary>
+    public IReadOnlyList<string> StatusOptions => Booking is null ? [] : [Booking.Status, .. BookingStatus.NextFrom(Booking.Status)];
 
     [BindProperty]
     public string Status { get; set; } = string.Empty;

@@ -4,7 +4,9 @@ using System.Globalization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.Extensions.Localization;
+using Omni.App.Business.Contracts.Jobs;
 using Omni.App.Business.Contracts.Managers;
+using Omni.App.Entities.Dtos.Knowledge;
 using Omni.App.Business.Contracts.Services.Knowledge;
 using Omni.App.Common.Helpers;
 using Omni.App.Entities.Requests.Knowledge;
@@ -19,13 +21,19 @@ namespace Omni.App.Pages.KnowledgeBase;
 public class SettingsModel : PageModel
 {
     private const string SavedKey = "knowledgeSettings.saved";
+    private const string ReindexStartedKey = "knowledgeSettings.reindex.started";
+    private const string ReindexBusyKey = "knowledgeSettings.reindex.busy";
 
     private readonly ICurrentClientContext _clientContext;
     private readonly IKnowledgeSettingsService _settings;
     private readonly IStringLocalizer _text;
 
-    public SettingsModel(ICurrentClientContext clientContext, IKnowledgeSettingsService settings, IStringLocalizer text)
+    private readonly IKnowledgeReindexQueue? _reindex;
+
+    public SettingsModel(ICurrentClientContext clientContext, IKnowledgeSettingsService settings, IStringLocalizer text,
+        IKnowledgeReindexQueue? reindex = null)
     {
+        _reindex = reindex;
         _clientContext = clientContext;
         _settings = settings;
         _text = text;
@@ -33,6 +41,8 @@ public class SettingsModel : PageModel
 
     public bool ClientConfigured { get; private set; }
     public KnowledgeSettingsResponse Current { get; private set; } = null!;
+    /// <summary>The client's running or last re-index since the app started (QA t4-ai-15), or null.</summary>
+    public KnowledgeReindexProgress? Reindex { get; private set; }
 
     [BindProperty]
     public int ChunkSizeTokens { get; set; }
@@ -59,6 +69,7 @@ public class SettingsModel : PageModel
         ClientConfigured = true;
 
         Current = await _settings.GetAsync(client.Id, ct);
+        Reindex = _reindex?.Progress(client.Id);
         ChunkSizeTokens = Current.ChunkSizeTokens;
         ChunkOverlapTokens = Current.ChunkOverlapTokens;
         TopK = Current.TopK;
@@ -91,6 +102,16 @@ public class SettingsModel : PageModel
 
         // Redisplay with the read-only values from the database and the user's attempted edits.
         Current = await _settings.GetAsync(client.Id, ct);
+        Reindex = _reindex?.Progress(client.Id);
         return Page();
+    }
+
+    /// <summary>"Re-index now": every entry re-chunked and re-embedded with the current settings, in the background.</summary>
+    public async Task<IActionResult> OnPostReindexAsync(CancellationToken ct)
+    {
+        var client = await _clientContext.GetClientAsync(ct);
+        if (client is null || _reindex is null) return RedirectToPage("/KnowledgeBase/Index");
+        StatusMessage = _text[_reindex.Start(client.Id, DateTimeOffset.UtcNow) ? ReindexStartedKey : ReindexBusyKey].Value;
+        return RedirectToPage();
     }
 }

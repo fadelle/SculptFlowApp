@@ -48,6 +48,7 @@
     <partial name="_GoogleButton" model="Model.ReturnUrl" />
 
     <form method="post" class="au-auth__form" data-auth-form data-au-no-busy>
+        <input type="hidden" name="Timezone" data-browser-timezone />
         <div class="au-form-field">
             <label class="au-form-label" for="reg-name">@T["register.fullName"]</label>
             <input type="text" name="FullName" id="reg-name" value="@Model.FullName" class="au-input" autocomplete="name" maxlength="200" required autofocus placeholder="@T["register.fullNamePlaceholder"]" />

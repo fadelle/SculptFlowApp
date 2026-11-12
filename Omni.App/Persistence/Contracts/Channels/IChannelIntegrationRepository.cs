@@ -13,6 +13,11 @@ public interface IChannelIntegrationRepository
 
     Task<ChannelIntegration?> GetReadOnlyAsync(Guid clientId, string channel, CancellationToken ct = default);
 
+    /// <summary>A send found the connection broken (QA t8-10): health "problem" with the code and Meta's message (also LastError),
+    /// set-based (the failing send's own changes are untouched), then the cached rows are dropped. True when it moved into
+    /// a problem now (it wasn't already a problem or disconnected), so the team is told once.</summary>
+    Task<bool> MarkSendProblemAsync(ChannelIntegration integration, string code, string message, DateTimeOffset at, CancellationToken ct = default);
+
     Task<ChannelIntegration?> GetByIdReadOnlyAsync(Guid integrationId, CancellationToken ct = default);
 
     /// <summary>Tracked, all channels of the client.</summary>

@@ -98,10 +98,23 @@ public class CalendarIntegrationServiceTests
     }
 
     [Fact]
-    public async Task FailConnect_records_the_error()
+    public async Task FailConnect_records_the_error_of_a_connect_in_progress()
     {
+        await Sut().RequestConnectAsync(_clientId, CalendarProvider.Google);
         var r = await Sut().FailConnectAsync(_clientId, CalendarProvider.Google, "denied");
-        Assert.Equal((CalendarIntegrationStatus.Error, "denied"), (r.Status, r.LastProblemMessage));
+        Assert.Equal((CalendarIntegrationStatus.Error, "denied"), (r!.Status, r.LastProblemMessage));
+    }
+
+    [Fact]
+    public async Task A_stray_callback_never_flips_a_connected_or_never_used_calendar_to_error()
+    {
+        // QA t5-ops-14: any visit to the callback without a valid state marked the calendar "error".
+        Assert.Null(await Sut().FailConnectAsync(_clientId, CalendarProvider.Google, "expired"));
+        Assert.Null(_row); // no row is created for it
+        Connected();
+        var r = await Sut().FailConnectAsync(_clientId, CalendarProvider.Google, "expired");
+        Assert.Equal(CalendarIntegrationStatus.Connected, r!.Status);
+        Assert.Null(_row!.LastProblemMessage);
     }
 
     // ---------------------------------------------------------------- refresh / select / sync toggle / disconnect

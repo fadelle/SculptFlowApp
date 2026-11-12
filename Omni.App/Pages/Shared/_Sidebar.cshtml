@@ -44,7 +44,7 @@
         <span class="au-brand__mark"><img class="au-brand__logo" src="~/logo.svg" alt="" width="38" height="38" /></span>
         <span class="au-brand__text">
             <span class="au-brand__name">Omni</span>
-            <span class="au-brand__sub" title="@clientName">@(string.IsNullOrWhiteSpace(clientName) ? T["nav.brandSub"].Value : clientName)</span>
+            <span class="au-brand__sub" title="@clientName" dir="auto">@(string.IsNullOrWhiteSpace(clientName) ? T["nav.brandSub"].Value : clientName)</span>
         </span>
     </a>
     <div class="au-side-rule"></div>
@@ -92,7 +92,7 @@
         @if (servicesIncluded)
         {
             <div class="au-side-section">@T["nav.section.setup"]</div>
-            @Row("/Services", "medical_services", T["nav.services"].Value, IsActive("/Services")) @* icon:medical_services *@
+            @Row("/Services", "category", T["nav.services"].Value, IsActive("/Services")) @* icon:category *@
             @if (aiIncluded)
             {
                 @Row("/KnowledgeBase", "menu_book", T["nav.knowledgeBase"].Value, IsActive("/KnowledgeBase")) @* icon:menu_book *@
@@ -102,6 +102,7 @@
 
         <div class="au-side-section">@T["nav.section.settings"]</div>
         @Row("/settings/business-info", "apartment", T["nav.businessInfo"].Value, IsActive("/settings/business-info")) @* icon:apartment *@
+        @Row("/settings/contact-stages", "label", T["nav.contactStages"].Value, IsActive("/settings/contact-stages")) @* icon:label *@
         @Row("/Members", "badge", T["nav.members"].Value, IsActive("/Members")) @* icon:badge *@
         @Row("/settings/integrations", "hub", T["nav.integrations"].Value, IsActive("/settings/integrations")) @* icon:hub *@
         @if (aiIncluded)

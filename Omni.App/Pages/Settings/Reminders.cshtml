@@ -20,6 +20,25 @@ else
         <p class="au-page-head__sub">@T["reminders.intro"]</p>
     </div>
 
+    @if (Model.Status is { } st)
+    {
+        @* QA t5-ops-07: say plainly when nothing can be sent, and what reminders did lately. *@
+        @if (st.Enabled && !st.CanSendAny)
+        {
+            <div class="au-alert au-alert--warning" role="status">
+                <span class="au-icon au-alert__icon" aria-hidden="true">warning</span>
+                <div class="au-alert__body">@T["reminders.health.nothingCanSend"]</div>
+            </div>
+        }
+        else if (st.Enabled && st.WhatsAppConnected && st.TemplateCount == 0)
+        {
+            <div class="au-alert au-alert--warning" role="status">
+                <span class="au-icon au-alert__icon" aria-hidden="true">warning</span>
+                <div class="au-alert__body">@T["reminders.health.noTemplate"]</div>
+            </div>
+        }
+        <p class="au-help" id="reminders-recent">@T["reminders.health.recent", st.Sent7Days, st.Skipped7Days, st.Failed7Days]</p>
+    }
     <form method="post" class="au-panel au-panel--round integration-form" id="reminders-form">
         <div class="set-section">
             <div class="set-section-head"><strong>@T["reminders.when.title"]</strong><div class="cell-sub">@T["reminders.when.help"]</div></div>

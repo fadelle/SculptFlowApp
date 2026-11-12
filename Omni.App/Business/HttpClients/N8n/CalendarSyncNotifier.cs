@@ -36,7 +36,7 @@ public class CalendarSyncNotifier : ICalendarSyncNotifier
 
         try
         {
-            using var response = await _http.PostAsJsonAsync(url, payload, JsonOptions, ct);
+            using var response = await N8nWebhook.PostAsync(_http, url, payload, JsonOptions, _configuration, ct);
             if (!response.IsSuccessStatusCode)
             {
                 var body = await response.Content.ReadAsStringAsync(ct);

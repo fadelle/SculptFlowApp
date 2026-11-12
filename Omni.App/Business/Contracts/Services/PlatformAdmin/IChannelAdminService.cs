@@ -22,6 +22,10 @@ public interface IChannelAdminService
 
     Task<PlatformAdminChange> DisconnectAsync(Guid id, CancellationToken ct);
 
+    /// <summary>Checks a WhatsApp connection's stored token with Meta (QA t8-20). 404 for an unknown connection, 422 for one that
+    /// isn't a connected WhatsApp number.</summary>
+    Task<ChannelCheckResult> CheckAsync(Guid id, CancellationToken ct);
+
     Task<PlatformAdminChange> DisconnectCalendarAsync(Guid id, CancellationToken ct);
 
     Task<PlatformAdminChange> SetCalendarSyncAsync(Guid id, bool enabled, CancellationToken ct);

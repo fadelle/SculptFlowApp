@@ -408,7 +408,7 @@ else
                         <span class="int-val">@T["integrations.tiktok.stopped"]</span>
                         @if (!string.IsNullOrEmpty(info?.LastProblemMessage))
                         {
-                            <details class="mt-1"><summary class="cell-sub">@T["messages.error.details"]</summary><div class="cell-sub break-word">@info.LastProblemMessage</div></details>
+                            <details class="mt-1"><summary class="cell-sub">@T["messages.error.details"]</summary><div class="cell-sub break-word">@StoredText.Show(info.LastProblemMessage, T)</div></details>
                         }
                     </div>
                 </div>

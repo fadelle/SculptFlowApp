@@ -46,8 +46,10 @@ public partial class MessageTraceAdminService : IMessageTraceAdminService
         var entries = MessageTraceMapper.Timeline(steps, messages, billing, events, logs);
         var clientId = steps.Select(s => s.ClientId).Concat(messages.Select(m => (Guid?)m.ClientId)).FirstOrDefault(c => c != null);
         var hasFailure = entries.Any(e => e.Outcome == TraceOutcomes.Failed);
+        var outcomes = steps.Count == 0 ? null : await _traces.OutcomesReadOnlyAsync([id], _time.GetUtcNow(), ct);
+        var (outcome, reason) = outcomes is not null && outcomes.TryGetValue(id, out var o) ? o : (TraceResults.Other, null);
         return new MessageTrace(id, started, entries.Count == 0 ? ended : entries.Max(e => e.At), clientId, conversationIds, messageIds,
-            hasFailure, entries);
+            hasFailure, entries, outcome, reason);
     }
 
     public async Task<MessageTrace> ForMessageAsync(Guid messageId, CancellationToken ct)

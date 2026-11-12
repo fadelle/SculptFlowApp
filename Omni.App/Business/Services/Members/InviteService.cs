@@ -4,6 +4,8 @@ using Omni.App.Business.Contracts.Services.Billing;
 using Omni.App.Business.Contracts.Services.Email;
 using Omni.App.Business.Contracts.Services.Members;
 using Omni.App.Common.Enums;
+using Omni.App.Common.Exceptions;
+using Omni.App.Entities.Dtos.Notifications;
 using Omni.App.Common.Helpers;
 using Omni.App.Common.Statics;
 using Omni.App.Entities.Dtos.Clients;
@@ -35,8 +37,9 @@ public class InviteService : IInviteService
 
     public InviteService(IAccountTokenRepository tokens, IClientRepository clients, IUnitOfWork unitOfWork, UserManager<AppUser> users,
         IEntitlementService entitlements, IAccountEmailService emails, IConfigManager config, IConfiguration configuration, TimeProvider time,
-        ILogger<InviteService> logger)
+        ILogger<InviteService> logger, Contracts.Services.Notifications.INotificationService? notifications = null)
     {
+        _notifications = notifications;
         _tokens = tokens;
         _clients = clients;
         _unitOfWork = unitOfWork;
@@ -151,6 +154,26 @@ public class InviteService : IInviteService
         return found is { } f ? new InviteLanding(f.Client.Name, f.Invite.Email, f.Invite.FullName) : null;
     }
 
+    /// <summary>The invitee's words when the plan has no free seat for them (QA t1-accounts-11).</summary>
+    public const string NoSeatKey = "acceptInvite.errors.noSeat";
+
+    private readonly Contracts.Services.Notifications.INotificationService? _notifications;
+
+    private async Task NotifyNoSeatAsync(Guid clientId, string email, CancellationToken ct)
+    {
+        if (_notifications is null) return;
+        try
+        {
+            await _notifications.CreateAsync(clientId, NotificationType.Billing,
+                NotificationText.Of("notifications.billing.inviteNoSeat.title", "notifications.billing.inviteNoSeat.message", email),
+                link: "/Members", ct: ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "The no-seat notice for client {ClientId} wasn't created.", clientId);
+        }
+    }
+
     public async Task<AppUser> AcceptAsync(string? token, string? fullName, string? password, string? confirmPassword, CancellationToken ct = default)
     {
         var name = (fullName ?? string.Empty).Trim();
@@ -171,7 +194,17 @@ public class InviteService : IInviteService
         else
         {
             // The invite held this seat; the plan may have shrunk since, so check again without counting the invite twice.
-            await EnsureSeatAsync(client.Id, now, exceptInviteId: invite.Id, ct);
+            try
+            {
+                await EnsureSeatAsync(client.Id, now, exceptInviteId: invite.Id, ct);
+            }
+            catch (EntitlementDeniedException)
+            {
+                // The invitee has no account and no Billing page (QA t1-accounts-11): tell them in their own words, and tell the
+                // team, who can free or add a seat.
+                await NotifyNoSeatAsync(client.Id, invite.Email, ct);
+                throw new InvalidOperationException(NoSeatKey);
+            }
         }
 
         var user = new AppUser

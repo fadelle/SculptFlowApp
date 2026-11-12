@@ -64,6 +64,24 @@ public class BotEngineTests
 
     // ---------------------------------------------------------------- the agent
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task A_conversation_or_test_chat_deleted_while_the_model_thinks_ends_the_run_quietly(bool test)
+    {
+        // QA t4-ai-19: deleting a bot during its test run made the memory insert fail its foreign key, logging DB errors.
+        var session = Guid.NewGuid();
+        _memory.Gone.Add(test ? session : ConversationId);
+        _model.Decide("reply", message: "Hello!");
+
+        await Sut().RunAsync(Trigger(testSession: test ? session : null));
+
+        Assert.Empty(_memory.Rows);
+        Assert.Empty(_tools.Calls);            // no reply, and no run_failed handoff either
+        Assert.Equal(["skipped"], Steps("bot.skipped"));
+        Assert.Empty(Steps("bot.run_failed"));
+    }
+
     [Fact]
     public async Task A_reply_runs_the_agent_with_the_rendered_prompt_the_bots_tools_and_the_decision_schema_then_sends_the_message()
     {

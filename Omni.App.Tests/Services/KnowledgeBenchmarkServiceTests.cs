@@ -546,6 +546,9 @@ public class KnowledgeBenchmarkServiceTests
         var done = PendingGeneration([]);
         done.Status = BenchmarkGenerationStatus.Completed;
         Assert.Equal(GenerationReceiveStatus.AlreadyProcessed, (await Sut().ReceiveGenerationResultAsync(done.Id, new GeneratorResponse(null, []), null, false)).Status);
+        // A body naming another generation is refused even once this one is complete (QA t4-ai-16), not answered 200.
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            Sut().ReceiveGenerationResultAsync(done.Id, new GeneratorResponse(Guid.NewGuid().ToString(), []), null, false));
 
         var failed = PendingGeneration([]);
         failed.Status = BenchmarkGenerationStatus.Failed;

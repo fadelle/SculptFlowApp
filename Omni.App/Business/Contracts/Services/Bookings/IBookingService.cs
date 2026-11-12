@@ -20,6 +20,9 @@ public interface IBookingService
 
     Task<BookingResponse?> UpdateStatusAsync(Guid clientId, Guid id, string status, CancellationToken ct = default);
 
+    /// <summary>Upcoming booked / confirmed bookings per service, for the warning before a service is deactivated (QA t5-ops-17).</summary>
+    Task<IReadOnlyDictionary<Guid, int>> CountUpcomingByServiceAsync(Guid clientId, CancellationToken ct = default);
+
     /// <summary>A member edits a booking from the dashboard (QA t5-ops-04): time, duration, service, location and notes. Only a
     /// booked or confirmed booking can change (ArgumentException otherwise); the end must follow the start; a new service must be
     /// one of the client's active ones. Like a member's new booking it isn't held to the opening hours, and the status stays as

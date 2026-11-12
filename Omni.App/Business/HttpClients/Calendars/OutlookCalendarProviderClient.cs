@@ -1,3 +1,4 @@
+using Omni.App.Common.Helpers;
 using System.Net.Http.Headers;
 using System.Text.Json;
 using Omni.App.Business.Contracts.HttpClients.Calendars;
@@ -25,11 +26,12 @@ public class OutlookCalendarProviderClient : ICalendarProviderClient
 
     public string Provider => CalendarProvider.Outlook;
 
-    private string ClientId => _configuration["MicrosoftCalendar:ClientId"]
-        ?? throw new InvalidOperationException("Missing MicrosoftCalendar:ClientId configuration.");
+    // Blank counts as missing (QA t5-ops-13: an empty ClientId sent members to Microsoft with client_id=).
+    private string ClientId => OAuthSetting.Required(_configuration, "MicrosoftCalendar:ClientId");
 
-    private string ClientSecret => _configuration["MicrosoftCalendar:ClientSecret"]
-        ?? throw new InvalidOperationException("Missing MicrosoftCalendar:ClientSecret — set it via user-secrets.");
+    private string ClientSecret => OAuthSetting.Required(_configuration, "MicrosoftCalendar:ClientSecret");
+
+    public bool IsConfigured => OAuthSetting.Has(_configuration, "MicrosoftCalendar:ClientId", "MicrosoftCalendar:ClientSecret");
 
     private string TenantId => string.IsNullOrWhiteSpace(_configuration["MicrosoftCalendar:TenantId"])
         ? "common" : _configuration["MicrosoftCalendar:TenantId"]!;

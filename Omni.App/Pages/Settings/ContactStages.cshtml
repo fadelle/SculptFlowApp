@@ -1,0 +1,62 @@
+@page "/settings/contact-stages"
+@model Omni.App.Pages.Settings.ContactStagesModel
+@inject ITextContext TextContext
+@{
+    ViewData["Title"] = T["nav.contactStages"].Value;
+    string Typed(int i, string language) =>
+        i < Model.Rows.Count && Model.Rows[i].Labels.TryGetValue(language, out var v) ? v ?? "" : "";
+}
+
+@if (!Model.ClientConfigured)
+{
+    <partial name="_NoClient" />
+}
+else
+{
+    <partial name="_Messages" model="new PageMessagesModel(Model.StatusMessage, Model.ErrorMessage)" />
+
+    <div class="au-page-head">
+        <p class="au-page-head__sub">@T["contactStages.intro"]</p>
+    </div>
+
+    @* QA t12-fix-06: a name per stage and language; the stage keys and their order are the business type's. *@
+    <form method="post" class="au-table-card">
+        <div class="au-table-scroll">
+            <table class="au-table au-table--stack">
+                <thead>
+                    <tr>
+                        <th>@T["contactStages.standard"]</th>
+                        @foreach (var language in ContactStagesModel.Languages)
+                        {
+                            <th>@T["contactStages.yourName", AppLanguage.NativeName(language)]</th>
+                        }
+                    </tr>
+                </thead>
+                <tbody>
+                    @for (var i = 0; i < Model.Stages.Count; i++)
+                    {
+                        var stage = Model.Stages[i];
+                        <tr>
+                            <td data-label="@T["contactStages.standard"]">
+                                <input type="hidden" name="Rows[@i].Key" value="@stage.Key" />
+                                <span class="row-title" dir="auto">@(stage.TypeLabels.TryGetValue(TextContext.Language, out var std) ? std : stage.TypeLabels.GetValueOrDefault(AppLanguage.English, stage.Key))</span>
+                            </td>
+                            @foreach (var language in ContactStagesModel.Languages)
+                            {
+                                <td data-label="@T["contactStages.yourName", AppLanguage.NativeName(language)]">
+                                    <input type="text" class="au-input" name="Rows[@i].Labels[@language]" value="@Typed(i, language)" maxlength="100"
+                                           dir="@AppLanguage.Direction(language)" lang="@language"
+                                           placeholder="@stage.TypeLabels.GetValueOrDefault(language, stage.TypeLabels.GetValueOrDefault(AppLanguage.English, stage.Key))"
+                                           aria-label="@T["contactStages.yourName", AppLanguage.NativeName(language)]" />
+                                </td>
+                            }
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <div class="au-form-actions" style="padding:12px 16px">
+            <button type="submit" class="au-btn au-btn--primary">@T["contactStages.save"]</button>
+        </div>
+    </form>
+}

@@ -244,6 +244,39 @@ code: check whether Render offers a way to relax them for `/api/integrations/*` 
 signature) and the JSON message endpoints, ask Render support for that exception, or put the app behind an edge whose
 rules you control.
 
+## QA fix batch 10 (all remaining QA findings)
+
+Do these in order when this batch reaches staging, then production.
+
+1. **Rotate the n8n ingest key first (QA t4-ai-09).** An old value of `N8n:IngestApiKey` was written into a tracked workflow
+   export in this public repository; the file is redacted now but git history keeps it. Generate a new key, set it on
+   Render (`N8n__IngestApiKey`) and in the n8n credential the workflows use, and treat the old one as public.
+2. **New secrets on Render** (environment variables, never the database): `N8n__RunTokenSecret` (signs the per-run token n8n
+   sends back on every AI tool call) and `N8n__WebhookSecret` (sent to n8n as `X-Omni-Webhook-Secret`). Use long random
+   values. With `RunTokenSecret` set, AI tool calls without a valid token are refused: re-import the workflows (step 3)
+   before or together with it.
+3. **n8n:** create a Header Auth credential "Omni webhook secret" (name `X-Omni-Webhook-Secret`, value = the secret), then
+   re-import `docs/n8n/omni-ai-assistant.json`, `omni-calendar-sync.json` and `omni-retrieval-benchmark.json` (the AI nodes send
+   `X-Omni-Run-Token`, the webhook nodes check the credential) and activate them. Only needed while an engine is on n8n.
+4. **Database:** run `schema.sql` (new: `billing.subscriptions.trial_used_at` with its backfill, `activity.platform_admin_writes`,
+   `crm.client_stage_labels`; changed: `ck_availability_rules_range` is now end <> start) and `seed-config.sql` (new settings
+   `Billing` / `TrialWarningDays`, `LowBalanceThreshold`, `Ai` / `MaxConcurrentRunsPerClient`, `MergeBurstMessages`,
+   `NoAnswerHandoffMinutes`; 126 settings). Both re-run safely.
+5. **Telegram bots:** reconnect each connected bot once (Settings → Integrations) so Telegram sends edits and block/unblock
+   updates (`allowed_updates` gained `edited_message` and `my_chat_member`, QA t3-inbox-17).
+6. **Check on staging:**
+   - The client IP header (QA t12-fix-04): after the first requests, the log has one "Client IP: requests carry …" line (or a warning) from
+     `ClientIpHeaderProbeMiddleware`. If `Proxy:ClientIpHeader` names a header that isn't in it, fix the setting: the
+     sign-in throttle and the admin write log read that address.
+   - Speed (QA t3-inbox-22): compare the Render region with the Supabase region (ap-southeast-1); time a Telegram webhook
+     and a member send again (the webhook no longer waits for the AI trigger).
+   - The bot no-answer watchdog (QA t9-04): with an engine on n8n and the workflow off, a customer message should reach the
+     team after `Ai` / `NoAnswerHandoffMinutes` with `bot.no_answer` in its trace.
+7. **Outlook calendars** need a Microsoft app registration (client id and secret) before "Outlook" is offered; until then
+   the Calendars page shows it as not available (QA t5-ops-13).
+8. **Icon font:** `wwwroot/fonts/material-symbols-outlined.woff2` was rebuilt (new icons for the Inbox, Contacts import/export
+   and Contact stages); it ships with the build, nothing to do on the server.
+
 ## First admin on a project without old data
 
 The copy brings the old admins over. On an empty project (schema, seed-config, portal `admin-schema.sql`, no copy), make the

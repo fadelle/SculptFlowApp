@@ -26,7 +26,13 @@ public class IndexModel : PageModel
     private readonly ICatalogService _services;
     private readonly IStringLocalizer _text;
 
-    public IndexModel(ICurrentClientContext clientContext, ICatalogService services, IStringLocalizer text)
+    private readonly Omni.App.Business.Contracts.Services.Bookings.IBookingService? _bookings;
+
+    /// <summary>Upcoming bookings per service: deactivating one that has some asks first (QA t5-ops-17).</summary>
+    public IReadOnlyDictionary<Guid, int> UpcomingBookings { get; private set; } = new Dictionary<Guid, int>();
+
+    public IndexModel(ICurrentClientContext clientContext, ICatalogService services, IStringLocalizer text,
+        Omni.App.Business.Contracts.Services.Bookings.IBookingService? bookings = null)
     {
         _clientContext = clientContext;
         _services = services;
@@ -69,6 +75,11 @@ public class IndexModel : PageModel
 
         ClientConfigured = true;
         Services = await _services.ListAsync(client.Id, activeOnly: false, ct);
+        if (_bookings is not null)
+        {
+            try { UpcomingBookings = await _bookings.CountUpcomingByServiceAsync(client.Id, ct); }
+            catch (Omni.App.Common.Exceptions.EntitlementDeniedException) { } // no bookings in the plan: nothing to warn about
+        }
         if (Edit is { } id)
         {
             var service = Services.FirstOrDefault(s => s.Id == id);

@@ -54,6 +54,8 @@ public class OptOutService : IOptOutService
     {
         if (!_config.OptOutSendConfirmation) return null;
         var client = await _clients.GetReadOnlyAsync(clientId, ct);
+        // A deactivated client sends nothing automatic (QA t12-fix-02); the opt-out itself is still recorded.
+        if (client is null || !client.IsActive) return null;
         var text = await _readerText.ForAsync([contact.PreferredLanguage, client?.DefaultLanguage], client?.BusinessTypeCode, ct);
         var name = client?.Name ?? string.Empty;
         return optedOut ? text["optOut.confirmation.stopped", name] : text["optOut.confirmation.resumed", name];

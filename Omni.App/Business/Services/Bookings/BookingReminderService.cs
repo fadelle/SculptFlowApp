@@ -12,6 +12,7 @@ using Omni.App.Entities.Models;
 using Omni.App.Entities.Requests.Bookings;
 using Omni.App.Persistence.Contracts;
 using Omni.App.Persistence.Contracts.Bookings;
+using Omni.App.Persistence.Contracts.Channels;
 using Omni.App.Persistence.Contracts.Clients;
 using Omni.App.Persistence.Contracts.Contacts;
 using Omni.App.Persistence.Contracts.Inbox;
@@ -38,11 +39,12 @@ public partial class BookingReminderService : IBookingReminderService
     private readonly IConfigManager _config;
     private readonly TimeProvider _time;
     private readonly ILogger<BookingReminderService> _logger;
+    private readonly IChannelIntegrationRepository _channels;
 
     public BookingReminderService(IBookingReminderRepository reminders, IContactRepository contacts, IConversationRepository conversations,
         IConversationService conversationService, IWhatsAppTemplateRepository templates, IClientRepository clients, IEntitlementService entitlements,
         IMessageService messages, IReaderTextFactory readerText, IUnitOfWork unitOfWork, IConfigManager config, TimeProvider time,
-        ILogger<BookingReminderService> logger)
+        ILogger<BookingReminderService> logger, IChannelIntegrationRepository channels)
     {
         _reminders = reminders;
         _contacts = contacts;
@@ -57,6 +59,7 @@ public partial class BookingReminderService : IBookingReminderService
         _config = config;
         _time = time;
         _logger = logger;
+        _channels = channels;
     }
 
     public async Task<ReminderSettingsDto> GetSettingsAsync(Guid clientId, CancellationToken ct = default) =>
@@ -170,22 +173,37 @@ public partial class BookingReminderService : IBookingReminderService
     {
         var contact = await _contacts.GetByIdAsync(due.ContactId, ct);
         if (contact is null) return (ReminderStatus.Skipped, ReminderReason.NoConversation, null, null);
-        if (contact.OptedOutAt is not null || !contact.MarketingOptIn) return (ReminderStatus.Skipped, ReminderReason.OptedOut, null, null);
+        // A reminder is a service message about the contact's own booking: only an explicit opt-out (STOP) stops it, not the
+        // absence of a marketing opt-in (QA t5-ops-07).
+        if (contact.OptedOutAt is not null) return (ReminderStatus.Skipped, ReminderReason.OptedOut, null, null);
 
-        var conversation = await LatestConversationAsync(client.Id, contact, ct);
-        if (conversation is null) return (ReminderStatus.Skipped, ReminderReason.NoConversation, null, null);
+        // A WhatsApp conversation is only started right before a real send (QA t5-ops-06: a reminder skipped for its template
+        // left an empty conversation that the Dashboard counted as waiting).
+        var conversation = await LatestConversationAsync(client.Id, contact.Id, ct);
+        if (conversation is null && string.IsNullOrWhiteSpace(contact.Phone)) return (ReminderStatus.Skipped, ReminderReason.NoConversation, null, null);
+        var channel = conversation?.Channel ?? ConversationChannel.WhatsApp;
         var local = TimeZoneInfo.ConvertTime(due.ScheduledStart, ViewerTimeZone.Find(client.Timezone) ?? TimeZoneInfo.Utc);
         var name = string.IsNullOrWhiteSpace(contact.FullName) ? string.Empty : contact.FullName.Trim();
 
-        if (conversation.Channel == ConversationChannel.WhatsApp)
+        if (channel == ConversationChannel.WhatsApp)
         {
             var templateId = PickTemplate(settings.Templates, contact.PreferredLanguage, client.DefaultLanguage);
-            if (templateId is null) return (ReminderStatus.Skipped, ReminderReason.NoTemplate, conversation.Channel, null);
+            if (templateId is null) return (ReminderStatus.Skipped, ReminderReason.NoTemplate, channel, null);
             var template = await _templates.GetReadOnlyAsync(client.Id, templateId.Value, ct);
-            if (template is null) return (ReminderStatus.Skipped, ReminderReason.NoTemplate, conversation.Channel, null);
-            if (template.Status != WhatsAppTemplateStatus.Approved) return (ReminderStatus.Skipped, ReminderReason.TemplateNotApproved, conversation.Channel, null);
+            if (template is null) return (ReminderStatus.Skipped, ReminderReason.NoTemplate, channel, null);
+            if (template.Status != WhatsAppTemplateStatus.Approved) return (ReminderStatus.Skipped, ReminderReason.TemplateNotApproved, channel, null);
             var needed = PlaceholderCount(template.Body);
-            if (needed > TemplateValues) return (ReminderStatus.Skipped, ReminderReason.TemplateParameters, conversation.Channel, null);
+            if (needed > TemplateValues) return (ReminderStatus.Skipped, ReminderReason.TemplateParameters, channel, null);
+            if (conversation is null)
+            {
+                if ((await _channels.GetReadOnlyAsync(client.Id, ChannelType.WhatsApp, ct))?.Status != ChannelIntegrationStatus.Connected)
+                {
+                    return (ReminderStatus.Skipped, ReminderReason.ChannelNotConnected, channel, null);
+                }
+                var created = await _conversationService.GetOrCreateForContactAsync(client.Id, contact.Id, ConversationChannel.WhatsApp, ct);
+                conversation = await _conversations.GetAsync(client.Id, created.Id, ct)
+                    ?? throw new InvalidOperationException("The new WhatsApp conversation is gone."); // text-ok: logged, never shown
+            }
 
             var culture = AppCulture.For(TemplateLanguage(template.Language));
             var when = $"{local.ToString(TextCulture.Pattern(culture, DateStyle.WeekdayDate), culture)} {local.ToString("HH:mm", culture)}";
@@ -194,7 +212,7 @@ public partial class BookingReminderService : IBookingReminderService
             return (ReminderStatus.Sent, string.Empty, conversation.Channel, sent?.Id);
         }
 
-        if (conversation.Channel == ConversationChannel.Telegram)
+        if (conversation is not null && channel == ConversationChannel.Telegram)
         {
             var text = await _readerText.ForAsync([contact.PreferredLanguage, client.DefaultLanguage], client.BusinessTypeCode, ct);
             var date = local.ToString(TextCulture.Pattern(text.Culture, DateStyle.WeekdayDate), text.Culture);
@@ -203,20 +221,27 @@ public partial class BookingReminderService : IBookingReminderService
             return (ReminderStatus.Sent, string.Empty, conversation.Channel, sent?.Id);
         }
 
-        return (ReminderStatus.Skipped, ReminderReason.ChannelUnsupported, conversation.Channel, null);
+        return (ReminderStatus.Skipped, ReminderReason.ChannelUnsupported, channel, null);
     }
 
-    /// <summary>The contact's most recently active WhatsApp or Telegram conversation; a new WhatsApp one when there is none
-    /// but the contact has a phone number.</summary>
-    private async Task<Conversation?> LatestConversationAsync(Guid clientId, Contact contact, CancellationToken ct)
+    /// <summary>The contact's most recently active WhatsApp or Telegram conversation, or null (a contact with a phone number
+    /// then gets a new WhatsApp one, but only once the reminder is sure to be sent).</summary>
+    private async Task<Conversation?> LatestConversationAsync(Guid clientId, Guid contactId, CancellationToken ct)
     {
-        var whatsApp = await _conversations.FindForContactAsync(clientId, contact.Id, ConversationChannel.WhatsApp, ct);
-        var telegram = await _conversations.FindForContactAsync(clientId, contact.Id, ConversationChannel.Telegram, ct);
-        var latest = new[] { whatsApp, telegram }.OfType<Conversation>()
+        var whatsApp = await _conversations.FindForContactAsync(clientId, contactId, ConversationChannel.WhatsApp, ct);
+        var telegram = await _conversations.FindForContactAsync(clientId, contactId, ConversationChannel.Telegram, ct);
+        return new[] { whatsApp, telegram }.OfType<Conversation>()
             .OrderByDescending(c => c.LastMessageAt ?? c.CreatedAt).FirstOrDefault();
-        if (latest is not null || string.IsNullOrWhiteSpace(contact.Phone)) return latest;
-        var created = await _conversationService.GetOrCreateForContactAsync(clientId, contact.Id, ConversationChannel.WhatsApp, ct);
-        return await _conversations.GetAsync(clientId, created.Id, ct);
+    }
+
+    public async Task<ReminderStatusDto> GetStatusAsync(Guid clientId, CancellationToken ct = default)
+    {
+        var settings = await GetSettingsAsync(clientId, ct);
+        var whatsApp = (await _channels.GetReadOnlyAsync(clientId, ChannelType.WhatsApp, ct))?.Status == ChannelIntegrationStatus.Connected;
+        var telegram = (await _channels.GetReadOnlyAsync(clientId, ChannelType.Telegram, ct))?.Status == ChannelIntegrationStatus.Connected;
+        var counts = await _reminders.CountByStatusSinceAsync(clientId, _time.GetUtcNow().AddDays(-7), ct);
+        return new ReminderStatusDto(settings.Enabled, whatsApp, settings.Templates.Count, telegram,
+            counts.GetValueOrDefault(ReminderStatus.Sent), counts.GetValueOrDefault(ReminderStatus.Skipped), counts.GetValueOrDefault(ReminderStatus.Failed));
     }
 
     /// <summary>The template for the contact's language, else the client's default language, else any chosen one.</summary>

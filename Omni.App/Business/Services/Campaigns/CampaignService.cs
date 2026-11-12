@@ -111,7 +111,7 @@ public class CampaignService : ICampaignService
         var stats = await ComputeStats(clientId, recipients, ct);
         var recipientRows = recipients.Select(r => new CampaignRecipientRow(
             r.Id, r.ContactId, r.Contact?.FullName, r.PhoneNumber, r.Status,
-            r.SkipReason, r.FailureCode, r.FailureReason,
+            r.SkipReason, r.FailureCode, StoredText.Show(r.FailureReason, _text), // in the reader's language (QA t5-ops-12)
             r.QueuedAt, r.SentAt, r.DeliveredAt, r.ReadAt, r.RepliedAt, r.BookedAt, r.FailedAt)).ToList();
 
         return new CampaignDetailsResponse(ToResponse(campaign), stats, recipientRows, campaign.WhatsAppTemplate?.Body);
@@ -123,6 +123,11 @@ public class CampaignService : ICampaignService
         {
             throw new ArgumentException("campaigns.errors.nameRequired");
         }
+        // marketing.campaigns.name is varchar(200) and campaign_type varchar(30): too long is a 400, never a 500 (QA t5-ops-08).
+        var name = request.Name.Trim();
+        if (name.Length > NameMax) throw new ArgumentException("campaigns.errors.nameTooLong").WithArgs(NameMax);
+        var campaignType = string.IsNullOrWhiteSpace(request.CampaignType) ? CampaignType.Custom : request.CampaignType.Trim();
+        if (campaignType.Length > CampaignTypeMax) throw new ArgumentException("campaigns.errors.typeTooLong").WithArgs(CampaignTypeMax);
         // A draft may carry the time it is meant for, but never a past one (QA t5-ops-10: a past date was stored).
         if (request.ScheduledAt is { } planned) EnsureFutureTime(planned);
         await _entitlements.EnsureFeatureAsync(request.ClientId, EntitlementKeys.Campaigns, ct);
@@ -174,8 +179,8 @@ public class CampaignService : ICampaignService
         {
             Id = Guid.NewGuid(),
             ClientId = request.ClientId,
-            Name = request.Name,
-            CampaignType = string.IsNullOrWhiteSpace(request.CampaignType) ? CampaignType.Custom : request.CampaignType,
+            Name = name,
+            CampaignType = campaignType,
             Channel = CampaignChannel.WhatsApp,
             WhatsAppTemplateId = request.WhatsAppTemplateId,
             AudienceType = audienceType,
@@ -574,7 +579,8 @@ public class CampaignService : ICampaignService
             var now = DateTimeOffset.UtcNow;
             recipient.Status = CampaignRecipientStatus.Failed;
             // Stored text (the campaign page shows it as written): a keyed refusal is worded now, outside a request in English.
-            recipient.FailureReason = _text.Localize(ex);
+            // Stored as a key where it is one of ours, read in each viewer's language (QA t5-ops-12).
+            recipient.FailureReason = StoredText.Of(ex, _text);
             recipient.FailedAt = now;
             recipient.UpdatedAt = now;
             await _unitOfWork.SaveChangesAsync(ct);
@@ -611,6 +617,9 @@ public class CampaignService : ICampaignService
     }
 
     private const string NotApprovedKey = "templates.errors.notApproved";
+
+    /// <summary>The longest campaign name and type the table holds.</summary>
+    public const int NameMax = 200, CampaignTypeMax = 30;
 
     /// <summary>A send problem that isn't the recipient's: the batch stops with the recipient still queued, and the campaign is
     /// paused when Pause (otherwise it is only Meta's rate limit, and the next run goes on).</summary>

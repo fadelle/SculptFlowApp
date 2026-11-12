@@ -176,7 +176,9 @@ public class BotService : IBotService
         var now = DateTimeOffset.UtcNow;
         foreach (var account in await _inboxSettings.ListForBotAsync(clientId, botId, ct))
         {
+            // AI goes off with it (QA t7-08): "on" with no bot left the account unsavable until the switch was turned off.
             account.BotId = null;
+            account.AiEnabled = false;
             account.UpdatedAt = now;
         }
         _bots.Remove(bot);

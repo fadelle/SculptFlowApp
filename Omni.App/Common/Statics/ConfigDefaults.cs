@@ -58,6 +58,10 @@ public static class ConfigDefaults
         "Charge each AI assistant reply as ai_reply usage (included credit first, then wallet). Needs an ai_reply rate; a client that can't pay gets no AI reply and the conversation goes to the team. Off = AI replies are not charged.");
     public static readonly ConfigDefinition BillingAddonsRenewByDefault = new("Billing", "AddonsRenewByDefault", "false", ConfigValueType.Bool,
         "Whether a client's add-ons renew with the plan when the client hasn't chosen for that add-on. Off = at each renewal an add-on ends (its extra units go, nothing is charged) unless it is set to renew.");
+    public static readonly ConfigDefinition BillingTrialWarningDays = new("Billing", "TrialWarningDays", "3", ConfigValueType.Int,
+        "How many days before a trial ends the dashboard starts saying so (0 = only once it has ended).", 0, 30);
+    public static readonly ConfigDefinition BillingLowBalanceThreshold = new("Billing", "LowBalanceThreshold", "5", ConfigValueType.Decimal,
+        "Below this wallet plus included credit (account currency) the dashboard warns that messages will stop when it runs out (0 = no warning).", 0, 100000);
     public static readonly ConfigDefinition KnowledgeMinScore = new("Knowledge", "MinScore", "0.30", ConfigValueType.Decimal,
         "Minimum similarity for a search result, for new clients (each client can change its own).", 0, 1);
     public static readonly ConfigDefinition KnowledgeChunkMaxChars = new("Knowledge", "ChunkMaxChars", "1000", ConfigValueType.Int,
@@ -166,6 +170,12 @@ public static class ConfigDefaults
         "Most bot runs (different conversations) at the same time; one conversation always runs one message at a time.", 1, 64);
     public static readonly ConfigDefinition AiBurstWaitMilliseconds = new("Ai", "BurstWaitMilliseconds", "1000", ConfigValueType.Int,
         "How long a conversation's next bot run waits after its message arrived, so messages the contact sent together are all saved and answered in the order they were written (0 = no wait).", 0, 10000);
+    public static readonly ConfigDefinition AiMaxConcurrentRunsPerClient = new("Ai", "MaxConcurrentRunsPerClient", "2", ConfigValueType.Int,
+        "Most bot runs of one client at the same time, so one busy client can't take every slot (Ai / MaxConcurrentRuns is the total).", 1, 64);
+    public static readonly ConfigDefinition AiNoAnswerHandoffMinutes = new("Ai", "NoAnswerHandoffMinutes", "10", ConfigValueType.Int,
+        "When the bot was asked about a customer's message and nothing came back (no reply, no hand-off) for this many minutes, the conversation goes to the team with a bot.no_answer step in the message trace (QA t9-04: a dead n8n workflow failed silently). 0 = never.", 0, 1440);
+    public static readonly ConfigDefinition AiMergeBurstMessages = new("Ai", "MergeBurstMessages", "true", ConfigValueType.Bool,
+        "Text messages a contact sends while the bot is still waiting to answer are answered together in one run (one reply, one charge) instead of one run each. Off = one run per message.");
     public static readonly ConfigDefinition AiInputTokenPriceUsdPerMillion = new("Ai", "InputTokenPriceUsdPerMillion", "1.25", ConfigValueType.Decimal,
         "What the AI model provider charges per million input tokens (USD), for the admin portal's AI usage estimate only (QA t7-10). Billing never reads it.", 0, 1000);
     public static readonly ConfigDefinition AiOutputTokenPriceUsdPerMillion = new("Ai", "OutputTokenPriceUsdPerMillion", "10", ConfigValueType.Decimal,
@@ -291,6 +301,8 @@ public static class ConfigDefaults
         BillingRecentTransactions,
         BillingChargeAiReplies,
         BillingAddonsRenewByDefault,
+        BillingTrialWarningDays,
+        BillingLowBalanceThreshold,
 
         OptOutEnabled,
         OptOutStopKeywords,
@@ -368,6 +380,9 @@ public static class ConfigDefaults
         AiTimeoutSeconds,
         AiMaxConcurrentRuns,
         AiBurstWaitMilliseconds,
+        AiMaxConcurrentRunsPerClient,
+        AiMergeBurstMessages,
+        AiNoAnswerHandoffMinutes,
         AiRetryUnansweredAfterSeconds,
         AiInputTokenPriceUsdPerMillion,
         AiOutputTokenPriceUsdPerMillion,

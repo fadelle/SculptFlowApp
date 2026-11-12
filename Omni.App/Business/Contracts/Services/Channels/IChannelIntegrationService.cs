@@ -20,6 +20,11 @@ public interface IChannelIntegrationService
 
     Task DisconnectAsync(Guid clientId, string channel, CancellationToken ct = default);
 
+    /// <summary>Asks Meta about the connected WhatsApp number with the stored token (QA t8-20): a good answer records the check
+    /// (LastVerifiedAt) and clears LastError; a refusal stores Meta's reason in LastError and the health shows it. Null when
+    /// the client has no connected WhatsApp.</summary>
+    Task<Entities.Dtos.PlatformAdmin.ChannelCheckResult?> CheckWhatsAppAsync(Guid clientId, CancellationToken ct = default);
+
     /// <summary>Completes WhatsApp Embedded Signup: exchanges the code for a token, looks up the phone number, and saves it.</summary>
     Task<ChannelIntegrationResponse> ConnectWhatsAppAsync(ConnectWhatsAppRequest request, CancellationToken ct = default);
 

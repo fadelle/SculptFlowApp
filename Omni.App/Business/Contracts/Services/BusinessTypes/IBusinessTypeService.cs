@@ -22,6 +22,13 @@ public interface IBusinessTypeService
     /// <summary>The client's stages in pipeline order (empty when the client doesn't exist).</summary>
     Task<IReadOnlyList<PipelineStageOption>> ListStagesForClientAsync(Guid clientId, CancellationToken ct = default);
 
+    /// <summary>The client's stages with the type's labels and its own (Settings → Contact stages, QA t12-fix-06).</summary>
+    Task<IReadOnlyList<ClientStageLabelRow>> ListClientStageLabelsAsync(Guid clientId, CancellationToken ct = default);
+
+    /// <summary>Replaces the client's own labels: stage key → language → label; an empty label (or a stage left out) goes back
+    /// to the type's. Keys must be the client's stages (400 otherwise); keys and categories never change.</summary>
+    Task SaveClientStageLabelsAsync(Guid clientId, IReadOnlyDictionary<string, Dictionary<string, string>> labels, CancellationToken ct = default);
+
     /// <summary>Whether <paramref name="key"/> is a stage of the client's business type.</summary>
     Task<bool> IsStageOfClientAsync(Guid clientId, string? key, CancellationToken ct = default);
 

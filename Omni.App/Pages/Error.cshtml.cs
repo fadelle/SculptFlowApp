@@ -8,7 +8,9 @@ namespace Omni.App.Pages
     [IgnoreAntiforgeryToken]
     public class ErrorModel : PageModel
     {
-        public string? RequestId { get; set; }
+        /// <summary>The failed request's trace id, whatever its method (QA t4-ai-17: a failed POST showed no reference, since
+        /// only OnGet set it).</summary>
+        public string? RequestId => Activity.Current?.Id ?? HttpContext?.TraceIdentifier;
 
         public bool ShowRequestId => !string.IsNullOrEmpty(RequestId);
 
@@ -17,7 +19,6 @@ namespace Omni.App.Pages
 
         public void OnGet()
         {
-            RequestId = Activity.Current?.Id ?? HttpContext.TraceIdentifier;
         }
     }
 

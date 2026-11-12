@@ -147,6 +147,7 @@ builder.Services.AddHttpContextAccessor();
 
 // Password rules, lockout (5 failed sign-ins lock for 15 minutes, the admin portal's old rule), AppSignInManager.
 builder.Services.AddOmniIdentity();
+builder.Services.AddSingleton<Omni.App.Common.Helpers.SignInThrottle>(); // per account+address lockout (QA t12-fix-01)
 
 var authentication = builder.Services.AddAuthentication(IdentityConstants.ApplicationScheme)
     .AddCookie(IdentityConstants.ApplicationScheme, options =>
@@ -289,6 +290,7 @@ builder.Services.AddScoped<IMessageTraceService, MessageTraceService>();
 builder.Services.AddScoped<IMessageTraceAdminService, MessageTraceAdminService>();
 builder.Services.AddHostedService<MessageTraceFlushJob>();
 builder.Services.AddScoped<IContactService, ContactService>();
+builder.Services.AddScoped<IContactImportService, ContactImportService>(); // CSV import/export (QA t12-fix-05)
 // Opt-out (Milestone C): stop/start words on inbound messages and the contact page switch; campaigns, reminders and
 // Inbox templates skip or refuse an opted-out contact.
 builder.Services.AddScoped<IOptOutService, OptOutService>();
@@ -365,6 +367,9 @@ builder.Services.AddScoped<IKnowledgeSearchService, KnowledgeSearchService>();
 builder.Services.AddSingleton<SsrfGuard>();
 builder.Services.AddSingleton<IHtmlContentExtractor, HtmlContentExtractor>();
 builder.Services.AddSingleton<IWebsiteScrapeQueue, WebsiteScrapeQueue>();
+// Knowledge Base re-index after a chunk-size change or on request (QA t4-ai-15).
+builder.Services.AddSingleton<IKnowledgeReindexQueue, KnowledgeReindexQueue>();
+builder.Services.AddHostedService<KnowledgeReindexWorker>();
 builder.Services.AddHttpClient<IWebsiteFetchClient, WebsiteFetchClient>(client =>
     {
         client.Timeout = Timeout.InfiniteTimeSpan; // per-request timeouts are enforced by the fetch client
@@ -447,6 +452,11 @@ builder.Services.AddScoped<IAiTriggerNotifier, BotTrigger>();
 builder.Services.AddSingleton<IBotRunQueue, BotRunQueue>();
 builder.Services.AddScoped<IBotEngine, BotEngine>();
 builder.Services.AddHostedService<BotRunWorker>();
+// Telegram webhooks queue their AI trigger and answer at once (QA t3-inbox-22); WhatsApp's already run in WhatsAppDeliveryWorker.
+builder.Services.AddSingleton<IAiTriggerDispatchQueue, AiTriggerDispatchQueue>();
+builder.Services.AddHostedService<AiTriggerDispatchWorker>();
+// A bot that was asked and never answered hands the conversation to the team (QA t9-04).
+builder.Services.AddHostedService<BotNoAnswerWatchdog>();
 // Calendar sync after a booking change: Calendars / SyncEngine picks n8n (CalendarSyncNotifier posts to
 // N8n:CalendarSyncWebhookUrl) or code (CalendarSyncWorker runs CalendarSyncClient, then ApplySyncCallbackAsync).
 builder.Services.AddHttpClient<CalendarSyncNotifier>();
@@ -477,7 +487,13 @@ builder.Services.AddRazorPages(options =>
     // The friendly 404/400 page (UseStatusCodePagesWithReExecute below) must render for signed-out visitors too.
     options.Conventions.AllowAnonymousToPage("/Status");
 });
-builder.Services.AddControllers();
+builder.Services.AddControllers().ConfigureApiBehaviorOptions(options =>
+{
+    // An unreadable or invalid body answers {error} in the caller's language and the field names, never ASP.NET's English
+    // problem text with internal type names (QA t4-ai-17).
+    options.InvalidModelStateResponseFactory = context => new Microsoft.AspNetCore.Mvc.BadRequestObjectResult(
+        Omni.App.Controllers.Filters.InvalidRequestBody.Of(context.HttpContext, context.ModelState));
+});
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
@@ -512,6 +528,8 @@ if (args.Length > 0 && args[0] == AdminCli.CreateAdminCommand)
 app.UseForwardedHeaders();
 // Security headers on every response, the error pages and static files included (QA t1-accounts-03).
 app.UseMiddleware<SecurityHeadersMiddleware>();
+app.UseMiddleware<ClientIpHeaderProbeMiddleware>();
+app.UseMiddleware<PlatformAdminWriteLogMiddleware>(); // every platform-admin write, by the main app itself (QA t6-admin-23) // logs once which client-IP headers arrive (QA t12-fix-04)
 
 // ---------------------------------------------------------------------
 // Middleware pipeline

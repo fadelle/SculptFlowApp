@@ -91,6 +91,67 @@ public class BotRunWorkerTests
     }
 
     [Fact]
+    public async Task One_busy_client_cant_take_every_slot()
+    {
+        // QA t7-05: the 4 platform-wide slots were all one client's, so another client's reply waited.
+        _config.SetupGet(c => c.AiMaxConcurrentRunsPerClient).Returns(1);
+        var worker = Worker(maxRuns: 4);
+        await worker.StartAsync(CancellationToken.None);
+        var busy = Guid.NewGuid();
+        _queue.TryEnqueue(Run(Guid.NewGuid(), "busy-1") with { ClientId = busy });
+        _queue.TryEnqueue(Run(Guid.NewGuid(), "busy-2") with { ClientId = busy });
+        _queue.TryEnqueue(Run(Guid.NewGuid(), "other"));
+
+        await Until(() => _engine.Started.Contains("busy-1") && _engine.Started.Contains("other"));
+        await Task.Delay(100);
+        Assert.DoesNotContain("busy-2", _engine.Started); // the busy client's second conversation waits for its own slot
+        _engine.Release("busy-1");
+        await Until(() => _engine.Started.Contains("busy-2"));
+        _engine.Release("busy-2");
+        _engine.Release("other");
+        await Until(() => _engine.Ended.Count == 3);
+        await worker.StopAsync(CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task Waiting_text_messages_of_a_conversation_are_answered_in_one_run()
+    {
+        // QA t4-ai-18: a burst of 4 messages got 4 runs, 4 replies and 4 charges.
+        _config.SetupGet(c => c.AiMergeBurstMessages).Returns(true);
+        _config.SetupGet(c => c.AiBurstWaitMilliseconds).Returns(300);
+        var worker = Worker(maxRuns: 4);
+        await worker.StartAsync(CancellationToken.None);
+        var chat = Guid.NewGuid();
+        var client = Guid.NewGuid();
+        _engine.Release("hi\nI want to book\ntomorrow?");
+        foreach (var text in new[] { "hi", "I want to book", "tomorrow?" }) _queue.TryEnqueue(Run(chat, text) with { ClientId = client });
+
+        await Until(() => _engine.Ended.Count == 1);
+        await Task.Delay(400);
+        Assert.Equal(["hi\nI want to book\ntomorrow?"], _engine.Started);
+        await worker.StopAsync(CancellationToken.None);
+    }
+
+    [Fact]
+    public void A_photo_or_voice_note_is_never_merged()
+    {
+        var chat = Guid.NewGuid();
+        List<BotRunWorker.Pending> Queue() =>
+        [
+            new(Run(chat, "a"), DateTimeOffset.UtcNow, 1), new(Run(chat, "b"), DateTimeOffset.UtcNow, 2),
+            new(Run(chat, "[photo]") with { MessageType = "image" }, DateTimeOffset.UtcNow, 3), new(Run(chat, "c"), DateTimeOffset.UtcNow, 4)
+        ];
+        var runs = Queue();
+        var (first, count) = BotRunWorker.Take(runs, merge: true);
+        Assert.Equal(("a\nb", 2, 2), (first.MessageText, count, runs.Count));
+        var (photo, one) = BotRunWorker.Take(runs, merge: true);
+        Assert.Equal(("image", 1), (photo.MessageType, one));
+        var off = Queue();
+        Assert.Equal(("a", 1), (BotRunWorker.Take(off, merge: false).Trigger.MessageText, 1));
+        Assert.Equal(3, off.Count);
+    }
+
+    [Fact]
     public void Runs_are_ordered_by_when_they_were_written_then_the_chats_own_order_then_the_queue()
     {
         var t = DateTimeOffset.UtcNow;

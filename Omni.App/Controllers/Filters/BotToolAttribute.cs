@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Omni.App.Business.Contracts.Services.Ai;
+using Omni.App.Common.Helpers;
 using Omni.App.Common.Statics;
 using Omni.App.Entities.Dtos.Ai;
 
@@ -17,6 +18,8 @@ namespace Omni.App.Controllers.Filters;
 /// (<see cref="BotToolOutcomes.MissingContext"/>, QA t9-01), and a bot that may no longer answer a 403
 /// (<see cref="BotToolOutcomes.BotNotAllowed"/>, as IBotToolService does for the code engine), so the run fails visibly instead of
 /// looking like a success. Runs before RequireFeature.
+/// With N8n:RunTokenSecret set, the call must also carry the run's token (<see cref="AiRunToken.Header"/>, from the AI trigger)
+/// issued for this client and bot, or it is a 401 (QA t4-ai-09: the ingest key alone was a master key for every client's tools).
 /// </summary>
 [AttributeUsage(AttributeTargets.Method)]
 public sealed class BotToolAttribute : Attribute, IAsyncActionFilter, IOrderedFilter
@@ -53,6 +56,14 @@ public sealed class BotToolAttribute : Attribute, IAsyncActionFilter, IOrderedFi
                 BotToolCheck.MissingContext => new BadRequestObjectResult(BotToolOutcomes.MissingContext()),
                 _ => new ObjectResult(BotToolOutcomes.BotNotAllowed(check.DeniedReason)) { StatusCode = StatusCodes.Status403Forbidden }
             };
+            return;
+        }
+        if (http.RequestServices.GetService<IConfiguration>() is { } configuration && AiRunToken.Secret(configuration) is { } secret
+            && !AiRunToken.IsValid(secret, http.Request.Headers[AiRunToken.Header].FirstOrDefault(), check.Run.ClientId, check.Run.BotId, DateTimeOffset.UtcNow))
+        {
+            http.RequestServices.GetService<ILogger<BotToolAttribute>>()?.LogWarning(
+                "AI tool call {Path} for client {ClientId} refused: missing, expired or foreign run token.", http.Request.Path.Value, check.Run.ClientId);
+            context.Result = new UnauthorizedObjectResult(new { error = $"Missing or invalid {AiRunToken.Header} header." });
             return;
         }
         http.Items[BotRunContext.ItemKey] = check.Run;

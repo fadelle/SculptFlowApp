@@ -34,6 +34,12 @@ public static class TraceSteps
     public const string BotActionResult = "bot.action_result";
     public const string BotReplyStopped = "bot.reply_stopped";
     public const string BotRunFailed = "bot.run_failed";
+    /// <summary>A waiting bot run the app stopped before it could start (a deploy or restart; QA t7-05): the contact gets no reply.</summary>
+    public const string BotRunDropped = "bot.run_dropped";
+    /// <summary>The bot was asked and nothing came back within Ai / NoAnswerHandoffMinutes; the conversation went to the team (QA t9-04).</summary>
+    public const string BotNoAnswer = "bot.no_answer";
+    /// <summary>Several waiting text messages of one conversation answered in one run (QA t4-ai-18).</summary>
+    public const string BotRunsMerged = "bot.runs_merged";
 
     // Contacts (from the bot's tools)
     public const string ContactLanguageIgnored = "contact.language_ignored";

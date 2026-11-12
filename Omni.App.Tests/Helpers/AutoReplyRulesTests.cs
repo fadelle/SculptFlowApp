@@ -21,9 +21,10 @@ public class AutoReplyRulesTests
     public void The_reopened_mode_picks_the_text(string mode, string? expected)
     {
         Assert.Equal(expected, AutoReplyRules.Choose(Settings(mode: mode, reopened: "Back"), AutoReplyTrigger.Reopened, false).Text);
-        // "Same message" uses the text even while the new-conversation reply itself is off.
+        // "Same message" is the new-conversation reply, so it is off while that is off (QA t7-09: the switched-off welcome
+        // text went out on every reopened conversation).
         if (mode == AutoReplyReopenedMode.Same)
-            Assert.Equal("Hi", AutoReplyRules.Choose(Settings(newOn: false, mode: mode), AutoReplyTrigger.Reopened, false).Text);
+            Assert.Null(AutoReplyRules.Choose(Settings(newOn: false, mode: mode), AutoReplyTrigger.Reopened, false).Text);
     }
 
     [Fact]

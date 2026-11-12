@@ -158,4 +158,16 @@ public class AutoReplyServiceTests
         _config.SetupGet(c => c.AutoReplyEnabled).Returns(false);
         Assert.Equal(AutoReplyChoice.Skip(AutoReplyRules.SkipDisabledByAdmin), await Sut().ChooseAsync(_clientId, ConversationChannel.WhatsApp, AutoReplyTrigger.NewConversation, false));
     }
+
+    [Fact]
+    public async Task A_deactivated_client_sends_no_auto_reply()
+    {
+        // QA t12-fix-02: its AI, campaigns and reminders stopped, but the welcome text still went out (and was billed).
+        _autoReplies.Setup(r => r.GetReadOnlyAsync(_clientId, ConversationChannel.WhatsApp, It.IsAny<CancellationToken>())).ReturnsAsync(
+            new AutoReply { ClientId = _clientId, Channel = ConversationChannel.WhatsApp, NewConversationEnabled = true, NewConversationMessage = "Hi!" });
+        _clients.Setup(r => r.GetReadOnlyAsync(_clientId, It.IsAny<CancellationToken>())).ReturnsAsync(new Client { Id = _clientId, Name = "Glow", IsActive = false });
+
+        Assert.Equal(AutoReplyChoice.Skip(AutoReplyRules.SkipClientInactive),
+            await Sut().ChooseAsync(_clientId, ConversationChannel.WhatsApp, AutoReplyTrigger.NewConversation, false));
+    }
 }

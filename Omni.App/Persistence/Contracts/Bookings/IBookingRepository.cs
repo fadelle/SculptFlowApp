@@ -32,6 +32,9 @@ public interface IBookingRepository
     /// <summary>Past bookings still booked/confirmed (no outcome recorded yet).</summary>
     Task<int> CountNeedingOutcomeAsync(Guid clientId, DateTimeOffset now, CancellationToken ct = default);
 
+    /// <summary>Upcoming booked / confirmed bookings per service (QA t5-ops-17: deactivating one gave no warning).</summary>
+    Task<IReadOnlyDictionary<Guid, int>> CountUpcomingByServiceAsync(Guid clientId, DateTimeOffset now, CancellationToken ct = default);
+
     /// <summary>Bookings that block slots (not canceled/rescheduled) starting in [lowUtc, highUtc).</summary>
     Task<IReadOnlyList<BusyBookingRow>> ListBusyAsync(Guid clientId, DateTimeOffset lowUtc, DateTimeOffset highUtc,
         Guid? excludeBookingId, CancellationToken ct = default);

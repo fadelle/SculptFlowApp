@@ -104,6 +104,16 @@ public class OptOutServiceTests
     }
 
     [Fact]
+    public async Task A_deactivated_client_sends_no_opt_out_confirmation()
+    {
+        // QA t12-fix-02: the STOP/START confirmation still went out; the opt-out itself is still recorded (Apply).
+        _config.SetupGet(c => c.OptOutSendConfirmation).Returns(true);
+        _clients.Setup(c => c.GetReadOnlyAsync(_clientId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Client { Id = _clientId, Name = "Glow", IsActive = false, BusinessTypeCode = TextKit.General });
+        Assert.Null(await Sut().ConfirmationTextAsync(_clientId, NewContact(), true));
+    }
+
+    [Fact]
     public async Task A_member_switch_saves_only_a_change_and_only_for_the_clients_contact()
     {
         var contact = NewContact();

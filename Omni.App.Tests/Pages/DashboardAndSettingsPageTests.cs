@@ -404,6 +404,25 @@ public class DashboardPageTests
         dashboard.Verify();
     }
 
+    [Fact]
+    public async Task Only_the_owner_downloads_the_contact_list_and_it_follows_the_filters()
+    {
+        // QA t12-fix-05: the export is every contact's details at once.
+        var csv = new Mock<Omni.App.Business.Contracts.Services.Contacts.IContactImportService>();
+        csv.Setup(c => c.ExportAsync(Glow.Id, "new", "ann", "web", It.IsAny<CancellationToken>())).ReturnsAsync("x");
+        Omni.App.Pages.Dashboard.ContactsModel Model(string role) => new Omni.App.Pages.Dashboard.ContactsModel(ClientContext(Glow, role).Object,
+            Mock.Of<IDashboardService>(), Mock.Of<IContactService>(), Mock.Of<IConfigManager>(), NoServices(), TextKit.Localizer(), csv.Object)
+        {
+            Stage = "new", Search = "ann", Source = "web"
+        }.Attach();
+
+        var file = Assert.IsType<FileContentResult>(await Model(UserRole.Client).OnGetExportAsync(default));
+        Assert.StartsWith("text/csv", file.ContentType);
+        Assert.EndsWith(".csv", file.FileDownloadName);
+        Assert.IsType<ForbidResult>(await Model(UserRole.Member).OnGetExportAsync(default));
+        csv.Verify(c => c.ExportAsync(It.IsAny<Guid>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
     // ---- contact detail ----------------------------------------------------------------------------------------------
 
     private static ContactResponse Contact(string status = "new", string? source = "web") =>

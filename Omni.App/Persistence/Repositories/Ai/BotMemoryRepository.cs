@@ -23,6 +23,9 @@ public class BotMemoryRepository : IBotMemoryRepository
 
     public void Add(BotMemory memory) => _db.BotMemory.Add(memory);
 
+    public Task<bool> OwnerExistsAsync(Guid key, bool test, CancellationToken ct = default) =>
+        test ? _db.BotTestSessions.AnyAsync(s => s.Id == key, ct) : _db.Conversations.AnyAsync(c => c.Id == key, ct);
+
     public async Task<int> DeleteAllButNewestAsync(Guid key, bool test, int keep, CancellationToken ct = default)
     {
         var kept = await Of(key, test).OrderByDescending(m => m.CreatedAt).ThenByDescending(m => m.Id)

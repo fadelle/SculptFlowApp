@@ -11,5 +11,10 @@ public record DashboardContactRow(
     string Qualification,
     DateTimeOffset? LastContactAt,
     DateTimeOffset? NextFollowupAt,
-    DateTimeOffset CreatedAt
+    DateTimeOffset CreatedAt,
+    // For the CSV export (QA t12-fix-05).
+    string? Email = null,
+    string? City = null,
+    string? PreferredLanguage = null,
+    DateTimeOffset? OptedOutAt = null
 );

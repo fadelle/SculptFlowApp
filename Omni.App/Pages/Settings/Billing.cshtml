@@ -3,7 +3,7 @@
 @{
     ViewData["Title"] = T["billing.title"].Value;
     var s = Model.Summary;
-    string Money(decimal value) => (s?.Currency == "USD" ? "$" : "") + value.Display("#,0.00") + (s?.Currency == "USD" ? "" : " " + s?.Currency);
+    string Money(decimal value) => BillingTextHelper.Money(value, s?.Currency);
     // Transactions show cents like the balances; usage keeps 6 decimals, so the exact amount is in the tooltip (QA t2-billing-23).
     string Cents(decimal value) => value.Display("#,0.00");
     string Exact(decimal value) => value.Display("#,0.00####");
@@ -68,7 +68,7 @@ else
     <div class="au-grid au-grid--4">
         <div class="au-stat stat-accent">
             <span class="au-eyebrow">@T["billing.plan.current"]</span>
-            <div class="au-stat__value">@(s.PlanName ?? T["billing.plan.none"].Value)</div>
+            <div class="au-stat__value">@(s.PlanName is null ? T["billing.plan.none"].Value : T.PlanName(s.PlanCode, s.PlanName))</div>
             <span class="au-stat__hint"><span class="badge @badge.Css">@badge.Text</span>
                 @if (s.TrialDays is { } trialLength) { <text>· @T.Plural("billing.trial.length", trialLength)</text> }
                 else if (s.PlanPrice is not null) { <text>· @T["billing.plan.price", Money(s.PlanPrice.Value), s.BillingPeriod == BillingPeriod.Year ? T["billing.plan.perYear"] : T["billing.plan.perMonth"]]</text> }</span>
@@ -113,7 +113,8 @@ else
             @foreach (var q in usage.Quotas)
             {
                 var full = q.Limit is { } max && q.Used >= max;
-                <div class="au-stat">
+                var over = q.Limit is { } cap && q.Used > cap;
+                <div class="au-stat @(over ? "quota-over" : "")">
                     <span class="au-eyebrow">@T.EntitlementLabel(q.Key, Omni.App.Common.Statics.EntitlementCatalog.Find(q.Key)?.Label ?? q.Key)</span>
                     <div class="au-stat__value">
                         @if (q.Limit is 0 && q.Used == 0)
@@ -136,6 +137,11 @@ else
                     else if (q.Limit is null)
                     {
                         <span class="au-stat__hint">@T["billing.entitlement.unlimited"]</span>
+                    }
+                    @if (over)
+                    {
+                        @* QA t2-billing-11: after a downgrade, say what is over and what to do, instead of a silent "3 of 1". *@
+                        <span class="au-stat__hint quota-over__hint">@T[BillingTextHelper.OverLimitKey(q.Key), q.Used - q.Limit!.Value]</span>
                     }
                 </div>
             }
@@ -284,7 +290,8 @@ else
                         {
                             <tr>
                                 <td data-label="@T["billing.transactions.date"]" class="cell-sub" @LocalTimeHelper.Title(t.CreatedAt)>@LocalTimeHelper.Time(t.CreatedAt, "datetime-year")</td>
-                                <td data-label="@T["billing.transactions.description"]" class="au-wrap">@T.LedgerLabel(t.EntryType)@(string.IsNullOrWhiteSpace(t.Reason) ? "" : " — " + t.Reason)</td>
+                                @* The kind of entry in the client's language; never the reason, which is the admin's internal note (QA t2-billing-08). *@
+                                <td data-label="@T["billing.transactions.description"]" class="au-wrap">@T.LedgerLabel(t.EntryType)</td>
                                 <td data-label="@T["billing.transactions.from"]">@(t.BalanceType == "wallet" ? T["billing.balance.title"] : T["billing.credit.included"])</td>
                                 <td data-label="@T["billing.transactions.amount"]" class="au-right" title="@Exact(t.Amount)">@(t.Amount > 0 ? "+" : t.Amount < 0 ? "−" : "")@Cents(Math.Abs(t.Amount))</td>
                                 <td data-label="@T["billing.transactions.balanceAfter"]" class="au-right" title="@Exact(t.BalanceAfter)">@Cents(t.BalanceAfter)</td>

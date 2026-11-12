@@ -16,8 +16,39 @@ public static class BillingTextHelper
     public const string EntitlementKeyPrefix = "billing.feature.";
     public const string EventTypeKeyPrefix = "billing.eventType.";
     public const string LedgerKeyPrefix = "billing.ledger.";
+    public const string PlanNameKeyPrefix = "billing.planName.";
+
+    /// <summary>A plan's name in the reader's language: billing.planName.{code in camelCase} for the seeded plans ("Free Trial"
+    /// was English in ar/fr; QA t2-billing-16), else the plan's own name.</summary>
+    public static string PlanName(this IStringLocalizer text, string? planCode, string? planName) =>
+        (planCode is null ? null : Find(text, PlanNameKeyPrefix, planCode)) ?? planName ?? string.Empty;
+
+    /// <summary>An amount in the reader's number and currency format ("$25.50", "25,50 $", QA t2-billing-16: French read
+    /// "$25,50"): USD is "$", another currency its code.</summary>
+    public static string Money(decimal value, string? currency)
+    {
+        var format = (System.Globalization.NumberFormatInfo)TextCulture.Current.NumberFormat.Clone();
+        format.CurrencySymbol = string.IsNullOrWhiteSpace(currency) || currency.Trim() == "USD" ? "$" : currency.Trim();
+        return value.ToString("C2", format);
+    }
 
     /// <summary>A plan feature or limit as an argument of a server message (e.g. "Campaigns isn't included in your plan").</summary>
+    private const string OverUsersKey = "billing.quota.over.users";
+    private const string OverChannelsKey = "billing.quota.over.channels";
+    private const string OverWhatsAppKey = "billing.quota.over.whatsapp";
+    private const string OverBotsKey = "billing.quota.over.bots";
+    private const string OverOtherKey = "billing.quota.over.other";
+
+    /// <summary>The "you're over this limit, here is what to do" text of a plan limit (QA t2-billing-11).</summary>
+    public static string OverLimitKey(string entitlementKey) => entitlementKey switch
+    {
+        EntitlementKeys.MaxUsers => OverUsersKey,
+        EntitlementKeys.MaxChannelConnections => OverChannelsKey,
+        EntitlementKeys.MaxWhatsAppNumbers => OverWhatsAppKey,
+        EntitlementKeys.MaxAiBots => OverBotsKey,
+        _ => OverOtherKey
+    };
+
     public static TextArg EntitlementArg(string entitlementKey) => TextArg.Of(EntitlementKeyPrefix + FilterLabelHelper.KeyPart(entitlementKey));
 
     public static string EntitlementLabel(this IStringLocalizer text, string entitlementKey, string fallback) =>

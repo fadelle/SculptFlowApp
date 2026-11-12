@@ -1,3 +1,4 @@
+using Omni.App.Common.Helpers;
 using System.Net.Http.Headers;
 using System.Text.Json;
 using Omni.App.Business.Contracts.HttpClients.TikTok;
@@ -24,11 +25,9 @@ public class TikTokProviderClient : ITikTokProviderClient
         _configuration = configuration;
     }
 
-    private string ClientKey => _configuration["TikTok:ClientKey"]
-        ?? throw new InvalidOperationException("Missing TikTok:ClientKey configuration.");
+    private string ClientKey => OAuthSetting.Required(_configuration, "TikTok:ClientKey");
 
-    private string ClientSecret => _configuration["TikTok:ClientSecret"]
-        ?? throw new InvalidOperationException("Missing TikTok:ClientSecret — set it via user-secrets.");
+    private string ClientSecret => OAuthSetting.Required(_configuration, "TikTok:ClientSecret");
 
     public string BuildAuthorizationUrl(string redirectUri, string state) =>
         "https://www.tiktok.com/v2/auth/authorize/"

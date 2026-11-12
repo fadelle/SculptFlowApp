@@ -355,6 +355,7 @@
       "parameters": {
         "httpMethod": "POST",
         "path": "10567aa2-f273-4aba-8203-0a9c48d9801d",
+        "authentication": "headerAuth",
         "options": {}
       },
       "type": "n8n-nodes-base.webhook",
@@ -365,7 +366,13 @@
       ],
       "id": "bb79b8f9-0261-4f11-b393-4b437ff7811c",
       "name": "booking_change",
-      "webhookId": "10567aa2-f273-4aba-8203-0a9c48d9801d"
+      "webhookId": "10567aa2-f273-4aba-8203-0a9c48d9801d",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "omniWebhookSec0",
+          "name": "Omni webhook secret"
+        }
+      }
     },
     {
       "parameters": {

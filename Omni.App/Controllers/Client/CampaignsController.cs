@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Omni.App.Business.Contracts.Managers;
 using Omni.App.Business.Contracts.Services.Campaigns;
 using Omni.App.Common.Enums;
+using Omni.App.Common.Statics;
 using Omni.App.Entities.Dtos.Campaigns;
 using Omni.App.Entities.Requests.Campaigns;
 using Omni.App.Entities.Responses.Campaigns;
@@ -26,6 +27,8 @@ public class CampaignsController : DashboardApiController
 
     /// <summary>Read-only "Matching Contacts: N" preview for the Campaign creation page — resolves the
     /// same audience CreateAsync would snapshot, without creating anything.</summary>
+    // Previews size a NEW campaign, so they need the plan like creating one (QA t5-ops-20); lists and details stay readable.
+    [RequireFeature(EntitlementKeys.Campaigns)]
     [HttpGet("audience-preview")]
     public async Task<ActionResult<AudiencePreviewResponse>> AudiencePreview(
         [FromQuery] string audienceType, [FromQuery] string? filters, CancellationToken ct)
@@ -38,6 +41,7 @@ public class CampaignsController : DashboardApiController
             return BadRequest(new { error = ApiErrorsAttribute.Text(HttpContext, UnknownAudienceKey, audienceType) });
         }
 
+        CampaignAudienceFilters.Validate(filters); // the preview counts what Create would accept (QA t5-ops-09)
         var count = await _audience.GetMatchingCountAsync(clientId.Value, audienceType, filters, ct);
         return Ok(new AudiencePreviewResponse(count));
     }
@@ -45,6 +49,7 @@ public class CampaignsController : DashboardApiController
     /// <summary>"Preview contacts" on the Campaign creation page — the same audience resolution as
     /// AudiencePreview above (ICampaignAudienceService.GetEligibleContactsAsync), just also returning
     /// up to `limit` names/phones instead of only a count. Read-only, no side effects.</summary>
+    [RequireFeature(EntitlementKeys.Campaigns)]
     [HttpGet("audience-preview/contacts")]
     public async Task<ActionResult<AudiencePreviewContactsResponse>> AudiencePreviewContacts(
         [FromQuery] string audienceType, [FromQuery] string? filters, [FromQuery] int limit, CancellationToken ct)
@@ -57,6 +62,7 @@ public class CampaignsController : DashboardApiController
             return BadRequest(new { error = ApiErrorsAttribute.Text(HttpContext, UnknownAudienceKey, audienceType) });
         }
 
+        CampaignAudienceFilters.Validate(filters);
         var cappedLimit = limit is > 0 and <= 50 ? limit : 10;
         var contacts = await _audience.GetEligibleContactsAsync(clientId.Value, audienceType, filters, ct);
         var preview = contacts.Take(cappedLimit).Select(l => new AudiencePreviewContactRow(l.Id, l.FullName, l.Phone)).ToList();

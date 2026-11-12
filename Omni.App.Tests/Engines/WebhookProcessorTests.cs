@@ -495,6 +495,25 @@ public class TelegramWebhookProcessorTests : WebhookTestBase
     }
 
     [Fact]
+    public async Task With_the_dispatch_queue_the_webhook_answers_before_the_ai_is_triggered()
+    {
+        // QA t3-inbox-22: the plan/bot checks and the n8n call ran inside Telegram's webhook request.
+        Integrations.Setup(i => i.GetByIdReadOnlyAsync(ConnectionId, It.IsAny<CancellationToken>())).ReturnsAsync(Connection());
+        var queue = new Omni.App.Business.Jobs.AiTriggerDispatchQueue();
+        var sut = new TelegramWebhookProcessor(Integrations.Object, AiTrigger.Object, Contacts.Object, Conversations.Object, Messages.Object,
+            NullLogger<TelegramWebhookProcessor>.Instance, Tracer.Object, deferredTriggers: queue);
+        using (System.Diagnostics.Activity.Current = new System.Diagnostics.Activity("webhook").SetIdFormat(System.Diagnostics.ActivityIdFormat.W3C).Start())
+        {
+            Assert.Equal(WebhookReceiveOutcome.Accepted, await sut.ReceiveAsync(ConnectionId, "s3cret", Update()));
+        }
+
+        AiTrigger.Verify(a => a.NotifyAsync(It.IsAny<AiTriggerPayload>(), It.IsAny<CancellationToken>()), Times.Never);
+        Assert.True(queue.TryDequeue(out var queued));
+        Assert.Equal((ConversationId, "hello"), (queued.ConversationId, queued.MessageText));
+        Assert.StartsWith("00-", queued.Traceparent); // the worker continues the message's trace
+    }
+
+    [Fact]
     public void External_message_ids_combine_chat_and_message() => Assert.Equal("42:7", TelegramWebhookProcessor.ExternalMessageId("42", 7));
 }
 

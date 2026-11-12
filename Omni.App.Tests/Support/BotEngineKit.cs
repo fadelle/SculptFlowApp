@@ -130,6 +130,11 @@ internal sealed class FakeBotMemory : IBotMemoryRepository
 
     public void Add(BotMemory memory) => Rows.Add(memory);
 
+    /// <summary>Conversations / test chats deleted while a run was thinking.</summary>
+    public HashSet<Guid> Gone { get; } = new();
+
+    public Task<bool> OwnerExistsAsync(Guid key, bool test, CancellationToken ct = default) => Task.FromResult(!Gone.Contains(key));
+
     public Task<int> DeleteAllButNewestAsync(Guid key, bool test, int keep, CancellationToken ct = default)
     {
         var old = Of(key, test).SkipLast(Math.Max(keep, 0)).ToList();

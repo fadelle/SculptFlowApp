@@ -195,7 +195,7 @@ else if (Model.Details is not null)
                                 : r.FailedAt is not null ? (T["values.failed"].Value, r.FailedAt)
                                 : r.QueuedAt is not null ? (T["values.queued"].Value, r.QueuedAt)
                                 : ("", (DateTimeOffset?)null);
-                            var problem = r.SkipReason is { } skip ? CampaignSkipReason.Label(T, skip) : r.FailureReason;
+                            var problem = r.SkipReason is { } skip ? CampaignSkipReason.Label(T, skip) : StoredText.Show(r.FailureReason, T);
                             <tr class="row-link" data-href="/dashboard/contacts/@r.ContactId" data-group="@Group(r.Status)">
                                 <td data-label="@T["campaigns.recipients.contact"]"><a class="cell-person" href="/dashboard/contacts/@r.ContactId"><span class="avatar-sm">@(string.IsNullOrWhiteSpace(r.ContactFullName) ? "?" : r.ContactFullName.Trim()[..1])</span><span dir="auto">@(r.ContactFullName ?? "—")</span></a></td>
                                 <td data-label="@T["contacts.table.phone"]"><span dir="ltr">@r.PhoneNumber</span></td>

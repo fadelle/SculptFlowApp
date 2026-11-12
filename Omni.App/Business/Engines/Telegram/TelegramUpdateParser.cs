@@ -30,9 +30,19 @@ public static class TelegramUpdateParser
             return Ignored(updateId, "not_an_object");
         }
 
+        // QA t3-inbox-17: an edit and "blocked the bot" were dropped silently.
+        if (update.TryGetProperty("my_chat_member", out var member) && member.ValueKind == JsonValueKind.Object)
+        {
+            return ParseMemberUpdate(updateId, member);
+        }
+        var kind = TelegramUpdateKind.CustomerMessage;
         if (!update.TryGetProperty("message", out var m) || m.ValueKind != JsonValueKind.Object)
         {
-            return Ignored(updateId, "unsupported_update_type");
+            if (!update.TryGetProperty("edited_message", out m) || m.ValueKind != JsonValueKind.Object)
+            {
+                return Ignored(updateId, "unsupported_update_type");
+            }
+            kind = TelegramUpdateKind.EditedMessage;
         }
 
         if (!m.TryGetProperty("chat", out var chat) || chat.ValueKind != JsonValueKind.Object
@@ -78,7 +88,30 @@ public static class TelegramUpdateParser
             MetadataJson: metadata,
             Timestamp: timestamp);
 
-        return new ParsedTelegramUpdate(TelegramUpdateKind.CustomerMessage, updateId, parsed, null);
+        return new ParsedTelegramUpdate(kind, updateId, parsed, null);
+    }
+
+    /// <summary>my_chat_member in a private chat: "kicked" = the person blocked the bot, "member" = they started it again.</summary>
+    private static ParsedTelegramUpdate ParseMemberUpdate(long updateId, JsonElement member)
+    {
+        if (!member.TryGetProperty("chat", out var chat) || chat.ValueKind != JsonValueKind.Object || GetString(chat, "type") != "private"
+            || !chat.TryGetProperty("id", out var chatIdEl) || chatIdEl.ValueKind != JsonValueKind.Number)
+        {
+            return Ignored(updateId, "non_private_chat");
+        }
+        var status = member.TryGetProperty("new_chat_member", out var now) && now.ValueKind == JsonValueKind.Object ? GetString(now, "status") : null;
+        var kind = status switch
+        {
+            "kicked" => TelegramUpdateKind.BotBlocked,
+            "member" => TelegramUpdateKind.BotUnblocked,
+            _ => (TelegramUpdateKind?)null
+        };
+        if (kind is null) return Ignored(updateId, "member_status_" + (status ?? "unknown"));
+        var at = member.TryGetProperty("date", out var dateEl) && dateEl.ValueKind == JsonValueKind.Number
+            ? DateTimeOffset.FromUnixTimeSeconds(dateEl.GetInt64()) : DateTimeOffset.UtcNow;
+        var parsed = new ParsedTelegramMessage(chatIdEl.GetInt64(), null, GetString(chat, "first_name"), GetString(chat, "last_name"),
+            GetString(chat, "username"), 0, "member_update", "", null, at);
+        return new ParsedTelegramUpdate(kind.Value, updateId, parsed, null);
     }
 
     /// <summary>(MessageType, human-readable Content, raw metadata JSON) for a message body.</summary>

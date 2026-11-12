@@ -213,7 +213,7 @@ public class TelegramBotClientTests
         _http.Enqueue(HttpStatusCode.OK, Ok("true")).Enqueue(HttpStatusCode.OK, Ok("true"));
         await Sut().SetWebhookAsync("t", "https://x/hook", "s3cret");
         Assert.Contains("\"secret_token\":\"s3cret\"", _http.Requests[0].Body);
-        Assert.Contains("\"allowed_updates\":[\"message\"]", _http.Requests[0].Body);
+        Assert.Contains("\"allowed_updates\":[\"message\",\"edited_message\",\"my_chat_member\"]", _http.Requests[0].Body);
         await Sut().DeleteWebhookAsync("t");
         Assert.Contains("\"drop_pending_updates\":false", _http.Requests[1].Body);
     }
@@ -290,13 +290,17 @@ public class TelegramBotClientTests
     [Theory]
     [InlineData(401, "Unauthorized", "rejected the bot token")]
     [InlineData(403, "Forbidden", "blocked the bot")]
-    [InlineData(429, "Too Many Requests", "rate-limiting")]
-    [InlineData(400, "Bad Request: chat not found", "Telegram error 400: Bad Request: chat not found")]
+    [InlineData(429, "Too Many Requests", "limiting")]
+    [InlineData(400, "Bad Request: chat not found", "chat with this person")]
+    [InlineData(400, "Bad Request: wrong file_id", "no longer available")]
+    [InlineData(400, "Bad Request: something new", "something new")]
     public async Task Telegram_errors_get_friendly_messages(int code, string description, string expected)
     {
+        // QA t3-inbox-14: keys read in the member's language (raw English "Telegram error 400: ..." before).
         _http.Enqueue((HttpStatusCode)code, "{\"ok\":false,\"error_code\":" + code + ",\"description\":\"" + description + "\"}");
         var ex = await Assert.ThrowsAsync<TelegramApiException>(() => Sut().GetMeAsync("t"));
-        Assert.Contains(expected, ex.Message);
+        Assert.StartsWith("providers.telegram.", ex.Message);
+        Assert.Contains(expected, TextKit.Localizer().Localize(ex));
     }
 
     [Fact]

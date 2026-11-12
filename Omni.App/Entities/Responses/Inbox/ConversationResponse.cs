@@ -16,5 +16,8 @@ public record ConversationResponse(
     /// The Inbox uses this to decide composer-vs-template-picker, but the backend enforces it
     /// independently too (see MessageService.SendAsync) rather than trusting the client.</summary>
     bool IsServiceWindowOpen,
-    DateTimeOffset CreatedAt
+    DateTimeOffset CreatedAt,
+    /// <summary>Whether the conversation's channel is connected (set when one conversation is opened; QA t8-18): the Inbox turns
+    /// the composer off with a notice instead of letting a send fail.</summary>
+    bool ChannelConnected = true
 );

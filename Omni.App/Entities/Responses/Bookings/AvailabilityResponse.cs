@@ -20,6 +20,11 @@ public record AvailabilityResponse(
     [property: System.Text.Json.Serialization.JsonPropertyOrder(100)] IReadOnlyList<AvailableSlotResponse> Slots
 )
 {
+    /// <summary>The same note for a member, as a strings-file key and its arguments (QA t5-ops-22: the dashboard showed the
+    /// AI's instruction "Resolve the contact's day ... and call again"). Never in the JSON: the AI tool keeps <see cref="Message"/>.</summary>
+    [System.Text.Json.Serialization.JsonIgnore] public string? MessageKey { get; init; }
+    [System.Text.Json.Serialization.JsonIgnore] public object[] MessageArgs { get; init; } = [];
+
     public string TodayDayOfWeek => DateOnly.Parse(Today).DayOfWeek.ToString();
     public string Tomorrow => DateOnly.Parse(Today).AddDays(1).ToString("yyyy-MM-dd");
     public string TomorrowDayOfWeek => DateOnly.Parse(Today).AddDays(1).DayOfWeek.ToString();

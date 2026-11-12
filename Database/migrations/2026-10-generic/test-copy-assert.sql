@@ -92,6 +92,9 @@ select pg_temp.check('ledger rows and sequence keep their values',
 select pg_temp.check('subscriptions anchor their periods at the copied period start',
     (select count(*) from billing.subscriptions) > 0
     and (select count(*) from billing.subscriptions where period_anchor is distinct from current_period_start) = 0);
+select pg_temp.check('subscriptions on a trial plan remember the trial was used',
+    (select count(*) from billing.subscriptions s join billing.plans p on p.id = s.plan_id
+     where (p.trial_days is not null) <> (s.trial_used_at is not null)) = 0);
 
 -- Logs, trace, timings.
 select pg_temp.check('error-log category prefix renamed',

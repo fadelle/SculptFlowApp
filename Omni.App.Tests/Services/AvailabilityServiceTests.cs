@@ -326,13 +326,65 @@ public class AvailabilityServiceTests
     [Theory]
     [InlineData("12:00", "15:00", "availability.errors.secondWindowOrder")]   // starts before the first ends
     [InlineData("15:00", "", "availability.errors.secondWindowIncomplete")]
-    [InlineData("16:00", "15:00", "availability.errors.dayEndBeforeStart")]
+    [InlineData("16:00", "16:00", "availability.errors.dayEndSameAsStart")]
     public async Task A_second_window_must_be_complete_and_after_the_first(string start2, string end2, string key)
     {
         var ex = await Assert.ThrowsAsync<ArgumentException>(() => Sut().SaveScheduleAsync(_clientId, "UTC",
             [new DayRuleDto(1, true, "09:00", "13:00", start2, end2)], GoodRules));
         Assert.Equal(key, ex.Message);
         _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    // ---------------------------------------------------------------- hours past midnight (QA t12-fix-07)
+
+    private void Overnight(DayOfWeek day, string start = "22:00", string end = "01:00") =>
+        _rules.Add(new AvailabilityRule { Id = Guid.NewGuid(), ClientId = _clientId, DayOfWeek = (int)day, IsOpen = true, StartTime = TimeOnly.Parse(start), EndTime = TimeOnly.Parse(end) });
+
+    [Fact]
+    public async Task Late_hours_run_past_midnight_and_their_slots_are_listed_under_the_day_they_start()
+    {
+        var day = Today.AddDays(3);
+        Overnight(day.DayOfWeek);
+
+        var evening = await Sut().GetSlotsAsync(_clientId, null, day, 1);
+        Assert.Equal(["22:00", "22:30", "23:00", "23:30", "00:00", "00:30"], evening.Slots.Select(s => s.Time));
+        Assert.Equal(day.AddDays(1).ToString("yyyy-MM-dd"), evening.Slots[^1].Date); // after midnight = the next day
+
+        // Asking for the next day shows the hours after midnight it inherits from the evening before.
+        var nextDay = await Sut().GetSlotsAsync(_clientId, null, day.AddDays(1), 1);
+        Assert.Equal(["00:00", "00:30"], nextDay.Slots.Select(s => s.Time));
+    }
+
+    [Fact]
+    public async Task A_booking_after_midnight_fits_the_evening_before_and_one_past_closing_does_not()
+    {
+        var day = Today.AddDays(3);
+        Overnight(day.DayOfWeek);
+
+        Assert.Null((await Sut().CheckSlotAsync(_clientId, null, At(4, 0, 30), null)).Error);      // 00:30-01:00
+        Assert.Null((await Sut().CheckSlotAsync(_clientId, null, At(3, 23, 45), null)).Error);     // across midnight
+        Assert.Equal(SlotCheckReason.Closed, (await Sut().CheckSlotAsync(_clientId, null, At(4, 0, 45), null)).Reason); // ends 01:15
+    }
+
+    [Theory]
+    [InlineData("22:00", "02:00", null, null, null)]                                         // fine: closes 02:00 the next day
+    [InlineData("09:00", "09:00", null, null, "availability.errors.dayEndSameAsStart")]
+    [InlineData("22:00", "02:00", "03:00", "05:00", "availability.errors.overnightLast")]      // only the last hours may cross midnight
+    [InlineData("09:00", "12:00", "20:00", "01:00", null)]                                    // the second hours may
+    public async Task Only_the_last_hours_of_a_day_may_run_past_midnight(string s, string e, string? s2, string? e2, string? key)
+    {
+        var save = () => Sut().SaveScheduleAsync(_clientId, "UTC", [new DayRuleDto(1, true, s, e, s2, e2)], GoodRules);
+        if (key is null) await save();
+        else Assert.Equal(key, (await Assert.ThrowsAsync<ArgumentException>(save)).Message);
+    }
+
+    [Fact]
+    public async Task Late_hours_must_end_before_the_next_day_opens()
+    {
+        var ex = await Assert.ThrowsAsync<ArgumentException>(() => Sut().SaveScheduleAsync(_clientId, "UTC",
+            [new DayRuleDto(5, true, "20:00", "03:00"), new DayRuleDto(6, true, "02:00", "10:00")], GoodRules));
+        Assert.Equal("availability.errors.overnightOverlap", ex.Message);
+        await Sut().SaveScheduleAsync(_clientId, "UTC", [new DayRuleDto(5, true, "20:00", "03:00"), new DayRuleDto(6, true, "09:00", "17:00")], GoodRules);
     }
 
     [Fact]

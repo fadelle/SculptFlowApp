@@ -82,7 +82,9 @@ public class TikTokIntegrationService : ITikTokIntegrationService
 
     public async Task FailConnectAsync(Guid clientId, string errorMessage, CancellationToken ct = default)
     {
-        var row = await GetOrCreateAsync(clientId, ct);
+        // As for calendars (QA t5-ops-14): only a connect in progress can fail.
+        var row = await _tikTok.GetAsync(clientId, ct);
+        if (row is null || row.Status != TikTokIntegrationStatus.Pending) return;
         row.Status = TikTokIntegrationStatus.Error;
         row.LastProblemMessage = errorMessage;
         row.UpdatedAt = DateTimeOffset.UtcNow;

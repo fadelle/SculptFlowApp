@@ -1,3 +1,4 @@
+using Omni.App.Common.Helpers;
 using System.Text.Json;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http;
@@ -93,7 +94,8 @@ public class CalendarOAuthControllerTests
     public async Task Missing_or_tampered_state_fails_the_attempt_without_exchanging_the_code(string? state)
     {
         await Sut().Callback(CalendarProvider.Google, "code", state, null, null, default);
-        _calendar.Verify(c => c.FailConnectAsync(_clientId, CalendarProvider.Google, It.Is<string>(m => m.Contains("expired or was invalid")), It.IsAny<CancellationToken>()), Times.Once);
+        // Stored as a key, read in each member's language (QA t5-ops-14).
+        _calendar.Verify(c => c.FailConnectAsync(_clientId, CalendarProvider.Google, StoredText.Key("oauth.errors.expired"), It.IsAny<CancellationToken>()), Times.Once);
         _google.Verify(g => g.ExchangeCodeAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 

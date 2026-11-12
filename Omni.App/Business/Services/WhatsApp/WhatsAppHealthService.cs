@@ -1,3 +1,4 @@
+using Omni.App.Common.Exceptions;
 using Omni.App.Common.Helpers;
 using System.Text.Json;
 using Omni.App.Business.Contracts.Managers;
@@ -52,6 +53,22 @@ public class WhatsAppHealthService : IWhatsAppHealthService
 
         return events.Select(h => new WhatsAppHealthEventResponse(
             h.Id, h.EventType, h.Severity, h.Status, h.Code, h.Message, h.OccurredAt)).ToList();
+    }
+
+    public async Task RecordSendFailureAsync(ChannelIntegration integration, WhatsAppSendException failure, CancellationToken ct = default)
+    {
+        if (failure.ConnectionProblemCode is not { } code) return;
+        var message = failure.UserMessage ?? failure.Message;
+        var now = DateTimeOffset.UtcNow;
+        var moved = await _integrations.MarkSendProblemAsync(integration, code, message, now, ct);
+        await _notifier.WhatsAppHealthUpdatedAsync(integration.ClientId, integration.Id, WhatsAppHealthLevel.Problem, integration.AccountStatus,
+            integration.AccountReviewStatus, integration.PhoneQualityRating, integration.PhoneStatus, message, now, ct);
+        if (!moved) return;
+        _events.Log(integration.ClientId, EventTypes.WhatsAppHealthEventReceived, source: "send",
+            metadataJson: JsonSerializer.Serialize(new { EventType = "send_failed", healthLevel = WhatsAppHealthLevel.Problem, code, metaCode = failure.ErrorCode }));
+        await _notifications.CreateAsync(integration.ClientId, NotificationType.IntegrationUnhealthy,
+            NotificationText.Of("notifications.whatsApp.title", "notifications.problem.text", message),
+            channelIntegrationId: integration.Id, link: "/WhatsApp/Health", ct: ct);
     }
 
     public async Task<WhatsAppHealthResponse> ApplyHealthEventAsync(WhatsAppHealthEventRequest request, CancellationToken ct = default)
@@ -259,6 +276,12 @@ public class WhatsAppHealthService : IWhatsAppHealthService
                 _ => $"Phone number status is '{c.PhoneStatus}'."
             };
             return (true, WhatsAppHealthLevel.Warning, c.PhoneStatus, message);
+        }
+
+        // A failed check or send on file is never "healthy" next to it (QA t8-20).
+        if (!string.IsNullOrWhiteSpace(c.LastError))
+        {
+            return (true, WhatsAppHealthLevel.Warning, "last_error", c.LastError);
         }
 
         return (true, WhatsAppHealthLevel.Healthy, null, null);
